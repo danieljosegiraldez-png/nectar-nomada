@@ -472,3 +472,129 @@ recommendations are approved as written. As with ADR-017, this approves
 Foundational-phase work (Location/Project/Organization/Sample schema, basic
 Story/MediaAsset) begins when Slice 2 itself is kicked off, which has not
 yet been requested as of this ADR.
+
+---
+
+## ADR-019 — Media Intelligence Pipeline: accepted as planning input, deferred
+
+**Context:** `MEDIA_INTELLIGENCE_PIPELINE.md` (committed separately) extends
+the Asset model, object storage conventions, and the AI Suggestion lifecycle
+to cover non-destructive ingestion of existing brand/expedition media from
+Google Drive (Phase A), AI-assisted content generation from that material
+(Phase B), and optional custom-model fine-tuning (Phase C). Per the
+document's own §6 and the instruction it was filed under, this has zero
+current urgency — Phase A is eligible to start no earlier than Slice 2
+(when `core.asset` exists), and Phase B belongs with Slice 7 (AI).
+
+**Decision:** Accepted as planning input now; implementation deferred to
+Slice 2 (Phase A) and Slice 7+ (Phase B/C) respectively — same pattern as
+`EXTERNAL_DATA_ARCHITECTURE.md`/`ADAPTIVE_INTELLIGENCE_EXPERIENCE_REVIEW.md`:
+logged and cross-checked now so it isn't re-derived with less context later,
+not an immediate build order.
+
+**Conflicts/gaps found on cross-check against `DOMAIN_MODEL.md` and
+`AI_GOVERNANCE.md`** (flagged per instruction, not silently reconciled):
+
+1. **`core.asset` doesn't yet have provenance columns.**
+   `MEDIA_INTELLIGENCE_PIPELINE.md` §2 assumes an Asset row can carry
+   `source_reference` (the Drive file ID/folder path) and, per §3, a
+   `provenance_class` value (`ai_suggestion` for AI-touched derivatives).
+   `DATA_ARCHITECTURE.md` §5's Asset field list has neither column —
+   §4's provenance-column requirement was written for "fact tables"
+   (research/sensory/environmental) and didn't explicitly name `core.asset`
+   as one of them, even though a photo is clearly evidence in the same
+   sense. **Resolution:** when `core.asset` is actually created (Slice 2),
+   add `provenance_class` and `source_reference` to it, extending
+   `DATA_ARCHITECTURE.md` §4's scope to explicitly include Asset. Not fixed
+   now since the table doesn't exist yet — noted here so it isn't
+   rediscovered as a surprise during Slice 2 schema work.
+2. **`INTEGRATIONS.md` §11's Google Drive adapter is scoped too narrowly.**
+   It currently names the interface `DocumentSourceProvider` and frames
+   Drive as a one-time migration source for documents/protocols.
+   `MEDIA_INTELLIGENCE_PIPELINE.md` needs an ongoing, broader capability —
+   listing/fetching binary media (photos/video) from designated folders,
+   repeatable, not a one-off migration. **Resolution:** generalize or add a
+   sibling interface (e.g. `GoogleDriveProvider` covering both documents and
+   media) when Phase A is actually implemented — not resolved now since it's
+   a one-line `INTEGRATIONS.md` edit best made alongside real code, not
+   speculatively.
+3. **`imported_unreviewed` is not in the existing status vocabulary.**
+   `DATA_ARCHITECTURE.md` §7's generic lifecycle enum is `draft |
+   incomplete | pending_review | verified | approved | archived | rejected`.
+   `MEDIA_INTELLIGENCE_PIPELINE.md` §2/§5a use `imported_unreviewed` and
+   `verified` — `verified` already exists in the enum; `imported_unreviewed`
+   does not. **Resolution:** at Slice 2 schema time, either map newly
+   ingested Assets to the existing `pending_review` value or add
+   `imported_unreviewed` as an explicit enum member if the distinction from
+   ordinary `pending_review` proves useful in practice — a judgment call to
+   make with real ingestion data in hand, not now.
+
+No conflict was found in §3 (AI-assisted generation) against
+`AI_GOVERNANCE.md` §2/§3/§4/§6 — the suggestion-only write path, the
+prohibition on claiming generated imagery is original photography, and the
+provenance-retention rule all apply directly with no adjustment needed.
+
+**Consequences:** No schema, code, or credentials changed by this ADR. The
+three gaps above are carried forward as concrete Slice 2 implementation
+notes rather than left implicit in a document that won't be re-read until
+Slice 7.
+
+---
+
+## ADR-020 — Commerce, Operations & Professional Tools Architecture: approved decisions
+
+**Context:** `COMMERCE_OPERATIONS_TOOLS_ARCHITECTURE.md` §AA listed eight
+open decisions after reviewing the commerce/operations/professional-tools
+input document. All eight are approved as recommended, resolved below.
+
+**Decisions (approved):**
+
+1. Add `organization` as a new `RBAC` `ScopeType`, with the same
+   downward-only containment rule already used for `program → project`
+   (`RBAC.md` §3) — approved. Scheduled as a `RBAC.md` amendment alongside
+   Client Portal work, not implemented now.
+2. `Offering` is built as a thin catalog/discovery layer (title, summary,
+   status, price summary, a pointer to the real detail entity) — approved,
+   explicitly rejecting a deeper shared commercial-workflow abstraction.
+   `Product`, `Experience`, and the new `Service`/`ConsultingEngagement`
+   chain keep their own distinct workflows.
+3. Research OS's `Protocol`/`ProtocolVersion` is reused for operational
+   (non-research) processing protocols too, rather than a separate
+   operational-protocol entity — approved. One versioning mechanism, one
+   immutability rule, applied to both contexts.
+4. Consulting is modeled as a `Project` carrying a `domain_tag =
+   'consulting'` (reusing `ProjectDomainTag`), with a new pre-Project
+   pipeline (`ServiceInquiry → Proposal`) only for the lead/discovery/scope
+   stages that occur before a Project exists — approved. No separate
+   consulting-project system.
+5. First vertical slice once Foundational work lands: **coffee lot
+   genealogy + processing workbench** — approved, ahead of fermentation
+   logging, coffee cupping/Sensory OS, consulting project → report, and
+   commerce → operational project, per that review's §Y dependency
+   analysis. This is the same Foundational-phase priority as ADR-017/018's
+   shared prerequisite (Location/Organization/Project/Sample), extended
+   with `Lot`/`LotTransformation`/`QuantityEvent` as the first
+   domain-specific build on top of it.
+6. Operational inventory (`traceability.inventory_item`/
+   `inventory_movement`, tied to `Lot`) stays structurally separate from
+   Commerce SKU inventory (`ProductVariant`'s existing `SKU/Inventory`),
+   connected only by a `source_lot_id` lineage FK — approved. Never the
+   same table with two meanings.
+7. Professional SaaS / multi-tenancy: design-now, build-later — approved
+   as the standing posture. No billing/subscription complexity,
+   white-labeling, or self-service organization signup until product
+   strategy specifically requires it (input document's own §34
+   instruction).
+8. The generalized `traceability.measurement` table uses specific nullable
+   FKs per possible parent (`fermentation_run_id` / `drying_lot_id` /
+   `storage_lot_id`), not a polymorphic `parent_type`/`parent_id` pair —
+   approved, trading table width for real foreign-key referential
+   integrity.
+
+**Consequences:** `COMMERCE_OPERATIONS_TOOLS_ARCHITECTURE.md`'s architecture
+is approved as written. As with ADR-017/018/019, this approves architecture
+and sequencing, not an implementation start — Foundational-phase work
+(Location/Organization/Project/Sample, then Lot/LotTransformation/
+QuantityEvent) begins when explicitly kicked off, which has not yet
+happened as of this ADR. No checkout, payment, billing, or sensor
+integration code is implied or authorized by this approval.
