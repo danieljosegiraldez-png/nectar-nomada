@@ -1,0 +1,176 @@
+:root {
+  --nn-bg: #faf6ef;
+  --nn-surface: #ffffff;
+  --nn-ink: #241c14;
+  --nn-ink-muted: #6b5f4f;
+  --nn-border: #e6ddcc;
+  --nn-brand: #7a3b1e;
+  --nn-brand-ink: #ffffff;
+  --nn-accent: #4a6b4a;
+  --nn-error: #a3311a;
+  --nn-radius: 10px;
+  --nn-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: var(--nn-bg);
+  color: var(--nn-ink);
+  font-family: var(--nn-font);
+  line-height: 1.5;
+}
+
+a {
+  color: var(--nn-brand);
+}
+
+.nn-shell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.nn-nav {
+  border-bottom: 1px solid var(--nn-border);
+  background: var(--nn-surface);
+}
+
+.nn-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 0;
+}
+
+.nn-wordmark {
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  color: var(--nn-ink);
+}
+
+.nn-nav-links {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  font-size: 0.95rem;
+}
+
+.nn-nav-links a {
+  text-decoration: none;
+  color: var(--nn-ink-muted);
+}
+
+.nn-nav-links a:hover {
+  color: var(--nn-ink);
+}
+
+.nn-main {
+  padding: 3rem 0;
+}
+
+.nn-card {
+  background: var(--nn-surface);
+  border: 1px solid var(--nn-border);
+  border-radius: var(--nn-radius);
+  padding: 2rem;
+  max-width: 420px;
+}
+
+.nn-hero h1 {
+  font-size: 2.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.nn-hero p {
+  color: var(--nn-ink-muted);
+  max-width: 60ch;
+}
+
+form.nn-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.nn-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.nn-field label {
+  font-size: 0.85rem;
+  color: var(--nn-ink-muted);
+}
+
+.nn-field input {
+  border: 1px solid var(--nn-border);
+  border-radius: 6px;
+  padding: 0.6rem 0.7rem;
+  font-size: 1rem;
+  background: var(--nn-bg);
+  color: var(--nn-ink);
+}
+
+.nn-field input:focus {
+  outline: 2px solid var(--nn-accent);
+  outline-offset: 1px;
+}
+
+.nn-button {
+  background: var(--nn-brand);
+  color: var(--nn-brand-ink);
+  border: none;
+  border-radius: 6px;
+  padding: 0.7rem 1rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.nn-button:hover {
+  opacity: 0.92;
+}
+
+.nn-error {
+  color: var(--nn-error);
+  font-size: 0.9rem;
+}
+
+.nn-muted {
+  color: var(--nn-ink-muted);
+  font-size: 0.9rem;
+}
+
+.nn-link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--nn-ink-muted);
+  font: inherit;
+}
+
+.nn-link-button:hover {
+  color: var(--nn-ink);
+}
+
+.nn-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #eef1e8;
+  color: var(--nn-accent);
+  border: 1px solid #d7ddcb;
+}

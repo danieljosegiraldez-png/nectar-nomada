@@ -334,3 +334,52 @@ outcomes, certifications, real dates) were invented anywhere in this document
 set, per CLAUDE.md §61(E)/§54 — all examples referencing Finca Rosina, Las
 Nubes, CryoBloom, Kiva Estate are the same illustrative project names already
 present in CLAUDE.md itself, used structurally, not as asserted facts.
+
+---
+
+## ADR-015 — Local dev database: Prisma's local Postgres (`prisma dev`), not Docker
+
+**Context:** Implementing Slice 1 required an actual Postgres instance to run
+migrations and verify the RBAC engine against real data, not just schema
+validation. The development machine had no Docker, Homebrew, or existing
+Postgres install.
+
+**Decision:** Use `prisma dev` (Prisma 7's bundled local Postgres-compatible
+database, part of the toolchain already required by ADR-005) for local
+development. Documented in `SETUP.md`.
+
+**Alternatives considered:** Installing Docker was rejected as unnecessary
+weight for a solo-maintained project when Prisma's own tooling already
+provides a zero-config local database with the exact migration workflow
+(`prisma migrate dev`) the project uses. Production remains Neon (ADR-007)
+unchanged — this is purely a local-dev convenience, not a hosting decision
+reversal; the `pg` driver adapter (ADR resolved in the driver-adapters
+research during implementation) speaks standard Postgres wire protocol
+against both.
+
+**Consequences:** `SETUP.md` documents `npx prisma dev` as a required local
+step. No production impact.
+
+## ADR-016 — Prisma Client via `@prisma/adapter-pg`, one adapter for both local and Neon
+
+**Context:** Prisma 7 requires an explicit driver adapter for SQL databases
+(no more bundled native engine binary in the client itself). Prisma publishes
+a Neon-specific adapter (`@prisma/adapter-neon`, HTTP-fetch-based, optimized
+for edge runtimes) alongside the generic `@prisma/adapter-pg` (standard `pg`
+driver, TCP).
+
+**Decision:** Use `@prisma/adapter-pg` uniformly, in both local dev and
+production against Neon.
+
+**Alternatives considered:** `@prisma/adapter-neon` was considered for
+production specifically, but rejected for v1 — it exists primarily for
+edge/serverless runtimes making stateless HTTP calls, and this application
+runs entirely in the Node.js runtime (required anyway for `argon2` password
+hashing, SECURITY.md §1), where a standard pooled TCP connection via `pg`
+works against Neon without issue. Using one adapter everywhere avoids an
+environment-conditional code path in `lib/db.ts` for no current benefit;
+revisit only if a future route genuinely needs edge deployment.
+
+**Consequences:** `lib/db.ts` has no environment branching. If an edge-runtime
+route is ever needed, that specific route (not the whole app) would switch to
+`@prisma/adapter-neon`.

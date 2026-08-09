@@ -1,0 +1,234 @@
+// Néctar Nómada — Prisma schema, Slice 1 (Identity)
+// Implements docs/architecture/DOMAIN_MODEL.md §1-2 and docs/architecture/RBAC.md §2.
+// Only the `core` Postgres schema exists so far. Module schemas (commerce, research,
+// sensory, competitions, environmental, content, project, partner, ai) are added as
+// their vertical slices are built — see docs/architecture/DATA_ARCHITECTURE.md §1.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["core"]
+}
+
+// ---------------------------------------------------------------------------
+// Identity: Person vs. UserAccount — see DOMAIN_MODEL.md §1.
+// No role field exists on either. Roles are always the result of an Assignment.
+// ---------------------------------------------------------------------------
+
+enum PersonStatus {
+  active
+  archived
+
+  @@schema("core")
+}
+
+model Person {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  givenName   String       @map("given_name")
+  familyName  String       @map("family_name")
+  displayName String       @map("display_name")
+  email       String?
+  phone       String?
+  locale      String       @default("es")
+  bio         String?
+  status      PersonStatus @default(active)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  createdBy   String?      @map("created_by") @db.Uuid
+  creator     UserAccount? @relation("PersonCreatedBy", fields: [createdBy], references: [id])
+
+  userAccount UserAccount?
+
+  @@map("person")
+  @@schema("core")
+}
+
+enum UserAccountStatus {
+  active
+  invited
+  suspended
+  deactivated
+
+  @@schema("core")
+}
+
+model UserAccount {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personId        String            @unique @map("person_id") @db.Uuid
+  person          Person            @relation(fields: [personId], references: [id])
+  // 'credentials' | 'google' | ... — see lib/auth/config.ts for the concrete providers wired up.
+  authProvider    String            @map("auth_provider")
+  // OAuth provider's subject/user id. Null for credentials accounts.
+  authSubject     String?           @map("auth_subject")
+  // Argon2id hash (SECURITY.md §1). Null for OAuth-only accounts.
+  passwordHash    String?           @map("password_hash")
+  emailVerifiedAt DateTime?         @map("email_verified_at")
+  lastLoginAt     DateTime?         @map("last_login_at")
+  status          UserAccountStatus @default(invited)
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  createdBy       String?           @map("created_by") @db.Uuid
+  creator         UserAccount?      @relation("UserAccountCreatedBy", fields: [createdBy], references: [id])
+
+  createdAccounts     UserAccount[] @relation("UserAccountCreatedBy")
+  personsCreated      Person[]      @relation("PersonCreatedBy")
+  roleProfilesCreated RoleProfile[] @relation("RoleProfileCreatedBy")
+  scopesCreated       Scope[]       @relation("ScopeCreatedBy")
+  assignments         Assignment[]  @relation("AssignmentToUserAccount")
+  assignmentsGranted  Assignment[]  @relation("AssignmentGrantedBy")
+  auditEvents         AuditEvent[]
+
+  @@unique([authProvider, authSubject])
+  @@map("user_account")
+  @@schema("core")
+}
+
+// ---------------------------------------------------------------------------
+// RBAC chain — see RBAC.md §2-4.
+// User → Assignment → Scope → Role Profile → Permission.
+// Scope containment (platform/program/project vs. leaf scopes) is resolved in
+// application code (lib/rbac/resolve.ts), not enforced by the database schema.
+// ---------------------------------------------------------------------------
+
+enum ScopeType {
+  platform
+  program
+  project
+  location
+  competition
+  session
+  experience
+
+  @@schema("core")
+}
+
+model Scope {
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scopeType  ScopeType    @map("scope_type")
+  // Null when scopeType = platform. FK to program/project/location/... is not
+  // enforced at the DB level yet because those tables don't exist until later
+  // slices — validated at the application layer per RBAC.md §2.
+  scopeRefId String?      @map("scope_ref_id") @db.Uuid
+  createdAt  DateTime     @default(now()) @map("created_at")
+  createdBy  String?      @map("created_by") @db.Uuid
+  creator    UserAccount? @relation("ScopeCreatedBy", fields: [createdBy], references: [id])
+
+  assignments Assignment[]
+
+  @@unique([scopeType, scopeRefId])
+  @@map("scope")
+  @@schema("core")
+}
+
+enum RoleProfileStatus {
+  active
+  archived
+
+  @@schema("core")
+}
+
+model RoleProfile {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String            @unique
+  description String?
+  status      RoleProfileStatus @default(active)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  createdBy   String?           @map("created_by") @db.Uuid
+  creator     UserAccount?      @relation("RoleProfileCreatedBy", fields: [createdBy], references: [id])
+
+  permissions RoleProfilePermission[]
+  assignments Assignment[]
+
+  @@map("role_profile")
+  @@schema("core")
+}
+
+// Permission is a seed-managed catalog (migrated via prisma/seed.ts,
+// RBAC.md §5), not user-editable data — no lifecycle columns needed.
+model Permission {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  resourceType String   @map("resource_type")
+  action       String
+  description  String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  roleProfiles RoleProfilePermission[]
+
+  @@unique([resourceType, action])
+  @@map("permission")
+  @@schema("core")
+}
+
+model RoleProfilePermission {
+  roleProfileId String   @map("role_profile_id") @db.Uuid
+  permissionId  String   @map("permission_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  roleProfile RoleProfile @relation(fields: [roleProfileId], references: [id], onDelete: Cascade)
+  permission  Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleProfileId, permissionId])
+  @@map("role_profile_permission")
+  @@schema("core")
+}
+
+enum AssignmentStatus {
+  active
+  revoked
+  expired
+
+  @@schema("core")
+}
+
+model Assignment {
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userAccountId String           @map("user_account_id") @db.Uuid
+  userAccount   UserAccount      @relation("AssignmentToUserAccount", fields: [userAccountId], references: [id])
+  roleProfileId String           @map("role_profile_id") @db.Uuid
+  roleProfile   RoleProfile      @relation(fields: [roleProfileId], references: [id])
+  scopeId       String           @map("scope_id") @db.Uuid
+  scope         Scope            @relation(fields: [scopeId], references: [id])
+  grantedBy     String?          @map("granted_by") @db.Uuid
+  granter       UserAccount?     @relation("AssignmentGrantedBy", fields: [grantedBy], references: [id])
+  grantedAt     DateTime         @default(now()) @map("granted_at")
+  validFrom     DateTime         @default(now()) @map("valid_from")
+  validTo       DateTime?        @map("valid_to")
+  status        AssignmentStatus @default(active)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  @@index([userAccountId, status])
+  @@map("assignment")
+  @@schema("core")
+}
+
+// ---------------------------------------------------------------------------
+// Audit — SECURITY.md §6. Append-only: no application role gets UPDATE/DELETE
+// on this table (enforced at the database-role level when provisioning
+// production credentials, not by Prisma). No status/updatedAt columns because
+// rows are never modified after insert.
+// ---------------------------------------------------------------------------
+
+model AuditEvent {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorUserAccountId String?      @map("actor_user_account_id") @db.Uuid
+  actor              UserAccount? @relation(fields: [actorUserAccountId], references: [id])
+  occurredAt         DateTime     @default(now()) @map("occurred_at")
+  operation          String
+  entityType         String       @map("entity_type")
+  entityId           String       @map("entity_id") @db.Uuid
+  before             Json?
+  after              Json?
+  reason             String?
+  sourceInterface    String       @map("source_interface")
+
+  @@index([entityType, entityId])
+  @@index([actorUserAccountId])
+  @@map("audit_event")
+  @@schema("core")
+}
