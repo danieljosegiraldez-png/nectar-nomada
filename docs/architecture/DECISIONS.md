@@ -383,3 +383,92 @@ revisit only if a future route genuinely needs edge deployment.
 **Consequences:** `lib/db.ts` has no environment branching. If an edge-runtime
 route is ever needed, that specific route (not the whole app) would switch to
 `@prisma/adapter-neon`.
+
+---
+
+## ADR-017 — External Data Architecture: approved decisions
+
+**Context:** `EXTERNAL_DATA_ARCHITECTURE.md` §30 listed eight open decisions
+after reviewing the `NECTAR_NOMADA_EXTERNAL_DATA_SOURCES.md` candidate
+catalog. All eight are approved as recommended, resolved below.
+
+**Decisions (approved):**
+
+1. Weather-shaped external data (Open-Meteo, NASA POWER) writes into the
+   existing `environmental.observation` table rather than a new table —
+   approved. `external.*` (new schema) is for everything that doesn't fit
+   that shape (biodiversity, soil, satellite, market, reference).
+2. `external_source_class` is a new axis alongside `provenance_class`, not
+   folded into one enum — approved.
+3. P0 scope is **Open-Meteo, NASA POWER, OpenTopography** — approved,
+   narrower than the source catalog's own 12-item P0 list. GBIF, Panama
+   IPDE/CKAN, Copernicus/Sentinel, SoilGrids, Crossref, ROR, Catalogue of
+   Life move to P1, sequenced with the modules that actually consume them
+   (Map & Territory, Research OS).
+4. Panama-government sources (IMHPA, INEC, ACP, MiAmbiente/SINIA, MIDA/
+   OSIGA) remain scheduled-import-only, not prioritized ahead of readiness
+   despite general Panama-first intent — approved. Revisit if a specific
+   consuming feature needs one of them sooner.
+5. No commercial/paid external-data provider (Visual Crossing, Tomorrow.io,
+   Google Places/Air Quality, ICE feeds, stock-imagery APIs) until a funded,
+   specific use case exists — approved as the standing default.
+6. PostGIS is adopted when the `Location` table is built (MVP Slice 2), not
+   enabled preemptively — approved.
+7. Forecast data is not persisted by default (fetched on demand, short
+   cache) — approved. A future research need to archive forecasts-as-issued
+   would be a separate, explicitly-scoped decision.
+8. Legal/licensing review is required before any use of Protected Planet,
+   ORCID, eBird, any Google API, stock-imagery providers, or ICE feeds —
+   approved as a hard gate; owner of that review is Daniel until a
+   Content/Ops Coordinator collaborator (`RBAC.md` §5) is onboarded.
+
+**Consequences:** `EXTERNAL_DATA_ARCHITECTURE.md`'s architecture is approved
+as written. No external-data code, adapters, or migrations are implemented
+yet — implementation is sequenced with `MVP_ROADMAP.md` Slice 2 (Location)
+and later, not started by this approval alone.
+
+---
+
+## ADR-018 — Adaptive Intelligence & Experience Architecture: approved decisions
+
+**Context:** `ADAPTIVE_INTELLIGENCE_EXPERIENCE_REVIEW.md` §Q listed seven
+open decisions after reviewing the content/experience/AI architecture input
+document. All seven are approved as recommended, resolved below.
+
+**Decisions (approved):**
+
+1. Story/Media ("Foundational" phase per that review's §N) is folded into
+   `MVP_ROADMAP.md` Slice 2 (Public Discovery) rather than a new separate
+   slice — approved. Slice 2 already scoped "Story" in `MVP_ROADMAP.md` §2;
+   this formalizes that it carries real content-model weight, not just a
+   placeholder read path.
+2. All content/creative/operator/research/sensory suggestion flows reuse
+   the existing `ai.recommendation` table (extending its `suggestion_type`
+   taxonomy) — approved. No parallel `AISuggestion`/`AIEnrichmentResult`
+   table is built.
+3. `StoryBlock` is adopted as the composition primitive now; a separate
+   `ExperienceComposition`/Experience Engine layer is deferred until a
+   genuinely block-incompatible experience type (e.g. real-time multi-
+   participant state) is actually scoped — approved.
+4. No media vendor (Cloudinary, Mux, etc.) is committed to in the
+   Foundational or MVP phase — start with object storage (R2, ADR-003) +
+   Next.js Image transforms; approved. Revisit per `ADAPTIVE_INTELLIGENCE_
+   EXPERIENCE_REVIEW.md` §I once volume/need justifies a dedicated media
+   platform.
+5. First vertical slice once Foundational work lands: **interactive place/
+   project story** — approved, ahead of CryoBloom/Follow-the-Sample, guided
+   sensory session, and the field-capture companion, per that review's §O
+   dependency analysis.
+6. `CustomerProfile`, `DeclaredPreference`, and `InteractionEvent` are added
+   to `DOMAIN_MODEL.md` — approved as a documented gap-fix, tracked together
+   with the Foundational-phase work rather than as a separate initiative.
+7. Rights/Consent ships in two tiers: minimal fields on `MediaAsset` in the
+   Foundational phase, full `RightsGrant`/`ReleaseDocument`/`License`
+   entities deferred to NEXT — approved.
+
+**Consequences:** `ADAPTIVE_INTELLIGENCE_EXPERIENCE_REVIEW.md`'s
+recommendations are approved as written. As with ADR-017, this approves
+*architecture and sequencing*, not an immediate implementation start —
+Foundational-phase work (Location/Project/Organization/Sample schema, basic
+Story/MediaAsset) begins when Slice 2 itself is kicked off, which has not
+yet been requested as of this ADR.
