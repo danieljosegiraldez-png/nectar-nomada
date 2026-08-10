@@ -160,7 +160,7 @@ unless a future decision says otherwise.
   payment/booking itself is unaffected (they still paid), but the physical
   product isn't permanently locked away for someone who never showed up.
 
-## 10. Pairing menu (optional structure)
+## 10. Pairing menu (optional structure) and episode design
 
 ```
 core.experience_pairing_course(id, experience_id, sequence_order,
@@ -172,6 +172,44 @@ Available for experiences that want a structured, ordered pairing sequence
 (course 1 + Product X, course 2 + Product Y) tied to real Products — **not
 required for every experience**. A simple tasting can just use the general
 description field; a multi-course pairing dinner can use this structure.
+
+### Episode design — grounded in SERNATUR's official methodology
+
+Extends the same table to support general **episode-based experience
+design**, not limited to pairing courses — grounded in Chile's national
+tourism authority (SERNATUR) manual *Diseño de Experiencias Turísticas*,
+which explicitly names turismo cultural y gastronómico as one of five
+official priority special-interest tourism categories.
+
+```
+core.experience_pairing_course: rename conceptually to episode, add
+  episode_type [pairing_course|talk|activity|transition|other],
+  action_type [nuclear|auxiliary] (nuclear = defines the experience;
+    auxiliary = support, e.g. transit/bathroom breaks — same action can be
+    nuclear in one experience design and auxiliary in another),
+  intensity_marker (nullable, small int or enum — for dramatic-curve
+    pacing: does this episode build toward, sit at, or come down from a
+    climax),
+  place_notes (nullable — functional AND emotional dimension: light,
+    sound, smell, not just a location reference),
+  narrative_notes (nullable — the "relato": what gets communicated in
+    this episode, distinct from what happens),
+  mediator_person_id (nullable — who leads this specific episode; not
+    every episode needs one, reuses core.experience_host from §3)
+```
+
+This is the same table, generalized — a pairing course *is* an episode
+(with `episode_type = pairing_course`); other episode types (a welcome
+talk, an outdoor activity segment, a transition between locations) use the
+same structure without needing separate tables.
+
+**Design principle carried from the source methodology, worth stating
+explicitly**: a good experience isn't just a checklist of episodes — the
+*sequence* should build a dramatic arc (build → climax → resolution, or
+multiple smaller peaks), not stay flat throughout. This is guidance for
+whoever designs an Experience (you, or a partner using the resource
+library — see `TOURISM_DESIGN_RESOURCES.md`), not an enforced constraint
+in the data model — the platform records the design, it doesn't grade it.
 
 ## 11. Live sensory feedback during tastings
 
