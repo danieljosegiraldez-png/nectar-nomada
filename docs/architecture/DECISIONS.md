@@ -1211,3 +1211,123 @@ test-mode API keys, and a decision about how to price at least one DEMO
 Experience for testing. Gastro-tourism-specific extensions
 (`TOURISM_EXPERIENCES.md`) remain a separate, not-yet-scheduled increment on
 top of this engine.
+
+---
+
+## ADR-029 — Slice 5 (Partner Workspace) implemented: assignment-scope
+visibility, classification restriction, RBAC catalog fix, R2 adapter
+
+**Context:** `MVP_ROADMAP.md` Slice 5 — Project Assignment, Task, data
+submission forms, and media upload, explicitly scoped as "the first slice
+where the classification axis meaningfully restricts a non-admin,
+non-researcher user's view." Per `DOMAIN_MODEL.md` §4, Partner Workspace is
+not a separate data model — it's a role-aware view composed from the
+existing RBAC primitives (`lib/rbac/service.ts`) over new `Task`/
+`FieldSubmission` (module-owned, new `partner` schema) and `Asset`
+(canonical, `core` schema, per `DATA_ARCHITECTURE.md` §5).
+
+**Decisions:**
+
+1. **RBAC catalog fix, applied before building anything else**: the
+   "Partner Field Collector" Role Profile (`RBAC.md` §5) was seeded with
+   `partner:submit_task`/`submit_data`/`upload_media` but **no
+   `classification:clear_partner`** — meaning, before this fix, a partner
+   could see nothing above `public` on their own assigned project, which
+   defeats the purpose of the classification level literally named
+   "partner." Added `classification:clear_partner` to the profile
+   (`lib/rbac/catalog.ts`) — Role Profiles/Permissions are seed-managed data
+   (`RBAC.md` §2), so this is a data change plus two new unit tests
+   (`tests/rbac/resolve.test.ts`), not a schema migration. A partner still
+   cannot clear `internal`/`confidential`/`trade_secret`, even on their own
+   assigned project — verified live (see below), not just in unit tests.
+2. **Partner Workspace's project list is driven by project-scoped
+   Assignments directly, not a `project:view` permission check** — same
+   "ownership is the filter" family of pattern as Cart/Order (ADR-025
+   decision 3), adapted to "assignment scope is the filter." A consequence,
+   confirmed by manual verification: a Platform Admin's platform-scoped
+   Assignment does **not** populate their own Partner Workspace project
+   list — "projects I'm assigned to" is a literal, narrow question, not a
+   god-view of every project. `RBAC.md` §3's platform-contains-everything
+   rule still applies *inside* a given project's workspace (an admin with a
+   matching project-scoped Assignment would see everything a partner sees
+   plus internal/confidential content) — it just isn't what drives which
+   projects show up in the list.
+3. **No dedicated `partner:view` permission — visibility reuses the
+   `submit_task`/`submit_data`/`upload_media` action permissions as the
+   view gate**, each independently AND-gated with the record's own
+   classification (`lib/partner/workspace.ts`'s `isVisible`). Deliberate
+   simplification, stated plainly rather than silently: every Role Profile
+   that can act on partner data today (Partner Field Collector, Platform
+   Admin) also holds all three action permissions together, so nothing is
+   currently under- or over-granted. Splitting out a real `partner:view`
+   permission is a small, isolated catalog change if a submit-without-view
+   profile is ever needed — not a redesign.
+4. **Task creation is admin/seed-only in this slice — no UI for it.** A
+   partner can update an existing Task's `status` (`submit_task`) and
+   create `FieldSubmission`s (`submit_data`), but Task rows themselves come
+   from seed/future-admin-tooling, not a Partner Workspace form. This keeps
+   the slice's write surface to what `partner:*`'s permission descriptions
+   actually say ("submit **or update** an assigned task," not "create
+   one") and avoids building an admin task-management UI that wasn't asked
+   for.
+5. **Partner-authored `FieldSubmission`s are always created at
+   `classification: 'partner'`, not user-selectable.** Letting a partner
+   pick a classification level (including one they can't themselves see)
+   would be a confusing, unnecessary escalation surface. Reclassifying
+   content upward is an admin/Research-Lead operation, not built in this
+   slice.
+6. **Media upload is a presigned-PUT flow, not a proxy through the Next.js
+   server**: `requestAssetUpload` (server action) returns a short-lived R2
+   presigned PUT URL; the browser uploads the file bytes directly to R2;
+   `finalizeAssetUpload` (a second server action, re-checking permissions —
+   never trusting the client-only gate) creates the `Asset` row only after
+   a successful upload, so a failed/abandoned upload never leaves a
+   dangling record pointing at nothing in the bucket. `ObjectStorageProvider`
+   (`lib/integrations/storage/`) follows the exact same adapter-per-
+   capability shape as `PaymentsProvider` (ADR-025 decision 6) —
+   `putObject`/`getSignedUrl`/`deleteObject`, Cloudflare R2 behind an
+   S3-API-compatible client (`DECISIONS.md` ADR-003), swappable to AWS S3
+   without touching `lib/partner/workspace.ts`.
+7. **`Asset` stays in `core` (canonical), `Task`/`FieldSubmission` get a new
+   `partner` module schema** — same split as `Product`/`ProductVariant`
+   (ADR-025 decision 1) and `Experience`/`ExperienceSession` (ADR-028
+   decision 1): the canonical, cross-module-referenceable entity in `core`,
+   the module-specific transactional data in its own schema.
+8. **A real, checked-in DEMO Partner Field Collector account**
+   (`demo-partner@nectar-nomada.example`, gated behind
+   `SEED_DEMO_PARTNER=true`, same `SEED_DEMO_ADMIN` convention) —
+   assigned to Las Nubes, used to seed one `partner`-classified
+   `FieldSubmission` (a `FieldSubmission.submittedByUserAccountId` is a
+   required FK; a submission genuinely needs a real actor, so this step is
+   skipped, not faked, when the flag isn't set). This is a deliberate
+   departure from Slice 3/4's ephemeral-test-fixture verification pattern:
+   the classification restriction this slice exists to prove is exactly
+   the kind of thing worth being permanently reproducible by anyone running
+   `SETUP.md`'s steps, not just demonstrated once in this session.
+9. **Two DEMO `Task` rows, deliberately mixed classification** — one
+   `classification: 'partner'` ("Confirm bloom-window observations..."),
+   one `classification: 'internal'` ("Internal: review Q3 research
+   budget..."), both on Las Nubes. This is the concrete fixture the
+   classification-restriction test needed and now permanently has.
+
+**Verified**, live, against Neon: `npx tsc --noEmit`, `npm run lint`,
+`npm test` (32 tests, 30 prior + 2 new for the catalog fix), and
+`npm run build` all pass. Browser-verified end to end, logged in as the real
+seeded DEMO partner account: Partner Workspace's project list shows exactly
+Las Nubes; the project workspace page shows **only** the `partner`-classified
+Task ("Confirm bloom-window observations...") — the `internal`-classified
+one is correctly absent; the DEMO `FieldSubmission` renders with real
+attribution; both write paths (task status update, new field submission
+creation) were exercised live and correctly appear via `revalidatePath`,
+then cleaned up (test data removed, task status reverted to its seeded
+`open` state) so the repository's demo dataset stays exactly what the seed
+script reproduces. Media upload itself is not yet verified — R2 credentials
+are unset, same open item as Stripe for Slices 3/4 (a third external
+credential this session cannot supply).
+
+**Consequences:** Slice 5's schema, RBAC catalog fix, object storage
+adapter, Partner Workspace service layer and UI, and DEMO seed content are
+complete and match MVP_ROADMAP.md's stated scope for this slice. Not built:
+an admin-facing Task-creation/reclassification UI (out of scope, noted
+above), and real media upload verification (blocked on R2 credentials, same
+shape as the Stripe items already tracked).

@@ -2,6 +2,7 @@
   "Nav": {
     "brand": "Néctar Nómada",
     "myNectar": "Mi Néctar",
+    "partnerWorkspace": "Espacio de Socios",
     "signIn": "Iniciar sesión",
     "signUp": "Crear cuenta",
     "signOut": "Cerrar sesión"
@@ -136,6 +137,34 @@
     "bookingStatus_refunded": "Reembolsada",
     "otherActivityHeading": "Historial sensorial · Guardados",
     "otherActivityBody": "Vacío — Sensorial es un slice vertical posterior (MVP_ROADMAP.md)."
+  },
+  "Partner": {
+    "badge": "Espacio de Socios",
+    "title": "Tus proyectos asignados",
+    "noProjects": "Aún no tienes proyectos asignados — un administrador puede otorgarte una Asignación con alcance de proyecto (RBAC.md §5).",
+    "backToWorkspace": "← Volver al Espacio de Socios",
+    "tasksHeading": "Tareas",
+    "noTasks": "Aún no hay tareas visibles para ti en este proyecto.",
+    "assignedTo": "Asignado a {name}",
+    "updateStatusButton": "Actualizar",
+    "taskStatus_open": "Abierta",
+    "taskStatus_in_progress": "En progreso",
+    "taskStatus_submitted": "Enviada",
+    "taskStatus_completed": "Completada",
+    "taskStatus_blocked": "Bloqueada",
+    "submissionsHeading": "Envíos de campo",
+    "noSubmissions": "Aún no hay envíos de campo visibles para ti en este proyecto.",
+    "submissionTitleLabel": "Título",
+    "submissionNotesLabel": "Notas",
+    "submitButton": "Enviar",
+    "mediaHeading": "Medios",
+    "noMedia": "Aún no se ha subido contenido a este proyecto.",
+    "uploadLabel": "Archivo",
+    "uploadButton": "Subir",
+    "uploadingButton": "Subiendo…",
+    "error_invalid_submission": "Ingresa un título y algunas notas.",
+    "error_no_project_access": "No tienes acceso a este proyecto.",
+    "error_upload_failed": "La subida falló. Intenta de nuevo."
   },
   "LocaleSwitcher": {
     "label": "Idioma"

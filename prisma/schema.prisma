@@ -12,7 +12,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  schemas    = ["core", "commerce", "experiences"]
+  schemas    = ["core", "commerce", "experiences", "partner"]
   // DECISIONS.md ADR-021/ADR-022 — deferred against the local PGlite sandbox
   // (no extension support), enabled now that Neon is the primary database.
   extensions = [postgis]
@@ -48,6 +48,7 @@ model Person {
   userAccount      UserAccount?
   projectsAsClient Project[]
   storiesAuthored  Story[]
+  assetsCaptured   Asset[]      @relation("AssetCreatorPerson")
 
   @@map("person")
   @@schema("core")
@@ -100,6 +101,10 @@ model UserAccount {
   bookings                  Booking[]
   orders                    Order[]
   experienceSessionsCreated ExperienceSession[] @relation("ExperienceSessionCreatedBy")
+  assetsCreated             Asset[]             @relation("AssetCreatedBy")
+  tasksCreated              Task[]              @relation("TaskCreatedBy")
+  tasksAssigned             Task[]              @relation("TaskAssignedTo")
+  fieldSubmissions          FieldSubmission[]   @relation("FieldSubmissionSubmittedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -334,6 +339,7 @@ model Location {
   stories                     Story[]
   products                    Product[]
   experiences                 Experience[]
+  assets                      Asset[]
 
   @@index([parentLocationId])
   @@index([organizationId])
@@ -463,6 +469,11 @@ model Project {
   stories     Story[]
   products    Product[]
   experiences Experience[]
+  assets      Asset[]
+
+  // Slice 5 (Partner Workspace) — module-owned, `partner` schema.
+  tasks            Task[]
+  fieldSubmissions FieldSubmission[]
 
   @@index([programId])
   @@index([organizationId])
@@ -923,4 +934,154 @@ model BookingPayment {
   @@index([bookingId])
   @@map("booking_payment")
   @@schema("experiences")
+}
+
+// ---------------------------------------------------------------------------
+// Slice 5 — Partner Workspace (MVP_ROADMAP.md). `Asset` is canonical
+// (DOMAIN_MODEL.md §3, DATA_ARCHITECTURE.md §5) so it lives in `core`, same
+// as Product/Experience — metadata only, the binary lives in R2
+// (DECISIONS.md ADR-003) referenced by `storageKey`. `Task`/`FieldSubmission`
+// are module-owned in a new `partner` schema, same convention as
+// `commerce`/`experiences`. Per DOMAIN_MODEL.md §4, "Partner Workspace" is
+// not a separate data model — it's a role-aware view over Assignment
+// (scope=project), Task, and Asset uploads; there is no `PartnerWorkspace`
+// table.
+// ---------------------------------------------------------------------------
+
+enum AssetStatus {
+  draft
+  approved
+  archived
+
+  @@schema("core")
+}
+
+// Metadata only — DATA_ARCHITECTURE.md §5 forbids binaries in Postgres.
+// `derivativeOfAssetId` points at the original when this row is a generated
+// thumbnail/preview; scientific/evidence originals are never overwritten,
+// only superseded by a new row (same version-preservation principle as
+// everywhere else — PLATFORM_OVERVIEW.md §3).
+model Asset {
+  id               String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assetType        String              @map("asset_type")
+  storageKey       String              @unique @map("storage_key")
+  storageBucket    String              @map("storage_bucket")
+  checksumSha256   String?             @map("checksum_sha256")
+  mimeType         String              @map("mime_type")
+  sizeBytes        Int                 @map("size_bytes")
+  originalFilename String?             @map("original_filename")
+  creatorPersonId  String?             @map("creator_person_id") @db.Uuid
+  creatorPerson    Person?             @relation("AssetCreatorPerson", fields: [creatorPersonId], references: [id])
+  capturedAt       DateTime?           @map("captured_at")
+  locationId       String?             @map("location_id") @db.Uuid
+  location         Location?           @relation(fields: [locationId], references: [id])
+  projectId        String?             @map("project_id") @db.Uuid
+  project          Project?            @relation(fields: [projectId], references: [id])
+  usageRights      String?             @map("usage_rights")
+  status           AssetStatus         @default(draft)
+  classification   ClassificationLevel @default(internal)
+
+  derivativeOfAssetId String? @map("derivative_of_asset_id") @db.Uuid
+  derivativeOf        Asset?  @relation("AssetDerivative", fields: [derivativeOfAssetId], references: [id])
+  derivatives         Asset[] @relation("AssetDerivative")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("AssetCreatedBy", fields: [createdBy], references: [id])
+
+  fieldSubmissions FieldSubmissionAsset[]
+
+  @@index([projectId])
+  @@index([locationId])
+  @@map("asset")
+  @@schema("core")
+}
+
+enum TaskStatus {
+  open
+  in_progress
+  submitted
+  completed
+  blocked
+
+  @@schema("partner")
+}
+
+model Task {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId   String  @map("project_id") @db.Uuid
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+
+  // Nullable — a Task can sit open for any partner assigned to the project,
+  // not necessarily pre-assigned to one specific person.
+  assignedToUserAccountId String?      @map("assigned_to_user_account_id") @db.Uuid
+  assignedTo              UserAccount? @relation("TaskAssignedTo", fields: [assignedToUserAccountId], references: [id])
+
+  dueDate DateTime?  @map("due_date")
+  status  TaskStatus @default(open)
+
+  // CLAUDE.md §10 classification axis, independent of the project-scoped
+  // partner:* permission grant — MVP_ROADMAP.md's stated purpose for this
+  // slice ("first slice where the classification axis meaningfully
+  // restricts a non-admin, non-researcher user's view"). A Task above what
+  // a partner's Assignment clears is invisible to them even on their own
+  // assigned project.
+  classification ClassificationLevel @default(internal)
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("TaskCreatedBy", fields: [createdBy], references: [id])
+
+  submissions FieldSubmission[]
+
+  @@index([projectId])
+  @@index([assignedToUserAccountId])
+  @@map("task")
+  @@schema("partner")
+}
+
+// A partner's field data entry (CLAUDE.md §4's "Operational forms / Data
+// entry / Documentation") — deliberately generic free text for this slice,
+// not a module-specific form (research measurements, environmental
+// observations), since Research OS and Environmental modules don't exist
+// yet (DOMAIN_MODEL.md §4's own note that Partner Workspace's submission
+// forms are module-specific once those modules land).
+model FieldSubmission {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId    String? @map("task_id") @db.Uuid
+  task      Task?   @relation(fields: [taskId], references: [id])
+
+  submittedByUserAccountId String      @map("submitted_by_user_account_id") @db.Uuid
+  submittedBy              UserAccount @relation("FieldSubmissionSubmittedBy", fields: [submittedByUserAccountId], references: [id])
+
+  title String
+  notes String
+
+  classification ClassificationLevel @default(internal)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  assets FieldSubmissionAsset[]
+
+  @@index([projectId])
+  @@index([taskId])
+  @@map("field_submission")
+  @@schema("partner")
+}
+
+model FieldSubmissionAsset {
+  fieldSubmissionId String          @map("field_submission_id") @db.Uuid
+  fieldSubmission   FieldSubmission @relation(fields: [fieldSubmissionId], references: [id], onDelete: Cascade)
+  assetId           String          @map("asset_id") @db.Uuid
+  asset             Asset           @relation(fields: [assetId], references: [id])
+
+  @@id([fieldSubmissionId, assetId])
+  @@map("field_submission_asset")
+  @@schema("partner")
 }

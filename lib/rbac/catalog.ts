@@ -96,6 +96,14 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       ["partner", "submit_task"],
       ["partner", "submit_data"],
       ["partner", "upload_media"],
+      // Slice 5 (DECISIONS.md ADR-029) — the classification level literally
+      // named "partner" exists for exactly this profile to clear. Without
+      // it, a Partner Field Collector could see nothing above `public` on
+      // their own assigned project, which defeats the purpose of a
+      // project-scoped Assignment. They still cannot clear
+      // internal/confidential/trade_secret — those stay admin/research-only
+      // even on a project the partner is assigned to.
+      ["classification", "clear_partner"],
     ],
   },
   {

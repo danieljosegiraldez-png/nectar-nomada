@@ -75,11 +75,14 @@ are accepted planning input (ADR-026/027) not yet built. End-to-end Stripe
 purchase verification pending test-mode API keys and at least one priced
 DEMO Experience, same open item as Slice 3 (ADR-025 decision 10).
 
-### Slice 5 — Partner Workspace
+### Slice 5 — Partner Workspace (implemented, DECISIONS.md ADR-029)
 Project Assignment (exercising `RBAC.md`'s scope=project path in production for
 the first time with a real non-admin user type), Task, data submission forms,
 media upload (`DATA_ARCHITECTURE.md` §5). First slice where the classification
-axis meaningfully restricts a non-admin, non-researcher user's view.
+axis meaningfully restricts a non-admin, non-researcher user's view — verified
+live with a real seeded DEMO Partner Field Collector account. Media upload's
+object-storage round trip is unverified pending Cloudflare R2 credentials
+(same open item as Stripe for Slices 3/4).
 
 ### Slice 6 — Sensory
 Sensory Session, Blind Sample, Evaluator, Assessment, Panel Results — starting

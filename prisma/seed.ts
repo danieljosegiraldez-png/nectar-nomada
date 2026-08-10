@@ -348,6 +348,113 @@ async function seedDemoDiscoverContent() {
     "Seeded Slice 2 DEMO Discover content: 2 organizations, 5 locations, 1 program, 1 project, 2 stories, " +
       "2 products, 2 experiences. Fictional placeholder data — CLAUDE.md §54. Not real project information.",
   );
+
+  return lasNubesProject;
+}
+
+async function findOrCreateProjectScope(projectId: string) {
+  const existing = await prisma.scope.findFirst({ where: { scopeType: "project", scopeRefId: projectId } });
+  if (existing) return existing;
+  return prisma.scope.create({ data: { scopeType: "project", scopeRefId: projectId } });
+}
+
+/**
+ * Slice 5 (Partner Workspace) DEMO partner account — opt-in via
+ * SEED_DEMO_PARTNER=true, same reasoning as SEED_DEMO_ADMIN (CLAUDE.md §54:
+ * never a default login in a shared/production environment). Assigned to
+ * Las Nubes with "Partner Field Collector" so this account can actually log
+ * in and demonstrate the classification-gated Partner Workspace view
+ * (MVP_ROADMAP.md Slice 5) end to end, not just in a one-off test fixture.
+ */
+async function seedDemoPartner(lasNubesProjectId: string) {
+  const email = "demo-partner@nectar-nomada.example";
+  const existingPerson = await prisma.person.findFirst({ where: { email } });
+  if (existingPerson) {
+    console.log("DEMO Partner Field Collector already seeded — skipping.");
+    return prisma.userAccount.findFirstOrThrow({ where: { personId: existingPerson.id } });
+  }
+
+  const passwordHash = await hashPassword("DemoPartner!2026-change-me");
+
+  const person = await prisma.person.create({
+    data: { givenName: "DEMO", familyName: "Partner", displayName: "DEMO Partner Field Collector", email },
+  });
+
+  const userAccount = await prisma.userAccount.create({
+    data: { personId: person.id, authProvider: "credentials", passwordHash, status: "active" },
+  });
+
+  const partnerProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Partner Field Collector" } });
+  const projectScope = await findOrCreateProjectScope(lasNubesProjectId);
+
+  await prisma.assignment.create({
+    data: { userAccountId: userAccount.id, roleProfileId: partnerProfile.id, scopeId: projectScope.id },
+  });
+
+  console.log(`Seeded DEMO Partner Field Collector — email: ${email}, password: DemoPartner!2026-change-me`);
+  console.log("Assigned to the Las Nubes project. Local/dev seed data only — CLAUDE.md §54. Rotate or remove before any shared deployment.");
+
+  return userAccount;
+}
+
+/**
+ * Slice 5 DEMO Tasks (mixed classification — MVP_ROADMAP.md's own stated
+ * purpose for this slice: "first slice where the classification axis
+ * meaningfully restricts a non-admin, non-researcher user's view"), plus a
+ * DEMO field submission attributed to the DEMO partner account when one
+ * exists (submittedByUserAccountId is a required FK — a submission
+ * genuinely needs a real actor, so this step is skipped, not faked, when
+ * SEED_DEMO_PARTNER wasn't also requested).
+ */
+async function seedDemoPartnerWorkspaceContent(lasNubesProjectId: string, submitterUserAccountId: string | null) {
+  const existingTask = await prisma.task.findFirst({
+    where: { projectId: lasNubesProjectId, title: "Confirm bloom-window observations for the apiary plot" },
+  });
+  if (existingTask) {
+    console.log("Slice 5 DEMO Partner Workspace content already seeded — skipping.");
+    return;
+  }
+
+  await prisma.task.create({
+    data: {
+      projectId: lasNubesProjectId,
+      title: "Confirm bloom-window observations for the apiary plot",
+      description:
+        "[DEMO placeholder task, classified 'partner' — visible to any partner assigned to this project. Real task content pending real partner engagement.]",
+      status: "open",
+      classification: "partner",
+    },
+  });
+
+  await prisma.task.create({
+    data: {
+      projectId: lasNubesProjectId,
+      title: "Internal: review Q3 research budget allocation",
+      description:
+        "[DEMO placeholder task, deliberately classified 'internal' — demonstrates that a Partner Field Collector assigned to this same project cannot see this task, per RBAC.md's classification axis.]",
+      status: "open",
+      classification: "internal",
+    },
+  });
+
+  if (submitterUserAccountId) {
+    await prisma.fieldSubmission.create({
+      data: {
+        projectId: lasNubesProjectId,
+        submittedByUserAccountId: submitterUserAccountId,
+        title: "Week 1 site check-in",
+        notes:
+          "[DEMO placeholder field submission — plausible but fictional content used to validate the Partner Workspace submission flow, not a real field report.]",
+        classification: "partner",
+      },
+    });
+  }
+
+  console.log(
+    "Seeded Slice 5 DEMO Partner Workspace content: 2 tasks" +
+      (submitterUserAccountId ? ", 1 field submission" : "") +
+      ". Fictional placeholder data — CLAUDE.md §54.",
+  );
 }
 
 async function main() {
@@ -360,7 +467,14 @@ async function main() {
   }
 
   if (process.env.SEED_DEMO_CONTENT === "true") {
-    await seedDemoDiscoverContent();
+    const lasNubesProject = await seedDemoDiscoverContent();
+
+    let demoPartnerAccount: { id: string } | null = null;
+    if (process.env.SEED_DEMO_PARTNER === "true") {
+      demoPartnerAccount = await seedDemoPartner(lasNubesProject.id);
+    }
+
+    await seedDemoPartnerWorkspaceContent(lasNubesProject.id, demoPartnerAccount?.id ?? null);
   }
 
   console.log(`Seeded ${PERMISSIONS.length} permissions and ${ROLE_PROFILES.length} role profiles.`);

@@ -2,6 +2,7 @@
   "Nav": {
     "brand": "Néctar Nómada",
     "myNectar": "My Néctar",
+    "partnerWorkspace": "Partner Workspace",
     "signIn": "Sign in",
     "signUp": "Sign up",
     "signOut": "Sign out"
@@ -136,6 +137,34 @@
     "bookingStatus_refunded": "Refunded",
     "otherActivityHeading": "Sensory history · Saved items",
     "otherActivityBody": "Empty — Sensory is a later vertical slice (MVP_ROADMAP.md)."
+  },
+  "Partner": {
+    "badge": "Partner Workspace",
+    "title": "Your assigned projects",
+    "noProjects": "No projects assigned to you yet — an admin can grant a project-scoped Assignment (RBAC.md §5).",
+    "backToWorkspace": "← Back to Partner Workspace",
+    "tasksHeading": "Tasks",
+    "noTasks": "No tasks visible to you on this project yet.",
+    "assignedTo": "Assigned to {name}",
+    "updateStatusButton": "Update",
+    "taskStatus_open": "Open",
+    "taskStatus_in_progress": "In progress",
+    "taskStatus_submitted": "Submitted",
+    "taskStatus_completed": "Completed",
+    "taskStatus_blocked": "Blocked",
+    "submissionsHeading": "Field submissions",
+    "noSubmissions": "No field submissions visible to you on this project yet.",
+    "submissionTitleLabel": "Title",
+    "submissionNotesLabel": "Notes",
+    "submitButton": "Submit",
+    "mediaHeading": "Media",
+    "noMedia": "No media uploaded to this project yet.",
+    "uploadLabel": "File",
+    "uploadButton": "Upload",
+    "uploadingButton": "Uploading…",
+    "error_invalid_submission": "Enter a title and some notes.",
+    "error_no_project_access": "You don't have access to this project.",
+    "error_upload_failed": "The upload failed. Try again."
   },
   "LocaleSwitcher": {
     "label": "Language"

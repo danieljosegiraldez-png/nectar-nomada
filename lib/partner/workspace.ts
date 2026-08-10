@@ -1,0 +1,252 @@
+/**
+ * Slice 5 (Partner Workspace). Per DOMAIN_MODEL.md §4, this is "not a
+ * separate data model — it is a role-aware view over Assignment (scope =
+ * Project), Task, Asset uploads... filtered to what that partner's
+ * Assignments grant." There is no PartnerWorkspace table; every function
+ * here composes the existing RBAC primitives (lib/rbac/service.ts) against
+ * Task/FieldSubmission/Asset.
+ *
+ * Visibility uses the actual `partner:*` action permissions as the view
+ * gate (there is no separate `partner:view` permission in the catalog,
+ * RBAC.md §5) — holding submit_task/submit_data/upload_media for this
+ * project's scope, AND clearing the specific record's classification, is
+ * what makes a record visible. This is a deliberate simplification: every
+ * Role Profile that can act on partner data today (Partner Field Collector,
+ * Platform Admin) also holds all three action permissions together, so this
+ * doesn't currently under- or over-grant visibility — splitting out a
+ * dedicated view permission is a small, isolated change if a
+ * submit-without-view profile is ever needed.
+ */
+import { randomUUID } from "node:crypto";
+import { prisma } from "../db";
+import { resolvedPermissionKeys } from "../rbac/service";
+import { permissionKey } from "../rbac/types";
+import type { ScopeTarget } from "../rbac/types";
+import { objectStorageProvider } from "../integrations/storage";
+
+export class PartnerAccessError extends Error {}
+
+function isVisible(grantedKeys: Set<string>, actionKey: string, classification: string): boolean {
+  if (!grantedKeys.has(actionKey)) return false;
+  if (classification === "public") return true;
+  return grantedKeys.has(permissionKey("classification", `clear_${classification}`));
+}
+
+/**
+ * Projects this user has an active project-scoped Assignment for — the
+ * Assignment itself is the gate, same "ownership is the filter" pattern as
+ * Cart/Order (lib/commerce/cart.ts), adapted to "assignment scope is the
+ * filter." A platform-scoped Assignment (e.g. Platform Admin) does not
+ * automatically populate this list — Partner Workspace means "projects I am
+ * specifically assigned to," not a god-view; RBAC.md §3's platform-contains-
+ * everything rule still applies once *inside* a given project (see
+ * getProjectWorkspace), it just isn't what drives this list.
+ */
+export async function getPartnerProjects(userAccountId: string) {
+  const now = new Date();
+  const assignments = await prisma.assignment.findMany({
+    where: {
+      userAccountId,
+      status: "active",
+      validFrom: { lte: now },
+      OR: [{ validTo: null }, { validTo: { gt: now } }],
+      scope: { scopeType: "project" },
+    },
+    include: { scope: true },
+  });
+
+  const projectIds = [
+    ...new Set(assignments.map((a) => a.scope.scopeRefId).filter((id): id is string => id !== null)),
+  ];
+  if (projectIds.length === 0) return [];
+
+  return prisma.project.findMany({
+    where: { id: { in: projectIds } },
+    orderBy: { name: "asc" },
+  });
+}
+
+export async function getProjectWorkspace(userAccountId: string, projectId: string) {
+  const target: ScopeTarget = { scopeType: "project", scopeRefId: projectId };
+  const grantedKeys = await resolvedPermissionKeys(userAccountId, target);
+
+  const canSubmitTask = grantedKeys.has(permissionKey("partner", "submit_task"));
+  const canSubmitData = grantedKeys.has(permissionKey("partner", "submit_data"));
+  const canUploadMedia = grantedKeys.has(permissionKey("partner", "upload_media"));
+
+  if (!canSubmitTask && !canSubmitData && !canUploadMedia) {
+    throw new PartnerAccessError("no_project_access");
+  }
+
+  const [project, tasks, submissions, assets] = await Promise.all([
+    prisma.project.findUniqueOrThrow({ where: { id: projectId } }),
+    prisma.task.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "desc" },
+      include: { assignedTo: { include: { person: true } } },
+    }),
+    prisma.fieldSubmission.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "desc" },
+      include: { submittedBy: { include: { person: true } }, assets: { include: { asset: true } } },
+    }),
+    prisma.asset.findMany({ where: { projectId }, orderBy: { createdAt: "desc" } }),
+  ]);
+
+  return {
+    project,
+    tasks: tasks.filter((t) => isVisible(grantedKeys, permissionKey("partner", "submit_task"), t.classification)),
+    submissions: submissions.filter((s) =>
+      isVisible(grantedKeys, permissionKey("partner", "submit_data"), s.classification),
+    ),
+    assets: assets.filter((a) => isVisible(grantedKeys, permissionKey("partner", "upload_media"), a.classification)),
+    canSubmitTask,
+    canSubmitData,
+    canUploadMedia,
+  };
+}
+
+const TASK_STATUSES = ["open", "in_progress", "submitted", "completed", "blocked"] as const;
+export type TaskStatusInput = (typeof TASK_STATUSES)[number];
+
+export async function updateTaskStatus(userAccountId: string, taskId: string, status: TaskStatusInput) {
+  if (!TASK_STATUSES.includes(status)) {
+    throw new PartnerAccessError("invalid_status");
+  }
+
+  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!task) throw new PartnerAccessError("task_not_found");
+
+  const target: ScopeTarget = { scopeType: "project", scopeRefId: task.projectId };
+  const grantedKeys = await resolvedPermissionKeys(userAccountId, target);
+  if (!isVisible(grantedKeys, permissionKey("partner", "submit_task"), task.classification)) {
+    throw new PartnerAccessError("no_task_access");
+  }
+
+  return prisma.task.update({ where: { id: taskId }, data: { status } });
+}
+
+export interface CreateFieldSubmissionInput {
+  projectId: string;
+  taskId?: string | null;
+  title: string;
+  notes: string;
+}
+
+/**
+ * Partner-authored submissions are always created at `classification:
+ * 'partner'` — not user-selectable. Letting a partner pick a classification
+ * level (including one they themselves can't see) would be a confusing,
+ * unnecessary escalation surface; reclassifying content upward is an
+ * admin/Research-Lead operation, not built in this slice.
+ */
+export async function createFieldSubmission(userAccountId: string, input: CreateFieldSubmissionInput) {
+  if (!input.title.trim() || !input.notes.trim()) {
+    throw new PartnerAccessError("invalid_submission");
+  }
+
+  const target: ScopeTarget = { scopeType: "project", scopeRefId: input.projectId };
+  const grantedKeys = await resolvedPermissionKeys(userAccountId, target);
+  if (!isVisible(grantedKeys, permissionKey("partner", "submit_data"), "partner")) {
+    throw new PartnerAccessError("no_project_access");
+  }
+
+  return prisma.fieldSubmission.create({
+    data: {
+      projectId: input.projectId,
+      taskId: input.taskId ?? null,
+      submittedByUserAccountId: userAccountId,
+      title: input.title.trim(),
+      notes: input.notes.trim(),
+      classification: "partner",
+    },
+  });
+}
+
+export interface RequestAssetUploadInput {
+  projectId: string;
+  originalFilename: string;
+  contentType: string;
+}
+
+/**
+ * Step 1 of 2 for a media upload. Returns a presigned PUT URL the browser
+ * uploads directly to R2 (lib/integrations/storage) — the Next.js server
+ * never holds the file bytes. `storageKey` follows DATA_ARCHITECTURE.md §5's
+ * convention. No Asset row is created yet; that happens in
+ * finalizeAssetUpload once the client confirms the upload succeeded, so a
+ * failed/abandoned upload never leaves a dangling Asset record pointing at
+ * nothing in the bucket.
+ */
+export async function requestAssetUpload(userAccountId: string, input: RequestAssetUploadInput) {
+  const target: ScopeTarget = { scopeType: "project", scopeRefId: input.projectId };
+  const grantedKeys = await resolvedPermissionKeys(userAccountId, target);
+  if (!isVisible(grantedKeys, permissionKey("partner", "upload_media"), "partner")) {
+    throw new PartnerAccessError("no_project_access");
+  }
+
+  const ext = input.originalFilename.includes(".") ? input.originalFilename.split(".").pop() : undefined;
+  const storageKey = `nectar-originals/partner/${input.projectId}/${randomUUID()}${ext ? `.${ext}` : ""}`;
+
+  const { uploadUrl } = await objectStorageProvider.putObject({ key: storageKey, contentType: input.contentType });
+
+  return { uploadUrl, storageKey };
+}
+
+export interface FinalizeAssetUploadInput {
+  projectId: string;
+  storageKey: string;
+  mimeType: string;
+  sizeBytes: number;
+  originalFilename: string;
+}
+
+const BUCKET = "nectar-originals";
+
+export async function finalizeAssetUpload(userAccountId: string, input: FinalizeAssetUploadInput) {
+  const target: ScopeTarget = { scopeType: "project", scopeRefId: input.projectId };
+  const grantedKeys = await resolvedPermissionKeys(userAccountId, target);
+  if (!isVisible(grantedKeys, permissionKey("partner", "upload_media"), "partner")) {
+    throw new PartnerAccessError("no_project_access");
+  }
+  if (!input.storageKey.startsWith(`nectar-originals/partner/${input.projectId}/`)) {
+    throw new PartnerAccessError("invalid_storage_key");
+  }
+
+  const userAccount = await prisma.userAccount.findUniqueOrThrow({
+    where: { id: userAccountId },
+    select: { personId: true },
+  });
+
+  const asset = await prisma.asset.create({
+    data: {
+      assetType: input.mimeType.startsWith("image/") ? "photo" : input.mimeType.startsWith("video/") ? "video" : "document",
+      storageKey: input.storageKey,
+      storageBucket: BUCKET,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      originalFilename: input.originalFilename,
+      creatorPersonId: userAccount.personId,
+      projectId: input.projectId,
+      status: "approved",
+      classification: "partner",
+      createdBy: userAccountId,
+    },
+  });
+
+  return asset;
+}
+
+export async function getAssetViewUrl(userAccountId: string, assetId: string): Promise<string> {
+  const asset = await prisma.asset.findUniqueOrThrow({ where: { id: assetId } });
+
+  if (asset.projectId) {
+    const target: ScopeTarget = { scopeType: "project", scopeRefId: asset.projectId };
+    const grantedKeys = await resolvedPermissionKeys(userAccountId, target);
+    if (!isVisible(grantedKeys, permissionKey("partner", "upload_media"), asset.classification)) {
+      throw new PartnerAccessError("no_asset_access");
+    }
+  }
+
+  return objectStorageProvider.getSignedUrl(asset.storageKey);
+}

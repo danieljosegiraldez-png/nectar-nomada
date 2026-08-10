@@ -45,6 +45,12 @@ Edit `.env`:
   `stripe listen --forward-to localhost:3000/api/webhooks/stripe`; it prints
   a `whsec_...` value to use here. In production this comes from the
   webhook endpoint's settings in the Stripe Dashboard instead.
+- `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_BUCKET` —
+  Cloudflare R2 object storage (DECISIONS.md ADR-003/ADR-029), needed for
+  Slice 5's Partner Workspace media upload. Create a bucket and an API
+  token scoped to it at [dash.cloudflare.com](https://dash.cloudflare.com)
+  → R2. Requires a free Cloudflare account; this can't be created on your
+  behalf.
 
 Then:
 
@@ -62,6 +68,16 @@ the password — never do this in a shared environment):
 SEED_DEMO_ADMIN=true npx prisma db seed
 ```
 
+To also get a DEMO Partner Field Collector login, assigned to the Las Nubes
+project (`demo-partner@nectar-nomada.example` / see console output for the
+password) — this is what lets you actually see the Slice 5 Partner Workspace
+classification restriction in action (the partner sees one DEMO Task, not
+the other, deliberately internal-classified one):
+
+```bash
+SEED_DEMO_CONTENT=true SEED_DEMO_PARTNER=true npx prisma db seed
+```
+
 ## Common commands
 
 | Command | What it does |
@@ -76,10 +92,9 @@ SEED_DEMO_ADMIN=true npx prisma db seed
 
 ## What's verified vs. not
 
-Everything through Slice 4 (Experiences & Reservations, core engine) has
-been verified against **Neon**, the primary database as of ADR-022, via
-`npm run build`, `npm run lint`, `npm test`, `npx tsc --noEmit`, and real
-browser sessions:
+Everything through Slice 5 (Partner Workspace) has been verified against
+**Neon**, the primary database as of ADR-022, via `npm run build`,
+`npm run lint`, `npm test`, `npx tsc --noEmit`, and real browser sessions:
 
 - Slice 1 (Identity): signup → login → My Néctar, RBAC resolution (unit
   tests + a live Platform Admin permission list), `prisma migrate deploy`.
@@ -101,21 +116,41 @@ browser sessions:
   booking form because the DEMO Experience has no price ("booking opens
   once pricing is set"); My Néctar's Bookings section shows "no bookings
   yet" for a real logged-in user.
+- Slice 5 (Partner Workspace): schema/migration on Neon; logged in as the
+  real seeded DEMO Partner Field Collector account, Partner Workspace's
+  project list correctly shows only Las Nubes (the project they're
+  assigned to — a Platform Admin's platform-scoped Assignment does *not*
+  populate this list, by design, ADR-029 decision 2); the project workspace
+  correctly shows only the `partner`-classified DEMO Task, not the
+  `internal`-classified one on the same project; both write paths (task
+  status update, new field submission) exercised live and confirmed working.
 
-**Not verified yet — Slices 3 & 4**: a real Stripe Checkout purchase
+**Not verified yet — Slices 3, 4 & 5**: a real Stripe Checkout purchase
 (Commerce order or Experience booking) completing through the shared
-webhook (`markOrderPaid`/`markBookingPaid`). Blocked on two things this
-session can't supply: `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` (see
-above), and a decision on how to price at least one DEMO `ProductVariant`
-or Experience for testing without fabricating a real price (DECISIONS.md
-ADR-025 decision 10, ADR-028 decision 8).
+webhook (`markOrderPaid`/`markBookingPaid`), and a real Partner Workspace
+media upload completing through R2. Blocked on credentials this session
+can't supply: `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` and a decision on
+how to price at least one DEMO `ProductVariant`/Experience (DECISIONS.md
+ADR-025 decision 10, ADR-028 decision 8), and
+`R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_BUCKET`
+(ADR-029 decision 6/verification note) respectively.
 
 **Not built yet — Slice 4**: `TOURISM_EXPERIENCES.md`'s gastro-tourism
 extensions (waitlist, multi-day sessions, dietary structure, pairing menus,
 live sensory feedback) — accepted planning input (ADR-026/027), layered onto
 the core engine in a future increment, not part of this verification.
 
+**Not built yet — Slice 5**: an admin-facing UI for creating/reclassifying
+Tasks (Task rows currently come from seed data only — ADR-029 decision 4).
+
 **Not verified anywhere yet**: Google OAuth (needs real credentials + a live
-redirect), email verification/transactional email (no provider wired up),
-and an actual Vercel deployment (nothing has been deployed anywhere yet —
-this has all run through `npm run dev`/`next build` locally against Neon).
+redirect), email verification/transactional email (no provider wired up).
+
+**Deployment**: a real Vercel production deployment exists at
+https://nectar-nomada-package.vercel.app (linked project
+`danieljosegiraldez-4768s-projects/nectar-nomada-package`), verified working
+end to end — homepage, Discover (real Neon data), and a full login → My
+Néctar walkthrough all checked directly against production after fixing a
+`DATABASE_URL` formatting bug caught during that verification. Stripe/R2
+env vars are not set in Vercel either, so the same gaps noted above apply
+in production too.

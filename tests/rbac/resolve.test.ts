@@ -169,6 +169,17 @@ describe("Partner Field Collector — scoped to Project A", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_B };
     expect(can(assignments, "submit_data", "partner", target)).toBe(false);
   });
+
+  it("positive: clears 'partner'-classified records within Project A (DECISIONS.md ADR-029 — the classification level named 'partner' exists for this profile to clear)", () => {
+    const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
+    expect(can(assignments, "submit_data", "partner", target, "partner")).toBe(true);
+  });
+
+  it("negative: still cannot clear 'internal' or 'confidential' records, even on their own assigned project", () => {
+    const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
+    expect(can(assignments, "submit_data", "partner", target, "internal")).toBe(false);
+    expect(can(assignments, "submit_data", "partner", target, "confidential")).toBe(false);
+  });
 });
 
 describe("Sensory Judge — scoped to Session 1 (blind-evaluation special case, RBAC.md §7)", () => {
@@ -216,7 +227,7 @@ describe("classification gate", () => {
   });
 
   it("holding the action permission is not sufficient without the matching clearance", () => {
-    // Partner Field Collector has no 'research' permissions and no classification clearances at all —
+    // Partner Field Collector clears 'partner' (ADR-029) but not 'confidential' —
     // included here mainly to document that both gates are independently necessary.
     const assignments = [assignmentFor("Partner Field Collector", { scopeType: "project", scopeRefId: PROJECT_A })];
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
