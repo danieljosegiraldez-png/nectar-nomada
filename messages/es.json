@@ -139,8 +139,10 @@
     "bookingStatus_confirmed": "Confirmada",
     "bookingStatus_cancelled": "Cancelada",
     "bookingStatus_refunded": "Reembolsada",
-    "otherActivityHeading": "Historial sensorial · Guardados",
-    "otherActivityBody": "Vacío — Sensorial es un slice vertical posterior (MVP_ROADMAP.md)."
+    "sensoryHistoryHeading": "Historial sensorial",
+    "noSensoryHistory": "Aún no has enviado evaluaciones.",
+    "sensoryHistorySample": "Muestra {code}",
+    "sensoryHistoryScore": "Puntaje general: {score}"
   },
   "Competitions": {
     "badge": "Competencias",

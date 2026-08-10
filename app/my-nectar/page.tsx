@@ -5,6 +5,7 @@ import { getCurrentUser } from "../../lib/auth/session";
 import { canManageOwnProfile, resolvedPermissionKeys } from "../../lib/rbac/service";
 import { getOrdersForUser } from "../../lib/commerce/orders";
 import { getBookingsForUser } from "../../lib/experiences/bookings";
+import { getAssessmentHistoryForEvaluator } from "../../lib/sensory/service";
 import { formatPrice } from "../../lib/discover/format";
 
 export const dynamic = "force-dynamic";
@@ -43,11 +44,12 @@ export default async function MyNectarPage() {
   // meaningful target to resolve against right now is the platform scope —
   // this is a live call into the same authorization service every other
   // module will use, not a stub.
-  const [platformPermissions, t, orders, bookings] = await Promise.all([
+  const [platformPermissions, t, orders, bookings, assessments] = await Promise.all([
     resolvedPermissionKeys(user.userAccountId, { scopeType: "platform", scopeRefId: null }),
     getTranslations("MyNectar"),
     getOrdersForUser(user.userAccountId),
     getBookingsForUser(user.userAccountId),
+    getAssessmentHistoryForEvaluator(user.userAccountId),
   ]);
 
   return (
@@ -143,8 +145,32 @@ export default async function MyNectarPage() {
       </section>
 
       <section style={{ marginTop: "2rem" }}>
-        <h2>{t("otherActivityHeading")}</h2>
-        <p className="nn-muted">{t("otherActivityBody")}</p>
+        <h2>{t("sensoryHistoryHeading")}</h2>
+        {assessments.length === 0 ? (
+          <p className="nn-muted">{t("noSensoryHistory")}</p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0 }}>
+            {assessments.map((assessment) => {
+              const session = assessment.blindSample.flight.session;
+              return (
+                <li key={assessment.id} className="nn-card" style={{ maxWidth: "none", marginBottom: "1rem" }}>
+                  <p style={{ margin: 0 }}>
+                    <strong>{session.protocolVersion.protocol.name}</strong> —{" "}
+                    {t("sensoryHistorySample", { code: assessment.blindSample.blindCode })}
+                  </p>
+                  <p className="nn-muted" style={{ margin: 0 }}>
+                    {session.name} · {assessment.submittedAt.toLocaleDateString()}
+                  </p>
+                  {assessment.overallScore ? (
+                    <p className="nn-price">
+                      {t("sensoryHistoryScore", { score: assessment.overallScore.toNumber().toFixed(2) })}
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
     </div>
   );

@@ -144,6 +144,34 @@ export async function submitAssessment(userAccountId: string, input: SubmitAsses
   }
 }
 
+/**
+ * An evaluator's own submitted assessments across every session — CLAUDE.md
+ * §14/§27's "My Tastings, Sensory History." Ownership check is the query
+ * itself (same pattern as lib/experiences/bookings.ts's getBookingsForUser)
+ * — no separate permission check needed, since this only ever returns the
+ * caller's own rows. Never reveals blind-sample identity (RBAC.md §7): the
+ * blind code and protocol/session names are a judge's own submitted record,
+ * not the real sample behind another judge's blind mapping.
+ */
+export function getAssessmentHistoryForEvaluator(userAccountId: string) {
+  return prisma.assessment.findMany({
+    where: { evaluatorUserAccountId: userAccountId, status: "submitted" },
+    include: {
+      blindSample: {
+        include: {
+          flight: {
+            include: {
+              session: { include: { protocolVersion: { include: { protocol: true } } } },
+            },
+          },
+        },
+      },
+      attributeResponses: true,
+    },
+    orderBy: { submittedAt: "desc" },
+  });
+}
+
 export async function getSessionForHeadJudge(userAccountId: string, sessionId: string) {
   const grantedKeys = await grantedKeysForSession(userAccountId, sessionId);
   if (!grantedKeys.has(permissionKey("blind_mapping", "view"))) {

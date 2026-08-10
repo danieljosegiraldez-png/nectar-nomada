@@ -139,8 +139,10 @@
     "bookingStatus_confirmed": "Confirmed",
     "bookingStatus_cancelled": "Cancelled",
     "bookingStatus_refunded": "Refunded",
-    "otherActivityHeading": "Sensory history · Saved items",
-    "otherActivityBody": "Empty — Sensory is a later vertical slice (MVP_ROADMAP.md)."
+    "sensoryHistoryHeading": "Sensory history",
+    "noSensoryHistory": "No submitted assessments yet.",
+    "sensoryHistorySample": "Sample {code}",
+    "sensoryHistoryScore": "Overall score: {score}"
   },
   "Competitions": {
     "badge": "Competitions",
