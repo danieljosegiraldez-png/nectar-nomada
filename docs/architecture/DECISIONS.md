@@ -961,3 +961,125 @@ completing through the webhook) is blocked on two external prerequisites
 that can't be supplied by this session: Stripe test-mode API keys, and a
 decision about how to price at least one DEMO variant for testing. Slice 4
 (Experience booking) is untouched by this ADR.
+
+---
+
+## ADR-026 — Five planning docs accepted: specimen/material traceability,
+consumer sensory feedback, guided field study tool, tourism experiences,
+research activity criteria
+
+**Context:** Five architecture planning documents were added to
+`docs/architecture/`, read in dependency order (each extends the one(s)
+before it):
+
+1. `SPECIMEN_AND_MATERIAL_TRACEABILITY.md`
+2. `CONSUMER_SENSORY_FEEDBACK.md`
+3. `GUIDED_FIELD_STUDY_TOOL.md`
+4. `TOURISM_EXPERIENCES.md`
+5. `RESEARCH_ACTIVITY_CRITERIA.md`
+
+Same pattern as every prior planning doc (ADR-017/018/019/020): **accepted
+as domain-model/process input, implementation deferred** — none of the
+schema described in documents 1-4 is built by this ADR. Cross-checked
+against `DOMAIN_MODEL.md`, `RBAC.md`, `AI_GOVERNANCE.md`, and
+`DATA_ARCHITECTURE.md` for conflicts; none found. Specific findings below.
+
+**Decisions:**
+
+1. **Documents 1-4 accepted as written, no conflicts found.**
+   `core.specimen`/`material.*` correctly reuse the existing `Species`/
+   `Cultivar` tables (`DOMAIN_MODEL.md` §4) rather than duplicating them;
+   `consumer_sensory.*` and `field_study.*` correctly follow the
+   one-schema-per-module convention (`DATA_ARCHITECTURE.md` §1) and the
+   mandatory provenance/data-quality columns (§4) — `provenance_class` is a
+   plain `text` column with a documented value list, not a Postgres enum,
+   so document 2's new `consumer_hedonic_feedback` value is a purely
+   additive comment-list extension, not a migration conflict. Document 2's
+   consumer/expert separation is a direct, correctly-scoped implementation
+   of CLAUDE.md §49's "never combine consumer preference with technical
+   quality score" rule — separate tables, separate provenance class,
+   comparison-not-merging in the UI, enforced at the query layer per its
+   §6. Document 3's AI-assisted species ID and voice-transcription features
+   correctly route through the `pending`-until-confirmed AI Suggestion
+   lifecycle (`AI_GOVERNANCE.md` §4) rather than writing directly.
+   Document 4's `requires_account = true` override for gastro-tourism
+   bookings is a documented, deliberate, narrowly-scoped exception to the
+   platform's general guest-checkout default (CLAUDE.md §12) — logged here
+   per its own request, not a silent policy change.
+2. **Minor documentation gap, not a conflict**: `DATA_ARCHITECTURE.md` §1's
+   enumerated schema list (`identity, commerce, research, sensory,
+   competitions, environmental, content, project, partner, ai`) predates
+   `material`, `consumer_sensory`, and `field_study` — the same situation
+   `commerce` was in before Slice 3 (ADR-025). Fold these three into that
+   list whenever `DATA_ARCHITECTURE.md` next gets a substantive edit; not
+   urgent enough to justify a standalone edit today.
+3. **OTA strategy (document 4, §1) — its own decision, as requested.**
+   Direct integration with Viator/GetYourGuide is **declined for now**.
+   Both platforms route independent operators through certified
+   connectivity-partner software (Bokun, Rezdy, FareHarbor) rather than
+   expecting direct API integration; building it directly would mean a real
+   certification process, mandatory polling-frequency compliance, and —
+   per Viator's supplier terms — the platform bearing legal responsibility
+   for overbooking/rate discrepancies caused by its own integration. Given
+   this platform's stated preference for low operational complexity and
+   solo maintainability (the same reasoning behind ADR-022's Neon-first
+   and ADR-025's Stripe-Checkout-not-Elements decisions), direct-booking
+   ownership through the platform's own Experience/Booking model is the
+   priority; OTA reach is not pursued now. **Kept open, not foreclosed**:
+   `INTEGRATIONS.md`'s adapter pattern means an `OTAChannelProvider`
+   interface (via a connectivity-partner intermediary, not a direct build)
+   could be added later without redesigning the Experience model — a
+   future ADR if OTA reach becomes a real priority, not a default path.
+4. **Document 5 (`RESEARCH_ACTIVITY_CRITERIA.md`) — substance test and
+   fee-tiering confirmed understood, no open questions.** The five-part
+   test (§1: falsifiable question, real protocol, real usable evidence,
+   honest consent language, program/project/location/researcher linkage as
+   necessary-but-not-sufficient infrastructure) and the paid/free tiering
+   (§2-3: structured falsifiability + hard-blocking tourism-language check
+   for paid activities, self-declared question + soft flag for free ones)
+   are both clear as specified — nothing flagged as ambiguous.
+5. **Research Compliance Reviewer Role Profile (document 5, §4) — compatible
+   with `RBAC.md` as a straightforward data addition, with one mechanism
+   worth naming precisely.** Adding the Role Profile itself, and Permissions
+   like `('research_activity', 'approve')`/`('research_activity', 'reject')`
+   scoped `platform` or `program`, is exactly the "Role Profiles and
+   Permissions are data, not code" pattern `RBAC.md` §2 and §5 already
+   establish (directly analogous to the existing `Research Lead` profile's
+   `('protocol', 'approve')` permission) — no schema or resolver change
+   needed, and `RBAC.md` §3's containment rule already lets a
+   platform/program-scoped Reviewer reach project-scoped research
+   activities correctly. **The one thing to get right at implementation
+   time**: the document's "cannot review an activity they personally
+   designed or proposed" rule is a **per-row conflict-of-interest check**
+   (did *this specific person* design *this specific activity*), which is
+   mechanically different from `RBAC.md` §7's blind-evaluation precedent it
+   cites — §7 restricts an entire table (`blind_code`↔`sample_id` mapping)
+   to specific Role Profiles, a scope/permission-level restriction; this
+   rule instead needs an authorship check folded into the query/action
+   itself, the same "ownership is the filter" pattern already used for
+   Cart/Order (ADR-025 decision 3) and My Néctar profile access, just
+   inverted (exclude the author rather than restrict to the owner). Not a
+   conflict — both are "structural enforcement, not policy-only," which is
+   the property that actually matters — just not literally the same
+   mechanism as §7, worth being precise about before implementation.
+6. **Retroactive review (document 5 §9) confirmed as a blocking gate, not
+   performed by AI.** Consistent with `AI_GOVERNANCE.md`'s "AI cannot
+   approve scientific conclusions" applied here to compliance conclusions
+   specifically: no automated judgment was made about whether CryoBloom or
+   the `TOURISM_EXPERIENCES.md` gastro-tourism design pass the five-part
+   test. A review checklist was prepared instead (delivered directly, not
+   filed as a doc, since it's an action item for Daniel Silvera as the
+   independent Compliance Reviewer, not reference architecture) covering
+   both against §1's test, for human completion. Per document 5 §9, no new
+   activity-related feature work (Sensory-adjacent live-tasting work from
+   document 4 §11, Guided Field Study Tool, or any other
+   research/tourism-activity feature) proceeds until that review completes.
+
+**Consequences:** All five documents are accepted as domain-model/process
+input; none of documents 1-4's schema is implemented by this ADR. Document
+5's compliance gate is now active and blocking: CryoBloom and gastro-tourism
+activity work are frozen pending Daniel Silvera's review against §1's
+five-part test. Everything else already in flight (Slice 4 Experiences work
+not touching gastro-tourism specifics, general platform work) is unaffected
+— the gate is scoped to *activity-related* feature work specifically, per
+document 5 §9's own wording, not a platform-wide freeze.
