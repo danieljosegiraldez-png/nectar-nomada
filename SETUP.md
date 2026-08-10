@@ -30,7 +30,11 @@ Edit `.env`:
   run `npx prisma dev ls` and use the `shadowDatabaseUrl` it prints (same
   host, different port from `DATABASE_URL`). Not needed against Neon in
   production, which provisions its own shadow database correctly.
-- `AUTH_SECRET` — generate one: `npx auth secret` (or `openssl rand -base64 32`).
+- `AUTH_SECRET` — generate one with `openssl rand -base64 32`. (Do **not**
+  run `npx auth secret` — that resolves to an unrelated npm package named
+  `auth`, maintained by Better Auth, and prints `BETTER_AUTH_SECRET`, which
+  this codebase doesn't use. This app is Auth.js/`next-auth` per
+  DECISIONS.md ADR-006; the only variable it reads is `AUTH_SECRET`.)
 - Leave `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` blank to run with just the
   email/password provider.
 
