@@ -27,8 +27,8 @@ copyright status, and this platform's approach:
 |---|---|---|---|
 | Specialty coffee | SCA Coffee Value Assessment (CVA-102/103/104/105) — officially replaced the 2004 cupping form (Nov 2024), current global standard; Coffee Quality Institute (CQI) Q Grader program; FlavorActiV coffee sensory tools (CQI-partnered) | SCA/CQI proprietary; CVA forms/terminology are SCA copyrighted material | Adapt-original, structurally informed by CVA's separation of Descriptive vs. Affective assessment; pursue SCA licensing if/when justified by scale |
 | Beer | BJCP Beer Scoresheet; Meilgaard Beer Flavor Wheel (1979, adopted by ASBC/MBAA as industry standard); AROXA and FlavorActiV beer flavor standards (calibration, not scoring) | Copyrighted (BJCP, Inc.; ASBC/MBAA); AROXA/FlavorActiV standards are commercial products | Adapt-original for scoring structure; reference (never reproduce) the Meilgaard wheel's category structure; calibration system (§7) tracks real commercial reference standards as external product data, not invented content |
-| Mead | BJCP Mead Scoresheet | Copyrighted, BJCP, Inc. | Adapt-original |
-| Honey | ISO 4121/5492/8586/8589 (general sensory methodology), International Honey Commission odour/aroma wheel, published academic literature (Apidologie and similar) | ISO standards are purchasable documents; underlying methodology/vocabulary widely published in open academic literature | Original, grounded in cited open literature — least licensing constraint of the priority batch |
+| Mead | BJCP Mead Scoresheet (organoleptic/sensory content only); AESHI (Asociación Española de Hidromiel) *Manual de Buenas Prácticas del Hidromiel* — real regulatory/technical content: classification taxonomy, raw material specs, production process, Spanish/EU legal framework | BJCP copyrighted (sensory content only — AESHI's own Ch. IV is explicitly BJCP-sourced, same restriction applies); AESHI's raw-material specs, classification, and process content is real regulatory material, usable as reference; Spanish law/customs codes are illustrative of a compliance-framework model, NOT directly applicable in Panama | Adapt-original for sensory scoring; AESHI's classification taxonomy and physicochemical specs used directly as real technical reference (§3 below); Panama-specific legal compliance is a separate question requiring a Panama-licensed attorney, not assumed from the Spanish model |
+| Honey | ISO 4121/5492/8586/8589 (general sensory methodology), International Honey Commission odour/aroma wheel, published academic literature (Apidologie and similar); additional real training/competition material received directly (100-pt competition rubric, defects taxonomy, real field-sample dataset) — institutional "UC Davis" attribution on the training material is unverified, see §3 note | ISO standards are purchasable documents; underlying methodology/vocabulary widely published in open academic literature; received competition rubric and field schema treated as your own working documents, not third-party copyrighted material | Original, grounded in cited open literature plus real received training/competition/field-intake content — least licensing constraint of the priority batch |
 | Wine | WSET Systematic Approach to Tasting (SAT); Court of Master Sommeliers deductive grid; **UC Davis Wine Aroma Wheel** (Ann C. Noble, UC Davis) — the foundational wine aroma wheel, widely cited academically | WSET/CMS trademarked; UC Davis wheel is Noble's copyrighted work, historically made available for educational/research citation — verify current terms before any use, do not assume free reproduction | Deferred — adapt-original when built, citing the Noble wheel's structure rather than reproducing it |
 | Cacao | Heirloom Cacao Preservation Fund fine-flavor evaluation; Cocoa of Excellence scoresheet | Organization-specific, license status to confirm when built | Deferred |
 | Chocolate | International Chocolate Awards scoresheet | Competition-specific, license status to confirm when built | Deferred |
@@ -102,18 +102,288 @@ collected data.
   gated cultural-identity research work) — your own style definitions, not
   BJCP's.
 
-### Honey (grounded in ISO/academic literature)
+#### Mead — expanded with real classification, specs, and fermentation model
+
+Source: AESHI (Asociación Española de Hidromiel) *Manual de Buenas Prácticas
+del Hidromiel* — a real trade-association manual grounded in actual Spanish/
+EU law, not compiled training material. **Important scope limit**: this
+manual's own Chapter IV (organoleptic properties) is explicitly sourced
+"de la guía BJCP para hidromiel 2015" — that content gets the same
+adapt-original, never-reproduce treatment as every other BJCP reference in
+this document (§1). What follows below is the *other* content — raw
+material specs, classification, production process — which is AESHI's own
+regulatory/technical material, not BJCP's.
+
+**Classification taxonomy** — significantly more precise than a generic
+"BJCP framework" reference:
+
+```
+mead.style_classification(
+  sweetness_category [seco|semi_dulce|dulce],
+  -- by final specific gravity: seco 0.990-1.010, semi_dulce 1.010-1.025,
+  -- dulce 1.025-1.050
+  raw_material_style [metheglin|tradicional|melomel|cyser|pyment|bochet|
+    capsicumel|braggot|acerglyn|other],
+  -- metheglin = herbs/spices; tradicional/"show mead" = water+honey only;
+  -- melomel = fruit-fermented, with named subtypes cyser (apple) and
+  -- pyment (grape); bochet = caramelized/toasted honey; capsicumel =
+  -- chili peppers; braggot = honey + cereal malt (45-55% sugars from each,
+  -- the one exception to the general 40%-max-non-honey-sugar rule below)
+  carbonation [plano|espumoso|gasificado]
+  -- still | naturally effervescent | artificially carbonated
+)
+```
+
+**Raw material specs, from actual regulatory thresholds** — worth keeping
+as real numbers, not vague guidance:
+
+```
+mead.honey_raw_material_acceptance(
+  moisture_pct_max = 18,           -- matches the exact threshold already
+                                    -- cited as a fermentation-defect cause
+                                    -- in the honey defects taxonomy above —
+                                    -- now confirmed as a real regulatory
+                                    -- number, not an arbitrary figure
+  diastase_index_min = 8,          -- freshness/overheating indicator
+  sugar_content_floral_min = 60,   -- g/100g
+  sugar_content_honeydew_min = 45, -- g/100g
+  ph_range = [3.5, 4.5],
+  acidity_max_meq_kg = 50,
+  hmf_max_mg_kg = 40               -- hydroxymethylfurfural, freshness
+                                    -- indicator, forms from sugar
+                                    -- dehydration (especially fructose)
+)
+
+mead.finished_product_specs(
+  abv_min_pct = 1,                 -- max = yeast-strain tolerance
+  ph_range = [3.3, 4.1],
+  volatile_acidity_max_g_l = 1.4   -- as acetic acid
+)
+```
+
+**Fruit/cereal sugar contribution rule**: non-honey fermentable sugars
+capped at 40% of total for commercial producers (measured as dry residue;
+density-based calculation method specified in the source), except braggot's
+45-55% cereal allowance. Post-stabilization sweetening from other sugar
+sources capped at 20%, doesn't require front-label declaration but must
+appear in the ingredient list.
+
+**Water chemistry targets** (for mead production specifically): Calcium
+40-60 ppm (double for braggot mash), Sodium <100 ppm, Bicarbonates <20 ppm,
+Chloride <300 ppm (adds smoothness/perceived sweetness; above 300 ppm is
+yeast-inhibiting), Sulfates (adds astringency/perceived bitterness — keep
+low unless the style specifically calls for it).
+
+**Fermentation phase model** — real, useful vocabulary for the still-unbuilt
+`FermentationRun` entity (flagged as a gap elsewhere):
+
+```
+fermentation.phase [latente_adaptacion|induccion|tumultuosa_exponencial|
+  estacionaria|declive_muerte_celular]
+```
+
+- **Latente/adaptación** (~12-24h): near-imperceptible growth, yeast
+  adapting to environment
+- **Inducción** (~1-2 days): yeast multiplication begins, budding activity,
+  CO2 forming but mostly staying dissolved; minimal gravity change;
+  typically *Saccharomyces apiculatus* initiates until ~5% ABV
+- **Tumultuosa/exponencial** (up to ~30 days): the major sugar-to-alcohol
+  conversion, visible bubbling, rapid cell increase, heat release; typically
+  elliptical yeast strains dominate; sharp density drop
+- **Estacionaria**: births ≈ deaths, population stable
+- **Declive/muerte celular** (up to ~6 months): fermentation slows as sugar
+  depletes and alcohol rises, CO2 production drops
+
+**Yeast species**: *Saccharomyces cerevisiae* and *bayanus* for standard
+production; other yeasts/bacteria permitted for experimental styles — this
+is the regulatory-document version of the same principle already in
+`AI_GOVERNANCE.md`/elsewhere: don't force every fermentation to use a
+single "standard" organism.
+
+### Honey — expanded with real competition, defect, and field-data content
+
+**Source note on institutional attribution**: several source documents label
+their protocol "UC Davis Adaptado." As with §1's general caveat, treat this
+methodology as genuinely useful and worth adopting, while being honest that
+the *precise* institutional origin of this exact scoresheet/formulario is
+unverified — UC Davis does real honey/pollination research generally, but
+this specific 100-point rubric and formulario haven't been independently
+confirmed as an official UC Davis publication versus compiled training
+material. Cite as "informed by UC Davis-attributed training material and
+general honey sensory literature," not as a confirmed UC Davis document.
+
 - Attribute categories informed by published honey sensory research: visual
-  (color, clarity), olfactory (aroma intensity and character), olfactory-
-  gustatory (flavor), tactile (crystallization texture, viscosity) — the
-  four-category structure used across the academic honey-sensory literature
-  cited in §1.
+  (color via Pfund scale, clarity, brightness), olfactory (aroma intensity
+  and character, warmed-sample technique), olfactory-gustatory (flavor,
+  retronasal perception), tactile (crystallization texture, viscosity) —
+  the four-category structure used across the academic honey-sensory
+  literature cited in §1.
 - Supports both **descriptive** (semi-quantitative, detailed descriptors)
   and **conformity** (does this unifloral honey match its claimed botanical
   origin's expected profile) modes — both documented approaches in the
   honey sensory literature, and the conformity mode connects directly to
   your Specimen/bloom-tracking work (`SPECIMEN_AND_MATERIAL_TRACEABILITY.md`)
-  for verifying a honey batch's claimed floral origin.
+  for verifying a honey batch's claimed floral origin. **Pollen analysis
+  (melissopalynology)** — now confirmed as a real intake field (see
+  `field_sample` schema below) — is the actual verification method for
+  conformity mode, not just a theoretical connection.
+
+#### Competition scoring rubric (100 points) — real, complete, ready to use
+
+```
+sensory.honey_competition_score(
+  aroma_positivo        integer, -- 0-20: intensity/complexity, descriptor richness
+  sabor_y_gusto          integer, -- 0-20: sweetness quality, acid/bitter balance, clean/harmonic expression
+  textura_boca           integer, -- 0-15: appropriate viscosity, pleasant mouthfeel, no excess astringency/hard crystals
+  apariencia              integer, -- 0-10: color appeal, brightness, clarity, evaluated on white background
+  persistencia_equilibrio integer, -- 0-15: flavor duration, harmony across all attributes
+  ausencia_defectos       integer, -- 0-20: absence of fermentation/mold/smoke/rancidity/contamination
+  total                   integer  -- sum, 0-100
+)
+```
+
+Quality tiers: 90-100 Excelente (no defects, standout profile) · 80-89 Muy
+buena (clean, complex) · 70-79 Buena (minor issues) · <70 muestra con
+defectos o poco destacada.
+
+Tasting conditions specified alongside the rubric: 20-25°C, neutral white
+light, no external perfumes/odors, neutral plastic or stainless spoons,
+water and plain crackers between samples — standard sensory-booth discipline,
+consistent with `SECURITY.md`/`RBAC.md`'s existing blind-evaluation controls
+when this runs as a formal competition (`COMPETITIONS.md`).
+
+#### Defects taxonomy — three-tier classification (Positivo/Neutral/Defecto)
+
+More precise than a binary good/bad split — several source documents
+converge on the same structure, now consolidated:
+
+```
+sensory.honey_descriptor(id, family, specific_descriptor, expected_perception,
+  classification [positivo|neutral|defecto], technical_cause (nullable))
+```
+
+**Positivo** families: floral (rosa, jazmín, azahar), frutal (manzana,
+durazno, melón), cítrico (limón, toronja, naranja), vegetal (pasto, tallo
+verde, alcachofa), herbal (tomillo, albahaca, hinojo), resinoso (pino,
+bálsamo, savia), animal/colmena (cera nueva, propóleo fresco — becomes
+defect if excessive), malteado (pan horneado, cereal), tostado (azúcar
+caramelizado — becomes defect if from overheating), lácticos (ácido láctico
+tipo yogur), ésteres de fermentación controlada (geraniol, citronelol),
+fenoles deseables (clavo/4-vinil guayacol, specified moderate).
+
+**Neutral** (context-dependent, not automatically negative): fermentación
+controlada (ligeramente alcohólico), floral fermentado leve, notas
+alcohólicas leves (vino blanco, sidra) — relevant given honey destined for
+mead, where mild fermentation character isn't necessarily a defect the way
+it would be in table honey.
+
+**Defecto** families, each with a **real technical cause**, not just a
+label — this is the valuable part, worth preserving exactly:
+- Fermentación indeseada — cosecha con humedad >18%, mal tapado, exposición
+  al aire; ácido acético, levadura descontrolada
+- Ácidos orgánicos indeseables — contaminación con *Clostridium*, restos
+  orgánicos; ácido butírico/isovalérico (queso, vómito, sudor)
+- Contaminación química — envases inadecuados, limpieza con químicos no
+  enjuagados; cloro, disolvente
+- Contaminación microbiológica — humedad ambiental, contacto con superficies
+  húmedas; establo, cuero mojado, **Brettanomyces** (see note below)
+- Oxidación avanzada — exposición prolongada al oxígeno, calor excesivo;
+  rancio, mantequilla vieja
+- Contaminación térmica — calentamiento excesivo para descristalizar; sabor
+  amargo, azúcar quemada, ahumado
+
+**Note on *Brettanomyces*, worth keeping distinct from a universal rule**:
+this genus reads as a contamination/defect indicator for standard honey
+evaluation, correctly classified as such here. It's also a wild yeast genus
+some fermentation traditions use intentionally (lambic beers, certain wild
+ferments). Given your own wild yeast bioprospecting work, treat "defect" as
+context-specific to honey evaluation specifically, not as a universal
+statement about the organism.
+
+#### Training protocol and calibration exercises
+
+- 5-phase training sequence: familiarization with floral origins → common
+  descriptor/defect identification → reference-standard practice (jasmine,
+  orange, propolis) → 0-5 intensity scale training → inter-panelist
+  calibration. This is a lighter-weight version of the Reference Standards &
+  Panel Calibration system already specified in §7 — the same underlying
+  concept (calibrate against known references), scaled appropriately for
+  honey rather than requiring AROXA-grade purchased standards for every
+  session.
+- Exercises: aroma recognition (essential oils/extracts in jars), described
+  comparison using known monofloral honeys, 0-5 intensity scaling with
+  mean/deviation recording, triangle test (three samples, one different,
+  identify the odd one out).
+- Panelist preparation rules: no perfumes/scented products, no coffee/
+  cigarettes/strong food before tasting, rinse with water between samples
+  (plain white bread as neutral option), evaluate in silence, use objective
+  language (avoid "rico"/"feo" — evaluate attributes, not just liking).
+
+#### Field/intake data schema — real, complete, from actual sample records
+
+A real example dataset (two representative entries, Chiriquí and Veraguas)
+confirms the actual field schema used for honey sample intake — this is
+concrete enough to build the intake form/table directly from:
+
+```
+apiary.field_sample(
+  sample_id text,              -- convention: PA-[PROVINCIA]-[AÑO]-[SEQ],
+                                -- e.g. "PA-CHIR-2024-001" — real, already in use
+  collection_date date,
+  apiary_name text,
+  apiary_code text,
+  beekeeper_name text,
+  beekeeper_contact text,
+  active_hive_count integer,
+  harvest_method text,         -- e.g. centrífuga, manual
+  province text, district text, corregimiento text,
+  altitude_masl integer,
+  gps_coordinates point,
+  ecosystem_type text,         -- e.g. montaña/cordillera, manglar/pacífico
+  climate_zone text,
+  predominant_flora text,      -- free text, candidate for Specimen linkage
+                                -- per SPECIMEN_AND_MATERIAL_TRACEABILITY.md
+  season text,
+  honey_type text,             -- multifloral | monofloral
+  color text,
+  crystallization text,        -- ninguna | parcial | [degree]
+  moisture_content_pct numeric,
+  ph numeric,
+  electrical_conductivity numeric,
+  water_activity numeric,      -- Aw
+  pollen_analysis text,        -- real melissopalynology breakdown, e.g.
+                                -- "Mangle rojo (85%), otras (15%)" — this is
+                                -- the actual conformity-mode verification
+                                -- data referenced above, not hypothetical
+  aroma_intensity text,
+  primary_notes text,
+  texture text,
+  defects_present text,
+  evaluators text,              -- e.g. "Panel Santa Fe" — a named field panel
+  sensory_evaluation_date date,
+  collection_vessel text,       -- e.g. balde plástico grado alimenticio, tambor metálico
+  storage_conditions text,
+  transport text,
+  additional_notes text
+)
+```
+
+This schema is significantly more complete than what was previously
+specified for honey intake — it adds real **physicochemical lab
+parameters** (moisture%, pH, electrical conductivity, water activity) that
+are genuine honey quality/authenticity indicators, distinct from sensory
+descriptors, and weren't in this document before. `electrical_conductivity`
+in particular is a real, standard method for distinguishing floral origin
+categories (e.g., the Veraguas mangrove example shows conductivity 0.9 vs.
+Chiriquí's 0.35 — mangrove/coastal honeys typically run higher) — worth
+treating this field as genuinely diagnostic, not just descriptive.
+
+The two example records also demonstrate the schema working end-to-end:
+one clean high-altitude coffee-adjacent multifloral honey with no defects,
+and one coastal mangrove monofloral honey with a real, correctly-flagged
+fermentation defect from poor post-harvest handling — a good worked example
+of the whole system catching a real quality problem, not just theoretical
+capability.
 
 ## 4. Deferred categories — placeholder structure only
 
@@ -203,6 +473,29 @@ recorded as `creation_method`/`composition_notes`, but `validated_against`
 is what lets someone (including future-you) know whether a given standard's
 claimed threshold has actually been checked against something external, or
 is still provisional.
+
+**Raw-ingredient extraction as a self-created standard method** — worth
+naming explicitly as a real `creation_method` value, distinct from
+compounding a standard from purchased isolates:
+
+```
+sensory.self_created_standard_detail.creation_method includes:
+  'aqueous_extraction_ratio' — a fixed ingredient-to-water ratio, steeped
+  and tasted directly to isolate one raw material's character in isolation
+  from a finished product
+```
+
+This is a real, published technique — not BJCP's, attributed to Briess
+Malt & Ingredients Co. (a commercial malt producer), publicly presented at
+the 2017 National Homebrewers Conference. The core idea generalizes well
+beyond malt: any raw ingredient can be evaluated the same way — steep at a
+controlled ratio, taste directly, isolate what that specific input
+contributes before it's combined with everything else in a finished
+beverage. Directly usable for panelist training on base malts for beer,
+but the same method applies to honey varietals or any other raw material
+where isolating one ingredient's contribution matters — not limited to one
+category. `base_material_source` and `composition_notes` should record the
+ratio and prep method used, same as any other self-created standard.
 
 **Commercial link**: when a reference standard is also a product you sell
 (`commerce_product_id` set), it's simultaneously a `core.Product` (with its

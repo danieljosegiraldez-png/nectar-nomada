@@ -239,7 +239,61 @@ identically whether the feedback came from a retail QR scan or a live event.
   time (a bottle to take home, merch) — these are ordinary `OrderItem`
   references attached to the booking, not a separate product system.
 
-## 13. Sequencing
+## 13. Real worked example — the mead-making course/workshop
+
+Not a hypothetical — a real Néctar Nómada offering already exists with real
+pricing, real faculty, and a real curriculum, worth capturing here as a
+concrete instance of this document's model rather than leaving it
+undocumented:
+
+**Two tiers, both real**:
+- Intro workshop: $65/person, 4 hours, includes a mead tasting paired with
+  cheese and dessert. Matches this document's private/group session model
+  (§3) directly — a single-episode experience.
+- Full program: $700, 10 sessions (33+ hours total), max 8 people, includes
+  honey/pollen samples, all brewing equipment, and field visits to an
+  apiary and professional meaderies. This maps onto §5 (recurring session
+  templates) as a multi-session series rather than a single booking.
+
+**Real curriculum** (11 modules — genuinely maps onto the episode-based
+design model from `TOURISM_DESIGN_RESOURCES.md`, each module is naturally
+one episode):
+
+1. Qué es hidromiel, sus variantes y las mieles de abeja
+2. Tomar y catar hidromieles
+3. Análisis sensorial de miel de abeja y selección de miel de abeja
+4. Producción de miel de abeja: apicultura en Panamá
+5. **Field visit**: apiario, entrevista con apicultor, panel sensorial de
+   miel de abeja, centro de acopio
+6. Maridaje con hidromieles
+7. Proceso de elaboración de hidromiel
+8. **Field visit**: hidromielera y/o cervecería profesional
+9. Manejo de barricas para fermentar y/o madurar hidromiel — connects
+   directly to the wood/material aging chain in
+   `SPECIMEN_AND_MATERIAL_TRACEABILITY.md` §4
+10. Envasado, carbonatación forzada y/o natural
+11. Experimental: fermentación mixta y/o espontánea
+
+Modules 5 and 8 are real field-visit episodes (matching §4's multi-day/
+field-trip pattern); module 3 is a real sensory panel session (connects
+directly to `CONSUMER_SENSORY_FEEDBACK.md`/`BEVERAGE_SENSORY_PROTOCOLS.md`'s
+honey protocol).
+
+**Real named faculty** — useful as real `Person`/host records
+(`core.experience_host`, §3) when this gets built, not placeholder data:
+you (brewer/hidromielero/beekeeper, CRBF Beer School recipe design, Craft
+Brewing Supply technical consultant), Bernardo Sequeira (organizer of the
+Central American homebrew cup's mead category), Luis Valdez, Marcelino
+Guevara and Gustavo Berrios (beekeeper association/cooperative board
+members).
+
+**Real illustration/creative direction concepts** for course materials —
+worth preserving for whenever course marketing content actually gets
+produced: a historical-to-modern visual arc (someone gathering a wild/
+broken hive → Vikings with mead horns → a modern hidromielero with
+refractometer and steel fermenters).
+
+## 14. Sequencing
 
 This is a substantial extension of Slice 4 (Experiences & Reservations) —
 fits within or immediately after that slice, not a separate later slice.
@@ -247,7 +301,9 @@ Gastro-tourism ships first; eco/heritage/agricultural use the same
 underlying model without additional build work, since nothing here is
 gastro-specific except the account-requirement override (§8) and the pairing
 structure (§10), both of which other tourism types can adopt or ignore per
-experience.
+experience. The mead course (§13) is real content ready to seed as an
+actual Experience once this slice is built — not a placeholder to design
+around later.
 
 Log as accepted domain-model input in `DECISIONS.md` when added to the repo,
 including the OTA strategy decision (§1) as its own ADR entry — this is

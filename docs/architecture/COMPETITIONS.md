@@ -27,9 +27,19 @@ to beer, mead, or cider specifically:
   Organizer/Entries Receptionist/Cellar Master roles, the same check-in and
   pull-sheet workflow, the same blind-coding discipline — judged using the
   Honey protocol from `BEVERAGE_SENSORY_PROTOCOLS.md` instead of a
-  beer-based one.
+  beer-based one. **This is no longer a hypothetical example** — the Honey
+  protocol now has a complete, real 100-point competitive scoring rubric
+  (Aroma 20 / Sabor y Gusto 20 / Textura y Boca 15 / Apariencia 10 /
+  Persistencia y Equilibrio 15 / Ausencia de Defectos 20, with quality tiers
+  from 90-100 Excelente down to <70), ready to actually judge entries
+  against, not just a category placeholder.
 - A **specialty coffee competition** works identically, judged against the
   CVA-adapted coffee protocol.
+- A **mead competition** also has real classification/specs to enter
+  against — `BEVERAGE_SENSORY_PROTOCOLS.md`'s mead section now includes a
+  real sweetness/raw-material/carbonation taxonomy (AESHI-sourced), useful
+  for defining competition categories/divisions with actual meaning (e.g.
+  a "Melomel — Semi Dulce" division) rather than generic style names.
 - A **cacao/chocolate competition** works identically once that protocol
   exists (currently placeholder per `BEVERAGE_SENSORY_PROTOCOLS.md` §4).
 - The only category-specific piece anywhere in this system is *which
@@ -104,6 +114,69 @@ need to go from cellar storage to a specific judging flight, in what order,
 from where. This is real event-day logistics infrastructure, not just data
 modeling: without it, a competition with more than a handful of entries
 becomes physically unmanageable on judging day.
+
+### 4a. Judges-needed estimator — an original tool, not a reproduction
+
+Organizer-facing planning tools, informed by real competition-planning
+operational patterns (structural concept — session/flight/panel-size
+relationships — adapted into Néctar Nómada's own tool, not reproducing any
+specific organization's exact formula or published text):
+
+```
+competitions.capacity_planner(
+  competition_edition_id,
+  expected_entry_count integer,
+  target_entries_per_flight integer (default 8, organizer-adjustable),
+  judges_per_panel integer (default 2, organizer-adjustable),
+  planned_sessions integer
+) -> {
+  estimated_flights: ceil(expected_entry_count / target_entries_per_flight),
+  estimated_judges_needed: ceil((estimated_flights * judges_per_panel) / planned_sessions),
+  rounded_to_even: true -- always round up to an even number, so every
+                         -- panel can be properly staffed
+}
+```
+
+This is a genuinely useful organizer tool your Competitions module doesn't
+have yet — turning "how many judges do I actually need" from a manual
+guess into something the platform calculates from real entry counts,
+adjustable per-competition since flight size and panel size are organizer
+choices, not fixed constants.
+
+### 4b. Entry numbering convention
+
+```
+competitions.entry.entry_number: format [CC][EEE] where CC = 2-digit
+  category number, EEE = 2-3 digit sequential entry number within that
+  category (e.g. category 7, 15th entry → "0715"). Auto-widens to 3-digit
+  entry suffix if any category exceeds 99 entries.
+```
+
+A structured numbering convention (category encoded directly in the number)
+rather than pure sequential numbers — this lets stewards and judges confirm
+at a glance that an entry matches its assigned flight, without a lookup.
+Generic pattern, not tied to any specific organization's exact scheme.
+
+### 4c. Supply/logistics checklist — a real operational gap, now filled
+
+```
+competitions.supply_checklist_item(id, competition_edition_id, item_name,
+  category [judging_tools|paperwork|refreshments|serviceware],
+  quantity_needed integer (nullable — some items are per-entry, some fixed),
+  quantity_per_entry_multiplier numeric (nullable, e.g. 5 for judging cups
+    per entry, accounting for breakage/mini-BOS/water/extra judges),
+  status [not_started|ordered|on_hand])
+```
+
+Real categories worth seeding as defaults: judging tools (pencils, dump
+buckets, flashlights), paperwork (scoresheets — note: quantity should be
+2-3x entry count for 2-3 judge panels, plus one extra per judge if a
+calibration round is planned), refreshments (palate cleansers, water),
+serviceware (cups/glasses — a real per-entry multiplier matters here, not
+just a flat count, since breakage and mini-BOS/BOS rounds consume more per
+entry than the initial judging alone). This is genuinely missing from the
+current Competitions design — event logistics planning, not just the
+judging-mechanics chain.
 
 ## 5. Judge-facing operational flow
 
