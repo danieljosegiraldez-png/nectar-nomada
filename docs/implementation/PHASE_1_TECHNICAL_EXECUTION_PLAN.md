@@ -1220,7 +1220,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 |---|---|---|---|---|---|---|---|---|
 | **T1 — Canonical Lot + LotTransformation schema — DONE** | None | traceability | Built: `Lot` (+`locationId`, added beyond the original sketch — see note below), `LotTransformation`, input/output joins, `ProvenanceClass`/`DataQuality` enums | `lib/traceability/lots.ts`: createLot, recordTransformation, getLotLineage | None (correctly out of scope) | `tests/traceability/lots.test.ts`, 10 tests, real Neon | Realized as planned — append-only invariant holds (no update function exists for either table) | **Met**: 2 migrations applied to Neon; 48/48 tests pass; split/merge/blend all exercised live, self-cleaning fixtures |
 | **T2 — QuantityEvent ledger — DONE** | T1 | traceability | Built: `QuantityEvent` (+`QuantityEventType` split into `adjustment_increase`/`adjustment_decrease` — see note below), `quantity >= 0` CHECK | `lib/traceability/quantity.ts`: recordQuantityEvent, computeCurrentQuantity | None (correctly out of scope) | `tests/traceability/quantity.test.ts`, 8 tests, real Neon | **Met**: migration applied to Neon; 56/56 tests pass across the full suite; multi-event sum (received/loss/sample_removed/transfer_in) verified live against Neon fixtures |
-| **T3 — Measurement architecture + unit registry** | T1 | traceability | New: `Measurement` | `lib/traceability/measurements.ts`, `lib/traceability/units.ts` | None yet | Unit: unit conversion, variable validation | Low | Measurement recordable against a Lot; canonical-unit registry covers §10.3's 7 variables |
+| **T3 — Measurement architecture + unit registry — DONE** | T1 | traceability | Built: `Measurement`, `MeasurementSourceType` (`fermentationRunId`/`dryingRunId`/`storageAssignmentId` are plain UUID columns, no FK yet — see note below) | `lib/traceability/measurements.ts`: recordMeasurement, correctMeasurement; `lib/traceability/units.ts`: canonical registry | None (correctly out of scope) | `tests/traceability/measurements.test.ts` (real Neon) + `tests/traceability/units.test.ts` (pure), 12 tests | **Met**: migration applied to Neon; 68/68 tests pass across the full suite; Fahrenheit→Celsius conversion and out-of-range rejection both verified live |
 | **T4 — Harvest/Receiving capture** | T1, T3 | traceability | New: `HarvestEvent`, `ReceivingEvent`, `Location.plot` | `lib/traceability/harvest.ts` | Create Lot (via Harvest form) | Integration: harvest creates a valid origin Lot | Low | A real DEMO harvest creates a Lot end-to-end |
 | **T5 — Sample lineage extension** | T1 | traceability + core | Extend: `Sample` | `lib/traceability/samples.ts` | Create Sample | Integration: sample_extraction transformation + Sample row | Low | Sample correctly links back to its source Lot |
 | **T6 — Fermentation run** | T1, T2, T3 | traceability | New: `FermentationRun`, `FermentationIntervention` | `lib/traceability/fermentation.ts` | Record Fermentation | Integration: full fermentation lifecycle | Medium — first "stage-run" entity, sets the pattern T7 follows | Start→intervene→measure→end cycle works, produces a stage-change LotTransformation |
@@ -1291,6 +1291,27 @@ ticket's own DoD) an absolute, single rule rather than a per-type special
 case, and matches §10.3's own "Positive, unit-converted" validation note
 for weight. Purely additive to a brand-new table with no existing data or
 callers — nothing to migrate, nothing destructive.
+
+**T3 implementation note — additive, proceeded and reported here per the
+same standing schema-change policy applied in T2:**
+
+`Measurement.fermentationRunId`/`dryingRunId`/`storageAssignmentId` are
+plain nullable UUID columns with **no DB-level foreign key** yet — §10.1's
+sketch describes FKs to `FermentationRun`/`DryingRun`/`StorageAssignment`,
+but none of those tables exist until T6/T7/T8 build them (§35's dependency
+graph already sequences T3 before all three). The columns exist now so
+Measurement's final shape is in place without a later structural change;
+each FK constraint gets added additively when its referenced table lands,
+same migration pattern as every other Phase 1 ticket. `lotId`/`sampleId`
+(the only subjects that can exist in Phase 1's current build) do have real
+FK constraints today.
+
+Also resolved during implementation: §11's Zod reference describes the
+*principle* ("validated, not free text") rather than mandating that
+specific library — `lib/traceability/units.ts` validates with plain
+TypeScript, matching the pattern already established in `lots.ts` and
+`quantity.ts` rather than introducing Zod into this module for the first
+time.
 
 ## 35. Dependency Graph
 

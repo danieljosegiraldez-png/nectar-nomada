@@ -62,6 +62,7 @@ model Person {
   calibrationResults           CalibrationResult[]
   sensitivityProfiles          EvaluatorSensitivityProfile[]
   lotTransformationsOperated   LotTransformation[]
+  measurementsOperated         Measurement[]
 
   @@map("person")
   @@schema("core")
@@ -126,6 +127,7 @@ model UserAccount {
   lotsCreated                 Lot[]                        @relation("LotCreatedBy")
   lotTransformationsCreated   LotTransformation[]          @relation("LotTransformationCreatedBy")
   quantityEventsCreated       QuantityEvent[]              @relation("QuantityEventCreatedBy")
+  measurementsCreated         Measurement[]                @relation("MeasurementCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -548,6 +550,7 @@ model Sample {
 
   blindMappings      SensoryBlindMapping[]
   competitionEntries Entry[]
+  measurements       Measurement[]
 
   @@index([projectId])
   @@index([organizationId])
@@ -1885,6 +1888,7 @@ model Lot {
   transformationInputs  LotTransformationInput[]
   transformationOutputs LotTransformationOutput[]
   quantityEvents        QuantityEvent[]
+  measurements          Measurement[]
 
   @@index([organizationId])
   @@index([projectId])
@@ -2008,5 +2012,79 @@ model QuantityEvent {
   @@index([lotId])
   @@index([transformationId])
   @@map("quantity_event")
+  @@schema("traceability")
+}
+
+enum MeasurementSourceType {
+  manual
+  device
+  sensor
+  lab
+  import
+  external_context
+  derived
+
+  @@schema("traceability")
+}
+
+// Generalized typed observation (execution plan §10) — temperature, pH,
+// Brix, relative humidity, moisture, water activity (§10.3's matrix).
+// Weight is deliberately NOT here: it's a *quantity* of material
+// (QuantityEvent, §9), not an *observation about* material.
+//
+// Specific nullable FKs, not a polymorphic subject_type/subject_id pair
+// (COMMERCE_OPERATIONS_TOOLS_ARCHITECTURE.md §I's referential-integrity
+// trade-off). fermentationRunId/dryingRunId/storageAssignmentId are plain
+// UUID columns with no DB-level FK yet — FermentationRun/DryingRun/
+// StorageAssignment don't exist until T6-T8; the constraint is added then,
+// additively, same pattern as every other Phase 1 migration.
+//
+// Phase 1 write paths only ever produce sourceType "manual" — the other six
+// values exist now so integrating a device/sensor/lab feed later needs no
+// migration (execution plan §10.2).
+//
+// Corrections: never an in-place UPDATE. correctsId (self-referencing,
+// nullable) + a mandatory reason (enforced in
+// lib/traceability/measurements.ts, not the DB) point a correction at the
+// row it corrects — same shape as sensory.Assessment.supersedesAssessmentId.
+model Measurement {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  variable   String
+  value      Decimal  @db.Decimal(12, 4)
+  unit       String
+  occurredAt DateTime @map("occurred_at")
+
+  lotId               String? @map("lot_id") @db.Uuid
+  lot                 Lot?    @relation(fields: [lotId], references: [id])
+  sampleId            String? @map("sample_id") @db.Uuid
+  sample              Sample? @relation(fields: [sampleId], references: [id])
+  fermentationRunId   String? @map("fermentation_run_id") @db.Uuid
+  dryingRunId         String? @map("drying_run_id") @db.Uuid
+  storageAssignmentId String? @map("storage_assignment_id") @db.Uuid
+
+  sourceType       MeasurementSourceType @default(manual) @map("source_type")
+  deviceId         String?               @map("device_id")
+  operatorPersonId String?               @map("operator_person_id") @db.Uuid
+  operator         Person?               @relation(fields: [operatorPersonId], references: [id])
+
+  correctsId  String?       @map("corrects_id") @db.Uuid
+  corrects    Measurement?  @relation("MeasurementCorrection", fields: [correctsId], references: [id])
+  corrections Measurement[] @relation("MeasurementCorrection")
+  reason      String?
+
+  provenanceClass ProvenanceClass @default(direct_observation) @map("provenance_class")
+  dataQuality     DataQuality?    @map("data_quality")
+  notes           String?
+  createdAt       DateTime        @default(now()) @map("created_at")
+  createdBy       String?         @map("created_by") @db.Uuid
+  creator         UserAccount?    @relation("MeasurementCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([lotId])
+  @@index([sampleId])
+  @@index([fermentationRunId])
+  @@index([dryingRunId])
+  @@index([storageAssignmentId])
+  @@index([correctsId])
+  @@map("measurement")
   @@schema("traceability")
 }
