@@ -1,9 +1,33 @@
 # Phase 1 Technical Execution Plan — Néctar Nómada Digital Platform
 
-**Status: planning only, awaiting product-owner approval.** No production code
-modified, no migration created, no dependency installed, no live data
-changed while producing this document — per the explicit constraint given
-with this task.
+**Status: approved.** All 7 decisions in §40 resolved — 6 approved as
+proposed, 1 changed (Farm Operator scope, §26/§40 item 6 — see below).
+Implementation of T1 is in progress; this document is updated in place as
+each ticket lands, not re-derived per ticket.
+
+**Decision record for §40's 7 items, as actually approved**:
+
+1. Lot Genealogy reconciliation (§8.1) — approved as proposed.
+2. Provenance retrofit sequencing (§6.3) — approved as proposed.
+3. `traceability` schema name — approved as proposed.
+4. First ticket, T1 — approved.
+5. Mixed-cultivar composition deferred (§13) — approved; no known
+   upcoming harvest needs it sooner.
+6. Farm Operator scope granularity — **changed from what was drafted**:
+   `project`-scope alone is not sufficient; real operators work across
+   multiple projects at one physical site, so `location`-scope must be
+   supported too, not treated as optional. Verified before implementing:
+   `ScopeType` already includes `location` (`prisma/schema.prisma`), and
+   Role Profiles carry no code-level restriction on which scope type
+   they're assigned at — `Partner Field Collector (scope: project or
+   location)` already proves this exact pattern works today with zero
+   schema change. Confirmed genuinely seed-data/Assignment-level, not a
+   schema change, as this document's §39 already anticipated — §26
+   already specified "project or location" before this decision was
+   asked, so no text change was needed there, only this record that it
+   was deliberately confirmed rather than defaulted to.
+7. Full offline sync out of Phase 1's gates (§24, §37) — approved as
+   proposed.
 
 Input: `NECTAR_NOMADA_PHASE_1_TECHNICAL_EXECUTION_PLAN_PROMPT_CORRECTED.md`.
 Required predecessor, read in full per its §-1: `GAP_ANALYSIS_2026-08-10.md`
@@ -1325,11 +1349,11 @@ discipline this session established.
   This plan defers it (§13); worth an explicit product-owner call if a
   known upcoming harvest genuinely needs precise composition tracking
   sooner than "when it's needed."
-- Does the Farm Operator Role Profile need `location`-scope Assignments in
-  addition to `project`-scope (§26), for an operator who works across
-  multiple projects at one physical site? Flagged, not resolved — `RBAC.md`
-  §3's containment rules support either without a schema change, so this
-  is a seed-data/onboarding decision, not an architecture one.
+- ~~Does the Farm Operator Role Profile need `location`-scope
+  Assignments...~~ — **Resolved**: yes, both `project` and `location`
+  scope are supported, confirmed as a seed-data/Assignment-level decision
+  with no schema impact (see the decision record at the top of this
+  document).
 
 ## 40. Product-Owner Decisions Required
 
@@ -1348,8 +1372,11 @@ discipline this session established.
 4. **Confirm Recommended First Ticket (§41)** — T1, or reprioritize.
 5. **Confirm no mixed-cultivar composition tracking in Phase 1** (§13,
    §39) — or flag a specific known need that changes this.
-6. **Confirm Farm Operator's default scope granularity** (§39) —
-   `project`, or also `location`, for Phase 1's initial seed/onboarding.
+6. ~~Confirm Farm Operator's default scope granularity~~ — **Resolved,
+   changed from draft**: both `project` and `location` scope are
+   supported and expected in practice, not `project` alone. Verified
+   no schema change required (see decision record at the top of this
+   document).
 7. **Confirm full offline sync stays out of Phase 1's gates** (§24, §37)
    — architecture stays compatible, but wiring it up isn't a Phase 1
    success criterion unless directed otherwise.
