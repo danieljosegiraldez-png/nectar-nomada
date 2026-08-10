@@ -1,8 +1,9 @@
 // Néctar Nómada — Prisma schema, Slice 1 (Identity)
 // Implements docs/architecture/DOMAIN_MODEL.md §1-2 and docs/architecture/RBAC.md §2.
-// Only the `core` Postgres schema exists so far. Module schemas (commerce, research,
-// sensory, competitions, environmental, content, project, partner, ai) are added as
-// their vertical slices are built — see docs/architecture/DATA_ARCHITECTURE.md §1.
+// One module-owned Postgres schema per vertical slice, added as each is built — see
+// the `schemas` array below for what's actually live, and
+// docs/architecture/DATA_ARCHITECTURE.md §1 for the convention (research and
+// environmental schemas are still correctly absent; those modules aren't built yet).
 
 generator client {
   provider        = "prisma-client"
