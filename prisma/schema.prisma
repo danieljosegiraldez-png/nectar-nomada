@@ -41,7 +41,8 @@ model Person {
   createdBy   String?      @map("created_by") @db.Uuid
   creator     UserAccount? @relation("PersonCreatedBy", fields: [createdBy], references: [id])
 
-  userAccount UserAccount?
+  userAccount      UserAccount?
+  projectsAsClient Project[]
 
   @@map("person")
   @@schema("core")
@@ -74,13 +75,18 @@ model UserAccount {
   createdBy       String?           @map("created_by") @db.Uuid
   creator         UserAccount?      @relation("UserAccountCreatedBy", fields: [createdBy], references: [id])
 
-  createdAccounts     UserAccount[] @relation("UserAccountCreatedBy")
-  personsCreated      Person[]      @relation("PersonCreatedBy")
-  roleProfilesCreated RoleProfile[] @relation("RoleProfileCreatedBy")
-  scopesCreated       Scope[]       @relation("ScopeCreatedBy")
-  assignments         Assignment[]  @relation("AssignmentToUserAccount")
-  assignmentsGranted  Assignment[]  @relation("AssignmentGrantedBy")
-  auditEvents         AuditEvent[]
+  createdAccounts      UserAccount[]  @relation("UserAccountCreatedBy")
+  personsCreated       Person[]       @relation("PersonCreatedBy")
+  roleProfilesCreated  RoleProfile[]  @relation("RoleProfileCreatedBy")
+  scopesCreated        Scope[]        @relation("ScopeCreatedBy")
+  assignments          Assignment[]   @relation("AssignmentToUserAccount")
+  assignmentsGranted   Assignment[]   @relation("AssignmentGrantedBy")
+  auditEvents          AuditEvent[]
+  locationsCreated     Location[]     @relation("LocationCreatedBy")
+  organizationsCreated Organization[] @relation("OrganizationCreatedBy")
+  programsCreated      Program[]      @relation("ProgramCreatedBy")
+  projectsCreated      Project[]      @relation("ProjectCreatedBy")
+  samplesCreated       Sample[]       @relation("SampleCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -230,5 +236,246 @@ model AuditEvent {
   @@index([entityType, entityId])
   @@index([actorUserAccountId])
   @@map("audit_event")
+  @@schema("core")
+}
+
+// ---------------------------------------------------------------------------
+// Foundational canonical entities — DOMAIN_MODEL.md §3, DECISIONS.md
+// ADR-017/018/019/020 (all four point at this as the shared prerequisite).
+// ---------------------------------------------------------------------------
+
+// DATA_ARCHITECTURE.md §7 — generic record lifecycle, shared by every
+// canonical/content entity below. Identity/RBAC tables (Person, UserAccount,
+// RoleProfile, Assignment) keep their own bespoke status enums, unchanged,
+// since their lifecycle genuinely differs from a content record's.
+enum RecordStatus {
+  draft
+  incomplete
+  pending_review
+  verified
+  approved
+  archived
+  rejected
+
+  @@schema("core")
+}
+
+// RBAC.md §6 — sensitive-record classification, an axis independent of and
+// checked alongside RBAC permission resolution (lib/rbac/resolve.ts's
+// `can()` already accepts this as a parameter — see RBAC.md §4 step 4).
+// This is the first slice where any table actually carries the column.
+// Defaults to `internal`, not `public` — a record must be explicitly
+// reclassified to appear on a public surface, never public by omission.
+enum ClassificationLevel {
+  public
+  registered
+  partner
+  internal
+  confidential
+  trade_secret
+
+  @@schema("core")
+}
+
+enum LocationType {
+  country
+  province
+  district
+  locality
+  site
+
+  @@schema("core")
+}
+
+model Location {
+  id               String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationType     LocationType        @map("location_type")
+  parentLocationId String?             @map("parent_location_id") @db.Uuid
+  parentLocation   Location?           @relation("LocationHierarchy", fields: [parentLocationId], references: [id])
+  childLocations   Location[]          @relation("LocationHierarchy")
+  organizationId   String?             @map("organization_id") @db.Uuid
+  organization     Organization?       @relation(fields: [organizationId], references: [id])
+  name             String
+  latitude         Float?
+  longitude        Float?
+  altitudeMeters   Float?              @map("altitude_meters")
+  timezone         String?
+  status           RecordStatus        @default(draft)
+  classification   ClassificationLevel @default(internal)
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+  createdBy        String?             @map("created_by") @db.Uuid
+  creator          UserAccount?        @relation("LocationCreatedBy", fields: [createdBy], references: [id])
+
+  projectsWithPrimaryLocation Project[] @relation("ProjectPrimaryLocation")
+  samples                     Sample[]
+
+  @@index([parentLocationId])
+  @@index([organizationId])
+  @@map("location")
+  @@schema("core")
+}
+
+// DOMAIN_MODEL.md §3 — one table, typed via organizationType, not one table
+// per type. Type-specific fields live in `attributes`, validated per type
+// at the application layer (DATA_ARCHITECTURE.md §3) — not built yet, since
+// no service/UI writes to this table until Slice 2.
+enum OrganizationType {
+  farm
+  estate
+  producer
+  roaster
+  brewery
+  winery
+  distillery
+  apiary
+  laboratory
+  restaurant
+  venue
+  association
+  university
+  supplier
+  tour_operator
+  nectar_nomada_partner
+
+  @@schema("core")
+}
+
+model Organization {
+  id               String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationType OrganizationType    @map("organization_type")
+  name             String
+  description      String?
+  attributes       Json?
+  status           RecordStatus        @default(draft)
+  classification   ClassificationLevel @default(internal)
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+  createdBy        String?             @map("created_by") @db.Uuid
+  creator          UserAccount?        @relation("OrganizationCreatedBy", fields: [createdBy], references: [id])
+
+  locations        Location[]
+  projectsOwned    Project[]  @relation("ProjectOrganization")
+  projectsAsClient Project[]  @relation("ProjectClientOrganization")
+  samples          Sample[]
+
+  @@map("organization")
+  @@schema("core")
+}
+
+// DOMAIN_MODEL.md §3 — optional parent grouping above Project. Exists
+// primarily so RBAC.md's `program` ScopeType has a real table to point at;
+// kept minimal until a concrete need for richer Program fields appears.
+model Program {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String?
+  status      RecordStatus @default(draft)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  createdBy   String?      @map("created_by") @db.Uuid
+  creator     UserAccount? @relation("ProgramCreatedBy", fields: [createdBy], references: [id])
+
+  projects Project[]
+
+  @@map("program")
+  @@schema("core")
+}
+
+// CLAUDE.md §18 — the domain-tag vocabulary is explicitly open-ended
+// ("possible future extension should not require redesign"), so this is a
+// seeded reference table + join, not a closed enum that would need a
+// migration every time a new domain (e.g. cacao, apiculture) is added.
+model DomainTag {
+  id   String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug String @unique
+  name String
+
+  projects ProjectDomainTagAssignment[]
+
+  @@map("domain_tag")
+  @@schema("core")
+}
+
+model Project {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  programId String?  @map("program_id") @db.Uuid
+  program   Program? @relation(fields: [programId], references: [id])
+
+  // Owning/partner organization running this project — distinct from a
+  // consulting client below (COMMERCE_OPERATIONS_TOOLS_ARCHITECTURE.md §O).
+  organizationId String?       @map("organization_id") @db.Uuid
+  organization   Organization? @relation("ProjectOrganization", fields: [organizationId], references: [id])
+
+  // Consulting client (ADR-020 item 4) — nullable, set only for
+  // domain_tag = 'consulting' engagements. Not a new CRM entity; the
+  // "client" relationship is exactly these two nullable FKs.
+  clientOrganizationId String?       @map("client_organization_id") @db.Uuid
+  clientOrganization   Organization? @relation("ProjectClientOrganization", fields: [clientOrganizationId], references: [id])
+  clientPersonId       String?       @map("client_person_id") @db.Uuid
+  clientPerson         Person?       @relation(fields: [clientPersonId], references: [id])
+
+  primaryLocationId String?   @map("primary_location_id") @db.Uuid
+  primaryLocation   Location? @relation("ProjectPrimaryLocation", fields: [primaryLocationId], references: [id])
+
+  name           String
+  description    String?
+  status         RecordStatus        @default(draft)
+  classification ClassificationLevel @default(internal)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  createdBy      String?             @map("created_by") @db.Uuid
+  creator        UserAccount?        @relation("ProjectCreatedBy", fields: [createdBy], references: [id])
+
+  domainTags ProjectDomainTagAssignment[]
+  samples    Sample[]
+
+  @@index([programId])
+  @@index([organizationId])
+  @@index([clientOrganizationId])
+  @@index([primaryLocationId])
+  @@map("project")
+  @@schema("core")
+}
+
+model ProjectDomainTagAssignment {
+  projectId   String @map("project_id") @db.Uuid
+  domainTagId String @map("domain_tag_id") @db.Uuid
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  domainTag DomainTag @relation(fields: [domainTagId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, domainTagId])
+  @@map("project_domain_tag")
+  @@schema("core")
+}
+
+// DOMAIN_MODEL.md §3 — referenced by Research OS/Sensory/Competitions/
+// Traceability, none of which exist yet, so this stays intentionally thin.
+// `sampleType` is a free-text field, not an enum — COMMERCE_OPERATIONS_
+// TOOLS_ARCHITECTURE.md §19's sample-type list is domain-specific and will
+// be constrained (if at all) once a real consuming module exists.
+model Sample {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sampleCode     String              @unique @map("sample_code")
+  sampleType     String              @map("sample_type")
+  description    String?
+  projectId      String?             @map("project_id") @db.Uuid
+  project        Project?            @relation(fields: [projectId], references: [id])
+  organizationId String?             @map("organization_id") @db.Uuid
+  organization   Organization?       @relation(fields: [organizationId], references: [id])
+  locationId     String?             @map("location_id") @db.Uuid
+  location       Location?           @relation(fields: [locationId], references: [id])
+  status         RecordStatus        @default(draft)
+  classification ClassificationLevel @default(internal)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  createdBy      String?             @map("created_by") @db.Uuid
+  creator        UserAccount?        @relation("SampleCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([projectId])
+  @@index([organizationId])
+  @@index([locationId])
+  @@map("sample")
   @@schema("core")
 }

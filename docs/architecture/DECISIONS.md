@@ -598,3 +598,60 @@ and sequencing, not an implementation start — Foundational-phase work
 QuantityEvent) begins when explicitly kicked off, which has not yet
 happened as of this ADR. No checkout, payment, billing, or sensor
 integration code is implied or authorized by this approval.
+
+---
+
+## ADR-021 — Foundational schema implemented; PostGIS deferred (tooling, not design)
+
+**Context:** Implementing the Foundational schema (`Location`, `Organization`,
+`Program`, `Project`, `DomainTag`, `Sample` — the shared prerequisite named
+in ADR-017/018/019/020) surfaced one concrete blocker: ADR-017 item 6
+approved enabling PostGIS "when the Location table is built," which is this
+moment. Adding `extensions = [postgis]` and an `Unsupported("geography(Point,
+4326)")` column on `Location` and attempting `prisma migrate dev` against
+the local development database failed:
+
+```
+ERROR: extension "postgis" is not available
+DETAIL: Could not open extension control file
+"/pglite/share/postgresql/extension/postgis.control": No such file or directory.
+```
+
+Prisma's bundled local development database (`prisma dev`) runs on PGlite —
+a WASM-embedded Postgres — which does not support installing arbitrary
+extensions, unlike a real Postgres server (Neon, or any standard Postgres
+install). This is a local-tooling limitation, not a reason to revisit the
+PostGIS decision itself.
+
+**Decision:** Ship the Foundational schema now with `Location.latitude`/
+`longitude`/`altitudeMeters` only (plain columns, as already specified in
+`DOMAIN_MODEL.md` §3). The PostGIS `geography(Point, 4326)` column is
+deferred until the schema is next migrated against a real Postgres instance
+(Neon, or a real local Postgres if one becomes available) — at that point it
+is a small additive migration, not a redesign, since lat/lng remain the
+canonical human-readable columns and the geography column was always meant
+to be additive (`EXTERNAL_DATA_ARCHITECTURE.md` §9).
+
+**A second, unrelated finding from the same implementation pass:** `prisma
+migrate dev`'s automatic shadow-database provisioning also does not work
+against this local PGlite instance — the first attempt failed with `type
+"PersonStatus" already exists`, which turned out to mean the auto-created
+shadow database silently fell back to the main development database itself.
+Fixed by explicitly pointing `prisma.config.ts`'s `shadowDatabaseUrl` at the
+separate shadow instance `prisma dev` already provisions (documented in
+`.env`/`SETUP.md` as `SHADOW_DATABASE_URL`) — this is also a local-only
+workaround; Neon/any real Postgres provisions its own shadow database
+correctly without it.
+
+**Consequences:** `Location`, `Organization`, `Program`, `DomainTag`,
+`Project` (+ `ProjectDomainTagAssignment`), and `Sample` are live in the
+database (migration `20260810002142_foundational_entities`), verified
+end-to-end against the real local database: a 3-level Location hierarchy,
+Organization↔Location, Program→Project, Organization→Project (both as
+owning org and as consulting client per ADR-020 item 4), Project→primary
+Location, the domain-tag many-to-many join, and Project→Sample all resolve
+correctly. `RecordStatus` and `ClassificationLevel` (RBAC.md §6, the first
+table to actually carry a classification column) are shared enums used
+across all five new models. No service/UI layer was built for these tables
+in this pass — none is needed yet, since no feature reads or writes them
+until Slice 2.
