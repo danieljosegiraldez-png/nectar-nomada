@@ -172,6 +172,26 @@ export async function recordTransformation(userAccountId: string, input: RecordT
           unit: output.unit ?? null,
         },
       });
+      // Seed the new lot's own quantity ledger so computeCurrentQuantity
+      // (lib/traceability/quantity.ts) reports correctly for it from
+      // creation, not just for lots created by HarvestEvent/ReceivingEvent
+      // — LotTransformationOutput.quantity was previously only a snapshot
+      // on the join row, disconnected from SUM(QuantityEvent). Skipped
+      // when quantity isn't given, same "missing stays missing" rule as
+      // everywhere else.
+      if (output.quantity != null && output.unit) {
+        await tx.quantityEvent.create({
+          data: {
+            lotId: outputLot.id,
+            eventType: "process_output",
+            quantity: output.quantity,
+            unit: output.unit,
+            occurredAt: input.occurredAt,
+            transformationId: transformation.id,
+            createdBy: userAccountId,
+          },
+        });
+      }
       outputLots.push(outputLot);
     }
 

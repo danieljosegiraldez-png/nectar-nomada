@@ -1223,7 +1223,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | **T3 — Measurement architecture + unit registry — DONE** | T1 | traceability | Built: `Measurement`, `MeasurementSourceType` (`fermentationRunId`/`dryingRunId`/`storageAssignmentId` are plain UUID columns, no FK yet — see note below) | `lib/traceability/measurements.ts`: recordMeasurement, correctMeasurement; `lib/traceability/units.ts`: canonical registry | None (correctly out of scope) | `tests/traceability/measurements.test.ts` (real Neon) + `tests/traceability/units.test.ts` (pure), 12 tests | **Met**: migration applied to Neon; 68/68 tests pass across the full suite; Fahrenheit→Celsius conversion and out-of-range rejection both verified live |
 | **T4 — Harvest/Receiving capture — DONE (backend)** | T1, T3 | traceability | Built: `HarvestEvent`, `ReceivingEvent` (+`projectId` on both, added beyond the original sketch — see note below), `Location.plot` | `lib/traceability/harvest.ts`: recordHarvestEvent, recordReceivingEvent | **Deferred to T10** — see note below | `tests/traceability/harvest.test.ts`, 6 tests, real Neon | **Met at the service layer**: migration applied to Neon; 74/74 tests pass across the full suite; a harvested lot verified split-ready end-to-end (composes with T1's recordTransformation). Browser click-through verification deferred until the Harvest form UI exists (T10) |
 | **T5 — Sample lineage extension — DONE** | T1 | traceability + core | Built: `Sample` +`sourceLotId`/`sourceTransformationId` (additive, nullable — existing seeded rows verified unaffected) | `lib/traceability/samples.ts`: createSampleFromLot | Deferred to T10 (same reasoning as T4) | `tests/traceability/samples.test.ts`, 5 tests, real Neon | **Met**: migration applied to Neon (2 pre-existing Sample rows confirmed still `NULL`/valid); 79/79 tests pass across the full suite; a sample extraction's transformation verified to have exactly 1 input and 0 outputs, matching §8.1's "output is the Sample row, not a second Lot row" |
-| **T6 — Fermentation run** | T1, T2, T3 | traceability | New: `FermentationRun`, `FermentationIntervention` | `lib/traceability/fermentation.ts` | Record Fermentation | Integration: full fermentation lifecycle | Medium — first "stage-run" entity, sets the pattern T7 follows | Start→intervene→measure→end cycle works, produces a stage-change LotTransformation |
+| **T6 — Fermentation run — DONE** | T1, T2, T3 | traceability | Built: `FermentationRun`, `FermentationIntervention` (+`LotTransformation.fermentationRunId`, +retroactive FK on `Measurement.fermentationRunId` deferred since T3 — see notes below) | `lib/traceability/fermentation.ts`: startFermentationRun, recordFermentationIntervention, endFermentationRun | Deferred to T10 (same reasoning as T4/T5) | `tests/traceability/fermentation.test.ts`, 4 tests, real Neon | **Met**: migration applied to Neon; 84/84 tests pass across the full suite; full start→intervene→measure→end cycle verified live, producing two stage-change `LotTransformation` rows (start: 1 input/0 outputs; end: 1 input/1 output) both linked via `fermentationRunId`, exactly matching §8.3's lineage diagram |
 | **T7 — Drying run** | T1, T2, T3, T6 (pattern reuse) | traceability | New: `DryingRun`, `DryingTurnEvent` | `lib/traceability/drying.ts` | Record Drying | Integration | Low (same pattern as T6) | Same shape as T6, drying-specific fields |
 | **T8 — Storage assignment** | T1 | traceability | New: `StorageAssignment` | `lib/traceability/storage.ts` | Record Storage Movement | Integration: location-history preservation | Low | Moving storage preserves prior assignment's history |
 | **T9 — RBAC: Farm Operator + lot/sample permissions** | T1 | core (RBAC catalog) | None (seed data) | `lib/rbac/catalog.ts` additions | None | RBAC positive+negative (§31) | Low | Farm Operator scoped correctly; cross-project denial verified |
@@ -1360,6 +1360,47 @@ quantity is given, matching `CLAUDE.md` §3's "missing must remain missing"
 discipline. UI deferred to T10, same reasoning already recorded in T4's
 note (§30's UI Screen Plan/dependency graph treat T10 as the first ticket
 with real navigation to attach a form to).
+
+**T6 implementation notes:**
+
+1. **A real, pre-existing bug fixed, not a schema change**: while building
+   `endFermentationRun` (whose output lot's quantity needed to be
+   immediately queryable), discovered that T1's `recordTransformation`
+   never seeded a `QuantityEvent` for the Lots it creates as outputs —
+   `LotTransformationOutput.quantity` was only ever a snapshot on the join
+   row, disconnected from `SUM(QuantityEvent)`. Every split/merge/blend/
+   stage_change output lot since T1 has been silently reporting
+   `computeCurrentQuantity = 0` regardless of its actual recorded
+   quantity — T1's and T5's own tests didn't catch this because they
+   asserted against `LotTransformationOutput.quantity` directly, never
+   through `computeCurrentQuantity`. Fixed in `lots.ts`: each output lot
+   now gets a `QuantityEvent` (`eventType: "process_output"` — defined in
+   T2's enum since the start, unused until now, same pattern as T2's
+   `sample_removed` sitting unused until T5) when quantity/unit is given.
+   Added a regression test to `lots.test.ts` confirming a split output's
+   quantity is now correctly queryable. This is a correctness fix to
+   already-committed, already-tested code, not a new design decision —
+   flagged prominently here rather than folded quietly into T6's own
+   files.
+2. **`LotTransformation.fermentationRunId` added** (nullable FK to the new
+   `FermentationRun`) — §15's own text ("input/output lot(s) are not FKs
+   on FermentationRun directly, they're expressed through the
+   LotTransformation that references this run") named the mechanism but
+   didn't spell out the field; this is the concrete shape needed to make
+   "which Lot is Run F-001 for" a real, queryable fact from the moment a
+   run starts (needed for RBAC checks mid-run and for T10's Active
+   Operations view), not something reconstructable only once a run ends.
+   Two `stage_change` transformations bracket a run — one at start (input:
+   the fermenting lot, zero outputs) and one at end (same input, output:
+   the next-stage lot) — matching §8.3's lineage diagram exactly.
+3. **`Measurement.fermentationRunId`'s FK constraint added**, fulfilling
+   the promise made in T3's own implementation note ("each FK constraint
+   gets added additively when its referenced table lands") — safe, since
+   no row has ever written a non-null value to that column before now.
+
+All three are additive/low-risk (new table, new nullable columns, a new FK
+on a column no one has used yet) or a pure bug fix — proceeded and reported
+here per this session's schema-change policy, same as T1-T5.
 
 ## 35. Dependency Graph
 

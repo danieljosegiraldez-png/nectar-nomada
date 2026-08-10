@@ -65,6 +65,7 @@ model Person {
   measurementsOperated         Measurement[]
   harvestEventsOperated        HarvestEvent[]                @relation("HarvestEventOperator")
   receivingEventsOperated      ReceivingEvent[]              @relation("ReceivingEventOperator")
+  fermentationRunsOperated     FermentationRun[]             @relation("FermentationRunOperator")
 
   @@map("person")
   @@schema("core")
@@ -97,41 +98,43 @@ model UserAccount {
   createdBy       String?           @map("created_by") @db.Uuid
   creator         UserAccount?      @relation("UserAccountCreatedBy", fields: [createdBy], references: [id])
 
-  createdAccounts             UserAccount[]                @relation("UserAccountCreatedBy")
-  personsCreated              Person[]                     @relation("PersonCreatedBy")
-  roleProfilesCreated         RoleProfile[]                @relation("RoleProfileCreatedBy")
-  scopesCreated               Scope[]                      @relation("ScopeCreatedBy")
-  assignments                 Assignment[]                 @relation("AssignmentToUserAccount")
-  assignmentsGranted          Assignment[]                 @relation("AssignmentGrantedBy")
-  auditEvents                 AuditEvent[]
-  locationsCreated            Location[]                   @relation("LocationCreatedBy")
-  organizationsCreated        Organization[]               @relation("OrganizationCreatedBy")
-  programsCreated             Program[]                    @relation("ProgramCreatedBy")
-  projectsCreated             Project[]                    @relation("ProjectCreatedBy")
-  samplesCreated              Sample[]                     @relation("SampleCreatedBy")
-  storiesCreated              Story[]                      @relation("StoryCreatedBy")
-  productsCreated             Product[]                    @relation("ProductCreatedBy")
-  experiencesCreated          Experience[]                 @relation("ExperienceCreatedBy")
-  productVariantsCreated      ProductVariant[]             @relation("ProductVariantCreatedBy")
-  carts                       Cart[]
-  bookings                    Booking[]
-  orders                      Order[]
-  experienceSessionsCreated   ExperienceSession[]          @relation("ExperienceSessionCreatedBy")
-  assetsCreated               Asset[]                      @relation("AssetCreatedBy")
-  tasksCreated                Task[]                       @relation("TaskCreatedBy")
-  tasksAssigned               Task[]                       @relation("TaskAssignedTo")
-  fieldSubmissions            FieldSubmission[]            @relation("FieldSubmissionSubmittedBy")
-  sensorySessionsCreated      SensorySession[]             @relation("SensorySessionCreatedBy")
-  assessments                 Assessment[]                 @relation("AssessmentByEvaluator")
-  recommendationsReviewed     Recommendation[]             @relation("RecommendationReviewedBy")
-  competitionJudgeAssignments CompetitionJudgeAssignment[]
-  competitionResultsFinalized CompetitionResult[]          @relation("CompetitionResultFinalizedBy")
-  lotsCreated                 Lot[]                        @relation("LotCreatedBy")
-  lotTransformationsCreated   LotTransformation[]          @relation("LotTransformationCreatedBy")
-  quantityEventsCreated       QuantityEvent[]              @relation("QuantityEventCreatedBy")
-  measurementsCreated         Measurement[]                @relation("MeasurementCreatedBy")
-  harvestEventsCreated        HarvestEvent[]               @relation("HarvestEventCreatedBy")
-  receivingEventsCreated      ReceivingEvent[]             @relation("ReceivingEventCreatedBy")
+  createdAccounts                  UserAccount[]                @relation("UserAccountCreatedBy")
+  personsCreated                   Person[]                     @relation("PersonCreatedBy")
+  roleProfilesCreated              RoleProfile[]                @relation("RoleProfileCreatedBy")
+  scopesCreated                    Scope[]                      @relation("ScopeCreatedBy")
+  assignments                      Assignment[]                 @relation("AssignmentToUserAccount")
+  assignmentsGranted               Assignment[]                 @relation("AssignmentGrantedBy")
+  auditEvents                      AuditEvent[]
+  locationsCreated                 Location[]                   @relation("LocationCreatedBy")
+  organizationsCreated             Organization[]               @relation("OrganizationCreatedBy")
+  programsCreated                  Program[]                    @relation("ProgramCreatedBy")
+  projectsCreated                  Project[]                    @relation("ProjectCreatedBy")
+  samplesCreated                   Sample[]                     @relation("SampleCreatedBy")
+  storiesCreated                   Story[]                      @relation("StoryCreatedBy")
+  productsCreated                  Product[]                    @relation("ProductCreatedBy")
+  experiencesCreated               Experience[]                 @relation("ExperienceCreatedBy")
+  productVariantsCreated           ProductVariant[]             @relation("ProductVariantCreatedBy")
+  carts                            Cart[]
+  bookings                         Booking[]
+  orders                           Order[]
+  experienceSessionsCreated        ExperienceSession[]          @relation("ExperienceSessionCreatedBy")
+  assetsCreated                    Asset[]                      @relation("AssetCreatedBy")
+  tasksCreated                     Task[]                       @relation("TaskCreatedBy")
+  tasksAssigned                    Task[]                       @relation("TaskAssignedTo")
+  fieldSubmissions                 FieldSubmission[]            @relation("FieldSubmissionSubmittedBy")
+  sensorySessionsCreated           SensorySession[]             @relation("SensorySessionCreatedBy")
+  assessments                      Assessment[]                 @relation("AssessmentByEvaluator")
+  recommendationsReviewed          Recommendation[]             @relation("RecommendationReviewedBy")
+  competitionJudgeAssignments      CompetitionJudgeAssignment[]
+  competitionResultsFinalized      CompetitionResult[]          @relation("CompetitionResultFinalizedBy")
+  lotsCreated                      Lot[]                        @relation("LotCreatedBy")
+  lotTransformationsCreated        LotTransformation[]          @relation("LotTransformationCreatedBy")
+  quantityEventsCreated            QuantityEvent[]              @relation("QuantityEventCreatedBy")
+  measurementsCreated              Measurement[]                @relation("MeasurementCreatedBy")
+  harvestEventsCreated             HarvestEvent[]               @relation("HarvestEventCreatedBy")
+  receivingEventsCreated           ReceivingEvent[]             @relation("ReceivingEventCreatedBy")
+  fermentationRunsCreated          FermentationRun[]            @relation("FermentationRunCreatedBy")
+  fermentationInterventionsCreated FermentationIntervention[]   @relation("FermentationInterventionCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -1964,12 +1967,21 @@ model LotTransformation {
   createdBy          String?               @map("created_by") @db.Uuid
   creator            UserAccount?          @relation("LotTransformationCreatedBy", fields: [createdBy], references: [id])
 
+  // Links a stage_change transformation to the run it starts or ends
+  // (execution plan §15 — "input/output lot(s) are not FKs on
+  // FermentationRun directly, they're expressed through the
+  // LotTransformation that references this run"). Null for every
+  // transformation type that isn't bracketing a stage run.
+  fermentationRunId String?          @map("fermentation_run_id") @db.Uuid
+  fermentationRun   FermentationRun? @relation(fields: [fermentationRunId], references: [id])
+
   inputs         LotTransformationInput[]
   outputs        LotTransformationOutput[]
   quantityEvents QuantityEvent[]
   samples        Sample[]
 
   @@index([occurredAt])
+  @@index([fermentationRunId])
   @@map("lot_transformation")
   @@schema("traceability")
 }
@@ -2090,13 +2102,18 @@ model Measurement {
   unit       String
   occurredAt DateTime @map("occurred_at")
 
-  lotId               String? @map("lot_id") @db.Uuid
-  lot                 Lot?    @relation(fields: [lotId], references: [id])
-  sampleId            String? @map("sample_id") @db.Uuid
-  sample              Sample? @relation(fields: [sampleId], references: [id])
-  fermentationRunId   String? @map("fermentation_run_id") @db.Uuid
-  dryingRunId         String? @map("drying_run_id") @db.Uuid
-  storageAssignmentId String? @map("storage_assignment_id") @db.Uuid
+  lotId               String?          @map("lot_id") @db.Uuid
+  lot                 Lot?             @relation(fields: [lotId], references: [id])
+  sampleId            String?          @map("sample_id") @db.Uuid
+  sample              Sample?          @relation(fields: [sampleId], references: [id])
+  // FermentationRun exists as of T6 — real FK now, added additively (see
+  // that model's own migration). dryingRunId/storageAssignmentId stay
+  // plain UUID columns with no FK until DryingRun/StorageAssignment exist
+  // (T7/T8), same pattern.
+  fermentationRunId   String?          @map("fermentation_run_id") @db.Uuid
+  fermentationRun     FermentationRun? @relation(fields: [fermentationRunId], references: [id])
+  dryingRunId         String?          @map("drying_run_id") @db.Uuid
+  storageAssignmentId String?          @map("storage_assignment_id") @db.Uuid
 
   sourceType       MeasurementSourceType @default(manual) @map("source_type")
   deviceId         String?               @map("device_id")
@@ -2208,5 +2225,68 @@ model ReceivingEvent {
   @@index([locationId])
   @@index([projectId])
   @@map("receiving_event")
+  @@schema("traceability")
+}
+
+enum FermentationInterventionType {
+  inoculation
+  agitation
+  purge
+  addition
+  sample
+  transfer
+  termination
+  other
+
+  @@schema("traceability")
+}
+
+// Stage-run execution record (execution plan §15) — the first of three
+// (FermentationRun/DryingRun/StorageAssignment), sets the pattern T7/T8
+// follow. Deliberately has no lotId of its own: which Lot is running
+// through it is expressed via the LotTransformation(s) that reference this
+// run (fermentationRunId on LotTransformation), never duplicated here.
+//
+// Lifecycle: startFermentationRun creates this row plus a stage_change
+// LotTransformation (input: the lot entering fermentation, zero outputs —
+// nothing changes lot-identity-wise yet). endFermentationRun sets endedAt
+// once (a real one-time transition recording an actual event, not an
+// edit — same as StorageAssignment's own endedAt, §17) and creates a
+// second stage_change LotTransformation (same input lot, output: a new
+// Lot at the next stage), matching §8.3's lineage diagram exactly.
+model FermentationRun {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vesselNote       String?      @map("vessel_note") // free text ("Tank 3") — no Vessel entity yet, DOMAIN_MODEL.md §20
+  startedAt        DateTime     @map("started_at")
+  endedAt          DateTime?    @map("ended_at")
+  operatorPersonId String?      @map("operator_person_id") @db.Uuid
+  operator         Person?      @relation("FermentationRunOperator", fields: [operatorPersonId], references: [id])
+  inoculated       Boolean      @default(false)
+  inoculationNote  String?      @map("inoculation_note")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  createdBy        String?      @map("created_by") @db.Uuid
+  creator          UserAccount? @relation("FermentationRunCreatedBy", fields: [createdBy], references: [id])
+
+  interventions   FermentationIntervention[]
+  measurements    Measurement[]
+  transformations LotTransformation[]
+
+  @@map("fermentation_run")
+  @@schema("traceability")
+}
+
+model FermentationIntervention {
+  id                String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fermentationRunId String                       @map("fermentation_run_id") @db.Uuid
+  fermentationRun   FermentationRun              @relation(fields: [fermentationRunId], references: [id])
+  interventionType  FermentationInterventionType @map("intervention_type")
+  occurredAt        DateTime                     @map("occurred_at")
+  notes             String?
+  createdAt         DateTime                     @default(now()) @map("created_at")
+  createdBy         String?                      @map("created_by") @db.Uuid
+  creator           UserAccount?                 @relation("FermentationInterventionCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([fermentationRunId])
+  @@map("fermentation_intervention")
   @@schema("traceability")
 }

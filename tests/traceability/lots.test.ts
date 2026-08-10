@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createLot, getLotLineage, recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
+import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 
 const RUN_ID = `t1-${Date.now()}`;
 
@@ -84,6 +85,7 @@ afterAll(async () => {
   // (onDelete: Restrict), so transformations must be removed first.
   const allTestLots = await prisma.lot.findMany({ where: { lotCode: { startsWith: RUN_ID } } });
   const lotIds = allTestLots.map((l) => l.id);
+  await prisma.quantityEvent.deleteMany({ where: { lotId: { in: lotIds } } });
   await prisma.lotTransformation.deleteMany({
     where: { OR: [{ inputs: { some: { lotId: { in: lotIds } } } }, { outputs: { some: { lotId: { in: lotIds } } } }] },
   });
@@ -191,6 +193,25 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     for (const outputLot of outputLots) {
       expect(outputLot.projectId).toBe(projectAId);
     }
+  });
+
+  it("regression: a split output lot's quantity is queryable via computeCurrentQuantity, not just the LotTransformationOutput snapshot", async () => {
+    const origin = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-split-quantity-origin`,
+      lotType: "cherry",
+      projectId: projectAId,
+    });
+
+    const { outputLots } = await recordTransformation(authorizedUserAccountId, {
+      transformationType: "split",
+      occurredAt: new Date(),
+      inputs: [{ lotId: origin.id, quantity: 100, unit: "kg" }],
+      outputs: [{ lotCode: `${RUN_ID}-split-quantity-output`, lotType: "processing", quantity: 60, unit: "kg" }],
+    });
+
+    const quantity = await computeCurrentQuantity(authorizedUserAccountId, outputLots[0]!.id);
+    expect(quantity.quantity.toNumber()).toBe(60);
+    expect(quantity.unit).toBe("kg");
   });
 
   it("merge: two lots combine into one output lot", async () => {
