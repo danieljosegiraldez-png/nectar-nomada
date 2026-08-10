@@ -1226,7 +1226,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | **T6 — Fermentation run — DONE** | T1, T2, T3 | traceability | Built: `FermentationRun`, `FermentationIntervention` (+`LotTransformation.fermentationRunId`, +retroactive FK on `Measurement.fermentationRunId` deferred since T3 — see notes below) | `lib/traceability/fermentation.ts`: startFermentationRun, recordFermentationIntervention, endFermentationRun | Deferred to T10 (same reasoning as T4/T5) | `tests/traceability/fermentation.test.ts`, 4 tests, real Neon | **Met**: migration applied to Neon; 84/84 tests pass across the full suite; full start→intervene→measure→end cycle verified live, producing two stage-change `LotTransformation` rows (start: 1 input/0 outputs; end: 1 input/1 output) both linked via `fermentationRunId`, exactly matching §8.3's lineage diagram |
 | **T7 — Drying run — DONE** | T1, T2, T3, T6 (pattern reuse) | traceability | Built: `DryingRun`, `DryingTurnEvent` (+`DryingTurnEventType` enum, §16's own sketch left this a plain String — see note below), `LotTransformation.dryingRunId`, retroactive FK on `Measurement.dryingRunId` | `lib/traceability/drying.ts`: startDryingRun, recordDryingTurnEvent, endDryingRun | Deferred to T10 (same reasoning as T4-T6) | `tests/traceability/drying.test.ts`, 4 tests, real Neon | **Met**: migration applied to Neon; 88/88 tests pass across the full suite; full start→turn→measure→end cycle verified live, same shape as T6 |
 | **T8 — Storage assignment — DONE** | T1 | traceability | Built: `StorageAssignment` (direct `lotId` FK, no bracketing LotTransformation pair — see note below), retroactive FK on `Measurement.storageAssignmentId` | `lib/traceability/storage.ts`: moveLotToStorage, getCurrentStorageAssignment | Deferred to T10 (same reasoning as T4-T7) | `tests/traceability/storage.test.ts`, 3 tests, real Neon | **Met**: migration applied to Neon; 91/91 tests pass across the full suite; a second move verified to close the prior assignment (`endedAt` set once) without touching its `locationId`, full history remains queryable |
-| **T9 — RBAC: Farm Operator + lot/sample permissions** | T1 | core (RBAC catalog) | None (seed data) | `lib/rbac/catalog.ts` additions | None | RBAC positive+negative (§31) | Low | Farm Operator scoped correctly; cross-project denial verified |
+| **T9 — RBAC: Farm Operator + lot/sample permissions — DONE (mostly pre-completed by T1)** | T1 | core (RBAC catalog) | None (seed data) | `lib/rbac/catalog.ts` additions — verified already complete | None | RBAC positive+negative (§31) — one gap closed | Low | Farm Operator scoped correctly; cross-project denial verified |
 | **T10 — Operator Workbench: Active Operations + Lot Detail** | T1-T9 | traceability | None | Read queries only | Active Operations, Lot Detail pages | E2E: full workflow visible | Medium — the first UI surfacing everything above, likely to surface integration gaps | A user can see identity/lineage/quantity/process/measurements/samples/tasks/audit on one Lot Detail page |
 | **T11 — Process/Deviation tracking** | T6, T7 | traceability | New: `ProcessExecution`, `Deviation` | Extend `fermentation.ts`/`drying.ts` | Surfaced on Lot Detail | Unit | Low | A recorded deviation shows on Lot Detail's Processing section |
 | **T12 — Sensory linkage panel** | T5, existing Sensory | traceability + sensory (read-only) | None | Read query joining Sample → SensorySession | Sensory panel on Lot Detail | Integration: link renders when present, absent gracefully otherwise | Low — read-only, no sensory schema touched | A Lot with a cupped Sample shows its PanelResult; one without shows nothing, not an error |
@@ -1421,6 +1421,24 @@ itself signals — storage doesn't change a Lot's identity, so there's no
 that closes the prior open assignment and creates a new one. No new
 design decisions beyond the retroactive `Measurement.storageAssignmentId`
 FK (same pattern as T6/T7).
+
+**T9 implementation note:** §26's entire RBAC spec — `lot:manage`,
+`lot:view`, `sample:manage`, the Farm Operator Role Profile with those
+plus `classification:clear_partner`, and its own `RBAC.md` §5 bullet —
+was already fully pulled forward during T1 (T1's own row noted this
+explicitly: "minimal pull-forward from T9"), since T1 needed a working
+Farm Operator to test lot creation against in the first place. Verified
+directly against `lib/rbac/catalog.ts` and `RBAC.md` §5 rather than
+assumed: nothing was missing. Cross-project denial has also already been
+exercised, positively and negatively, in every one of T1-T8's own test
+files (8 separate `wrongProjectUserAccountId` negative tests). The one
+genuine gap: T1's own `lots.test.ts` tested the "no Assignment at all"
+negative case for `lot:manage`, but `sample:manage` (the other permission
+T9 names) never got the equivalent test — added to `samples.test.ts`.
+Every other module (`quantity.ts`, `measurements.ts`, `harvest.ts`,
+`fermentation.ts`, `drying.ts`, `storage.ts`) delegates to the same
+`requireLotAccess`/`can()` mechanism already proven correct for this case,
+so re-testing it per calling module would be redundant, not more rigorous.
 
 ## 35. Dependency Graph
 

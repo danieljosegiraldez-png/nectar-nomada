@@ -17,6 +17,7 @@ let projectBId: string;
 
 let authorizedUserAccountId: string; // Farm Operator, scope: project A
 let wrongProjectUserAccountId: string; // Farm Operator, scope: project B
+let unauthorizedUserAccountId: string; // no Assignment at all
 
 async function createTestUserAccount(label: string) {
   const person = await prisma.person.create({
@@ -52,6 +53,8 @@ beforeAll(async () => {
 
   wrongProjectUserAccountId = await createTestUserAccount("WrongProjectOperator");
   await assignFarmOperator(wrongProjectUserAccountId, { scopeType: "project", scopeRefId: projectBId });
+
+  unauthorizedUserAccountId = await createTestUserAccount("Unauthorized");
 });
 
 afterAll(async () => {
@@ -70,7 +73,7 @@ afterAll(async () => {
   });
   await prisma.scope.deleteMany({ where: { OR: [{ scopeRefId: projectAId }, { scopeRefId: projectBId }] } });
   await prisma.userAccount.deleteMany({
-    where: { id: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } },
+    where: { id: { in: [authorizedUserAccountId, wrongProjectUserAccountId, unauthorizedUserAccountId] } },
   });
   await prisma.person.deleteMany({ where: { displayName: { contains: RUN_ID } } });
   await prisma.project.deleteMany({ where: { id: { in: [projectAId, projectBId] } } });
@@ -117,6 +120,23 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
     await expect(
       createSampleFromLot(wrongProjectUserAccountId, {
         sampleCode: `${RUN_ID}-S002`,
+        sampleType: "green_coffee",
+        sourceLotId: lot.id,
+        occurredAt: new Date(),
+      }),
+    ).rejects.toThrow(TraceabilityAccessError);
+  });
+
+  it("denies a user with no Assignment at all (T9 RBAC negative case, §31 — sample:manage's own version of T1's lot:manage test)", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-sample-unauthorized`,
+      lotType: "green",
+      projectId: projectAId,
+    });
+
+    await expect(
+      createSampleFromLot(unauthorizedUserAccountId, {
+        sampleCode: `${RUN_ID}-S006`,
         sampleType: "green_coffee",
         sourceLotId: lot.id,
         occurredAt: new Date(),
