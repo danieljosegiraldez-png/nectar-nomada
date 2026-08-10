@@ -1,6 +1,6 @@
 # Consumer Sensory Feedback — Néctar Nómada Digital Platform
 
-Extends `DOMAIN_MODEL.md` §4 (Sensory Evaluation) and `PLATFORM_OVERVIEW.md`
+Extends `DOMAIN_MODEL.md` §4 (Sensory Evaluation) and `CLAUDE.md`
 §14 (My Néctar — "My Tastings, Sensory History," previously specified with no
 data source defined). This document specifies a **second, structurally
 separate sensory pathway**: lightweight, QR-triggered consumer feedback,
@@ -107,7 +107,7 @@ registration:
 - Basic spam/duplicate-submission control (one response per email per batch).
 - The claim mechanism for My Néctar linking (§5).
 - Optional marketing opt-in (explicit checkbox, off by default, per the
-  Declared vs. Inferred preference distinction already in `DOMAIN_MODEL.md`
+  Declared vs. Inferred preference distinction already in `CLAUDE.md`
   §15/customer profile principles — never assumed from the act of
   submitting feedback).
 
@@ -125,7 +125,7 @@ Per your decision:
   browser tab — but this doesn't create persistent in-app access.
 - **Logged into My Néctar at submission, or claims it later via matching
   email**: `respondent.user_account_id` gets set, and the response becomes
-  part of that Person's permanent Sensory History (`PLATFORM_OVERVIEW.md`
+  part of that Person's permanent Sensory History (`CLAUDE.md`
   §14 — this is literally the missing data source that section referenced
   with nothing behind it until now).
 - Underlying data is retained either way (never deleted, consistent with the
@@ -179,7 +179,7 @@ This depends on:
   against; the consumer-only default view (§6, batch peer comparison) could
   technically ship without waiting for Slice 6, once Commerce and a batch
   concept exist.
-- My Néctar's Sensory History (already named in `PLATFORM_OVERVIEW.md` §14)
+- My Néctar's Sensory History (already named in `CLAUDE.md` §14)
   gets its actual data source from this work — worth noting as a nice
   convergence rather than two separate features.
 

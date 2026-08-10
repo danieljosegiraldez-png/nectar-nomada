@@ -100,7 +100,7 @@ relevant here:
   role-aware view over `Assignment` (scope = Project), `Task`, `Asset`
   uploads" — directly the pattern §Q below reuses for Client/Producer
   Portal.
-- **Project System** (`DOMAIN_MODEL.md` §8, from CLAUDE.md §8): `Programs,
+- **Project System** (`CLAUDE.md` §8): `Programs,
   Projects, Subprojects/Initiatives, Project Assignments, Collaborations,
   Milestones, Tasks, Assets, Reports, Events, Products, Experiences` — `Task`
   and even `Reports` are already named here, meaning §37 (Tasks) and part of
@@ -162,7 +162,7 @@ architecture without duplicating it.
 | Professional SaaS readiness | FUTURE/OPTIONAL — design-now, build-later (§R) |
 | Multi-Organization / multi-tenancy | PARTIAL — RBAC's Assignment/Scope model is inherently multi-subject; `organization` `ScopeType` is MISSING (§S) |
 | Contextual Role/Permission model | EXISTS (`RBAC.md`) — already exactly `User → Assignment → Scope → Role Profile → Permission` |
-| Tasks | EXISTS as design (`DOMAIN_MODEL.md` §8) — not new |
+| Tasks | EXISTS as design (`CLAUDE.md` §8) — not new |
 | Alerts | MISSING, genuinely new but thin (rule-based, §T) |
 | Operator Dashboard | OVERLAPS EXISTING SYSTEM — same mechanism as Adaptive Intelligence review's Operator Intelligence (§T) |
 | AI Operator Copilot | OVERLAPS EXISTING SYSTEM — same `AIProvider`/`ai.recommendation` mechanism (§U) |
@@ -206,7 +206,7 @@ architecture without duplicating it.
 **Reuse directly, no duplication:**
 
 - `Person`, `Organization`, `Location`, `Project`, `Sample` — as always.
-- `Task` (`DOMAIN_MODEL.md` §8) for consulting follow-through (§O) and
+- `Task` (`CLAUDE.md` §8) for consulting follow-through (§O) and
   operational to-dos (§37) — one entity, not two task systems.
 - `Protocol`/`ProtocolVersion` (Research OS) for **both** experimental and
   operational processing protocols (§J) — one versioning mechanism.

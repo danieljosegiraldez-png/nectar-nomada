@@ -399,7 +399,7 @@ involvement.
 | WHERE (field/office/event/home) | Not modeled explicitly; closest proxy is device+connectivity (below) plus which app surface (Partner Workspace vs. public site) the user is in — already distinguished by `PLATFORM_OVERVIEW.md` §4's role-aware surfaces. |
 | WHAT (current project/location/sample/product) | EXISTS structurally once those entities exist — ordinary page/request context, not a new personalization concern. |
 | WHEN (project lifecycle, season, event timing) | Derivable from existing/planned entity status fields and dates — no new infrastructure. |
-| DEVICE | Standard responsive web — `PLATFORM_OVERVIEW.md` §39 (PWA-first) already covers this direction. |
+| DEVICE | Standard responsive web — `CLAUDE.md` §39 (PWA-first) already covers this direction. |
 | CONNECTIVITY | Not modeled yet — ties to the offline/PWA work `CLAUDE.md` §40 already defers to later; this review does not recommend building it earlier. |
 | HISTORY | **Gap** — no `InteractionEvent` entity exists. Needed for personalization generally, not content-specific. |
 | INTEREST | **Gap** — no `DeclaredPreference`/inferred-interest entity exists. `CLAUDE.md` §15 describes this conceptually (declared vs. inferred, "do not convert behavioral inference into personal factual information") but it was never added to `DOMAIN_MODEL.md`'s concrete entity list (§52) or built in Slice 1. Flagged as a genuine gap this review surfaces, not something the input document introduced. |

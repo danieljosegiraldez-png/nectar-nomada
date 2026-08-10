@@ -205,8 +205,8 @@ region Stripe doesn't serve well) open later.
 **Decision:** Mapbox, behind the `MapsProvider` adapter.
 
 **Alternatives considered:** Google Maps was considered but Mapbox's custom
-styling fits the non-generic public design direction (`PLATFORM_OVERVIEW.md`
-§48/§9) better, and its pricing model is more predictable at the traffic levels
+styling fits the non-generic public design direction (`CLAUDE.md`
+§48) better, and its pricing model is more predictable at the traffic levels
 expected.
 
 **Consequences:** Custom map styling is available from v1's Map & Territory
