@@ -19,17 +19,16 @@ cp .env.example .env
 ```
 
 Edit `.env`:
-- `DATABASE_URL` — for local dev, start Prisma's bundled local Postgres in
-  another terminal (`npx prisma dev`) and it prints a `postgres://...` TCP
-  URL; paste that in. For production this becomes a Neon connection string
-  (DECISIONS.md ADR-007).
-- `SHADOW_DATABASE_URL` — required for `prisma migrate dev` to work locally
-  (DECISIONS.md ADR-021): `prisma dev`'s automatic shadow-database
-  provisioning doesn't work against its own local PGlite instance, so this
-  must point at the separate shadow instance `prisma dev` also provisions —
-  run `npx prisma dev ls` and use the `shadowDatabaseUrl` it prints (same
-  host, different port from `DATABASE_URL`). Not needed against Neon in
-  production, which provisions its own shadow database correctly.
+- `DATABASE_URL` — **Neon by default now** (DECISIONS.md ADR-022, ahead of
+  ADR-007's original "at deploy time" plan): create a project at neon.tech
+  and paste its connection string (use the pooled one Neon shows by
+  default). Real Postgres has neither of the two limitations the local
+  sandbox below runs into.
+  <br>Optional fallback for offline/disposable local work: run
+  `npx prisma dev` in another terminal and paste the `postgres://...` URL it
+  prints instead — if you do, also set `SHADOW_DATABASE_URL` (see
+  `.env.example`; not needed with Neon, which provisions its own shadow
+  database correctly).
 - `AUTH_SECRET` — generate one with `openssl rand -base64 32`. (Do **not**
   run `npx auth secret` — that resolves to an unrelated npm package named
   `auth`, maintained by Better Auth, and prints `BETTER_AUTH_SECRET`, which
@@ -68,13 +67,17 @@ SEED_DEMO_ADMIN=true npx prisma db seed
 
 ## What's verified vs. not
 
-Everything above was actually run against a real local Postgres during this
-session (migrations applied, seed data inserted and queried, signup → login →
-protected-page flow driven through an actual browser, and the Foundational
-schema's relationships — Location hierarchy, Organization/Program/Project/
-Sample FKs, the domain-tag join — exercised in a rolled-back transaction) —
-see the chat history for the walkthroughs. **Not verified**: Neon in
-production, PostGIS (deferred — DECISIONS.md ADR-021, the local dev database
-can't load Postgres extensions), Google OAuth (needs real credentials + a
-live redirect), and email verification/transactional email (no provider
-wired up yet — out of Slice 1 scope per MVP_ROADMAP.md).
+Everything through the Foundational schema has now been verified against
+**Neon**, the primary database as of ADR-022: `prisma migrate deploy` (both
+migrations, including PostGIS), seeding, and a full signup → login → My
+Néctar walkthrough through an actual browser session, plus a PostGIS round
+trip (`ST_MakePoint`/`ST_Distance` via raw SQL) and the Foundational schema's
+relationships (Location hierarchy, Organization/Program/Project/Sample FKs,
+the domain-tag join) — all exercised in rolled-back transactions, all
+against real Postgres. Local `prisma dev` was also exercised earlier for the
+same flows and is documented above purely as a fallback now. **Not verified
+anywhere yet**: Google OAuth (needs real credentials + a live redirect),
+email verification/transactional email (no provider wired up — out of Slice
+1 scope per MVP_ROADMAP.md), and an actual Vercel deployment (nothing has
+been deployed anywhere yet — this has all run through `npm run dev`/`next
+build` locally against Neon).

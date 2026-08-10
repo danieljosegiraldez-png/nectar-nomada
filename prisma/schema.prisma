@@ -5,13 +5,17 @@
 // their vertical slices are built — see docs/architecture/DATA_ARCHITECTURE.md §1.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider        = "prisma-client"
+  output          = "../generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  schemas  = ["core"]
+  provider   = "postgresql"
+  schemas    = ["core"]
+  // DECISIONS.md ADR-021/ADR-022 — deferred against the local PGlite sandbox
+  // (no extension support), enabled now that Neon is the primary database.
+  extensions = [postgis]
 }
 
 // ---------------------------------------------------------------------------
@@ -288,24 +292,29 @@ enum LocationType {
 }
 
 model Location {
-  id               String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  locationType     LocationType        @map("location_type")
-  parentLocationId String?             @map("parent_location_id") @db.Uuid
-  parentLocation   Location?           @relation("LocationHierarchy", fields: [parentLocationId], references: [id])
-  childLocations   Location[]          @relation("LocationHierarchy")
-  organizationId   String?             @map("organization_id") @db.Uuid
-  organization     Organization?       @relation(fields: [organizationId], references: [id])
+  id               String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationType     LocationType                           @map("location_type")
+  parentLocationId String?                                @map("parent_location_id") @db.Uuid
+  parentLocation   Location?                              @relation("LocationHierarchy", fields: [parentLocationId], references: [id])
+  childLocations   Location[]                             @relation("LocationHierarchy")
+  organizationId   String?                                @map("organization_id") @db.Uuid
+  organization     Organization?                          @relation(fields: [organizationId], references: [id])
   name             String
   latitude         Float?
   longitude        Float?
-  altitudeMeters   Float?              @map("altitude_meters")
+  // PostGIS point, kept in sync with latitude/longitude at the application
+  // layer. Not exposed through Prisma's typed query API — spatial queries
+  // (ST_DWithin/ST_Intersects, EXTERNAL_DATA_ARCHITECTURE.md §9) use
+  // $queryRaw until a real spatial-query need justifies more than that.
+  geoPoint         Unsupported("geography(Point, 4326)")? @map("geo_point")
+  altitudeMeters   Float?                                 @map("altitude_meters")
   timezone         String?
-  status           RecordStatus        @default(draft)
-  classification   ClassificationLevel @default(internal)
-  createdAt        DateTime            @default(now()) @map("created_at")
-  updatedAt        DateTime            @updatedAt @map("updated_at")
-  createdBy        String?             @map("created_by") @db.Uuid
-  creator          UserAccount?        @relation("LocationCreatedBy", fields: [createdBy], references: [id])
+  status           RecordStatus                           @default(draft)
+  classification   ClassificationLevel                    @default(internal)
+  createdAt        DateTime                               @default(now()) @map("created_at")
+  updatedAt        DateTime                               @updatedAt @map("updated_at")
+  createdBy        String?                                @map("created_by") @db.Uuid
+  creator          UserAccount?                           @relation("LocationCreatedBy", fields: [createdBy], references: [id])
 
   projectsWithPrimaryLocation Project[] @relation("ProjectPrimaryLocation")
   samples                     Sample[]

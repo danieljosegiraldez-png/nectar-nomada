@@ -17,7 +17,7 @@ export default async function MyNectarPage() {
     redirect("/login");
   }
 
-  const userAccount = await prisma.userAccount.findUniqueOrThrow({
+  const userAccount = await prisma.userAccount.findUnique({
     where: { id: user.userAccountId },
     include: {
       person: true,
@@ -27,6 +27,13 @@ export default async function MyNectarPage() {
       },
     },
   });
+
+  // A valid, correctly-signed session can still reference a UserAccount that
+  // no longer exists (deleted account, or a session cookie issued against a
+  // different database) — fail closed with a clean redirect, not a 500.
+  if (!userAccount) {
+    redirect("/login");
+  }
 
   // No Project/Program tables exist yet (later slices) so the only
   // meaningful target to resolve against right now is the platform scope —

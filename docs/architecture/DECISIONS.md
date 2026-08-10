@@ -632,6 +632,13 @@ is a small additive migration, not a redesign, since lat/lng remain the
 canonical human-readable columns and the geography column was always meant
 to be additive (`EXTERNAL_DATA_ARCHITECTURE.md` §9).
 
+**Update, same day (ADR-022):** closed out. With Neon now the primary
+database, migration `20260810010606_enable_postgis_location_geopoint` added
+`CREATE EXTENSION IF NOT EXISTS postgis` and `Location.geoPoint`, deployed
+and verified for real — `ST_MakePoint`/`ST_SetSRID`/`ST_Distance` round-
+tripped correctly via `$executeRaw`/`$queryRaw` in a rolled-back transaction
+against Neon. The deferral lasted one work session, exactly as predicted.
+
 **A second, unrelated finding from the same implementation pass:** `prisma
 migrate dev`'s automatic shadow-database provisioning also does not work
 against this local PGlite instance — the first attempt failed with `type
@@ -655,3 +662,73 @@ table to actually carry a classification column) are shared enums used
 across all five new models. No service/UI layer was built for these tables
 in this pass — none is needed yet, since no feature reads or writes them
 until Slice 2.
+
+---
+
+## ADR-022 — Neon becomes the primary development database ahead of go-live
+
+**Context:** Daniel is dedicating the next several days to finishing the
+platform before going online and inviting other users/collaborators (Nathy
+Rubio and possibly others). ADR-021 surfaced two friction points specific to
+Prisma's local `prisma dev` database (PGlite): it can't auto-provision a
+shadow database (worked around with an explicit `SHADOW_DATABASE_URL`), and
+it can't load Postgres extensions at all (PostGIS deferred). Both are
+tooling limitations of the local sandbox, not of the architecture — Neon
+(already the approved production target, ADR-007) doesn't have either
+problem.
+
+**Decision:** Switch primary development to Neon now, rather than only at
+deploy time. Local `prisma dev` remains available as an optional, disposable
+sandbox for local experimentation, but is no longer the default —
+`DATABASE_URL` in `.env` points at Neon from this point forward.
+
+**Alternatives considered:** Continuing on local `prisma dev` until closer to
+launch, moving to Neon only right before going live, was rejected
+specifically because of the timeline given — a tight multi-day push toward
+inviting real people is exactly the wrong time to discover a local/production
+divergence (a migration that behaves differently, an extension that isn't
+available, a shadow-database quirk) for the first time. Surfacing that risk
+now, with days of runway left rather than hours, is the entire point of this
+decision.
+
+**Consequences:**
+- `SHADOW_DATABASE_URL` and its local-only workaround (ADR-021) become
+  unnecessary once `DATABASE_URL` points at Neon — `prisma migrate dev`
+  provisions its own shadow database correctly against real Postgres. The
+  env var and the `prisma.config.ts` wiring stay in place (harmless, and
+  still needed if local `prisma dev` is used again later), but are no longer
+  load-bearing for day-to-day work.
+- PostGIS can be enabled for real once migrations run against Neon, closing
+  out the ADR-021 deferral — `Location.geoPoint` becomes a small additive
+  migration rather than a redesign.
+- Neon project creation itself requires Daniel — account creation is outside
+  what this session performs regardless of instruction, per this
+  environment's standing account-creation restriction. Once a connection
+  string exists, migration deploy, seeding, and verification proceed the
+  same way they did against the local database.
+- `SETUP.md` is updated to present Neon as the default local `.env` target,
+  with `prisma dev` documented as an optional fallback rather than the
+  primary path.
+
+**Update, same day — migration deployed and verified:** `prisma migrate
+deploy` applied both existing migrations to Neon cleanly on the first try
+(no shadow-database step needed at all for `deploy`, unlike `dev`), the RBAC
+catalog seeded successfully, and PostGIS was re-enabled per the note on
+ADR-021. The full signup/login/My Néctar flow was re-verified through an
+actual browser session against Neon, and Neon's cold-start behavior (a
+`P2028` "unable to start a transaction in the given time" on the very first
+query after the compute had been idle) was observed and resolved by simply
+retrying — expected serverless behavior, not a bug, but worth knowing about
+for anything time-sensitive (e.g. an OAuth callback) once this is deployed
+somewhere real.
+
+**Bug found and fixed during this verification, unrelated to Neon itself:**
+`app/my-nectar/page.tsx` used `findUniqueOrThrow` to load the `UserAccount`
+for the current session, which throws an unhandled 500 if a
+validly-signed session references a `UserAccount` that no longer exists in
+the database — encountered here because a browser tab held a session
+cookie issued against the local database before `DATABASE_URL` switched to
+Neon, but the same failure mode would occur in production if a session
+ever outlived its account (e.g. deletion). Fixed to `findUnique` with a
+graceful `redirect("/login")` on a miss, matching `SECURITY.md` §2's
+"fail closed, never 500" posture for authorization-adjacent code paths.
