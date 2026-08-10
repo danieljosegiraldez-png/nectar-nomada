@@ -138,6 +138,7 @@ model UserAccount {
   fermentationInterventionsCreated FermentationIntervention[]   @relation("FermentationInterventionCreatedBy")
   dryingRunsCreated                DryingRun[]                  @relation("DryingRunCreatedBy")
   dryingTurnEventsCreated          DryingTurnEvent[]            @relation("DryingTurnEventCreatedBy")
+  storageAssignmentsCreated        StorageAssignment[]          @relation("StorageAssignmentCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -371,7 +372,7 @@ model Location {
   createdBy        String?                                @map("created_by") @db.Uuid
   creator          UserAccount?                           @relation("LocationCreatedBy", fields: [createdBy], references: [id])
 
-  projectsWithPrimaryLocation Project[]        @relation("ProjectPrimaryLocation")
+  projectsWithPrimaryLocation Project[]           @relation("ProjectPrimaryLocation")
   samples                     Sample[]
   stories                     Story[]
   products                    Product[]
@@ -381,6 +382,7 @@ model Location {
   harvestEvents               HarvestEvent[]
   receivingEvents             ReceivingEvent[]
   dryingRuns                  DryingRun[]
+  storageAssignments          StorageAssignment[]
 
   @@index([parentLocationId])
   @@index([organizationId])
@@ -1926,6 +1928,7 @@ model Lot {
   quantityEvents        QuantityEvent[]
   measurements          Measurement[]
   samples               Sample[]
+  storageAssignments    StorageAssignment[]
   // 1:1 — a Lot originates from at most one of these (or from a
   // LotTransformation output, which carries no back-relation of its own
   // kind here since that Lot is one of possibly several outputs).
@@ -2110,19 +2113,18 @@ model Measurement {
   unit       String
   occurredAt DateTime @map("occurred_at")
 
-  lotId               String?          @map("lot_id") @db.Uuid
-  lot                 Lot?             @relation(fields: [lotId], references: [id])
-  sampleId            String?          @map("sample_id") @db.Uuid
-  sample              Sample?          @relation(fields: [sampleId], references: [id])
-  // FermentationRun/DryingRun exist as of T6/T7 — real FKs now, added
-  // additively (see those models' own migrations). storageAssignmentId
-  // stays a plain UUID column with no FK until StorageAssignment exists
-  // (T8), same pattern.
-  fermentationRunId   String?          @map("fermentation_run_id") @db.Uuid
-  fermentationRun     FermentationRun? @relation(fields: [fermentationRunId], references: [id])
-  dryingRunId         String?          @map("drying_run_id") @db.Uuid
-  dryingRun           DryingRun?       @relation(fields: [dryingRunId], references: [id])
-  storageAssignmentId String?          @map("storage_assignment_id") @db.Uuid
+  lotId               String?            @map("lot_id") @db.Uuid
+  lot                 Lot?               @relation(fields: [lotId], references: [id])
+  sampleId            String?            @map("sample_id") @db.Uuid
+  sample              Sample?            @relation(fields: [sampleId], references: [id])
+  // FermentationRun/DryingRun/StorageAssignment exist as of T6/T7/T8 — all
+  // real FKs now, each added additively when its table landed.
+  fermentationRunId   String?            @map("fermentation_run_id") @db.Uuid
+  fermentationRun     FermentationRun?   @relation(fields: [fermentationRunId], references: [id])
+  dryingRunId         String?            @map("drying_run_id") @db.Uuid
+  dryingRun           DryingRun?         @relation(fields: [dryingRunId], references: [id])
+  storageAssignmentId String?            @map("storage_assignment_id") @db.Uuid
+  storageAssignment   StorageAssignment? @relation(fields: [storageAssignmentId], references: [id])
 
   sourceType       MeasurementSourceType @default(manual) @map("source_type")
   deviceId         String?               @map("device_id")
@@ -2356,5 +2358,36 @@ model DryingTurnEvent {
 
   @@index([dryingRunId])
   @@map("drying_turn_event")
+  @@schema("traceability")
+}
+
+// Location history (execution plan §17) — genuinely simpler than
+// FermentationRun/DryingRun: storage doesn't change a Lot's identity, so
+// there's no bracketing stage_change LotTransformation pair here, just a
+// direct lotId FK. History is preserved by never updating endedAt
+// retroactively past the truth: moving a lot's storage location creates a
+// *new* StorageAssignment row (with the prior one's endedAt set once, at
+// the actual move time) rather than mutating locationId in place. Current
+// quantity stays computed from QuantityEvent (§9), never duplicated here.
+// Sample extraction from storage is a LotTransformation
+// (sample_extraction, T5), not a field on this table.
+model StorageAssignment {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lotId         String       @map("lot_id") @db.Uuid
+  lot           Lot          @relation(fields: [lotId], references: [id])
+  locationId    String       @map("location_id") @db.Uuid
+  location      Location     @relation(fields: [locationId], references: [id])
+  containerNote String?      @map("container_note") // "Bag #14" — free text, no Container entity in Phase 1
+  startedAt     DateTime     @map("started_at")
+  endedAt       DateTime?    @map("ended_at") // null = current assignment
+  createdAt     DateTime     @default(now()) @map("created_at")
+  createdBy     String?      @map("created_by") @db.Uuid
+  creator       UserAccount? @relation("StorageAssignmentCreatedBy", fields: [createdBy], references: [id])
+
+  measurements Measurement[]
+
+  @@index([lotId])
+  @@index([locationId])
+  @@map("storage_assignment")
   @@schema("traceability")
 }

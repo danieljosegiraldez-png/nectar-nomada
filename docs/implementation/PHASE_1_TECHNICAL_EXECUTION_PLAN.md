@@ -1225,7 +1225,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | **T5 — Sample lineage extension — DONE** | T1 | traceability + core | Built: `Sample` +`sourceLotId`/`sourceTransformationId` (additive, nullable — existing seeded rows verified unaffected) | `lib/traceability/samples.ts`: createSampleFromLot | Deferred to T10 (same reasoning as T4) | `tests/traceability/samples.test.ts`, 5 tests, real Neon | **Met**: migration applied to Neon (2 pre-existing Sample rows confirmed still `NULL`/valid); 79/79 tests pass across the full suite; a sample extraction's transformation verified to have exactly 1 input and 0 outputs, matching §8.1's "output is the Sample row, not a second Lot row" |
 | **T6 — Fermentation run — DONE** | T1, T2, T3 | traceability | Built: `FermentationRun`, `FermentationIntervention` (+`LotTransformation.fermentationRunId`, +retroactive FK on `Measurement.fermentationRunId` deferred since T3 — see notes below) | `lib/traceability/fermentation.ts`: startFermentationRun, recordFermentationIntervention, endFermentationRun | Deferred to T10 (same reasoning as T4/T5) | `tests/traceability/fermentation.test.ts`, 4 tests, real Neon | **Met**: migration applied to Neon; 84/84 tests pass across the full suite; full start→intervene→measure→end cycle verified live, producing two stage-change `LotTransformation` rows (start: 1 input/0 outputs; end: 1 input/1 output) both linked via `fermentationRunId`, exactly matching §8.3's lineage diagram |
 | **T7 — Drying run — DONE** | T1, T2, T3, T6 (pattern reuse) | traceability | Built: `DryingRun`, `DryingTurnEvent` (+`DryingTurnEventType` enum, §16's own sketch left this a plain String — see note below), `LotTransformation.dryingRunId`, retroactive FK on `Measurement.dryingRunId` | `lib/traceability/drying.ts`: startDryingRun, recordDryingTurnEvent, endDryingRun | Deferred to T10 (same reasoning as T4-T6) | `tests/traceability/drying.test.ts`, 4 tests, real Neon | **Met**: migration applied to Neon; 88/88 tests pass across the full suite; full start→turn→measure→end cycle verified live, same shape as T6 |
-| **T8 — Storage assignment** | T1 | traceability | New: `StorageAssignment` | `lib/traceability/storage.ts` | Record Storage Movement | Integration: location-history preservation | Low | Moving storage preserves prior assignment's history |
+| **T8 — Storage assignment — DONE** | T1 | traceability | Built: `StorageAssignment` (direct `lotId` FK, no bracketing LotTransformation pair — see note below), retroactive FK on `Measurement.storageAssignmentId` | `lib/traceability/storage.ts`: moveLotToStorage, getCurrentStorageAssignment | Deferred to T10 (same reasoning as T4-T7) | `tests/traceability/storage.test.ts`, 3 tests, real Neon | **Met**: migration applied to Neon; 91/91 tests pass across the full suite; a second move verified to close the prior assignment (`endedAt` set once) without touching its `locationId`, full history remains queryable |
 | **T9 — RBAC: Farm Operator + lot/sample permissions** | T1 | core (RBAC catalog) | None (seed data) | `lib/rbac/catalog.ts` additions | None | RBAC positive+negative (§31) | Low | Farm Operator scoped correctly; cross-project denial verified |
 | **T10 — Operator Workbench: Active Operations + Lot Detail** | T1-T9 | traceability | None | Read queries only | Active Operations, Lot Detail pages | E2E: full workflow visible | Medium — the first UI surfacing everything above, likely to surface integration gaps | A user can see identity/lineage/quantity/process/measurements/samples/tasks/audit on one Lot Detail page |
 | **T11 — Process/Deviation tracking** | T6, T7 | traceability | New: `ProcessExecution`, `Deviation` | Extend `fermentation.ts`/`drying.ts` | Surfaced on Lot Detail | Unit | Low | A recorded deviation shows on Lot Detail's Processing section |
@@ -1413,6 +1413,14 @@ brand-new table; otherwise this ticket is exactly T6's pattern reused, per
 its own row: same lifecycle shape (start/intervene-or-turn/end), same
 `fermentationRunId`-equivalent linking mechanism (`dryingRunId`), same
 `process_output` QuantityEvent seeding on the new output lot.
+
+**T8 implementation note:** genuinely simpler than T6/T7, exactly as §17
+itself signals — storage doesn't change a Lot's identity, so there's no
+`stage_change` `LotTransformation` bracketing pair here, just a direct
+`lotId` FK on `StorageAssignment` and a single `moveLotToStorage` function
+that closes the prior open assignment and creates a new one. No new
+design decisions beyond the retroactive `Measurement.storageAssignmentId`
+FK (same pattern as T6/T7).
 
 ## 35. Dependency Graph
 
