@@ -1222,7 +1222,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | **T2 — QuantityEvent ledger — DONE** | T1 | traceability | Built: `QuantityEvent` (+`QuantityEventType` split into `adjustment_increase`/`adjustment_decrease` — see note below), `quantity >= 0` CHECK | `lib/traceability/quantity.ts`: recordQuantityEvent, computeCurrentQuantity | None (correctly out of scope) | `tests/traceability/quantity.test.ts`, 8 tests, real Neon | **Met**: migration applied to Neon; 56/56 tests pass across the full suite; multi-event sum (received/loss/sample_removed/transfer_in) verified live against Neon fixtures |
 | **T3 — Measurement architecture + unit registry — DONE** | T1 | traceability | Built: `Measurement`, `MeasurementSourceType` (`fermentationRunId`/`dryingRunId`/`storageAssignmentId` are plain UUID columns, no FK yet — see note below) | `lib/traceability/measurements.ts`: recordMeasurement, correctMeasurement; `lib/traceability/units.ts`: canonical registry | None (correctly out of scope) | `tests/traceability/measurements.test.ts` (real Neon) + `tests/traceability/units.test.ts` (pure), 12 tests | **Met**: migration applied to Neon; 68/68 tests pass across the full suite; Fahrenheit→Celsius conversion and out-of-range rejection both verified live |
 | **T4 — Harvest/Receiving capture — DONE (backend)** | T1, T3 | traceability | Built: `HarvestEvent`, `ReceivingEvent` (+`projectId` on both, added beyond the original sketch — see note below), `Location.plot` | `lib/traceability/harvest.ts`: recordHarvestEvent, recordReceivingEvent | **Deferred to T10** — see note below | `tests/traceability/harvest.test.ts`, 6 tests, real Neon | **Met at the service layer**: migration applied to Neon; 74/74 tests pass across the full suite; a harvested lot verified split-ready end-to-end (composes with T1's recordTransformation). Browser click-through verification deferred until the Harvest form UI exists (T10) |
-| **T5 — Sample lineage extension** | T1 | traceability + core | Extend: `Sample` | `lib/traceability/samples.ts` | Create Sample | Integration: sample_extraction transformation + Sample row | Low | Sample correctly links back to its source Lot |
+| **T5 — Sample lineage extension — DONE** | T1 | traceability + core | Built: `Sample` +`sourceLotId`/`sourceTransformationId` (additive, nullable — existing seeded rows verified unaffected) | `lib/traceability/samples.ts`: createSampleFromLot | Deferred to T10 (same reasoning as T4) | `tests/traceability/samples.test.ts`, 5 tests, real Neon | **Met**: migration applied to Neon (2 pre-existing Sample rows confirmed still `NULL`/valid); 79/79 tests pass across the full suite; a sample extraction's transformation verified to have exactly 1 input and 0 outputs, matching §8.1's "output is the Sample row, not a second Lot row" |
 | **T6 — Fermentation run** | T1, T2, T3 | traceability | New: `FermentationRun`, `FermentationIntervention` | `lib/traceability/fermentation.ts` | Record Fermentation | Integration: full fermentation lifecycle | Medium — first "stage-run" entity, sets the pattern T7 follows | Start→intervene→measure→end cycle works, produces a stage-change LotTransformation |
 | **T7 — Drying run** | T1, T2, T3, T6 (pattern reuse) | traceability | New: `DryingRun`, `DryingTurnEvent` | `lib/traceability/drying.ts` | Record Drying | Integration | Low (same pattern as T6) | Same shape as T6, drying-specific fields |
 | **T8 — Storage assignment** | T1 | traceability | New: `StorageAssignment` | `lib/traceability/storage.ts` | Record Storage Movement | Integration: location-history preservation | Low | Moving storage preserves prior assignment's history |
@@ -1347,6 +1347,19 @@ is always `SUM(QuantityEvent)`" invariant holds from a lot's very first
 moment rather than only from its first transformation onward — skipped
 entirely when weight isn't recorded, per `CLAUDE.md` §3's "missing must
 remain missing," never a fabricated zero.
+
+**T5 implementation note:**
+
+Not a schema change, but worth recording alongside T4's identical
+composition: `createSampleFromLot` records a `QuantityEvent`
+("sample_removed") against the source lot in the same transaction whenever
+a quantity/unit is given for the material extracted — `sample_removed` has
+existed in `QuantityEventType` since T2 specifically for this case, but T5
+is the first ticket to actually trigger it. Skipped entirely when no
+quantity is given, matching `CLAUDE.md` §3's "missing must remain missing"
+discipline. UI deferred to T10, same reasoning already recorded in T4's
+note (§30's UI Screen Plan/dependency graph treat T10 as the first ticket
+with real navigation to attach a form to).
 
 ## 35. Dependency Graph
 

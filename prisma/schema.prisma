@@ -562,6 +562,19 @@ model Sample {
   createdBy      String?             @map("created_by") @db.Uuid
   creator        UserAccount?        @relation("SampleCreatedBy", fields: [createdBy], references: [id])
 
+  // Phase 1, T5 (docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md
+  // §18) — additive, nullable. Existing Sample rows (seeded for Sensory/
+  // Competitions demo content) stay valid with NULL lineage: they predate
+  // the Lot model and genuinely have no lot to point at, correctly
+  // `missing`, never backfilled with a guess. A sample extracted from a
+  // Lot is always paired with the sourceTransformationId
+  // (transformationType "sample_extraction") that produced it — its
+  // "output" is this Sample row, not a second Lot row.
+  sourceLotId            String?            @map("source_lot_id") @db.Uuid
+  sourceLot              Lot?               @relation(fields: [sourceLotId], references: [id])
+  sourceTransformationId String?            @map("source_transformation_id") @db.Uuid
+  sourceTransformation   LotTransformation? @relation(fields: [sourceTransformationId], references: [id])
+
   blindMappings      SensoryBlindMapping[]
   competitionEntries Entry[]
   measurements       Measurement[]
@@ -569,6 +582,8 @@ model Sample {
   @@index([projectId])
   @@index([organizationId])
   @@index([locationId])
+  @@index([sourceLotId])
+  @@index([sourceTransformationId])
   @@map("sample")
   @@schema("core")
 }
@@ -1903,6 +1918,7 @@ model Lot {
   transformationOutputs LotTransformationOutput[]
   quantityEvents        QuantityEvent[]
   measurements          Measurement[]
+  samples               Sample[]
   // 1:1 — a Lot originates from at most one of these (or from a
   // LotTransformation output, which carries no back-relation of its own
   // kind here since that Lot is one of possibly several outputs).
@@ -1951,6 +1967,7 @@ model LotTransformation {
   inputs         LotTransformationInput[]
   outputs        LotTransformationOutput[]
   quantityEvents QuantityEvent[]
+  samples        Sample[]
 
   @@index([occurredAt])
   @@map("lot_transformation")

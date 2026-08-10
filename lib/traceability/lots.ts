@@ -24,7 +24,7 @@ import type { ScopeTarget } from "../rbac/types";
 export class TraceabilityAccessError extends Error {}
 
 /** Every concrete scope target a Lot (or a to-be-created Lot's parent context) resolves against — never just one. */
-function scopeTargetsFor(input: { projectId?: string | null; locationId?: string | null }): ScopeTarget[] {
+export function scopeTargetsFor(input: { projectId?: string | null; locationId?: string | null }): ScopeTarget[] {
   const targets: ScopeTarget[] = [];
   if (input.projectId) targets.push({ scopeType: "project", scopeRefId: input.projectId });
   if (input.locationId) targets.push({ scopeType: "location", scopeRefId: input.locationId });
