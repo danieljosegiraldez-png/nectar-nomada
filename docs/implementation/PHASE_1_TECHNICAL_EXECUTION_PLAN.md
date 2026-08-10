@@ -1219,7 +1219,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | Ticket | Dependency | Domain | Schema | Backend | Frontend | Tests | Risk | Definition of Done |
 |---|---|---|---|---|---|---|---|---|
 | **T1 — Canonical Lot + LotTransformation schema — DONE** | None | traceability | Built: `Lot` (+`locationId`, added beyond the original sketch — see note below), `LotTransformation`, input/output joins, `ProvenanceClass`/`DataQuality` enums | `lib/traceability/lots.ts`: createLot, recordTransformation, getLotLineage | None (correctly out of scope) | `tests/traceability/lots.test.ts`, 10 tests, real Neon | Realized as planned — append-only invariant holds (no update function exists for either table) | **Met**: 2 migrations applied to Neon; 48/48 tests pass; split/merge/blend all exercised live, self-cleaning fixtures |
-| **T2 — QuantityEvent ledger** | T1 | traceability | New: `QuantityEvent` | `lib/traceability/quantity.ts` | None yet | Unit: sum computation, negative-quantity rejection | Low | Quantity computed correctly across a multi-event lot history |
+| **T2 — QuantityEvent ledger — DONE** | T1 | traceability | Built: `QuantityEvent` (+`QuantityEventType` split into `adjustment_increase`/`adjustment_decrease` — see note below), `quantity >= 0` CHECK | `lib/traceability/quantity.ts`: recordQuantityEvent, computeCurrentQuantity | None (correctly out of scope) | `tests/traceability/quantity.test.ts`, 8 tests, real Neon | **Met**: migration applied to Neon; 56/56 tests pass across the full suite; multi-event sum (received/loss/sample_removed/transfer_in) verified live against Neon fixtures |
 | **T3 — Measurement architecture + unit registry** | T1 | traceability | New: `Measurement` | `lib/traceability/measurements.ts`, `lib/traceability/units.ts` | None yet | Unit: unit conversion, variable validation | Low | Measurement recordable against a Lot; canonical-unit registry covers §10.3's 7 variables |
 | **T4 — Harvest/Receiving capture** | T1, T3 | traceability | New: `HarvestEvent`, `ReceivingEvent`, `Location.plot` | `lib/traceability/harvest.ts` | Create Lot (via Harvest form) | Integration: harvest creates a valid origin Lot | Low | A real DEMO harvest creates a Lot end-to-end |
 | **T5 — Sample lineage extension** | T1 | traceability + core | Extend: `Sample` | `lib/traceability/samples.ts` | Create Sample | Integration: sample_extraction transformation + Sample row | Low | Sample correctly links back to its source Lot |
@@ -1262,6 +1262,35 @@ than silently worked around:**
    `lib/partner/workspace.ts` if location-scoped partner access is ever
    actually relied upon — flagged here rather than silently left
    undiscovered.
+
+**T2 implementation note, one deliberate deviation from the original
+sketch — additive/low-risk, proceeded and reported here rather than
+paused on, per the standing schema-change policy this session confirmed
+(additive changes with no destructive or ambiguous-design element may
+proceed during implementation and get reported in the ticket summary;
+only destructive or genuinely ambiguous changes require a pre-approval
+pause):**
+
+§9's original `QuantityEventType` sketch listed a single `adjustment`
+value alongside directionally-unambiguous types (`received`,
+`process_output`, `loss`, `sample_removed`, `transfer_in`,
+`transfer_out`). §33's migration-strategy table separately noted a
+`quantity >= 0` check "except `loss`/`adjustment`" — two underspecified,
+mutually inconsistent placeholders from the planning pass, not a locked
+design. Implementing `computeCurrentQuantity` required resolving both at
+once: a correction can genuinely go either direction (found more
+material than recorded, or less), so a single undifferentiated
+`adjustment` value can't be summed correctly without also persisting
+which way it went. Resolved by splitting it into `adjustment_increase`/
+`adjustment_decrease` — two self-documenting event types instead of a
+nullable direction column — and keeping `quantity` a non-negative
+magnitude for **every** event type, no exceptions, enforced by a DB
+CHECK constraint plus an application-layer check in
+`recordQuantityEvent`. This makes "reject negative quantity" (this
+ticket's own DoD) an absolute, single rule rather than a per-type special
+case, and matches §10.3's own "Positive, unit-converted" validation note
+for weight. Purely additive to a brand-new table with no existing data or
+callers — nothing to migrate, nothing destructive.
 
 ## 35. Dependency Graph
 

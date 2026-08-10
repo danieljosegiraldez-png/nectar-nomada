@@ -125,6 +125,7 @@ model UserAccount {
   competitionResultsFinalized CompetitionResult[]          @relation("CompetitionResultFinalizedBy")
   lotsCreated                 Lot[]                        @relation("LotCreatedBy")
   lotTransformationsCreated   LotTransformation[]          @relation("LotTransformationCreatedBy")
+  quantityEventsCreated       QuantityEvent[]              @relation("QuantityEventCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -1883,6 +1884,7 @@ model Lot {
 
   transformationInputs  LotTransformationInput[]
   transformationOutputs LotTransformationOutput[]
+  quantityEvents        QuantityEvent[]
 
   @@index([organizationId])
   @@index([projectId])
@@ -1923,8 +1925,9 @@ model LotTransformation {
   createdBy          String?               @map("created_by") @db.Uuid
   creator            UserAccount?          @relation("LotTransformationCreatedBy", fields: [createdBy], references: [id])
 
-  inputs  LotTransformationInput[]
-  outputs LotTransformationOutput[]
+  inputs         LotTransformationInput[]
+  outputs        LotTransformationOutput[]
+  quantityEvents QuantityEvent[]
 
   @@index([occurredAt])
   @@map("lot_transformation")
@@ -1958,5 +1961,52 @@ model LotTransformationOutput {
   @@index([transformationId])
   @@index([lotId])
   @@map("lot_transformation_output")
+  @@schema("traceability")
+}
+
+// `adjustment` is split into _increase/_decrease rather than carrying a
+// separate direction column: quantity is always a non-negative magnitude
+// (see QuantityEvent below), and every other event type's effect on a lot's
+// running total is unambiguous from its name alone (execution plan §9's
+// sketch left this one case underspecified — resolved here rather than
+// adding a nullable direction field just for one event type).
+enum QuantityEventType {
+  received
+  process_output
+  loss
+  sample_removed
+  adjustment_increase
+  adjustment_decrease
+  transfer_in
+  transfer_out
+
+  @@schema("traceability")
+}
+
+// Append-only mass/quantity ledger (execution plan §9) — a Lot's current
+// quantity is always SUM(QuantityEvent), computed by
+// lib/traceability/quantity.ts, never a stored overwritable column, same
+// principle as LotTransformation above. `quantity` is a non-negative
+// magnitude for every event type; direction is derived from `eventType`.
+model QuantityEvent {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lotId            String             @map("lot_id") @db.Uuid
+  lot              Lot                @relation(fields: [lotId], references: [id])
+  eventType        QuantityEventType  @map("event_type")
+  quantity         Decimal            @db.Decimal(10, 3)
+  unit             String
+  occurredAt       DateTime           @map("occurred_at")
+  transformationId String?            @map("transformation_id") @db.Uuid
+  transformation   LotTransformation? @relation(fields: [transformationId], references: [id])
+  provenanceClass  ProvenanceClass    @default(direct_observation) @map("provenance_class")
+  dataQuality      DataQuality?       @map("data_quality")
+  notes            String?
+  createdAt        DateTime           @default(now()) @map("created_at")
+  createdBy        String?            @map("created_by") @db.Uuid
+  creator          UserAccount?       @relation("QuantityEventCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([lotId])
+  @@index([transformationId])
+  @@map("quantity_event")
   @@schema("traceability")
 }

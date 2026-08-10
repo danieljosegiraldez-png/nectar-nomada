@@ -36,7 +36,7 @@ function scopeTargetsFor(input: { projectId?: string | null; locationId?: string
   return targets;
 }
 
-async function requireLotAccess(
+export async function requireLotAccess(
   userAccountId: string,
   action: "manage" | "view",
   candidates: ReadonlyArray<{ projectId?: string | null; locationId?: string | null }>,
