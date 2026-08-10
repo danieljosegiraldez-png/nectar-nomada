@@ -474,12 +474,35 @@ async function findOrCreateSessionScope(sessionId: string) {
  * fabricating sensory outcomes, so the DEMO session ships genuinely
  * unscored, exactly like the DEMO Products/Experiences ship unpriced.
  */
+const COFFEE_STANDARD_SOURCE_REFERENCE =
+  "Adapted from the general structure of the SCA Coffee Value Assessment (CVA-103 Descriptive / " +
+  "CVA-104 Affective) — separating what the coffee tastes like from how much the evaluator values it. " +
+  "Not a reproduction of CVA's proprietary intensity-scale wording or official form, and not an SCA-licensed " +
+  "implementation. BEVERAGE_SENSORY_PROTOCOLS.md §1/§3, DECISIONS.md ADR-035.";
+
 async function seedDemoSensoryContent(lasNubesProjectId: string) {
   const existingProtocol = await prisma.sensoryProtocol.findFirst({
     where: { name: "Coffee Cupping (Illustrative)" },
+    include: { versions: { include: { attributes: true } } },
   });
   if (existingProtocol) {
-    console.log("Slice 6 DEMO Sensory content already seeded — skipping.");
+    // Patch metadata/section fields onto already-seeded rows (e.g. production) rather than
+    // silently skipping — BEVERAGE_SENSORY_PROTOCOLS.md §3 requires every protocol to carry a
+    // standard_source_reference, which didn't exist as a field when this protocol was first seeded.
+    await prisma.sensoryProtocol.update({
+      where: { id: existingProtocol.id },
+      data: { standardSourceReference: COFFEE_STANDARD_SOURCE_REFERENCE, standardLicenseStatus: "adapted_original" },
+    });
+    const affectiveNames = new Set(["Overall Impression"]);
+    for (const version of existingProtocol.versions) {
+      for (const attribute of version.attributes) {
+        const section = affectiveNames.has(attribute.name) ? "affective" : "descriptive";
+        if (attribute.section !== section) {
+          await prisma.sensoryAttribute.update({ where: { id: attribute.id }, data: { section } });
+        }
+      }
+    }
+    console.log("Slice 6 DEMO Sensory content already seeded — patched coffee protocol metadata/sections.");
     return prisma.sensorySession.findFirstOrThrow({ where: { name: "DEMO Cupping Session — Las Nubes" } });
   }
 
@@ -492,6 +515,8 @@ async function seedDemoSensoryContent(lasNubesProjectId: string) {
         "Not an official standard (e.g. not the SCA cupping form) — CLAUDE.md §30 explicitly cautions against " +
         "assuming one specific scoring system. Replace with a real, competition/lab-specific protocol version " +
         "before use.]",
+      standardSourceReference: COFFEE_STANDARD_SOURCE_REFERENCE,
+      standardLicenseStatus: "adapted_original",
     },
   });
 
@@ -499,10 +524,20 @@ async function seedDemoSensoryContent(lasNubesProjectId: string) {
     data: { protocolId: protocol.id, version: 1, scoreMin: 0, scoreMax: 10, status: "active" },
   });
 
-  const attributeNames = ["Aroma", "Flavor", "Acidity", "Body", "Sweetness", "Aftertaste", "Overall Impression"];
-  for (const [index, name] of attributeNames.entries()) {
+  // Descriptive (what it tastes like) vs. Affective (how much the evaluator values it) —
+  // the CVA-adapted split described above; "Overall Impression" is the affective/hedonic judgment.
+  const attributeNames: Array<{ name: string; section: "descriptive" | "affective" }> = [
+    { name: "Aroma", section: "descriptive" },
+    { name: "Flavor", section: "descriptive" },
+    { name: "Acidity", section: "descriptive" },
+    { name: "Body", section: "descriptive" },
+    { name: "Sweetness", section: "descriptive" },
+    { name: "Aftertaste", section: "descriptive" },
+    { name: "Overall Impression", section: "affective" },
+  ];
+  for (const [index, { name, section }] of attributeNames.entries()) {
     await prisma.sensoryAttribute.create({
-      data: { protocolVersionId: protocolVersion.id, name, displayOrder: index, scaleMin: 0, scaleMax: 10 },
+      data: { protocolVersionId: protocolVersion.id, name, displayOrder: index, scaleMin: 0, scaleMax: 10, section },
     });
   }
 
@@ -559,6 +594,149 @@ async function seedDemoSensoryContent(lasNubesProjectId: string) {
 }
 
 /**
+ * Real (non-DEMO-gated, always runs) Beverage Sensory Protocol content per
+ * BEVERAGE_SENSORY_PROTOCOLS.md and DECISIONS.md ADR-035. Unlike the DEMO
+ * content above (fictional samples/sessions), these are the platform's
+ * actual configured protocols — genuinely usable, honestly attributed to
+ * what they're adapted from, never claiming to be an official BJCP/SCA/ISO
+ * form. No ReferenceStandard rows are seeded here (CLAUDE.md §54 — no real
+ * compound/threshold data sheets available to seed honestly).
+ */
+async function seedBeverageProtocolsContent() {
+  const existingBeer = await prisma.sensoryProtocol.findFirst({ where: { name: "Beer Judging (BJCP-Adapted, Illustrative)" } });
+  if (!existingBeer) {
+    const bjcpAttributes = ["Aroma", "Appearance", "Flavor", "Mouthfeel", "Overall Impression"] as const;
+    for (const [domain, name] of [
+      ["beer", "Beer Judging (BJCP-Adapted, Illustrative)"],
+      ["mead", "Mead Evaluation (BJCP-Adapted, Illustrative)"],
+    ] as const) {
+      const protocol = await prisma.sensoryProtocol.create({
+        data: {
+          domain,
+          name,
+          description:
+            `[Illustrative ${domain} evaluation protocol — general structural shape used broadly across ` +
+            "brewing/mead judging (aroma, appearance, flavor, mouthfeel, overall impression), not BJCP's exact " +
+            "proprietary scoring rubric or style-specific numeric point allocations.]",
+          standardSourceReference:
+            "Adapted from the general category structure of BJCP (Beer Judge Certification Program) scoresheets " +
+            "— not a reproduction of BJCP's official scoresheet, style guidelines, or scoring weights, and not a " +
+            "BJCP-certified or licensed implementation. BEVERAGE_SENSORY_PROTOCOLS.md §1/§3, DECISIONS.md ADR-035.",
+          standardLicenseStatus: "adapted_original",
+        },
+      });
+      const version = await prisma.sensoryProtocolVersion.create({
+        data: { protocolId: protocol.id, version: 1, scoreMin: 0, scoreMax: 10, status: "active" },
+      });
+      for (const [index, name] of bjcpAttributes.entries()) {
+        await prisma.sensoryAttribute.create({
+          data: {
+            protocolVersionId: version.id,
+            name,
+            displayOrder: index,
+            scaleMin: 0,
+            scaleMax: 10,
+            section: name === "Overall Impression" ? "affective" : "descriptive",
+          },
+        });
+      }
+    }
+    console.log("Seeded Beer and Mead sensory protocols (BJCP-adapted, illustrative).");
+  }
+
+  const existingHoney = await prisma.sensoryProtocol.findFirst({ where: { name: "Honey Sensory Evaluation (ISO/Academic-Grounded)" } });
+  if (!existingHoney) {
+    const protocol = await prisma.sensoryProtocol.create({
+      data: {
+        domain: "honey",
+        name: "Honey Sensory Evaluation (ISO/Academic-Grounded)",
+        description:
+          "[Honey sensory protocol grounded in published ISO sensory-methodology standards and open academic " +
+          "honey-sensory literature — least licensing constraint of the priority batch, still explicitly not an " +
+          "official ISO reproduction.]",
+        standardSourceReference:
+          "Grounded in ISO 4121/5492/8586/8589 general sensory methodology and the International Honey " +
+          "Commission odour/aroma wheel, plus published academic literature (e.g. Apidologie) — original attribute " +
+          "structure informed by open, citable sources, not a purchased/reproduced ISO document. " +
+          "BEVERAGE_SENSORY_PROTOCOLS.md §1/§3, DECISIONS.md ADR-035.",
+        standardLicenseStatus: "adapted_original",
+      },
+    });
+    const version = await prisma.sensoryProtocolVersion.create({
+      data: { protocolId: protocol.id, version: 1, scoreMin: 0, scoreMax: 10, status: "active" },
+    });
+    // Four-category structure used across the academic honey-sensory literature (§1): visual,
+    // olfactory, olfactory-gustatory, tactile.
+    const honeyAttributes: Array<{ name: string; section: "descriptive" | "affective" }> = [
+      { name: "Visual — Color", section: "descriptive" },
+      { name: "Visual — Clarity", section: "descriptive" },
+      { name: "Olfactory — Aroma Intensity", section: "descriptive" },
+      { name: "Olfactory — Aroma Character", section: "descriptive" },
+      { name: "Olfactory-Gustatory — Flavor", section: "descriptive" },
+      { name: "Tactile — Crystallization Texture", section: "descriptive" },
+      { name: "Tactile — Viscosity", section: "descriptive" },
+      { name: "Overall Impression", section: "affective" },
+    ];
+    for (const [index, { name, section }] of honeyAttributes.entries()) {
+      await prisma.sensoryAttribute.create({
+        data: { protocolVersionId: version.id, name, displayOrder: index, scaleMin: 0, scaleMax: 10, section },
+      });
+    }
+    console.log("Seeded Honey sensory protocol (ISO/academic-grounded).");
+  }
+
+  // Deferred categories (BEVERAGE_SENSORY_PROTOCOLS.md §4) — recognized evaluation categories the
+  // platform is designed to support, no real attribute content or scale until specifically requested.
+  const plannedCategories: Array<{ domain: string; name: string }> = [
+    { domain: "wine", name: "Wine Evaluation (Planned)" },
+    { domain: "cacao", name: "Cacao Fine-Flavor Evaluation (Planned)" },
+    { domain: "chocolate", name: "Chocolate Evaluation (Planned)" },
+    { domain: "spirits", name: "Spirits Evaluation, General (Planned)" },
+    { domain: "rum", name: "Rum Evaluation (Planned)" },
+    { domain: "gin", name: "Gin Evaluation (Planned)" },
+    { domain: "infused_liquors", name: "Infused Liquors Evaluation (Planned)" },
+    { domain: "water", name: "Fine Water Evaluation (Planned)" },
+    { domain: "non_alcoholic", name: "Non-Alcoholic Beverage Evaluation (Planned)" },
+  ];
+  let plannedCreated = 0;
+  for (const { domain, name } of plannedCategories) {
+    const existing = await prisma.sensoryProtocol.findFirst({ where: { name } });
+    if (existing) continue;
+    await prisma.sensoryProtocol.create({
+      data: {
+        domain,
+        name,
+        description:
+          "[Recognized evaluation category, not yet built — BEVERAGE_SENSORY_PROTOCOLS.md §4. No attribute " +
+          "content or scale defined until this category is specifically requested.]",
+        status: "planned",
+      },
+    });
+    plannedCreated += 1;
+  }
+  if (plannedCreated > 0) {
+    console.log(`Seeded ${plannedCreated} placeholder (status=planned) sensory protocol categories.`);
+  }
+
+  const existingSupplier = await prisma.organization.findFirst({ where: { name: "FlavorActiV" } });
+  if (!existingSupplier) {
+    await prisma.organization.create({
+      data: {
+        organizationType: "supplier",
+        name: "FlavorActiV",
+        description:
+          "Reference-standard supplier for calibrated sensory flavor/aroma standards (coffee, beer, spirits, " +
+          "water) — CQI-partnered. Used as an external Organization record per BEVERAGE_SENSORY_PROTOCOLS.md " +
+          "§7.1, not a fixed/hard-coded supplier list.",
+        status: "approved",
+        classification: "internal",
+      },
+    });
+    console.log("Seeded FlavorActiV as a core.Organization (supplier).");
+  }
+}
+
+/**
  * DEMO Sensory Judge account — opt-in via SEED_DEMO_JUDGE=true, same
  * SEED_DEMO_ADMIN/SEED_DEMO_PARTNER convention. Scoped to the DEMO cupping
  * session so the blind-mapping restriction (RBAC.md §7) is reproducible by
@@ -601,6 +779,8 @@ async function main() {
   const permissionsByKey = await seedPermissions();
   await seedRoleProfiles(permissionsByKey);
   const platformScope = await seedPlatformScope();
+
+  await seedBeverageProtocolsContent();
 
   if (process.env.SEED_DEMO_ADMIN === "true") {
     await seedDemoAdmin(platformScope.id);

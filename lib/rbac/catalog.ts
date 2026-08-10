@@ -37,6 +37,10 @@ export const PERMISSIONS: readonly PermissionDef[] = [
 
   { resourceType: "blind_mapping", action: "view", description: "View the real identity behind a blind-coded sample (RBAC.md §7)." },
 
+  { resourceType: "ai", action: "review_suggestion", description: "Review AI-generated suggestions (accept/reject/modify) — AI_GOVERNANCE.md §4." },
+
+  { resourceType: "competition", action: "manage", description: "Create editions/categories/entries, assign judges, finalize results, and declare awards." },
+
   { resourceType: "classification", action: "clear_registered", description: "Access records classified Registered." },
   { resourceType: "classification", action: "clear_partner", description: "Access records classified Partner." },
   { resourceType: "classification", action: "clear_internal", description: "Access records classified Internal." },
@@ -68,6 +72,10 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       ["content", "publish"],
       ["project", "view"],
       ["project", "manage_operations"],
+      // Slice 7 (AI) — reviewing a data-completeness suggestion and
+      // deciding whether to act on it is exactly the kind of non-developer
+      // collaborator task this profile exists for (RBAC.md §5).
+      ["ai", "review_suggestion"],
     ],
   },
   {

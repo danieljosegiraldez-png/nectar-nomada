@@ -94,12 +94,28 @@ table and verified live: a DEMO Sensory Judge sees only blind codes, never real
 sample identity. Assessments are immutable once submitted (create-only, no
 update path) — corrections are a documented future workflow, not built.
 
-### Slice 7 — AI
+**Beverage Sensory Protocols & Panel Calibration (implemented, DECISIONS.md
+ADR-035)** — extends Slice 6 with real, honestly-attributed protocol content
+for coffee (CVA-adapted descriptive/affective split), beer and mead
+(BJCP-adapted), and honey (ISO/academic-grounded), plus placeholder `planned`
+rows for the nine remaining categories (`BEVERAGE_SENSORY_PROTOCOLS.md` §4).
+Also implements the Reference Standards & Panel Calibration system (§7):
+`ReferenceStandard`, `CalibrationSession`/`CalibrationResult`, and
+`EvaluatorSensitivityProfile`, gated by the existing `sensory:manage_session`
+permission. No `ReferenceStandard` rows carry invented compound/threshold
+data — CLAUDE.md §54.
+
+### Slice 7 — AI (implemented, DECISIONS.md ADR-033)
 Permission-aware assistant (`AI_GOVERNANCE.md`), data-completeness suggestions.
 Deliberately last: it needs Slices 1–6's governed data model to exist and be
 populated before an AI feature reading that data means anything, and it needs
 the RBAC-scoped retrieval path (`AI_GOVERNANCE.md` §5) to have real permission
-boundaries to respect.
+boundaries to respect. The write-restriction control is a real, separately-
+privileged Postgres role (`ai_service`), verified directly against Neon to
+enforce insert-only access to `ai.recommendation` and nothing else — not just
+an application-layer convention. No real LLM provider is wired up (no API
+key); the shipped generator is an honest, working rule-based one, swappable
+later without touching the suggestion lifecycle around it.
 
 ## 3. Explicitly deferred past this roadmap
 
@@ -109,8 +125,11 @@ boundaries to respect.
   first public MVP if doing so blocks foundational architecture. Migration via
   the Airtable adapter (`INTEGRATIONS.md` §4) is a project that starts after
   Slice 6, once Sensory's protocol model is proven and Research OS can reuse it.
-- **Competitions** — reuses Sensory's Assessment engine (`DOMAIN_MODEL.md`), so
-  it is sequenced after Slice 6, not part of this roadmap's numbered slices.
+- ~~**Competitions**~~ — **implemented, DECISIONS.md ADR-034.** Reuses
+  Sensory's judging engine directly (`DOMAIN_MODEL.md`) rather than
+  duplicating it — no new judging UI, `CompetitionCategory` links to an
+  existing `SensorySession`. Not built: competitor-facing entry
+  registration, public results browsing.
 - **Apiary/Honey, Fermentation, additional agricultural domains beyond coffee** —
   modeled to not require redesign (`DOMAIN_MODEL.md` §7) but not built until a
   concrete project needs them.

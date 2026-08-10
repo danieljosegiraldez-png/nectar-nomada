@@ -1522,3 +1522,313 @@ Organization-typing question is resolved without a schema change for the
 reference-standard use case specifically; the general single-type
 limitation remains a known, low-priority gap with an already-proven fix
 pattern if it's ever actually needed.
+
+---
+
+## ADR-032 — Fix: Assessment double-submission race (post-Slice-6 review)
+
+**Context:** A self-review after Slice 6 shipped found that
+`submitAssessment` used a check-then-create pattern (query for an existing
+submitted Assessment, then create a new one) with no database-level
+uniqueness backing it. Two concurrent requests — a double-click, a retried
+network request — could both pass the check and create two "submitted"
+Assessment rows for the same evaluator/blind-sample pair, and
+`computePanelResult` would then silently count that evaluator's scores
+twice in the panel average.
+
+**Decision:** Added `@@unique([blindSampleId, evaluatorUserAccountId])` to
+`Assessment` and rewrote `submitAssessment` to rely on the resulting
+Postgres constraint violation (caught as `Prisma.PrismaClientKnownRequestError`
+code `P2002`) rather than a pre-check query — the create either succeeds or
+fails atomically, closing the race entirely instead of narrowing it.
+
+**Consequence worth flagging now, for later**: this constraint assumes
+there is never more than one Assessment row per evaluator/sample, which is
+true today (ADR-030 decision 5 — no correction workflow exists). If a
+correction workflow is ever built, this exact constraint will need
+revisiting — most likely a partial unique index scoped to
+`status = 'submitted'` rather than an unconditional one, so a `superseded`
+row can coexist with its replacement. Noted directly in the schema comment
+so this isn't rediscovered the hard way.
+
+**Verified**: `npx tsc --noEmit` clean, migration applied cleanly to Neon.
+
+---
+
+## ADR-033 — Slice 7 (AI) implemented: real restricted Postgres role, not
+just an application-layer promise
+
+**Context:** `MVP_ROADMAP.md` Slice G — a permission-aware platform
+assistant and data-completeness suggestions. `AI_GOVERNANCE.md` §3 draws a
+sharp line between a governance *policy* and a governance *control*: "the
+prohibition is enforced at the database permission layer, not only in
+application logic ... this is the concrete difference." This slice takes
+that literally rather than approximating it in application code.
+
+**Decisions:**
+
+1. **A real, separately-privileged Postgres role (`ai_service`)**, not a
+   naming convention. `prisma/migrations/*_slice7_ai` creates it `NOLOGIN`
+   (no password embedded in a file committed to git) with
+   `GRANT INSERT ON ai.recommendation`; a follow-up migration adds
+   `GRANT SELECT` on that same table once testing showed Postgres's
+   `RETURNING` clause (which Prisma's `.create()` always uses) requires
+   SELECT even for an otherwise insert-only caller. `UPDATE`/`DELETE`
+   stay revoked — even the AI role cannot edit or delete its own past
+   suggestions, only append new ones. **Verified directly against Neon**,
+   not just asserted: connected as `ai_service` and confirmed `INSERT`
+   succeeds, `UPDATE` on `ai.recommendation` fails, and `SELECT` on
+   `core.user_account` (or any other table) fails with a real Postgres
+   permission-denied error — see verification note below.
+2. **The role's password is generated and set out-of-band**, never
+   committed — the migration file creates the role `NOLOGIN`; a separate,
+   non-committed step (`ALTER ROLE ... LOGIN PASSWORD ...`, documented in
+   `SETUP.md`) activates it, and the resulting connection string lives only
+   in `.env` as `AI_SERVICE_DATABASE_URL`. `lib/ai/db.ts` is the only file
+   that constructs a Prisma Client against it; every other file in the
+   codebase uses `lib/db.ts`'s full-access client.
+3. **No real LLM provider is wired up — and the code says so.**
+   `generateDataCompletenessSuggestions` is a genuine, working rule-based
+   generator (`model: "rule-based-completeness-checker-v1"`), not a stub
+   pretending to call GPT/Claude. There is no API key for one, and
+   fabricating that call would misrepresent what's actually happening —
+   the same anti-fabrication discipline CLAUDE.md §54 applies to seed data
+   applied here to the AI layer itself. Swapping in a real model later only
+   touches this one function; the suggestion lifecycle, RBAC gating, and
+   audit trail don't change (`INTEGRATIONS.md` §7's provider-independence
+   principle).
+4. **Read-scoping for suggestion review is a single new permission
+   (`ai:review_suggestion`), not fully generic per-entity scoping.**
+   `AI_GOVERNANCE.md` §4 describes review visibility as scoped like a
+   human's own resolved RBAC access; building that generically for an
+   open-ended `related_entity_type` (which could point at a Project, a
+   Task, a SensorySession, anything) is materially more work than this
+   slice needs. Deliberately narrowed, same trade-off already made for
+   Partner Workspace (ADR-029) and Sensory (ADR-030) visibility: gated by a
+   platform/program-scope permission check, not resolved per related
+   entity. Granted to Platform Admin (via its full permission set) and
+   Content/Ops Coordinator — reviewing a data-completeness gap is exactly
+   the non-developer collaborator task `RBAC.md` §5 names that profile for.
+5. **"Accept" records a human decision, it does not apply anything.**
+   `decideSuggestion` writes `status`/`reviewer`/`decisionAt` and a
+   mandatory `AuditEvent` — it never edits the Project (or whatever entity)
+   the suggestion is about. The actual fix happens through whatever
+   surface already exists for that entity. This keeps the human's real
+   write genuinely the human's own action, per `AI_GOVERNANCE.md` §3's
+   requirement, rather than this function performing it on the AI's
+   behalf under a human's clicked "accept."
+
+**Verified**, live, against Neon: `npx tsc --noEmit`, `npm run lint`,
+`npm test`, and `npm run build` all pass. Direct role-level verification
+(a standalone script, not the app) confirmed `ai_service` can `INSERT`
+into `ai.recommendation`, cannot `UPDATE` it, and cannot touch any other
+table at all — real Postgres `permission denied` errors, not application
+logic. Browser-verified the full lifecycle as Platform Admin: the rule
+correctly found zero suggestions against real seed data (Las Nubes already
+has a description — nothing to fabricate a gap about); created a real
+temporary test Project with no description, ran the generator again, got a
+genuine `pending` suggestion, clicked Accept, confirmed it moved to
+"reviewed" with correct human attribution, and confirmed the resulting
+`AuditEvent` (`operation: "recommendation.accepted"`) was actually written.
+Test project, suggestion, and audit row all removed afterward.
+
+**Consequences:** Slice 7's suggestion lifecycle, RBAC-gated review UI, and
+the DB-enforced write restriction are complete and demonstrably real, not
+asserted. Not built: any actual LLM-backed suggestion generator (no
+provider configured — this is an intentional scope boundary, not a gap to
+close later by default), and per-entity-scoped review visibility (decision
+4 above).
+
+---
+
+## ADR-034 — Competitions implemented: reuses Sensory's judging engine
+directly, no parallel scoring system
+
+**Context:** `DOMAIN_MODEL.md`'s Competitions section is explicit:
+"Reuses `SensoryProtocol`/`Assessment` from the Sensory module for the
+actual judging mechanics rather than duplicating a scoring engine —
+Competitions is a workflow and chain-of-custody layer wrapped around
+Sensory, not a parallel evaluation system." `MVP_ROADMAP.md` §3 sequenced
+this after Slice 6 for exactly that reason. Built now that Slice 6 exists.
+
+**Decisions:**
+
+1. **New `competitions` schema holds only workflow entities — `Competition
+   → CompetitionEdition → CompetitionCategory → Entry`,
+   `CompetitionJudgeAssignment` (conflict-of-interest metadata only), and
+   `CompetitionResult`/`Award`.** No competitions-owned table duplicates
+   blind coding, assessment submission, or panel-result computation —
+   `CompetitionCategory.sensorySessionId` links directly to an existing
+   `sensory.SensorySession`, and all actual judging happens through the
+   unmodified `/sensory/[sessionId]` UI already built in Slice 6. Verified
+   live (see below): zero new judging UI was written, and the existing one
+   worked unchanged.
+2. **A competition judge is assigned exactly the way a Sensory judge always
+   is** — a session-scoped RBAC Assignment holding "Sensory Judge" or
+   "Sensory Head Judge." `CompetitionJudgeAssignment` records
+   competition-specific metadata Sensory has no concept of (conflict-of-
+   interest declaration, CLAUDE.md §29) alongside that Assignment, but does
+   not replace or duplicate the actual permission grant.
+3. **Direct cross-module references to `sensory.*` tables** (`Entry` doesn't
+   reference `sensory.*` directly, but `CompetitionCategory.sensorySessionId`
+   and `CompetitionResult.blindSampleId` do) are a deliberate exception to
+   `DATA_ARCHITECTURE.md` §1's general "modules reference core, not each
+   other" convention — made explicitly because `DOMAIN_MODEL.md` itself
+   mandates reuse over duplication for this specific module, not a
+   precedent for cross-module references generally.
+4. **`CompetitionResult` is a distinct, official, human-finalized outcome —
+   never a live read of `PanelResult`.** `finalizeResult` snapshots the
+   current overall-score `PanelResult` mean into `CompetitionResult.
+   finalScore` at the moment a head judge finalizes it, the same
+   provenance/snapshot principle used for `OrderItem.unitPriceAmount`
+   (ADR-025) and `Booking.unitPriceAmount` (ADR-028) — a later Assessment
+   correction (once that workflow exists) must never silently rewrite an
+   already-finalized competition result. Finalizing never touches the
+   underlying `Assessment`/`PanelResult` rows themselves (CLAUDE.md §32 —
+   nobody, including this action, silently changes what the judges actually
+   submitted).
+5. **No classification field on `Competition`/`Edition`/`Category`/`Entry`
+   in this slice** — stated plainly as a scope simplification, not an
+   oversight. Every function in `lib/competitions/service.ts` is gated by a
+   single `competition:manage` permission (granted to Platform Admin only);
+   there is no public-facing browse/results surface yet that would need
+   per-record classification. Add it if/when that surface is built, not
+   preemptively.
+6. **`competition:manage` is Admin-only for this slice** — `Content/Ops
+   Coordinator`'s existing catalog description already said "explicitly
+   excluding ... competition-result permissions" before this ADR (written
+   during Slice 1, anticipating this module), so no change was needed there
+   to keep that boundary.
+
+**Verified**, live, against Neon: `npx tsc --noEmit`, `npm run lint`,
+`npm test`, and `npm run build` all pass. Created a real, clearly-labeled
+TEST Competition/Edition/Category/Entry linked to the existing DEMO Sensory
+session and one of its two DEMO Samples; submitted a real assessment
+through the *existing, unmodified* `/sensory/[sessionId]` UI; computed a
+panel result there (also unmodified); then, from the new Competitions UI,
+finalized the result — the resulting `finalScore` (8.50) matched the
+submitted score exactly — and declared an award, which rendered correctly.
+All test data (competition, cascaded edition/category/entry/result/award,
+the test assessment, and derived panel results) removed afterward.
+
+**Consequences:** Competitions' workflow layer is complete and genuinely
+reuses Sensory rather than approximating reuse. Not built: a
+competitor-facing entry-registration UI (entries are admin/seed-created
+this slice, same scope boundary already used for Partner Workspace Tasks
+and Sensory Sessions), and any public results/awards browsing surface
+(would need the classification field noted in decision 5 first).
+
+## ADR-035 — Beverage Sensory Protocol content populated; Reference
+Standards & Panel Calibration implemented
+
+**Context:** ADR-031 accepted `BEVERAGE_SENSORY_PROTOCOLS.md` as
+domain-model input, deferring implementation to Slice 6. Slice 6 shipped
+with only the illustrative coffee protocol as a placeholder. This ADR closes
+that gap: real (not fabricated) protocol content for coffee/beer/mead/honey,
+placeholder rows for the nine deferred categories, and the Reference
+Standards & Panel Calibration system specified in
+`BEVERAGE_SENSORY_PROTOCOLS.md` §7.
+
+**Decisions:**
+
+1. **`SensoryProtocol` gains `standardSourceReference` and
+   `standardLicenseStatus` (`adapted_original|licensed|pending_license`);
+   `SensoryAttribute` gains `section` (`descriptive|affective|null`).** Every
+   populated protocol in this ADR sets `standardSourceReference` to an
+   honest, specific citation of what it's structurally adapted from, and
+   `standardLicenseStatus = adapted_original` — none of the seeded content
+   claims to be a licensed reproduction of SCA/BJCP/ISO material, matching
+   `BEVERAGE_SENSORY_PROTOCOLS.md` §1's "adapt-original, not verbatim"
+   governing rule.
+2. **Coffee** (existing "Coffee Cupping (Illustrative)" protocol, patched
+   rather than replaced, so already-seeded production rows keep their
+   history) — attributes split into `descriptive` (Aroma, Flavor, Acidity,
+   Body, Sweetness, Aftertaste) and `affective` (Overall Impression),
+   structurally informed by the SCA Coffee Value Assessment's
+   Descriptive/Affective separation (CVA-103/104) without reproducing CVA's
+   proprietary scale wording.
+3. **Beer and Mead** — separate protocols (matching BJCP's own separate
+   scoresheets), each with Aroma/Appearance/Flavor/Mouthfeel (descriptive)
+   plus Overall Impression (affective) — the general category shape used
+   broadly in brewing/mead judging, not BJCP's scoring rubric or
+   style-specific point allocations.
+4. **Honey** — grounded in ISO 4121/5492/8586/8589 and published academic
+   honey-sensory literature (least licensing constraint of the batch per
+   ADR-031's registry) — four-category structure (visual, olfactory,
+   olfactory-gustatory, tactile) plus an affective Overall Impression.
+5. **Nine deferred categories** (wine, cacao, chocolate, spirits, rum, gin,
+   infused liquors, water, non-alcoholic) seeded as `SensoryProtocol` rows
+   with `status: planned` and no attributes — recognized categories the
+   platform is designed to support, with zero invented content, per
+   `BEVERAGE_SENSORY_PROTOCOLS.md` §4.
+6. **FlavorActiV recorded as a real `core.Organization`**
+   (`organizationType: supplier`) rather than a hard-coded supplier
+   reference — legitimate because the user supplied this fact directly in
+   the original planning conversation (not fabricated), and consistent with
+   §7.1's "any supplier is just an Organization record" design.
+   No `ReferenceStandard` rows carry invented compound/threshold data —
+   CLAUDE.md §54 applies to protocol design content exactly as it does to
+   sensory outcomes; no real FlavorActiV data sheets were available to seed
+   honestly, so the registry ships empty and is populated only when real
+   data-sheet content exists.
+7. **Reference Standards & Panel Calibration schema** implements
+   `BEVERAGE_SENSORY_PROTOCOLS.md` §7 as specified: `ReferenceStandard`
+   (open `supplierOrganizationId`, not a closed list; optional
+   `commerceProductId` for standards that are also sold),
+   `SelfCreatedStandardDetail` (1:1, carries `validatedAgainst` so a
+   self-made standard's claims stay traceable per the platform's evidence
+   discipline rather than getting a pass because they're "internal"),
+   `CalibrationSession`/`CalibrationResult` (structurally distinct from
+   `SensorySession`/`Assessment` — a calibration session tests a panelist's
+   demonstrated ability against a known standard, it does not evaluate a
+   product), and `EvaluatorSensitivityProfile` (composite-keyed on
+   person + reference standard, tracks demonstrated threshold and
+   `confidenceLevel` so a panel's aggregate results are traceable to
+   tested, not assumed, perceptual ability — the same reasoning
+   AROXA/FlavorActiV documentation gives for tracking per-panelist
+   anosmia).
+8. **Calibration gating reuses `sensory:manage_session`, no new
+   permission.** Running a calibration program is the same
+   panel-administration authority as running a judging session, already
+   held by "Sensory Head Judge" — adding a dedicated permission would
+   duplicate an existing authority boundary rather than express a new one.
+   `lib/sensory/calibration.ts` gates every function through this single
+   platform-scope check, matching the `competition:manage` pattern from
+   ADR-034.
+9. **`recordCalibrationResult` upserts `EvaluatorSensitivityProfile` as a
+   side effect** — every recorded result updates the evaluator's
+   `lastCalibrationDate` and `confidenceLevel` (`tested_once` → later
+   results move it to `regularly_calibrated`), and updates
+   `demonstratedThreshold` only when the result was both correctly
+   identified and carries an `actualConcentrationPresented` value. A wrong
+   or unmeasured result still records `lastCalibrationDate`/
+   `confidenceLevel` (the evaluator was tested) without overwriting a
+   previously-demonstrated threshold with a null.
+10. **Minimal UI, not a full workflow builder** — `/calibration` (reference
+    standards + calibration sessions, both list-and-add) and
+    `/calibration/[id]` (results list + record-result form), matching the
+    UI density of Competitions (ADR-034) rather than Sensory's full judging
+    flow, since calibration is an admin/back-office activity, not a
+    field-facing form.
+
+**Verified**, live, against Neon: `npx tsc --noEmit`, `npm run lint`,
+`npm test`, and `npm run build` all pass. Applied the schema migration,
+ran the (idempotent) seed to confirm no duplicate `Organization` rows were
+created and all 13 protocols (coffee, beer, mead, honey, 9 planned) exist
+with the expected `standardSourceReference`/`status`/`section` values.
+Created a real, clearly-labeled TEST `ReferenceStandard` and
+`CalibrationSession` through the live UI, then recorded a `CalibrationResult`
+against the existing DEMO Sensory Judge Person — confirmed the
+`EvaluatorSensitivityProfile` upsert produced the expected
+`demonstratedThreshold`/`confidenceLevel`, and that the session detail page
+rendered the result correctly. All test data removed afterward.
+
+**Consequences:** The Sensory module now ships genuinely differentiated,
+honestly-attributed protocol content for four real categories instead of
+one illustrative placeholder, and a real panel-calibration program instead
+of just a descriptor list — closing the gap ADR-031 flagged between
+"descriptor lists" and what UC Davis/AROXA/FlavorActiV-grade programs
+actually require. Not built: any UI for editing/superseding a protocol
+version (protocols are seed/service-created only, matching the admin-only
+pattern used elsewhere), and no licensing relationship with SCA/BJCP/ISO
+has been pursued — that remains the user's own action item per ADR-031.

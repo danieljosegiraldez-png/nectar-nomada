@@ -12,7 +12,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  schemas    = ["core", "commerce", "experiences", "partner", "sensory"]
+  schemas    = ["core", "commerce", "experiences", "partner", "sensory", "ai", "competitions"]
   // DECISIONS.md ADR-021/ADR-022 — deferred against the local PGlite sandbox
   // (no extension support), enabled now that Neon is the primary database.
   extensions = [postgis]
@@ -31,24 +31,35 @@ enum PersonStatus {
 }
 
 model Person {
-  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  givenName   String       @map("given_name")
-  familyName  String       @map("family_name")
-  displayName String       @map("display_name")
-  email       String?
-  phone       String?
-  locale      String       @default("es")
-  bio         String?
-  status      PersonStatus @default(active)
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
-  createdBy   String?      @map("created_by") @db.Uuid
-  creator     UserAccount? @relation("PersonCreatedBy", fields: [createdBy], references: [id])
+  id                    String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  givenName             String       @map("given_name")
+  familyName            String       @map("family_name")
+  displayName           String       @map("display_name")
+  email                 String?
+  phone                 String?
+  locale                String       @default("es")
+  bio                   String?
+  status                PersonStatus @default(active)
+  // BEVERAGE_SENSORY_PROTOCOLS.md §7.3 — array of {certifying_body,
+  // certification_name, level_or_rank, date_earned, expiry_date?,
+  // certificate_reference}. Extends CLAUDE.md §9's Expertise/Certifications
+  // fields with real structure; empty/absent unless explicitly supplied —
+  // never inferred (CLAUDE.md §54).
+  sensoryCertifications Json?        @map("sensory_certifications")
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+  createdBy             String?      @map("created_by") @db.Uuid
+  creator               UserAccount? @relation("PersonCreatedBy", fields: [createdBy], references: [id])
 
-  userAccount      UserAccount?
-  projectsAsClient Project[]
-  storiesAuthored  Story[]
-  assetsCaptured   Asset[]      @relation("AssetCreatorPerson")
+  userAccount                  UserAccount?
+  projectsAsClient             Project[]
+  storiesAuthored              Story[]
+  assetsCaptured               Asset[]                       @relation("AssetCreatorPerson")
+  competitionEntries           Entry[]
+  selfCreatedStandardsCreated  SelfCreatedStandardDetail[]
+  calibrationSessionsConducted CalibrationSession[]
+  calibrationResults           CalibrationResult[]
+  sensitivityProfiles          EvaluatorSensitivityProfile[]
 
   @@map("person")
   @@schema("core")
@@ -81,32 +92,35 @@ model UserAccount {
   createdBy       String?           @map("created_by") @db.Uuid
   creator         UserAccount?      @relation("UserAccountCreatedBy", fields: [createdBy], references: [id])
 
-  createdAccounts           UserAccount[]       @relation("UserAccountCreatedBy")
-  personsCreated            Person[]            @relation("PersonCreatedBy")
-  roleProfilesCreated       RoleProfile[]       @relation("RoleProfileCreatedBy")
-  scopesCreated             Scope[]             @relation("ScopeCreatedBy")
-  assignments               Assignment[]        @relation("AssignmentToUserAccount")
-  assignmentsGranted        Assignment[]        @relation("AssignmentGrantedBy")
-  auditEvents               AuditEvent[]
-  locationsCreated          Location[]          @relation("LocationCreatedBy")
-  organizationsCreated      Organization[]      @relation("OrganizationCreatedBy")
-  programsCreated           Program[]           @relation("ProgramCreatedBy")
-  projectsCreated           Project[]           @relation("ProjectCreatedBy")
-  samplesCreated            Sample[]            @relation("SampleCreatedBy")
-  storiesCreated            Story[]             @relation("StoryCreatedBy")
-  productsCreated           Product[]           @relation("ProductCreatedBy")
-  experiencesCreated        Experience[]        @relation("ExperienceCreatedBy")
-  productVariantsCreated    ProductVariant[]    @relation("ProductVariantCreatedBy")
-  carts                     Cart[]
-  bookings                  Booking[]
-  orders                    Order[]
-  experienceSessionsCreated ExperienceSession[] @relation("ExperienceSessionCreatedBy")
-  assetsCreated             Asset[]             @relation("AssetCreatedBy")
-  tasksCreated              Task[]              @relation("TaskCreatedBy")
-  tasksAssigned             Task[]              @relation("TaskAssignedTo")
-  fieldSubmissions          FieldSubmission[]   @relation("FieldSubmissionSubmittedBy")
-  sensorySessionsCreated    SensorySession[]    @relation("SensorySessionCreatedBy")
-  assessments               Assessment[]        @relation("AssessmentByEvaluator")
+  createdAccounts             UserAccount[]                @relation("UserAccountCreatedBy")
+  personsCreated              Person[]                     @relation("PersonCreatedBy")
+  roleProfilesCreated         RoleProfile[]                @relation("RoleProfileCreatedBy")
+  scopesCreated               Scope[]                      @relation("ScopeCreatedBy")
+  assignments                 Assignment[]                 @relation("AssignmentToUserAccount")
+  assignmentsGranted          Assignment[]                 @relation("AssignmentGrantedBy")
+  auditEvents                 AuditEvent[]
+  locationsCreated            Location[]                   @relation("LocationCreatedBy")
+  organizationsCreated        Organization[]               @relation("OrganizationCreatedBy")
+  programsCreated             Program[]                    @relation("ProgramCreatedBy")
+  projectsCreated             Project[]                    @relation("ProjectCreatedBy")
+  samplesCreated              Sample[]                     @relation("SampleCreatedBy")
+  storiesCreated              Story[]                      @relation("StoryCreatedBy")
+  productsCreated             Product[]                    @relation("ProductCreatedBy")
+  experiencesCreated          Experience[]                 @relation("ExperienceCreatedBy")
+  productVariantsCreated      ProductVariant[]             @relation("ProductVariantCreatedBy")
+  carts                       Cart[]
+  bookings                    Booking[]
+  orders                      Order[]
+  experienceSessionsCreated   ExperienceSession[]          @relation("ExperienceSessionCreatedBy")
+  assetsCreated               Asset[]                      @relation("AssetCreatedBy")
+  tasksCreated                Task[]                       @relation("TaskCreatedBy")
+  tasksAssigned               Task[]                       @relation("TaskAssignedTo")
+  fieldSubmissions            FieldSubmission[]            @relation("FieldSubmissionSubmittedBy")
+  sensorySessionsCreated      SensorySession[]             @relation("SensorySessionCreatedBy")
+  assessments                 Assessment[]                 @relation("AssessmentByEvaluator")
+  recommendationsReviewed     Recommendation[]             @relation("RecommendationReviewedBy")
+  competitionJudgeAssignments CompetitionJudgeAssignment[]
+  competitionResultsFinalized CompetitionResult[]          @relation("CompetitionResultFinalizedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -387,13 +401,15 @@ model Organization {
   createdBy        String?             @map("created_by") @db.Uuid
   creator          UserAccount?        @relation("OrganizationCreatedBy", fields: [createdBy], references: [id])
 
-  locations        Location[]
-  projectsOwned    Project[]    @relation("ProjectOrganization")
-  projectsAsClient Project[]    @relation("ProjectClientOrganization")
-  samples          Sample[]
-  stories          Story[]
-  products         Product[]
-  experiences      Experience[]
+  locations                  Location[]
+  projectsOwned              Project[]           @relation("ProjectOrganization")
+  projectsAsClient           Project[]           @relation("ProjectClientOrganization")
+  samples                    Sample[]
+  stories                    Story[]
+  products                   Product[]
+  experiences                Experience[]
+  competitionEntries         Entry[]
+  referenceStandardsSupplied ReferenceStandard[]
 
   @@map("organization")
   @@schema("core")
@@ -520,7 +536,8 @@ model Sample {
   createdBy      String?             @map("created_by") @db.Uuid
   creator        UserAccount?        @relation("SampleCreatedBy", fields: [createdBy], references: [id])
 
-  blindMappings SensoryBlindMapping[]
+  blindMappings      SensoryBlindMapping[]
+  competitionEntries Entry[]
 
   @@index([projectId])
   @@index([organizationId])
@@ -596,7 +613,10 @@ model Product {
   // the actual sellable/priced/inventoried unit (DOMAIN_MODEL.md Commerce
   // module: "Product → ProductVariant → SKU/Inventory/Price"). Display
   // price is computed from active variants, not stored on Product itself.
-  variants ProductVariant[]
+  variants           ProductVariant[]
+  // Set when this catalog listing is also a sensory reference-standard kit
+  // (BEVERAGE_SENSORY_PROTOCOLS.md §7.1) — one record, two roles.
+  referenceStandards ReferenceStandard[]
 
   @@index([projectId])
   @@index([locationId])
@@ -1105,20 +1125,39 @@ model FieldSubmissionAsset {
 enum SensoryProtocolStatus {
   active
   archived
+  // BEVERAGE_SENSORY_PROTOCOLS.md §4 — a recognized evaluation category the
+  // platform is designed to support, with no real attribute content built
+  // yet. Distinct from `archived` (was active, now retired) — this was
+  // never active in the first place.
+  planned
+
+  @@schema("sensory")
+}
+
+enum SensoryProtocolLicenseStatus {
+  adapted_original
+  licensed
+  pending_license
 
   @@schema("sensory")
 }
 
 model SensoryProtocol {
-  id          String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                      String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   // 'coffee' | 'honey' | 'beer' | 'wine' | 'mead' | 'spirits' | 'other' — free
   // text per CLAUDE.md §21's open domain list, not a closed enum.
-  domain      String
-  name        String
-  description String?
-  status      SensoryProtocolStatus @default(active)
-  createdAt   DateTime              @default(now()) @map("created_at")
-  updatedAt   DateTime              @updatedAt @map("updated_at")
+  domain                  String
+  name                    String
+  description             String?
+  status                  SensoryProtocolStatus         @default(active)
+  // BEVERAGE_SENSORY_PROTOCOLS.md §1/§3 — real sensory scoresheets are
+  // frequently copyrighted professional standards (BJCP/SCA/WSET). Every
+  // protocol must cite what it's grounded in and never claim to *be* an
+  // official form unless actually licensed to do so.
+  standardSourceReference String?                       @map("standard_source_reference")
+  standardLicenseStatus   SensoryProtocolLicenseStatus? @map("standard_license_status")
+  createdAt               DateTime                      @default(now()) @map("created_at")
+  updatedAt               DateTime                      @updatedAt @map("updated_at")
 
   versions SensoryProtocolVersion[]
 
@@ -1148,8 +1187,9 @@ model SensoryProtocolVersion {
   supersededBy          SensoryProtocolVersion?  @relation("SensoryProtocolVersionSupersession", fields: [supersededByVersionId], references: [id])
   supersedes            SensoryProtocolVersion[] @relation("SensoryProtocolVersionSupersession")
 
-  attributes SensoryAttribute[]
-  sessions   SensorySession[]
+  attributes            SensoryAttribute[]
+  sessions              SensorySession[]
+  competitionCategories CompetitionCategory[]
 
   @@unique([protocolId, version])
   @@map("sensory_protocol_version")
@@ -1165,6 +1205,14 @@ model SensoryAttribute {
   scaleMin          Decimal                @map("scale_min") @db.Decimal(5, 2)
   scaleMax          Decimal                @map("scale_max") @db.Decimal(5, 2)
   description       String?
+  // BEVERAGE_SENSORY_PROTOCOLS.md §3 — CVA's key structural innovation for
+  // coffee: separating Descriptive Assessment (what it tastes like) from
+  // Affective Assessment (how much the evaluator values it), rather than
+  // collapsing description and preference into one score. Free text
+  // ('descriptive' | 'affective'), null for protocols that don't use this
+  // split (e.g. the existing single-section illustrative coffee protocol,
+  // beer/mead/honey).
+  section           String?
 
   responses    AttributeResponse[]
   panelResults PanelResult[]
@@ -1200,7 +1248,8 @@ model SensorySession {
   createdBy         String?                @map("created_by") @db.Uuid
   creator           UserAccount?           @relation("SensorySessionCreatedBy", fields: [createdBy], references: [id])
 
-  flights SensoryFlight[]
+  flights               SensoryFlight[]
+  competitionCategories CompetitionCategory[]
 
   @@index([protocolVersionId])
   @@map("sensory_session")
@@ -1227,9 +1276,10 @@ model SensoryBlindSample {
   flight    SensoryFlight @relation(fields: [flightId], references: [id], onDelete: Cascade)
   blindCode String        @map("blind_code")
 
-  blindMapping SensoryBlindMapping?
-  assessments  Assessment[]
-  panelResults PanelResult[]
+  blindMapping      SensoryBlindMapping?
+  assessments       Assessment[]
+  panelResults      PanelResult[]
+  competitionResult CompetitionResult?
 
   @@unique([flightId, blindCode])
   @@map("sensory_blind_sample")
@@ -1281,6 +1331,15 @@ model Assessment {
 
   attributeResponses AttributeResponse[]
 
+  // No correction workflow exists yet (DECISIONS.md ADR-030 decision 5) —
+  // until one does, there must never be more than one Assessment row per
+  // (blindSample, evaluator) at all, full stop. This is the DB-level
+  // backstop for that: submitAssessment's own existence check is a
+  // check-then-create race (two concurrent requests could both pass the
+  // check), so the real guarantee has to live here. When a correction
+  // workflow is eventually built, this constraint needs revisiting —
+  // likely a partial unique index scoped to status = 'submitted' instead.
+  @@unique([blindSampleId, evaluatorUserAccountId])
   @@index([blindSampleId])
   @@index([evaluatorUserAccountId])
   @@map("assessment")
@@ -1322,5 +1381,406 @@ model PanelResult {
 
   @@unique([blindSampleId, attributeId])
   @@map("panel_result")
+  @@schema("sensory")
+}
+
+// ---------------------------------------------------------------------------
+// Slice 7 — AI (MVP_ROADMAP.md), implementing AI_GOVERNANCE.md's suggestion
+// lifecycle literally: "AI Suggestion → Evidence/Reason → Human Review →
+// Accept/Reject/Modify → Action → Audit Record." This is the ONLY table any
+// AI-service code path may write to — enforced not just by convention but by
+// a real, separately-privileged Postgres role (see
+// prisma/migrations/*_ai_governance_role/migration.sql and
+// lib/ai/db.ts) that holds INSERT on this table and nothing else. Human
+// review decisions (accept/reject/modify) are written by the reviewing
+// human's own request, through the normal `prisma` client, RBAC-checked
+// like any other write — never by the AI role.
+// ---------------------------------------------------------------------------
+
+enum RecommendationStatus {
+  pending
+  accepted
+  rejected
+  modified
+
+  @@schema("ai")
+}
+
+model Recommendation {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  suggestionType String   @map("suggestion_type")
+  model          String
+  modelVersion   String?  @map("model_version")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Related entity refs + input summary — deliberately untyped jsonb, since
+  // this table's whole point is to work across every module without a
+  // schema change per suggestion type (AI_GOVERNANCE.md §4).
+  context            Json?
+  recommendation     String
+  supportingEvidence Json?    @map("supporting_evidence")
+  confidence         Decimal? @db.Decimal(4, 3)
+
+  // Not a real FK — related_entity_type spans every module's own schema,
+  // and the ai_service Postgres role must not gain cross-schema read
+  // access just to validate a foreign key. Application code resolves this
+  // pair against the correct module table using resolvedPermissionKeys the
+  // same way a human's own request would.
+  relatedEntityType String? @map("related_entity_type")
+  relatedEntityId   String? @map("related_entity_id") @db.Uuid
+
+  status                RecommendationStatus @default(pending)
+  reviewerUserAccountId String?              @map("reviewer_user_account_id") @db.Uuid
+  reviewer              UserAccount?         @relation("RecommendationReviewedBy", fields: [reviewerUserAccountId], references: [id])
+  decisionAt            DateTime?            @map("decision_at")
+  actionTaken           String?              @map("action_taken")
+
+  @@index([status])
+  @@index([relatedEntityType, relatedEntityId])
+  @@map("recommendation")
+  @@schema("ai")
+}
+
+// ---------------------------------------------------------------------------
+// Competitions (CLAUDE.md §29-30, DOMAIN_MODEL.md "Competitions"). Explicitly
+// NOT a parallel evaluation system: "Reuses SensoryProtocol/Assessment from
+// the Sensory module for the actual judging mechanics rather than
+// duplicating a scoring engine." This module is a workflow/chain-of-custody
+// layer — registration, categories, entries, judge assignment (with
+// conflict-of-interest tracking Sensory itself has no concept of), and
+// finalized results/awards — wrapped around Sensory's existing
+// SensorySession/SensoryFlight/SensoryBlindSample/SensoryBlindMapping/
+// Assessment/PanelResult tables, which do the actual blind judging
+// unchanged. A Competition judge is assigned exactly the way a Sensory judge
+// always is — a session-scoped RBAC Assignment holding the "Sensory Judge"
+// or "Sensory Head Judge" Role Profile — no parallel permission system.
+// Direct cross-module references to `sensory.*` here are a deliberate,
+// DOMAIN_MODEL.md-sanctioned exception to DATA_ARCHITECTURE.md §1's general
+// "modules reference core, not each other" convention, precisely because
+// reuse (not duplication) is the explicit design mandate for this module.
+// ---------------------------------------------------------------------------
+
+enum CompetitionStatus {
+  active
+  archived
+
+  @@schema("competitions")
+}
+
+model Competition {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // Same open, free-text domain convention as SensoryProtocol.domain.
+  domain      String
+  name        String
+  description String?
+  status      CompetitionStatus @default(active)
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  editions CompetitionEdition[]
+
+  @@map("competition")
+  @@schema("competitions")
+}
+
+enum CompetitionEditionStatus {
+  planning
+  open_for_entries
+  judging
+  completed
+
+  @@schema("competitions")
+}
+
+model CompetitionEdition {
+  id            String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  competitionId String                   @map("competition_id") @db.Uuid
+  competition   Competition              @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  // e.g. "2026" — free text, not a year type, since some editions are
+  // named rather than dated (e.g. "Inaugural Edition").
+  label         String
+  status        CompetitionEditionStatus @default(planning)
+  createdAt     DateTime                 @default(now()) @map("created_at")
+
+  categories CompetitionCategory[]
+
+  @@index([competitionId])
+  @@map("competition_edition")
+  @@schema("competitions")
+}
+
+model CompetitionCategory {
+  id                       String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  editionId                String                 @map("edition_id") @db.Uuid
+  edition                  CompetitionEdition     @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  name                     String
+  sensoryProtocolVersionId String                 @map("sensory_protocol_version_id") @db.Uuid
+  sensoryProtocolVersion   SensoryProtocolVersion @relation(fields: [sensoryProtocolVersionId], references: [id])
+  // Null until judging actually begins for this category — set once, then
+  // every blind-coding/judging/panel-result action for this category
+  // happens entirely through the existing Sensory UI against this session.
+  sensorySessionId         String?                @map("sensory_session_id") @db.Uuid
+  sensorySession           SensorySession?        @relation(fields: [sensorySessionId], references: [id])
+  createdAt                DateTime               @default(now()) @map("created_at")
+
+  entries          Entry[]
+  judgeAssignments CompetitionJudgeAssignment[]
+
+  @@index([editionId])
+  @@index([sensoryProtocolVersionId])
+  @@map("competition_category")
+  @@schema("competitions")
+}
+
+enum EntryStatus {
+  registered
+  received
+  disqualified
+  judged
+
+  @@schema("competitions")
+}
+
+model Entry {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId               String              @map("category_id") @db.Uuid
+  category                 CompetitionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  // The canonical Sample being entered — later blind-coded into a
+  // sensory.SensoryBlindSample within the category's session for judging.
+  // Chain of custody (CLAUDE.md §29) is this FK plus Sample's own
+  // provenance, not a duplicated tracking record.
+  sampleId                 String              @map("sample_id") @db.Uuid
+  sample                   Sample              @relation(fields: [sampleId], references: [id])
+  competitorPersonId       String?             @map("competitor_person_id") @db.Uuid
+  competitorPerson         Person?             @relation(fields: [competitorPersonId], references: [id])
+  competitorOrganizationId String?             @map("competitor_organization_id") @db.Uuid
+  competitorOrganization   Organization?       @relation(fields: [competitorOrganizationId], references: [id])
+  status                   EntryStatus         @default(registered)
+  registeredAt             DateTime            @default(now()) @map("registered_at")
+
+  result CompetitionResult?
+
+  @@index([categoryId])
+  @@index([sampleId])
+  @@map("entry")
+  @@schema("competitions")
+}
+
+// Judge assignment metadata Sensory itself has no concept of
+// (conflict-of-interest declaration, CLAUDE.md §29) — the actual permission
+// grant to judge is the standard session-scoped RBAC Assignment, created
+// alongside this row, not replaced by it.
+model CompetitionJudgeAssignment {
+  id                         String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId                 String              @map("category_id") @db.Uuid
+  category                   CompetitionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  userAccountId              String              @map("user_account_id") @db.Uuid
+  userAccount                UserAccount         @relation(fields: [userAccountId], references: [id])
+  conflictOfInterestDeclared Boolean             @default(false) @map("conflict_of_interest_declared")
+  conflictOfInterestNotes    String?             @map("conflict_of_interest_notes")
+  assignedAt                 DateTime            @default(now()) @map("assigned_at")
+
+  @@unique([categoryId, userAccountId])
+  @@map("competition_judge_assignment")
+  @@schema("competitions")
+}
+
+enum CompetitionResultStatus {
+  draft
+  finalized
+
+  @@schema("competitions")
+}
+
+// The competition's official, published outcome — distinct from Sensory's
+// own PanelResult (raw statistical aggregate). A head judge reviews the
+// PanelResult and finalizes a CompetitionResult from it; the underlying
+// Assessments/PanelResult rows are never altered by this (CLAUDE.md §32 —
+// AI/no one silently changes competition results; finalizing here is a
+// distinct, audited human act, not an edit to the sensory data it's based
+// on).
+model CompetitionResult {
+  id                       String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entryId                  String                  @unique @map("entry_id") @db.Uuid
+  entry                    Entry                   @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  blindSampleId            String                  @unique @map("blind_sample_id") @db.Uuid
+  blindSample              SensoryBlindSample      @relation(fields: [blindSampleId], references: [id])
+  finalScore               Decimal?                @map("final_score") @db.Decimal(6, 3)
+  rank                     Int?
+  status                   CompetitionResultStatus @default(draft)
+  finalizedByUserAccountId String?                 @map("finalized_by_user_account_id") @db.Uuid
+  finalizedByUserAccount   UserAccount?            @relation("CompetitionResultFinalizedBy", fields: [finalizedByUserAccountId], references: [id])
+  finalizedAt              DateTime?               @map("finalized_at")
+
+  award Award?
+
+  @@map("competition_result")
+  @@schema("competitions")
+}
+
+model Award {
+  id        String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  resultId  String            @unique @map("result_id") @db.Uuid
+  result    CompetitionResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  // Free text, deliberately not a closed enum — CLAUDE.md §30: competition
+  // scoring/award structures are configured per edition, not assumed.
+  name      String
+  awardedAt DateTime          @default(now()) @map("awarded_at")
+
+  @@map("award")
+  @@schema("competitions")
+}
+
+// ---------------------------------------------------------------------------
+// Reference Standards & Panel Calibration (BEVERAGE_SENSORY_PROTOCOLS.md §7,
+// DECISIONS.md ADR-035). What turns "we have a descriptor list" into a
+// professional-grade panel program: calibrating evaluators against known,
+// precisely-dosed reference compounds, recording per-evaluator calibration
+// history (including known insensitivity/anosmia), and tracking real
+// certifications. Supplier is deliberately open — any current or future
+// supplier (FlavorActiV, AROXA, Néctar Nómada itself) is just a
+// `core.Organization` row, never a hard-coded value (§7.1).
+// ---------------------------------------------------------------------------
+
+enum ReferenceStandardOrigin {
+  commercial_third_party
+  self_created
+  adapted_from_commercial
+
+  @@schema("sensory")
+}
+
+model ReferenceStandard {
+  id                       String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  compoundName             String                  @map("compound_name")
+  sensoryDescriptor        String                  @map("sensory_descriptor")
+  // 'beer' | 'wine' | 'coffee' | 'honey' | 'spirits' | 'water' | 'other' —
+  // same open, free-text convention as SensoryProtocol.domain.
+  category                 String
+  typicalThresholdValue    Decimal?                @map("typical_threshold_value") @db.Decimal(10, 4)
+  thresholdUnit            String?                 @map("threshold_unit")
+  standardOrigin           ReferenceStandardOrigin @map("standard_origin")
+  supplierOrganizationId   String?                 @map("supplier_organization_id") @db.Uuid
+  supplierOrganization     Organization?           @relation(fields: [supplierOrganizationId], references: [id])
+  supplierProductReference String?                 @map("supplier_product_reference")
+  dataSheetReference       String?                 @map("data_sheet_reference")
+  // Set when this standard is also a product sold through Commerce — one
+  // record serving both a commercial listing and internal calibration use
+  // (§7.1), not duplicated data.
+  commerceProductId        String?                 @map("commerce_product_id") @db.Uuid
+  commerceProduct          Product?                @relation(fields: [commerceProductId], references: [id])
+  notes                    String?
+  createdAt                DateTime                @default(now()) @map("created_at")
+
+  selfCreatedDetail            SelfCreatedStandardDetail?
+  calibrationResults           CalibrationResult[]
+  evaluatorSensitivityProfiles EvaluatorSensitivityProfile[]
+
+  @@index([category])
+  @@index([supplierOrganizationId])
+  @@map("reference_standard")
+  @@schema("sensory")
+}
+
+enum StandardValidationMethod {
+  none
+  commercial_standard_comparison
+  expert_panel_consensus
+  triangle_test
+
+  @@schema("sensory")
+}
+
+// A self-created standard's threshold/descriptor claims get the same
+// evidence discipline as any other fact in this system (DATA_ARCHITECTURE.md
+// §4) — "I made this and I know what's in it" is `creationMethod`/
+// `compositionNotes`; `validatedAgainst` is what lets someone (including
+// future-you) know whether the claimed threshold has actually been checked
+// against something external, or is still provisional (`none` is a
+// legitimate, honestly-recorded value, not a gap to hide).
+model SelfCreatedStandardDetail {
+  referenceStandardId String                   @id @map("reference_standard_id") @db.Uuid
+  referenceStandard   ReferenceStandard        @relation(fields: [referenceStandardId], references: [id], onDelete: Cascade)
+  compositionNotes    String?                  @map("composition_notes")
+  creationMethod      String?                  @map("creation_method")
+  baseMaterialSource  String?                  @map("base_material_source")
+  validatedAgainst    StandardValidationMethod @default(none) @map("validated_against")
+  validationReference String?                  @map("validation_reference")
+  createdByPersonId   String?                  @map("created_by_person_id") @db.Uuid
+  createdByPerson     Person?                  @relation(fields: [createdByPersonId], references: [id])
+  createdAt           DateTime                 @default(now()) @map("created_at")
+
+  @@map("self_created_standard_detail")
+  @@schema("sensory")
+}
+
+// A panelist capability test, structurally distinct from SensorySession
+// (which evaluates products, not people) — CLAUDE.md's evaluator-profile
+// principle (§27) applied concretely.
+model CalibrationSession {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionDate            DateTime @map("session_date")
+  category               String
+  conductedByPersonId    String?  @map("conducted_by_person_id") @db.Uuid
+  conductedByPerson      Person?  @relation(fields: [conductedByPersonId], references: [id])
+  // Array of {referenceStandardId, actualConcentration} — a trainer may
+  // dose below/above a standard's default concentration for a given
+  // exercise, so this is the session's own record, not just a link.
+  referenceStandardsUsed Json?    @map("reference_standards_used")
+  notes                  String?
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  results CalibrationResult[]
+
+  @@map("calibration_session")
+  @@schema("sensory")
+}
+
+model CalibrationResult {
+  id                           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  calibrationSessionId         String             @map("calibration_session_id") @db.Uuid
+  calibrationSession           CalibrationSession @relation(fields: [calibrationSessionId], references: [id], onDelete: Cascade)
+  evaluatorPersonId            String             @map("evaluator_person_id") @db.Uuid
+  evaluatorPerson              Person             @relation(fields: [evaluatorPersonId], references: [id])
+  referenceStandardId          String             @map("reference_standard_id") @db.Uuid
+  referenceStandard            ReferenceStandard  @relation(fields: [referenceStandardId], references: [id])
+  correctlyIdentified          Boolean            @map("correctly_identified")
+  perceivedDescriptorGiven     String?            @map("perceived_descriptor_given")
+  perceivedIntensityRating     Decimal?           @map("perceived_intensity_rating") @db.Decimal(6, 3)
+  actualConcentrationPresented Decimal?           @map("actual_concentration_presented") @db.Decimal(10, 4)
+  notes                        String?
+
+  @@index([calibrationSessionId])
+  @@index([evaluatorPersonId])
+  @@map("calibration_result")
+  @@schema("sensory")
+}
+
+enum SensitivityConfidenceLevel {
+  not_tested
+  tested_once
+  regularly_calibrated
+
+  @@schema("sensory")
+}
+
+// Why this matters, stated once (BEVERAGE_SENSORY_PROTOCOLS.md §7.3): some
+// panelists are genuinely anosmic to specific compounds — a rigorous panel
+// needs to know this per-panelist, not discover it mid-evaluation. This is
+// what makes a panel's aggregate PanelResult actually trustworthy: an
+// evaluator's assessment of a related off-flavor carries different weight
+// if their calibration history shows reliable detection at low
+// concentrations versus never having been tested, or known insensitivity.
+model EvaluatorSensitivityProfile {
+  personId              String                     @map("person_id") @db.Uuid
+  person                Person                     @relation(fields: [personId], references: [id])
+  referenceStandardId   String                     @map("reference_standard_id") @db.Uuid
+  referenceStandard     ReferenceStandard          @relation(fields: [referenceStandardId], references: [id])
+  demonstratedThreshold Decimal?                   @map("demonstrated_threshold") @db.Decimal(10, 4)
+  knownAnosmic          Boolean?                   @map("known_anosmic")
+  lastCalibrationDate   DateTime?                  @map("last_calibration_date")
+  confidenceLevel       SensitivityConfidenceLevel @default(not_tested) @map("confidence_level")
+
+  @@id([personId, referenceStandardId])
+  @@map("evaluator_sensitivity_profile")
   @@schema("sensory")
 }

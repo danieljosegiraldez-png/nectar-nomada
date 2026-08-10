@@ -60,6 +60,32 @@ npx prisma db seed       # seeds Permissions + Role Profiles (RBAC.md §5)
 npm run dev              # http://localhost:3000
 ```
 
+### Slice 7 (AI)
+
+`prisma/migrations/*_slice7_ai` creates a restricted `ai_service` Postgres
+role (NOLOGIN, no password) as part of the migration — deliberately, since
+migration files are committed to git and must never contain a real secret.
+After running migrations, give it a password yourself and build
+`AI_SERVICE_DATABASE_URL`:
+
+```bash
+npx prisma db execute --stdin <<< "ALTER ROLE ai_service WITH LOGIN PASSWORD '$(openssl rand -hex 24)';"
+```
+
+That command doesn't print the password back to you on purpose (avoid
+leaving it in shell history readably) — instead run it as two steps if you
+need the value for the connection string:
+
+```bash
+PW=$(openssl rand -hex 24)
+npx prisma db execute --stdin <<< "ALTER ROLE ai_service WITH LOGIN PASSWORD '$PW';"
+echo "postgresql://ai_service:$PW@<your-neon-host>/<your-db>?sslmode=require"
+```
+
+Paste that into `.env` as `AI_SERVICE_DATABASE_URL`. Without it, `/ai`'s
+"Scan for suggestions" button will fail — everything else in the app works
+fine regardless.
+
 To also get a DEMO Platform Admin login for local testing
 (`demo-admin@nectar-nomada.example` / see prisma/seed.ts console output for
 the password — never do this in a shared environment):
@@ -101,9 +127,10 @@ SEED_DEMO_CONTENT=true SEED_DEMO_JUDGE=true npx prisma db seed
 
 ## What's verified vs. not
 
-Everything through Slice 6 (Sensory) has been verified against **Neon**,
-the primary database as of ADR-022, via `npm run build`, `npm run lint`,
-`npm test`, `npx tsc --noEmit`, and real browser sessions:
+Everything through Beverage Sensory Protocols & Panel Calibration
+(post-Slice-7) has been verified against
+**Neon**, the primary database as of ADR-022, via `npm run build`,
+`npm run lint`, `npm test`, `npx tsc --noEmit`, and real browser sessions:
 
 - Slice 1 (Identity): signup → login → My Néctar, RBAC resolution (unit
   tests + a live Platform Admin permission list), `prisma migrate deploy`.
@@ -143,6 +170,31 @@ the primary database as of ADR-022, via `npm run build`, `npm run lint`,
   RBAC.md §3's platform-containment rule) and a working "compute panel
   result" action whose aggregate output matched the submitted values
   exactly. Test data removed afterward.
+- Slice 7 (AI): schema/migration on Neon, including a real, separately-
+  privileged `ai_service` Postgres role — verified directly (not just
+  asserted) that it can `INSERT` into `ai.recommendation`, cannot `UPDATE`
+  it, and cannot touch any other table at all. The rule-based generator
+  correctly found zero suggestions against real seed data, then correctly
+  flagged a real temporary test Project with no description; accepting
+  that suggestion in the UI correctly moved it to "reviewed" with human
+  attribution and produced a real `AuditEvent`. Test data removed
+  afterward.
+- Competitions: schema/migration on Neon. A real, clearly-labeled TEST
+  Competition/Edition/Category/Entry, linked to the existing DEMO Sensory
+  session — judged through the *unmodified* `/sensory/[sessionId]` UI (no
+  new judging UI was written), then finalized from the new Competitions UI
+  with a `finalScore` that matched the submitted assessment exactly, and a
+  declared award rendered correctly. Test data removed afterward.
+- Beverage Sensory Protocols & Panel Calibration (DECISIONS.md ADR-035):
+  schema/migration on Neon; the seed idempotently produced all 13 protocols
+  (coffee/beer/mead/honey plus 9 `planned` placeholders) with correct
+  `standardSourceReference`/`section` values and zero duplicate
+  Organizations. A real, clearly-labeled TEST `ReferenceStandard` and
+  `CalibrationSession` were created through the live `/calibration` UI, a
+  `CalibrationResult` recorded against the existing DEMO Sensory Judge
+  Person, and the resulting `EvaluatorSensitivityProfile` upsert confirmed
+  directly against Neon (`demonstratedThreshold`/`confidenceLevel` matched
+  the recorded result). Test data removed afterward.
 
 **Not verified yet — Slices 3, 4 & 5**: a real Stripe Checkout purchase
 (Commerce order or Experience booking) completing through the shared

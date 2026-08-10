@@ -13,6 +13,7 @@
  * lib/rbac/catalog.ts.
  */
 import { prisma } from "../db";
+import { Prisma } from "../../generated/prisma/client";
 import { resolvedPermissionKeys } from "../rbac/service";
 import { permissionKey } from "../rbac/types";
 import type { ScopeTarget } from "../rbac/types";
@@ -109,33 +110,38 @@ export async function submitAssessment(userAccountId: string, input: SubmitAsses
     throw new SensoryAccessError("no_session_access");
   }
 
-  const existing = await prisma.assessment.findFirst({
-    where: { blindSampleId: input.blindSampleId, evaluatorUserAccountId: userAccountId, status: "submitted" },
-  });
-  if (existing) {
-    throw new SensoryAccessError("already_submitted");
-  }
-
   if (input.attributeResponses.length === 0) {
     throw new SensoryAccessError("responses_required");
   }
 
-  return prisma.assessment.create({
-    data: {
-      blindSampleId: input.blindSampleId,
-      evaluatorUserAccountId: userAccountId,
-      overallScore: input.overallScore ?? null,
-      comment: input.comment ?? null,
-      attributeResponses: {
-        create: input.attributeResponses.map((r) => ({
-          attributeId: r.attributeId,
-          value: r.value,
-          comment: r.comment ?? null,
-        })),
+  // The real guarantee against a double submission is the DB-level unique
+  // constraint on (blindSampleId, evaluatorUserAccountId) — a pre-check
+  // query here would still leave a race between two concurrent requests
+  // (e.g. a double-click). Catch the constraint violation instead of
+  // relying on check-then-create.
+  try {
+    return await prisma.assessment.create({
+      data: {
+        blindSampleId: input.blindSampleId,
+        evaluatorUserAccountId: userAccountId,
+        overallScore: input.overallScore ?? null,
+        comment: input.comment ?? null,
+        attributeResponses: {
+          create: input.attributeResponses.map((r) => ({
+            attributeId: r.attributeId,
+            value: r.value,
+            comment: r.comment ?? null,
+          })),
+        },
       },
-    },
-    include: { attributeResponses: true },
-  });
+      include: { attributeResponses: true },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new SensoryAccessError("already_submitted");
+    }
+    throw error;
+  }
 }
 
 export async function getSessionForHeadJudge(userAccountId: string, sessionId: string) {
