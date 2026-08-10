@@ -9,3 +9,5 @@ node_modules
 next-env.d.ts
 *.tsbuildinfo
 .DS_Store
+.vercel
+.env*
