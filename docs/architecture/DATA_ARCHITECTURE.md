@@ -8,11 +8,22 @@ PostGIS + Prisma + S3-compatible object storage and specifies how they're used.
 
 ## 1. One database, module-owned schemas
 
-Single Postgres database (`nectar`), one schema per module
-(`identity`, `commerce`, `research`, `sensory`, `competitions`, `environmental`,
-`content`, `project`, `partner`, `ai`) plus a `core` schema for the canonical
-entity layer (Person, UserAccount, Organization, Location, Project, Asset, RBAC
-tables). This is a naming/organizational convention within one physical database
+Single Postgres database (`nectar`), one schema per module, added as each
+module's vertical slice is built, plus a `core` schema for the canonical
+entity layer (Person, UserAccount, Organization, Location, Project, Program,
+DomainTag, Sample, Asset, Story, Product, Experience, RBAC tables). Currently
+implemented (`prisma/schema.prisma`'s `datasource.schemas`, kept in sync with
+this list as new slices land): `core`, `commerce`, `experiences`, `partner`,
+`sensory`, `ai`, `competitions`.
+
+`research` and `environmental` are correctly still absent — those modules
+(Research OS, Environmental Data) aren't built yet, not an oversight in this
+list. `identity`, `content`, and `project` never became separate schemas as
+originally planned here: Identity, Story, and Project all ended up owned by
+`core` instead, since they're canonical-entity-layer concerns rather than a
+single module's private tables.
+
+This is a naming/organizational convention within one physical database
 — not separate databases — chosen so:
 
 - Cross-module joins remain physically possible (needed for search, dashboards,
