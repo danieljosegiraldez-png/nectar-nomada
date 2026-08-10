@@ -66,6 +66,7 @@ model Person {
   harvestEventsOperated        HarvestEvent[]                @relation("HarvestEventOperator")
   receivingEventsOperated      ReceivingEvent[]              @relation("ReceivingEventOperator")
   fermentationRunsOperated     FermentationRun[]             @relation("FermentationRunOperator")
+  dryingTurnEventsOperated     DryingTurnEvent[]             @relation("DryingTurnEventOperator")
 
   @@map("person")
   @@schema("core")
@@ -135,6 +136,8 @@ model UserAccount {
   receivingEventsCreated           ReceivingEvent[]             @relation("ReceivingEventCreatedBy")
   fermentationRunsCreated          FermentationRun[]            @relation("FermentationRunCreatedBy")
   fermentationInterventionsCreated FermentationIntervention[]   @relation("FermentationInterventionCreatedBy")
+  dryingRunsCreated                DryingRun[]                  @relation("DryingRunCreatedBy")
+  dryingTurnEventsCreated          DryingTurnEvent[]            @relation("DryingTurnEventCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -377,6 +380,7 @@ model Location {
   lots                        Lot[]
   harvestEvents               HarvestEvent[]
   receivingEvents             ReceivingEvent[]
+  dryingRuns                  DryingRun[]
 
   @@index([parentLocationId])
   @@index([organizationId])
@@ -1974,6 +1978,9 @@ model LotTransformation {
   // transformation type that isn't bracketing a stage run.
   fermentationRunId String?          @map("fermentation_run_id") @db.Uuid
   fermentationRun   FermentationRun? @relation(fields: [fermentationRunId], references: [id])
+  // Same mechanism, T7's DryingRun.
+  dryingRunId       String?          @map("drying_run_id") @db.Uuid
+  dryingRun         DryingRun?       @relation(fields: [dryingRunId], references: [id])
 
   inputs         LotTransformationInput[]
   outputs        LotTransformationOutput[]
@@ -1982,6 +1989,7 @@ model LotTransformation {
 
   @@index([occurredAt])
   @@index([fermentationRunId])
+  @@index([dryingRunId])
   @@map("lot_transformation")
   @@schema("traceability")
 }
@@ -2106,13 +2114,14 @@ model Measurement {
   lot                 Lot?             @relation(fields: [lotId], references: [id])
   sampleId            String?          @map("sample_id") @db.Uuid
   sample              Sample?          @relation(fields: [sampleId], references: [id])
-  // FermentationRun exists as of T6 — real FK now, added additively (see
-  // that model's own migration). dryingRunId/storageAssignmentId stay
-  // plain UUID columns with no FK until DryingRun/StorageAssignment exist
-  // (T7/T8), same pattern.
+  // FermentationRun/DryingRun exist as of T6/T7 — real FKs now, added
+  // additively (see those models' own migrations). storageAssignmentId
+  // stays a plain UUID column with no FK until StorageAssignment exists
+  // (T8), same pattern.
   fermentationRunId   String?          @map("fermentation_run_id") @db.Uuid
   fermentationRun     FermentationRun? @relation(fields: [fermentationRunId], references: [id])
   dryingRunId         String?          @map("drying_run_id") @db.Uuid
+  dryingRun           DryingRun?       @relation(fields: [dryingRunId], references: [id])
   storageAssignmentId String?          @map("storage_assignment_id") @db.Uuid
 
   sourceType       MeasurementSourceType @default(manual) @map("source_type")
@@ -2288,5 +2297,64 @@ model FermentationIntervention {
 
   @@index([fermentationRunId])
   @@map("fermentation_intervention")
+  @@schema("traceability")
+}
+
+// §16's own sketch left DryingTurnEvent.eventType a plain String
+// ('turned'|'covered'|'uncovered' as an inline comment) — made a real enum
+// here instead, matching FermentationInterventionType's precedent (T6) and
+// this codebase's general practice of typed enums with an `other` escape
+// valve over unvalidated strings for closed vocabularies.
+enum DryingTurnEventType {
+  turned
+  covered
+  uncovered
+  other
+
+  @@schema("traceability")
+}
+
+// Same shape and lifecycle as FermentationRun (T6) — no lotId of its own;
+// which Lot is drying is expressed via the stage_change LotTransformation(s)
+// that reference this run. locationId (the drying site/bed) is descriptive
+// context only, not a second RBAC gate — access is still resolved against
+// the source lot's own project/location, same as every other traceability
+// write path in this module.
+model DryingRun {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  method       String? // 'raised_bed' | 'patio' | 'mechanical' | free text — §16
+  locationId   String?      @map("location_id") @db.Uuid
+  location     Location?    @relation(fields: [locationId], references: [id])
+  layerDepthCm Decimal?     @map("layer_depth_cm") @db.Decimal(6, 2)
+  startedAt    DateTime     @map("started_at")
+  endedAt      DateTime?    @map("ended_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  createdBy    String?      @map("created_by") @db.Uuid
+  creator      UserAccount? @relation("DryingRunCreatedBy", fields: [createdBy], references: [id])
+
+  turningEvents   DryingTurnEvent[]
+  measurements    Measurement[]
+  transformations LotTransformation[]
+
+  @@index([locationId])
+  @@map("drying_run")
+  @@schema("traceability")
+}
+
+model DryingTurnEvent {
+  id               String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dryingRunId      String              @map("drying_run_id") @db.Uuid
+  dryingRun        DryingRun           @relation(fields: [dryingRunId], references: [id])
+  eventType        DryingTurnEventType @map("event_type")
+  occurredAt       DateTime            @map("occurred_at")
+  operatorPersonId String?             @map("operator_person_id") @db.Uuid
+  operator         Person?             @relation("DryingTurnEventOperator", fields: [operatorPersonId], references: [id])
+  notes            String?
+  createdAt        DateTime            @default(now()) @map("created_at")
+  createdBy        String?             @map("created_by") @db.Uuid
+  creator          UserAccount?        @relation("DryingTurnEventCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([dryingRunId])
+  @@map("drying_turn_event")
   @@schema("traceability")
 }
