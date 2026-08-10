@@ -64,11 +64,16 @@ Extends Discovery's read-only Product pages into purchasable ones. My Néctar
 gains Orders. End-to-end Stripe purchase verification pending test-mode API
 keys and at least one priced DEMO variant (ADR-025 decision 10).
 
-### Slice 4 — Experiences & Reservations
+### Slice 4 — Experiences & Reservations (implemented, DECISIONS.md ADR-028)
 Experience, ExperienceSession, Booking, Participant. My Néctar gains Bookings.
 Distinct booking engine per CLAUDE.md §12, not a Commerce SKU hack — validates
 that the Experience/Booking model built in `DOMAIN_MODEL.md` actually holds up
-against a real capacity/scheduling UI.
+against a real capacity/scheduling UI. This is the core booking engine only —
+`TOURISM_EXPERIENCES.md`'s gastro-tourism-specific extensions (waitlist,
+multi-day sessions, dietary structure, pairing menus, live sensory feedback)
+are accepted planning input (ADR-026/027) not yet built. End-to-end Stripe
+purchase verification pending test-mode API keys and at least one priced
+DEMO Experience, same open item as Slice 3 (ADR-025 decision 10).
 
 ### Slice 5 — Partner Workspace
 Project Assignment (exercising `RBAC.md`'s scope=project path in production for

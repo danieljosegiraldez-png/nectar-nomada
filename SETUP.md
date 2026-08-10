@@ -76,9 +76,10 @@ SEED_DEMO_ADMIN=true npx prisma db seed
 
 ## What's verified vs. not
 
-Everything through Slice 3 (Commerce) has been verified against **Neon**,
-the primary database as of ADR-022, via `npm run build`, `npm run lint`,
-`npm test`, `npx tsc --noEmit`, and real browser sessions:
+Everything through Slice 4 (Experiences & Reservations, core engine) has
+been verified against **Neon**, the primary database as of ADR-022, via
+`npm run build`, `npm run lint`, `npm test`, `npx tsc --noEmit`, and real
+browser sessions:
 
 - Slice 1 (Identity): signup → login → My Néctar, RBAC resolution (unit
   tests + a live Platform Admin permission list), `prisma migrate deploy`.
@@ -93,12 +94,26 @@ the primary database as of ADR-022, via `npm run build`, `npm run lint`,
   for the two DEMO products (zero `ProductVariant` rows, per CLAUDE.md §54);
   `/cart` redirects an unauthenticated visitor to `/login` and shows the
   empty-cart state for a real logged-in user with no cart.
+- Slice 4 (Experiences, core engine): schema/migration on Neon; an
+  Experience page with zero `ExperienceSession` rows correctly shows "no
+  sessions currently scheduled"; a real (non-fabricated, date-only) test
+  session correctly renders its date/capacity and correctly withholds the
+  booking form because the DEMO Experience has no price ("booking opens
+  once pricing is set"); My Néctar's Bookings section shows "no bookings
+  yet" for a real logged-in user.
 
-**Not verified yet — Slice 3**: a real Stripe Checkout purchase completing
-through the webhook (`markOrderPaid`). Blocked on two things this session
-can't supply: `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` (see above), and a
-decision on how to price at least one DEMO `ProductVariant` for testing
-without fabricating a real price (DECISIONS.md ADR-025 decision 10).
+**Not verified yet — Slices 3 & 4**: a real Stripe Checkout purchase
+(Commerce order or Experience booking) completing through the shared
+webhook (`markOrderPaid`/`markBookingPaid`). Blocked on two things this
+session can't supply: `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` (see
+above), and a decision on how to price at least one DEMO `ProductVariant`
+or Experience for testing without fabricating a real price (DECISIONS.md
+ADR-025 decision 10, ADR-028 decision 8).
+
+**Not built yet — Slice 4**: `TOURISM_EXPERIENCES.md`'s gastro-tourism
+extensions (waitlist, multi-day sessions, dietary structure, pairing menus,
+live sensory feedback) — accepted planning input (ADR-026/027), layered onto
+the core engine in a future increment, not part of this verification.
 
 **Not verified anywhere yet**: Google OAuth (needs real credentials + a live
 redirect), email verification/transactional email (no provider wired up),

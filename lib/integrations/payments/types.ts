@@ -20,6 +20,12 @@ export interface CheckoutLineItem {
 }
 
 export interface CreateCheckoutSessionInput {
+  // Opaque to this adapter — round-tripped as Stripe's client_reference_id
+  // and returned unchanged in PaymentEvent.orderId. Callers from more than
+  // one module (Commerce, Experiences) share this one adapter, so each
+  // prefixes its own domain onto the value (e.g. "order:<uuid>",
+  // "booking:<uuid>") and the webhook route dispatches on that prefix —
+  // this field is never interpreted here, only carried.
   orderId: string;
   orderNumber: string;
   lineItems: CheckoutLineItem[];

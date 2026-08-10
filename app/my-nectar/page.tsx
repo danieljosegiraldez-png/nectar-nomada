@@ -4,6 +4,7 @@ import { prisma } from "../../lib/db";
 import { getCurrentUser } from "../../lib/auth/session";
 import { canManageOwnProfile, resolvedPermissionKeys } from "../../lib/rbac/service";
 import { getOrdersForUser } from "../../lib/commerce/orders";
+import { getBookingsForUser } from "../../lib/experiences/bookings";
 import { formatPrice } from "../../lib/discover/format";
 
 export const dynamic = "force-dynamic";
@@ -42,10 +43,11 @@ export default async function MyNectarPage() {
   // meaningful target to resolve against right now is the platform scope —
   // this is a live call into the same authorization service every other
   // module will use, not a stub.
-  const [platformPermissions, t, orders] = await Promise.all([
+  const [platformPermissions, t, orders, bookings] = await Promise.all([
     resolvedPermissionKeys(user.userAccountId, { scopeType: "platform", scopeRefId: null }),
     getTranslations("MyNectar"),
     getOrdersForUser(user.userAccountId),
+    getBookingsForUser(user.userAccountId),
   ]);
 
   return (
@@ -107,6 +109,33 @@ export default async function MyNectarPage() {
                   ))}
                 </ul>
                 <p className="nn-price">{formatPrice(order.subtotalAmount, order.currency, "")}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section style={{ marginTop: "2rem" }}>
+        <h2>{t("bookingsHeading")}</h2>
+        {bookings.length === 0 ? (
+          <p className="nn-muted">{t("noBookings")}</p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0 }}>
+            {bookings.map((booking) => (
+              <li key={booking.id} className="nn-card" style={{ maxWidth: "none", marginBottom: "1rem" }}>
+                <p>
+                  <strong>{booking.bookingNumber}</strong> —{" "}
+                  {t(`bookingStatus_${booking.status}` as "bookingStatus_pending_payment")}
+                </p>
+                <p>{booking.experienceSession.experience.name}</p>
+                <ul>
+                  {booking.participants.map((participant) => (
+                    <li key={participant.id}>{participant.fullName}</li>
+                  ))}
+                </ul>
+                <p className="nn-price">
+                  {formatPrice(booking.unitPriceAmount.mul(booking.participantCount), booking.currency, "")}
+                </p>
               </li>
             ))}
           </ul>

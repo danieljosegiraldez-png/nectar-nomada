@@ -68,6 +68,31 @@
     "status_cancelled": "Cancelled",
     "status_refunded": "Refunded"
   },
+  "Experiences": {
+    "upcomingSessionsHeading": "Upcoming sessions",
+    "noSessionsScheduled": "No sessions currently scheduled.",
+    "notBookableYet": "Booking opens once pricing is set.",
+    "soldOut": "Sold out",
+    "spotsRemaining": "{count} spots remaining",
+    "participantNamesLabel": "Participant names (one per line)",
+    "participantNamesPlaceholder": "Jane Doe\nJohn Doe",
+    "bookButton": "Book",
+    "error_participants_required": "Enter at least one participant name.",
+    "error_session_unavailable": "This session is no longer available.",
+    "error_price_unavailable": "This experience isn't bookable yet.",
+    "error_insufficient_capacity": "Not enough spots left for that many participants."
+  },
+  "Bookings": {
+    "successTitle": "Booking confirmed",
+    "successBody": "Thank you — your booking has been placed. A confirmation is on its way.",
+    "bookingNumberLabel": "Booking number",
+    "statusLabel": "Status",
+    "viewBookingsLink": "View my bookings",
+    "status_pending_payment": "Payment pending",
+    "status_confirmed": "Confirmed",
+    "status_cancelled": "Cancelled",
+    "status_refunded": "Refunded"
+  },
   "Auth": {
     "signInTitle": "Sign in",
     "signUpTitle": "Create your account",
@@ -103,8 +128,14 @@
     "orderStatus_fulfilled": "Fulfilled",
     "orderStatus_cancelled": "Cancelled",
     "orderStatus_refunded": "Refunded",
-    "otherActivityHeading": "Bookings · Sensory history · Saved items",
-    "otherActivityBody": "Empty — Experiences and Sensory are later vertical slices (MVP_ROADMAP.md)."
+    "bookingsHeading": "Bookings",
+    "noBookings": "No bookings yet.",
+    "bookingStatus_pending_payment": "Payment pending",
+    "bookingStatus_confirmed": "Confirmed",
+    "bookingStatus_cancelled": "Cancelled",
+    "bookingStatus_refunded": "Refunded",
+    "otherActivityHeading": "Sensory history · Saved items",
+    "otherActivityBody": "Empty — Sensory is a later vertical slice (MVP_ROADMAP.md)."
   },
   "LocaleSwitcher": {
     "label": "Language"

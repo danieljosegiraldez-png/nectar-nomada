@@ -1083,3 +1083,131 @@ five-part test. Everything else already in flight (Slice 4 Experiences work
 not touching gastro-tourism specifics, general platform work) is unaffected
 — the gate is scoped to *activity-related* feature work specifically, per
 document 5 §9's own wording, not a platform-wide freeze.
+
+---
+
+## ADR-027 — Retroactive research-activity review (ADR-026/§9 gate): resolved
+
+**Context:** ADR-026 logged `RESEARCH_ACTIVITY_CRITERIA.md` §9's blocking
+requirement — CryoBloom and the `TOURISM_EXPERIENCES.md` gastro-tourism
+design had to be reviewed against the five-part substance test (§1) by
+Daniel Silvera, the independent Research Compliance Reviewer, before any
+new activity-related feature work (Consumer Sensory Feedback's live-tasting
+path, Guided Field Study Tool, further Tourism build-out) could proceed.
+Per `AI_GOVERNANCE.md`, this review was performed by the human reviewer,
+not by AI — the checklist prepared alongside ADR-026 was handed off, not
+completed, by this session.
+
+**Decision:** Reported by the platform owner (2026-08-10) as **approved by
+Daniel Silvera** — no conditions or exceptions noted as of this entry. If
+Daniel Silvera's own written notes (per-item findings against the §1
+checklist, for CryoBloom and the gastro-tourism design separately) become
+available, they should be appended here or linked from here, consistent
+with `RESEARCH_ACTIVITY_CRITERIA.md` §4's visibility requirement for
+compliance decisions — this entry records the outcome, not the underlying
+reasoning, which is the reviewer's to document.
+
+**Consequences:** The `RESEARCH_ACTIVITY_CRITERIA.md` §9 gate is lifted.
+Activity-related feature work (gastro-tourism-specific pieces of Slice 4,
+Consumer Sensory Feedback's live-tasting integration, Guided Field Study
+Tool) may now proceed under the same "planning input, implementation
+deferred until its own slice comes up" discipline as every other accepted
+planning document — this ADR removes the blocking gate, it does not itself
+schedule or start that work.
+
+---
+
+## ADR-028 — Slice 4 (Experiences & Reservations) implemented: core booking
+engine only, extensions deferred
+
+**Context:** `MVP_ROADMAP.md` Slice 4 — `Experience → ExperienceSession →
+Booking → Participant` (`DOMAIN_MODEL.md`'s Experiences & Reservations
+module), built on Slice 2's read-only Experience catalog and reusing Slice
+3's Stripe integration. Built after ADR-027 lifted the
+`RESEARCH_ACTIVITY_CRITERIA.md` §9 gate — this ADR covers the core booking
+engine only, not any gastro-tourism-specific piece of `TOURISM_EXPERIENCES.md`.
+
+**Decisions:**
+
+1. **`Experience` gets a `sessions ExperienceSession[]` relation instead of
+   bookings hanging directly off `Experience`** — same catalog-listing /
+   sellable-unit split as `Product → ProductVariant` (ADR-025 decision 1):
+   `Experience` stays the catalog page Discover renders; `ExperienceSession`
+   is the actual scheduled, capacity-bound occurrence. An Experience with
+   zero sessions still renders as a normal catalog listing ("no sessions
+   currently scheduled"), same graceful-empty pattern as a Product with zero
+   variants.
+2. **New `experiences` Postgres schema**, second module-owned schema after
+   `commerce`, same `DATA_ARCHITECTURE.md` §1 convention. `ExperienceSession`,
+   `Booking`, `Participant`, `BookingPayment` all live there;
+   `ExperienceSession.experienceId` is the only cross-schema foreign key.
+3. **No Cart-equivalent for bookings.** `DOMAIN_MODEL.md`'s own chain has no
+   intermediate step between `ExperienceSession` and `Booking` — a booking
+   is created directly from a session (participant names + implicit
+   quantity), not staged in a cart first. This is a real structural
+   difference from Commerce, not a simplification skipped for later:
+   booking flows are naturally single-item ("book this session"), unlike a
+   multi-product shopping cart.
+4. **Booking authorization uses the same ownership-folded-into-query
+   pattern** as Cart/Order (ADR-025 decision 3) — `getBookingForUser`/
+   `getBookingsForUser` fold `userAccountId` into the query itself, no
+   fetch-then-check.
+5. **`Booking.unitPriceAmount`/`currency` are snapshotted at booking
+   creation**, same provenance principle as `OrderItem.unitPriceAmount`
+   (ADR-025 decision 4) — a later Experience price change must never
+   rewrite a past Booking's total.
+6. **Capacity is re-validated at booking creation, decremented only on paid
+   confirmation** (`markBookingPaid`), exactly mirroring ADR-025 decision 5's
+   inventory handling — a session's `capacityRemaining` isn't reserved the
+   moment someone starts booking, only once payment actually succeeds.
+7. **The existing `PaymentsProvider` adapter is reused as-is for bookings**,
+   not duplicated — `INTEGRATIONS.md`'s adapter-per-capability pattern means
+   one Stripe Checkout integration serves both Commerce and Experiences.
+   Since both modules now share one webhook endpoint and one
+   `client_reference_id` slot, the value passed to `createCheckoutSession`
+   is now a domain-prefixed opaque string (`order:<uuid>` /
+   `booking:<uuid>`) rather than a bare id — the webhook route
+   (`app/api/webhooks/stripe/route.ts`) parses the prefix to dispatch to
+   `markOrderPaid` or `markBookingPaid`. `BookingPayment` is a distinct
+   model from `commerce.Payment` (same shape, own status enum) purely
+   because Prisma foreign keys and enums are schema-scoped — every module
+   schema so far defines its own status enums even where identical in
+   shape (`ProductVariantStatus` vs. `ExperienceSessionStatus`), not shared
+   cross-schema.
+8. **A Booking cannot be created for a session whose Experience has no
+   price** (`priceAmount === null`) — CLAUDE.md §54's anti-fabrication rule
+   applied the same way as ADR-025 decision 10 handled unpriced
+   ProductVariants: the UI shows "booking opens once pricing is set"
+   instead of inventing a number. Verified live against Neon with a real
+   (non-fabricated, date-only) test `ExperienceSession` fixture: the
+   session's date/capacity render correctly and the booking form is
+   correctly withheld pending a real price — fixture removed after
+   verification, not left in the database.
+9. **Gastro-tourism-specific extensions from `TOURISM_EXPERIENCES.md`
+   (waitlist, multi-day sessions, recurring session templates, structured
+   dietary/allergen fields, the `requires_account` override, pairing menus,
+   deposits, live `consumer_sensory` feedback integration) are explicitly
+   NOT part of this ADR.** They remain accepted planning input
+   (ADR-026/027) layered onto this core engine later, not built now — this
+   keeps Slice 4 a genuine vertical slice rather than absorbing all of
+   Tourism's scope at once.
+
+**Verified**: `npx tsc --noEmit`, `npm run lint`, `npm test` (30 RBAC tests,
+unaffected), and `npm run build` all pass; migration
+`20260810062745_slice4_experiences` applied cleanly to Neon
+(`prisma migrate status` confirms up to date). Browser-verified against
+Neon: an Experience with zero sessions shows the correct empty state; a real
+scheduled session (test fixture, removed after verification) shows its
+date/time and remaining capacity via `next-intl`'s `useFormatter`, and
+correctly withholds the booking form because the DEMO Experience has no
+price. My Néctar's new Bookings section correctly shows "no bookings yet"
+for a real logged-in user.
+
+**Consequences:** Slice 4's core schema, booking service, session/booking UI,
+and My Néctar integration are complete. End-to-end verification (a real
+Stripe booking payment completing through the shared webhook) is blocked on
+the same two prerequisites as Slice 3 (ADR-025 decision 10): Stripe
+test-mode API keys, and a decision about how to price at least one DEMO
+Experience for testing. Gastro-tourism-specific extensions
+(`TOURISM_EXPERIENCES.md`) remain a separate, not-yet-scheduled increment on
+top of this engine.

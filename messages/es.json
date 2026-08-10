@@ -68,6 +68,31 @@
     "status_cancelled": "Cancelado",
     "status_refunded": "Reembolsado"
   },
+  "Experiences": {
+    "upcomingSessionsHeading": "Próximas sesiones",
+    "noSessionsScheduled": "Aún no hay sesiones programadas.",
+    "notBookableYet": "Las reservas abren cuando se defina el precio.",
+    "soldOut": "Agotado",
+    "spotsRemaining": "{count} cupos disponibles",
+    "participantNamesLabel": "Nombres de los participantes (uno por línea)",
+    "participantNamesPlaceholder": "Jane Doe\nJohn Doe",
+    "bookButton": "Reservar",
+    "error_participants_required": "Ingresa al menos un nombre de participante.",
+    "error_session_unavailable": "Esta sesión ya no está disponible.",
+    "error_price_unavailable": "Esta experiencia aún no está disponible para reservar.",
+    "error_insufficient_capacity": "No hay suficientes cupos para esa cantidad de participantes."
+  },
+  "Bookings": {
+    "successTitle": "Reserva confirmada",
+    "successBody": "Gracias — tu reserva ha sido realizada. Recibirás una confirmación en breve.",
+    "bookingNumberLabel": "Número de reserva",
+    "statusLabel": "Estado",
+    "viewBookingsLink": "Ver mis reservas",
+    "status_pending_payment": "Pago pendiente",
+    "status_confirmed": "Confirmada",
+    "status_cancelled": "Cancelada",
+    "status_refunded": "Reembolsada"
+  },
   "Auth": {
     "signInTitle": "Iniciar sesión",
     "signUpTitle": "Crea tu cuenta",
@@ -103,8 +128,14 @@
     "orderStatus_fulfilled": "Completado",
     "orderStatus_cancelled": "Cancelado",
     "orderStatus_refunded": "Reembolsado",
-    "otherActivityHeading": "Reservas · Historial sensorial · Guardados",
-    "otherActivityBody": "Vacío — Experiencias y Sensorial son slices verticales posteriores (MVP_ROADMAP.md)."
+    "bookingsHeading": "Reservas",
+    "noBookings": "Aún no tienes reservas.",
+    "bookingStatus_pending_payment": "Pago pendiente",
+    "bookingStatus_confirmed": "Confirmada",
+    "bookingStatus_cancelled": "Cancelada",
+    "bookingStatus_refunded": "Reembolsada",
+    "otherActivityHeading": "Historial sensorial · Guardados",
+    "otherActivityBody": "Vacío — Sensorial es un slice vertical posterior (MVP_ROADMAP.md)."
   },
   "LocaleSwitcher": {
     "label": "Idioma"

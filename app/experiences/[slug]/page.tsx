@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getPublicExperienceBySlug } from "../../../lib/discover/service";
 import { formatPrice } from "../../../lib/discover/format";
+import { BookExperienceForm } from "../../components/BookExperienceForm";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,10 @@ export default async function ExperienceDetailPage({ params }: { params: Promise
 
       {experience.summary ? <p className="nn-muted">{experience.summary}</p> : null}
       {experience.description ? <div className="nn-prose">{experience.description}</div> : null}
+
+      <div className="nn-section">
+        <BookExperienceForm sessions={experience.sessions} bookable={experience.priceAmount !== null} />
+      </div>
     </div>
   );
 }

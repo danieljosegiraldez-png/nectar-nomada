@@ -12,7 +12,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  schemas    = ["core", "commerce"]
+  schemas    = ["core", "commerce", "experiences"]
   // DECISIONS.md ADR-021/ADR-022 — deferred against the local PGlite sandbox
   // (no extension support), enabled now that Neon is the primary database.
   extensions = [postgis]
@@ -80,24 +80,26 @@ model UserAccount {
   createdBy       String?           @map("created_by") @db.Uuid
   creator         UserAccount?      @relation("UserAccountCreatedBy", fields: [createdBy], references: [id])
 
-  createdAccounts        UserAccount[]    @relation("UserAccountCreatedBy")
-  personsCreated         Person[]         @relation("PersonCreatedBy")
-  roleProfilesCreated    RoleProfile[]    @relation("RoleProfileCreatedBy")
-  scopesCreated          Scope[]          @relation("ScopeCreatedBy")
-  assignments            Assignment[]     @relation("AssignmentToUserAccount")
-  assignmentsGranted     Assignment[]     @relation("AssignmentGrantedBy")
-  auditEvents            AuditEvent[]
-  locationsCreated       Location[]       @relation("LocationCreatedBy")
-  organizationsCreated   Organization[]   @relation("OrganizationCreatedBy")
-  programsCreated        Program[]        @relation("ProgramCreatedBy")
-  projectsCreated        Project[]        @relation("ProjectCreatedBy")
-  samplesCreated         Sample[]         @relation("SampleCreatedBy")
-  storiesCreated         Story[]          @relation("StoryCreatedBy")
-  productsCreated        Product[]        @relation("ProductCreatedBy")
-  experiencesCreated     Experience[]     @relation("ExperienceCreatedBy")
-  productVariantsCreated ProductVariant[] @relation("ProductVariantCreatedBy")
-  carts                  Cart[]
-  orders                 Order[]
+  createdAccounts           UserAccount[]       @relation("UserAccountCreatedBy")
+  personsCreated            Person[]            @relation("PersonCreatedBy")
+  roleProfilesCreated       RoleProfile[]       @relation("RoleProfileCreatedBy")
+  scopesCreated             Scope[]             @relation("ScopeCreatedBy")
+  assignments               Assignment[]        @relation("AssignmentToUserAccount")
+  assignmentsGranted        Assignment[]        @relation("AssignmentGrantedBy")
+  auditEvents               AuditEvent[]
+  locationsCreated          Location[]          @relation("LocationCreatedBy")
+  organizationsCreated      Organization[]      @relation("OrganizationCreatedBy")
+  programsCreated           Program[]           @relation("ProgramCreatedBy")
+  projectsCreated           Project[]           @relation("ProjectCreatedBy")
+  samplesCreated            Sample[]            @relation("SampleCreatedBy")
+  storiesCreated            Story[]             @relation("StoryCreatedBy")
+  productsCreated           Product[]           @relation("ProductCreatedBy")
+  experiencesCreated        Experience[]        @relation("ExperienceCreatedBy")
+  productVariantsCreated    ProductVariant[]    @relation("ProductVariantCreatedBy")
+  carts                     Cart[]
+  bookings                  Booking[]
+  orders                    Order[]
+  experienceSessionsCreated ExperienceSession[] @relation("ExperienceSessionCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -611,6 +613,12 @@ model Experience {
   createdBy       String?             @map("created_by") @db.Uuid
   creator         UserAccount?        @relation("ExperienceCreatedBy", fields: [createdBy], references: [id])
 
+  // Slice 4 (Experiences & Reservations) — an Experience is the catalog
+  // listing; ExperienceSession is the actual scheduled, bookable occurrence
+  // (DOMAIN_MODEL.md: "Experience → ExperienceSession → Booking →
+  // Participant"), same split as Product → ProductVariant in Slice 3.
+  sessions ExperienceSession[]
+
   @@index([projectId])
   @@index([locationId])
   @@index([organizationId])
@@ -784,4 +792,135 @@ model Payment {
   @@index([orderId])
   @@map("payment")
   @@schema("commerce")
+}
+
+// ---------------------------------------------------------------------------
+// Slice 4 — Experiences & Reservations (MVP_ROADMAP.md). Second module-owned
+// schema (`experiences`), same convention as Commerce — Experience itself
+// stays in `core` (Discover already reads it as a catalog listing);
+// everything scheduled/bookable extends it from here. Distinct booking
+// engine per CLAUDE.md §12, not a Commerce SKU hack: capacity lives on the
+// Session, not an inventory count, and a Booking can carry multiple named
+// Participants.
+// ---------------------------------------------------------------------------
+
+enum ExperienceSessionStatus {
+  scheduled
+  cancelled
+  completed
+
+  @@schema("experiences")
+}
+
+// The actual scheduled, bookable occurrence of an Experience. An Experience
+// needs at least one scheduled Session to be bookable — Discover's
+// Experience pages already handle zero sessions gracefully (still just a
+// catalog listing), same pattern as a Product with zero ProductVariants.
+model ExperienceSession {
+  id                String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  experienceId      String                  @map("experience_id") @db.Uuid
+  experience        Experience              @relation(fields: [experienceId], references: [id], onDelete: Cascade)
+  startAt           DateTime                @map("start_at")
+  endAt             DateTime?               @map("end_at")
+  // Null = not capacity-tracked; otherwise decremented by confirmed
+  // Bookings' participantCount on paid Booking creation
+  // (lib/experiences/bookings.ts).
+  capacityTotal     Int?                    @map("capacity_total")
+  capacityRemaining Int?                    @map("capacity_remaining")
+  status            ExperienceSessionStatus @default(scheduled)
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+  createdBy         String?                 @map("created_by") @db.Uuid
+  creator           UserAccount?            @relation("ExperienceSessionCreatedBy", fields: [createdBy], references: [id])
+
+  bookings Booking[]
+
+  @@index([experienceId])
+  @@map("experience_session")
+  @@schema("experiences")
+}
+
+enum BookingStatus {
+  pending_payment
+  confirmed
+  cancelled
+  refunded
+
+  @@schema("experiences")
+}
+
+model Booking {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // Human-friendly, distinct from `id` — generated in
+  // lib/experiences/bookings.ts, same pattern as Order.orderNumber.
+  bookingNumber       String            @unique @map("booking_number")
+  experienceSessionId String            @map("experience_session_id") @db.Uuid
+  experienceSession   ExperienceSession @relation(fields: [experienceSessionId], references: [id])
+  userAccountId       String            @map("user_account_id") @db.Uuid
+  userAccount         UserAccount       @relation(fields: [userAccountId], references: [id])
+  status              BookingStatus     @default(pending_payment)
+  participantCount    Int               @default(1) @map("participant_count")
+  // Snapshot at booking time, not a live lookup through Experience — the
+  // same provenance principle as OrderItem.unitPriceAmount (ADR-025 decision
+  // 4): a later Experience price change must never rewrite a past Booking.
+  unitPriceAmount     Decimal           @map("unit_price_amount") @db.Decimal(10, 2)
+  currency            String            @default("USD")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  participants Participant[]
+  payments     BookingPayment[]
+
+  @@index([userAccountId])
+  @@index([experienceSessionId])
+  @@map("booking")
+  @@schema("experiences")
+}
+
+model Participant {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId String   @map("booking_id") @db.Uuid
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  fullName  String   @map("full_name")
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([bookingId])
+  @@map("participant")
+  @@schema("experiences")
+}
+
+enum BookingPaymentStatus {
+  pending
+  succeeded
+  failed
+  refunded
+
+  @@schema("experiences")
+}
+
+// Mirrors commerce.Payment exactly (same append-only attempt-log shape,
+// reusing the same PaymentsProvider adapter — INTEGRATIONS.md's
+// adapter-per-capability pattern means one Stripe integration serves both
+// Commerce and Experiences, not a duplicated one per module) — a distinct
+// model *and* a distinct status enum rather than a shared one, since it FKs
+// to Booking, not Order, and every module schema so far defines its own
+// enums even where identical in shape (e.g. ProductVariantStatus vs.
+// ExperienceSessionStatus), not shared cross-schema.
+model BookingPayment {
+  id                      String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId               String               @map("booking_id") @db.Uuid
+  booking                 Booking              @relation(fields: [bookingId], references: [id])
+  provider                String               @default("stripe")
+  providerSessionId       String?              @unique @map("provider_session_id")
+  providerPaymentIntentId String?              @unique @map("provider_payment_intent_id")
+  amount                  Decimal              @db.Decimal(10, 2)
+  currency                String
+  status                  BookingPaymentStatus @default(pending)
+  createdAt               DateTime             @default(now()) @map("created_at")
+  updatedAt               DateTime             @updatedAt @map("updated_at")
+
+  @@index([bookingId])
+  @@map("booking_payment")
+  @@schema("experiences")
 }

@@ -127,6 +127,14 @@ export function listPublicExperiences() {
 export function getPublicExperienceBySlug(slug: string) {
   return prisma.experience.findFirst({
     where: { ...PUBLIC_WHERE, slug },
-    include: { project: true, location: true, organization: true },
+    include: {
+      project: true,
+      location: true,
+      organization: true,
+      sessions: {
+        where: { status: "scheduled", startAt: { gt: new Date() } },
+        orderBy: { startAt: "asc" },
+      },
+    },
   });
 }

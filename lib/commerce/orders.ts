@@ -85,7 +85,11 @@ export async function createCheckoutSessionForOrder(
   });
 
   const session = await paymentsProvider.createCheckoutSession({
-    orderId: order.id,
+    // Domain-prefixed, opaque to the payments adapter — the webhook route
+    // strips the prefix to decide whether to call markOrderPaid (Commerce)
+    // or markBookingPaid (Experiences, lib/experiences/bookings.ts). One
+    // PaymentsProvider adapter serves both modules.
+    orderId: `order:${order.id}`,
     orderNumber: order.orderNumber,
     customerEmail,
     successUrl: `${origin}/checkout/success?order=${order.orderNumber}`,
