@@ -108,6 +108,12 @@ something to assign, not a closed list:
   submission, media upload, no approval permissions.
 - **Sensory Judge** (scope: session) — submit assessments only, no visibility into
   other judges' scores or blind-code mapping.
+- **Sensory Head Judge** (scope: session) — runs a judging session: manages
+  sessions/flights/blind samples, reveals blind-coded sample identity,
+  computes panel results, and can also submit assessments. §7's independent
+  authority — distinct from Sensory Judge specifically so the blind mapping
+  isn't reachable by every judge on the panel. Added in Slice 6 (`DECISIONS.md`
+  ADR-030 decision 4).
 - **Customer** — not an Assignment-based profile; every authenticated
   UserAccount without further Assignments gets the implicit baseline "Registered
   Customer" permission set (My Néctar, ordering, booking) enforced as a default
