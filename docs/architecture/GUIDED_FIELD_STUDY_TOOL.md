@@ -166,13 +166,16 @@ nutrition impact on nano/micro-lot outcomes).
   fact-bearing record in this system behaves, and worth remembering
   precisely because it's the exception, not the pattern.
 - **Offline support** — draft-then-sync, same approach as the platform's
-  general field-work offline capability. **Sequencing flag**: `MVP_ROADMAP.md`
-  §3 currently defers *full* offline operation as a general platform
-  capability, touched on only lightly for Partner Workspace forms. This tool
-  explicitly needs local drafting to be genuinely usable at remote sites —
-  worth deciding, when this tool is actually scheduled, whether it needs its
-  own lighter local-draft mechanism pulled forward rather than waiting on
-  the general offline architecture.
+  general field-work offline capability. **Resolved**: `OFFLINE_FIELD_
+  CAPABILITY.md` (written specifically because this section and
+  `MAP_AND_TERRITORY.md` both independently needed offline support) now
+  specifies this in full — PWA-based local drafting (§1-2), a real draft
+  lifecycle (§3), versioned conflict resolution rather than silent overwrite
+  (§4), storage-quota handling (§5), and sync behavior (§6) — superseding
+  the earlier open question of whether this tool needed its own lighter
+  local-draft mechanism pulled forward ahead of a general architecture.
+  This tool's field capture forms use that mechanism directly, not a
+  separate one.
 
 ## 9. Recurring studies
 
