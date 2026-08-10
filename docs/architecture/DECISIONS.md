@@ -1832,3 +1832,131 @@ actually require. Not built: any UI for editing/superseding a protocol
 version (protocols are seed/service-created only, matching the admin-only
 pattern used elsewhere), and no licensing relationship with SCA/BJCP/ISO
 has been pursued — that remains the user's own action item per ADR-031.
+
+---
+
+## ADR-036 — Competitions operational layer (COMPETITIONS.md): accepted as
+planning input; category-agnostic design confirmed; four gaps identified
+(non-blocking)
+
+**Context:** `COMPETITIONS.md` (committed separately) extends the
+Competitions *entity chain* — already implemented per ADR-034 — with the
+**operational layer**: roles (Organizer, Entries Receptionist, Cellar
+Master), entry intake/check-in, blind coding at intake, pull sheets,
+judge-facing sign-in/dashboard, Best of Show as a second judging round, and
+a genuinely separate entry-fee payment system. Same discipline as every
+other planning doc: **accepted as input, implementation deferred** —
+nothing in this ADR builds any of it.
+
+**Category-agnostic confirmation, explicitly requested and verified**: the
+document's own opening section states its Beer Awards Platform research was
+for *operational pattern* research only, and the entity structure it
+proposes (`competitions.entry` extensions, `pull_sheet`, `judge_session`,
+`bos_round`, `entry_fee_payment`) is built entirely on the existing
+generic `Competition`/`CompetitionCategory`/`Entry` chain (ADR-034) with no
+beer-specific field, enum, or default anywhere. Confirmed correct — a
+honey or coffee competition uses identical infrastructure, differing only
+in which `SensoryProtocolVersion` a category's judging reuses, exactly as
+the document claims.
+
+**Important framing correction, not a fault of the document**: the
+document (and its accompanying prompt) describes Competitions as future
+work "sequenced after Slice 6, not part of this roadmap's numbered
+slices," accurate when `MVP_ROADMAP.md` was last in that state. As of
+ADR-034, the core entity chain — `Competition → CompetitionEdition →
+CompetitionCategory → Entry → CompetitionJudgeAssignment →
+CompetitionResult → Award`, RBAC gating (`competition:manage`), and a
+working UI — is **already implemented and live in production**. This
+document's operational layer is additive on top of that existing
+implementation, not describing not-yet-started work. Noted here so the
+eventual implementation pass starts from the real current schema, not the
+conceptual one in `DOMAIN_MODEL.md` §4 (see gap 1 below).
+
+**Cross-checks requested (§1, §3, §6, §9), checked against the actual
+implementation, not just the docs:**
+
+1. **§1 (new roles as Role Profile data additions)** — confirmed
+   consistent with `RBAC.md` §2/§5: `competition` is already a valid leaf
+   scope type (`RBAC.md` §2, §3), and Organizer/Entries
+   Receptionist/Cellar Master as competition-scoped Role Profiles is a
+   pure data addition, no schema change, matching how every other
+   project/session-scoped role already works. **Gap (naming, not
+   RBAC-structural)**: the document's proposed `judge_session
+   (judge_person_id, ...)` keys the judge by `core.Person`, but the
+   already-implemented `CompetitionJudgeAssignment.userAccountId` (and
+   `Assessment.evaluatorUserAccountId`) key by `core.UserAccount` — the
+   login identity, not the biographical record. `judge_session` should key
+   the same way for consistency (a Person without a UserAccount can't sign
+   in or submit Assessments today), a one-line fix when this is actually
+   built, not a structural conflict.
+2. **§3 (blind coding at intake reuses RBAC.md §7; assignment vs. lookup
+   permissions separated)** — the **lookup restriction** is real and
+   already enforced exactly as claimed: `blind_mapping:view` gates every
+   function in `lib/sensory/service.ts` that reads a
+   `SensoryBlindMapping` row, and the Entries Receptionist profile the
+   document proposes correctly excludes it. **Gap**: there is currently no
+   runtime **creation** path for `SensoryBlindMapping` at all — every
+   existing row is seed-created (`prisma/seed.ts`), not written through any
+   service function or permission-gated action. The document's "assignment
+   and lookup are different permissions" claim is the right design, but it
+   describes a permission (something like `blind_mapping:assign`, distinct
+   from `blind_mapping:view`) that doesn't exist yet in
+   `lib/rbac/catalog.ts` — worth adding explicitly as a named permission
+   when intake is built, not assumed to already exist.
+3. **§6 (`bos_round` as its own entity, not an overloaded `Flight`)** — no
+   naming or schema conflict: `SensoryFlight` is scoped to one
+   `SensorySession.id` with no notion of rounds, rankings, or advancement,
+   and `competitions.bos_round` lives in a different schema entirely.
+   **Gap**: the document doesn't yet specify *how* a `bos_round`'s
+   `entries` (category winners) actually get judged. `CompetitionCategory`
+   already links to Sensory via `sensorySessionId` for its first round; a
+   `bos_round` needs the equivalent link (its own `sensorySessionId`, most
+   likely) so Best of Show judging still flows through the existing
+   Sensory UI rather than becoming a second, undocumented parallel
+   scoring path — which would violate the platform's own "no parallel
+   scoring system" principle (`DOMAIN_MODEL.md` §4, restated in ADR-034
+   decision 1). Worth specifying explicitly before implementation, not a
+   blocker for accepting the document now.
+4. **§9 (entry fees: genuinely separate `PaymentsProvider` instance, not
+   shared with Commerce)** — the decision itself is sound and the
+   `PaymentsProvider.createCharge/refund/getStatus` interface shape
+   matches `INTEGRATIONS.md` §6 exactly. **Structural gap in the
+   convention, not the decision**: `INTEGRATIONS.md` §1 currently
+   describes one configured provider per capability directory via a
+   single env-driven factory (`<capability>/index.ts`) — it doesn't yet
+   describe how two independently-configured instances of the *same*
+   interface (Commerce's Stripe config and Competitions' separate one)
+   coexist. Resolution is straightforward (two capability directories, or
+   a factory taking a named instance) but should be decided explicitly
+   when built, the same way ADR-034 called out its own explicit exception
+   to a general convention rather than silently deviating from it.
+   Separately, confirmed `SECURITY.md` §6 already mandates audit rows for
+   "every payment/refund event" *and*, independently, "every competition
+   result change or judge assignment change" — both already-existing
+   requirements the document correctly inherits. **One pre-existing gap
+   found while checking this, unrelated to the new document**:
+   `lib/competitions/service.ts`'s already-implemented `finalizeResult` and
+   `declareAward` do not currently call `recordAuditEvent`, despite
+   `SECURITY.md` §6 requiring it for "every competition result change."
+   Not introduced by this document — flagged here because the operational
+   layer will add several more audit-requiring actions (check-in,
+   blind-code assignment, entry-fee payments) on top of an existing gap
+   that should be closed at the same time, not compounded.
+
+**Other cross-checks**: no conflicts found against `DOMAIN_MODEL.md`'s
+conceptual entity chain beyond the framing correction above (§8's reuse of
+the Story & Knowledge Engine for a competition website matches the existing
+`Story`/`Project` pattern with no new module implied), or against
+`RESEARCH_ACTIVITY_CRITERIA.md` (referenced only as example future context
+for a Panama-style lager competition, not a functional dependency of this
+document).
+
+**Consequences:** Accepted as planning input for a future Competitions
+operational-layer increment — not built by this ADR. Four concrete,
+non-blocking items are now on record for whoever implements it: key
+`judge_session` by `UserAccount` not `Person` (gap 1); add an explicit
+`blind_mapping:assign`-shaped permission distinct from `blind_mapping:view`
+for intake (gap 2); give `bos_round` its own `sensorySessionId` link before
+building Best of Show judging (gap 3); decide the two-Stripe-instance
+convention explicitly and close the pre-existing audit-trail gap in
+`finalizeResult`/`declareAward` in the same pass (gap 4).
