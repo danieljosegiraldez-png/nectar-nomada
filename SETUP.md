@@ -78,6 +78,15 @@ the other, deliberately internal-classified one):
 SEED_DEMO_CONTENT=true SEED_DEMO_PARTNER=true npx prisma db seed
 ```
 
+To also get a DEMO Sensory Judge login, assigned to the DEMO cupping session
+(`demo-judge@nectar-nomada.example` / see console output for the password) —
+lets you see the Slice 6 blind-mapping restriction in action (the judge sees
+only blind codes "A"/"B", never the real sample identity behind them):
+
+```bash
+SEED_DEMO_CONTENT=true SEED_DEMO_JUDGE=true npx prisma db seed
+```
+
 ## Common commands
 
 | Command | What it does |
@@ -92,9 +101,9 @@ SEED_DEMO_CONTENT=true SEED_DEMO_PARTNER=true npx prisma db seed
 
 ## What's verified vs. not
 
-Everything through Slice 5 (Partner Workspace) has been verified against
-**Neon**, the primary database as of ADR-022, via `npm run build`,
-`npm run lint`, `npm test`, `npx tsc --noEmit`, and real browser sessions:
+Everything through Slice 6 (Sensory) has been verified against **Neon**,
+the primary database as of ADR-022, via `npm run build`, `npm run lint`,
+`npm test`, `npx tsc --noEmit`, and real browser sessions:
 
 - Slice 1 (Identity): signup → login → My Néctar, RBAC resolution (unit
   tests + a live Platform Admin permission list), `prisma migrate deploy`.
@@ -124,6 +133,16 @@ Everything through Slice 5 (Partner Workspace) has been verified against
   correctly shows only the `partner`-classified DEMO Task, not the
   `internal`-classified one on the same project; both write paths (task
   status update, new field submission) exercised live and confirmed working.
+- Slice 6 (Sensory): schema/migration on Neon; logged in as the real seeded
+  DEMO Sensory Judge account, the session page shows only blind codes
+  ("Muestra A"/"Muestra B") with no real sample identity rendered anywhere;
+  submitted a real test assessment (all 7 attributes), which correctly
+  flipped that sample to "already submitted" while leaving the other
+  sample's form open; logged in as Platform Admin, the same session
+  correctly reveals real sample codes (`LN-CUP-001`/`LN-CUP-002`, via
+  RBAC.md §3's platform-containment rule) and a working "compute panel
+  result" action whose aggregate output matched the submitted values
+  exactly. Test data removed afterward.
 
 **Not verified yet — Slices 3, 4 & 5**: a real Stripe Checkout purchase
 (Commerce order or Experience booking) completing through the shared
@@ -142,6 +161,11 @@ the core engine in a future increment, not part of this verification.
 
 **Not built yet — Slice 5**: an admin-facing UI for creating/reclassifying
 Tasks (Task rows currently come from seed data only — ADR-029 decision 4).
+
+**Not built yet — Slice 6**: the Assessment-correction workflow (the schema
+supports it via `supersedesAssessmentId`; `submitAssessment` currently just
+rejects a second submission — ADR-030 decision 5), and any protocol domain
+beyond coffee cupping.
 
 **Not verified anywhere yet**: Google OAuth (needs real credentials + a live
 redirect), email verification/transactional email (no provider wired up).

@@ -1331,3 +1331,194 @@ complete and match MVP_ROADMAP.md's stated scope for this slice. Not built:
 an admin-facing Task-creation/reclassification UI (out of scope, noted
 above), and real media upload verification (blocked on R2 credentials, same
 shape as the Stripe items already tracked).
+
+---
+
+## ADR-030 — Slice 6 (Sensory) implemented: configurable protocol, blind
+mapping as a genuinely restricted table, immutable assessments
+
+**Context:** `MVP_ROADMAP.md` Slice 6 — Sensory Session, Blind Sample,
+Evaluator, Assessment, Panel Results, starting with one configured
+Evaluation Protocol (coffee cupping, per the roadmap's own stated
+preference) rather than every domain at once, to prove the
+configurable-protocol model (`DOMAIN_MODEL.md`'s "Sensory Evaluation")
+before generalizing. This is CLAUDE.md's most rigor-heavy module — §21-30
+specify configurable protocols, blind evaluation, and immutable responses
+in detail, and RBAC.md §7 already named the exact restricted-table pattern
+this slice needed to implement literally, not just reference.
+
+**Decisions:**
+
+1. **`SensoryProtocol → SensoryProtocolVersion → SensoryAttribute`, all in a
+   new `sensory` schema, `domain` a free-text field** — not a closed enum —
+   matching CLAUDE.md §21's explicit instruction that the sensory
+   architecture must not be one universal form. Versions carry their own
+   `scoreMin`/`scoreMax` and `supersededByVersionId`, the same
+   versioned-protocol shape used elsewhere in this project's design work.
+2. **The DEMO protocol's attribute set (Aroma, Flavor, Acidity, Body,
+   Sweetness, Aftertaste, Overall Impression) is deliberately generic, not
+   the real SCA cupping form** — CLAUDE.md §30 explicitly warns against
+   assuming or implying one specific official scoring system, and the SCA
+   form is itself a real, specific published protocol; copying it verbatim
+   under a "DEMO" label would still read as claiming that standard. The
+   protocol's own description states this plainly.
+3. **`SensorySession → SensoryFlight → SensoryBlindSample`, with
+   `SensoryBlindMapping` as its own table** — RBAC.md §7's "the mapping
+   table between blind_code and the real sample_id is its own table with
+   its own restrictive Role Profile requirement" implemented literally, not
+   approximated. A new `blind_mapping:view` permission exists, and the
+   "Sensory Judge" Role Profile does not hold it — a Judge's resolved
+   permission set cannot query `SensoryBlindMapping` at all, the same
+   "structurally unreachable, not merely hidden" property RBAC.md §7
+   already required for this exact scenario. `core.Sample` (Foundational
+   schema, previously unused since it was built ahead of any module that
+   needed it) is the real-identity target — the first thing to actually
+   reference it.
+4. **New "Sensory Head Judge" Role Profile** (scope: session) — holds
+   `sensory:manage_session`, `blind_mapping:view`, `sensory:submit_assessment`,
+   and `classification:clear_internal`. A dedicated profile rather than
+   reusing Platform Admin, because a real judging panel's head judge is a
+   session-scoped role, not necessarily a platform administrator.
+5. **Assessments are create-only — no `updateAssessment` function exists.**
+   CLAUDE.md §21 and `AI_GOVERNANCE.md` §2 both require submitted sensory
+   forms to be immutable; the schema supports corrections via a
+   `supersedesAssessmentId` self-reference, but building the correction
+   *workflow* (when is a correction allowed, who approves it, how it's
+   surfaced) is out of scope for this slice. `submitAssessment` simply
+   rejects a second submission from the same evaluator for the same blind
+   sample — verified live (see below), not just asserted.
+6. **`PanelResult` rows are recomputed via delete-then-recreate, not
+   upsert.** A nullable `attributeId` (null = overall-score aggregate) means
+   Postgres's NULL-is-distinct semantics wouldn't actually enforce "at most
+   one overall row per blind sample" through the unique index alone;
+   `computePanelResult` sidesteps this by clearing and rebuilding all rows
+   for a blind sample inside one transaction, which is correct regardless
+   of that edge case and matches CLAUDE.md §28's "derived metric, stored
+   with method/timestamp, never hand-edited" requirement either way.
+7. **Task/session creation stays seed-only, same scope boundary as Slice
+   5's Task creation** — no admin UI for creating protocols, sessions,
+   flights, or blind samples in this slice. The judge-facing (submit
+   assessment) and head-judge-facing (reveal identity, compute panel
+   result) surfaces are what MVP_ROADMAP.md's Slice 6 description actually
+   asks for.
+8. **A real, permanent DEMO Sensory Judge account**
+   (`demo-judge@nectar-nomada.example`, gated `SEED_DEMO_JUDGE=true`, same
+   convention as ADR-029's DEMO partner) assigned to one DEMO cupping
+   session — same reasoning as ADR-029 decision 8: the blind-mapping
+   restriction this slice exists to prove should be reproducible by anyone
+   running `SETUP.md`, not just demonstrated once. **Zero Assessment rows
+   are seeded** — CLAUDE.md §54 forbids fabricating sensory outcomes, the
+   same discipline already applied to prices (Slice 3) and session dates
+   (Slice 4).
+
+**Verified**, live, against Neon: `npx tsc --noEmit`, `npm run lint`,
+`npm test` (37 tests, 32 prior + 5 new for the blind-mapping RBAC
+restriction), and `npm run build` all pass. Browser-verified end to end:
+logged in as the real seeded DEMO Sensory Judge, the session page shows
+only blind codes ("Muestra A"/"Muestra B") with no real-identity text
+anywhere in the rendered page; submitted a real test assessment across all
+7 attributes, which correctly flipped that sample's form to "already
+submitted" and correctly left the other sample's form open; logged in as
+Platform Admin (whose platform-scoped Assignment correctly grants
+`blind_mapping:view`/`sensory:manage_session` via RBAC.md §3's containment
+rule even without a session-specific Assignment), the same session now
+shows the real sample codes (`LN-CUP-001`/`LN-CUP-002`) and a working
+"compute panel result" action whose output matched the submitted values
+exactly. Test assessment and its derived panel results were then deleted so
+the repository's demo dataset stays exactly what the seed script
+reproduces.
+
+**Consequences:** Slice 6's schema, RBAC extension, service layer, and UI
+are complete and match MVP_ROADMAP.md's stated scope. Not built: the
+Assessment-correction workflow (schema supports it, no UI), Competitions
+(explicitly deferred — `DOMAIN_MODEL.md` notes it reuses
+`SensoryProtocol`/`Assessment` rather than duplicating the scoring engine,
+which this slice's design already accommodates), and any domain beyond
+coffee (the configurable-protocol model is proven; extending to honey/beer/
+wine is now a content addition, not a schema change).
+
+---
+
+## ADR-031 — Beverage Sensory Protocols & Reference Standards: accepted as
+planning input, Organization-typing gap identified (non-blocking)
+
+**Context:** `BEVERAGE_SENSORY_PROTOCOLS.md` (committed separately) extends
+Slice 6's `SensoryProtocol`/`SensoryProtocolVersion` entities with real,
+licensing-aware protocol content for coffee (adapted from SCA's CVA
+structure), beer and mead (adapted from BJCP), and honey (grounded in ISO/
+academic literature), plus a Reference Standards & Panel Calibration system
+(`reference_standard`, `calibration_session`, `calibration_result`,
+`evaluator_sensitivity_profile`, plus structured certifications on
+`core.Person`). Unlike the five-document planning batch (ADR-026), this is
+explicitly not speculative future scope — reference-standard suppliers
+(FlavorActiV) and real certifications (UC Davis, CQI Q-Grader, etc.) are
+current practice. Same discipline applies regardless: **accepted as planning
+input, implementation deferred** — nothing in this ADR builds any of it.
+
+**Cross-check requested: does `core.Organization` support being a
+reference-standard supplier and any other organization type
+simultaneously?**
+
+Checked against the actual implementation, not just the docs:
+`Organization.organizationType` is a single, required, closed Prisma enum
+(`OrganizationType` — farm/estate/producer/.../supplier/
+nectar_nomada_partner/...), not nullable, not multi-valued, no open
+free-text escape hatch. One Organization row carries exactly one type.
+
+**Finding: not a blocker for this specific use case, but a real, named gap
+in the general model.**
+
+- `reference_standard.supplier_organization_id`, as the planning doc
+  specifies it, is a plain FK to `core.Organization` with no constraint
+  requiring `organizationType = 'supplier'` — mechanically, *any*
+  Organization row can already be referenced as a supplier regardless of
+  its type. AROXA/FlavorActiV (pure third-party suppliers) fit cleanly
+  under the existing `supplier` value with zero schema change.
+- The actual friction is Néctar Nómada's own Organization record (already
+  typed `nectar_nomada_partner`, its primary identity in the platform) also
+  being a standards creator/seller. `organizationType` cannot hold two
+  values at once, so it cannot be truthfully tagged both
+  `nectar_nomada_partner` *and* `supplier` simultaneously.
+- **Recommended resolution, no schema change required**: don't try to
+  answer "is this Organization a supplier" from `organizationType` at all
+  for this purpose — derive it contextually from whether any
+  `reference_standard` rows reference it via `supplier_organization_id`,
+  the same "don't encode a role permanently in identity, derive it from
+  context" principle `DOMAIN_MODEL.md` §2 already states for Person roles
+  ("Wanting a producer's OrganizationMembership to also grant Partner
+  Workspace access requires a separate, explicit Assignment... permission
+  scope and organizational title do not always move together"), applied
+  here to Organization instead of Person. Néctar Nómada's own org record
+  keeps its existing type and is simply referenced by
+  `reference_standard.supplier_organization_id` — no redesign needed.
+- **The general gap is real and worth naming precisely, even though it
+  doesn't block this feature**: `organizationType` as a single closed enum
+  cannot express "this Organization is genuinely both X and Y" for *any*
+  pair of types (e.g., an org that's both a Roaster and a Tour Operator),
+  the exact same problem `ProjectDomainTag` already solves for Projects
+  (CLAUDE.md §8 — "a project belongs to multiple domains simultaneously").
+  No equivalent many-to-many tag table exists for Organization. If a real
+  case requiring simultaneous organization types shows up (not the
+  reference-standard-supplier case, which the contextual-FK resolution
+  above already handles cleanly), the fix is the same shape already
+  proven: an `OrganizationTypeTag` join table, not a redesign of the
+  canonical entity.
+
+**Other cross-checks**: no conflicts found against `DOMAIN_MODEL.md`
+(reuses `SensoryProtocol`/`SensoryProtocolVersion` exactly as specified,
+adds no new canonical entities beyond what §3 already lists) or `RBAC.md`
+(the calibration system's access needs fit the existing
+`sensory:manage_session`/classification-axis pattern already built for
+Slice 6 — no new permission type implied). One minor, pre-existing
+documentation lag noticed while cross-checking, unrelated to this doc: the
+"Sensory Head Judge" Role Profile (added in Slice 6, ADR-030 decision 4)
+isn't yet listed in `RBAC.md` §5's prose alongside "Sensory Judge" — cosmetic,
+`RBAC.md` §5 already states its list isn't closed, not urgent to fix now.
+
+**Consequences:** Accepted as planning input for a future increment of
+Slice 6 (real protocol content for coffee/beer/mead/honey, plus the
+calibration/reference-standard system) — not built by this ADR. The
+Organization-typing question is resolved without a schema change for the
+reference-standard use case specifically; the general single-type
+limitation remains a known, low-priority gap with an already-proven fix
+pattern if it's ever actually needed.

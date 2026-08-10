@@ -199,6 +199,36 @@ describe("Sensory Judge — scoped to Session 1 (blind-evaluation special case, 
     const target: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
     expect(can(assignments, "submit_assessment", "sensory", target, "confidential")).toBe(false);
   });
+
+  it("negative: cannot view the blind mapping at all — the action permission itself is absent, not merely a classification gap (RBAC.md §7 — structurally unreachable, not just hidden by the UI)", () => {
+    const target: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
+    expect(can(assignments, "view", "blind_mapping", target, "public")).toBe(false);
+  });
+});
+
+describe("Sensory Head Judge — scoped to Session 1 (RBAC.md §7's independent authority)", () => {
+  const assignments = [assignmentFor("Sensory Head Judge", { scopeType: "session", scopeRefId: SESSION_1 })];
+
+  it("positive: can view the blind-code mapping within Session 1", () => {
+    const target: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
+    expect(can(assignments, "view", "blind_mapping", target)).toBe(true);
+  });
+
+  it("positive: can manage the session and submit assessments within Session 1", () => {
+    const target: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
+    expect(can(assignments, "manage_session", "sensory", target)).toBe(true);
+    expect(can(assignments, "submit_assessment", "sensory", target)).toBe(true);
+  });
+
+  it("negative: cannot view the blind-code mapping for a different session", () => {
+    const target: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_2 };
+    expect(can(assignments, "view", "blind_mapping", target)).toBe(false);
+  });
+
+  it("positive: clears 'internal'-classified session data, unlike a plain Sensory Judge", () => {
+    const target: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
+    expect(can(assignments, "submit_assessment", "sensory", target, "internal")).toBe(true);
+  });
 });
 
 describe("Content/Ops Coordinator — non-developer collaborator role, DOMAIN_MODEL.md §6", () => {

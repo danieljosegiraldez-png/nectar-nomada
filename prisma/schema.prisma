@@ -12,7 +12,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  schemas    = ["core", "commerce", "experiences", "partner"]
+  schemas    = ["core", "commerce", "experiences", "partner", "sensory"]
   // DECISIONS.md ADR-021/ADR-022 — deferred against the local PGlite sandbox
   // (no extension support), enabled now that Neon is the primary database.
   extensions = [postgis]
@@ -105,6 +105,8 @@ model UserAccount {
   tasksCreated              Task[]              @relation("TaskCreatedBy")
   tasksAssigned             Task[]              @relation("TaskAssignedTo")
   fieldSubmissions          FieldSubmission[]   @relation("FieldSubmissionSubmittedBy")
+  sensorySessionsCreated    SensorySession[]    @relation("SensorySessionCreatedBy")
+  assessments               Assessment[]        @relation("AssessmentByEvaluator")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -517,6 +519,8 @@ model Sample {
   updatedAt      DateTime            @updatedAt @map("updated_at")
   createdBy      String?             @map("created_by") @db.Uuid
   creator        UserAccount?        @relation("SampleCreatedBy", fields: [createdBy], references: [id])
+
+  blindMappings SensoryBlindMapping[]
 
   @@index([projectId])
   @@index([organizationId])
@@ -1084,4 +1088,239 @@ model FieldSubmissionAsset {
   @@id([fieldSubmissionId, assetId])
   @@map("field_submission_asset")
   @@schema("partner")
+}
+
+// ---------------------------------------------------------------------------
+// Slice 6 — Sensory Evaluation (MVP_ROADMAP.md). CLAUDE.md §21: configurable
+// Evaluation Protocols, never one universal form — SensoryProtocol/Version is
+// the same versioned-protocol shape used elsewhere in this project's
+// planning docs. Blind-identity restriction implements RBAC.md §7 literally:
+// SensoryBlindMapping is its own table, gated by a dedicated
+// blind_mapping:view permission the Sensory Judge profile does not hold — a
+// Judge's resolved permissions genuinely cannot query it, not merely hidden
+// from the screen they're shown. `core.Sample` (Foundational schema) is
+// reused as-is as the canonical real-identity target.
+// ---------------------------------------------------------------------------
+
+enum SensoryProtocolStatus {
+  active
+  archived
+
+  @@schema("sensory")
+}
+
+model SensoryProtocol {
+  id          String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // 'coffee' | 'honey' | 'beer' | 'wine' | 'mead' | 'spirits' | 'other' — free
+  // text per CLAUDE.md §21's open domain list, not a closed enum.
+  domain      String
+  name        String
+  description String?
+  status      SensoryProtocolStatus @default(active)
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+
+  versions SensoryProtocolVersion[]
+
+  @@map("sensory_protocol")
+  @@schema("sensory")
+}
+
+enum SensoryProtocolVersionStatus {
+  draft
+  active
+  superseded
+
+  @@schema("sensory")
+}
+
+model SensoryProtocolVersion {
+  id         String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  protocolId String                       @map("protocol_id") @db.Uuid
+  protocol   SensoryProtocol              @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+  version    Int
+  scoreMin   Decimal                      @map("score_min") @db.Decimal(5, 2)
+  scoreMax   Decimal                      @map("score_max") @db.Decimal(5, 2)
+  status     SensoryProtocolVersionStatus @default(draft)
+  createdAt  DateTime                     @default(now()) @map("created_at")
+
+  supersededByVersionId String?                  @map("superseded_by_version_id") @db.Uuid
+  supersededBy          SensoryProtocolVersion?  @relation("SensoryProtocolVersionSupersession", fields: [supersededByVersionId], references: [id])
+  supersedes            SensoryProtocolVersion[] @relation("SensoryProtocolVersionSupersession")
+
+  attributes SensoryAttribute[]
+  sessions   SensorySession[]
+
+  @@unique([protocolId, version])
+  @@map("sensory_protocol_version")
+  @@schema("sensory")
+}
+
+model SensoryAttribute {
+  id                String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  protocolVersionId String                 @map("protocol_version_id") @db.Uuid
+  protocolVersion   SensoryProtocolVersion @relation(fields: [protocolVersionId], references: [id], onDelete: Cascade)
+  name              String
+  displayOrder      Int                    @map("display_order")
+  scaleMin          Decimal                @map("scale_min") @db.Decimal(5, 2)
+  scaleMax          Decimal                @map("scale_max") @db.Decimal(5, 2)
+  description       String?
+
+  responses    AttributeResponse[]
+  panelResults PanelResult[]
+
+  @@index([protocolVersionId])
+  @@map("sensory_attribute")
+  @@schema("sensory")
+}
+
+enum SensorySessionStatus {
+  draft
+  blind_coding
+  in_progress
+  completed
+  locked
+
+  @@schema("sensory")
+}
+
+model SensorySession {
+  id                String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String
+  protocolVersionId String                 @map("protocol_version_id") @db.Uuid
+  protocolVersion   SensoryProtocolVersion @relation(fields: [protocolVersionId], references: [id])
+  scheduledAt       DateTime?              @map("scheduled_at")
+  status            SensorySessionStatus   @default(draft)
+  // CLAUDE.md §10 classification axis — same independent AND-gate as every
+  // other module. Sensory data defaults internal (real judging results are
+  // rarely public until formally released).
+  classification    ClassificationLevel    @default(internal)
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+  createdBy         String?                @map("created_by") @db.Uuid
+  creator           UserAccount?           @relation("SensorySessionCreatedBy", fields: [createdBy], references: [id])
+
+  flights SensoryFlight[]
+
+  @@index([protocolVersionId])
+  @@map("sensory_session")
+  @@schema("sensory")
+}
+
+model SensoryFlight {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId     String         @map("session_id") @db.Uuid
+  session       SensorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name          String
+  sequenceOrder Int            @map("sequence_order")
+
+  blindSamples SensoryBlindSample[]
+
+  @@index([sessionId])
+  @@map("sensory_flight")
+  @@schema("sensory")
+}
+
+model SensoryBlindSample {
+  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  flightId  String        @map("flight_id") @db.Uuid
+  flight    SensoryFlight @relation(fields: [flightId], references: [id], onDelete: Cascade)
+  blindCode String        @map("blind_code")
+
+  blindMapping SensoryBlindMapping?
+  assessments  Assessment[]
+  panelResults PanelResult[]
+
+  @@unique([flightId, blindCode])
+  @@map("sensory_blind_sample")
+  @@schema("sensory")
+}
+
+// The restricted table RBAC.md §7 describes literally — a Sensory Judge's
+// resolved permissions never include blind_mapping:view, so this table is
+// structurally unreachable to them, not merely unrendered by the UI.
+model SensoryBlindMapping {
+  id            String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  blindSampleId String             @unique @map("blind_sample_id") @db.Uuid
+  blindSample   SensoryBlindSample @relation(fields: [blindSampleId], references: [id], onDelete: Cascade)
+  sampleId      String             @map("sample_id") @db.Uuid
+  sample        Sample             @relation(fields: [sampleId], references: [id])
+  revealedAt    DateTime?          @map("revealed_at")
+
+  @@map("sensory_blind_mapping")
+  @@schema("sensory")
+}
+
+enum AssessmentStatus {
+  submitted
+  superseded
+
+  @@schema("sensory")
+}
+
+// Immutable once submitted — CLAUDE.md §21 / DOMAIN_MODEL.md "Sensory
+// Evaluation": corrections are new rows referencing the one they replace via
+// supersedesAssessmentId, never an in-place update. No update path exists in
+// lib/sensory/service.ts by design — AI_GOVERNANCE.md §2 explicitly forbids
+// "alter submitted sensory forms," and this applies the same discipline to
+// every caller, not only AI.
+model Assessment {
+  id                     String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  blindSampleId          String             @map("blind_sample_id") @db.Uuid
+  blindSample            SensoryBlindSample @relation(fields: [blindSampleId], references: [id], onDelete: Cascade)
+  evaluatorUserAccountId String             @map("evaluator_user_account_id") @db.Uuid
+  evaluator              UserAccount        @relation("AssessmentByEvaluator", fields: [evaluatorUserAccountId], references: [id])
+  overallScore           Decimal?           @map("overall_score") @db.Decimal(5, 2)
+  comment                String?
+  status                 AssessmentStatus   @default(submitted)
+  submittedAt            DateTime           @default(now()) @map("submitted_at")
+
+  supersedesAssessmentId String?     @unique @map("supersedes_assessment_id") @db.Uuid
+  supersedes             Assessment? @relation("AssessmentSupersession", fields: [supersedesAssessmentId], references: [id])
+  supersededBy           Assessment? @relation("AssessmentSupersession")
+
+  attributeResponses AttributeResponse[]
+
+  @@index([blindSampleId])
+  @@index([evaluatorUserAccountId])
+  @@map("assessment")
+  @@schema("sensory")
+}
+
+model AttributeResponse {
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assessmentId String           @map("assessment_id") @db.Uuid
+  assessment   Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  attributeId  String           @map("attribute_id") @db.Uuid
+  attribute    SensoryAttribute @relation(fields: [attributeId], references: [id])
+  value        Decimal          @db.Decimal(5, 2)
+  comment      String?
+
+  @@unique([assessmentId, attributeId])
+  @@map("attribute_response")
+  @@schema("sensory")
+}
+
+// Derived metric, not a measurement — CLAUDE.md §28: "Derived metrics must
+// store: method; formula; software/version when relevant; source dataset;
+// timestamp; version." Upserted on demand from current (non-superseded)
+// Assessments by lib/sensory/service.ts's computePanelResult, never
+// hand-edited — the panel's own record of "how we got this number."
+model PanelResult {
+  id            String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  blindSampleId String             @map("blind_sample_id") @db.Uuid
+  blindSample   SensoryBlindSample @relation(fields: [blindSampleId], references: [id], onDelete: Cascade)
+  // Null = overall-score aggregate; set = one specific attribute's aggregate.
+  attributeId   String?            @map("attribute_id") @db.Uuid
+  attribute     SensoryAttribute?  @relation(fields: [attributeId], references: [id])
+  method        String             @default("simple_mean_v1")
+  responseCount Int                @map("response_count")
+  meanValue     Decimal            @map("mean_value") @db.Decimal(6, 3)
+  minValue      Decimal            @map("min_value") @db.Decimal(6, 3)
+  maxValue      Decimal            @map("max_value") @db.Decimal(6, 3)
+  computedAt    DateTime           @default(now()) @map("computed_at")
+
+  @@unique([blindSampleId, attributeId])
+  @@map("panel_result")
+  @@schema("sensory")
 }

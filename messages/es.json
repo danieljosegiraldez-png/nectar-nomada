@@ -3,6 +3,7 @@
     "brand": "Néctar Nómada",
     "myNectar": "Mi Néctar",
     "partnerWorkspace": "Espacio de Socios",
+    "sensory": "Sensorial",
     "signIn": "Iniciar sesión",
     "signUp": "Crear cuenta",
     "signOut": "Cerrar sesión"
@@ -137,6 +138,27 @@
     "bookingStatus_refunded": "Reembolsada",
     "otherActivityHeading": "Historial sensorial · Guardados",
     "otherActivityBody": "Vacío — Sensorial es un slice vertical posterior (MVP_ROADMAP.md)."
+  },
+  "Sensory": {
+    "badge": "Sensorial",
+    "title": "Tus sesiones de cata",
+    "noSessions": "Aún no tienes sesiones asignadas — un administrador puede otorgarte una Asignación con alcance de sesión (RBAC.md §5).",
+    "backToSessions": "← Volver a Sensorial",
+    "blindCodeLabel": "Muestra {code}",
+    "realSampleLabel": "Muestra real: {code}",
+    "noMapping": "sin asignar",
+    "alreadySubmitted": "Ya enviaste una evaluación para esta muestra.",
+    "overallScoreLabel": "Puntaje general ({min}–{max})",
+    "commentLabel": "Comentario",
+    "submitAssessmentButton": "Enviar evaluación",
+    "assessmentCount": "{count} evaluaciones enviadas",
+    "computePanelResultButton": "Calcular resultado del panel",
+    "overallScoreResultLabel": "Puntaje general",
+    "panelResultSummary": "promedio {mean} (mín {min}, máx {max}, n={count})",
+    "error_already_submitted": "Ya enviaste una evaluación para esta muestra.",
+    "error_no_session_access": "No tienes acceso a esta sesión.",
+    "error_responses_required": "Ingresa al menos una respuesta de atributo.",
+    "error_blind_sample_not_found": "Esta muestra ya no está disponible."
   },
   "Partner": {
     "badge": "Espacio de Socios",

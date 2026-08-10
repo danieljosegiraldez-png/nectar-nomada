@@ -29,6 +29,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <>
                     <Link href="/my-nectar">{t("myNectar")}</Link>
                     <Link href="/partner">{t("partnerWorkspace")}</Link>
+                    <Link href="/sensory">{t("sensory")}</Link>
                     <form action={logoutAction}>
                       <button type="submit" className="nn-link-button">
                         {t("signOut")}

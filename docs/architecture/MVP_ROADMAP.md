@@ -84,12 +84,15 @@ live with a real seeded DEMO Partner Field Collector account. Media upload's
 object-storage round trip is unverified pending Cloudflare R2 credentials
 (same open item as Stripe for Slices 3/4).
 
-### Slice 6 — Sensory
+### Slice 6 — Sensory (implemented, DECISIONS.md ADR-030)
 Sensory Session, Blind Sample, Evaluator, Assessment, Panel Results — starting
-with one configured Evaluation Protocol (likely coffee cupping, given the
-existing CryoBloom/coffee context) rather than all domains at once, to prove the
-configurable-protocol model (`DOMAIN_MODEL.md` "Sensory Evaluation") before
-generalizing to honey/beer/wine.
+with one configured Evaluation Protocol (coffee cupping) rather than all
+domains at once, to prove the configurable-protocol model (`DOMAIN_MODEL.md`
+"Sensory Evaluation") before generalizing to honey/beer/wine. RBAC.md §7's
+blind-mapping restriction implemented as a genuinely separate, permission-gated
+table and verified live: a DEMO Sensory Judge sees only blind codes, never real
+sample identity. Assessments are immutable once submitted (create-only, no
+update path) — corrections are a documented future workflow, not built.
 
 ### Slice 7 — AI
 Permission-aware assistant (`AI_GOVERNANCE.md`), data-completeness suggestions.

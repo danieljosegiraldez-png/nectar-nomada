@@ -33,6 +33,9 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { resourceType: "partner", action: "upload_media", description: "Upload media assets for a project." },
 
   { resourceType: "sensory", action: "submit_assessment", description: "Submit a sensory assessment within a judging session." },
+  { resourceType: "sensory", action: "manage_session", description: "Create/manage sessions, flights, and blind samples; compute panel results." },
+
+  { resourceType: "blind_mapping", action: "view", description: "View the real identity behind a blind-coded sample (RBAC.md §7)." },
 
   { resourceType: "classification", action: "clear_registered", description: "Access records classified Registered." },
   { resourceType: "classification", action: "clear_partner", description: "Access records classified Partner." },
@@ -110,8 +113,22 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
     name: "Sensory Judge",
     description:
       "Submit assessments within an assigned judging session only. Deliberately excludes " +
-      "classification:clear_* — a judge's resolved permissions cannot reach the blind-code mapping " +
-      "(RBAC.md §7), regardless of what the UI shows.",
+      "classification:clear_* and blind_mapping:view — a judge's resolved permissions cannot reach the " +
+      "blind-code mapping (RBAC.md §7), regardless of what the UI shows.",
     permissions: [["sensory", "submit_assessment"]],
+  },
+  {
+    name: "Sensory Head Judge",
+    description:
+      "Runs a judging session: manages sessions/flights/blind samples, reveals blind-coded sample " +
+      "identity, computes panel results, and can also submit assessments. RBAC.md §7's independent " +
+      "authority — distinct from Sensory Judge specifically so the blind mapping isn't reachable by " +
+      "every judge on the panel.",
+    permissions: [
+      ["sensory", "manage_session"],
+      ["sensory", "submit_assessment"],
+      ["blind_mapping", "view"],
+      ["classification", "clear_internal"],
+    ],
   },
 ] as const;

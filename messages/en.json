@@ -3,6 +3,7 @@
     "brand": "Néctar Nómada",
     "myNectar": "My Néctar",
     "partnerWorkspace": "Partner Workspace",
+    "sensory": "Sensory",
     "signIn": "Sign in",
     "signUp": "Sign up",
     "signOut": "Sign out"
@@ -137,6 +138,27 @@
     "bookingStatus_refunded": "Refunded",
     "otherActivityHeading": "Sensory history · Saved items",
     "otherActivityBody": "Empty — Sensory is a later vertical slice (MVP_ROADMAP.md)."
+  },
+  "Sensory": {
+    "badge": "Sensory",
+    "title": "Your judging sessions",
+    "noSessions": "No sessions assigned to you yet — an admin can grant a session-scoped Assignment (RBAC.md §5).",
+    "backToSessions": "← Back to Sensory",
+    "blindCodeLabel": "Sample {code}",
+    "realSampleLabel": "Real sample: {code}",
+    "noMapping": "unmapped",
+    "alreadySubmitted": "You've already submitted an assessment for this sample.",
+    "overallScoreLabel": "Overall score ({min}–{max})",
+    "commentLabel": "Comment",
+    "submitAssessmentButton": "Submit assessment",
+    "assessmentCount": "{count} assessments submitted",
+    "computePanelResultButton": "Compute panel result",
+    "overallScoreResultLabel": "Overall score",
+    "panelResultSummary": "mean {mean} (min {min}, max {max}, n={count})",
+    "error_already_submitted": "You've already submitted an assessment for this sample.",
+    "error_no_session_access": "You don't have access to this session.",
+    "error_responses_required": "Enter at least one attribute response.",
+    "error_blind_sample_not_found": "This sample is no longer available."
   },
   "Partner": {
     "badge": "Partner Workspace",

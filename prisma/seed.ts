@@ -457,6 +457,146 @@ async function seedDemoPartnerWorkspaceContent(lasNubesProjectId: string, submit
   );
 }
 
+async function findOrCreateSessionScope(sessionId: string) {
+  const existing = await prisma.scope.findFirst({ where: { scopeType: "session", scopeRefId: sessionId } });
+  if (existing) return existing;
+  return prisma.scope.create({ data: { scopeType: "session", scopeRefId: sessionId } });
+}
+
+/**
+ * Slice 6 (Sensory) DEMO content — opt-in via SEED_DEMO_CONTENT=true, same
+ * gate as other Discover/Partner demo content. Per MVP_ROADMAP.md Slice 6,
+ * starts with one configured protocol (coffee cupping) rather than every
+ * domain at once. Attribute set is a generic, commonly-used illustrative
+ * list — explicitly NOT presented as an official standard (e.g. not the SCA
+ * cupping form) per CLAUDE.md §30's caution against assuming one specific
+ * scoring system. No Assessment rows are seeded — CLAUDE.md §54 forbids
+ * fabricating sensory outcomes, so the DEMO session ships genuinely
+ * unscored, exactly like the DEMO Products/Experiences ship unpriced.
+ */
+async function seedDemoSensoryContent(lasNubesProjectId: string) {
+  const existingProtocol = await prisma.sensoryProtocol.findFirst({
+    where: { name: "Coffee Cupping (Illustrative)" },
+  });
+  if (existingProtocol) {
+    console.log("Slice 6 DEMO Sensory content already seeded — skipping.");
+    return prisma.sensorySession.findFirstOrThrow({ where: { name: "DEMO Cupping Session — Las Nubes" } });
+  }
+
+  const protocol = await prisma.sensoryProtocol.create({
+    data: {
+      domain: "coffee",
+      name: "Coffee Cupping (Illustrative)",
+      description:
+        "[DEMO placeholder protocol — a generic, commonly-used illustrative attribute set for coffee cupping. " +
+        "Not an official standard (e.g. not the SCA cupping form) — CLAUDE.md §30 explicitly cautions against " +
+        "assuming one specific scoring system. Replace with a real, competition/lab-specific protocol version " +
+        "before use.]",
+    },
+  });
+
+  const protocolVersion = await prisma.sensoryProtocolVersion.create({
+    data: { protocolId: protocol.id, version: 1, scoreMin: 0, scoreMax: 10, status: "active" },
+  });
+
+  const attributeNames = ["Aroma", "Flavor", "Acidity", "Body", "Sweetness", "Aftertaste", "Overall Impression"];
+  for (const [index, name] of attributeNames.entries()) {
+    await prisma.sensoryAttribute.create({
+      data: { protocolVersionId: protocolVersion.id, name, displayOrder: index, scaleMin: 0, scaleMax: 10 },
+    });
+  }
+
+  const sample1 = await prisma.sample.upsert({
+    where: { sampleCode: "LN-CUP-001" },
+    update: {},
+    create: {
+      sampleCode: "LN-CUP-001",
+      sampleType: "green_coffee",
+      description: "[DEMO placeholder sample — Las Nubes coffee, lot detail not populated.]",
+      projectId: lasNubesProjectId,
+      status: "approved",
+      classification: "internal",
+    },
+  });
+  const sample2 = await prisma.sample.upsert({
+    where: { sampleCode: "LN-CUP-002" },
+    update: {},
+    create: {
+      sampleCode: "LN-CUP-002",
+      sampleType: "green_coffee",
+      description: "[DEMO placeholder sample — Las Nubes coffee, second lot, lot detail not populated.]",
+      projectId: lasNubesProjectId,
+      status: "approved",
+      classification: "internal",
+    },
+  });
+
+  const session = await prisma.sensorySession.create({
+    data: {
+      name: "DEMO Cupping Session — Las Nubes",
+      protocolVersionId: protocolVersion.id,
+      status: "in_progress",
+      classification: "internal",
+    },
+  });
+
+  const flight = await prisma.sensoryFlight.create({
+    data: { sessionId: session.id, name: "Flight 1", sequenceOrder: 1 },
+  });
+
+  const blindSampleA = await prisma.sensoryBlindSample.create({ data: { flightId: flight.id, blindCode: "A" } });
+  await prisma.sensoryBlindMapping.create({ data: { blindSampleId: blindSampleA.id, sampleId: sample1.id } });
+
+  const blindSampleB = await prisma.sensoryBlindSample.create({ data: { flightId: flight.id, blindCode: "B" } });
+  await prisma.sensoryBlindMapping.create({ data: { blindSampleId: blindSampleB.id, sampleId: sample2.id } });
+
+  console.log(
+    "Seeded Slice 6 DEMO Sensory content: 1 protocol (v1, 7 attributes), 2 samples, 1 session, 1 flight, " +
+      "2 blind samples. No Assessments seeded (CLAUDE.md §54 — never fabricate sensory outcomes).",
+  );
+
+  return session;
+}
+
+/**
+ * DEMO Sensory Judge account — opt-in via SEED_DEMO_JUDGE=true, same
+ * SEED_DEMO_ADMIN/SEED_DEMO_PARTNER convention. Scoped to the DEMO cupping
+ * session so the blind-mapping restriction (RBAC.md §7) is reproducible by
+ * anyone, not just demonstrated once in a single session.
+ */
+async function seedDemoJudge(sessionId: string) {
+  const email = "demo-judge@nectar-nomada.example";
+  const existingPerson = await prisma.person.findFirst({ where: { email } });
+  if (existingPerson) {
+    console.log("DEMO Sensory Judge already seeded — skipping.");
+    return prisma.userAccount.findFirstOrThrow({ where: { personId: existingPerson.id } });
+  }
+
+  const passwordHash = await hashPassword("DemoJudge!2026-change-me");
+
+  const person = await prisma.person.create({
+    data: { givenName: "DEMO", familyName: "Judge", displayName: "DEMO Sensory Judge", email },
+  });
+
+  const userAccount = await prisma.userAccount.create({
+    data: { personId: person.id, authProvider: "credentials", passwordHash, status: "active" },
+  });
+
+  const judgeProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Sensory Judge" } });
+  const sessionScope = await findOrCreateSessionScope(sessionId);
+
+  await prisma.assignment.create({
+    data: { userAccountId: userAccount.id, roleProfileId: judgeProfile.id, scopeId: sessionScope.id },
+  });
+
+  console.log(`Seeded DEMO Sensory Judge — email: ${email}, password: DemoJudge!2026-change-me`);
+  console.log(
+    "Assigned to the DEMO cupping session. Local/dev seed data only — CLAUDE.md §54. Rotate or remove before any shared deployment.",
+  );
+
+  return userAccount;
+}
+
 async function main() {
   const permissionsByKey = await seedPermissions();
   await seedRoleProfiles(permissionsByKey);
@@ -475,6 +615,11 @@ async function main() {
     }
 
     await seedDemoPartnerWorkspaceContent(lasNubesProject.id, demoPartnerAccount?.id ?? null);
+
+    const sensorySession = await seedDemoSensoryContent(lasNubesProject.id);
+    if (process.env.SEED_DEMO_JUDGE === "true") {
+      await seedDemoJudge(sensorySession.id);
+    }
   }
 
   console.log(`Seeded ${PERMISSIONS.length} permissions and ${ROLE_PROFILES.length} role profiles.`);
