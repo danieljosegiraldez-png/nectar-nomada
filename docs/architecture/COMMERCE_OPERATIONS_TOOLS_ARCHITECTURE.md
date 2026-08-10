@@ -473,10 +473,18 @@ Five domains — Business, Operational, Research, Sensory, Content/Experience
 document's own "may share infrastructure but should not be conceptually
 mixed" instruction. Each domain queries its own module's tables through a
 dedicated read-model/view; the only shared infrastructure is the
-visualization component library (§28) and the provenance-preserving chart
-convention already established (`ADAPTIVE_INTELLIGENCE_EXPERIENCE_REVIEW.md`
-§24's "every chart carries units/source/sample identity/date/provenance"
-applies here unchanged). This project has a `dataviz` skill/convention
+visualization component library (§28) and a provenance-preserving chart
+requirement, adopted here directly: every chart carries units, source,
+sample identity, and provenance alongside the data itself. This traces back
+to the source input document's own proposal (`NECTAR_NOMADA_CONTENT_
+EXPERIENCE_ARCHITECTURE.md` §24, "Interactive Data Visualization": "Charts
+should support: hover/tap; annotations; provenance; source; units; sample
+identity; export where permitted") — `ADAPTIVE_INTELLIGENCE_EXPERIENCE_
+REVIEW.md` never actually addressed that input document's §24 in its own
+review (confirmed on inspection: no capability-map row for chart/
+visualization requirements, no adoption decision), so this document adopts
+the requirement directly rather than citing it as something already
+established elsewhere. This project has a `dataviz` skill/convention
 available for implementation-time chart-styling consistency — worth noting
 for whoever builds the actual charts, not an architecture decision.
 
