@@ -1,13 +1,18 @@
-export default function HomePage() {
+import Link from "next/link";
+import { getTranslations } from "next-intl/server";
+
+export default async function HomePage() {
+  const [tHome, tDiscover] = await Promise.all([getTranslations("Home"), getTranslations("Discover")]);
+
   return (
     <div className="nn-hero">
-      <span className="nn-badge">Slice 1 — Identity</span>
-      <h1>Territory, agriculture, fermentation, research, and craft.</h1>
-      <p>
-        This is the foundation slice: accounts, profiles, and the permission system every
-        other module — Discover, Commerce, Experiences, Partner Workspace, Research OS,
-        Sensory, Competitions — will be built on top of. Public discovery (map, stories,
-        products, experiences) is the next slice.
+      <span className="nn-badge">{tHome("badge")}</span>
+      <h1>{tHome("title")}</h1>
+      <p>{tHome("description")}</p>
+      <p style={{ marginTop: "1.5rem" }}>
+        <Link href="/discover" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
+          {tDiscover("exploreCta")}
+        </Link>
       </p>
     </div>
   );

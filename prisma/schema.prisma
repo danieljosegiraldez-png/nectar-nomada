@@ -47,6 +47,7 @@ model Person {
 
   userAccount      UserAccount?
   projectsAsClient Project[]
+  storiesAuthored  Story[]
 
   @@map("person")
   @@schema("core")
@@ -91,6 +92,9 @@ model UserAccount {
   programsCreated      Program[]      @relation("ProgramCreatedBy")
   projectsCreated      Project[]      @relation("ProjectCreatedBy")
   samplesCreated       Sample[]       @relation("SampleCreatedBy")
+  storiesCreated       Story[]        @relation("StoryCreatedBy")
+  productsCreated      Product[]      @relation("ProductCreatedBy")
+  experiencesCreated   Experience[]   @relation("ExperienceCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -300,6 +304,10 @@ model Location {
   organizationId   String?                                @map("organization_id") @db.Uuid
   organization     Organization?                          @relation(fields: [organizationId], references: [id])
   name             String
+  // Public URL slug (Slice 2, Discover module) — nullable because most
+  // Locations (country/province/district rows in the hierarchy) never get
+  // their own public page; only ones a Discover page links to need one.
+  slug             String?                                @unique
   latitude         Float?
   longitude        Float?
   // PostGIS point, kept in sync with latitude/longitude at the application
@@ -316,8 +324,11 @@ model Location {
   createdBy        String?                                @map("created_by") @db.Uuid
   creator          UserAccount?                           @relation("LocationCreatedBy", fields: [createdBy], references: [id])
 
-  projectsWithPrimaryLocation Project[] @relation("ProjectPrimaryLocation")
+  projectsWithPrimaryLocation Project[]    @relation("ProjectPrimaryLocation")
   samples                     Sample[]
+  stories                     Story[]
+  products                    Product[]
+  experiences                 Experience[]
 
   @@index([parentLocationId])
   @@index([organizationId])
@@ -364,9 +375,12 @@ model Organization {
   creator          UserAccount?        @relation("OrganizationCreatedBy", fields: [createdBy], references: [id])
 
   locations        Location[]
-  projectsOwned    Project[]  @relation("ProjectOrganization")
-  projectsAsClient Project[]  @relation("ProjectClientOrganization")
+  projectsOwned    Project[]    @relation("ProjectOrganization")
+  projectsAsClient Project[]    @relation("ProjectClientOrganization")
   samples          Sample[]
+  stories          Story[]
+  products         Product[]
+  experiences      Experience[]
 
   @@map("organization")
   @@schema("core")
@@ -428,6 +442,9 @@ model Project {
   primaryLocation   Location? @relation("ProjectPrimaryLocation", fields: [primaryLocationId], references: [id])
 
   name           String
+  // Public URL slug (Slice 2, Discover module) — nullable: an internal-only
+  // project never needs one until/unless it's published.
+  slug           String?             @unique
   description    String?
   status         RecordStatus        @default(draft)
   classification ClassificationLevel @default(internal)
@@ -436,8 +453,11 @@ model Project {
   createdBy      String?             @map("created_by") @db.Uuid
   creator        UserAccount?        @relation("ProjectCreatedBy", fields: [createdBy], references: [id])
 
-  domainTags ProjectDomainTagAssignment[]
-  samples    Sample[]
+  domainTags  ProjectDomainTagAssignment[]
+  samples     Sample[]
+  stories     Story[]
+  products    Product[]
+  experiences Experience[]
 
   @@index([programId])
   @@index([organizationId])
@@ -486,5 +506,110 @@ model Sample {
   @@index([organizationId])
   @@index([locationId])
   @@map("sample")
+  @@schema("core")
+}
+
+// ---------------------------------------------------------------------------
+// Slice 2 — Public Discovery (MVP_ROADMAP.md, read-only paths). Story,
+// Product, and Experience are the canonical entities DOMAIN_MODEL.md already
+// named; only their public-display shape is built here. Deliberately thin:
+// - No StoryBlock/composition system yet (ADAPTIVE_INTELLIGENCE_EXPERIENCE_
+//   REVIEW.md's own Foundational recommendation) — a single markdown body is
+//   enough to validate the Discover architecture end-to-end; block-based
+//   composition is real future work, not needed to ship a readable page.
+// - No MediaAsset/object-storage pipeline yet — that's its own scoped pass
+//   (DATA_ARCHITECTURE.md §5, ADAPTIVE_INTELLIGENCE_EXPERIENCE_REVIEW.md).
+//   These pages are text/data-first for now, not photo-first.
+// - No ProductVariant/SKU/Cart/Order (Slice 3) or ExperienceSession/Booking
+//   (Slice 4) — Product and Experience here are browsable catalog entries
+//   only, matching "read paths only, no booking/purchase yet."
+// ---------------------------------------------------------------------------
+
+model Story {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug           String              @unique
+  title          String
+  summary        String?
+  bodyMarkdown   String?             @map("body_markdown")
+  projectId      String?             @map("project_id") @db.Uuid
+  project        Project?            @relation(fields: [projectId], references: [id])
+  locationId     String?             @map("location_id") @db.Uuid
+  location       Location?           @relation(fields: [locationId], references: [id])
+  organizationId String?             @map("organization_id") @db.Uuid
+  organization   Organization?       @relation(fields: [organizationId], references: [id])
+  authorPersonId String?             @map("author_person_id") @db.Uuid
+  authorPerson   Person?             @relation(fields: [authorPersonId], references: [id])
+  status         RecordStatus        @default(draft)
+  classification ClassificationLevel @default(internal)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  createdBy      String?             @map("created_by") @db.Uuid
+  creator        UserAccount?        @relation("StoryCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([projectId])
+  @@index([locationId])
+  @@index([organizationId])
+  @@map("story")
+  @@schema("core")
+}
+
+model Product {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug           String              @unique
+  name           String
+  summary        String?
+  description    String?
+  // Nullable and deliberately unseeded in DEMO data — CLAUDE.md §54 lists
+  // "prices" among facts that must never be fabricated for seed content.
+  // Real pricing arrives with Slice 3 (Commerce/ProductVariant).
+  priceAmount    Decimal?            @map("price_amount") @db.Decimal(10, 2)
+  priceCurrency  String?             @map("price_currency")
+  projectId      String?             @map("project_id") @db.Uuid
+  project        Project?            @relation(fields: [projectId], references: [id])
+  locationId     String?             @map("location_id") @db.Uuid
+  location       Location?           @relation(fields: [locationId], references: [id])
+  organizationId String?             @map("organization_id") @db.Uuid
+  organization   Organization?       @relation(fields: [organizationId], references: [id])
+  status         RecordStatus        @default(draft)
+  classification ClassificationLevel @default(internal)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  createdBy      String?             @map("created_by") @db.Uuid
+  creator        UserAccount?        @relation("ProductCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([projectId])
+  @@index([locationId])
+  @@index([organizationId])
+  @@map("product")
+  @@schema("core")
+}
+
+model Experience {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug            String              @unique
+  name            String
+  summary         String?
+  description     String?
+  // Same reasoning as Product.priceAmount — never fabricated in seed data.
+  priceAmount     Decimal?            @map("price_amount") @db.Decimal(10, 2)
+  priceCurrency   String?             @map("price_currency")
+  durationMinutes Int?                @map("duration_minutes")
+  projectId       String?             @map("project_id") @db.Uuid
+  project         Project?            @relation(fields: [projectId], references: [id])
+  locationId      String?             @map("location_id") @db.Uuid
+  location        Location?           @relation(fields: [locationId], references: [id])
+  organizationId  String?             @map("organization_id") @db.Uuid
+  organization    Organization?       @relation(fields: [organizationId], references: [id])
+  status          RecordStatus        @default(draft)
+  classification  ClassificationLevel @default(internal)
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  createdBy       String?             @map("created_by") @db.Uuid
+  creator         UserAccount?        @relation("ExperienceCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([projectId])
+  @@index([locationId])
+  @@index([organizationId])
+  @@map("experience")
   @@schema("core")
 }

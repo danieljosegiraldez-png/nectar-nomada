@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { prisma } from "../../lib/db";
 import { getCurrentUser } from "../../lib/auth/session";
 import { canManageOwnProfile, resolvedPermissionKeys } from "../../lib/rbac/service";
@@ -39,30 +40,26 @@ export default async function MyNectarPage() {
   // meaningful target to resolve against right now is the platform scope —
   // this is a live call into the same authorization service every other
   // module will use, not a stub.
-  const platformPermissions = await resolvedPermissionKeys(user.userAccountId, {
-    scopeType: "platform",
-    scopeRefId: null,
-  });
+  const [platformPermissions, t] = await Promise.all([
+    resolvedPermissionKeys(user.userAccountId, { scopeType: "platform", scopeRefId: null }),
+    getTranslations("MyNectar"),
+  ]);
 
   return (
     <div>
-      <span className="nn-badge">My Néctar</span>
-      <h1>Hola, {userAccount.person.displayName}</h1>
+      <span className="nn-badge">{t("badge")}</span>
+      <h1>{t("greeting", { name: userAccount.person.displayName })}</h1>
       <p className="nn-muted">{userAccount.person.email}</p>
 
       <section style={{ marginTop: "2rem" }}>
-        <h2>Assignments</h2>
+        <h2>{t("assignmentsHeading")}</h2>
         {userAccount.assignments.length === 0 ? (
-          <p className="nn-muted">
-            No Role Profile assignments yet. You have baseline Registered Customer access only
-            (RBAC.md §5) — an admin can grant a scoped Assignment later without changing your
-            account itself.
-          </p>
+          <p className="nn-muted">{t("noAssignments")}</p>
         ) : (
           <ul>
             {userAccount.assignments.map((a) => (
               <li key={a.id}>
-                {a.roleProfile.name} — scope: {a.scope.scopeType}
+                {a.roleProfile.name} — {t("assignmentScope", { scope: a.scope.scopeType })}
                 {a.scope.scopeRefId ? ` (${a.scope.scopeRefId})` : ""}
               </li>
             ))}
@@ -71,9 +68,9 @@ export default async function MyNectarPage() {
       </section>
 
       <section style={{ marginTop: "2rem" }}>
-        <h2>Resolved platform-scope permissions</h2>
+        <h2>{t("permissionsHeading")}</h2>
         {platformPermissions.size === 0 ? (
-          <p className="nn-muted">None — expected for a new account with no Assignments.</p>
+          <p className="nn-muted">{t("noPermissions")}</p>
         ) : (
           <ul>
             {Array.from(platformPermissions).map((key) => (
@@ -86,12 +83,8 @@ export default async function MyNectarPage() {
       </section>
 
       <section style={{ marginTop: "2rem" }}>
-        <h2>Orders · Bookings · Sensory history · Saved items</h2>
-        <p className="nn-muted">
-          Empty — Commerce, Experiences, and Sensory are later vertical slices (MVP_ROADMAP.md).
-          This page is real, not a mock: it queries your actual UserAccount, Person, and
-          Assignment rows.
-        </p>
+        <h2>{t("activityHeading")}</h2>
+        <p className="nn-muted">{t("activityBody")}</p>
       </section>
     </div>
   );

@@ -40,13 +40,23 @@ slice, not deferred hardening.
 Scope, and the authorization service correctly grants/denies across at least one
 positive and one negative case per seeded Role Profile.
 
-### Slice 2 — Public Discovery (read-only)
+### Slice 2 — Public Discovery (read-only) — **implemented, DECISIONS.md ADR-024**
 Location, Project, Story, Product, Experience — read paths only, no
 booking/purchase yet. Built against the real authorization service from Slice 1,
 so classification filtering (`SECURITY.md` §4) is exercised from day one, not
 bolted on. This is where the "same location page dynamically exposes connected
 information" behavior (CLAUDE.md §6) first appears, scoped to whatever entities
 exist by this point (Location, Project, Story, Product stubs).
+
+Shipped as: `lib/discover/service.ts` (the single hard-filtered read path,
+`classification: 'public'` AND `status: 'approved'`, unconditional regardless
+of viewer identity — verified in a real browser session to return identical
+content signed in and signed out), `/discover` index plus
+`/locations|projects|stories|products|experiences/[slug]` detail pages, and
+CLAUDE.md §54-compliant DEMO seed content (`SEED_DEMO_CONTENT=true`) built
+around Las Nubes, Finca Rosina, and Kiva Estate. `StoryBlock` composition,
+the MediaAsset/object-storage pipeline, and Commerce/Experience booking
+mechanics are explicitly deferred past this slice — see ADR-024.
 
 ### Slice 3 — Commerce
 Product/Variant/SKU, Cart, Order, Stripe integration (`INTEGRATIONS.md` §6).

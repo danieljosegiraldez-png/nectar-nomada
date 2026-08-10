@@ -1,0 +1,74 @@
+{
+  "Nav": {
+    "brand": "Néctar Nómada",
+    "myNectar": "My Néctar",
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "signOut": "Sign out"
+  },
+  "Home": {
+    "badge": "Slices 1–2 — Identity and Discovery",
+    "title": "Territory, agriculture, fermentation, research, and craft.",
+    "description": "This is the platform's foundation: accounts, profiles, and the permission system every other module — Commerce, Experiences, Partner Workspace, Research OS, Sensory, Competitions — will be built on top of. Explore the projects, places, stories, products, and experiences already available."
+  },
+  "Discover": {
+    "exploreCta": "Explore",
+    "badge": "Demo content",
+    "demoNotice": "Everything on this page is demo content — plausible but fictional data used to test the architecture, not real project information.",
+    "title": "Discover",
+    "locationsHeading": "Places",
+    "projectsHeading": "Projects",
+    "storiesHeading": "Stories",
+    "productsHeading": "Products",
+    "experiencesHeading": "Experiences",
+    "empty": "No public content in this category yet.",
+    "priceUnavailable": "Pricing coming soon",
+    "viewAll": "View all",
+    "backToDiscover": "← Back to Discover",
+    "locatedAt": "Located at {location}",
+    "partOfProject": "Part of {project}",
+    "producedBy": "By {organization}",
+    "domainTagsHeading": "Domains",
+    "relatedStoriesHeading": "Stories",
+    "relatedProductsHeading": "Products",
+    "relatedExperiencesHeading": "Experiences",
+    "placesInThisArea": "Places",
+    "durationMinutes": "About {minutes} minutes",
+    "notFoundTitle": "Not found",
+    "notFoundBody": "This page doesn't exist, or isn't public yet."
+  },
+  "Auth": {
+    "signInTitle": "Sign in",
+    "signUpTitle": "Create your account",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "firstNameLabel": "First name",
+    "lastNameLabel": "Last name",
+    "signInButton": "Sign in",
+    "signInButtonPending": "Signing in…",
+    "signUpButton": "Sign up",
+    "signUpButtonPending": "Creating account…",
+    "noAccountYet": "No account yet?",
+    "signUpLink": "Sign up",
+    "alreadyHaveAccount": "Already have an account?",
+    "signInLink": "Sign in",
+    "errorInvalidInput": "Please check the fields you entered.",
+    "errorIncorrectCredentials": "Incorrect email or password.",
+    "errorEmailTaken": "An account with this email already exists.",
+    "errorInvalidEmailOrPassword": "Enter a valid email and password."
+  },
+  "MyNectar": {
+    "badge": "My Néctar",
+    "greeting": "Hello, {name}",
+    "assignmentsHeading": "Assignments",
+    "noAssignments": "No Role Profile assignments yet. You have baseline Registered Customer access only (RBAC.md §5) — an admin can grant a scoped Assignment later without changing your account itself.",
+    "assignmentScope": "scope: {scope}",
+    "permissionsHeading": "Resolved platform-scope permissions",
+    "noPermissions": "None — expected for a new account with no Assignments.",
+    "activityHeading": "Orders · Bookings · Sensory history · Saved items",
+    "activityBody": "Empty — Commerce, Experiences, and Sensory are later vertical slices (MVP_ROADMAP.md). This page is real, not a mock: it queries your actual UserAccount, Person, and Assignment rows."
+  },
+  "LocaleSwitcher": {
+    "label": "Language"
+  }
+}

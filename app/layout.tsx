@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getTranslations } from "next-intl/server";
 import "./globals.css";
 import { getCurrentUser } from "../lib/auth/session";
 import { logoutAction } from "./actions/auth";
+import { LocaleSwitcher } from "./components/LocaleSwitcher";
 
 export const metadata: Metadata = {
   title: "Néctar Nómada",
@@ -10,36 +13,39 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const user = await getCurrentUser();
+  const [user, locale, t] = await Promise.all([getCurrentUser(), getLocale(), getTranslations("Nav")]);
 
   return (
-    <html lang="es">
+    <html lang={locale}>
       <body>
-        <header className="nn-nav">
-          <div className="nn-shell nn-nav-row">
-            <Link href="/" className="nn-wordmark">
-              Néctar Nómada
-            </Link>
-            <nav className="nn-nav-links">
-              {user ? (
-                <>
-                  <Link href="/my-nectar">Mi Néctar</Link>
-                  <form action={logoutAction}>
-                    <button type="submit" className="nn-link-button">
-                      Sign out
-                    </button>
-                  </form>
-                </>
-              ) : (
-                <>
-                  <Link href="/login">Sign in</Link>
-                  <Link href="/signup">Sign up</Link>
-                </>
-              )}
-            </nav>
-          </div>
-        </header>
-        <main className="nn-shell nn-main">{children}</main>
+        <NextIntlClientProvider>
+          <header className="nn-nav">
+            <div className="nn-shell nn-nav-row">
+              <Link href="/" className="nn-wordmark">
+                {t("brand")}
+              </Link>
+              <nav className="nn-nav-links">
+                {user ? (
+                  <>
+                    <Link href="/my-nectar">{t("myNectar")}</Link>
+                    <form action={logoutAction}>
+                      <button type="submit" className="nn-link-button">
+                        {t("signOut")}
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/login">{t("signIn")}</Link>
+                    <Link href="/signup">{t("signUp")}</Link>
+                  </>
+                )}
+                <LocaleSwitcher />
+              </nav>
+            </div>
+          </header>
+          <main className="nn-shell nn-main">{children}</main>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

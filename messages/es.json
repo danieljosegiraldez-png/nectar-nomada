@@ -1,0 +1,74 @@
+{
+  "Nav": {
+    "brand": "Néctar Nómada",
+    "myNectar": "Mi Néctar",
+    "signIn": "Iniciar sesión",
+    "signUp": "Crear cuenta",
+    "signOut": "Cerrar sesión"
+  },
+  "Home": {
+    "badge": "Slices 1–2 — Identidad y Descubrimiento",
+    "title": "Territorio, agricultura, fermentación, investigación y oficio.",
+    "description": "Esta es la base de la plataforma: cuentas, perfiles y el sistema de permisos sobre el que se construyen los demás módulos — Comercio, Experiencias, Espacio de Trabajo de Socios, Research OS, Sensorial, Competencias. Explora los proyectos, lugares, historias, productos y experiencias ya disponibles."
+  },
+  "Discover": {
+    "exploreCta": "Explorar",
+    "badge": "Contenido de demostración",
+    "demoNotice": "Todo el contenido de esta página es de demostración — datos ficticios pero verosímiles para probar la arquitectura, no información real de proyectos.",
+    "title": "Descubre",
+    "locationsHeading": "Lugares",
+    "projectsHeading": "Proyectos",
+    "storiesHeading": "Historias",
+    "productsHeading": "Productos",
+    "experiencesHeading": "Experiencias",
+    "empty": "Aún no hay contenido público en esta categoría.",
+    "priceUnavailable": "Precio próximamente",
+    "viewAll": "Ver todo",
+    "backToDiscover": "← Volver a Descubre",
+    "locatedAt": "Ubicado en {location}",
+    "partOfProject": "Parte de {project}",
+    "producedBy": "Por {organization}",
+    "domainTagsHeading": "Dominios",
+    "relatedStoriesHeading": "Historias",
+    "relatedProductsHeading": "Productos",
+    "relatedExperiencesHeading": "Experiencias",
+    "placesInThisArea": "Lugares",
+    "durationMinutes": "Aproximadamente {minutes} minutos",
+    "notFoundTitle": "No encontrado",
+    "notFoundBody": "Esta página no existe, o aún no es pública."
+  },
+  "Auth": {
+    "signInTitle": "Iniciar sesión",
+    "signUpTitle": "Crea tu cuenta",
+    "emailLabel": "Correo electrónico",
+    "passwordLabel": "Contraseña",
+    "firstNameLabel": "Nombre",
+    "lastNameLabel": "Apellido",
+    "signInButton": "Iniciar sesión",
+    "signInButtonPending": "Iniciando sesión…",
+    "signUpButton": "Crear cuenta",
+    "signUpButtonPending": "Creando cuenta…",
+    "noAccountYet": "¿Aún no tienes cuenta?",
+    "signUpLink": "Crear cuenta",
+    "alreadyHaveAccount": "¿Ya tienes cuenta?",
+    "signInLink": "Iniciar sesión",
+    "errorInvalidInput": "Revisa los datos ingresados.",
+    "errorIncorrectCredentials": "Correo o contraseña incorrectos.",
+    "errorEmailTaken": "Ya existe una cuenta con este correo.",
+    "errorInvalidEmailOrPassword": "Ingresa un correo y contraseña válidos."
+  },
+  "MyNectar": {
+    "badge": "Mi Néctar",
+    "greeting": "Hola, {name}",
+    "assignmentsHeading": "Asignaciones",
+    "noAssignments": "Aún no tienes asignaciones de perfil de rol. Tienes acceso base de Cliente Registrado (RBAC.md §5) — un administrador puede otorgarte una asignación con alcance definido más adelante, sin modificar tu cuenta.",
+    "assignmentScope": "alcance: {scope}",
+    "permissionsHeading": "Permisos resueltos a nivel de plataforma",
+    "noPermissions": "Ninguno — esperado para una cuenta nueva sin asignaciones.",
+    "activityHeading": "Pedidos · Reservas · Historial sensorial · Guardados",
+    "activityBody": "Vacío — Comercio, Experiencias y Sensorial son slices verticales posteriores (MVP_ROADMAP.md). Esta página es real, no una maqueta: consulta tus propios registros de UserAccount, Person y Assignment."
+  },
+  "LocaleSwitcher": {
+    "label": "Idioma"
+  }
+}

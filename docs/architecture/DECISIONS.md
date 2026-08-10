@@ -732,3 +732,145 @@ Neon, but the same failure mode would occur in production if a session
 ever outlived its account (e.g. deletion). Fixed to `findUnique` with a
 graceful `redirect("/login")` on a miss, matching `SECURITY.md` §2's
 "fail closed, never 500" posture for authorization-adjacent code paths.
+
+---
+
+## ADR-023 — UI chrome i18n: next-intl, cookie-based, no URL routing
+
+**Context:** The nav showed "Mi Néctar" (hardcoded Spanish) while the My
+Néctar page body showed "My Néctar" (hardcoded English) — no locale system
+existed at all, just ad hoc strings in each language depending on which
+file was written when. CLAUDE.md §41 requires Spanish and English as
+first-class, with Spanish stated as the priority language.
+
+**Decision:** `next-intl` (v4) for UI chrome strings (nav, buttons, headers,
+form labels, error messages), with **cookie-based locale resolution and no
+`/en`/`/es` URL prefix routing**.
+
+**Alternatives considered:** next-intl's more commonly documented setup
+uses a `[locale]` URL segment (`/en/discover`, `/es/discover`) via its own
+middleware, giving per-locale static generation and SEO benefits. Rejected
+for now — that structure earns its cost when there's per-locale *content* to
+route to, and Story/Product/Experience text is explicitly not translated
+yet (MVP_ROADMAP.md §3's own reasoning: translation workflow waits for
+content volume). Adopting URL-prefix routing today would mean restructuring
+every existing route under `app/[locale]/...`, rewriting every internal
+link, and reworking `proxy.ts`'s matcher — real cost with no present
+benefit while every page is UI-chrome-only in whichever language the viewer
+picked. Revisit when Story content actually ships in two languages.
+
+Hand-rolling a small custom translation helper (plain objects + a `t()`
+function) was also considered, avoiding a new dependency — rejected because
+the user's instruction explicitly named a standard library, and next-intl's
+ICU message support (interpolation, pluralization) is worth having before
+it's needed rather than retrofitted later.
+
+**Locale resolution order** (`i18n/request.ts`): `NEXT_LOCALE` cookie → the
+request's `Accept-Language` header (English if it clearly prefers English,
+Spanish otherwise) → `defaultLocale` (Spanish). The cookie is set two ways:
+explicitly by the nav's EN/ES switcher (`app/actions/locale.ts`), and
+automatically at login from the account's persisted `Person.locale`
+(`app/actions/auth.ts`) — DOMAIN_MODEL.md §1 already modeled this field; it
+was simply never wired to anything until now. Locale is deliberately kept
+out of the session JWT (no type-augmentation surface added to
+`next-auth`'s `User`/`Session`/`JWT` for something this low-stakes) —
+`Person.locale` is the durable source of truth, the cookie is the
+immediate-effect mechanism, and the two are kept in sync at exactly two
+moments (switcher click, login) rather than resolved from the database on
+every request.
+
+**Verified end-to-end** in a real browser session against Neon: switching
+EN→ES instantly re-rendered the entire page (nav, hero, CTA) with no full
+reload artifacts, and `Person.locale` was confirmed updated to `'es'` in
+the database afterward — the persistence isn't just a cookie, it round-
+tripped through Neon.
+
+**Consequences:** Every hardcoded UI string in `app/layout.tsx`,
+`app/page.tsx`, `app/login`, `app/signup`, `app/my-nectar`, and
+`app/actions/auth.ts` now resolves through `messages/{es,en}.json` — the
+original "Mi Néctar"/"My Néctar" inconsistency can't recur because both the
+nav and the page body read the same locale-resolved `Nav.myNectar` /
+`MyNectar.badge` keys, which are defined consistently with each other in
+each locale file. Zod's own per-field validation messages
+(`lib/validation/auth.ts`) are **not** individually translated — out of
+scope for this pass; a validation failure now surfaces one generic
+translated message instead of Zod's raw English text, noted inline in
+`app/actions/auth.ts`. Content translation (Story/Product/Experience) is
+explicitly not covered, unchanged from MVP_ROADMAP.md §3.
+
+---
+
+## ADR-024 — Slice 2 (Public Discovery) implemented: scope and seed-data decisions
+
+**Context:** `MVP_ROADMAP.md` Slice 2 — Location, Project, Story, Product,
+Experience, read-only, built against Slice 1's real authorization service.
+This ADR records the implementation-level decisions made while building it,
+consistent with the pattern set by ADR-021's Foundational-schema notes.
+
+**Decisions:**
+
+1. **`Story` ships as a single `bodyMarkdown` text column, not
+   `StoryBlock`/`StoryVersion`/composition.** `ADAPTIVE_INTELLIGENCE_
+   EXPERIENCE_REVIEW.md`'s own Foundational-phase recommendation was a
+   *handful* of block types; this goes one step thinner — plain text,
+   rendered with `white-space: pre-wrap`, no markdown parser dependency
+   added. Justification: nothing yet needs more than a readable page, and
+   the real replacement (block composition, reused for Reporting too per
+   `COMMERCE_OPERATIONS_TOOLS_ARCHITECTURE.md` §N) is a deliberate future
+   investment, not something to approximate twice.
+2. **No `MediaAsset`/object-storage pipeline in this slice.** Discover pages
+   are text/data-first — no hero images, no photography. Adding R2 upload
+   flow and an `Asset` table was in scope for neither the user's Slice 2
+   request nor `MVP_ROADMAP.md`'s own Slice 2 description. Revisit when
+   real photography exists to publish — inventing placeholder "photos of
+   Finca Rosina" would itself be a CLAUDE.md §54 violation (fabricated
+   visual evidence of a real place).
+3. **Public visibility requires both `classification: 'public'` AND
+   `status: 'approved'`**, enforced as one hard-coded `PUBLIC_WHERE` object
+   in `lib/discover/service.ts` — the single path every public route reads
+   through, unconditionally, regardless of viewer identity (verified: an
+   authenticated Platform Admin and a signed-out visitor see identical
+   `/discover` content in this slice). Seeing more belongs to a future
+   Platform Command Center surface, not a variant of this one.
+4. **`Location`/`Project` slugs are nullable**; only records meant to have a
+   public page get one. Country/province rows in the seeded hierarchy
+   (Panamá, Chiriquí, Panamá province) stay `slug: null` and simply don't
+   appear in Discover listings — structural hierarchy, not published
+   content.
+5. **DEMO seed data uses only Las Nubes, Finca Rosina, and Kiva Estate** —
+   the CLAUDE.md §54-sanctioned names — deliberately **not** CryoBloom,
+   despite it also being listed there. Reasoning: CryoBloom is a real,
+   ongoing research program; even clearly-labeled placeholder copy about it
+   risks being read as a claim about actual findings, which is a sharper
+   version of exactly the fabrication risk CLAUDE.md §54 and the Research
+   OS provenance model exist to prevent. The other three names carry no
+   comparable research-integrity weight.
+6. **No prices, GPS/coordinates, certifications, specific dates, or named
+   people anywhere in seed data** — CLAUDE.md §54's explicit do-not-
+   fabricate list. `Product`/`Experience.priceAmount` stays `null`
+   throughout every seeded record; the UI renders "pricing coming soon"
+   instead of a placeholder number. `Story.authorPersonId` is never set in
+   seed data. Every seeded Organization/Project/Story/Product/Experience
+   description is written to read honestly as placeholder copy (bracketed
+   `[DEMO placeholder — ...]` notes) rather than invented specifics dressed
+   up as real detail.
+7. **The seed script is idempotent** (`prisma/seed.ts`'s new
+   `seedDemoDiscoverContent`, gated behind `SEED_DEMO_CONTENT=true`,
+   matching the existing `SEED_DEMO_ADMIN` convention) — upserts by slug
+   where a unique slug exists, find-or-create by name otherwise. Verified
+   by running it twice against Neon with no errors or duplicates.
+
+**Verified end-to-end** in a real browser session against Neon: `/discover`
+listing all five entity types; a Project detail page showing its domain
+tags (Coffee/Apiary/Tourism/Research — the same combination CLAUDE.md §8
+uses as its own worked example for Las Nubes), primary Location, and
+related Story; the reverse direction confirmed on the Location detail page
+(showing its Project, Story, and Products); and identical content
+confirmed for both an authenticated and a signed-out visitor.
+
+**Consequences:** Slice 2 is functionally complete per its stated scope.
+Commerce (`ProductVariant`/`Cart`/`Order`, Slice 3), Experience booking
+(`ExperienceSession`/`Booking`, Slice 4), `StoryBlock` composition, and the
+media pipeline remain open, tracked where they were already tracked
+(`MVP_ROADMAP.md`, `ADAPTIVE_INTELLIGENCE_EXPERIENCE_REVIEW.md` §N/§X) —
+this ADR doesn't reopen or resequence any of them.

@@ -1,12 +1,15 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { AuthError } from "next-auth";
+import { getTranslations } from "next-intl/server";
 import { prisma } from "../../lib/db";
 import { hashPassword } from "../../lib/auth/password";
 import { signUpSchema, loginSchema } from "../../lib/validation/auth";
 import { recordAuditEvent } from "../../lib/audit";
 import { signIn } from "../../auth";
+import { isAppLocale, LOCALE_COOKIE } from "../../i18n/config";
 
 export interface FormActionState {
   error?: string;
@@ -21,6 +24,8 @@ export interface FormActionState {
  * by an admin later.
  */
 export async function signUpAction(_prevState: FormActionState, formData: FormData): Promise<FormActionState> {
+  const t = await getTranslations("Auth");
+
   const parsed = signUpSchema.safeParse({
     givenName: formData.get("givenName"),
     familyName: formData.get("familyName"),
@@ -28,15 +33,19 @@ export async function signUpAction(_prevState: FormActionState, formData: FormDa
     password: formData.get("password"),
   });
 
+  // Zod's own per-field messages stay in English internally (lib/validation/auth.ts) —
+  // translating every possible Zod constraint message individually is out of scope
+  // for this pass, so any validation failure surfaces this one translated, generic
+  // message instead of Zod's raw text.
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { error: t("errorInvalidInput") };
   }
 
   const { givenName, familyName, email, password } = parsed.data;
 
   const existing = await prisma.person.findFirst({ where: { email } });
   if (existing) {
-    return { error: "An account with this email already exists." };
+    return { error: t("errorEmailTaken") };
   }
 
   const passwordHash = await hashPassword(password);
@@ -75,13 +84,34 @@ export async function signUpAction(_prevState: FormActionState, formData: FormDa
 }
 
 export async function loginAction(_prevState: FormActionState, formData: FormData): Promise<FormActionState> {
+  const t = await getTranslations("Auth");
+
   const parsed = loginSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
   });
 
   if (!parsed.success) {
-    return { error: "Enter a valid email and password." };
+    return { error: t("errorInvalidEmailOrPassword") };
+  }
+
+  // Apply the account's persisted language preference (DOMAIN_MODEL.md §1
+  // Person.locale) immediately on login, ahead of confirming the password —
+  // locale isn't sensitive, and this is the simplest place to guarantee the
+  // very next page load reflects it without threading locale through the
+  // session/JWT. A wrong password below just means this was a no-op cookie
+  // write for an unauthenticated visitor.
+  const person = await prisma.person.findFirst({
+    where: { email: parsed.data.email },
+    select: { locale: true },
+  });
+  if (isAppLocale(person?.locale)) {
+    const cookieStore = await cookies();
+    cookieStore.set(LOCALE_COOKIE, person.locale, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    });
   }
 
   try {
@@ -92,7 +122,7 @@ export async function loginAction(_prevState: FormActionState, formData: FormDat
     });
   } catch (error) {
     if (error instanceof AuthError) {
-      return { error: "Incorrect email or password." };
+      return { error: t("errorIncorrectCredentials") };
     }
     throw error;
   }
