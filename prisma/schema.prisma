@@ -12,7 +12,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  schemas    = ["core"]
+  schemas    = ["core", "commerce"]
   // DECISIONS.md ADR-021/ADR-022 — deferred against the local PGlite sandbox
   // (no extension support), enabled now that Neon is the primary database.
   extensions = [postgis]
@@ -80,21 +80,24 @@ model UserAccount {
   createdBy       String?           @map("created_by") @db.Uuid
   creator         UserAccount?      @relation("UserAccountCreatedBy", fields: [createdBy], references: [id])
 
-  createdAccounts      UserAccount[]  @relation("UserAccountCreatedBy")
-  personsCreated       Person[]       @relation("PersonCreatedBy")
-  roleProfilesCreated  RoleProfile[]  @relation("RoleProfileCreatedBy")
-  scopesCreated        Scope[]        @relation("ScopeCreatedBy")
-  assignments          Assignment[]   @relation("AssignmentToUserAccount")
-  assignmentsGranted   Assignment[]   @relation("AssignmentGrantedBy")
-  auditEvents          AuditEvent[]
-  locationsCreated     Location[]     @relation("LocationCreatedBy")
-  organizationsCreated Organization[] @relation("OrganizationCreatedBy")
-  programsCreated      Program[]      @relation("ProgramCreatedBy")
-  projectsCreated      Project[]      @relation("ProjectCreatedBy")
-  samplesCreated       Sample[]       @relation("SampleCreatedBy")
-  storiesCreated       Story[]        @relation("StoryCreatedBy")
-  productsCreated      Product[]      @relation("ProductCreatedBy")
-  experiencesCreated   Experience[]   @relation("ExperienceCreatedBy")
+  createdAccounts        UserAccount[]    @relation("UserAccountCreatedBy")
+  personsCreated         Person[]         @relation("PersonCreatedBy")
+  roleProfilesCreated    RoleProfile[]    @relation("RoleProfileCreatedBy")
+  scopesCreated          Scope[]          @relation("ScopeCreatedBy")
+  assignments            Assignment[]     @relation("AssignmentToUserAccount")
+  assignmentsGranted     Assignment[]     @relation("AssignmentGrantedBy")
+  auditEvents            AuditEvent[]
+  locationsCreated       Location[]       @relation("LocationCreatedBy")
+  organizationsCreated   Organization[]   @relation("OrganizationCreatedBy")
+  programsCreated        Program[]        @relation("ProgramCreatedBy")
+  projectsCreated        Project[]        @relation("ProjectCreatedBy")
+  samplesCreated         Sample[]         @relation("SampleCreatedBy")
+  storiesCreated         Story[]          @relation("StoryCreatedBy")
+  productsCreated        Product[]        @relation("ProductCreatedBy")
+  experiencesCreated     Experience[]     @relation("ExperienceCreatedBy")
+  productVariantsCreated ProductVariant[] @relation("ProductVariantCreatedBy")
+  carts                  Cart[]
+  orders                 Order[]
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -559,11 +562,6 @@ model Product {
   name           String
   summary        String?
   description    String?
-  // Nullable and deliberately unseeded in DEMO data — CLAUDE.md §54 lists
-  // "prices" among facts that must never be fabricated for seed content.
-  // Real pricing arrives with Slice 3 (Commerce/ProductVariant).
-  priceAmount    Decimal?            @map("price_amount") @db.Decimal(10, 2)
-  priceCurrency  String?             @map("price_currency")
   projectId      String?             @map("project_id") @db.Uuid
   project        Project?            @relation(fields: [projectId], references: [id])
   locationId     String?             @map("location_id") @db.Uuid
@@ -576,6 +574,12 @@ model Product {
   updatedAt      DateTime            @updatedAt @map("updated_at")
   createdBy      String?             @map("created_by") @db.Uuid
   creator        UserAccount?        @relation("ProductCreatedBy", fields: [createdBy], references: [id])
+
+  // Slice 3 (Commerce) — a Product is a catalog listing; ProductVariant is
+  // the actual sellable/priced/inventoried unit (DOMAIN_MODEL.md Commerce
+  // module: "Product → ProductVariant → SKU/Inventory/Price"). Display
+  // price is computed from active variants, not stored on Product itself.
+  variants ProductVariant[]
 
   @@index([projectId])
   @@index([locationId])
@@ -612,4 +616,172 @@ model Experience {
   @@index([organizationId])
   @@map("experience")
   @@schema("core")
+}
+
+// ---------------------------------------------------------------------------
+// Slice 3 — Commerce (MVP_ROADMAP.md). First module in its own Postgres
+// schema (`commerce`), per DATA_ARCHITECTURE.md §1's module-schema
+// convention — Product itself stays in `core` (it's a canonical entity
+// Discover already reads), everything sellable/transactional extends it
+// from here.
+// ---------------------------------------------------------------------------
+
+enum ProductVariantStatus {
+  active
+  archived
+
+  @@schema("commerce")
+}
+
+// The actual sellable/priced/inventoried unit. A Product needs at least one
+// active Variant to be purchasable — Discover's Product pages already
+// handle zero variants gracefully (still just a catalog listing).
+model ProductVariant {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId      String               @map("product_id") @db.Uuid
+  product        Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku            String               @unique
+  // Null = the product's only/default variant (no size/weight options).
+  variantName    String?              @map("variant_name")
+  priceAmount    Decimal              @map("price_amount") @db.Decimal(10, 2)
+  priceCurrency  String               @default("USD") @map("price_currency")
+  // Null = not inventory-tracked (e.g. made-to-order); otherwise decremented
+  // on paid Order creation (lib/commerce/orders.ts).
+  inventoryCount Int?                 @map("inventory_count")
+  status         ProductVariantStatus @default(active)
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+  createdBy      String?              @map("created_by") @db.Uuid
+  creator        UserAccount?         @relation("ProductVariantCreatedBy", fields: [createdBy], references: [id])
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([productId])
+  @@map("product_variant")
+  @@schema("commerce")
+}
+
+enum CartStatus {
+  active
+  converted
+  abandoned
+
+  @@schema("commerce")
+}
+
+// One UserAccount can accumulate multiple Cart rows over time (one per
+// converted/abandoned cycle) but should have at most one `active` cart at
+// once — enforced in lib/commerce/cart.ts (find-or-create), not a DB
+// constraint, since "at most one" per status value isn't expressible as a
+// simple unique index without excluding the other statuses.
+model Cart {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userAccountId String      @map("user_account_id") @db.Uuid
+  userAccount   UserAccount @relation(fields: [userAccountId], references: [id])
+  status        CartStatus  @default(active)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  items CartItem[]
+
+  @@index([userAccountId, status])
+  @@map("cart")
+  @@schema("commerce")
+}
+
+model CartItem {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cartId           String         @map("cart_id") @db.Uuid
+  cart             Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productVariantId String         @map("product_variant_id") @db.Uuid
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+  quantity         Int            @default(1)
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  @@unique([cartId, productVariantId])
+  @@map("cart_item")
+  @@schema("commerce")
+}
+
+enum OrderStatus {
+  pending_payment
+  paid
+  fulfilled
+  cancelled
+  refunded
+
+  @@schema("commerce")
+}
+
+model Order {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // Human-friendly, distinct from `id` — generated in lib/commerce/orders.ts,
+  // not a DB sequence (keeps order-number formatting an application concern).
+  orderNumber    String      @unique @map("order_number")
+  userAccountId  String      @map("user_account_id") @db.Uuid
+  userAccount    UserAccount @relation(fields: [userAccountId], references: [id])
+  status         OrderStatus @default(pending_payment)
+  subtotalAmount Decimal     @map("subtotal_amount") @db.Decimal(10, 2)
+  currency       String      @default("USD")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  items    OrderItem[]
+  payments Payment[]
+
+  @@index([userAccountId])
+  @@map("order")
+  @@schema("commerce")
+}
+
+// unitPriceAmount/currency are a snapshot at purchase time, not a live
+// lookup through productVariant — the same "preserve what actually
+// happened" principle already governing Protocol execution and lot
+// genealogy elsewhere in this schema, applied to price history. A later
+// ProductVariant price change must never alter a historical Order's total.
+model OrderItem {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId          String         @map("order_id") @db.Uuid
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productVariantId String         @map("product_variant_id") @db.Uuid
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+  quantity         Int
+  unitPriceAmount  Decimal        @map("unit_price_amount") @db.Decimal(10, 2)
+  currency         String
+
+  @@index([orderId])
+  @@map("order_item")
+  @@schema("commerce")
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+  refunded
+
+  @@schema("commerce")
+}
+
+// One Order can have more than one Payment row over its life (a failed
+// attempt followed by a successful retry) — Payment is an append-only
+// attempt log, Order.status is the derived current state.
+model Payment {
+  id                      String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId                 String        @map("order_id") @db.Uuid
+  order                   Order         @relation(fields: [orderId], references: [id])
+  provider                String        @default("stripe")
+  providerSessionId       String?       @unique @map("provider_session_id")
+  providerPaymentIntentId String?       @unique @map("provider_payment_intent_id")
+  amount                  Decimal       @db.Decimal(10, 2)
+  currency                String
+  status                  PaymentStatus @default(pending)
+  createdAt               DateTime      @default(now()) @map("created_at")
+  updatedAt               DateTime      @updatedAt @map("updated_at")
+
+  @@index([orderId])
+  @@map("payment")
+  @@schema("commerce")
 }

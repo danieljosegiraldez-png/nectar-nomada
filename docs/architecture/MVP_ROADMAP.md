@@ -58,10 +58,11 @@ around Las Nubes, Finca Rosina, and Kiva Estate. `StoryBlock` composition,
 the MediaAsset/object-storage pipeline, and Commerce/Experience booking
 mechanics are explicitly deferred past this slice — see ADR-024.
 
-### Slice 3 — Commerce
+### Slice 3 — Commerce (implemented, DECISIONS.md ADR-025)
 Product/Variant/SKU, Cart, Order, Stripe integration (`INTEGRATIONS.md` §6).
 Extends Discovery's read-only Product pages into purchasable ones. My Néctar
-gains Orders.
+gains Orders. End-to-end Stripe purchase verification pending test-mode API
+keys and at least one priced DEMO variant (ADR-025 decision 10).
 
 ### Slice 4 — Experiences & Reservations
 Experience, ExperienceSession, Booking, Participant. My Néctar gains Bookings.

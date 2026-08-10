@@ -874,3 +874,90 @@ Commerce (`ProductVariant`/`Cart`/`Order`, Slice 3), Experience booking
 media pipeline remain open, tracked where they were already tracked
 (`MVP_ROADMAP.md`, `ADAPTIVE_INTELLIGENCE_EXPERIENCE_REVIEW.md` §N/§X) —
 this ADR doesn't reopen or resequence any of them.
+
+---
+
+## ADR-025 — Slice 3 (Commerce) implemented: variant model, ownership pattern, payments adapter
+
+**Context:** `MVP_ROADMAP.md` Slice 3 — Product → purchasable
+`ProductVariant`, Cart, Order, Stripe checkout — built on top of Slice 2's
+read-only Discover catalog and Slice 1's real authorization service. This
+ADR records the implementation-level decisions, same pattern as ADR-021/024.
+
+**Decisions:**
+
+1. **`Product` gets a `ProductVariant[]` relation instead of `priceAmount`/
+   `priceCurrency` fields directly on `Product`.** `Product` stays the
+   catalog listing (name, description, classification — what Discover
+   renders); `ProductVariant` is the sellable unit (SKU, price, inventory).
+   This matches CLAUDE.md §11's own object list (`Product`, `Product
+   Variant`, `SKU`, `Inventory` as distinct objects) and avoids conflating
+   "a product exists" with "a specific priced, purchasable configuration of
+   it exists" — a coffee could have a 250g and 1kg variant at different
+   prices, or no purchasable variant at all yet.
+2. **New `commerce` Postgres schema**, separate from `core` — first
+   module-specific schema, following the convention `DATA_ARCHITECTURE.md`
+   §1 already named but hadn't yet used. `ProductVariant`, `Cart`,
+   `CartItem`, `Order`, `OrderItem`, `Payment` all live there;
+   `ProductVariant.productId` is the only cross-schema foreign key.
+3. **Cart and Order authorization use the ownership-folded-into-query
+   pattern**, not RBAC Assignment resolution — the same choice already made
+   for My Néctar profile access (RBAC.md's "ownership is the filter, not a
+   separate check"). Every Cart/Order read or write puts `userAccountId` in
+   the `where` clause itself (`lib/commerce/cart.ts`,
+   `lib/commerce/orders.ts`'s `getOrderForUser`); there is no
+   fetch-then-check-ownership step, and no case where personal transactional
+   data needs the classification axis (it's never `public`/`internal`, it's
+   simply "yours or not").
+4. **`OrderItem.unitPriceAmount`/`currency` are snapshotted at order
+   creation**, never a live join through `ProductVariant` at read time — the
+   same provenance principle already applied to Protocol versions and lot
+   genealogy elsewhere in the architecture. A later price change on a
+   `ProductVariant` must never rewrite what a past order says it charged.
+5. **Availability is re-validated at checkout, not trusted from add-to-
+   cart time.** `createOrderFromCart` re-checks `status === 'active'`,
+   `product.classification === 'public'`, `product.status === 'approved'`,
+   and remaining inventory for every cart item inside the same transaction
+   that creates the Order — an item could have gone out of stock or been
+   unpublished between being added to the cart and checkout.
+6. **Payments go through a `PaymentsProvider` adapter interface**
+   (`lib/integrations/payments/types.ts`), never calling the Stripe SDK
+   directly from application code — `INTEGRATIONS.md` §1's adapter-per-
+   capability pattern, already used for nothing else yet since this is the
+   first external paid integration. Method names
+   (`createCheckoutSession`/`parseWebhookEvent`) were chosen to match what
+   Stripe Checkout actually needs rather than keeping
+   `INTEGRATIONS.md`'s original placeholder names (`createCharge`/
+   `getStatus`), which assumed a lower-level charge API than Stripe
+   Checkout's session-based flow.
+7. **Stripe Checkout (hosted), not Stripe Elements/custom payment UI.**
+   Fastest path to a working, PCI-scope-free purchase flow given the
+   multi-day timeline (ADR-022's same reasoning applied again); the
+   `PaymentsProvider` interface doesn't leak this choice, so swapping to an
+   embedded flow later doesn't touch `lib/commerce/orders.ts`.
+8. **Order creation happens before redirecting to Stripe**, not after
+   payment succeeds. The `Order` row (status `pending_payment`) and
+   `Payment` row (status `pending`) are created synchronously in the
+   checkout server action; the webhook (`/api/webhooks/stripe`) only ever
+   transitions an existing Order to `paid`, decrementing tracked inventory
+   and recording an `AuditEvent`. This keeps "what did the customer try to
+   buy" inspectable even if they abandon Stripe Checkout or the webhook is
+   delayed, and makes `markOrderPaid` naturally idempotent against Stripe's
+   at-least-once webhook delivery (a no-op if the Order is already `paid`).
+9. **Webhook signature verification is mandatory and unforgiving** —
+   `stripe.webhooks.constructEvent` is left to throw on a bad signature, and
+   the route handler turns that into a 400 without touching the database.
+   No fallback path trusts an unverified request body.
+10. **No fabricated prices anywhere in seed data (CLAUDE.md §54, continuing
+    ADR-024 decision 6).** The two existing DEMO products (Las Nubes
+    Coffee, Cerro Azul Wildflower Honey) still have zero `ProductVariant`
+    rows as of this ADR — they are not yet purchasable, and won't be until
+    real or explicitly-user-supplied placeholder pricing exists. Full
+    Stripe purchase-flow verification is deferred until that's resolved.
+
+**Consequences:** Slice 3's schema, cart, order, and payments-adapter code
+is complete. End-to-end verification (a real Stripe test-mode purchase
+completing through the webhook) is blocked on two external prerequisites
+that can't be supplied by this session: Stripe test-mode API keys, and a
+decision about how to price at least one DEMO variant for testing. Slice 4
+(Experience booking) is untouched by this ADR.

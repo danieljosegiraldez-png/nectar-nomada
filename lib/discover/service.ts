@@ -90,7 +90,12 @@ export function getPublicStoryBySlug(slug: string) {
 export function listPublicProducts() {
   return prisma.product.findMany({
     where: PUBLIC_WHERE,
-    include: { project: true, location: true, organization: true },
+    include: {
+      project: true,
+      location: true,
+      organization: true,
+      variants: { where: { status: "active" }, orderBy: { priceAmount: "asc" } },
+    },
     orderBy: { name: "asc" },
   });
 }
@@ -98,7 +103,12 @@ export function listPublicProducts() {
 export function getPublicProductBySlug(slug: string) {
   return prisma.product.findFirst({
     where: { ...PUBLIC_WHERE, slug },
-    include: { project: true, location: true, organization: true },
+    include: {
+      project: true,
+      location: true,
+      organization: true,
+      variants: { where: { status: "active" }, orderBy: { priceAmount: "asc" } },
+    },
   });
 }
 

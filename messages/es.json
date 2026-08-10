@@ -23,6 +23,7 @@
     "experiencesHeading": "Experiencias",
     "empty": "Aún no hay contenido público en esta categoría.",
     "priceUnavailable": "Precio próximamente",
+    "fromPrice": "Desde {price}",
     "viewAll": "Ver todo",
     "backToDiscover": "← Volver a Descubre",
     "locatedAt": "Ubicado en {location}",
@@ -35,7 +36,37 @@
     "placesInThisArea": "Lugares",
     "durationMinutes": "Aproximadamente {minutes} minutos",
     "notFoundTitle": "No encontrado",
-    "notFoundBody": "Esta página no existe, o aún no es pública."
+    "notFoundBody": "Esta página no existe, o aún no es pública.",
+    "variantLabel": "Opción",
+    "addToCartButton": "Agregar al carrito",
+    "quantityLabel": "Cantidad",
+    "outOfStock": "Agotado",
+    "noVariantsYet": "Aún no disponible para compra."
+  },
+  "Cart": {
+    "title": "Carrito",
+    "empty": "Tu carrito está vacío.",
+    "continueShopping": "Seguir explorando",
+    "quantityLabel": "Cantidad",
+    "updateButton": "Actualizar",
+    "removeButton": "Quitar",
+    "subtotalLabel": "Subtotal",
+    "checkoutButton": "Pagar",
+    "error_variant_unavailable": "Este artículo ya no está disponible.",
+    "error_insufficient_inventory": "No hay suficiente inventario para la cantidad solicitada.",
+    "error_quantity_invalid": "Ingresa una cantidad válida."
+  },
+  "Checkout": {
+    "successTitle": "Pedido confirmado",
+    "successBody": "Gracias — tu pedido ha sido realizado. Recibirás una confirmación en breve.",
+    "orderNumberLabel": "Número de pedido",
+    "statusLabel": "Estado",
+    "viewOrdersLink": "Ver mis pedidos",
+    "status_pending_payment": "Pago pendiente",
+    "status_paid": "Pagado",
+    "status_fulfilled": "Completado",
+    "status_cancelled": "Cancelado",
+    "status_refunded": "Reembolsado"
   },
   "Auth": {
     "signInTitle": "Iniciar sesión",
@@ -65,8 +96,15 @@
     "assignmentScope": "alcance: {scope}",
     "permissionsHeading": "Permisos resueltos a nivel de plataforma",
     "noPermissions": "Ninguno — esperado para una cuenta nueva sin asignaciones.",
-    "activityHeading": "Pedidos · Reservas · Historial sensorial · Guardados",
-    "activityBody": "Vacío — Comercio, Experiencias y Sensorial son slices verticales posteriores (MVP_ROADMAP.md). Esta página es real, no una maqueta: consulta tus propios registros de UserAccount, Person y Assignment."
+    "ordersHeading": "Pedidos",
+    "noOrders": "Aún no tienes pedidos.",
+    "orderStatus_pending_payment": "Pago pendiente",
+    "orderStatus_paid": "Pagado",
+    "orderStatus_fulfilled": "Completado",
+    "orderStatus_cancelled": "Cancelado",
+    "orderStatus_refunded": "Reembolsado",
+    "otherActivityHeading": "Reservas · Historial sensorial · Guardados",
+    "otherActivityBody": "Vacío — Experiencias y Sensorial son slices verticales posteriores (MVP_ROADMAP.md)."
   },
   "LocaleSwitcher": {
     "label": "Idioma"

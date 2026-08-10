@@ -3,6 +3,8 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "../../lib/db";
 import { getCurrentUser } from "../../lib/auth/session";
 import { canManageOwnProfile, resolvedPermissionKeys } from "../../lib/rbac/service";
+import { getOrdersForUser } from "../../lib/commerce/orders";
+import { formatPrice } from "../../lib/discover/format";
 
 export const dynamic = "force-dynamic";
 
@@ -40,9 +42,10 @@ export default async function MyNectarPage() {
   // meaningful target to resolve against right now is the platform scope —
   // this is a live call into the same authorization service every other
   // module will use, not a stub.
-  const [platformPermissions, t] = await Promise.all([
+  const [platformPermissions, t, orders] = await Promise.all([
     resolvedPermissionKeys(user.userAccountId, { scopeType: "platform", scopeRefId: null }),
     getTranslations("MyNectar"),
+    getOrdersForUser(user.userAccountId),
   ]);
 
   return (
@@ -83,8 +86,36 @@ export default async function MyNectarPage() {
       </section>
 
       <section style={{ marginTop: "2rem" }}>
-        <h2>{t("activityHeading")}</h2>
-        <p className="nn-muted">{t("activityBody")}</p>
+        <h2>{t("ordersHeading")}</h2>
+        {orders.length === 0 ? (
+          <p className="nn-muted">{t("noOrders")}</p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0 }}>
+            {orders.map((order) => (
+              <li key={order.id} className="nn-card" style={{ maxWidth: "none", marginBottom: "1rem" }}>
+                <p>
+                  <strong>{order.orderNumber}</strong> —{" "}
+                  {t(`orderStatus_${order.status}` as "orderStatus_pending_payment")}
+                </p>
+                <ul>
+                  {order.items.map((item) => (
+                    <li key={item.id}>
+                      {item.productVariant.product.name}
+                      {item.productVariant.variantName ? ` — ${item.productVariant.variantName}` : ""} ×
+                      {item.quantity} — {formatPrice(item.unitPriceAmount, item.currency, "")}
+                    </li>
+                  ))}
+                </ul>
+                <p className="nn-price">{formatPrice(order.subtotalAmount, order.currency, "")}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section style={{ marginTop: "2rem" }}>
+        <h2>{t("otherActivityHeading")}</h2>
+        <p className="nn-muted">{t("otherActivityBody")}</p>
       </section>
     </div>
   );

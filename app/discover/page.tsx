@@ -7,7 +7,7 @@ import {
   listPublicProducts,
   listPublicExperiences,
 } from "../../lib/discover/service";
-import { formatPrice } from "../../lib/discover/format";
+import { formatPrice, lowestVariantPrice } from "../../lib/discover/format";
 
 export const dynamic = "force-dynamic";
 
@@ -84,12 +84,17 @@ export default async function DiscoverPage() {
           <p className="nn-muted">{t("empty")}</p>
         ) : (
           <div className="nn-grid">
-            {products.map((product) => (
-              <Link key={product.id} href={`/products/${product.slug}`} className="nn-card-link">
-                <h3>{product.name}</h3>
-                <p className="nn-price">{formatPrice(product.priceAmount, product.priceCurrency, t("priceUnavailable"))}</p>
-              </Link>
-            ))}
+            {products.map((product) => {
+              const price = lowestVariantPrice(product.variants);
+              return (
+                <Link key={product.id} href={`/products/${product.slug}`} className="nn-card-link">
+                  <h3>{product.name}</h3>
+                  <p className="nn-price">
+                    {price ? t("fromPrice", { price: formatPrice(price.amount, price.currency, "") }) : t("priceUnavailable")}
+                  </p>
+                </Link>
+              );
+            })}
           </div>
         )}
       </section>

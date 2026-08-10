@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getPublicProductBySlug } from "../../../lib/discover/service";
-import { formatPrice } from "../../../lib/discover/format";
+import { lowestVariantPrice, formatPrice } from "../../../lib/discover/format";
+import { AddToCartForm } from "../../components/AddToCartForm";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     notFound();
   }
 
+  const price = lowestVariantPrice(product.variants);
+
   return (
     <div>
       <Link href="/discover" className="nn-back-link">
@@ -22,7 +25,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
       <h1>{product.name}</h1>
       <p className="nn-price" style={{ fontSize: "1.2rem" }}>
-        {formatPrice(product.priceAmount, product.priceCurrency, t("priceUnavailable"))}
+        {price ? formatPrice(price.amount, price.currency, "") : t("priceUnavailable")}
       </p>
       <div className="nn-detail-meta">
         {product.project ? (
@@ -34,6 +37,18 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
       {product.summary ? <p className="nn-muted">{product.summary}</p> : null}
       {product.description ? <div className="nn-prose">{product.description}</div> : null}
+
+      <div className="nn-section">
+        <AddToCartForm
+          variants={product.variants.map((v) => ({
+            id: v.id,
+            variantName: v.variantName,
+            priceAmount: v.priceAmount.toNumber(),
+            priceCurrency: v.priceCurrency,
+            inventoryCount: v.inventoryCount,
+          }))}
+        />
+      </div>
     </div>
   );
 }
