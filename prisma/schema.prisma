@@ -13,7 +13,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  schemas    = ["core", "commerce", "experiences", "partner", "sensory", "ai", "competitions"]
+  schemas    = ["core", "commerce", "experiences", "partner", "sensory", "ai", "competitions", "traceability"]
   // DECISIONS.md ADR-021/ADR-022 — deferred against the local PGlite sandbox
   // (no extension support), enabled now that Neon is the primary database.
   extensions = [postgis]
@@ -61,6 +61,7 @@ model Person {
   calibrationSessionsConducted CalibrationSession[]
   calibrationResults           CalibrationResult[]
   sensitivityProfiles          EvaluatorSensitivityProfile[]
+  lotTransformationsOperated   LotTransformation[]
 
   @@map("person")
   @@schema("core")
@@ -122,6 +123,8 @@ model UserAccount {
   recommendationsReviewed     Recommendation[]             @relation("RecommendationReviewedBy")
   competitionJudgeAssignments CompetitionJudgeAssignment[]
   competitionResultsFinalized CompetitionResult[]          @relation("CompetitionResultFinalizedBy")
+  lotsCreated                 Lot[]                        @relation("LotCreatedBy")
+  lotTransformationsCreated   LotTransformation[]          @relation("LotTransformationCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -357,6 +360,7 @@ model Location {
   products                    Product[]
   experiences                 Experience[]
   assets                      Asset[]
+  lots                        Lot[]
 
   @@index([parentLocationId])
   @@index([organizationId])
@@ -411,6 +415,7 @@ model Organization {
   experiences                Experience[]
   competitionEntries         Entry[]
   referenceStandardsSupplied ReferenceStandard[]
+  lots                       Lot[]
 
   @@map("organization")
   @@schema("core")
@@ -493,6 +498,9 @@ model Project {
   // Slice 5 (Partner Workspace) — module-owned, `partner` schema.
   tasks            Task[]
   fieldSubmissions FieldSubmission[]
+
+  // Phase 1 — module-owned, `traceability` schema.
+  lots Lot[]
 
   @@index([programId])
   @@index([organizationId])
@@ -1784,4 +1792,171 @@ model EvaluatorSensitivityProfile {
   @@id([personId, referenceStandardId])
   @@map("evaluator_sensitivity_profile")
   @@schema("sensory")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1 — Coffee Lot Genealogy (docs/implementation/PHASE_1_TECHNICAL_
+// EXECUTION_PLAN.md, ticket T1). Reconciles DOMAIN_MODEL.md §4's Agricultural
+// Traceability chain (Lot → HarvestEvent → Selection → Processing →
+// Fermentation → Drying → Storage → ... — which names the stages) with
+// COMMERCE_OPERATIONS_TOOLS_ARCHITECTURE.md §F's already-approved
+// Lot/LotTransformation mechanism (which is how a lot actually splits,
+// merges, or blends between those stages) — the latter is the physical
+// mechanics underneath the former's named pipeline, not a competing model.
+// ---------------------------------------------------------------------------
+
+// DATA_ARCHITECTURE.md §4 — specified as "mandatory, not conventional" since
+// the platform's first architecture pass, implemented for the first time
+// here. Applied to every new Phase 1 fact-bearing table (execution plan
+// §6.2); retrofitting it onto already-built Sensory/Competitions/Partner
+// tables is a deliberately separate, explicitly-sequenced fast-follow
+// (execution plan §6.3), not part of this migration.
+enum ProvenanceClass {
+  measured_fact
+  original_record
+  direct_observation
+  scientific_evidence
+  manufacturer_specification
+  interpretation
+  hypothesis
+  conclusion
+  recommendation
+  ai_suggestion
+
+  @@schema("core")
+}
+
+enum DataQuality {
+  verified
+  verified_with_limitation
+  provisional
+  unconfirmed
+  conflicting
+  superseded
+  working_hypothesis
+  not_tested
+  missing_source_record
+
+  @@schema("core")
+}
+
+enum LotType {
+  cherry
+  processing
+  drying
+  green
+  roast
+  sample
+  other
+
+  @@schema("traceability")
+}
+
+model Lot {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lotCode        String              @unique @map("lot_code")
+  lotType        LotType             @map("lot_type")
+  organizationId String?             @map("organization_id") @db.Uuid
+  organization   Organization?       @relation(fields: [organizationId], references: [id])
+  projectId      String?             @map("project_id") @db.Uuid
+  project        Project?            @relation(fields: [projectId], references: [id])
+  // Same project/organization/location triple every other traceable
+  // canonical entity (Sample, Story, Product, Experience) already carries.
+  // Needed as a real RBAC scope target, not just descriptive metadata: a
+  // location-scoped Farm Operator Assignment (execution plan §26 decision
+  // record) can only authorize an action against a Lot if the Lot itself
+  // resolves to that location — RBAC.md §3's leaf-scope containment rule
+  // means a project-scoped check alone would never succeed for such an
+  // Assignment.
+  locationId     String?             @map("location_id") @db.Uuid
+  location       Location?           @relation(fields: [locationId], references: [id])
+  // Administrative record lifecycle (draft/approved/archived/...) — distinct
+  // from a lot's *processing stage*, which is never stored here. Current
+  // stage is always derived by querying this lot's LotTransformation
+  // history (execution plan §8.2: "current state is computed, never an
+  // overwritable column").
+  status         RecordStatus        @default(draft)
+  classification ClassificationLevel @default(internal)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  createdBy      String?             @map("created_by") @db.Uuid
+  creator        UserAccount?        @relation("LotCreatedBy", fields: [createdBy], references: [id])
+
+  transformationInputs  LotTransformationInput[]
+  transformationOutputs LotTransformationOutput[]
+
+  @@index([organizationId])
+  @@index([projectId])
+  @@map("lot")
+  @@schema("traceability")
+}
+
+enum LotTransformationType {
+  split
+  merge
+  blend
+  stage_change
+  sample_extraction
+  loss
+  disposal
+  sale
+
+  @@schema("traceability")
+}
+
+// Append-only by construction — lib/traceability/lots.ts deliberately has no
+// update function for this table or its input/output joins. A correction is
+// always a new LotTransformation, never an edit to an existing one, the same
+// principle already proven for sensory.Assessment (immutable,
+// supersedesAssessmentId for corrections) and SensoryProtocolVersion
+// (versioned, never overwritten) elsewhere in this schema — getting this
+// wrong would silently corrupt traceability with no error, discovered only
+// when a report doesn't add up.
+model LotTransformation {
+  id                 String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  transformationType LotTransformationType @map("transformation_type")
+  occurredAt         DateTime              @map("occurred_at")
+  operatorPersonId   String?               @map("operator_person_id") @db.Uuid
+  operator           Person?               @relation(fields: [operatorPersonId], references: [id])
+  notes              String?
+  provenanceClass    ProvenanceClass       @default(direct_observation) @map("provenance_class")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  createdBy          String?               @map("created_by") @db.Uuid
+  creator            UserAccount?          @relation("LotTransformationCreatedBy", fields: [createdBy], references: [id])
+
+  inputs  LotTransformationInput[]
+  outputs LotTransformationOutput[]
+
+  @@index([occurredAt])
+  @@map("lot_transformation")
+  @@schema("traceability")
+}
+
+model LotTransformationInput {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  transformationId String            @map("transformation_id") @db.Uuid
+  transformation   LotTransformation @relation(fields: [transformationId], references: [id], onDelete: Cascade)
+  lotId            String            @map("lot_id") @db.Uuid
+  lot              Lot               @relation(fields: [lotId], references: [id])
+  quantity         Decimal?          @db.Decimal(10, 3)
+  unit             String?
+
+  @@index([transformationId])
+  @@index([lotId])
+  @@map("lot_transformation_input")
+  @@schema("traceability")
+}
+
+model LotTransformationOutput {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  transformationId String            @map("transformation_id") @db.Uuid
+  transformation   LotTransformation @relation(fields: [transformationId], references: [id], onDelete: Cascade)
+  lotId            String            @map("lot_id") @db.Uuid
+  lot              Lot               @relation(fields: [lotId], references: [id])
+  quantity         Decimal?          @db.Decimal(10, 3)
+  unit             String?
+
+  @@index([transformationId])
+  @@index([lotId])
+  @@map("lot_transformation_output")
+  @@schema("traceability")
 }

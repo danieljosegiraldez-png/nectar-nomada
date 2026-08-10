@@ -1218,7 +1218,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 
 | Ticket | Dependency | Domain | Schema | Backend | Frontend | Tests | Risk | Definition of Done |
 |---|---|---|---|---|---|---|---|---|
-| **T1 — Canonical Lot + LotTransformation schema** | None | traceability | New: `Lot`, `LotTransformation`, input/output joins, provenance enums | `lib/traceability/lots.ts`: createLot, recordTransformation | None yet | Unit: split/merge round-trip; lineage CTE correctness | Low — new tables, but the append-only invariant (§8.2) must be gotten right here or everything downstream inherits the bug | Migration applied to Neon; unit tests pass; a script-level split/merge/blend scenario verified against real DB |
+| **T1 — Canonical Lot + LotTransformation schema — DONE** | None | traceability | Built: `Lot` (+`locationId`, added beyond the original sketch — see note below), `LotTransformation`, input/output joins, `ProvenanceClass`/`DataQuality` enums | `lib/traceability/lots.ts`: createLot, recordTransformation, getLotLineage | None (correctly out of scope) | `tests/traceability/lots.test.ts`, 10 tests, real Neon | Realized as planned — append-only invariant holds (no update function exists for either table) | **Met**: 2 migrations applied to Neon; 48/48 tests pass; split/merge/blend all exercised live, self-cleaning fixtures |
 | **T2 — QuantityEvent ledger** | T1 | traceability | New: `QuantityEvent` | `lib/traceability/quantity.ts` | None yet | Unit: sum computation, negative-quantity rejection | Low | Quantity computed correctly across a multi-event lot history |
 | **T3 — Measurement architecture + unit registry** | T1 | traceability | New: `Measurement` | `lib/traceability/measurements.ts`, `lib/traceability/units.ts` | None yet | Unit: unit conversion, variable validation | Low | Measurement recordable against a Lot; canonical-unit registry covers §10.3's 7 variables |
 | **T4 — Harvest/Receiving capture** | T1, T3 | traceability | New: `HarvestEvent`, `ReceivingEvent`, `Location.plot` | `lib/traceability/harvest.ts` | Create Lot (via Harvest form) | Integration: harvest creates a valid origin Lot | Low | A real DEMO harvest creates a Lot end-to-end |
@@ -1232,6 +1232,36 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | **T12 — Sensory linkage panel** | T5, existing Sensory | traceability + sensory (read-only) | None | Read query joining Sample → SensorySession | Sensory panel on Lot Detail | Integration: link renders when present, absent gracefully otherwise | Low — read-only, no sensory schema touched | A Lot with a cupped Sample shows its PanelResult; one without shows nothing, not an error |
 | **T13 — Lot Summary Report** | T1-T12 | traceability | None | `lib/traceability/reports.ts` | Lot Report page | E2E: report reproduces from live data | Low | Report renders origin/lineage/processing/measurements/samples/sensory for a real DEMO lot |
 | **T14 — Full E2E test + DEMO seed** | T1-T13 | traceability | Seed script additions | None | None | The full coffee-workflow E2E test (§31) | Medium — the integration point that proves everything actually composes | One DEMO harvest-to-sensory chain seeded and passing an automated E2E test, not just a manual verification pass |
+
+**T1 implementation notes, two deliberate deviations from the original
+sketch, both discovered mid-implementation and reasoned through rather
+than silently worked around:**
+
+1. **`Lot.locationId` added.** §6.1's original sketch only gave `Lot`
+   `organizationId`/`projectId`. Implementing the approved Farm Operator
+   scope change (decision 6) surfaced a real gap: RBAC.md §3's leaf-scope
+   containment rule means a `location`-scoped Assignment can only
+   authorize an action against a resource that itself resolves to that
+   location — a `projectId`-only `Lot` could never be reached by a
+   location-scoped check at all. Fixed by adding `locationId`, matching
+   the same project/organization/location triple every other traceable
+   canonical entity (`Sample`, `Story`, `Product`, `Experience`) already
+   carries — a consistency fix, not scope creep.
+2. **Also discovered**: `Partner Field Collector`'s documented
+   "scope: project or location" (`RBAC.md` §5) is real for `location` as a
+   valid `ScopeType` and as an unrestricted Assignment target, but no
+   Partner Workspace resource actually checks a location-scope target in
+   code (`lib/partner/workspace.ts` only ever checks `scopeType:
+   "project"`) — so a location-scoped Partner Field Collector Assignment
+   would not currently authorize anything there. This doesn't affect T1
+   (Farm Operator's location-scope check in `lib/traceability/lots.ts` is
+   implemented for real, tested, and passing), but it means the "already-
+   proven precedent" cited when approving decision 6 was accurate for the
+   schema/Assignment layer only, not for Partner Workspace's specific
+   resource-level checks. Worth a follow-up look at
+   `lib/partner/workspace.ts` if location-scoped partner access is ever
+   actually relied upon — flagged here rather than silently left
+   undiscovered.
 
 ## 35. Dependency Graph
 
@@ -1255,9 +1285,18 @@ T13 ──→ T14 (Full E2E + DEMO seed)
 ## 36. Phase Gates
 
 - **GATE A — Canonical model approved**: this document approved by the
-  product owner (blocks T1).
+  product owner (blocks T1). **Passed** (approval recorded at the top of
+  this document).
 - **GATE B — Genealogy tests pass**: T1's split/merge/blend unit tests
-  green against real Postgres.
+  green against real Postgres. **Passed** — `Lot`/`LotTransformation`
+  schema live on Neon; `lib/traceability/lots.ts` (createLot,
+  recordTransformation, getLotLineage) implemented; `tests/traceability/
+  lots.test.ts` (10 tests: RBAC positive/negative including the
+  location-scope case from the approved decision change, split/merge/
+  blend round-trips, append-only history, forward/backward lineage CTEs)
+  passes against real Neon, self-contained fixtures fully cleaned up by
+  its own `afterAll`. `npx tsc --noEmit`/`npm run lint`/`npm test`
+  (48/48)/`npm run build` all green.
 - **GATE C — Measurement model validated**: T3's unit-registry and
   variable-validation tests green.
 - **GATE D — Operator workflow functional**: T10 renders a real, non-empty

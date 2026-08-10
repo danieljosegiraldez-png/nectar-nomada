@@ -114,6 +114,13 @@ something to assign, not a closed list:
   authority — distinct from Sensory Judge specifically so the blind mapping
   isn't reachable by every judge on the panel. Added in Slice 6 (`DECISIONS.md`
   ADR-030 decision 4).
+- **Farm Operator** (scope: project or location) — create/transform lots,
+  record measurements and fermentation/drying/storage runs, and create
+  samples within an assigned project or location. Same project-or-location
+  Assignment flexibility already proven for Partner Field Collector, since
+  a real operator often works across multiple projects at one physical
+  site. No approval permissions. Added for Phase 1
+  (`docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md`).
 - **Customer** — not an Assignment-based profile; every authenticated
   UserAccount without further Assignments gets the implicit baseline "Registered
   Customer" permission set (My Néctar, ordering, booking) enforced as a default

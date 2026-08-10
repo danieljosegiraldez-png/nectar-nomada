@@ -41,6 +41,16 @@ export const PERMISSIONS: readonly PermissionDef[] = [
 
   { resourceType: "competition", action: "manage", description: "Create editions/categories/entries, assign judges, finalize results, and declare awards." },
 
+  // Phase 1 (docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md §26) —
+  // deliberately not reusing research:create_measurement: an operational
+  // fermentation/drying reading is not research evidence until Research OS
+  // explicitly adopts it, and overloading that permission would blur the
+  // boundary COMMERCE_OPERATIONS_TOOLS_ARCHITECTURE.md §J insists on
+  // keeping sharp (Operational Measurement != Approved Research Evidence).
+  { resourceType: "lot", action: "manage", description: "Create/transform lots, record measurements, fermentation/drying/storage runs." },
+  { resourceType: "lot", action: "view", description: "View lot detail, lineage, and measurements." },
+  { resourceType: "sample", action: "manage", description: "Create samples, including from a traceable lot." },
+
   { resourceType: "classification", action: "clear_registered", description: "Access records classified Registered." },
   { resourceType: "classification", action: "clear_partner", description: "Access records classified Partner." },
   { resourceType: "classification", action: "clear_internal", description: "Access records classified Internal." },
@@ -137,6 +147,25 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       ["sensory", "submit_assessment"],
       ["blind_mapping", "view"],
       ["classification", "clear_internal"],
+    ],
+  },
+  {
+    name: "Farm Operator",
+    description:
+      "Create/transform lots and record measurements, fermentation/drying/storage runs, and samples " +
+      "within an assigned project or location. Intended scope: project or location — the same " +
+      "Assignment mechanism already proven for Partner Field Collector, since a real operator often " +
+      "works across multiple projects at one physical site rather than one project alone " +
+      "(docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md §26, decision record). No approval " +
+      "permissions.",
+    permissions: [
+      ["lot", "manage"],
+      ["lot", "view"],
+      ["sample", "manage"],
+      // Same classification grant as Partner Field Collector (DECISIONS.md
+      // ADR-029 decision 2) — an operator on their own assigned project
+      // still cannot clear internal/confidential/trade_secret.
+      ["classification", "clear_partner"],
     ],
   },
 ] as const;
