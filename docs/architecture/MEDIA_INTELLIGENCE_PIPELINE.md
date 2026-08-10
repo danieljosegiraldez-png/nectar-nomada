@@ -42,7 +42,7 @@ GoogleDriveProvider.fetchFile(fileId) → binary + metadata
 ```
 
 Import job (`ExternalImportJob` pattern, consistent with
-`EXTERNAL_DATA_SOURCES.md` §25):
+`NECTAR_NOMADA_EXTERNAL_DATA_SOURCES.md` §25):
 
 1. List files in designated brand/expedition folders.
 2. For each new or changed file: download, checksum, upload to
@@ -201,5 +201,5 @@ ingestion design in §2:
   patterns to justify it.
 
 Log this document's acceptance in `DECISIONS.md` the same way
-`EXTERNAL_DATA_SOURCES.md` was logged — accepted as planning input, sequencing
-deferred, not an immediate build order.
+`NECTAR_NOMADA_EXTERNAL_DATA_SOURCES.md` was logged — accepted as planning
+input, sequencing deferred, not an immediate build order.
