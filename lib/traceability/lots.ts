@@ -20,7 +20,7 @@
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import type { ScopeTarget } from "../rbac/types";
-import type { ProvenanceClass } from "../../generated/prisma/client";
+import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
 export class TraceabilityAccessError extends Error {}
 
@@ -262,4 +262,300 @@ export async function getLotLineage(userAccountId: string, lotId: string) {
     ancestorLotIds: ancestors.map((r) => r.lot_id),
     descendantLotIds: descendants.map((r) => r.lot_id),
   };
+}
+
+/**
+ * T10 (§29, §34): what Lots (and, by extension, Samples) a user can see for
+ * list/dashboard purposes — distinct from `requireLotAccess`'s per-resource
+ * check, since "list everything I can see" needs the actual set of
+ * project/location scope refs a user's Assignments grant `lot:view`
+ * against, not just a yes/no answer for one already-known Lot. A
+ * platform-scoped Assignment (RBAC.md §3: "platform always contains")
+ * sees everything; a project/location-scoped one sees only Lots resolving
+ * to those scopes; a user with no qualifying Assignment sees nothing.
+ */
+interface LotVisibility {
+  mode: "all" | "none" | "scoped";
+  projectIds: string[];
+  locationIds: string[];
+}
+
+async function resolveLotVisibility(userAccountId: string, action: "view" | "manage" = "view"): Promise<LotVisibility> {
+  const now = new Date();
+  const assignments = await prisma.assignment.findMany({
+    where: {
+      userAccountId,
+      status: "active",
+      validFrom: { lte: now },
+      OR: [{ validTo: null }, { validTo: { gt: now } }],
+    },
+    include: { scope: true, roleProfile: { include: { permissions: { include: { permission: true } } } } },
+  });
+
+  const viewGranting = assignments.filter((a) =>
+    a.roleProfile.permissions.some((rp) => rp.permission.resourceType === "lot" && rp.permission.action === action),
+  );
+
+  if (viewGranting.some((a) => a.scope.scopeType === "platform")) {
+    return { mode: "all", projectIds: [], locationIds: [] };
+  }
+
+  const projectIds = [
+    ...new Set(
+      viewGranting
+        .filter((a) => a.scope.scopeType === "project")
+        .map((a) => a.scope.scopeRefId)
+        .filter((id): id is string => id != null),
+    ),
+  ];
+  const locationIds = [
+    ...new Set(
+      viewGranting
+        .filter((a) => a.scope.scopeType === "location")
+        .map((a) => a.scope.scopeRefId)
+        .filter((id): id is string => id != null),
+    ),
+  ];
+
+  if (projectIds.length === 0 && locationIds.length === 0) {
+    return { mode: "none", projectIds: [], locationIds: [] };
+  }
+  return { mode: "scoped", projectIds, locationIds };
+}
+
+function scopeOrClauses(visibility: LotVisibility): Array<{ projectId: { in: string[] } } | { locationId: { in: string[] } }> {
+  const clauses: Array<{ projectId: { in: string[] } } | { locationId: { in: string[] } }> = [];
+  if (visibility.projectIds.length) clauses.push({ projectId: { in: visibility.projectIds } });
+  if (visibility.locationIds.length) clauses.push({ locationId: { in: visibility.locationIds } });
+  return clauses;
+}
+
+/** Null return means "matches nothing" — the caller should short-circuit rather than query with an empty OR (which Prisma/Postgres would read as "matches everything"). */
+function lotWhereFromVisibility(visibility: LotVisibility): Prisma.LotWhereInput | null {
+  if (visibility.mode === "all") return {};
+  if (visibility.mode === "none") return null;
+  return { OR: scopeOrClauses(visibility) };
+}
+
+function sampleWhereFromVisibility(visibility: LotVisibility): Prisma.SampleWhereInput | null {
+  if (visibility.mode === "all") return {};
+  if (visibility.mode === "none") return null;
+  return { OR: scopeOrClauses(visibility) };
+}
+
+function lotMatchesVisibility(lot: { projectId: string | null; locationId: string | null }, visibility: LotVisibility): boolean {
+  if (visibility.mode === "all") return true;
+  if (visibility.mode === "none") return false;
+  return (
+    (lot.projectId != null && visibility.projectIds.includes(lot.projectId)) ||
+    (lot.locationId != null && visibility.locationIds.includes(lot.locationId))
+  );
+}
+
+export interface LotListFilters {
+  lotType?: CreateLotInput["lotType"];
+}
+
+/** Filterable list for the `/lots` screen (§30 screen 2) — capped at 200, newest first; Phase 1 has no pagination UI yet. */
+export async function getLotList(userAccountId: string, filters: LotListFilters = {}) {
+  const visibility = await resolveLotVisibility(userAccountId);
+  const where = lotWhereFromVisibility(visibility);
+  if (where === null) return [];
+
+  return prisma.lot.findMany({
+    where: { ...where, ...(filters.lotType ? { lotType: filters.lotType } : {}) },
+    include: { project: true, organization: true, location: true },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+}
+
+// Placeholder threshold for the "requiring attention" card (§23: "past a
+// configurable threshold") — Phase 1 has no settings UI to make this
+// actually configurable yet, so it's a named constant, not a magic number.
+const ATTENTION_MEASUREMENT_STALENESS_HOURS = 24;
+
+/**
+ * The four Active Operations cards (§23) — concrete, actionable queries,
+ * not a decorative dashboard. Every card is scoped to what this user's
+ * Assignments actually let them see.
+ */
+export async function getActiveOperations(userAccountId: string) {
+  const visibility = await resolveLotVisibility(userAccountId);
+  if (visibility.mode === "none") {
+    return { activeFermentationRuns: [], activeDryingRuns: [], lotsNeedingMeasurement: [], samplesAwaitingSensory: [] };
+  }
+
+  const runInclude = {
+    transformations: {
+      where: { transformationType: "stage_change" as const },
+      orderBy: { occurredAt: "asc" as const },
+      take: 1,
+      include: { inputs: { include: { lot: { include: { project: true } } } } },
+    },
+  };
+
+  const [fermentationRunRows, dryingRunRows] = await Promise.all([
+    prisma.fermentationRun.findMany({ where: { endedAt: null }, include: runInclude }),
+    prisma.dryingRun.findMany({ where: { endedAt: null }, include: runInclude }),
+  ]);
+
+  const withSourceLot = <T extends { transformations: Array<{ inputs: Array<{ lot: NonNullable<unknown> }> }> }>(rows: T[]) =>
+    rows
+      .map((run) => ({ run, lot: run.transformations[0]?.inputs[0]?.lot ?? null }))
+      .filter((entry): entry is { run: T; lot: NonNullable<(typeof entry)["lot"]> } => entry.lot != null);
+
+  const activeFermentationRuns = withSourceLot(fermentationRunRows).filter((e) => lotMatchesVisibility(e.lot as { projectId: string | null; locationId: string | null }, visibility));
+  const activeDryingRuns = withSourceLot(dryingRunRows).filter((e) => lotMatchesVisibility(e.lot as { projectId: string | null; locationId: string | null }, visibility));
+
+  const staleThreshold = new Date(Date.now() - ATTENTION_MEASUREMENT_STALENESS_HOURS * 60 * 60 * 1000);
+  const activeLotIds = [
+    ...activeFermentationRuns.map((e) => (e.lot as { id: string }).id),
+    ...activeDryingRuns.map((e) => (e.lot as { id: string }).id),
+  ];
+  const recentlyMeasuredLotIds =
+    activeLotIds.length === 0
+      ? new Set<string>()
+      : new Set(
+          (
+            await prisma.measurement.findMany({
+              where: { lotId: { in: activeLotIds }, occurredAt: { gte: staleThreshold } },
+              select: { lotId: true },
+            })
+          ).map((m) => m.lotId),
+        );
+  const lotsNeedingMeasurement = [...activeFermentationRuns, ...activeDryingRuns]
+    .map((e) => e.lot as { id: string; lotCode: string })
+    .filter((lot) => !recentlyMeasuredLotIds.has(lot.id));
+
+  const sampleWhere = sampleWhereFromVisibility(visibility);
+  const samplesAwaitingSensory =
+    sampleWhere === null
+      ? []
+      : await prisma.sample.findMany({
+          where: { ...sampleWhere, sourceLotId: { not: null }, blindMappings: { none: {} } },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        });
+
+  return { activeFermentationRuns, activeDryingRuns, lotsNeedingMeasurement, samplesAwaitingSensory };
+}
+
+/**
+ * Full Lot Detail aggregation (§23) — everything the page needs in one
+ * call except current quantity (lib/traceability/quantity.ts's
+ * computeCurrentQuantity, called separately by the page to avoid a
+ * lots.ts → quantity.ts → lots.ts import cycle) and sensory results
+ * (T12, out of scope here). `auditEvents` is intentionally queried even
+ * though no Phase 1 write path has ever populated `core.AuditEvent` for a
+ * traceability entity yet — the section renders correctly empty, which is
+ * an honest reflection of unbuilt instrumentation, not a bug in this
+ * query.
+ */
+export async function getLotDetail(userAccountId: string, lotId: string) {
+  const lot = await prisma.lot.findUnique({
+    where: { id: lotId },
+    include: { project: true, organization: true, location: true },
+  });
+  if (!lot) throw new TraceabilityAccessError("lot_not_found");
+
+  await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+
+  const [
+    lineage,
+    transformations,
+    quantityEvents,
+    measurements,
+    samples,
+    storageAssignments,
+    tasks,
+    auditEvents,
+  ] = await Promise.all([
+    getLotLineage(userAccountId, lotId),
+    prisma.lotTransformation.findMany({
+      where: { OR: [{ inputs: { some: { lotId } } }, { outputs: { some: { lotId } } }] },
+      include: { inputs: true, outputs: true },
+      orderBy: { occurredAt: "asc" },
+    }),
+    prisma.quantityEvent.findMany({ where: { lotId }, orderBy: { occurredAt: "asc" } }),
+    prisma.measurement.findMany({ where: { lotId }, orderBy: { occurredAt: "asc" } }),
+    prisma.sample.findMany({ where: { sourceLotId: lotId }, orderBy: { createdAt: "asc" } }),
+    prisma.storageAssignment.findMany({ where: { lotId }, include: { location: true }, orderBy: { startedAt: "asc" } }),
+    lot.projectId
+      ? prisma.task.findMany({ where: { projectId: lot.projectId }, orderBy: { createdAt: "desc" }, take: 20 })
+      : Promise.resolve([]),
+    prisma.auditEvent.findMany({ where: { entityType: "Lot", entityId: lotId }, orderBy: { occurredAt: "desc" } }),
+  ]);
+
+  const fermentationRunIds = [...new Set(transformations.map((t) => t.fermentationRunId).filter((id): id is string => id != null))];
+  const dryingRunIds = [...new Set(transformations.map((t) => t.dryingRunId).filter((id): id is string => id != null))];
+
+  const [fermentationRuns, dryingRuns] = await Promise.all([
+    fermentationRunIds.length
+      ? prisma.fermentationRun.findMany({ where: { id: { in: fermentationRunIds } }, include: { interventions: { orderBy: { occurredAt: "asc" } } } })
+      : Promise.resolve([]),
+    dryingRunIds.length
+      ? prisma.dryingRun.findMany({ where: { id: { in: dryingRunIds } }, include: { turningEvents: { orderBy: { occurredAt: "asc" } } } })
+      : Promise.resolve([]),
+  ]);
+
+  return {
+    lot,
+    lineage,
+    transformations,
+    quantityEvents,
+    measurements,
+    samples,
+    fermentationRuns,
+    dryingRuns,
+    storageAssignments,
+    tasks,
+    auditEvents,
+  };
+}
+
+/**
+ * What a user can actually pick from when creating a lot or moving one to
+ * storage (§30 screens 4/8) — enough detail (organization, location
+ * hierarchy) to render real dropdowns instead of asking an operator to
+ * paste in a raw UUID.
+ *
+ * Projects are scoped to the user's actual `lot:manage` Assignments (cheap
+ * and exact — a project-scoped Assignment names its project directly).
+ * Locations are shown system-wide rather than scope-filtered: a
+ * project-scoped Farm Operator's harvest still needs a real plot/location,
+ * and this schema has no direct Location→Project relationship to compute
+ * "locations belonging to project X" from. The dropdown is a convenience,
+ * not the security boundary — `recordHarvestEvent`/`moveLotToStorage`
+ * still run the real `requireLotAccess` check server-side regardless of
+ * what's offered here, so a mismatched pick fails safely with a normal
+ * error, not a silent authorization bypass.
+ */
+export async function getManageableContext(userAccountId: string) {
+  const visibility = await resolveLotVisibility(userAccountId, "manage");
+
+  const [projects, locations] = await Promise.all([
+    visibility.mode === "none"
+      ? Promise.resolve([])
+      : visibility.mode === "all"
+        ? prisma.project.findMany({ orderBy: { name: "asc" } })
+        : prisma.project.findMany({ where: { id: { in: visibility.projectIds } }, orderBy: { name: "asc" } }),
+    prisma.location.findMany({ include: { organization: true }, orderBy: { name: "asc" } }),
+  ]);
+
+  const organizations = [
+    ...new Map(
+      locations.filter((l) => l.organization != null).map((l) => [l.organization!.id, l.organization!]),
+    ).values(),
+  ];
+
+  return { projects, locations, organizations };
+}
+
+/** Lightweight lot fetch + view-access check for the simpler "record X" form pages, which don't need getLotDetail's full aggregation. */
+export async function getLotSummary(userAccountId: string, lotId: string) {
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) throw new TraceabilityAccessError("lot_not_found");
+  await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  return lot;
 }

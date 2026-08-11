@@ -1240,7 +1240,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | **T7 — Drying run — DONE** | T1, T2, T3, T6 (pattern reuse) | traceability | Built: `DryingRun`, `DryingTurnEvent` (+`DryingTurnEventType` enum, §16's own sketch left this a plain String — see note below), `LotTransformation.dryingRunId`, retroactive FK on `Measurement.dryingRunId` | `lib/traceability/drying.ts`: startDryingRun, recordDryingTurnEvent, endDryingRun | Deferred to T10 (same reasoning as T4-T6) | `tests/traceability/drying.test.ts`, 4 tests, real Neon | **Met**: migration applied to Neon; 88/88 tests pass across the full suite; full start→turn→measure→end cycle verified live, same shape as T6 |
 | **T8 — Storage assignment — DONE** | T1 | traceability | Built: `StorageAssignment` (direct `lotId` FK, no bracketing LotTransformation pair — see note below), retroactive FK on `Measurement.storageAssignmentId` | `lib/traceability/storage.ts`: moveLotToStorage, getCurrentStorageAssignment | Deferred to T10 (same reasoning as T4-T7) | `tests/traceability/storage.test.ts`, 3 tests, real Neon | **Met**: migration applied to Neon; 91/91 tests pass across the full suite; a second move verified to close the prior assignment (`endedAt` set once) without touching its `locationId`, full history remains queryable |
 | **T9 — RBAC: Farm Operator + lot/sample permissions — DONE (mostly pre-completed by T1)** | T1 | core (RBAC catalog) | None (seed data) | `lib/rbac/catalog.ts` additions — verified already complete | None | RBAC positive+negative (§31) — one gap closed | Low | Farm Operator scoped correctly; cross-project denial verified |
-| **T10 — Operator Workbench: Active Operations + Lot Detail** | T1-T9 | traceability | None | Read queries only | Active Operations, Lot Detail pages | E2E: full workflow visible | Medium — the first UI surfacing everything above, likely to surface integration gaps | A user can see identity/lineage/quantity/process/measurements/samples/tasks/audit on one Lot Detail page |
+| **T10 — Operator Workbench — DONE, scope expanded, see note below** | T1-T9 | traceability | None | Built: `getLotDetail`, `getActiveOperations`, `getLotList`, `getManageableContext`, `getLotSummary` in `lots.ts`; `app/actions/traceability.ts` (14 server actions, all wiring into T4-T8's existing service functions, no new write logic) | Built: `/lots` (Active Operations + Lot List), `/lots/[id]` (full detail), `/lots/new` (Harvest/Receiving), `/lots/[id]/{fermentation,drying,storage,samples}/new`, `MeasurementForm` + inline intervention/turn/end-run forms on Lot Detail (§30 screens 1-9) | E2E: full workflow visible | Medium — the first UI surfacing everything above, likely to surface integration gaps | **Met**: a real TEST Farm Operator account, created via the actual signup flow and granted a project-scoped Assignment, was walked through the full live UI against real Neon — harvest → measurement → start fermentation → intervention → end fermentation (new lot created, quantity/lineage correct) → move storage → create sample (quantity reduced correctly) — with Active Operations and the Lot List reflecting every state change correctly at each step. TEST fixtures fully cleaned up afterward (verified zero rows remain) |
 | **T11 — Process/Deviation tracking** | T6, T7 | traceability | New: `ProcessExecution`, `Deviation` | Extend `fermentation.ts`/`drying.ts` | Surfaced on Lot Detail | Unit | Low | A recorded deviation shows on Lot Detail's Processing section |
 | **T12 — Sensory linkage panel** | T5, existing Sensory | traceability + sensory (read-only) | None | Read query joining Sample → SensorySession | Sensory panel on Lot Detail | Integration: link renders when present, absent gracefully otherwise | Low — read-only, no sensory schema touched | A Lot with a cupped Sample shows its PanelResult; one without shows nothing, not an error |
 | **T13 — Lot Summary Report** | T1-T12 | traceability | None | `lib/traceability/reports.ts` | Lot Report page | E2E: report reproduces from live data | Low | Report renders origin/lineage/processing/measurements/samples/sensory for a real DEMO lot |
@@ -1489,6 +1489,76 @@ denormalization beyond §F's stated minimal design (§18's own note, added
 alongside this one). Not part of Phase 1's original ticket sequence (T1-T14)
 — this is a fix applied between T9 and T10, in response to a dedicated
 verification pass, not a numbered ticket of its own.
+
+**T10 scope decision, made before starting the ticket:** T10's own
+ticket-table row, taken literally, scopes only two read-only screens
+(Active Operations, Lot Detail) — "Schema: None | Backend: Read queries
+only." But T4-T8's own implementation notes each said their write-form UI
+was "deferred to T10... where it has a real page to live on." Read
+literally, T10 never actually delivers those forms, and neither does any
+later ticket (T11-T14 only add read-only panels to the pages T10 builds:
+Deviation, Sensory linkage, the Lot Report). That's a real gap between the
+14-ticket breakdown and §30's own 11-screen UI list — 5 of the 6 write
+forms (Create Lot, Record Fermentation, Record Drying, Record Storage
+Movement, Create Sample, Record Measurement) were never assigned to any
+ticket.
+
+**Resolved by expanding T10** to cover §30 screens 1-9 (everything except
+the Sensory linkage panel and Lot Report, which stay correctly scoped to
+T12/T13). Reasoning: a "Lot Detail" page that can show lineage/quantity/
+measurements but has no way to actually create a lot or record a
+fermentation isn't an Operator *Workbench* — it's a read-only report,
+which contradicts the ticket's own name and undersells everything T1-T9
+built. Fulfilling this now also means T4-T8's own "deferred to T10"
+implementation notes turn out to be accurate rather than a broken promise
+that would need yet another ticket to resolve later. No new backend logic
+beyond three read/aggregation functions (`getLotDetail`,
+`getActiveOperations`, `getLotList`) — every write form calls a service
+function that already exists and is already tested (T4-T8). Two more read
+helpers (`getManageableContext`, `getLotSummary`) were added once the
+forms were actually being built — `getManageableContext` resolves the
+project/location dropdowns a Create Lot/Move Storage form needs from the
+user's real Assignments (falling back to a system-wide location list
+rather than trying to derive "locations belonging to project X" from a
+relationship this schema doesn't have — the dropdown is a convenience,
+`requireLotAccess` is still the real gate); `getLotSummary` is a
+lightweight lot fetch + view check for the simpler "record X" pages that
+don't need `getLotDetail`'s full aggregation.
+
+**Sensory (§30 screen 10) and Media are correctly absent from Lot Detail**
+— Sensory linkage is T12's own ticket; Media (`Asset` via
+`ContentEntityLink`) was never built by any Phase 1 ticket, so there's
+nothing to query. **History is present but always empty** — the
+`AuditEvent` query is real and correct, but no T1-T9 write path has ever
+populated `core.AuditEvent` for a traceability entity, so the section
+renders its honest empty state rather than fabricated content, consistent
+with this project's anti-fabrication discipline. Both are pre-existing
+gaps surfaced by building the first real UI over this data, not new ones.
+
+**One real bug found and fixed during live verification**: the "currently
+in storage" line on Lot Detail displayed the raw `locationId` UUID instead
+of the location's name — `getLotDetail`'s `storageAssignments` query
+didn't include the `location` relation. Fixed by adding
+`include: { location: true }`; caught precisely because verification used
+a real browser click-through against real Neon data rather than stopping
+at typecheck/lint/build, which all passed the whole time this bug was
+present.
+
+**Live verification, in full**: a real account (not a script-inserted
+row) was created via the actual `/signup` form, granted a project-scoped
+Farm Operator `Assignment` via direct SQL (credentials/password hashing
+only exists behind the real signup flow, so the account itself was never
+faked), and walked through: Harvest → Lot Detail render → Record
+Measurement → Start Fermentation → Record Intervention → End Fermentation
+(new drying-stage Lot created, quantity 480.5→455kg correct, lineage
+"1 ancestor" on the new lot / "1 descendant" on the original correct) →
+Active Operations reflecting the fermenting lot, then reflecting nothing
+once ended → Move Storage → Create Sample (quantity 455→453.5kg correct)
+→ Active Operations' "awaiting sensory" card showing the new sample. Every
+TEST fixture (2 Lots, 1 Sample, 1 FermentationRun, transformations,
+quantity events, the TEST Farm/Plot/Project, the TEST UserAccount/Person)
+was deleted afterward — verified zero rows remain, same discipline as
+every other TEST fixture in this session.
 
 ## 35. Dependency Graph
 
