@@ -1241,9 +1241,9 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | **T8 — Storage assignment — DONE** | T1 | traceability | Built: `StorageAssignment` (direct `lotId` FK, no bracketing LotTransformation pair — see note below), retroactive FK on `Measurement.storageAssignmentId` | `lib/traceability/storage.ts`: moveLotToStorage, getCurrentStorageAssignment | Deferred to T10 (same reasoning as T4-T7) | `tests/traceability/storage.test.ts`, 3 tests, real Neon | **Met**: migration applied to Neon; 91/91 tests pass across the full suite; a second move verified to close the prior assignment (`endedAt` set once) without touching its `locationId`, full history remains queryable |
 | **T9 — RBAC: Farm Operator + lot/sample permissions — DONE (mostly pre-completed by T1)** | T1 | core (RBAC catalog) | None (seed data) | `lib/rbac/catalog.ts` additions — verified already complete | None | RBAC positive+negative (§31) — one gap closed | Low | Farm Operator scoped correctly; cross-project denial verified |
 | **T10 — Operator Workbench — DONE, scope expanded, see note below** | T1-T9 | traceability | None | Built: `getLotDetail`, `getActiveOperations`, `getLotList`, `getManageableContext`, `getLotSummary` in `lots.ts`; `app/actions/traceability.ts` (14 server actions, all wiring into T4-T8's existing service functions, no new write logic) | Built: `/lots` (Active Operations + Lot List), `/lots/[id]` (full detail), `/lots/new` (Harvest/Receiving), `/lots/[id]/{fermentation,drying,storage,samples}/new`, `MeasurementForm` + inline intervention/turn/end-run forms on Lot Detail (§30 screens 1-9) | E2E: full workflow visible | Medium — the first UI surfacing everything above, likely to surface integration gaps | **Met**: a real TEST Farm Operator account, created via the actual signup flow and granted a project-scoped Assignment, was walked through the full live UI against real Neon — harvest → measurement → start fermentation → intervention → end fermentation (new lot created, quantity/lineage correct) → move storage → create sample (quantity reduced correctly) — with Active Operations and the Lot List reflecting every state change correctly at each step. TEST fixtures fully cleaned up afterward (verified zero rows remain) |
-| **T11 — Process/Deviation tracking** | T6, T7 | traceability | New: `ProcessExecution`, `Deviation` | Extend `fermentation.ts`/`drying.ts` | Surfaced on Lot Detail | Unit | Low | A recorded deviation shows on Lot Detail's Processing section |
+| **T11 — Process/Deviation tracking — DEFERRED, v2, see note below** | T6, T7 | traceability | New: `ProcessExecution`, `Deviation` | Extend `fermentation.ts`/`drying.ts` | Surfaced on Lot Detail | Unit | Low | A recorded deviation shows on Lot Detail's Processing section |
 | **T12 — Sensory linkage panel** | T5, existing Sensory | traceability + sensory (read-only) | None | Read query joining Sample → SensorySession | Sensory panel on Lot Detail | Integration: link renders when present, absent gracefully otherwise | Low — read-only, no sensory schema touched | A Lot with a cupped Sample shows its PanelResult; one without shows nothing, not an error |
-| **T13 — Lot Summary Report** | T1-T12 | traceability | None | `lib/traceability/reports.ts` | Lot Report page | E2E: report reproduces from live data | Low | Report renders origin/lineage/processing/measurements/samples/sensory for a real DEMO lot |
+| **T13 — Lot Summary Report** | T10, T12 (T11 deferred — see note below) | traceability | None | `lib/traceability/reports.ts` | Lot Report page, **designed print-friendly from the start** | E2E: report reproduces from live data | Low | Report renders origin/lineage/processing/measurements/samples/sensory for a real DEMO lot, on a print-friendly authenticated page (browser print-to-PDF produces a client-sendable document) — PDF export and login-free external client access are explicitly out of scope for this ticket (v1 scope decision, ADR-039) |
 | **T14 — Full E2E test + DEMO seed** | T1-T13 | traceability | Seed script additions | None | None | The full coffee-workflow E2E test (§31) | Medium — the integration point that proves everything actually composes | One DEMO harvest-to-sensory chain seeded and passing an automated E2E test, not just a manual verification pass |
 
 **T1 implementation notes, two deliberate deviations from the original
@@ -1560,6 +1560,87 @@ quantity events, the TEST Farm/Plot/Project, the TEST UserAccount/Person)
 was deleted afterward — verified zero rows remain, same discipline as
 every other TEST fixture in this session.
 
+**T9.5 (inserted between T9 and T10, before T10 began)**: the prior fix
+(logged above) made `provenanceClass` explicit in code but left it
+optional with `?? "direct_observation"` as the fallback — meaning every
+call site that omitted it (every one of them; `grep -c "provenanceClass"
+app/actions/traceability.ts` returned zero before this ticket) still
+silently asserted the strongest class in the vocabulary. T9.5 removed the
+fallback entirely.
+
+**Decision: `provenanceClass` is required, not nullable** — no `?` in any
+`lib/traceability/*.ts` input interface, no `@default(direct_observation)`
+in the schema (migration `20260811100000_provenance_class_required`,
+`ALTER COLUMN ... DROP DEFAULT`, applied to `LotTransformation`,
+`QuantityEvent`, `Measurement`, `HarvestEvent`, `ReceivingEvent`). Chosen
+over nullable-with-`missing_source_record` because a nullable column with
+no forcing mechanism just relocates the same silent-omission failure
+(rows would sit at `null` forever, for the same reason they sat at
+`direct_observation` forever); required makes the TypeScript compiler
+enforce that every one of the twelve write functions and all ten call
+sites in `app/actions/traceability.ts` states a real, justified class.
+Full reasoning in the draft ADR (`docs/architecture/ADR-038_DRAFT.md`, not
+yet appended to `DECISIONS.md`). All five tables were empty in production
+at the time (verified live against Neon) — the migration was
+unconditionally safe, nothing to backfill.
+
+**Per-operation classes, chosen at the action layer**: harvest/receiving
+weight-brix-temperature readings → `measured_fact` (instrument readings
+taken at receiving); starting/ending a fermentation or drying run,
+split/merge/blend/stage_change, and sample extraction → `original_record`
+(an action taken, not something measured); measurement entry is the one
+path with a real UI choice (see below).
+
+**`operatorPersonId` is the observer field — `recordedBy` was proposed and
+rejected.** The ticket that opened this work initially asked for a new
+`recordedBy` field distinct from `createdBy`; that request was itself
+caught as a mistake before implementation — `operatorPersonId` already
+existed on `LotTransformation`, `Measurement`, `HarvestEvent`, and
+`ReceivingEvent` and already did exactly that job (a `Person` FK,
+independent of `createdBy`'s `UserAccount` FK). No new field was added.
+The actual gap was that no call site ever supplied it — every row had
+`operatorPersonId: null` regardless of who actually made the observation.
+
+**Made reachable on measurement entry only** (deliberately minimal, per
+the ticket's own constraint — a general provenance-capture UX is
+`16_ADAPTIVE_OPERATOR_WORKSPACE_PREAMBLE.md`'s research, not this
+ticket's job): `MeasurementForm.tsx` gained two fields — "¿Cómo se conoce
+este dato?" (a 4-option `provenanceClass` select: measured_fact,
+direct_observation, interpretation, scientific_evidence — a deliberate
+subset of the 10-value vocabulary, excluding the values that don't apply
+to raw field data entry) and "Observado por" (an observer select,
+defaulting to the logged-in user's own Person via a new
+`getObserverCandidates` in `lots.ts`, system-wide like
+`getManageableContext`'s Location dropdown — convenience, not a security
+boundary). Two taps to override both, zero to accept the defaults.
+
+**Tests**: two new (`measurements.test.ts`, "T9.5" describe block) — one
+asserting a chosen `provenanceClass` persists exactly as given and never
+lands on `direct_observation`, one asserting `operatorPersonId` and
+`createdBy` can hold two different people on the same row. One pre-existing
+test (`lots.test.ts`) asserted the old fallback-to-`direct_observation`
+behavior verbatim; rewritten (not deleted) to assert the new required,
+no-fallback behavior instead.
+
+**Live verification**: a real TEST account, farm/plot/project, and a
+second Person (no `UserAccount` of its own — the "field technician who
+took the reading" scenario) were created; a harvest was recorded through
+`/lots/new` (persisted `provenance_class = "measured_fact"`, confirmed via
+direct query); a measurement was recorded through the Lot Detail page
+selecting `provenanceClass = "interpretation"` and the second Person as
+observer — persisted row confirmed live: `provenance_class =
+"interpretation"`, `operator_person_id` = the field technician's Person
+id, `created_by` = the logged-in account — the exact divergence this
+ticket exists to make reachable, verified against real Neon data, not
+assumed from the code. All TEST fixtures deleted afterward, verified zero
+rows remain.
+
+**Out of scope, explicitly**: `PHASE_1_TECHNICAL_EXECUTION_PLAN.md` §6.3's
+six sensory tables (`Assessment`, `AttributeResponse`, `PanelResult`,
+`CalibrationResult`, `CompetitionResult`, `FieldSubmission`) carry no
+`provenanceClass` column and were not touched — remains a known open item
+for a future pass.
+
 ## 35. Dependency Graph
 
 ```
@@ -1573,11 +1654,32 @@ T1 (Lot + LotTransformation)
  └─→ T9 (RBAC)
       │
 T4, T5, T6, T7, T8, T9 ──→ T10 (Operator Workbench)
-T6, T7 ──→ T11 (Process/Deviation)
+T6, T7 ──→ T11 (Process/Deviation) — DEFERRED, v2 (ADR-039)
 T5 ──→ T12 (Sensory linkage)
-T10, T11, T12 ──→ T13 (Lot Report)
+T10, T12 ──→ T13 (Lot Report)
 T13 ──→ T14 (Full E2E + DEMO seed)
 ```
+
+**Correction (ADR-039, v1 scope pass):** `T13` previously listed `T11` as
+a dependency alongside `T10`/`T12`. That was inherited from the original
+ticket's sequencing order, not a genuine data dependency — T13's own
+Definition of Done never renders a deviations section, and a harvest with
+zero recorded deviations still produces a complete report. Corrected here
+to `T10, T12 → T13` only. T11 is deferred to v2, not cancelled; see the
+implementation note below and ADR-039 for full reasoning.
+
+**T11 (Process/Deviation tracking) deferral, recorded here rather than
+only in a session report:** v1 is scoped by a falsifiable test — can the
+platform carry one real 2026 harvest from cherry through to a cupping
+score and a lot report that could actually be sent to a client (ADR-039)?
+T11 is not required to pass that test: a harvest with zero recorded
+deviations (the ordinary case) still produces a complete, valid report.
+**Deferred to v2, not cancelled** — `ProcessExecution`/`Deviation` remain
+real, scoped work; they simply do not gate v1. If a future pass reopens
+T11, re-add it as a `T13` dependency only if the Lot Report's own
+Definition of Done is changed to actually render a deviations section —
+otherwise the dependency will silently drift back to being sequencing
+order rather than a real one, the same issue this correction fixes.
 
 ## 36. Phase Gates
 
