@@ -1960,3 +1960,564 @@ for intake (gap 2); give `bos_round` its own `sensorySessionId` link before
 building Best of Show judging (gap 3); decide the two-Stripe-instance
 convention explicitly and close the pre-existing audit-trail gap in
 `finalizeResult`/`declareAward` in the same pass (gap 4).
+
+---
+
+## ADR-037 — AI Persona, Modes, Knowledge & Tools Architecture: approved decisions
+
+**Context:** `AI_PERSONA_MODES_KNOWLEDGE_TOOLS_ARCHITECTURE.md` §43 listed
+seven open decisions after reviewing
+`AI_PERSONA_MODES_KNOWLEDGE_TOOLS_PROMPT_CORRECTED.md`. All seven are
+approved as recommended, resolved below. That document's status moves from
+"awaiting product-owner approval" to approved; as with ADR-017/018/020,
+approval covers architecture and sequencing only — nothing in it is
+implemented, and no model SDK, embedding, retrieval pipeline, or permission
+is created by this entry.
+
+**Decisions (approved):**
+
+1. Professional modes live as a **code-level registry** (a typed
+   array/map, e.g. `lib/ai/modes.ts`), following the same "data-shaped
+   constants in code" pattern `lib/rbac/catalog.ts` already uses — not a
+   database table, not admin-editable at runtime. Approved. `RBAC.md` §2
+   makes Role Profiles data because CLAUDE.md requires non-developers to
+   add roles without a deploy; that requirement does not extend to
+   prompt/product surface, which is the same category as email templates
+   (`INTEGRATIONS.md` §5) and adapter capability interfaces
+   (`INTEGRATIONS.md` §1), both already code in this architecture. Which
+   mode(s) a given response used is recorded per response in
+   `ai.recommendation.context` (already `jsonb`, no schema change).
+
+2. `knowledge.*` is a **new schema, structurally parallel to but distinct
+   from `external.*`** (`EXTERNAL_DATA_ARCHITECTURE.md` §7) — approved,
+   explicitly rejecting folding textual knowledge sources into the
+   external-data design. The two answer different questions and carry
+   different shapes: `external.*` stores observations (value, unit, place,
+   time), `knowledge.*` stores documents and claims. The licensing/access
+   column shape is copied from `external.license` — that is the reuse that
+   matters, not a shared table.
+
+3. **MVP mode set: FIELD, OPERATOR, SENSORY, COMPETITION, COMMERCE, and a
+   general DISCOVER mode** — approved per §40. RESEARCH, FERMENTATION,
+   BREWING, and CONSULTING are explicitly deferred until their underlying
+   modules exist, and stay marked `groundingStatus = not_yet_grounded`
+   until then, with the intent router declining to route to them with
+   fabricated confidence. No business reason was identified to build
+   persona/routing for a mode ahead of its module. Each becomes `live` on
+   its module shipping, with no change to the mode's persona or tool
+   definition — only its grounding flag.
+
+4. **`ai:converse` is a real new permission**, platform-scoped, distinct
+   from the existing `ai:review_suggestion` (who may review AI-written
+   output) — approved. Held initially by **Platform Admin and Content/Ops
+   Coordinator**, the same two profiles that already hold
+   `ai:review_suggestion`. Explicitly not defaulted to "every
+   authenticated user"; widening is a later decision to make deliberately
+   once real responses have been read. To be added to
+   `lib/rbac/catalog.ts` when Ask Néctar is actually built, not now.
+
+5. **No bulk knowledge ingestion — source registration only** until
+   retrieval and citation rights are individually confirmed per source
+   (§8, §38) — approved. `knowledge.source.retrieval_allowed` and
+   `citation_allowed` are hard gates checked before any retrieval job
+   runs, not documentation notes, mirroring
+   `EXTERNAL_DATA_ARCHITECTURE.md` §24's enforcement pattern for external
+   datasets. This applies with particular force to BJCP, SCA, WSET, and
+   Cicerone material, whose proprietary status is already flagged in
+   `BEVERAGE_SENSORY_PROTOCOLS.md` §1. A registered source with citation
+   permitted and retrieval not assumed is the platform's representation of
+   a pending licensing question — if a license is later obtained, that is
+   a column change on one row plus a reference to the actual grant, not a
+   new mechanism.
+
+6. **Anthropic Claude remains the default `AIProvider`**, per ADR-011 and
+   `PLATFORM_OVERVIEW.md` §8 — approved, confirming the existing decision
+   rather than reopening it. No new information has arrived that would
+   trigger re-evaluation. Provider independence is preserved by the
+   adapter boundary (`INTEGRATIONS.md` §7, CLAUDE.md §42), so comparing or
+   switching providers later remains a configuration change, not a rewrite
+   of the routing/mode/tool logic.
+
+7. **`ai.recommendation.decision_reason` is added at Foundational-phase
+   time, with its taxonomy left open** — approved. The column is additive
+   and nullable (a one-column migration, no backfill). The reason
+   vocabulary suggested in §30 (incorrect, unsupported, irrelevant, too
+   generic, too technical, too simplified, wrong tone, missing source,
+   better alternative) is treated as a starting reference, not a fixed
+   enum: the real taxonomy is derived from actual rejection reasons once
+   there is review volume to learn from. Consistent with §30's own
+   caution, historical user decisions never retroactively upgrade a past
+   record's `provenance_class`.
+
+**What this unblocks:** `AI_PERSONA_MODES_KNOWLEDGE_TOOLS_ARCHITECTURE.md`
+is now an approved architecture document and can be cited as authority.
+This specifically unblocks the brand/marketing review
+(`BRAND_MARKETING_COMMUNITY_SALES_ARCHITECTURE.md`, not yet written), whose
+own required conflict check — per its input document's §98 item 11 —
+requires that its AI marketing guardrails and Ask Néctar marketing mode
+defer to `AI_GOVERNANCE.md`'s suggestion lifecycle and to this document's
+Commerce/Tourism mode definitions rather than defining a parallel AI
+behavior model for marketing.
+
+**Not decided here:** model selection specifics, prompting strategy, and
+cost/latency trade-offs remain implementation details of the AI slice's own
+design notes (`AI_GOVERNANCE.md` §9, this document's §39). The first real
+`AIProvider` implementation, the intent router, and the mode registry are
+Foundational-phase work (§41) to be kicked off explicitly, not started by
+this approval.
+
+---
+
+## ADR-038 — T9.5: provenanceClass required, no default; operatorPersonId
+confirmed as the sole observer field
+
+**Context:** `5ceed23` (the verification-pass fix) added `sourceReference`
+to the five Phase 1 traceability tables (`LotTransformation`,
+`QuantityEvent`, `Measurement`, `HarvestEvent`, `ReceivingEvent`) and
+threaded `provenanceClass` as a parameter through all twelve write
+functions across `lib/traceability/*.ts`. What it did not do — and what
+this ticket (`docs/architecture/14_T9.5_PROVENANCE_RETROFIT_PROMPT.md`)
+exists to fix — is remove the fallback. Every one of those functions still
+declared `provenanceClass?: ProvenanceClass` and resolved it with
+`input.provenanceClass ?? "direct_observation"`. No caller anywhere passed
+a value; every row written by T1-T10, including everything T10's eight new
+routes produced, silently asserted `direct_observation` — the strongest
+class in the vocabulary — regardless of whether anyone actually observed
+anything. `DATA_ARCHITECTURE.md` §4 requires unknown provenance to surface
+honestly as `data_quality = 'missing_source_record'`, never a sentinel; a
+default that silently claims the strongest class is exactly that sentinel.
+
+**Decision 1 — required, not nullable.** `provenanceClass` is now a
+required field with no schema default (`ALTER COLUMN ... DROP DEFAULT`,
+migration `20260811100000_provenance_class_required`) and no `?` in any
+`lib/traceability/*.ts` input interface. Every one of the twelve write
+functions removed its `?? "direct_observation"` fallback.
+
+Rejected alternative: making the column nullable, carrying "unknown" as
+`data_quality = 'missing_source_record'` per `DATA_ARCHITECTURE.md` §4.
+Reasoning for required over nullable:
+
+1. CLAUDE.md §3 — "never automatically infer missing factual values and
+   save them as facts" — applies here too. A nullable column with no
+   forcing mechanism doesn't remove the silent-omission failure, it just
+   changes its shape: rows would sit at `null` forever, for the same
+   reason they sat at `direct_observation` forever — nothing forces a real
+   choice either way.
+2. Required makes the TypeScript compiler the enforcement mechanism. Every
+   call site — all twelve service functions and all ten call sites in
+   `app/actions/traceability.ts` — fails to build until it states a real,
+   justified class. That is strictly stronger than a runtime convention
+   that depends on every future author remembering to fill in a nullable
+   field.
+3. Nullable would require adding a `dataQuality` column to three tables
+   that don't have one today (`LotTransformation`, `HarvestEvent`,
+   `ReceivingEvent`) purely to carry the "missing" state honestly — more
+   schema surface for a problem the required approach avoids by
+   construction.
+4. Required forces exactly the analysis this ticket asks for: a stated,
+   per-operation class at every call site, not a table of "null for now."
+
+All five tables were empty in production at the time of this migration
+(verified live against Neon — zero rows in `lot_transformation`,
+`quantity_event`, `measurement`, `harvest_event`, `receiving_event`, and
+zero rows in `lot` itself). T10's verification fixtures were fully cleaned
+up; no real operator data existed yet. The migration was therefore
+unconditionally safe — nothing to backfill or reclassify.
+
+**Decision 2 — `operatorPersonId` is the observer field; `recordedBy` is
+explicitly rejected.** The prompt that originated this ticket first asked
+for a new `recordedBy` field, distinct from `createdBy`. That request was
+itself a mistake, caught before implementation: `operatorPersonId` already
+exists on the input interfaces in `lots.ts`, `harvest.ts`,
+`measurements.ts`, `fermentation.ts`, `drying.ts`, and `samples.ts`, is
+already genuinely independent of `createdBy` (a `Person` FK vs. a
+`UserAccount` FK), and does exactly the job `recordedBy` would have
+duplicated. Creating a second field for the same concept is the specific
+category of error this platform's data architecture is disciplined
+against. No `recordedBy` or `recordedAt` field was added; `occurredAt` and
+`createdAt` already cover the timestamps.
+
+The gap was never the field — it was that no call site ever supplied it.
+Before this ticket, `grep` confirmed every T10 write path passed
+`operatorPersonId` through as `null`, so the divergence the schema already
+supported was unreachable from any UI. This ticket makes it reachable on
+measurement entry (`app/components/traceability/MeasurementForm.tsx`): a
+new "Observed by" select, defaulting to the logged-in user's own `Person`
+(via a new `getObserverCandidates` in `lib/traceability/lots.ts`, sourced
+system-wide — same "convenience, not security boundary" reasoning already
+used for `getManageableContext`'s Location dropdown), changeable to any
+other active `Person` in two taps. No other write path gained a UI
+override in this pass — deliberately minimal, per the ticket's own
+constraint (§4) not to design a general provenance-capture UX ahead of
+`16_ADAPTIVE_OPERATOR_WORKSPACE_PREAMBLE.md`'s research.
+
+**Decision 3 — per-operation provenance classes, chosen at the action
+layer, not the service layer.** `app/actions/traceability.ts`'s ten call
+sites now each state an explicit class:
+
+| Call site | Class | Reasoning |
+|---|---|---|
+| `recordHarvestAction` | `measured_fact` | Cherry weight/brix/temperature are instrument readings taken at receiving. |
+| `recordReceivingAction` | `measured_fact` | Same reasoning — a delivery weight is a scale reading. |
+| `recordMeasurementAction` | UI-selected, default `measured_fact` | The one path with a real operator-facing choice; see Decision 2. |
+| `startFermentationAction` | `original_record` | Starting a run is an action taken, not something measured. |
+| `endFermentationFormAction` | `original_record` | Same — ending a run is an action, also seeds the output lot's QuantityEvent with the same class. |
+| `startDryingAction` / `endDryingFormAction` | `original_record` | Same reasoning as fermentation. |
+| `createSampleAction` | `original_record` | Extracting a sample is an action taken against the source lot. |
+| `recordStageChangeFormAction` (split/merge/blend/stage_change) | `original_record` | A transformation record is an original record of an action, not a measurement. |
+
+`recordFermentationInterventionFormAction`, `recordDryingTurnFormAction`,
+and `recordStorageMoveAction` are unchanged — `FermentationIntervention`,
+`DryingTurnEvent`, and `StorageAssignment` carry no `provenanceClass`
+column and are out of this ticket's five-table scope.
+
+**Tests added** (`tests/traceability/measurements.test.ts`, describe block
+"T9.5"): one asserting a chosen `provenanceClass` (`scientific_evidence`,
+`interpretation`) persists exactly as given and never lands on
+`direct_observation`; one asserting `operatorPersonId` and `createdBy` can
+hold two different people on the same `Measurement` row — the case that
+was structurally supported but practically unreachable before this ticket.
+One pre-existing test (`lots.test.ts`, "verification-pass fix:
+provenanceClass/sourceReference default sensibly...") asserted the exact
+fallback behavior this ADR removes; it was rewritten rather than deleted,
+now asserting the value passed through is honored verbatim with no
+fallback of any kind.
+
+**Remaining open item, explicitly out of scope here:**
+`PHASE_1_TECHNICAL_EXECUTION_PLAN.md` §6.3's six sensory tables
+(`Assessment`, `AttributeResponse`, `PanelResult`, `CalibrationResult`,
+`CompetitionResult`, `FieldSubmission`) do not carry `provenanceClass` and
+were not touched by this ticket, which is scoped to the five Phase 1
+traceability tables only. They remain a known gap for a future pass.
+
+---
+
+## ADR-039 — Platform v1 defined by falsifiable test, not feature list;
+T11 and Notification deferred to v1.1
+
+**Context:** `CLAUDE.md` specifies an enterprise-scale platform across 63
+sections; only a fraction is built, by design (§53's vertical-slice
+strategy). "CLAUDE.md complete" is not a usable v1 definition — scoped
+that way, v1 never ships. A feature list is no better: every line becomes
+a negotiation and scope drifts upward without anyone deciding it should.
+
+**Decision: v1 is defined by a falsifiable test.**
+
+> Can the platform carry one real 2026 harvest from cherry through to a
+> cupping score and a lot report that could actually be sent to a client?
+
+If something is required to pass this test, it is in scope. If it is not,
+it is out — regardless of how well-specified it already is elsewhere in
+the architecture set.
+
+**In scope, confirmed by the mapping below:** Phase 1 Traceability T6-T10
+(built), T9.5's provenance retrofit (built, this session), T12 (Sensory
+linkage panel), T13 (Lot Summary Report), T14 (Full E2E test + DEMO seed).
+
+**Deferred to v1.1 or later, one explicit logged decision — not an
+omission.** The point of logging what is deliberately not being built is
+that it cannot quietly return later without a stated reason:
+
+- **Research OS / CryoBloom migration**, including its Equipment/
+  Calibration readiness objects (`CLAUDE.md` §17) — real, specified,
+  not required to carry a coffee harvest.
+- **Apiary/honey structured schema** — architecture-only per
+  `DOMAIN_MODEL.md` §4, no tables exist, not required.
+- **Fermentation beyond coffee** — the fermentation infrastructure built
+  (T6) is coffee-scoped for v1; generalizing it is real future work.
+- **Environmental/time-series data** — no sensor or logger ingestion in
+  v1; `Measurement`'s `sourceType` values beyond `manual` remain
+  unexercised by design (T3).
+- **Role-specific dashboards** (`CLAUDE.md` §47) — v1 has the Operator
+  Workbench (T10); executive/research/commerce dashboards are later.
+- **Global search** (`CLAUDE.md` §33) — not required to carry one named
+  harvest through a system an operator already knows how to navigate.
+- **Full offline/PWA** (`OFFLINE_FIELD_CAPABILITY.md`) — specified,
+  deferred; v1's operator UI assumes connectivity.
+- **Native mobile** — the PWA-first strategy (`CLAUDE.md` §39) already
+  defers this beyond v1.
+- **Data import/export** (`CLAUDE.md` §45-46), including PDF export of
+  the Lot Report — not required by the test as literally stated (see the
+  print-friendly-page reading below).
+- **T11 (Process/Deviation tracking).** Not required by the test: a
+  harvest with zero recorded deviations (the common case) still produces
+  a valid cupping score and lot report. T13's own DoD list — "origin/
+  lineage/processing/measurements/samples/sensory" — never names
+  deviations as a rendered section, even though the existing dependency
+  graph lists `T11 → T13`. That dependency looks inherited from
+  ticket-sequencing order (T11 was slotted before T13 in the original
+  14-ticket list) rather than a genuine data dependency. **Action taken:**
+  the dependency graph in `PHASE_1_TECHNICAL_EXECUTION_PLAN.md` §35 is
+  corrected — `T13` depends on `T10` and `T12` only, not `T11` — and T11's
+  deferral is recorded in the plan document itself, marked deferred (not
+  cancelled), on the v2 list. T11 remains real, scoped, and worth
+  building; it is simply not gating v1.
+- **`Notification`.** Real leverage (Operator Mode's digest framing,
+  tourism waitlist claim windows, field-study reminders, Alert delivery)
+  but not required by a single-harvest walkthrough — an operator can
+  check Lot Detail manually for the one harvest the test describes.
+  Recommended **out** of v1, revisited once operator count or alert
+  volume makes manual checking impractical (a v1.1-scale problem, not a
+  v1 one).
+
+None of the above is required to carry one harvest end to end. All remain
+real, specified, and undiminished for later phases — deferral is a
+sequencing decision, not a judgment that the work doesn't matter.
+
+**Decided: "sent to a client" means a print-friendly authenticated page,
+not an export pipeline.** "A lot report that could actually be sent to a
+client" was ambiguous between (a) an exported file (PDF) a staff member
+forwards, (b) a clean, printable authenticated web page (browser
+print-to-PDF suffices), and (c) a genuine external share link requiring
+no login. Confirmed reading for v1: (b) — T13's Lot Report is designed
+print-friendly from the outset (its own definition of done now states
+this explicitly, `PHASE_1_TECHNICAL_EXECUTION_PLAN.md` T13 row), which is
+zero extra cost done up front and real rework if retrofitted later. (a)
+PDF export and (c) login-free external client access are real future
+capabilities (`CLAUDE.md` §46 Exports; a genuine external client portal)
+but neither is required by the test as literally stated, and neither is
+built by any T6-T14 ticket — both remain on the deferred list above.
+
+**Status-accuracy findings (verified live, not from prior session notes):**
+
+1. **Credentials**: Vercel production (`vercel env ls production`) has
+   only `DATABASE_URL` and `AUTH_SECRET` set. None of
+   `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the four R2 variables, or
+   Google OAuth credentials exist in production (or, per prior
+   `GAP_ANALYSIS_2026-08-10.md` findings, locally). Unchanged since that
+   report.
+2. **Commerce/Experiences never exercised past DEMO content-level rows**:
+   `commerce.product_variant` has zero rows (confirmed live) —
+   `core.product` has 2 DEMO rows, but no variant/SKU/price has ever been
+   created for either, by design (`prisma/seed.ts`'s own comment:
+   "`priceAmount` stays null — CLAUDE.md §54," matching ADR-025 decision
+   10 / ADR-028 decision 8's no-fabricated-pricing rule). Same pattern for
+   Experiences: `core.experience` has 2 DEMO rows, `experiences.
+   experience_session` has zero. No Stripe checkout or booking path has
+   ever run against real data, consistent with finding 1 (no Stripe keys
+   configured anywhere to run one).
+3. **Partner Workspace media**: `core.asset` has zero rows. No object-
+   storage round trip has ever completed, consistent with finding 1 (no
+   R2 credentials configured anywhere to complete one).
+
+None of this blocks v1 — the falsifiable test does not touch Commerce,
+Experiences, or Partner Workspace media. It is stated here because v1
+scope decisions should be made knowing which adjacent paths are proven
+versus unexercised, not assumed.
+
+**Traceability chain status** (the actual v1 surface): `core.location`
+(7 rows), `core.project` (1), `core.organization` (3) carry real DEMO
+seed data; `traceability.lot` and its dependent tables are empty in
+production as of this ADR — expected, since T10's verification fixtures
+were cleaned up and no real 2026 harvest has been entered yet.
+
+**Explicit clause — capability versus completion.** Building T6-T14 plus
+the provenance retrofit gives the platform the *capability* to carry a
+harvest end to end. It does not, by itself, constitute *having done so*.
+The Part B test is answered truthfully only once an actual 2026 harvest
+has been entered by a real operator, once T12-T14 ship — a real
+operational event, not a ticket closing. A v1 that is declared complete
+because every ticket is checked off, but that no real harvest has ever
+actually passed through, is **not** a v1 that has passed its own test —
+it is a v1 that has been declared complete and never used, which is the
+specific failure mode this project is most exposed to, and the one most
+likely to be forgotten first once the ticket list is empty. This
+distinction is recorded here, in the decision log, precisely so it
+survives past the session that wrote it: **"all tickets closed" and
+"the test in Part B answered yes" are not the same claim, and only the
+second one is v1.**
+
+---
+
+## ADR-040 — Amendment to ADR-026/031/035/036: real honey/mead content
+verified, no schema/RBAC conflict, copyright boundary held
+
+**Context:** commit `4080633` updated three already-accepted planning
+documents with real content received directly (not researched):
+`BEVERAGE_SENSORY_PROTOCOLS.md` (100-point honey competition rubric,
+three-tier defect taxonomy, `apiary.field_sample` intake schema, AESHI
+mead classification/specs/fermentation-phase model), `COMPETITIONS.md`
+(confirming the honey/mead examples reference real, not placeholder,
+scoring content), and `TOURISM_EXPERIENCES.md` (new §13 documenting the
+real mead-making course, renumbering old §13 Sequencing to §14). This is
+an amendment to the documents' existing acceptance record — `TOURISM_
+EXPERIENCES.md`'s original acceptance is ADR-026; `BEVERAGE_SENSORY_
+PROTOCOLS.md`'s is ADR-031 (accepted) and ADR-035 (partially
+implemented); `COMPETITIONS.md`'s is ADR-036 — not a fresh acceptance
+entry.
+
+**Verification performed, per the five items named when this content was
+handed off:**
+
+1. **Rubric/classification integration**: conceptually clean, not yet
+   implemented. ADR-035 implemented Honey's general four-category
+   structure (visual/olfactory/olfactory-gustatory/tactile) and Mead's
+   Aroma/Appearance/Flavor/Mouthfeel shape using the existing generic
+   `SensoryProtocol`/`SensoryAttribute`/`Assessment` mechanism — confirmed
+   live (`grep` against `prisma/schema.prisma`) that none of this
+   commit's new content (`honey_competition_score`,
+   `mead.style_classification`, `apiary.field_sample`,
+   `honey_descriptor`) has been implemented; these remain markdown-
+   sketched shapes. **One real design question surfaced, not silently
+   resolved**: the honey competition rubric is sketched as a bespoke
+   6-column table, but the platform's own governing principle (`CLAUDE.md`
+   §49, already realized for Coffee/Beer/Mead/Honey-general in ADR-035) is
+   to avoid a hardcoded per-category scoring table — the more consistent
+   implementation, when built, is six `SensoryAttribute` rows under a new
+   "Honey Competition (100-pt)" `SensoryProtocolVersion`, reusing the
+   mechanism already proven rather than adding a parallel one. Flagged for
+   the implementer to decide at build time, not decided here.
+2. **`apiary.field_sample` vs. `SPECIMEN_AND_MATERIAL_TRACEABILITY.md`'s
+   `Specimen`/`SpecimenObservation`**: genuine overlap, not a conflict —
+   both remain unimplemented. Recommendation, not a merge: keep them
+   separate (`field_sample` describes one honey sample's lab/intake data;
+   `Specimen` describes one individually-tracked tree's bloom timing —
+   different semantics, per `DOMAIN_MODEL.md` §20's own "diverge enough,
+   keep separate" principle already applied elsewhere in both documents).
+   The connection is the correlational many-to-many link
+   `SPECIMEN_AND_MATERIAL_TRACEABILITY.md` §3 already proposes
+   (`primary_forage_specimen_ids`), with `field_sample.pollen_analysis`
+   serving as the analytical evidence a human would use to decide which
+   Specimens are plausible forage sources — not a new linking mechanism,
+   and not a field-level merge.
+3. **`COMPETITIONS.md`'s honey/mead references checked against the actual
+   updated rubric/taxonomy**: accurate. The cited 100-point breakdown
+   (Aroma 20/Sabor y Gusto 20/Textura y Boca 15/Apariencia 10/
+   Persistencia y Equilibrio 15/Ausencia de Defectos 20, tiers 90-100
+   Excelente down to <70) and the "Melomel — Semi Dulce" example division
+   both match `BEVERAGE_SENSORY_PROTOCOLS.md`'s actual content exactly —
+   no fabricated or mismatched cross-reference.
+4. **`TOURISM_EXPERIENCES.md` renumbering (old §13 Sequencing → new
+   §14)**: confirmed clean. Repo-wide search for any citation of
+   `TOURISM_EXPERIENCES.md §13` (or any other specific section number of
+   this document) found none outside the prompt file describing this same
+   update — no citation broke.
+5. **Copyright boundary — AESHI Chapter IV (BJCP-sourced organoleptic
+   content) exclusion**: verified respected, not just stated. Direct read
+   of the new mead content (raw material specs, finished-product specs,
+   fruit/cereal sugar rules, water chemistry targets, fermentation-phase
+   model, yeast species) confirms it is regulatory/compositional/
+   biological content, not organoleptic scoring language — a targeted
+   search for BJCP scoresheet vocabulary (diacetyl, estery, phenolic,
+   DMS, oxidized, "off-flavor," point-allocation language) across the new
+   content returned zero matches. One borderline passage noted: the water
+   chemistry section uses perceptual language ("adds smoothness/perceived
+   sweetness," "adds astringency/perceived bitterness") — read as general
+   production science explaining water chemistry's effect on the product,
+   not judging-rubric descriptor language, and not drawn from a
+   scoresheet structure. Does not cross the excluded boundary.
+
+**No implementation in this ADR** — matches the source content's own
+framing ("this remains planning-doc content"). `PHASE_1_TECHNICAL_
+EXECUTION_PLAN.md`'s Traceability tickets do not touch Sensory/
+Competitions/Tourism; this amendment changes nothing about Phase 1
+sequencing.
+
+---
+
+## ADR-041 — Four planning docs accepted: map & territory, offline field
+capability, Drive organization scheme, tourism design resources
+
+**Context:** Four architecture planning documents were added to
+`docs/architecture/`, each ending with "Log acceptance in `DECISIONS.md`"
+and none previously logged (documentation correction pass, Part D item
+1):
+
+1. `MAP_AND_TERRITORY.md`
+2. `OFFLINE_FIELD_CAPABILITY.md`
+3. `DRIVE_ORGANIZATION_SCHEME.md`
+4. `TOURISM_DESIGN_RESOURCES.md`
+
+Same pattern as every prior planning-doc batch (ADR-017/018/019/020/026):
+**accepted as domain-model/planning input, implementation deferred** —
+none of the schema or process described below is built by this ADR.
+Cross-checked against `DOMAIN_MODEL.md`, `RBAC.md`, `DATA_ARCHITECTURE.md`,
+and each other for conflicts; none found.
+
+**Decisions:**
+
+1. **`MAP_AND_TERRITORY.md` accepted.** A rendering-layer specification
+   over already-modeled entities (`Location`, `Specimen`, `Experience`
+   routes) — no new canonical entity, no schema conflict. Its Sentinel
+   Hub/Copernicus NDVI layer and licensing-discipline references now
+   correctly point at `EXTERNAL_DATA_ARCHITECTURE.md` (corrected this
+   same pass — see Part C above). Static-export attribution requirement
+   is a real licensing-compliance need, not a design preference, and is
+   logged as such.
+2. **`OFFLINE_FIELD_CAPABILITY.md` accepted.** Cross-cutting PWA/service-
+   worker infrastructure (`offline.draft_record`, `offline.sync_conflict`)
+   — genuinely new schema, no overlap with anything built. Its conflict-
+   resolution model (both competing versions preserved for human review,
+   never last-write-wins) is a direct, correctly-scoped application of
+   the version-preservation principle already running through the
+   platform (`CLAUDE.md` §3, `DATA_ARCHITECTURE.md` §2's `superseded_by`
+   pattern) — not a new philosophy invented for this one case. Confirmed
+   as the document `MAP_AND_TERRITORY.md` §7/§12 and
+   `GUIDED_FIELD_STUDY_TOOL.md` §8 both already defer their own offline
+   requirement to, rather than duplicating it.
+3. **`DRIVE_ORGANIZATION_SCHEME.md` accepted.** Addendum to
+   `MEDIA_INTELLIGENCE_PIPELINE.md`, grounded in a real audit of the
+   actual shared Drive (2026-08-10) — no schema of its own; specifies a
+   target folder structure and an ID/naming convention
+   (`[PROYECTO]-[SERIE]-VOL[N]`, `[PROYECTO]-[AAAA]-[SEQ]`,
+   `[LOTE]-[PROCESO]-[SEQ]`) that `MEDIA_INTELLIGENCE_PIPELINE.md` Phase A
+   ingestion should apply once real server-side Drive write credentials
+   exist. Historical codes are explicitly not rewritten retroactively —
+   consistent with the platform's own no-silent-mutation discipline
+   applied to an external system, not just internal data.
+4. **`TOURISM_DESIGN_RESOURCES.md` accepted.** New `resources.
+   tourism_design_module`/`tourism_design_exercise` tables, Partner-
+   Workspace-scoped (`Partner Field Collector`, `Research Contributor`,
+   and above — `RBAC.md` §5, no new permission needed). Grounded
+   primarily in SERNATUR's citation-licensed manual plus two applied
+   works from a named, credentialed practitioner (Victor Jiménez Ayres) —
+   every module carries a populated `source_attribution` field, and
+   third-party framework content (Hackéate's propósito/vínculo lens) is
+   described in the platform's own words rather than reproduced, matching
+   this platform's general copyright discipline. §2c's cross-producer
+   "beer route" map extension is explicitly flagged as a future
+   opportunity, not built here — correctly left out of this acceptance.
+
+**Consequence:** all four documents move from "awaiting acceptance" to
+accepted planning input; sequencing (Slice 5 for offline/Partner-Workspace-
+scoped work, rendering-layer work for the map, Phase A ingestion for the
+Drive scheme once credentials exist) stays exactly as each document's own
+§`Sequencing` already states — this ADR does not change build order, only
+records that the input itself is accepted.
+
+---
+
+## ADR-042 — Publer adopted for social publishing/distribution/analytics,
+reversing the earlier Meta Business Suite preference
+
+**Context:** `NECTAR_NOMADA_BRAND_MARKETING_COMMUNITY_SALES_INPUT_
+CORRECTED.md`'s own opening states this explicitly reverses a prior
+decision and asks for its own `DECISIONS.md` entry — logged here as part
+of the documentation correction pass (Part D item 2), since a search of
+this file for "Publer" previously returned nothing.
+
+**What it reverses:** an earlier operating preference to avoid paid
+social-scheduling subscriptions, favoring Meta Business Suite over
+Publer/Buffer. That preference was never itself logged as its own ADR —
+it was an informal operating decision, not a documented one — so this
+entry is both the first formal record of the tool choice and the record
+of what it replaces.
+
+**Decision:** Publer adoption is confirmed. Publer is scoped narrowly, per
+the source document's own framing: a **replaceable social publishing,
+distribution, and analytics adapter** — implementing the platform's
+`PaymentsProvider`-style adapter discipline (`INTEGRATIONS.md`), not a
+piece of canonical domain data. Néctar Nómada's own platform remains
+authoritative for brand identity, brand voice, canonical facts, approved
+claims, audience strategy, campaigns, original media, customer identity,
+sales, bookings, consulting inquiries, CRM, community intelligence,
+attribution, learning, rights, and AI governance — Publer only executes
+scheduling/publishing/analytics on top of that, and canonical
+campaign/content data must survive a Publer failure (the source
+document's own §22), never living only in Publer.
+
+**No implementation in this ADR.** `NECTAR_NOMADA_BRAND_MARKETING_
+COMMUNITY_SALES_INPUT_CORRECTED.md` is itself marked "architecture input
+only — do not implement directly," and no Phase 1 Traceability ticket
+touches Marketing/Community — this decision does not change current
+build sequencing.
