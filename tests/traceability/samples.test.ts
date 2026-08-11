@@ -88,6 +88,7 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
     });
 
     const { transformation, sample } = await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       sampleCode: `${RUN_ID}-S001`,
       sampleType: "green_coffee",
       sourceLotId: lot.id,
@@ -119,6 +120,7 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
 
     await expect(
       createSampleFromLot(wrongProjectUserAccountId, {
+        provenanceClass: "original_record",
         sampleCode: `${RUN_ID}-S002`,
         sampleType: "green_coffee",
         sourceLotId: lot.id,
@@ -136,6 +138,7 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
 
     await expect(
       createSampleFromLot(unauthorizedUserAccountId, {
+        provenanceClass: "original_record",
         sampleCode: `${RUN_ID}-S006`,
         sampleType: "green_coffee",
         sourceLotId: lot.id,
@@ -147,6 +150,7 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
   it("rejects an unknown source lot", async () => {
     await expect(
       createSampleFromLot(authorizedUserAccountId, {
+        provenanceClass: "original_record",
         sampleCode: `${RUN_ID}-S003`,
         sampleType: "green_coffee",
         sourceLotId: "00000000-0000-0000-0000-000000000000",
@@ -162,6 +166,7 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
       projectId: projectAId,
     });
     await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "received",
       quantity: 100,
@@ -170,6 +175,7 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
     });
 
     await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       sampleCode: `${RUN_ID}-S004`,
       sampleType: "green_coffee",
       sourceLotId: lot.id,
@@ -195,6 +201,7 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
     });
 
     await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       sampleCode: `${RUN_ID}-S005`,
       sampleType: "green_coffee",
       sourceLotId: lot.id,

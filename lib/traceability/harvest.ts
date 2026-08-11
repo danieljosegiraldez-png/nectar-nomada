@@ -30,16 +30,18 @@ export interface RecordHarvestEventInput {
   ripenessNotes?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
-  // Verification-pass fix: explicit, not left to the schema's silent
-  // @default(direct_observation).
-  provenanceClass?: ProvenanceClass;
+  // T9.5: required, no fallback. app/actions/traceability.ts passes
+  // "measured_fact" here — a harvest weight/brix/temperature reading is an
+  // instrument value read off a scale/refractometer/thermometer at
+  // receiving, per T9.5 §3(b)'s own worked example.
+  provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
 }
 
 export async function recordHarvestEvent(userAccountId: string, input: RecordHarvestEventInput) {
   await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId }]);
 
-  const provenanceClass = input.provenanceClass ?? "direct_observation";
+  const provenanceClass = input.provenanceClass;
 
   return prisma.$transaction(async (tx) => {
     const lot = await tx.lot.create({
@@ -107,14 +109,15 @@ export interface RecordReceivingEventInput {
   condition?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
-  provenanceClass?: ProvenanceClass;
+  // T9.5: required — same reasoning as RecordHarvestEventInput above.
+  provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
 }
 
 export async function recordReceivingEvent(userAccountId: string, input: RecordReceivingEventInput) {
   await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId }]);
 
-  const provenanceClass = input.provenanceClass ?? "direct_observation";
+  const provenanceClass = input.provenanceClass;
 
   return prisma.$transaction(async (tx) => {
     const lot = await tx.lot.create({

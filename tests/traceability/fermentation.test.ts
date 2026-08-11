@@ -88,6 +88,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
       projectId: projectAId,
     });
     await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "received",
       quantity: 300,
@@ -96,6 +97,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
     });
 
     const { run, transformation: startTransformation } = await startFermentationRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       lotId: lot.id,
       vesselNote: "Tank 3",
       startedAt: new Date("2026-01-02"),
@@ -119,6 +121,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
     });
 
     const measurement = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       variable: "temperature",
       value: 24,
       unit: "C",
@@ -128,6 +131,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
     expect(measurement.value.toNumber()).toBe(24);
 
     const { run: endedRun, transformation: endTransformation, outputLot } = await endFermentationRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       fermentationRunId: run.id,
       endedAt: new Date("2026-01-04"),
       outputLotCode: `${RUN_ID}-cycle-fermented`,
@@ -162,6 +166,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
 
     await expect(
       startFermentationRun(wrongProjectUserAccountId, {
+        provenanceClass: "original_record",
         lotId: lot.id,
         startedAt: new Date(),
       }),
@@ -174,7 +179,11 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
       lotType: "processing",
       projectId: projectAId,
     });
-    const { run } = await startFermentationRun(authorizedUserAccountId, { lotId: lot.id, startedAt: new Date() });
+    const { run } = await startFermentationRun(authorizedUserAccountId, {
+      lotId: lot.id,
+      startedAt: new Date(),
+      provenanceClass: "original_record",
+    });
 
     await expect(
       recordFermentationIntervention(wrongProjectUserAccountId, {
@@ -191,9 +200,14 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
       lotType: "processing",
       projectId: projectAId,
     });
-    const { run } = await startFermentationRun(authorizedUserAccountId, { lotId: lot.id, startedAt: new Date() });
+    const { run } = await startFermentationRun(authorizedUserAccountId, {
+      lotId: lot.id,
+      startedAt: new Date(),
+      provenanceClass: "original_record",
+    });
 
     await endFermentationRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       fermentationRunId: run.id,
       endedAt: new Date(),
       outputLotCode: `${RUN_ID}-double-end-output`,
@@ -202,6 +216,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
 
     await expect(
       endFermentationRun(authorizedUserAccountId, {
+        provenanceClass: "original_record",
         fermentationRunId: run.id,
         endedAt: new Date(),
         outputLotCode: `${RUN_ID}-double-end-output-2`,

@@ -78,6 +78,7 @@ describe("recordMeasurement — RBAC, validation, unit conversion", () => {
       projectId: projectAId,
     });
     const measurement = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       variable: "brix",
       value: 22,
       unit: "Bx",
@@ -96,6 +97,7 @@ describe("recordMeasurement — RBAC, validation, unit conversion", () => {
     });
     await expect(
       recordMeasurement(wrongProjectUserAccountId, {
+        provenanceClass: "measured_fact",
         variable: "brix",
         value: 22,
         unit: "Bx",
@@ -108,6 +110,7 @@ describe("recordMeasurement — RBAC, validation, unit conversion", () => {
   it("requires at least one subject (lotId or sampleId)", async () => {
     await expect(
       recordMeasurement(authorizedUserAccountId, {
+        provenanceClass: "measured_fact",
         variable: "brix",
         value: 22,
         unit: "Bx",
@@ -123,6 +126,7 @@ describe("recordMeasurement — RBAC, validation, unit conversion", () => {
       projectId: projectAId,
     });
     const measurement = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       variable: "temperature",
       value: 98.6,
       unit: "F",
@@ -141,6 +145,7 @@ describe("recordMeasurement — RBAC, validation, unit conversion", () => {
     });
     await expect(
       recordMeasurement(authorizedUserAccountId, {
+        provenanceClass: "measured_fact",
         variable: "ph",
         value: 20,
         unit: "pH",
@@ -159,6 +164,7 @@ describe("correctMeasurement — append-only correction chain", () => {
       projectId: projectAId,
     });
     const original = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       variable: "moisture",
       value: 12,
       unit: "%",
@@ -167,6 +173,7 @@ describe("correctMeasurement — append-only correction chain", () => {
     });
 
     const correction = await correctMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       measurementId: original.id,
       value: 11.5,
       unit: "%",
@@ -189,6 +196,7 @@ describe("correctMeasurement — append-only correction chain", () => {
       projectId: projectAId,
     });
     const original = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       variable: "moisture",
       value: 12,
       unit: "%",
@@ -198,6 +206,7 @@ describe("correctMeasurement — append-only correction chain", () => {
 
     await expect(
       correctMeasurement(authorizedUserAccountId, {
+        provenanceClass: "measured_fact",
         measurementId: original.id,
         value: 11.5,
         unit: "%",
@@ -205,5 +214,77 @@ describe("correctMeasurement — append-only correction chain", () => {
         reason: "   ",
       }),
     ).rejects.toThrow(MeasurementValidationError);
+  });
+});
+
+// T9.5 — the retrofit's two required tests: no silent direct_observation,
+// and operatorPersonId genuinely independent of createdBy.
+describe("T9.5 — provenance is chosen, never defaulted; observer independent of creator", () => {
+  it("persists exactly the provenanceClass the caller chose, never a silent direct_observation", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-provenance-explicit`,
+      lotType: "processing",
+      projectId: projectAId,
+    });
+
+    const labResult = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "scientific_evidence",
+      variable: "ph",
+      value: 4.2,
+      unit: "pH",
+      occurredAt: new Date(),
+      lotId: lot.id,
+    });
+    expect(labResult.provenanceClass).toBe("scientific_evidence");
+
+    const estimate = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "interpretation",
+      variable: "moisture",
+      value: 11,
+      unit: "%",
+      occurredAt: new Date(),
+      lotId: lot.id,
+    });
+    expect(estimate.provenanceClass).toBe("interpretation");
+    // Neither call named "direct_observation" and neither row landed there —
+    // T1-T9's silent `?? "direct_observation"` fallback is gone; there is no
+    // longer a code path that can produce that value except a caller asking
+    // for it by name.
+    expect(labResult.provenanceClass).not.toBe("direct_observation");
+    expect(estimate.provenanceClass).not.toBe("direct_observation");
+  });
+
+  it("allows operatorPersonId (who observed) to differ from createdBy (who typed it in)", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-observer-divergence`,
+      lotType: "drying",
+      projectId: projectAId,
+    });
+
+    // The field technician who actually took the reading at the drying
+    // beds — a real Person, deliberately with no UserAccount of their own,
+    // since this scenario is exactly "someone who isn't logged into the
+    // platform did the observing."
+    const fieldTechnician = await prisma.person.create({
+      data: { givenName: "TEST", familyName: "FieldTechnician", displayName: `TEST FieldTechnician (${RUN_ID})`, locale: "es" },
+    });
+
+    const measurement = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      variable: "moisture",
+      value: 10.5,
+      unit: "%",
+      occurredAt: new Date(),
+      lotId: lot.id,
+      operatorPersonId: fieldTechnician.id,
+    });
+
+    const recordingUserAccount = await prisma.userAccount.findUniqueOrThrow({ where: { id: authorizedUserAccountId } });
+
+    expect(measurement.operatorPersonId).toBe(fieldTechnician.id);
+    expect(measurement.createdBy).toBe(authorizedUserAccountId);
+    // The case T9.5 exists to make reachable: the person who observed and
+    // the account that recorded it are two different people on one row.
+    expect(measurement.operatorPersonId).not.toBe(recordingUserAccount.personId);
   });
 });

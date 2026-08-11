@@ -46,9 +46,10 @@ export interface CreateSampleFromLotInput {
   occurredAt: Date;
   operatorPersonId?: string | null;
   notes?: string | null;
-  // Verification-pass fix: explicit, not left to the schema's silent
-  // @default(direct_observation).
-  provenanceClass?: ProvenanceClass;
+  // T9.5: required, no fallback. app/actions/traceability.ts passes
+  // "original_record" — extracting a sample is an action taken against the
+  // source lot, per T9.5 §3(b)'s "lot merge or transformation" example.
+  provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
 }
 
@@ -58,7 +59,7 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
 
   await requireSampleAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
 
-  const provenanceClass = input.provenanceClass ?? "direct_observation";
+  const provenanceClass = input.provenanceClass;
 
   return prisma.$transaction(async (tx) => {
     const transformation = await tx.lotTransformation.create({

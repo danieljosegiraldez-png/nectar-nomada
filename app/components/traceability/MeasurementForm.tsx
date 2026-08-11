@@ -10,7 +10,31 @@ const initialState: TraceabilityActionState = {};
 // (routed through QuantityEvent, not here, per T3's own design).
 const VARIABLES = ["temperature", "ph", "brix", "relative_humidity", "moisture", "water_activity"] as const;
 
-export function MeasurementForm({ lotId }: { lotId: string }) {
+// T9.5 §3(c)/§4: the subset of ProvenanceClass that's actually plausible for
+// a raw field measurement — not the full ten-value vocabulary (hypothesis,
+// conclusion, recommendation, ai_suggestion, original_record belong to
+// other layers of the system, not a moisture reading at the drying beds).
+// measured_fact first/default: Phase 1's only source type is "manual"
+// (§10.2), i.e. an operator reading an instrument — a thermometer,
+// refractometer, pH meter, moisture meter — which is a measured fact, not
+// an unqualified claim (T9.5 §3(b)'s "harvest weight read off a scale"
+// reasoning extends the same way here).
+const PROVENANCE_CLASSES = ["measured_fact", "direct_observation", "interpretation", "scientific_evidence"] as const;
+
+interface ObserverOption {
+  id: string;
+  displayName: string;
+}
+
+export function MeasurementForm({
+  lotId,
+  observers,
+  selfPersonId,
+}: {
+  lotId: string;
+  observers: ObserverOption[];
+  selfPersonId: string | null;
+}) {
   const [state, formAction, pending] = useActionState(recordMeasurementAction, initialState);
   const t = useTranslations("Traceability");
 
@@ -34,6 +58,26 @@ export function MeasurementForm({ lotId }: { lotId: string }) {
       <div className="nn-field">
         <label htmlFor="unit">{t("unitLabel")}</label>
         <input id="unit" name="unit" type="text" required placeholder="C, pH, Bx, %, aw" />
+      </div>
+      <div className="nn-field">
+        <label htmlFor="provenanceClass">{t("provenanceClassLabel")}</label>
+        <select id="provenanceClass" name="provenanceClass" defaultValue="measured_fact">
+          {PROVENANCE_CLASSES.map((cls) => (
+            <option key={cls} value={cls}>
+              {t(`provenanceClass_${cls}` as "provenanceClass_measured_fact")}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="nn-field">
+        <label htmlFor="operatorPersonId">{t("observerLabel")}</label>
+        <select id="operatorPersonId" name="operatorPersonId" defaultValue={selfPersonId ?? ""}>
+          {observers.map((person) => (
+            <option key={person.id} value={person.id}>
+              {person.id === selfPersonId ? t("observerSelfOption", { name: person.displayName }) : person.displayName}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="nn-field">
         <label htmlFor="notes">{t("notesLabel")}</label>

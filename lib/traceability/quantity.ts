@@ -36,9 +36,10 @@ export interface RecordQuantityEventInput {
   occurredAt: Date;
   transformationId?: string | null;
   notes?: string | null;
-  // Verification-pass fix: explicit, not left to the schema's silent
-  // @default(direct_observation).
-  provenanceClass?: ProvenanceClass;
+  // T9.5: required, no fallback — see lots.ts's RecordTransformationInput
+  // comment. eventType alone doesn't determine a correct default (a
+  // "received" event could be a scale reading or a delivery-note figure).
+  provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
 }
 
@@ -62,7 +63,7 @@ export async function recordQuantityEvent(userAccountId: string, input: RecordQu
       transformationId: input.transformationId ?? null,
       notes: input.notes ?? null,
       createdBy: userAccountId,
-      provenanceClass: input.provenanceClass ?? "direct_observation",
+      provenanceClass: input.provenanceClass,
       sourceReference: input.sourceReference ?? null,
     },
   });

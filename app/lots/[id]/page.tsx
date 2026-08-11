@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { getLotDetail, TraceabilityAccessError } from "../../../lib/traceability/lots";
+import { getLotDetail, getObserverCandidates, TraceabilityAccessError } from "../../../lib/traceability/lots";
 import { computeCurrentQuantity } from "../../../lib/traceability/quantity";
 import {
   recordFermentationInterventionFormAction,
@@ -34,6 +34,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   }
 
   const quantity = await computeCurrentQuantity(user.userAccountId, id);
+  const { people: observers, selfPersonId } = await getObserverCandidates(user.userAccountId);
 
   const { lot, lineage, transformations, quantityEvents, measurements, samples, fermentationRuns, dryingRuns, storageAssignments, tasks, auditEvents } = detail;
 
@@ -262,7 +263,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
             ))}
           </ul>
         )}
-        <MeasurementForm lotId={lot.id} />
+        <MeasurementForm lotId={lot.id} observers={observers} selfPersonId={selfPersonId} />
       </section>
 
       <section className="nn-section">

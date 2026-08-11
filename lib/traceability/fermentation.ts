@@ -50,9 +50,10 @@ export interface StartFermentationRunInput {
   quantity?: number | null;
   unit?: string | null;
   notes?: string | null;
-  // Verification-pass fix: explicit, not left to the schema's silent
-  // @default(direct_observation).
-  provenanceClass?: ProvenanceClass;
+  // T9.5: required, no fallback. app/actions/traceability.ts passes
+  // "original_record" — starting a run is an action taken, not a
+  // measurement (per T9.5 §3(b)'s "lot merge or transformation" example).
+  provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
 }
 
@@ -81,7 +82,7 @@ export async function startFermentationRun(userAccountId: string, input: StartFe
         notes: input.notes ?? null,
         createdBy: userAccountId,
         fermentationRunId: run.id,
-        provenanceClass: input.provenanceClass ?? "direct_observation",
+        provenanceClass: input.provenanceClass,
         sourceReference: input.sourceReference ?? null,
         inputs: {
           create: [{ lotId: input.lotId, quantity: input.quantity ?? null, unit: input.unit ?? null }],
@@ -124,7 +125,8 @@ export interface EndFermentationRunInput {
   unit?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
-  provenanceClass?: ProvenanceClass;
+  // T9.5: required — same reasoning as StartFermentationRunInput above.
+  provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
 }
 
@@ -136,7 +138,7 @@ export async function endFermentationRun(userAccountId: string, input: EndFermen
   const sourceLot = await resolveRunSourceLot(input.fermentationRunId);
   await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
 
-  const provenanceClass = input.provenanceClass ?? "direct_observation";
+  const provenanceClass = input.provenanceClass;
 
   return prisma.$transaction(async (tx) => {
     const endedRun = await tx.fermentationRun.update({

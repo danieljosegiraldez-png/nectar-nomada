@@ -87,6 +87,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
       projectId: projectAId,
     });
     await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "received",
       quantity: 285,
@@ -95,6 +96,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
     });
 
     const { run, transformation: startTransformation } = await startDryingRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       lotId: lot.id,
       method: "raised_bed",
       layerDepthCm: 5,
@@ -116,6 +118,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
     });
 
     const { run: endedRun, transformation: endTransformation, outputLot } = await endDryingRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       dryingRunId: run.id,
       endedAt: new Date("2026-01-15"),
       outputLotCode: `${RUN_ID}-cycle-green`,
@@ -148,6 +151,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
 
     await expect(
       startDryingRun(wrongProjectUserAccountId, {
+        provenanceClass: "original_record",
         lotId: lot.id,
         startedAt: new Date(),
       }),
@@ -160,7 +164,11 @@ describe("Drying — full start/turn/measure/end cycle", () => {
       lotType: "drying",
       projectId: projectAId,
     });
-    const { run } = await startDryingRun(authorizedUserAccountId, { lotId: lot.id, startedAt: new Date() });
+    const { run } = await startDryingRun(authorizedUserAccountId, {
+      lotId: lot.id,
+      startedAt: new Date(),
+      provenanceClass: "original_record",
+    });
 
     await expect(
       recordDryingTurnEvent(wrongProjectUserAccountId, {
@@ -177,9 +185,14 @@ describe("Drying — full start/turn/measure/end cycle", () => {
       lotType: "drying",
       projectId: projectAId,
     });
-    const { run } = await startDryingRun(authorizedUserAccountId, { lotId: lot.id, startedAt: new Date() });
+    const { run } = await startDryingRun(authorizedUserAccountId, {
+      lotId: lot.id,
+      startedAt: new Date(),
+      provenanceClass: "original_record",
+    });
 
     await endDryingRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       dryingRunId: run.id,
       endedAt: new Date(),
       outputLotCode: `${RUN_ID}-double-end-output`,
@@ -188,6 +201,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
 
     await expect(
       endDryingRun(authorizedUserAccountId, {
+        provenanceClass: "original_record",
         dryingRunId: run.id,
         endedAt: new Date(),
         outputLotCode: `${RUN_ID}-double-end-output-2`,

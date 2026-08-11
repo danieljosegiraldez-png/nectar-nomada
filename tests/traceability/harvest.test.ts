@@ -111,6 +111,7 @@ afterAll(async () => {
 describe("recordHarvestEvent — creates the origin Lot end-to-end", () => {
   it("allows a project-scoped Farm Operator to record a harvest at their project's plot", async () => {
     const { harvestEvent, lot } = await recordHarvestEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotCode: `${RUN_ID}-harvest-ok`,
       locationId: plotLocationId,
       organizationId: farmOrganizationId,
@@ -137,6 +138,7 @@ describe("recordHarvestEvent — creates the origin Lot end-to-end", () => {
   it("denies a Farm Operator scoped to a different project", async () => {
     await expect(
       recordHarvestEvent(wrongProjectUserAccountId, {
+        provenanceClass: "measured_fact",
         lotCode: `${RUN_ID}-harvest-denied`,
         locationId: plotLocationId,
         organizationId: farmOrganizationId,
@@ -148,6 +150,7 @@ describe("recordHarvestEvent — creates the origin Lot end-to-end", () => {
 
   it("creates no QuantityEvent when cherryWeightKg is not recorded (missing stays missing, never fabricated)", async () => {
     const { lot } = await recordHarvestEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotCode: `${RUN_ID}-harvest-no-weight`,
       locationId: plotLocationId,
       organizationId: farmOrganizationId,
@@ -164,6 +167,7 @@ describe("recordHarvestEvent — creates the origin Lot end-to-end", () => {
 
   it("end-to-end: a harvested lot can be split immediately afterward, composing with T1's transformation machinery", async () => {
     const { lot: harvestLot } = await recordHarvestEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotCode: `${RUN_ID}-harvest-then-split`,
       locationId: plotLocationId,
       organizationId: farmOrganizationId,
@@ -173,6 +177,7 @@ describe("recordHarvestEvent — creates the origin Lot end-to-end", () => {
     });
 
     const { outputLots } = await recordTransformation(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       transformationType: "split",
       occurredAt: new Date(),
       inputs: [{ lotId: harvestLot.id, quantity: 300, unit: "kg" }],
@@ -192,6 +197,7 @@ describe("recordHarvestEvent — creates the origin Lot end-to-end", () => {
 describe("recordReceivingEvent — creates the origin Lot from an external supplier", () => {
   it("allows a project-scoped Farm Operator to record a receiving with no known location", async () => {
     const { receivingEvent, lot } = await recordReceivingEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotCode: `${RUN_ID}-receiving-ok`,
       organizationId: supplierOrganizationId,
       projectId: projectAId,
@@ -211,6 +217,7 @@ describe("recordReceivingEvent — creates the origin Lot from an external suppl
   it("denies a Farm Operator scoped to a different project", async () => {
     await expect(
       recordReceivingEvent(wrongProjectUserAccountId, {
+        provenanceClass: "measured_fact",
         lotCode: `${RUN_ID}-receiving-denied`,
         organizationId: supplierOrganizationId,
         projectId: projectAId,

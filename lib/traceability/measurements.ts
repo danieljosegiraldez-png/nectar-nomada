@@ -55,11 +55,12 @@ export interface RecordMeasurementInput {
   sampleId?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
-  // Verification-pass fix: explicit, not left to the schema's silent
-  // @default(direct_observation) — Phase 1's only source type is "manual"
-  // (§10.2), so direct_observation is correct as a default, but callers
-  // recording e.g. a lab-analyzed value can now say so.
-  provenanceClass?: ProvenanceClass;
+  // T9.5: required, no fallback. The MeasurementForm UI (app/components/
+  // traceability/MeasurementForm.tsx) exposes this as a real select,
+  // defaulting to "measured_fact" (a manually-read instrument value —
+  // thermometer, refractometer, pH meter, moisture meter — per T9.5 §3(b)'s
+  // "harvest weight read off a scale" example), but changeable per reading.
+  provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
 }
 
@@ -81,7 +82,7 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
       operatorPersonId: input.operatorPersonId ?? null,
       notes: input.notes ?? null,
       createdBy: userAccountId,
-      provenanceClass: input.provenanceClass ?? "direct_observation",
+      provenanceClass: input.provenanceClass,
       sourceReference: input.sourceReference ?? null,
     },
   });
@@ -95,7 +96,8 @@ export interface CorrectMeasurementInput {
   reason: string;
   operatorPersonId?: string | null;
   notes?: string | null;
-  provenanceClass?: ProvenanceClass;
+  // T9.5: required — see RecordMeasurementInput's comment.
+  provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
 }
 
@@ -132,7 +134,7 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
       correctsId: original.id,
       reason: input.reason,
       createdBy: userAccountId,
-      provenanceClass: input.provenanceClass ?? "direct_observation",
+      provenanceClass: input.provenanceClass,
       sourceReference: input.sourceReference ?? null,
     },
   });

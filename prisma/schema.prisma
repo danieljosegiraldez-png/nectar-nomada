@@ -1969,7 +1969,13 @@ model LotTransformation {
   operatorPersonId   String?               @map("operator_person_id") @db.Uuid
   operator           Person?               @relation(fields: [operatorPersonId], references: [id])
   notes              String?
-  provenanceClass    ProvenanceClass       @default(direct_observation) @map("provenance_class")
+  // T9.5: no default. T1-T9 left this NOT NULL with a silent
+  // @default(direct_observation) that every write path fell through to
+  // unchallenged — a row that nobody chose a class for still asserted the
+  // strongest claim in the vocabulary. Required at the type level now
+  // (lib/traceability/*.ts's input interfaces carry no `?`); the caller
+  // must state a real class.
+  provenanceClass    ProvenanceClass       @map("provenance_class")
   // Citation for this specific fact ("lab report #123", "calibrated scale
   // reading 2026-01-01") — distinct from operatorPersonId (who did it) and
   // occurredAt (when it happened), which this table already carries.
@@ -2067,7 +2073,8 @@ model QuantityEvent {
   occurredAt       DateTime           @map("occurred_at")
   transformationId String?            @map("transformation_id") @db.Uuid
   transformation   LotTransformation? @relation(fields: [transformationId], references: [id])
-  provenanceClass  ProvenanceClass    @default(direct_observation) @map("provenance_class")
+  // T9.5: no default — see LotTransformation.provenanceClass's comment.
+  provenanceClass  ProvenanceClass    @map("provenance_class")
   sourceReference  String?            @map("source_reference")
   dataQuality      DataQuality?       @map("data_quality")
   notes            String?
@@ -2143,7 +2150,8 @@ model Measurement {
   corrections Measurement[] @relation("MeasurementCorrection")
   reason      String?
 
-  provenanceClass ProvenanceClass @default(direct_observation) @map("provenance_class")
+  // T9.5: no default — see LotTransformation.provenanceClass's comment.
+  provenanceClass ProvenanceClass @map("provenance_class")
   sourceReference String?         @map("source_reference")
   dataQuality     DataQuality?    @map("data_quality")
   notes           String?
@@ -2196,7 +2204,8 @@ model HarvestEvent {
   notes            String?
   resultingLotId   String          @unique @map("resulting_lot_id") @db.Uuid
   resultingLot     Lot             @relation(fields: [resultingLotId], references: [id])
-  provenanceClass  ProvenanceClass @default(direct_observation) @map("provenance_class")
+  // T9.5: no default — see LotTransformation.provenanceClass's comment.
+  provenanceClass  ProvenanceClass @map("provenance_class")
   sourceReference  String?         @map("source_reference")
   createdAt        DateTime        @default(now()) @map("created_at")
   createdBy        String?         @map("created_by") @db.Uuid
@@ -2236,7 +2245,8 @@ model ReceivingEvent {
   notes            String?
   resultingLotId   String          @unique @map("resulting_lot_id") @db.Uuid
   resultingLot     Lot             @relation(fields: [resultingLotId], references: [id])
-  provenanceClass  ProvenanceClass @default(direct_observation) @map("provenance_class")
+  // T9.5: no default — see LotTransformation.provenanceClass's comment.
+  provenanceClass  ProvenanceClass @map("provenance_class")
   sourceReference  String?         @map("source_reference")
   createdAt        DateTime        @default(now()) @map("created_at")
   createdBy        String?         @map("created_by") @db.Uuid

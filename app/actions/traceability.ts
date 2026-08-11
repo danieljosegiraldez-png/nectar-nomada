@@ -63,6 +63,9 @@ export async function recordHarvestAction(
       brix: emptyToNullNumber(formData.get("brix")),
       condition: emptyToNull(formData.get("condition")),
       notes: emptyToNull(formData.get("notes")),
+      // T9.5 §3(b): a harvest weight/brix reading is an instrument value
+      // read at receiving — measured_fact, not an unqualified claim.
+      provenanceClass: "measured_fact",
     });
     lotId = lot.id;
   } catch (error) {
@@ -93,6 +96,9 @@ export async function recordReceivingAction(
       cherryWeightKg: emptyToNullNumber(formData.get("cherryWeightKg")),
       condition: emptyToNull(formData.get("condition")),
       notes: emptyToNull(formData.get("notes")),
+      // T9.5 §3(b): same reasoning as recordHarvestAction — a delivery
+      // weight is a scale reading, measured_fact.
+      provenanceClass: "measured_fact",
     });
     lotId = lot.id;
   } catch (error) {
@@ -122,6 +128,10 @@ export async function recordMeasurementAction(
       unit: String(formData.get("unit") ?? ""),
       occurredAt: new Date(),
       notes: emptyToNull(formData.get("notes")),
+      // T9.5 §3(c): the one write path where the UI itself exposes both
+      // fields (MeasurementForm) rather than the action choosing silently.
+      provenanceClass: String(formData.get("provenanceClass") ?? "measured_fact") as never,
+      operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
     });
   } catch (error) {
     return { error: friendlyError(t, error) };
@@ -151,6 +161,8 @@ export async function startFermentationAction(
       inoculationNote: emptyToNull(formData.get("inoculationNote")),
       quantity: emptyToNullNumber(formData.get("quantity")),
       unit: emptyToNull(formData.get("unit")),
+      // T9.5 §3(b): starting a run is an action taken, not a measurement.
+      provenanceClass: "original_record",
     });
   } catch (error) {
     return { error: friendlyError(t, error) };
@@ -187,6 +199,7 @@ export async function endFermentationFormAction(formData: FormData): Promise<voi
     outputLotType: String(formData.get("outputLotType") ?? "drying") as never,
     quantity: emptyToNullNumber(formData.get("quantity")),
     unit: emptyToNull(formData.get("unit")),
+    provenanceClass: "original_record",
   });
 
   revalidatePath(`/lots/${lotId}`);
@@ -211,6 +224,8 @@ export async function startDryingAction(
       startedAt: new Date(),
       quantity: emptyToNullNumber(formData.get("quantity")),
       unit: emptyToNull(formData.get("unit")),
+      // T9.5 §3(b): starting a run is an action taken, not a measurement.
+      provenanceClass: "original_record",
     });
   } catch (error) {
     return { error: friendlyError(t, error) };
@@ -246,6 +261,7 @@ export async function endDryingFormAction(formData: FormData): Promise<void> {
     outputLotType: String(formData.get("outputLotType") ?? "green") as never,
     quantity: emptyToNullNumber(formData.get("quantity")),
     unit: emptyToNull(formData.get("unit")),
+    provenanceClass: "original_record",
   });
 
   revalidatePath(`/lots/${lotId}`);
@@ -297,6 +313,8 @@ export async function createSampleAction(
       unit: emptyToNull(formData.get("unit")),
       occurredAt: new Date(),
       notes: emptyToNull(formData.get("notes")),
+      // T9.5 §3(b): extracting a sample is an action taken against the lot.
+      provenanceClass: "original_record",
     });
   } catch (error) {
     return { error: friendlyError(t, error) };
@@ -319,6 +337,9 @@ export async function recordStageChangeFormAction(formData: FormData): Promise<v
   await recordTransformation(user.userAccountId, {
     transformationType: "stage_change",
     occurredAt: new Date(),
+    // T9.5 §3(b): a stage change / split / merge / blend is an action
+    // taken, not a measurement.
+    provenanceClass: "original_record",
     inputs: [{ lotId, quantity: emptyToNullNumber(formData.get("quantity")), unit: emptyToNull(formData.get("unit")) }],
     outputs:
       outputLotCode && outputLotType

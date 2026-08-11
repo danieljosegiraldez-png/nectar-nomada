@@ -172,6 +172,7 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     });
 
     const { transformation, outputLots } = await recordTransformation(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       transformationType: "split",
       occurredAt: new Date(),
       inputs: [{ lotId: origin.id, quantity: 500, unit: "kg" }],
@@ -203,6 +204,7 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     });
 
     const { outputLots } = await recordTransformation(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       transformationType: "split",
       occurredAt: new Date(),
       inputs: [{ lotId: origin.id, quantity: 100, unit: "kg" }],
@@ -214,21 +216,28 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     expect(quantity.unit).toBe("kg");
   });
 
-  it("verification-pass fix: provenanceClass/sourceReference default sensibly but are honored when the caller sets them explicitly", async () => {
+  it("T9.5: provenanceClass is honored exactly as the caller chose it — sourceReference stays null when omitted", async () => {
+    // Supersedes the old "defaults sensibly to direct_observation" test:
+    // T9.5 removed that fallback entirely (verification-pass finding —
+    // every T1-T9 write path silently asserted direct_observation whether
+    // or not anyone observed anything). provenanceClass is now a required
+    // argument with no default at any layer; this test asserts the value
+    // passed through is stored verbatim, not silently coerced.
     const origin = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-provenance-default`,
       lotType: "cherry",
       projectId: projectAId,
     });
 
-    const { transformation: defaulted } = await recordTransformation(authorizedUserAccountId, {
+    const { transformation: chosen } = await recordTransformation(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       transformationType: "stage_change",
       occurredAt: new Date(),
       inputs: [{ lotId: origin.id }],
       outputs: [],
     });
-    expect(defaulted.provenanceClass).toBe("direct_observation");
-    expect(defaulted.sourceReference).toBeNull();
+    expect(chosen.provenanceClass).toBe("original_record");
+    expect(chosen.sourceReference).toBeNull();
 
     const origin2 = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-provenance-explicit`,
@@ -260,6 +269,7 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     });
 
     const { transformation, outputLots } = await recordTransformation(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       transformationType: "merge",
       occurredAt: new Date(),
       inputs: [
@@ -287,6 +297,7 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     });
 
     const { transformation, outputLots } = await recordTransformation(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       transformationType: "blend",
       occurredAt: new Date(),
       inputs: [
@@ -314,6 +325,7 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     });
 
     const first = await recordTransformation(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       transformationType: "stage_change",
       occurredAt: new Date("2026-01-01"),
       inputs: [{ lotId: origin.id, quantity: 100, unit: "kg" }],
@@ -321,6 +333,7 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     });
 
     const second = await recordTransformation(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       transformationType: "stage_change",
       occurredAt: new Date("2026-01-02"),
       inputs: [{ lotId: first.outputLots[0]!.id, quantity: 95, unit: "kg" }],
@@ -344,6 +357,7 @@ describe("getLotLineage — recursive CTE correctness", () => {
       projectId: projectAId,
     });
     const step1 = await recordTransformation(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       transformationType: "stage_change",
       occurredAt: new Date(),
       inputs: [{ lotId: origin.id }],
@@ -352,6 +366,7 @@ describe("getLotLineage — recursive CTE correctness", () => {
     const step1LotId = step1.outputLots[0]!.id;
 
     const step2 = await recordTransformation(authorizedUserAccountId, {
+      provenanceClass: "original_record",
       transformationType: "stage_change",
       occurredAt: new Date(),
       inputs: [{ lotId: step1LotId }],

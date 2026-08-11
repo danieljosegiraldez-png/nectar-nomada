@@ -86,12 +86,10 @@ export interface RecordTransformationInput {
   occurredAt: Date;
   operatorPersonId?: string | null;
   notes?: string | null;
-  // Verification-pass fix: explicit, not left to the schema's silent
-  // @default(direct_observation) — a stage_change transformation an
-  // operator entered by hand is genuinely direct_observation; a future
-  // sensor-triggered or computed transformation would need a caller that
-  // says so.
-  provenanceClass?: ProvenanceClass;
+  // T9.5: required, no fallback — the caller (app/actions/traceability.ts)
+  // must state a real class for every transformation type; there is no
+  // single correct default across split/merge/blend/stage_change/etc.
+  provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
   inputs: ReadonlyArray<{ lotId: string; quantity?: number | null; unit?: string | null }>;
   // New Lot(s) this transformation produces — every LotTransformation output
@@ -135,7 +133,7 @@ export async function recordTransformation(userAccountId: string, input: RecordT
     inputLots.map((lot) => ({ projectId: lot.projectId, locationId: lot.locationId })),
   );
 
-  const provenanceClass = input.provenanceClass ?? "direct_observation";
+  const provenanceClass = input.provenanceClass;
 
   return prisma.$transaction(async (tx) => {
     const transformation = await tx.lotTransformation.create({
@@ -550,6 +548,21 @@ export async function getManageableContext(userAccountId: string) {
   ];
 
   return { projects, locations, organizations };
+}
+
+/**
+ * Candidate observers for the measurement-entry "who actually took this
+ * reading" override (T9.5 §3(c)) — every active Person, system-wide, plus
+ * which one is this user's own. Same reasoning as getManageableContext's
+ * Location dropdown above: a convenience for a two-tap override, not a
+ * security boundary — operatorPersonId carries no RBAC weight of its own.
+ */
+export async function getObserverCandidates(userAccountId: string) {
+  const [account, people] = await Promise.all([
+    prisma.userAccount.findUnique({ where: { id: userAccountId }, select: { personId: true } }),
+    prisma.person.findMany({ where: { status: "active" }, orderBy: { displayName: "asc" } }),
+  ]);
+  return { people, selfPersonId: account?.personId ?? null };
 }
 
 /** Lightweight lot fetch + view-access check for the simpler "record X" form pages, which don't need getLotDetail's full aggregation. */

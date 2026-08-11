@@ -78,6 +78,7 @@ describe("recordQuantityEvent — RBAC and validation", () => {
       projectId: projectAId,
     });
     const event = await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "received",
       quantity: 500,
@@ -95,6 +96,7 @@ describe("recordQuantityEvent — RBAC and validation", () => {
     });
     await expect(
       recordQuantityEvent(wrongProjectUserAccountId, {
+        provenanceClass: "measured_fact",
         lotId: lot.id,
         eventType: "received",
         quantity: 100,
@@ -112,6 +114,7 @@ describe("recordQuantityEvent — RBAC and validation", () => {
     });
     await expect(
       recordQuantityEvent(authorizedUserAccountId, {
+        provenanceClass: "measured_fact",
         lotId: lot.id,
         eventType: "loss",
         quantity: -5,
@@ -121,6 +124,7 @@ describe("recordQuantityEvent — RBAC and validation", () => {
     ).rejects.toThrow(QuantityValidationError);
     await expect(
       recordQuantityEvent(authorizedUserAccountId, {
+        provenanceClass: "measured_fact",
         lotId: lot.id,
         eventType: "adjustment_decrease",
         quantity: -1,
@@ -140,6 +144,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
     });
 
     await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "received",
       quantity: 500,
@@ -147,6 +152,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
       occurredAt: new Date("2026-01-01"),
     });
     await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "loss",
       quantity: 20,
@@ -154,6 +160,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
       occurredAt: new Date("2026-01-02"),
     });
     await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "sample_removed",
       quantity: 5,
@@ -161,6 +168,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
       occurredAt: new Date("2026-01-03"),
     });
     await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "transfer_in",
       quantity: 25,
@@ -182,6 +190,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
     });
 
     await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "received",
       quantity: 100,
@@ -189,6 +198,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
       occurredAt: new Date("2026-01-01"),
     });
     await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "adjustment_increase",
       quantity: 10,
@@ -196,6 +206,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
       occurredAt: new Date("2026-01-02"),
     });
     await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "adjustment_decrease",
       quantity: 15,
@@ -226,6 +237,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
       projectId: projectAId,
     });
     await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "received",
       quantity: 500,
@@ -233,6 +245,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
       occurredAt: new Date("2026-01-01"),
     });
     await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
       lotId: lot.id,
       eventType: "received",
       quantity: 10,
