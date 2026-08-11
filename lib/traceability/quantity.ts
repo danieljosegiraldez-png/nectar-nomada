@@ -13,6 +13,7 @@
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { Prisma } from "../../generated/prisma/client";
+import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export class QuantityValidationError extends Error {}
 
@@ -35,6 +36,10 @@ export interface RecordQuantityEventInput {
   occurredAt: Date;
   transformationId?: string | null;
   notes?: string | null;
+  // Verification-pass fix: explicit, not left to the schema's silent
+  // @default(direct_observation).
+  provenanceClass?: ProvenanceClass;
+  sourceReference?: string | null;
 }
 
 export async function recordQuantityEvent(userAccountId: string, input: RecordQuantityEventInput) {
@@ -57,6 +62,8 @@ export async function recordQuantityEvent(userAccountId: string, input: RecordQu
       transformationId: input.transformationId ?? null,
       notes: input.notes ?? null,
       createdBy: userAccountId,
+      provenanceClass: input.provenanceClass ?? "direct_observation",
+      sourceReference: input.sourceReference ?? null,
     },
   });
 }

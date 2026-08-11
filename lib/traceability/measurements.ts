@@ -18,6 +18,7 @@
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { normalizeToCanonical, type MeasurementVariable } from "./units";
+import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export class MeasurementValidationError extends Error {}
 
@@ -54,6 +55,12 @@ export interface RecordMeasurementInput {
   sampleId?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
+  // Verification-pass fix: explicit, not left to the schema's silent
+  // @default(direct_observation) — Phase 1's only source type is "manual"
+  // (§10.2), so direct_observation is correct as a default, but callers
+  // recording e.g. a lab-analyzed value can now say so.
+  provenanceClass?: ProvenanceClass;
+  sourceReference?: string | null;
 }
 
 export async function recordMeasurement(userAccountId: string, input: RecordMeasurementInput) {
@@ -74,6 +81,8 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
       operatorPersonId: input.operatorPersonId ?? null,
       notes: input.notes ?? null,
       createdBy: userAccountId,
+      provenanceClass: input.provenanceClass ?? "direct_observation",
+      sourceReference: input.sourceReference ?? null,
     },
   });
 }
@@ -86,6 +95,8 @@ export interface CorrectMeasurementInput {
   reason: string;
   operatorPersonId?: string | null;
   notes?: string | null;
+  provenanceClass?: ProvenanceClass;
+  sourceReference?: string | null;
 }
 
 /**
@@ -121,6 +132,8 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
       correctsId: original.id,
       reason: input.reason,
       createdBy: userAccountId,
+      provenanceClass: input.provenanceClass ?? "direct_observation",
+      sourceReference: input.sourceReference ?? null,
     },
   });
 }

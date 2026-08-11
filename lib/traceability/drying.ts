@@ -17,7 +17,7 @@
  */
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
-import type { LotType } from "../../generated/prisma/client";
+import type { LotType, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveRunSourceLot(dryingRunId: string) {
   const transformation = await prisma.lotTransformation.findFirst({
@@ -40,6 +40,10 @@ export interface StartDryingRunInput {
   unit?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
+  // Verification-pass fix: explicit, not left to the schema's silent
+  // @default(direct_observation).
+  provenanceClass?: ProvenanceClass;
+  sourceReference?: string | null;
 }
 
 export async function startDryingRun(userAccountId: string, input: StartDryingRunInput) {
@@ -66,6 +70,8 @@ export async function startDryingRun(userAccountId: string, input: StartDryingRu
         notes: input.notes ?? null,
         createdBy: userAccountId,
         dryingRunId: run.id,
+        provenanceClass: input.provenanceClass ?? "direct_observation",
+        sourceReference: input.sourceReference ?? null,
         inputs: {
           create: [{ lotId: input.lotId, quantity: input.quantity ?? null, unit: input.unit ?? null }],
         },
@@ -109,6 +115,8 @@ export interface EndDryingRunInput {
   unit?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
+  provenanceClass?: ProvenanceClass;
+  sourceReference?: string | null;
 }
 
 export async function endDryingRun(userAccountId: string, input: EndDryingRunInput) {
@@ -118,6 +126,8 @@ export async function endDryingRun(userAccountId: string, input: EndDryingRunInp
 
   const sourceLot = await resolveRunSourceLot(input.dryingRunId);
   await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
+
+  const provenanceClass = input.provenanceClass ?? "direct_observation";
 
   return prisma.$transaction(async (tx) => {
     const endedRun = await tx.dryingRun.update({
@@ -133,6 +143,8 @@ export async function endDryingRun(userAccountId: string, input: EndDryingRunInp
         notes: input.notes ?? null,
         createdBy: userAccountId,
         dryingRunId: input.dryingRunId,
+        provenanceClass,
+        sourceReference: input.sourceReference ?? null,
         inputs: {
           create: [{ lotId: sourceLot.id, quantity: input.quantity ?? null, unit: input.unit ?? null }],
         },
@@ -169,6 +181,8 @@ export async function endDryingRun(userAccountId: string, input: EndDryingRunInp
           occurredAt: input.endedAt,
           transformationId: transformation.id,
           createdBy: userAccountId,
+          provenanceClass,
+          sourceReference: input.sourceReference ?? null,
         },
       });
     }

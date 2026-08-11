@@ -21,6 +21,7 @@
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { scopeTargetsFor, TraceabilityAccessError } from "./lots";
+import type { ProvenanceClass } from "../../generated/prisma/client";
 
 async function requireSampleAccess(
   userAccountId: string,
@@ -45,6 +46,10 @@ export interface CreateSampleFromLotInput {
   occurredAt: Date;
   operatorPersonId?: string | null;
   notes?: string | null;
+  // Verification-pass fix: explicit, not left to the schema's silent
+  // @default(direct_observation).
+  provenanceClass?: ProvenanceClass;
+  sourceReference?: string | null;
 }
 
 export async function createSampleFromLot(userAccountId: string, input: CreateSampleFromLotInput) {
@@ -52,6 +57,8 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   if (!sourceLot) throw new TraceabilityAccessError("lot_not_found");
 
   await requireSampleAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
+
+  const provenanceClass = input.provenanceClass ?? "direct_observation";
 
   return prisma.$transaction(async (tx) => {
     const transformation = await tx.lotTransformation.create({
@@ -61,6 +68,8 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
         operatorPersonId: input.operatorPersonId ?? null,
         notes: input.notes ?? null,
         createdBy: userAccountId,
+        provenanceClass,
+        sourceReference: input.sourceReference ?? null,
         inputs: {
           create: [{ lotId: input.sourceLotId, quantity: input.quantity ?? null, unit: input.unit ?? null }],
         },
@@ -91,6 +100,8 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
           occurredAt: input.occurredAt,
           transformationId: transformation.id,
           createdBy: userAccountId,
+          provenanceClass,
+          sourceReference: input.sourceReference ?? null,
         },
       });
     }

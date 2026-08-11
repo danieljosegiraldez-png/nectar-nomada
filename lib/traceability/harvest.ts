@@ -14,6 +14,7 @@
  */
 import { prisma } from "../db";
 import { requireLotAccess } from "./lots";
+import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export interface RecordHarvestEventInput {
   lotCode: string;
@@ -29,10 +30,16 @@ export interface RecordHarvestEventInput {
   ripenessNotes?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
+  // Verification-pass fix: explicit, not left to the schema's silent
+  // @default(direct_observation).
+  provenanceClass?: ProvenanceClass;
+  sourceReference?: string | null;
 }
 
 export async function recordHarvestEvent(userAccountId: string, input: RecordHarvestEventInput) {
   await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId }]);
+
+  const provenanceClass = input.provenanceClass ?? "direct_observation";
 
   return prisma.$transaction(async (tx) => {
     const lot = await tx.lot.create({
@@ -62,6 +69,8 @@ export async function recordHarvestEvent(userAccountId: string, input: RecordHar
         notes: input.notes ?? null,
         resultingLotId: lot.id,
         createdBy: userAccountId,
+        provenanceClass,
+        sourceReference: input.sourceReference ?? null,
       },
     });
 
@@ -74,6 +83,8 @@ export async function recordHarvestEvent(userAccountId: string, input: RecordHar
           unit: "kg",
           occurredAt: input.harvestedAt,
           createdBy: userAccountId,
+          provenanceClass,
+          sourceReference: input.sourceReference ?? null,
         },
       });
     }
@@ -96,10 +107,14 @@ export interface RecordReceivingEventInput {
   condition?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
+  provenanceClass?: ProvenanceClass;
+  sourceReference?: string | null;
 }
 
 export async function recordReceivingEvent(userAccountId: string, input: RecordReceivingEventInput) {
   await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId }]);
+
+  const provenanceClass = input.provenanceClass ?? "direct_observation";
 
   return prisma.$transaction(async (tx) => {
     const lot = await tx.lot.create({
@@ -129,6 +144,8 @@ export async function recordReceivingEvent(userAccountId: string, input: RecordR
         notes: input.notes ?? null,
         resultingLotId: lot.id,
         createdBy: userAccountId,
+        provenanceClass,
+        sourceReference: input.sourceReference ?? null,
       },
     });
 
@@ -141,6 +158,8 @@ export async function recordReceivingEvent(userAccountId: string, input: RecordR
           unit: "kg",
           occurredAt: input.receivedAt,
           createdBy: userAccountId,
+          provenanceClass,
+          sourceReference: input.sourceReference ?? null,
         },
       });
     }

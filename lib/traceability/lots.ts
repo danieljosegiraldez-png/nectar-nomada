@@ -20,6 +20,7 @@
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import type { ScopeTarget } from "../rbac/types";
+import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export class TraceabilityAccessError extends Error {}
 
@@ -85,6 +86,13 @@ export interface RecordTransformationInput {
   occurredAt: Date;
   operatorPersonId?: string | null;
   notes?: string | null;
+  // Verification-pass fix: explicit, not left to the schema's silent
+  // @default(direct_observation) — a stage_change transformation an
+  // operator entered by hand is genuinely direct_observation; a future
+  // sensor-triggered or computed transformation would need a caller that
+  // says so.
+  provenanceClass?: ProvenanceClass;
+  sourceReference?: string | null;
   inputs: ReadonlyArray<{ lotId: string; quantity?: number | null; unit?: string | null }>;
   // New Lot(s) this transformation produces — every LotTransformation output
   // is a freshly created Lot row (execution plan §8.1's lineage diagram: a
@@ -127,6 +135,8 @@ export async function recordTransformation(userAccountId: string, input: RecordT
     inputLots.map((lot) => ({ projectId: lot.projectId, locationId: lot.locationId })),
   );
 
+  const provenanceClass = input.provenanceClass ?? "direct_observation";
+
   return prisma.$transaction(async (tx) => {
     const transformation = await tx.lotTransformation.create({
       data: {
@@ -135,6 +145,8 @@ export async function recordTransformation(userAccountId: string, input: RecordT
         operatorPersonId: input.operatorPersonId ?? null,
         notes: input.notes ?? null,
         createdBy: userAccountId,
+        provenanceClass,
+        sourceReference: input.sourceReference ?? null,
         inputs: {
           create: input.inputs.map((i) => ({
             lotId: i.lotId,
@@ -189,6 +201,9 @@ export async function recordTransformation(userAccountId: string, input: RecordT
             occurredAt: input.occurredAt,
             transformationId: transformation.id,
             createdBy: userAccountId,
+            // Same reliability as the transformation that produced it.
+            provenanceClass,
+            sourceReference: input.sourceReference ?? null,
           },
         });
       }

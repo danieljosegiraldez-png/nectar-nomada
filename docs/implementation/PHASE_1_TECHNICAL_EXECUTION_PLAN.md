@@ -924,6 +924,19 @@ prompt §19's "do not use blind code as canonical sample identity" is
 already the enforced reality in this codebase (`RBAC.md` §7), not a new
 requirement to satisfy.
 
+**Verification-pass note (added after T5 shipped):** `sourceLotId` is a
+direct, denormalized field beyond `COMMERCE_OPERATIONS_TOOLS_
+ARCHITECTURE.md` §F's stated minimal design, which says the transformation
+record alone ("`sourceTransformationId`") is sufficient to answer "where
+did this sample come from," and that `Sample` "does not need its own
+genealogy fields." This sketch added `sourceLotId` anyway, from the start,
+without flagging the deviation. Recorded here for the record rather than
+changed: the field is populated consistently with `sourceTransformationId`
+in every write path (`lib/traceability/samples.ts`), so the two never
+diverge in practice — a reasonable, intentional denormalization for query
+convenience (avoids a join through `LotTransformationInput` to find the
+source lot), not a competing or broken mechanism. No code change implied.
+
 ## 19. Sensory Integration Boundary
 
 **The Sensory OS already exists (Slice 6) — use it, build nothing new.**
@@ -1439,6 +1452,43 @@ Every other module (`quantity.ts`, `measurements.ts`, `harvest.ts`,
 `fermentation.ts`, `drying.ts`, `storage.ts`) delegates to the same
 `requireLotAccess`/`can()` mechanism already proven correct for this case,
 so re-testing it per calling module would be redundant, not more rigorous.
+
+**Verification-pass fix (post-T9, pre-T10): provenance vocabulary
+completion.** A read-only verification pass across T1-T9 found two things
+worth recording:
+
+1. §6.2's own provenance-vocabulary design specified four columns
+   (`provenanceClass`, `sourceReference`, `recordedById`/`recordedBy`,
+   `recordedAt`) but only two (`provenanceClass`, `dataQuality`) were ever
+   added to the five tables that carry them (`LotTransformation`,
+   `QuantityEvent`, `Measurement`, `HarvestEvent`, `ReceivingEvent`).
+   **Fixed with a deliberate, narrower scope than the original sketch**:
+   added `sourceReference` (genuinely new — a citation field with no
+   existing equivalent) to all five tables via an additive migration.
+   Did **not** add `recordedById`/`recordedAt` — all five tables already
+   carry `operatorPersonId` (who) and `occurredAt`/`createdBy` (when/who
+   submitted), which cover the same role §6.2's generic sketch was
+   written for before these concrete tables existed. Adding parallel
+   fields would have created redundant, confusing columns, not a real fix.
+2. `provenanceClass` has carried `@default(direct_observation)` since T1,
+   and no service-layer write path in T1-T9 ever set it explicitly — every
+   record silently fell through to the schema default rather than being a
+   deliberate choice, contradicting §6.2's own "mandatory... NOT NULL on
+   every write path" language. **Fixed**: every write function across
+   `lots.ts`, `quantity.ts`, `measurements.ts`, `harvest.ts`,
+   `fermentation.ts`, `drying.ts`, `samples.ts` now accepts an optional
+   `provenanceClass`/`sourceReference` pair and explicitly passes
+   `provenanceClass ?? "direct_observation"` to Prisma — same runtime
+   behavior when omitted, but now a visible, overridable choice in code
+   rather than an invisible schema fallback. Verified with a new test
+   (`lots.test.ts`) confirming both the default and an explicit override
+   are honored.
+
+Also logged during the same pass, not changed: `Sample.sourceLotId` is a
+denormalization beyond §F's stated minimal design (§18's own note, added
+alongside this one). Not part of Phase 1's original ticket sequence (T1-T14)
+— this is a fix applied between T9 and T10, in response to a dedicated
+verification pass, not a numbered ticket of its own.
 
 ## 35. Dependency Graph
 

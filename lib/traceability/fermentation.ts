@@ -27,7 +27,7 @@
  */
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
-import type { LotType } from "../../generated/prisma/client";
+import type { LotType, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveRunSourceLot(fermentationRunId: string) {
   const transformation = await prisma.lotTransformation.findFirst({
@@ -50,6 +50,10 @@ export interface StartFermentationRunInput {
   quantity?: number | null;
   unit?: string | null;
   notes?: string | null;
+  // Verification-pass fix: explicit, not left to the schema's silent
+  // @default(direct_observation).
+  provenanceClass?: ProvenanceClass;
+  sourceReference?: string | null;
 }
 
 export async function startFermentationRun(userAccountId: string, input: StartFermentationRunInput) {
@@ -77,6 +81,8 @@ export async function startFermentationRun(userAccountId: string, input: StartFe
         notes: input.notes ?? null,
         createdBy: userAccountId,
         fermentationRunId: run.id,
+        provenanceClass: input.provenanceClass ?? "direct_observation",
+        sourceReference: input.sourceReference ?? null,
         inputs: {
           create: [{ lotId: input.lotId, quantity: input.quantity ?? null, unit: input.unit ?? null }],
         },
@@ -118,6 +124,8 @@ export interface EndFermentationRunInput {
   unit?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
+  provenanceClass?: ProvenanceClass;
+  sourceReference?: string | null;
 }
 
 export async function endFermentationRun(userAccountId: string, input: EndFermentationRunInput) {
@@ -127,6 +135,8 @@ export async function endFermentationRun(userAccountId: string, input: EndFermen
 
   const sourceLot = await resolveRunSourceLot(input.fermentationRunId);
   await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
+
+  const provenanceClass = input.provenanceClass ?? "direct_observation";
 
   return prisma.$transaction(async (tx) => {
     const endedRun = await tx.fermentationRun.update({
@@ -142,6 +152,8 @@ export async function endFermentationRun(userAccountId: string, input: EndFermen
         notes: input.notes ?? null,
         createdBy: userAccountId,
         fermentationRunId: input.fermentationRunId,
+        provenanceClass,
+        sourceReference: input.sourceReference ?? null,
         inputs: {
           create: [{ lotId: sourceLot.id, quantity: input.quantity ?? null, unit: input.unit ?? null }],
         },
@@ -180,6 +192,8 @@ export async function endFermentationRun(userAccountId: string, input: EndFermen
           occurredAt: input.endedAt,
           transformationId: transformation.id,
           createdBy: userAccountId,
+          provenanceClass,
+          sourceReference: input.sourceReference ?? null,
         },
       });
     }

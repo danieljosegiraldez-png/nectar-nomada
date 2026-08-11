@@ -1970,6 +1970,12 @@ model LotTransformation {
   operator           Person?               @relation(fields: [operatorPersonId], references: [id])
   notes              String?
   provenanceClass    ProvenanceClass       @default(direct_observation) @map("provenance_class")
+  // Citation for this specific fact ("lab report #123", "calibrated scale
+  // reading 2026-01-01") — distinct from operatorPersonId (who did it) and
+  // occurredAt (when it happened), which this table already carries.
+  // Verification-pass finding: not added for T1-T9 alongside
+  // provenanceClass; completed here rather than left compounding.
+  sourceReference    String?               @map("source_reference")
   createdAt          DateTime              @default(now()) @map("created_at")
   createdBy          String?               @map("created_by") @db.Uuid
   creator            UserAccount?          @relation("LotTransformationCreatedBy", fields: [createdBy], references: [id])
@@ -2062,6 +2068,7 @@ model QuantityEvent {
   transformationId String?            @map("transformation_id") @db.Uuid
   transformation   LotTransformation? @relation(fields: [transformationId], references: [id])
   provenanceClass  ProvenanceClass    @default(direct_observation) @map("provenance_class")
+  sourceReference  String?            @map("source_reference")
   dataQuality      DataQuality?       @map("data_quality")
   notes            String?
   createdAt        DateTime           @default(now()) @map("created_at")
@@ -2137,6 +2144,7 @@ model Measurement {
   reason      String?
 
   provenanceClass ProvenanceClass @default(direct_observation) @map("provenance_class")
+  sourceReference String?         @map("source_reference")
   dataQuality     DataQuality?    @map("data_quality")
   notes           String?
   createdAt       DateTime        @default(now()) @map("created_at")
@@ -2189,6 +2197,7 @@ model HarvestEvent {
   resultingLotId   String          @unique @map("resulting_lot_id") @db.Uuid
   resultingLot     Lot             @relation(fields: [resultingLotId], references: [id])
   provenanceClass  ProvenanceClass @default(direct_observation) @map("provenance_class")
+  sourceReference  String?         @map("source_reference")
   createdAt        DateTime        @default(now()) @map("created_at")
   createdBy        String?         @map("created_by") @db.Uuid
   creator          UserAccount?    @relation("HarvestEventCreatedBy", fields: [createdBy], references: [id])
@@ -2228,6 +2237,7 @@ model ReceivingEvent {
   resultingLotId   String          @unique @map("resulting_lot_id") @db.Uuid
   resultingLot     Lot             @relation(fields: [resultingLotId], references: [id])
   provenanceClass  ProvenanceClass @default(direct_observation) @map("provenance_class")
+  sourceReference  String?         @map("source_reference")
   createdAt        DateTime        @default(now()) @map("created_at")
   createdBy        String?         @map("created_by") @db.Uuid
   creator          UserAccount?    @relation("ReceivingEventCreatedBy", fields: [createdBy], references: [id])

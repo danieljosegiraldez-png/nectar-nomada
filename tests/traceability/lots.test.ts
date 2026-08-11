@@ -214,6 +214,39 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     expect(quantity.unit).toBe("kg");
   });
 
+  it("verification-pass fix: provenanceClass/sourceReference default sensibly but are honored when the caller sets them explicitly", async () => {
+    const origin = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-provenance-default`,
+      lotType: "cherry",
+      projectId: projectAId,
+    });
+
+    const { transformation: defaulted } = await recordTransformation(authorizedUserAccountId, {
+      transformationType: "stage_change",
+      occurredAt: new Date(),
+      inputs: [{ lotId: origin.id }],
+      outputs: [],
+    });
+    expect(defaulted.provenanceClass).toBe("direct_observation");
+    expect(defaulted.sourceReference).toBeNull();
+
+    const origin2 = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-provenance-explicit`,
+      lotType: "cherry",
+      projectId: projectAId,
+    });
+    const { transformation: explicit } = await recordTransformation(authorizedUserAccountId, {
+      transformationType: "stage_change",
+      occurredAt: new Date(),
+      inputs: [{ lotId: origin2.id }],
+      outputs: [],
+      provenanceClass: "manufacturer_specification",
+      sourceReference: "Lab report #123",
+    });
+    expect(explicit.provenanceClass).toBe("manufacturer_specification");
+    expect(explicit.sourceReference).toBe("Lab report #123");
+  });
+
   it("merge: two lots combine into one output lot", async () => {
     const lotA = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-merge-input-a`,
