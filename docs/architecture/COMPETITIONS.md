@@ -195,8 +195,8 @@ competitions.judge_session(id, competition_edition_id, judge_person_id,
   Assessments across competitions/editions they've judged — their own
   judging record over time, useful for a working judge tracking their own
   development (directly relevant given your own UC Davis/FlavorActiV/
-  Cicerone background — this is exactly the kind of record a working judge
-  actually wants).
+  Cicerone/BJCP background — this is exactly the kind of record a working
+  judge actually wants).
 
 ```
 sensory.assessment: add visible_to_judge_as_personal_record (boolean,

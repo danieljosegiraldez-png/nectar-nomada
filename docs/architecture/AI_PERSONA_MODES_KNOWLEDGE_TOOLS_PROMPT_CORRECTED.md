@@ -20,7 +20,7 @@ Before making any changes:
    - `SECURITY.md`
    - `MVP_ROADMAP.md`
    - `DECISIONS.md`
-   - `EXTERNAL_DATA_SOURCES.md`
+   - `EXTERNAL_DATA_ARCHITECTURE.md`
    - `MEDIA_INTELLIGENCE_PIPELINE.md`
    - `SPECIMEN_AND_MATERIAL_TRACEABILITY.md`
    - `CONSUMER_SENSORY_FEEDBACK.md`
@@ -1265,7 +1265,7 @@ Include:
 32. Integration With Research OS (DOMAIN_MODEL.md §4)
 33. Integration With Sensory OS (BEVERAGE_SENSORY_PROTOCOLS.md, CONSUMER_SENSORY_FEEDBACK.md)
 34. Integration With Content Intelligence (MEDIA_INTELLIGENCE_PIPELINE.md)
-35. Integration With External Data (EXTERNAL_DATA_SOURCES.md)
+35. Integration With External Data (EXTERNAL_DATA_ARCHITECTURE.md)
 36. Integration With Commerce / Operations
 37. Security & RBAC
 38. Copyright / Licensing

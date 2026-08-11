@@ -108,7 +108,7 @@ auto-suggestion based on tag count. Kept simple deliberately.
 ## 5. Species identification
 
 Both available: **AI-assisted suggestion from a photo (via the GBIF/
-iNaturalist adapters already documented in `EXTERNAL_DATA_SOURCES.md`)**, with
+iNaturalist adapters already documented in `EXTERNAL_DATA_ARCHITECTURE.md`)**, with
 the surveyor confirming or correcting — and **manual entry always works**
 independent of whether AI suggestion is used. This is a straightforward
 application of the AI Suggestion lifecycle (`AI_GOVERNANCE.md` §4) — species

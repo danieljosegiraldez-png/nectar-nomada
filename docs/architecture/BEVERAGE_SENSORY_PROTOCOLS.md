@@ -202,15 +202,24 @@ single "standard" organism.
 
 ### Honey — expanded with real competition, defect, and field-data content
 
-**Source note on institutional attribution**: several source documents label
-their protocol "UC Davis Adaptado." As with §1's general caveat, treat this
-methodology as genuinely useful and worth adopting, while being honest that
-the *precise* institutional origin of this exact scoresheet/formulario is
-unverified — UC Davis does real honey/pollination research generally, but
-this specific 100-point rubric and formulario haven't been independently
-confirmed as an official UC Davis publication versus compiled training
-material. Cite as "informed by UC Davis-attributed training material and
-general honey sensory literature," not as a confirmed UC Davis document.
+**Attribution, corrected (documentation correction pass):** the 100-point
+competition rubric and three-tier defect taxonomy below are Daniel
+Giráldez's own work — developed and refined through his own honey
+judging and training practice, informed by his professional sensory
+background (UC Davis / AROXA-Cara / FlavorActiV, §7.3), not derived from
+or reproducing a specific UC Davis publication. An earlier version of
+this document hedged the attribution toward "UC Davis-attributed
+training material... institutional origin unverified" — that hedge ran
+in the wrong direction: the platform's attribution discipline exists to
+stop the platform claiming work that isn't its own, and it applies
+equally to *disclaiming* work that is. Where UC Davis-style training
+informed the author's own thinking, that's real, relevant background —
+but the rubric itself is not presented as a UC Davis document. The
+originally compiled rubric/taxonomy text is preserved below (per
+`DATA_ARCHITECTURE.md` §2's version-preservation rule) rather than
+deleted; the versions immediately following this note are the current,
+enhanced-original ones, restructured in the platform's own voice from
+the same underlying facts and point values.
 
 - Attribute categories informed by published honey sensory research: visual
   (color via Pfund scale, clarity, brightness), olfactory (aroma intensity
@@ -228,7 +237,99 @@ general honey sensory literature," not as a confirmed UC Davis document.
   `field_sample` schema below) — is the actual verification method for
   conformity mode, not just a theoretical connection.
 
-#### Competition scoring rubric (100 points) — real, complete, ready to use
+#### Competition scoring rubric (100 points) — current version, enhanced original
+
+Six criteria, weighted toward aromatic/flavor complexity and freedom from
+defect — the two dimensions that separate a technically clean honey from
+one that actually stands out in competition:
+
+```
+sensory.honey_competition_score(
+  aroma_positivo          integer, -- 0-20: aromatic richness — how many distinct, recognizable notes are present and how clearly they read
+  sabor_y_gusto           integer, -- 0-20: the tasting experience itself — sweetness quality, acid/bitter balance, how cleanly and harmoniously the flavor comes together
+  textura_boca            integer, -- 0-15: mouthfeel — viscosity appropriate to the honey type, no excess astringency, no unpleasant hard crystallization
+  apariencia              integer, -- 0-10: visual appeal on a white background — color, brightness, clarity
+  persistencia_equilibrio integer, -- 0-15: how long the flavor lasts and how well every attribute holds together as a whole, not just individually
+  ausencia_defectos       integer, -- 0-20: freedom from fermentation, mold, smoke, rancidity, or contamination — the ceiling every other score sits under
+  total                   integer  -- sum, 0-100
+)
+```
+
+Quality bands read the total, not any single criterion: **90-100
+Excelente** (clean, no defects, a profile that stands out) · **80-89 Muy
+buena** (clean and complex, without quite reaching standout) · **70-79
+Buena** (sound honey with minor issues) · **below 70**, a sample carrying
+real defects or too indistinct to place.
+
+Judging environment matters as much as the rubric itself: 20-25°C,
+neutral white light, no perfume or scented product nearby, neutral
+plastic or stainless spoons, water and a plain cracker between samples —
+the same sensory-booth discipline `SECURITY.md`/`RBAC.md` already assume
+for a formal blind competition (`COMPETITIONS.md`).
+
+#### Defects taxonomy — three-tier classification, current version, enhanced original
+
+A binary good/bad split loses information a judge actually needs — this
+taxonomy keeps a third tier for character that reads as neutral depending
+on context, and ties every defect back to its real cause rather than
+leaving it as an unexplained label:
+
+```
+sensory.honey_descriptor(id, family, specific_descriptor, expected_perception,
+  classification [positivo|neutral|defecto], technical_cause (nullable))
+```
+
+**Positivo** — descriptor families a judge wants to find: floral (rose,
+jasmine, orange blossom), fruity (apple, peach, melon), citrus (lemon,
+grapefruit, orange), vegetal (grass, green stem, artichoke), herbal
+(thyme, basil, fennel), resinous (pine, balsam, sap), hive-character
+(fresh wax, fresh propolis — becomes a defect past a certain intensity),
+malty (baked bread, cereal), toasted (caramelized sugar — becomes a
+defect if it came from overheating rather than the honey's own
+character), lactic (yogurt-like lactic acid), controlled-fermentation
+esters (geraniol, citronellol), and desirable phenolics (clove/4-vinyl
+guaiacol, in moderation).
+
+**Neutral** — reads as context-dependent, not automatically a mark
+against the sample: mild controlled fermentation, light fermented-floral
+character, faint alcohol notes (white wine, cider). This matters
+specifically for honey destined for mead production, where a trace of
+fermentation character isn't the defect it would be in honey judged for
+the table.
+
+**Defecto** — every family here carries a real, specific cause, not just
+a label:
+
+- **Unwanted fermentation** — harvested above 18% moisture, poor sealing,
+  air exposure; reads as acetic acid, uncontrolled yeast character.
+- **Undesirable organic acids** — *Clostridium* or organic-matter
+  contamination; reads as butyric/isovaleric acid (cheese, vomit, sweat).
+- **Chemical contamination** — unsuitable containers, cleaning chemicals
+  not fully rinsed; reads as chlorine or solvent.
+- **Microbiological contamination** — ambient humidity, contact with wet
+  surfaces; reads as stable, wet leather, or **Brettanomyces** (see note
+  below).
+- **Advanced oxidation** — prolonged oxygen exposure, excess heat; reads
+  as rancid, old butter.
+- **Thermal contamination** — excessive heat used to decrystallize; reads
+  as bitter, burnt sugar, smoke.
+
+**On *Brettanomyces*, deliberately not a universal rule**: it correctly
+reads as a contamination/defect signal in standard honey evaluation, as
+classified above. It's also a wild yeast genus some fermentation
+traditions use on purpose (lambic beers, certain wild ferments) — given
+the platform's own wild-yeast bioprospecting work, "defect" here is
+specific to honey evaluation, not a blanket statement about the organism.
+
+#### Superseded — prior compiled version (preserved, not deleted)
+
+Per `DATA_ARCHITECTURE.md` §2's version-preservation rule: the rubric and
+defect taxonomy above supersede the text below, which was the original
+compiled version carrying the now-corrected UC Davis hedge. Kept for
+historical reference, not for current use.
+
+<details>
+<summary>Original rubric and defect taxonomy (superseded)</summary>
 
 ```
 sensory.honey_competition_score(
@@ -248,14 +349,7 @@ defectos o poco destacada.
 
 Tasting conditions specified alongside the rubric: 20-25°C, neutral white
 light, no external perfumes/odors, neutral plastic or stainless spoons,
-water and plain crackers between samples — standard sensory-booth discipline,
-consistent with `SECURITY.md`/`RBAC.md`'s existing blind-evaluation controls
-when this runs as a formal competition (`COMPETITIONS.md`).
-
-#### Defects taxonomy — three-tier classification (Positivo/Neutral/Defecto)
-
-More precise than a binary good/bad split — several source documents
-converge on the same structure, now consolidated:
+water and plain crackers between samples.
 
 ```
 sensory.honey_descriptor(id, family, specific_descriptor, expected_perception,
@@ -273,32 +367,20 @@ fenoles deseables (clavo/4-vinil guayacol, specified moderate).
 
 **Neutral** (context-dependent, not automatically negative): fermentación
 controlada (ligeramente alcohólico), floral fermentado leve, notas
-alcohólicas leves (vino blanco, sidra) — relevant given honey destined for
-mead, where mild fermentation character isn't necessarily a defect the way
-it would be in table honey.
+alcohólicas leves (vino blanco, sidra).
 
-**Defecto** families, each with a **real technical cause**, not just a
-label — this is the valuable part, worth preserving exactly:
-- Fermentación indeseada — cosecha con humedad >18%, mal tapado, exposición
-  al aire; ácido acético, levadura descontrolada
-- Ácidos orgánicos indeseables — contaminación con *Clostridium*, restos
-  orgánicos; ácido butírico/isovalérico (queso, vómito, sudor)
-- Contaminación química — envases inadecuados, limpieza con químicos no
-  enjuagados; cloro, disolvente
-- Contaminación microbiológica — humedad ambiental, contacto con superficies
-  húmedas; establo, cuero mojado, **Brettanomyces** (see note below)
-- Oxidación avanzada — exposición prolongada al oxígeno, calor excesivo;
-  rancio, mantequilla vieja
-- Contaminación térmica — calentamiento excesivo para descristalizar; sabor
-  amargo, azúcar quemada, ahumado
+**Defecto** families: Fermentación indeseada — cosecha con humedad >18%,
+mal tapado, exposición al aire; ácido acético, levadura descontrolada.
+Ácidos orgánicos indeseables — contaminación con *Clostridium*, restos
+orgánicos; ácido butírico/isovalérico (queso, vómito, sudor). Contaminación
+química — envases inadecuados, limpieza con químicos no enjuagados; cloro,
+disolvente. Contaminación microbiológica — humedad ambiental, contacto con
+superficies húmedas; establo, cuero mojado, Brettanomyces. Oxidación
+avanzada — exposición prolongada al oxígeno, calor excesivo; rancio,
+mantequilla vieja. Contaminación térmica — calentamiento excesivo para
+descristalizar; sabor amargo, azúcar quemada, ahumado.
 
-**Note on *Brettanomyces*, worth keeping distinct from a universal rule**:
-this genus reads as a contamination/defect indicator for standard honey
-evaluation, correctly classified as such here. It's also a wild yeast genus
-some fermentation traditions use intentionally (lambic beers, certain wild
-ferments). Given your own wild yeast bioprospecting work, treat "defect" as
-context-specific to honey evaluation specifically, not as a universal
-statement about the organism.
+</details>
 
 #### Training protocol and calibration exercises
 
@@ -540,9 +622,12 @@ sensory.evaluator_sensitivity_profile(person_id, reference_standard_id,
 
 This extends the `Expertise`/`Certifications` fields already specified on
 `Person` (`CLAUDE.md` §9) with real structure — your own UC Davis, AROXA/
-Cara, and FlavorActiV credentials populate this exactly as real,
+Cara, FlavorActiV, and BJCP credentials populate this exactly as real,
 verifiable data, the same as Kurt's Q-Grader certification already
-mentioned in your CryoBloom team context.
+mentioned in your CryoBloom team context. BJCP is the credential most
+directly relevant to this document's own licensing discussion (§1) —
+worth listing alongside the others rather than omitted (documentation
+correction pass).
 
 **Why this matters specifically**: AROXA's own documentation notes that
 some panelists are genuinely anosmic (smell-blind) to specific compounds —

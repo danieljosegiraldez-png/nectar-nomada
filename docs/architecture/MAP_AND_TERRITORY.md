@@ -72,7 +72,7 @@ the Experience's stop sequence.
 ## 6. Satellite/NDVI imagery layer
 
 Optional toggle-able layer sourcing from Sentinel Hub/Copernicus, per the
-adapter already scoped in `EXTERNAL_DATA_SOURCES.md`. Off by default
+adapter already scoped in `EXTERNAL_DATA_ARCHITECTURE.md`. Off by default
 (bandwidth/performance cost), available where farm-health visualization is
 useful — connects the earlier data-source research to something actually
 renderable rather than an abstract future integration.
@@ -121,7 +121,7 @@ automatically includes required attribution for whichever data sources are
 active in that view — Mapbox attribution always, Sentinel/Copernicus
 attribution when the NDVI layer (§6) is included. This is a licensing
 compliance requirement, not a design choice, consistent with the licensing
-discipline already established in `EXTERNAL_DATA_SOURCES.md`. Attribution
+discipline already established in `EXTERNAL_DATA_ARCHITECTURE.md`. Attribution
 text is generated automatically based on which layers are actually in the
 exported view — never omitted because someone forgot, never manually
 re-typed per export.
