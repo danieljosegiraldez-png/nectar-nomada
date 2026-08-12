@@ -93,28 +93,25 @@ inspected by Kenneth once A0–A8 ship.
 
 ### Pending
 
+**`16_ADAPTIVE_OPERATOR_WORKSPACE_PREAMBLE.md`** — **unblocked.** Its
+companion, `ADAPTIVE_OPERATOR_WORKSPACE_RESEARCH_PROMPT.md`, is now filed
+(committed alongside this fix) — the preamble is no longer a preamble to
+nothing. Its own §6, line 135's `recordedBy`/ADR-038 contradiction is also
+fixed, corrected to `operatorPersonId`. Neither the preamble nor its
+companion has actually been *run* yet, so this is pending, not done — and
+the research prompt's own filed copy carries a status note worth reading
+first: it was written to shape T10's design, which has since shipped
+(`db9410b`), and its apiary data-model addendum is superseded by
+`22_`/`24_`'s real model. Remaining value is refinement of what exists plus
+design input for A5 and later multi-role context-switching, not greenfield
+architecture.
+
 **`17_DESIGN_TO_IMPLEMENTATION_AUDIT_PROMPT.md`** — read-only coverage audit:
 does the code actually do what the documents claim? Part A checks the
 *enforcement* claims (the `ai_service` role grant, blind-mapping
 unreachability, append-only audit rows), which is where a false claim carries
 real consequence. Run after v1 is defined and exercised, so deliberate
 deferrals don't read as gaps.
-
-### Blocked
-
-**`16_ADAPTIVE_OPERATOR_WORKSPACE_PREAMBLE.md`** — opens with "prepend this to
-`ADAPTIVE_OPERATOR_WORKSPACE_RESEARCH_PROMPT.md`". That file has never existed
-at any path — reconfirmed in the 2026-08-12 audit. The preamble is sound on
-its own (vocabulary map, four already-decided constraints, tool entitlement
-derived not stored) but it is a preamble to nothing until the companion
-research prompt is saved to that filename.
-
-Two further caveats if it is ever revived: its **§6, line 135**, refers to
-`recordedBy`, which ADR-038 rejected in favour of `operatorPersonId` —
-confirmed still present at that exact line as of the audit; fix that first.
-And it was written to *shape* T10's design; T10 shipped in `db9410b`, so its
-remaining value is refinement and multi-role context-switching, not
-architecture.
 
 ### V2
 
