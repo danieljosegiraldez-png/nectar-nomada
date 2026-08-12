@@ -13,6 +13,12 @@ import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PERMISSIONS, ROLE_PROFILES } from "../lib/rbac/catalog";
 import { hashPassword } from "../lib/auth/password";
+import { recordTransformation } from "../lib/traceability/lots";
+import { recordHarvestEvent } from "../lib/traceability/harvest";
+import { startFermentationRun, endFermentationRun } from "../lib/traceability/fermentation";
+import { startDryingRun, endDryingRun } from "../lib/traceability/drying";
+import { moveLotToStorage } from "../lib/traceability/storage";
+import { createSampleFromLot } from "../lib/traceability/samples";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
@@ -116,7 +122,7 @@ async function seedDemoAdmin(platformScopeId: string) {
  *   the world.
  */
 async function findOrCreateLocation(data: {
-  locationType: "country" | "province" | "district" | "locality" | "site";
+  locationType: "country" | "province" | "district" | "locality" | "site" | "plot";
   name: string;
   slug?: string;
   parentLocationId?: string;
@@ -594,6 +600,216 @@ async function seedDemoSensoryContent(lasNubesProjectId: string) {
 }
 
 /**
+ * Phase 1, ticket T14 (docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md
+ * §32, §34) — one DEMO harvest-to-sensory chain, opt-in via
+ * SEED_DEMO_CONTENT=true like the rest of this file's demo content.
+ *
+ * Reuses the real service-layer functions (recordHarvestEvent,
+ * recordTransformation, startFermentationRun/endFermentationRun,
+ * startDryingRun/endDryingRun, moveLotToStorage, createSampleFromLot)
+ * rather than hand-duplicating their invariants (QuantityEvent seeding on
+ * every output lot, the stage_change LotTransformation pairing, etc.) —
+ * the same "reuse before creating" discipline applied to seed data
+ * generation itself. Every one of these functions requires an
+ * authenticated, RBAC-checked userAccountId, so this creates one small,
+ * internal-only actor to call them with: no passwordHash is ever set, so
+ * unlike DEMO Partner Field Collector (seedDemoPartner, a real loginable
+ * demo credential), this account cannot authenticate at all — it exists
+ * solely to satisfy the service layer's requireLotAccess check for this
+ * seeding pass, not as a persona this ticket is introducing.
+ *
+ * The chain: one harvest, split into two processing batches (the same
+ * fork mechanism already verified for a green coffee lot roasted three
+ * ways), each independently fermented, dried, moved to storage, and
+ * sampled — the two resulting samples attach to the *existing* "DEMO
+ * Cupping Session — Las Nubes" (seedDemoSensoryContent) as two new blind
+ * samples in its existing Flight 1, alongside the two placeholder samples
+ * that session already ships with. This is deliberately additive, not a
+ * replacement: LN-CUP-001/002 keep their own "lot detail not populated"
+ * placeholder status exactly as documented; these two new samples are
+ * what actually satisfies "lot detail populated," genuinely, end to end.
+ *
+ * **Deliberate, explicit exception, not an oversight:** one of the two new
+ * blind samples (D) also gets a `PanelResult` — a real departure from
+ * seedDemoSensoryContent's own stated rule ("No Assessments seeded —
+ * CLAUDE.md §54 forbids fabricating sensory outcomes") and from
+ * LN-CUP-001/002/C, which stay genuinely unscored. The reason this one
+ * crosses that line: ADR-039's own v1 falsifiable test is stated as
+ * "cherry through to a cupping score and a lot report" — a DEMO chain
+ * that stops one step short of a score cannot demonstrate the mechanism
+ * the test itself is defined by, and T13's Lot Report has never been
+ * exercised end-to-end against a score reached through real lineage
+ * (T13's own test fixture creates a PanelResult directly in a *test*
+ * file, never shipped as visible content). This does not relax the
+ * platform's evidence discipline for anything else: no `Assessment`
+ * (individual judge submission) rows are created — only the aggregate
+ * `PanelResult`, the same minimal shape T13's own test already uses —
+ * and the value is a round, obviously-illustrative number, not a
+ * plausible-looking real one. C stays unscored deliberately, so a reader
+ * can see both states side by side in the same session.
+ */
+async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessionId: string) {
+  const existingLot = await prisma.lot.findFirst({ where: { lotCode: "LN-2027-CHERRY-01" } });
+  if (existingLot) {
+    console.log("DEMO traceability chain already seeded — skipping.");
+    return;
+  }
+
+  const lasNubesSite = await findOrCreateLocation({ locationType: "site", name: "Las Nubes", slug: "las-nubes" });
+  const lasNubesFarm = await findOrCreateOrganization({
+    organizationType: "farm",
+    name: "Las Nubes",
+    description:
+      "[DEMO placeholder organization — the coffee-producing side of the Las Nubes multi-domain project. " +
+      "No verified production figures, certifications, or exact history populated yet.]",
+  });
+  const plot = await findOrCreateLocation({
+    locationType: "plot",
+    name: "Las Nubes — Plot 1",
+    slug: "las-nubes-plot-1",
+    parentLocationId: lasNubesSite.id,
+    organizationId: lasNubesFarm.id,
+  });
+
+  let seedOperatorPerson = await prisma.person.findFirst({ where: { displayName: "DEMO Seed Operator (internal)" } });
+  let seedOperatorAccount;
+  if (!seedOperatorPerson) {
+    seedOperatorPerson = await prisma.person.create({
+      data: { givenName: "DEMO", familyName: "Seed Operator", displayName: "DEMO Seed Operator (internal)", locale: "es" },
+    });
+    seedOperatorAccount = await prisma.userAccount.create({
+      data: { personId: seedOperatorPerson.id, authProvider: "credentials", status: "active" },
+    });
+    const farmOperatorProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+    const projectScope = await findOrCreateProjectScope(lasNubesProjectId);
+    await prisma.assignment.create({
+      data: { userAccountId: seedOperatorAccount.id, roleProfileId: farmOperatorProfile.id, scopeId: projectScope.id },
+    });
+  } else {
+    seedOperatorAccount = await prisma.userAccount.findFirstOrThrow({ where: { personId: seedOperatorPerson.id } });
+  }
+  const operatorId = seedOperatorAccount.id;
+
+  const warehouse = await findOrCreateLocation({
+    locationType: "site",
+    name: "Las Nubes — Warehouse",
+    slug: "las-nubes-warehouse",
+    parentLocationId: lasNubesSite.id,
+    organizationId: lasNubesFarm.id,
+  });
+
+  // --- Harvest ---
+  const { lot: cherryLot } = await recordHarvestEvent(operatorId, {
+    lotCode: "LN-2027-CHERRY-01",
+    locationId: plot.id,
+    organizationId: lasNubesFarm.id,
+    projectId: lasNubesProjectId,
+    harvestedAt: new Date("2027-01-20T07:00:00Z"),
+    cherryWeightKg: 800,
+    brix: 21,
+    provenanceClass: "measured_fact",
+  });
+
+  // --- Split into two processing batches — same fork mechanism already
+  //     verified for a green coffee lot roasted three ways.
+  const { outputLots: batches } = await recordTransformation(operatorId, {
+    transformationType: "split",
+    occurredAt: new Date("2027-01-20T09:00:00Z"),
+    provenanceClass: "original_record",
+    inputs: [{ lotId: cherryLot.id, quantity: 800, unit: "kg" }],
+    outputs: [
+      { lotCode: "LN-2027-BATCH-A", lotType: "processing", quantity: 400, unit: "kg" },
+      { lotCode: "LN-2027-BATCH-B", lotType: "processing", quantity: 400, unit: "kg" },
+    ],
+  });
+
+  const blindCodes = ["C", "D"];
+  const flight = await prisma.sensoryFlight.findFirstOrThrow({ where: { sessionId: sensorySessionId, name: "Flight 1" } });
+
+  for (const [index, batch] of batches.entries()) {
+    const suffix = index === 0 ? "A" : "B";
+
+    // --- Fermentation ---
+    const { run: fermentationRun } = await startFermentationRun(operatorId, {
+      lotId: batch.id,
+      startedAt: new Date("2027-01-20T10:00:00Z"),
+      quantity: 400,
+      unit: "kg",
+      provenanceClass: "original_record",
+    });
+    const { outputLot: dryingStageLot } = await endFermentationRun(operatorId, {
+      fermentationRunId: fermentationRun.id,
+      endedAt: new Date("2027-01-22T10:00:00Z"),
+      outputLotCode: `LN-2027-DRYING-${suffix}`,
+      outputLotType: "drying",
+      quantity: 380,
+      unit: "kg",
+      provenanceClass: "original_record",
+    });
+
+    // --- Drying ---
+    const { run: dryingRun } = await startDryingRun(operatorId, {
+      lotId: dryingStageLot.id,
+      startedAt: new Date("2027-01-22T11:00:00Z"),
+      quantity: 380,
+      unit: "kg",
+      provenanceClass: "original_record",
+    });
+    const { outputLot: greenLot } = await endDryingRun(operatorId, {
+      dryingRunId: dryingRun.id,
+      endedAt: new Date("2027-02-04T11:00:00Z"),
+      outputLotCode: `LN-2027-GREEN-${suffix}`,
+      outputLotType: "green",
+      quantity: 320,
+      unit: "kg",
+      provenanceClass: "original_record",
+    });
+
+    // --- Storage ---
+    await moveLotToStorage(operatorId, {
+      lotId: greenLot.id,
+      locationId: warehouse.id,
+      containerNote: `Bag ${suffix}`,
+      startedAt: new Date("2027-02-04T12:00:00Z"),
+    });
+
+    // --- Sample, linked into the existing DEMO Cupping Session's Flight 1 ---
+    const { sample } = await createSampleFromLot(operatorId, {
+      sampleCode: `LN-CUP-00${index + 3}`,
+      sampleType: "green_coffee",
+      description: `DEMO — Las Nubes coffee, batch ${suffix}, full lineage from harvest through drying and storage.`,
+      sourceLotId: greenLot.id,
+      quantity: 1,
+      unit: "kg",
+      occurredAt: new Date("2027-02-05T09:00:00Z"),
+      provenanceClass: "original_record",
+    });
+
+    const blindSample = await prisma.sensoryBlindSample.create({
+      data: { flightId: flight.id, blindCode: blindCodes[index]! },
+    });
+    await prisma.sensoryBlindMapping.create({ data: { blindSampleId: blindSample.id, sampleId: sample.id } });
+
+    // Only batch B (blind code D) gets a score — see the function-level
+    // comment for why this one crosses the "never fabricate a sensory
+    // outcome" line while everything else in this file still doesn't.
+    // Round, obviously-illustrative numbers, not a plausible-looking real
+    // score; no Assessment (individual judge) rows, only the aggregate.
+    if (index === 1) {
+      await prisma.panelResult.create({
+        data: { blindSampleId: blindSample.id, attributeId: null, responseCount: 3, meanValue: 85, minValue: 80, maxValue: 90 },
+      });
+    }
+  }
+
+  console.log(
+    "Seeded T14 DEMO traceability chain: 1 harvest (800 kg), split into 2 batches, each fermented, dried, " +
+      "stored, and sampled — 2 new samples linked into the existing DEMO Cupping Session's Flight 1 (blind codes " +
+      "C, D). No sensory outcome fabricated — genuinely unscored, same as the session's original placeholder samples.",
+  );
+}
+
+/**
  * Real (non-DEMO-gated, always runs) Beverage Sensory Protocol content per
  * BEVERAGE_SENSORY_PROTOCOLS.md and DECISIONS.md ADR-035. Unlike the DEMO
  * content above (fictional samples/sessions), these are the platform's
@@ -800,6 +1016,8 @@ async function main() {
     if (process.env.SEED_DEMO_JUDGE === "true") {
       await seedDemoJudge(sensorySession.id);
     }
+
+    await seedDemoTraceabilityChain(lasNubesProject.id, sensorySession.id);
   }
 
   console.log(`Seeded ${PERMISSIONS.length} permissions and ${ROLE_PROFILES.length} role profiles.`);

@@ -35,11 +35,21 @@ Platform v1 is defined by a falsifiable test (ADR-039): *can the platform
 carry one real 2026 harvest from cherry through to a cupping score and a lot
 report that could be sent to a client?*
 
-Phase 1 tickets T1–T10, T9.5, T12, T12.5, T12.6, and T13 are all built.
-**Only T14 remains** — the full coffee end-to-end test plus DEMO seed
-(`PHASE_1_TECHNICAL_EXECUTION_PLAN.md` confirms T14 is the one ticket row
-without a DONE marker). T11 (deviation tracking) is deferred to v1.1, not
-cancelled.
+**Coffee's Phase 1 ticket sequence is complete.** T1–T10, T9.5, T12, T12.5,
+T12.6, T13, and now **T14** are all built (`PHASE_1_TECHNICAL_EXECUTION_PLAN.md`
+§34 — every row carries a DONE marker except T11, deferred to v1.1, not
+cancelled). T14 shipped the full harvest-to-sensory E2E test
+(`tests/traceability/e2e.test.ts`) and a DEMO seed chain
+(`seedDemoTraceabilityChain` in `prisma/seed.ts`) that reaches an actual
+scored cupping result — the literal shape of ADR-039's falsifiable test —
+by calling the real T1–T13 service functions rather than hand-seeding rows.
+It also fixed a real incident: a mid-verification test run left partial
+fixture state that triggered an unfiltered `deleteMany` across ten tables
+(Prisma silently drops `undefined` keys from a `where` clause). Recovered
+via Neon PITR + reseed; fixed for good with a guard
+(`tests/helpers/assertDefinedWhere.ts`) applied to all 155 `deleteMany`
+call sites across every test file, with its own fail-fast-before-any-
+database-call proof (`tests/helpers/e2e-cleanup-failsafe.test.ts`).
 
 **Apiary now has its own, parallel v1 test**, scoped in
 `22_APIARY_V1_SCOPING_REPORT.md` and revised in
@@ -56,9 +66,12 @@ exists: scope the offline options before A0 is committed to.
 
 ADR-039 carries a clause worth repeating here: these tickets build the
 *capability* to carry a harvest end to end. They do not constitute having
-done so. A truthful "yes" on the v1 test needs a real harvest entered by a
-real operator once T14 ships — and, for apiary, a real season actually
-inspected by Kenneth once A0–A8 ship.
+done so. A truthful "yes" on the v1 test needs a real 2026 harvest entered
+by a real operator who isn't Daniel — T14's own DEMO chain proves the
+mechanism composes (cherry → lot → sample → session → score, verified live
+via `getLotReport`), it does not itself answer ADR-039's question. Same
+distinction for apiary: a real season actually inspected by Kenneth, once
+A0–A8 ship.
 
 ---
 
@@ -176,10 +189,9 @@ entities that do not exist is how invented entities enter a schema.
    committing to A0's build.
 2. **Decide A0**, informed by `25_`'s findings — the base offline mechanism
    every other apiary ticket depends on.
-3. **A1–A8 (apiary) alongside T14 (coffee)** — confirmed non-conflicting in
-   `22_APIARY_V1_SCOPING_REPORT.md` §3: A1-A4's schema/service layer touches
-   no file T14 touches, so the two can run in the same window rather than
-   queuing behind each other.
+3. **A1–A8 (apiary)** — coffee's own ticket sequence is closed (T14 done),
+   so this no longer runs "alongside" anything; it's simply the one
+   remaining build track.
 4. **Credentials** (Stripe, R2, Google OAuth — all unset in production as of
    the last verified check).
 5. **The real milestone**: a real apiary season actually inspected by

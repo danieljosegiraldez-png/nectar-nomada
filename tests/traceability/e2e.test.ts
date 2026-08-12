@@ -25,7 +25,7 @@ import { recordMeasurement } from "../../lib/traceability/measurements";
 import { createSampleFromLot } from "../../lib/traceability/samples";
 import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 import { getLotReport } from "../../lib/traceability/reports";
-import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { cleanupE2eFixtures } from "./e2e-cleanup";
 
 const RUN_ID = `t14-e2e-${Date.now()}`;
 
@@ -195,35 +195,26 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.panelResult.deleteMany({ where: assertDefinedWhere({ blindSampleId }) });
-  await prisma.sensoryBlindMapping.deleteMany({ where: assertDefinedWhere({ blindSampleId }) });
-  await prisma.sensoryBlindSample.deleteMany({ where: assertDefinedWhere({ id: blindSampleId }) });
-  await prisma.sensoryFlight.deleteMany({ where: assertDefinedWhere({ id: flightId }) });
-  await prisma.sensorySession.deleteMany({ where: assertDefinedWhere({ id: sessionId }) });
-  await prisma.sensoryProtocolVersion.deleteMany({ where: assertDefinedWhere({ id: protocolVersionId }) });
-  await prisma.sensoryProtocol.deleteMany({ where: assertDefinedWhere({ id: protocolId }) });
-  await prisma.sample.deleteMany({ where: assertDefinedWhere({ id: sampleId }) });
-  await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId: greenLotId }) });
-  await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ id: storageAssignmentId }) });
-
-  const allLotIds = [cherryLotId, dryingStageLotId, greenLotId];
-  await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: allLotIds } }) });
-  await prisma.lotTransformation.deleteMany({
-    where: assertDefinedWhere({ OR: [{ inputs: { some: { lotId: { in: allLotIds } } } }, { outputs: { some: { lotId: { in: allLotIds } } } }] }),
+  await cleanupE2eFixtures(RUN_ID, {
+    blindSampleId,
+    flightId,
+    sessionId,
+    protocolVersionId,
+    protocolId,
+    sampleId,
+    greenLotId,
+    storageAssignmentId,
+    cherryLotId,
+    dryingStageLotId,
+    dryingRunId,
+    fermentationRunId,
+    operatorUserAccountId,
+    wrongProjectUserAccountId,
+    projectId,
+    plotLocationId,
+    warehouseLocationId,
+    organizationId,
   });
-  await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: dryingRunId }) });
-  await prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: fermentationRunId }) });
-  await prisma.harvestEvent.deleteMany({ where: assertDefinedWhere({ resultingLotId: cherryLotId }) });
-  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: allLotIds } }) });
-
-  const userAccountIds = [operatorUserAccountId, wrongProjectUserAccountId];
-  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: projectId }) });
-  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
-  await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
-  await prisma.project.deleteMany({ where: assertDefinedWhere({ name: { contains: RUN_ID } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [plotLocationId, warehouseLocationId] } }) });
-  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
 });
 
 describe("Full coffee workflow — T14 end-to-end", () => {

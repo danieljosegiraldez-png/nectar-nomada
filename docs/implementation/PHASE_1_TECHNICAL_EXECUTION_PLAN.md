@@ -1246,7 +1246,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | **T12.5 — Photo/asset attachment across Traceability — DONE, see note below** | T12 | core (Asset) + traceability (read/write) | `Asset` gains `lotId`/`harvestEventId`/`measurementId`/`fermentationRunId`/`dryingRunId`/`sampleId` (nullable, specific FKs) + `provenanceClass` (required)/`sourceReference`/`dataQuality` | `lib/traceability/media.ts`: requestLotAssetUpload, finalizeLotAssetUpload | `PhotoUploadForm.tsx` wired into 6 attachment points (lot/harvest/measurement/fermentation/drying/sample) + Photos section (renders only when present) | Unit (RBAC + provenance + creatorPersonId, R2-independent paths only) | Low — additive schema, no existing table's required-ness changed | **Partially met — see note below**: schema/service/UI verified live end-to-end except the actual R2 PUT (no credentials in any environment) |
 | **T12.6 — Labour-time and material-consumption capture — DONE, see note below** | T12.5 | traceability | New: `LabourEntry` (4 nullable parent FKs: harvestEvent/receivingEvent/fermentationRun/dryingRun), `MaterialConsumptionEntry` (2 nullable parent FKs: fermentationRun/dryingRun) — both `provenanceClass` required, `dataQuality` nullable | `lib/traceability/operations.ts`: recordLabourEntry, recordMaterialConsumptionEntry | `LabourEntryForm.tsx`/`MaterialConsumptionForm.tsx` wired into Harvest, new Receiving section, Active Fermentation, Active Drying | `tests/traceability/operations.test.ts`, 13 tests, real Neon | Low — additive schema, comparable in size to T8 | **Met**: ADR-044 (amendment to ADR-039) records the capture-or-lose-it reasoning; both forms verified live (real Farm Operator, real harvest → labour entry → visible on Lot Detail) against real Neon; TEST fixtures cleaned up |
 | **T13 — Lot Summary Report — DONE, scope note below** | T10, T12 (T11 deferred — see note below) | traceability | None | `lib/traceability/reports.ts`: getLotReport | `/lots/[id]/report`, **print-friendly from the start** (`app/globals.css` `@media print`), `PrintButton.tsx` | `tests/traceability/reports.test.ts`, 6 tests, full harvest→ferment→dry→sample→sensory chain, real Neon | Low | **Met**: report renders origin/lineage/processing/measurements/samples/sensory (+ photos, T12.5 addition) for a real chain built live against Neon, on a print-friendly authenticated page — print CSS verified loaded and targeting nav/buttons/forms; PDF export and login-free external access remain out of scope (ADR-039) |
-| **T14 — Full E2E test + DEMO seed** | T1-T13 | traceability | Seed script additions | None | None | The full coffee-workflow E2E test (§31) | Medium — the integration point that proves everything actually composes | One DEMO harvest-to-sensory chain seeded and passing an automated E2E test, not just a manual verification pass |
+| **T14 — Full E2E test + DEMO seed — DONE, scope note below** | T1-T13 | traceability | None (no new tables; `seed.ts` additions only) | `prisma/seed.ts`: `seedDemoTraceabilityChain` (calls the real T1-T13 service functions, not raw `prisma.create`) | None | `tests/traceability/e2e.test.ts` (full harvest→sensory chain, RBAC denial) + `tests/helpers/e2e-cleanup-failsafe.test.ts` (afterAll fail-safe proof) + `tests/helpers/assertDefinedWhere.ts`/`.test.ts` (guard, 12 test files retrofitted) | Medium — the integration point that proves everything actually composes | **Met**: one DEMO harvest-to-sensory chain seeded end-to-end and an automated E2E test passing against real Neon, not just a manual verification pass |
 
 **T1 implementation notes, two deliberate deviations from the original
 sketch, both discovered mid-implementation and reasoned through rather
@@ -1871,6 +1871,101 @@ to show labour hours or consumed materials, `lib/traceability/
 reports.ts` would need its own lineage-wide query for these tables,
 mirroring how it already handles Processing/Measurements — not built
 here, since nothing in this ticket's own scope required it.
+
+**T14 implementation note, three parts: the E2E test itself, a real
+data-loss incident discovered mid-verification and its fix, and the
+DEMO seed chain — plus a deliberate, disclosed exception to §54.**
+
+**1. The E2E test** (`tests/traceability/e2e.test.ts`). One continuous
+chain exercising T1-T13 end to end against real Neon: `recordHarvestEvent`
+(cherry) → `startFermentationRun`/`endFermentationRun` → `startDryingRun`/
+`endDryingRun` → `moveLotToStorage` → `recordMeasurement` →
+`createSampleFromLot` → sensory fixtures (protocol/version/session/
+flight/blindSample/blindMapping/panelResult). Assertions cover
+`computeCurrentQuantity` per lot (proving independent ledgers, not one
+running total), `getLotLineage` (`ancestorLotIds`, a real API-shape
+correction made while writing the test — not `{ancestors: [...]}` as
+first assumed), `getLotReport` rendering including `storageAssignments`
+(a gap T13's own test never exercised), and RBAC denial on both a read
+(`getLotReport`) and a write (`moveLotToStorage`).
+
+**2. The incident.** A first test run hit Neon's default cold-start
+delay against the default 10s Vitest `hookTimeout`; `beforeAll` failed
+partway through, leaving most fixture-id variables `undefined`, and
+`afterAll` still ran. Prisma silently drops `undefined` keys from a
+`where` clause (`{ x: undefined }` → `{}`), so several `deleteMany`
+calls executed as **unfiltered deletes of entire tables** —
+`panelResult`, `sensoryBlindMapping`, `sensoryBlindSample`,
+`sensoryFlight`, `sensorySession`, `sensoryProtocolVersion`,
+`sensoryProtocol`, `sample`, `measurement`, and `storageAssignment` were
+wiped platform-wide before the cascade hit a `quantityEvent.deleteMany`
+whose `{ in: [...] }` array Prisma does validate, and threw — which is
+what actually stopped it. Discovered via a read-only row-count check,
+disclosed in full to the user immediately, recovered via a Neon PITR
+restore plus a `SEED_DEMO_CONTENT=true` seed re-run for the DEMO-sourced
+tables (real sensory protocol content is seeded, not restore-only).
+
+**Fix**: `tests/helpers/assertDefinedWhere.ts` — a guard that throws
+`UnsafeWhereClauseError` on an empty `where` or an `undefined` at any
+depth (nested filter objects and arrays included; `null` and empty
+`{in: []}` remain allowed, as real deliberate values). Applied to every
+`deleteMany` call across all 12 test files (155 call sites total, not
+just `e2e.test.ts`), composed as `deleteMany({ where:
+assertDefinedWhere({...}) })`. Proven independently of any live
+incident replay: `tests/helpers/e2e-cleanup-failsafe.test.ts` imports
+the actual `cleanupE2eFixtures` function `e2e.test.ts`'s own `afterAll`
+calls (extracted into the plain module `tests/traceability/
+e2e-cleanup.ts` specifically so importing it doesn't re-execute
+`e2e.test.ts`'s own top-level `describe`/`beforeAll`/`afterAll`), and
+reconstructs the incident's exact partial state — `cherryLotId` defined,
+everything downstream `undefined`. Confirmed to throw
+`UnsafeWhereClauseError` on the exact field that failed in the real
+incident (`blindSampleId`), and confirmed to fail **before any network
+call**, not merely before a destructive one, by running the failsafe
+test with zero database environment variables loaded at all (`Test
+Files 1 passed (1), Tests 3 passed (3)`, no `DATABASE_URL` in the
+process).
+
+**3. The DEMO seed chain** (`prisma/seed.ts`,
+`seedDemoTraceabilityChain`). Reuses the real T1-T13 service functions
+rather than hand-duplicating their invariants via raw `prisma.create`
+calls — a deliberate departure from every other `seedDemo*` function in
+the file, chosen because this chain's entire point is proving the real
+services compose, not just that rows can exist. An internal-only "DEMO
+Seed Operator" `UserAccount` (no `passwordHash`, cannot authenticate)
+satisfies `requireLotAccess` for the seeding pass. Harvest (800kg) splits
+into two 400kg batches, each fermented → dried → stored → sampled →
+attached to the existing DEMO Cupping Session's Flight 1 as a new blind
+sample (codes C and D).
+
+**Exception to CLAUDE.md §54, disclosed and narrowly scoped**: per
+explicit instruction, blind sample D (batch B) receives one
+`PanelResult` (`meanValue: 85`, illustrative round numbers) — the
+established precedent (`seedDemoSensoryContent`'s own comment: "No
+Assessments seeded — CLAUDE.md §54 forbids fabricating sensory
+outcomes") is deliberately overridden for exactly this one row, because
+ADR-039's own v1 falsifiable test is literally cherry-through-to-a-
+cupping-score, so the mechanism can't be demonstrated end to end without
+one scored result. Scope is kept as narrow as the exception allows: only
+an aggregate `PanelResult`, never an `Assessment`; blind sample C is
+left deliberately unscored so both states remain visible side by side;
+the seed code carries an explicit comment citing this reasoning in
+place. Verified end to end via a direct `getLotReport` call against the
+seeded green lot (the internal-only seed operator can't log in through
+the UI to check via browser) — Origin/Lineage/Processing/Measurements/
+Samples/Sensory all render, including the score.
+
+Idempotency guard (`if (existing lot) return`) meant the chain, once
+already seeded live, wouldn't pick up the later PanelResult addition on
+a re-run; the live Neon environment was brought in sync with a one-off
+patch script (created, run once, deleted — not part of the committed
+seed path) rather than complicating the idempotency check for a
+downstream-row case that will never recur once this ticket is closed.
+
+Full verification: `npm run typecheck` and `npm run lint` clean; full
+suite — 16 test files, 142 tests, including `e2e.test.ts` and
+`e2e-cleanup-failsafe.test.ts` — passing together against real Neon
+(`--testTimeout=30000 --hookTimeout=30000`).
 
 ## 35. Dependency Graph
 
