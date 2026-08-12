@@ -441,7 +441,7 @@ reassessment below (not part of the original A1-A8 set).
 | **A0 — Offline base mechanism** *(added 2026-08-12, see §7)* | None (infrastructure, can start in parallel with A1) | `offline.draft_record`, `offline.sync_conflict` per `OFFLINE_FIELD_CAPABILITY.md` §3-4, scoped to A5's forms only — no map-tile caching (`MAP_AND_TERRITORY.md`'s own need, not required here) | Service worker + IndexedDB draft queue + sync + versioned conflict resolution (never last-write-wins, per `OFFLINE_FIELD_CAPABILITY.md` §4) | Persistent offline indicator; "sync now" control | **Large — the single biggest unknown in this whole set.** Nothing built so far in this project touches a service worker or PWA infrastructure at all; there is no in-repo precedent to size against, unlike every other ticket in this table. Likely larger than A5. Flagged, not minimized. |
 | **A1 — Apiary site + Hive/Colony schema + RBAC — DONE, see note below** | None (parallel to coffee's T14) | Built: `Location.locationType` gains `apiary_site` (additive enum value, same shape as T4's `plot` addition); new `apiary` Postgres schema, `Hive`/`Colony` tables; `Permission` gains an `apiary` subject (`manage`/`view`), reusing the existing `Assignment → Scope → RoleProfile → Permission` mechanism verbatim, granted to Farm Operator | `lib/apiary/hives.ts`: createHive, createColony, getHive (mirrors `lib/traceability/lots.ts`'s shape, much smaller — no DAG) | None yet (T10-style UI is A5) | **Met**: `tests/apiary/hives.test.ts`, 10 tests, real Neon — RBAC positive (project-scoped and location-scoped Farm Operator) and negative (wrong-project, no-assignment), Colony resolving access via its parent Hive, `apiary_site` round-tripped live. |
 | **A2 — Colony origin + Inspection schema/service** *(as originally proposed — superseded below)* | A1 | New `Inspection` table (collapsed shape per §2 — health/feeding/treatment as fields, not child tables); `Colony` gains origin fields | `lib/apiary/inspections.ts`: recordInspection | None yet (A5) | **Small-medium, closer to T8 than T6.** One table despite many columns; no second table the way `FermentationIntervention` needed one, because the collapse in §1/§2 removed that need. |
-| **A2 — REVISED (2026-08-12): Colony origin + Inspection + ColonyEvent schema/service** | A1 | New `Inspection` table (formal only, per §1a) **and** new `ColonyEvent` table (`feeding`/`treatment`/`passing_observation`, per §1a) — two tables, not one; `Colony` gains origin fields | `lib/apiary/inspections.ts`: recordInspection; `lib/apiary/colonyEvents.ts`: recordColonyEvent (validates `treatmentBatchLabel` required when `eventType = treatment`, mirroring `recordMaterialConsumptionEntry`) | None yet (A5) | **Small-medium, between T8 and T6 — one step up from the original estimate.** Two tables instead of one, but both small and no transformation DAG; still well short of T6's size (which paired a run *and* built a second table for a fundamentally different reason — a long-lived process, not a type-discriminated log). |
+| **A2 — REVISED (2026-08-12): Colony origin + Inspection + ColonyEvent schema/service — DONE, see note below** | A1 | Built: `ColonyOriginType` enum + `Colony.originType`/`originNote`; new `Inspection` table (formal only, per §1a) **and** new `ColonyEvent` table (`feeding`/`treatment`/`passing_observation`, per §1a) — two tables, not one | `lib/apiary/inspections.ts`: recordInspection, listInspectionsForColony; `lib/apiary/colonyEvents.ts`: recordColonyEvent (validates `treatmentBatchLabel` required when `eventType = treatment`, mirroring `recordMaterialConsumptionEntry`), listColonyEventsForColony | None yet (A5) | **Met**: `tests/apiary/inspections.test.ts` (8 tests) + `tests/apiary/colonyEvents.test.ts` (9 tests), real Neon — provenanceClass fixed per §1a's mapping (Inspection always `direct_observation`; ColonyEvent `original_record` for feeding/treatment, `direct_observation` for passing_observation), `treatmentBatchLabel` requiredness, RBAC via the parent Colony's Hive. |
 | **A3 — Harvest/extraction → HoneyBatch as `Lot`** | A1, A2 (revised) | `LotType` gains `honey` (additive enum value, same shape as `roast`); new small `ApiaryHarvestEvent`-equivalent table (mirrors `HarvestEvent`'s shape: `colonyId`, `extractedWeightKg`, `framesHarvested`, `resultingLotId`, provenance) | `lib/apiary/harvest.ts`: recordApiaryHarvest, producing a `Lot` via the *existing* `recordTransformation`-adjacent pattern already proven for coffee's `HarvestEvent` | None yet (A5) | **Small, comparable to T4's schema layer alone** (T4 built two event tables; this is one, since Receiving has no apiary analogue in this scope). |
 | **A4 — Sensory linkage** | A3 | None | Near-zero — `createSampleFromLot` (`lib/traceability/samples.ts:56`) already accepts any `Lot`; `getSensoryLinkageForSamples` (`lib/traceability/lots.ts:603`) already works off `Sample`, domain-agnostic | Folds into A5's Lot/HoneyBatch detail view, not a separate screen | **Near-zero — may not warrant a standalone ticket.** Listed separately here for traceability against §3's own checklist item, but recommend folding into A3's definition of done rather than tracking as its own line once actual work starts. |
 | **A5 — Operator UI: Inspection form + ColonyEvent quick-entry + Hive/Colony views + Harvest→HoneyBatch UI** | A0, A1-A4 | None | Server actions mirroring `app/actions/traceability.ts`'s pattern | New `/apiaries`, `/apiaries/[id]`, per-hive/colony detail, the Inspection form and `ColonyEvent` quick-entry points (§4 design, revised) — built offline-aware from the start per §7, not retrofitted | **Medium-large, comparable to T10, larger than originally estimated.** The first UI surfacing everything above, same integration-gap risk T10's own row called out, now also carrying the offline-aware requirement A0 provides — real added surface versus the original estimate, not just a dependency line. |
@@ -489,6 +489,56 @@ catalog change re-seeded (`prisma/seed.ts`, idempotent upserts — no
 `SEED_DEMO_CONTENT` needed, `apiary:manage`/`apiary:view` are seeded
 unconditionally alongside every other permission). Full suite — 17 files,
 152 tests — passes together; typecheck, lint, and `next build` all clean.
+
+**A2 — REVISED implementation note (2026-08-12).** Built exactly the §1a
+correction, not the original single-table collapse: `Inspection` stays
+formal, with no `feeding`/`treatment` value on any enum it carries; the
+new `ColonyEvent` table holds `feeding`/`treatment`/`passing_observation`/
+`other`, the same type-discriminated-log shape as
+`FermentationIntervention`/`DryingTurnEvent`/`QuantityEvent` elsewhere in
+this schema. `Inspection.outcome` is `NOT NULL` unconditional, a real
+DB-level guarantee (§1a's own note that this is a genuine improvement the
+split enables, not just a side effect of it).
+
+`ColonyOriginType` (`purchased`/`captured`/`split`/`other`) and
+`Colony.originType`/`originNote` were added as a required-no-default
+column plus a nullable free-text one — verified zero `Colony` rows existed
+in Neon before this migration (A1 shipped no seed content and no UI yet),
+so this doesn't retrofit a required column onto live data the way T9.5's
+own ADR-038 retrofit had to. `originNote` deliberately stays free text, no
+structured supplier/parent-Colony FK — full division mechanics remain
+correctly deferred to v1.1 (§5), a `split` origin records the flat fact
+only.
+
+`provenanceClass` is fixed at the action layer everywhere, never
+operator-selectable, per the exact mapping this ticket specified:
+`Inspection` is always `direct_observation`; `ColonyEvent` is
+`original_record` for `feeding`/`treatment` (a record of an action taken)
+and `direct_observation` for `passing_observation`/`other` (a state fact,
+witnessed) — `lib/apiary/colonyEvents.ts`'s `provenanceClassFor` makes
+this an exhaustive switch, not a conditional an unhandled event type could
+silently fall through. `treatmentBatchLabel` is required whenever
+`eventType = treatment`, enforced in `recordColonyEvent` before the
+RBAC/DB call (same ordering `recordMaterialConsumptionEntry` already
+uses) — the DB column itself stays nullable since the requirement is
+conditional on `eventType`, not universal.
+
+Both `recordInspection` and `recordColonyEvent` resolve RBAC by loading
+the parent `Colony`'s own `Hive` and reusing `requireApiaryAccess` from
+`./hives` — no new RBAC helper, no new permission beyond A1's
+`apiary:manage`/`apiary:view`.
+
+Verified live against real Neon: migration
+`20260812175658_a2_apiary_inspection_colonyevent_origin` applied cleanly
+(three new enums, two new tables, `Colony.origin_type` added as required
+with zero existing rows — Prisma's own migration output flagged the "not
+possible if the table is not empty" warning, confirming the empty-table
+precondition held). `tests/apiary/inspections.test.ts` (8 tests) and
+`tests/apiary/colonyEvents.test.ts` (9 tests) cover both fixed-
+provenanceClass mappings, the `treatmentBatchLabel` requirement (missing
+and whitespace-only), RBAC positive/negative via the parent Hive, and
+list ordering. Full suite — 19 files, 169 tests — passes together;
+typecheck, lint, and `next build` all clean.
 
 ---
 

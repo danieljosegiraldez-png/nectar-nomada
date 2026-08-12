@@ -69,6 +69,8 @@ model Person {
   dryingTurnEventsOperated           DryingTurnEvent[]             @relation("DryingTurnEventOperator")
   labourEntriesOperated              LabourEntry[]                 @relation("LabourEntryOperator")
   materialConsumptionEntriesOperated MaterialConsumptionEntry[]    @relation("MaterialConsumptionEntryOperator")
+  inspectionsOperated                Inspection[]                  @relation("InspectionOperator")
+  colonyEventsOperated               ColonyEvent[]                 @relation("ColonyEventOperator")
 
   @@map("person")
   @@schema("core")
@@ -145,6 +147,8 @@ model UserAccount {
   materialConsumptionEntriesCreated MaterialConsumptionEntry[]   @relation("MaterialConsumptionEntryCreatedBy")
   hivesCreated                      Hive[]                       @relation("HiveCreatedBy")
   coloniesCreated                   Colony[]                     @relation("ColonyCreatedBy")
+  inspectionsCreated                Inspection[]                 @relation("InspectionCreatedBy")
+  colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -2596,9 +2600,15 @@ model StorageAssignment {
 // distinct even though they're 1:1 most of the time — a colony can die,
 // swarm, or be requeened while the hive box persists (§2).
 //
-// A1 scope only: this section does not include Colony's origin fields,
-// Inspection, or ColonyEvent — those are A2 (§3), added as a later,
-// additive migration once A1 lands.
+// A2 (§1a, §3 REVISED) added Colony's origin fields, plus Inspection and
+// ColonyEvent as two separate tables — the §1a correction: a beekeeper who
+// only feeds a colony was never inspecting it, so folding feeding/
+// treatment/passing-observation into Inspection would corrupt Inspection's
+// own evidentiary weight ("a trained person opened the hive and assessed
+// it"). Inspection stays formal and structurally protected; ColonyEvent is
+// a separate, type-discriminated log for the other three, the same shape
+// FermentationIntervention/DryingTurnEvent/QuantityEvent already use
+// elsewhere in this schema.
 // ---------------------------------------------------------------------------
 
 enum HiveStatus {
@@ -2650,28 +2660,144 @@ enum ColonyStatus {
   @@schema("apiary")
 }
 
+// §1's boundary analysis: "Pass, required — a capture-or-lose-it fact,
+// same class as T12.6." Flat fact only, not full division mechanics —
+// a `split` origin does not carry a parent-Colony FK; full genealogy is
+// explicitly deferred to v1.1 (§5), same as queen genealogy.
+enum ColonyOriginType {
+  purchased
+  captured
+  split
+  other
+
+  @@schema("apiary")
+}
+
 // Genuinely distinct from Hive even though 1:1 most of the time (§2).
 // `hiveId` is reassignable (a colony can move hives) — no move operation
 // exists yet in A1, this is schema-only; append-only history for a move,
 // if ever needed, is a later concern (same "not built speculatively"
 // discipline as everywhere else in this schema, §13).
 model Colony {
-  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  hiveId          String          @map("hive_id") @db.Uuid
-  hive            Hive            @relation(fields: [hiveId], references: [id])
-  status          ColonyStatus    @default(active)
-  startedAt       DateTime        @map("started_at")
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hiveId          String           @map("hive_id") @db.Uuid
+  hive            Hive             @relation(fields: [hiveId], references: [id])
+  status          ColonyStatus     @default(active)
+  startedAt       DateTime         @map("started_at")
+  // A2 — required, no default: verified zero Colony rows existed in Neon
+  // before this migration, so this doesn't retrofit a required column onto
+  // live data (unlike ADR-038's own T9.5 retrofit, which had to reckon
+  // with existing rows).
+  originType      ColonyOriginType @map("origin_type")
+  originNote      String?          @map("origin_note") // e.g. supplier name, capture location — free text, no structured Supplier/parent-Colony FK
   // ADR-038 pattern, applied here per 22_APIARY_V1_SCOPING_REPORT.md §1's
   // explicit instruction — no default, the action layer must state a real
-  // class. Origin fields (purchased/captured/split) are A2, not A1 — see
-  // this section's own header note.
-  provenanceClass ProvenanceClass @map("provenance_class")
-  dataQuality     DataQuality?    @map("data_quality")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  createdBy       String?         @map("created_by") @db.Uuid
-  creator         UserAccount?    @relation("ColonyCreatedBy", fields: [createdBy], references: [id])
+  // class.
+  provenanceClass ProvenanceClass  @map("provenance_class")
+  dataQuality     DataQuality?     @map("data_quality")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  createdBy       String?          @map("created_by") @db.Uuid
+  creator         UserAccount?     @relation("ColonyCreatedBy", fields: [createdBy], references: [id])
+
+  inspections  Inspection[]
+  colonyEvents ColonyEvent[]
 
   @@index([hiveId])
   @@map("colony")
+  @@schema("apiary")
+}
+
+// §1a — formal and structurally protected: no `feeding`/`treatment` value
+// exists in any enum on this table, so the DB schema itself makes the
+// original collapse-bug impossible, not just discouraged by convention.
+// `outcome` is NOT NULL, unconditional — the split into a separate table
+// (rather than the collapsed single-table design) is what makes this a
+// real DB-level guarantee instead of a service-layer-conditional
+// requirement (§1a's own note on this being a genuine improvement, not
+// just a consequence of the split).
+enum InspectionOutcome {
+  nothing_unusual
+  issue_observed
+
+  @@schema("apiary")
+}
+
+model Inspection {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  colonyId         String            @map("colony_id") @db.Uuid
+  colony           Colony            @relation(fields: [colonyId], references: [id])
+  occurredAt       DateTime          @map("occurred_at")
+  operatorPersonId String?           @map("operator_person_id") @db.Uuid
+  operator         Person?           @relation("InspectionOperator", fields: [operatorPersonId], references: [id])
+  outcome          InspectionOutcome
+  broodPatternNote String?           @map("brood_pattern_note")
+  queenSighted     Boolean?          @map("queen_sighted")
+  storesLevel      String?           @map("stores_level")
+  temperamentNote  String?           @map("temperament_note")
+  pestDiseaseFlags String?           @map("pest_disease_flags")
+  note             String?
+  // Fixed to direct_observation at the action layer for every call site —
+  // a trained person directly assessed the colony (§1a). Not
+  // operator-selectable, same discipline as every other fixed-per-call-site
+  // provenanceClass in this codebase (T12.6's own precedent).
+  provenanceClass  ProvenanceClass   @map("provenance_class")
+  dataQuality      DataQuality?      @map("data_quality")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  createdBy        String?           @map("created_by") @db.Uuid
+  creator          UserAccount?      @relation("InspectionCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([colonyId])
+  @@map("inspection")
+  @@schema("apiary")
+}
+
+// §1a — feeding/treatment/passing_observation share one type-discriminated
+// table because none of the three carries Inspection's evidentiary claim;
+// the corruption risk in the original (rejected) design was specific to
+// mixing those with Inspection, not a general problem with sharing a
+// table. `other` mirrors the same catch-all convention as
+// FermentationInterventionType/DryingTurnEventType.
+enum ColonyEventType {
+  feeding
+  treatment
+  passing_observation
+  other
+
+  @@schema("apiary")
+}
+
+model ColonyEvent {
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  colonyId            String          @map("colony_id") @db.Uuid
+  colony              Colony          @relation(fields: [colonyId], references: [id])
+  eventType           ColonyEventType @map("event_type")
+  occurredAt          DateTime        @map("occurred_at")
+  operatorPersonId    String?         @map("operator_person_id") @db.Uuid
+  operator            Person?         @relation("ColonyEventOperator", fields: [operatorPersonId], references: [id])
+  feedingMaterial     String?         @map("feeding_material") // e.g. "sugar syrup 1:1" — feeding only
+  feedingQuantity     Decimal?        @map("feeding_quantity") @db.Decimal(10, 3)
+  feedingUnit         String?         @map("feeding_unit")
+  treatmentProduct    String?         @map("treatment_product") // e.g. "Apivar" — treatment only
+  // Nullable at the DB level (meaningless for the other three event
+  // types) but required at the service layer whenever eventType =
+  // treatment (§1a) — same shape as MaterialConsumptionEntry.batchLabel's
+  // existing requiredness (T12.6), enforced in recordColonyEvent, not here.
+  treatmentBatchLabel String?         @map("treatment_batch_label")
+  treatmentDose       Decimal?        @map("treatment_dose") @db.Decimal(10, 3)
+  treatmentDoseUnit   String?         @map("treatment_dose_unit")
+  note                String? // passing_observation's payload; free text on any type
+  // Fixed at the action layer, never operator-selectable: feeding/treatment
+  // -> original_record (a record of an action taken); passing_observation
+  // -> direct_observation (a state fact, witnessed) — §1a's own framing,
+  // mapped onto ProvenanceClass values that already exist, no invention
+  // needed.
+  provenanceClass     ProvenanceClass @map("provenance_class")
+  dataQuality         DataQuality?    @map("data_quality")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  createdBy           String?         @map("created_by") @db.Uuid
+  creator             UserAccount?    @relation("ColonyEventCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([colonyId])
+  @@map("colony_event")
   @@schema("apiary")
 }

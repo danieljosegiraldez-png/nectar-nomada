@@ -1,19 +1,20 @@
 /**
- * Ticket A1 (docs/implementation/22_APIARY_V1_SCOPING_REPORT.md §2-3).
- * Hive/Colony — much smaller than lib/traceability/lots.ts's shape:
- * no transformation DAG, just two small physical/biological entities and
- * an RBAC check mirroring requireLotAccess's own project/location
- * leaf-scope containment (RBAC.md §3), against the `apiary` subject
- * instead of `lot`.
+ * Ticket A1 (docs/implementation/22_APIARY_V1_SCOPING_REPORT.md §2-3), A2
+ * (§1a, §3 REVISED) added Colony's origin fields below. Hive/Colony are
+ * much smaller than lib/traceability/lots.ts's shape: no transformation
+ * DAG, just physical/biological entities and an RBAC check mirroring
+ * requireLotAccess's own project/location leaf-scope containment
+ * (RBAC.md §3), against the `apiary` subject instead of `lot`.
  *
- * A1 scope only: no origin fields on Colony, no Inspection, no
- * ColonyEvent — those are A2, added as a later, additive migration once
- * A1 lands (see the schema section's own header note).
+ * Inspection/ColonyEvent (recordInspection/recordColonyEvent) live in
+ * ./inspections and ./colonyEvents, not here — both resolve RBAC via
+ * their parent Colony's own Hive, using requireApiaryAccess exported
+ * below (reuse, not a second RBAC helper).
  */
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import type { ScopeTarget } from "../rbac/types";
-import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
+import type { ColonyOriginType, DataQuality, ProvenanceClass } from "../../generated/prisma/client";
 
 export class ApiaryAccessError extends Error {}
 
@@ -66,10 +67,14 @@ export interface CreateColonyInput {
   hiveId: string;
   startedAt: Date;
   status?: "active" | "dead" | "absconded";
-  // A2 will require a real per-call justification the way T9.5 already
-  // requires for every other provenance-carrying write in this codebase —
-  // no default here either, matching that established convention rather
-  // than inventing a new one for apiary.
+  // §1's boundary analysis: "Pass, required — a capture-or-lose-it fact."
+  // No default — a colony's origin, once forgotten, is not reconstructable
+  // from anything else the platform records.
+  originType: ColonyOriginType;
+  originNote?: string | null;
+  // No default here either, matching every other provenance-carrying
+  // write's convention (ADR-038) — the action layer must state a real
+  // class.
   provenanceClass: ProvenanceClass;
   dataQuality?: DataQuality | null;
 }
@@ -84,6 +89,8 @@ export async function createColony(userAccountId: string, input: CreateColonyInp
       hiveId: input.hiveId,
       startedAt: input.startedAt,
       status: input.status ?? "active",
+      originType: input.originType,
+      originNote: input.originNote ?? null,
       provenanceClass: input.provenanceClass,
       dataQuality: input.dataQuality ?? null,
       createdBy: userAccountId,

@@ -152,6 +152,7 @@ describe("createColony", () => {
     const colony = await createColony(authorizedUserAccountId, {
       hiveId: hive.id,
       startedAt: new Date("2026-01-01"),
+      originType: "purchased",
       provenanceClass: "direct_observation",
     });
 
@@ -172,6 +173,7 @@ describe("createColony", () => {
       createColony(wrongProjectUserAccountId, {
         hiveId: hive.id,
         startedAt: new Date("2026-01-01"),
+        originType: "purchased",
         provenanceClass: "direct_observation",
       }),
     ).rejects.toThrow(ApiaryAccessError);
@@ -182,6 +184,7 @@ describe("createColony", () => {
       createColony(authorizedUserAccountId, {
         hiveId: "00000000-0000-0000-0000-000000000000",
         startedAt: new Date("2026-01-01"),
+        originType: "purchased",
         provenanceClass: "direct_observation",
       }),
     ).rejects.toThrow(ApiaryAccessError);
@@ -198,6 +201,7 @@ describe("getHive", () => {
     await createColony(authorizedUserAccountId, {
       hiveId: hive.id,
       startedAt: new Date("2026-01-01"),
+      originType: "purchased",
       provenanceClass: "direct_observation",
     });
 
