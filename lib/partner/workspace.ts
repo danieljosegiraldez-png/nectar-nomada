@@ -199,6 +199,14 @@ export interface FinalizeAssetUploadInput {
   mimeType: string;
   sizeBytes: number;
   originalFilename: string;
+  // T12.5: same bug T9.5 fixed for operatorPersonId, caught here before it
+  // shipped further — the field existed (creatorPersonId is a real Person
+  // FK, structurally distinct from createdBy's UserAccount FK) but no
+  // caller could ever reach a value other than the uploader. Who took the
+  // photograph and who uploaded it are different facts (a field technician
+  // photographs a site, a partner uploads it that evening); default to the
+  // uploader's own Person (the common case, no extra tap), overridable.
+  creatorPersonId?: string | null;
 }
 
 const BUCKET = "nectar-originals";
@@ -226,11 +234,16 @@ export async function finalizeAssetUpload(userAccountId: string, input: Finalize
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
       originalFilename: input.originalFilename,
-      creatorPersonId: userAccount.personId,
+      creatorPersonId: input.creatorPersonId ?? userAccount.personId,
       projectId: input.projectId,
       status: "approved",
       classification: "partner",
       createdBy: userAccountId,
+      // T12.5: Partner Workspace uploads predate ADR-038's provenance
+      // discipline reaching Asset — a partner-submitted photo is an
+      // original record of what the partner observed at their site, not a
+      // measurement, so original_record rather than measured_fact.
+      provenanceClass: "original_record",
     },
   });
 

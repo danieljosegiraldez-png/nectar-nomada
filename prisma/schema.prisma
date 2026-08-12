@@ -587,6 +587,7 @@ model Sample {
   blindMappings      SensoryBlindMapping[]
   competitionEntries Entry[]
   measurements       Measurement[]
+  assets             Asset[]
 
   @@index([projectId])
   @@index([organizationId])
@@ -1060,6 +1061,33 @@ model Asset {
   derivativeOf        Asset?  @relation("AssetDerivative", fields: [derivativeOfAssetId], references: [id])
   derivatives         Asset[] @relation("AssetDerivative")
 
+  // T12.5: specific nullable FKs per possible Traceability parent, not a
+  // polymorphic parent_type/parent_id pair (ADR-020 decision 8,
+  // Measurement's own precedent). Receiving has no dedicated FK — a
+  // receiving-stage photo attaches via lotId, the lot ReceivingEvent
+  // itself creates; every other stage gets its own column because the
+  // event/run/sample it documents is more specific than "this lot."
+  lotId             String?          @map("lot_id") @db.Uuid
+  lot               Lot?             @relation(fields: [lotId], references: [id])
+  harvestEventId    String?          @map("harvest_event_id") @db.Uuid
+  harvestEvent      HarvestEvent?    @relation(fields: [harvestEventId], references: [id])
+  measurementId     String?          @map("measurement_id") @db.Uuid
+  measurement       Measurement?     @relation(fields: [measurementId], references: [id])
+  fermentationRunId String?          @map("fermentation_run_id") @db.Uuid
+  fermentationRun   FermentationRun? @relation(fields: [fermentationRunId], references: [id])
+  dryingRunId       String?          @map("drying_run_id") @db.Uuid
+  dryingRun         DryingRun?       @relation(fields: [dryingRunId], references: [id])
+  sampleId          String?          @map("sample_id") @db.Uuid
+  sample            Sample?          @relation(fields: [sampleId], references: [id])
+
+  // T12.5: required, no default — same reasoning as ADR-038 (T9.5): a
+  // photograph is a fact-bearing record, and a silent default would
+  // misrepresent an unstated provenance as the strongest class in the
+  // vocabulary. sourceReference/dataQuality follow DATA_ARCHITECTURE.md §4.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  sourceReference String?         @map("source_reference")
+  dataQuality     DataQuality?    @map("data_quality")
+
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")
   createdBy String?      @map("created_by") @db.Uuid
@@ -1069,6 +1097,12 @@ model Asset {
 
   @@index([projectId])
   @@index([locationId])
+  @@index([lotId])
+  @@index([harvestEventId])
+  @@index([measurementId])
+  @@index([fermentationRunId])
+  @@index([dryingRunId])
+  @@index([sampleId])
   @@map("asset")
   @@schema("core")
 }
@@ -1934,6 +1968,7 @@ model Lot {
   // kind here since that Lot is one of possibly several outputs).
   harvestEvent          HarvestEvent?
   receivingEvent        ReceivingEvent?
+  assets                Asset[]
 
   @@index([organizationId])
   @@index([projectId])
@@ -2159,6 +2194,8 @@ model Measurement {
   createdBy       String?         @map("created_by") @db.Uuid
   creator         UserAccount?    @relation("MeasurementCreatedBy", fields: [createdBy], references: [id])
 
+  assets Asset[]
+
   @@index([lotId])
   @@index([sampleId])
   @@index([fermentationRunId])
@@ -2210,6 +2247,8 @@ model HarvestEvent {
   createdAt        DateTime        @default(now()) @map("created_at")
   createdBy        String?         @map("created_by") @db.Uuid
   creator          UserAccount?    @relation("HarvestEventCreatedBy", fields: [createdBy], references: [id])
+
+  assets Asset[]
 
   @@index([locationId])
   @@index([organizationId])
@@ -2301,6 +2340,7 @@ model FermentationRun {
   interventions   FermentationIntervention[]
   measurements    Measurement[]
   transformations LotTransformation[]
+  assets          Asset[]
 
   @@map("fermentation_run")
   @@schema("traceability")
@@ -2357,6 +2397,7 @@ model DryingRun {
   turningEvents   DryingTurnEvent[]
   measurements    Measurement[]
   transformations LotTransformation[]
+  assets          Asset[]
 
   @@index([locationId])
   @@map("drying_run")

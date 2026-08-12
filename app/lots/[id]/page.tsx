@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getLotDetail, getObserverCandidates, TraceabilityAccessError } from "../../../lib/traceability/lots";
 import { computeCurrentQuantity } from "../../../lib/traceability/quantity";
+import { getSignedUrlForAsset } from "../../../lib/traceability/media";
 import {
   recordFermentationInterventionFormAction,
   endFermentationFormAction,
@@ -11,6 +12,7 @@ import {
   endDryingFormAction,
 } from "../../actions/traceability";
 import { MeasurementForm } from "../../components/traceability/MeasurementForm";
+import { PhotoUploadForm } from "../../components/traceability/PhotoUploadForm";
 
 export const dynamic = "force-dynamic";
 
@@ -36,11 +38,20 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   const quantity = await computeCurrentQuantity(user.userAccountId, id);
   const { people: observers, selfPersonId } = await getObserverCandidates(user.userAccountId);
 
-  const { lot, lineage, transformations, quantityEvents, measurements, samples, fermentationRuns, dryingRuns, storageAssignments, tasks, auditEvents, sensoryLinkage } = detail;
+  const { lot, lineage, transformations, quantityEvents, measurements, samples, fermentationRuns, dryingRuns, storageAssignments, tasks, auditEvents, sensoryLinkage, harvestEvent, assets } = detail;
 
   const activeFermentation = fermentationRuns.find((r) => r.endedAt === null) ?? null;
   const activeDrying = dryingRuns.find((r) => r.endedAt === null) ?? null;
   const currentStorage = storageAssignments.find((s) => s.endedAt === null) ?? null;
+
+  // T12.5: signed GET URLs computed once here (server-side, already gated
+  // by getLotDetail's own requireLotAccess("view", ...) above) — same
+  // "render-only-when-present" pattern as Sensory, and the same "no
+  // independent RBAC check downstream of an already-gated aggregation"
+  // reasoning as getSensoryLinkageForSamples.
+  const assetsWithUrls = await Promise.all(
+    assets.map(async (asset) => ({ asset, viewUrl: await getSignedUrlForAsset(asset.storageKey) })),
+  );
 
   const currentStage = activeFermentation
     ? t("stageFermenting")
@@ -72,6 +83,16 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         {lot.location ? <span>{lot.location.name}</span> : null}
         {lot.organization ? <span>{lot.organization.name}</span> : null}
       </p>
+
+      <PhotoUploadForm lotId={lot.id} parent={{ kind: "lot" }} observers={observers} selfPersonId={selfPersonId} />
+
+      {harvestEvent ? (
+        <section className="nn-section">
+          <h2>{t("harvestInfoHeading")}</h2>
+          <p className="nn-muted">{t("harvestOccurredAtLabel", { date: harvestEvent.harvestedAt.toISOString().slice(0, 16).replace("T", " ") })}</p>
+          <PhotoUploadForm lotId={lot.id} parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }} observers={observers} selfPersonId={selfPersonId} />
+        </section>
+      ) : null}
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "1rem" }}>
         {!activeFermentation && !activeDrying ? (
@@ -180,6 +201,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                 {t("endFermentationButton")}
               </button>
             </form>
+            <PhotoUploadForm lotId={lot.id} parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }} observers={observers} selfPersonId={selfPersonId} />
           </div>
         ) : null}
 
@@ -239,6 +261,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                 {t("endDryingButton")}
               </button>
             </form>
+            <PhotoUploadForm lotId={lot.id} parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }} observers={observers} selfPersonId={selfPersonId} />
           </div>
         ) : null}
 
@@ -259,6 +282,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               <li key={m.id}>
                 {m.variable}: {m.value.toString()} {m.unit} — {m.occurredAt.toISOString().slice(0, 16).replace("T", " ")}
                 {m.correctsId ? ` (${t("correctionLabel")})` : ""}
+                <PhotoUploadForm lotId={lot.id} parent={{ kind: "measurement", measurementId: m.id }} observers={observers} selfPersonId={selfPersonId} />
               </li>
             ))}
           </ul>
@@ -290,6 +314,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
             {samples.map((s) => (
               <li key={s.id}>
                 {s.sampleCode} ({s.sampleType})
+                <PhotoUploadForm lotId={lot.id} parent={{ kind: "sample", sampleId: s.id }} observers={observers} selfPersonId={selfPersonId} />
               </li>
             ))}
           </ul>
@@ -314,6 +339,24 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                 </li>
               )),
             )}
+          </ul>
+        </section>
+      ) : null}
+
+      {assetsWithUrls.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("photosHeading")}</h2>
+          <ul style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", listStyle: "none", padding: 0 }}>
+            {assetsWithUrls.map(({ asset, viewUrl }) => (
+              <li key={asset.id}>
+                {asset.assetType === "photo" ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- signed R2 URL, not a static/optimizable Next asset
+                  <img src={viewUrl} alt="" style={{ width: 160, height: 160, objectFit: "cover", borderRadius: 4 }} />
+                ) : (
+                  <a href={viewUrl}>{asset.originalFilename ?? asset.id}</a>
+                )}
+              </li>
+            ))}
           </ul>
         </section>
       ) : null}

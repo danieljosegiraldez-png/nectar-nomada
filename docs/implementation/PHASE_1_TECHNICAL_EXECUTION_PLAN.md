@@ -1243,6 +1243,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | **T10 — Operator Workbench — DONE, scope expanded, see note below** | T1-T9 | traceability | None | Built: `getLotDetail`, `getActiveOperations`, `getLotList`, `getManageableContext`, `getLotSummary` in `lots.ts`; `app/actions/traceability.ts` (14 server actions, all wiring into T4-T8's existing service functions, no new write logic) | Built: `/lots` (Active Operations + Lot List), `/lots/[id]` (full detail), `/lots/new` (Harvest/Receiving), `/lots/[id]/{fermentation,drying,storage,samples}/new`, `MeasurementForm` + inline intervention/turn/end-run forms on Lot Detail (§30 screens 1-9) | E2E: full workflow visible | Medium — the first UI surfacing everything above, likely to surface integration gaps | **Met**: a real TEST Farm Operator account, created via the actual signup flow and granted a project-scoped Assignment, was walked through the full live UI against real Neon — harvest → measurement → start fermentation → intervention → end fermentation (new lot created, quantity/lineage correct) → move storage → create sample (quantity reduced correctly) — with Active Operations and the Lot List reflecting every state change correctly at each step. TEST fixtures fully cleaned up afterward (verified zero rows remain) |
 | **T11 — Process/Deviation tracking — DEFERRED, v2, see note below** | T6, T7 | traceability | New: `ProcessExecution`, `Deviation` | Extend `fermentation.ts`/`drying.ts` | Surfaced on Lot Detail | Unit | Low | A recorded deviation shows on Lot Detail's Processing section |
 | **T12 — Sensory linkage panel — DONE** | T5, existing Sensory | traceability + sensory (read-only) | None | `getSensoryLinkageForSamples` in `lots.ts`, wired into `getLotDetail` | Sensory panel on Lot Detail | Integration: link renders when present, absent gracefully otherwise | Low — read-only, no sensory schema touched | **Met**: a Lot with a cupped Sample shows its PanelResult; one without renders no Sensory section at all, not an empty one or an error |
+| **T12.5 — Photo/asset attachment across Traceability — DONE, see note below** | T12 | core (Asset) + traceability (read/write) | `Asset` gains `lotId`/`harvestEventId`/`measurementId`/`fermentationRunId`/`dryingRunId`/`sampleId` (nullable, specific FKs) + `provenanceClass` (required)/`sourceReference`/`dataQuality` | `lib/traceability/media.ts`: requestLotAssetUpload, finalizeLotAssetUpload | `PhotoUploadForm.tsx` wired into 6 attachment points (lot/harvest/measurement/fermentation/drying/sample) + Photos section (renders only when present) | Unit (RBAC + provenance + creatorPersonId, R2-independent paths only) | Low — additive schema, no existing table's required-ness changed | **Partially met — see note below**: schema/service/UI verified live end-to-end except the actual R2 PUT (no credentials in any environment) |
 | **T13 — Lot Summary Report** | T10, T12 (T11 deferred — see note below) | traceability | None | `lib/traceability/reports.ts` | Lot Report page, **designed print-friendly from the start** | E2E: report reproduces from live data | Low | Report renders origin/lineage/processing/measurements/samples/sensory for a real DEMO lot, on a print-friendly authenticated page (browser print-to-PDF produces a client-sendable document) — PDF export and login-free external client access are explicitly out of scope for this ticket (v1 scope decision, ADR-039) |
 | **T14 — Full E2E test + DEMO seed** | T1-T13 | traceability | Seed script additions | None | None | The full coffee-workflow E2E test (§31) | Medium — the integration point that proves everything actually composes | One DEMO harvest-to-sensory chain seeded and passing an automated E2E test, not just a manual verification pass |
 
@@ -1679,7 +1680,88 @@ check to add, not a schema change.
 UI: Lot Detail's Sensory section (`app/lots/[id]/page.tsx`) renders only
 when at least one of the lot's Samples has a linkage entry — no section
 header at all otherwise, matching "absent gracefully" rather than an
-empty-state message.
+empty-state message. ADR-043 records the RBAC decision above formally;
+`tests/traceability/lots.test.ts`'s "T12 boundary (ADR-043)" describe
+block pins the non-leakage limit and the operator-lot scoping guarantee
+this section describes — both were previously verified only by hand.
+
+**T12.5 implementation note**
+(`docs/implementation/21_T12.5_MEDIA_ATTACHMENT_PROMPT.md`). `Asset`
+gains six nullable, specific FKs (`lotId`, `harvestEventId`,
+`measurementId`, `fermentationRunId`, `dryingRunId`, `sampleId` — no
+`receivingEventId`; a receiving-stage photo attaches via `lotId`, the
+lot `ReceivingEvent` itself creates) plus `provenanceClass` (required,
+no default — same ADR-038 reasoning as the five Phase 1 tables),
+`sourceReference`, `dataQuality`. `lib/traceability/media.ts` is a new,
+Traceability-specific service — not built on `lib/partner/workspace.ts`'s
+upload functions, which hardcode `partner:upload_media`, `classification:
+"partner"`, and a partner-specific key prefix. Permission: `lot:manage`,
+reused rather than a new one. Classification defaults to `internal`
+(not `partner`) — every Traceability Lot today is Néctar Nómada's own
+production; `SPECIMEN_AND_MATERIAL_TRACEABILITY.md` §7's client-site
+`partner`/`confidential` rule has no coffee-lot engagement to apply to
+yet, so a fixed `internal` default is correct for v1 (a future
+client-facing coffee engagement would need a real per-project decision,
+not a silent copy of this constant).
+
+`provenanceClass` is fixed at `direct_observation` for every attachment
+point at the action layer (`app/actions/traceability.ts`), not
+operator-selectable — a field photo documents what's in front of the
+photographer, the same category as `HarvestEvent`'s `measured_fact`
+reasoning but for documentation rather than measurement; unlike
+Measurement (T9.5 §3(c)), none of the six points has a genuinely
+ambiguous case to justify a picker.
+
+`creatorPersonId` — the same bug T9.5 fixed for `operatorPersonId`,
+caught here before it shipped: `lib/partner/workspace.ts`'s
+`finalizeAssetUpload` hardcoded `creatorPersonId: userAccount.personId`
+with no override, even though the field is a real `Person` FK,
+structurally distinct from `createdBy`'s `UserAccount` FK. Fixed at the
+source (an optional `creatorPersonId` param, default preserved) rather
+than left for a future audit, and the new Traceability path
+(`finalizeLotAssetUpload`) follows the same default-to-uploader,
+overridable pattern from the start, surfaced as a "Photographed by"
+select on `PhotoUploadForm.tsx` — the same UX shape as T9.5's "Observed
+by" on `MeasurementForm.tsx`.
+
+Offline (§5 of the prompt): not built, not precluded. Attachment is
+always a separate call from the record it documents — every parent
+(Lot, HarvestEvent, Measurement, FermentationRun, DryingRun, Sample)
+already exists before `PhotoUploadForm` can render, so a record is never
+blocked on having a photo, and a later offline-sync path can call
+`finalizeLotAssetUpload` against an already-synced parent with no change
+to this function's shape.
+
+**What was verified live and what could not be** (§7 of the prompt): a
+real TEST Farm Operator account (via actual signup, Farm Operator
+Assignment granted by script) created a live Harvest through `/lots/new`
+and reached the resulting Lot Detail page — confirmed live: the six-FK
+schema against real Neon, the general Lot photo widget and the new
+Harvest section both rendering with a working file input and
+"Photographed by" select defaulted to self, the Photos section correctly
+absent (zero Assets), and no regression to Measurement/Sensory/Timeline
+sections already on the page. Two real bugs were caught only by this
+live pass and are already fixed in the code this note describes: (1) the
+long-running dev server held a stale in-memory Prisma Client from before
+`prisma generate` re-ran, throwing `Unknown argument lotId` on the new
+Asset query — required a server restart, not a code change; (2) the new
+`harvestHeading`/`harvestedAtLabel` i18n keys collided with pre-existing
+keys of the same name already used by `/lots/new`'s own Harvest form
+section — silently overwritten by JSON's last-key-wins parsing (both
+`en.json` and `es.json`), renamed to `harvestInfoHeading`/
+`harvestOccurredAtLabel` to resolve. **Not verified**: the actual R2 PUT
+and the resulting real `core.Asset` row — R2 credentials do not exist in
+any environment (`R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/
+`R2_SECRET_ACCESS_KEY`/`R2_BUCKET`, confirmed absent both locally and in
+Vercel production), so `requestLotAssetUpload`'s call to
+`objectStorageProvider.putObject` cannot be exercised this session. Code
+and unit tests for every RBAC/validation guard clause that runs before
+that call are verified (`tests/traceability/media.test.ts`); the PUT
+itself and the Photos section actually rendering a real photo remain
+open until credentials exist. All TEST fixtures (the Farm Operator
+account, the Lot, plus unrelated debris left over from an earlier
+interrupted parallel test run) were cleaned up and verified zero
+remaining.
 
 ## 35. Dependency Graph
 

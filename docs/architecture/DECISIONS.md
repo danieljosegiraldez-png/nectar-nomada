@@ -2521,3 +2521,73 @@ COMMUNITY_SALES_INPUT_CORRECTED.md` is itself marked "architecture input
 only — do not implement directly," and no Phase 1 Traceability ticket
 touches Marketing/Community — this decision does not change current
 build sequencing.
+
+---
+
+## ADR-043 — T12: `getSensoryLinkageForSamples` gated by `lot:view`, not
+`blind_mapping:view`
+
+**Context:** `RBAC.md` §7 restricts every function in `lib/sensory/
+service.ts` that would reveal a `SensoryBlindMapping` row to callers
+holding `blind_mapping:view` — the permission only "Sensory Head Judge"
+holds (`lib/rbac/catalog.ts`), never "Sensory Judge" and never "Farm
+Operator." T12's Lot Detail Sensory panel needs to show a Farm Operator
+their own lot's cupping score, which reads through `SensoryBlindMapping`
+to reach the `PanelResult` it points at — a literal reading of §7 would
+require `blind_mapping:view` here too, which Farm Operator does not and
+should not hold. This decision was made and implemented during T12
+(`lib/traceability/lots.ts`'s `getSensoryLinkageForSamples`, plan doc's
+T12 implementation note) but never recorded as its own ADR — this entry
+closes that gap (`21_T12.5_MEDIA_ATTACHMENT_PROMPT.md` §8 flagged it as
+still open going into T12.5).
+
+**Decision:** `getSensoryLinkageForSamples` is gated by `lot:view` alone
+— already checked by its only caller, `getLotDetail`, before this
+function ever runs — not `blind_mapping:view`.
+
+**Why this does not weaken §7.** §7's restriction exists to keep a
+*judge* from learning which real sample a blind code maps to *before or
+during scoring* — the whole point of a blind evaluation is that the judge
+scoring a sample cannot trace it back to a producer while their judgment
+could still be influenced by that knowledge. It has never been a rule
+that a finished, computed result must stay hidden forever from the
+operator whose lot produced it. `getSensoryLinkageForSamples` is not
+reachable by a judge mid-session and is not called from any code path
+`lib/sensory/service.ts` owns — it is a read exposed only through
+Traceability's own Lot Detail aggregation, to the operator of that
+specific lot, after scoring is complete.
+
+**The explicit limit, stated so it survives past this session.** This
+function returns exactly two things and nothing else: an aggregate
+`PanelResult` (`meanValue`/`minValue`/`maxValue`/`responseCount`, the
+`attributeId: null` overall row only) and the session's own `name`/
+`status`. It **never** returns `blindCode`, the `SensoryBlindMapping` row
+itself, or any individual `Assessment`/evaluator identity — verified by
+re-reading its Prisma `select` (`lots.ts`), which has no path to any of
+those three. A future addition to this function's returned fields must
+not widen past that limit without a new, explicit decision — "it already
+bypasses `blind_mapping:view`" is not license to add more through the
+same door.
+
+**Scoping, verified rather than assumed.** `getSensoryLinkageForSamples`
+takes only `sampleIds`, no user or scope argument of its own — its only
+caller, `getLotDetail`, has already run `requireLotAccess(userAccountId,
+"view", ...)` for the one lot in question, and passes only
+`samples.map((s) => s.id)` — the Samples already scoped to that lot via
+`sourceLotId: lotId`, not sample IDs from anywhere else. There is no
+path by which this function is called with another operator's sample
+IDs; leaf-scope containment (`RBAC.md` §3) governs which lots
+`requireLotAccess` allows in the first place, and this function inherits
+that scoping structurally rather than re-checking it. `tests/
+traceability/lots.test.ts`'s new "T12 boundary" describe block pins both
+claims (the field-level limit and this scoping) as regression tests,
+closing the second item `21_T12.5_MEDIA_ATTACHMENT_PROMPT.md` §8 flagged
+as open.
+
+**Also deliberately does not check `SensorySession.classification`**
+(defaults `internal`) against the caller's `classification:clear_*`
+grant — gating is purely "has a `PanelResult` been computed," matching
+T12's own "shows its PanelResult; one without shows nothing" framing. If
+that turns out to be the wrong call in practice, it is a one-line `can()`
+addition, not a schema change — noted here, not resolved, since no
+concrete case has required it yet.

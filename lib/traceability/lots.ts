@@ -467,6 +467,7 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     storageAssignments,
     tasks,
     auditEvents,
+    harvestEvent,
   ] = await Promise.all([
     getLotLineage(userAccountId, lotId),
     prisma.lotTransformation.findMany({
@@ -482,12 +483,17 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
       ? prisma.task.findMany({ where: { projectId: lot.projectId }, orderBy: { createdAt: "desc" }, take: 20 })
       : Promise.resolve([]),
     prisma.auditEvent.findMany({ where: { entityType: "Lot", entityId: lotId }, orderBy: { occurredAt: "desc" } }),
+    // T12.5: the originating HarvestEvent, if this lot came from one — not
+    // previously fetched by getLotDetail (Receiving has no equivalent
+    // fetch here either, since a receiving-stage photo attaches via lotId
+    // directly, needing no extra lookup).
+    prisma.harvestEvent.findUnique({ where: { resultingLotId: lotId } }),
   ]);
 
   const fermentationRunIds = [...new Set(transformations.map((t) => t.fermentationRunId).filter((id): id is string => id != null))];
   const dryingRunIds = [...new Set(transformations.map((t) => t.dryingRunId).filter((id): id is string => id != null))];
 
-  const [fermentationRuns, dryingRuns, sensoryLinkage] = await Promise.all([
+  const [fermentationRuns, dryingRuns, sensoryLinkage, assets] = await Promise.all([
     fermentationRunIds.length
       ? prisma.fermentationRun.findMany({ where: { id: { in: fermentationRunIds } }, include: { interventions: { orderBy: { occurredAt: "asc" } } } })
       : Promise.resolve([]),
@@ -495,6 +501,25 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
       ? prisma.dryingRun.findMany({ where: { id: { in: dryingRunIds } }, include: { turningEvents: { orderBy: { occurredAt: "asc" } } } })
       : Promise.resolve([]),
     getSensoryLinkageForSamples(samples.map((s) => s.id)),
+    // T12.5: every Asset attached anywhere in this lot's chain, one query —
+    // grouped by attachment point in the page component, not here, since
+    // "how to render six kinds of attachment" is a UI concern, not a
+    // service-layer one. No independent RBAC check inside this query: the
+    // requireLotAccess("view", ...) call above already gates the whole
+    // aggregation this belongs to, same as sensoryLinkage.
+    prisma.asset.findMany({
+      where: {
+        OR: [
+          { lotId },
+          harvestEvent ? { harvestEventId: harvestEvent.id } : undefined,
+          { measurementId: { in: measurements.map((m) => m.id) } },
+          { fermentationRunId: { in: fermentationRunIds } },
+          { dryingRunId: { in: dryingRunIds } },
+          { sampleId: { in: samples.map((s) => s.id) } },
+        ].filter((clause): clause is NonNullable<typeof clause> => clause != null),
+      },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
   return {
@@ -510,6 +535,8 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     tasks,
     auditEvents,
     sensoryLinkage,
+    harvestEvent,
+    assets,
   };
 }
 

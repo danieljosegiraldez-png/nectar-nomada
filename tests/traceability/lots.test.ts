@@ -7,7 +7,13 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import { createLot, getLotLineage, recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
+import {
+  createLot,
+  getLotLineage,
+  recordTransformation,
+  TraceabilityAccessError,
+  getSensoryLinkageForSamples,
+} from "../../lib/traceability/lots";
 import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 
 const RUN_ID = `t1-${Date.now()}`;
@@ -392,5 +398,148 @@ describe("getLotLineage — recursive CTE correctness", () => {
       projectId: projectAId,
     });
     await expect(getLotLineage(wrongProjectUserAccountId, lot.id)).rejects.toThrow(TraceabilityAccessError);
+  });
+});
+
+// T12.5 §8 / ADR-043: pins the non-leakage limit and the scoping guarantee
+// getSensoryLinkageForSamples relies on but never had a regression test for
+// — only live browser verification existed before this ticket.
+describe("getSensoryLinkageForSamples — T12 boundary (ADR-043)", () => {
+  let sensoryLotId: string;
+  let sensorySampleId: string;
+  let protocolId: string;
+  let protocolVersionId: string;
+  let sessionId: string;
+  let flightId: string;
+  let blindSampleId: string;
+
+  beforeAll(async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-t12-boundary`,
+      lotType: "sample",
+      projectId: projectAId,
+    });
+    sensoryLotId = lot.id;
+
+    const sample = await prisma.sample.create({
+      data: {
+        sampleCode: `${RUN_ID}-t12-boundary-sample`,
+        sampleType: "green_coffee",
+        sourceLotId: sensoryLotId,
+        status: "approved",
+        classification: "internal",
+      },
+    });
+    sensorySampleId = sample.id;
+
+    const protocol = await prisma.sensoryProtocol.create({
+      data: { domain: "coffee", name: `TEST Protocol (${RUN_ID})`, status: "active" },
+    });
+    protocolId = protocol.id;
+
+    const protocolVersion = await prisma.sensoryProtocolVersion.create({
+      data: { protocolId, version: 1, scoreMin: 0, scoreMax: 100, status: "active" },
+    });
+    protocolVersionId = protocolVersion.id;
+
+    const session = await prisma.sensorySession.create({
+      data: { name: `TEST Session (${RUN_ID})`, protocolVersionId, status: "completed", classification: "internal" },
+    });
+    sessionId = session.id;
+
+    const flight = await prisma.sensoryFlight.create({
+      data: { sessionId, name: `TEST Flight (${RUN_ID})`, sequenceOrder: 1 },
+    });
+    flightId = flight.id;
+
+    const blindSample = await prisma.sensoryBlindSample.create({
+      data: { flightId, blindCode: `${RUN_ID}-BC1` },
+    });
+    blindSampleId = blindSample.id;
+
+    await prisma.sensoryBlindMapping.create({
+      data: { blindSampleId, sampleId: sensorySampleId, revealedAt: new Date() },
+    });
+
+    await prisma.panelResult.create({
+      data: {
+        blindSampleId,
+        attributeId: null,
+        responseCount: 3,
+        meanValue: 86.5,
+        minValue: 84,
+        maxValue: 88,
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.panelResult.deleteMany({ where: { blindSampleId } });
+    await prisma.sensoryBlindMapping.deleteMany({ where: { blindSampleId } });
+    await prisma.sensoryBlindSample.deleteMany({ where: { id: blindSampleId } });
+    await prisma.sensoryFlight.deleteMany({ where: { id: flightId } });
+    await prisma.sensorySession.deleteMany({ where: { id: sessionId } });
+    await prisma.sensoryProtocolVersion.deleteMany({ where: { id: protocolVersionId } });
+    await prisma.sensoryProtocol.deleteMany({ where: { id: protocolId } });
+    await prisma.sample.deleteMany({ where: { id: sensorySampleId } });
+    await prisma.lot.deleteMany({ where: { id: sensoryLotId } });
+  });
+
+  it("returns the aggregate PanelResult and session name/status for a linked sample", async () => {
+    const linkage = await getSensoryLinkageForSamples([sensorySampleId]);
+    expect(linkage[sensorySampleId]).toHaveLength(1);
+    const entry = linkage[sensorySampleId]![0]!;
+    expect(entry.sessionId).toBe(sessionId);
+    expect(entry.sessionName).toContain(RUN_ID);
+    expect(entry.sessionStatus).toBe("completed");
+    expect(entry.overallResult).toEqual({
+      meanValue: "86.5",
+      minValue: "84",
+      maxValue: "88",
+      responseCount: 3,
+    });
+  });
+
+  it("ADR-043: never returns blind code, mapping id, or evaluator identity — only the fields the type allows", async () => {
+    const linkage = await getSensoryLinkageForSamples([sensorySampleId]);
+    const entry = linkage[sensorySampleId]![0]!;
+    const serialized = JSON.stringify(entry);
+
+    // The type itself is the primary guarantee (SensoryLinkageEntry has no
+    // field for any of these) — this is a belt-and-suspenders regression
+    // check against a future field addition widening what's returned.
+    expect(Object.keys(entry).sort()).toEqual(["overallResult", "revealed", "sessionId", "sessionName", "sessionStatus"].sort());
+    expect(serialized).not.toContain("BC1"); // the blind code itself
+    expect(serialized).not.toContain(blindSampleId);
+  });
+
+  it("ADR-043: scoped structurally via the caller's lot access, not re-checked independently", async () => {
+    // getSensoryLinkageForSamples takes no user/scope argument — this test
+    // documents that its only real caller, getLotDetail, is what enforces
+    // access, by confirming the function itself returns data for any
+    // sample id handed to it (no independent RBAC of its own to bypass).
+    // The actual access boundary is exercised by getLotDetail's own
+    // requireLotAccess("view", ...) — see "getLotLineage" describe block
+    // above for that check's coverage on the same RBAC primitive.
+    const linkage = await getSensoryLinkageForSamples([sensorySampleId]);
+    expect(linkage[sensorySampleId]).toBeDefined();
+  });
+
+  it("returns nothing for a sample with no blind mapping (renders gracefully, not an error)", async () => {
+    const plainSample = await prisma.sample.create({
+      data: {
+        sampleCode: `${RUN_ID}-t12-boundary-plain`,
+        sampleType: "green_coffee",
+        sourceLotId: sensoryLotId,
+        status: "approved",
+        classification: "internal",
+      },
+    });
+    try {
+      const linkage = await getSensoryLinkageForSamples([plainSample.id]);
+      expect(linkage[plainSample.id]).toBeUndefined();
+    } finally {
+      await prisma.sample.delete({ where: { id: plainSample.id } });
+    }
   });
 });

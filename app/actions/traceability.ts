@@ -13,6 +13,7 @@ import { startFermentationRun, recordFermentationIntervention, endFermentationRu
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { createSampleFromLot } from "../../lib/traceability/samples";
+import { requestLotAssetUpload, finalizeLotAssetUpload, type LotAssetParent } from "../../lib/traceability/media";
 
 export interface TraceabilityActionState {
   error?: string;
@@ -355,4 +356,66 @@ export async function recordStageChangeFormAction(formData: FormData): Promise<v
   });
 
   revalidatePath(`/lots/${lotId}`);
+}
+
+// --- T12.5: Photo/asset attachment, §30's six attachment points ---------
+
+export async function requestLotAssetUploadAction(
+  lotId: string,
+  originalFilename: string,
+  contentType: string,
+): Promise<{ uploadUrl: string; storageKey: string } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const t = await getTranslations("Traceability");
+  try {
+    return await requestLotAssetUpload(user.userAccountId, { lotId, originalFilename, contentType });
+  } catch (error) {
+    if (error instanceof TraceabilityAccessError) return { error: t("error_access", { detail: error.message }) };
+    if (error instanceof Error) return { error: error.message };
+    throw error;
+  }
+}
+
+export async function finalizeLotAssetUploadAction(
+  lotId: string,
+  storageKey: string,
+  mimeType: string,
+  sizeBytes: number,
+  originalFilename: string,
+  parent: LotAssetParent,
+  creatorPersonId: string | null,
+): Promise<{ ok: true } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const t = await getTranslations("Traceability");
+  try {
+    await finalizeLotAssetUpload(user.userAccountId, {
+      lotId,
+      storageKey,
+      mimeType,
+      sizeBytes,
+      originalFilename,
+      parent,
+      // T12.5 §2: a field photo — of a lot, a harvest, a measurement in
+      // progress, a fermentation vessel, a drying bed, a sample — is
+      // someone photographing what is directly in front of them at the
+      // moment of capture, the same reasoning HarvestEvent's weight/brix
+      // readings use for measured_fact, applied to direct_observation
+      // instead since a photo documents rather than measures. Not
+      // operator-selectable: unlike Measurement (T9.5 §3(c)), there is no
+      // genuinely ambiguous case among these six attachment points to
+      // expose a picker for.
+      provenanceClass: "direct_observation",
+      creatorPersonId,
+    });
+  } catch (error) {
+    if (error instanceof TraceabilityAccessError) return { error: t("error_access", { detail: error.message }) };
+    throw error;
+  }
+
+  revalidatePath(`/lots/${lotId}`);
+  return { ok: true };
 }
