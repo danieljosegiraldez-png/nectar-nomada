@@ -416,6 +416,7 @@
     "lotType_roast": "Roast",
     "lotType_sample": "Sample",
     "lotType_other": "Other",
+    "lotType_honey": "Honey",
     "transformationType_split": "Split",
     "transformationType_merge": "Merge",
     "transformationType_blend": "Blend",

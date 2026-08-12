@@ -416,6 +416,7 @@
     "lotType_roast": "Tostado",
     "lotType_sample": "Muestra",
     "lotType_other": "Otro",
+    "lotType_honey": "Miel",
     "transformationType_split": "División",
     "transformationType_merge": "Fusión",
     "transformationType_blend": "Mezcla",

@@ -6,6 +6,12 @@
  * calling the real, unmodified T2/T3/T5/T12.5 functions against a Lot this
  * ticket produced — not by re-reading their source and asserting they
  * "should" work.
+ *
+ * A4 (Sensory linkage) folds into this file rather than getting its own —
+ * §5 already found `getSensoryLinkageForSamples` needs zero new code once
+ * A3 exists (it operates on `Sample.id` alone, no domain branching), and
+ * the "chain reuse — the central claim" describe block's own final test
+ * confirms that live, the same discipline the other four proofs use.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
@@ -15,7 +21,7 @@ import { createSampleFromLot } from "../../lib/traceability/samples";
 import { recordMeasurement } from "../../lib/traceability/measurements";
 import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 import { finalizeLotAssetUpload, requestLotAssetUpload } from "../../lib/traceability/media";
-import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { getSensoryLinkageForSamples, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a3-${Date.now()}`;
@@ -252,5 +258,68 @@ describe("chain reuse — the central claim of 22_APIARY_V1_SCOPING_REPORT.md §
 
     expect(asset.lotId).toBe(lot.id);
     expect(asset.assetType).toBe("photo");
+  });
+
+  it("Sensory linkage (A4, folded in): getSensoryLinkageForSamples works unmodified for a honey Lot's Sample", async () => {
+    const { lot } = await recordApiaryHarvest(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-sensory`,
+      colonyId,
+      occurredAt: new Date("2026-04-11"),
+      extractedWeightKg: 8,
+      provenanceClass: "measured_fact",
+    });
+
+    const { sample } = await createSampleFromLot(authorizedUserAccountId, {
+      sampleCode: `${RUN_ID}-CUP-002`,
+      sampleType: "honey_cupping",
+      sourceLotId: lot.id,
+      quantity: 0.1,
+      unit: "kg",
+      occurredAt: new Date("2026-04-12"),
+      provenanceClass: "original_record",
+    });
+
+    // Same fixture shape tests/traceability/lots.test.ts's own T12
+    // boundary suite already uses for coffee — domain is free text
+    // (SensoryProtocol.domain: String), so "honey" needs no schema change.
+    const protocol = await prisma.sensoryProtocol.create({
+      data: { domain: "honey", name: `TEST Honey Protocol (${RUN_ID})`, status: "active" },
+    });
+    const protocolVersion = await prisma.sensoryProtocolVersion.create({
+      data: { protocolId: protocol.id, version: 1, scoreMin: 0, scoreMax: 100, status: "active" },
+    });
+    const session = await prisma.sensorySession.create({
+      data: { name: `TEST Honey Session (${RUN_ID})`, protocolVersionId: protocolVersion.id, status: "completed", classification: "internal" },
+    });
+    const flight = await prisma.sensoryFlight.create({
+      data: { sessionId: session.id, name: `TEST Flight (${RUN_ID})`, sequenceOrder: 1 },
+    });
+    const blindSample = await prisma.sensoryBlindSample.create({
+      data: { flightId: flight.id, blindCode: `${RUN_ID}-HB1` },
+    });
+
+    try {
+      await prisma.sensoryBlindMapping.create({
+        data: { blindSampleId: blindSample.id, sampleId: sample.id, revealedAt: new Date() },
+      });
+      await prisma.panelResult.create({
+        data: { blindSampleId: blindSample.id, attributeId: null, responseCount: 3, meanValue: 84, minValue: 82, maxValue: 87 },
+      });
+
+      const linkage = await getSensoryLinkageForSamples([sample.id]);
+      expect(linkage[sample.id]).toHaveLength(1);
+      const entry = linkage[sample.id]![0]!;
+      expect(entry.sessionId).toBe(session.id);
+      expect(entry.sessionStatus).toBe("completed");
+      expect(entry.overallResult).toEqual({ meanValue: "84", minValue: "82", maxValue: "87", responseCount: 3 });
+    } finally {
+      await prisma.panelResult.deleteMany({ where: assertDefinedWhere({ blindSampleId: blindSample.id }) });
+      await prisma.sensoryBlindMapping.deleteMany({ where: assertDefinedWhere({ blindSampleId: blindSample.id }) });
+      await prisma.sensoryBlindSample.deleteMany({ where: assertDefinedWhere({ id: blindSample.id }) });
+      await prisma.sensoryFlight.deleteMany({ where: assertDefinedWhere({ id: flight.id }) });
+      await prisma.sensorySession.deleteMany({ where: assertDefinedWhere({ id: session.id }) });
+      await prisma.sensoryProtocolVersion.deleteMany({ where: assertDefinedWhere({ id: protocolVersion.id }) });
+      await prisma.sensoryProtocol.deleteMany({ where: assertDefinedWhere({ id: protocol.id }) });
+    }
   });
 });

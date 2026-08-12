@@ -61,14 +61,18 @@ A2 — REVISED (Colony origin + Inspection + ColonyEvent), and A3
 (Harvest/extraction → HoneyBatch as `Lot`) are now done**
 (`tests/apiary/hives.test.ts`, 10 tests; `tests/apiary/inspections.test.ts`,
 8 tests; `tests/apiary/colonyEvents.test.ts`, 9 tests;
-`tests/apiary/harvest.test.ts`, 7 tests — all real Neon). Inspection stays
+`tests/apiary/harvest.test.ts`, 8 tests — all real Neon). Inspection stays
 a formal, structurally protected table (§1a); feeding/treatment/passing-
 observation share a separate `ColonyEvent` log. A3's own test suite
 confirmed §2's central claim by execution, not just architecture: the
 real, unmodified `createSampleFromLot`/`recordMeasurement`/
 `computeCurrentQuantity`/`requestLotAssetUpload`+`finalizeLotAssetUpload`
-all work against a honey `Lot` with zero new downstream code.
-**A0, A4–A8 remain unbuilt.** The ADR amendment
+all work against a honey `Lot` with zero new downstream code. **A4
+(Sensory linkage) folded into A3's own definition of done, per the
+report's own recommendation, rather than becoming a standalone ticket** —
+`getSensoryLinkageForSamples`'s zero-new-code claim now has a live proof
+too, not just the source read that originally predicted it.
+**A0, A5–A8 remain unbuilt.** The ADR amendment
 justifying apiary's v1 inclusion is still a draft sitting inside the
 scoping report, not yet appended to `DECISIONS.md` (unlike ADR-044,
 T12.6's own amendment, which is appended). A0 was originally flagged as
@@ -200,10 +204,10 @@ entities that do not exist is how invented entities enter a schema.
    afternoon test, not a build task.
 2. **A0**, sized small-medium per `25_`'s findings — the base offline
    mechanism every other apiary ticket depends on.
-3. **A4–A8 (apiary)** — A1/A2/A3 are done (A4 itself needs a verification
-   checkbox, not new code, per §5's own finding); coffee's own ticket
-   sequence is closed (T14 done), so this no longer runs "alongside"
-   anything; it's simply the one remaining build track.
+3. **A5–A8 (apiary)** — A1/A2/A3 are done, and A4 is folded into A3 (no
+   standalone build, confirmed live); coffee's own ticket sequence is
+   closed (T14 done), so this no longer runs "alongside" anything; it's
+   simply the one remaining build track.
 4. **Credentials** (Stripe, R2, Google OAuth — all unset in production as of
    the last verified check).
 5. **The real milestone**: a real apiary season actually inspected by

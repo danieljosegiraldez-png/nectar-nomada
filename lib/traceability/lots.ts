@@ -52,7 +52,11 @@ export async function requireLotAccess(
 
 export interface CreateLotInput {
   lotCode: string;
-  lotType: "cherry" | "processing" | "drying" | "green" | "roast" | "sample" | "other";
+  // A3 (22_APIARY_V1_SCOPING_REPORT.md §2) added "honey" to the DB enum;
+  // kept in sync here rather than left stale — a caller creating or
+  // filtering a honey Lot through the generic createLot()/getLotList()
+  // path needs this widened, same as every prior lotType addition.
+  lotType: "cherry" | "processing" | "drying" | "green" | "roast" | "sample" | "other" | "honey";
   organizationId?: string | null;
   projectId?: string | null;
   locationId?: string | null;
