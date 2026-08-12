@@ -52,21 +52,23 @@ model Person {
   createdBy             String?      @map("created_by") @db.Uuid
   creator               UserAccount? @relation("PersonCreatedBy", fields: [createdBy], references: [id])
 
-  userAccount                  UserAccount?
-  projectsAsClient             Project[]
-  storiesAuthored              Story[]
-  assetsCaptured               Asset[]                       @relation("AssetCreatorPerson")
-  competitionEntries           Entry[]
-  selfCreatedStandardsCreated  SelfCreatedStandardDetail[]
-  calibrationSessionsConducted CalibrationSession[]
-  calibrationResults           CalibrationResult[]
-  sensitivityProfiles          EvaluatorSensitivityProfile[]
-  lotTransformationsOperated   LotTransformation[]
-  measurementsOperated         Measurement[]
-  harvestEventsOperated        HarvestEvent[]                @relation("HarvestEventOperator")
-  receivingEventsOperated      ReceivingEvent[]              @relation("ReceivingEventOperator")
-  fermentationRunsOperated     FermentationRun[]             @relation("FermentationRunOperator")
-  dryingTurnEventsOperated     DryingTurnEvent[]             @relation("DryingTurnEventOperator")
+  userAccount                        UserAccount?
+  projectsAsClient                   Project[]
+  storiesAuthored                    Story[]
+  assetsCaptured                     Asset[]                       @relation("AssetCreatorPerson")
+  competitionEntries                 Entry[]
+  selfCreatedStandardsCreated        SelfCreatedStandardDetail[]
+  calibrationSessionsConducted       CalibrationSession[]
+  calibrationResults                 CalibrationResult[]
+  sensitivityProfiles                EvaluatorSensitivityProfile[]
+  lotTransformationsOperated         LotTransformation[]
+  measurementsOperated               Measurement[]
+  harvestEventsOperated              HarvestEvent[]                @relation("HarvestEventOperator")
+  receivingEventsOperated            ReceivingEvent[]              @relation("ReceivingEventOperator")
+  fermentationRunsOperated           FermentationRun[]             @relation("FermentationRunOperator")
+  dryingTurnEventsOperated           DryingTurnEvent[]             @relation("DryingTurnEventOperator")
+  labourEntriesOperated              LabourEntry[]                 @relation("LabourEntryOperator")
+  materialConsumptionEntriesOperated MaterialConsumptionEntry[]    @relation("MaterialConsumptionEntryOperator")
 
   @@map("person")
   @@schema("core")
@@ -99,46 +101,48 @@ model UserAccount {
   createdBy       String?           @map("created_by") @db.Uuid
   creator         UserAccount?      @relation("UserAccountCreatedBy", fields: [createdBy], references: [id])
 
-  createdAccounts                  UserAccount[]                @relation("UserAccountCreatedBy")
-  personsCreated                   Person[]                     @relation("PersonCreatedBy")
-  roleProfilesCreated              RoleProfile[]                @relation("RoleProfileCreatedBy")
-  scopesCreated                    Scope[]                      @relation("ScopeCreatedBy")
-  assignments                      Assignment[]                 @relation("AssignmentToUserAccount")
-  assignmentsGranted               Assignment[]                 @relation("AssignmentGrantedBy")
-  auditEvents                      AuditEvent[]
-  locationsCreated                 Location[]                   @relation("LocationCreatedBy")
-  organizationsCreated             Organization[]               @relation("OrganizationCreatedBy")
-  programsCreated                  Program[]                    @relation("ProgramCreatedBy")
-  projectsCreated                  Project[]                    @relation("ProjectCreatedBy")
-  samplesCreated                   Sample[]                     @relation("SampleCreatedBy")
-  storiesCreated                   Story[]                      @relation("StoryCreatedBy")
-  productsCreated                  Product[]                    @relation("ProductCreatedBy")
-  experiencesCreated               Experience[]                 @relation("ExperienceCreatedBy")
-  productVariantsCreated           ProductVariant[]             @relation("ProductVariantCreatedBy")
-  carts                            Cart[]
-  bookings                         Booking[]
-  orders                           Order[]
-  experienceSessionsCreated        ExperienceSession[]          @relation("ExperienceSessionCreatedBy")
-  assetsCreated                    Asset[]                      @relation("AssetCreatedBy")
-  tasksCreated                     Task[]                       @relation("TaskCreatedBy")
-  tasksAssigned                    Task[]                       @relation("TaskAssignedTo")
-  fieldSubmissions                 FieldSubmission[]            @relation("FieldSubmissionSubmittedBy")
-  sensorySessionsCreated           SensorySession[]             @relation("SensorySessionCreatedBy")
-  assessments                      Assessment[]                 @relation("AssessmentByEvaluator")
-  recommendationsReviewed          Recommendation[]             @relation("RecommendationReviewedBy")
-  competitionJudgeAssignments      CompetitionJudgeAssignment[]
-  competitionResultsFinalized      CompetitionResult[]          @relation("CompetitionResultFinalizedBy")
-  lotsCreated                      Lot[]                        @relation("LotCreatedBy")
-  lotTransformationsCreated        LotTransformation[]          @relation("LotTransformationCreatedBy")
-  quantityEventsCreated            QuantityEvent[]              @relation("QuantityEventCreatedBy")
-  measurementsCreated              Measurement[]                @relation("MeasurementCreatedBy")
-  harvestEventsCreated             HarvestEvent[]               @relation("HarvestEventCreatedBy")
-  receivingEventsCreated           ReceivingEvent[]             @relation("ReceivingEventCreatedBy")
-  fermentationRunsCreated          FermentationRun[]            @relation("FermentationRunCreatedBy")
-  fermentationInterventionsCreated FermentationIntervention[]   @relation("FermentationInterventionCreatedBy")
-  dryingRunsCreated                DryingRun[]                  @relation("DryingRunCreatedBy")
-  dryingTurnEventsCreated          DryingTurnEvent[]            @relation("DryingTurnEventCreatedBy")
-  storageAssignmentsCreated        StorageAssignment[]          @relation("StorageAssignmentCreatedBy")
+  createdAccounts                   UserAccount[]                @relation("UserAccountCreatedBy")
+  personsCreated                    Person[]                     @relation("PersonCreatedBy")
+  roleProfilesCreated               RoleProfile[]                @relation("RoleProfileCreatedBy")
+  scopesCreated                     Scope[]                      @relation("ScopeCreatedBy")
+  assignments                       Assignment[]                 @relation("AssignmentToUserAccount")
+  assignmentsGranted                Assignment[]                 @relation("AssignmentGrantedBy")
+  auditEvents                       AuditEvent[]
+  locationsCreated                  Location[]                   @relation("LocationCreatedBy")
+  organizationsCreated              Organization[]               @relation("OrganizationCreatedBy")
+  programsCreated                   Program[]                    @relation("ProgramCreatedBy")
+  projectsCreated                   Project[]                    @relation("ProjectCreatedBy")
+  samplesCreated                    Sample[]                     @relation("SampleCreatedBy")
+  storiesCreated                    Story[]                      @relation("StoryCreatedBy")
+  productsCreated                   Product[]                    @relation("ProductCreatedBy")
+  experiencesCreated                Experience[]                 @relation("ExperienceCreatedBy")
+  productVariantsCreated            ProductVariant[]             @relation("ProductVariantCreatedBy")
+  carts                             Cart[]
+  bookings                          Booking[]
+  orders                            Order[]
+  experienceSessionsCreated         ExperienceSession[]          @relation("ExperienceSessionCreatedBy")
+  assetsCreated                     Asset[]                      @relation("AssetCreatedBy")
+  tasksCreated                      Task[]                       @relation("TaskCreatedBy")
+  tasksAssigned                     Task[]                       @relation("TaskAssignedTo")
+  fieldSubmissions                  FieldSubmission[]            @relation("FieldSubmissionSubmittedBy")
+  sensorySessionsCreated            SensorySession[]             @relation("SensorySessionCreatedBy")
+  assessments                       Assessment[]                 @relation("AssessmentByEvaluator")
+  recommendationsReviewed           Recommendation[]             @relation("RecommendationReviewedBy")
+  competitionJudgeAssignments       CompetitionJudgeAssignment[]
+  competitionResultsFinalized       CompetitionResult[]          @relation("CompetitionResultFinalizedBy")
+  lotsCreated                       Lot[]                        @relation("LotCreatedBy")
+  lotTransformationsCreated         LotTransformation[]          @relation("LotTransformationCreatedBy")
+  quantityEventsCreated             QuantityEvent[]              @relation("QuantityEventCreatedBy")
+  measurementsCreated               Measurement[]                @relation("MeasurementCreatedBy")
+  harvestEventsCreated              HarvestEvent[]               @relation("HarvestEventCreatedBy")
+  receivingEventsCreated            ReceivingEvent[]             @relation("ReceivingEventCreatedBy")
+  fermentationRunsCreated           FermentationRun[]            @relation("FermentationRunCreatedBy")
+  fermentationInterventionsCreated  FermentationIntervention[]   @relation("FermentationInterventionCreatedBy")
+  dryingRunsCreated                 DryingRun[]                  @relation("DryingRunCreatedBy")
+  dryingTurnEventsCreated           DryingTurnEvent[]            @relation("DryingTurnEventCreatedBy")
+  storageAssignmentsCreated         StorageAssignment[]          @relation("StorageAssignmentCreatedBy")
+  labourEntriesCreated              LabourEntry[]                @relation("LabourEntryCreatedBy")
+  materialConsumptionEntriesCreated MaterialConsumptionEntry[]   @relation("MaterialConsumptionEntryCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -440,6 +444,7 @@ model Organization {
   lots                       Lot[]
   harvestEvents              HarvestEvent[]
   receivingEvents            ReceivingEvent[]
+  labourEntriesProvided      LabourEntry[]
 
   @@map("organization")
   @@schema("core")
@@ -2248,7 +2253,8 @@ model HarvestEvent {
   createdBy        String?         @map("created_by") @db.Uuid
   creator          UserAccount?    @relation("HarvestEventCreatedBy", fields: [createdBy], references: [id])
 
-  assets Asset[]
+  assets        Asset[]
+  labourEntries LabourEntry[]
 
   @@index([locationId])
   @@index([organizationId])
@@ -2290,6 +2296,8 @@ model ReceivingEvent {
   createdAt        DateTime        @default(now()) @map("created_at")
   createdBy        String?         @map("created_by") @db.Uuid
   creator          UserAccount?    @relation("ReceivingEventCreatedBy", fields: [createdBy], references: [id])
+
+  labourEntries LabourEntry[]
 
   @@index([organizationId])
   @@index([locationId])
@@ -2337,10 +2345,12 @@ model FermentationRun {
   createdBy        String?      @map("created_by") @db.Uuid
   creator          UserAccount? @relation("FermentationRunCreatedBy", fields: [createdBy], references: [id])
 
-  interventions   FermentationIntervention[]
-  measurements    Measurement[]
-  transformations LotTransformation[]
-  assets          Asset[]
+  interventions              FermentationIntervention[]
+  measurements               Measurement[]
+  transformations            LotTransformation[]
+  assets                     Asset[]
+  labourEntries              LabourEntry[]
+  materialConsumptionEntries MaterialConsumptionEntry[]
 
   @@map("fermentation_run")
   @@schema("traceability")
@@ -2394,10 +2404,12 @@ model DryingRun {
   createdBy    String?      @map("created_by") @db.Uuid
   creator      UserAccount? @relation("DryingRunCreatedBy", fields: [createdBy], references: [id])
 
-  turningEvents   DryingTurnEvent[]
-  measurements    Measurement[]
-  transformations LotTransformation[]
-  assets          Asset[]
+  turningEvents              DryingTurnEvent[]
+  measurements               Measurement[]
+  transformations            LotTransformation[]
+  assets                     Asset[]
+  labourEntries              LabourEntry[]
+  materialConsumptionEntries MaterialConsumptionEntry[]
 
   @@index([locationId])
   @@map("drying_run")
@@ -2419,6 +2431,110 @@ model DryingTurnEvent {
 
   @@index([dryingRunId])
   @@map("drying_turn_event")
+  @@schema("traceability")
+}
+
+// T12.6 (docs/implementation/20_CAPTURE_OR_LOSE_IT_REPORT.md §2). Labour
+// time is entirely irrecoverable if not captured during the harvest
+// window (ADR-044's capture-or-lose-it clause) — no payroll/timesheet
+// system exists elsewhere in the platform to reconstruct it from later.
+//
+// Deliberately no lotId — every parent here (HarvestEvent/ReceivingEvent/
+// FermentationRun/DryingRun) already sits on the genealogy DAG, so labour
+// inherits lineage for free without a second, potentially ambiguous
+// attachment point. Aggregate headcount + duration, not named individuals
+// or clock-in/out — the field-form reality (§3) is "four people, three
+// hours," not a timesheet; named identity and precise timestamps are on
+// the deliberately-not-captured list (§4), a real, stated choice, not an
+// oversight.
+model LabourEntry {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  harvestEventId    String?          @map("harvest_event_id") @db.Uuid
+  harvestEvent      HarvestEvent?    @relation(fields: [harvestEventId], references: [id])
+  receivingEventId  String?          @map("receiving_event_id") @db.Uuid
+  receivingEvent    ReceivingEvent?  @relation(fields: [receivingEventId], references: [id])
+  fermentationRunId String?          @map("fermentation_run_id") @db.Uuid
+  fermentationRun   FermentationRun? @relation(fields: [fermentationRunId], references: [id])
+  dryingRunId       String?          @map("drying_run_id") @db.Uuid
+  dryingRun         DryingRun?       @relation(fields: [dryingRunId], references: [id])
+
+  workerCount Int     @map("worker_count")
+  hours       Decimal @db.Decimal(6, 2)
+  taskNote    String? @map("task_note")
+
+  // In-kind flag — labour provided by a third party (a partner, a
+  // neighboring farm), not Néctar Nómada's own. Rides this table rather
+  // than a new one; optional, off by default (§3).
+  providedByOrganizationId String?       @map("provided_by_organization_id") @db.Uuid
+  providedByOrganization   Organization? @relation(fields: [providedByOrganizationId], references: [id])
+
+  occurredAt       DateTime @default(now()) @map("occurred_at")
+  operatorPersonId String?  @map("operator_person_id") @db.Uuid
+  operator         Person?  @relation("LabourEntryOperator", fields: [operatorPersonId], references: [id])
+
+  // Required, no default — a photo/labour tally is a fact-bearing record
+  // (ADR-038's reasoning, same as T12.5's Asset.provenanceClass).
+  // dataQuality is the separate "how much do we trust it" axis (verified
+  // vs. provisional) — a same-day headcount and a next-morning
+  // recollection can both be direct_observation, differing only here.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  dataQuality     DataQuality?    @map("data_quality")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("LabourEntryCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([harvestEventId])
+  @@index([receivingEventId])
+  @@index([fermentationRunId])
+  @@index([dryingRunId])
+  @@map("labour_entry")
+  @@schema("traceability")
+}
+
+// T12.6 (§2). Batch-identified material consumption (yeast, cultures,
+// nutrients, treatments) — the batch is the irrecoverable identity fact;
+// a fermentation result isn't fully interpretable later without knowing
+// which culture batch produced it. Scoped to fermentation/drying only
+// (the two stages the source report names) — not lotId, same DAG
+// reasoning as LabourEntry above. materialName/batchLabel are free text,
+// not an FK to a Consumable entity — none exists yet (`18_
+// EQUIPMENT_AND_READINESS_PROMPT_REVISED.md` owns that model); these
+// columns are a natural later FK-swap target once it ships, not this
+// ticket's migration to write. Deliberately not stock-linked — this
+// table records the fact of consumption, never decrements a balance.
+model MaterialConsumptionEntry {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fermentationRunId String?          @map("fermentation_run_id") @db.Uuid
+  fermentationRun   FermentationRun? @relation(fields: [fermentationRunId], references: [id])
+  dryingRunId       String?          @map("drying_run_id") @db.Uuid
+  dryingRun         DryingRun?       @relation(fields: [dryingRunId], references: [id])
+
+  materialName String   @map("material_name")
+  batchLabel   String   @map("batch_label")
+  quantity     Decimal? @db.Decimal(10, 3)
+  unit         String?
+
+  occurredAt       DateTime @default(now()) @map("occurred_at")
+  operatorPersonId String?  @map("operator_person_id") @db.Uuid
+  operator         Person?  @relation("MaterialConsumptionEntryOperator", fields: [operatorPersonId], references: [id])
+
+  // Required, no default — same reasoning as LabourEntry.provenanceClass
+  // above. Fixed to direct_observation at the action layer for every
+  // call site (app/actions/traceability.ts) — none of these entries has
+  // a genuinely ambiguous provenance the way a lab-reported measurement
+  // sometimes does, so no operator-facing picker is exposed for it.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  dataQuality     DataQuality?    @map("data_quality")
+  notes           String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("MaterialConsumptionEntryCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([fermentationRunId])
+  @@index([dryingRunId])
+  @@map("material_consumption_entry")
   @@schema("traceability")
 }
 

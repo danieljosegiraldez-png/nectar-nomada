@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { getLotDetail, getObserverCandidates, TraceabilityAccessError } from "../../../lib/traceability/lots";
+import { getLotDetail, getObserverCandidates, getManageableContext, TraceabilityAccessError } from "../../../lib/traceability/lots";
 import { computeCurrentQuantity } from "../../../lib/traceability/quantity";
 import { getSignedUrlForAsset } from "../../../lib/traceability/media";
 import {
@@ -13,6 +13,9 @@ import {
 } from "../../actions/traceability";
 import { MeasurementForm } from "../../components/traceability/MeasurementForm";
 import { PhotoUploadForm } from "../../components/traceability/PhotoUploadForm";
+import { LabourEntryForm } from "../../components/traceability/LabourEntryForm";
+import { MaterialConsumptionForm } from "../../components/traceability/MaterialConsumptionForm";
+import type { LabourEntry } from "../../../generated/prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -37,8 +40,38 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
 
   const quantity = await computeCurrentQuantity(user.userAccountId, id);
   const { people: observers, selfPersonId } = await getObserverCandidates(user.userAccountId);
+  // T12.6: organizations for the labour form's "provided in-kind by" toggle
+  // — same convenience-not-security-boundary reasoning as getManageableContext's
+  // other dropdowns (lots.ts), reused here rather than a new query.
+  const { organizations } = await getManageableContext(user.userAccountId);
 
-  const { lot, lineage, transformations, quantityEvents, measurements, samples, fermentationRuns, dryingRuns, storageAssignments, tasks, auditEvents, sensoryLinkage, harvestEvent, assets } = detail;
+  const {
+    lot,
+    lineage,
+    transformations,
+    quantityEvents,
+    measurements,
+    samples,
+    fermentationRuns,
+    dryingRuns,
+    storageAssignments,
+    tasks,
+    auditEvents,
+    sensoryLinkage,
+    harvestEvent,
+    receivingEvent,
+    assets,
+    labourEntries,
+    materialConsumptionEntries,
+  } = detail;
+
+  const formatDate = (date: Date) => date.toISOString().slice(0, 16).replace("T", " ");
+  const labourEntryLine = (entry: LabourEntry) =>
+    t("labourEntryLine", { workers: entry.workerCount, hours: entry.hours.toString(), date: formatDate(entry.occurredAt) }) +
+    (entry.taskNote ? ` — ${entry.taskNote}` : "");
+  const consumptionEntryLine = (entry: (typeof materialConsumptionEntries)[number]) =>
+    t("consumptionEntryLine", { material: entry.materialName, batch: entry.batchLabel }) +
+    (entry.quantity != null ? ` — ${entry.quantity.toString()} ${entry.unit ?? ""}` : "");
 
   const activeFermentation = fermentationRuns.find((r) => r.endedAt === null) ?? null;
   const activeDrying = dryingRuns.find((r) => r.endedAt === null) ?? null;
@@ -90,7 +123,46 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         <section className="nn-section">
           <h2>{t("harvestInfoHeading")}</h2>
           <p className="nn-muted">{t("harvestOccurredAtLabel", { date: harvestEvent.harvestedAt.toISOString().slice(0, 16).replace("T", " ") })}</p>
+          {labourEntries.filter((le) => le.harvestEventId === harvestEvent.id).length > 0 ? (
+            <ul>
+              {labourEntries
+                .filter((le) => le.harvestEventId === harvestEvent.id)
+                .map((le) => (
+                  <li key={le.id}>{labourEntryLine(le)}</li>
+                ))}
+            </ul>
+          ) : null}
+          <LabourEntryForm
+            lotId={lot.id}
+            parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }}
+            observers={observers}
+            selfPersonId={selfPersonId}
+            organizations={organizations}
+          />
           <PhotoUploadForm lotId={lot.id} parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }} observers={observers} selfPersonId={selfPersonId} />
+        </section>
+      ) : null}
+
+      {receivingEvent ? (
+        <section className="nn-section">
+          <h2>{t("receivingInfoHeading")}</h2>
+          <p className="nn-muted">{t("receivingOccurredAtLabel", { date: receivingEvent.receivedAt.toISOString().slice(0, 16).replace("T", " ") })}</p>
+          {labourEntries.filter((le) => le.receivingEventId === receivingEvent.id).length > 0 ? (
+            <ul>
+              {labourEntries
+                .filter((le) => le.receivingEventId === receivingEvent.id)
+                .map((le) => (
+                  <li key={le.id}>{labourEntryLine(le)}</li>
+                ))}
+            </ul>
+          ) : null}
+          <LabourEntryForm
+            lotId={lot.id}
+            parent={{ kind: "receivingEvent", receivingEventId: receivingEvent.id }}
+            observers={observers}
+            selfPersonId={selfPersonId}
+            organizations={organizations}
+          />
         </section>
       ) : null}
 
@@ -205,6 +277,34 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               </button>
             </form>
             <PhotoUploadForm lotId={lot.id} parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }} observers={observers} selfPersonId={selfPersonId} />
+
+            {labourEntries.filter((le) => le.fermentationRunId === activeFermentation.id).length > 0 ? (
+              <ul>
+                {labourEntries
+                  .filter((le) => le.fermentationRunId === activeFermentation.id)
+                  .map((le) => (
+                    <li key={le.id}>{labourEntryLine(le)}</li>
+                  ))}
+              </ul>
+            ) : null}
+            <LabourEntryForm
+              lotId={lot.id}
+              parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }}
+              observers={observers}
+              selfPersonId={selfPersonId}
+              organizations={organizations}
+            />
+
+            {materialConsumptionEntries.filter((mc) => mc.fermentationRunId === activeFermentation.id).length > 0 ? (
+              <ul>
+                {materialConsumptionEntries
+                  .filter((mc) => mc.fermentationRunId === activeFermentation.id)
+                  .map((mc) => (
+                    <li key={mc.id}>{consumptionEntryLine(mc)}</li>
+                  ))}
+              </ul>
+            ) : null}
+            <MaterialConsumptionForm lotId={lot.id} parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }} />
           </div>
         ) : null}
 
@@ -265,6 +365,34 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               </button>
             </form>
             <PhotoUploadForm lotId={lot.id} parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }} observers={observers} selfPersonId={selfPersonId} />
+
+            {labourEntries.filter((le) => le.dryingRunId === activeDrying.id).length > 0 ? (
+              <ul>
+                {labourEntries
+                  .filter((le) => le.dryingRunId === activeDrying.id)
+                  .map((le) => (
+                    <li key={le.id}>{labourEntryLine(le)}</li>
+                  ))}
+              </ul>
+            ) : null}
+            <LabourEntryForm
+              lotId={lot.id}
+              parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }}
+              observers={observers}
+              selfPersonId={selfPersonId}
+              organizations={organizations}
+            />
+
+            {materialConsumptionEntries.filter((mc) => mc.dryingRunId === activeDrying.id).length > 0 ? (
+              <ul>
+                {materialConsumptionEntries
+                  .filter((mc) => mc.dryingRunId === activeDrying.id)
+                  .map((mc) => (
+                    <li key={mc.id}>{consumptionEntryLine(mc)}</li>
+                  ))}
+              </ul>
+            ) : null}
+            <MaterialConsumptionForm lotId={lot.id} parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }} />
           </div>
         ) : null}
 

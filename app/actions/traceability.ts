@@ -14,6 +14,12 @@ import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/t
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { createSampleFromLot } from "../../lib/traceability/samples";
 import { requestLotAssetUpload, finalizeLotAssetUpload, type LotAssetParent } from "../../lib/traceability/media";
+import {
+  recordLabourEntry,
+  recordMaterialConsumptionEntry,
+  type LabourEntryParent,
+  type MaterialConsumptionParent,
+} from "../../lib/traceability/operations";
 
 export interface TraceabilityActionState {
   error?: string;
@@ -418,4 +424,78 @@ export async function finalizeLotAssetUploadAction(
 
   revalidatePath(`/lots/${lotId}`);
   return { ok: true };
+}
+
+// --- T12.6: Labour-time and material-consumption capture -----------------
+// (docs/implementation/20_CAPTURE_OR_LOSE_IT_REPORT.md)
+
+function labourParentFromFormData(formData: FormData): LabourEntryParent {
+  const kind = String(formData.get("parentKind") ?? "");
+  const parentId = String(formData.get("parentId") ?? "");
+  switch (kind) {
+    case "harvestEvent":
+      return { kind, harvestEventId: parentId };
+    case "receivingEvent":
+      return { kind, receivingEventId: parentId };
+    case "fermentationRun":
+      return { kind, fermentationRunId: parentId };
+    case "dryingRun":
+      return { kind, dryingRunId: parentId };
+    default:
+      throw new TraceabilityAccessError("invalid_parent_kind");
+  }
+}
+
+function consumptionParentFromFormData(formData: FormData): MaterialConsumptionParent {
+  const kind = String(formData.get("parentKind") ?? "");
+  const parentId = String(formData.get("parentId") ?? "");
+  switch (kind) {
+    case "fermentationRun":
+      return { kind, fermentationRunId: parentId };
+    case "dryingRun":
+      return { kind, dryingRunId: parentId };
+    default:
+      throw new TraceabilityAccessError("invalid_parent_kind");
+  }
+}
+
+export async function recordLabourEntryFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  await recordLabourEntry(user.userAccountId, {
+    lotId,
+    parent: labourParentFromFormData(formData),
+    workerCount: Number(formData.get("workerCount") ?? 0),
+    hours: Number(formData.get("hours") ?? 0),
+    taskNote: emptyToNull(formData.get("taskNote")),
+    providedByOrganizationId: emptyToNull(formData.get("providedByOrganizationId")),
+    operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
+    // Source report §3: a headcount/hours tally reported at the time is a
+    // direct observation — not operator-selectable, matching how T9.5
+    // handled every call site without a genuinely ambiguous provenance.
+    provenanceClass: "direct_observation",
+  });
+
+  revalidatePath(`/lots/${lotId}`);
+}
+
+export async function recordMaterialConsumptionEntryFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  await recordMaterialConsumptionEntry(user.userAccountId, {
+    lotId,
+    parent: consumptionParentFromFormData(formData),
+    materialName: String(formData.get("materialName") ?? ""),
+    batchLabel: String(formData.get("batchLabel") ?? ""),
+    quantity: emptyToNullNumber(formData.get("quantity")),
+    unit: emptyToNull(formData.get("unit")),
+    operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
+    provenanceClass: "direct_observation",
+  });
+
+  revalidatePath(`/lots/${lotId}`);
 }

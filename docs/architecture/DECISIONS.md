@@ -2591,3 +2591,112 @@ T12's own "shows its PanelResult; one without shows nothing" framing. If
 that turns out to be the wrong call in practice, it is a one-line `can()`
 addition, not a schema change — noted here, not resolved, since no
 concrete case has required it yet.
+
+---
+
+## ADR-044 — Amendment to ADR-039: the capture-or-lose-it clause;
+labour-time and material-consumption capture (T12.6) enters v1 scope
+
+**Context.** `20_CAPTURE_OR_LOSE_IT_PROMPT.md` asked a narrow question
+ahead of the 2026 harvest: what is the minimum set of operator-workbench
+fields that must exist before the season starts, so its true operational
+economics can be reconstructed later, even though the analysis itself
+won't be built until v2? The governing principle: money can be applied
+retroactively (a labour rate can be decided in 2027 and multiplied
+against hours recorded now); physical and temporal facts cannot (if
+nobody records that a fermentation took eleven hours of attended work,
+no future system recovers it). The resulting read-only analysis
+(`20_CAPTURE_OR_LOSE_IT_REPORT.md`) found labour time and batch-
+identified material consumption both irrecoverable if not captured
+during the harvest window, proposed a minimal schema and UX, and drafted
+this amendment for review. It has now been implemented (T12.6) and this
+entry formally appends that draft, confirmed against the live decision
+log immediately before appending (ADR-043 was the prior last entry).
+
+**The amendment itself.** ADR-039's deferral list (T11, Notification,
+Research OS migration, etc.) shares one property: none of it forecloses
+anything by waiting. A notification system built in v1.1 works exactly
+as well as one built in v1; a deviation-tracking ticket added mid-
+harvest doesn't lose deviations that hadn't happened yet.
+
+Labour time and batch-identified material consumption during the 2026
+harvest do not share that property. Neither is required by the v1
+falsifiable test (a cupping score and lot report need neither), so by
+the test alone both would defer exactly like T11 and Notification. But
+unlike every item on that list, the window to capture them closes
+permanently on a fixed calendar (Panama's harvest, roughly November
+2026–March 2027) — a labour tally not recorded during a January
+fermentation cannot be added in March, let alone in 2027 when the v2
+economics work is actually built.
+
+**Decision: labour-time and material-consumption capture enter v1
+scope, on this narrow basis — not because the falsifiable test requires
+them, but because deferring them does not preserve the option the way
+every other deferred item does.** This is the same reasoning already
+applied to media attachment (T12.5, `21_T12.5_MEDIA_ATTACHMENT_PROMPT.md`)
+— the two are independent applications of one principle, not two
+unrelated exceptions. This amendment names that principle once: no
+change to any other item on ADR-039's deferred list, no change to the
+v1 test itself, one added criterion for what else can justify v1
+inclusion beyond passing the test — irreversibility against a fixed
+calendar window, argued explicitly, not invoked casually.
+
+**What was actually built (T12.6), matching the source report's own
+field spec.** Two new append-only `traceability` tables, no changes to
+any existing table's required-ness:
+
+- `LabourEntry` — specific nullable FKs per parent (`harvestEventId`,
+  `receivingEventId`, `fermentationRunId`, `dryingRunId`; no `lotId` —
+  every parent already sits on the genealogy DAG, ADR-020 decision 8's
+  no-polymorphic-parent rule applied again), `workerCount`/`hours`
+  required together, optional `taskNote`, an optional
+  `providedByOrganizationId` in-kind flag, required `provenanceClass`
+  (no default, ADR-038's reasoning applied a third time after Measurement
+  and Asset), and a separate nullable `dataQuality` axis — deliberately
+  distinct from `provenanceClass`: a same-day headcount tally and a
+  next-morning recollection can both legitimately be `direct_observation`
+  about what happened, differing only in how much the number is trusted
+  (`verified` vs. `provisional`), which is a `dataQuality` distinction,
+  not a `provenanceClass` one.
+- `MaterialConsumptionEntry` — scoped to `fermentationRunId`/
+  `dryingRunId` only (the two stages the source report names).
+  `materialName`/`batchLabel` required — `batchLabel` is the one
+  irrecoverable identity fact a fermentation result can't be fully
+  interpreted without later; `quantity`/`unit` stay optional even once
+  the form is open, since a fabricated precise number is worse than an
+  honest blank (`DATA_ARCHITECTURE.md` §4). Free text, not an FK to a
+  `Consumable` entity — none exists yet (`18_
+  EQUIPMENT_AND_READINESS_PROMPT_REVISED.md` owns that model); no fourth
+  inventory concept was created here, matching the source report's own
+  hard constraint.
+
+`provenanceClass` is fixed to `direct_observation` at the action layer
+for every call site — not operator-selectable, since none of the six
+attachment points (four for labour, two for consumption) has a
+genuinely ambiguous provenance the way a lab-reported measurement
+sometimes does; a picker here would be exactly the UI friction the
+source report's §5 warns against.
+
+Permission: `lot:manage`, reused rather than a new permission —
+consistent with every other Traceability write function in this phase.
+
+**UI, matching the source report's §3 exactly.** Both forms are small,
+always-optional inline actions (never blocking `startFermentationAction`/
+`endFermentationFormAction`/harvest or receiving recording), wired into
+Lot Detail's Harvest section, a new Receiving section (added for this
+ticket — Lot Detail had no such section before, since T12.5's photos
+attach receiving-stage media via `lotId` directly and never needed one;
+`LabourEntry` does carry a real `receivingEventId` FK per the source
+report's own field spec, so a section exists here that T12.5
+deliberately didn't need), and the existing Active Fermentation/Active
+Drying sections. The golden path is two field-taps and one submit-tap
+for labour (People, Hours) and four field-taps and one submit-tap for
+consumption (Material, Batch label, Quantity, Unit — Unit pre-filled
+`kg`), matching the source report's own tap-count analysis.
+
+**Deliberately not captured, unchanged from the source report's §4**:
+named individual identity (aggregate headcount only), clock-in/clock-out
+timestamps, structured Resource/Equipment identity (`18_`'s job),
+stock-linked material consumption, and labour/consumption during
+Storage and Sample stages. Any monetary field remains entirely out of
+scope — this is the governing principle itself, not a shortfall.

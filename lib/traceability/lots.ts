@@ -468,6 +468,7 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     tasks,
     auditEvents,
     harvestEvent,
+    receivingEvent,
   ] = await Promise.all([
     getLotLineage(userAccountId, lotId),
     prisma.lotTransformation.findMany({
@@ -483,17 +484,20 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
       ? prisma.task.findMany({ where: { projectId: lot.projectId }, orderBy: { createdAt: "desc" }, take: 20 })
       : Promise.resolve([]),
     prisma.auditEvent.findMany({ where: { entityType: "Lot", entityId: lotId }, orderBy: { occurredAt: "desc" } }),
-    // T12.5: the originating HarvestEvent, if this lot came from one — not
-    // previously fetched by getLotDetail (Receiving has no equivalent
-    // fetch here either, since a receiving-stage photo attaches via lotId
-    // directly, needing no extra lookup).
+    // T12.5: the originating HarvestEvent, if this lot came from one.
     prisma.harvestEvent.findUnique({ where: { resultingLotId: lotId } }),
+    // T12.6: the originating ReceivingEvent, if this lot came from one
+    // instead — needed so labour can attach to Receiving specifically
+    // (unlike T12.5's photos, which attach receiving-stage media via
+    // lotId directly since Asset has no receivingEventId FK; labour_entry
+    // does have one, per the source report's own field spec).
+    prisma.receivingEvent.findUnique({ where: { resultingLotId: lotId } }),
   ]);
 
   const fermentationRunIds = [...new Set(transformations.map((t) => t.fermentationRunId).filter((id): id is string => id != null))];
   const dryingRunIds = [...new Set(transformations.map((t) => t.dryingRunId).filter((id): id is string => id != null))];
 
-  const [fermentationRuns, dryingRuns, sensoryLinkage, assets] = await Promise.all([
+  const [fermentationRuns, dryingRuns, sensoryLinkage, assets, labourEntries, materialConsumptionEntries] = await Promise.all([
     fermentationRunIds.length
       ? prisma.fermentationRun.findMany({ where: { id: { in: fermentationRunIds } }, include: { interventions: { orderBy: { occurredAt: "asc" } } } })
       : Promise.resolve([]),
@@ -520,6 +524,24 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
       },
       orderBy: { createdAt: "desc" },
     }),
+    // T12.6: every LabourEntry across this lot's four possible attachment
+    // points — same "grouping is a UI concern" reasoning as assets above.
+    prisma.labourEntry.findMany({
+      where: {
+        OR: [
+          harvestEvent ? { harvestEventId: harvestEvent.id } : undefined,
+          receivingEvent ? { receivingEventId: receivingEvent.id } : undefined,
+          { fermentationRunId: { in: fermentationRunIds } },
+          { dryingRunId: { in: dryingRunIds } },
+        ].filter((clause): clause is NonNullable<typeof clause> => clause != null),
+      },
+      orderBy: { occurredAt: "desc" },
+    }),
+    // T12.6: every MaterialConsumptionEntry, scoped to fermentation/drying only.
+    prisma.materialConsumptionEntry.findMany({
+      where: { OR: [{ fermentationRunId: { in: fermentationRunIds } }, { dryingRunId: { in: dryingRunIds } }] },
+      orderBy: { occurredAt: "desc" },
+    }),
   ]);
 
   return {
@@ -536,7 +558,10 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     auditEvents,
     sensoryLinkage,
     harvestEvent,
+    receivingEvent,
     assets,
+    labourEntries,
+    materialConsumptionEntries,
   };
 }
 

@@ -1244,6 +1244,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | **T11 — Process/Deviation tracking — DEFERRED, v2, see note below** | T6, T7 | traceability | New: `ProcessExecution`, `Deviation` | Extend `fermentation.ts`/`drying.ts` | Surfaced on Lot Detail | Unit | Low | A recorded deviation shows on Lot Detail's Processing section |
 | **T12 — Sensory linkage panel — DONE** | T5, existing Sensory | traceability + sensory (read-only) | None | `getSensoryLinkageForSamples` in `lots.ts`, wired into `getLotDetail` | Sensory panel on Lot Detail | Integration: link renders when present, absent gracefully otherwise | Low — read-only, no sensory schema touched | **Met**: a Lot with a cupped Sample shows its PanelResult; one without renders no Sensory section at all, not an empty one or an error |
 | **T12.5 — Photo/asset attachment across Traceability — DONE, see note below** | T12 | core (Asset) + traceability (read/write) | `Asset` gains `lotId`/`harvestEventId`/`measurementId`/`fermentationRunId`/`dryingRunId`/`sampleId` (nullable, specific FKs) + `provenanceClass` (required)/`sourceReference`/`dataQuality` | `lib/traceability/media.ts`: requestLotAssetUpload, finalizeLotAssetUpload | `PhotoUploadForm.tsx` wired into 6 attachment points (lot/harvest/measurement/fermentation/drying/sample) + Photos section (renders only when present) | Unit (RBAC + provenance + creatorPersonId, R2-independent paths only) | Low — additive schema, no existing table's required-ness changed | **Partially met — see note below**: schema/service/UI verified live end-to-end except the actual R2 PUT (no credentials in any environment) |
+| **T12.6 — Labour-time and material-consumption capture — DONE, see note below** | T12.5 | traceability | New: `LabourEntry` (4 nullable parent FKs: harvestEvent/receivingEvent/fermentationRun/dryingRun), `MaterialConsumptionEntry` (2 nullable parent FKs: fermentationRun/dryingRun) — both `provenanceClass` required, `dataQuality` nullable | `lib/traceability/operations.ts`: recordLabourEntry, recordMaterialConsumptionEntry | `LabourEntryForm.tsx`/`MaterialConsumptionForm.tsx` wired into Harvest, new Receiving section, Active Fermentation, Active Drying | `tests/traceability/operations.test.ts`, 13 tests, real Neon | Low — additive schema, comparable in size to T8 | **Met**: ADR-044 (amendment to ADR-039) records the capture-or-lose-it reasoning; both forms verified live (real Farm Operator, real harvest → labour entry → visible on Lot Detail) against real Neon; TEST fixtures cleaned up |
 | **T13 — Lot Summary Report — DONE, scope note below** | T10, T12 (T11 deferred — see note below) | traceability | None | `lib/traceability/reports.ts`: getLotReport | `/lots/[id]/report`, **print-friendly from the start** (`app/globals.css` `@media print`), `PrintButton.tsx` | `tests/traceability/reports.test.ts`, 6 tests, full harvest→ferment→dry→sample→sensory chain, real Neon | Low | **Met**: report renders origin/lineage/processing/measurements/samples/sensory (+ photos, T12.5 addition) for a real chain built live against Neon, on a print-friendly authenticated page — print CSS verified loaded and targeting nav/buttons/forms; PDF export and login-free external access remain out of scope (ADR-039) |
 | **T14 — Full E2E test + DEMO seed** | T1-T13 | traceability | Seed script additions | None | None | The full coffee-workflow E2E test (§31) | Medium — the integration point that proves everything actually composes | One DEMO harvest-to-sensory chain seeded and passing an automated E2E test, not just a manual verification pass |
 
@@ -1822,6 +1823,54 @@ screenshot of print output. The full six-section, multi-stage case
 `getLotReport`'s reproducibility on a second call and its RBAC denial)
 is covered by `tests/traceability/reports.test.ts` against real Neon.
 All TEST fixtures cleaned up and verified zero remaining.
+
+**T12.6 implementation note**
+(`docs/implementation/20_CAPTURE_OR_LOSE_IT_REPORT.md`, formally entered
+v1 scope via ADR-044's amendment to ADR-039). `lib/traceability/
+operations.ts` follows T12.5's `media.ts` shape exactly: a discriminated
+parent union per table (`LabourEntryParent` — 4 kinds; `MaterialConsumptionParent`
+— 2 kinds), `lotId` carried on every call purely for RBAC scoping (the
+same convention every other Lot Detail form already follows), `lot:manage`
+reused rather than a new permission.
+
+`getLotDetail` (`lots.ts`) gained a `receivingEvent` lookup — a real gap
+T12.5 didn't have: photos attach a receiving-stage record via `lotId`
+directly (Asset has no `receivingEventId`), but `LabourEntry` does carry
+one per the source report's own field spec, so Lot Detail needed a
+Receiving section it never needed before. `labourEntries`/
+`materialConsumptionEntries` are fetched once across every attachment
+point in the same `Promise.all`, grouped by parent in the page component
+— identical "grouping is a UI concern" reasoning as T12.5's `assets`
+query.
+
+`workerCount`/`hours` are enforced positive both by the NOT NULL
+columns and an explicit `LabourValidationError` check in
+`recordLabourEntry` (HTML5 `min`/`required` on the inputs is the first
+line of defense, not the only one). `materialName`/`batchLabel` get the
+same treatment via `MaterialConsumptionValidationError` — an empty or
+whitespace-only string is rejected server-side even though the form
+marks both fields `required`.
+
+Verified live: a real Farm Operator account (via actual signup, Farm
+Operator Assignment granted by script) created a Harvest through the
+service layer, then recorded a labour entry ("4 people, 3 hours")
+through the actual `LabourEntryForm` on `/lots/[id]`, confirmed
+rendering correctly in the Harvest section's entry list afterward,
+against real Neon. A dev-server restart was required to pick up the new
+i18n keys (the same `next dev` stale-messages behavior noted in T12.5
+and T13's own implementation notes — no longer surprising, but still
+required each time new keys are added). All TEST fixtures (the Farm
+Operator account, the harvest lot, the labour entry) cleaned up and
+verified zero remaining.
+
+**Deliberately not touched this ticket**: T13's `getLotReport` does not
+surface labour/consumption data — the ticket's own DoD (origin/lineage/
+processing/measurements/samples/sensory) doesn't name it, and adding a
+new report section wasn't asked for. If a future report revision wants
+to show labour hours or consumed materials, `lib/traceability/
+reports.ts` would need its own lineage-wide query for these tables,
+mirroring how it already handles Processing/Measurements — not built
+here, since nothing in this ticket's own scope required it.
 
 ## 35. Dependency Graph
 
