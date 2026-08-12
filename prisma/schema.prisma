@@ -71,6 +71,7 @@ model Person {
   materialConsumptionEntriesOperated MaterialConsumptionEntry[]    @relation("MaterialConsumptionEntryOperator")
   inspectionsOperated                Inspection[]                  @relation("InspectionOperator")
   colonyEventsOperated               ColonyEvent[]                 @relation("ColonyEventOperator")
+  apiaryHarvestEventsOperated        ApiaryHarvestEvent[]          @relation("ApiaryHarvestEventOperator")
 
   @@map("person")
   @@schema("core")
@@ -148,6 +149,7 @@ model UserAccount {
   hivesCreated                      Hive[]                       @relation("HiveCreatedBy")
   coloniesCreated                   Colony[]                     @relation("ColonyCreatedBy")
   inspectionsCreated                Inspection[]                 @relation("InspectionCreatedBy")
+  apiaryHarvestEventsCreated        ApiaryHarvestEvent[]         @relation("ApiaryHarvestEventCreatedBy")
   colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
 
   @@unique([authProvider, authSubject])
@@ -1946,6 +1948,11 @@ enum LotType {
   roast
   sample
   other
+  // A3 (22_APIARY_V1_SCOPING_REPORT.md §2) — HoneyBatch is a Lot, not a
+  // parallel table: a physically distinct output material reuses the
+  // existing Lot machinery (Sample/Measurement/QuantityEvent/Asset)
+  // unmodified, the same reasoning already applied to `roast`.
+  honey
 
   @@schema("traceability")
 }
@@ -1990,6 +1997,7 @@ model Lot {
   // kind here since that Lot is one of possibly several outputs).
   harvestEvent          HarvestEvent?
   receivingEvent        ReceivingEvent?
+  apiaryHarvestEvent    ApiaryHarvestEvent?
   assets                Asset[]
 
   @@index([organizationId])
@@ -2699,8 +2707,9 @@ model Colony {
   createdBy       String?          @map("created_by") @db.Uuid
   creator         UserAccount?     @relation("ColonyCreatedBy", fields: [createdBy], references: [id])
 
-  inspections  Inspection[]
-  colonyEvents ColonyEvent[]
+  inspections         Inspection[]
+  colonyEvents        ColonyEvent[]
+  apiaryHarvestEvents ApiaryHarvestEvent[]
 
   @@index([hiveId])
   @@map("colony")
@@ -2799,5 +2808,37 @@ model ColonyEvent {
 
   @@index([colonyId])
   @@map("colony_event")
+  @@schema("apiary")
+}
+
+// A3 (§2, §3) — mirrors HarvestEvent's shape exactly (colonyId in place of
+// locationId/organizationId, since colonyId already gives a complete path
+// to Hive -> Location/Project — no need to duplicate that here). Produces
+// a Lot the same way recordHarvestEvent does: atomically, in the same
+// transaction, with a matching QuantityEvent("received") when weight is
+// given. This is the "existing Lot machinery" reuse §2 argues for — no
+// new Sample/Measurement/QuantityEvent/Asset code, only this one small
+// event table plus the LotType addition above.
+model ApiaryHarvestEvent {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  colonyId          String          @map("colony_id") @db.Uuid
+  colony            Colony          @relation(fields: [colonyId], references: [id])
+  occurredAt        DateTime        @map("occurred_at")
+  extractedWeightKg Decimal?        @map("extracted_weight_kg") @db.Decimal(10, 3)
+  framesHarvested   Int?            @map("frames_harvested")
+  operatorPersonId  String?         @map("operator_person_id") @db.Uuid
+  operator          Person?         @relation("ApiaryHarvestEventOperator", fields: [operatorPersonId], references: [id])
+  notes             String?
+  resultingLotId    String          @unique @map("resulting_lot_id") @db.Uuid
+  resultingLot      Lot             @relation(fields: [resultingLotId], references: [id])
+  // ADR-038 pattern — no default, the action layer must state a real class.
+  provenanceClass   ProvenanceClass @map("provenance_class")
+  sourceReference   String?         @map("source_reference")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  createdBy         String?         @map("created_by") @db.Uuid
+  creator           UserAccount?    @relation("ApiaryHarvestEventCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([colonyId])
+  @@map("apiary_harvest_event")
   @@schema("apiary")
 }

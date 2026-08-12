@@ -442,7 +442,7 @@ reassessment below (not part of the original A1-A8 set).
 | **A1 — Apiary site + Hive/Colony schema + RBAC — DONE, see note below** | None (parallel to coffee's T14) | Built: `Location.locationType` gains `apiary_site` (additive enum value, same shape as T4's `plot` addition); new `apiary` Postgres schema, `Hive`/`Colony` tables; `Permission` gains an `apiary` subject (`manage`/`view`), reusing the existing `Assignment → Scope → RoleProfile → Permission` mechanism verbatim, granted to Farm Operator | `lib/apiary/hives.ts`: createHive, createColony, getHive (mirrors `lib/traceability/lots.ts`'s shape, much smaller — no DAG) | None yet (T10-style UI is A5) | **Met**: `tests/apiary/hives.test.ts`, 10 tests, real Neon — RBAC positive (project-scoped and location-scoped Farm Operator) and negative (wrong-project, no-assignment), Colony resolving access via its parent Hive, `apiary_site` round-tripped live. |
 | **A2 — Colony origin + Inspection schema/service** *(as originally proposed — superseded below)* | A1 | New `Inspection` table (collapsed shape per §2 — health/feeding/treatment as fields, not child tables); `Colony` gains origin fields | `lib/apiary/inspections.ts`: recordInspection | None yet (A5) | **Small-medium, closer to T8 than T6.** One table despite many columns; no second table the way `FermentationIntervention` needed one, because the collapse in §1/§2 removed that need. |
 | **A2 — REVISED (2026-08-12): Colony origin + Inspection + ColonyEvent schema/service — DONE, see note below** | A1 | Built: `ColonyOriginType` enum + `Colony.originType`/`originNote`; new `Inspection` table (formal only, per §1a) **and** new `ColonyEvent` table (`feeding`/`treatment`/`passing_observation`, per §1a) — two tables, not one | `lib/apiary/inspections.ts`: recordInspection, listInspectionsForColony; `lib/apiary/colonyEvents.ts`: recordColonyEvent (validates `treatmentBatchLabel` required when `eventType = treatment`, mirroring `recordMaterialConsumptionEntry`), listColonyEventsForColony | None yet (A5) | **Met**: `tests/apiary/inspections.test.ts` (8 tests) + `tests/apiary/colonyEvents.test.ts` (9 tests), real Neon — provenanceClass fixed per §1a's mapping (Inspection always `direct_observation`; ColonyEvent `original_record` for feeding/treatment, `direct_observation` for passing_observation), `treatmentBatchLabel` requiredness, RBAC via the parent Colony's Hive. |
-| **A3 — Harvest/extraction → HoneyBatch as `Lot`** | A1, A2 (revised) | `LotType` gains `honey` (additive enum value, same shape as `roast`); new small `ApiaryHarvestEvent`-equivalent table (mirrors `HarvestEvent`'s shape: `colonyId`, `extractedWeightKg`, `framesHarvested`, `resultingLotId`, provenance) | `lib/apiary/harvest.ts`: recordApiaryHarvest, producing a `Lot` via the *existing* `recordTransformation`-adjacent pattern already proven for coffee's `HarvestEvent` | None yet (A5) | **Small, comparable to T4's schema layer alone** (T4 built two event tables; this is one, since Receiving has no apiary analogue in this scope). |
+| **A3 — Harvest/extraction → HoneyBatch as `Lot` — DONE, see note below** | A1, A2 (revised) | Built: `LotType` gains `honey` (additive enum value, same shape as `roast`); new `ApiaryHarvestEvent` table (mirrors `HarvestEvent`'s shape: `colonyId`, `extractedWeightKg`, `framesHarvested`, `resultingLotId`, provenance) | `lib/apiary/harvest.ts`: recordApiaryHarvest, producing a `Lot` the same way `recordHarvestEvent` does — Lot + event row + a matching `QuantityEvent("received")` in one transaction | None yet (A5) | **Met, and §2's central claim confirmed live, not just architecturally**: `tests/apiary/harvest.test.ts`'s "chain reuse" suite calls the real, unmodified `createSampleFromLot`, `recordMeasurement`, `computeCurrentQuantity`, and `requestLotAssetUpload`/`finalizeLotAssetUpload` against a honey `Lot` this ticket produced — all four passed with zero new code, against real Neon. |
 | **A4 — Sensory linkage** | A3 | None | Near-zero — `createSampleFromLot` (`lib/traceability/samples.ts:56`) already accepts any `Lot`; `getSensoryLinkageForSamples` (`lib/traceability/lots.ts:603`) already works off `Sample`, domain-agnostic | Folds into A5's Lot/HoneyBatch detail view, not a separate screen | **Near-zero — may not warrant a standalone ticket.** Listed separately here for traceability against §3's own checklist item, but recommend folding into A3's definition of done rather than tracking as its own line once actual work starts. |
 | **A5 — Operator UI: Inspection form + ColonyEvent quick-entry + Hive/Colony views + Harvest→HoneyBatch UI** | A0, A1-A4 | None | Server actions mirroring `app/actions/traceability.ts`'s pattern | New `/apiaries`, `/apiaries/[id]`, per-hive/colony detail, the Inspection form and `ColonyEvent` quick-entry points (§4 design, revised) — built offline-aware from the start per §7, not retrofitted | **Medium-large, comparable to T10, larger than originally estimated.** The first UI surfacing everything above, same integration-gap risk T10's own row called out, now also carrying the offline-aware requirement A0 provides — real added surface versus the original estimate, not just a dependency line. |
 | **A6 — Photo attachment** | A5 | `Asset` gains `hiveId`/`colonyId`/`inspectionId`/`colonyEventId` nullable FKs (a `honeyBatchId` is unnecessary — it's a `Lot`, so the existing `lotId` FK already covers it, another small reuse win from §2) | Extends `lib/traceability/media.ts`'s existing request/finalize functions — same functions, new parent-kind cases, not new functions | Reuse `PhotoUploadForm.tsx` wholesale, wired into four new attachment points | **Low, comparable to T12.5 but smaller** — T12.5 built the whole pattern from nothing across 6 points; this is 4 more points on an existing pattern. |
@@ -539,6 +539,80 @@ provenanceClass mappings, the `treatmentBatchLabel` requirement (missing
 and whitespace-only), RBAC positive/negative via the parent Hive, and
 list ordering. Full suite — 19 files, 169 tests — passes together;
 typecheck, lint, and `next build` all clean.
+
+**A3 implementation note (2026-08-12) — §2's central claim, confirmed
+live, not just re-argued architecturally.** `lib/apiary/harvest.ts`'s
+`recordApiaryHarvest` mirrors `lib/traceability/harvest.ts`'s
+`recordHarvestEvent` field-for-field: one transaction creates the `Lot`
+(`lotType: "honey"`), the `ApiaryHarvestEvent` row, and — when
+`extractedWeightKg` is given — a matching `QuantityEvent("received")`,
+skipped when weight isn't recorded (`CLAUDE.md` §3's "missing must remain
+missing," not fabricated as zero). The resulting `Lot`'s
+`organizationId`/`projectId`/`locationId` are derived from the Colony's
+own Hive/Location chain, not re-asked of the caller — the same
+project/organization/location triple every other traceable canonical
+entity carries (T1's own precedent), populated automatically here since
+the Hive→Location chain already exists by the time a colony is
+harvestable.
+
+RBAC checks `apiary:manage` (via `requireApiaryAccess`, resolved off the
+parent Hive) for the harvest event itself — the same choice
+`recordInspection`/`recordColonyEvent` already made, since sourcing honey
+from a colony is an apiary-domain action, not a generic Lot one. This is
+deliberately a different subject than the Lot's own downstream
+operations.
+
+**The reuse claim itself, tested directly rather than assumed:**
+`tests/apiary/harvest.test.ts`'s "chain reuse" suite calls the real,
+unmodified functions from T2/T5/T3/T12.5 against a honey `Lot` this
+ticket produced, against real Neon — not a re-read of their source
+confirming they "should" work:
+
+- **QuantityEvent (T2)** — the `received` event `recordApiaryHarvest`
+  itself creates is summed correctly by `computeCurrentQuantity`, with
+  zero apiary-specific code in `quantity.ts`.
+- **Sample (T5)** — `createSampleFromLot` (permission: `sample:manage`,
+  already granted to Farm Operator) extracts a sample from the honey Lot
+  via a real `sample_extraction` `LotTransformation`, the identical shape
+  coffee's own sample extraction uses.
+- **Measurement (T3)** — `recordMeasurement` records a `moisture` reading
+  (a real honey QC metric) against the honey Lot via `lot:manage`, with
+  zero apiary-specific code in `measurements.ts`.
+- **Asset (T12.5)** — `requestLotAssetUpload`'s pre-R2 RBAC guard denies a
+  wrong-project operator, and `finalizeLotAssetUpload` attaches a photo to
+  the honey Lot via `lot:manage`, with zero apiary-specific code in
+  `media.ts`.
+
+**All four passed.** §2's central architectural claim — that a honey Lot
+reuses the existing Lot machinery with zero new downstream code — holds,
+confirmed by execution rather than by re-reading the source and asserting
+it should.
+
+**One real, narrower finding, not a break of the claim above.** The
+service-layer literal type union `CreateLotInput["lotType"]`
+(`lib/traceability/lots.ts:55`) — used by `createLot`,
+`recordTransformation`'s output typing, and `getLotList`'s filter — does
+not include `"honey"`, even though the DB enum now does. This does not
+block A3: `recordApiaryHarvest` creates its `Lot` via `prisma.lot.create`
+directly inside a transaction, typed against the full generated `LotType`
+enum, the identical approach `recordHarvestEvent`/`recordReceivingEvent`
+already use (neither calls `createLot()` either). The gap only surfaces
+if a future caller tries to create or filter a honey Lot through the
+*generic* `createLot()`/`getLotList()` path — relevant to A5 (the Lot
+List filter dropdown, `app/lots/page.tsx`, is also derived from this same
+union) and to i18n (`lotType_honey` has no message key yet, so a honey Lot
+rendered through the existing `/lots`, `/lots/[id]`, or
+`/lots/[id]/report` pages would show a missing-translation fallback for
+its type badge). Both are UI-layer, A5's stated scope, not A3's — flagged
+here so they don't get silently rediscovered later.
+
+Verified live against real Neon: migration
+`20260812182652_a3_apiary_harvest_extraction` applied cleanly (`honey`
+added to `LotType`, one new table, all FKs and indexes).
+`tests/apiary/harvest.test.ts` (7 tests) covers `recordApiaryHarvest`
+itself (Lot correctness, RBAC positive/negative, unknown colonyId) plus
+the four chain-reuse proofs above. Full suite — 20 files, 176 tests —
+passes together; typecheck, lint, and `next build` all clean.
 
 ---
 
