@@ -2700,3 +2700,160 @@ timestamps, structured Resource/Equipment identity (`18_`'s job),
 stock-linked material consumption, and labour/consumption during
 Storage and Sample stages. Any monetary field remains entirely out of
 scope — this is the governing principle itself, not a shortfall.
+
+---
+
+## ADR-045 — Incident: undefined-`where` unfiltered deletes during T14
+verification; `assertDefinedWhere` adopted as a structural control
+
+**Context.** During T14's own verification (`tests/traceability/e2e.test.ts`
+against real Neon), a first test run hit Neon's cold-start latency against
+Vitest's default 10s `hookTimeout`. `beforeAll` failed partway through,
+after the harvest step had already assigned `cherryLotId` but before any
+later step assigned `dryingStageLotId`, `greenLotId`, `sampleId`,
+`protocolId`, `protocolVersionId`, `sessionId`, `flightId`, or
+`blindSampleId` — those variables were left `undefined`. Vitest still ran
+`afterAll` against this partially-populated fixture state, as it always
+does regardless of how `beforeAll` exited.
+
+**What happened.** `afterAll` called `prisma.panelResult.deleteMany({
+where: { blindSampleId } })` and several structurally identical calls,
+each keyed on a variable that was `undefined` at that point. Prisma's
+client silently drops `undefined`-valued keys from a `where` object
+before sending the query — `{ blindSampleId: undefined }` is not treated
+as "match nothing" or "invalid input," it is treated as `{}`, which
+`deleteMany` executes as an unfiltered delete of every row in the table.
+Ten tables were wiped platform-wide in sequence —`panelResult`,
+`sensoryBlindMapping`, `sensoryBlindSample`, `sensoryFlight`,
+`sensorySession`, `sensoryProtocolVersion`, `sensoryProtocol`, `sample`,
+`measurement`, `storageAssignment` — before the cascade reached
+`quantityEvent.deleteMany({ where: { lotId: { in: [realId, undefined,
+undefined] } } } )`, which threw. This is the one asymmetry that
+actually stopped the cascade: Prisma validates array elements inside a
+filter (`{ in: [...] }`) and rejects an `undefined` member, but performs
+no equivalent check on a bare top-level key. The same silent-drop
+behavior, applied inconsistently across the client's own input surface,
+is what made the bug both possible and, briefly, invisible — every prior
+call had returned normally, because an unfiltered `deleteMany` on an
+already-matching-everything table does not itself raise an error.
+
+Discovered via a read-only row-count check run immediately after the
+failed test, disclosed in full to the user before any further action was
+taken. No destructive action was taken to try to work around it.
+
+**Why this class of bug is dangerous, not just this instance of it.**
+Three properties compound: (1) the failure mode is silent at the call
+site — no exception, no warning, the query simply runs with a different
+`where` than the one written; (2) TypeScript's own types do not catch it
+— every fixture-id variable in `e2e.test.ts` was declared `let x:
+string`, which is true once `beforeAll` succeeds and false exactly when
+it matters, so the type checker offered no protection against the actual
+failure mode; (3) `deleteMany`'s blast radius scales with how wrong the
+filter is, and an empty filter is the maximally wrong case — one missing
+value converts a scoped cleanup into a platform-wide one. Nothing about
+this is specific to `e2e.test.ts` — any `afterAll`/cleanup path anywhere
+in the codebase that builds a `where` from variables assigned during
+`beforeAll` carries the same latent risk the moment `beforeAll` can fail
+partway through, which every real-Neon integration test can.
+
+**Decision: adopt `assertDefinedWhere` as a required structural control
+on every `deleteMany` (and, by the same reasoning, any other
+unrestricted-by-default Prisma write) whose `where` is built from
+variables that are not compile-time constants.** Not a convention, not a
+review checklist item — a function every such call must be wrapped in,
+so the failure mode is a thrown error at the call site instead of a
+silent no-op filter.
+
+`tests/helpers/assertDefinedWhere.ts` recursively validates a `where`
+object: throws `UnsafeWhereClauseError` if the object is empty, or if any
+value at any depth (including inside nested filter objects and arrays)
+is `undefined`. `null` and empty `{ in: [] }` arrays are explicitly
+allowed through — both are real, deliberate values a caller can mean, not
+the missing-value case this guard exists to catch. Composes as
+`deleteMany({ where: assertDefinedWhere({ ... }) })`, a minimal-diff
+wrapper rather than a rewritten call. Applied retroactively to all 155
+`deleteMany` call sites across all 12 test files with an `afterAll`
+cleanup block, not only the three that actually fired during the
+incident — every other site carried the identical latent risk, just
+not yet triggered.
+
+The guard's own correctness is pinned independently of any live incident
+replay: `tests/helpers/assertDefinedWhere.test.ts` covers the guard in
+isolation (empty `where`, top-level and nested `undefined`, one-
+undefined-among-several, `null`/empty-array allowed, a fake `deleteMany`
+proving rejection happens before the delete call is reached).
+`tests/helpers/e2e-cleanup-failsafe.test.ts` goes further and calls
+`e2e.test.ts`'s own real cleanup function (`cleanupE2eFixtures`,
+extracted into the plain module `tests/traceability/e2e-cleanup.ts` so
+importing it doesn't re-trigger `e2e.test.ts`'s own top-level
+`describe`/`beforeAll`/`afterAll`) with the exact partial-fixture shape
+the real incident produced, and confirms it throws
+`UnsafeWhereClauseError` on `blindSampleId` — the actual first vulnerable
+field. Run with zero database environment variables loaded at all, it
+still passes, which is the direct proof the guard fails before any
+network call is made, not merely before a destructive one reaches the
+database.
+
+**Alternatives considered.**
+- *Per-call `if (!x) throw` guards at each of the 155 sites.* Rejected:
+  the same omission that caused the incident (a variable assumed always
+  defined) is exactly the kind of manual step a per-call guard depends on
+  someone remembering to add at every new call site going forward. A
+  composable function that every `deleteMany` is wrapped in cannot be
+  individually forgotten in the same way once it is the established
+  pattern.
+- *Scope every `afterAll` behind a `try/catch` that skips cleanup on any
+  `beforeAll` failure.* Rejected: this hides the underlying defect rather
+  than fixing it, and does nothing for a `beforeAll` that partially
+  succeeds without throwing (a slow step that returns a still-usable but
+  wrong value, for instance) — the actual incident's `where`-shape defect
+  would remain live.
+- *Switch every `deleteMany` to explicit `id`-list deletes only, never a
+  derived filter.* Rejected as disproportionate: several legitimate
+  cleanup queries are relationally derived (`lotId: { in: allLotIds }`,
+  `OR` across input/output joins) and cannot be reduced to a flat id
+  list without losing what they're actually expressing; the defect is
+  the possibility of an `undefined` value reaching Prisma silently, not
+  the shape of the filter itself.
+
+**Recovery.** The affected Neon database was restored via Neon's
+point-in-time recovery from the console (performed by the operator, not
+from this session — no Neon CLI/API credentials exist in this
+environment). The restore did not fully recover DEMO-sourced content in
+the affected tables; those rows were regenerated by re-running
+`prisma/seed.ts` with `SEED_DEMO_CONTENT=true` after confirming directly
+that the seed script contains zero `delete` calls anywhere in it. This
+recovery method works specifically because the seed script is
+idempotent-by-construction for the rows it owns (each `seedDemo*`
+function checks for its own already-existing rows before creating new
+ones) and because the real sensory-protocol content it seeds
+(`sensoryProtocol`/`sensoryProtocolVersion`, added in commit `f1e87ae`)
+is authored content reproducible from the script itself, not data that
+only ever existed as rows in the database. Rows the seed script does not
+source at all (`panelResult`, `measurement`, `storageAssignment` prior to
+T14) were correctly identified as not recovered by this method — an
+inherent property of what the script produces, not additional damage
+from the incident.
+
+**Consequences.**
+- Every `afterAll`/cleanup path in this codebase that derives a `where`
+  from `beforeAll`-assigned variables must use `assertDefinedWhere` (or
+  an equivalent guard providing the same property) going forward; a new
+  test file adding an unguarded `deleteMany` on such a variable is a
+  regression of this decision, not a stylistic omission.
+- Daily automated snapshots have since been configured on the Neon
+  project (operator-configured, outside this codebase), narrowing future
+  exposure between a similar incident and the nearest clean recovery
+  point. This is a mitigation for the consequence, not a substitute for
+  the guard — `assertDefinedWhere` prevents the class of query from
+  executing at all; snapshots only bound how much would be lost if some
+  future, structurally different bug got past it.
+- The underlying Prisma behavior — silently dropping `undefined` object
+  keys from a `where` clause while validating `undefined` inside array
+  filters — is unchanged upstream and not something this platform
+  controls. This decision treats it as a permanent hazard of the ORM to
+  guard against at the call site, not a bug expected to be fixed
+  elsewhere.
+- No production data was affected — the incident occurred against a
+  development/DEMO Neon database used for test verification, not the
+  platform's production environment.

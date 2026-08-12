@@ -59,10 +59,12 @@ The scope is settled — tickets **A0** (offline base mechanism) through **A8**
 (DEMO seed + E2E test) — but **none of A0–A8 is built yet**, and the ADR
 amendment justifying apiary's v1 inclusion is still a draft sitting inside
 the scoping report, not yet appended to `DECISIONS.md` (unlike ADR-044,
-T12.6's own amendment, which is appended). A0 is flagged in its own scoping
-as the largest unknown in the whole set — no service worker/PWA mechanism
-exists anywhere in this codebase yet, which is why `25_` (not yet written)
-exists: scope the offline options before A0 is committed to.
+T12.6's own amendment, which is appended). A0 was originally flagged as
+the largest unknown in the whole set; `25_OFFLINE_OPTIONS_ANALYSIS.md` has
+since sized all three options and recommends Option B (a minimal IndexedDB
+draft queue, no service worker), resizing A0 down to small-medium —
+pending one field check (does Kenneth's phone keep a tab alive offline at
+Cerro Azul). A0 itself is still unbuilt; only its sizing is settled.
 
 ADR-039 carries a clause worth repeating here: these tickets build the
 *capability* to carry a harvest end to end. They do not constitute having
@@ -103,6 +105,7 @@ A0–A8 ship.
 | `22_APIARY_V1_SCOPING_PROMPT.md` | Produced `22_APIARY_V1_SCOPING_REPORT.md` — apiary's v1 boundary, A1-A8 ticket breakdown, draft ADR amendment. *(Uncommitted — on disk, `git status` shows it untracked.)* |
 | `23_RECIPES_FORMULATION_DISTILLATION_PROMPT.md` | Produced `docs/architecture/RECIPES_FORMULATION_AND_DISTILLATION.md` — `DistillationRun`/`SaccharificationRun`/`RoastSession` specified, `Recipe`/`RecipeVersion` designed, two worked traces. *(Uncommitted.)* |
 | `24_APIARY_SCOPING_REVISION_PROMPT.md` | Revised `22_`'s report in place: `Inspection`/`ColonyEvent` model split, offline reassessed as non-deferrable (added ticket A0), status corrected. *(Uncommitted, like the report it revises.)* |
+| `25_OFFLINE_OPTIONS_PROMPT.md` | Produced `25_OFFLINE_OPTIONS_ANALYSIS.md` (commit `c03fa2a`) — sized and compared three options for A0 (full PWA, minimal IndexedDB draft queue, paper). Found the original A0 sizing wrongly included versioned conflict resolution, which doesn't apply to `Inspection`/`ColonyEvent`'s append-only write shape. Recommends **Option B** (minimal draft queue, no service worker), resizing A0 from the set's largest unknown down to small-medium, pending one field check (tab survival on Kenneth's device at Cerro Azul with no signal). Confirms A4's fold into A3 under the same scrutiny. |
 
 ### Pending
 
@@ -146,12 +149,6 @@ independently modelling Resource guarantees divergence — this one owns it.
 
 ## Not yet written
 
-- **`25_` — offline options for apiary's A0.** Scope the actual options
-  before A0 (offline base mechanism) is committed to — `22_APIARY_V1_SCOPING_REPORT.md`
-  §7 concluded offline is not deferrable for apiary's Operator UI
-  specifically, but did not evaluate implementation options in depth. No
-  in-repo service-worker/PWA precedent exists to size A0 against, which is
-  exactly what makes scoping it first worthwhile.
 - **Brand/marketing architecture review** — `09_`'s own actual deliverable
   (`BRAND_MARKETING_COMMUNITY_SALES_ARCHITECTURE.md`), still missing. The
   input document is filed and unblocked by ADR-037; the review itself was
@@ -185,10 +182,12 @@ entities that do not exist is how invented entities enter a schema.
 
 ## Recommended order from here
 
-1. **`25_`** — not yet written; scope apiary's offline options before
-   committing to A0's build.
-2. **Decide A0**, informed by `25_`'s findings — the base offline mechanism
-   every other apiary ticket depends on.
+1. **Confirm A0's field precondition** — `25_OFFLINE_OPTIONS_ANALYSIS.md`
+   recommends Option B (minimal IndexedDB draft queue) contingent on one
+   check: does Kenneth's phone keep a tab alive offline at Cerro Azul. An
+   afternoon test, not a build task.
+2. **A0**, sized small-medium per `25_`'s findings — the base offline
+   mechanism every other apiary ticket depends on.
 3. **A1–A8 (apiary)** — coffee's own ticket sequence is closed (T14 done),
    so this no longer runs "alongside" anything; it's simply the one
    remaining build track.
