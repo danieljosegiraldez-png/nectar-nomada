@@ -13,7 +13,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  schemas    = ["core", "commerce", "experiences", "partner", "sensory", "ai", "competitions", "traceability"]
+  schemas    = ["core", "commerce", "experiences", "partner", "sensory", "ai", "competitions", "traceability", "apiary"]
   // DECISIONS.md ADR-021/ADR-022 — deferred against the local PGlite sandbox
   // (no extension support), enabled now that Neon is the primary database.
   extensions = [postgis]
@@ -143,6 +143,8 @@ model UserAccount {
   storageAssignmentsCreated         StorageAssignment[]          @relation("StorageAssignmentCreatedBy")
   labourEntriesCreated              LabourEntry[]                @relation("LabourEntryCreatedBy")
   materialConsumptionEntriesCreated MaterialConsumptionEntry[]   @relation("MaterialConsumptionEntryCreatedBy")
+  hivesCreated                      Hive[]                       @relation("HiveCreatedBy")
+  coloniesCreated                   Colony[]                     @relation("ColonyCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -343,6 +345,13 @@ enum LocationType {
   // locationType = plot and parentLocationId pointing at the farm's own
   // site-typed row, not a new entity family.
   plot
+  // A1 (22_APIARY_V1_SCOPING_REPORT.md §2) — an Apiary is not a new table,
+  // it's a place holding hives, the same relationship a farm has to its
+  // plots. parentLocationId points at the property/farm site-typed row,
+  // same shape as `plot`. Distinct from OrganizationType.apiary (an
+  // organization that operates an apiary business) — different tables,
+  // different enums, deliberately not conflated (§2's own naming flag).
+  apiary_site
 
   @@schema("core")
 }
@@ -387,6 +396,7 @@ model Location {
   receivingEvents             ReceivingEvent[]
   dryingRuns                  DryingRun[]
   storageAssignments          StorageAssignment[]
+  hives                       Hive[]
 
   @@index([parentLocationId])
   @@index([organizationId])
@@ -532,6 +542,9 @@ model Project {
   lots            Lot[]
   harvestEvents   HarvestEvent[]
   receivingEvents ReceivingEvent[]
+
+  // A1 (22_APIARY_V1_SCOPING_REPORT.md) — module-owned, `apiary` schema.
+  hives Hive[]
 
   @@index([programId])
   @@index([organizationId])
@@ -2567,4 +2580,98 @@ model StorageAssignment {
   @@index([locationId])
   @@map("storage_assignment")
   @@schema("traceability")
+}
+
+// ---------------------------------------------------------------------------
+// Apiary — ticket A1 (docs/implementation/22_APIARY_V1_SCOPING_REPORT.md
+// §2-3), a separate vertical from coffee's `traceability` schema, its own
+// `apiary` Postgres schema per DATA_ARCHITECTURE.md §1's one-schema-per-
+// module convention. Only touches coffee at the RBAC/Location layer
+// (Location.locationType gains `apiary_site`, above), never at any
+// coffee-specific table.
+//
+// `Apiary` itself is not a table — it's a Location (`apiary_site`), the
+// same relationship a farm has to its plots (§2). `Hive` is the physical,
+// addressable structure; `Colony` is the living occupant, genuinely
+// distinct even though they're 1:1 most of the time — a colony can die,
+// swarm, or be requeened while the hive box persists (§2).
+//
+// A1 scope only: this section does not include Colony's origin fields,
+// Inspection, or ColonyEvent — those are A2 (§3), added as a later,
+// additive migration once A1 lands.
+// ---------------------------------------------------------------------------
+
+enum HiveStatus {
+  active
+  empty
+  retired
+
+  @@schema("apiary")
+}
+
+// Same project/location dual-carry every other RBAC-checked canonical
+// entity uses (Lot, Sample, Story, Product, Experience) — T1's own note
+// on Lot.locationId applies identically here: a Farm Operator Assignment
+// can be scoped to either a project or a location (execution plan §26),
+// and RBAC.md §3's leaf-scope containment rule means a project-scoped
+// Assignment could never reach a Hive at all without projectId — real for
+// A7's actual plan (a Project like Cerro Azul gains the `apiary` domain
+// tag and a Farm Operator Assignment scoped to that Project, not
+// necessarily to the apiary_site Location specifically). Not spelled out
+// in §2's literal field list; added here for the same reason T1 added
+// Lot.locationId beyond its own original sketch.
+model Hive {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identifier  String // e.g. "H-014" — unique within its apiary, not globally
+  locationId  String       @map("location_id") @db.Uuid // the Apiary (Location.locationType = apiary_site)
+  location    Location     @relation(fields: [locationId], references: [id])
+  projectId   String?      @map("project_id") @db.Uuid
+  project     Project?     @relation(fields: [projectId], references: [id])
+  installedAt DateTime?    @map("installed_at")
+  status      HiveStatus   @default(active)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  createdBy   String?      @map("created_by") @db.Uuid
+  creator     UserAccount? @relation("HiveCreatedBy", fields: [createdBy], references: [id])
+
+  colonies Colony[]
+
+  @@unique([locationId, identifier])
+  @@index([locationId])
+  @@index([projectId])
+  @@map("hive")
+  @@schema("apiary")
+}
+
+enum ColonyStatus {
+  active
+  dead
+  absconded
+
+  @@schema("apiary")
+}
+
+// Genuinely distinct from Hive even though 1:1 most of the time (§2).
+// `hiveId` is reassignable (a colony can move hives) — no move operation
+// exists yet in A1, this is schema-only; append-only history for a move,
+// if ever needed, is a later concern (same "not built speculatively"
+// discipline as everywhere else in this schema, §13).
+model Colony {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hiveId          String          @map("hive_id") @db.Uuid
+  hive            Hive            @relation(fields: [hiveId], references: [id])
+  status          ColonyStatus    @default(active)
+  startedAt       DateTime        @map("started_at")
+  // ADR-038 pattern, applied here per 22_APIARY_V1_SCOPING_REPORT.md §1's
+  // explicit instruction — no default, the action layer must state a real
+  // class. Origin fields (purchased/captured/split) are A2, not A1 — see
+  // this section's own header note.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  dataQuality     DataQuality?    @map("data_quality")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  createdBy       String?         @map("created_by") @db.Uuid
+  creator         UserAccount?    @relation("ColonyCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([hiveId])
+  @@map("colony")
+  @@schema("apiary")
 }

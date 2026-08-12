@@ -51,6 +51,13 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { resourceType: "lot", action: "view", description: "View lot detail, lineage, and measurements." },
   { resourceType: "sample", action: "manage", description: "Create samples, including from a traceable lot." },
 
+  // A1 (docs/implementation/22_APIARY_V1_SCOPING_REPORT.md §3) — a new
+  // subject, not folded into `lot`: Hive/Colony are not Lots (§2), and the
+  // apiary vertical has its own dependency chain, separate from coffee's
+  // traceability schema.
+  { resourceType: "apiary", action: "manage", description: "Create/manage hives and colonies, and record apiary field data." },
+  { resourceType: "apiary", action: "view", description: "View hive/colony detail." },
+
   { resourceType: "classification", action: "clear_registered", description: "Access records classified Registered." },
   { resourceType: "classification", action: "clear_partner", description: "Access records classified Partner." },
   { resourceType: "classification", action: "clear_internal", description: "Access records classified Internal." },
@@ -153,15 +160,20 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
     name: "Farm Operator",
     description:
       "Create/transform lots and record measurements, fermentation/drying/storage runs, and samples " +
-      "within an assigned project or location. Intended scope: project or location — the same " +
-      "Assignment mechanism already proven for Partner Field Collector, since a real operator often " +
-      "works across multiple projects at one physical site rather than one project alone " +
+      "within an assigned project or location. Also covers apiary (hives/colonies, A1) — extending " +
+      "this profile rather than adding a parallel one, since the same person (e.g. Kenneth) often " +
+      "works both coffee and apiary at one site (22_APIARY_V1_SCOPING_REPORT.md §6's draft ADR " +
+      "amendment). Intended scope: project or location — the same Assignment mechanism already " +
+      "proven for Partner Field Collector, since a real operator often works across multiple " +
+      "projects at one physical site rather than one project alone " +
       "(docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md §26, decision record). No approval " +
       "permissions.",
     permissions: [
       ["lot", "manage"],
       ["lot", "view"],
       ["sample", "manage"],
+      ["apiary", "manage"],
+      ["apiary", "view"],
       // Same classification grant as Partner Field Collector (DECISIONS.md
       // ADR-029 decision 2) — an operator on their own assigned project
       // still cannot clear internal/confidential/trade_secret.

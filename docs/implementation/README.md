@@ -56,9 +56,11 @@ database-call proof (`tests/helpers/e2e-cleanup-failsafe.test.ts`).
 `24_APIARY_SCOPING_REVISION_PROMPT.md`: *can the platform carry one apiary
 through a season of inspections to a honey batch with a sensory result?*
 The scope is settled — tickets **A0** (offline base mechanism) through **A8**
-(DEMO seed + E2E test) — but **none of A0–A8 is built yet**, and the ADR
-amendment justifying apiary's v1 inclusion is still a draft sitting inside
-the scoping report, not yet appended to `DECISIONS.md` (unlike ADR-044,
+(DEMO seed + E2E test). **A1 (apiary site + Hive/Colony schema + RBAC) is
+now done** (`tests/apiary/hives.test.ts`, 10 tests, real Neon) — the first
+apiary ticket built. **A0, A2–A8 remain unbuilt.** The ADR amendment
+justifying apiary's v1 inclusion is still a draft sitting inside the
+scoping report, not yet appended to `DECISIONS.md` (unlike ADR-044,
 T12.6's own amendment, which is appended). A0 was originally flagged as
 the largest unknown in the whole set; `25_OFFLINE_OPTIONS_ANALYSIS.md` has
 since sized all three options and recommends Option B (a minimal IndexedDB
@@ -188,9 +190,9 @@ entities that do not exist is how invented entities enter a schema.
    afternoon test, not a build task.
 2. **A0**, sized small-medium per `25_`'s findings — the base offline
    mechanism every other apiary ticket depends on.
-3. **A1–A8 (apiary)** — coffee's own ticket sequence is closed (T14 done),
-   so this no longer runs "alongside" anything; it's simply the one
-   remaining build track.
+3. **A2–A8 (apiary)** — A1 is done; coffee's own ticket sequence is closed
+   (T14 done), so this no longer runs "alongside" anything; it's simply the
+   one remaining build track.
 4. **Credentials** (Stripe, R2, Google OAuth — all unset in production as of
    the last verified check).
 5. **The real milestone**: a real apiary season actually inspected by

@@ -439,7 +439,7 @@ reassessment below (not part of the original A1-A8 set).
 | Ticket | Depends on | Schema | Backend | Frontend | Size, relative to built tickets |
 |---|---|---|---|---|---|
 | **A0 — Offline base mechanism** *(added 2026-08-12, see §7)* | None (infrastructure, can start in parallel with A1) | `offline.draft_record`, `offline.sync_conflict` per `OFFLINE_FIELD_CAPABILITY.md` §3-4, scoped to A5's forms only — no map-tile caching (`MAP_AND_TERRITORY.md`'s own need, not required here) | Service worker + IndexedDB draft queue + sync + versioned conflict resolution (never last-write-wins, per `OFFLINE_FIELD_CAPABILITY.md` §4) | Persistent offline indicator; "sync now" control | **Large — the single biggest unknown in this whole set.** Nothing built so far in this project touches a service worker or PWA infrastructure at all; there is no in-repo precedent to size against, unlike every other ticket in this table. Likely larger than A5. Flagged, not minimized. |
-| **A1 — Apiary site + Hive/Colony schema + RBAC** | None (parallel to coffee's T14) | `Location.locationType` gains `apiary_site` (additive enum value, same shape as T4's `plot` addition); new `Hive`, `Colony` tables; `Permission` gains an `apiary` subject (`manage`/`view`), reusing the existing `Assignment → Scope → RoleProfile → Permission` mechanism verbatim | `lib/apiary/hives.ts`: createHive, createColony (mirrors `lib/traceability/lots.ts`'s shape, much smaller — no DAG) | None yet (T10-style UI is A5) | **Small — between T8 and T9.** Two small tables, no transformation DAG, RBAC catalog addition is data, not new mechanics. |
+| **A1 — Apiary site + Hive/Colony schema + RBAC — DONE, see note below** | None (parallel to coffee's T14) | Built: `Location.locationType` gains `apiary_site` (additive enum value, same shape as T4's `plot` addition); new `apiary` Postgres schema, `Hive`/`Colony` tables; `Permission` gains an `apiary` subject (`manage`/`view`), reusing the existing `Assignment → Scope → RoleProfile → Permission` mechanism verbatim, granted to Farm Operator | `lib/apiary/hives.ts`: createHive, createColony, getHive (mirrors `lib/traceability/lots.ts`'s shape, much smaller — no DAG) | None yet (T10-style UI is A5) | **Met**: `tests/apiary/hives.test.ts`, 10 tests, real Neon — RBAC positive (project-scoped and location-scoped Farm Operator) and negative (wrong-project, no-assignment), Colony resolving access via its parent Hive, `apiary_site` round-tripped live. |
 | **A2 — Colony origin + Inspection schema/service** *(as originally proposed — superseded below)* | A1 | New `Inspection` table (collapsed shape per §2 — health/feeding/treatment as fields, not child tables); `Colony` gains origin fields | `lib/apiary/inspections.ts`: recordInspection | None yet (A5) | **Small-medium, closer to T8 than T6.** One table despite many columns; no second table the way `FermentationIntervention` needed one, because the collapse in §1/§2 removed that need. |
 | **A2 — REVISED (2026-08-12): Colony origin + Inspection + ColonyEvent schema/service** | A1 | New `Inspection` table (formal only, per §1a) **and** new `ColonyEvent` table (`feeding`/`treatment`/`passing_observation`, per §1a) — two tables, not one; `Colony` gains origin fields | `lib/apiary/inspections.ts`: recordInspection; `lib/apiary/colonyEvents.ts`: recordColonyEvent (validates `treatmentBatchLabel` required when `eventType = treatment`, mirroring `recordMaterialConsumptionEntry`) | None yet (A5) | **Small-medium, between T8 and T6 — one step up from the original estimate.** Two tables instead of one, but both small and no transformation DAG; still well short of T6's size (which paired a run *and* built a second table for a fundamentally different reason — a long-lived process, not a type-discriminated log). |
 | **A3 — Harvest/extraction → HoneyBatch as `Lot`** | A1, A2 (revised) | `LotType` gains `honey` (additive enum value, same shape as `roast`); new small `ApiaryHarvestEvent`-equivalent table (mirrors `HarvestEvent`'s shape: `colonyId`, `extractedWeightKg`, `framesHarvested`, `resultingLotId`, provenance) | `lib/apiary/harvest.ts`: recordApiaryHarvest, producing a `Lot` via the *existing* `recordTransformation`-adjacent pattern already proven for coffee's `HarvestEvent` | None yet (A5) | **Small, comparable to T4's schema layer alone** (T4 built two event tables; this is one, since Receiving has no apiary analogue in this scope). |
@@ -458,6 +458,37 @@ will be there, not in A1-A4. **A0 changes this picture** — it's
 infrastructure with no coffee-side analogue, so it doesn't compete with
 T14 for the same files, but it is now the largest unknown in the entire
 sequencing plan (see §7), and A5 cannot start in earnest ahead of it.
+
+**A1 implementation note (2026-08-12), one deliberate deviation from this
+section's own literal field list, same class as T1's own precedent.**
+`Hive` gained a `projectId` (nullable) alongside `locationId`, which §2's
+field list didn't spell out ("identifier, locationId (the Apiary), install
+date, status"). Reasoning, not an oversight: A7's own plan has a Farm
+Operator's Assignment scoped to a *Project* (e.g. Cerro Azul, which gains
+the `apiary` domain tag) at least as often as to the apiary_site *Location*
+specifically. RBAC.md §3's leaf-scope containment rule means a
+project-scoped Assignment can only authorize a resource that itself
+resolves to that project — without `projectId`, a Hive would only ever be
+reachable by a location-scoped Assignment, silently breaking A7's own
+design. This is the identical gap and fix T1's own implementation note
+already recorded for `Lot.locationId` (added beyond its original sketch for
+the same leaf-scope-containment reason) — applied here in the opposite
+direction (project added to a location-first entity, not the reverse), not
+a new kind of decision. `Colony` carries no `projectId`/`locationId` of its
+own; RBAC resolves it via its parent `Hive`, the same pattern
+`StorageAssignment`/`Sample` already use against their parent `Lot`.
+
+Verified live against real Neon: migration
+`20260812171131_a1_apiary_hive_colony` applied cleanly (new `apiary`
+schema, two enums, two tables, all FKs and indexes); a Farm Operator scoped
+to a Project and a separate one scoped directly to the apiary_site Location
+both created Hives successfully; a wrong-project operator and a
+no-Assignment user were both denied; Colony creation resolved and denied
+access via its parent Hive's own scope, not an independent check. RBAC
+catalog change re-seeded (`prisma/seed.ts`, idempotent upserts — no
+`SEED_DEMO_CONTENT` needed, `apiary:manage`/`apiary:view` are seeded
+unconditionally alongside every other permission). Full suite — 17 files,
+152 tests — passes together; typecheck, lint, and `next build` all clean.
 
 ---
 
