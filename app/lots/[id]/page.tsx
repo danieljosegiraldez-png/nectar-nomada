@@ -36,7 +36,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   const quantity = await computeCurrentQuantity(user.userAccountId, id);
   const { people: observers, selfPersonId } = await getObserverCandidates(user.userAccountId);
 
-  const { lot, lineage, transformations, quantityEvents, measurements, samples, fermentationRuns, dryingRuns, storageAssignments, tasks, auditEvents } = detail;
+  const { lot, lineage, transformations, quantityEvents, measurements, samples, fermentationRuns, dryingRuns, storageAssignments, tasks, auditEvents, sensoryLinkage } = detail;
 
   const activeFermentation = fermentationRuns.find((r) => r.endedAt === null) ?? null;
   const activeDrying = dryingRuns.find((r) => r.endedAt === null) ?? null;
@@ -295,6 +295,28 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           </ul>
         )}
       </section>
+
+      {samples.some((s) => sensoryLinkage[s.id]?.length) ? (
+        <section className="nn-section">
+          <h2>{t("sensoryHeading")}</h2>
+          <ul>
+            {samples.flatMap((s) =>
+              (sensoryLinkage[s.id] ?? []).map((entry) => (
+                <li key={`${s.id}-${entry.sessionId}`}>
+                  {s.sampleCode} — {entry.sessionName}
+                  {entry.overallResult ? (
+                    <>
+                      : {t("sensoryOverallScoreLabel", { mean: entry.overallResult.meanValue, count: entry.overallResult.responseCount })}
+                    </>
+                  ) : (
+                    <> — {t("sensoryAwaitingResultLabel")}</>
+                  )}
+                </li>
+              )),
+            )}
+          </ul>
+        </section>
+      ) : null}
 
       {lot.projectId ? (
         <section className="nn-section">

@@ -443,12 +443,11 @@ export async function getActiveOperations(userAccountId: string) {
  * Full Lot Detail aggregation (§23) — everything the page needs in one
  * call except current quantity (lib/traceability/quantity.ts's
  * computeCurrentQuantity, called separately by the page to avoid a
- * lots.ts → quantity.ts → lots.ts import cycle) and sensory results
- * (T12, out of scope here). `auditEvents` is intentionally queried even
- * though no Phase 1 write path has ever populated `core.AuditEvent` for a
- * traceability entity yet — the section renders correctly empty, which is
- * an honest reflection of unbuilt instrumentation, not a bug in this
- * query.
+ * lots.ts → quantity.ts → lots.ts import cycle). `auditEvents` is
+ * intentionally queried even though no Phase 1 write path has ever
+ * populated `core.AuditEvent` for a traceability entity yet — the section
+ * renders correctly empty, which is an honest reflection of unbuilt
+ * instrumentation, not a bug in this query.
  */
 export async function getLotDetail(userAccountId: string, lotId: string) {
   const lot = await prisma.lot.findUnique({
@@ -488,13 +487,14 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
   const fermentationRunIds = [...new Set(transformations.map((t) => t.fermentationRunId).filter((id): id is string => id != null))];
   const dryingRunIds = [...new Set(transformations.map((t) => t.dryingRunId).filter((id): id is string => id != null))];
 
-  const [fermentationRuns, dryingRuns] = await Promise.all([
+  const [fermentationRuns, dryingRuns, sensoryLinkage] = await Promise.all([
     fermentationRunIds.length
       ? prisma.fermentationRun.findMany({ where: { id: { in: fermentationRunIds } }, include: { interventions: { orderBy: { occurredAt: "asc" } } } })
       : Promise.resolve([]),
     dryingRunIds.length
       ? prisma.dryingRun.findMany({ where: { id: { in: dryingRunIds } }, include: { turningEvents: { orderBy: { occurredAt: "asc" } } } })
       : Promise.resolve([]),
+    getSensoryLinkageForSamples(samples.map((s) => s.id)),
   ]);
 
   return {
@@ -509,7 +509,91 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     storageAssignments,
     tasks,
     auditEvents,
+    sensoryLinkage,
   };
+}
+
+export interface SensoryLinkageEntry {
+  sessionId: string;
+  sessionName: string;
+  sessionStatus: string;
+  revealed: boolean;
+  overallResult: { meanValue: string; minValue: string; maxValue: string; responseCount: number } | null;
+}
+
+/**
+ * T12 (§34): read-only join from Sample → SensoryBlindMapping →
+ * SensoryBlindSample → (SensoryFlight → SensorySession) + PanelResult, so
+ * Lot Detail can show "this lot's cupped sample scored X" without an
+ * empty/error state for a Sample that was never cupped (§30 screen 10's
+ * "renders when present, absent gracefully otherwise").
+ *
+ * Deliberately gated by `lot:view` alone (already enforced by the caller,
+ * getLotDetail), not `blind_mapping:view`. RBAC.md §7's restriction exists
+ * to keep a *judge* from learning which real sample a blind code maps to
+ * before/while scoring — it is not a rule that final, computed results
+ * must stay hidden from the operator of the lot that produced them
+ * forever. This function only ever returns an aggregate `PanelResult`
+ * (mean/min/max/responseCount) and the session's own name/status; it never
+ * returns `blindCode`, the mapping row itself, or any individual
+ * Assessment/evaluator identity — Farm Operator (the actual caller here)
+ * holds neither `blind_mapping:view` nor any `sensory:*` permission, and
+ * none is needed for this specific, narrow exposure.
+ *
+ * Also deliberately does not apply a `classification:clear_*` check
+ * against SensorySession (which defaults to `internal`) — the ticket's own
+ * "shows its PanelResult; one without shows nothing" framing gates on
+ * whether a result has been *computed*, not on the session's own
+ * classification. If that turns out to be the wrong call, it is a
+ * one-line fix (a `can()` check against `session.classification`), not a
+ * schema change.
+ */
+export async function getSensoryLinkageForSamples(sampleIds: string[]): Promise<Record<string, SensoryLinkageEntry[]>> {
+  if (sampleIds.length === 0) return {};
+
+  const samples = await prisma.sample.findMany({
+    where: { id: { in: sampleIds } },
+    select: {
+      id: true,
+      blindMappings: {
+        select: {
+          revealedAt: true,
+          blindSample: {
+            select: {
+              flight: { select: { session: { select: { id: true, name: true, status: true } } } },
+              panelResults: {
+                where: { attributeId: null },
+                select: { meanValue: true, minValue: true, maxValue: true, responseCount: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const result: Record<string, SensoryLinkageEntry[]> = {};
+  for (const sample of samples) {
+    if (sample.blindMappings.length === 0) continue;
+    result[sample.id] = sample.blindMappings.map((mapping) => {
+      const overall = mapping.blindSample.panelResults[0] ?? null;
+      return {
+        sessionId: mapping.blindSample.flight.session.id,
+        sessionName: mapping.blindSample.flight.session.name,
+        sessionStatus: mapping.blindSample.flight.session.status,
+        revealed: mapping.revealedAt != null,
+        overallResult: overall
+          ? {
+              meanValue: overall.meanValue.toString(),
+              minValue: overall.minValue.toString(),
+              maxValue: overall.maxValue.toString(),
+              responseCount: overall.responseCount,
+            }
+          : null,
+      };
+    });
+  }
+  return result;
 }
 
 /**

@@ -1242,7 +1242,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | **T9 — RBAC: Farm Operator + lot/sample permissions — DONE (mostly pre-completed by T1)** | T1 | core (RBAC catalog) | None (seed data) | `lib/rbac/catalog.ts` additions — verified already complete | None | RBAC positive+negative (§31) — one gap closed | Low | Farm Operator scoped correctly; cross-project denial verified |
 | **T10 — Operator Workbench — DONE, scope expanded, see note below** | T1-T9 | traceability | None | Built: `getLotDetail`, `getActiveOperations`, `getLotList`, `getManageableContext`, `getLotSummary` in `lots.ts`; `app/actions/traceability.ts` (14 server actions, all wiring into T4-T8's existing service functions, no new write logic) | Built: `/lots` (Active Operations + Lot List), `/lots/[id]` (full detail), `/lots/new` (Harvest/Receiving), `/lots/[id]/{fermentation,drying,storage,samples}/new`, `MeasurementForm` + inline intervention/turn/end-run forms on Lot Detail (§30 screens 1-9) | E2E: full workflow visible | Medium — the first UI surfacing everything above, likely to surface integration gaps | **Met**: a real TEST Farm Operator account, created via the actual signup flow and granted a project-scoped Assignment, was walked through the full live UI against real Neon — harvest → measurement → start fermentation → intervention → end fermentation (new lot created, quantity/lineage correct) → move storage → create sample (quantity reduced correctly) — with Active Operations and the Lot List reflecting every state change correctly at each step. TEST fixtures fully cleaned up afterward (verified zero rows remain) |
 | **T11 — Process/Deviation tracking — DEFERRED, v2, see note below** | T6, T7 | traceability | New: `ProcessExecution`, `Deviation` | Extend `fermentation.ts`/`drying.ts` | Surfaced on Lot Detail | Unit | Low | A recorded deviation shows on Lot Detail's Processing section |
-| **T12 — Sensory linkage panel** | T5, existing Sensory | traceability + sensory (read-only) | None | Read query joining Sample → SensorySession | Sensory panel on Lot Detail | Integration: link renders when present, absent gracefully otherwise | Low — read-only, no sensory schema touched | A Lot with a cupped Sample shows its PanelResult; one without shows nothing, not an error |
+| **T12 — Sensory linkage panel — DONE** | T5, existing Sensory | traceability + sensory (read-only) | None | `getSensoryLinkageForSamples` in `lots.ts`, wired into `getLotDetail` | Sensory panel on Lot Detail | Integration: link renders when present, absent gracefully otherwise | Low — read-only, no sensory schema touched | **Met**: a Lot with a cupped Sample shows its PanelResult; one without renders no Sensory section at all, not an empty one or an error |
 | **T13 — Lot Summary Report** | T10, T12 (T11 deferred — see note below) | traceability | None | `lib/traceability/reports.ts` | Lot Report page, **designed print-friendly from the start** | E2E: report reproduces from live data | Low | Report renders origin/lineage/processing/measurements/samples/sensory for a real DEMO lot, on a print-friendly authenticated page (browser print-to-PDF produces a client-sendable document) — PDF export and login-free external client access are explicitly out of scope for this ticket (v1 scope decision, ADR-039) |
 | **T14 — Full E2E test + DEMO seed** | T1-T13 | traceability | Seed script additions | None | None | The full coffee-workflow E2E test (§31) | Medium — the integration point that proves everything actually composes | One DEMO harvest-to-sensory chain seeded and passing an automated E2E test, not just a manual verification pass |
 
@@ -1525,10 +1525,12 @@ relationship this schema doesn't have — the dropdown is a convenience,
 lightweight lot fetch + view check for the simpler "record X" pages that
 don't need `getLotDetail`'s full aggregation.
 
-**Sensory (§30 screen 10) and Media are correctly absent from Lot Detail**
-— Sensory linkage is T12's own ticket; Media (`Asset` via
-`ContentEntityLink`) was never built by any Phase 1 ticket, so there's
-nothing to query. **History is present but always empty** — the
+**Sensory (§30 screen 10) was correctly absent from Lot Detail at T10 time**
+— it shipped in T12 (see implementation note below). **Media remains
+absent** — `Asset` via `ContentEntityLink` was never built by any Phase 1
+ticket, so there's nothing to query (v1 media-readiness question is
+tracked separately, `19_ADR_RECONCILIATION_AND_T13_AMENDMENTS.md` Part C).
+**History is present but always empty** — the
 `AuditEvent` query is real and correct, but no T1-T9 write path has ever
 populated `core.AuditEvent` for a traceability entity, so the section
 renders its honest empty state rather than fabricated content, consistent
@@ -1640,6 +1642,44 @@ six sensory tables (`Assessment`, `AttributeResponse`, `PanelResult`,
 `CalibrationResult`, `CompetitionResult`, `FieldSubmission`) carry no
 `provenanceClass` column and were not touched — remains a known open item
 for a future pass.
+
+**T12 implementation note.** `getSensoryLinkageForSamples` (`lots.ts`)
+joins `Sample → SensoryBlindMapping → SensoryBlindSample → (SensoryFlight
+→ SensorySession)` plus `PanelResult` (overall aggregate only,
+`attributeId: null`), wired into `getLotDetail`'s existing
+`Promise.all`. One RBAC decision worth recording explicitly, since it's a
+deliberate departure from the pattern every other Sensory-touching
+function in this codebase follows:
+
+This function is gated by `lot:view` alone (already checked by
+`getLotDetail`'s caller), not `blind_mapping:view` — even though it reads
+through `SensoryBlindMapping`, the table `lib/sensory/service.ts`'s own
+header comment says "every function that would reveal a
+`SensoryBlindMapping` row requires [it]." Farm Operator holds neither
+`blind_mapping:view` nor any `sensory:*` permission (confirmed against
+`lib/rbac/catalog.ts`), so gating this the same way would mean an
+operator could never see their own lot's cupping score without also
+being granted judge-level access — directly contradicting the ticket's
+own DoD. The reasoning: RBAC.md §7's restriction protects a *judge* from
+learning a blind code's real identity before/while scoring; it was never
+a rule that a finished, computed result must stay hidden from the
+operator whose lot produced it. This function only ever returns an
+aggregate `PanelResult` (mean/min/max/responseCount) and the session's
+own name/status — never `blindCode`, the mapping row itself, or any
+individual `Assessment`/evaluator identity, so nothing RBAC.md §7 is
+actually trying to protect is exposed.
+
+Also deliberately does not check `SensorySession.classification`
+(defaults `internal`) against the caller's `classification:clear_*`
+grant — gating is purely "has a `PanelResult` been computed," matching
+the ticket's own "shows its PanelResult; one without shows nothing"
+framing. If this turns out wrong in practice, it's a one-line `can()`
+check to add, not a schema change.
+
+UI: Lot Detail's Sensory section (`app/lots/[id]/page.tsx`) renders only
+when at least one of the lot's Samples has a linkage entry — no section
+header at all otherwise, matching "absent gracefully" rather than an
+empty-state message.
 
 ## 35. Dependency Graph
 
