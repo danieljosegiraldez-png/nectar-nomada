@@ -8,6 +8,7 @@ import { prisma } from "../../lib/db";
 import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceability/quantity";
 import { endDryingRun, recordDryingTurnEvent, startDryingRun } from "../../lib/traceability/drying";
+import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `t7-${Date.now()}`;
 
@@ -57,24 +58,24 @@ afterAll(async () => {
   const testLots = await prisma.lot.findMany({ where: { lotCode: { startsWith: RUN_ID } } });
   const lotIds = testLots.map((l) => l.id);
 
-  await prisma.measurement.deleteMany({ where: { lotId: { in: lotIds } } });
-  await prisma.quantityEvent.deleteMany({ where: { lotId: { in: lotIds } } });
+  await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
+  await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
   const runs = await prisma.dryingRun.findMany({ where: { transformations: { some: { inputs: { some: { lotId: { in: lotIds } } } } } } });
   const runIds = runs.map((r) => r.id);
-  await prisma.dryingTurnEvent.deleteMany({ where: { dryingRunId: { in: runIds } } });
-  await prisma.lotTransformation.deleteMany({ where: { dryingRunId: { in: runIds } } });
-  await prisma.dryingRun.deleteMany({ where: { id: { in: runIds } } });
-  await prisma.lot.deleteMany({ where: { id: { in: lotIds } } });
+  await prisma.dryingTurnEvent.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: runIds } }) });
+  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: runIds } }) });
+  await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) });
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
 
   await prisma.assignment.deleteMany({
-    where: { userAccountId: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } },
+    where: assertDefinedWhere({ userAccountId: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } }),
   });
-  await prisma.scope.deleteMany({ where: { OR: [{ scopeRefId: projectAId }, { scopeRefId: projectBId }] } });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ OR: [{ scopeRefId: projectAId }, { scopeRefId: projectBId }] }) });
   await prisma.userAccount.deleteMany({
-    where: { id: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } },
+    where: assertDefinedWhere({ id: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } }),
   });
-  await prisma.person.deleteMany({ where: { displayName: { contains: RUN_ID } } });
-  await prisma.project.deleteMany({ where: { id: { in: [projectAId, projectBId] } } });
+  await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
+  await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectAId, projectBId] } }) });
 });
 
 describe("Drying — full start/turn/measure/end cycle", () => {

@@ -15,6 +15,7 @@ import {
   LabourValidationError,
   MaterialConsumptionValidationError,
 } from "../../lib/traceability/operations";
+import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `t12-6-ops-${Date.now()}`;
 
@@ -110,29 +111,29 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await prisma.labourEntry.deleteMany({
-    where: { OR: [{ harvestEventId }, { receivingEventId }, { fermentationRunId }, { dryingRunId }] },
+    where: assertDefinedWhere({ OR: [{ harvestEventId }, { receivingEventId }, { fermentationRunId }, { dryingRunId }] }),
   });
-  await prisma.materialConsumptionEntry.deleteMany({ where: { OR: [{ fermentationRunId }, { dryingRunId }] } });
+  await prisma.materialConsumptionEntry.deleteMany({ where: assertDefinedWhere({ OR: [{ fermentationRunId }, { dryingRunId }] }) });
 
   const allLotIds = [harvestLotId, receivingLotId, dryingLotId];
-  await prisma.quantityEvent.deleteMany({ where: { lotId: { in: allLotIds } } });
+  await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: allLotIds } }) });
   await prisma.lotTransformation.deleteMany({
-    where: { OR: [{ inputs: { some: { lotId: { in: allLotIds } } } }, { outputs: { some: { lotId: { in: allLotIds } } } }] },
+    where: assertDefinedWhere({ OR: [{ inputs: { some: { lotId: { in: allLotIds } } } }, { outputs: { some: { lotId: { in: allLotIds } } } }] }),
   });
-  await prisma.fermentationRun.deleteMany({ where: { id: fermentationRunId } });
-  await prisma.dryingRun.deleteMany({ where: { id: dryingRunId } });
-  await prisma.harvestEvent.deleteMany({ where: { id: harvestEventId } });
-  await prisma.receivingEvent.deleteMany({ where: { id: receivingEventId } });
-  await prisma.lot.deleteMany({ where: { id: { in: allLotIds } } });
+  await prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: fermentationRunId }) });
+  await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: dryingRunId }) });
+  await prisma.harvestEvent.deleteMany({ where: assertDefinedWhere({ id: harvestEventId }) });
+  await prisma.receivingEvent.deleteMany({ where: assertDefinedWhere({ id: receivingEventId }) });
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: allLotIds } }) });
 
   const userAccountIds = [authorizedUserAccountId, wrongProjectUserAccountId];
-  await prisma.assignment.deleteMany({ where: { userAccountId: { in: userAccountIds } } });
-  await prisma.scope.deleteMany({ where: { scopeRefId: { in: [projectAId, projectBId] } } });
-  await prisma.userAccount.deleteMany({ where: { id: { in: userAccountIds } } });
-  await prisma.person.deleteMany({ where: { displayName: { contains: RUN_ID } } });
-  await prisma.project.deleteMany({ where: { id: { in: [projectAId, projectBId] } } });
-  await prisma.location.deleteMany({ where: { id: locationId } });
-  await prisma.organization.deleteMany({ where: { id: organizationId } });
+  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: [projectAId, projectBId] } }) });
+  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
+  await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
+  await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectAId, projectBId] } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: locationId }) });
+  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
 });
 
 describe("recordLabourEntry", () => {

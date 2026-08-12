@@ -9,6 +9,7 @@ import { prisma } from "../../lib/db";
 import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 import { recordHarvestEvent, recordReceivingEvent } from "../../lib/traceability/harvest";
+import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `t4-${Date.now()}`;
 
@@ -87,25 +88,25 @@ afterAll(async () => {
   const testLots = await prisma.lot.findMany({ where: { lotCode: { startsWith: RUN_ID } } });
   const lotIds = testLots.map((l) => l.id);
 
-  await prisma.quantityEvent.deleteMany({ where: { lotId: { in: lotIds } } });
+  await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
   await prisma.lotTransformation.deleteMany({
-    where: { OR: [{ inputs: { some: { lotId: { in: lotIds } } } }, { outputs: { some: { lotId: { in: lotIds } } } }] },
+    where: assertDefinedWhere({ OR: [{ inputs: { some: { lotId: { in: lotIds } } } }, { outputs: { some: { lotId: { in: lotIds } } } }] }),
   });
-  await prisma.harvestEvent.deleteMany({ where: { resultingLotId: { in: lotIds } } });
-  await prisma.receivingEvent.deleteMany({ where: { resultingLotId: { in: lotIds } } });
-  await prisma.lot.deleteMany({ where: { id: { in: lotIds } } });
+  await prisma.harvestEvent.deleteMany({ where: assertDefinedWhere({ resultingLotId: { in: lotIds } }) });
+  await prisma.receivingEvent.deleteMany({ where: assertDefinedWhere({ resultingLotId: { in: lotIds } }) });
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
 
   await prisma.assignment.deleteMany({
-    where: { userAccountId: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } },
+    where: assertDefinedWhere({ userAccountId: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } }),
   });
-  await prisma.scope.deleteMany({ where: { OR: [{ scopeRefId: projectAId }, { scopeRefId: projectBId }] } });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ OR: [{ scopeRefId: projectAId }, { scopeRefId: projectBId }] }) });
   await prisma.userAccount.deleteMany({
-    where: { id: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } },
+    where: assertDefinedWhere({ id: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } }),
   });
-  await prisma.person.deleteMany({ where: { displayName: { contains: RUN_ID } } });
-  await prisma.location.deleteMany({ where: { organizationId: farmOrganizationId } });
-  await prisma.project.deleteMany({ where: { id: { in: [projectAId, projectBId] } } });
-  await prisma.organization.deleteMany({ where: { id: { in: [farmOrganizationId, supplierOrganizationId] } } });
+  await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ organizationId: farmOrganizationId }) });
+  await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectAId, projectBId] } }) });
+  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: [farmOrganizationId, supplierOrganizationId] } }) });
 });
 
 describe("recordHarvestEvent — creates the origin Lot end-to-end", () => {

@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { requestLotAssetUpload, finalizeLotAssetUpload } from "../../lib/traceability/media";
+import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `t12-5-media-${Date.now()}`;
 
@@ -53,13 +54,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.asset.deleteMany({ where: { lotId } });
-  await prisma.lot.deleteMany({ where: { id: lotId } });
-  await prisma.assignment.deleteMany({ where: { userAccountId: { in: [authorizedUserAccountId, wrongProjectUserAccountId, unauthorizedUserAccountId] } } });
-  await prisma.scope.deleteMany({ where: { OR: [{ scopeRefId: projectAId }, { scopeRefId: projectBId }] } });
-  await prisma.userAccount.deleteMany({ where: { id: { in: [authorizedUserAccountId, wrongProjectUserAccountId, unauthorizedUserAccountId] } } });
-  await prisma.person.deleteMany({ where: { displayName: { contains: RUN_ID } } });
-  await prisma.project.deleteMany({ where: { id: { in: [projectAId, projectBId] } } });
+  await prisma.asset.deleteMany({ where: assertDefinedWhere({ lotId }) });
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: lotId }) });
+  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: [authorizedUserAccountId, wrongProjectUserAccountId, unauthorizedUserAccountId] } }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ OR: [{ scopeRefId: projectAId }, { scopeRefId: projectBId }] }) });
+  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [authorizedUserAccountId, wrongProjectUserAccountId, unauthorizedUserAccountId] } }) });
+  await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
+  await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectAId, projectBId] } }) });
 });
 
 describe("requestLotAssetUpload — RBAC (pre-R2 guard clauses only)", () => {
