@@ -165,3 +165,33 @@ describe("listInspectionsForColony", () => {
     await expect(listInspectionsForColony(wrongProjectUserAccountId, colonyId)).rejects.toThrow(ApiaryAccessError);
   });
 });
+
+// A5/A0 (25_OFFLINE_OPTIONS_ANALYSIS.md §0) — a retried offline-sync pass
+// must be a no-op, not a duplicate row, checked server-side before insert.
+describe("recordInspection — clientDraftId idempotency", () => {
+  it("a retried call with the same clientDraftId returns the existing row, not a duplicate", async () => {
+    const clientDraftId = `${RUN_ID}-draft-1`;
+
+    const first = await recordInspection(authorizedUserAccountId, { colonyId, outcome: "nothing_unusual", clientDraftId });
+    const retried = await recordInspection(authorizedUserAccountId, { colonyId, outcome: "nothing_unusual", clientDraftId });
+
+    expect(retried.id).toBe(first.id);
+    const rows = await prisma.inspection.findMany({ where: { clientDraftId } });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("two different clientDraftIds produce two distinct rows", async () => {
+    const first = await recordInspection(authorizedUserAccountId, {
+      colonyId,
+      outcome: "nothing_unusual",
+      clientDraftId: `${RUN_ID}-draft-2a`,
+    });
+    const second = await recordInspection(authorizedUserAccountId, {
+      colonyId,
+      outcome: "nothing_unusual",
+      clientDraftId: `${RUN_ID}-draft-2b`,
+    });
+
+    expect(first.id).not.toBe(second.id);
+  });
+});

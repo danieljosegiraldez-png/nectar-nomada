@@ -30,6 +30,12 @@ export interface RecordInspectionInput {
   temperamentNote?: string | null;
   pestDiseaseFlags?: string | null;
   note?: string | null;
+  // A5/A0 (25_OFFLINE_OPTIONS_ANALYSIS.md §0) — a client-generated id from
+  // the offline draft queue. When present, a retried "Sync now" pass (the
+  // same draft POSTed twice after a dropped response) is a no-op, not a
+  // duplicate row: checked server-side before insert, per §0's own
+  // idempotent-sync finding.
+  clientDraftId?: string | null;
 }
 
 /**
@@ -42,6 +48,11 @@ export interface RecordInspectionInput {
 export async function recordInspection(userAccountId: string, input: RecordInspectionInput) {
   const scope = await resolveColonyScope(input.colonyId);
   await requireApiaryAccess(userAccountId, "manage", [scope]);
+
+  if (input.clientDraftId) {
+    const existing = await prisma.inspection.findUnique({ where: { clientDraftId: input.clientDraftId } });
+    if (existing) return existing;
+  }
 
   const provenanceClass: ProvenanceClass = "direct_observation";
 
@@ -58,6 +69,7 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
       pestDiseaseFlags: input.pestDiseaseFlags ?? null,
       note: input.note ?? null,
       provenanceClass,
+      clientDraftId: input.clientDraftId ?? null,
       createdBy: userAccountId,
     },
   });

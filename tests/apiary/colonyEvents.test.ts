@@ -214,3 +214,41 @@ describe("listColonyEventsForColony", () => {
     expect(first.occurredAt.getTime()).toBeGreaterThanOrEqual(second.occurredAt.getTime());
   });
 });
+
+// A5/A0 (25_OFFLINE_OPTIONS_ANALYSIS.md §0) — same idempotent-sync
+// guarantee as Inspection's own clientDraftId test.
+describe("recordColonyEvent — clientDraftId idempotency", () => {
+  it("a retried call with the same clientDraftId returns the existing row, not a duplicate", async () => {
+    const clientDraftId = `${RUN_ID}-draft-1`;
+
+    const first = await recordColonyEvent(authorizedUserAccountId, {
+      colonyId,
+      eventType: "passing_observation",
+      note: "retried",
+      clientDraftId,
+    });
+    const retried = await recordColonyEvent(authorizedUserAccountId, {
+      colonyId,
+      eventType: "passing_observation",
+      note: "retried",
+      clientDraftId,
+    });
+
+    expect(retried.id).toBe(first.id);
+    const rows = await prisma.colonyEvent.findMany({ where: { clientDraftId } });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("the treatmentBatchLabel validation still runs before the idempotency check on a retry", async () => {
+    // A retried sync of a draft that was never valid to begin with must
+    // still fail every time, not silently "succeed" the second time
+    // because a lookup short-circuited past validation.
+    await expect(
+      recordColonyEvent(authorizedUserAccountId, {
+        colonyId,
+        eventType: "treatment",
+        clientDraftId: `${RUN_ID}-draft-invalid`,
+      }),
+    ).rejects.toThrow(ColonyEventValidationError);
+  });
+});

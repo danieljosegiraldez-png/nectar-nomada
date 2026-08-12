@@ -36,6 +36,9 @@ export interface RecordColonyEventInput {
   treatmentDose?: number | null;
   treatmentDoseUnit?: string | null;
   note?: string | null;
+  // A5/A0 (25_OFFLINE_OPTIONS_ANALYSIS.md §0) — same idempotent-sync
+  // purpose as RecordInspectionInput.clientDraftId.
+  clientDraftId?: string | null;
 }
 
 /**
@@ -65,6 +68,11 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
   const scope = await resolveColonyScope(input.colonyId);
   await requireApiaryAccess(userAccountId, "manage", [scope]);
 
+  if (input.clientDraftId) {
+    const existing = await prisma.colonyEvent.findUnique({ where: { clientDraftId: input.clientDraftId } });
+    if (existing) return existing;
+  }
+
   return prisma.colonyEvent.create({
     data: {
       colonyId: input.colonyId,
@@ -80,6 +88,7 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
       treatmentDoseUnit: input.treatmentDoseUnit ?? null,
       note: input.note ?? null,
       provenanceClass: provenanceClassFor(input.eventType),
+      clientDraftId: input.clientDraftId ?? null,
       createdBy: userAccountId,
     },
   });

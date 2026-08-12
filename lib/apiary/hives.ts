@@ -14,7 +14,7 @@
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import type { ScopeTarget } from "../rbac/types";
-import type { ColonyOriginType, DataQuality, ProvenanceClass } from "../../generated/prisma/client";
+import type { ColonyOriginType, DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
 export class ApiaryAccessError extends Error {}
 
@@ -103,4 +103,123 @@ export async function getHive(userAccountId: string, hiveId: string) {
   if (!hive) throw new ApiaryAccessError("hive_not_found");
   await requireApiaryAccess(userAccountId, "view", [{ projectId: hive.projectId, locationId: hive.locationId }]);
   return hive;
+}
+
+/**
+ * A5 (§3). What apiary_site Locations a user can see for the `/apiaries`
+ * list — the same "aggregate the concrete scope refs an Assignment
+ * actually grants" reasoning `lib/traceability/lots.ts`'s
+ * `resolveLotVisibility` already uses for `/lots`, against the `apiary`
+ * subject instead of `lot`. A platform-scoped Assignment sees every
+ * apiary; a project/location-scoped one sees only apiaries reachable
+ * through those scopes; no qualifying Assignment sees none.
+ */
+interface ApiaryVisibility {
+  mode: "all" | "none" | "scoped";
+  projectIds: string[];
+  locationIds: string[];
+}
+
+async function resolveApiaryVisibility(userAccountId: string, action: "view" | "manage" = "view"): Promise<ApiaryVisibility> {
+  const now = new Date();
+  const assignments = await prisma.assignment.findMany({
+    where: {
+      userAccountId,
+      status: "active",
+      validFrom: { lte: now },
+      OR: [{ validTo: null }, { validTo: { gt: now } }],
+    },
+    include: { scope: true, roleProfile: { include: { permissions: { include: { permission: true } } } } },
+  });
+
+  const granting = assignments.filter((a) =>
+    a.roleProfile.permissions.some((rp) => rp.permission.resourceType === "apiary" && rp.permission.action === action),
+  );
+
+  if (granting.some((a) => a.scope.scopeType === "platform")) {
+    return { mode: "all", projectIds: [], locationIds: [] };
+  }
+
+  const projectIds = [
+    ...new Set(
+      granting
+        .filter((a) => a.scope.scopeType === "project")
+        .map((a) => a.scope.scopeRefId)
+        .filter((id): id is string => id != null),
+    ),
+  ];
+  const locationIds = [
+    ...new Set(
+      granting
+        .filter((a) => a.scope.scopeType === "location")
+        .map((a) => a.scope.scopeRefId)
+        .filter((id): id is string => id != null),
+    ),
+  ];
+
+  if (projectIds.length === 0 && locationIds.length === 0) {
+    return { mode: "none", projectIds: [], locationIds: [] };
+  }
+  return { mode: "scoped", projectIds, locationIds };
+}
+
+/**
+ * Capped at 200, newest-named-first is meaningless for a handful of
+ * apiary sites — ordered by name instead, matching how few rows this
+ * table will realistically ever hold relative to `/lots`.
+ */
+export async function getApiaryList(userAccountId: string) {
+  const visibility = await resolveApiaryVisibility(userAccountId);
+  if (visibility.mode === "none") return [];
+
+  const where: Prisma.LocationWhereInput = {
+    locationType: "apiary_site",
+    ...(visibility.mode === "scoped"
+      ? {
+          OR: [
+            { id: { in: visibility.locationIds } },
+            { hives: { some: { projectId: { in: visibility.projectIds } } } },
+          ],
+        }
+      : {}),
+  };
+
+  return prisma.location.findMany({
+    where,
+    include: { hives: true },
+    orderBy: { name: "asc" },
+    take: 200,
+  });
+}
+
+export async function getApiaryDetail(userAccountId: string, locationId: string) {
+  const location = await prisma.location.findUnique({
+    where: { id: locationId },
+    include: { hives: { include: { colonies: true }, orderBy: { identifier: "asc" } } },
+  });
+  if (!location || location.locationType !== "apiary_site") throw new ApiaryAccessError("apiary_not_found");
+
+  // Reachable either directly (a location-scoped Assignment against this
+  // apiary itself) or through any Hive already sited here (a project-
+  // scoped Assignment against whatever Project that Hive belongs to) —
+  // the same "try every concrete candidate" discipline requireApiaryAccess
+  // already applies everywhere else, just fed more than one candidate.
+  const candidates = [{ locationId: location.id }, ...location.hives.map((h) => ({ projectId: h.projectId, locationId: h.locationId }))];
+  await requireApiaryAccess(userAccountId, "view", candidates);
+
+  return location;
+}
+
+/**
+ * Optional Project dropdown for the "New Hive" form — mirrors
+ * `lib/traceability/lots.ts`'s `getManageableContext` for `lot`, against
+ * `apiary` instead. `Hive.projectId` is genuinely optional (A1's own
+ * note: a location-scoped Assignment already suffices on its own), so an
+ * empty list here just means the form omits the dropdown, not an error.
+ */
+export async function getManageableApiaryProjects(userAccountId: string) {
+  const visibility = await resolveApiaryVisibility(userAccountId, "manage");
+  if (visibility.mode === "none") return [];
+  if (visibility.mode === "all") return prisma.project.findMany({ orderBy: { name: "asc" } });
+  return prisma.project.findMany({ where: { id: { in: visibility.projectIds } }, orderBy: { name: "asc" } });
 }

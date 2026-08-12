@@ -72,15 +72,25 @@ all work against a honey `Lot` with zero new downstream code. **A4
 report's own recommendation, rather than becoming a standalone ticket** —
 `getSensoryLinkageForSamples`'s zero-new-code claim now has a live proof
 too, not just the source read that originally predicted it.
-**A0, A5–A8 remain unbuilt.** The ADR amendment
-justifying apiary's v1 inclusion is still a draft sitting inside the
-scoping report, not yet appended to `DECISIONS.md` (unlike ADR-044,
-T12.6's own amendment, which is appended). A0 was originally flagged as
-the largest unknown in the whole set; `25_OFFLINE_OPTIONS_ANALYSIS.md` has
-since sized all three options and recommends Option B (a minimal IndexedDB
-draft queue, no service worker), resizing A0 down to small-medium —
-pending one field check (does Kenneth's phone keep a tab alive offline at
-Cerro Azul). A0 itself is still unbuilt; only its sizing is settled.
+**A5 (Operator UI) is now done, and A0 (offline base mechanism) was folded
+into it rather than becoming its own ticket** — `25_OFFLINE_OPTIONS_ANALYSIS.md`'s
+Option B (vanilla IndexedDB draft queue, no service worker, explicit "Sync
+now") turned out to be exactly A5's own offline-form problem, so building
+one without the other made no sense. `InspectionForm` and
+`ColonyEventQuickEntry` queue drafts locally and sync via a
+`clientDraftId`-checked-before-insert idempotent action
+(`app/actions/apiary.ts`); `HarvestForm`/`NewHiveForm`/`NewColonyForm`
+stay online-only, per A0's own scope note. Live-verified against real
+Neon: a draft queued while offline stays `pending` and un-synced; on
+reconnect it auto-syncs and the real row appears. `/apiaries`,
+`/apiaries/[id]`, and the per-hive/colony detail page are live in both
+English and Spanish, and `HarvestForm` redirects straight into the
+existing `/lots/[id]` page — no new HoneyBatch screen was needed, the
+strongest practical confirmation yet of §2's "HoneyBatch is just a `Lot`"
+argument. **A6–A8 remain unbuilt.** The ADR amendment justifying apiary's
+v1 inclusion is still a draft sitting inside the scoping report, not yet
+appended to `DECISIONS.md` (unlike ADR-044, T12.6's own amendment, which
+is appended).
 
 ADR-039 carries a clause worth repeating here: these tickets build the
 *capability* to carry a harvest end to end. They do not constitute having
@@ -198,19 +208,13 @@ entities that do not exist is how invented entities enter a schema.
 
 ## Recommended order from here
 
-1. **Confirm A0's field precondition** — `25_OFFLINE_OPTIONS_ANALYSIS.md`
-   recommends Option B (minimal IndexedDB draft queue) contingent on one
-   check: does Kenneth's phone keep a tab alive offline at Cerro Azul. An
-   afternoon test, not a build task.
-2. **A0**, sized small-medium per `25_`'s findings — the base offline
-   mechanism every other apiary ticket depends on.
-3. **A5–A8 (apiary)** — A1/A2/A3 are done, and A4 is folded into A3 (no
-   standalone build, confirmed live); coffee's own ticket sequence is
-   closed (T14 done), so this no longer runs "alongside" anything; it's
-   simply the one remaining build track.
-4. **Credentials** (Stripe, R2, Google OAuth — all unset in production as of
+1. **A6–A8 (apiary)** — A1-A3 are done, A4 folded into A3, and A0 folded
+   into A5 (both confirmed live, no standalone build); coffee's own ticket
+   sequence is closed (T14 done), so this remains the one open build
+   track. A6 (photo attachment) is next in dependency order.
+2. **Credentials** (Stripe, R2, Google OAuth — all unset in production as of
    the last verified check).
-5. **The real milestone**: a real apiary season actually inspected by
+3. **The real milestone**: a real apiary season actually inspected by
    Kenneth, not a demo — and, in parallel, a real 2026 coffee harvest entered
    by a real operator who isn't Daniel. Both are what actually answer
    ADR-039's test and apiary's own. No further architecture pass answers

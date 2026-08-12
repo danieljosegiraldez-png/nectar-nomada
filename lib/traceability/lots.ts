@@ -473,6 +473,7 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     auditEvents,
     harvestEvent,
     receivingEvent,
+    apiaryHarvestEvent,
   ] = await Promise.all([
     getLotLineage(userAccountId, lotId),
     prisma.lotTransformation.findMany({
@@ -496,6 +497,14 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     // lotId directly since Asset has no receivingEventId FK; labour_entry
     // does have one, per the source report's own field spec).
     prisma.receivingEvent.findUnique({ where: { resultingLotId: lotId } }),
+    // A5 (22_APIARY_V1_SCOPING_REPORT.md) — the originating
+    // ApiaryHarvestEvent, if this lot is a honey batch. Mutually exclusive
+    // with harvestEvent/receivingEvent in practice (a Lot originates from
+    // at most one of the three), fetched unconditionally the same way —
+    // cheap for a lot that isn't honey (a single indexed unique lookup
+    // that just returns null), no lotType branching needed to decide
+    // whether to ask.
+    prisma.apiaryHarvestEvent.findUnique({ where: { resultingLotId: lotId } }),
   ]);
 
   const fermentationRunIds = [...new Set(transformations.map((t) => t.fermentationRunId).filter((id): id is string => id != null))];
@@ -563,6 +572,7 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     sensoryLinkage,
     harvestEvent,
     receivingEvent,
+    apiaryHarvestEvent,
     assets,
     labourEntries,
     materialConsumptionEntries,

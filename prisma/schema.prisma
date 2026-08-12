@@ -2751,6 +2751,12 @@ model Inspection {
   // provenanceClass in this codebase (T12.6's own precedent).
   provenanceClass  ProvenanceClass   @map("provenance_class")
   dataQuality      DataQuality?      @map("data_quality")
+  // A5/A0 (25_OFFLINE_OPTIONS_ANALYSIS.md §0/§4) — idempotent sync: a
+  // client-generated draft id, checked server-side before insert, so a
+  // retried "Sync now" pass after a dropped response never writes the
+  // same field entry twice. Nullable — only offline-queued submissions
+  // carry one; a direct online call (if any existed) would not.
+  clientDraftId    String?           @unique @map("client_draft_id")
   createdAt        DateTime          @default(now()) @map("created_at")
   createdBy        String?           @map("created_by") @db.Uuid
   creator          UserAccount?      @relation("InspectionCreatedBy", fields: [createdBy], references: [id])
@@ -2802,6 +2808,8 @@ model ColonyEvent {
   // needed.
   provenanceClass     ProvenanceClass @map("provenance_class")
   dataQuality         DataQuality?    @map("data_quality")
+  // A5/A0 — same idempotent-sync purpose as Inspection.clientDraftId above.
+  clientDraftId       String?         @unique @map("client_draft_id")
   createdAt           DateTime        @default(now()) @map("created_at")
   createdBy           String?         @map("created_by") @db.Uuid
   creator             UserAccount?    @relation("ColonyEventCreatedBy", fields: [createdBy], references: [id])

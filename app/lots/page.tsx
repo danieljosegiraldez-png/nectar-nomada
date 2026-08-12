@@ -14,6 +14,10 @@ const LOT_TYPES: NonNullable<LotListFilters["lotType"]>[] = [
   "roast",
   "sample",
   "other",
+  // A5 (22_APIARY_V1_SCOPING_REPORT.md) — flagged as a gap when
+  // CreateLotInput["lotType"] widened for "honey" (A3/A4 follow-up); this
+  // is the actual UI wiring that gap left undone.
+  "honey",
 ];
 
 export default async function LotsPage({ searchParams }: { searchParams: Promise<{ lotType?: string }> }) {

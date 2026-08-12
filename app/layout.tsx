@@ -30,6 +30,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     <Link href="/my-nectar">{t("myNectar")}</Link>
                     <Link href="/partner">{t("partnerWorkspace")}</Link>
                     <Link href="/lots">{t("lots")}</Link>
+                    <Link href="/apiaries">{t("apiaries")}</Link>
                     <Link href="/sensory">{t("sensory")}</Link>
                     <Link href="/ai">{t("ai")}</Link>
                     <Link href="/competitions">{t("competitions")}</Link>
