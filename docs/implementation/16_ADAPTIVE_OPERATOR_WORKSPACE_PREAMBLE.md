@@ -132,8 +132,12 @@ consulting. Reference them as future context surfaces only.
 
 Quick-capture UX must answer **how an operator states provenance.** T9.5
 removed the silent `direct_observation` default — provenance is now a
-deliberate choice at every write path, and `recordedBy` (who observed) is
-distinct from `createdBy` (who typed it in). So a "+ Measurement" button
+deliberate choice at every write path, and `operatorPersonId` (who
+observed) is distinct from `createdBy` (who typed it in) — the same
+existing field every T1-T13 write path already carries, per ADR-038
+decision 2, which rejected a separate `recordedBy` column precisely
+because `operatorPersonId` already covers this; do not add a new field.
+So a "+ Measurement" button
 cannot just capture a number: the flow has to establish whether this is a
 measured fact, an estimate, or a secondhand report, and who actually
 observed it — in two taps at a drying bed, in sunlight, possibly offline.
