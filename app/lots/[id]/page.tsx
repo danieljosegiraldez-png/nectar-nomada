@@ -111,6 +111,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         <Link href={`/lots/${lot.id}/samples/new`} className="nn-button" style={{ textDecoration: "none" }}>
           {t("createSampleButton")}
         </Link>
+        <Link href={`/lots/${lot.id}/report`} className="nn-button" style={{ textDecoration: "none" }}>
+          {t("viewReportButton")}
+        </Link>
       </div>
 
       <section className="nn-section">

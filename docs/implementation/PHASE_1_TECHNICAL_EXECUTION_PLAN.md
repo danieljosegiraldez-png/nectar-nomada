@@ -1244,7 +1244,7 @@ No `RENAME`, no `MIGRATE` (in the sense of moving data between shapes), no
 | **T11 — Process/Deviation tracking — DEFERRED, v2, see note below** | T6, T7 | traceability | New: `ProcessExecution`, `Deviation` | Extend `fermentation.ts`/`drying.ts` | Surfaced on Lot Detail | Unit | Low | A recorded deviation shows on Lot Detail's Processing section |
 | **T12 — Sensory linkage panel — DONE** | T5, existing Sensory | traceability + sensory (read-only) | None | `getSensoryLinkageForSamples` in `lots.ts`, wired into `getLotDetail` | Sensory panel on Lot Detail | Integration: link renders when present, absent gracefully otherwise | Low — read-only, no sensory schema touched | **Met**: a Lot with a cupped Sample shows its PanelResult; one without renders no Sensory section at all, not an empty one or an error |
 | **T12.5 — Photo/asset attachment across Traceability — DONE, see note below** | T12 | core (Asset) + traceability (read/write) | `Asset` gains `lotId`/`harvestEventId`/`measurementId`/`fermentationRunId`/`dryingRunId`/`sampleId` (nullable, specific FKs) + `provenanceClass` (required)/`sourceReference`/`dataQuality` | `lib/traceability/media.ts`: requestLotAssetUpload, finalizeLotAssetUpload | `PhotoUploadForm.tsx` wired into 6 attachment points (lot/harvest/measurement/fermentation/drying/sample) + Photos section (renders only when present) | Unit (RBAC + provenance + creatorPersonId, R2-independent paths only) | Low — additive schema, no existing table's required-ness changed | **Partially met — see note below**: schema/service/UI verified live end-to-end except the actual R2 PUT (no credentials in any environment) |
-| **T13 — Lot Summary Report** | T10, T12 (T11 deferred — see note below) | traceability | None | `lib/traceability/reports.ts` | Lot Report page, **designed print-friendly from the start** | E2E: report reproduces from live data | Low | Report renders origin/lineage/processing/measurements/samples/sensory for a real DEMO lot, on a print-friendly authenticated page (browser print-to-PDF produces a client-sendable document) — PDF export and login-free external client access are explicitly out of scope for this ticket (v1 scope decision, ADR-039) |
+| **T13 — Lot Summary Report — DONE, scope note below** | T10, T12 (T11 deferred — see note below) | traceability | None | `lib/traceability/reports.ts`: getLotReport | `/lots/[id]/report`, **print-friendly from the start** (`app/globals.css` `@media print`), `PrintButton.tsx` | `tests/traceability/reports.test.ts`, 6 tests, full harvest→ferment→dry→sample→sensory chain, real Neon | Low | **Met**: report renders origin/lineage/processing/measurements/samples/sensory (+ photos, T12.5 addition) for a real chain built live against Neon, on a print-friendly authenticated page — print CSS verified loaded and targeting nav/buttons/forms; PDF export and login-free external access remain out of scope (ADR-039) |
 | **T14 — Full E2E test + DEMO seed** | T1-T13 | traceability | Seed script additions | None | None | The full coffee-workflow E2E test (§31) | Medium — the integration point that proves everything actually composes | One DEMO harvest-to-sensory chain seeded and passing an automated E2E test, not just a manual verification pass |
 
 **T1 implementation notes, two deliberate deviations from the original
@@ -1762,6 +1762,66 @@ open until credentials exist. All TEST fixtures (the Farm Operator
 account, the Lot, plus unrelated debris left over from an earlier
 interrupted parallel test run) were cleaned up and verified zero
 remaining.
+
+**T13 implementation note.** `getLotReport` (`lib/traceability/reports.ts`)
+reuses `getLotDetail`'s RBAC check and aggregation wholesale — no
+independent `requireLotAccess` call, same reasoning as
+`getSensoryLinkageForSamples` and the T12.5 asset query — and adds an
+Origin section (every `HarvestEvent`/`ReceivingEvent` whose
+`resultingLotId` is this lot or any lineage ancestor; plural, since a
+blend genuinely has multiple parents) plus human-readable lineage
+(ancestor/descendant lot codes resolved for display, not bare UUIDs —
+the report is meant to be read on paper, without clicking through the
+app). No new schema — `COMMERCE_OPERATIONS_TOOLS_ARCHITECTURE.md` §N's
+versioned `reporting.report`/`report_version` system remains Phase 2
+input (ADR-020), out of this ticket's scope (Schema: None).
+
+**A real divergence from `getLotDetail`, found by the E2E test, not
+assumed going in:** Processing and Measurements had to be rebuilt
+lineage-wide rather than reused directly. `getLotDetail`'s own
+`fermentationRuns`/`dryingRuns`/`measurements` are scoped to
+transformations/readings that literally name the requested lot as
+input or output — correct for an operator's working view of *this*
+lot, but wrong for a report: a green lot's fermentation stage-change
+names the cherry lot as input and the drying lot as output, never the
+green lot itself, so reusing `getLotDetail`'s scoping produced a green-
+lot report with an empty Processing section and no fermentation
+temperature readings, silently omitting the material's actual history.
+Fixed by having `getLotReport` independently query
+`LotTransformation`/`Measurement`/`StorageAssignment` across `[lotId,
+...ancestorLotIds]` — a report looks backward across the full lineage
+for "how did we get here," while forward-looking information (what a
+lot later became) stays in Lineage's `descendantLots` list, a link to
+that lot's own report, rather than this one's Processing section
+growing to cover material it didn't produce. Samples and Sensory stay
+scoped to the reported lot itself — a sample is *of* that specific lot
+at that specific stage, and belongs on its own report, not folded into
+a descendant's.
+
+Scope note: the ticket's own DoD text lists origin/lineage/processing/
+measurements/samples/sensory. The report also renders a Photos section
+— a deliberate small addition beyond that literal list, T12.5 having
+landed specifically so this report could show real field photos, per
+the media-readiness investigation's own prediction (same "documented
+expansion" pattern as T10's own note).
+
+Verified live: a real Farm Operator account created a Harvest through
+the service layer, viewed on both `/lots/[id]` (confirming the new "View
+report" link) and `/lots/[id]/report` (confirming Origin/Lineage/
+Processing/Measurements/Samples all render their correct
+present/absent state) against real Neon, after a dev-server restart to
+pick up the new i18n keys (same stale-messages lesson as T12.5 — `next
+dev` does not hot-reload `messages/*.json` additions). The `@media
+print` rule was confirmed loaded and targeting the intended selectors
+(`.nn-nav, .nn-back-link, .nn-report-actions, form, button`) via
+`document.styleSheets` inspection — full print-rendering emulation
+isn't available in this session's browser tooling, so the rule's
+presence and selectors were verified directly rather than a rendered
+screenshot of print output. The full six-section, multi-stage case
+(harvest → fermentation → drying → sample → sensory → photo, plus
+`getLotReport`'s reproducibility on a second call and its RBAC denial)
+is covered by `tests/traceability/reports.test.ts` against real Neon.
+All TEST fixtures cleaned up and verified zero remaining.
 
 ## 35. Dependency Graph
 

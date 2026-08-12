@@ -285,3 +285,57 @@ form.nn-form {
   white-space: pre-wrap;
   line-height: 1.7;
 }
+
+.nn-report-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.nn-report-generated {
+  color: var(--nn-ink-muted);
+  font-size: 0.85rem;
+}
+
+.nn-report-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  list-style: none;
+  padding: 0;
+}
+
+.nn-report-photos img {
+  width: 160px;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--nn-border);
+}
+
+/* T13: the Lot Report (/lots/[id]/report) is designed print-friendly from
+   the start (ADR-039) — browser print-to-PDF should produce a clean,
+   client-sendable document with no app chrome, upload widgets, or
+   navigation, none of which mean anything once the page is on paper. */
+@media print {
+  .nn-nav,
+  .nn-back-link,
+  .nn-report-actions,
+  form,
+  button {
+    display: none !important;
+  }
+
+  .nn-main {
+    padding: 0;
+  }
+
+  .nn-shell {
+    max-width: none;
+    padding: 0;
+  }
+
+  body {
+    background: #fff;
+  }
+}
