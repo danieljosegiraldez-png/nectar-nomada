@@ -3394,3 +3394,204 @@ or `SensoryDescriptorResponse` data was loaded, since none was supplied —
 the mechanism is proven by tests only, against real Neon, the same way F1
 and S1 proved their own mechanisms before real field data existed to
 load.
+
+---
+
+## ADR-051 — RO1: Research OS schema, PE-protocol variable modeling,
+statistical discipline
+
+**Context.** `29_BRECHAS_OPERACION_FINCA_INVESTIGACION_MIGRACION.md` §8
+and the `17_` audit (hallazgos 18 and 22) named the same gap twice: more
+than thirty PE post-harvest protocols at Cafelino run real, controlled
+experiments — isolated variables (water source, yeast, fermentation
+orientation, bag position, volume, bed level), a declared control, one
+un-replicated run per treatment — with nowhere to live.
+`Protocol`/`ProtocolVersion` generic was never built (only Sensory's own
+specific version exists), and every variable today lives as prose in a
+single `Comentarios` column ("GrainPro Bag, Spontaneous Wild, vertical
+position 28 cm height cherry mass" — three variables mixed in free text,
+unqueryable).
+
+**Decision 1 — `Recommendation` naming collision resolved by prefix, not
+redesign.** The AI Layer already has a `Recommendation` model (Slice 7,
+`ai` schema: `suggestionType`/`model`/`confidence`/`reviewer`) with an
+unrelated shape. The Research OS entity is named `ResearchRecommendation`,
+matching this chain's own `ResearchProgram`/`ResearchQuestion` prefix
+rather than bolting "Research" on awkwardly elsewhere. The two models
+never reference each other and share no fields beyond the English word.
+
+**Decision 2 — catalog versus closed-enum, per variable, exactly as the
+product owner specified.** Two distinct shapes, respected per variable,
+never converted either direction. **Catalog** (Recipiente/equipo de
+fermentado, Levadura/cultivo, Método de inoculación, Grado de proceso,
+Cuarto de secado): a named `VariableCatalog` + `VariableCatalogValue`
+pair, extendable by insert, never migration — the same data-not-schema
+pattern `RBAC.md` §2 already proves for Role Profiles; `lib/research/
+catalogs.ts` seeds the real starting values. **Closed enum** (Fuente de
+agua, Posición de masa): fixed, small, product-owner-confirmed
+vocabularies not expected to grow, stored as `ProtocolVariable.enumValues`
+(a native array), frozen at creation — changing the set means a new
+`ProtocolVersion`, the same immutability every other field on a version
+already has. `ProtocolVariableValueType` (`text | numeric | boolean |
+catalog | closed_enum`) carries the distinction at the schema level;
+`createProtocolVersion` rejects a `catalog` variable without a
+`catalogId` or a `closed_enum` variable with empty `enumValues`.
+
+**Decision 3 — catalog value `definition` and `alias`, both optional, and
+the honey-color/semi-wash mapping deliberately left unlinked.** Every
+`VariableCatalogValue` gained `definition` (optional, standardizes
+language over time — the same reasoning `SensoryDescriptor.
+expectedPerception`/`technicalCause` already proves for R1's tasting
+vocabulary, applied here to process variables) and `aliasOfId` (optional,
+self-referential, one level — an alias points directly at its canonical
+row, never chains). The real case the mechanism exists for:
+honey-by-color (`black honey`, `red honey`, `yellow honey`, `light
+honey`) and semi-wash-by-percentage (`Semi Wash 75%`, `50%`, `25%`) may
+name the same underlying process. **Deliberately not pre-linked** in
+`lib/research/catalogs.ts`'s seed data, per the ticket's own explicit
+instruction not to assume the mapping. `setVariableCatalogValueAlias` and
+`compareTreatmentBatchesByVariable`'s alias resolution are built and
+tested against a placeholder pair; the real correspondence is a
+product-owner decision, still open (see Consequence).
+
+**Decision 4 — "Spontaneous Wild" is a `dataQuality` signal, not an
+organism name.** Recording it as an identified organism would assert
+knowledge nobody has (the same distinction `23_
+RECIPES_FORMULATION_AND_DISTILLATION.md` §5c already established for
+spontaneous fermentation/consortia). `VariableCatalogValue.
+impliesUnknownIdentity` marks values like this one; when a treatment
+picks one, `TreatmentBatchVariableValue.dataQuality` becomes required by
+`createTreatmentBatch`'s own validation — never silently defaulted.
+
+**Decision 5 — bed level is interpreted against its room, not stored as a
+bare number.** The solar room has 3 levels with light; the dark room has
+6 levels with none — a level number alone doesn't say how much light a
+lot received. The drying room is a `Location` (reusing F1's own
+exposure-attribute pattern) carrying `dryingRoomLightExposure` and
+`dryingRoomBedLevelCount`; `ProcessingStage.locationId` records which
+room a given stage ran in. `getBedLevelContext` resolves a numeric "nivel
+de cama" value against that stage's room, so level 1 in the solar room
+and level 1 in the dark room are never conflated.
+
+**Decision 6 — declared control, and the no-replication discipline
+enforced at runtime, not just in a comment.** `Experiment.
+controlTreatmentBatchId` is declared, never inferred, and validated to
+belong to a `TreatmentBatch` under that same Experiment
+(`declareControlTreatmentBatch`). Every PE treatment runs once: the
+platform can say "this treatment scored 87, the control scored 84," and
+can never say "this treatment produces on average 3 points more."
+`Conclusion` gains `provenanceClass` (required, ADR-038 pattern) and
+`isComparative` (boolean); `createConclusion` rejects `isComparative:
+true` paired with `provenanceClass: "measured_fact"` — a single
+un-replicated run can never earn measured-fact certainty about a
+*difference* between treatments.
+
+**Decision 7 — bioprotection is constitutive of the method, not a free
+variable.** MP72 and HDA54 colonize without fermenting during cold hold
+prefermentativo, mechanistically distinct from a fermentation yeast.
+Which strain is used is a catalog-typed `ProtocolVariable` value *within
+one `ProtocolVersion`* — MP72 vs. HDA54 is comparison inside the method,
+not two protocols. A future "no bioprotection" control-negative run is
+the same `ProtocolVersion` with a different catalog pick, not a new
+protocol; no schema addition was needed beyond Decision 2's catalog
+mechanism.
+
+**Decision 8 — CryoBloom is a method, not a marker field, and experiments
+have lineage separate from Lot transformation.** Multiple PEs (PE-79/80,
+PE-97/98) ran the same prefermentative protocol with only the strain
+varied — confirmed not a version change. "All treatments that used
+CryoBloom" is answered as "all `TreatmentBatch` rows under that one
+`ProtocolVersion`"; `ProtocolVariable.isControlled` (already built)
+distinguishes a deliberately-varied factor from a protocol constant, no
+new field needed. Separately, the six prior trials that led to
+experiments A/B/C are scientific derivation, not a physical Lot split —
+deliberately modeled apart from the Lot lineage DAG.
+`Experiment.derivedFromExperimentId` + `derivationNote` (self-
+referential, declared via `declareExperimentLineage`) record which
+experiment's findings shaped the next design, and why.
+
+**Decision 9 — declared limits are part of the record, not a separate
+document.** The product owner's reference card names what isn't measured
+yet (β-glucosidasa, GC-MS, LC-MS, comparative pH/°Brix, quantitative
+microbiology, calibrated-panel formal cupping) as the honest boundary of
+what the method can currently claim. `Experiment.declaredLimitations`
+(free text, the product owner's own wording, not forced into an invented
+checklist enum) is set via `updateDeclaredLimitations` and read back
+alongside the experiment's results.
+
+**Decision 10 — cherry-study vocabulary gets new infrastructure, not
+`SensoryDescriptor`.** The "Estudio de cerezas" sheet's controlled
+vocabulary (Selección, Flotado, Condición visual, Limpieza, Color,
+Firmeza, Densidad-bracket, Tamaño/forma, Defectos de grano) is the same
+*shape* as R1's `SensoryDescriptor`/`SensoryDescriptorResponse` —
+vocabulary controlled by attribute, versioned under a protocol —
+evaluated and rejected as a direct reuse: `SensoryDescriptorResponse` is
+structurally coupled to `Assessment` → `BlindSample` → a judging session
+context, and a pre-processing cherry inspection has none of those — no
+judge, no blind code, no session. Decided instead to reuse the
+*mechanism* Decision 2 already builds (`VariableCatalog`/
+`VariableCatalogValue`) rather than a third parallel system. A new join
+table, `ProcessingStageObservation`, records a categorical pick against a
+`ProcessingStage`; Brix, peso inicial, and densidad-as-decimal stay
+ordinary `Measurement` rows. Real content: only 2 of 6 rows in the source
+sheet have values (Brix 17.53 pacamara lote 11, Brix 18.5 Geisha lote
+10) — preserved as a template in incipient use; empty cells are
+`missing_source_record`, never zero or estimated.
+
+**Decision 11 — `ProtocolRequiredMeasurement` enforces what "el sistema
+sabe qué medir" actually means.** Either a numeric `MeasurementVariable`
+reference (`variable` set, `catalogId` null) or a categorical
+`VariableCatalog` reference (`catalogId` set, `variable` null), each
+paired with `atProcessingStage` (free text, matched by string equality
+against `ProcessingStage.name`). `completeProcessingStage`
+(`lib/research/treatments.ts`) refuses to close a stage until every
+required measurement/observation for that stage's name has a
+corresponding `Measurement` or `ProcessingStageObservation` row — an
+enforcement point, not a comment.
+
+**Decision 12 — UI built only where the ticket exercises it.** Screens
+exist for: create/version a protocol with its catalog/enum/numeric
+variables and required measurements; list/filter protocols by variable;
+execute a protocol against a lot; view a treatment's results including
+its sensory linkage. No UI for `Publication`, `AnalysisPlan`/
+`AnalysisRun`/`AnalysisResult`, `Deviation`/`CorrectiveAction`,
+`Approval`, the `Interpretation` → `Conclusion` → `ResearchRecommendation`
+chain, control declaration, experiment lineage, or declared limitations —
+all of these have real schema and RBAC-checked, audited service
+functions, callable from a script or a future screen without redesign.
+
+**Decision 13 — `RESEARCH_ACTIVITY_CRITERIA.md` gets support, not
+enforcement.** Built: the `ResearchActivity` model (`isPaid`,
+`researchQuestionStructured`, `complianceStatus`, `publicListingCopy`,
+`consentFormCopy`, `languageFlagStatus`), the Research Compliance
+Reviewer Role Profile (`research_activity:review`, deliberately excluding
+`research:approve_protocol`/`execute_protocol` — this role reviews
+whether an activity qualifies as research, it doesn't run research), and
+a no-self-review rule enforced in code (`canReviewResearchActivity` —
+structural, the same mechanism `RBAC.md` §7 uses for blind-judge
+restrictions). Not applied: no CryoBloom/gastro-tourism activity was
+reviewed against the five-part test — that is `RESEARCH_ACTIVITY_
+CRITERIA.md` §9's own human review, out of this ticket's scope.
+
+**Consequence.** The platform can now hold a PE-style controlled
+experiment as queryable structure instead of prose in a `Comentarios`
+column, with two questions deliberately left open rather than guessed:
+which honey-color name is genuinely equivalent to which semi-wash
+percentage (the alias mechanism is built and tested; the mapping needs
+the product owner's confirmation before any real catalog rows are linked
+with `setVariableCatalogValueAlias`), and what the PE-77…PE-112 numbering
+itself encodes beyond lineage (`Protocol.externalIdentifier` stores it
+verbatim, `identifierConvention` is a free-text slot for the explanation
+once given). Deferred by design, not oversight: `Publication`,
+`AnalysisPlan`/`Run`/`Result`, `Deviation`/`CorrectiveAction`, `Approval`,
+and the `Interpretation` → `Conclusion` → `ResearchRecommendation` chain
+have no UI — a future ticket, triggered by actual use. No PE data was
+imported — the real CSVs live with the product owner, not in this
+repository; `README.md`'s implementation status states what a clean
+PE-protocol CSV import would need and what's still unknown before
+writing it. CryoBloom source material classification is named, not
+applied: the product owner's CryoBloom presentation/protocol/Q&A/
+reference card carry an explicit "personal use, do not distribute"
+notice — if loaded, it must be `internal`, never `public`
+(`03_CRYOBLOOM_PUBLIC_CONTENT_PROMPT.md`'s existing discipline), not
+loaded in this ticket.

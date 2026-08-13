@@ -523,6 +523,94 @@ Descubre Terroir, José Giráldez/Craft Brewing Supply integration, defect
 none was supplied; the mechanism is proven by tests only, the same way
 F1/S1 proved their own mechanisms before real field data existed to load.
 
+### RO1 — Research OS: full schema, PE-protocol variable modeling, screens only for what PE exercises
+
+`34_RO1_RESEARCH_OS.md`. Full DOMAIN_MODEL.md §4 chain -- 24 entities
+(ResearchProgram -> ResearchQuestion -> Hypothesis -> Experiment -> Protocol
+-> ProtocolVersion -> TreatmentBatch -> ProcessingStage, Evidence ->
+EvidenceClaim -> Interpretation -> Conclusion -> ResearchRecommendation,
+AnalysisPlan/Run/Result, Publication, Deviation -> CorrectiveAction,
+Approval, VariableCatalog/VariableCatalogValue, ProcessingStageObservation,
+ResearchActivity) -- against the real §3a variable modeling the product
+owner decided: catalog-typed (Recipiente, Levadura/cultivo, Método de
+inoculación, Grado de proceso, Cuarto de secado -- extendable by insert,
+never migration, same data-not-schema pattern RBAC.md §2 already proves
+for Role Profiles) versus closed-enum (Fuente de agua, Posición de masa --
+fixed, frozen per ProtocolVersion), each catalog value carrying an
+optional definition and an optional aliasOfId (self-referential,
+canonical-value resolution -- compareTreatmentBatchesByVariable resolves
+through it before diffing, proven against a real case: honey-by-color and
+semi-wash-by-percentage may name the same process, deliberately left
+unlinked in seed data pending the product owner's own correspondence).
+Spontaneous Wild is modeled as a dataQuality signal (absence of known
+strain), not an organism name. Bed level is interpreted against its own
+room (Location gains dryingRoomLightExposure/dryingRoomBedLevelCount,
+ProcessingStage gains locationId) -- level 1 in the solar room and level 1
+in the dark room are never conflated.
+
+The §3b "Estudio de cerezas" categorical vocabulary (Selección, Flotado,
+Condición visual, Limpieza, Color, Firmeza, Densidad-bracket, Tamaño/
+forma, Defectos de grano) reuses the catalog mechanism, not R1's
+SensoryDescriptor/SensoryDescriptorResponse -- that pair is structurally
+coupled to Assessment/BlindSample/a judging session, and a pre-processing
+cherry inspection has none of those. A new join table,
+ProcessingStageObservation, records the categorical picks; Brix/peso/
+densidad stay ordinary Measurement rows. ProtocolRequiredMeasurement
+(numeric variable or catalog reference, at a named processing-stage
+moment) is what a ProtocolVersion declares it needs measured, and
+completeProcessingStage enforces it -- refuses to close a stage missing a
+required reading or pick.
+
+§4's statistical discipline: Experiment.controlTreatmentBatchId (declared,
+validated to belong to the same experiment) makes the control explicit;
+Conclusion.provenanceClass (required) + isComparative (boolean) is
+enforced by createConclusion -- a comparative conclusion can never be
+measured_fact, since no PE treatment is replicated. Bioprotection strain
+(MP72/HDA54) is a catalog-typed variable within one ProtocolVersion, not a
+separate protocol -- reusing §3a's mechanism, no new field.
+CryoBloom-as-method is answered as "every TreatmentBatch under that
+ProtocolVersion," using the already-built ProtocolVariable.isControlled to
+distinguish a deliberately-varied factor from a protocol constant.
+Experiment.derivedFromExperimentId + derivationNote record scientific
+lineage between trials, deliberately separate from the Lot-transformation
+DAG. Experiment.declaredLimitations (free text, the product owner's own
+wording) records the method's stated boundary alongside its results, not
+in a separate document.
+
+UI built only for what §5 names: create/version a protocol with its
+variables and required measurements; list/filter protocols by variable;
+execute a protocol against a lot; view a treatment's results including its
+sensory linkage (reusing getSensoryLinkageForSamples unmodified). No UI for
+Publication, AnalysisPlan/Run/Result, Deviation/CorrectiveAction, Approval,
+the Interpretation -> Conclusion -> ResearchRecommendation chain, control
+declaration, experiment lineage, or declared limitations -- all have real,
+RBAC-checked, audited service functions, deliberately not screen-connected
+yet.
+
+RESEARCH_ACTIVITY_CRITERIA.md's gate is supported, not applied: the
+ResearchActivity model, the Research Compliance Reviewer Role Profile, and
+the no-self-review rule (canReviewResearchActivity, enforced in code, the
+same structural mechanism RBAC.md §7 uses for blind-judge restrictions)
+are built; no CryoBloom/gastro-tourism activity was reviewed against the
+five-part test -- that stays human review, out of scope here.
+
+23 new tests (tests/research/ro1.test.ts), real Neon, covering all fifteen
+of §9's verification scenarios. **Appended as ADR-051** in DECISIONS.md,
+right after R1's own ADR-050. Two open questions flagged rather than
+assumed: which honey-color name is genuinely equivalent to which
+semi-wash percentage (needs the product owner), and what the
+PE-77...PE-112 numbering itself encodes beyond lineage
+(Protocol.externalIdentifier stores it verbatim; identifierConvention is
+a free-text slot for the explanation once given). No PE data was
+imported -- the real CSVs live with the product owner, not in this
+repository; what a clean PE-protocol CSV import would need is reported in
+the draft ADR's Consequences. What remains from `29_` after this ticket:
+Research OS/PE protocols (done, mechanism only -- no real data loaded)
+closes §8; still open -- map/plano, water, climate, meeting-minutes
+entity, Kits Descubre Terroir, José Giráldez/Craft Brewing Supply
+integration, and the actual PE CSV import once the product owner supplies
+the files and confirms the open questions above.
+
 ---
 
 ## The series
