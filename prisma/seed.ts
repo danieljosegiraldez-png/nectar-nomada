@@ -84,12 +84,17 @@ async function seedVariableCatalogs() {
     for (const [index, value] of catalog.values.entries()) {
       await prisma.variableCatalogValue.upsert({
         where: { catalogId_value: { catalogId: row.id, value: value.value } },
-        update: { impliesUnknownIdentity: value.impliesUnknownIdentity ?? false, displayOrder: index },
+        update: {
+          impliesUnknownIdentity: value.impliesUnknownIdentity ?? false,
+          displayOrder: index,
+          definition: value.definition ?? null,
+        },
         create: {
           catalogId: row.id,
           value: value.value,
           impliesUnknownIdentity: value.impliesUnknownIdentity ?? false,
           displayOrder: index,
+          definition: value.definition ?? null,
         },
       });
     }

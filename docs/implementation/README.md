@@ -544,9 +544,21 @@ for Role Profiles) versus closed-enum (Fuente de agua, Posición de masa --
 fixed, frozen per ProtocolVersion), each catalog value carrying an
 optional definition and an optional aliasOfId (self-referential,
 canonical-value resolution -- compareTreatmentBatchesByVariable resolves
-through it before diffing, proven against a real case: honey-by-color and
-semi-wash-by-percentage may name the same process, deliberately left
-unlinked in seed data pending the product owner's own correspondence).
+through it before diffing). **RO1.1 correction (35_
+RO1.1_HONEY_PORCENTAJE_CANONICO.md, ADR-052):** honey-by-color and
+semi-wash-by-percentage are NOT aliased to each other -- industry sources
+contradict each other on the mapping seriously enough (black honey
+reported as anywhere from 50% to 100% mucílago retenido depending on the
+source; yellow honey defined by retained mucílago in some sources and by
+*removed* mucílago, inverted, in others) that loading a fixed
+correspondence would assert a standard that doesn't exist. Percentage
+(grado_proceso) is the canonical, comparable value; color is its own
+separate catalog-typed variable (honey_color: black/red/yellow/white,
+gold dropped by product-owner decision), recorded alongside the
+percentage, never in its place, each color's definition stating
+explicitly that the equivalence varies by region and producer. The alias
+mechanism itself stays valid for other cases -- this specific one just
+isn't one of them.
 Spontaneous Wild is modeled as a dataQuality signal (absence of known
 strain), not an organism name. Bed level is interpreted against its own
 room (Location gains dryingRoomLightExposure/dryingRoomBedLevelCount,
@@ -599,14 +611,18 @@ same structural mechanism RBAC.md §7 uses for blind-judge restrictions)
 are built; no CryoBloom/gastro-tourism activity was reviewed against the
 five-part test -- that stays human review, out of scope here.
 
-23 new tests (tests/research/ro1.test.ts), real Neon, covering all fifteen
-of §9's verification scenarios. **Appended as ADR-051** in DECISIONS.md,
-right after R1's own ADR-050. Two open questions flagged rather than
-assumed: which honey-color name is genuinely equivalent to which
-semi-wash percentage (needs the product owner), and what the
-PE-77...PE-112 numbering itself encodes beyond lineage
-(Protocol.externalIdentifier stores it verbatim; identifierConvention is
-a free-text slot for the explanation once given). No PE data was
+28 tests (tests/research/ro1.test.ts, RO1's original 23 plus RO1.1's own
+four verification points from its §5), real Neon, covering all fifteen
+of §9's verification scenarios plus RO1.1's honey-percentage-canonical
+correction. **Appended as ADR-051** in DECISIONS.md,
+right after R1's own ADR-050. Both open questions flagged in that ADR are
+now closed by **ADR-052** (35_RO1.1_HONEY_PORCENTAJE_CANONICO.md): the
+honey-color/semi-wash mapping is resolved by explicit non-mapping (§2
+above -- a decision, not a gap), and the product owner has confirmed
+**PE-77...PE-112 is sequence only** -- it encodes nothing beyond the
+lineage the Lot/LotTransformation DAG already models
+(Protocol.externalIdentifier stores it verbatim; no further parsing
+work is needed against it). No PE data was
 imported -- the real CSVs live with the product owner, not in this
 repository; what a clean PE-protocol CSV import would need is reported in
 the draft ADR's Consequences. What remains from `29_` after this ticket:

@@ -3595,3 +3595,96 @@ reference card carry an explicit "personal use, do not distribute"
 notice — if loaded, it must be `internal`, never `public`
 (`03_CRYOBLOOM_PUBLIC_CONTENT_PROMPT.md`'s existing discipline), not
 loaded in this ticket.
+
+---
+
+## ADR-052 — Amendment to ADR-051: honey color has no percentage mapping,
+by design, not by omission; PE-77…PE-112 confirmed sequence-only
+
+**Context.** ADR-051's own Consequence section left two questions open
+rather than guessed: whether a honey-color name (black/red/yellow/white)
+is genuinely equivalent to a semi-wash percentage, and what the
+PE-77…PE-112 numbering encodes beyond lineage. `35_
+RO1.1_HONEY_PORCENTAJE_CANONICO.md` answers the first with an explicit
+correction to §3a-bis, and the product owner has now confirmed the
+second directly.
+
+**Decision 1 — no color-to-percentage mapping is loaded, and none should
+be, because the industry sources contradict each other, not just each
+other's numbers but what "color" measures at all.** Black honey is
+reported as 75%, 75–100%, 50–100%, and 65–100% mucílago retenido
+depending on the source. Yellow honey is reported as 25% and 25–35%
+retenido, and at least one source defines it by mucílago *removed*
+instead — inverting the whole system relative to the others. White
+honey ranges from 10% retenido to 80–90% removed. Beyond the arithmetic,
+the deeper problem is that "color" itself isn't one measurement
+region-to-region: some regions determine color by how much mucílago
+remains after depulping, but most determine it by sugar caramelization
+during drying — the color is a drying outcome, not a mucílago quantity,
+in much of the industry. Efico's own framing: retained-mucílago
+percentage mainly explains white-versus-yellow, while light exposure and
+drying time — a different axis entirely — mainly explains red-versus-
+black. Loading a fixed color↔percentage table would assert one
+productor's vocabulary as a universal standard that does not exist.
+
+**Decision 2 — percentage is the canonical value; color is the
+producer's own label, recorded alongside it, never in its place.** The
+percentage of mucílago retenido is what's measurable and what makes two
+producers' lots comparable. Color is now `honey_color`, its own
+catalog-typed `ProtocolVariable` — a sibling of `grado_proceso`
+(percentage), not a value inside it and not `aliasOfId`-linked to any of
+its rows. `lib/research/catalogs.ts`'s four values (black/red/yellow/
+white — `gold` was considered and dropped by product-owner decision)
+each carry a `definition` stating explicitly that the percentage
+equivalence varies by region and by producer, so a future reader of the
+catalog sees the caution at the point of use, not only in this ADR. This
+is the same discipline `Spontaneous Wild` (RO1 §3a) already established
+for `levadura_cultivo` — a label is not a measurement, and recording it
+as if it were asserts knowledge nobody has.
+
+**Decision 3 — this is the goal, not a workaround: register both,
+compare on the measurable one, let the vocabulary itself become data.**
+Per the product owner, the objective is to keep using percentage while
+*gradually* standardizing language — producers use different vocabulary
+in process talk versus marketing for what is often the same or a
+closely related measurable process. The platform doesn't impose a
+translation; it records both fields on every honey treatment it can, and
+comparison always runs on `grado_proceso`. Over enough real lots, seeing
+percentage and color side by side is what will eventually reveal how
+each producer actually uses their own color terms — real information
+earned from data, not a convention invented ahead of it.
+
+**Cleanup.** A live leak was found and removed during this ticket's own
+execution: `tests/research/ro1.test.ts`'s original §9.5 test (added
+under RO1) created a throwaway `grado_proceso` value named `TEST red
+honey (...)` and aliased it to the real `Semi Wash 50%` row to prove the
+alias mechanism — but its `afterAll` cleanup only ever deleted RUN_ID-
+scoped rows from `levadura_cultivo`, never from `grado_proceso`, so
+every test run since RO1 shipped left one more `TEST red honey (...)`
+alias row permanently attached to the real, shared `grado_proceso`
+catalog. Seven such rows were found live in Neon and deleted; the test's
+cleanup now covers every catalog it writes a TEST value to
+(`levadura_cultivo`, `grado_proceso`, `recipiente`), and §9.5 itself no
+longer uses a honey-color example — it proves the alias mechanism (still
+valid for other cases, per this ADR's own Decision 1) against a neutral
+`recipiente` pair instead. Confirmed after cleanup: zero
+`VariableCatalogValue` rows with a non-null `aliasOfId` remain anywhere
+in the database.
+
+**Also confirmed by the product owner, recorded here rather than left
+implicit: the PE-77…PE-112 numbering is sequence only.** It encodes no
+information beyond the lineage the `Lot`/`LotTransformation` DAG already
+models — not a process family, not a date range, not a site. No further
+schema or parsing work is needed against this numbering;
+`Protocol.externalIdentifier` continues to store it verbatim exactly as
+before.
+
+**Consequence.** Both of ADR-051's open questions are now closed: the
+honey-color mapping is closed by explicit non-mapping (a decision, not a
+gap), and the PE numbering question is closed by direct confirmation.
+`getManageableContext`/`compareTreatmentBatchesByVariable` and the rest
+of RO1's comparison machinery are unchanged by this ADR — `honey_color`
+flows through the exact same catalog-typed-variable mechanism `§3a`
+already built, proving that mechanism's own claim that catalog and alias
+infrastructure built for one case generalizes to a new one without a
+schema change.

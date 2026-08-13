@@ -65,6 +65,7 @@ let recipienteCatalogId: string;
 let levaduraCatalogId: string;
 let metodoCatalogId: string;
 let gradoCatalogId: string;
+let honeyColorCatalogId: string;
 let seleccionCatalogId: string;
 let posicionMasaVariableId: string;
 let alturaMasaVariableId: string;
@@ -117,12 +118,13 @@ beforeAll(async () => {
   sourceLotId = sourceLot.id;
 
   const catalogs = await prisma.variableCatalog.findMany({
-    where: { key: { in: ["recipiente", "levadura_cultivo", "metodo_inoculacion", "grado_proceso", "cereza_seleccion"] } },
+    where: { key: { in: ["recipiente", "levadura_cultivo", "metodo_inoculacion", "grado_proceso", "honey_color", "cereza_seleccion"] } },
   });
   recipienteCatalogId = catalogs.find((c) => c.key === "recipiente")!.id;
   levaduraCatalogId = catalogs.find((c) => c.key === "levadura_cultivo")!.id;
   metodoCatalogId = catalogs.find((c) => c.key === "metodo_inoculacion")!.id;
   gradoCatalogId = catalogs.find((c) => c.key === "grado_proceso")!.id;
+  honeyColorCatalogId = catalogs.find((c) => c.key === "honey_color")!.id;
   seleccionCatalogId = catalogs.find((c) => c.key === "cereza_seleccion")!.id;
 });
 
@@ -151,7 +153,17 @@ afterAll(async () => {
   });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: [sourceLotId, ...outputLotIds] } }) });
 
-  await prisma.variableCatalogValue.deleteMany({ where: assertDefinedWhere({ catalogId: levaduraCatalogId, value: { contains: RUN_ID } }) });
+  // RO1.1 fix: this used to only clean up levaduraCatalogId, which let
+  // §9.5's old TEST-scoped grado_proceso alias rows leak across every run
+  // that ever executed this file (found and cleaned up live in Neon during
+  // 35_RO1.1_HONEY_PORCENTAJE_CANONICO.md's own execution) -- every
+  // catalog this file ever adds a TEST value to must be cleaned here.
+  await prisma.variableCatalogValue.deleteMany({
+    where: assertDefinedWhere({
+      catalogId: { in: [levaduraCatalogId, gradoCatalogId, recipienteCatalogId] },
+      value: { contains: RUN_ID },
+    }),
+  });
 
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: [researchLeadUserAccountId, labOperatorUserAccountId] } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: [researchLeadScopeId, labOperatorScopeId] } }) });
@@ -194,6 +206,10 @@ describe("§9.1/§9.2 — create protocol with real §3a variables + §3b requir
         { name: "Levadura / cultivo", valueType: "catalog", catalogId: levaduraCatalogId },
         { name: "Método de inoculación", valueType: "catalog", catalogId: metodoCatalogId },
         { name: "Grado de proceso", valueType: "catalog", catalogId: gradoCatalogId },
+        // RO1.1 — a separate variable from Grado de proceso, not an alias
+        // of any of its values. Percentage stays the canonical, comparable
+        // axis; color is the producer's own label, recorded alongside it.
+        { name: "Color de honey", valueType: "catalog", catalogId: honeyColorCatalogId },
         { name: "Fuente de agua", valueType: "closed_enum", enumValues: ["río", "quebrada", "pozo", "red"] },
         { name: "Posición de masa", valueType: "closed_enum", enumValues: ["vertical", "horizontal"] },
         { name: "Altura de masa", valueType: "numeric", unit: "cm" },
@@ -206,7 +222,7 @@ describe("§9.1/§9.2 — create protocol with real §3a variables + §3b requir
 
     expect(version.version).toBe(1);
     expect(version.status).toBe("draft");
-    expect(version.variables).toHaveLength(7);
+    expect(version.variables).toHaveLength(8);
     expect(version.requiredMeasurements).toHaveLength(2);
 
     posicionMasaVariableId = version.variables.find((v) => v.name === "Posición de masa")!.id;
@@ -234,7 +250,7 @@ describe("§9.1/§9.2 — create protocol with real §3a variables + §3b requir
 
   it("§9.2 — versioning again leaves version 1 fully intact and queryable", async () => {
     const versionBefore = await prisma.protocolVersion.findFirstOrThrow({ where: { protocolId, version: 1 }, include: { variables: true } });
-    expect(versionBefore.variables).toHaveLength(7);
+    expect(versionBefore.variables).toHaveLength(8);
 
     await createProtocolVersion(researchLeadUserAccountId, {
       protocolId,
@@ -244,7 +260,7 @@ describe("§9.1/§9.2 — create protocol with real §3a variables + §3b requir
 
     const versionAfter = await prisma.protocolVersion.findFirstOrThrow({ where: { protocolId, version: 1 }, include: { variables: true } });
     expect(versionAfter.status).toBe("draft");
-    expect(versionAfter.variables).toHaveLength(7);
+    expect(versionAfter.variables).toHaveLength(8);
     const versionCount = await prisma.protocolVersion.count({ where: { protocolId } });
     expect(versionCount).toBe(2);
   });
@@ -286,50 +302,146 @@ describe("§9.4 — add a definition to an existing catalog value, read where it
   });
 });
 
-describe("§9.5 — register an alias, confirm canonical resolution and cross-name comparability", () => {
-  it("setVariableCatalogValueAlias links an honey-color name to a semi-wash% name (mechanism only — no assumed mapping)", async () => {
-    // §3a-bis: the ticket explicitly says NOT to assume which color maps to
-    // which percentage — that's a product-owner decision (see the ADR/
-    // report). This test proves the MECHANISM: once linked, two
-    // differently-named picks resolve to the same canonical value and
-    // compare as equal — using placeholder catalog rows added here, not a
-    // real confirmed correspondence.
-    const redHoney = await addVariableCatalogValue(researchLeadUserAccountId, {
-      catalogKey: "grado_proceso",
-      value: `TEST red honey (${RUN_ID})`,
+describe("§9.5 — register an alias, confirm canonical resolution and cross-name comparability (RO1.1: not honey color/percentage)", () => {
+  it("setVariableCatalogValueAlias still links/resolves two values within a catalog, using a neutral placeholder pair", async () => {
+    // RO1.1 (35_RO1.1_HONEY_PORCENTAJE_CANONICO.md) corrected this test:
+    // the original version aliased a throwaway "red honey" value to the
+    // real "Semi Wash 50%" grado_proceso row to prove the mechanism —
+    // exactly the pattern RO1.1 says never happens for real (industry
+    // sources contradict each other on the color-to-percentage mapping,
+    // §1). The alias mechanism itself stays valid for other cases, so it's
+    // proven here with a neutral recipiente pair instead.
+    const variantValue = await addVariableCatalogValue(researchLeadUserAccountId, {
+      catalogKey: "recipiente",
+      value: `TEST Recipiente Variant (${RUN_ID})`,
     });
-    const semiWash50 = await prisma.variableCatalogValue.findFirstOrThrow({ where: { catalogId: gradoCatalogId, value: "Semi Wash 50%" } });
+    const canonicalValue = await prisma.variableCatalogValue.findFirstOrThrow({ where: { catalogId: recipienteCatalogId, value: "Tanque I" } });
 
-    await setVariableCatalogValueAlias(researchLeadUserAccountId, redHoney.id, semiWash50.id);
-    const reread = await prisma.variableCatalogValue.findUniqueOrThrow({ where: { id: redHoney.id } });
-    expect(reread.aliasOfId).toBe(semiWash50.id);
+    await setVariableCatalogValueAlias(researchLeadUserAccountId, variantValue.id, canonicalValue.id);
+    const reread = await prisma.variableCatalogValue.findUniqueOrThrow({ where: { id: variantValue.id } });
+    expect(reread.aliasOfId).toBe(canonicalValue.id);
 
     const version = await prisma.protocolVersion.findFirstOrThrow({ where: { protocolId, version: 1 } });
-    const gradoVariable = await prisma.protocolVariable.findFirstOrThrow({ where: { protocolVersionId: version.id, name: "Grado de proceso" } });
 
-    const batchNamedByColor = await createTreatmentBatch(researchLeadUserAccountId, {
+    const batchNamedByVariant = await createTreatmentBatch(researchLeadUserAccountId, {
       protocolVersionId: version.id,
       lotId: sourceLotId,
-      batchLabel: `TEST named-by-color (${RUN_ID})`,
+      batchLabel: `TEST named-by-variant (${RUN_ID})`,
       startedAt: new Date("2027-02-11T08:00:00Z"),
       provenanceClass: "measured_fact",
-      variableValues: [{ protocolVariableId: gradoVariable.id, catalogValueId: redHoney.id }],
+      variableValues: [{ protocolVariableId: recipienteVariableId, catalogValueId: variantValue.id }],
     });
-    treatmentBatchIds.push(batchNamedByColor.id);
+    treatmentBatchIds.push(batchNamedByVariant.id);
 
-    const batchNamedByPercent = await createTreatmentBatch(researchLeadUserAccountId, {
+    const batchNamedByCanonical = await createTreatmentBatch(researchLeadUserAccountId, {
       protocolVersionId: version.id,
       lotId: sourceLotId,
-      batchLabel: `TEST named-by-percent (${RUN_ID})`,
+      batchLabel: `TEST named-by-canonical (${RUN_ID})`,
       startedAt: new Date("2027-02-11T08:00:00Z"),
+      provenanceClass: "measured_fact",
+      variableValues: [{ protocolVariableId: recipienteVariableId, catalogValueId: canonicalValue.id }],
+    });
+    treatmentBatchIds.push(batchNamedByCanonical.id);
+
+    const comparison = await compareTreatmentBatchesByVariable(researchLeadUserAccountId, batchNamedByVariant.id, batchNamedByCanonical.id);
+    const recipienteComparison = comparison.find((c) => c.protocolVariableId === recipienteVariableId)!;
+    expect(recipienteComparison.differs).toBe(false);
+  });
+});
+
+describe("RO1.1 — honey: percentage is the canonical value, color is a producer label, never aliased to it", () => {
+  let honeyColorVariableId: string;
+
+  it("§3a-bis correction: 'Color de honey' is its own catalog-typed variable, independent of Grado de proceso", async () => {
+    const version = await prisma.protocolVersion.findFirstOrThrow({ where: { protocolId, version: 1 }, include: { variables: true } });
+    const colorVariable = version.variables.find((v) => v.name === "Color de honey");
+    expect(colorVariable).toBeDefined();
+    expect(colorVariable!.catalogId).toBe(honeyColorCatalogId);
+    honeyColorVariableId = colorVariable!.id;
+  });
+
+  it("§5.1 — two producers use the same color label with different measured percentages: they do not compare as equivalent", async () => {
+    const version = await prisma.protocolVersion.findFirstOrThrow({ where: { protocolId, version: 1 } });
+    const gradoVariable = await prisma.protocolVariable.findFirstOrThrow({ where: { protocolVersionId: version.id, name: "Grado de proceso" } });
+    const redHoney = await prisma.variableCatalogValue.findFirstOrThrow({ where: { catalogId: honeyColorCatalogId, value: "red honey" } });
+    const semiWash50 = await prisma.variableCatalogValue.findFirstOrThrow({ where: { catalogId: gradoCatalogId, value: "Semi Wash 50%" } });
+    const semiWash75 = await prisma.variableCatalogValue.findFirstOrThrow({ where: { catalogId: gradoCatalogId, value: "Semi Wash 75%" } });
+
+    const producerA = await createTreatmentBatch(researchLeadUserAccountId, {
+      protocolVersionId: version.id,
+      lotId: sourceLotId,
+      batchLabel: `TEST honey producer A red (${RUN_ID})`,
+      startedAt: new Date("2027-02-12T08:00:00Z"),
+      provenanceClass: "measured_fact",
+      variableValues: [
+        { protocolVariableId: gradoVariable.id, catalogValueId: semiWash50.id },
+        { protocolVariableId: honeyColorVariableId, catalogValueId: redHoney.id },
+      ],
+    });
+    treatmentBatchIds.push(producerA.id);
+
+    const producerB = await createTreatmentBatch(researchLeadUserAccountId, {
+      protocolVersionId: version.id,
+      lotId: sourceLotId,
+      batchLabel: `TEST honey producer B red (${RUN_ID})`,
+      startedAt: new Date("2027-02-12T08:00:00Z"),
+      provenanceClass: "measured_fact",
+      variableValues: [
+        { protocolVariableId: gradoVariable.id, catalogValueId: semiWash75.id },
+        { protocolVariableId: honeyColorVariableId, catalogValueId: redHoney.id },
+      ],
+    });
+    treatmentBatchIds.push(producerB.id);
+
+    const comparison = await compareTreatmentBatchesByVariable(researchLeadUserAccountId, producerA.id, producerB.id);
+    const gradoComparison = comparison.find((c) => c.protocolVariableId === gradoVariable.id)!;
+    const colorComparison = comparison.find((c) => c.protocolVariableId === honeyColorVariableId)!;
+
+    // Same producer-chosen label on both — if color were the comparison
+    // axis this would wrongly read as "equivalent." It isn't the axis:
+    // the canonical percentage is, and it correctly shows they differ.
+    expect(colorComparison.differs).toBe(false);
+    expect(gradoComparison.differs).toBe(true);
+    expect(gradoComparison.valueA).not.toBe(gradoComparison.valueB);
+  });
+
+  it("§5.2 — a treatment can record the percentage with no color label at all; color is never required", async () => {
+    const version = await prisma.protocolVersion.findFirstOrThrow({ where: { protocolId, version: 1 } });
+    const gradoVariable = await prisma.protocolVariable.findFirstOrThrow({ where: { protocolVersionId: version.id, name: "Grado de proceso" } });
+    const semiWash50 = await prisma.variableCatalogValue.findFirstOrThrow({ where: { catalogId: gradoCatalogId, value: "Semi Wash 50%" } });
+
+    const batch = await createTreatmentBatch(researchLeadUserAccountId, {
+      protocolVersionId: version.id,
+      lotId: sourceLotId,
+      batchLabel: `TEST honey no-color-label (${RUN_ID})`,
+      startedAt: new Date("2027-02-12T08:00:00Z"),
       provenanceClass: "measured_fact",
       variableValues: [{ protocolVariableId: gradoVariable.id, catalogValueId: semiWash50.id }],
     });
-    treatmentBatchIds.push(batchNamedByPercent.id);
+    treatmentBatchIds.push(batch.id);
 
-    const comparison = await compareTreatmentBatchesByVariable(researchLeadUserAccountId, batchNamedByColor.id, batchNamedByPercent.id);
-    const gradoComparison = comparison.find((c) => c.protocolVariableId === gradoVariable.id)!;
-    expect(gradoComparison.differs).toBe(false);
+    const detail = await getTreatmentBatchDetail(researchLeadUserAccountId, batch.id);
+    expect(detail.variableValues.some((v) => v.protocolVariableId === gradoVariable.id)).toBe(true);
+    expect(detail.variableValues.some((v) => v.protocolVariableId === honeyColorVariableId)).toBe(false);
+  });
+
+  it("§5.3 — every honey color's definition warns the percentage equivalence varies by region/producer", async () => {
+    const colors = await prisma.variableCatalogValue.findMany({ where: { catalogId: honeyColorCatalogId } });
+    expect(colors).toHaveLength(4);
+    expect(colors.map((c) => c.value).sort()).toEqual(["black honey", "red honey", "white honey", "yellow honey"]);
+    for (const color of colors) {
+      expect(color.definition).toBeTruthy();
+      expect(color.definition).toContain("no una medición");
+      expect(color.aliasOfId).toBeNull();
+    }
+  });
+
+  it("§5.4 — no color<->percentage alias remains loaded anywhere in either catalog", async () => {
+    const honeyColorValues = await prisma.variableCatalogValue.findMany({ where: { catalogId: honeyColorCatalogId } });
+    const gradoValues = await prisma.variableCatalogValue.findMany({ where: { catalogId: gradoCatalogId } });
+    for (const v of [...honeyColorValues, ...gradoValues]) {
+      expect(v.aliasOfId).toBeNull();
+    }
   });
 });
 
