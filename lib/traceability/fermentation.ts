@@ -27,6 +27,7 @@
  */
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { recordAuditEvent } from "../audit";
 import type { LotType, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveRunSourceLot(fermentationRunId: string) {
@@ -62,7 +63,7 @@ export async function startFermentationRun(userAccountId: string, input: StartFe
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const run = await tx.fermentationRun.create({
       data: {
         vesselNote: input.vesselNote ?? null,
@@ -92,6 +93,18 @@ export async function startFermentationRun(userAccountId: string, input: StartFe
 
     return { run, transformation };
   });
+
+  // C1 §3 pattern: an evidentiary write.
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "fermentation_run.start",
+    entityType: "fermentation_run",
+    entityId: result.run.id,
+    after: result.run,
+    sourceInterface: "traceability.service",
+  });
+
+  return result;
 }
 
 export interface RecordFermentationInterventionInput {
@@ -140,7 +153,7 @@ export async function endFermentationRun(userAccountId: string, input: EndFermen
 
   const provenanceClass = input.provenanceClass;
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const endedRun = await tx.fermentationRun.update({
       where: { id: input.fermentationRunId },
       data: { endedAt: input.endedAt },
@@ -202,4 +215,16 @@ export async function endFermentationRun(userAccountId: string, input: EndFermen
 
     return { run: endedRun, transformation, outputLot };
   });
+
+  // C1 §3 pattern: an evidentiary write.
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "fermentation_run.end",
+    entityType: "fermentation_run",
+    entityId: result.run.id,
+    after: result.run,
+    sourceInterface: "traceability.service",
+  });
+
+  return result;
 }

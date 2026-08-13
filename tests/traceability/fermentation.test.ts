@@ -63,6 +63,7 @@ afterAll(async () => {
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
   const runs = await prisma.fermentationRun.findMany({ where: { transformations: { some: { inputs: { some: { lotId: { in: lotIds } } } } } } });
   const runIds = runs.map((r) => r.id);
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "fermentation_run", entityId: { in: runIds } }) });
   await prisma.fermentationIntervention.deleteMany({ where: assertDefinedWhere({ fermentationRunId: { in: runIds } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ fermentationRunId: { in: runIds } }) });
   await prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) });
@@ -156,6 +157,13 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
 
     const interventions = await prisma.fermentationIntervention.findMany({ where: { fermentationRunId: run.id } });
     expect(interventions).toHaveLength(1);
+
+    const auditEvents = await prisma.auditEvent.findMany({
+      where: { entityType: "fermentation_run", entityId: run.id },
+      orderBy: { occurredAt: "asc" },
+    });
+    expect(auditEvents.map((e) => e.operation)).toEqual(["fermentation_run.start", "fermentation_run.end"]);
+    expect(auditEvents.every((e) => e.actorUserAccountId === authorizedUserAccountId)).toBe(true);
   }, 20000);
 
   it("denies a Farm Operator scoped to a different project from starting a run", async () => {

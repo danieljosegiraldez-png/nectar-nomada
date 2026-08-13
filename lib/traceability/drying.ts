@@ -17,6 +17,7 @@
  */
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { recordAuditEvent } from "../audit";
 import type { LotType, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveRunSourceLot(dryingRunId: string) {
@@ -51,7 +52,7 @@ export async function startDryingRun(userAccountId: string, input: StartDryingRu
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const run = await tx.dryingRun.create({
       data: {
         method: input.method ?? null,
@@ -80,6 +81,18 @@ export async function startDryingRun(userAccountId: string, input: StartDryingRu
 
     return { run, transformation };
   });
+
+  // C1 §3 pattern: an evidentiary write.
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "drying_run.start",
+    entityType: "drying_run",
+    entityId: result.run.id,
+    after: result.run,
+    sourceInterface: "traceability.service",
+  });
+
+  return result;
 }
 
 export interface RecordDryingTurnEventInput {
@@ -130,7 +143,7 @@ export async function endDryingRun(userAccountId: string, input: EndDryingRunInp
 
   const provenanceClass = input.provenanceClass;
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const endedRun = await tx.dryingRun.update({
       where: { id: input.dryingRunId },
       data: { endedAt: input.endedAt },
@@ -190,4 +203,16 @@ export async function endDryingRun(userAccountId: string, input: EndDryingRunInp
 
     return { run: endedRun, transformation, outputLot };
   });
+
+  // C1 §3 pattern: an evidentiary write.
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "drying_run.end",
+    entityType: "drying_run",
+    entityId: result.run.id,
+    after: result.run,
+    sourceInterface: "traceability.service",
+  });
+
+  return result;
 }
