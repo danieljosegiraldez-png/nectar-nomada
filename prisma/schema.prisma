@@ -78,6 +78,7 @@ model Person {
   plantingEventsOperated             PlantingEvent[]               @relation("PlantingEventOperator")
   specimenObservationsObserved       SpecimenObservation[]         @relation("SpecimenObservationObserver")
   treatmentBatchesOperated           TreatmentBatch[]              @relation("TreatmentBatchOperator")
+  processSensoryObservationsObserved ProcessSensoryObservation[]   @relation("ProcessSensoryObservationObserver")
 
   @@map("person")
   @@schema("core")
@@ -176,6 +177,7 @@ model UserAccount {
   treatmentBatchesCreated            TreatmentBatch[]             @relation("TreatmentBatchCreatedBy")
   processingStagesCreated            ProcessingStage[]            @relation("ProcessingStageCreatedBy")
   processingStageObservationsCreated ProcessingStageObservation[] @relation("ProcessingStageObservationCreatedBy")
+  processSensoryObservationsCreated  ProcessSensoryObservation[]  @relation("ProcessSensoryObservationCreatedBy")
   evidenceCreated                    Evidence[]                   @relation("EvidenceCreatedBy")
   evidenceClaimsCreated              EvidenceClaim[]              @relation("EvidenceClaimCreatedBy")
   interpretationsCreated             Interpretation[]             @relation("InterpretationCreatedBy")
@@ -1825,7 +1827,10 @@ model SensoryDescriptor {
   displayOrder       Int?                            @map("display_order")
   createdAt          DateTime                        @default(now()) @map("created_at")
 
-  responses SensoryDescriptorResponse[]
+  responses                  SensoryDescriptorResponse[]
+  // RO1.2 §2b-iii — a field descriptor optionally mapped to this structured
+  // vocabulary later, by someone with judgment, never automatic.
+  processSensoryObservations ProcessSensoryObservation[]
 
   @@index([protocolVersionId])
   @@map("sensory_descriptor")
@@ -2378,22 +2383,26 @@ model Lot {
   createdBy      String?             @map("created_by") @db.Uuid
   creator        UserAccount?        @relation("LotCreatedBy", fields: [createdBy], references: [id])
 
-  transformationInputs  LotTransformationInput[]
-  transformationOutputs LotTransformationOutput[]
-  quantityEvents        QuantityEvent[]
-  measurements          Measurement[]
-  samples               Sample[]
-  storageAssignments    StorageAssignment[]
+  transformationInputs      LotTransformationInput[]
+  transformationOutputs     LotTransformationOutput[]
+  quantityEvents            QuantityEvent[]
+  measurements              Measurement[]
+  samples                   Sample[]
+  storageAssignments        StorageAssignment[]
   // 1:1 — a Lot originates from at most one of these (or from a
   // LotTransformation output, which carries no back-relation of its own
   // kind here since that Lot is one of possibly several outputs).
-  harvestEvent          HarvestEvent?
-  receivingEvent        ReceivingEvent?
-  apiaryHarvestEvent    ApiaryHarvestEvent?
-  assets                Asset[]
+  harvestEvent              HarvestEvent?
+  receivingEvent            ReceivingEvent?
+  apiaryHarvestEvent        ApiaryHarvestEvent?
+  assets                    Asset[]
   // RO1 — a PE protocol treatment applied to this Lot, when one exists
   // (nullable on TreatmentBatch — Research OS isn't coffee-only).
-  treatmentBatches      TreatmentBatch[]
+  treatmentBatches          TreatmentBatch[]
+  // RO1.2 §1a — this Lot was used as another treatment's washing medium
+  // ("Doble Mosto Guacho," PE-106/PE-107) — closer to inoculating than to
+  // rinsing, so recording which lot the mosto came from matters.
+  washMediumSourceForStages ProcessingStage[]         @relation("ProcessingStageWashMediumSourceLot")
 
   @@index([organizationId])
   @@index([projectId])
@@ -3768,8 +3777,9 @@ model VariableCatalogValue {
   displayOrder           Int                    @default(0) @map("display_order")
   impliesUnknownIdentity Boolean                @default(false) @map("implies_unknown_identity")
 
-  values       TreatmentBatchVariableValue[]
-  observations ProcessingStageObservation[]
+  values             TreatmentBatchVariableValue[]
+  observations       ProcessingStageObservation[]
+  washMediumOfStages ProcessingStage[]             @relation("ProcessingStageWashMedium")
 
   @@unique([catalogId, value])
   @@index([aliasOfId])
@@ -3921,14 +3931,14 @@ model TreatmentBatchVariableValue {
 }
 
 model ProcessingStage {
-  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  treatmentBatchId String         @map("treatment_batch_id") @db.Uuid
-  treatmentBatch   TreatmentBatch @relation(fields: [treatmentBatchId], references: [id])
+  id                       String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  treatmentBatchId         String                @map("treatment_batch_id") @db.Uuid
+  treatmentBatch           TreatmentBatch        @relation(fields: [treatmentBatchId], references: [id])
   // Free text ("post-fermentación", "seco", "taza") — matches
   // ProtocolRequiredMeasurement.atProcessingStage by string equality, same
   // open-vocabulary reasoning as RoastSession.roastLevel.
-  name             String
-  sequenceOrder    Int            @map("sequence_order")
+  name                     String
+  sequenceOrder            Int                   @map("sequence_order")
   // §3a — "el cuarto es parte de la variable, no contexto." Which room
   // (typically a drying room) this stage occurred in. Descriptive-context
   // shape matches DryingRun.locationId's own precedent, but load-bearing
@@ -3936,22 +3946,41 @@ model ProcessingStage {
   // paired with this Location's own dryingRoomBedLevelCount/
   // dryingRoomLightExposure (§9.6) — level 1 in the solar room and level 1
   // in the dark room are different exposures, not the same number.
-  locationId       String?        @map("location_id") @db.Uuid
-  location         Location?      @relation(fields: [locationId], references: [id])
-  startedAt        DateTime       @map("started_at")
-  completedAt      DateTime?      @map("completed_at")
-  notes            String?
-  createdAt        DateTime       @default(now()) @map("created_at")
-  createdBy        String?        @map("created_by") @db.Uuid
-  creator          UserAccount?   @relation("ProcessingStageCreatedBy", fields: [createdBy], references: [id])
+  locationId               String?               @map("location_id") @db.Uuid
+  location                 Location?             @relation(fields: [locationId], references: [id])
+  startedAt                DateTime              @map("started_at")
+  completedAt              DateTime?             @map("completed_at")
+  notes                    String?
+  // RO1.2 §1a — the washing medium is its own dimension (agua limpia,
+  // mosto propio, mosto de otro lote, ninguno), not a variant of "lavado":
+  // water rinses and dilutes, mosto keeps the microbial load and the
+  // compounds already developed. `washMediumCatalogValueId` picks which
+  // (from the `medio_lavado` VariableCatalog, §3a's mechanism);
+  // `washMediumSourceLotId` records which other Lot the mosto came from
+  // when it isn't the batch's own (the product owner already does this —
+  // PE-106/PE-107, "Doble Mosto Guacho") — closer to inoculating than to
+  // rinsing, so which lot matters. Quantity and the medium's own pH/Brix/
+  // temperature are ordinary Measurement rows (volumen_medio_lavado/
+  // ph_medio/brix_medio/temperatura_medio), not new fields here — same
+  // reasoning cereza's Brix/peso already follows.
+  washMediumCatalogValueId String?               @map("wash_medium_catalog_value_id") @db.Uuid
+  washMediumCatalogValue   VariableCatalogValue? @relation("ProcessingStageWashMedium", fields: [washMediumCatalogValueId], references: [id])
+  washMediumSourceLotId    String?               @map("wash_medium_source_lot_id") @db.Uuid
+  washMediumSourceLot      Lot?                  @relation("ProcessingStageWashMediumSourceLot", fields: [washMediumSourceLotId], references: [id])
+  createdAt                DateTime              @default(now()) @map("created_at")
+  createdBy                String?               @map("created_by") @db.Uuid
+  creator                  UserAccount?          @relation("ProcessingStageCreatedBy", fields: [createdBy], references: [id])
 
-  measurements Measurement[]
-  observations ProcessingStageObservation[]
-  assets       Asset[]
-  deviations   Deviation[]
+  measurements        Measurement[]
+  observations        ProcessingStageObservation[]
+  sensoryObservations ProcessSensoryObservation[]
+  assets              Asset[]
+  deviations          Deviation[]
 
   @@index([treatmentBatchId])
   @@index([locationId])
+  @@index([washMediumCatalogValueId])
+  @@index([washMediumSourceLotId])
   @@map("processing_stage")
   @@schema("research")
 }
@@ -3987,27 +4016,102 @@ model ProcessingStageObservation {
   @@schema("research")
 }
 
+// RO1.2 §2b — sensory evaluation of the MEDIUM during processing (mosto,
+// cereza, pergamino, grano), distinct from both ProcessingStageObservation
+// (physical state — color, firmeza, flotado) and Assessment (finished
+// product, weeks later). Its value is operational: it says whether a
+// fermentation is on track while there's still time to intervene, which a
+// cupping score three weeks later can't. Time series by design — repeated
+// readings at different moments (12h, 36h) say different things about the
+// same fermentation, not one judgment.
+//
+// Field vocabulary is deliberately NOT forced to technical terms (§2b-iii):
+// a field worker's own language ("huele a guarapo") communicates something
+// real in the moment, and often the worker is the one present at 6am, not
+// a technician. `freeTextDescriptor` is recorded verbatim; an optional link
+// to a structured SensoryDescriptor (R1) is a later mapping made by someone
+// with judgment, never automatic — same "let the equivalence emerge from
+// use, don't impose a translation" goal RO1.1 already applied to honey
+// color.
+//
+// Inference is deliberately NOT a field on this row. "Huele a éster
+// frutal" is a direct observation; "hay levadura no-Saccharomyces activa"
+// is an interpretation, and without quantitative microbiology (named as
+// not-yet-measured on the product owner's own CryoBloom reference card)
+// it's an informed hypothesis, not a fact. Recording it as a same-row text
+// field would blur exactly the line ADR-038/Evidence→Interpretation exists
+// to hold — so a real inference goes through that existing chain instead:
+// create an Evidence row via `evidenceProcessSensoryObservationId`, then an
+// EvidenceClaim/Interpretation off of it, provenanceClass "interpretation".
+enum ProcessSensoryMedium {
+  mosto
+  cereza
+  pergamino
+  grano
+
+  @@schema("research")
+}
+
+model ProcessSensoryObservation {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  processingStageId      String               @map("processing_stage_id") @db.Uuid
+  processingStage        ProcessingStage      @relation(fields: [processingStageId], references: [id])
+  observedAt             DateTime             @map("observed_at")
+  observerPersonId       String?              @map("observer_person_id") @db.Uuid
+  observer               Person?              @relation("ProcessSensoryObservationObserver", fields: [observerPersonId], references: [id])
+  medium                 ProcessSensoryMedium
+  freeTextDescriptor     String               @map("free_text_descriptor")
+  structuredDescriptorId String?              @map("structured_descriptor_id") @db.Uuid
+  structuredDescriptor   SensoryDescriptor?   @relation(fields: [structuredDescriptorId], references: [id])
+  intensity              String?
+  // "La observación que dispara una intervención es distinta de la que
+  // solo se anota" — which ones led to action is what later teaches which
+  // signals matter.
+  triggeredIntervention  Boolean              @default(false) @map("triggered_intervention")
+  // ADR-038 — required, no default. Almost always direct_observation for
+  // the descriptor fields themselves; the separate inference (if any) gets
+  // its own provenanceClass on the Interpretation built off this row.
+  provenanceClass        ProvenanceClass      @map("provenance_class")
+  sourceReference        String?              @map("source_reference")
+  createdAt              DateTime             @default(now()) @map("created_at")
+  createdBy              String?              @map("created_by") @db.Uuid
+  creator                UserAccount?         @relation("ProcessSensoryObservationCreatedBy", fields: [createdBy], references: [id])
+
+  evidence Evidence[]
+
+  @@index([processingStageId])
+  @@index([structuredDescriptorId])
+  @@index([observerPersonId])
+  @@map("process_sensory_observation")
+  @@schema("research")
+}
+
 // A piece of evidence supporting an experiment's interpretation — a tasted
 // Sample, a photo Asset, a Measurement summary, or free-standing content.
 // Sample/Asset/Measurement are reused, not re-modeled (§2): a tasted
 // sample's evidentiary weight is the existing Sample row itself.
 model Evidence {
-  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  treatmentBatchId String?         @map("treatment_batch_id") @db.Uuid
-  treatmentBatch   TreatmentBatch? @relation(fields: [treatmentBatchId], references: [id])
-  sampleId         String?         @map("sample_id") @db.Uuid
-  sample           Sample?         @relation(fields: [sampleId], references: [id])
-  assetId          String?         @map("asset_id") @db.Uuid
-  asset            Asset?          @relation(fields: [assetId], references: [id])
-  measurementId    String?         @map("measurement_id") @db.Uuid
-  measurement      Measurement?    @relation(fields: [measurementId], references: [id])
-  description      String?
+  id                          String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  treatmentBatchId            String?                    @map("treatment_batch_id") @db.Uuid
+  treatmentBatch              TreatmentBatch?            @relation(fields: [treatmentBatchId], references: [id])
+  sampleId                    String?                    @map("sample_id") @db.Uuid
+  sample                      Sample?                    @relation(fields: [sampleId], references: [id])
+  assetId                     String?                    @map("asset_id") @db.Uuid
+  asset                       Asset?                     @relation(fields: [assetId], references: [id])
+  measurementId               String?                    @map("measurement_id") @db.Uuid
+  measurement                 Measurement?               @relation(fields: [measurementId], references: [id])
+  // RO1.2 §2b-iii — lets a process-sensory observation's inference (e.g.
+  // "hay levadura no-Saccharomyces activa") become a real Interpretation,
+  // instead of a same-row text field blurring observation vs. inference.
+  processSensoryObservationId String?                    @map("process_sensory_observation_id") @db.Uuid
+  processSensoryObservation   ProcessSensoryObservation? @relation(fields: [processSensoryObservationId], references: [id])
+  description                 String?
   // ADR-038 — required, no default.
-  provenanceClass  ProvenanceClass @map("provenance_class")
-  sourceReference  String?         @map("source_reference")
-  createdAt        DateTime        @default(now()) @map("created_at")
-  createdBy        String?         @map("created_by") @db.Uuid
-  creator          UserAccount?    @relation("EvidenceCreatedBy", fields: [createdBy], references: [id])
+  provenanceClass             ProvenanceClass            @map("provenance_class")
+  sourceReference             String?                    @map("source_reference")
+  createdAt                   DateTime                   @default(now()) @map("created_at")
+  createdBy                   String?                    @map("created_by") @db.Uuid
+  creator                     UserAccount?               @relation("EvidenceCreatedBy", fields: [createdBy], references: [id])
 
   claims EvidenceClaim[]
 
@@ -4015,6 +4119,7 @@ model Evidence {
   @@index([sampleId])
   @@index([assetId])
   @@index([measurementId])
+  @@index([processSensoryObservationId])
   @@map("evidence")
   @@schema("research")
 }

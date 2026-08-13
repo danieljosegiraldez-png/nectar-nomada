@@ -22,13 +22,24 @@ export interface CreateEvidenceInput {
   sampleId?: string | null;
   assetId?: string | null;
   measurementId?: string | null;
+  // RO1.2 §2b-iii — the mechanism a process-sensory observation's inference
+  // (e.g. "hay levadura no-Saccharomyces activa") becomes a real
+  // Interpretation through, instead of a same-row text field blurring
+  // observation vs. inference.
+  processSensoryObservationId?: string | null;
   description?: string | null;
   provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
 }
 
 export async function createEvidence(userAccountId: string, input: CreateEvidenceInput) {
-  if (!input.treatmentBatchId && !input.sampleId && !input.assetId && !input.measurementId) {
+  if (
+    !input.treatmentBatchId &&
+    !input.sampleId &&
+    !input.assetId &&
+    !input.measurementId &&
+    !input.processSensoryObservationId
+  ) {
     throw new EvidenceValidationError("at_least_one_reference_required");
   }
 
@@ -38,6 +49,14 @@ export async function createEvidence(userAccountId: string, input: CreateEvidenc
     if (!batch) throw new ResearchAccessError("treatment_batch_not_found");
     projectId = batch.projectId;
   }
+  if (input.processSensoryObservationId) {
+    const observation = await prisma.processSensoryObservation.findUnique({
+      where: { id: input.processSensoryObservationId },
+      include: { processingStage: { include: { treatmentBatch: true } } },
+    });
+    if (!observation) throw new ResearchAccessError("process_sensory_observation_not_found");
+    projectId = projectId ?? observation.processingStage.treatmentBatch.projectId;
+  }
   await requireResearchAccess(userAccountId, "create_evidence", [{ projectId }]);
 
   const evidence = await prisma.evidence.create({
@@ -46,6 +65,7 @@ export async function createEvidence(userAccountId: string, input: CreateEvidenc
       sampleId: input.sampleId ?? null,
       assetId: input.assetId ?? null,
       measurementId: input.measurementId ?? null,
+      processSensoryObservationId: input.processSensoryObservationId ?? null,
       description: input.description ?? null,
       provenanceClass: input.provenanceClass,
       sourceReference: input.sourceReference ?? null,

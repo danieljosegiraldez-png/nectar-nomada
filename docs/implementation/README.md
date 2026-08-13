@@ -632,6 +632,69 @@ entity, Kits Descubre Terroir, José Giráldez/Craft Brewing Supply
 integration, and the actual PE CSV import once the product owner supplies
 the files and confirms the open questions above.
 
+### RO1.2 — Fermentation methods: orthogonal dimensions, wash medium, process-sensory evaluation
+
+Extends RO1's own catalog mechanism, not a new module. The ticket's central
+finding: fermentation "methods" the industry usually presents as one list
+are actually independent axes — "anaeróbico no es un proceso, es una
+condición de fermentación," combinable with any process flow, thermal
+handling, or microbial source. Modeled as seven orthogonal dimensions a
+treatment selects one value from each of (Flujo de proceso, Condición de
+oxígeno, Manejo de temperatura, Fuente microbiana, Sustrato añadido,
+Estado de la cereza, Medio de lavado), reusing RO1 §3a's
+`VariableCatalog`/`ProtocolVariable`(catalog-typed)/
+`TreatmentBatchVariableValue` mechanism unmodified — six new catalogs,
+zero new schema for the dimensions themselves. The seventh, "Flujo de
+proceso," turned out to already exist as `grado_proceso`
+(Natural/Washed/Semi Wash 50%/75%) — reused, not duplicated; its one real
+gap, "Honey," is added bare (no baked-in percentage, unlike Semi Wash's),
+matching RO1.1/ADR-052's own restraint against inventing a
+percentage without real data.
+
+Two genuinely new relational structures, not data-only: wash medium
+(`ProcessingStage.washMediumCatalogValueId`/`washMediumSourceLotId` —
+"mosto de otro lote" is closer to inoculating than rinsing, PE-106/PE-107
+"Doble Mosto Guacho," so which lot matters and is enforced both ways by
+`recordWashMedium`) and `ProcessSensoryObservation` (sensory evaluation of
+the *medium* — mosto/cereza/pergamino/grano — during processing, distinct
+from `Assessment`'s finished-product cupping and RO1's own
+`ProcessingStageObservation` physical-state check; field-language
+descriptors recorded verbatim, never forced technical, same "let the
+equivalence emerge from use" reasoning as RO1.1's honey color; a real
+inference goes through the existing `Evidence` -> `EvidenceClaim` ->
+`Interpretation` chain via a new `Evidence.processSensoryObservationId`
+FK, never a same-row field). Every §2 method's own numeric field (cold
+hold's six temperature checkpoints, thermal-shock cycles, vessel pressure,
+brine concentration, water volume/ratio, and the rest) is a
+`lib/traceability/units.ts` registry addition, not schema — CLAUDE.md's
+own stated rule; the multi-stage "cereza entera anaeróbica sumergida ->
+despulpado -> honey" scenario is a chained `LotTransformation` DAG across
+two `TreatmentBatch` rows, never a compound catalog value, per §2's own
+"Multi-etapa... no crees un valor de catálogo" instruction.
+
+No new screens (RO1's existing UI reads this data unmodified, since it
+flows through mechanisms already rendered). 11 tests
+(`tests/research/ro1-2.test.ts`), real Neon, covering all of §5's
+verification scenarios, full regression 321/321. Migration applied
+directly against Neon (`prisma migrate diff --from-config-datasource`,
+routing around a pre-existing migration-history ordering defect —
+`20260813112712_ro1_statistical_discipline`'s folder timestamp predates
+`20260813153349_ro1_research_os`, the migration that creates the
+`research` schema its own SQL depends on; it applied fine in the real
+order things were actually run, but breaks a from-scratch shadow-database
+replay — not fixed here, flagged for a future session since fixing it
+means touching already-applied migration history, out of this ticket's
+scope). Draft ADR-053 text written, not yet appended (same "draft, not
+appended" pattern as F1/S1/R1's own ADRs), pending product-owner review.
+
+**Incomplete fields, reported per §6, not silently assumed:**
+`bioprotective_yeast_dose`'s unit (grams assumed, unconfirmed — could be
+g/hL or another convention), `koji_substrate`/`rehydration_method`/valve
+type (maceración carbónica, anaeróbico)/anaeróbico's purge gas are free
+text, not a controlled vocabulary — the ticket names no fixed list for
+any of them. No specific "Honey NN%" `grado_proceso` value is loaded.
+Every other method in §2 has its full field list built.
+
 ### V1 — Vocabulary fix: Lote is terrain, Batch is harvested/processed coffee
 
 A UI/i18n relabel, not a schema change (`Lot` stays `Lot` in the database —
@@ -739,6 +802,7 @@ so none was drafted.
 | `33_R1_ROASTSESSION_TAXONOMIA_SENSORIAL.md` | `RoastSession` and structured sensory descriptor/defect taxonomy — schema/service layer only, no UI. See "Where things stand" above. |
 | `34_RO1_RESEARCH_OS.md` | Research OS — 24-entity schema, PE-protocol variable modeling, catalog/statistical-discipline layer. §5-scoped UI only. See "Where things stand" above. |
 | `35_RO1.1_HONEY_PORCENTAJE_CANONICO.md` | Corrected RO1 §3a-bis: no honey color↔percentage alias is loaded — percentage is canonical, color is a separate producer label. See "Where things stand" above and ADR-052. |
+| `36_RO1.2_METODOS_FERMENTACION.md` | Fermentation methods as orthogonal dimensions — 6 new catalogs, wash medium, `ProcessSensoryObservation`. No new screens. Draft ADR-053, not appended. See "Where things stand" above. |
 | `38_V1_VOCABULARIO_LOTE_BATCH.md` | Vocabulary fix — terrain "Lote"/"Plot" vs. harvested-coffee "Batch," plus the batch→origin-plot visibility this ticket found actually missing. New `/plots` page. No schema rename. See "Where things stand" above. |
 
 ### Pending

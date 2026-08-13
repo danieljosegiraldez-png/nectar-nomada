@@ -70,7 +70,22 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
   {
     key: "grado_proceso",
     name: "Grado de proceso",
-    values: [{ value: "Natural" }, { value: "Washed" }, { value: "Semi Wash 50%" }, { value: "Semi Wash 75%" }],
+    // RO1.2 (36_RO1.2_METODOS_FERMENTACION.md §1) — "Flujo de proceso" is
+    // this same axis, not a new catalog (see the RO1.2 comment block
+    // below). "Honey" was missing entirely until this ticket; added bare,
+    // without a baked-in percentage, matching how "Natural"/"Washed" carry
+    // none either — NOT the same thing as inventing a color-to-percentage
+    // equivalence (RO1.1/ADR-052's actual rule). A specific "Honey NN%"
+    // value gets added, same insert-extensible mechanism, only once a real
+    // batch's measured percentage justifies it — never guessed ahead of
+    // that, same discipline as everywhere else in this catalog.
+    values: [
+      { value: "Natural" },
+      { value: "Washed" },
+      { value: "Semi Wash 50%" },
+      { value: "Semi Wash 75%" },
+      { value: "Honey" },
+    ],
   },
   // RO1.1 (35_RO1.1_HONEY_PORCENTAJE_CANONICO.md) — a separate catalog, not
   // values inside grado_proceso and not aliased to any of them. The
@@ -185,6 +200,147 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
     key: "cereza_defectos",
     name: "Defectos de grano",
     values: [{ value: "sano" }, { value: "brocado" }, { value: "vano" }, { value: "defectuoso" }],
+  },
+
+  // RO1.2 (36_RO1.2_METODOS_FERMENTACION.md §1). Six of the ticket's seven
+  // "orthogonal dimensions" — independent axes a treatment selects one
+  // value from each of, via the existing ProtocolVariable(catalog-typed)
+  // + TreatmentBatchVariableValue mechanism (§3a). No new schema: this IS
+  // the mechanism §3a already built for exactly this shape of question.
+  //
+  // The seventh dimension, "Flujo de proceso" (natural/honey/lavado/
+  // semi-lavado), is deliberately NOT a new catalog here — it's the same
+  // axis `grado_proceso` (above) already models: Natural/Washed/Semi Wash
+  // 50%/Semi Wash 75%. Adding a duplicate catalog under a new name would
+  // recreate what CLAUDE.md §2 already forbids ("the same X must not be
+  // recreated unnecessarily"). Honey-specific values (with their measured
+  // %, per ADR-052 — percentage is canonical, color is a separate label)
+  // aren't pre-populated here: RO1.1 already established that inventing a
+  // percentage without real product-owner data is exactly the fabrication
+  // this platform's provenance discipline forbids. They get added as real
+  // honey-process batches are recorded, same insert-extensible mechanism
+  // as every other catalog value.
+  {
+    key: "condicion_oxigeno",
+    name: "Condición de oxígeno",
+    values: [
+      {
+        value: "abierto_aerobico",
+        definition: "Fermentación con oxígeno disponible, sin sellado ni restricción de aire.",
+      },
+      {
+        value: "anaerobico",
+        definition:
+          "Fermentación con oxígeno restringido en recipiente sellado. Puede ser con cereza entera o despulpada, y combinarse con cualquier flujo de proceso. No es lo mismo que maceración carbónica ni un alias suyo: anaeróbico no exige CO₂ ni cereza entera — maceración carbónica es un subconjunto específico con ambos requisitos. El mercado a veces los usa indistintamente; este catálogo los mantiene separados a propósito (§4).",
+      },
+      {
+        value: "maceracion_carbonica",
+        definition:
+          "Cereza entera en tanque sellado saturado con CO₂; la fermentación ocurre dentro de cada cereza, no en la masa circundante. Es un subconjunto específico de anaeróbico, no equivalente ni intercambiable: exige CO₂ (purgado o medido) y cereza entera, que anaeróbico no exige por sí solo. No aliasear con anaerobico (§4).",
+      },
+      {
+        value: "anoxico",
+        definition:
+          "Sin oxígeno y sin CO₂ — cámara sellada con purga de gas inerte. Distinto de anaeróbico: anaeróbico no excluye el CO₂ que la propia fermentación genera; anóxico lo purga activamente.",
+      },
+    ],
+  },
+  {
+    key: "manejo_temperatura",
+    name: "Manejo de temperatura",
+    values: [
+      { value: "ambiente", definition: "Sin manejo activo de temperatura; el ambiente del lugar de fermentación." },
+      {
+        value: "cold_hold_prefermentativo",
+        definition:
+          "Cereza entera enfriada antes de cualquier fermentación, para retrasar actividad microbiana. Protocolo CryoBloom.",
+      },
+      {
+        value: "fermentacion_fria",
+        definition:
+          "Fermentación sostenida a temperatura reducida durante todo el proceso, distinta de un enfriamiento puntual.",
+      },
+      {
+        value: "choque_termico",
+        definition:
+          "Ciclos rápidos de temperatura durante o después de la fermentación, para arrestar actividad microbiana en un punto preciso. Puede repetirse en varios ciclos.",
+      },
+      {
+        value: "choque_en_frio",
+        definition:
+          "Descenso brusco de temperatura una sola vez, distinto del cold hold sostenido y de los ciclos repetidos del choque térmico.",
+      },
+    ],
+  },
+  {
+    key: "fuente_microbiana",
+    name: "Fuente microbiana",
+    values: [
+      {
+        value: "espontanea",
+        definition: "Sin inoculación deliberada; los microorganismos presentes de forma natural en la cereza y el ambiente.",
+      },
+      {
+        value: "levadura_inoculada",
+        definition:
+          "Levadura comercial o cultivo añadido deliberadamente. La cepa específica se registra en el catálogo Levadura/cultivo.",
+      },
+      { value: "bacterias_lab", definition: "Bacterias ácido-lácticas añadidas o favorecidas deliberadamente." },
+      { value: "koji", definition: "Aspergillus oryzae, usado para sacarificación (ver 23_ §5a)." },
+      {
+        value: "cultivo_mixto",
+        definition: "Combinación deliberada de más de una fuente microbiana en el mismo tratamiento.",
+      },
+    ],
+  },
+  {
+    key: "sustrato_anadido",
+    name: "Sustrato añadido",
+    values: [
+      { value: "ninguno", definition: "Sin ingrediente añadido durante la fermentación." },
+      {
+        value: "co_fermentacion",
+        definition:
+          "Fruta, especias u otro ingrediente añadido durante la fermentación. Qué se añadió y cuánto se registra aparte, nunca oculto — la divulgación importa, los estándares de declaración varían por productor y mercado.",
+      },
+      {
+        value: "doble_mosto",
+        definition:
+          "Reuso de mosto de una fermentación previa. De qué lote vino se registra vía Medio de lavado (mosto_de_otro_lote) cuando ese mosto también se usa como medio; si además hubo inoculación con él, ambos ejes se marcan.",
+      },
+    ],
+  },
+  {
+    key: "estado_cereza",
+    name: "Estado de la cereza",
+    values: [{ value: "entera", definition: "Cereza sin despulpar." }, { value: "despulpada", definition: "Cereza sin la piel/pulpa exterior." }],
+  },
+  // §1a. Selected via ProcessingStage.washMediumCatalogValueId. Water rinses
+  // and dilutes; mosto keeps the microbial load and the compounds already
+  // developed — not a variant of "lavado," its own dimension.
+  {
+    key: "medio_lavado",
+    name: "Medio de lavado",
+    values: [
+      {
+        value: "agua_limpia",
+        definition: "Agua sin carga microbiana ni compuestos de fermentación previa. Arrastra y diluye.",
+      },
+      {
+        value: "mosto_propio",
+        definition:
+          "Mosto del mismo lote. Mantiene el lote cerrado sobre sí mismo — la carga microbiana y los compuestos ya desarrollados vienen del propio proceso.",
+      },
+      {
+        value: "mosto_de_otro_lote",
+        definition:
+          "Mosto de un lote distinto o de una fermentación previa. Introduce material externo — más cercano a inocular que a lavar (PE-106/PE-107, \"Doble Mosto Guacho\"). El lote de origen se registra en ProcessingStage.washMediumSourceLotId, nunca solo en este valor de catálogo.",
+      },
+      {
+        value: "ninguno_natural",
+        definition: "Sin lavado — proceso natural; la cereza no pasa por medio líquido de lavado.",
+      },
+    ],
   },
 ] as const;
 

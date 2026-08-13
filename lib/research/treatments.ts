@@ -316,6 +316,161 @@ export async function recordProcessingStageObservation(userAccountId: string, in
   return observation;
 }
 
+export interface RecordWashMediumInput {
+  processingStageId: string;
+  // Must belong to the "medio_lavado" VariableCatalog (RO1.2 §1a).
+  washMediumCatalogValueId: string;
+  // Required exactly when the picked catalog value is "mosto_de_otro_lote"
+  // — closer to inoculating than to rinsing (PE-106/PE-107), so which lot
+  // matters and isn't optional in that one case. Must be absent otherwise:
+  // "mosto propio" and "agua limpia"/"ninguno_natural" don't name another
+  // lot, and letting one linger on the row would misrepresent provenance.
+  washMediumSourceLotId?: string | null;
+}
+
+export class WashMediumValidationError extends Error {}
+
+/**
+ * RO1.2 §1a — "el medio de lavado tiene su propio estado, y en un
+ * experimento eso puede ser tan relevante como el del café." Quantity and
+ * the medium's own pH/Brix/temperature stay ordinary Measurement rows
+ * (wash_medium_volume/ph/brix/temperature, lib/traceability/units.ts) —
+ * this function only sets which medium was used and, when applicable,
+ * which other Lot it came from.
+ */
+export async function recordWashMedium(userAccountId: string, input: RecordWashMediumInput) {
+  const stage = await prisma.processingStage.findUnique({
+    where: { id: input.processingStageId },
+    include: { treatmentBatch: true },
+  });
+  if (!stage) throw new ResearchAccessError("processing_stage_not_found");
+  await requireResearchAccess(userAccountId, "execute_protocol", [{ projectId: stage.treatmentBatch.projectId }]);
+
+  const catalogValue = await prisma.variableCatalogValue.findUnique({
+    where: { id: input.washMediumCatalogValueId },
+    include: { catalog: true },
+  });
+  if (!catalogValue) throw new ResearchAccessError("variable_catalog_value_not_found");
+  if (catalogValue.catalog.key !== "medio_lavado") {
+    throw new WashMediumValidationError("catalog_value_not_in_medio_lavado");
+  }
+
+  const isOtherLot = catalogValue.value === "mosto_de_otro_lote";
+  if (isOtherLot && !input.washMediumSourceLotId) {
+    throw new WashMediumValidationError("mosto_de_otro_lote_requires_source_lot");
+  }
+  if (!isOtherLot && input.washMediumSourceLotId) {
+    throw new WashMediumValidationError("source_lot_only_valid_for_mosto_de_otro_lote");
+  }
+  if (input.washMediumSourceLotId) {
+    const sourceLot = await prisma.lot.findUnique({ where: { id: input.washMediumSourceLotId } });
+    if (!sourceLot) throw new ResearchAccessError("wash_medium_source_lot_not_found");
+  }
+
+  const updated = await prisma.processingStage.update({
+    where: { id: input.processingStageId },
+    data: {
+      washMediumCatalogValueId: input.washMediumCatalogValueId,
+      washMediumSourceLotId: input.washMediumSourceLotId ?? null,
+    },
+  });
+
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "processing_stage.record_wash_medium",
+    entityType: "processing_stage",
+    entityId: updated.id,
+    after: updated,
+    sourceInterface: "research.service",
+  });
+
+  return updated;
+}
+
+export interface RecordProcessSensoryObservationInput {
+  processingStageId: string;
+  observedAt: Date;
+  observerPersonId?: string | null;
+  medium: "mosto" | "cereza" | "pergamino" | "grano";
+  // §2b-iii — recorded verbatim, in the field worker's own language. Never
+  // forced to technical vocabulary; required, since an observation without
+  // any descriptor is nothing to record.
+  freeTextDescriptor: string;
+  // §2b-iii — optional, a later mapping made by someone with judgment, not
+  // automatic (same "let the equivalence emerge from use" reasoning RO1.1
+  // applied to honey color).
+  structuredDescriptorId?: string | null;
+  intensity?: string | null;
+  // §2b-iii — "la observación que dispara una intervención es distinta de
+  // la que solo se anota." Defaults false; never inferred from the text.
+  triggeredIntervention?: boolean;
+  provenanceClass: ProvenanceClass;
+  sourceReference?: string | null;
+}
+
+/**
+ * RO1.2 §2b — sensory evaluation of the MEDIUM during processing, distinct
+ * from recordProcessingStageObservation (physical cherry state, §3b) and
+ * from Assessment (finished product, weeks later). Deliberately does NOT
+ * accept an inference/interpretation field — a real inference about
+ * microbial activity goes through Evidence -> EvidenceClaim ->
+ * Interpretation instead (Evidence.processSensoryObservationId), the same
+ * chain RO1's own provenance discipline already established, so
+ * observation and inference stay structurally separate, not just
+ * textually separate.
+ */
+export async function recordProcessSensoryObservation(
+  userAccountId: string,
+  input: RecordProcessSensoryObservationInput,
+) {
+  const stage = await prisma.processingStage.findUnique({
+    where: { id: input.processingStageId },
+    include: { treatmentBatch: true },
+  });
+  if (!stage) throw new ResearchAccessError("processing_stage_not_found");
+  await requireResearchAccess(userAccountId, "execute_protocol", [{ projectId: stage.treatmentBatch.projectId }]);
+
+  if (!input.freeTextDescriptor.trim()) {
+    throw new TreatmentBatchValidationError("free_text_descriptor_required");
+  }
+
+  if (input.structuredDescriptorId) {
+    const descriptor = await prisma.sensoryDescriptor.findUnique({ where: { id: input.structuredDescriptorId } });
+    if (!descriptor) throw new ResearchAccessError("sensory_descriptor_not_found");
+  }
+  if (input.observerPersonId) {
+    const observer = await prisma.person.findUnique({ where: { id: input.observerPersonId } });
+    if (!observer) throw new ResearchAccessError("observer_person_not_found");
+  }
+
+  const observation = await prisma.processSensoryObservation.create({
+    data: {
+      processingStageId: input.processingStageId,
+      observedAt: input.observedAt,
+      observerPersonId: input.observerPersonId ?? null,
+      medium: input.medium,
+      freeTextDescriptor: input.freeTextDescriptor,
+      structuredDescriptorId: input.structuredDescriptorId ?? null,
+      intensity: input.intensity ?? null,
+      triggeredIntervention: input.triggeredIntervention ?? false,
+      provenanceClass: input.provenanceClass,
+      sourceReference: input.sourceReference ?? null,
+      createdBy: userAccountId,
+    },
+  });
+
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "process_sensory_observation.create",
+    entityType: "process_sensory_observation",
+    entityId: observation.id,
+    after: observation,
+    sourceInterface: "research.service",
+  });
+
+  return observation;
+}
+
 /**
  * §3 — "Cold hold y fermentación son dos variables independientes ... Eso
  * encaja con el DAG que ya existe: cada etapa es una transformación, y su
