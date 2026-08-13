@@ -682,10 +682,10 @@ routing around a pre-existing migration-history ordering defect —
 `20260813153349_ro1_research_os`, the migration that creates the
 `research` schema its own SQL depends on; it applied fine in the real
 order things were actually run, but breaks a from-scratch shadow-database
-replay — not fixed here, flagged for a future session since fixing it
-means touching already-applied migration history, out of this ticket's
-scope). Draft ADR-053 text written, not yet appended (same "draft, not
-appended" pattern as F1/S1/R1's own ADRs), pending product-owner review.
+replay. Filed as its own ticket, `39_MIGRATION_HISTORY_ORDERING_BUG.md`
+— see "Not yet written"/"Pending" below; not fixed here, deliberately, per
+the product owner's own instruction. **Appended as ADR-053** in
+`DECISIONS.md`, right after RO1.1's own ADR-052.
 
 **Incomplete fields, reported per §6, not silently assumed:**
 `bioprotective_yeast_dose`'s unit (grams assumed, unconfirmed — could be
@@ -806,6 +806,24 @@ so none was drafted.
 | `38_V1_VOCABULARIO_LOTE_BATCH.md` | Vocabulary fix — terrain "Lote"/"Plot" vs. harvested-coffee "Batch," plus the batch→origin-plot visibility this ticket found actually missing. New `/plots` page. No schema rename. See "Where things stand" above. |
 
 ### Pending
+
+**`39_MIGRATION_HISTORY_ORDERING_BUG.md`** — **found during RO1.2, not
+fixed, deliberately.** `20260813112712_ro1_statistical_discipline`'s
+folder timestamp predates `20260813153349_ro1_research_os`, the migration
+that creates the `research` schema its own SQL depends on. Production
+(Neon) is unaffected — `prisma migrate status` reports clean, because
+`_prisma_migrations` just records what actually ran, in the actual order
+it ran. But a from-scratch shadow-database replay (what `prisma migrate
+dev` needs to generate a new migration, and what standing up any new
+environment from the migration files alone would need) fails at that
+exact point. RO1.2 routed around it with `prisma migrate diff
+--from-config-datasource` (diffing directly against the live database)
+instead of the normal flow — documented as a repeatable workaround in the
+ticket's own §6, needed by every schema-changing session until this is
+actually fixed. Not fixed here: the real fix touches either
+`_prisma_migrations` on production or already-applied migration folder
+names, both sensitive enough to need explicit product-owner sign-off
+first (the ticket lays out three options, not yet chosen).
 
 **`16_ADAPTIVE_OPERATOR_WORKSPACE_PREAMBLE.md`** — **unblocked.** Its
 companion, `ADAPTIVE_OPERATOR_WORKSPACE_RESEARCH_PROMPT.md`, is now filed

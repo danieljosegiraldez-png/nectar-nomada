@@ -3688,3 +3688,126 @@ flows through the exact same catalog-typed-variable mechanism `§3a`
 already built, proving that mechanism's own claim that catalog and alias
 infrastructure built for one case generalizes to a new one without a
 schema change.
+
+---
+
+## ADR-053 — RO1.2: fermentation methods as orthogonal dimensions, not a
+flat catalog
+
+**Context.** `36_RO1.2_METODOS_FERMENTACION.md` set out to load RO1's
+catalog mechanism with the industry's fermentation-method vocabulary and
+found the vocabulary itself doesn't fit a flat catalog: "anaeróbico no es
+un proceso, es una condición de fermentación" — it can sit on top of a
+washed, honey, or natural flow, combine with thermal shock, a
+prefermentative cold hold, or inoculated yeast, none of which compete with
+each other. The product owner's own real data already shows this: *"cereza
+entera anaeróbica sumergida, después despulpado, después honey"* is one
+lot combining an oxygen condition with a process flow across two chained
+stages — not one compound label.
+
+**Decision 1 — seven independent dimensions, not a method enum.** A
+treatment selects one value from each of: Flujo de proceso, Condición de
+oxígeno, Manejo de temperatura, Fuente microbiana, Sustrato añadido,
+Estado de la cereza, Medio de lavado. This is data, not schema: RO1 §3a's
+`VariableCatalog`/`VariableCatalogValue` + `ProtocolVariable`(catalog-
+typed) + `TreatmentBatchVariableValue` mechanism already expresses exactly
+this shape — "pick one value per declared axis" — so six of the seven
+dimensions are new `VariableCatalog` rows (`condicion_oxigeno`,
+`manejo_temperatura`, `fuente_microbiana`, `sustrato_anadido`,
+`estado_cereza`, `medio_lavado`) with no schema change at all.
+
+**Decision 2 — "Flujo de proceso" reuses `grado_proceso`, not a new
+catalog.** RO1's own `grado_proceso` catalog (Natural/Washed/Semi Wash
+50%/Semi Wash 75%) already *is* this axis under a different name — adding
+a duplicate would recreate what CLAUDE.md §2 forbids ("the same X must not
+be recreated unnecessarily"). Its only real gap was "Honey," entirely
+missing until now; added bare, without a baked-in percentage (unlike
+"Semi Wash 50%/75%," which do bake theirs in), because RO1.1/ADR-052
+already established that inventing a color-to-percentage equivalence
+without real data is exactly the fabrication this platform's provenance
+discipline forbids — the same restraint applies to guessing a *specific*
+honey percentage bracket. A "Honey NN%" value gets added, same
+insert-extensible mechanism, only once a real batch's measured percentage
+justifies it.
+
+**Decision 3 — the multi-stage scenario is a DAG, never a compound
+value.** "Cereza entera anaeróbica sumergida → despulpado → honey" is
+modeled as two `TreatmentBatch` rows (one per stage) joined by a real
+`LotTransformation` between their lots — each stage carries only the
+dimension values that actually describe it, never a composite string.
+This is the same resolution §2's own "Multi-etapa... no crees un valor de
+catálogo" instruction already states for encoding sequence: the
+`lot_transformation` DAG is the mechanism, not a field.
+
+**Decision 4 — wash medium is its own dimension, with two new
+`ProcessingStage` fields, not a catalog value alone.** "Lavar con agua
+limpia no es lo mismo que lavar con el propio mucílago o con mosto
+fermentado" — water dilutes; mosto keeps the microbial load and developed
+compounds. `medio_lavado` (a new catalog: agua_limpia / mosto_propio /
+mosto_de_otro_lote / ninguno_natural) names *which* medium; a real schema
+addition, `ProcessingStage.washMediumSourceLotId`, names *which other Lot*
+the mosto came from when it's `mosto_de_otro_lote` — required exactly
+then, forbidden otherwise (`recordWashMedium` enforces both directions),
+because that case is closer to inoculating than to rinsing (the product
+owner's own PE-106/PE-107 "Doble Mosto Guacho"), and provenance would be
+misrepresented either omitting it or leaving it dangling on an unrelated
+selection. Quantity and the medium's own pH/Brix/temperature stay ordinary
+`Measurement` rows (`wash_medium_volume`/`ph`/`brix`/`temperature`),
+distinct variable names from the cherry/lot's own readings — same
+physical measurement, different subject, no new column needed to say so.
+
+**Decision 5 — every §2 method's numeric field is a `Measurement`
+variable, not new schema.** Cold hold's six temperature checkpoints,
+thermal-shock cycle durations, river-water temperature, vessel pressure,
+brine concentration, and the rest are additions to
+`lib/traceability/units.ts`'s registry only — CLAUDE.md's own stated rule
+("adding a new measurable variable requires no schema migration"). A
+distinct variable name is used per genuinely distinct concept (the six
+cold-hold checkpoints are six different things, not six readings of one
+thing); a repeated concept over time (thermal-shock cycles) reuses one
+variable across multiple `Measurement` rows, one per occurrence — "cantidad
+de ciclos" is the row count, never stored as a second field. Boolean and
+free-text fields (agitación, tipo de sellado, cultivo usado) go through
+the existing `ProtocolVariable`(boolean/text-typed) mechanism, not
+`Measurement` at all.
+
+**Decision 6 — process-sensory evaluation is its own entity, and
+deliberately carries no inference field.** `ProcessSensoryObservation` is
+new: subject is the *medium* (mosto/cereza/pergamino/grano) at a specific
+processing moment, not the finished product (`Assessment`, weeks later)
+or the cherry's physical state (`ProcessingStageObservation`, §3b). Its
+`freeTextDescriptor` is recorded verbatim, in the field worker's own
+language ("huele a guarapo") — never forced to technical vocabulary,
+matching RO1.1's own "let the equivalence emerge from use" reasoning for
+honey color; an optional `structuredDescriptorId` link is a later mapping
+a person with judgment makes, never automatic. A real inference about
+microbial activity ("hay levadura no-Saccharomyces activa") does NOT get
+a same-row field — it goes through the existing `Evidence` →
+`EvidenceClaim` → `Interpretation` chain instead (a new
+`Evidence.processSensoryObservationId` FK), the same discipline
+`Evidence`/`Interpretation` already enforces for every other kind of
+evidence in this schema: observation and inference stay structurally
+separate, not just textually separate, and only the latter carries a
+`provenanceClass` of `interpretation`.
+
+**Consequence.** No schema rename, no new UI (per the ticket's own
+scoping — "sin pantallas nuevas," RO1's existing screens read this data
+unmodified since it flows through mechanisms they already render). Two
+genuinely new relational structures: `ProcessSensoryObservation` (+its
+`Evidence` link) and `ProcessingStage.washMediumCatalogValueId`/
+`washMediumSourceLotId`. Everything else — the six new catalogs, the new
+`Measurement` variables, `grado_proceso`'s "Honey" addition — is data, not
+schema, matching every prior RO1 decision's own bias toward the
+insert-extensible mechanism over a migration.
+
+**Incomplete fields, reported per §6, not silently assumed:** the
+reference card excerpt in the ticket names `bioprotective_yeast_dose`'s
+field but not its unit convention (grams assumed here as the common
+sachet/gram-scale default; needs product-owner confirmation — g vs g/hL
+vs another convention). `koji_substrate`, `rehydration_method`, valve
+type (maceración carbónica/anaeróbico), and the specific purge gas for
+anaeróbico are recorded as free text rather than a controlled vocabulary
+— the ticket gives no fixed list for any of them, and inventing one would
+be exactly the fabrication this discipline forbids. No specific "Honey
+NN%" `grado_proceso` value is loaded (Decision 2) — every method in §2
+otherwise has its full field list built.
