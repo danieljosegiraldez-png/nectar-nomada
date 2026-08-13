@@ -500,6 +500,7 @@
     "inspectionRecordButton": "Registrar inspección",
     "cancelButton": "Cancelar",
     "inspectionSavedLocally": "Guardado en este dispositivo — se sincronizará al conectar.",
+    "localSaveFailedError": "No se pudo guardar en este dispositivo. Verificá el almacenamiento disponible e intentá de nuevo.",
     "colonyEventHeading": "Alimentación, tratamiento y observaciones",
     "logFeedingHeading": "Registrar alimentación",
     "feedingMaterialLabel": "Material",
@@ -536,7 +537,11 @@
     "syncNowButton": "Sincronizar ahora",
     "syncingButton": "Sincronizando…",
     "discardErroredButton": "Descartar fallidas",
-    "syncResult": "Sincronizadas {synced}, fallidas {errored}."
+    "syncResult": "Sincronizadas {synced}, fallidas {errored}.",
+    "lastSyncLabel": "Última sincronización: {time}",
+    "neverSyncedLabel": "Todavía no sincronizó",
+    "storageWarning": "El almacenamiento del dispositivo se está agotando",
+    "draftsPurgedNotice": "{count, plural, one {Se eliminó # borrador antiguo sin sincronizar} other {Se eliminaron # borradores antiguos sin sincronizar}} para proteger los datos de campo si se pierde este dispositivo."
   },
   "LocaleSwitcher": {
     "label": "Idioma"

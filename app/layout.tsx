@@ -6,10 +6,13 @@ import "./globals.css";
 import { getCurrentUser } from "../lib/auth/session";
 import { logoutAction } from "./actions/auth";
 import { LocaleSwitcher } from "./components/LocaleSwitcher";
+import { ServiceWorkerRegistration } from "./components/ServiceWorkerRegistration";
 
 export const metadata: Metadata = {
   title: "Néctar Nómada",
   description: "Territory, agriculture, fermentation, research, and craft — one platform.",
+  // A5.5 — lets the operator routes be added to the home screen.
+  manifest: "/manifest.webmanifest",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -18,6 +21,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale}>
       <body>
+        <ServiceWorkerRegistration />
         <NextIntlClientProvider>
           <header className="nn-nav">
             <div className="nn-shell nn-nav-row">

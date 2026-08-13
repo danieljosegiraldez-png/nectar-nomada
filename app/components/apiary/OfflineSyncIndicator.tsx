@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { listDrafts, syncAll, discardDraft, type DraftKind } from "../../../lib/apiary/offlineQueue";
+import {
+  listDrafts,
+  syncAll,
+  discardDraft,
+  getLastSyncAt,
+  purgeStaleDrafts,
+  getStorageEstimate,
+  type DraftKind,
+} from "../../../lib/apiary/offlineQueue";
 import { recordColonyEventSyncAction, recordInspectionSyncAction } from "../../actions/apiary";
 import type { RecordInspectionInput } from "../../../lib/apiary/inspections";
 import type { RecordColonyEventInput } from "../../../lib/apiary/colonyEvents";
@@ -45,12 +53,23 @@ export function OfflineSyncIndicator() {
   const [isOnline, setIsOnline] = useState(() => (typeof window !== "undefined" ? navigator.onLine : true));
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastMessage, setLastMessage] = useState<string | null>(null);
+  // A5.5 §2 (visible, honest state), §3 (storage quota), §4 (stale-draft
+  // purge — a narrow, documented exception to OFFLINE_FIELD_CAPABILITY.md
+  // §3's general "no expiry" rule; see the A5.5 ADR draft in README.md).
+  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  const [storageWarning, setStorageWarning] = useState(false);
+  const [purgeNotice, setPurgeNotice] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    const purgeResult = await purgeStaleDrafts();
     const drafts = await listDrafts();
     setPendingCount(drafts.filter((d) => d.status === "pending").length);
     setErroredCount(drafts.filter((d) => d.status === "error").length);
-  }, []);
+    setLastSyncAt(getLastSyncAt());
+    if (purgeResult.purged > 0) setPurgeNotice(t("draftsPurgedNotice", { count: purgeResult.purged }));
+    const estimate = await getStorageEstimate();
+    setStorageWarning(estimate.usageRatio != null && estimate.usageRatio > 0.8);
+  }, [t]);
 
   const runSync = useCallback(async () => {
     if (isSyncing) return;
@@ -97,7 +116,8 @@ export function OfflineSyncIndicator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runSync/refresh are stable via useCallback's own deps
   }, []);
 
-  if (pendingCount === 0 && erroredCount === 0 && isOnline) return null;
+  const hasContent = pendingCount > 0 || erroredCount > 0 || !isOnline || storageWarning || purgeNotice;
+  if (!hasContent) return null;
 
   return (
     <div className="nn-section" style={{ padding: "0.5rem 1rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -106,6 +126,7 @@ export function OfflineSyncIndicator() {
       </span>
       {pendingCount > 0 ? <span className="nn-muted">{t("pendingCount", { count: pendingCount })}</span> : null}
       {erroredCount > 0 ? <span className="nn-muted">{t("erroredCount", { count: erroredCount })}</span> : null}
+      <span className="nn-muted">{lastSyncAt ? t("lastSyncLabel", { time: new Date(lastSyncAt).toLocaleString() }) : t("neverSyncedLabel")}</span>
       {pendingCount > 0 || erroredCount > 0 ? (
         <button type="button" className="nn-button" onClick={() => void runSync()} disabled={isSyncing || !isOnline}>
           {isSyncing ? t("syncingButton") : t("syncNowButton")}
@@ -124,6 +145,12 @@ export function OfflineSyncIndicator() {
         </button>
       ) : null}
       {lastMessage ? <span className="nn-muted">{lastMessage}</span> : null}
+      {storageWarning ? (
+        <span className="nn-badge" style={{ background: "var(--nn-color-warning, #b45309)" }}>
+          {t("storageWarning")}
+        </span>
+      ) : null}
+      {purgeNotice ? <span className="nn-muted">{purgeNotice}</span> : null}
     </div>
   );
 }

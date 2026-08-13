@@ -115,17 +115,55 @@ a mock, and all passed. Pre-load cleanup removed the DEMO "Las Nubes" 2027
 chain seeded by T14 (a name collision waiting to happen against the real
 Project) and 71 orphaned rows left behind by earlier test runs whose
 `afterAll` never completed — root-caused, not fixed (see the note below).
+**A5.5 (service worker: the app opens with zero signal) is now done,**
+built out of A1-A8 numeric order per direct instruction, ahead of A8.
+`25_OFFLINE_OPTIONS_ANALYSIS.md`'s Option B (A5) only covers *losing*
+connectivity mid-session; it never solves *arriving* at a zero-coverage
+site and opening the app cold. `public/sw.js` precaches the app shell
+(both locales' i18n messages, static assets) on first visit with signal,
+cache-first for static/build assets, network-first-with-cache-fallback
+for operator-route navigations (`/apiaries`, `/lots`), falling back to a
+static, self-contained `public/offline.html` that reads the `NEXT_LOCALE`
+cookie client-side rather than trying to solve locale-aware caching
+inside the service worker itself. `public/manifest.webmanifest` makes the
+app addable to a home screen — the prompt's own point that an operator in
+the field can't be expected to remember a URL. §2's three data-protection
+controls are all in: synchronous IndexedDB write before the UI confirms
+"saved" (unchanged from A5, now also surfaced as a visible `saveError` in
+`InspectionForm` and `ColonyEventQuickEntry` on write failure, not just
+on sync failure), always-visible state (`OfflineSyncIndicator` now shows
+last-successful-sync time and a storage-quota warning at >80% usage, not
+just pending/errored counts), and drafts are never discarded locally
+until the server confirms the row exists. §3's storage-quota warning uses
+`navigator.storage.estimate()`. §4's three security decisions: Auth.js
+session `maxAge` cut from Auth.js's ~30-day default to 7 days
+(`lib/auth/config.ts`) — a uniform lever, not offline-specific, since
+Auth.js has no offline-only session concept; app-level IndexedDB
+encryption evaluated and explicitly rejected for v1 (reasoning in
+`lib/apiary/offlineQueue.ts`'s comment above `purgeStaleDrafts` — a
+device-bound key ends up reachable by anything that can drive the page,
+so it protects against the wrong attacker) in favor of a two-stage
+7-day-warning/21-day-purge mechanism, a narrow, explicitly-scoped
+exception to `OFFLINE_FIELD_CAPABILITY.md` §3's "no expiry, ever" rule;
+and fresh per-sync RBAC revalidation was confirmed live, not just by
+reading the code — a scratch Assignment was created, used to sync one
+Inspection successfully, revoked, and a second sync attempt against the
+same (now-revoked) Assignment was confirmed rejected by both
+`recordInspectionSyncAction` and `recordColonyEventSyncAction`, then the
+scratch rows were deleted. Draft ADR text for this ticket is below
+("Draft ADR-046"), not yet appended to `DECISIONS.md`.
+
 **A8 remains unbuilt.** The ADR amendment justifying apiary's v1 inclusion
 is still a draft sitting inside the scoping report, not yet appended to
 `DECISIONS.md` (unlike ADR-044, T12.6's own amendment, which is appended).
 
-**Investigation, not a fix: why 71 rows were orphaned in Neon.**
-`vitest.config.ts` sets no `testTimeout`/`hookTimeout` — every test file
-runs on Vitest's 10-second default for both. `DATABASE_URL` in `.env`
-points at Neon's *direct* endpoint (no `-pooler` hostname suffix), and
+**Fixed, not just investigated: why 71 rows were orphaned in Neon.**
+`vitest.config.ts` set no `testTimeout`/`hookTimeout` — every test file
+ran on Vitest's 10-second default for both. `DATABASE_URL` in `.env`
+pointed at Neon's *direct* endpoint (no `-pooler` hostname suffix), and
 Neon's serverless compute suspends after idle — the first query on a
 fresh connection after a suspend has to wait for the compute to wake,
-which has repeatedly measured well past 10 seconds live in this session
+which repeatedly measured well past 10 seconds live in this session
 (`tests/traceability/e2e.test.ts` and `reports.test.ts` both failed their
 `beforeAll`/`afterAll` under the default timeout — including when run
 alone, just the two of them — and passed cleanly once `--testTimeout=30000
@@ -140,9 +178,100 @@ or `afterAll` times out partway through, whatever `deleteMany` calls
 hadn't run yet simply don't — that's the mechanism that left this
 session's Person/Organization/Project/Location/Lot residue behind (17 + 6
 + 17 + 13 + 18 = 71, the exact figure found and removed during A7's
-pre-load cleanup). Not fixed here per instruction — a real fix would touch
-`vitest.config.ts`'s global timeouts and/or the `DATABASE_URL`
-pooler-vs-direct question, both explicitly out of scope for this pass.
+pre-load cleanup). **Fixed in the commit immediately after A7**:
+`vitest.config.ts` now sets `testTimeout: 30000, hookTimeout: 30000`
+explicitly, and `.env`'s `DATABASE_URL` was corrected to Neon's
+`-pooler` endpoint — the value `.env.example` had already documented as
+the intended one, confirmed empirically (`prisma migrate status` and the
+full suite both run cleanly against it) rather than assumed. `.env` is
+gitignored, so this fix never touches git; only `vitest.config.ts` was
+committed.
+
+---
+
+## Draft ADR-046 (draft only — not appended to `DECISIONS.md`)
+
+**ADR-DRAFT-046 — Service worker for cold-start offline app-shell
+availability (A5.5); three offline security decisions**
+
+**Context.** A5 built `25_OFFLINE_OPTIONS_ANALYSIS.md`'s Option B: a
+vanilla IndexedDB draft queue with explicit/opportunistic sync, no
+service worker. That mechanism only ever engages once the app is already
+open in a live browser tab — it solves losing signal mid-session. It does
+nothing for the more basic failure `28_A5.5_SERVICE_WORKER_OFFLINE.md`
+names as the real field condition: an operator at a site with zero
+cellular coverage (Calovébora and equivalent sites) taps the home-screen
+icon, the browser tries to fetch from the network, fails, and shows
+nothing — the same failure mode as a device restart or a browser fully
+closed and reopened. `25_` itself anticipated this outcome and named the
+correction in advance: *if Option B proves insufficient, add a service
+worker that caches the app shell — not a jump to full Option A* (the
+heavier, cross-cutting offline architecture `OFFLINE_FIELD_CAPABILITY.md`
+describes in general). A5.5 is exactly that anticipated, narrow addition,
+confirmed necessary rather than assumed necessary, once A5 shipped and
+made the gap concrete.
+
+**Decision 1 — scope.** Add `public/sw.js`: cache-first for static/
+build-hashed assets, network-first-with-cache-fallback for navigations to
+operator routes (`/apiaries`, `/lots`), falling back further to a
+precached, locale-aware-at-runtime `public/offline.html` when nothing
+else is cached. Explicitly out of scope, per the ticket's own boundary:
+Background Sync API, automatic conflict resolution, map-tile caching,
+push notifications, offline mode for admin/report routes. This sits on
+top of A5, not instead of it — A5's IndexedDB queue and idempotent
+`clientDraftId` sync are unchanged and still do all the actual data work;
+the service worker's only job is making the shell open at all.
+
+**Decision 2 — session duration offline.** Auth.js's default JWT session
+`maxAge` (~30 days) is too long for a device that may operate for
+extended stretches without ever reaching the server to be told its
+session is revoked. Auth.js has no concept of an "offline-only" session
+lifetime — the lever is uniform, online and offline alike — so the fix is
+a single shorter `maxAge`: 7 days (`lib/auth/config.ts`). Chosen to bound
+how long a lost or stolen device stays authenticated without forcing
+daily re-login for operators who use the app most days; `SECURITY.md`
+§11's existing precedent (shorter durations for sensitive profiles) is
+the same reasoning applied to the offline case.
+
+**Decision 3 — drafts at rest.** Queued Inspection/ColonyEvent drafts sit
+in plaintext IndexedDB, and a lost/stolen device exposes them as
+`partner`-classified field data. App-level encryption was evaluated and
+rejected for v1: any key reachable by the page itself (no server round
+trip available, by construction, while offline) is reachable by anything
+that can drive the page, which protects against a reader of the raw
+IndexedDB file but not against the realistic threat — an unlocked lost
+phone. The device's own screen lock is the actual first line of defense
+here, outside this application's control. Implemented mitigation instead:
+`purgeStaleDrafts()` (`lib/apiary/offlineQueue.ts`) — a visible warning
+at 7 days unsynced, an actual purge at 21 days, always reported back to
+the UI, never silent. This is an explicit, narrowly-scoped exception to
+`OFFLINE_FIELD_CAPABILITY.md` §3's general "no expiry, ever" rule for
+captured field data — justified here specifically by the security
+exposure of an unsynced draft on a lost device, not a reversal of that
+rule for any other case. Worth reconsidering (e.g. a device-bound key via
+WebAuthn/platform keystore) for a future engagement with stronger
+data-protection requirements.
+
+**Decision 4 — revalidation on sync.** Non-negotiable per the ticket:
+the server must revalidate Assignment/scope validity fresh on every sync
+call, never trusting what the client believed when it queued the draft.
+This was already true by construction — `recordInspectionSyncAction`/
+`recordColonyEventSyncAction` call `recordInspection`/`recordColonyEvent`,
+which call `requireApiaryAccess`/`requireColonyEventWriteAccess`, which
+call `can()`, which queries `Assignment` fresh from the database on every
+invocation with no caching layer in between — but "true by construction"
+is not the same as verified. Confirmed live: a scratch Person/
+UserAccount/Assignment (Farm Operator, scoped to a scratch Location) was
+created; `recordInspection` succeeded against it; the Assignment was set
+`status: revoked`; a second, distinct `recordInspection` call and a
+`recordColonyEvent` call against the same now-revoked Assignment both
+threw `ApiaryAccessError("no_apiary_access")`. Scratch rows deleted after.
+
+**Consequence.** A5.5 does not reopen or revise A0-A5's design — it is
+the specific, bounded addition `25_` already predicted, built once A5
+made the gap real rather than speculative. No case was found for jumping
+to full Option A (`OFFLINE_FIELD_CAPABILITY.md`'s general cross-cutting
+architecture) for this ticket's scope.
 
 ADR-039 carries a clause worth repeating here: these tickets build the
 *capability* to carry a harvest end to end. They do not constitute having
@@ -262,11 +391,11 @@ entities that do not exist is how invented entities enter a schema.
 
 ## Recommended order from here
 
-1. **A8 (apiary)** — A1-A3, A6, and A7 are done, A4 folded into A3, and A0
-   folded into A5 (all confirmed live, no standalone build); coffee's own
-   ticket sequence is closed (T14 done), so this remains the one open
-   build track. A8 (DEMO seed + E2E test) is the last ticket in the
-   original A1-A8 set.
+1. **A8 (apiary)** — A1-A3, A5.5, A6, and A7 are done, A4 folded into A3,
+   and A0 folded into A5 (all confirmed live, no standalone build);
+   coffee's own ticket sequence is closed (T14 done), so this remains the
+   one open build track. A8 (DEMO seed + E2E test) is the last ticket in
+   the original A1-A8 set.
 2. **Credentials** (Stripe, R2, Google OAuth — all unset in production as of
    the last verified check).
 3. **The real milestone**: a real apiary season actually inspected by

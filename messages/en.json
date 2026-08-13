@@ -500,6 +500,7 @@
     "inspectionRecordButton": "Record inspection",
     "cancelButton": "Cancel",
     "inspectionSavedLocally": "Saved on this device — will sync when connected.",
+    "localSaveFailedError": "Could not save on this device. Check available storage and try again.",
     "colonyEventHeading": "Feeding, treatment, and observations",
     "logFeedingHeading": "Log feeding",
     "feedingMaterialLabel": "Material",
@@ -536,7 +537,11 @@
     "syncNowButton": "Sync now",
     "syncingButton": "Syncing…",
     "discardErroredButton": "Discard failed",
-    "syncResult": "Synced {synced}, failed {errored}."
+    "syncResult": "Synced {synced}, failed {errored}.",
+    "lastSyncLabel": "Last synced: {time}",
+    "neverSyncedLabel": "Never synced yet",
+    "storageWarning": "Device storage running low",
+    "draftsPurgedNotice": "{count, plural, one {# old unsynced draft was removed} other {# old unsynced drafts were removed}} to protect field data if this device is lost."
   },
   "LocaleSwitcher": {
     "label": "Language"

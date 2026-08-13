@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Néctar Nómada — Offline</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; background: #1a1410; color: #f2e9dc; margin: 0; padding: 2rem 1.25rem; }
+  .wrap { max-width: 28rem; margin: 3rem auto; text-align: center; }
+  .badge { display: inline-block; background: #b47828; color: #1a1410; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.85rem; font-weight: 600; margin-bottom: 1rem; }
+  h1 { font-size: 1.4rem; margin: 0 0 0.5rem; }
+  p { color: #cbb99f; line-height: 1.5; }
+  .count { font-size: 2.5rem; font-weight: 700; margin: 1.5rem 0 0.25rem; }
+  .links { margin-top: 2rem; display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+  a.btn { display: inline-block; background: #b47828; color: #1a1410; padding: 0.6rem 1.1rem; border-radius: 0.4rem; text-decoration: none; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="badge" data-t="badge">Offline</span>
+  <h1 data-t="title">No hay conexión</h1>
+  <p data-t="body">Esta página no se guardó en caché todavía, así que no se puede mostrar sin señal. Tus borradores guardados en este dispositivo siguen a salvo.</p>
+  <div class="count" id="draft-count">—</div>
+  <p data-t="countLabel">borradores pendientes en este dispositivo</p>
+  <div class="links">
+    <a class="btn" href="/apiaries" data-t="apiaryLink">Apiarios</a>
+    <a class="btn" href="/lots" data-t="lotsLink">Lotes</a>
+  </div>
+</div>
+<script>
+(function () {
+  var es = document.cookie.split("; ").find(function (row) { return row.indexOf("NEXT_LOCALE=") === 0; });
+  var locale = es ? es.split("=")[1] : "es";
+  var text = {
+    es: {
+      badge: "Sin conexión",
+      title: "No hay conexión",
+      body: "Esta página no se guardó en caché todavía, así que no se puede mostrar sin señal. Tus borradores guardados en este dispositivo siguen a salvo.",
+      countLabel: "borradores pendientes en este dispositivo",
+      apiaryLink: "Apiarios",
+      lotsLink: "Lotes",
+    },
+    en: {
+      badge: "Offline",
+      title: "No connection",
+      body: "This page wasn't cached yet, so it can't be shown without a signal. Your drafts saved on this device are still safe.",
+      countLabel: "pending drafts on this device",
+      apiaryLink: "Apiaries",
+      lotsLink: "Lots",
+    },
+  };
+  var t = text[locale] || text.es;
+  document.querySelectorAll("[data-t]").forEach(function (el) {
+    el.textContent = t[el.getAttribute("data-t")];
+  });
+
+  // Same IndexedDB shape as lib/apiary/offlineQueue.ts (DB "nectar-apiary-offline", store "drafts") — read directly, no module import, since this page has no bundler.
+  var req = indexedDB.open("nectar-apiary-offline", 1);
+  req.onsuccess = function () {
+    try {
+      var db = req.result;
+      if (!db.objectStoreNames.contains("drafts")) {
+        document.getElementById("draft-count").textContent = "0";
+        return;
+      }
+      var tx = db.transaction("drafts", "readonly");
+      var getAll = tx.objectStore("drafts").getAll();
+      getAll.onsuccess = function () {
+        var pending = getAll.result.filter(function (d) { return d.status === "pending" || d.status === "error"; });
+        document.getElementById("draft-count").textContent = String(pending.length);
+      };
+    } catch (e) {
+      document.getElementById("draft-count").textContent = "?";
+    }
+  };
+  req.onerror = function () {
+    document.getElementById("draft-count").textContent = "?";
+  };
+})();
+</script>
+</body>
+</html>

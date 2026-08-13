@@ -19,6 +19,7 @@ export function InspectionForm({ colonyId, selfPersonId }: { colonyId: string; s
   const t = useTranslations("Apiary");
   const [showDetails, setShowDetails] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [brood, setBrood] = useState("");
   const [queenSighted, setQueenSighted] = useState(false);
   const [stores, setStores] = useState("");
@@ -27,29 +28,43 @@ export function InspectionForm({ colonyId, selfPersonId }: { colonyId: string; s
   const [note, setNote] = useState("");
 
   async function submitRoutine() {
-    await queueDraft("inspection", {
-      colonyId,
-      occurredAt: new Date(),
-      operatorPersonId: selfPersonId,
-      outcome: "nothing_unusual",
-    });
+    setSaveError(null);
+    try {
+      await queueDraft("inspection", {
+        colonyId,
+        occurredAt: new Date(),
+        operatorPersonId: selfPersonId,
+        outcome: "nothing_unusual",
+      });
+    } catch {
+      // A5.5 §2: the local write itself failed (e.g. storage quota) — the
+      // operator must see this now, not discover a missing entry later.
+      setSaveError(t("localSaveFailedError"));
+      return;
+    }
     window.dispatchEvent(new Event(APIARY_DRAFTS_CHANGED_EVENT));
     setSavedMessage(t("inspectionSavedLocally"));
   }
 
   async function submitDetails() {
-    await queueDraft("inspection", {
-      colonyId,
-      occurredAt: new Date(),
-      operatorPersonId: selfPersonId,
-      outcome: "issue_observed",
-      broodPatternNote: brood.trim() || null,
-      queenSighted,
-      storesLevel: stores.trim() || null,
-      temperamentNote: temperament.trim() || null,
-      pestDiseaseFlags: pest.trim() || null,
-      note: note.trim() || null,
-    });
+    setSaveError(null);
+    try {
+      await queueDraft("inspection", {
+        colonyId,
+        occurredAt: new Date(),
+        operatorPersonId: selfPersonId,
+        outcome: "issue_observed",
+        broodPatternNote: brood.trim() || null,
+        queenSighted,
+        storesLevel: stores.trim() || null,
+        temperamentNote: temperament.trim() || null,
+        pestDiseaseFlags: pest.trim() || null,
+        note: note.trim() || null,
+      });
+    } catch {
+      setSaveError(t("localSaveFailedError"));
+      return;
+    }
     window.dispatchEvent(new Event(APIARY_DRAFTS_CHANGED_EVENT));
     setSavedMessage(t("inspectionSavedLocally"));
     setShowDetails(false);
@@ -124,6 +139,11 @@ export function InspectionForm({ colonyId, selfPersonId }: { colonyId: string; s
       {savedMessage ? (
         <p className="nn-muted" style={{ marginTop: "0.5rem" }}>
           {savedMessage}
+        </p>
+      ) : null}
+      {saveError ? (
+        <p className="nn-error" style={{ marginTop: "0.5rem" }}>
+          {saveError}
         </p>
       ) : null}
     </div>

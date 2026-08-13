@@ -150,5 +150,91 @@ export async function syncAll(syncer: Syncer): Promise<{ synced: number; errored
   }
 
   const stillPending = (await listDrafts()).filter((d) => d.status === "pending" || d.status === "error").length;
+  if (synced > 0) recordLastSyncSuccess();
   return { synced, errored, stillPending };
+}
+
+// --- A5.5 §2: "visible, honest state" — when was the last successful sync?
+// localStorage rather than IndexedDB: one small timestamp, read
+// synchronously, no transaction ceremony needed for it.
+const LAST_SYNC_KEY = "nn-apiary-last-sync-at";
+
+function recordLastSyncSuccess(): void {
+  try {
+    localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
+  } catch {
+    // Storage unavailable (private browsing, quota) — the indicator simply
+    // shows no last-sync time; not worth surfacing a second error for.
+  }
+}
+
+export function getLastSyncAt(): number | null {
+  try {
+    const raw = localStorage.getItem(LAST_SYNC_KEY);
+    return raw ? Number(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+// --- A5.5 §4: security exception to OFFLINE_FIELD_CAPABILITY.md §3's
+// general "no expiry, ever" rule — scoped narrowly to this specific risk
+// (a lost/stolen device exposing unsynced partner-classified field data
+// in plaintext IndexedDB), not a general reversal of that rule. See the
+// A5.5 ADR draft (docs/implementation/README.md) for the full reasoning.
+// Two stages: a visible warning well before the cutoff, then an actual
+// purge — never silent, always reported back to the caller so the UI can
+// tell the operator what happened.
+//
+// This purge — not app-level IndexedDB encryption — is the implemented
+// mitigation for the "lost/stolen device" threat. Evaluated and rejected
+// for v1: encrypting drafts at rest would need a key held somewhere the
+// page can reach it without the operator re-entering a passphrase on
+// every offline write (defeating the "instant, no-signal-needed" save
+// this whole ticket exists for), which means the key ends up in the same
+// browser storage as the data it protects — protecting against a reader
+// of the raw IndexedDB file, not against anyone who can drive the page
+// itself. Real-world exposure here is a lost/stolen *unlocked* phone
+// (screen-lock is the actual first line of defense, outside this app's
+// control) with a small, time-boxed batch of pending Inspection/
+// ColonyEvent drafts — bounded exposure a 21-day purge already caps.
+// Worth reconsidering for a future engagement with stronger data-
+// protection requirements (e.g. a client-supplied device-bound key via
+// WebAuthn/platform keystore), but not justified here against this
+// threat model.
+export const STALE_WARNING_DAYS = 7;
+export const STALE_PURGE_DAYS = 21;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export async function purgeStaleDrafts(): Promise<{ purged: number; warningCount: number }> {
+  const drafts = await listDrafts();
+  const now = Date.now();
+  let purged = 0;
+  let warningCount = 0;
+  for (const draft of drafts) {
+    const ageDays = (now - draft.createdAt) / DAY_MS;
+    if (ageDays >= STALE_PURGE_DAYS) {
+      await discardDraft(draft.id);
+      purged++;
+    } else if (ageDays >= STALE_WARNING_DAYS) {
+      warningCount++;
+    }
+  }
+  return { purged, warningCount };
+}
+
+// --- A5.5 §3: warn before a write fails, not after.
+export interface StorageEstimate {
+  usageRatio: number | null;
+}
+
+export async function getStorageEstimate(): Promise<StorageEstimate> {
+  if (!("storage" in navigator) || !navigator.storage.estimate) return { usageRatio: null };
+  try {
+    const { usage, quota } = await navigator.storage.estimate();
+    if (usage == null || quota == null || quota === 0) return { usageRatio: null };
+    return { usageRatio: usage / quota };
+  } catch {
+    return { usageRatio: null };
+  }
 }

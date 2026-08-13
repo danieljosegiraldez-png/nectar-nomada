@@ -64,7 +64,12 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 
 export const authConfig: NextAuthConfig = {
   providers,
-  session: { strategy: "jwt" },
+  // A5.5 §4: shortened from Auth.js's ~30-day default to 7 days. This is a
+  // uniform lever — Auth.js has no offline-only session concept, so it
+  // applies the same online and off — chosen to bound how long a lost or
+  // stolen device stays signed in without forcing daily re-auth for
+  // operators who use the app most days.
+  session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 7 },
   pages: { signIn: "/login" },
   callbacks: {
     /**
