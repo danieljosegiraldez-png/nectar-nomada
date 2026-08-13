@@ -31,14 +31,28 @@ export class AiAccessError extends Error {}
 const MODEL_NAME = "rule-based-completeness-checker-v1";
 
 /**
- * Scans public Projects for a missing description — a concrete, narrow
- * instance of AI_GOVERNANCE.md §1's "identify missing information"
- * capability. Idempotent: skips a Project that already has a pending
- * suggestion of this type, so re-running doesn't pile up duplicates.
+ * Scans Projects for a missing description — a concrete, narrow instance of
+ * AI_GOVERNANCE.md §1's "identify missing information" capability.
+ * Idempotent: skips a Project that already has a pending suggestion of this
+ * type, so re-running doesn't pile up duplicates.
+ *
+ * C1 §5 (17_ audit): excludes `confidential`/`trade_secret` Projects. This
+ * generator has no requesting-user context to scope reads against (it's
+ * designed for a scheduled trigger, per this file's header comment), and the
+ * review queue it feeds is a single platform-wide gate, not per-entity
+ * scoped (AI_GOVERNANCE.md §5) — so a suggestion's own text is the only
+ * thing standing between a real project's name and any reviewer holding
+ * `ai:review_suggestion`. `public`/`registered`/`partner`/`internal` stay in
+ * scope (broadly staff-visible elsewhere in this codebase); the two tiers
+ * that require a separate `classification:clear_*` grant to view at all are
+ * excluded here so this generator can never be the leak.
  */
 export async function generateDataCompletenessSuggestions(): Promise<number> {
   const projectsMissingDescription = await prisma.project.findMany({
-    where: { OR: [{ description: null }, { description: "" }] },
+    where: {
+      OR: [{ description: null }, { description: "" }],
+      classification: { notIn: ["confidential", "trade_secret"] },
+    },
     select: { id: true, name: true },
   });
 

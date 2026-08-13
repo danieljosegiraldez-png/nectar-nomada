@@ -11,10 +11,21 @@ Auth.js (self-hosted, `DECISIONS.md` ADR-006) with credentials (email + password
 Argon2id hashing) and OAuth (Google at minimum, for lower-friction customer
 signup). Sessions are server-side, httpOnly, secure, SameSite=Lax cookies —
 no auth tokens in localStorage/sessionStorage where they're reachable by XSS.
-Email verification required before an account can create Assignments-bearing
-activity (booking/ordering as a guest is allowed without verification; anything
-touching Partner/Research/Sensory workspaces requires a verified, invited
-account).
+Email verification is **not currently enforced anywhere**, corrected here
+(C1 §5, 17_ audit) — an earlier version of this section stated it as already
+required before Assignments-bearing activity. In reality: `emailVerifiedAt`
+is set automatically for Google OAuth signups (already verified by Google)
+but is never set at all for Credentials (email+password) signups, because no
+verification-email flow exists yet (`grep`-confirmed: no send-verification
+or verify-token code anywhere, consistent with `INTEGRATIONS.md` §5's Email
+adapter being unbuilt). No code path anywhere reads `emailVerifiedAt` as a
+gate. **This was deliberately left as a documentation fix, not a code fix**:
+enforcing this gate today would lock out every existing Credentials-based
+account, including the real Partner/Farm Operator/Research/Sensory accounts
+already in production, since none of them has ever had this field set.
+Building the actual control requires an email-sending integration first
+(none exists) — worth scoping as its own ticket, not retrofitted here as a
+"cheap fix" that would break live accounts.
 
 ## 2. Authorization — server-side, single choke point
 

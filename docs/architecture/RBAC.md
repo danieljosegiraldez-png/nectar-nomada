@@ -102,7 +102,18 @@ one place instead of re-derived per module with room for drift.
 Concrete starting Role Profiles — editable data, listed here so the MVP has
 something to assign, not a closed list:
 
-- **Platform Admin** (scope: platform) — full permission set.
+- **Platform Admin** (scope: platform) — full permission set, including
+  `platform:manage_users`/`platform:manage_permissions`. **Build status note
+  (C1 §5, 17_ audit)**: these two permissions are seeded and granted, but no
+  route or UI implements user invitation/suspension or Role Profile/
+  Assignment management yet — Platform Admin work of that kind happens
+  directly against the database today, not through an app surface. Not a
+  gap in the permission model itself, just an unbuilt admin UI; recorded
+  here so it isn't mistaken for an oversight. Research Lead's
+  `research:create_evidence`/`research:approve_protocol` (below) are real
+  and enforced, but Research OS itself — the module those permissions
+  govern — is unbuilt (`MVP_ROADMAP.md` §3), so neither has a live call site
+  to exercise yet either.
 - **Content/Ops Coordinator** (scope: platform or program) — story/content and
   project-operations permissions, explicitly excluding research-approval and
   competition-result permissions. This is the profile that satisfies "non-developer
