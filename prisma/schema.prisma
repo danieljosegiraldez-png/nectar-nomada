@@ -67,6 +67,7 @@ model Person {
   receivingEventsOperated            ReceivingEvent[]              @relation("ReceivingEventOperator")
   fermentationRunsOperated           FermentationRun[]             @relation("FermentationRunOperator")
   dryingTurnEventsOperated           DryingTurnEvent[]             @relation("DryingTurnEventOperator")
+  roastSessionsRoasted               RoastSession[]                @relation("RoastSessionRoaster")
   labourEntriesOperated              LabourEntry[]                 @relation("LabourEntryOperator")
   materialConsumptionEntriesOperated MaterialConsumptionEntry[]    @relation("MaterialConsumptionEntryOperator")
   inspectionsOperated                Inspection[]                  @relation("InspectionOperator")
@@ -145,6 +146,7 @@ model UserAccount {
   fermentationRunsCreated           FermentationRun[]            @relation("FermentationRunCreatedBy")
   fermentationInterventionsCreated  FermentationIntervention[]   @relation("FermentationInterventionCreatedBy")
   dryingRunsCreated                 DryingRun[]                  @relation("DryingRunCreatedBy")
+  roastSessionsCreated              RoastSession[]               @relation("RoastSessionCreatedBy")
   dryingTurnEventsCreated           DryingTurnEvent[]            @relation("DryingTurnEventCreatedBy")
   storageAssignmentsCreated         StorageAssignment[]          @relation("StorageAssignmentCreatedBy")
   labourEntriesCreated              LabourEntry[]                @relation("LabourEntryCreatedBy")
@@ -1544,6 +1546,7 @@ model SensoryProtocolVersion {
   supersedes            SensoryProtocolVersion[] @relation("SensoryProtocolVersionSupersession")
 
   attributes            SensoryAttribute[]
+  descriptors           SensoryDescriptor[]
   sessions              SensorySession[]
   competitionCategories CompetitionCategory[]
 
@@ -1685,7 +1688,8 @@ model Assessment {
   supersedes             Assessment? @relation("AssessmentSupersession", fields: [supersedesAssessmentId], references: [id])
   supersededBy           Assessment? @relation("AssessmentSupersession")
 
-  attributeResponses AttributeResponse[]
+  attributeResponses  AttributeResponse[]
+  descriptorResponses SensoryDescriptorResponse[]
 
   // No correction workflow exists yet (DECISIONS.md ADR-030 decision 5) —
   // until one does, there must never be more than one Assessment row per
@@ -1713,6 +1717,78 @@ model AttributeResponse {
 
   @@unique([assessmentId, attributeId])
   @@map("attribute_response")
+  @@schema("sensory")
+}
+
+// R1 (docs/implementation/33_R1_ROASTSESSION_TAXONOMIA_SENSORIAL.md §2). One
+// unified vocabulary/taxonomy table, not separate Descriptor and Defect
+// tables — matches the shape BEVERAGE_SENSORY_PROTOCOLS.md's own defects-
+// taxonomy section already specified (`sensory.honey_descriptor(id, family,
+// specific_descriptor, expected_perception, classification [positivo|
+// neutral|defecto], technical_cause (nullable))`), reused as-is rather than
+// redesigned. A descriptor belongs to a SensoryProtocolVersion, same
+// versioning discipline SensoryAttribute already follows — it does not
+// float loose across protocols, and a new protocol version can supersede
+// its predecessor's vocabulary the same way it can supersede attributes.
+enum SensoryDescriptorClassification {
+  positive
+  neutral
+  defect
+
+  @@schema("sensory")
+}
+
+model SensoryDescriptor {
+  id                 String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  protocolVersionId  String                          @map("protocol_version_id") @db.Uuid
+  protocolVersion    SensoryProtocolVersion          @relation(fields: [protocolVersionId], references: [id], onDelete: Cascade)
+  family             String
+  specificDescriptor String                          @map("specific_descriptor")
+  expectedPerception String?                         @map("expected_perception")
+  classification     SensoryDescriptorClassification
+  // Only meaningful when classification = defect — a defect that names its
+  // cause is diagnostic, not just a label (§2.2). Free text, not a closed
+  // enum: the real causes are domain-specific (honey's six families are not
+  // coffee's or beer's), and forcing every future domain's defect causes
+  // into one shared enum would either fragment into per-domain enums anyway
+  // or flatten genuinely different vocabularies into one.
+  technicalCause     String?                         @map("technical_cause")
+  displayOrder       Int?                            @map("display_order")
+  createdAt          DateTime                        @default(now()) @map("created_at")
+
+  responses SensoryDescriptorResponse[]
+
+  @@index([protocolVersionId])
+  @@map("sensory_descriptor")
+  @@schema("sensory")
+}
+
+enum SensoryConfidenceLevel {
+  low
+  medium
+  high
+
+  @@schema("sensory")
+}
+
+// The structured pick, living alongside AttributeResponse's numeric scores
+// and Assessment.comment's free text — additive, not a replacement for
+// either. Nullable confidence: "confianza media" is meaningful when given,
+// but not every evaluator workflow collects it, same "missing stays
+// missing" discipline as Measurement.dataQuality.
+model SensoryDescriptorResponse {
+  id           String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assessmentId String                  @map("assessment_id") @db.Uuid
+  assessment   Assessment              @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  descriptorId String                  @map("descriptor_id") @db.Uuid
+  descriptor   SensoryDescriptor       @relation(fields: [descriptorId], references: [id])
+  confidence   SensoryConfidenceLevel?
+  comment      String?
+
+  @@unique([assessmentId, descriptorId])
+  @@index([assessmentId])
+  @@index([descriptorId])
+  @@map("sensory_descriptor_response")
   @@schema("sensory")
 }
 
@@ -2308,6 +2384,9 @@ model LotTransformation {
   // Same mechanism, T7's DryingRun.
   dryingRunId       String?          @map("drying_run_id") @db.Uuid
   dryingRun         DryingRun?       @relation(fields: [dryingRunId], references: [id])
+  // Same mechanism, R1's RoastSession.
+  roastSessionId    String?          @map("roast_session_id") @db.Uuid
+  roastSession      RoastSession?    @relation(fields: [roastSessionId], references: [id])
 
   inputs         LotTransformationInput[]
   outputs        LotTransformationOutput[]
@@ -2451,6 +2530,13 @@ model Measurement {
   dryingRun           DryingRun?         @relation(fields: [dryingRunId], references: [id])
   storageAssignmentId String?            @map("storage_assignment_id") @db.Uuid
   storageAssignment   StorageAssignment? @relation(fields: [storageAssignmentId], references: [id])
+  // R1 — also the mechanism that distinguishes a pre-roast green-coffee
+  // moisture/density reading (§1.4) from an ordinary storage-phase one:
+  // both carry lotId, but only the pre-roast reading also carries
+  // roastSessionId. No new field needed to express "which moment" — the
+  // presence of this FK already says so unambiguously.
+  roastSessionId      String?            @map("roast_session_id") @db.Uuid
+  roastSession        RoastSession?      @relation(fields: [roastSessionId], references: [id])
 
   sourceType       MeasurementSourceType @default(manual) @map("source_type")
   deviceId         String?               @map("device_id")
@@ -2478,6 +2564,7 @@ model Measurement {
   @@index([fermentationRunId])
   @@index([dryingRunId])
   @@index([storageAssignmentId])
+  @@index([roastSessionId])
   @@index([correctsId])
   @@map("measurement")
   @@schema("traceability")
@@ -2703,6 +2790,67 @@ model DryingTurnEvent {
 
   @@index([dryingRunId])
   @@map("drying_turn_event")
+  @@schema("traceability")
+}
+
+// R1 (docs/implementation/33_R1_ROASTSESSION_TAXONOMIA_SENSORIAL.md §1). Same
+// shape and lifecycle as FermentationRun/DryingRun — no lotId of its own;
+// which green Lot went in and which roast Lot came out is expressed through
+// the stage_change LotTransformation this run brackets, via
+// LotTransformation.roastSessionId (matching fermentationRunId/dryingRunId's
+// exact precedent), never a direct FK here.
+//
+// The already-verified case — one green Lot roasted three ways, recorded
+// as one `split` LotTransformation with three outputs (§1.1, "eso no se
+// toca") — isn't reused directly, because each of the three roasts is a
+// genuinely separate execution (different roaster, equipment, profile,
+// timing), which this entity's one-run-per-transformation shape can't
+// express if three roasts shared one transformation row. Recording each
+// roast as its own `stage_change` transformation (same input green Lot,
+// one output roast Lot each) produces the identical queryable DAG shape —
+// getLotLineage's recursive CTE follows lot_transformation_input/output
+// edges generically, indifferent to whether three children came from one
+// transformation row or three — without touching recordTransformation or
+// the split mechanism at all.
+//
+// roasterPersonId is deliberately a first-class, queryable FK, not folded
+// into notes: "el tostador es una variable del experimento, no solo un
+// actor" (§1.3) — the case this ticket exists for is the same coffee
+// roasted by two roasters on two machines, compared side by side.
+//
+// equipmentNote stays free text, matching FermentationRun.vesselNote's own
+// precedent exactly — no Equipment entity exists yet
+// (18_EQUIPMENT_AND_READINESS_PROMPT_REVISED.md, still V2).
+//
+// No curve/profile columns here — first/second crack are the two
+// universally-named checkpoints every roast log tracks regardless of
+// equipment, so they get real columns; every other curve point (bean/air
+// temperature over time) is recorded as ordinary Measurement rows via the
+// new Measurement.roastSessionId FK below, reusing the exact generalized
+// mechanism T3 already built and T7 already proved works for a run-scoped
+// series, rather than a new time-series table or an opaque file reference.
+model RoastSession {
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roastLevel        String?      @map("roast_level") // free text ("claro filtro", "medio espresso") — vocabulary varies by market/style, not a closed enum
+  equipmentNote     String?      @map("equipment_note")
+  roasterPersonId   String?      @map("roaster_person_id") @db.Uuid
+  roaster           Person?      @relation("RoastSessionRoaster", fields: [roasterPersonId], references: [id])
+  chargeWeightKg    Decimal?     @map("charge_weight_kg") @db.Decimal(10, 3)
+  dischargeWeightKg Decimal?     @map("discharge_weight_kg") @db.Decimal(10, 3)
+  startedAt         DateTime     @map("started_at")
+  endedAt           DateTime?    @map("ended_at")
+  firstCrackAt      DateTime?    @map("first_crack_at")
+  secondCrackAt     DateTime?    @map("second_crack_at")
+  notes             String?
+  createdAt         DateTime     @default(now()) @map("created_at")
+  createdBy         String?      @map("created_by") @db.Uuid
+  creator           UserAccount? @relation("RoastSessionCreatedBy", fields: [createdBy], references: [id])
+
+  measurements    Measurement[]
+  transformations LotTransformation[]
+
+  @@index([roasterPersonId])
+  @@map("roast_session")
   @@schema("traceability")
 }
 
