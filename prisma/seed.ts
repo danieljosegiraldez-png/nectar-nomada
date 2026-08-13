@@ -109,12 +109,21 @@ async function seedDemoAdmin(platformScopeId: string) {
  * Slice 2 (Public Discovery) DEMO content — opt-in via SEED_DEMO_CONTENT=true,
  * same reasoning as SEED_DEMO_ADMIN. CLAUDE.md §54 compliance, deliberate:
  *
- * - Uses only project/place names CLAUDE.md §54 already names as acceptable
- *   seed examples (Las Nubes, Finca Rosina, Kiva Estate) — CryoBloom is
- *   deliberately NOT seeded here, given how much more sensitive fabricating
- *   even placeholder copy about it would be for a real, ongoing research
- *   program (this platform's own scientific-integrity principle, applied to
- *   itself).
+ * - Uses "Finca Rosina" and "Kiva Estate" — project/place names CLAUDE.md
+ *   §54 already names as acceptable seed examples. The fictional coffee
+ *   project itself is named "DEMO Cloudline," deliberately NOT "Las
+ *   Nubes" despite CLAUDE.md §54 listing that name too: A7 loaded real
+ *   production Projects under "Las Nubes Cerro Azul" and had to delete an
+ *   earlier DEMO "Las Nubes" tree specifically because it collided with
+ *   them. §54's own example list predates that real data and is stale for
+ *   this one name — reusing it here would recreate the exact risk A7's
+ *   cleanup existed to remove, so this deviates from the letter of §54's
+ *   example list to honor its actual intent (never let DEMO content be
+ *   mistaken for something real). CryoBloom is deliberately NOT seeded
+ *   here either, given how much more sensitive fabricating even
+ *   placeholder copy about it would be for a real, ongoing research
+ *   program (this platform's own scientific-integrity principle, applied
+ *   to itself).
  * - No GPS/precise coordinates on any seeded Location — CLAUDE.md §54 lists
  *   "GPS" and "addresses" among facts never to fabricate for seed data.
  * - No prices on any seeded Product/Experience — same list, "prices" is
@@ -204,8 +213,8 @@ async function seedDemoDiscoverContent() {
   });
   const lasNubesSite = await findOrCreateLocation({
     locationType: "site",
-    name: "Las Nubes",
-    slug: "las-nubes",
+    name: "DEMO Cloudline",
+    slug: "demo-cloudline",
     parentLocationId: cerroAzul.id,
   });
 
@@ -232,13 +241,13 @@ async function seedDemoDiscoverContent() {
   }
 
   const lasNubesProject = await prisma.project.upsert({
-    where: { slug: "las-nubes" },
+    where: { slug: "demo-cloudline" },
     update: {},
     create: {
-      slug: "las-nubes",
-      name: "Las Nubes",
+      slug: "demo-cloudline",
+      name: "DEMO Cloudline",
       description:
-        "A multi-domain project in the Cerro Azul cloud forest, connecting coffee, apiculture, tourism, and research under one territory. [DEMO placeholder content, per CLAUDE.md §54 — plausible but fictional, not a real project record.]",
+        "A fictional multi-domain project in the Cerro Azul cloud forest, connecting coffee, apiculture, tourism, and research under one territory. [DEMO placeholder content, per CLAUDE.md §54 — plausible but fictional, not a real project record. Named 'DEMO Cloudline' rather than 'Las Nubes' — see this function's own header comment.]",
       programId: territoryProgram.id,
       primaryLocationId: lasNubesSite.id,
       status: "approved",
@@ -256,14 +265,14 @@ async function seedDemoDiscoverContent() {
   }
 
   await prisma.story.upsert({
-    where: { slug: "discovering-las-nubes" },
+    where: { slug: "discovering-demo-cloudline" },
     update: {},
     create: {
-      slug: "discovering-las-nubes",
-      title: "Discovering Las Nubes",
+      slug: "discovering-demo-cloudline",
+      title: "Discovering DEMO Cloudline",
       summary: "A cloud-forest territory where coffee, bees, and research share the same ground.",
       bodyMarkdown:
-        "Las Nubes sits where the forest stays wrapped in cloud most mornings — the kind of place where coffee, " +
+        "DEMO Cloudline sits where the forest stays wrapped in cloud most mornings — the kind of place where coffee, " +
         "pollinators, and long-running research questions all depend on the same few hundred meters of elevation. " +
         "This is placeholder demo copy: it exists to validate the Discover architecture end to end, not to describe " +
         "verified project history. Real storytelling content replaces this once written and reviewed.",
@@ -280,7 +289,7 @@ async function seedDemoDiscoverContent() {
     create: {
       slug: "cloud-forest-of-cerro-azul",
       title: "The Cloud Forest of Cerro Azul",
-      summary: "Territory notes on the highland forest surrounding Las Nubes.",
+      summary: "Territory notes on the highland forest surrounding DEMO Cloudline.",
       bodyMarkdown:
         "Cerro Azul's cloud forest is a recurring backdrop for Néctar Nómada's territory work in this area. " +
         "[DEMO placeholder — descriptive copy pending real field notes and review.]",
@@ -291,12 +300,12 @@ async function seedDemoDiscoverContent() {
   });
 
   await prisma.product.upsert({
-    where: { slug: "las-nubes-coffee" },
+    where: { slug: "demo-cloudline-coffee" },
     update: {},
     create: {
-      slug: "las-nubes-coffee",
-      name: "Las Nubes Coffee",
-      summary: "Coffee grown within the Las Nubes project territory.",
+      slug: "demo-cloudline-coffee",
+      name: "DEMO Cloudline Coffee",
+      summary: "Coffee grown within the DEMO Cloudline project territory.",
       description: "[DEMO placeholder listing — pricing, lot detail, and processing notes pending Slice 3 (Commerce).]",
       projectId: lasNubesProject.id,
       organizationId: fincaRosinaOrg.id,
@@ -313,7 +322,7 @@ async function seedDemoDiscoverContent() {
     create: {
       slug: "cerro-azul-wildflower-honey",
       name: "Cerro Azul Wildflower Honey",
-      summary: "Honey from the apiary domain of the Las Nubes project.",
+      summary: "Honey from the apiary domain of the DEMO Cloudline project.",
       description: "[DEMO placeholder listing — harvest and sourcing detail pending.]",
       projectId: lasNubesProject.id,
       locationId: cerroAzul.id,
@@ -323,12 +332,12 @@ async function seedDemoDiscoverContent() {
   });
 
   await prisma.experience.upsert({
-    where: { slug: "farm-visit-las-nubes" },
+    where: { slug: "farm-visit-demo-cloudline" },
     update: {},
     create: {
-      slug: "farm-visit-las-nubes",
-      name: "Farm Visit — Las Nubes",
-      summary: "A guided walk through the Las Nubes coffee and apiary territory.",
+      slug: "farm-visit-demo-cloudline",
+      name: "Farm Visit — DEMO Cloudline",
+      summary: "A guided walk through the DEMO Cloudline coffee and apiary territory.",
       description: "[DEMO placeholder listing — itinerary, capacity, and booking arrive with Slice 4 (Experiences).]",
       durationMinutes: 120,
       projectId: lasNubesProject.id,
@@ -345,7 +354,7 @@ async function seedDemoDiscoverContent() {
     create: {
       slug: "cloud-forest-walk-cerro-azul",
       name: "Cloud Forest Walk — Cerro Azul",
-      summary: "A territory walk through the highland forest around Las Nubes.",
+      summary: "A territory walk through the highland forest around DEMO Cloudline.",
       description: "[DEMO placeholder listing.]",
       durationMinutes: 90,
       locationId: cerroAzul.id,
@@ -372,37 +381,47 @@ async function findOrCreateProjectScope(projectId: string) {
  * Slice 5 (Partner Workspace) DEMO partner account — opt-in via
  * SEED_DEMO_PARTNER=true, same reasoning as SEED_DEMO_ADMIN (CLAUDE.md §54:
  * never a default login in a shared/production environment). Assigned to
- * Las Nubes with "Partner Field Collector" so this account can actually log
- * in and demonstrate the classification-gated Partner Workspace view
- * (MVP_ROADMAP.md Slice 5) end to end, not just in a one-off test fixture.
+ * DEMO Cloudline with "Partner Field Collector" so this account can
+ * actually log in and demonstrate the classification-gated Partner
+ * Workspace view (MVP_ROADMAP.md Slice 5) end to end, not just in a
+ * one-off test fixture.
  */
 async function seedDemoPartner(lasNubesProjectId: string) {
   const email = "demo-partner@nectar-nomada.example";
   const existingPerson = await prisma.person.findFirst({ where: { email } });
-  if (existingPerson) {
-    console.log("DEMO Partner Field Collector already seeded — skipping.");
-    return prisma.userAccount.findFirstOrThrow({ where: { personId: existingPerson.id } });
-  }
+  const userAccount = existingPerson
+    ? await prisma.userAccount.findFirstOrThrow({ where: { personId: existingPerson.id } })
+    : await (async () => {
+        const passwordHash = await hashPassword("DemoPartner!2026-change-me");
+        const person = await prisma.person.create({
+          data: { givenName: "DEMO", familyName: "Partner", displayName: "DEMO Partner Field Collector", email },
+        });
+        const account = await prisma.userAccount.create({
+          data: { personId: person.id, authProvider: "credentials", passwordHash, status: "active" },
+        });
+        console.log(`Seeded DEMO Partner Field Collector — email: ${email}, password: DemoPartner!2026-change-me`);
+        return account;
+      })();
 
-  const passwordHash = await hashPassword("DemoPartner!2026-change-me");
-
-  const person = await prisma.person.create({
-    data: { givenName: "DEMO", familyName: "Partner", displayName: "DEMO Partner Field Collector", email },
-  });
-
-  const userAccount = await prisma.userAccount.create({
-    data: { personId: person.id, authProvider: "credentials", passwordHash, status: "active" },
-  });
-
+  // Checked unconditionally, not only on first creation — the account can
+  // survive a DEMO Project's own deletion/recreation (A7's own "Las
+  // Nubes" cleanup precedent), which would otherwise leave a real,
+  // loginable account holding an Assignment scoped to a Project id that
+  // no longer exists. Same class of bug fixed in seedDemoTraceabilityChain
+  // below.
   const partnerProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Partner Field Collector" } });
-  const projectScope = await findOrCreateProjectScope(lasNubesProjectId);
-
-  await prisma.assignment.create({
-    data: { userAccountId: userAccount.id, roleProfileId: partnerProfile.id, scopeId: projectScope.id },
+  const existingAssignment = await prisma.assignment.findFirst({
+    where: { userAccountId: userAccount.id, scope: { scopeType: "project", scopeRefId: lasNubesProjectId } },
   });
-
-  console.log(`Seeded DEMO Partner Field Collector — email: ${email}, password: DemoPartner!2026-change-me`);
-  console.log("Assigned to the Las Nubes project. Local/dev seed data only — CLAUDE.md §54. Rotate or remove before any shared deployment.");
+  if (!existingAssignment) {
+    const projectScope = await findOrCreateProjectScope(lasNubesProjectId);
+    await prisma.assignment.create({
+      data: { userAccountId: userAccount.id, roleProfileId: partnerProfile.id, scopeId: projectScope.id },
+    });
+    console.log("Assigned to the DEMO Cloudline project. Local/dev seed data only — CLAUDE.md §54. Rotate or remove before any shared deployment.");
+  } else {
+    console.log("DEMO Partner Field Collector already seeded — skipping.");
+  }
 
   return userAccount;
 }
@@ -518,8 +537,14 @@ async function seedDemoSensoryContent(lasNubesProjectId: string) {
     // survived it (protocols aren't scoped to a Project). The prior
     // assumption "protocol exists => session exists" no longer holds;
     // self-heal by rebuilding the session/samples/flight instead of
-    // crashing on a session this repository may no longer have.
-    const existingSession = await prisma.sensorySession.findFirst({ where: { name: "DEMO Cupping Session — Las Nubes" } });
+    // crashing on a session this repository may no longer have. Renamed
+    // "DEMO Cupping Session — Cloudline" going forward (see this file's
+    // "DEMO Cloudline" rename note) — checked by the *old* name too so a
+    // pre-rename session from an earlier run is still found, not
+    // duplicated.
+    const existingSession =
+      (await prisma.sensorySession.findFirst({ where: { name: "DEMO Cupping Session — Cloudline" } })) ??
+      (await prisma.sensorySession.findFirst({ where: { name: "DEMO Cupping Session — Las Nubes" } }));
     if (existingSession) {
       console.log("Slice 6 DEMO Sensory content already seeded — patched coffee protocol metadata/sections.");
       return existingSession;
@@ -575,24 +600,24 @@ async function seedDemoSensoryContent(lasNubesProjectId: string) {
  */
 async function seedDemoCuppingSession(protocolVersionId: string, lasNubesProjectId: string) {
   const sample1 = await prisma.sample.upsert({
-    where: { sampleCode: "LN-CUP-001" },
+    where: { sampleCode: "DCL-CUP-001" },
     update: {},
     create: {
-      sampleCode: "LN-CUP-001",
+      sampleCode: "DCL-CUP-001",
       sampleType: "green_coffee",
-      description: "[DEMO placeholder sample — Las Nubes coffee, lot detail not populated.]",
+      description: "[DEMO placeholder sample — DEMO Cloudline coffee, lot detail not populated.]",
       projectId: lasNubesProjectId,
       status: "approved",
       classification: "internal",
     },
   });
   const sample2 = await prisma.sample.upsert({
-    where: { sampleCode: "LN-CUP-002" },
+    where: { sampleCode: "DCL-CUP-002" },
     update: {},
     create: {
-      sampleCode: "LN-CUP-002",
+      sampleCode: "DCL-CUP-002",
       sampleType: "green_coffee",
-      description: "[DEMO placeholder sample — Las Nubes coffee, second lot, lot detail not populated.]",
+      description: "[DEMO placeholder sample — DEMO Cloudline coffee, second lot, lot detail not populated.]",
       projectId: lasNubesProjectId,
       status: "approved",
       classification: "internal",
@@ -601,7 +626,7 @@ async function seedDemoCuppingSession(protocolVersionId: string, lasNubesProject
 
   const session = await prisma.sensorySession.create({
     data: {
-      name: "DEMO Cupping Session — Las Nubes",
+      name: "DEMO Cupping Session — Cloudline",
       protocolVersionId,
       status: "in_progress",
       classification: "internal",
@@ -649,10 +674,10 @@ async function seedDemoCuppingSession(protocolVersionId: string, lasNubesProject
  * fork mechanism already verified for a green coffee lot roasted three
  * ways), each independently fermented, dried, moved to storage, and
  * sampled — the two resulting samples attach to the *existing* "DEMO
- * Cupping Session — Las Nubes" (seedDemoSensoryContent) as two new blind
+ * Cupping Session — Cloudline" (seedDemoSensoryContent) as two new blind
  * samples in its existing Flight 1, alongside the two placeholder samples
  * that session already ships with. This is deliberately additive, not a
- * replacement: LN-CUP-001/002 keep their own "lot detail not populated"
+ * replacement: DCL-CUP-001/002 keep their own "lot detail not populated"
  * placeholder status exactly as documented; these two new samples are
  * what actually satisfies "lot detail populated," genuinely, end to end.
  *
@@ -660,7 +685,7 @@ async function seedDemoCuppingSession(protocolVersionId: string, lasNubesProject
  * blind samples (D) also gets a `PanelResult` — a real departure from
  * seedDemoSensoryContent's own stated rule ("No Assessments seeded —
  * CLAUDE.md §54 forbids fabricating sensory outcomes") and from
- * LN-CUP-001/002/C, which stay genuinely unscored. The reason this one
+ * DCL-CUP-001/002/C, which stay genuinely unscored. The reason this one
  * crosses that line: ADR-039's own v1 falsifiable test is stated as
  * "cherry through to a cupping score and a lot report" — a DEMO chain
  * that stops one step short of a score cannot demonstrate the mechanism
@@ -674,26 +699,38 @@ async function seedDemoCuppingSession(protocolVersionId: string, lasNubesProject
  * and the value is a round, obviously-illustrative number, not a
  * plausible-looking real one. C stays unscored deliberately, so a reader
  * can see both states side by side in the same session.
+ *
+ * Named "DEMO Cloudline," not "Las Nubes" — see `seedDemoDiscoverContent`'s
+ * own header comment for why. Root cause of a real bug found while
+ * verifying this rename: the seed operator's Assignment was only ever
+ * created inside the "Person didn't exist yet" branch, so once the
+ * Person survived a Project's deletion/recreation (exactly what happened
+ * to the old "Las Nubes" Project under A7's cleanup) the reused account
+ * kept an Assignment scoped to a Project id that no longer existed —
+ * `recordHarvestEvent` below then failed with `no_lot_access`. Fixed by
+ * checking for an Assignment scoped to *this* `lasNubesProjectId`
+ * specifically, unconditionally, the same pattern `seedDemoApiaryChain`
+ * (A8) and `seedDemoPartner` above already use.
  */
 async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessionId: string) {
-  const existingLot = await prisma.lot.findFirst({ where: { lotCode: "LN-2027-CHERRY-01" } });
+  const existingLot = await prisma.lot.findFirst({ where: { lotCode: "DCL-2027-CHERRY-01" } });
   if (existingLot) {
     console.log("DEMO traceability chain already seeded — skipping.");
     return;
   }
 
-  const lasNubesSite = await findOrCreateLocation({ locationType: "site", name: "Las Nubes", slug: "las-nubes" });
+  const lasNubesSite = await findOrCreateLocation({ locationType: "site", name: "DEMO Cloudline", slug: "demo-cloudline" });
   const lasNubesFarm = await findOrCreateOrganization({
     organizationType: "farm",
-    name: "Las Nubes",
+    name: "DEMO Cloudline",
     description:
-      "[DEMO placeholder organization — the coffee-producing side of the Las Nubes multi-domain project. " +
+      "[DEMO placeholder organization — the coffee-producing side of the DEMO Cloudline multi-domain project. " +
       "No verified production figures, certifications, or exact history populated yet.]",
   });
   const plot = await findOrCreateLocation({
     locationType: "plot",
-    name: "Las Nubes — Plot 1",
-    slug: "las-nubes-plot-1",
+    name: "DEMO Cloudline — Plot 1",
+    slug: "demo-cloudline-plot-1",
     parentLocationId: lasNubesSite.id,
     organizationId: lasNubesFarm.id,
   });
@@ -707,27 +744,36 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
     seedOperatorAccount = await prisma.userAccount.create({
       data: { personId: seedOperatorPerson.id, authProvider: "credentials", status: "active" },
     });
-    const farmOperatorProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
-    const projectScope = await findOrCreateProjectScope(lasNubesProjectId);
-    await prisma.assignment.create({
-      data: { userAccountId: seedOperatorAccount.id, roleProfileId: farmOperatorProfile.id, scopeId: projectScope.id },
-    });
   } else {
     seedOperatorAccount = await prisma.userAccount.findFirstOrThrow({ where: { personId: seedOperatorPerson.id } });
   }
   const operatorId = seedOperatorAccount.id;
 
+  // Checked unconditionally against *this* project id, not only when the
+  // Person is brand new — see this function's own header comment for the
+  // no_lot_access bug this fixes.
+  const existingOperatorAssignment = await prisma.assignment.findFirst({
+    where: { userAccountId: operatorId, scope: { scopeType: "project", scopeRefId: lasNubesProjectId } },
+  });
+  if (!existingOperatorAssignment) {
+    const farmOperatorProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+    const projectScope = await findOrCreateProjectScope(lasNubesProjectId);
+    await prisma.assignment.create({
+      data: { userAccountId: operatorId, roleProfileId: farmOperatorProfile.id, scopeId: projectScope.id },
+    });
+  }
+
   const warehouse = await findOrCreateLocation({
     locationType: "site",
-    name: "Las Nubes — Warehouse",
-    slug: "las-nubes-warehouse",
+    name: "DEMO Cloudline — Warehouse",
+    slug: "demo-cloudline-warehouse",
     parentLocationId: lasNubesSite.id,
     organizationId: lasNubesFarm.id,
   });
 
   // --- Harvest ---
   const { lot: cherryLot } = await recordHarvestEvent(operatorId, {
-    lotCode: "LN-2027-CHERRY-01",
+    lotCode: "DCL-2027-CHERRY-01",
     locationId: plot.id,
     organizationId: lasNubesFarm.id,
     projectId: lasNubesProjectId,
@@ -745,8 +791,8 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
     provenanceClass: "original_record",
     inputs: [{ lotId: cherryLot.id, quantity: 800, unit: "kg" }],
     outputs: [
-      { lotCode: "LN-2027-BATCH-A", lotType: "processing", quantity: 400, unit: "kg" },
-      { lotCode: "LN-2027-BATCH-B", lotType: "processing", quantity: 400, unit: "kg" },
+      { lotCode: "DCL-2027-BATCH-A", lotType: "processing", quantity: 400, unit: "kg" },
+      { lotCode: "DCL-2027-BATCH-B", lotType: "processing", quantity: 400, unit: "kg" },
     ],
   });
 
@@ -767,7 +813,7 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
     const { outputLot: dryingStageLot } = await endFermentationRun(operatorId, {
       fermentationRunId: fermentationRun.id,
       endedAt: new Date("2027-01-22T10:00:00Z"),
-      outputLotCode: `LN-2027-DRYING-${suffix}`,
+      outputLotCode: `DCL-2027-DRYING-${suffix}`,
       outputLotType: "drying",
       quantity: 380,
       unit: "kg",
@@ -785,7 +831,7 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
     const { outputLot: greenLot } = await endDryingRun(operatorId, {
       dryingRunId: dryingRun.id,
       endedAt: new Date("2027-02-04T11:00:00Z"),
-      outputLotCode: `LN-2027-GREEN-${suffix}`,
+      outputLotCode: `DCL-2027-GREEN-${suffix}`,
       outputLotType: "green",
       quantity: 320,
       unit: "kg",
@@ -802,9 +848,9 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
 
     // --- Sample, linked into the existing DEMO Cupping Session's Flight 1 ---
     const { sample } = await createSampleFromLot(operatorId, {
-      sampleCode: `LN-CUP-00${index + 3}`,
+      sampleCode: `DCL-CUP-00${index + 3}`,
       sampleType: "green_coffee",
-      description: `DEMO — Las Nubes coffee, batch ${suffix}, full lineage from harvest through drying and storage.`,
+      description: `DEMO — DEMO Cloudline coffee, batch ${suffix}, full lineage from harvest through drying and storage.`,
       sourceLotId: greenLot.id,
       quantity: 1,
       unit: "kg",

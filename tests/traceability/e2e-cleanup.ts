@@ -60,8 +60,17 @@ export async function cleanupE2eFixtures(runId: string, ids: E2eFixtureIds) {
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: allLotIds } }) });
 
   const userAccountIds = [ids.operatorUserAccountId, ids.wrongProjectUserAccountId];
+  // Derive scope ids from the Assignments *before* deleting them — the
+  // wrong-project operator's own Scope (a second Project, `ids.projectId`
+  // alone never covers it) otherwise leaks every run. Found via a live
+  // Neon audit (37 accumulated dangling project-scoped Scope rows,
+  // 2026-08-13) and fixed the same way in tests/apiary/e2e-cleanup.ts.
+  const assignmentsToRemove = await prisma.assignment.findMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
+  const scopeIds = assignmentsToRemove.map((a) => a.scopeId);
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: ids.projectId }) });
+  if (scopeIds.length > 0) {
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+  }
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: runId } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ name: { contains: runId } }) });
