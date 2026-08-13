@@ -23,6 +23,7 @@ import { createHive, createColony } from "../lib/apiary/hives";
 import { recordInspection } from "../lib/apiary/inspections";
 import { recordColonyEvent } from "../lib/apiary/colonyEvents";
 import { recordApiaryHarvest } from "../lib/apiary/harvest";
+import { findOrCreateOrganization } from "./seedHelpers";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
@@ -109,21 +110,34 @@ async function seedDemoAdmin(platformScopeId: string) {
  * Slice 2 (Public Discovery) DEMO content — opt-in via SEED_DEMO_CONTENT=true,
  * same reasoning as SEED_DEMO_ADMIN. CLAUDE.md §54 compliance, deliberate:
  *
- * - Uses "Finca Rosina" and "Kiva Estate" — project/place names CLAUDE.md
- *   §54 already names as acceptable seed examples. The fictional coffee
- *   project itself is named "DEMO Cloudline," deliberately NOT "Las
- *   Nubes" despite CLAUDE.md §54 listing that name too: A7 loaded real
- *   production Projects under "Las Nubes Cerro Azul" and had to delete an
- *   earlier DEMO "Las Nubes" tree specifically because it collided with
- *   them. §54's own example list predates that real data and is stale for
- *   this one name — reusing it here would recreate the exact risk A7's
- *   cleanup existed to remove, so this deviates from the letter of §54's
- *   example list to honor its actual intent (never let DEMO content be
- *   mistaken for something real). CryoBloom is deliberately NOT seeded
- *   here either, given how much more sensitive fabricating even
- *   placeholder copy about it would be for a real, ongoing research
- *   program (this platform's own scientific-integrity principle, applied
- *   to itself).
+ * - Uses "DEMO Amber Ridge" and "Kiva Estate" — fictional farm/estate
+ *   names for this DEMO content. "Kiva Estate" is still one of CLAUDE.md
+ *   §54's named acceptable examples. The other farm is deliberately NOT
+ *   named "Finca Rosina" despite §54 listing that name too, and despite
+ *   an earlier version of this function using it: A7 reused the
+ *   then-DEMO-only "Finca Rosina" Organization as the real Cerro Azul
+ *   farm org (real name, pre-approved by Sherry Huerbsch — see
+ *   `docs/implementation/27_A7_PROYECTOS_ASSIGNMENTS_DATOS_REALES.md` §3),
+ *   with real `OrganizationMembership` rows for Bob/Sherry/Chris Huerbsch
+ *   and the real "Las Nubes Cerro Azul — Café" Project now pointing at
+ *   that same organization id. Continuing to seed fictional DEMO content
+ *   under the name "Finca Rosina" would keep attaching it to that same
+ *   real organization on every `SEED_DEMO_CONTENT=true` run — the exact
+ *   DEMO/real collision risk §54's own intent exists to prevent, the same
+ *   reasoning that already forced "Las Nubes" → "DEMO Cloudline" below.
+ *   The fictional coffee project itself is named "DEMO Cloudline,"
+ *   deliberately NOT "Las Nubes" despite CLAUDE.md §54 listing that name
+ *   too: A7 loaded real production Projects under "Las Nubes Cerro Azul"
+ *   and had to delete an earlier DEMO "Las Nubes" tree specifically
+ *   because it collided with them. §54's own example list predates that
+ *   real data and is stale for both names now — reusing either would
+ *   recreate the exact risk A7's cleanup existed to remove, so this
+ *   deviates from the letter of §54's example list to honor its actual
+ *   intent (never let DEMO content be mistaken for something real).
+ *   CryoBloom is deliberately NOT seeded here either, given how much more
+ *   sensitive fabricating even placeholder copy about it would be for a
+ *   real, ongoing research program (this platform's own
+ *   scientific-integrity principle, applied to itself).
  * - No GPS/precise coordinates on any seeded Location — CLAUDE.md §54 lists
  *   "GPS" and "addresses" among facts never to fabricate for seed data.
  * - No prices on any seeded Product/Experience — same list, "prices" is
@@ -148,16 +162,6 @@ async function findOrCreateLocation(data: {
   return prisma.location.create({
     data: { ...data, status: "approved", classification: "public" },
   });
-}
-
-async function findOrCreateOrganization(data: {
-  organizationType: "farm" | "estate";
-  name: string;
-  description?: string;
-}) {
-  const existing = await prisma.organization.findFirst({ where: { name: data.name } });
-  if (existing) return existing;
-  return prisma.organization.create({ data: { ...data, status: "approved", classification: "public" } });
 }
 
 async function findOrCreateProgram(name: string) {
@@ -192,24 +196,24 @@ async function seedDemoDiscoverContent() {
     parentLocationId: panamaProvince.id,
   });
 
-  const fincaRosinaOrg = await findOrCreateOrganization({
+  const demoAmberRidgeOrg = await findOrCreateOrganization(prisma, {
     organizationType: "farm",
-    name: "Finca Rosina",
+    name: "DEMO Amber Ridge",
     description:
       "A specialty coffee farm in the Boquete highlands. [DEMO placeholder — production figures, certifications, and exact history are not populated; add real, verified detail before this leaves demo status.]",
   });
-  const kivaEstateOrg = await findOrCreateOrganization({
+  const kivaEstateOrg = await findOrCreateOrganization(prisma, {
     organizationType: "estate",
     name: "Kiva Estate",
     description: "[DEMO placeholder organization — no verified details populated yet.]",
   });
 
-  const fincaRosinaSite = await findOrCreateLocation({
+  const demoAmberRidgeSite = await findOrCreateLocation({
     locationType: "site",
-    name: "Finca Rosina",
-    slug: "finca-rosina",
+    name: "DEMO Amber Ridge",
+    slug: "demo-amber-ridge",
     parentLocationId: boquete.id,
-    organizationId: fincaRosinaOrg.id,
+    organizationId: demoAmberRidgeOrg.id,
   });
   const lasNubesSite = await findOrCreateLocation({
     locationType: "site",
@@ -308,7 +312,7 @@ async function seedDemoDiscoverContent() {
       summary: "Coffee grown within the DEMO Cloudline project territory.",
       description: "[DEMO placeholder listing — pricing, lot detail, and processing notes pending Slice 3 (Commerce).]",
       projectId: lasNubesProject.id,
-      organizationId: fincaRosinaOrg.id,
+      organizationId: demoAmberRidgeOrg.id,
       locationId: lasNubesSite.id,
       status: "approved",
       classification: "public",
@@ -720,7 +724,7 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
   }
 
   const lasNubesSite = await findOrCreateLocation({ locationType: "site", name: "DEMO Cloudline", slug: "demo-cloudline" });
-  const lasNubesFarm = await findOrCreateOrganization({
+  const lasNubesFarm = await findOrCreateOrganization(prisma, {
     organizationType: "farm",
     name: "DEMO Cloudline",
     description:

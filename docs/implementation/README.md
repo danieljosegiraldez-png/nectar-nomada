@@ -360,6 +360,53 @@ de secado, both real apiary sites) verified intact before and after every
 write, and every TEST-prefixed verification artifact cleaned up — zero
 residue.
 
+**A follow-up data-integrity fix, 2026-08-13, found while working an
+unrelated ticket (S1).** A7's own reuse of the pre-existing "Finca Rosina"
+Organization for the real Cerro Azul farm was itself correct — real
+`OrganizationMembership` rows for Bob/Sherry/Chris Huerbsch and the real
+"Las Nubes Cerro Azul — Café" Project already pointed at it, matching
+`27_A7_...md` §3's brand-name pre-approval by Sherry. But the org's own
+`description` was never updated off its original "Boquete highlands /
+DEMO placeholder" text, and `seedDemoDiscoverContent()` in `prisma/seed.ts`
+kept matching that same organization by name on every
+`SEED_DEMO_CONTENT=true` run — a real DEMO Product
+(`demo-cloudline-coffee`) and a reparented DEMO Location (the original
+"Finca Rosina" site, moved under real Cerro Azul instead of its intended
+Boquete) were both found still attached to it, plus an orphaned
+pre-cleanup leftover Product (`las-nubes-coffee`). Fixed against real
+Neon: the real org's description corrected (sourced from §3, not
+fabricated); a new `DEMO Amber Ridge` Organization created to carry the
+DEMO identity forward; the DEMO Location and Product reassigned to it and
+the Location reparented back to Boquete; the orphaned Product deleted;
+`seedDemoDiscoverContent()` updated to seed `DEMO Amber Ridge` instead of
+`Finca Rosina` going forward — the same "rename the DEMO side, never the
+real side" pattern already used for "Las Nubes" → "DEMO Cloudline". The
+real Location, all ten real child Locations, both real Projects, and the
+three real `OrganizationMembership` rows were verified unchanged before
+and after. See `22_APIARY_V1_SCOPING_REPORT.md`'s A7 row for the full
+account.
+
+**The root cause was fixed structurally, not just renamed, in the same
+follow-up.** A renamed string only fixes the one collision found — it
+does nothing to stop a *future* DEMO name landing on a *future* real
+organization's name, and this exact mechanism had already bitten once
+before (A8's "Las Nubes" collision). `findOrCreateOrganization` was
+extracted out of `prisma/seed.ts` into a new `prisma/seedHelpers.ts` (so
+it's importable by a test without triggering seed.ts's own
+import-time `main()` — a full production seed run) and now checks, before
+reusing any name-matched Organization, whether it already has real
+backing (any `OrganizationMembership` row, or any real `Project`
+referencing it as `organizationId`/`clientOrganizationId`); if so it
+throws `DemoOrganizationCollisionError` instead of silently returning it.
+`tests/seed/organizationGuard.test.ts` proves this against real Neon —
+scratch fixtures, not a full seed run: the guard throws when a
+name-matched org carries a real membership, throws when it carries a real
+Project reference, and still reuses idempotently (and still creates a
+fresh row) when there's no real backing, so normal `SEED_DEMO_CONTENT=true`
+re-runs keep working. 4/4 pass; the full suite (255 tests, 26 files) and
+`typecheck`/`lint` all pass after the change; scratch fixtures verified
+cleaned, zero residue.
+
 **`32_S1_CAFES_EXTERNOS.md` is now run — schema and service layer only, no
 UI, same convention as F1.** Closes the gap where a coffee arrives already
 cupping-worthy with no `Lot` behind it — a client sample, a competitor's
