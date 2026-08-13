@@ -158,6 +158,7 @@ model UserAccount {
   plantingEventsCreated             PlantingEvent[]              @relation("PlantingEventCreatedBy")
   specimensCreated                  Specimen[]                   @relation("SpecimenCreatedBy")
   specimenObservationsCreated       SpecimenObservation[]        @relation("SpecimenObservationCreatedBy")
+  externalCoffeeOriginsCreated      ExternalCoffeeOrigin[]       @relation("ExternalCoffeeOriginCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -527,21 +528,24 @@ model Organization {
   createdBy        String?             @map("created_by") @db.Uuid
   creator          UserAccount?        @relation("OrganizationCreatedBy", fields: [createdBy], references: [id])
 
-  locations                  Location[]
-  projectsOwned              Project[]                @relation("ProjectOrganization")
-  projectsAsClient           Project[]                @relation("ProjectClientOrganization")
-  samples                    Sample[]
-  stories                    Story[]
-  products                   Product[]
-  experiences                Experience[]
-  competitionEntries         Entry[]
-  referenceStandardsSupplied ReferenceStandard[]
-  lots                       Lot[]
-  harvestEvents              HarvestEvent[]
-  receivingEvents            ReceivingEvent[]
-  labourEntriesProvided      LabourEntry[]
-  memberships                OrganizationMembership[]
-  plantingEventsSourced      PlantingEvent[]
+  locations                        Location[]
+  projectsOwned                    Project[]                @relation("ProjectOrganization")
+  projectsAsClient                 Project[]                @relation("ProjectClientOrganization")
+  samples                          Sample[]
+  stories                          Story[]
+  products                         Product[]
+  experiences                      Experience[]
+  competitionEntries               Entry[]
+  referenceStandardsSupplied       ReferenceStandard[]
+  lots                             Lot[]
+  harvestEvents                    HarvestEvent[]
+  receivingEvents                  ReceivingEvent[]
+  labourEntriesProvided            LabourEntry[]
+  memberships                      OrganizationMembership[]
+  plantingEventsSourced            PlantingEvent[]
+  externalCoffeeOriginsAsProducer  ExternalCoffeeOrigin[]   @relation("ExternalCoffeeProducer")
+  externalCoffeeOriginsAsProcessor ExternalCoffeeOrigin[]   @relation("ExternalCoffeeProcessor")
+  externalCoffeeOriginsAsBrand     ExternalCoffeeOrigin[]   @relation("ExternalCoffeeBrand")
 
   @@map("organization")
   @@schema("core")
@@ -729,12 +733,114 @@ model Sample {
   measurements       Measurement[]
   assets             Asset[]
 
+  // S1 (docs/implementation/32_S1_CAFES_EXTERNOS.md) — present exactly
+  // when sourceLotId is null and this Sample's origin is a third-party
+  // declaration rather than this platform's own traceability chain. The
+  // two are mutually exclusive in practice (a Lot-sourced sample already
+  // has real lineage; nothing here re-derives it), but not enforced as an
+  // XOR constraint at the DB level — see ExternalCoffeeOrigin's own
+  // comment for why.
+  externalOrigin ExternalCoffeeOrigin?
+
   @@index([projectId])
   @@index([organizationId])
   @@index([locationId])
   @@index([sourceLotId])
   @@index([sourceTransformationId])
   @@map("sample")
+  @@schema("core")
+}
+
+// S1 (docs/implementation/32_S1_CAFES_EXTERNOS.md). A coffee that arrives
+// already cupped-worthy with no Lot behind it — a client's sample, a
+// competitor's entry, a green sample someone hands you at a fair. Producer,
+// processor, and brand are three genuinely different organizations (§1's
+// worked example: Agustín Gómez's Geisha, processed at Cafelino's
+// beneficio, presented under Néctar Nómada's own brand) and none of the
+// three implies the others.
+//
+// Not limited to third-party coffee — §1's own text: "es el modelo correcto
+// para cualquier café donde producción y procesamiento se separan." A
+// Lot-backed Sample could theoretically also carry one of these if that
+// need arises later; today only the Lot-less path populates it, since
+// that's the actual gap this ticket closes.
+enum HarvestWindowPrecision {
+  year
+  month
+  date
+
+  @@schema("core")
+}
+
+model ExternalCoffeeOrigin {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sampleId String @unique @map("sample_id") @db.Uuid
+  sample   Sample @relation(fields: [sampleId], references: [id])
+
+  // §1 — all three nullable; "todos nulables salvo lo mínimo que
+  // identifique el café" is enforced in the service layer (at least one
+  // of the three must be given), not here — a DB-level CHECK across three
+  // nullable FKs adds little and the service layer is where every other
+  // "at least one of" rule in this codebase already lives (e.g.
+  // Specimen's sectorSimple/gridRow, deliberately NOT enforced as an XOR
+  // either).
+  producerOrganizationId  String?       @map("producer_organization_id") @db.Uuid
+  producerOrganization    Organization? @relation("ExternalCoffeeProducer", fields: [producerOrganizationId], references: [id])
+  processorOrganizationId String?       @map("processor_organization_id") @db.Uuid
+  processorOrganization   Organization? @relation("ExternalCoffeeProcessor", fields: [processorOrganizationId], references: [id])
+  brandOrganizationId     String?       @map("brand_organization_id") @db.Uuid
+  brandOrganization       Organization? @relation("ExternalCoffeeBrand", fields: [brandOrganizationId], references: [id])
+
+  // §2 — one declaration-class for the whole bundle (manufacturer_
+  // specification or interpretation, chosen at the action layer per
+  // ADR-038's pattern — required, no default). dataQuality is per field
+  // below instead, since reliability genuinely differs fact by fact (the
+  // ticket's own calibration note: farm is usually solid, process
+  // sometimes reliable, varietal is what most often comes in wrong) —
+  // collapsing that into one record-level dataQuality would hide exactly
+  // the distinction §2 asks to preserve.
+  declaredProvenanceClass ProvenanceClass @map("declared_provenance_class")
+  sourceReference         String?         @map("source_reference")
+
+  // §6 — each declared fact carries its own "when did we learn this"
+  // timestamp, not a full version history. Recommendation (see the S1
+  // draft ADR's §6 section for the full reasoning): row-versioning is
+  // machinery built for approved-document supersession with downstream
+  // pinned references (ProtocolVersion, CompetitionResult) — nothing
+  // points at "this ExternalCoffeeOrigin as of version N," so that
+  // machinery would be pure overhead here. A per-fact knownAt column
+  // answers the one question §6 actually asks — completing a record later
+  // must not look like it was known from the start — without building a
+  // parallel versioning system this entity doesn't need.
+  declaredVarietal    String?      @map("declared_varietal")
+  varietalDataQuality DataQuality? @map("varietal_data_quality")
+  varietalKnownAt     DateTime?    @map("varietal_known_at")
+
+  declaredProcess    String?      @map("declared_process")
+  processDataQuality DataQuality? @map("process_data_quality")
+  processKnownAt     DateTime?    @map("process_known_at")
+
+  // §4 — variable precision, never a fabricated day. harvestWindowPrecision
+  // is the authoritative field: year is populated whenever precision is
+  // year/month/date, month only when month/date, day only when date. The
+  // service layer enforces this shape; nothing here silently invents a
+  // day out of "cosecha 2025."
+  harvestWindowPrecision   HarvestWindowPrecision? @map("harvest_window_precision")
+  harvestYear              Int?                    @map("harvest_year")
+  harvestMonth             Int?                    @map("harvest_month")
+  harvestDay               Int?                    @map("harvest_day")
+  harvestWindowDataQuality DataQuality?            @map("harvest_window_data_quality")
+  harvestWindowKnownAt     DateTime?               @map("harvest_window_known_at")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ExternalCoffeeOriginCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([producerOrganizationId])
+  @@index([processorOrganizationId])
+  @@index([brandOrganizationId])
+  @@map("external_coffee_origin")
   @@schema("core")
 }
 
