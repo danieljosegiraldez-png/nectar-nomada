@@ -66,7 +66,13 @@ export async function getSessionForJudge(userAccountId: string, sessionId: strin
   const session = await prisma.sensorySession.findUniqueOrThrow({
     where: { id: sessionId },
     include: {
-      protocolVersion: { include: { protocol: true, attributes: { orderBy: { displayOrder: "asc" } } } },
+      protocolVersion: {
+        include: {
+          protocol: true,
+          attributes: { orderBy: { displayOrder: "asc" } },
+          descriptors: { orderBy: { displayOrder: "asc" } },
+        },
+      },
       flights: {
         orderBy: { sequenceOrder: "asc" },
         include: {
@@ -96,6 +102,17 @@ export interface SubmitAssessmentInput {
   overallScore?: number | null;
   comment?: string | null;
   attributeResponses: ReadonlyArray<{ attributeId: string; value: number; comment?: string | null }>;
+  // R1 (docs/implementation/33_R1_ROASTSESSION_TAXONOMIA_SENSORIAL.md §2) —
+  // additive alongside attributeResponses and comment, never a replacement
+  // for either: a structured descriptor/defect pick, with its own optional
+  // per-response confidence ("creo que hay fenólico, no estoy seguro" is
+  // different information from a flat assertion). Free text still works
+  // exactly as before whether or not this is given.
+  descriptorResponses?: ReadonlyArray<{
+    descriptorId: string;
+    confidence?: "low" | "medium" | "high" | null;
+    comment?: string | null;
+  }>;
 }
 
 export async function submitAssessment(userAccountId: string, input: SubmitAssessmentInput) {
@@ -135,8 +152,15 @@ export async function submitAssessment(userAccountId: string, input: SubmitAsses
             comment: r.comment ?? null,
           })),
         },
+        descriptorResponses: {
+          create: (input.descriptorResponses ?? []).map((r) => ({
+            descriptorId: r.descriptorId,
+            confidence: r.confidence ?? null,
+            comment: r.comment ?? null,
+          })),
+        },
       },
-      include: { attributeResponses: true },
+      include: { attributeResponses: true, descriptorResponses: true },
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -199,7 +223,13 @@ export async function getSessionForHeadJudge(userAccountId: string, sessionId: s
   const session = await prisma.sensorySession.findUniqueOrThrow({
     where: { id: sessionId },
     include: {
-      protocolVersion: { include: { protocol: true, attributes: { orderBy: { displayOrder: "asc" } } } },
+      protocolVersion: {
+        include: {
+          protocol: true,
+          attributes: { orderBy: { displayOrder: "asc" } },
+          descriptors: { orderBy: { displayOrder: "asc" } },
+        },
+      },
       flights: {
         orderBy: { sequenceOrder: "asc" },
         include: {
