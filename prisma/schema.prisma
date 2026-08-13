@@ -2,8 +2,9 @@
 // Implements docs/architecture/DOMAIN_MODEL.md §1-2 and docs/architecture/RBAC.md §2.
 // One module-owned Postgres schema per vertical slice, added as each is built — see
 // the `schemas` array below for what's actually live, and
-// docs/architecture/DATA_ARCHITECTURE.md §1 for the convention (research and
-// environmental schemas are still correctly absent; those modules aren't built yet).
+// docs/architecture/DATA_ARCHITECTURE.md §1 for the convention (the
+// environmental schema is still correctly absent; that module isn't built yet.
+// RO1, docs/implementation/34_RO1_RESEARCH_OS.md, adds "research").
 
 generator client {
   provider        = "prisma-client"
@@ -13,7 +14,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  schemas    = ["core", "commerce", "experiences", "partner", "sensory", "ai", "competitions", "traceability", "apiary"]
+  schemas    = ["core", "commerce", "experiences", "partner", "sensory", "ai", "competitions", "traceability", "apiary", "research"]
   // DECISIONS.md ADR-021/ADR-022 — deferred against the local PGlite sandbox
   // (no extension support), enabled now that Neon is the primary database.
   extensions = [postgis]
@@ -76,6 +77,7 @@ model Person {
   organizationMemberships            OrganizationMembership[]
   plantingEventsOperated             PlantingEvent[]               @relation("PlantingEventOperator")
   specimenObservationsObserved       SpecimenObservation[]         @relation("SpecimenObservationObserver")
+  treatmentBatchesOperated           TreatmentBatch[]              @relation("TreatmentBatchOperator")
 
   @@map("person")
   @@schema("core")
@@ -161,6 +163,34 @@ model UserAccount {
   specimensCreated                  Specimen[]                   @relation("SpecimenCreatedBy")
   specimenObservationsCreated       SpecimenObservation[]        @relation("SpecimenObservationCreatedBy")
   externalCoffeeOriginsCreated      ExternalCoffeeOrigin[]       @relation("ExternalCoffeeOriginCreatedBy")
+
+  // RO1 (docs/implementation/34_RO1_RESEARCH_OS.md) — one CreatedBy back-
+  // relation per new Research OS entity, same convention as every block
+  // above.
+  researchProgramsCreated            ResearchProgram[]            @relation("ResearchProgramCreatedBy")
+  researchQuestionsCreated           ResearchQuestion[]           @relation("ResearchQuestionCreatedBy")
+  hypothesesCreated                  Hypothesis[]                 @relation("HypothesisCreatedBy")
+  experimentsCreated                 Experiment[]                 @relation("ExperimentCreatedBy")
+  protocolsCreated                   Protocol[]                   @relation("ProtocolCreatedBy")
+  protocolVersionsCreated            ProtocolVersion[]            @relation("ProtocolVersionCreatedBy")
+  treatmentBatchesCreated            TreatmentBatch[]             @relation("TreatmentBatchCreatedBy")
+  processingStagesCreated            ProcessingStage[]            @relation("ProcessingStageCreatedBy")
+  processingStageObservationsCreated ProcessingStageObservation[] @relation("ProcessingStageObservationCreatedBy")
+  evidenceCreated                    Evidence[]                   @relation("EvidenceCreatedBy")
+  evidenceClaimsCreated              EvidenceClaim[]              @relation("EvidenceClaimCreatedBy")
+  interpretationsCreated             Interpretation[]             @relation("InterpretationCreatedBy")
+  conclusionsCreated                 Conclusion[]                 @relation("ConclusionCreatedBy")
+  researchRecommendationsCreated     ResearchRecommendation[]     @relation("ResearchRecommendationCreatedBy")
+  analysisPlansCreated               AnalysisPlan[]               @relation("AnalysisPlanCreatedBy")
+  analysisRunsCreated                AnalysisRun[]                @relation("AnalysisRunCreatedBy")
+  analysisResultsCreated             AnalysisResult[]             @relation("AnalysisResultCreatedBy")
+  publicationsCreated                Publication[]                @relation("PublicationCreatedBy")
+  deviationsCreated                  Deviation[]                  @relation("DeviationCreatedBy")
+  correctiveActionsCreated           CorrectiveAction[]           @relation("CorrectiveActionCreatedBy")
+  approvalsDecided                   Approval[]                   @relation("ApprovalApprover")
+  researchActivitiesProposed         ResearchActivity[]           @relation("ResearchActivityProposedBy")
+  researchActivitiesReviewed         ResearchActivity[]           @relation("ResearchActivityReviewedBy")
+  researchActivitiesCreated          ResearchActivity[]           @relation("ResearchActivityCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -464,6 +494,16 @@ model Location {
   subdivisionReason     SubdivisionReason? @map("subdivision_reason")
   subdivisionReasonNote String?            @map("subdivision_reason_note")
 
+  // RO1 (34_RO1_RESEARCH_OS.md §3a) — same F1 attribute pattern as sun
+  // exposure above, only meaningful for a drying-room Location. "El nivel
+  // por sí solo no dice cuánta luz recibe — depende de en qué cuarto está.
+  // El cuarto solar tiene 3 niveles con luz; el cuarto oscuro tiene 6
+  // niveles y ninguna luz." A ProcessingStage's "nivel de cama"
+  // ProtocolVariable value is only interpretable paired with these two
+  // fields on the room it ran in (via ProcessingStage.locationId).
+  dryingRoomLightExposure DryingRoomLightExposure? @map("drying_room_light_exposure")
+  dryingRoomBedLevelCount Int?                     @map("drying_room_bed_level_count")
+
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")
   createdBy String?      @map("created_by") @db.Uuid
@@ -485,10 +525,18 @@ model Location {
   plantingEvents              PlantingEvent[]
   labourEntries               LabourEntry[]
   materialConsumptionEntries  MaterialConsumptionEntry[]
+  processingStages            ProcessingStage[]
 
   @@index([parentLocationId])
   @@index([organizationId])
   @@map("location")
+  @@schema("core")
+}
+
+enum DryingRoomLightExposure {
+  with_light
+  without_light
+
   @@schema("core")
 }
 
@@ -674,6 +722,13 @@ model Project {
   // A1 (22_APIARY_V1_SCOPING_REPORT.md) — module-owned, `apiary` schema.
   hives Hive[]
 
+  // RO1 (34_RO1_RESEARCH_OS.md) — module-owned, `research` schema.
+  // Denormalized directly on Experiment/TreatmentBatch (not only reachable
+  // via Protocol/ProtocolVersion) for the same RBAC-resolution reason as
+  // Lot/Sample's own direct projectId.
+  experiments      Experiment[]
+  treatmentBatches TreatmentBatch[]
+
   @@index([programId])
   @@index([organizationId])
   @@index([clientOrganizationId])
@@ -743,6 +798,10 @@ model Sample {
   // XOR constraint at the DB level — see ExternalCoffeeOrigin's own
   // comment for why.
   externalOrigin ExternalCoffeeOrigin?
+
+  // RO1 — a tasted/analyzed Sample used as Research OS evidence (§2: "Sample
+  // es canónico y ya llega a Sensory... no necesita mecanismo nuevo").
+  researchEvidence Evidence[]
 
   @@index([projectId])
   @@index([organizationId])
@@ -1348,6 +1407,13 @@ model Asset {
   specimenId String?   @map("specimen_id") @db.Uuid
   specimen   Specimen? @relation(fields: [specimenId], references: [id])
 
+  // RO1 (34_RO1_RESEARCH_OS.md §2) — same nullable-FK-per-parent convention:
+  // "las fotos de un protocolo se adjuntan igual."
+  treatmentBatchId  String?          @map("treatment_batch_id") @db.Uuid
+  treatmentBatch    TreatmentBatch?  @relation(fields: [treatmentBatchId], references: [id])
+  processingStageId String?          @map("processing_stage_id") @db.Uuid
+  processingStage   ProcessingStage? @relation(fields: [processingStageId], references: [id])
+
   // T12.5: required, no default — same reasoning as ADR-038 (T9.5): a
   // photograph is a fact-bearing record, and a silent default would
   // misrepresent an unstated provenance as the strongest class in the
@@ -1362,6 +1428,7 @@ model Asset {
   creator   UserAccount? @relation("AssetCreatedBy", fields: [createdBy], references: [id])
 
   fieldSubmissions FieldSubmissionAsset[]
+  evidence         Evidence[]
 
   @@index([projectId])
   @@index([locationId])
@@ -1376,6 +1443,8 @@ model Asset {
   @@index([inspectionId])
   @@index([colonyEventId])
   @@index([specimenId])
+  @@index([treatmentBatchId])
+  @@index([processingStageId])
   @@map("asset")
   @@schema("core")
 }
@@ -2322,6 +2391,9 @@ model Lot {
   receivingEvent        ReceivingEvent?
   apiaryHarvestEvent    ApiaryHarvestEvent?
   assets                Asset[]
+  // RO1 — a PE protocol treatment applied to this Lot, when one exists
+  // (nullable on TreatmentBatch — Research OS isn't coffee-only).
+  treatmentBatches      TreatmentBatch[]
 
   @@index([organizationId])
   @@index([projectId])
@@ -2537,6 +2609,14 @@ model Measurement {
   // presence of this FK already says so unambiguously.
   roastSessionId      String?            @map("roast_session_id") @db.Uuid
   roastSession        RoastSession?      @relation(fields: [roastSessionId], references: [id])
+  // RO1 — a PE-protocol reading (Brix/pH/moisture) taken during a
+  // TreatmentBatch's execution, at a specific ProcessingStage moment
+  // (post-fermentación, seco, taza...). Same additive-FK-per-parent pattern
+  // as every other parent above.
+  treatmentBatchId    String?            @map("treatment_batch_id") @db.Uuid
+  treatmentBatch      TreatmentBatch?    @relation(fields: [treatmentBatchId], references: [id])
+  processingStageId   String?            @map("processing_stage_id") @db.Uuid
+  processingStage     ProcessingStage?   @relation(fields: [processingStageId], references: [id])
 
   sourceType       MeasurementSourceType @default(manual) @map("source_type")
   deviceId         String?               @map("device_id")
@@ -2557,7 +2637,8 @@ model Measurement {
   createdBy       String?         @map("created_by") @db.Uuid
   creator         UserAccount?    @relation("MeasurementCreatedBy", fields: [createdBy], references: [id])
 
-  assets Asset[]
+  assets   Asset[]
+  evidence Evidence[]
 
   @@index([lotId])
   @@index([sampleId])
@@ -2565,6 +2646,8 @@ model Measurement {
   @@index([dryingRunId])
   @@index([storageAssignmentId])
   @@index([roastSessionId])
+  @@index([treatmentBatchId])
+  @@index([processingStageId])
   @@index([correctsId])
   @@map("measurement")
   @@schema("traceability")
@@ -3464,4 +3547,768 @@ model ApiaryHarvestEvent {
   @@index([colonyId])
   @@map("apiary_harvest_event")
   @@schema("apiary")
+}
+
+// =============================================================================
+// Research OS — RO1 (docs/implementation/34_RO1_RESEARCH_OS.md). Full schema
+// per DOMAIN_MODEL.md §4 / CLAUDE.md §17; UI is built only for the subset
+// §5 names — creating/versioning/listing a protocol, executing one against a
+// Lot, and viewing results including the sensory link. The rest of the chain
+// below (Publication, AnalysisPlan/Run/Result, Deviation/CorrectiveAction,
+// Approval, Interpretation -> Conclusion -> ResearchRecommendation) gets
+// schema and service functions, deliberately no screens yet — "el esquema
+// existe; las pantallas llegan cuando se usen" (§5).
+// =============================================================================
+
+model ResearchProgram {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String?
+  status      RecordStatus @default(draft)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  createdBy   String?      @map("created_by") @db.Uuid
+  creator     UserAccount? @relation("ResearchProgramCreatedBy", fields: [createdBy], references: [id])
+
+  questions          ResearchQuestion[]
+  experiments        Experiment[]
+  researchActivities ResearchActivity[]
+
+  @@map("research_program")
+  @@schema("research")
+}
+
+model ResearchQuestion {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  researchProgramId String          @map("research_program_id") @db.Uuid
+  researchProgram   ResearchProgram @relation(fields: [researchProgramId], references: [id])
+  questionText      String          @map("question_text")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  createdBy         String?         @map("created_by") @db.Uuid
+  creator           UserAccount?    @relation("ResearchQuestionCreatedBy", fields: [createdBy], references: [id])
+
+  hypotheses Hypothesis[]
+
+  @@index([researchProgramId])
+  @@map("research_question")
+  @@schema("research")
+}
+
+model Hypothesis {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  researchQuestionId String           @map("research_question_id") @db.Uuid
+  researchQuestion   ResearchQuestion @relation(fields: [researchQuestionId], references: [id])
+  statement          String
+  createdAt          DateTime         @default(now()) @map("created_at")
+  createdBy          String?          @map("created_by") @db.Uuid
+  creator            UserAccount?     @relation("HypothesisCreatedBy", fields: [createdBy], references: [id])
+
+  experiments Experiment[]
+
+  @@index([researchQuestionId])
+  @@map("hypothesis")
+  @@schema("research")
+}
+
+model Experiment {
+  id                      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  researchProgramId       String          @map("research_program_id") @db.Uuid
+  researchProgram         ResearchProgram @relation(fields: [researchProgramId], references: [id])
+  hypothesisId            String?         @map("hypothesis_id") @db.Uuid
+  hypothesis              Hypothesis?     @relation(fields: [hypothesisId], references: [id])
+  // Denormalized, matching Lot/Sample's own precedent — avoids a multi-hop
+  // join (Experiment -> Protocol -> ProtocolVersion -> ...) for every RBAC
+  // scope check.
+  projectId               String?         @map("project_id") @db.Uuid
+  project                 Project?        @relation(fields: [projectId], references: [id])
+  name                    String
+  description             String?
+  status                  RecordStatus    @default(draft)
+  // §4a — "cada experimento tiene un tratamiento control explícito." Points
+  // at the one TreatmentBatch that IS this experiment's baseline; declared,
+  // never inferred (declareControlTreatmentBatch, lib/research/programs.ts).
+  controlTreatmentBatchId String?         @unique @map("control_treatment_batch_id") @db.Uuid
+  controlTreatmentBatch   TreatmentBatch? @relation("ExperimentControlTreatmentBatch", fields: [controlTreatmentBatchId], references: [id])
+  // §4f — "linaje entre ensayos... qué ensayo derivó de cuál y por qué."
+  // Deliberately separate from the Lot lineage DAG (lot_transformation,
+  // §7's PE-80-94 nomenclature) — this is scientific/experimental
+  // derivation (a prior trial's findings informed the next design), a
+  // different kind of "led to" than a physical lot split.
+  derivedFromExperimentId String?         @map("derived_from_experiment_id") @db.Uuid
+  derivedFromExperiment   Experiment?     @relation("ExperimentLineage", fields: [derivedFromExperimentId], references: [id])
+  derivationNote          String?         @map("derivation_note")
+  derivedExperiments      Experiment[]    @relation("ExperimentLineage")
+  // §4g — "la tarjeta de referencia lista explícitamente lo que no está
+  // medido todavía... eso es el límite declarado de lo que el método puede
+  // afirmar hoy." Free text, not a structured checklist — the real list
+  // (β-glucosidasa, GC-MS, LC-MS, pH/°Brix comparativo, microbiología
+  // cuantitativa, cupping formal) is the product owner's own wording, kept
+  // verbatim rather than forced into an invented enum.
+  declaredLimitations     String?         @map("declared_limitations")
+  createdAt               DateTime        @default(now()) @map("created_at")
+  createdBy               String?         @map("created_by") @db.Uuid
+  creator                 UserAccount?    @relation("ExperimentCreatedBy", fields: [createdBy], references: [id])
+
+  protocols       Protocol[]
+  analysisPlans   AnalysisPlan[]
+  publications    Publication[]
+  interpretations Interpretation[]
+
+  @@index([researchProgramId])
+  @@index([hypothesisId])
+  @@index([projectId])
+  @@index([derivedFromExperimentId])
+  @@map("experiment")
+  @@schema("research")
+}
+
+// §4 — "la numeración PE-77 a PE-112 codifica algo, pero no está documentado
+// qué. No lo adivines." externalIdentifier stores the code verbatim
+// ("PE-89") as an opaque, uninterpreted string; identifierConvention is a
+// free-text slot for whenever the product owner explains what the number
+// encodes — not guessed, not decomposed into structured parts today.
+model Protocol {
+  id                   String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  experimentId         String?      @map("experiment_id") @db.Uuid
+  experiment           Experiment?  @relation(fields: [experimentId], references: [id])
+  name                 String
+  externalIdentifier   String?      @unique @map("external_identifier")
+  identifierConvention String?      @map("identifier_convention")
+  description          String?
+  createdAt            DateTime     @default(now()) @map("created_at")
+  createdBy            String?      @map("created_by") @db.Uuid
+  creator              UserAccount? @relation("ProtocolCreatedBy", fields: [createdBy], references: [id])
+
+  versions ProtocolVersion[]
+
+  @@index([experimentId])
+  @@map("protocol")
+  @@schema("research")
+}
+
+// Same three-state lifecycle as SensoryProtocolVersionStatus — the fourth
+// reuse of the Protocol -> ProtocolVersion pattern §2 points at ("no
+// inventes un quinto mecanismo de versionado"), not a new vocabulary.
+enum ProtocolVersionStatus {
+  draft
+  active
+  superseded
+
+  @@schema("research")
+}
+
+model ProtocolVersion {
+  id         String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  protocolId String                @map("protocol_id") @db.Uuid
+  protocol   Protocol              @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+  version    Int
+  status     ProtocolVersionStatus @default(draft)
+  notes      String?
+  createdAt  DateTime              @default(now()) @map("created_at")
+  createdBy  String?               @map("created_by") @db.Uuid
+  creator    UserAccount?          @relation("ProtocolVersionCreatedBy", fields: [createdBy], references: [id])
+
+  supersededByVersionId String?           @map("superseded_by_version_id") @db.Uuid
+  supersededBy          ProtocolVersion?  @relation("ProtocolVersionSupersession", fields: [supersededByVersionId], references: [id])
+  supersedes            ProtocolVersion[] @relation("ProtocolVersionSupersession")
+
+  variables            ProtocolVariable[]
+  requiredMeasurements ProtocolRequiredMeasurement[]
+  treatmentBatches     TreatmentBatch[]
+
+  @@unique([protocolId, version])
+  @@map("protocol_version")
+  @@schema("research")
+}
+
+enum ProtocolVariableValueType {
+  text
+  numeric
+  boolean
+  catalog
+  closed_enum
+
+  @@schema("research")
+}
+
+model VariableCatalog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key         String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  values               VariableCatalogValue[]
+  protocolVariables    ProtocolVariable[]
+  requiredMeasurements ProtocolRequiredMeasurement[]
+
+  @@map("variable_catalog")
+  @@schema("research")
+}
+
+model VariableCatalogValue {
+  id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  catalogId              String                 @map("catalog_id") @db.Uuid
+  catalog                VariableCatalog        @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  value                  String
+  // §3a-bis — "qué significa ese valor y qué lo distingue del vecino."
+  // Optional deliberately: requiring it would slow field capture. Same
+  // shape as SensoryDescriptor.expectedPerception/technicalCause (R1) —
+  // the same standardize-the-language-over-time reasoning applied to
+  // process variables instead of tasting descriptors.
+  definition             String?                @map("definition")
+  // §3a-bis — "nombres alternativos que apuntan al mismo valor canónico."
+  // Real case this exists for: honey-by-color and semi-wash-by-percentage
+  // may name the same process. Self-referential, one level (an alias
+  // points directly at its canonical row, never chains through another
+  // alias) — resolveCatalogValue (lib/research/protocols.ts) follows this
+  // once. Null means this row IS canonical.
+  aliasOfId              String?                @map("alias_of_id") @db.Uuid
+  aliasOf                VariableCatalogValue?  @relation("VariableCatalogValueAlias", fields: [aliasOfId], references: [id])
+  aliases                VariableCatalogValue[] @relation("VariableCatalogValueAlias")
+  displayOrder           Int                    @default(0) @map("display_order")
+  impliesUnknownIdentity Boolean                @default(false) @map("implies_unknown_identity")
+
+  values       TreatmentBatchVariableValue[]
+  observations ProcessingStageObservation[]
+
+  @@unique([catalogId, value])
+  @@index([aliasOfId])
+  @@map("variable_catalog_value")
+  @@schema("research")
+}
+
+// §3 — "el modelo tiene que poder responder: mostrame todos los protocolos
+// donde la única diferencia fue agua de río versus quebrada." One row per
+// controlled factor a ProtocolVersion declares (water source, yeast
+// presence, fermentation orientation, bag position, volume...); the actual
+// value per execution lives on TreatmentBatchVariableValue below, keyed to
+// this row, so both "which variable" and "what value" stay structured and
+// queryable rather than living in prose.
+model ProtocolVariable {
+  id                String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  protocolVersionId String                    @map("protocol_version_id") @db.Uuid
+  protocolVersion   ProtocolVersion           @relation(fields: [protocolVersionId], references: [id], onDelete: Cascade)
+  name              String
+  description       String?
+  valueType         ProtocolVariableValueType @map("value_type")
+  unit              String?
+  // §3a — only set when valueType = catalog (Recipiente, Levadura/cultivo,
+  // Método de inoculación, Grado de proceso).
+  catalogId         String?                   @map("catalog_id") @db.Uuid
+  catalog           VariableCatalog?          @relation(fields: [catalogId], references: [id])
+  // §3a — only set when valueType = closed_enum (Fuente de agua, Posición
+  // de masa). Frozen at creation; changing the set means a new
+  // ProtocolVersion, not editing this row (§9.2).
+  enumValues        String[]                  @map("enum_values")
+  // False for a variable that's recorded but not deliberately varied
+  // between treatments (e.g. operator name) — true for the isolated factors
+  // §1 names (water source, yeast, orientation, bag position, volume).
+  isControlled      Boolean                   @default(true) @map("is_controlled")
+  displayOrder      Int                       @default(0) @map("display_order")
+
+  values TreatmentBatchVariableValue[]
+
+  @@index([protocolVersionId])
+  @@index([catalogId])
+  @@map("protocol_variable")
+  @@schema("research")
+}
+
+// §3's design warning, restated: "un campo opcional es un campo vacío la
+// mayoría de las veces" (provenanceClass's own history, T9.5). This is the
+// mechanism that fixes it for Research OS — not more optional fields on
+// Measurement, but a ProtocolVersion declaring exactly which measurements
+// it requires and at which processing stage. When a batch runs under this
+// version, the system knows what to measure, and completeProcessingStage
+// (lib/research/treatments.ts) refuses to close a stage that's missing one
+// (§9 verification scenario 5).
+// §3b — a required measurement is either a numeric MeasurementVariable
+// reading (variable set, catalogId null — Brix/pH/humedad/peso/densidad,
+// recorded as ordinary Measurement rows) or a categorical VariableCatalog
+// pick (catalogId set, variable null — "Estudio de cerezas"'s Selección,
+// Flotado, Condición visual, Limpieza, Color, Firmeza, Densidad-bracket,
+// Tamaño/forma, Defectos, recorded as ProcessingStageObservation rows).
+// Exactly one of the two is set — enforced in lib/research/protocols.ts,
+// not at the DB level (Prisma has no CHECK-constraint shorthand here).
+model ProtocolRequiredMeasurement {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  protocolVersionId String           @map("protocol_version_id") @db.Uuid
+  protocolVersion   ProtocolVersion  @relation(fields: [protocolVersionId], references: [id], onDelete: Cascade)
+  // MeasurementVariable (lib/traceability/units.ts) reused, not duplicated —
+  // Brix/pH/humedad are already canonical variables (brix, ph, moisture).
+  variable          String?
+  // §3b — set instead of `variable` for a categorical pick.
+  catalogId         String?          @map("catalog_id") @db.Uuid
+  catalog           VariableCatalog? @relation(fields: [catalogId], references: [id])
+  // Free text naming the ProcessingStage moment this applies to
+  // ("post-fermentación", "seco", "taza") — ProcessingStage.name is itself
+  // free text below, so this matches by string equality, not FK: a required
+  // measurement is declared on the protocol version before any batch (and
+  // therefore any stage row) exists.
+  atProcessingStage String           @map("at_processing_stage")
+  displayOrder      Int              @default(0) @map("display_order")
+
+  @@index([protocolVersionId])
+  @@index([catalogId])
+  @@map("protocol_required_measurement")
+  @@schema("research")
+}
+
+// A single execution of a ProtocolVersion — one PE run. lotId is the real
+// coffee this treatment applies to when one exists (nullable: Research OS
+// isn't coffee-only, DOMAIN_MODEL.md §4). projectId is denormalized for the
+// same RBAC-resolution reason as Experiment.projectId above.
+model TreatmentBatch {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  protocolVersionId String          @map("protocol_version_id") @db.Uuid
+  protocolVersion   ProtocolVersion @relation(fields: [protocolVersionId], references: [id])
+  lotId             String?         @map("lot_id") @db.Uuid
+  lot               Lot?            @relation(fields: [lotId], references: [id])
+  projectId         String?         @map("project_id") @db.Uuid
+  project           Project?        @relation(fields: [projectId], references: [id])
+  batchLabel        String          @map("batch_label")
+  operatorPersonId  String?         @map("operator_person_id") @db.Uuid
+  operator          Person?         @relation("TreatmentBatchOperator", fields: [operatorPersonId], references: [id])
+  startedAt         DateTime        @map("started_at")
+  endedAt           DateTime?       @map("ended_at")
+  notes             String?
+  // ADR-038 — required, no default: a treatment execution is a fact-bearing
+  // record, same reasoning as every other evidentiary write in this schema.
+  provenanceClass   ProvenanceClass @map("provenance_class")
+  sourceReference   String?         @map("source_reference")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  createdBy         String?         @map("created_by") @db.Uuid
+  creator           UserAccount?    @relation("TreatmentBatchCreatedBy", fields: [createdBy], references: [id])
+
+  variableValues       TreatmentBatchVariableValue[]
+  processingStages     ProcessingStage[]
+  measurements         Measurement[]
+  assets               Asset[]
+  evidence             Evidence[]
+  deviations           Deviation[]
+  // §4a — the inverse of Experiment.controlTreatmentBatchId: present when
+  // this batch IS the declared control/baseline for some Experiment.
+  controlForExperiment Experiment?                   @relation("ExperimentControlTreatmentBatch")
+
+  @@index([protocolVersionId])
+  @@index([lotId])
+  @@index([projectId])
+  @@map("treatment_batch")
+  @@schema("research")
+}
+
+model TreatmentBatchVariableValue {
+  id                 String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  treatmentBatchId   String                @map("treatment_batch_id") @db.Uuid
+  treatmentBatch     TreatmentBatch        @relation(fields: [treatmentBatchId], references: [id], onDelete: Cascade)
+  protocolVariableId String                @map("protocol_variable_id") @db.Uuid
+  protocolVariable   ProtocolVariable      @relation(fields: [protocolVariableId], references: [id])
+  textValue          String?               @map("text_value")
+  numericValue       Decimal?              @map("numeric_value") @db.Decimal(12, 4)
+  booleanValue       Boolean?              @map("boolean_value")
+  // §3a — set instead of textValue for a catalog-typed variable.
+  catalogValueId     String?               @map("catalog_value_id") @db.Uuid
+  catalogValue       VariableCatalogValue? @relation(fields: [catalogValueId], references: [id])
+  // §3a — "Spontaneous Wild" case: required (validated in
+  // lib/research/treatments.ts) when catalogValue.impliesUnknownIdentity is
+  // true, otherwise optional.
+  dataQuality        DataQuality?          @map("data_quality")
+
+  @@unique([treatmentBatchId, protocolVariableId])
+  @@index([catalogValueId])
+  @@map("treatment_batch_variable_value")
+  @@schema("research")
+}
+
+model ProcessingStage {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  treatmentBatchId String         @map("treatment_batch_id") @db.Uuid
+  treatmentBatch   TreatmentBatch @relation(fields: [treatmentBatchId], references: [id])
+  // Free text ("post-fermentación", "seco", "taza") — matches
+  // ProtocolRequiredMeasurement.atProcessingStage by string equality, same
+  // open-vocabulary reasoning as RoastSession.roastLevel.
+  name             String
+  sequenceOrder    Int            @map("sequence_order")
+  // §3a — "el cuarto es parte de la variable, no contexto." Which room
+  // (typically a drying room) this stage occurred in. Descriptive-context
+  // shape matches DryingRun.locationId's own precedent, but load-bearing
+  // here: a "nivel de cama" ProtocolVariable value is only interpretable
+  // paired with this Location's own dryingRoomBedLevelCount/
+  // dryingRoomLightExposure (§9.6) — level 1 in the solar room and level 1
+  // in the dark room are different exposures, not the same number.
+  locationId       String?        @map("location_id") @db.Uuid
+  location         Location?      @relation(fields: [locationId], references: [id])
+  startedAt        DateTime       @map("started_at")
+  completedAt      DateTime?      @map("completed_at")
+  notes            String?
+  createdAt        DateTime       @default(now()) @map("created_at")
+  createdBy        String?        @map("created_by") @db.Uuid
+  creator          UserAccount?   @relation("ProcessingStageCreatedBy", fields: [createdBy], references: [id])
+
+  measurements Measurement[]
+  observations ProcessingStageObservation[]
+  assets       Asset[]
+  deviations   Deviation[]
+
+  @@index([treatmentBatchId])
+  @@index([locationId])
+  @@map("processing_stage")
+  @@schema("research")
+}
+
+// §3b — "Estudio de cerezas" controlled-vocabulary attributes (Selección,
+// Flotado, Condición visual, Limpieza, Color, Firmeza, Densidad-bracket,
+// Tamaño/forma, Defectos de grano). Deliberately NOT
+// SensoryDescriptor/SensoryDescriptorResponse (R1) — that pair is
+// structurally coupled to Assessment/BlindSample/a judging session, and a
+// pre-processing cherry inspection has none of those. Reuses the
+// VariableCatalog mechanism §3a already builds instead of standing up a
+// third parallel system. Brix/peso-inicial/densidad numeric readings stay
+// ordinary Measurement rows (MeasurementVariable already has "brix") — this
+// table is only for the genuinely categorical picks.
+model ProcessingStageObservation {
+  id                String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  processingStageId String               @map("processing_stage_id") @db.Uuid
+  processingStage   ProcessingStage      @relation(fields: [processingStageId], references: [id])
+  catalogValueId    String               @map("catalog_value_id") @db.Uuid
+  catalogValue      VariableCatalogValue @relation(fields: [catalogValueId], references: [id])
+  occurredAt        DateTime             @map("occurred_at")
+  notes             String?
+  // ADR-038 — required, no default.
+  provenanceClass   ProvenanceClass      @map("provenance_class")
+  sourceReference   String?              @map("source_reference")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  createdBy         String?              @map("created_by") @db.Uuid
+  creator           UserAccount?         @relation("ProcessingStageObservationCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([processingStageId])
+  @@index([catalogValueId])
+  @@map("processing_stage_observation")
+  @@schema("research")
+}
+
+// A piece of evidence supporting an experiment's interpretation — a tasted
+// Sample, a photo Asset, a Measurement summary, or free-standing content.
+// Sample/Asset/Measurement are reused, not re-modeled (§2): a tasted
+// sample's evidentiary weight is the existing Sample row itself.
+model Evidence {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  treatmentBatchId String?         @map("treatment_batch_id") @db.Uuid
+  treatmentBatch   TreatmentBatch? @relation(fields: [treatmentBatchId], references: [id])
+  sampleId         String?         @map("sample_id") @db.Uuid
+  sample           Sample?         @relation(fields: [sampleId], references: [id])
+  assetId          String?         @map("asset_id") @db.Uuid
+  asset            Asset?          @relation(fields: [assetId], references: [id])
+  measurementId    String?         @map("measurement_id") @db.Uuid
+  measurement      Measurement?    @relation(fields: [measurementId], references: [id])
+  description      String?
+  // ADR-038 — required, no default.
+  provenanceClass  ProvenanceClass @map("provenance_class")
+  sourceReference  String?         @map("source_reference")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  createdBy        String?         @map("created_by") @db.Uuid
+  creator          UserAccount?    @relation("EvidenceCreatedBy", fields: [createdBy], references: [id])
+
+  claims EvidenceClaim[]
+
+  @@index([treatmentBatchId])
+  @@index([sampleId])
+  @@index([assetId])
+  @@index([measurementId])
+  @@map("evidence")
+  @@schema("research")
+}
+
+model EvidenceClaim {
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  evidenceId String       @map("evidence_id") @db.Uuid
+  evidence   Evidence     @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  claimText  String       @map("claim_text")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  createdBy  String?      @map("created_by") @db.Uuid
+  creator    UserAccount? @relation("EvidenceClaimCreatedBy", fields: [createdBy], references: [id])
+
+  interpretations Interpretation[]
+
+  @@index([evidenceId])
+  @@map("evidence_claim")
+  @@schema("research")
+}
+
+model Interpretation {
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  experimentId       String         @map("experiment_id") @db.Uuid
+  experiment         Experiment     @relation(fields: [experimentId], references: [id])
+  evidenceClaimId    String?        @map("evidence_claim_id") @db.Uuid
+  evidenceClaim      EvidenceClaim? @relation(fields: [evidenceClaimId], references: [id])
+  interpretationText String         @map("interpretation_text")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  createdBy          String?        @map("created_by") @db.Uuid
+  creator            UserAccount?   @relation("InterpretationCreatedBy", fields: [createdBy], references: [id])
+
+  conclusions Conclusion[]
+
+  @@index([experimentId])
+  @@index([evidenceClaimId])
+  @@map("interpretation")
+  @@schema("research")
+}
+
+model Conclusion {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  interpretationId String          @map("interpretation_id") @db.Uuid
+  interpretation   Interpretation  @relation(fields: [interpretationId], references: [id])
+  conclusionText   String          @map("conclusion_text")
+  // §4b — "cualquier conclusión comparativa es provenanceClass =
+  // 'interpretation', nunca measured_fact." Required, no default (ADR-038
+  // pattern); createConclusion (lib/research/evidence.ts) rejects
+  // measured_fact whenever isComparative is true — a single, un-replicated
+  // TreatmentBatch run can never earn measured-fact certainty about a
+  // difference between treatments.
+  provenanceClass  ProvenanceClass @map("provenance_class")
+  // §4b — true when this conclusion compares two or more treatments (e.g.
+  // "el tratamiento puntuó más alto que el control"). False for a
+  // conclusion about a single treatment's own result.
+  isComparative    Boolean         @default(false) @map("is_comparative")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  createdBy        String?         @map("created_by") @db.Uuid
+  creator          UserAccount?    @relation("ConclusionCreatedBy", fields: [createdBy], references: [id])
+
+  recommendations ResearchRecommendation[]
+
+  @@index([interpretationId])
+  @@map("conclusion")
+  @@schema("research")
+}
+
+// Named ResearchRecommendation, not Recommendation — the AI Layer already
+// has a `Recommendation` model (Slice 7, "ai" schema) with an unrelated
+// shape (suggestionType/model/confidence/reviewer). Same English word, two
+// different concepts (DOMAIN_MODEL.md §4, "hallazgo 18" of the `17_` audit);
+// this ticket's own §2 requires resolving the collision before creating the
+// second one. Prefixed to match this chain's own ResearchProgram/
+// ResearchQuestion naming, not "Research" bolted on awkwardly elsewhere.
+model ResearchRecommendation {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conclusionId       String       @map("conclusion_id") @db.Uuid
+  conclusion         Conclusion   @relation(fields: [conclusionId], references: [id])
+  recommendationText String       @map("recommendation_text")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  createdBy          String?      @map("created_by") @db.Uuid
+  creator            UserAccount? @relation("ResearchRecommendationCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([conclusionId])
+  @@map("research_recommendation")
+  @@schema("research")
+}
+
+model AnalysisPlan {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  experimentId String       @map("experiment_id") @db.Uuid
+  experiment   Experiment   @relation(fields: [experimentId], references: [id])
+  planText     String       @map("plan_text")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  createdBy    String?      @map("created_by") @db.Uuid
+  creator      UserAccount? @relation("AnalysisPlanCreatedBy", fields: [createdBy], references: [id])
+
+  runs AnalysisRun[]
+
+  @@index([experimentId])
+  @@map("analysis_plan")
+  @@schema("research")
+}
+
+enum AnalysisRunStatus {
+  pending
+  running
+  completed
+  failed
+
+  @@schema("research")
+}
+
+model AnalysisRun {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  analysisPlanId String            @map("analysis_plan_id") @db.Uuid
+  analysisPlan   AnalysisPlan      @relation(fields: [analysisPlanId], references: [id])
+  status         AnalysisRunStatus @default(pending)
+  startedAt      DateTime?         @map("started_at")
+  endedAt        DateTime?         @map("ended_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  createdBy      String?           @map("created_by") @db.Uuid
+  creator        UserAccount?      @relation("AnalysisRunCreatedBy", fields: [createdBy], references: [id])
+
+  results AnalysisResult[]
+
+  @@index([analysisPlanId])
+  @@map("analysis_run")
+  @@schema("research")
+}
+
+model AnalysisResult {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  analysisRunId String       @map("analysis_run_id") @db.Uuid
+  analysisRun   AnalysisRun  @relation(fields: [analysisRunId], references: [id])
+  resultSummary String       @map("result_summary")
+  resultData    Json?        @map("result_data")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  createdBy     String?      @map("created_by") @db.Uuid
+  creator       UserAccount? @relation("AnalysisResultCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([analysisRunId])
+  @@map("analysis_result")
+  @@schema("research")
+}
+
+enum PublicationStatus {
+  draft
+  submitted
+  published
+  retracted
+
+  @@schema("research")
+}
+
+model Publication {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  experimentId String?           @map("experiment_id") @db.Uuid
+  experiment   Experiment?       @relation(fields: [experimentId], references: [id])
+  title        String
+  status       PublicationStatus @default(draft)
+  publishedAt  DateTime?         @map("published_at")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  createdBy    String?           @map("created_by") @db.Uuid
+  creator      UserAccount?      @relation("PublicationCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([experimentId])
+  @@map("publication")
+  @@schema("research")
+}
+
+model Deviation {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  treatmentBatchId  String?          @map("treatment_batch_id") @db.Uuid
+  treatmentBatch    TreatmentBatch?  @relation(fields: [treatmentBatchId], references: [id])
+  processingStageId String?          @map("processing_stage_id") @db.Uuid
+  processingStage   ProcessingStage? @relation(fields: [processingStageId], references: [id])
+  description       String
+  occurredAt        DateTime         @map("occurred_at")
+  severity          String?
+  createdAt         DateTime         @default(now()) @map("created_at")
+  createdBy         String?          @map("created_by") @db.Uuid
+  creator           UserAccount?     @relation("DeviationCreatedBy", fields: [createdBy], references: [id])
+
+  correctiveActions CorrectiveAction[]
+
+  @@index([treatmentBatchId])
+  @@index([processingStageId])
+  @@map("deviation")
+  @@schema("research")
+}
+
+model CorrectiveAction {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deviationId String       @map("deviation_id") @db.Uuid
+  deviation   Deviation    @relation(fields: [deviationId], references: [id])
+  actionText  String       @map("action_text")
+  takenAt     DateTime?    @map("taken_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  createdBy   String?      @map("created_by") @db.Uuid
+  creator     UserAccount? @relation("CorrectiveActionCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([deviationId])
+  @@map("corrective_action")
+  @@schema("research")
+}
+
+enum ApprovalDecision {
+  approved
+  rejected
+
+  @@schema("research")
+}
+
+// ADR-020 decision 8 would normally call for a specific nullable FK per
+// possible target, but Approval's whole purpose is to approve *any*
+// research object generically (a ProtocolVersion today, a Publication or
+// other object later) — a deliberate, narrow exception here, matching the
+// AI Recommendation model's own existing relatedEntityType/relatedEntityId
+// precedent (Slice 7, "ai" schema) rather than inventing a new pattern.
+model Approval {
+  id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entityType            String           @map("entity_type")
+  entityId              String           @map("entity_id") @db.Uuid
+  approverUserAccountId String           @map("approver_user_account_id") @db.Uuid
+  approver              UserAccount      @relation("ApprovalApprover", fields: [approverUserAccountId], references: [id])
+  decision              ApprovalDecision
+  decidedAt             DateTime         @map("decided_at")
+  notes                 String?
+  createdAt             DateTime         @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@map("approval")
+  @@schema("research")
+}
+
+enum ResearchComplianceStatus {
+  pending_review
+  approved
+  rejected
+  recategorized
+
+  @@schema("research")
+}
+
+enum LanguageFlagStatus {
+  clear
+  flagged
+  resolved
+
+  @@schema("research")
+}
+
+// RESEARCH_ACTIVITY_CRITERIA.md — the substance test distinguishing real
+// research from commercial activity using research language. §6: "que el
+// modelo soporte ese gate ... Construilo; no lo apliques." This table plus
+// canReviewResearchActivity's independence check (lib/research/
+// researchActivity.ts) are that support; nothing in this ticket blocks on
+// complianceStatus, and no CryoBloom/gastro-tourism review is executed here
+// — that's RESEARCH_ACTIVITY_CRITERIA.md §9's own human review, out of
+// scope for RO1.
+model ResearchActivity {
+  id                         String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                       String
+  description                String?
+  researchProgramId          String?                  @map("research_program_id") @db.Uuid
+  researchProgram            ResearchProgram?         @relation(fields: [researchProgramId], references: [id])
+  isPaid                     Boolean                  @map("is_paid")
+  // The five-part substance test's structured answer — falsifiable
+  // question, method, evidence plan, consent language, program/project
+  // linkage (RESEARCH_ACTIVITY_CRITERIA.md's own five parts) — kept as Json
+  // rather than five more columns since its shape is the criteria doc's own
+  // evolving checklist, not a stable relational structure yet.
+  researchQuestionStructured Json?                    @map("research_question_structured")
+  complianceStatus           ResearchComplianceStatus @default(pending_review) @map("compliance_status")
+  publicListingCopy          String?                  @map("public_listing_copy")
+  consentFormCopy            String?                  @map("consent_form_copy")
+  languageFlagStatus         LanguageFlagStatus?      @map("language_flag_status")
+  // The independence rule's data: who proposed it can never be who reviews
+  // it. Enforced in code (canReviewResearchActivity), not only by
+  // convention — RESEARCH_ACTIVITY_CRITERIA.md §4's "no auto-revisión,"
+  // same structural mechanism RBAC.md §7 already uses for blind-judge
+  // restrictions.
+  proposedByUserAccountId    String?                  @map("proposed_by_user_account_id") @db.Uuid
+  proposedBy                 UserAccount?             @relation("ResearchActivityProposedBy", fields: [proposedByUserAccountId], references: [id])
+  reviewedByUserAccountId    String?                  @map("reviewed_by_user_account_id") @db.Uuid
+  reviewedBy                 UserAccount?             @relation("ResearchActivityReviewedBy", fields: [reviewedByUserAccountId], references: [id])
+  reviewedAt                 DateTime?                @map("reviewed_at")
+  reviewNotes                String?                  @map("review_notes")
+  createdAt                  DateTime                 @default(now()) @map("created_at")
+  createdBy                  String?                  @map("created_by") @db.Uuid
+  creator                    UserAccount?             @relation("ResearchActivityCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([researchProgramId])
+  @@index([proposedByUserAccountId])
+  @@map("research_activity")
+  @@schema("research")
 }

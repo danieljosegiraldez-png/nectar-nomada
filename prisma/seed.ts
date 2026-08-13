@@ -12,6 +12,7 @@ import "dotenv/config";
 import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PERMISSIONS, ROLE_PROFILES } from "../lib/rbac/catalog";
+import { VARIABLE_CATALOGS } from "../lib/research/catalogs";
 import { hashPassword } from "../lib/auth/password";
 import { recordTransformation } from "../lib/traceability/lots";
 import { recordHarvestEvent } from "../lib/traceability/harvest";
@@ -62,6 +63,34 @@ async function seedRoleProfiles(permissionsByKey: Map<string, { id: string }>) {
         },
         update: {},
         create: { roleProfileId: roleProfile.id, permissionId: permission.id },
+      });
+    }
+  }
+}
+
+// RO1 (docs/implementation/34_RO1_RESEARCH_OS.md §3a/§3b) — same seed-
+// managed "data, not schema" pattern as seedPermissions/seedRoleProfiles
+// above. §9.3's own test: adding a value here + re-running this seed is
+// how a new yeast/vessel/method/grade enters the catalog, never a
+// migration.
+async function seedVariableCatalogs() {
+  for (const catalog of VARIABLE_CATALOGS) {
+    const row = await prisma.variableCatalog.upsert({
+      where: { key: catalog.key },
+      update: { name: catalog.name, description: catalog.description ?? null },
+      create: { key: catalog.key, name: catalog.name, description: catalog.description ?? null },
+    });
+
+    for (const [index, value] of catalog.values.entries()) {
+      await prisma.variableCatalogValue.upsert({
+        where: { catalogId_value: { catalogId: row.id, value: value.value } },
+        update: { impliesUnknownIdentity: value.impliesUnknownIdentity ?? false, displayOrder: index },
+        create: {
+          catalogId: row.id,
+          value: value.value,
+          impliesUnknownIdentity: value.impliesUnknownIdentity ?? false,
+          displayOrder: index,
+        },
       });
     }
   }
@@ -1372,6 +1401,7 @@ async function main() {
   const platformScope = await seedPlatformScope();
 
   await seedBeverageProtocolsContent();
+  await seedVariableCatalogs();
 
   if (process.env.SEED_DEMO_ADMIN === "true") {
     await seedDemoAdmin(platformScope.id);

@@ -27,6 +27,13 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { resourceType: "research", action: "create_measurement", description: "Record a new measurement or observation." },
   { resourceType: "research", action: "create_evidence", description: "Attach evidence to a research record." },
   { resourceType: "research", action: "approve_protocol", description: "Approve a protocol version." },
+  // RO1 (docs/implementation/34_RO1_RESEARCH_OS.md §5) — running a protocol
+  // against real material (creating a TreatmentBatch and its
+  // ProcessingStages) is distinct from authoring/approving the protocol
+  // version itself: the product owner designs and approves PE protocols,
+  // Eliecer/Roberto execute them (§1) — approve_protocol and
+  // execute_protocol are deliberately two permissions, not one.
+  { resourceType: "research", action: "execute_protocol", description: "Execute a protocol version against a lot: create a TreatmentBatch and its ProcessingStages." },
 
   { resourceType: "partner", action: "submit_task", description: "Submit or update an assigned task." },
   { resourceType: "partner", action: "submit_data", description: "Submit field data for a project." },
@@ -81,6 +88,14 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { resourceType: "specimen", action: "manage", description: "Create/manage Specimens and record SpecimenObservations." },
   { resourceType: "specimen", action: "view", description: "View Specimen detail and observation history." },
 
+  // RO1 §6 — RESEARCH_ACTIVITY_CRITERIA.md's substance-test gate. A single
+  // "review" action (approve or reject is the decision *content*, decided
+  // via ResearchActivity.complianceStatus, not two separate permissions) —
+  // matches competition:manage's own single-permission-many-decisions
+  // shape rather than splitting review into approve_activity/
+  // reject_activity.
+  { resourceType: "research_activity", action: "review", description: "Approve or reject a ResearchActivity's compliance status against RESEARCH_ACTIVITY_CRITERIA.md's substance test." },
+
   { resourceType: "classification", action: "clear_registered", description: "Access records classified Registered." },
   { resourceType: "classification", action: "clear_partner", description: "Access records classified Partner." },
   { resourceType: "classification", action: "clear_internal", description: "Access records classified Internal." },
@@ -120,24 +135,46 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
   },
   {
     name: "Research Lead",
-    description: "Full research module permissions within an assigned project, including protocol approval.",
+    description: "Full research module permissions within an assigned project, including protocol approval and execution.",
     permissions: [
       ["research", "view"],
       ["research", "create_measurement"],
       ["research", "create_evidence"],
       ["research", "approve_protocol"],
+      // RO1 — the product owner both designs/approves PE protocols and
+      // runs them personally at times; Research Lead gets both permissions.
+      ["research", "execute_protocol"],
       ["classification", "clear_internal"],
       ["classification", "clear_confidential"],
     ],
   },
   {
     name: "Research Contributor",
-    description: "Create/edit measurements and evidence within an assigned project. No approve/publish.",
+    description: "Create/edit measurements and evidence within an assigned project, and execute approved protocol versions. No approve/publish.",
     permissions: [
       ["research", "view"],
       ["research", "create_measurement"],
       ["research", "create_evidence"],
+      // RO1 §1 — Eliecer/Roberto run PE protocols the product owner
+      // designs; they need execute_protocol without approve_protocol.
+      ["research", "execute_protocol"],
       ["classification", "clear_internal"],
+    ],
+  },
+  {
+    name: "Research Compliance Reviewer",
+    description:
+      "RESEARCH_ACTIVITY_CRITERIA.md §4's independent reviewer — approves or rejects a ResearchActivity's " +
+      "compliance status against the five-part substance test. Deliberately excludes research:approve_protocol " +
+      "and research:execute_protocol: this role reviews whether an activity qualifies as real research, it does " +
+      "not run research itself. The no-self-review rule (a reviewer cannot decide their own proposal) is " +
+      "enforced in code (canReviewResearchActivity, lib/research/researchActivity.ts), not by this permission " +
+      "grant alone — same structural-not-just-permission pattern RBAC.md §7 uses for blind-judge restrictions.",
+    permissions: [
+      ["research_activity", "review"],
+      ["research", "view"],
+      ["classification", "clear_internal"],
+      ["classification", "clear_confidential"],
     ],
   },
   {

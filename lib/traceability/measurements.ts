@@ -74,6 +74,13 @@ export interface RecordMeasurementInput {
   fermentationRunId?: string | null;
   dryingRunId?: string | null;
   storageAssignmentId?: string | null;
+  // RO1 (docs/implementation/34_RO1_RESEARCH_OS.md §2, §8) — same
+  // additional-link-alongside-lotId shape as every FK above: a PE-protocol
+  // reading taken during a TreatmentBatch's execution, at a specific
+  // ProcessingStage moment. Requires lotId (validated below), same
+  // reasoning as roastSessionId's own comment.
+  treatmentBatchId?: string | null;
+  processingStageId?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
   // T9.5: required, no fallback. The MeasurementForm UI (app/components/
@@ -101,6 +108,12 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
   if (input.storageAssignmentId && !input.lotId) {
     throw new MeasurementValidationError("storage_assignment_link_requires_lot_id");
   }
+  if (input.treatmentBatchId && !input.lotId) {
+    throw new MeasurementValidationError("treatment_batch_link_requires_lot_id");
+  }
+  if (input.processingStageId && !input.lotId) {
+    throw new MeasurementValidationError("processing_stage_link_requires_lot_id");
+  }
 
   const normalized = normalizeToCanonical(input.variable, input.value, input.unit);
 
@@ -116,6 +129,8 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
       fermentationRunId: input.fermentationRunId ?? null,
       dryingRunId: input.dryingRunId ?? null,
       storageAssignmentId: input.storageAssignmentId ?? null,
+      treatmentBatchId: input.treatmentBatchId ?? null,
+      processingStageId: input.processingStageId ?? null,
       sourceType: "manual",
       operatorPersonId: input.operatorPersonId ?? null,
       notes: input.notes ?? null,
