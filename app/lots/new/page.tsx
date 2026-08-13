@@ -25,12 +25,12 @@ export default async function NewLotPage() {
 
       <section className="nn-section">
         <h2>{t("harvestHeading")}</h2>
-        <HarvestForm organizations={context.organizations} locations={context.locations} projects={context.projects} />
+        <HarvestForm organizations={context.organizations} locations={context.plotLocations} projects={context.projects} />
       </section>
 
       <section className="nn-section">
         <h2>{t("receivingHeading")}</h2>
-        <ReceivingForm organizations={context.organizations} locations={context.locations} projects={context.projects} />
+        <ReceivingForm organizations={context.organizations} locations={context.plotLocations} projects={context.projects} />
       </section>
     </div>
   );

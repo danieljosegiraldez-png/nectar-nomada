@@ -718,7 +718,16 @@ export async function getManageableContext(userAccountId: string) {
     ).values(),
   ];
 
-  return { projects, locations, organizations };
+  // Harvest/Receiving's own "which plot" dropdown must not offer
+  // administrative geography (country/province/district/locality) or
+  // processing-stage sites (Beneficio, Cuarto de secado) alongside actual
+  // plots — those aren't valid harvest/receiving locations and picking one
+  // by mistake is what produced the confusing "no lot access" reports.
+  // `locations` (all types, unfiltered) stays as-is for callers like the
+  // Storage move form, where a warehouse/site is a legitimate destination.
+  const plotLocations = locations.filter((l) => l.locationType === "plot");
+
+  return { projects, locations, plotLocations, organizations };
 }
 
 /**

@@ -33,14 +33,20 @@ function isVisible(grantedKeys: Set<string>, actionKey: string, classification: 
 }
 
 /**
- * Projects this user has an active project-scoped Assignment for — the
- * Assignment itself is the gate, same "ownership is the filter" pattern as
- * Cart/Order (lib/commerce/cart.ts), adapted to "assignment scope is the
- * filter." A platform-scoped Assignment (e.g. Platform Admin) does not
- * automatically populate this list — Partner Workspace means "projects I am
- * specifically assigned to," not a god-view; RBAC.md §3's platform-contains-
- * everything rule still applies once *inside* a given project (see
+ * Projects this user has an active project-scoped Assignment for, AND
+ * whose resolved permissions for that project include at least one of the
+ * `partner:*` actions — the same three-way check `getProjectWorkspace`
+ * gates opening on. A platform-scoped Assignment (e.g. Platform Admin) does
+ * not automatically populate this list — Partner Workspace means "projects
+ * I am specifically assigned to," not a god-view; RBAC.md §3's platform-
+ * contains-everything rule still applies once *inside* a given project (see
  * getProjectWorkspace), it just isn't what drives this list.
+ *
+ * Must not diverge from getProjectWorkspace's own gate: an earlier version
+ * of this function used "has a project-scoped Assignment" as the sole
+ * filter, which let a project-scoped Role Profile with no `partner:*`
+ * permission (e.g. Farm Operator) see its project listed here and then hit
+ * a 404 the moment it tried to open it.
  */
 export async function getPartnerProjects(userAccountId: string) {
   const now = new Date();
@@ -60,8 +66,22 @@ export async function getPartnerProjects(userAccountId: string) {
   ];
   if (projectIds.length === 0) return [];
 
+  const visibleProjectIds: string[] = [];
+  for (const projectId of projectIds) {
+    const target: ScopeTarget = { scopeType: "project", scopeRefId: projectId };
+    const grantedKeys = await resolvedPermissionKeys(userAccountId, target);
+    if (
+      grantedKeys.has(permissionKey("partner", "submit_task")) ||
+      grantedKeys.has(permissionKey("partner", "submit_data")) ||
+      grantedKeys.has(permissionKey("partner", "upload_media"))
+    ) {
+      visibleProjectIds.push(projectId);
+    }
+  }
+  if (visibleProjectIds.length === 0) return [];
+
   return prisma.project.findMany({
-    where: { id: { in: projectIds } },
+    where: { id: { in: visibleProjectIds } },
     orderBy: { name: "asc" },
   });
 }
