@@ -52,7 +52,9 @@ export function LabourEntryForm({
               ? parent.receivingEventId
               : parent.kind === "fermentationRun"
                 ? parent.fermentationRunId
-                : parent.dryingRunId
+                : parent.kind === "dryingRun"
+                  ? parent.dryingRunId
+                  : parent.locationId
         }
       />
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>

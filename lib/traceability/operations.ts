@@ -35,10 +35,19 @@ export type LabourEntryParent =
   | { kind: "harvestEvent"; harvestEventId: string }
   | { kind: "receivingEvent"; receivingEventId: string }
   | { kind: "fermentationRun"; fermentationRunId: string }
-  | { kind: "dryingRun"; dryingRunId: string };
+  | { kind: "dryingRun"; dryingRunId: string }
+  // F1 (30_F1_OPERACION_FINCA_ESQUEMA.md §4) — a fifth parent, the one
+  // genuinely new case: work with no batch yet (600 holes, apiary-site
+  // clearing). `locationId` here *is* the row's real FK (unlike the other
+  // four, which are RBAC-only lookups against a lotId that's never
+  // stored) — see Location.locationId on the schema for why.
+  | { kind: "location"; locationId: string };
 
 export interface RecordLabourEntryInput {
-  lotId: string;
+  // Required for every parent kind except "location" — validated below,
+  // not typed as conditionally required, since the four existing kinds
+  // keep using it purely for RBAC scoping exactly as before.
+  lotId?: string | null;
   parent: LabourEntryParent;
   workerCount: number;
   hours: number;
@@ -72,6 +81,8 @@ function labourParentData(parent: LabourEntryParent) {
       return { fermentationRunId: parent.fermentationRunId };
     case "dryingRun":
       return { dryingRunId: parent.dryingRunId };
+    case "location":
+      return { locationId: parent.locationId };
   }
 }
 
@@ -91,9 +102,16 @@ export async function recordLabourEntry(userAccountId: string, input: RecordLabo
     throw new LabourValidationError("hours_must_be_positive");
   }
 
-  const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
-  if (!lot) throw new TraceabilityAccessError("lot_not_found");
-  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  if (input.parent.kind === "location") {
+    const location = await prisma.location.findUnique({ where: { id: input.parent.locationId } });
+    if (!location) throw new TraceabilityAccessError("location_not_found");
+    await requireLotAccess(userAccountId, "manage", [{ locationId: input.parent.locationId }]);
+  } else {
+    if (!input.lotId) throw new LabourValidationError("lot_id_required");
+    const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
+    if (!lot) throw new TraceabilityAccessError("lot_not_found");
+    await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  }
 
   const labourEntry = await prisma.labourEntry.create({
     data: {
@@ -125,13 +143,20 @@ export async function recordLabourEntry(userAccountId: string, input: RecordLabo
 
 // --- Material consumption entry ------------------------------------------
 
-/** Scoped to fermentation/drying only — the two stages the source report names (yeast/cultures/nutrients/treatments). */
+/**
+ * Originally scoped to fermentation/drying only. F1 §4 adds `location` —
+ * insumos (nutrients, biochar, lime) and material like compost/biochar
+ * production applied directly to a plot, no batch involved.
+ */
 export type MaterialConsumptionParent =
   | { kind: "fermentationRun"; fermentationRunId: string }
-  | { kind: "dryingRun"; dryingRunId: string };
+  | { kind: "dryingRun"; dryingRunId: string }
+  | { kind: "location"; locationId: string };
 
 export interface RecordMaterialConsumptionEntryInput {
-  lotId: string;
+  // Required for every parent kind except "location" — same convention as
+  // RecordLabourEntryInput.lotId above.
+  lotId?: string | null;
   parent: MaterialConsumptionParent;
   materialName: string;
   // The one irrecoverable identity fact (source report §3) — required,
@@ -152,6 +177,8 @@ function consumptionParentData(parent: MaterialConsumptionParent) {
       return { fermentationRunId: parent.fermentationRunId };
     case "dryingRun":
       return { dryingRunId: parent.dryingRunId };
+    case "location":
+      return { locationId: parent.locationId };
   }
 }
 
@@ -165,9 +192,16 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
   if (!input.materialName.trim()) throw new MaterialConsumptionValidationError("material_name_required");
   if (!input.batchLabel.trim()) throw new MaterialConsumptionValidationError("batch_label_required");
 
-  const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
-  if (!lot) throw new TraceabilityAccessError("lot_not_found");
-  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  if (input.parent.kind === "location") {
+    const location = await prisma.location.findUnique({ where: { id: input.parent.locationId } });
+    if (!location) throw new TraceabilityAccessError("location_not_found");
+    await requireLotAccess(userAccountId, "manage", [{ locationId: input.parent.locationId }]);
+  } else {
+    if (!input.lotId) throw new MaterialConsumptionValidationError("lot_id_required");
+    const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
+    if (!lot) throw new TraceabilityAccessError("lot_not_found");
+    await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  }
 
   const materialConsumptionEntry = await prisma.materialConsumptionEntry.create({
     data: {

@@ -19,7 +19,17 @@ export function MaterialConsumptionForm({ lotId, parent }: { lotId: string; pare
     <form action={recordMaterialConsumptionEntryFormAction} className="nn-form" style={{ maxWidth: 420, marginTop: "0.5rem" }}>
       <input type="hidden" name="lotId" value={lotId} />
       <input type="hidden" name="parentKind" value={parent.kind} />
-      <input type="hidden" name="parentId" value={parent.kind === "fermentationRun" ? parent.fermentationRunId : parent.dryingRunId} />
+      <input
+        type="hidden"
+        name="parentId"
+        value={
+          parent.kind === "fermentationRun"
+            ? parent.fermentationRunId
+            : parent.kind === "dryingRun"
+              ? parent.dryingRunId
+              : parent.locationId
+        }
+      />
       <div className="nn-field">
         <label htmlFor={`consumption-batch-${parent.kind}`}>{t("batchLabelLabel")}</label>
         <input id={`consumption-batch-${parent.kind}`} name="batchLabel" type="text" required />
