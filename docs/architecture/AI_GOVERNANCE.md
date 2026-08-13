@@ -29,8 +29,10 @@ AI must not, under any code path:
 - alter submitted sensory forms (which are immutable once submitted per
   `DOMAIN_MODEL.md` §4);
 - infer missing measurements and save them as fact;
-- expose restricted information (AI queries run through the same RBAC resolution
-  as a human user — see §5).
+- expose restricted information through a *reviewer-facing* surface without
+  going through the standard permission check (see §5 for the current,
+  narrower state of this guarantee than earlier drafts of this document
+  described).
 
 ## 3. Technical enforcement, not policy-only
 
@@ -39,10 +41,21 @@ application logic, so a prompt-injection or application bug cannot route around
 it:
 
 - The AI service runs under its own Postgres role (`ai_service`) with `INSERT`
-  grant on `ai.recommendation` only, and `SELECT` grants on module tables scoped
-  the same way a human UserAccount's resolved RBAC permissions would be (§5) —
-  it has **no** `INSERT`/`UPDATE`/`DELETE` grant on any `research.*`,
-  `sensory.*`, `competitions.*`, or `core.*` table.
+  grant on `ai.recommendation` only — it has **no** `INSERT`/`UPDATE`/`DELETE`
+  grant on any `research.*`, `sensory.*`, `competitions.*`, or `core.*` table.
+  Verified live against the production database (17_ audit, Part A item 1):
+  `ai_service` holds exactly `INSERT`+`SELECT` on `ai.recommendation`, `USAGE`
+  only on the `public`/`ai` schemas, and nothing else.
+- **What this role does *not* have, corrected from an earlier draft of this
+  section**: `ai_service` carries no `SELECT` grant on any module table at
+  all — the write restriction above is a real, database-enforced control, but
+  reads for suggestion generation do not go through this restricted role or
+  through any RBAC-scoped connection. They go through the platform's ordinary
+  full-access application database client (§5 describes exactly what that
+  means for the one generator built so far). This is a real gap between what
+  this document originally claimed ("SELECT grants scoped the same way a
+  human's resolved RBAC permissions would be") and what is actually built;
+  logged here rather than silently corrected, per C1 §4.
 - Because the write path physically does not exist for the AI role, "AI silently
   mutates a scientific record" is not a bug class that can occur in production
   regardless of prompt content — this is the concrete difference between a
@@ -80,16 +93,33 @@ reviewer's own RBAC permissions — a reviewer only sees AI suggestions touching
 entities they already have permission to act on, so the review queue cannot be
 used to leak restricted context through the AI layer.
 
-## 5. AI queries respect RBAC, always
+## 5. AI reads — design intent vs. what is actually built
 
-When AI is asked to search, summarize, or compare across platform data (§1), the
-retrieval step runs through the same permission-resolution service described in
-`RBAC.md` §4, scoped to the requesting user's own resolved access — never a
-privileged "AI has read access to everything" bypass. A researcher's AI assistant
-cannot surface another project's confidential protocol just because the model
-technically has a database connection; it has the same visibility the requesting
-human does, because the query is executed as that human, not as a superuser
-service account with a system prompt telling it to behave.
+This section originally described a per-user AI assistant: a researcher asks a
+question, the retrieval step resolves through `RBAC.md` §4 scoped to that
+person's own access, and the AI never sees more than the requesting human
+could see directly. **That interactive assistant does not exist yet.** The
+only AI feature built so far (`lib/ai/service.ts`'s
+`generateDataCompletenessSuggestions`) is not a per-user query at all — it is
+an internally-triggered generator with no requesting-user context to scope
+against. It reads via the platform's ordinary full-access `prisma` client
+(the same one every other server-side module uses), running an **unscoped**
+query across every `Project` regardless of classification or which human
+triggered generation.
+
+The RBAC control that *is* real and verified today sits downstream, not
+upstream: every suggestion this generator produces still requires
+`review_suggestion` permission to see or act on (§4, `app/actions/ai.ts`), so
+nothing reaches an unauthorized viewer through the review surface. What is
+not true is the upstream claim that generation itself only reads what a
+particular human could already see — today it reads everything, and the
+access control is entirely at the review gate, not at the read.
+
+If and when a real per-user, interactive AI assistant is built, this
+section's original design — retrieval scoped through the resolved-permission
+service, per §1's "search/summarize/compare" — is still the right target,
+and should replace this note once that assistant exists. Until then, this is
+the accurate description of what runs today.
 
 ## 6. Provenance labeling
 

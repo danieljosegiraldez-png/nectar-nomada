@@ -12,9 +12,14 @@ Single Postgres database (`nectar`), one schema per module, added as each
 module's vertical slice is built, plus a `core` schema for the canonical
 entity layer (Person, UserAccount, Organization, Location, Project, Program,
 DomainTag, Sample, Asset, Story, Product, Experience, RBAC tables). Currently
-implemented (`prisma/schema.prisma`'s `datasource.schemas`, kept in sync with
-this list as new slices land): `core`, `commerce`, `experiences`, `partner`,
-`sensory`, `ai`, `competitions`.
+implemented (`prisma/schema.prisma`'s `datasource.schemas`): `core`,
+`commerce`, `experiences`, `partner`, `sensory`, `ai`, `competitions`,
+`traceability`, `apiary`. **This list went stale once already (this exact
+correction was made once before, per this section's own edit history) and
+had drifted again by the time of the 17_ audit** — `traceability` (T1) and
+`apiary` (A1) had both landed without a follow-up edit here. Corrected again,
+C1 §4; see `DOMAIN_MODEL.md` §8 for the per-entity build-status marker
+adopted after this exact pattern repeated twice.
 
 `research` and `environmental` are correctly still absent — those modules
 (Research OS, Environmental Data) aren't built yet, not an oversight in this

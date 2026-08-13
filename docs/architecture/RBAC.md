@@ -22,7 +22,14 @@ every grant is scoped by construction.
 ```
 core.role_profile(id, name, description, status)
 core.permission(id, resource_type, action, description)
-                 -- e.g. ('sample', 'create'), ('protocol', 'approve'), ('order', 'refund')
+                 -- e.g. ('sample', 'manage'), ('research', 'approve_protocol'),
+                 -- ('lot', 'manage') — corrected examples (17_ audit, C1 §4):
+                 -- the originals here, ('sample','create')/('protocol','approve')/
+                 -- ('order','refund'), don't match any permission actually in
+                 -- lib/rbac/catalog.ts. There is no 'order' resourceType at
+                 -- all — commerce/order actions are not RBAC-gated through
+                 -- this system, which the old example could easily be
+                 -- misread as implying.
 core.role_profile_permission(role_profile_id, permission_id)   -- join table
 core.scope(id, scope_type, scope_ref_id)
                  -- scope_type: platform | program | project | location | competition
@@ -120,7 +127,23 @@ something to assign, not a closed list:
   Assignment flexibility already proven for Partner Field Collector, since
   a real operator often works across multiple projects at one physical
   site. No approval permissions. Added for Phase 1
-  (`docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md`).
+  (`docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md`). **Also
+  carries `apiary:manage`/`apiary:view`** (added in ticket A1,
+  `22_APIARY_V1_SCOPING_REPORT.md` §2) — corrected here (17_ audit, C1 §4),
+  since this profile's apiary permissions were never folded back into this
+  list when A1 added them.
+- **Project Viewer** (scope: project) — read-only visibility across a
+  project's modules, no write permissions. Documented only in
+  `22_APIARY_V1_SCOPING_REPORT.md` until now; added here (C1 §4) since it's
+  a real, seeded Role Profile with no prior entry in this canonical list.
+- **Apiary Colony Event Recorder** (scope: project or location) —
+  narrower than Farm Operator: `apiary:view` + `colony_event:manage` only,
+  deliberately excluding `apiary:manage` — can log feeding/treatment/
+  passing-observation ColonyEvents, but cannot create a formal Inspection,
+  Hive, or Colony. Added in A7 for a trainee who logs routine events before
+  being trusted with a formal Inspection — a competence gate expressed on
+  the Assignment, not a separate permission tier. Same documentation gap as
+  Project Viewer, same fix.
 - **Customer** — not an Assignment-based profile; every authenticated
   UserAccount without further Assignments gets the implicit baseline "Registered
   Customer" permission set (My Néctar, ordering, booking) enforced as a default
@@ -135,9 +158,17 @@ classification unless explicitly overridden). This axis is checked in resolution
 step 4 above and is orthogonal to the Assignment/Scope chain — a Research Lead
 with full project permissions still cannot see a `trade_secret`-classified
 protocol unless their resolved access separately clears that classification
-(classification clearance is itself modeled as a Permission,
-e.g. `('classification', 'view_confidential')`, grantable via the same Role
-Profile mechanism).
+(classification clearance is itself modeled as a Permission, grantable via
+the same Role Profile mechanism — **corrected here (17_ audit, C1 §4)**: an
+earlier version of this section gave a single example,
+`('classification', 'view_confidential')`, but the real design (and the
+actual seed data in `lib/rbac/catalog.ts`) is five separate actions, one per
+classification level above `public`/`registered`: `clear_partner`,
+`clear_internal`, `clear_confidential`, `clear_trade_secret`. The code is
+correct here and the old single-action example was wrong — a single
+`view_confidential` action couldn't express "cleared for Internal but not
+Confidential," which is exactly the kind of graduated clearance this axis
+needs to support.
 
 ## 7. Blind-evaluation special case
 

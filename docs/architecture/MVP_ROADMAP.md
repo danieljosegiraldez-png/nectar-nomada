@@ -130,12 +130,26 @@ later without touching the suggestion lifecycle around it.
   duplicating it — no new judging UI, `CompetitionCategory` links to an
   existing `SensorySession`. Not built: competitor-facing entry
   registration, public results browsing.
-- **Apiary/Honey, Fermentation, additional agricultural domains beyond coffee** —
-  modeled to not require redesign (`DOMAIN_MODEL.md` §7) but not built until a
-  concrete project needs them.
-- **Offline/field capability** (CLAUDE.md §40) — architected for (local draft +
-  sync is a data-shape consideration touched on in Partner Workspace forms) but
-  full offline operation is not a Slice 5 deliverable.
+- ~~**Apiary/Honey**~~ — **implemented, tickets A1-A8 + A5.5** (corrected
+  here, 17_ audit C1 §4 — this line went stale the same way the Competitions
+  line above once did, and for the same reason: a later ticket set shipped
+  without this deferral list getting a follow-up edit). Hive/Colony/
+  Inspection/ColonyEvent/ApiaryHarvestEvent, a honey `Lot` reusing the
+  coffee traceability chain with zero new code (`22_APIARY_V1_SCOPING_
+  REPORT.md` §2), offline capture (see below), and a DEMO seed chain are
+  all live. **Fermentation, additional agricultural domains beyond coffee
+  and honey** — still deferred; `FermentationRun`/`FermentationIntervention`
+  exist only as generic coffee-processing infrastructure (T6), not the
+  broader multi-beverage fermentation model `DOMAIN_MODEL.md` §4 describes.
+- **Offline/field capability** (CLAUDE.md §40) — **partially implemented**,
+  corrected here (C1 §4): this line originally described offline support as
+  just "a data-shape consideration," but A5/A5.5 built real infrastructure
+  for the Apiary module specifically — an IndexedDB draft queue with
+  idempotent `clientDraftId` sync (A5) and a registered service worker
+  caching the app shell for cold-start availability with zero connectivity
+  (A5.5, ADR-046). Full offline operation across every module (the general,
+  cross-cutting architecture `OFFLINE_FIELD_CAPABILITY.md` describes) is
+  still not built — only Apiary's Inspection/ColonyEvent forms have it.
 - **Internationalization content pipeline** — Spanish/English are the stated
   priority (CLAUDE.md §41); the schema separates canonical data from localized
   display content from Slice 1 onward (a `locale` dimension on content tables),

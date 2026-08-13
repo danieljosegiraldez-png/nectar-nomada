@@ -56,7 +56,8 @@ token for defense in depth, per CLAUDE.md §56.
 
 ## 6. Audit trail
 
-`core.audit_event` (`DOMAIN_MODEL.md` §5) receives a mandatory row for:
+`core.audit_event` (`DOMAIN_MODEL.md` §5) is intended to receive a mandatory
+row for:
 
 - every Assignment create/revoke and classification-clearance grant (`RBAC.md` §8);
 - every write to a table carrying `provenance_class` in
@@ -69,11 +70,36 @@ token for defense in depth, per CLAUDE.md §56.
 - every payment/refund event and every account status change (suspend/
   deactivate/role assignment).
 
-Audit rows are append-only (no `UPDATE`/`DELETE` grant on `audit_event` for any
-application role, including admin — corrections are new rows, consistent with
-the version-preservation principle running through the whole spec). Sensitive and
-scientific records get this stronger audit treatment by default, not as an
-opt-in setting (CLAUDE.md §35).
+**Current build status (17_ audit, C1 §3/§4 — corrected from an earlier
+version of this section that stated this list as already fully built):**
+
+- Assignment create/revoke ✅, evidentiary writes across Traceability/Apiary
+  (and Sensory's `Assessment` submission, evidentiary by immutability rather
+  than a `provenance_class` column) ✅ (C1 §3), AI-suggestion
+  accept/reject/modify ✅, `order.paid`/`booking.paid` ✅.
+- **Not yet built**: protocol/document version supersession, competition
+  result changes, judge assignment changes, refund events (no refund
+  capability exists yet at all — `INTEGRATIONS.md` §6), and account status
+  changes (suspend/deactivate has no implementing route yet — `RBAC.md` §2).
+  These remain real gaps, not silently-satisfied claims.
+
+Audit rows are append-only **by application convention only, not by database
+grant** — this corrects an earlier version of this section, which claimed no
+role held `UPDATE`/`DELETE` on `audit_event`, including admin. Verified live
+(17_ audit, Part A item 4): the application's own connecting database role
+holds full `UPDATE`/`DELETE` privileges on `audit_event`, the same as any
+Postgres table owner absent an explicit restricting grant — no such grant
+exists. What is true is that exactly one function in the codebase
+(`lib/audit.ts`'s `recordAuditEvent`) ever writes to this table, and it only
+ever calls `create`; no `.update()`/`.delete()` call against `audit_event`
+exists anywhere. This is a real, working control — just an application-layer
+one, not the database-level guarantee originally claimed. A dedicated
+restricted database role (mirroring the `ai_service` pattern already proven
+for `ai.recommendation`, `AI_GOVERNANCE.md` §3) would close this gap if a
+true database-level guarantee is later required. Sensitive and scientific
+records are intended to get this stronger audit treatment by default, not as
+an opt-in setting (CLAUDE.md §35) — see the coverage gaps above for where
+that intention isn't fully realized yet.
 
 ## 7. Rate limiting
 
@@ -114,13 +140,34 @@ which are TLS by default with the chosen managed providers.
 
 ## 11. Session handling
 
-Session lifetime and idle timeout are shorter for Admin/Research/Competition
-Role Profiles (workspaces touching confidential or evidentiary data) than for
-Registered Customer sessions — a concrete, testable difference, not just a
-stated intention. Session invalidation on password change and on Assignment
-revocation is immediate (revoking a Partner's project Assignment terminates
-their ability to act in that scope on their next request, not merely at next
-login).
+Session lifetime is a single uniform value (`lib/auth/config.ts`,
+`maxAge: 7 days`), not differentiated by Role Profile. **This corrects an
+earlier version of this section**, which described shorter sessions for
+Admin/Research/Competition profiles than for Registered Customers — that
+differentiated design was never built, and the reason is architectural, not
+an oversight: Auth.js's JWT session strategy exposes exactly one `maxAge`
+lever, applied uniformly to every session regardless of role, with no
+built-in concept of a per-profile or "offline-only" lifetime. The 7-day
+value itself was a deliberate decision (ADR-046, made for A5.5's offline
+capability — bounding how long a lost or stolen field device stays
+authenticated without forcing daily re-login for operators who use the app
+most days), not a default left unconsidered. A genuinely differentiated
+session lifetime by Role Profile would require custom session-token
+infrastructure beyond Auth.js's session strategy — worth building if a real
+need justifies that complexity, not built speculatively ahead of one.
+
+Session invalidation on Assignment revocation is immediate in practice, but
+as a side effect of the RBAC design rather than a dedicated session-layer
+mechanism: `can()` re-queries `Assignment` fresh from the database on every
+permission check with no caching layer in between (`lib/rbac/service.ts`),
+so a revoked Assignment stops authorizing anything on the very next request
+regardless of how long the session token itself remains valid — confirmed
+live (ADR-046 decision 4). Session invalidation on password change is not separately implemented — the
+Credentials provider (`lib/auth/config.ts`) authenticates against a real
+password, but there is no change-password flow anywhere in the codebase yet
+(`grep` for it found nothing), so there is nothing this control would
+currently apply to; worth building alongside whenever a change-password flow
+is added, not before.
 
 ## 12. Testing
 
