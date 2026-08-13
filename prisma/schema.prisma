@@ -73,6 +73,8 @@ model Person {
   colonyEventsOperated               ColonyEvent[]                 @relation("ColonyEventOperator")
   apiaryHarvestEventsOperated        ApiaryHarvestEvent[]          @relation("ApiaryHarvestEventOperator")
   organizationMemberships            OrganizationMembership[]
+  plantingEventsOperated             PlantingEvent[]               @relation("PlantingEventOperator")
+  specimenObservationsObserved       SpecimenObservation[]         @relation("SpecimenObservationObserver")
 
   @@map("person")
   @@schema("core")
@@ -153,6 +155,9 @@ model UserAccount {
   apiaryHarvestEventsCreated        ApiaryHarvestEvent[]         @relation("ApiaryHarvestEventCreatedBy")
   colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
   organizationMembershipsCreated    OrganizationMembership[]     @relation("OrganizationMembershipCreatedBy")
+  plantingEventsCreated             PlantingEvent[]              @relation("PlantingEventCreatedBy")
+  specimensCreated                  Specimen[]                   @relation("SpecimenCreatedBy")
+  specimenObservationsCreated       SpecimenObservation[]        @relation("SpecimenObservationCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -364,6 +369,42 @@ enum LocationType {
   @@schema("core")
 }
 
+// F1 (30_F1_OPERACION_FINCA_ESQUEMA.md §1) — fixed values given directly by
+// the product owner; free text lives alongside these in Location.description
+// and Location.slopeDescription/soilType, never instead of them.
+enum SunExposure {
+  full_sun
+  morning
+  afternoon
+  both
+
+  @@schema("core")
+}
+
+enum ShadePercentageBracket {
+  pct_20
+  pct_30
+  pct_50
+  pct_70
+  pct_90
+
+  @@schema("core")
+}
+
+// F1 §2 — the reason a microlot was subdivided, recorded on the *child*
+// Location (the microlot itself), not the parent. Only meaningful when
+// parentLocationId is set; nullable everywhere else, same as every other
+// F1 attribute. `other` always pairs with subdivisionReasonNote — the
+// "typed value + free note" rule (§1) applies here too.
+enum SubdivisionReason {
+  altitude
+  shade
+  slope
+  other
+
+  @@schema("core")
+}
+
 model Location {
   id               String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   locationType     LocationType                           @map("location_type")
@@ -384,16 +425,48 @@ model Location {
   // (ST_DWithin/ST_Intersects, EXTERNAL_DATA_ARCHITECTURE.md §9) use
   // $queryRaw until a real spatial-query need justifies more than that.
   geoPoint         Unsupported("geography(Point, 4326)")? @map("geo_point")
-  altitudeMeters   Float?                                 @map("altitude_meters")
   timezone         String?
   status           RecordStatus                           @default(draft)
   classification   ClassificationLevel                    @default(internal)
-  createdAt        DateTime                               @default(now()) @map("created_at")
-  updatedAt        DateTime                               @updatedAt @map("updated_at")
-  createdBy        String?                                @map("created_by") @db.Uuid
-  creator          UserAccount?                           @relation("LocationCreatedBy", fields: [createdBy], references: [id])
 
-  projectsWithPrimaryLocation Project[]           @relation("ProjectPrimaryLocation")
+  // F1 (30_F1_OPERACION_FINCA_ESQUEMA.md §1) — stable terroir attributes,
+  // all nullable (existing Locations don't have them). `altitudeMinM`/
+  // `altitudeMaxM` replace the old single-value `altitudeMeters` (removed;
+  // confirmed unpopulated on every live row before dropping it) — A7 hit
+  // this directly: Finca Las Nubes Jaramillo is 1300-1500m, and the range
+  // *within* one Location is precisely what later justifies subdividing it
+  // into a microlot (§2). Rainfall deliberately does NOT live here — it's
+  // a daily measurement (`EnvironmentalObservation`, specified §6, not
+  // built), not a stable attribute; freezing it here would misrepresent
+  // something that varies as something that doesn't.
+  sunExposure        SunExposure?            @map("sun_exposure")
+  shadePercentage    ShadePercentageBracket? @map("shade_percentage")
+  altitudeMinM       Int?                    @map("altitude_min_m")
+  altitudeMaxM       Int?                    @map("altitude_max_m")
+  // No fixed value list was given for slope or soil type (unlike sun
+  // exposure/shade, both enumerated directly by the product owner) — free
+  // text rather than inventing a controlled vocabulary nobody asked for.
+  slopeDescription   String?                 @map("slope_description")
+  soilType           String?                 @map("soil_type")
+  plantSpacingMeters Decimal?                @map("plant_spacing_meters") @db.Decimal(5, 2)
+  // General free-text catch-all (§1's "regla que no debe romperse": a
+  // typed value list always needs a place for what doesn't fit it) — A7's
+  // Catuaí age and the apiary-to-well/fence distance had nowhere to live
+  // but a loading script's comments before this field existed.
+  description        String?
+
+  // F1 §2 — only meaningful when parentLocationId is set (this Location
+  // *is* a microlot). Nullable everywhere else, same as every attribute
+  // above.
+  subdivisionReason     SubdivisionReason? @map("subdivision_reason")
+  subdivisionReasonNote String?            @map("subdivision_reason_note")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("LocationCreatedBy", fields: [createdBy], references: [id])
+
+  projectsWithPrimaryLocation Project[]                  @relation("ProjectPrimaryLocation")
   samples                     Sample[]
   stories                     Story[]
   products                    Product[]
@@ -405,6 +478,10 @@ model Location {
   dryingRuns                  DryingRun[]
   storageAssignments          StorageAssignment[]
   hives                       Hive[]
+  specimens                   Specimen[]
+  plantingEvents              PlantingEvent[]
+  labourEntries               LabourEntry[]
+  materialConsumptionEntries  MaterialConsumptionEntry[]
 
   @@index([parentLocationId])
   @@index([organizationId])
@@ -451,8 +528,8 @@ model Organization {
   creator          UserAccount?        @relation("OrganizationCreatedBy", fields: [createdBy], references: [id])
 
   locations                  Location[]
-  projectsOwned              Project[]           @relation("ProjectOrganization")
-  projectsAsClient           Project[]           @relation("ProjectClientOrganization")
+  projectsOwned              Project[]                @relation("ProjectOrganization")
+  projectsAsClient           Project[]                @relation("ProjectClientOrganization")
   samples                    Sample[]
   stories                    Story[]
   products                   Product[]
@@ -464,6 +541,7 @@ model Organization {
   receivingEvents            ReceivingEvent[]
   labourEntriesProvided      LabourEntry[]
   memberships                OrganizationMembership[]
+  plantingEventsSourced      PlantingEvent[]
 
   @@map("organization")
   @@schema("core")
@@ -485,18 +563,18 @@ enum MembershipStatus {
 // a producer can lose Partner Workspace access while remaining listed as
 // the farm's owner).
 model OrganizationMembership {
-  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  personId       String            @map("person_id") @db.Uuid
-  person         Person            @relation(fields: [personId], references: [id])
-  organizationId String            @map("organization_id") @db.Uuid
-  organization   Organization      @relation(fields: [organizationId], references: [id])
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personId       String           @map("person_id") @db.Uuid
+  person         Person           @relation(fields: [personId], references: [id])
+  organizationId String           @map("organization_id") @db.Uuid
+  organization   Organization     @relation(fields: [organizationId], references: [id])
   title          String?
-  startedAt      DateTime          @default(now()) @map("started_at")
-  endedAt        DateTime?         @map("ended_at")
-  status         MembershipStatus  @default(active)
-  createdAt      DateTime          @default(now()) @map("created_at")
-  createdBy      String?           @map("created_by") @db.Uuid
-  creator        UserAccount?      @relation("OrganizationMembershipCreatedBy", fields: [createdBy], references: [id])
+  startedAt      DateTime         @default(now()) @map("started_at")
+  endedAt        DateTime?        @map("ended_at")
+  status         MembershipStatus @default(active)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  createdBy      String?          @map("created_by") @db.Uuid
+  creator        UserAccount?     @relation("OrganizationMembershipCreatedBy", fields: [createdBy], references: [id])
 
   @@index([personId])
   @@index([organizationId])
@@ -1157,6 +1235,11 @@ model Asset {
   colonyEventId String?      @map("colony_event_id") @db.Uuid
   colonyEvent   ColonyEvent? @relation(fields: [colonyEventId], references: [id])
 
+  // F1 (30_F1_OPERACION_FINCA_ESQUEMA.md) — same nullable-FK-per-parent
+  // convention as every attachment point above.
+  specimenId String?   @map("specimen_id") @db.Uuid
+  specimen   Specimen? @relation(fields: [specimenId], references: [id])
+
   // T12.5: required, no default — same reasoning as ADR-038 (T9.5): a
   // photograph is a fact-bearing record, and a silent default would
   // misrepresent an unstated provenance as the strongest class in the
@@ -1184,6 +1267,7 @@ model Asset {
   @@index([colonyId])
   @@index([inspectionId])
   @@index([colonyEventId])
+  @@index([specimenId])
   @@map("asset")
   @@schema("core")
 }
@@ -2539,6 +2623,12 @@ model LabourEntry {
   fermentationRun   FermentationRun? @relation(fields: [fermentationRunId], references: [id])
   dryingRunId       String?          @map("drying_run_id") @db.Uuid
   dryingRun         DryingRun?       @relation(fields: [dryingRunId], references: [id])
+  // F1 (30_F1_OPERACION_FINCA_ESQUEMA.md §4) — a fifth nullable parent,
+  // ADR-020 decision 8's pattern extended rather than reworked. Digging
+  // 600 holes or clearing an apiary site is real labour with no batch to
+  // attach to yet — "el trabajo se registra contra el lugar donde ocurre."
+  locationId        String?          @map("location_id") @db.Uuid
+  location          Location?        @relation(fields: [locationId], references: [id])
 
   workerCount Int     @map("worker_count")
   hours       Decimal @db.Decimal(6, 2)
@@ -2570,6 +2660,7 @@ model LabourEntry {
   @@index([receivingEventId])
   @@index([fermentationRunId])
   @@index([dryingRunId])
+  @@index([locationId])
   @@map("labour_entry")
   @@schema("traceability")
 }
@@ -2591,6 +2682,10 @@ model MaterialConsumptionEntry {
   fermentationRun   FermentationRun? @relation(fields: [fermentationRunId], references: [id])
   dryingRunId       String?          @map("drying_run_id") @db.Uuid
   dryingRun         DryingRun?       @relation(fields: [dryingRunId], references: [id])
+  // F1 §4 — same pattern as LabourEntry.locationId above: nutrients,
+  // biochar, and lime applied to a plot before any batch exists.
+  locationId        String?          @map("location_id") @db.Uuid
+  location          Location?        @relation(fields: [locationId], references: [id])
 
   materialName String   @map("material_name")
   batchLabel   String   @map("batch_label")
@@ -2616,7 +2711,210 @@ model MaterialConsumptionEntry {
 
   @@index([fermentationRunId])
   @@index([dryingRunId])
+  @@index([locationId])
   @@map("material_consumption_entry")
+  @@schema("traceability")
+}
+
+// F1 (30_F1_OPERACION_FINCA_ESQUEMA.md §4) — "Siembra"/"Recepción de
+// material vegetal" carry origin+varietal+quantity semantics that don't
+// fit LabourEntry (hours/workers) or MaterialConsumptionEntry (a
+// materialName+batchLabel consumed against a fermentation/drying run).
+// Reusing ReceivingEvent (T4) was considered and rejected: that table
+// produces a `Lot` and carries coffee-cherry-specific fields
+// (cherryWeightKg/brix/temperatureC) — seedlings arriving at a nursery
+// aren't processable material entering the traceability chain, so forcing
+// them through ReceivingEvent would be the same kind of conflation
+// CLAUDE.md §18 already warns against for Species/Cultivar. A small,
+// single-purpose new entity, same shape as HarvestEvent/ReceivingEvent —
+// not a general-purpose parallel table.
+enum PlantingEventType {
+  // The 600 Caturra seedlings arriving from Cafelino on 2026-08-08.
+  received
+  // The same material actually going into the ground — may be the same
+  // day as `received` or weeks later (nursery holding period); two
+  // distinct facts, not implied by each other.
+  planted
+
+  @@schema("traceability")
+}
+
+model PlantingEvent {
+  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId String            @map("location_id") @db.Uuid
+  location   Location          @relation(fields: [locationId], references: [id])
+  eventType  PlantingEventType @map("event_type")
+
+  // Free text, not a Species/Cultivar FK — those tables are specified
+  // (DOMAIN_MODEL.md §4) but not built, and building a taxonomy system was
+  // not asked for by this ticket. "Caturra"/"Catuaí" as typed-enough text
+  // is what the product owner actually needs recorded today.
+  varietal String?
+  quantity Int?
+  unit     String? @default("plantones")
+
+  // Where the material came from — the 600 Caturra seedlings came from
+  // Cafelino. Nullable: a `planted` event for material already on-site
+  // (no new arrival) has no separate source to name.
+  sourceOrganizationId String?       @map("source_organization_id") @db.Uuid
+  sourceOrganization   Organization? @relation(fields: [sourceOrganizationId], references: [id])
+
+  occurredAt       DateTime @default(now()) @map("occurred_at")
+  operatorPersonId String?  @map("operator_person_id") @db.Uuid
+  operator         Person?  @relation("PlantingEventOperator", fields: [operatorPersonId], references: [id])
+  notes            String?
+
+  // Required, no default (ADR-038 pattern) — a planting recorded the same
+  // day is direct_observation; one logged from memory weeks later is not.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  sourceReference String?         @map("source_reference")
+  dataQuality     DataQuality?    @map("data_quality")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("PlantingEventCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([locationId])
+  @@index([sourceOrganizationId])
+  @@map("planting_event")
+  @@schema("traceability")
+}
+
+// F1 §3/§5, extending SPECIMEN_AND_MATERIAL_TRACEABILITY.md §2's design.
+// `species_id`/`cultivar_id` from that doc's original sketch are dropped
+// here — the Species/Cultivar tables they'd reference are themselves
+// specified but not built (DOMAIN_MODEL.md §4), and building that taxonomy
+// was not asked for by this ticket; `commonName`/`varietalNote` (free
+// text) are what's actually needed today, same reasoning as
+// PlantingEvent.varietal above.
+//
+// `specimenType` resolves this ticket's own open question (§5): the
+// broca traps are modeled as Specimens per the product owner's direct
+// decision, not as equipment, so the table needs a discriminator between
+// a tracked plant and a monitoring trap rather than nulling out
+// plant-only fields for a trap. A new `specimen:manage`/`specimen:view`
+// permission pair gates this table (RBAC catalog) — the same reasoning
+// A1 used to give Apiary its own permission instead of folding into
+// `lot:manage`: a Specimen is a standing land asset, not a Lot in the
+// processing-chain sense.
+enum SpecimenType {
+  plant
+  trap
+
+  @@schema("traceability")
+}
+
+enum SpecimenStatus {
+  active
+  // Maps to both "retirada" (a trap, cycle-eligible) and a permanently
+  // removed plant — the history of *why*/whether it cycles back lives in
+  // SpecimenObservation (installed/removed/reinstalled), not as extra
+  // status values here. "Reinstalada" is simply a return to `active`
+  // preceded by a `reinstalled` observation — no third status invented.
+  removed
+  // Plant-only in practice; a trap is never "dead," just removed.
+  dead
+
+  @@schema("traceability")
+}
+
+// F1 §3 — both sector mechanisms available on every Specimen, neither
+// required: "un Specimen puede tener uno, el otro, los dos, o ninguno."
+// `sectorSimple` works from day one with no field prep; `gridRow`/
+// `gridPosition` are more precise but need physically-numbered rows —
+// the farm evolves from approximate to precise, not the other way around.
+enum SpecimenSector {
+  alto
+  medio
+  bajo
+
+  @@schema("traceability")
+}
+
+model Specimen {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  locationId   String         @map("location_id") @db.Uuid
+  location     Location       @relation(fields: [locationId], references: [id])
+  specimenType SpecimenType   @map("specimen_type")
+  commonName   String         @map("common_name")
+  varietalNote String?        @map("varietal_note")
+  plantedDate  DateTime?      @map("planted_date")
+  status       SpecimenStatus @default(active)
+
+  sectorSimple SpecimenSector? @map("sector_simple")
+  gridRow      Int?            @map("grid_row")
+  gridPosition Int?            @map("grid_position")
+  // "A cierta distancia entre tantos plantones" (§5) — qualitative by the
+  // product owner's own wording, not a number with a given unit.
+  densityNote  String?         @map("density_note")
+
+  notes String?
+
+  // Colony (A2) already established this exact precedent: an origin/
+  // existence fact gets provenanceClass too, not just its observations.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  dataQuality     DataQuality?    @map("data_quality")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("SpecimenCreatedBy", fields: [createdBy], references: [id])
+
+  observations SpecimenObservation[]
+  assets       Asset[]
+
+  @@index([locationId])
+  @@map("specimen")
+  @@schema("traceability")
+}
+
+// F1 §5 — extends SPECIMEN_AND_MATERIAL_TRACEABILITY.md §2's
+// SpecimenObservation with trap-specific values rather than a parallel
+// "TrapCheck" entity: "una revisión de trampa es una observación fechada
+// con un valor — misma forma, distinto sujeto." `installed`/`removed`/
+// `reinstalled` back Specimen.status transitions for a trap's real
+// activate→retire→reinstall cycle (repela); `trap_check` is the
+// capture-count reading itself.
+enum SpecimenObservationType {
+  bloom_start
+  bloom_peak
+  bloom_end
+  health
+  material_harvested
+  installed
+  removed
+  reinstalled
+  trap_check
+  other
+
+  @@schema("traceability")
+}
+
+model SpecimenObservation {
+  id               String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  specimenId       String                  @map("specimen_id") @db.Uuid
+  specimen         Specimen                @relation(fields: [specimenId], references: [id], onDelete: Cascade)
+  observationType  SpecimenObservationType @map("observation_type")
+  observedAt       DateTime                @map("observed_at")
+  observerPersonId String?                 @map("observer_person_id") @db.Uuid
+  observer         Person?                 @relation("SpecimenObservationObserver", fields: [observerPersonId], references: [id])
+
+  // Only meaningful for observationType = trap_check — the 18 de julio
+  // minutes' actual capture-count reading. Nullable and untyped-by-name
+  // beyond that: not generalized into a Measurement-style value/unit pair
+  // ahead of a second numeric observation type actually needing one.
+  captureCount Int? @map("capture_count")
+
+  notes String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+  dataQuality     DataQuality?    @map("data_quality")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("SpecimenObservationCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([specimenId])
+  @@map("specimen_observation")
   @@schema("traceability")
 }
 
