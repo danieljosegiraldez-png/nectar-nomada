@@ -454,6 +454,76 @@ No real external-coffee samples were loaded — none were supplied; §9's
 verification proves the mechanism the same way F1 proved its own before
 real field data existed to load.
 
+**`33_R1_ROASTSESSION_TAXONOMIA_SENSORIAL.md` is now run — schema and
+service layer only, no UI, same convention as F1/S1.** Two joined gaps
+from `29_` §7a and `17_`'s Part C finding 4: no typed record of how a
+coffee was roasted, and no structured vocabulary for what a judge
+perceived beyond a plain number. `RoastSession` follows Fermentation/
+DryingRun's principle (an execution record hanging off `LotTransformation`
+via a dedicated `roastSessionId` FK) but is one call, not their start/end
+pair — a roast's real capture point, every §4 scenario describes it, is
+"log the whole session once it's done," the same shape `HarvestEvent`
+already uses. Three roasters roasting the same green lot three ways is
+recorded as three separate `stage_change` transformations sharing one
+input lot, rather than reusing the already-verified `split`-with-three-
+outputs shape directly — each roast is a genuinely separate execution the
+one-FK-per-transformation shape can't express if they shared a
+transformation row; `getLotLineage`'s recursive CTE produces the
+identical queryable DAG either way. The roast curve reuses the existing
+`Measurement` entity (new `roastSessionId` FK, additive, same convention
+as `fermentationRunId`/`dryingRunId`/`storageAssignmentId`) rather than a
+new time-series table or an opaque equipment-file reference; first/second
+crack get real `RoastSession` columns since every roast log tracks those
+two checkpoints. Equipment stays free text (`equipmentNote`), matching
+`FermentationRun.vesselNote`'s own precedent — no Equipment entity exists
+yet (`18_`, still V2). The same `roastSessionId` mechanism distinguishes a
+pre-roast green-coffee measurement from an ordinary storage-phase one —
+no new field needed, the FK's presence already says which moment.
+
+`SensoryDescriptor`/`SensoryDescriptorResponse` implement the exact shape
+`BEVERAGE_SENSORY_PROTOCOLS.md`'s defects-taxonomy section already
+specified (one unified table: family, specific descriptor, expected
+perception, classification positive/neutral/defect, nullable technical
+cause) — not redesigned into separate tables. Loaded the real,
+product-owner-authored three-tier honey taxonomy (12 positive families, 2
+neutral, 6 defect families each with a real technical cause) into
+`prisma/seed.ts`'s unconditional `seedBeverageProtocolsContent()` —
+caught and fixed a real seeding bug along the way: the descriptor-seeding
+code was originally nested inside `if (!existingHoney)`, which silently
+never ran because the Honey protocol already existed in Neon from an
+earlier session; moved to its own idempotency check keyed on the protocol
+version. Coffee/beer/mead get no descriptor rows — no real vocabulary
+exists for them yet, not fabricated to fill the gap. `submitAssessment`
+gains an optional `descriptorResponses` array (with a nullable
+low/medium/high confidence per response) alongside the existing numeric
+`AttributeResponse` and `Assessment.comment` free text — additive, never
+a replacement for either; existing callers omitting it are unaffected.
+Checked live: `core.Assessment` has zero rows in the shared database, so
+§2.4's "don't auto-convert existing free text" question has nothing to
+migrate yet — the policy is recorded for when real evaluations start
+accumulating.
+
+11 new tests (`tests/traceability/roasting.test.ts`,
+`tests/sensory/descriptors.test.ts`), real Neon, covering all five of
+§4's verification scenarios. `docs/implementation/R1_ADR_DRAFT.md` holds
+the draft ADR-050 text (not yet appended, per the ticket's own
+instruction). Two pre-existing gaps were found while building this
+ticket and spun off as separate background tasks rather than folded into
+these commits: `Measurement.fermentationRunId`/`dryingRunId`/
+`storageAssignmentId` existed as schema columns since T6/T7/T8 but were
+never wired through `recordMeasurement` until this ticket's own
+`roastSessionId` addition prompted the check; and `FermentationRun`/
+`DryingRun`'s start/end functions were missed by C1 §3's audit-trail pass
+and still record no `AuditEvent`. What remains from `29_` after this
+ticket: `RoastSession` (done) and the descriptor/defect taxonomy (done)
+close §7a and the audit's Part C finding 4; still open — Research OS/PE
+protocols, map/plano, water, climate, meeting-minutes entity, Kits
+Descubre Terroir, José Giráldez/Craft Brewing Supply integration, defect
+*classification* workflow beyond the vocabulary itself (§7b), and real
+`RoastSession`/`SensoryDescriptorResponse` data — none was loaded, since
+none was supplied; the mechanism is proven by tests only, the same way
+F1/S1 proved their own mechanisms before real field data existed to load.
+
 ---
 
 ## The series
@@ -491,6 +561,7 @@ real field data existed to load.
 | `29_BRECHAS_OPERACION_FINCA_INVESTIGACION_MIGRACION.md` | "Dirección, no implementación" — investigation, not a ticket to build from directly. Four of its sections (§4a, §4b, §5, §6) implemented as `30_F1_OPERACION_FINCA_ESQUEMA.md`; the rest (§7-§10) remains unbuilt, see F1's entry above and its draft ADR's Consequences section. |
 | `30_F1_OPERACION_FINCA_ESQUEMA.md` | Farm-operation schema/service layer — Location attributes, microlots, Specimen/traps, PlantingEvent, labour/material against a place. No UI, by explicit product-owner decision. See "Where things stand" above. |
 | `32_S1_CAFES_EXTERNOS.md` | External coffee schema/service layer — `ExternalCoffeeOrigin`, `Sample` without a `Lot`. No UI, by explicit product-owner decision. See "Where things stand" above. |
+| `33_R1_ROASTSESSION_TAXONOMIA_SENSORIAL.md` | `RoastSession` and structured sensory descriptor/defect taxonomy — schema/service layer only, no UI. See "Where things stand" above. |
 
 ### Pending
 
