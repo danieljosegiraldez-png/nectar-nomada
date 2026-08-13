@@ -505,9 +505,8 @@ accumulating.
 
 11 new tests (`tests/traceability/roasting.test.ts`,
 `tests/sensory/descriptors.test.ts`), real Neon, covering all five of
-§4's verification scenarios. `docs/implementation/R1_ADR_DRAFT.md` holds
-the draft ADR-050 text (not yet appended, per the ticket's own
-instruction). Two pre-existing gaps were found while building this
+§4's verification scenarios. **Appended as ADR-050** in `DECISIONS.md`,
+right after S1's own ADR-049. Two pre-existing gaps were found while building this
 ticket and spun off as separate background tasks rather than folded into
 these commits: `Measurement.fermentationRunId`/`dryingRunId`/
 `storageAssignmentId` existed as schema columns since T6/T7/T8 but were

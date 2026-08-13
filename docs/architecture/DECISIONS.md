@@ -3288,3 +3288,109 @@ external-coffee samples were loaded, since none were supplied; the
 mechanism is proven by tests only (`tests/traceability/s1.test.ts`, 14
 tests, real Neon), the same way F1 proved its own mechanism before real
 field data existed to load.
+
+---
+
+## ADR-050 — R1: RoastSession and structured sensory descriptor/defect
+taxonomy
+
+**Context.** `docs/implementation/29_BRECHAS_OPERACION_FINCA_INVESTIGACION_
+MIGRACION.md` §7a and `17_`'s Part C finding 4 named two gaps that need
+each other: no typed record of *how* a coffee was roasted, and no
+structured vocabulary for *what* was perceived beyond a plain number. The
+case that unifies them is real: the same coffee roasted by different
+roasters on different equipment, cupped side by side — the roaster is a
+variable of the experiment, not just an actor, and a judge's "off-flavor,
+confianza media, defecto de familia DMS" has nowhere to go but
+unstructured comment text today, despite the platform's own Reference
+Standards & Calibration system existing specifically to make that
+observation precise and comparable.
+
+**Decision 1 — roast curve reuses `Measurement`, not a new time-series
+table or a file reference.** Three options were on the table: discrete
+points, a dedicated time-series table, or an opaque reference to the
+roaster's own equipment export. Decided discrete points via the existing
+`Measurement` entity (`Measurement.roastSessionId`, additive, matching
+the exact per-parent-table pattern already established for
+`fermentationRunId`/`dryingRunId`/`storageAssignmentId`). First/second
+crack get real columns on `RoastSession` itself
+(`firstCrackAt`/`secondCrackAt`) since every roast log tracks those two
+checkpoints regardless of equipment; every other curve point (bean/air
+temperature over time) is an ordinary `Measurement` row. A dedicated
+time-series table was rejected as unbuilt machinery for data volume this
+ticket has no evidence needs it. An opaque equipment-file reference was
+rejected because it would make the curve unqueryable from within the
+platform.
+
+**Decision 2 — equipment stays free text, no new entity.**
+`RoastSession.equipmentNote` matches `FermentationRun.vesselNote`'s own
+precedent exactly. `18_EQUIPMENT_AND_READINESS_PROMPT_REVISED.md` remains
+unbuilt (still V2); building an `Equipment` entity now would be scope
+invented ahead of being asked for.
+
+**Decision 3 — one `RoastSession` per execution, not the split-with-many-
+outputs shape reused directly.** `RoastSession` follows Fermentation/
+DryingRun's principle (an execution record hanging off `LotTransformation`
+via a dedicated FK) but not their exact two-call start/end shape, and not
+the already-verified `split` transformation's exact shape either.
+Roasting is short and its real capture point is "log the whole session
+once it's done," so `recordRoastSession` is one call, matching
+`HarvestEvent`'s own precedent for a short, bounded activity. Three
+roasters roasting the same green lot three ways is recorded as three
+separate `stage_change` `LotTransformation`s sharing the same input lot,
+rather than reusing the verified `split`-with-three-outputs shape
+directly — each roast is a genuinely separate execution the one-
+`roastSessionId`-per-transformation FK can't express if they shared one
+transformation row. This produces the identical queryable DAG either way:
+`getLotLineage`'s recursive CTE follows `lot_transformation_input`/
+`output` edges generically, indifferent to whether three children came
+from one transformation row or three — the generic split mechanism
+itself stays untouched; this ticket simply doesn't use it for this
+specific case.
+
+**Decision 4 — one unified descriptor/defect table, matching the already-
+designed shape.** `BEVERAGE_SENSORY_PROTOCOLS.md`'s defects-taxonomy
+section already specified the shape (`sensory.honey_descriptor(id,
+family, specific_descriptor, expected_perception, classification
+[positivo|neutral|defecto], technical_cause nullable)`) —
+`SensoryDescriptor` implements it as written, not redesigned into
+separate Descriptor/Defect tables. A descriptor belongs to a
+`SensoryProtocolVersion`, the same versioning discipline `SensoryAttribute`
+already follows. Confidence is a new, separate axis on
+`SensoryDescriptorResponse` (nullable low/medium/high) — additive
+alongside the existing numeric `AttributeResponse` and
+`Assessment.comment` free text, never a replacement for either.
+
+**Decision 5 — real content only for honey; no fabrication for coffee/
+beer/mead.** Loaded the real, product-owner-authored three-tier taxonomy
+(12 positive families, 2 neutral, 6 defect families each with a real
+technical cause) from `BEVERAGE_SENSORY_PROTOCOLS.md`'s current,
+non-superseded version — unconditionally seeded in `prisma/seed.ts`'s
+`seedBeverageProtocolsContent()`, same category as the honey rubric/
+attributes already seeded there, not `SEED_DEMO_CONTENT`-gated
+placeholder data. Coffee, beer, and mead get no descriptor rows, since no
+real vocabulary exists for them yet.
+
+**Decision 6 — existing evaluations: nothing to migrate.** Checked live
+against Neon: `core.Assessment` currently has zero rows in the shared
+database. The policy for when real evaluations do start accumulating
+stands as the ticket states it: never auto-convert free text into
+structured descriptors — leave existing free-text comments as-is, and
+optionally flag them as human-review candidates if a future ticket wants
+to backfill structure with actual evaluator confirmation.
+
+**Consequence.** Terroir-to-roast-to-cupping correlation (the platform's
+own falsifiable v1 test, ADR-039) gains one more real link: a roast
+profile is now a queryable fact, not a lot-code-and-notes guess. Two
+pre-existing gaps were found while building this ticket, unrelated to
+R1's own scope, and spun off as separate background tasks rather than
+folded into these commits: `Measurement.fermentationRunId`/`dryingRunId`/
+`storageAssignmentId` existed as schema columns since T6/T7/T8 but were
+never actually wired through `recordMeasurement` until this ticket's own
+`roastSessionId` addition prompted the fix (now landed); and
+`FermentationRun`/`DryingRun`'s start/end functions were missed by C1 §3's
+audit-trail pass and still record no `AuditEvent`. No real `RoastSession`
+or `SensoryDescriptorResponse` data was loaded, since none was supplied —
+the mechanism is proven by tests only, against real Neon, the same way F1
+and S1 proved their own mechanisms before real field data existed to
+load.
