@@ -16,6 +16,7 @@ import { prisma } from "../db";
 import { Prisma } from "../../generated/prisma/client";
 import { resolvedPermissionKeys } from "../rbac/service";
 import { permissionKey } from "../rbac/types";
+import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 
 export class SensoryAccessError extends Error {}
@@ -119,8 +120,9 @@ export async function submitAssessment(userAccountId: string, input: SubmitAsses
   // query here would still leave a race between two concurrent requests
   // (e.g. a double-click). Catch the constraint violation instead of
   // relying on check-then-create.
+  let assessment;
   try {
-    return await prisma.assessment.create({
+    assessment = await prisma.assessment.create({
       data: {
         blindSampleId: input.blindSampleId,
         evaluatorUserAccountId: userAccountId,
@@ -142,6 +144,22 @@ export async function submitAssessment(userAccountId: string, input: SubmitAsses
     }
     throw error;
   }
+
+  // C1 §3: a judge's original, immutable submission is evidentiary even
+  // though Assessment doesn't carry the generic provenanceClass column
+  // (Part C's own drift finding) — it uses immutability + supersession
+  // instead. One audit row for the whole submission, not one per
+  // AttributeResponse child row.
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "assessment.create",
+    entityType: "assessment",
+    entityId: assessment.id,
+    after: assessment,
+    sourceInterface: "sensory.service",
+  });
+
+  return assessment;
 }
 
 /**

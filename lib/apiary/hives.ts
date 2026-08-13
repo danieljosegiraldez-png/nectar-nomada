@@ -13,6 +13,7 @@
  */
 import { prisma } from "../db";
 import { can } from "../rbac/service";
+import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { ColonyOriginType, DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -106,7 +107,7 @@ export async function createColony(userAccountId: string, input: CreateColonyInp
   if (!hive) throw new ApiaryAccessError("hive_not_found");
   await requireApiaryAccess(userAccountId, "manage", [{ projectId: hive.projectId, locationId: hive.locationId }]);
 
-  return prisma.colony.create({
+  const colony = await prisma.colony.create({
     data: {
       hiveId: input.hiveId,
       startedAt: input.startedAt,
@@ -118,6 +119,19 @@ export async function createColony(userAccountId: string, input: CreateColonyInp
       createdBy: userAccountId,
     },
   });
+
+  // C1 §3: evidentiary write — a colony's origin, once forgotten, is not
+  // reconstructable (§1's own "capture-or-lose-it" framing for this field).
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "colony.create",
+    entityType: "colony",
+    entityId: colony.id,
+    after: colony,
+    sourceInterface: "apiary.service",
+  });
+
+  return colony;
 }
 
 export async function getHive(userAccountId: string, hiveId: string) {

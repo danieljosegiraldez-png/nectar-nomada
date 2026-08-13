@@ -14,6 +14,7 @@
  */
 import { prisma } from "../db";
 import { requireLotAccess } from "./lots";
+import { recordAuditEvent } from "../audit";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export interface RecordHarvestEventInput {
@@ -43,7 +44,7 @@ export async function recordHarvestEvent(userAccountId: string, input: RecordHar
 
   const provenanceClass = input.provenanceClass;
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const lot = await tx.lot.create({
       data: {
         lotCode: input.lotCode,
@@ -93,6 +94,19 @@ export async function recordHarvestEvent(userAccountId: string, input: RecordHar
 
     return { harvestEvent, lot };
   });
+
+  // C1 §3: evidentiary write (carries provenanceClass); after the
+  // transaction commits, same reasoning as recordTransformation.
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "harvest_event.create",
+    entityType: "harvest_event",
+    entityId: result.harvestEvent.id,
+    after: result.harvestEvent,
+    sourceInterface: "traceability.service",
+  });
+
+  return result;
 }
 
 export interface RecordReceivingEventInput {
@@ -119,7 +133,7 @@ export async function recordReceivingEvent(userAccountId: string, input: RecordR
 
   const provenanceClass = input.provenanceClass;
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const lot = await tx.lot.create({
       data: {
         lotCode: input.lotCode,
@@ -169,4 +183,16 @@ export async function recordReceivingEvent(userAccountId: string, input: RecordR
 
     return { receivingEvent, lot };
   });
+
+  // C1 §3: evidentiary write (carries provenanceClass).
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "receiving_event.create",
+    entityType: "receiving_event",
+    entityId: result.receivingEvent.id,
+    after: result.receivingEvent,
+    sourceInterface: "traceability.service",
+  });
+
+  return result;
 }

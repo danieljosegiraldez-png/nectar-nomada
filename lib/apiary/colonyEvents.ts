@@ -10,6 +10,7 @@
  */
 import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess, requireColonyEventWriteAccess } from "./hives";
+import { recordAuditEvent } from "../audit";
 import type { ColonyEventType, ProvenanceClass } from "../../generated/prisma/client";
 
 export class ColonyEventValidationError extends Error {}
@@ -73,7 +74,7 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
     if (existing) return existing;
   }
 
-  return prisma.colonyEvent.create({
+  const colonyEvent = await prisma.colonyEvent.create({
     data: {
       colonyId: input.colonyId,
       eventType: input.eventType,
@@ -92,6 +93,19 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
       createdBy: userAccountId,
     },
   });
+
+  // C1 §3: evidentiary write. Not reached on the clientDraftId idempotent
+  // no-op path above, same reasoning as recordInspection.
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "colony_event.create",
+    entityType: "colony_event",
+    entityId: colonyEvent.id,
+    after: colonyEvent,
+    sourceInterface: "apiary.service",
+  });
+
+  return colonyEvent;
 }
 
 export async function listColonyEventsForColony(userAccountId: string, colonyId: string) {

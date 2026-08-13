@@ -12,6 +12,7 @@
  */
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { recordAuditEvent } from "../audit";
 import { Prisma } from "../../generated/prisma/client";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
@@ -53,7 +54,7 @@ export async function recordQuantityEvent(userAccountId: string, input: RecordQu
 
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
 
-  return prisma.quantityEvent.create({
+  const quantityEvent = await prisma.quantityEvent.create({
     data: {
       lotId: input.lotId,
       eventType: input.eventType,
@@ -67,6 +68,18 @@ export async function recordQuantityEvent(userAccountId: string, input: RecordQu
       sourceReference: input.sourceReference ?? null,
     },
   });
+
+  // C1 §3: evidentiary write (carries provenanceClass).
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "quantity_event.create",
+    entityType: "quantity_event",
+    entityId: quantityEvent.id,
+    after: quantityEvent,
+    sourceInterface: "traceability.service",
+  });
+
+  return quantityEvent;
 }
 
 export interface CurrentQuantity {

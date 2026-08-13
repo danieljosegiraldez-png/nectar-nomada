@@ -11,6 +11,7 @@
  */
 import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
+import { recordAuditEvent } from "../audit";
 import type { InspectionOutcome, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveColonyScope(colonyId: string) {
@@ -56,7 +57,7 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
 
   const provenanceClass: ProvenanceClass = "direct_observation";
 
-  return prisma.inspection.create({
+  const inspection = await prisma.inspection.create({
     data: {
       colonyId: input.colonyId,
       occurredAt: input.occurredAt ?? new Date(),
@@ -73,6 +74,19 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
       createdBy: userAccountId,
     },
   });
+
+  // C1 §3: evidentiary write. Not reached on the clientDraftId idempotent
+  // no-op path above, so a retried sync never double-audits the same fact.
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "inspection.create",
+    entityType: "inspection",
+    entityId: inspection.id,
+    after: inspection,
+    sourceInterface: "apiary.service",
+  });
+
+  return inspection;
 }
 
 export async function listInspectionsForColony(userAccountId: string, colonyId: string) {

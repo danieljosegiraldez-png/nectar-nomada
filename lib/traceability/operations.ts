@@ -16,6 +16,7 @@
  */
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { recordAuditEvent } from "../audit";
 import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
 
 export class LabourValidationError extends Error {}
@@ -94,7 +95,7 @@ export async function recordLabourEntry(userAccountId: string, input: RecordLabo
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
 
-  return prisma.labourEntry.create({
+  const labourEntry = await prisma.labourEntry.create({
     data: {
       workerCount: input.workerCount,
       hours: input.hours,
@@ -108,6 +109,18 @@ export async function recordLabourEntry(userAccountId: string, input: RecordLabo
       ...labourParentData(input.parent),
     },
   });
+
+  // C1 §3: evidentiary write (carries provenanceClass).
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "labour_entry.create",
+    entityType: "labour_entry",
+    entityId: labourEntry.id,
+    after: labourEntry,
+    sourceInterface: "traceability.service",
+  });
+
+  return labourEntry;
 }
 
 // --- Material consumption entry ------------------------------------------
@@ -156,7 +169,7 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
 
-  return prisma.materialConsumptionEntry.create({
+  const materialConsumptionEntry = await prisma.materialConsumptionEntry.create({
     data: {
       materialName: input.materialName.trim(),
       batchLabel: input.batchLabel.trim(),
@@ -171,4 +184,16 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
       ...consumptionParentData(input.parent),
     },
   });
+
+  // C1 §3: evidentiary write (carries provenanceClass).
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "material_consumption_entry.create",
+    entityType: "material_consumption_entry",
+    entityId: materialConsumptionEntry.id,
+    after: materialConsumptionEntry,
+    sourceInterface: "traceability.service",
+  });
+
+  return materialConsumptionEntry;
 }

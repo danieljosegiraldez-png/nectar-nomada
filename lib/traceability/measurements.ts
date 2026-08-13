@@ -18,6 +18,7 @@
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { normalizeToCanonical, type MeasurementVariable } from "./units";
+import { recordAuditEvent } from "../audit";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export class MeasurementValidationError extends Error {}
@@ -70,7 +71,7 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
 
   const normalized = normalizeToCanonical(input.variable, input.value, input.unit);
 
-  return prisma.measurement.create({
+  const measurement = await prisma.measurement.create({
     data: {
       variable: input.variable,
       value: normalized.value,
@@ -86,6 +87,18 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
       sourceReference: input.sourceReference ?? null,
     },
   });
+
+  // C1 §3: evidentiary write (carries provenanceClass).
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "measurement.create",
+    entityType: "measurement",
+    entityId: measurement.id,
+    after: measurement,
+    sourceInterface: "traceability.service",
+  });
+
+  return measurement;
 }
 
 export interface CorrectMeasurementInput {
@@ -120,7 +133,7 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
 
   const normalized = normalizeToCanonical(original.variable as MeasurementVariable, input.value, input.unit);
 
-  return prisma.measurement.create({
+  const correction = await prisma.measurement.create({
     data: {
       variable: original.variable,
       value: normalized.value,
@@ -138,4 +151,18 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
       sourceReference: input.sourceReference ?? null,
     },
   });
+
+  // C1 §3: correcting an evidentiary fact is itself an evidentiary write.
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "measurement.correct",
+    entityType: "measurement",
+    entityId: correction.id,
+    before: original,
+    after: correction,
+    reason: input.reason,
+    sourceInterface: "traceability.service",
+  });
+
+  return correction;
 }

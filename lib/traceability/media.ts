@@ -23,6 +23,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
 import { objectStorageProvider } from "../integrations/storage";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { recordAuditEvent } from "../audit";
 import type { ClassificationLevel, ProvenanceClass } from "../../generated/prisma/client";
 
 const BUCKET = "nectar-originals";
@@ -145,7 +146,7 @@ export async function finalizeLotAssetUpload(userAccountId: string, input: Final
     select: { personId: true },
   });
 
-  return prisma.asset.create({
+  const asset = await prisma.asset.create({
     data: {
       assetType: input.mimeType.startsWith("image/") ? "photo" : input.mimeType.startsWith("video/") ? "video" : "document",
       storageKey: input.storageKey,
@@ -162,6 +163,19 @@ export async function finalizeLotAssetUpload(userAccountId: string, input: Final
       ...parentData(input.parent, input.lotId),
     },
   });
+
+  // C1 §3: evidentiary write (carries provenanceClass) — a field photo is
+  // original evidence the same way a measurement reading is.
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "asset.create",
+    entityType: "asset",
+    entityId: asset.id,
+    after: asset,
+    sourceInterface: "traceability.service",
+  });
+
+  return asset;
 }
 
 /**

@@ -20,6 +20,7 @@
  */
 import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
+import { recordAuditEvent } from "../audit";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export interface RecordApiaryHarvestInput {
@@ -47,7 +48,7 @@ export async function recordApiaryHarvest(userAccountId: string, input: RecordAp
 
   const provenanceClass = input.provenanceClass;
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // The resulting Lot carries the same project/organization/location
     // triple every other traceable canonical entity does (T1's own note)
     // — derived from the Colony's own Hive/Location, not re-asked of the
@@ -99,4 +100,17 @@ export async function recordApiaryHarvest(userAccountId: string, input: RecordAp
 
     return { harvestEvent, lot };
   });
+
+  // C1 §3: evidentiary write (carries provenanceClass); after the
+  // transaction commits, same reasoning as the coffee-side harvest.ts.
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "apiary_harvest_event.create",
+    entityType: "apiary_harvest_event",
+    entityId: result.harvestEvent.id,
+    after: result.harvestEvent,
+    sourceInterface: "apiary.service",
+  });
+
+  return result;
 }

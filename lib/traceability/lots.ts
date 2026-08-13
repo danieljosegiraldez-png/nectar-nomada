@@ -19,6 +19,7 @@
  */
 import { prisma } from "../db";
 import { can } from "../rbac/service";
+import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -139,7 +140,7 @@ export async function recordTransformation(userAccountId: string, input: RecordT
 
   const provenanceClass = input.provenanceClass;
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const transformation = await tx.lotTransformation.create({
       data: {
         transformationType: input.transformationType,
@@ -214,6 +215,21 @@ export async function recordTransformation(userAccountId: string, input: RecordT
 
     return { transformation, outputLots };
   });
+
+  // C1 §3: evidentiary write (LotTransformation carries provenanceClass) —
+  // recorded after the transaction commits, not inside it, since an audit
+  // row for a transaction that later rolled back would misrepresent what
+  // actually happened.
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "lot_transformation.create",
+    entityType: "lot_transformation",
+    entityId: result.transformation.id,
+    after: result.transformation,
+    sourceInterface: "traceability.service",
+  });
+
+  return result;
 }
 
 /**
