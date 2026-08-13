@@ -3811,3 +3811,28 @@ anaeróbico are recorded as free text rather than a controlled vocabulary
 be exactly the fabrication this discipline forbids. No specific "Honey
 NN%" `grado_proceso` value is loaded (Decision 2) — every method in §2
 otherwise has its full field list built.
+
+---
+
+## ADR-054 — Amendment to ADR-053: bioprotective yeast dose is g/kg, per
+the product owner
+
+**Context.** ADR-053's own Consequence section left
+`bioprotective_yeast_dose`'s unit unconfirmed, defaulting to an absolute
+gram weight rather than guess a scale-relative convention without real
+data. The product owner has now confirmed it directly.
+
+**Decision.** The unit is `g/kg` — dose scales with the mass of cherry
+being treated, not an absolute weight. The CryoBloom reference card's own
+real figure: **1 g/kg base, plus a 30% adjustment, ≈1.3 g/kg.**
+`lib/traceability/units.ts`'s registry entry is corrected from `g` (min
+0/max 10000) to `g/kg` (min 0/max 20 — wide enough for real dosing,
+narrow enough to still catch a fat-fingered entry), and
+`tests/research/ro1-2.test.ts`'s §5.4 cold-hold verification now records
+the real 1.3 g/kg figure rather than a placeholder value.
+
+**Consequence.** `bioprotective_yeast_dose` moves from ADR-053's
+"incomplete fields" list to confirmed. The remaining items on that
+list — `koji_substrate`, `rehydration_method`, valve type, anaeróbico's
+purge gas, and the unloaded "Honey NN%" `grado_proceso` value — are
+unaffected by this amendment and stay open.

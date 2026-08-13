@@ -171,11 +171,12 @@ const REGISTRY: Record<MeasurementVariable, VariableDefinition> = {
   // °C/min: keep what the product owner actually records.
   cold_hold_descent_rate: { canonicalUnit: "min/C", min: 0, max: 1000, acceptedUnits: { "min/C": (v) => v } },
   cold_hold_plateau_duration: { canonicalUnit: "h", min: 0, max: 500, acceptedUnits: { h: (v) => v } },
-  // Unit not given by the reference card excerpt in the ticket — "g" is a
-  // reasonable default (sachet/gram-scale dosing is standard for
-  // bioprotective cultures) but this is exactly the kind of incomplete
-  // field §6's own instruction asks to report, not silently assume.
-  bioprotective_yeast_dose: { canonicalUnit: "g", min: 0, max: 10000, acceptedUnits: { g: (v) => v } },
+  // Confirmed by the product owner (post-RO1.2, §6 follow-up): g/kg, not
+  // an absolute gram weight — dose scales with the cherry mass being
+  // treated. The CryoBloom reference card's real figure is 1 g/kg base,
+  // plus a 30% adjustment (~1.3 g/kg) — 20 g/kg comfortably covers real
+  // dosing without being so wide it stops catching a fat-fingered entry.
+  bioprotective_yeast_dose: { canonicalUnit: "g/kg", min: 0, max: 20, acceptedUnits: { "g/kg": (v) => v } },
   rehydration_time: { canonicalUnit: "min", min: 0, max: 1440, acceptedUnits: { min: (v) => v } },
   cold_hold_pre_seal_temperature: {
     canonicalUnit: "C",

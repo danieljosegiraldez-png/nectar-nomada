@@ -686,14 +686,17 @@ replay. Filed as its own ticket, `39_MIGRATION_HISTORY_ORDERING_BUG.md`
 — see "Not yet written"/"Pending" below; not fixed here, deliberately, per
 the product owner's own instruction. **Appended as ADR-053** in
 `DECISIONS.md`, right after RO1.1's own ADR-052.
+**`bioprotective_yeast_dose`'s unit, flagged incomplete in ADR-053, is now
+confirmed by the product owner: `g/kg`, real CryoBloom reference figure 1
+g/kg base + 30% adjustment ≈1.3 g/kg — closed by ADR-054**, the registry
+entry and §5.4's test corrected to match.
 
-**Incomplete fields, reported per §6, not silently assumed:**
-`bioprotective_yeast_dose`'s unit (grams assumed, unconfirmed — could be
-g/hL or another convention), `koji_substrate`/`rehydration_method`/valve
-type (maceración carbónica, anaeróbico)/anaeróbico's purge gas are free
-text, not a controlled vocabulary — the ticket names no fixed list for
-any of them. No specific "Honey NN%" `grado_proceso` value is loaded.
-Every other method in §2 has its full field list built.
+**Incomplete fields still open, reported per §6, not silently assumed:**
+`koji_substrate`/`rehydration_method`/valve type (maceración carbónica,
+anaeróbico)/anaeróbico's purge gas are free text, not a controlled
+vocabulary — the ticket names no fixed list for any of them. No specific
+"Honey NN%" `grado_proceso` value is loaded. Every other method in §2 has
+its full field list built.
 
 ### V1 — Vocabulary fix: Lote is terrain, Batch is harvested/processed coffee
 

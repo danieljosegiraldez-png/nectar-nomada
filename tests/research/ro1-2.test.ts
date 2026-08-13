@@ -352,7 +352,8 @@ describe("§5.4 — a CryoBloom cold hold treatment reads back complete with eve
       { variable: "cold_hold_target_temperature_max", value: 4, unit: "C" },
       { variable: "cold_hold_descent_rate", value: 12, unit: "min/C" },
       { variable: "cold_hold_plateau_duration", value: 18, unit: "h" },
-      { variable: "bioprotective_yeast_dose", value: 30, unit: "g" },
+      // Real CryoBloom reference card figure: 1 g/kg base + 30% adjustment.
+      { variable: "bioprotective_yeast_dose", value: 1.3, unit: "g/kg" },
       { variable: "rehydration_time", value: 20, unit: "min" },
       { variable: "cold_hold_pre_seal_temperature", value: 3, unit: "C" },
       { variable: "cold_hold_arrival_temperature", value: 5, unit: "C" },
