@@ -22,6 +22,7 @@ import { recordMeasurement } from "../../lib/traceability/measurements";
 import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 import { finalizeLotAssetUpload, requestLotAssetUpload } from "../../lib/traceability/media";
 import { getSensoryLinkageForSamples, TraceabilityAccessError } from "../../lib/traceability/lots";
+import { getLotReport } from "../../lib/traceability/reports";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a3-${Date.now()}`;
@@ -155,6 +156,23 @@ describe("recordApiaryHarvest", () => {
         provenanceClass: "measured_fact",
       }),
     ).rejects.toThrow(ApiaryAccessError);
+  });
+
+  it("getLotReport's origin section includes the ApiaryHarvestEvent — a real bug found via A8's own live-browser verification (Lot Detail showed the harvest, the report claimed 'origin unknown' because getLotReport only ever queried HarvestEvent/ReceivingEvent)", async () => {
+    const { lot } = await recordApiaryHarvest(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-report-origin`,
+      colonyId,
+      occurredAt: new Date("2026-04-05"),
+      extractedWeightKg: 5,
+      provenanceClass: "measured_fact",
+    });
+
+    const report = await getLotReport(authorizedUserAccountId, lot.id);
+    expect(report.origins.harvestEvents).toHaveLength(0);
+    expect(report.origins.receivingEvents).toHaveLength(0);
+    expect(report.origins.apiaryHarvestEvents).toHaveLength(1);
+    expect(report.origins.apiaryHarvestEvents[0]!.resultingLotId).toBe(lot.id);
+    expect(report.origins.apiaryHarvestEvents[0]!.colony.hive.location.id).toBe(apiarySiteId);
   });
 
   it("rejects an unknown colonyId", async () => {

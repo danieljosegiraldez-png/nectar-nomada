@@ -360,6 +360,8 @@
     "originUnknown": "Origin unknown — no harvest or receiving event found in this lot's lineage.",
     "originHarvestEntry": "Harvested {date}, {organization} — {location}",
     "originReceivingEntry": "Received {date} from {organization}",
+    "originApiaryHarvestEntry": "Apiary harvest {date}, {organization} — {location}",
+    "organizationUnknown": "organization unknown",
     "lineageNone": "This lot has no recorded ancestors or descendants.",
     "processingFermentationEntry": "Fermentation: {start} to {end}",
     "processingDryingEntry": "Drying: {start} to {end}",

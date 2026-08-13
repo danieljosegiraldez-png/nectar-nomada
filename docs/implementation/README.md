@@ -200,6 +200,25 @@ were audited, cleaned, and their two remaining source files
 file using the same "wrong-project user" pattern already cleaned up
 correctly.
 
+**A8's own live-browser verification, deferred at the time, was completed
+2026-08-13** — logged in as a scratch Farm Operator scoped to the DEMO
+Highland Apiary project, in both locales: the Hive/Colony detail page
+correctly shows all 3 recorded activity entries in order; the honey
+`Lot`'s own detail page shows the 22 kg harvest, the 0.3 kg sample, and
+the sensory score (8, 3 responses) end to end — the platform's own
+falsifiable "harvest through to a cupping score" claim, now confirmed
+live in the running app for apiary, not just via direct DB/service-layer
+queries. This pass found one real, pre-existing bug: the Lot Report page
+(T13) claimed "origin unknown" for that same honey lot, even though its
+own detail page correctly showed the harvest. `getLotReport`'s origin
+query (`lib/traceability/reports.ts`) only ever checked `HarvestEvent`/
+`ReceivingEvent` — `ApiaryHarvestEvent` (A3) was never wired in, a gap
+that existed from A3 onward and had gone unnoticed because no honey lot's
+report had been checked live until now. Fixed (query + report page +
+new `originApiaryHarvestEntry`/`organizationUnknown` i18n keys), pinned
+with a new regression test in `tests/apiary/harvest.test.ts`, and
+re-verified correct in both locales after the fix.
+
 **Fixed, not just investigated: why 71 rows were orphaned in Neon.**
 `vitest.config.ts` set no `testTimeout`/`hookTimeout` — every test file
 ran on Vitest's 10-second default for both. `DATABASE_URL` in `.env`

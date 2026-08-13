@@ -360,6 +360,8 @@
     "originUnknown": "Origen desconocido — no se encontró ningún evento de cosecha o recepción en el linaje de este lote.",
     "originHarvestEntry": "Cosechado el {date}, {organization} — {location}",
     "originReceivingEntry": "Recibido el {date} de {organization}",
+    "originApiaryHarvestEntry": "Cosecha de apiario el {date}, {organization} — {location}",
+    "organizationUnknown": "organización desconocida",
     "lineageNone": "Este lote no tiene ancestros ni descendientes registrados.",
     "processingFermentationEntry": "Fermentación: {start} a {end}",
     "processingDryingEntry": "Secado: {start} a {end}",

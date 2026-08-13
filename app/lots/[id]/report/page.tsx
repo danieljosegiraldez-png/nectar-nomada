@@ -73,7 +73,7 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
 
       <section className="nn-section">
         <h2>{t("originHeading")}</h2>
-        {origins.harvestEvents.length === 0 && origins.receivingEvents.length === 0 ? (
+        {origins.harvestEvents.length === 0 && origins.receivingEvents.length === 0 && origins.apiaryHarvestEvents.length === 0 ? (
           <p className="nn-muted">{t("originUnknown")}</p>
         ) : (
           <ul>
@@ -85,6 +85,15 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
             {origins.receivingEvents.map((r) => (
               <li key={r.id}>
                 {t("originReceivingEntry", { date: formatDate(r.receivedAt), organization: r.organization.name })}
+              </li>
+            ))}
+            {origins.apiaryHarvestEvents.map((a) => (
+              <li key={a.id}>
+                {t("originApiaryHarvestEntry", {
+                  date: formatDate(a.occurredAt),
+                  location: a.colony.hive.location.name,
+                  organization: a.colony.hive.location.organization?.name ?? t("organizationUnknown"),
+                })}
               </li>
             ))}
           </ul>

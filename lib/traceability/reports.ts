@@ -29,15 +29,22 @@ import { prisma } from "../db";
 import { getLotDetail } from "./lots";
 
 /**
- * A lot's origin is every HarvestEvent/ReceivingEvent whose resultingLotId
- * is this lot itself or any of its lineage ancestors — plural, not
- * singular, because a blend transformation genuinely has multiple parents
- * (execution plan §8.3's DAG, not a tree). A lot with no HarvestEvent/
- * ReceivingEvent anywhere in its ancestry (shouldn't happen given every
- * Lot originates from one of those two events or a transformation output
+ * A lot's origin is every HarvestEvent/ReceivingEvent/ApiaryHarvestEvent
+ * whose resultingLotId is this lot itself or any of its lineage ancestors
+ * — plural, not singular, because a blend transformation genuinely has
+ * multiple parents (execution plan §8.3's DAG, not a tree). A lot with no
+ * origin event anywhere in its ancestry (shouldn't happen given every Lot
+ * originates from one of these three events or a transformation output
  * that eventually traces back to one, but the query makes no assumption)
  * simply returns an empty origins array — rendered as "unknown," never a
  * guessed value, per DATA_ARCHITECTURE.md §4.
+ *
+ * ApiaryHarvestEvent (A3) was added after this function was originally
+ * written and, until now, was never included here — every honey Lot's
+ * report claimed "origin unknown" despite the harvest being fully
+ * recorded (visible on the Lot's own detail page via `getLotDetail`,
+ * which does query it). Found via A8's own live-browser verification
+ * pass and fixed here, not worked around.
  */
 export async function getLotReport(userAccountId: string, lotId: string) {
   const detail = await getLotDetail(userAccountId, lotId);
@@ -46,7 +53,7 @@ export async function getLotReport(userAccountId: string, lotId: string) {
   const descendantIds = detail.lineage.descendantLotIds;
   const originCandidateIds = [lotId, ...ancestorIds];
 
-  const [harvestOrigins, receivingOrigins, ancestorLots, descendantLots] = await Promise.all([
+  const [harvestOrigins, receivingOrigins, apiaryHarvestOrigins, ancestorLots, descendantLots] = await Promise.all([
     prisma.harvestEvent.findMany({
       where: { resultingLotId: { in: originCandidateIds } },
       include: { location: true, organization: true },
@@ -56,6 +63,11 @@ export async function getLotReport(userAccountId: string, lotId: string) {
       where: { resultingLotId: { in: originCandidateIds } },
       include: { location: true, organization: true },
       orderBy: { receivedAt: "asc" },
+    }),
+    prisma.apiaryHarvestEvent.findMany({
+      where: { resultingLotId: { in: originCandidateIds } },
+      include: { colony: { include: { hive: { include: { location: { include: { organization: true } } } } } } },
+      orderBy: { occurredAt: "asc" },
     }),
     ancestorIds.length ? prisma.lot.findMany({ where: { id: { in: ancestorIds } } }) : Promise.resolve([]),
     descendantIds.length ? prisma.lot.findMany({ where: { id: { in: descendantIds } } }) : Promise.resolve([]),
@@ -103,7 +115,7 @@ export async function getLotReport(userAccountId: string, lotId: string) {
     dryingRuns,
     storageAssignments,
     measurements,
-    origins: { harvestEvents: harvestOrigins, receivingEvents: receivingOrigins },
+    origins: { harvestEvents: harvestOrigins, receivingEvents: receivingOrigins, apiaryHarvestEvents: apiaryHarvestOrigins },
     ancestorLots,
     descendantLots,
     generatedAt: new Date(),
