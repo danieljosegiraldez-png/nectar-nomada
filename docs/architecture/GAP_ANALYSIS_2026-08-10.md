@@ -1,5 +1,22 @@
 # Gap Analysis — Néctar Nómada Digital Platform (2026-08-10)
 
+> **⚠️ HISTORICAL DOCUMENT — BUILD-STATE CLAIMS BELOW ARE OBSOLETE.**
+> Written 2026-08-10. Its method (programmatic extraction against the live
+> repo, not against memory) was sound and much of it still holds, but its
+> **build-status verdicts are wrong as of today**: Part 3's classification of
+> Agricultural Traceability (§18) and Apiary/Honey (§19) as "SPECIFIED, zero
+> code" is the most consequential example — both are now among the most
+> heavily tested parts of the platform (tickets T1–T14, T9.5, T12.5, T12.6
+> for Traceability; A1–A8, A5.5 for Apiary), each with dedicated schema
+> models, service layers, and test suites. Do **not** use this document to
+> decide what is or isn't built. For current build status, check
+> `docs/implementation/README.md` and
+> `docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md`'s ticket table
+> (§34) instead. This document is kept, not deleted, because its inventory
+> method and several of its still-valid findings (documentation debt,
+> cross-reference gaps) remain useful history — read it as "what was true on
+> 2026-08-10," not as current state.
+
 Comprehensive audit per `07_GAP_ANALYSIS_PROMPT.md`. This is a read-only
 report — no code or other architecture document was modified while
 producing it. All build-state claims below were pulled directly from the
