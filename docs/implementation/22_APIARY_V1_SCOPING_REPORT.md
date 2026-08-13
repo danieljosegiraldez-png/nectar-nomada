@@ -43,7 +43,7 @@ then what's missing from both.
 All four hold, and I found no reason to move any of them back in:
 
 - **Full colony division mechanics / queen genealogy** — confirmed
-  correctly deferred. Kenneth populates Apiary 2's two empty hives by
+  correctly deferred. Kenis populates Apiary 2's two empty hives by
   nucleus purchase this season, not splitting, so division mechanics are
   never exercised. Recording the *fact* of origin (§1 above) costs a
   column; recording the *mechanics* of division costs a DAG. Correct to
@@ -70,7 +70,7 @@ Two real gaps, both operational rather than schema:
 
 1. **Partner-site RBAC/access setup is assumed but never listed as an
    item.** Three of five named testers work three different sites
-   (Kenneth/Cerro Azul, Chayanne/Kiva-Toabré, Mickelle/San Juan). Without
+   (Kenis/Cerro Azul, Chayanne/Kiva-Toabré, Mickelle/San Juan). Without
    this, nobody can log in and use anything else in this ticket. It's not
    new architecture (`SPECIMEN_AND_MATERIAL_TRACEABILITY.md` §7 already
    specifies the exact pattern — Project-per-engagement,
@@ -362,7 +362,7 @@ models.
   `Location` row (`locationType` gains a value, e.g. `apiary_site`,
   `parentLocationId` = the property/farm it sits on). Zero new tables.
   **Naming flag:** `OrganizationType` already has an `apiary` value
-  (an *organization* that operates an apiary business — e.g. how Kenneth's
+  (an *organization* that operates an apiary business — e.g. how Kenis's
   operation might be typed). That is a different concept from the
   *physical site* being proposed here as a `Location`. They don't collide
   in the schema (different tables, different enums), but the name overlap
@@ -808,7 +808,7 @@ tables exist, not required by the falsifiable test. That reasoning was
 sound when written and has nothing wrong with it as architecture — it is
 now outdated for a reason that has nothing to do with architecture
 either: the platform's actual named pilot testers are mostly beekeepers.
-Of five named testers (Kenneth/Cerro Azul, Chayanne/Kiva-Toabré,
+Of five named testers (Kenis/Cerro Azul, Chayanne/Kiva-Toabré,
 Mickelle/San Juan on apiary; Bob and Sherry/Cerro Azul on coffee), three
 of five work apiary. Deferring apiary as ADR-039 currently does leaves
 three of five pilot users with nothing to use. The v1 test was written
@@ -868,7 +868,7 @@ season's testers won't exercise them. RBAC reuses the existing
 `Assignment → Scope → RoleProfile → Permission` mechanism verbatim (new
 `apiary` permission subject, extending the existing `Farm Operator`
 profile rather than adding a parallel role, since the same person —
-Kenneth — works both coffee and apiary at one site). Partner-site access
+Kenis — works both coffee and apiary at one site). Partner-site access
 for Chayanne and Mickelle reuses `SPECIMEN_AND_MATERIAL_TRACEABILITY.md`
 §7's pattern verbatim — Project-per-engagement, `classification =
 partner`, no new architecture. **Offline support (`OFFLINE_FIELD_CAPABILITY.md`'s
@@ -911,7 +911,7 @@ deferred for coffee's.**
 The original report (§5) filed this as a flagged risk under "deliberately
 not built," inheriting coffee's existing ADR-039 deferral by default. On
 direct reassessment, that's the wrong bucket. The test case makes this
-concrete: Kenneth works through twelve hives in sequence at Cerro Azul
+concrete: Kenis works through twelve hives in sequence at Cerro Azul
 with no connectivity. If nothing saves until he returns to signal, one of
 two things happens — the session's data is lost outright, or he writes on
 paper and transcribes that evening, which does not recover a

@@ -19,7 +19,7 @@ inspection never edits an existing row, never attaches to a shared
 mutable entity, and never collides with another inspection the way two
 edits to one `Specimen` would — a second inspection of the same colony
 on the same day is just a second, independently valid row, not a
-conflict needing reconciliation. Even Kenneth double-entering one
+conflict needing reconciliation. Even Kenis double-entering one
 inspection by mistake produces two harmless rows, not corrupted data.
 
 **This means §4's versioned conflict-resolution mechanism does not apply
@@ -86,7 +86,7 @@ different answers:
   IndexedDB synchronously with the local "save," not merely to React
   state. A phone restart loses at most an in-progress, not-yet-submitted
   entry, the same as any web form anywhere.
-- **Can Kenneth *reopen* the app and keep working after a restart, while
+- **Can Kenis *reopen* the app and keep working after a restart, while
   still offline?** No, not without a service worker — a fresh page load
   with no signal and no cached app shell simply fails to load, standard
   browser behavior. This is Option B's one real gap, and it is the
@@ -111,7 +111,7 @@ Option B is a genuine subset of Option A, not throwaway work.
 ### Option C — paper, honest provenance
 
 **Zero build.** The vocabulary Option C needs already exists — nothing to
-add. `provenanceClass` stays `direct_observation`: Kenneth genuinely did
+add. `provenanceClass` stays `direct_observation`: Kenis genuinely did
 observe the hive directly, and `provenanceClass` states what *kind* of
 fact this is (an observation, not a guess), not how promptly it was
 recorded. What degrades is `dataQuality` — `provisional` fits a same-
@@ -120,7 +120,7 @@ evening transcription honestly (checked against
 `verified_with_limitation`, `provisional`, `unconfirmed`, `conflicting`,
 `superseded`, `working_hypothesis`, `not_tested`,
 `missing_source_record` — `provisional` and `verified_with_limitation`
-both already exist and both fit depending on how confident Kenneth is in
+both already exist and both fit depending on how confident Kenis is in
 his own memory). `Inspection.occurredAt` already means "when the
 inspection happened," separate from `createdAt` ("when the row was
 written") — the schema already anticipated a delayed recording without
@@ -136,7 +136,7 @@ only the immediate in-app attachment is what's actually delayed, not the
 photo itself.
 
 **Friction, and the risk it names honestly:** zero *new* field friction
-(Kenneth already carries some way to take notes), but Option C doesn't
+(Kenis already carries some way to take notes), but Option C doesn't
 reduce total work — it moves and delays it. Twelve hives on paper become
 twelve re-entries that evening, which is *more* total effort than either
 built option (both of which capture directly, needing no re-entry at
@@ -187,7 +187,7 @@ and is not a dead end — it's the honest majority of Option A, reusable
 outright rather than replaced.
 
 **The one thing to verify before finalizing A0's scope, and it is a
-field check, not a build task:** does Kenneth's own phone/browser
+field check, not a build task:** does Kenis's own phone/browser
 reliably keep a tab alive through a normal inspection session at Cerro
 Azul with no signal, or does the OS discard it? This is answerable in an
 afternoon with his actual device, not a redesign question. Two outcomes:
@@ -203,7 +203,7 @@ afternoon with his actual device, not a redesign question. Two outcomes:
   A's full scope.
 
 This isn't declining to choose — it's refusing to guess at a fact
-(Kenneth's actual device behavior) this document has no way to know, per
+(Kenis's actual device behavior) this document has no way to know, per
 the same discipline that governs every other undecided fact in this
 project. The recommendation is Option B either way; the open question is
 only whether one small addition rides along with it.
