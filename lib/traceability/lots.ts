@@ -292,13 +292,18 @@ export async function getLotLineage(userAccountId: string, lotId: string) {
  * sees everything; a project/location-scoped one sees only Lots resolving
  * to those scopes; a user with no qualifying Assignment sees nothing.
  */
-interface LotVisibility {
+// Exported for R1's listRoastSessions (lib/traceability/roasting.ts) — a
+// RoastSession has no projectId/locationId of its own (same as
+// FermentationRun/DryingRun), so "which roast sessions can this user see"
+// resolves through the same lot-visibility mechanism as everything else,
+// applied to the source lot each session's transformation references.
+export interface LotVisibility {
   mode: "all" | "none" | "scoped";
   projectIds: string[];
   locationIds: string[];
 }
 
-async function resolveLotVisibility(userAccountId: string, action: "view" | "manage" = "view"): Promise<LotVisibility> {
+export async function resolveLotVisibility(userAccountId: string, action: "view" | "manage" = "view"): Promise<LotVisibility> {
   const now = new Date();
   const assignments = await prisma.assignment.findMany({
     where: {
@@ -361,7 +366,7 @@ function sampleWhereFromVisibility(visibility: LotVisibility): Prisma.SampleWher
   return { OR: scopeOrClauses(visibility) };
 }
 
-function lotMatchesVisibility(lot: { projectId: string | null; locationId: string | null }, visibility: LotVisibility): boolean {
+export function lotMatchesVisibility(lot: { projectId: string | null; locationId: string | null }, visibility: LotVisibility): boolean {
   if (visibility.mode === "all") return true;
   if (visibility.mode === "none") return false;
   return (

@@ -54,6 +54,15 @@ export interface RecordMeasurementInput {
   occurredAt: Date;
   lotId?: string | null;
   sampleId?: string | null;
+  // R1 (docs/implementation/33_R1_ROASTSESSION_TAXONOMIA_SENSORIAL.md §1.4)
+  // — an additional link alongside lotId, not a third independent subject:
+  // green-coffee moisture/density measured just before a specific roast
+  // still scopes/RBAC-checks against the Lot like any other Lot
+  // measurement, but also carrying roastSessionId is what distinguishes
+  // "measured for this roast" from an ordinary storage-phase reading of the
+  // same Lot — no separate "moment" field needed, the FK's presence already
+  // says so. Requires lotId to be set alongside it (validated below).
+  roastSessionId?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
   // T9.5: required, no fallback. The MeasurementForm UI (app/components/
@@ -69,6 +78,10 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
   const candidates = await scopeCandidatesForSubject(input.lotId, input.sampleId);
   await requireLotAccess(userAccountId, "manage", candidates);
 
+  if (input.roastSessionId && !input.lotId) {
+    throw new MeasurementValidationError("roast_session_link_requires_lot_id");
+  }
+
   const normalized = normalizeToCanonical(input.variable, input.value, input.unit);
 
   const measurement = await prisma.measurement.create({
@@ -79,6 +92,7 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
       occurredAt: input.occurredAt,
       lotId: input.lotId ?? null,
       sampleId: input.sampleId ?? null,
+      roastSessionId: input.roastSessionId ?? null,
       sourceType: "manual",
       operatorPersonId: input.operatorPersonId ?? null,
       notes: input.notes ?? null,
