@@ -689,21 +689,30 @@ export async function getSensoryLinkageForSamples(sampleIds: string[]): Promise<
  * hierarchy) to render real dropdowns instead of asking an operator to
  * paste in a raw UUID.
  *
- * Projects are scoped to the user's actual `lot:manage` Assignments (cheap
- * and exact — a project-scoped Assignment names its project directly).
- * Locations are shown system-wide rather than scope-filtered: a
- * project-scoped Farm Operator's harvest still needs a real plot/location,
- * and this schema has no direct Location→Project relationship to compute
- * "locations belonging to project X" from. The dropdown is a convenience,
- * not the security boundary — `recordHarvestEvent`/`moveLotToStorage`
- * still run the real `requireLotAccess` check server-side regardless of
- * what's offered here, so a mismatched pick fails safely with a normal
- * error, not a silent authorization bypass.
+ * Both `projects` and `locations` are scoped to the user's actual
+ * `lot:manage` Assignments — offering an option the write path will then
+ * reject (`recordHarvestEvent`/`recordReceivingEvent`'s `requireLotAccess`
+ * failing with "no_lot_access") is the same bug class already fixed once
+ * in lib/partner/workspace.ts's `getPartnerProjects`: a list's own filter
+ * and the write path's authorization check must agree, not just both
+ * exist independently.
+ *
+ * Location has no direct Project FK (`Project.primaryLocationId` is one
+ * nullable pointer, not the set of locations a project's work happens at),
+ * so "which locations belong to project X" is computed via Organization
+ * instead: a plot Location (e.g. "Lote 1") typically has `organizationId`
+ * null and inherits it from its parent site Location ("Finca Las Nubes
+ * Cerro Azul", which does carry `organizationId`) via `parentLocationId` —
+ * confirmed against real data, every existing Lot tying a project to a
+ * location does so through exactly this chain. A Location is reachable if
+ * its own or an ancestor's `organizationId` matches one of the user's
+ * accessible projects' `organizationId`, OR the Location itself is granted
+ * directly via a location-scoped Assignment (`visibility.locationIds`).
  */
 export async function getManageableContext(userAccountId: string) {
   const visibility = await resolveLotVisibility(userAccountId, "manage");
 
-  const [projects, locations] = await Promise.all([
+  const [projects, allLocations] = await Promise.all([
     visibility.mode === "none"
       ? Promise.resolve([])
       : visibility.mode === "all"
@@ -711,6 +720,41 @@ export async function getManageableContext(userAccountId: string) {
         : prisma.project.findMany({ where: { id: { in: visibility.projectIds } }, orderBy: { name: "asc" } }),
     prisma.location.findMany({ include: { organization: true }, orderBy: { name: "asc" } }),
   ]);
+
+  const locationsById = new Map(allLocations.map((l) => [l.id, l]));
+  const effectiveOrgCache = new Map<string, string | null>();
+  function effectiveOrganizationId(location: (typeof allLocations)[number]): string | null {
+    if (effectiveOrgCache.has(location.id)) return effectiveOrgCache.get(location.id)!;
+    let result: string | null = null;
+    let current: typeof location | undefined = location;
+    const visited = new Set<string>();
+    while (current && !visited.has(current.id)) {
+      if (current.organizationId) {
+        result = current.organizationId;
+        break;
+      }
+      visited.add(current.id);
+      current = current.parentLocationId ? locationsById.get(current.parentLocationId) : undefined;
+    }
+    effectiveOrgCache.set(location.id, result);
+    return result;
+  }
+
+  const locations =
+    visibility.mode === "all"
+      ? allLocations
+      : visibility.mode === "none"
+        ? []
+        : (() => {
+            const accessibleOrgIds = new Set(
+              projects.map((p) => p.organizationId).filter((id): id is string => id != null),
+            );
+            return allLocations.filter((l) => {
+              if (visibility.locationIds.includes(l.id)) return true;
+              const orgId = effectiveOrganizationId(l);
+              return orgId != null && accessibleOrgIds.has(orgId);
+            });
+          })();
 
   const organizations = [
     ...new Map(

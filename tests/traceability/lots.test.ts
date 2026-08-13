@@ -13,6 +13,7 @@ import {
   recordTransformation,
   TraceabilityAccessError,
   getSensoryLinkageForSamples,
+  getManageableContext,
 } from "../../lib/traceability/lots";
 import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -542,5 +543,140 @@ describe("getSensoryLinkageForSamples — T12 boundary (ADR-043)", () => {
     } finally {
       await prisma.sample.delete({ where: { id: plainSample.id } });
     }
+  });
+});
+
+describe("getManageableContext — location/organization scoping", () => {
+  // Same bug class as lib/partner/workspace.ts's getPartnerProjects fix
+  // (4718b58): the dropdown must not offer a location the write path
+  // (requireLotAccess, via recordHarvestEvent/recordReceivingEvent) will
+  // then reject. Location has no direct Project FK, so reachability is
+  // computed via Organization — a plot Location inherits its parent
+  // site's organizationId through parentLocationId.
+  const SCOPE_RUN_ID = `t1-mc-${Date.now()}`;
+
+  let orgReachableId: string;
+  let orgUnreachableId: string;
+  let projectReachableId: string;
+  let siteReachableId: string;
+  let plotReachableId: string;
+  let siteUnreachableId: string;
+  let plotUnreachableId: string;
+  let directGrantLocationId: string;
+
+  let projectScopedUserId: string;
+  let locationScopedUserId: string;
+  let noAssignmentUserId: string;
+
+  beforeAll(async () => {
+    const orgReachable = await prisma.organization.create({
+      data: { organizationType: "farm", name: `TEST Reachable Farm (${SCOPE_RUN_ID})`, status: "approved", classification: "internal" },
+    });
+    orgReachableId = orgReachable.id;
+
+    const orgUnreachable = await prisma.organization.create({
+      data: { organizationType: "farm", name: `TEST Unreachable Farm (${SCOPE_RUN_ID})`, status: "approved", classification: "internal" },
+    });
+    orgUnreachableId = orgUnreachable.id;
+
+    const projectReachable = await prisma.project.create({
+      data: { name: `TEST Reachable Project (${SCOPE_RUN_ID})`, organizationId: orgReachableId, status: "approved", classification: "internal" },
+    });
+    projectReachableId = projectReachable.id;
+
+    const siteReachable = await prisma.location.create({
+      data: { locationType: "site", name: `TEST Reachable Site (${SCOPE_RUN_ID})`, organizationId: orgReachableId, status: "approved", classification: "internal" },
+    });
+    siteReachableId = siteReachable.id;
+
+    // organizationId deliberately null — inherits orgReachableId from its
+    // parent, matching how real plot rows (e.g. "Lote 1") are shaped.
+    const plotReachable = await prisma.location.create({
+      data: { locationType: "plot", name: `TEST Reachable Plot (${SCOPE_RUN_ID})`, parentLocationId: siteReachableId, status: "approved", classification: "internal" },
+    });
+    plotReachableId = plotReachable.id;
+
+    const siteUnreachable = await prisma.location.create({
+      data: { locationType: "site", name: `TEST Unreachable Site (${SCOPE_RUN_ID})`, organizationId: orgUnreachableId, status: "approved", classification: "internal" },
+    });
+    siteUnreachableId = siteUnreachable.id;
+
+    const plotUnreachable = await prisma.location.create({
+      data: { locationType: "plot", name: `TEST Unreachable Plot (${SCOPE_RUN_ID})`, parentLocationId: siteUnreachableId, status: "approved", classification: "internal" },
+    });
+    plotUnreachableId = plotUnreachable.id;
+
+    // Belongs to the unreachable organization, but granted directly via a
+    // location-scoped Assignment — must show up for that grant regardless
+    // of organization matching (the OR path in getManageableContext).
+    const directGrantLocation = await prisma.location.create({
+      data: { locationType: "site", name: `TEST Direct Grant Site (${SCOPE_RUN_ID})`, organizationId: orgUnreachableId, status: "approved", classification: "internal" },
+    });
+    directGrantLocationId = directGrantLocation.id;
+
+    projectScopedUserId = await createTestUserAccount("ProjectScopedManageable");
+    await assignFarmOperator(projectScopedUserId, { scopeType: "project", scopeRefId: projectReachableId });
+
+    locationScopedUserId = await createTestUserAccount("LocationScopedManageable");
+    await assignFarmOperator(locationScopedUserId, { scopeType: "location", scopeRefId: directGrantLocationId });
+
+    noAssignmentUserId = await createTestUserAccount("NoAssignmentManageable");
+  });
+
+  afterAll(async () => {
+    await prisma.assignment.deleteMany({
+      where: assertDefinedWhere({ userAccountId: { in: [projectScopedUserId, locationScopedUserId, noAssignmentUserId] } }),
+    });
+    await prisma.scope.deleteMany({
+      where: assertDefinedWhere({ OR: [{ scopeRefId: projectReachableId }, { scopeRefId: directGrantLocationId }] }),
+    });
+    await prisma.userAccount.deleteMany({
+      where: assertDefinedWhere({ id: { in: [projectScopedUserId, locationScopedUserId, noAssignmentUserId] } }),
+    });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: SCOPE_RUN_ID } }) });
+    await prisma.location.deleteMany({
+      where: assertDefinedWhere({ id: { in: [plotReachableId, siteReachableId, plotUnreachableId, siteUnreachableId, directGrantLocationId] } }),
+    });
+    await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectReachableId }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: [orgReachableId, orgUnreachableId] } }) });
+  });
+
+  it("a project-scoped Farm Operator sees only locations under their project's organization", async () => {
+    const context = await getManageableContext(projectScopedUserId);
+    const locationIds = context.locations.map((l) => l.id);
+    expect(locationIds).toContain(siteReachableId);
+    expect(locationIds).toContain(plotReachableId);
+    expect(locationIds).not.toContain(siteUnreachableId);
+    expect(locationIds).not.toContain(plotUnreachableId);
+    expect(locationIds).not.toContain(directGrantLocationId);
+  });
+
+  it("plotLocations narrows further to locationType plot only, still within scope", async () => {
+    const context = await getManageableContext(projectScopedUserId);
+    const plotLocationIds = context.plotLocations.map((l) => l.id);
+    expect(plotLocationIds).toContain(plotReachableId);
+    expect(plotLocationIds).not.toContain(siteReachableId); // right org, wrong type
+    expect(plotLocationIds).not.toContain(plotUnreachableId); // right type, wrong org
+  });
+
+  it("organizations derives from the scoped locations, not the full system list", async () => {
+    const context = await getManageableContext(projectScopedUserId);
+    const orgIds = context.organizations.map((o) => o.id);
+    expect(orgIds).toContain(orgReachableId);
+    expect(orgIds).not.toContain(orgUnreachableId);
+  });
+
+  it("a location-scoped Farm Operator sees their exact granted location even outside any accessible project's organization", async () => {
+    const context = await getManageableContext(locationScopedUserId);
+    const locationIds = context.locations.map((l) => l.id);
+    expect(locationIds).toEqual([directGrantLocationId]);
+  });
+
+  it("a user with no Assignment gets empty projects, locations, and organizations", async () => {
+    const context = await getManageableContext(noAssignmentUserId);
+    expect(context.projects).toEqual([]);
+    expect(context.locations).toEqual([]);
+    expect(context.plotLocations).toEqual([]);
+    expect(context.organizations).toEqual([]);
   });
 });
