@@ -252,6 +252,59 @@ full suite both run cleanly against it) rather than assumed. `.env` is
 gitignored, so this fix never touches git; only `vitest.config.ts` was
 committed.
 
+**`17_DESIGN_TO_IMPLEMENTATION_AUDIT_PROMPT.md` (Parts A-F) is now run,
+in full.** Read-only design-to-implementation audit: does the code actually
+do what the architecture documents claim? Part A checked 7 enforcement
+claims against live Neon grants and code — 3 held exactly as documented
+(blind-mapping restriction, Lot/LotTransformation append-only in practice,
+Media pipeline correctly unbuilt); 4 didn't (`ai_service`'s "SELECT scoped
+like RBAC" claim, `audit_event`'s DB-level append-only claim, and two
+provenance-column gaps). Part B built a coverage matrix across 15
+architecture/planning documents; Parts C-E detailed the drift, found real
+orphan code (two undocumented RBAC permissions, two undocumented Role
+Profiles), and caught `GAP_ANALYSIS_2026-08-10.md`'s Traceability/Apiary
+verdicts having gone backwards in three days. Part F consolidated all of it
+into a punch list.
+
+**`31_C1_CORRECCIONES_AUDITORIA.md` executed that punch list, in the order
+the audit itself specified — consequence, not effort.** Separate commits per
+section, all against real Neon:
+- §1: `GAP_ANALYSIS_2026-08-10.md` marked historical with an unmissable header.
+- §2: the two orphan ADRs (A5.5's offline decisions, T12.5's Asset schema)
+  appended to `DECISIONS.md` as ADR-046/ADR-047; both draft files deleted.
+- §3: audit trail added to 11 evidentiary write sites across
+  `lib/traceability/*`, `lib/apiary/*`, `lib/sensory/service.ts` — live-
+  verified producing real `AuditEvent` rows during the full test run (184
+  tests).
+- §4: six documents corrected to describe what's actually built rather than
+  what was originally claimed (`AI_GOVERNANCE.md`, `SECURITY.md` ×2,
+  `RBAC.md` ×3, `MVP_ROADMAP.md`, `DATA_ARCHITECTURE.md`) — every case was
+  the document being wrong, not the code.
+- §5: `generateDataCompletenessSuggestions` now excludes confidential/
+  trade_secret Projects; two orphan-permission pairs got a documentation
+  note instead of a speculative UI; `SECURITY.md` §1's email-verification
+  claim was corrected rather than enforced (enforcing it today would have
+  locked out every real Credentials-based account — no verification-email
+  flow exists to have ever set the field); `tests/discover/service.test.ts`
+  added 7 tests for the previously-untested public-read filter, surfacing
+  one further real finding along the way (a public Story attached to a
+  non-public Location still exposes that Location's details via the
+  `location: true` include on the Story's own public page — flagged, not
+  fixed, out of this ticket's scope).
+- §7: `DOMAIN_MODEL.md` now carries a `[BUILT]`/`[PARTIAL]`/`[SPECIFIED]`/
+  `[DEFERRED]` tag on every entity in §3-§5, and its own §7 stale summary
+  (still listing Sensory/Competitions/Apiary as unbuilt) was corrected in
+  the same pass — the exact failure this whole ticket exists to fix, found
+  again while fixing it. New §8 proposes, without implementing, tying future
+  audit passes to `PHASE_1_TECHNICAL_EXECUTION_PLAN.md` §36's Phase Gates.
+
+Full `typecheck`/`lint`/test suite (202 tests, 23 files) passed after every
+section. §6's explicit out-of-scope list (the "code is better than the doc"
+drifts, and four items scoped as their own future tickets — sensory
+descriptor/defect taxonomy, `CompetitionResult.rank`, rate limiting, refund
+capability, `measurement` partitioning, `AssetStatus` vocabulary for the
+media pipeline) was left untouched, as instructed.
+
 ---
 
 ## The series
@@ -283,6 +336,8 @@ committed.
 | `23_RECIPES_FORMULATION_DISTILLATION_PROMPT.md` | Produced `docs/architecture/RECIPES_FORMULATION_AND_DISTILLATION.md` — `DistillationRun`/`SaccharificationRun`/`RoastSession` specified, `Recipe`/`RecipeVersion` designed, two worked traces. *(Uncommitted.)* |
 | `24_APIARY_SCOPING_REVISION_PROMPT.md` | Revised `22_`'s report in place: `Inspection`/`ColonyEvent` model split, offline reassessed as non-deferrable (added ticket A0), status corrected. *(Uncommitted, like the report it revises.)* |
 | `25_OFFLINE_OPTIONS_PROMPT.md` | Produced `25_OFFLINE_OPTIONS_ANALYSIS.md` (commit `c03fa2a`) — sized and compared three options for A0 (full PWA, minimal IndexedDB draft queue, paper). Found the original A0 sizing wrongly included versioned conflict resolution, which doesn't apply to `Inspection`/`ColonyEvent`'s append-only write shape. Recommends **Option B** (minimal draft queue, no service worker), resizing A0 from the set's largest unknown down to small-medium, pending one field check (tab survival on Kenneth's device at Cerro Azul with no signal). Confirms A4's fold into A3 under the same scrutiny. |
+| `17_DESIGN_TO_IMPLEMENTATION_AUDIT_PROMPT.md` | Read-only, Parts A-F all run. Part A: 3 of 7 enforcement claims held exactly as documented, 4 didn't (DB-level claims that were actually application-logic-only, or unbuilt). Part B: coverage matrix across 15 documents. Parts C-E: drift detail, orphan permissions/Role Profiles, `GAP_ANALYSIS_2026-08-10.md`'s build-status verdicts found to have gone backwards. Part F: consolidated punch list, executed as `31_C1_CORRECCIONES_AUDITORIA.md` — see "Where things stand" above for the full account. |
+| `31_C1_CORRECCIONES_AUDITORIA.md` | Executed 17_'s Part F punch list, ordered by consequence not effort, one commit per section — see "Where things stand" above. |
 
 ### Pending
 
@@ -298,13 +353,6 @@ first: it was written to shape T10's design, which has since shipped
 `22_`/`24_`'s real model. Remaining value is refinement of what exists plus
 design input for A5 and later multi-role context-switching, not greenfield
 architecture.
-
-**`17_DESIGN_TO_IMPLEMENTATION_AUDIT_PROMPT.md`** — read-only coverage audit:
-does the code actually do what the documents claim? Part A checks the
-*enforcement* claims (the `ai_service` role grant, blind-mapping
-unreachability, append-only audit rows), which is where a false claim carries
-real consequence. Run after v1 is defined and exercised, so deliberate
-deferrals don't read as gaps.
 
 ### V2
 
