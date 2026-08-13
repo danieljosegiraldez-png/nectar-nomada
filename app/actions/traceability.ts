@@ -135,6 +135,14 @@ export async function recordMeasurementAction(
       unit: String(formData.get("unit") ?? ""),
       occurredAt: new Date(),
       notes: emptyToNull(formData.get("notes")),
+      // Pre-existing gap fix: MeasurementForm now carries these as hidden
+      // fields when rendered against an active FermentationRun/DryingRun/
+      // StorageAssignment (see app/lots/[id]/page.tsx's MeasurementForm
+      // call) — absent otherwise, same as roastSessionId once the R1 UI
+      // wires it in.
+      fermentationRunId: emptyToNull(formData.get("fermentationRunId")),
+      dryingRunId: emptyToNull(formData.get("dryingRunId")),
+      storageAssignmentId: emptyToNull(formData.get("storageAssignmentId")),
       // T9.5 §3(c): the one write path where the UI itself exposes both
       // fields (MeasurementForm) rather than the action choosing silently.
       provenanceClass: String(formData.get("provenanceClass") ?? "measured_fact") as never,

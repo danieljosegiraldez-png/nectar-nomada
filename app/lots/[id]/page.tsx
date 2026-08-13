@@ -418,7 +418,14 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
             ))}
           </ul>
         )}
-        <MeasurementForm lotId={lot.id} observers={observers} selfPersonId={selfPersonId} />
+        <MeasurementForm
+          lotId={lot.id}
+          observers={observers}
+          selfPersonId={selfPersonId}
+          fermentationRunId={activeFermentation?.id ?? null}
+          dryingRunId={activeDrying?.id ?? null}
+          storageAssignmentId={currentStorage?.id ?? null}
+        />
       </section>
 
       <section className="nn-section">

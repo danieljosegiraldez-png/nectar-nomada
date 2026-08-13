@@ -8,12 +8,17 @@ import { prisma } from "../../lib/db";
 import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { correctMeasurement, MeasurementValidationError, recordMeasurement } from "../../lib/traceability/measurements";
 import { UnitValidationError } from "../../lib/traceability/units";
+import { startFermentationRun } from "../../lib/traceability/fermentation";
+import { startDryingRun } from "../../lib/traceability/drying";
+import { moveLotToStorage } from "../../lib/traceability/storage";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `t3-${Date.now()}`;
 
 let projectAId: string;
 let projectBId: string;
+let organizationId: string;
+let storageLocationId: string;
 
 let authorizedUserAccountId: string; // Farm Operator, scope: project A
 let wrongProjectUserAccountId: string; // Farm Operator, scope: project B
@@ -52,12 +57,32 @@ beforeAll(async () => {
 
   wrongProjectUserAccountId = await createTestUserAccount("WrongProjectOperator");
   await assignFarmOperator(wrongProjectUserAccountId, { scopeType: "project", scopeRefId: projectBId });
+
+  const organization = await prisma.organization.create({
+    data: { organizationType: "farm", name: `TEST Farm (${RUN_ID})`, status: "approved", classification: "internal" },
+  });
+  organizationId = organization.id;
+  const storageLocation = await prisma.location.create({
+    data: { locationType: "site", name: `TEST Warehouse (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
+  });
+  storageLocationId = storageLocation.id;
 });
 
 afterAll(async () => {
   const allTestLots = await prisma.lot.findMany({ where: { lotCode: { startsWith: RUN_ID } } });
   const lotIds = allTestLots.map((l) => l.id);
+
+  const fermentationRuns = await prisma.fermentationRun.findMany({ where: { transformations: { some: { inputs: { some: { lotId: { in: lotIds } } } } } } });
+  const fermentationRunIds = fermentationRuns.map((r) => r.id);
+  const dryingRuns = await prisma.dryingRun.findMany({ where: { transformations: { some: { inputs: { some: { lotId: { in: lotIds } } } } } } });
+  const dryingRunIds = dryingRuns.map((r) => r.id);
+
   await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
+  await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
+  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ fermentationRunId: { in: fermentationRunIds } }) });
+  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: dryingRunIds } }) });
+  await prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: { in: fermentationRunIds } }) });
+  await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: dryingRunIds } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
 
   await prisma.assignment.deleteMany({
@@ -68,7 +93,9 @@ afterAll(async () => {
     where: assertDefinedWhere({ id: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } }),
   });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: storageLocationId }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectAId, projectBId] } }) });
+  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
 });
 
 describe("recordMeasurement — RBAC, validation, unit conversion", () => {
@@ -287,5 +314,169 @@ describe("T9.5 — provenance is chosen, never defaulted; observer independent o
     // The case T9.5 exists to make reachable: the person who observed and
     // the account that recorded it are two different people on one row.
     expect(measurement.operatorPersonId).not.toBe(recordingUserAccount.personId);
+  });
+});
+
+// Pre-existing gap fix: FermentationRun/DryingRun/StorageAssignment have
+// been real FKs on Measurement since T6/T7/T8, but recordMeasurement never
+// accepted or set them until now — same "additional link alongside lotId"
+// pattern as R1's roastSessionId.
+describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentId links", () => {
+  it("sets fermentationRunId alongside lotId and reads it back", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-fermentation-link`,
+      lotType: "processing",
+      projectId: projectAId,
+    });
+    const { run } = await startFermentationRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      lotId: lot.id,
+      startedAt: new Date("2026-01-02"),
+      inoculated: false,
+    });
+
+    const measurement = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      variable: "temperature",
+      value: 25,
+      unit: "C",
+      occurredAt: new Date("2026-01-02T12:00:00Z"),
+      lotId: lot.id,
+      fermentationRunId: run.id,
+    });
+
+    expect(measurement.fermentationRunId).toBe(run.id);
+    const reloaded = await prisma.measurement.findUniqueOrThrow({ where: { id: measurement.id } });
+    expect(reloaded.fermentationRunId).toBe(run.id);
+    expect(reloaded.lotId).toBe(lot.id);
+  });
+
+  it("rejects fermentationRunId without lotId", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-fermentation-link-no-lot`,
+      lotType: "processing",
+      projectId: projectAId,
+    });
+    const { run } = await startFermentationRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      lotId: lot.id,
+      startedAt: new Date("2026-01-02"),
+      inoculated: false,
+    });
+
+    await expect(
+      recordMeasurement(authorizedUserAccountId, {
+        provenanceClass: "measured_fact",
+        variable: "temperature",
+        value: 25,
+        unit: "C",
+        occurredAt: new Date(),
+        fermentationRunId: run.id,
+      }),
+    ).rejects.toThrow(MeasurementValidationError);
+  });
+
+  it("sets dryingRunId alongside lotId and reads it back", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-drying-link`,
+      lotType: "drying",
+      projectId: projectAId,
+    });
+    const { run } = await startDryingRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      lotId: lot.id,
+      startedAt: new Date("2026-01-05"),
+    });
+
+    const measurement = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      variable: "moisture",
+      value: 11.5,
+      unit: "%",
+      occurredAt: new Date("2026-01-05T12:00:00Z"),
+      lotId: lot.id,
+      dryingRunId: run.id,
+    });
+
+    expect(measurement.dryingRunId).toBe(run.id);
+    const reloaded = await prisma.measurement.findUniqueOrThrow({ where: { id: measurement.id } });
+    expect(reloaded.dryingRunId).toBe(run.id);
+    expect(reloaded.lotId).toBe(lot.id);
+  });
+
+  it("rejects dryingRunId without lotId", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-drying-link-no-lot`,
+      lotType: "drying",
+      projectId: projectAId,
+    });
+    const { run } = await startDryingRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      lotId: lot.id,
+      startedAt: new Date("2026-01-05"),
+    });
+
+    await expect(
+      recordMeasurement(authorizedUserAccountId, {
+        provenanceClass: "measured_fact",
+        variable: "moisture",
+        value: 11.5,
+        unit: "%",
+        occurredAt: new Date(),
+        dryingRunId: run.id,
+      }),
+    ).rejects.toThrow(MeasurementValidationError);
+  });
+
+  it("sets storageAssignmentId alongside lotId and reads it back", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-storage-link`,
+      lotType: "green",
+      projectId: projectAId,
+    });
+    const assignment = await moveLotToStorage(authorizedUserAccountId, {
+      lotId: lot.id,
+      locationId: storageLocationId,
+      startedAt: new Date("2026-01-10"),
+    });
+
+    const measurement = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      variable: "relative_humidity",
+      value: 60,
+      unit: "%",
+      occurredAt: new Date("2026-01-10T12:00:00Z"),
+      lotId: lot.id,
+      storageAssignmentId: assignment.id,
+    });
+
+    expect(measurement.storageAssignmentId).toBe(assignment.id);
+    const reloaded = await prisma.measurement.findUniqueOrThrow({ where: { id: measurement.id } });
+    expect(reloaded.storageAssignmentId).toBe(assignment.id);
+    expect(reloaded.lotId).toBe(lot.id);
+  });
+
+  it("rejects storageAssignmentId without lotId", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-storage-link-no-lot`,
+      lotType: "green",
+      projectId: projectAId,
+    });
+    const assignment = await moveLotToStorage(authorizedUserAccountId, {
+      lotId: lot.id,
+      locationId: storageLocationId,
+      startedAt: new Date("2026-01-10"),
+    });
+
+    await expect(
+      recordMeasurement(authorizedUserAccountId, {
+        provenanceClass: "measured_fact",
+        variable: "relative_humidity",
+        value: 60,
+        unit: "%",
+        occurredAt: new Date(),
+        storageAssignmentId: assignment.id,
+      }),
+    ).rejects.toThrow(MeasurementValidationError);
   });
 });

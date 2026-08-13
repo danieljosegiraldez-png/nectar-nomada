@@ -30,10 +30,20 @@ export function MeasurementForm({
   lotId,
   observers,
   selfPersonId,
+  fermentationRunId,
+  dryingRunId,
+  storageAssignmentId,
 }: {
   lotId: string;
   observers: ObserverOption[];
   selfPersonId: string | null;
+  // Pre-existing gap fix: the Lot Detail page already knows which of these
+  // (if any) is the lot's current active context — same activeFermentation/
+  // activeDrying/currentStorage it uses for the other contextual forms on
+  // that page. At most one is ever non-null for a given lot at a time.
+  fermentationRunId?: string | null;
+  dryingRunId?: string | null;
+  storageAssignmentId?: string | null;
 }) {
   const [state, formAction, pending] = useActionState(recordMeasurementAction, initialState);
   const t = useTranslations("Traceability");
@@ -41,6 +51,9 @@ export function MeasurementForm({
   return (
     <form action={formAction} className="nn-form" style={{ maxWidth: 480, marginTop: "1rem" }}>
       <input type="hidden" name="lotId" value={lotId} />
+      {fermentationRunId ? <input type="hidden" name="fermentationRunId" value={fermentationRunId} /> : null}
+      {dryingRunId ? <input type="hidden" name="dryingRunId" value={dryingRunId} /> : null}
+      {storageAssignmentId ? <input type="hidden" name="storageAssignmentId" value={storageAssignmentId} /> : null}
       <div className="nn-field">
         <label htmlFor="variable">{t("variableLabel")}</label>
         <select id="variable" name="variable" defaultValue="temperature">

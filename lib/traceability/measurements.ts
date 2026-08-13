@@ -63,6 +63,17 @@ export interface RecordMeasurementInput {
   // same Lot — no separate "moment" field needed, the FK's presence already
   // says so. Requires lotId to be set alongside it (validated below).
   roastSessionId?: string | null;
+  // Pre-existing gap fix (found while wiring roastSessionId above): these
+  // three FKs have been real columns on Measurement since T6/T7/T8 (see
+  // the schema's own comment on this model) but recordMeasurement never
+  // accepted or set them — a measurement taken mid-fermentation/-drying or
+  // against a StorageAssignment could only ever be linked to the Lot in
+  // general. Same "additional link alongside lotId" shape as
+  // roastSessionId: each requires lotId to be set alongside it (validated
+  // below), not a fourth/fifth/sixth independent subject.
+  fermentationRunId?: string | null;
+  dryingRunId?: string | null;
+  storageAssignmentId?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
   // T9.5: required, no fallback. The MeasurementForm UI (app/components/
@@ -81,6 +92,15 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
   if (input.roastSessionId && !input.lotId) {
     throw new MeasurementValidationError("roast_session_link_requires_lot_id");
   }
+  if (input.fermentationRunId && !input.lotId) {
+    throw new MeasurementValidationError("fermentation_run_link_requires_lot_id");
+  }
+  if (input.dryingRunId && !input.lotId) {
+    throw new MeasurementValidationError("drying_run_link_requires_lot_id");
+  }
+  if (input.storageAssignmentId && !input.lotId) {
+    throw new MeasurementValidationError("storage_assignment_link_requires_lot_id");
+  }
 
   const normalized = normalizeToCanonical(input.variable, input.value, input.unit);
 
@@ -93,6 +113,9 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
       lotId: input.lotId ?? null,
       sampleId: input.sampleId ?? null,
       roastSessionId: input.roastSessionId ?? null,
+      fermentationRunId: input.fermentationRunId ?? null,
+      dryingRunId: input.dryingRunId ?? null,
+      storageAssignmentId: input.storageAssignmentId ?? null,
       sourceType: "manual",
       operatorPersonId: input.operatorPersonId ?? null,
       notes: input.notes ?? null,
