@@ -1109,8 +1109,14 @@ async function seedBeverageProtocolsContent() {
     console.log("Seeded Beer and Mead sensory protocols (BJCP-adapted, illustrative).");
   }
 
-  const existingHoney = await prisma.sensoryProtocol.findFirst({ where: { name: "Honey Sensory Evaluation (ISO/Academic-Grounded)" } });
-  if (!existingHoney) {
+  const existingHoney = await prisma.sensoryProtocol.findFirst({
+    where: { name: "Honey Sensory Evaluation (ISO/Academic-Grounded)" },
+    include: { versions: true },
+  });
+  let honeyProtocolVersionId: string;
+  if (existingHoney) {
+    honeyProtocolVersionId = existingHoney.versions[0]!.id;
+  } else {
     const protocol = await prisma.sensoryProtocol.create({
       data: {
         domain: "honey",
@@ -1130,6 +1136,7 @@ async function seedBeverageProtocolsContent() {
     const version = await prisma.sensoryProtocolVersion.create({
       data: { protocolId: protocol.id, version: 1, scoreMin: 0, scoreMax: 10, status: "active" },
     });
+    honeyProtocolVersionId = version.id;
     // Four-category structure used across the academic honey-sensory literature (§1): visual,
     // olfactory, olfactory-gustatory, tactile.
     const honeyAttributes: Array<{ name: string; section: "descriptive" | "affective" }> = [
@@ -1148,6 +1155,125 @@ async function seedBeverageProtocolsContent() {
       });
     }
     console.log("Seeded Honey sensory protocol (ISO/academic-grounded).");
+  }
+
+  // R1 (docs/implementation/33_R1_ROASTSESSION_TAXONOMIA_SENSORIAL.md §2.3)
+  // — real content, not invented: the three-tier descriptor/defect taxonomy
+  // already written and reconstructed as the product owner's own original
+  // work in docs/architecture/BEVERAGE_SENSORY_PROTOCOLS.md "Defects
+  // taxonomy — three-tier classification, current version, enhanced
+  // original" (commit c913595). Copied here verbatim in structure, not the
+  // superseded prior compiled version. Only honey has real content as of
+  // this ticket — coffee/beer/mead get no descriptor rows, since no real
+  // vocabulary exists for them yet (§2.3's own "el contenido ya está
+  // escrito — no lo inventes"). Own idempotency check (not nested inside
+  // the protocol-creation `if` above): the Honey protocol already existed
+  // from an earlier session before this ticket, so this must be able to
+  // backfill descriptors onto it without re-running protocol creation.
+  const existingHoneyDescriptor = await prisma.sensoryDescriptor.findFirst({
+    where: { protocolVersionId: honeyProtocolVersionId },
+  });
+  if (!existingHoneyDescriptor) {
+    const honeyDescriptors: Array<{
+      family: string;
+      specificDescriptor: string;
+      expectedPerception?: string;
+      classification: "positive" | "neutral" | "defect";
+      technicalCause?: string;
+    }> = [
+      { family: "floral", specificDescriptor: "rose, jasmine, orange blossom", classification: "positive" },
+      { family: "fruity", specificDescriptor: "apple, peach, melon", classification: "positive" },
+      { family: "citrus", specificDescriptor: "lemon, grapefruit, orange", classification: "positive" },
+      { family: "vegetal", specificDescriptor: "grass, green stem, artichoke", classification: "positive" },
+      { family: "herbal", specificDescriptor: "thyme, basil, fennel", classification: "positive" },
+      { family: "resinous", specificDescriptor: "pine, balsam, sap", classification: "positive" },
+      {
+        family: "hive-character",
+        specificDescriptor: "fresh wax, fresh propolis",
+        expectedPerception: "becomes a defect past a certain intensity",
+        classification: "positive",
+      },
+      { family: "malty", specificDescriptor: "baked bread, cereal", classification: "positive" },
+      {
+        family: "toasted",
+        specificDescriptor: "caramelized sugar",
+        expectedPerception: "becomes a defect if it came from overheating rather than the honey's own character",
+        classification: "positive",
+      },
+      { family: "lactic", specificDescriptor: "yogurt-like lactic acid", classification: "positive" },
+      {
+        family: "controlled-fermentation esters",
+        specificDescriptor: "geraniol, citronellol",
+        classification: "positive",
+      },
+      {
+        family: "desirable phenolics",
+        specificDescriptor: "clove, 4-vinyl guaiacol",
+        expectedPerception: "in moderation",
+        classification: "positive",
+      },
+      {
+        family: "mild controlled fermentation",
+        specificDescriptor: "light fermented-floral character",
+        classification: "neutral",
+      },
+      {
+        family: "faint alcohol notes",
+        specificDescriptor: "white wine, cider",
+        expectedPerception: "context-dependent — matters specifically for honey destined for mead production",
+        classification: "neutral",
+      },
+      {
+        family: "unwanted fermentation",
+        specificDescriptor: "acetic acid, uncontrolled yeast character",
+        classification: "defect",
+        technicalCause: "harvested above 18% moisture, poor sealing, air exposure",
+      },
+      {
+        family: "undesirable organic acids",
+        specificDescriptor: "butyric/isovaleric acid (cheese, vomit, sweat)",
+        classification: "defect",
+        technicalCause: "Clostridium or organic-matter contamination",
+      },
+      {
+        family: "chemical contamination",
+        specificDescriptor: "chlorine or solvent",
+        classification: "defect",
+        technicalCause: "unsuitable containers, cleaning chemicals not fully rinsed",
+      },
+      {
+        family: "microbiological contamination",
+        specificDescriptor: "stable, wet leather, or Brettanomyces",
+        classification: "defect",
+        technicalCause: "ambient humidity, contact with wet surfaces",
+      },
+      {
+        family: "advanced oxidation",
+        specificDescriptor: "rancid, old butter",
+        classification: "defect",
+        technicalCause: "prolonged oxygen exposure, excess heat",
+      },
+      {
+        family: "thermal contamination",
+        specificDescriptor: "bitter, burnt sugar, smoke",
+        classification: "defect",
+        technicalCause: "excessive heat used to decrystallize",
+      },
+    ];
+    for (const [index, d] of honeyDescriptors.entries()) {
+      await prisma.sensoryDescriptor.create({
+        data: {
+          protocolVersionId: honeyProtocolVersionId,
+          family: d.family,
+          specificDescriptor: d.specificDescriptor,
+          expectedPerception: d.expectedPerception ?? null,
+          classification: d.classification,
+          technicalCause: d.technicalCause ?? null,
+          displayOrder: index,
+        },
+      });
+    }
+    console.log("Seeded the Honey sensory protocol's descriptor/defect taxonomy.");
   }
 
   // Deferred categories (BEVERAGE_SENSORY_PROTOCOLS.md §4) — recognized evaluation categories the
