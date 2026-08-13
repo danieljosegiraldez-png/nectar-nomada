@@ -670,6 +670,8 @@ the files and confirms the open questions above.
 | `30_F1_OPERACION_FINCA_ESQUEMA.md` | Farm-operation schema/service layer — Location attributes, microlots, Specimen/traps, PlantingEvent, labour/material against a place. No UI, by explicit product-owner decision. See "Where things stand" above. |
 | `32_S1_CAFES_EXTERNOS.md` | External coffee schema/service layer — `ExternalCoffeeOrigin`, `Sample` without a `Lot`. No UI, by explicit product-owner decision. See "Where things stand" above. |
 | `33_R1_ROASTSESSION_TAXONOMIA_SENSORIAL.md` | `RoastSession` and structured sensory descriptor/defect taxonomy — schema/service layer only, no UI. See "Where things stand" above. |
+| `34_RO1_RESEARCH_OS.md` | Research OS — 24-entity schema, PE-protocol variable modeling, catalog/statistical-discipline layer. §5-scoped UI only. See "Where things stand" above. |
+| `35_RO1.1_HONEY_PORCENTAJE_CANONICO.md` | Corrected RO1 §3a-bis: no honey color↔percentage alias is loaded — percentage is canonical, color is a separate producer label. See "Where things stand" above and ADR-052. |
 
 ### Pending
 
