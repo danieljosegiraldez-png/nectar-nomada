@@ -27,8 +27,8 @@ export function getPublicLocationBySlug(slug: string) {
   return prisma.location.findFirst({
     where: { ...PUBLIC_WHERE, slug },
     include: {
-      organization: true,
-      parentLocation: true,
+      organization: { where: PUBLIC_WHERE },
+      parentLocation: { where: PUBLIC_WHERE },
       projectsWithPrimaryLocation: { where: PUBLIC_WHERE, orderBy: { name: "asc" } },
       stories: { where: PUBLIC_WHERE, orderBy: { title: "asc" } },
       products: { where: PUBLIC_WHERE, orderBy: { name: "asc" } },
@@ -44,7 +44,7 @@ export function getPublicLocationBySlug(slug: string) {
 export function listPublicProjects() {
   return prisma.project.findMany({
     where: { ...PUBLIC_WHERE, slug: { not: null } },
-    include: { primaryLocation: true },
+    include: { primaryLocation: { where: PUBLIC_WHERE } },
     orderBy: { name: "asc" },
   });
 }
@@ -53,8 +53,9 @@ export function getPublicProjectBySlug(slug: string) {
   return prisma.project.findFirst({
     where: { ...PUBLIC_WHERE, slug },
     include: {
-      primaryLocation: true,
-      organization: true,
+      primaryLocation: { where: PUBLIC_WHERE },
+      organization: { where: PUBLIC_WHERE },
+      // Program carries no classification column — nothing to filter.
       program: true,
       domainTags: { include: { domainTag: true } },
       stories: { where: PUBLIC_WHERE, orderBy: { title: "asc" } },
@@ -71,7 +72,7 @@ export function getPublicProjectBySlug(slug: string) {
 export function listPublicStories() {
   return prisma.story.findMany({
     where: PUBLIC_WHERE,
-    include: { project: true, location: { where: PUBLIC_WHERE } },
+    include: { project: { where: PUBLIC_WHERE }, location: { where: PUBLIC_WHERE } },
     orderBy: { title: "asc" },
   });
 }
@@ -79,7 +80,13 @@ export function listPublicStories() {
 export function getPublicStoryBySlug(slug: string) {
   return prisma.story.findFirst({
     where: { ...PUBLIC_WHERE, slug },
-    include: { project: true, location: { where: PUBLIC_WHERE }, organization: true, authorPerson: true },
+    include: {
+      project: { where: PUBLIC_WHERE },
+      location: { where: PUBLIC_WHERE },
+      organization: { where: PUBLIC_WHERE },
+      // Person carries no classification column — nothing to filter.
+      authorPerson: true,
+    },
   });
 }
 
@@ -91,9 +98,9 @@ export function listPublicProducts() {
   return prisma.product.findMany({
     where: PUBLIC_WHERE,
     include: {
-      project: true,
-      location: true,
-      organization: true,
+      project: { where: PUBLIC_WHERE },
+      location: { where: PUBLIC_WHERE },
+      organization: { where: PUBLIC_WHERE },
       variants: { where: { status: "active" }, orderBy: { priceAmount: "asc" } },
     },
     orderBy: { name: "asc" },
@@ -104,9 +111,9 @@ export function getPublicProductBySlug(slug: string) {
   return prisma.product.findFirst({
     where: { ...PUBLIC_WHERE, slug },
     include: {
-      project: true,
-      location: true,
-      organization: true,
+      project: { where: PUBLIC_WHERE },
+      location: { where: PUBLIC_WHERE },
+      organization: { where: PUBLIC_WHERE },
       variants: { where: { status: "active" }, orderBy: { priceAmount: "asc" } },
     },
   });
@@ -119,7 +126,11 @@ export function getPublicProductBySlug(slug: string) {
 export function listPublicExperiences() {
   return prisma.experience.findMany({
     where: PUBLIC_WHERE,
-    include: { project: true, location: true, organization: true },
+    include: {
+      project: { where: PUBLIC_WHERE },
+      location: { where: PUBLIC_WHERE },
+      organization: { where: PUBLIC_WHERE },
+    },
     orderBy: { name: "asc" },
   });
 }
@@ -128,9 +139,9 @@ export function getPublicExperienceBySlug(slug: string) {
   return prisma.experience.findFirst({
     where: { ...PUBLIC_WHERE, slug },
     include: {
-      project: true,
-      location: true,
-      organization: true,
+      project: { where: PUBLIC_WHERE },
+      location: { where: PUBLIC_WHERE },
+      organization: { where: PUBLIC_WHERE },
       sessions: {
         where: { status: "scheduled", startAt: { gt: new Date() } },
         orderBy: { startAt: "asc" },
