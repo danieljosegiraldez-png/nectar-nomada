@@ -15,6 +15,7 @@ import { prisma } from "../../lib/db";
 import {
   getPublicLocationBySlug,
   getPublicProjectBySlug,
+  getPublicStoryBySlug,
   listPublicLocations,
   listPublicProjects,
   listPublicStories,
@@ -143,13 +144,22 @@ describe("Discover public read path (SECURITY.md §4)", () => {
     expect(locations.some((l) => l.id === publicLocationId)).toBe(true);
   });
 
-  it("listPublicStories still includes a public story even when its parent location is not public", async () => {
-    // The story itself is the classified unit here, not its parent — this
-    // is a deliberate confirmation of current behavior (PUBLIC_WHERE is
-    // per-entity, not inherited from a related Location), not a claim that
-    // one is more "correct" than the other. If that's ever meant to change,
-    // this test is the place that would need to change with it.
+  it("listPublicStories still includes a public story even when its parent location is not public, but nulls out the location", async () => {
+    // The story itself stays the classified unit — a public Story about a
+    // non-public place is still shown — but the classification leak this
+    // test caught originally (the Location's own record riding along
+    // unfiltered on `include: { location: true }`) is now closed: `location`
+    // is null instead of exposing an internal-classified record's fields.
     const stories = await listPublicStories();
-    expect(stories.some((s) => s.id === publicStoryOnInternalLocationId)).toBe(true);
+    const story = stories.find((s) => s.id === publicStoryOnInternalLocationId);
+    expect(story).toBeDefined();
+    expect(story!.location).toBeNull();
+  });
+
+  it("getPublicStoryBySlug nulls out a non-public location instead of exposing it", async () => {
+    const story = await prisma.story.findUniqueOrThrow({ where: { id: publicStoryOnInternalLocationId } });
+    const result = await getPublicStoryBySlug(story.slug);
+    expect(result).not.toBeNull();
+    expect(result!.location).toBeNull();
   });
 });

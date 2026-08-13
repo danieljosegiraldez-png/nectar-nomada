@@ -71,7 +71,7 @@ export function getPublicProjectBySlug(slug: string) {
 export function listPublicStories() {
   return prisma.story.findMany({
     where: PUBLIC_WHERE,
-    include: { project: true, location: true },
+    include: { project: true, location: { where: PUBLIC_WHERE } },
     orderBy: { title: "asc" },
   });
 }
@@ -79,7 +79,7 @@ export function listPublicStories() {
 export function getPublicStoryBySlug(slug: string) {
   return prisma.story.findFirst({
     where: { ...PUBLIC_WHERE, slug },
-    include: { project: true, location: true, organization: true, authorPerson: true },
+    include: { project: true, location: { where: PUBLIC_WHERE }, organization: true, authorPerson: true },
   });
 }
 
