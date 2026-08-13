@@ -305,6 +305,62 @@ descriptor/defect taxonomy, `CompetitionResult.rank`, rate limiting, refund
 capability, `measurement` partitioning, `AssetStatus` vocabulary for the
 media pipeline) was left untouched, as instructed.
 
+**`30_F1_OPERACION_FINCA_ESQUEMA.md` is now run — schema and service layer
+only, no UI, by explicit product-owner decision.** Implements four sections
+of `29_BRECHAS_OPERACION_FINCA_INVESTIGACION_MIGRACION.md` (§4a stable
+Location attributes, §4b microlots, §5 labour/material against a place,
+§6 Specimens/traps) — a "dirección, no implementación" doc that itself
+warns against building directly from it; F1 is that ticket. Schema:
+`Location` gains sun/shade/altitude-range/slope/soil/spacing/description
+plus `subdivisionReason` (replacing the single-value `altitudeMeters`,
+confirmed zero populated rows before dropping it); new `Specimen`/
+`SpecimenObservation`/`PlantingEvent` models; `LabourEntry`/
+`MaterialConsumptionEntry` gain a nullable `locationId` so genuine
+labour/material facts (holes dug, insumos applied) can be recorded
+against a place with no batch yet, alongside the existing `Lot`-parent
+path. RBAC: `location:manage_attributes`, `specimen:manage`/`view`, both
+granted to Farm Operator (Bob/Sherry's real profile) and `specimen:view`
+to Project Viewer. Broca traps are `Specimen.specimenType = "trap"`, not
+a separate entity — the active→removed→reinstalled cycle lives entirely
+in `SpecimenObservation` rows, reusing the one observation mechanism
+rather than building a parallel one, per the ticket's own instruction.
+27 new tests (`tests/traceability/f1.test.ts`), real Neon, alongside the
+existing 210 (237 total, all passing).
+
+Running F1's own §7 real-data verification surfaced a genuine RBAC gap:
+Bob/Sherry/Daniel's real Farm Operator assignments on Cerro Azul are
+project-scoped, but every new F1 permission check is location-scoped only
+(`Location` carries no `projectId` for `lot:manage`'s usual project-or-
+location fallback to reach). Fixed live against Neon — Bob and Sherry now
+hold location-scoped Farm Operator on the Finca-level Location, all six
+real Lote rows, and Beneficio; Daniel holds it on both real Apiario sites
+— flagged as a standing design tension worth its own future ADR (see the
+F1 draft ADR's Consequences section). Of `29_` §5's four real pending
+facts, only one had every field the schema actually requires: the 600
+Caturra seedlings received from Cafelino on 2026-08-08 (real
+`PlantingEvent`, recorded against the Finca-level Location). The other
+three — 600 planting holes, cleanup of apiary sites, the biochar
+waterwheel activation — could not be recorded without fabricating
+`LabourEntry`'s required `workerCount`/`hours` fields, which no source
+document states; someone still needs to ask Sherry, Bob, or Kenis for
+those numbers. Per the same discipline, no per-lot altitude/sun/shade
+values were loaded onto any of the six real lots — the only real number
+in the source docs (Cerro Azul altitude varies 600-650m *within* a lot)
+is an unattributed illustrative example, not a confirmed measurement of
+one specific lot, so it was recorded only as a sourced, general note on
+the Finca-level Location's `description`, not as any lot's real
+`altitudeMinM`/`altitudeMaxM`. `docs/implementation/F1_ADR_DRAFT.md`
+holds the draft ADR-048 text (not yet appended, per the ticket's own
+instruction) — see its Consequences section for the RBAC-gap follow-up
+and the full list of what `29_` still leaves unbuilt (`RoastSession`,
+defect classification, Research OS/PE protocols, map, water, climate,
+meeting minutes, Kits Descubre Terroir, José Giráldez/Craft Brewing
+Supply integration — all named in `29_` §7-§10, none in F1's scope).
+A7's real data (both real projects, all six real lots, Beneficio, Cuarto
+de secado, both real apiary sites) verified intact before and after every
+write, and every TEST-prefixed verification artifact cleaned up — zero
+residue.
+
 ---
 
 ## The series
@@ -338,6 +394,9 @@ media pipeline) was left untouched, as instructed.
 | `25_OFFLINE_OPTIONS_PROMPT.md` | Produced `25_OFFLINE_OPTIONS_ANALYSIS.md` (commit `c03fa2a`) — sized and compared three options for A0 (full PWA, minimal IndexedDB draft queue, paper). Found the original A0 sizing wrongly included versioned conflict resolution, which doesn't apply to `Inspection`/`ColonyEvent`'s append-only write shape. Recommends **Option B** (minimal draft queue, no service worker), resizing A0 from the set's largest unknown down to small-medium, pending one field check (tab survival on Kenneth's device at Cerro Azul with no signal). Confirms A4's fold into A3 under the same scrutiny. |
 | `17_DESIGN_TO_IMPLEMENTATION_AUDIT_PROMPT.md` | Read-only, Parts A-F all run. Part A: 3 of 7 enforcement claims held exactly as documented, 4 didn't (DB-level claims that were actually application-logic-only, or unbuilt). Part B: coverage matrix across 15 documents. Parts C-E: drift detail, orphan permissions/Role Profiles, `GAP_ANALYSIS_2026-08-10.md`'s build-status verdicts found to have gone backwards. Part F: consolidated punch list, executed as `31_C1_CORRECCIONES_AUDITORIA.md` — see "Where things stand" above for the full account. |
 | `31_C1_CORRECCIONES_AUDITORIA.md` | Executed 17_'s Part F punch list, ordered by consequence not effort, one commit per section — see "Where things stand" above. |
+| `27_A7_PROYECTOS_ASSIGNMENTS_DATOS_REALES.md` | Real Projects/Assignments/People/Locations for Cerro Azul — see A7 in "Where things stand" above. *(Filed late in this session; the ticket itself had already been executed.)* |
+| `29_BRECHAS_OPERACION_FINCA_INVESTIGACION_MIGRACION.md` | "Dirección, no implementación" — investigation, not a ticket to build from directly. Four of its sections (§4a, §4b, §5, §6) implemented as `30_F1_OPERACION_FINCA_ESQUEMA.md`; the rest (§7-§10) remains unbuilt, see F1's entry above and its draft ADR's Consequences section. |
+| `30_F1_OPERACION_FINCA_ESQUEMA.md` | Farm-operation schema/service layer — Location attributes, microlots, Specimen/traps, PlantingEvent, labour/material against a place. No UI, by explicit product-owner decision. See "Where things stand" above. |
 
 ### Pending
 
