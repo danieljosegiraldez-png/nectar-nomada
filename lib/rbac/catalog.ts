@@ -58,6 +58,15 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { resourceType: "apiary", action: "manage", description: "Create/manage hives and colonies, and record apiary field data." },
   { resourceType: "apiary", action: "view", description: "View hive/colony detail." },
 
+  // A7 (docs/implementation/22_APIARY_V1_SCOPING_REPORT.md) — a narrower
+  // permission than apiary:manage, specifically so a trainee (competence-
+  // gated, not permission-gated by design intent) can log ColonyEvent
+  // entries without also being able to create a formal Inspection.
+  // recordColonyEvent accepts apiary:manage OR colony_event:manage;
+  // recordInspection accepts apiary:manage only.
+  { resourceType: "colony_event", action: "manage", description: "Record ColonyEvent entries (feeding/treatment/passing observation) without full apiary:manage." },
+  { resourceType: "colony_event", action: "view", description: "View ColonyEvent entries." },
+
   { resourceType: "classification", action: "clear_registered", description: "Access records classified Registered." },
   { resourceType: "classification", action: "clear_partner", description: "Access records classified Partner." },
   { resourceType: "classification", action: "clear_internal", description: "Access records classified Internal." },
@@ -178,6 +187,31 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       // ADR-029 decision 2) — an operator on their own assigned project
       // still cannot clear internal/confidential/trade_secret.
       ["classification", "clear_partner"],
+    ],
+  },
+  {
+    name: "Project Viewer",
+    description:
+      "Read-only visibility into a project's operational and apiary data — no manage permissions at " +
+      "all. Intended scope: project or location, same as Farm Operator, but for a stakeholder who " +
+      "needs to see records rather than record them (A7, docs/implementation/22_APIARY_V1_SCOPING_REPORT.md).",
+    permissions: [
+      ["project", "view"],
+      ["lot", "view"],
+      ["apiary", "view"],
+    ],
+  },
+  {
+    name: "Apiary Colony Event Recorder",
+    description:
+      "Record ColonyEvent entries (feeding/treatment/passing observation) and view hive/colony detail — " +
+      "deliberately excludes apiary:manage, so this profile cannot create an Inspection or a Hive/Colony. " +
+      "A7's own case: a trainee who logs routine events but records a formal Inspection only once " +
+      "accompanied enough times to be trusted with one — a competence gate documented on the Assignment, " +
+      "not expressed by a different permission tier here.",
+    permissions: [
+      ["apiary", "view"],
+      ["colony_event", "manage"],
     ],
   },
 ] as const;

@@ -87,10 +87,62 @@ reconnect it auto-syncs and the real row appears. `/apiaries`,
 English and Spanish, and `HarvestForm` redirects straight into the
 existing `/lots/[id]` page — no new HoneyBatch screen was needed, the
 strongest practical confirmation yet of §2's "HoneyBatch is just a `Lot`"
-argument. **A6–A8 remain unbuilt.** The ADR amendment justifying apiary's
-v1 inclusion is still a draft sitting inside the scoping report, not yet
-appended to `DECISIONS.md` (unlike ADR-044, T12.6's own amendment, which
-is appended).
+argument. **A6 (photo attachment) is now done** — `Asset` gains
+`hiveId`/`colonyId`/`inspectionId`/`colonyEventId` nullable FKs (no
+`honeyBatchId`; a honey batch is a `Lot`, already covered by the existing
+`lotId` FK), `lib/apiary/media.ts` mirrors T12.5's request/finalize shape
+against `requireApiaryAccess`, and `ApiaryPhotoUploadForm` is wired into
+all four attachment points plus an aggregated "Photos" gallery on the Hive
+Detail page (`tests/apiary/media.test.ts`, 7 tests, real Neon).
+Live-verified through the RBAC/storage-key-prefix steps against real Neon;
+the actual object-storage PUT is unverified live in this environment — no
+R2 credentials, the same limitation T12.5 already established, surfacing
+as a clean, catchable error rather than a crash. **A7 (Projects,
+Assignments, real people/organizations) is now done — real production
+data, not demo.** Absorbed `26_CARGA_REAL_PASO1_PERSONAS_ORGANIZACIONES.md`
+(never run; treated as replaced). Café and apiario are two *separate*
+Projects on one physical site (Finca Las Nubes Cerro Azul), not one
+Project with two domain tags — they're two different sociedades (Huerbsch
+vs. Daniel Giráldez individually), and leaf-scope containment has to keep
+them apart. Built `OrganizationMembership` — `DOMAIN_MODEL.md` §2 already
+specified this table; it had never actually been built until now. Added a
+narrower `colony_event:manage` permission (distinct from `apiary:manage`)
+so a trainee (Kenis) can log `ColonyEvent` entries without also being able
+to create an `Inspection` — a real RBAC gap the original A1/A2 apiary
+permission model couldn't express. §8's 5 isolation requirements were
+run live against real Neon through the real service-layer functions, not
+a mock, and all passed. Pre-load cleanup removed the DEMO "Las Nubes" 2027
+chain seeded by T14 (a name collision waiting to happen against the real
+Project) and 71 orphaned rows left behind by earlier test runs whose
+`afterAll` never completed — root-caused, not fixed (see the note below).
+**A8 remains unbuilt.** The ADR amendment justifying apiary's v1 inclusion
+is still a draft sitting inside the scoping report, not yet appended to
+`DECISIONS.md` (unlike ADR-044, T12.6's own amendment, which is appended).
+
+**Investigation, not a fix: why 71 rows were orphaned in Neon.**
+`vitest.config.ts` sets no `testTimeout`/`hookTimeout` — every test file
+runs on Vitest's 10-second default for both. `DATABASE_URL` in `.env`
+points at Neon's *direct* endpoint (no `-pooler` hostname suffix), and
+Neon's serverless compute suspends after idle — the first query on a
+fresh connection after a suspend has to wait for the compute to wake,
+which has repeatedly measured well past 10 seconds live in this session
+(`tests/traceability/e2e.test.ts` and `reports.test.ts` both failed their
+`beforeAll`/`afterAll` under the default timeout — including when run
+alone, just the two of them — and passed cleanly once `--testTimeout=30000
+--hookTimeout=30000` was set explicitly). `lib/db.ts`'s single cached
+`PrismaClient` on `globalThis` is scoped per *process*, but Vitest's
+default pool runs test files in parallel worker threads — each worker
+gets its own process-local cache and therefore its own independent
+connection pool, so a full run opens several fresh direct connections to
+Neon at once, compounding the cold-start wait each file's hooks already
+have to absorb within the same tight 10-second budget. When a `beforeAll`
+or `afterAll` times out partway through, whatever `deleteMany` calls
+hadn't run yet simply don't — that's the mechanism that left this
+session's Person/Organization/Project/Location/Lot residue behind (17 + 6
++ 17 + 13 + 18 = 71, the exact figure found and removed during A7's
+pre-load cleanup). Not fixed here per instruction — a real fix would touch
+`vitest.config.ts`'s global timeouts and/or the `DATABASE_URL`
+pooler-vs-direct question, both explicitly out of scope for this pass.
 
 ADR-039 carries a clause worth repeating here: these tickets build the
 *capability* to carry a harvest end to end. They do not constitute having
@@ -98,8 +150,10 @@ done so. A truthful "yes" on the v1 test needs a real 2026 harvest entered
 by a real operator who isn't Daniel — T14's own DEMO chain proves the
 mechanism composes (cherry → lot → sample → session → score, verified live
 via `getLotReport`), it does not itself answer ADR-039's question. Same
-distinction for apiary: a real season actually inspected by Kenneth, once
-A0–A8 ship.
+distinction for apiary: a real season actually inspected by Kenis
+Rodríguez Núñez ("Kenneth" was this document's placeholder name before A7
+loaded the real people — Chayanne López and Daniel Giráldez are the
+apiario's other two real operators), once A0–A8 ship.
 
 ---
 
@@ -208,17 +262,18 @@ entities that do not exist is how invented entities enter a schema.
 
 ## Recommended order from here
 
-1. **A6–A8 (apiary)** — A1-A3 are done, A4 folded into A3, and A0 folded
-   into A5 (both confirmed live, no standalone build); coffee's own ticket
-   sequence is closed (T14 done), so this remains the one open build
-   track. A6 (photo attachment) is next in dependency order.
+1. **A8 (apiary)** — A1-A3, A6, and A7 are done, A4 folded into A3, and A0
+   folded into A5 (all confirmed live, no standalone build); coffee's own
+   ticket sequence is closed (T14 done), so this remains the one open
+   build track. A8 (DEMO seed + E2E test) is the last ticket in the
+   original A1-A8 set.
 2. **Credentials** (Stripe, R2, Google OAuth — all unset in production as of
    the last verified check).
 3. **The real milestone**: a real apiary season actually inspected by
-   Kenneth, not a demo — and, in parallel, a real 2026 coffee harvest entered
-   by a real operator who isn't Daniel. Both are what actually answer
-   ADR-039's test and apiary's own. No further architecture pass answers
-   either question.
+   Kenis, Chayanne, and Daniel — the real people and Projects now exist
+   (A7) — and, in parallel, a real 2026 coffee harvest entered by a real
+   operator who isn't Daniel. Both are what actually answer ADR-039's test
+   and apiary's own. No further architecture pass answers either question.
 
 `17_` (the coverage audit) and the rest of v2 (data sovereignty, economics
 merged with `18_`) follow once there is real usage in both domains to audit

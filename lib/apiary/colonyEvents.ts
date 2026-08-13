@@ -9,7 +9,7 @@
  * RBAC resolves via the parent Colony's own Hive, same as ./inspections.
  */
 import { prisma } from "../db";
-import { ApiaryAccessError, requireApiaryAccess } from "./hives";
+import { ApiaryAccessError, requireApiaryAccess, requireColonyEventWriteAccess } from "./hives";
 import type { ColonyEventType, ProvenanceClass } from "../../generated/prisma/client";
 
 export class ColonyEventValidationError extends Error {}
@@ -66,7 +66,7 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
   }
 
   const scope = await resolveColonyScope(input.colonyId);
-  await requireApiaryAccess(userAccountId, "manage", [scope]);
+  await requireColonyEventWriteAccess(userAccountId, [scope]);
 
   if (input.clientDraftId) {
     const existing = await prisma.colonyEvent.findUnique({ where: { clientDraftId: input.clientDraftId } });
@@ -98,5 +98,5 @@ export async function listColonyEventsForColony(userAccountId: string, colonyId:
   const scope = await resolveColonyScope(colonyId);
   await requireApiaryAccess(userAccountId, "view", [scope]);
 
-  return prisma.colonyEvent.findMany({ where: { colonyId }, orderBy: { occurredAt: "desc" } });
+  return prisma.colonyEvent.findMany({ where: { colonyId }, include: { assets: true }, orderBy: { occurredAt: "desc" } });
 }

@@ -522,6 +522,7 @@
     "recordHarvestButton": "Registrar cosecha",
     "activityHeading": "Actividad reciente",
     "noActivity": "Todavía no hay inspecciones ni eventos registrados.",
+    "photosHeading": "Fotos",
     "inspectionOutcome_nothing_unusual": "Nada fuera de lo normal",
     "inspectionOutcome_issue_observed": "Se observó un problema",
     "colonyEventType_feeding": "Alimentación",

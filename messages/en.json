@@ -522,6 +522,7 @@
     "recordHarvestButton": "Record harvest",
     "activityHeading": "Recent activity",
     "noActivity": "No inspections or events recorded yet.",
+    "photosHeading": "Photos",
     "inspectionOutcome_nothing_unusual": "Nothing unusual",
     "inspectionOutcome_issue_observed": "Issue observed",
     "colonyEventType_feeding": "Feeding",

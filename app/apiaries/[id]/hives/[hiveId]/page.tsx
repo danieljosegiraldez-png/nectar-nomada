@@ -4,12 +4,15 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getHive } from "../../../../../lib/apiary/hives";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
+import { getSignedUrlForAsset } from "../../../../../lib/traceability/media";
 import { listInspectionsForColony } from "../../../../../lib/apiary/inspections";
 import { listColonyEventsForColony } from "../../../../../lib/apiary/colonyEvents";
 import { NewColonyForm } from "../../../../components/apiary/NewColonyForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
 import { ColonyEventQuickEntry } from "../../../../components/apiary/ColonyEventQuickEntry";
 import { HarvestForm } from "../../../../components/apiary/HarvestForm";
+import { ApiaryPhotoUploadForm } from "../../../../components/apiary/ApiaryPhotoUploadForm";
+import type { Asset } from "../../../../../generated/prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +22,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
 
   const { id: apiaryId, hiveId } = await params;
   const t = await getTranslations("Apiary");
-  const [hive, { selfPersonId }] = await Promise.all([
+  const [hive, { people: observers, selfPersonId }] = await Promise.all([
     getHive(user.userAccountId, hiveId),
     getObserverCandidates(user.userAccountId),
   ]);
@@ -36,6 +39,22 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
       ])
     : [[], []];
 
+  const revalidationPath = `/apiaries/${apiaryId}/hives/${hiveId}`;
+
+  // A6: same "one aggregated gallery, upload forms at each attachment
+  // point" pattern as app/lots/[id]/page.tsx — signed GET URLs computed
+  // once here, already gated by getHive/listInspectionsForColony/
+  // listColonyEventsForColony's own requireApiaryAccess("view", ...) above.
+  const allAssets: Asset[] = [
+    ...hive.assets,
+    ...(colony?.assets ?? []),
+    ...inspections.flatMap((insp) => insp.assets),
+    ...colonyEvents.flatMap((evt) => evt.assets),
+  ];
+  const assetsWithUrls = await Promise.all(
+    allAssets.map(async (asset) => ({ asset, viewUrl: await getSignedUrlForAsset(asset.storageKey) })),
+  );
+
   return (
     <div>
       <p>
@@ -44,6 +63,12 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
       <span className="nn-badge">{t("badge")}</span>
       <h1>{hive.identifier}</h1>
       <p className="nn-muted">{t(`hiveStatus_${hive.status}`)}</p>
+      <ApiaryPhotoUploadForm
+        parent={{ kind: "hive", hiveId: hive.id }}
+        revalidationPath={revalidationPath}
+        observers={observers}
+        selfPersonId={selfPersonId}
+      />
 
       {!colony ? (
         <section className="nn-section">
@@ -60,6 +85,12 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
               <span>{t(`colonyStatus_${colony.status}`)}</span>
             </p>
             {colony.originNote ? <p className="nn-muted">{colony.originNote}</p> : null}
+            <ApiaryPhotoUploadForm
+              parent={{ kind: "colony", colonyId: colony.id }}
+              revalidationPath={revalidationPath}
+              observers={observers}
+              selfPersonId={selfPersonId}
+            />
           </section>
 
           <section className="nn-section">
@@ -86,11 +117,23 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                 {inspections.map((insp) => (
                   <li key={insp.id}>
                     {insp.occurredAt.toLocaleDateString()} — {t(`inspectionOutcome_${insp.outcome}`)}
+                    <ApiaryPhotoUploadForm
+                      parent={{ kind: "inspection", inspectionId: insp.id }}
+                      revalidationPath={revalidationPath}
+                      observers={observers}
+                      selfPersonId={selfPersonId}
+                    />
                   </li>
                 ))}
                 {colonyEvents.map((evt) => (
                   <li key={evt.id}>
                     {evt.occurredAt.toLocaleDateString()} — {t(`colonyEventType_${evt.eventType}`)}
+                    <ApiaryPhotoUploadForm
+                      parent={{ kind: "colonyEvent", colonyEventId: evt.id }}
+                      revalidationPath={revalidationPath}
+                      observers={observers}
+                      selfPersonId={selfPersonId}
+                    />
                   </li>
                 ))}
               </ul>
@@ -98,6 +141,24 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
           </section>
         </>
       )}
+
+      {assetsWithUrls.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("photosHeading")}</h2>
+          <ul style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", listStyle: "none", padding: 0 }}>
+            {assetsWithUrls.map(({ asset, viewUrl }) => (
+              <li key={asset.id}>
+                {asset.assetType === "photo" ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- signed R2 URL, not a static/optimizable Next asset
+                  <img src={viewUrl} alt="" style={{ width: 160, height: 160, objectFit: "cover", borderRadius: 4 }} />
+                ) : (
+                  <a href={viewUrl}>{asset.originalFilename ?? asset.id}</a>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

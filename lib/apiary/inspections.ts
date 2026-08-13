@@ -79,5 +79,5 @@ export async function listInspectionsForColony(userAccountId: string, colonyId: 
   const scope = await resolveColonyScope(colonyId);
   await requireApiaryAccess(userAccountId, "view", [scope]);
 
-  return prisma.inspection.findMany({ where: { colonyId }, orderBy: { occurredAt: "desc" } });
+  return prisma.inspection.findMany({ where: { colonyId }, include: { assets: true }, orderBy: { occurredAt: "desc" } });
 }

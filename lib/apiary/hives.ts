@@ -40,6 +40,28 @@ export async function requireApiaryAccess(
   throw new ApiaryAccessError("no_apiary_access");
 }
 
+/**
+ * A7 — recordColonyEvent's own gate: accepts the broad `apiary:manage`
+ * (Farm Operator and anyone else with full apiary write access) OR the
+ * narrower `colony_event:manage` (Apiary Colony Event Recorder — a
+ * trainee who can log events but not create a Hive/Colony/Inspection).
+ * recordInspection deliberately does NOT use this — it stays gated by
+ * apiary:manage alone, per §7's own requirement that ColonyEvent access
+ * never implies Inspection access.
+ */
+export async function requireColonyEventWriteAccess(
+  userAccountId: string,
+  candidates: ReadonlyArray<{ projectId?: string | null; locationId?: string | null }>,
+) {
+  for (const candidate of candidates) {
+    for (const target of apiaryScopeTargetsFor(candidate)) {
+      if (await can(userAccountId, "manage", "apiary", target)) return;
+      if (await can(userAccountId, "manage", "colony_event", target)) return;
+    }
+  }
+  throw new ApiaryAccessError("no_apiary_access");
+}
+
 export interface CreateHiveInput {
   identifier: string;
   locationId: string;
@@ -99,7 +121,10 @@ export async function createColony(userAccountId: string, input: CreateColonyInp
 }
 
 export async function getHive(userAccountId: string, hiveId: string) {
-  const hive = await prisma.hive.findUnique({ where: { id: hiveId }, include: { colonies: true } });
+  const hive = await prisma.hive.findUnique({
+    where: { id: hiveId },
+    include: { colonies: { include: { assets: true } }, assets: true },
+  });
   if (!hive) throw new ApiaryAccessError("hive_not_found");
   await requireApiaryAccess(userAccountId, "view", [{ projectId: hive.projectId, locationId: hive.locationId }]);
   return hive;

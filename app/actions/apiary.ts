@@ -2,13 +2,16 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { createHive, createColony, ApiaryAccessError } from "../../lib/apiary/hives";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { recordInspection } from "../../lib/apiary/inspections";
 import { recordColonyEvent, ColonyEventValidationError } from "../../lib/apiary/colonyEvents";
+import { requestApiaryAssetUpload, finalizeApiaryAssetUpload } from "../../lib/apiary/media";
 import type { RecordInspectionInput } from "../../lib/apiary/inspections";
 import type { RecordColonyEventInput } from "../../lib/apiary/colonyEvents";
+import type { ApiaryAssetParent } from "../../lib/apiary/media";
 
 const emptyToNull = (value: FormDataEntryValue | null) => {
   const str = String(value ?? "").trim();
@@ -124,4 +127,63 @@ export async function recordColonyEventSyncAction(input: RecordColonyEventInput)
     if (error instanceof ApiaryAccessError) return { ok: false, errorKind: "access", message: error.message };
     return { ok: false, errorKind: "unknown", message: error instanceof Error ? error.message : String(error) };
   }
+}
+
+// --- A6: Photo attachment on Hive/Colony/Inspection/ColonyEvent — same
+// two-step round trip as app/actions/traceability.ts's Lot-side pair
+// (requestLotAssetUploadAction/finalizeLotAssetUploadAction), online-only
+// like every other apiary form except Inspection/ColonyEvent quick-entry.
+
+export async function requestApiaryAssetUploadAction(
+  parent: ApiaryAssetParent,
+  originalFilename: string,
+  contentType: string,
+): Promise<{ uploadUrl: string; storageKey: string } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const t = await getTranslations("Traceability");
+  try {
+    return await requestApiaryAssetUpload(user.userAccountId, { parent, originalFilename, contentType });
+  } catch (error) {
+    if (error instanceof ApiaryAccessError) return { error: t("error_access", { detail: error.message }) };
+    if (error instanceof Error) return { error: error.message };
+    throw error;
+  }
+}
+
+export async function finalizeApiaryAssetUploadAction(
+  parent: ApiaryAssetParent,
+  storageKey: string,
+  mimeType: string,
+  sizeBytes: number,
+  originalFilename: string,
+  creatorPersonId: string | null,
+  revalidationPath: string,
+): Promise<{ ok: true } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const t = await getTranslations("Traceability");
+  try {
+    await finalizeApiaryAssetUpload(user.userAccountId, {
+      parent,
+      storageKey,
+      mimeType,
+      sizeBytes,
+      originalFilename,
+      // Same reasoning as finalizeLotAssetUploadAction: a photo of a hive,
+      // colony, inspection, or colony event documents what was directly in
+      // front of the photographer at capture time — direct_observation,
+      // not operator-selectable.
+      provenanceClass: "direct_observation",
+      creatorPersonId,
+    });
+  } catch (error) {
+    if (error instanceof ApiaryAccessError) return { error: t("error_access", { detail: error.message }) };
+    throw error;
+  }
+
+  revalidatePath(revalidationPath);
+  return { ok: true };
 }

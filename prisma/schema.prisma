@@ -72,6 +72,7 @@ model Person {
   inspectionsOperated                Inspection[]                  @relation("InspectionOperator")
   colonyEventsOperated               ColonyEvent[]                 @relation("ColonyEventOperator")
   apiaryHarvestEventsOperated        ApiaryHarvestEvent[]          @relation("ApiaryHarvestEventOperator")
+  organizationMemberships            OrganizationMembership[]
 
   @@map("person")
   @@schema("core")
@@ -151,6 +152,7 @@ model UserAccount {
   inspectionsCreated                Inspection[]                 @relation("InspectionCreatedBy")
   apiaryHarvestEventsCreated        ApiaryHarvestEvent[]         @relation("ApiaryHarvestEventCreatedBy")
   colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
+  organizationMembershipsCreated    OrganizationMembership[]     @relation("OrganizationMembershipCreatedBy")
 
   @@unique([authProvider, authSubject])
   @@map("user_account")
@@ -461,8 +463,44 @@ model Organization {
   harvestEvents              HarvestEvent[]
   receivingEvents            ReceivingEvent[]
   labourEntriesProvided      LabourEntry[]
+  memberships                OrganizationMembership[]
 
   @@map("organization")
+  @@schema("core")
+}
+
+enum MembershipStatus {
+  active
+  ended
+
+  @@schema("core")
+}
+
+// A7 (docs/implementation/22_APIARY_V1_SCOPING_REPORT.md) — implements the
+// shape DOMAIN_MODEL.md §2 already specified but this codebase never
+// built: descriptive metadata only (what to call this person in this
+// context), grants no platform permission by itself. A separate,
+// explicit Assignment is what grants access — the two are correlated in
+// practice but never the same mechanism (DOMAIN_MODEL.md §2's own example:
+// a producer can lose Partner Workspace access while remaining listed as
+// the farm's owner).
+model OrganizationMembership {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personId       String            @map("person_id") @db.Uuid
+  person         Person            @relation(fields: [personId], references: [id])
+  organizationId String            @map("organization_id") @db.Uuid
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  title          String?
+  startedAt      DateTime          @default(now()) @map("started_at")
+  endedAt        DateTime?         @map("ended_at")
+  status         MembershipStatus  @default(active)
+  createdAt      DateTime          @default(now()) @map("created_at")
+  createdBy      String?           @map("created_by") @db.Uuid
+  creator        UserAccount?      @relation("OrganizationMembershipCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([personId])
+  @@index([organizationId])
+  @@map("organization_membership")
   @@schema("core")
 }
 
@@ -1104,6 +1142,21 @@ model Asset {
   sampleId          String?          @map("sample_id") @db.Uuid
   sample            Sample?          @relation(fields: [sampleId], references: [id])
 
+  // A6 (22_APIARY_V1_SCOPING_REPORT.md — Photo attachment): same "specific
+  // nullable FK per parent, not polymorphic" convention as the six
+  // Traceability FKs above (ADR-020 decision 8). A honeyBatchId is
+  // unintentionally unnecessary — a HoneyBatch is a Lot (§2), so the
+  // existing lotId FK above already covers it; that reuse is the whole
+  // point of A3's design.
+  hiveId        String?      @map("hive_id") @db.Uuid
+  hive          Hive?        @relation(fields: [hiveId], references: [id])
+  colonyId      String?      @map("colony_id") @db.Uuid
+  colony        Colony?      @relation(fields: [colonyId], references: [id])
+  inspectionId  String?      @map("inspection_id") @db.Uuid
+  inspection    Inspection?  @relation(fields: [inspectionId], references: [id])
+  colonyEventId String?      @map("colony_event_id") @db.Uuid
+  colonyEvent   ColonyEvent? @relation(fields: [colonyEventId], references: [id])
+
   // T12.5: required, no default — same reasoning as ADR-038 (T9.5): a
   // photograph is a fact-bearing record, and a silent default would
   // misrepresent an unstated provenance as the strongest class in the
@@ -1127,6 +1180,10 @@ model Asset {
   @@index([fermentationRunId])
   @@index([dryingRunId])
   @@index([sampleId])
+  @@index([hiveId])
+  @@index([colonyId])
+  @@index([inspectionId])
+  @@index([colonyEventId])
   @@map("asset")
   @@schema("core")
 }
@@ -2652,6 +2709,7 @@ model Hive {
   creator     UserAccount? @relation("HiveCreatedBy", fields: [createdBy], references: [id])
 
   colonies Colony[]
+  assets   Asset[]
 
   @@unique([locationId, identifier])
   @@index([locationId])
@@ -2710,6 +2768,7 @@ model Colony {
   inspections         Inspection[]
   colonyEvents        ColonyEvent[]
   apiaryHarvestEvents ApiaryHarvestEvent[]
+  assets              Asset[]
 
   @@index([hiveId])
   @@map("colony")
@@ -2760,6 +2819,8 @@ model Inspection {
   createdAt        DateTime          @default(now()) @map("created_at")
   createdBy        String?           @map("created_by") @db.Uuid
   creator          UserAccount?      @relation("InspectionCreatedBy", fields: [createdBy], references: [id])
+
+  assets Asset[]
 
   @@index([colonyId])
   @@map("inspection")
@@ -2813,6 +2874,8 @@ model ColonyEvent {
   createdAt           DateTime        @default(now()) @map("created_at")
   createdBy           String?         @map("created_by") @db.Uuid
   creator             UserAccount?    @relation("ColonyEventCreatedBy", fields: [createdBy], references: [id])
+
+  assets Asset[]
 
   @@index([colonyId])
   @@map("colony_event")
