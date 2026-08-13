@@ -349,9 +349,8 @@ in the source docs (Cerro Azul altitude varies 600-650m *within* a lot)
 is an unattributed illustrative example, not a confirmed measurement of
 one specific lot, so it was recorded only as a sourced, general note on
 the Finca-level Location's `description`, not as any lot's real
-`altitudeMinM`/`altitudeMaxM`. `docs/implementation/F1_ADR_DRAFT.md`
-holds the draft ADR-048 text (not yet appended, per the ticket's own
-instruction) — see its Consequences section for the RBAC-gap follow-up
+`altitudeMinM`/`altitudeMaxM`. **Appended as ADR-048** in `DECISIONS.md` —
+see its Consequence section for the RBAC-gap follow-up
 and the full list of what `29_` still leaves unbuilt (`RoastSession`,
 defect classification, Research OS/PE protocols, map, water, climate,
 meeting minutes, Kits Descubre Terroir, José Giráldez/Craft Brewing
@@ -403,12 +402,10 @@ precedent as A7's other real organizations — never added to
 (`tests/traceability/s1.test.ts`), real Neon, covering all six of §9's
 scenarios including a real minimal external-coffee sample reaching an
 actual cupping score. Full suite now 251 tests, all passing.
-`docs/implementation/S1_ADR_DRAFT.md` holds the draft ADR-049 text (not
-yet appended — deliberately numbered right after F1's own still-pending
-ADR-048 draft, with a cross-reference in both files so neither gets
-appended out of order or collides). No real external-coffee samples were
-loaded — none were supplied; §9's verification proves the mechanism the
-same way F1 proved its own before real field data existed to load.
+**Appended as ADR-049** in `DECISIONS.md`, right after F1's own ADR-048.
+No real external-coffee samples were loaded — none were supplied; §9's
+verification proves the mechanism the same way F1 proved its own before
+real field data existed to load.
 
 ---
 

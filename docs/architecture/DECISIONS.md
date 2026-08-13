@@ -3061,3 +3061,230 @@ working number ADR-044; that number was taken by the time it was appended
 as ADR-047, the next number actually available in this log — chronological
 order of the underlying decision does not determine its position in this
 append-only log.
+
+---
+
+## ADR-048 — F1: farm-operation data model (Location attributes, microlots,
+labour/material against a place, PlantingEvent, Specimen/traps)
+
+**Context.** `docs/implementation/29_BRECHAS_OPERACION_FINCA_INVESTIGACION_
+MIGRACION.md` (a "dirección, no implementación" investigation, itself never
+meant to be built from directly) identified four real gaps in farm
+operations the existing traceability model — built around `Lot`/batch —
+couldn't express: stable per-lot terroir attributes, human-driven microlot
+subdivision, work and material consumption against a *place* rather than a
+batch, and individual-plant/trap tracking with sector.
+`30_F1_OPERACION_FINCA_ESQUEMA.md` implements exactly the four sections of
+`29_` that map to these gaps (§4a, §4b, §5, §6); it explicitly does not
+touch `29_`'s other sections (`RoastSession`, defect classification,
+Research OS, map, water, climate — see `docs/implementation/README.md`
+for the full list of what remains unbuilt).
+
+**Decision 1 — labour/material against a Location: extend, don't create a
+new entity.** Four real, undocumented facts triggered this: 600 planting
+holes being dug, cleanup of apiary sites, 600 seedlings received, a
+biochar-fermentation waterwheel activated. None of these are against a
+`Lot` — T12.6's `LabourEntry`/`MaterialConsumptionEntry` require one.
+Added a nullable `locationId` FK to both existing tables rather than
+building a new entity, and built a separate small `PlantingEvent` entity
+for the arrival/planting-specific facts (varietal, quantity, source
+organization) that don't fit either table's shape. `ReceivingEvent` (T4)
+was considered and rejected as a home for "receiving 600 seedlings" — it
+produces a coffee `Lot` and carries cherry-specific fields
+(`cherryWeightKg`, `brix`, `temperatureC`); forcing seedlings through it
+would conflate two different kinds of "receiving," the mistake CLAUDE.md
+§18 warns against for Species/Cultivar. `LabourEntry`/
+`MaterialConsumptionEntry` already model the right shape for genuine
+labour-hours and material-consumption facts — a hole-digging or a
+fumigation is structurally identical whether it happens against a `Lot`
+or a `Location`, only the parent changes. A discriminated-union parent
+(`LabourEntryParent`/`MaterialConsumptionParent`, now five and three
+variants respectively) keeps this on the existing RBAC/audit path
+(`lot:manage`, reused rather than a new permission). Both a whole-lot
+treatment (Sherry fumigating Lote 2 entirely) and a targeted one (three
+specific plants treated for roya) coexist as valid, distinct records —
+the location-parent entries cover the former, `SpecimenObservation`
+(decision 3) covers the latter. Costs deliberately excluded, per
+`20_CAPTURE_OR_LOSE_IT_REPORT.md`'s own standing criterion.
+
+**Decision 2 — microlots via `Location.parentLocationId`, two
+non-negotiable rules.** No new entity — a microlot is a `Location` with
+`locationType` inherited from its parent and `parentLocationId` pointing
+at it, the pattern already proven for `plot` and `apiary_site` (A1). Rule
+1: a batch harvested before a microlot existed can only ever be
+attributed to the whole parent lot — nothing in this codebase reassigns
+an existing `Lot`/`HarvestEvent`'s `locationId`, and `createMicrolot`
+doesn't add that capability; enforced by omission, not a check. Rule 2:
+the system never detects microlots, and must not try to — detecting an
+internal difference would require the difference to already exist as
+separately-harvested data, which means a human already made the
+subdivision decision, making detection circular. `getAltitudeRange()` is
+the one arithmetic-only exception: it returns the raw `altitudeMaxM -
+altitudeMinM`, never a boolean against an invented threshold. Human
+observation decides; the system only records the decision.
+
+**Decision 3 — broca traps modeled as `Specimen`, not a separate
+entity.** `Specimen.specimenType` (`plant` | `trap`) discriminates a trap
+from a plant. The active → removed → reinstalled lifecycle is not a
+third/fourth `Specimen.status` value — status stays exactly
+`active`/`removed`/`dead` (the last plant-only) — and the cycle lives
+entirely in `SpecimenObservation` rows (`installed`/`removed`/
+`reinstalled`), which also drive the status transition in the service
+layer. Capture-count trap readings (`trap_check`, with a required
+`captureCount`) live in the same observation table, read back as a series
+via `getTrapCheckSeries`. A trap's state history is structurally
+identical to the observation log a tagged plant already needed; one
+mechanism, two specimen types, discriminated by `specimenType`, not by
+nulling out plant-only fields. Both sector mechanisms (`sectorSimple`:
+alto/medio/bajo, and `gridRow`/`gridPosition`) are accepted
+simultaneously, never forced into a choice. Position, not GPS — canopy
+defeats GPS precision in the field, the same problem
+`SPECIMEN_AND_MATERIAL_TRACEABILITY.md` §6 already had to solve. No
+`species_id`/`cultivar_id` FK — `DOMAIN_MODEL.md` §4 specifies a
+Species/Cultivar taxonomy never built; rather than building that taxonomy
+now, `Specimen.commonName`/`varietalNote` and `PlantingEvent.varietal`
+stay free text.
+
+**Decision 4 — schema without interface, by explicit product-owner
+decision.** F1 ships migration, service layer
+(`lib/traceability/locations.ts`, `specimens.ts`, `plantingEvents.ts`, the
+`operations.ts` location-parent extension), RBAC
+(`location:manage_attributes`, `specimen:manage`/`view`), and tests — no
+UI. The seedlings are six months old and won't fruit until 2031;
+observations can be recorded manually in the field until an interface
+exists. Mirrors `DOMAIN_MODEL.md` §7's own standing principle: specifying
+ahead of building is the point of modeling in advance, not a deferred
+obligation.
+
+**Consequence.** Terroir correlation (altitude/sun/shade against cupping
+scores) becomes possible once real per-lot attribute values are entered —
+none are yet. Running F1's own real-data verification surfaced a real
+RBAC gap: Farm Operator assignments for the real Cerro Azul operators
+were project-scoped, but every new F1 permission check is location-scoped
+only, since `Location` carries no `projectId` for `lot:manage`'s usual
+project-or-location fallback to reach. Fixed live against Neon for the
+real accounts that needed it (Bob, Sherry, Daniel each hold real
+location-scoped Farm Operator assignments now), but this remains a
+standing design tension worth its own future ADR: should `location`/
+`specimen` RBAC checks fall back to project scope the way `lot:manage`
+already does via `scopeTargetsFor()`, or should Farm Operator assignments
+themselves become location-scoped as the norm? Not decided here —
+flagged for the product owner. ~150-300 real `Specimen` rows (stratified
+sampling across Lote 1-3) and the 30 real broca traps remain to be
+created by an actual person in the field with actual position/sector
+data — this ticket built the mechanism and proved it against real Neon,
+it did not and could not fabricate that field data.
+
+---
+
+## ADR-049 — S1: external coffee — cupping without a full traceability chain
+
+**Context.** `docs/implementation/32_S1_CAFES_EXTERNOS.md`. The
+platform's entire traceability model assumed a `Sample` comes from a
+`Lot` via `sample_extraction`. Real operation breaks that assumption
+constantly: a client or contact hands over a coffee with only a farm
+name, a declared varietal, a declared process, and a harvest year or
+month — no terrain lot, no transformation chain, no measurements. It gets
+cupped anyway, and that score is valid.
+
+**Decision 1 — `Sample` without a `Lot`, not a minimal `Lot`.** Two
+structural options were on the table: (a) a minimal `Lot` row carrying
+only what's known, with `Sample` continuing to extract from it as always;
+(b) `Sample.sourceLotId` stays null and `Sample` gets its own
+declared-origin metadata directly, via a new 1:1 `ExternalCoffeeOrigin`
+table. Decided (b), on evidence rather than preference:
+`Sample.sourceLotId` was already nullable — T5's own schema comment
+states DEMO Sensory/Competitions samples predate the `Lot` model and
+correctly carry null lineage, "never backfilled with a guess." DEMO
+`Sample` rows already flow through the full real cupping pipeline
+(`SensorySession` → `SensoryFlight` → `SensoryBlindSample` →
+`SensoryBlindMapping` → `Assessment`/`PanelResult`) with zero special
+casing anywhere in that chain — every function along that path, including
+`getSensoryLinkageForSamples`, operates on `sampleIds` alone and never
+reads `sourceLotId`. A minimal `Lot` (option a) would have looked like a
+normal, traceable `Lot` everywhere except in the fine print of its own
+provenance fields — exactly the confusion the ticket's own risk note
+warned about. `ExternalCoffeeOrigin` is a separate 1:1 table rather than
+columns on `Sample` directly, since `Sample` already serves Sensory,
+Competitions, and Partner Workspace uses that have nothing to do with
+coffee origin declarations.
+
+**Decision 2 — producer, processor, brand: three independently nullable
+`Organization` FKs.** `producerOrganizationId`, `processorOrganizationId`,
+`brandOrganizationId` — the worked example is real: Agustín Gómez's
+Geisha, processed at Cafelino's beneficio, presented under Néctar
+Nómada's own brand. None of the three implies the others. Enforced in the
+service layer, not the schema, that at least one is present — a DB CHECK
+across three nullable FKs was rejected as unnecessary machinery for a
+rule the service layer already owns elsewhere (F1's `Specimen.
+sectorSimple`/`gridRow` "at least one, not enforced as XOR" is the direct
+precedent). Not limited to genuinely external coffee — a `Lot`-backed
+`Sample` could carry an `ExternalCoffeeOrigin` too if that need ever
+arises; today only the `Lot`-less path populates it.
+
+**Decision 3 — declared, not observed; `dataQuality` per fact, not per
+record.** One `declaredProvenanceClass` for the whole declared bundle
+(`manufacturer_specification` or `interpretation`, required, ADR-038's
+exact pattern, no default). `dataQuality` is per field instead —
+`varietalDataQuality`, `processDataQuality`, `harvestWindowDataQuality`
+are three independent columns — since reliability genuinely differs fact
+by fact (the ticket's own calibration note: the farm is usually solid,
+the process sometimes reliable, the varietal is what most often comes in
+wrong). Collapsing that into one record-level value would erase exactly
+the distinction the ticket asked to preserve. Any declared value requires
+its own `dataQuality`; a value with none is rejected rather than silently
+left unrated.
+
+**Decision 4 — harvest window never fabricates a day.**
+`harvestWindowPrecision` (`year`/`month`/`date`) is authoritative;
+`harvestYear`/`harvestMonth`/`harvestDay` are validated against it so
+"cosecha 2025" can never silently become "2025-01-01." A single
+`harvestWindowStart`/`harvestWindowEnd` range pair was considered and
+rejected — computing an implied boundary from a year-only or month-only
+declaration risks the exact fabricated-precision problem the ticket warns
+against, since an inferred boundary looks like a real date to anything
+reading the column later without also reading the precision field.
+
+**Decision 5 — classification and ownership needed no new mechanism.**
+`Sample.classification` already defaults to `internal`; `createdBy` is
+already the creating `UserAccount`. There is no `organization`
+`ScopeType` in this codebase (`lib/rbac/types.ts` lists exactly platform/
+program/project/location/competition/session/experience) — linking
+`producerOrganizationId` at a coffee therefore grants that organization's
+members nothing; access is purely Assignment-based, same as every other
+record in the platform.
+
+**Decision 6 — completing a record later: dated-knowledge fields, not
+row-versioning.** This codebase's existing versioning machinery
+(`SensoryProtocolVersion`, and CLAUDE.md §3's "Version preservation"
+principle) exists because *other* approved artifacts pin a reference to a
+specific version — a `CompetitionResult` or `SensorySession` names the
+exact `ProtocolVersion` it was scored against, and that reference must
+keep resolving to the same content forever. Nothing points at "this
+`ExternalCoffeeOrigin` as of version 3," so parallel version tables would
+be machinery with no consumer. Instead: per-fact `*KnownAt` timestamp
+columns (`varietalKnownAt`/`processKnownAt`/`harvestWindowKnownAt`), each
+stamped to `now()` only when that specific field is newly set or
+genuinely changes — completing the process doesn't touch the varietal's
+own timestamp. `completeExternalCoffeeOrigin(..., { linkToLotId })` also
+supports linking the real `Lot` once traced, without deleting or clearing
+the `ExternalCoffeeOrigin` row — how a record started (declared, not
+traced) stays true history even after the gap closes, the same
+"never silently mutate away evidence of a prior state" instinct behind
+every audit-trail decision already made in this codebase (C1 §3).
+
+**Decision 7 — Lost Origin.** Real organization
+(`organization_type: laboratory`), created directly against Neon via a
+one-time script, matching A7/F1's own precedent for loading real, named
+entities — never through `prisma/seed.ts`'s DEMO gate. Id:
+`f18965bd-46cc-459b-a469-3732442218ee`.
+
+**Consequence.** RBAC reuses `sample:manage` exactly as
+`createSampleFromLot` (T5) already does — no new permission. No UI, no
+third-party self-submission form, no CSV importer, no cross-organization
+data-sovereignty resolution (deferred to whenever that gets designed, per
+`29_`'s own note) — all per the ticket's explicit scope. No real
+external-coffee samples were loaded, since none were supplied; the
+mechanism is proven by tests only (`tests/traceability/s1.test.ts`, 14
+tests, real Neon), the same way F1 proved its own mechanism before real
+field data existed to load.
