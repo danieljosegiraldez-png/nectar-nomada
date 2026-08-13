@@ -98,6 +98,13 @@ afterAll(async () => {
   const testLots = await prisma.lot.findMany({ where: { lotCode: { startsWith: RUN_ID } } });
   const lotIds = testLots.map((l) => l.id);
 
+  // createSampleFromLot's own Samples (CUP-001/CUP-002) were never cleaned
+  // up here — a real leak, found while building A8's own apiary E2E test
+  // against the same pattern. Their attached sensory content already
+  // cleans itself inline (each `it` block's own try/finally); only the
+  // Sample rows themselves were missing.
+  await prisma.sample.deleteMany({ where: assertDefinedWhere({ sampleCode: { startsWith: RUN_ID } }) });
+
   await prisma.asset.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
   await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });

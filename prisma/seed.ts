@@ -19,6 +19,10 @@ import { startFermentationRun, endFermentationRun } from "../lib/traceability/fe
 import { startDryingRun, endDryingRun } from "../lib/traceability/drying";
 import { moveLotToStorage } from "../lib/traceability/storage";
 import { createSampleFromLot } from "../lib/traceability/samples";
+import { createHive, createColony } from "../lib/apiary/hives";
+import { recordInspection } from "../lib/apiary/inspections";
+import { recordColonyEvent } from "../lib/apiary/colonyEvents";
+import { recordApiaryHarvest } from "../lib/apiary/harvest";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
@@ -508,8 +512,20 @@ async function seedDemoSensoryContent(lasNubesProjectId: string) {
         }
       }
     }
-    console.log("Slice 6 DEMO Sensory content already seeded — patched coffee protocol metadata/sections.");
-    return prisma.sensorySession.findFirstOrThrow({ where: { name: "DEMO Cupping Session — Las Nubes" } });
+    // A7's own pre-load cleanup (docs/implementation/README.md) removed the
+    // entire DEMO "Las Nubes" tree — Project, Samples, and this Session
+    // included — as a real-data name-collision risk, but this Protocol row
+    // survived it (protocols aren't scoped to a Project). The prior
+    // assumption "protocol exists => session exists" no longer holds;
+    // self-heal by rebuilding the session/samples/flight instead of
+    // crashing on a session this repository may no longer have.
+    const existingSession = await prisma.sensorySession.findFirst({ where: { name: "DEMO Cupping Session — Las Nubes" } });
+    if (existingSession) {
+      console.log("Slice 6 DEMO Sensory content already seeded — patched coffee protocol metadata/sections.");
+      return existingSession;
+    }
+    const protocolVersion = existingProtocol.versions[0]!;
+    return seedDemoCuppingSession(protocolVersion.id, lasNubesProjectId);
   }
 
   const protocol = await prisma.sensoryProtocol.create({
@@ -547,6 +563,17 @@ async function seedDemoSensoryContent(lasNubesProjectId: string) {
     });
   }
 
+  return seedDemoCuppingSession(protocolVersion.id, lasNubesProjectId);
+}
+
+/**
+ * The session/samples/flight/blind-samples half of the DEMO cupping
+ * content, split out from `seedDemoSensoryContent` so it can be called
+ * from both "protocol just created" and "protocol already existed but the
+ * session it produced was since deleted" (A7's own DEMO "Las Nubes"
+ * cleanup) without duplicating this shape.
+ */
+async function seedDemoCuppingSession(protocolVersionId: string, lasNubesProjectId: string) {
   const sample1 = await prisma.sample.upsert({
     where: { sampleCode: "LN-CUP-001" },
     update: {},
@@ -575,7 +602,7 @@ async function seedDemoSensoryContent(lasNubesProjectId: string) {
   const session = await prisma.sensorySession.create({
     data: {
       name: "DEMO Cupping Session — Las Nubes",
-      protocolVersionId: protocolVersion.id,
+      protocolVersionId,
       status: "in_progress",
       classification: "internal",
     },
@@ -810,6 +837,178 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
 }
 
 /**
+ * Ticket A8 (docs/implementation/22_APIARY_V1_SCOPING_REPORT.md §3) — DEMO
+ * seed for the apiary track, mirroring `seedDemoTraceabilityChain` above
+ * but deliberately NOT reusing "Las Nubes" as a name anywhere. A7 had to
+ * delete an earlier DEMO "Las Nubes" tree specifically because it collided
+ * with the real "Las Nubes Cerro Azul" Projects/Organizations that now
+ * exist in this database — reusing that name here would recreate the
+ * exact collision risk A7's own cleanup existed to remove. This chain
+ * gets its own clearly-fictional "DEMO Highland Apiary" identity instead,
+ * fully independent of both the real A7 data and the coffee DEMO chain.
+ *
+ * Reuses the "Honey Sensory Evaluation (ISO/Academic-Grounded)" protocol
+ * `seedBeverageProtocolsContent` already seeds unconditionally, rather
+ * than creating a second honey protocol — the same zero-duplication
+ * discipline A3/A4 already proved for the service layer, applied here to
+ * seed content. Must run after `seedBeverageProtocolsContent` in `main()`
+ * so that protocol already exists.
+ */
+async function seedDemoApiaryChain() {
+  const existingLot = await prisma.lot.findFirst({ where: { lotCode: "DEMO-APIARY-HONEY-01" } });
+  if (existingLot) {
+    console.log("DEMO apiary chain already seeded — skipping.");
+    return;
+  }
+
+  const apiaryOrg = await prisma.organization.findFirst({ where: { name: "DEMO Highland Apiary" } });
+  const organization =
+    apiaryOrg ??
+    (await prisma.organization.create({
+      data: {
+        organizationType: "farm",
+        name: "DEMO Highland Apiary",
+        description: "[DEMO placeholder organization — a fictional apiary example, not a real producer.]",
+        status: "approved",
+        classification: "internal",
+      },
+    }));
+
+  const existingSite = await prisma.location.findFirst({ where: { locationType: "apiary_site", name: "DEMO Highland Apiary" } });
+  const apiarySite =
+    existingSite ??
+    (await prisma.location.create({
+      data: {
+        locationType: "apiary_site",
+        name: "DEMO Highland Apiary",
+        organizationId: organization.id,
+        status: "approved",
+        classification: "internal",
+      },
+    }));
+
+  const existingProject = await prisma.project.findFirst({ where: { name: "DEMO Highland Apiary — Honey" } });
+  const project =
+    existingProject ??
+    (await prisma.project.create({
+      data: { name: "DEMO Highland Apiary — Honey", status: "approved", classification: "internal" },
+    }));
+
+  let seedOperatorPerson = await prisma.person.findFirst({ where: { displayName: "DEMO Seed Operator (internal)" } });
+  let seedOperatorAccount;
+  if (!seedOperatorPerson) {
+    seedOperatorPerson = await prisma.person.create({
+      data: { givenName: "DEMO", familyName: "Seed Operator", displayName: "DEMO Seed Operator (internal)", locale: "es" },
+    });
+    seedOperatorAccount = await prisma.userAccount.create({
+      data: { personId: seedOperatorPerson.id, authProvider: "credentials", status: "active" },
+    });
+  } else {
+    seedOperatorAccount = await prisma.userAccount.findFirstOrThrow({ where: { personId: seedOperatorPerson.id } });
+  }
+  const operatorId = seedOperatorAccount.id;
+
+  // A fresh Assignment scoped to this apiary Project — the same seed
+  // operator account can carry more than one Assignment (RBAC.md §9), so
+  // reusing the identity here doesn't imply reusing coffee's own scope.
+  const existingAssignment = await prisma.assignment.findFirst({
+    where: { userAccountId: operatorId, scope: { scopeType: "project", scopeRefId: project.id } },
+  });
+  if (!existingAssignment) {
+    const farmOperatorProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+    const scope = await prisma.scope.upsert({
+      where: { scopeType_scopeRefId: { scopeType: "project", scopeRefId: project.id } },
+      update: {},
+      create: { scopeType: "project", scopeRefId: project.id },
+    });
+    await prisma.assignment.create({
+      data: { userAccountId: operatorId, roleProfileId: farmOperatorProfile.id, scopeId: scope.id },
+    });
+  }
+
+  // --- Hive + Colony ---
+  const hive = await createHive(operatorId, {
+    identifier: "DEMO-APIARY-H1",
+    locationId: apiarySite.id,
+    projectId: project.id,
+    installedAt: new Date("2026-10-01"),
+  });
+  const colony = await createColony(operatorId, {
+    hiveId: hive.id,
+    startedAt: new Date("2026-10-05"),
+    originType: "purchased",
+    originNote: "[DEMO placeholder — a fictional nucleus colony purchase, no real supplier.]",
+    provenanceClass: "direct_observation",
+  });
+
+  // --- A season of Inspections/ColonyEvents ---
+  await recordInspection(operatorId, { colonyId: colony.id, occurredAt: new Date("2026-10-15"), outcome: "nothing_unusual" });
+  await recordColonyEvent(operatorId, {
+    colonyId: colony.id,
+    eventType: "feeding",
+    occurredAt: new Date("2026-10-20"),
+    feedingMaterial: "1:1 sugar syrup",
+    feedingQuantity: 2,
+    feedingUnit: "L",
+  });
+  await recordInspection(operatorId, {
+    colonyId: colony.id,
+    occurredAt: new Date("2026-11-10"),
+    outcome: "issue_observed",
+    broodPatternNote: "Good, solid brood pattern",
+    queenSighted: true,
+    storesLevel: "abundant",
+  });
+
+  // --- Harvest -> honey Lot ---
+  const { lot: honeyLot } = await recordApiaryHarvest(operatorId, {
+    lotCode: "DEMO-APIARY-HONEY-01",
+    colonyId: colony.id,
+    occurredAt: new Date("2027-01-15"),
+    extractedWeightKg: 22,
+    framesHarvested: 9,
+    provenanceClass: "measured_fact",
+  });
+
+  // --- Sample, scored — the same falsifiable-v1-test proof T14 built for
+  //     coffee, made visible here for apiary: a real, unmodified honey
+  //     batch reaching an actual sensory result through zero new code. ---
+  const { sample } = await createSampleFromLot(operatorId, {
+    sampleCode: "DEMO-APIARY-HONEY-SAMPLE-01",
+    sampleType: "honey_cupping",
+    description: "DEMO — Highland Apiary honey, full lineage from harvest through sensory.",
+    sourceLotId: honeyLot.id,
+    quantity: 0.3,
+    unit: "kg",
+    occurredAt: new Date("2027-01-16"),
+    provenanceClass: "original_record",
+  });
+
+  const honeyProtocolVersion = await prisma.sensoryProtocolVersion.findFirstOrThrow({
+    where: { protocol: { name: "Honey Sensory Evaluation (ISO/Academic-Grounded)" } },
+    orderBy: { version: "desc" },
+  });
+  const session = await prisma.sensorySession.create({
+    data: { name: "DEMO Honey Tasting — Highland Apiary", protocolVersionId: honeyProtocolVersion.id, status: "completed", classification: "internal" },
+  });
+  const flight = await prisma.sensoryFlight.create({ data: { sessionId: session.id, name: "Flight 1", sequenceOrder: 1 } });
+  const blindSample = await prisma.sensoryBlindSample.create({ data: { flightId: flight.id, blindCode: "E" } });
+  await prisma.sensoryBlindMapping.create({ data: { blindSampleId: blindSample.id, sampleId: sample.id } });
+  // Round, obviously-illustrative number on a 0-10 scale, not a
+  // plausible-looking real score — same discipline T14's own DEMO batch B
+  // score uses.
+  await prisma.panelResult.create({
+    data: { blindSampleId: blindSample.id, attributeId: null, responseCount: 3, meanValue: 8, minValue: 7, maxValue: 9 },
+  });
+
+  console.log(
+    "Seeded A8 DEMO apiary chain: 1 Hive, 1 Colony, a season of 2 Inspections + 1 ColonyEvent, 1 harvest " +
+      "(22 kg), 1 Sample scored via the existing Honey sensory protocol (DEMO Honey Tasting — Highland Apiary, " +
+      "blind code E).",
+  );
+}
+
+/**
  * Real (non-DEMO-gated, always runs) Beverage Sensory Protocol content per
  * BEVERAGE_SENSORY_PROTOCOLS.md and DECISIONS.md ADR-035. Unlike the DEMO
  * content above (fictional samples/sessions), these are the platform's
@@ -1018,6 +1217,11 @@ async function main() {
     }
 
     await seedDemoTraceabilityChain(lasNubesProject.id, sensorySession.id);
+
+    // A8 — runs after seedBeverageProtocolsContent() (its Honey protocol
+    // must already exist) and is fully independent of lasNubesProject, per
+    // its own function-level note about not reusing "Las Nubes" naming.
+    await seedDemoApiaryChain();
   }
 
   console.log(`Seeded ${PERMISSIONS.length} permissions and ${ROLE_PROFILES.length} role profiles.`);

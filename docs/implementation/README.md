@@ -153,9 +153,71 @@ same (now-revoked) Assignment was confirmed rejected by both
 scratch rows were deleted. Draft ADR text for this ticket is below
 ("Draft ADR-046"), not yet appended to `DECISIONS.md`.
 
-**A8 remains unbuilt.** The ADR amendment justifying apiary's v1 inclusion
-is still a draft sitting inside the scoping report, not yet appended to
-`DECISIONS.md` (unlike ADR-044, T12.6's own amendment, which is appended).
+**A8 (DEMO seed + E2E test) is now done — the last ticket in the original
+A1-A8 set, so the apiary track's own build is complete.** The ADR
+amendment justifying apiary's v1 inclusion is still a draft sitting inside
+the scoping report, not yet appended to `DECISIONS.md` (unlike ADR-044,
+T12.6's own amendment, which is appended). `tests/apiary/e2e.test.ts`
+mirrors T14's own coffee E2E test structure: Hive → Colony → a season of
+Inspections/ColonyEvents (including one recorded through the *offline*
+path — a client-generated `clientDraftId`, retried exactly as a real
+dropped-response resync would retry it, per §7's own addition to A8's
+definition of done — confirmed to resolve to one row) → harvest → honey
+`Lot` → `Sample` → an actual sensory score via the real, unmodified
+`getSensoryLinkageForSamples` → RBAC denial on both a read and a write
+path. All 6 assertions pass against real Neon.
+
+`seedDemoApiaryChain()` in `prisma/seed.ts` (opt-in, `SEED_DEMO_CONTENT=
+true`) gives the apiary track its own DEMO example — deliberately named
+"DEMO Highland Apiary," not "Las Nubes." A7 deleted an earlier DEMO "Las
+Nubes" tree specifically because it collided with the real "Las Nubes
+Cerro Azul" Projects; reusing that name for apiary's own DEMO content
+would have recreated the exact risk A7's cleanup existed to remove.
+Verified running to completion and idempotently no-op on a second run,
+against real Neon.
+
+**Two pre-existing bugs found and fixed while building A8** (both
+directly blocked verifying it, not scope creep): `seedDemoSensoryContent`
+assumed its coffee cupping Protocol implied its DEMO Session still
+existed — no longer true after A7 deleted that Session along with the
+rest of the old "Las Nubes" tree; now self-heals by rebuilding the
+session/samples/flight if the protocol survived but the session didn't.
+`tests/apiary/harvest.test.ts`'s own `afterAll` never deleted the two
+`Sample` rows (`{RUN_ID}-CUP-001`/`002`) it creates — a real per-run leak;
+fixed, and 8 already-accumulated leaked rows were cleaned from Neon in
+the same pass.
+
+**One pre-existing bug found and deliberately left unfixed, reported
+instead — a design question for the user, not a call to make silently
+under A8's banner.** `seedDemoTraceabilityChain` (coffee) now throws
+`no_lot_access` on `SEED_DEMO_CONTENT=true`: `seedDemoDiscoverContent`
+recreates a fresh DEMO "Las Nubes" Project/Organization/Location tree
+every time it runs (A7 deleted the original), which is the *exact*
+name-collision risk A7's own cleanup existed to remove — now happening
+again, automatically, on every `SEED_DEMO_CONTENT=true` run, and this
+time something downstream in the recreated tree no longer resolves RBAC
+the way `seedDemoTraceabilityChain` expects. This was triggered once,
+by hand, while verifying A8 (to confirm `seedDemoApiaryChain` itself ran
+cleanly) — the accidentally-recreated "Las Nubes" tree was fully removed
+immediately after, and the real A7 data (`Las Nubes Cerro Azul — Café`/
+`— Apiario`) was confirmed intact throughout. **Do not run
+`SEED_DEMO_CONTENT=true` against this database again until this is
+resolved** — either coffee's own DEMO chain needs a distinct identity
+the same way A8's apiary chain now has one, or `seedDemoDiscoverContent`
+needs to stop unconditionally recreating deleted DEMO content. That's a
+real design decision (rename coffee's DEMO chain vs. make the real A7
+data supersede it vs. something else), not a one-line fix.
+
+**Separately, a broader pattern found but not touched under A8:** a
+one-off Neon query during A8's own verification found 37 `Scope` rows
+(`scopeType: "project"`) whose `scopeRefId` points at a Project that no
+longer exists — harmless (nothing references them) but indicative that
+the "wrong-project user" pattern several test files use for negative RBAC
+assertions (create a second Project + Scope, assert access denied, then
+clean up) has the same class of cleanup gap `tests/apiary/e2e-cleanup.ts`
+had before this session fixed it: several `afterAll`s clean up by a
+single known `projectId`, missing the *second* project's own Scope. Not
+audited or fixed file-by-file here — flagged for a dedicated pass.
 
 **Fixed, not just investigated: why 71 rows were orphaned in Neon.**
 `vitest.config.ts` set no `testTimeout`/`hookTimeout` — every test file
@@ -391,14 +453,25 @@ entities that do not exist is how invented entities enter a schema.
 
 ## Recommended order from here
 
-1. **A8 (apiary)** — A1-A3, A5.5, A6, and A7 are done, A4 folded into A3,
-   and A0 folded into A5 (all confirmed live, no standalone build);
-   coffee's own ticket sequence is closed (T14 done), so this remains the
-   one open build track. A8 (DEMO seed + E2E test) is the last ticket in
-   the original A1-A8 set.
-2. **Credentials** (Stripe, R2, Google OAuth — all unset in production as of
+1. **Apiary's own A1-A8 ticket sequence is now closed** — A0 folded into
+   A5 and A4 folded into A3 (both confirmed live, no standalone build);
+   A8 was the last remaining ticket. Coffee's own sequence closed earlier
+   at T14. Both verticals' build tracks are done; no more architecture or
+   ticket work answers what's left (see #3 below).
+2. **Two things worth resolving before `SEED_DEMO_CONTENT=true` is run
+   again**: `seedDemoTraceabilityChain` (coffee) currently throws
+   `no_lot_access` because `seedDemoDiscoverContent` recreates a DEMO "Las
+   Nubes" tree every run, which collides with the real A7 data the same
+   way the tree A7 deleted did — needs a real decision (rename coffee's
+   DEMO chain the way A8 gave apiary's its own identity, or stop
+   recreating deleted DEMO content unconditionally), not a quick patch.
+   And the 37 dangling project-scoped `Scope` rows found during A8 (§
+   "Where things stand" above) are harmless but indicate the same
+   cleanup-gap pattern exists in more test files than just the one A8
+   fixed — worth a dedicated pass, not urgent.
+3. **Credentials** (Stripe, R2, Google OAuth — all unset in production as of
    the last verified check).
-3. **The real milestone**: a real apiary season actually inspected by
+4. **The real milestone**: a real apiary season actually inspected by
    Kenis, Chayanne, and Daniel — the real people and Projects now exist
    (A7) — and, in parallel, a real 2026 coffee harvest entered by a real
    operator who isn't Daniel. Both are what actually answer ADR-039's test
