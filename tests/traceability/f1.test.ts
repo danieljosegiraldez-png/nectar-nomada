@@ -305,9 +305,9 @@ describe("recordSpecimenObservation — trap capture-count series and the active
 
     const series = await getTrapCheckSeries(authorizedUserAccountId, specimenTrapId);
     expect(series.length).toBe(2);
-    expect(series[0].captureCount).toBe(4);
-    expect(series[1].captureCount).toBe(11);
-    expect(series[0].observedAt.getTime()).toBeLessThan(series[1].observedAt.getTime());
+    expect(series[0]?.captureCount).toBe(4);
+    expect(series[1]?.captureCount).toBe(11);
+    expect(series[0]?.observedAt.getTime()).toBeLessThan(series[1]!.observedAt.getTime());
   });
 
   it("drives the active -> removed -> reinstalled cycle via observation rows, not a fourth status value", async () => {
@@ -395,8 +395,8 @@ describe("recordPlantingEvent", () => {
 
     const events = await listPlantingEventsForLocation(authorizedUserAccountId, locationId);
     expect(events.length).toBe(2);
-    expect(events[0].eventType).toBe("planted");
-    expect(events[1].eventType).toBe("received");
+    expect(events[0]?.eventType).toBe("planted");
+    expect(events[1]?.eventType).toBe("received");
   });
 });
 
