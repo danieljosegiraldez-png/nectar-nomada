@@ -361,6 +361,55 @@ de secado, both real apiary sites) verified intact before and after every
 write, and every TEST-prefixed verification artifact cleaned up — zero
 residue.
 
+**`32_S1_CAFES_EXTERNOS.md` is now run — schema and service layer only, no
+UI, same convention as F1.** Closes the gap where a coffee arrives already
+cupping-worthy with no `Lot` behind it — a client sample, a competitor's
+entry, green coffee handed over at a fair, with only a declared farm,
+varietal, process, and harvest year/month. Structural decision (§3, with
+reasoning in the draft ADR): `Sample.sourceLotId` stays null and a new
+1:1 `ExternalCoffeeOrigin` table carries the declared metadata, rather
+than building a minimal `Lot` — decided on direct evidence, not
+preference: `sourceLotId` was already nullable (T5), and DEMO Sensory/
+Competitions samples already flow through the full real cupping pipeline
+(`SensorySession` → `SensoryFlight` → `SensoryBlindSample` →
+`PanelResult`) with no `Lot` at all, so the mechanism this ticket needed
+already existed end to end — it just had no entry point for real,
+non-demo declared-origin data. `ExternalCoffeeOrigin` carries producer/
+processor/brand as three independently nullable `Organization` FKs (§1's
+worked example: Agustín Gómez's Geisha, processed at Cafelino, presented
+under Néctar Nómada's own brand), one record-level `declaredProvenanceClass`
+(manufacturer_specification/interpretation, ADR-038 pattern) but three
+independent per-field `dataQuality` columns (varietal/process/harvest
+window), since §2's own calibration note says their reliability genuinely
+differs fact by fact. Harvest window is `year`/`month`/`date` precision
+with the corresponding fields validated against it — never a fabricated
+day out of "cosecha 2025." §5's classification/ownership requirement
+("nace internal, tuyo," sharing only via explicit Assignment) needed zero
+new code — `Sample.classification` already defaults to `internal`, and
+there is no `organization` RBAC `ScopeType` in this codebase, so an
+`Organization` FK on a record has never granted that organization's
+members access. §6's "complete later, but don't pretend it was always
+known" recommendation (in the draft ADR, with reasoning): per-fact
+`*KnownAt` timestamp columns, not row-versioning — nothing in this schema
+pins a reference to "this record as of version N" the way
+`SensoryProtocolVersion`/`CompetitionResult` do, so full versioning
+machinery would be pure overhead; `completeExternalCoffeeOrigin` stamps
+only the field that actually changed. It also supports linking the real
+`Lot` once traced, without clearing the declared-origin history. Created
+the real **Lost Origin** organization (`organization_type: laboratory`,
+id `f18965bd-46cc-459b-a469-3732442218ee`) via a one-time script, same
+precedent as A7's other real organizations — never added to
+`prisma/seed.ts`'s DEMO gate. 14 new tests
+(`tests/traceability/s1.test.ts`), real Neon, covering all six of §9's
+scenarios including a real minimal external-coffee sample reaching an
+actual cupping score. Full suite now 251 tests, all passing.
+`docs/implementation/S1_ADR_DRAFT.md` holds the draft ADR-049 text (not
+yet appended — deliberately numbered right after F1's own still-pending
+ADR-048 draft, with a cross-reference in both files so neither gets
+appended out of order or collides). No real external-coffee samples were
+loaded — none were supplied; §9's verification proves the mechanism the
+same way F1 proved its own before real field data existed to load.
+
 ---
 
 ## The series
@@ -397,6 +446,7 @@ residue.
 | `27_A7_PROYECTOS_ASSIGNMENTS_DATOS_REALES.md` | Real Projects/Assignments/People/Locations for Cerro Azul — see A7 in "Where things stand" above. *(Filed late in this session; the ticket itself had already been executed.)* |
 | `29_BRECHAS_OPERACION_FINCA_INVESTIGACION_MIGRACION.md` | "Dirección, no implementación" — investigation, not a ticket to build from directly. Four of its sections (§4a, §4b, §5, §6) implemented as `30_F1_OPERACION_FINCA_ESQUEMA.md`; the rest (§7-§10) remains unbuilt, see F1's entry above and its draft ADR's Consequences section. |
 | `30_F1_OPERACION_FINCA_ESQUEMA.md` | Farm-operation schema/service layer — Location attributes, microlots, Specimen/traps, PlantingEvent, labour/material against a place. No UI, by explicit product-owner decision. See "Where things stand" above. |
+| `32_S1_CAFES_EXTERNOS.md` | External coffee schema/service layer — `ExternalCoffeeOrigin`, `Sample` without a `Lot`. No UI, by explicit product-owner decision. See "Where things stand" above. |
 
 ### Pending
 

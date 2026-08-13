@@ -8,6 +8,12 @@ ADR-047 (T12.5 Asset provenance), so this drafts as **ADR-048**.
 Re-confirm at append time — sessions between now and then may claim it
 first.
 
+**Update (S1 session):** a second draft now exists,
+`docs/implementation/S1_ADR_DRAFT.md`, deliberately claiming **ADR-049**
+to sit right after this one. Append this one (048) first if both are
+still pending, or re-check S1's own draft's number before appending
+either.
+
 **Session note (read before appending):** this exact "draft, never
 appended" pattern has already produced two permanent orphans once before
 in this codebase — `T12.5_ADR_DRAFT.md` and `ADR-037_DRAFT.md`, both sitting
