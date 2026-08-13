@@ -67,6 +67,20 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { resourceType: "colony_event", action: "manage", description: "Record ColonyEvent entries (feeding/treatment/passing observation) without full apiary:manage." },
   { resourceType: "colony_event", action: "view", description: "View ColonyEvent entries." },
 
+  // F1 (docs/implementation/30_F1_OPERACION_FINCA_ESQUEMA.md) — editing a
+  // Location's own stable terroir attributes (§1) and subdividing it into
+  // a microlot (§2) is a different authority than recording a fact under
+  // an existing Location: it edits the parent record itself, not a child
+  // row, so it gets its own permission rather than folding into lot:manage.
+  { resourceType: "location", action: "manage_attributes", description: "Edit a Location's terroir attributes (sun, shade, altitude range, slope, soil, plant spacing, description) and create microlots beneath it." },
+
+  // F1 §3/§5 — a Specimen is a standing land asset (a tracked tree, or a
+  // broca trap modeled as a Specimen per direct product-owner decision),
+  // not a Lot in the processing-chain sense — same reasoning A1 used to
+  // give Apiary its own permission instead of reusing lot:manage.
+  { resourceType: "specimen", action: "manage", description: "Create/manage Specimens and record SpecimenObservations." },
+  { resourceType: "specimen", action: "view", description: "View Specimen detail and observation history." },
+
   { resourceType: "classification", action: "clear_registered", description: "Access records classified Registered." },
   { resourceType: "classification", action: "clear_partner", description: "Access records classified Partner." },
   { resourceType: "classification", action: "clear_internal", description: "Access records classified Internal." },
@@ -183,6 +197,12 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       ["sample", "manage"],
       ["apiary", "manage"],
       ["apiary", "view"],
+      // F1 — same reasoning as apiary:manage/view above: Bob and Sherry
+      // are exactly who records Location terroir attributes, creates
+      // microlots, and tracks Specimens/traps in the field.
+      ["location", "manage_attributes"],
+      ["specimen", "manage"],
+      ["specimen", "view"],
       // Same classification grant as Partner Field Collector (DECISIONS.md
       // ADR-029 decision 2) — an operator on their own assigned project
       // still cannot clear internal/confidential/trade_secret.
@@ -199,6 +219,7 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       ["project", "view"],
       ["lot", "view"],
       ["apiary", "view"],
+      ["specimen", "view"],
     ],
   },
   {
