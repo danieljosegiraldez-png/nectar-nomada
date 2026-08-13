@@ -2857,3 +2857,207 @@ from the incident.
 - No production data was affected — the incident occurred against a
   development/DEMO Neon database used for test verification, not the
   platform's production environment.
+
+---
+
+## ADR-046 — Service worker for cold-start offline app-shell availability
+(A5.5); three offline security decisions
+
+**Context.** A5 built `25_OFFLINE_OPTIONS_ANALYSIS.md`'s Option B: a vanilla
+IndexedDB draft queue with explicit/opportunistic sync, no service worker.
+That mechanism only ever engages once the app is already open in a live
+browser tab — it solves losing signal mid-session. It does nothing for the
+more basic failure `28_A5.5_SERVICE_WORKER_OFFLINE.md` names as the real
+field condition: an operator at a site with zero cellular coverage
+(Calovébora and equivalent sites) taps the home-screen icon, the browser
+tries to fetch from the network, fails, and shows nothing — the same failure
+mode as a device restart or a browser fully closed and reopened. `25_` itself
+anticipated this outcome and named the correction in advance: *if Option B
+proves insufficient, add a service worker that caches the app shell — not a
+jump to full Option A* (the heavier, cross-cutting offline architecture
+`OFFLINE_FIELD_CAPABILITY.md` describes in general). A5.5 is exactly that
+anticipated, narrow addition, confirmed necessary rather than assumed
+necessary, once A5 shipped and made the gap concrete.
+
+**Decision 1 — scope.** Add `public/sw.js`: cache-first for static/
+build-hashed assets, network-first-with-cache-fallback for navigations to
+operator routes (`/apiaries`, `/lots`), falling back further to a precached,
+locale-aware-at-runtime `public/offline.html` when nothing else is cached.
+Explicitly out of scope, per the ticket's own boundary: Background Sync API,
+automatic conflict resolution, map-tile caching, push notifications, offline
+mode for admin/report routes. This sits on top of A5, not instead of it —
+A5's IndexedDB queue and idempotent `clientDraftId` sync are unchanged and
+still do all the actual data work; the service worker's only job is making
+the shell open at all.
+
+**Decision 2 — session duration offline.** Auth.js's default JWT session
+`maxAge` (~30 days) is too long for a device that may operate for extended
+stretches without ever reaching the server to be told its session is
+revoked. Auth.js has no concept of an "offline-only" session lifetime — the
+lever is uniform, online and offline alike — so the fix is a single shorter
+`maxAge`: 7 days (`lib/auth/config.ts`). Chosen to bound how long a lost or
+stolen device stays authenticated without forcing daily re-login for
+operators who use the app most days. **This deliberately supersedes
+`SECURITY.md` §11's original role-differentiated session-lifetime design**
+for the reason stated above: Auth.js's `maxAge` is a single global lever, not
+a per-Role-Profile one, so a uniform value applied to everyone was the only
+implementable form of "bound exposure from a lost device" available without
+building custom session-token infrastructure disproportionate to this
+platform's current scale. `SECURITY.md` §11 has been corrected to describe
+this uniform value rather than the differentiated design that was never
+built.
+
+**Decision 3 — drafts at rest.** Queued Inspection/ColonyEvent drafts sit in
+plaintext IndexedDB, and a lost/stolen device exposes them as
+`partner`-classified field data. App-level encryption was evaluated and
+rejected for v1: any key reachable by the page itself (no server round trip
+available, by construction, while offline) is reachable by anything that can
+drive the page, which protects against a reader of the raw IndexedDB file
+but not against the realistic threat — an unlocked lost phone. The device's
+own screen lock is the actual first line of defense here, outside this
+application's control. Implemented mitigation instead: `purgeStaleDrafts()`
+(`lib/apiary/offlineQueue.ts`) — a visible warning at 7 days unsynced, an
+actual purge at 21 days, always reported back to the UI, never silent. This
+is an explicit, narrowly-scoped exception to `OFFLINE_FIELD_CAPABILITY.md`
+§3's general "no expiry, ever" rule for captured field data — justified here
+specifically by the security exposure of an unsynced draft on a lost device,
+not a reversal of that rule for any other case. Worth reconsidering (e.g. a
+device-bound key via WebAuthn/platform keystore) for a future engagement
+with stronger data-protection requirements.
+
+**Decision 4 — revalidation on sync.** Non-negotiable per the ticket: the
+server must revalidate Assignment/scope validity fresh on every sync call,
+never trusting what the client believed when it queued the draft. This was
+already true by construction — `recordInspectionSyncAction`/
+`recordColonyEventSyncAction` call `recordInspection`/`recordColonyEvent`,
+which call `requireApiaryAccess`/`requireColonyEventWriteAccess`, which call
+`can()`, which queries `Assignment` fresh from the database on every
+invocation with no caching layer in between — but "true by construction" is
+not the same as verified. Confirmed live: a scratch Person/UserAccount/
+Assignment (Farm Operator, scoped to a scratch Location) was created;
+`recordInspection` succeeded against it; the Assignment was set `status:
+revoked`; a second, distinct `recordInspection` call and a
+`recordColonyEvent` call against the same now-revoked Assignment both threw
+`ApiaryAccessError("no_apiary_access")`. Scratch rows deleted after.
+
+**Consequence.** A5.5 does not reopen or revise A0-A5's design — it is the
+specific, bounded addition `25_` already predicted, built once A5 made the
+gap real rather than speculative. No case was found for jumping to full
+Option A (`OFFLINE_FIELD_CAPABILITY.md`'s general cross-cutting architecture)
+for this ticket's scope.
+
+---
+
+## ADR-047 — T12.5: Asset provenance required from the start; classification
+defaults internal; creatorPersonId fixed before it shipped; media capture
+enters v1 alongside the labour/consumption capture-window reasoning
+
+**Context.** `21_T12.5_MEDIA_ATTACHMENT_PROMPT.md` scoped photo/asset
+attachment across Traceability — Harvest, Measurement, Fermentation, Drying,
+Sample, and a general Lot photo (which also covers Receiving, which gets no
+dedicated FK of its own). `core.Asset` existed since Slice 5 (Partner
+Workspace) but carried none of ADR-038's provenance columns and had no
+Traceability FK of any kind. Confirmed empty in production before this
+migration (`core.asset` row count: 0, matching every prior media-readiness
+check this phase).
+
+**Decision 1 — six specific nullable FKs, not a polymorphic pair.** `Asset`
+gains `lotId`, `harvestEventId`, `measurementId`, `fermentationRunId`,
+`dryingRunId`, `sampleId`. Matches ADR-020 decision 8 and `Measurement`'s own
+precedent. Receiving has no FK of its own — a receiving-stage photo attaches
+via `lotId`, the lot `ReceivingEvent` itself creates, since a separate
+`receivingEventId` column would just be a second way to say "this lot" for
+an event with no other Traceability FK pointing at it specifically.
+
+**Decision 2 — `provenanceClass` required, no default; per-attachment-point
+class stated explicitly.** Same reasoning as ADR-038: a photograph is a
+fact-bearing record, and a silent default would misrepresent an unstated
+provenance as the strongest class in the vocabulary. Every one of the six
+attachment points uses `direct_observation`, chosen at the action layer
+(`app/actions/traceability.ts`), not exposed as an operator-facing picker —
+a field photo documents what is directly in front of the person taking it;
+unlike Measurement (T9.5 decision 3), none of these six points has a
+genuinely ambiguous case among the provenance vocabulary to justify UI
+friction for a choice that isn't really in question. `sourceReference` and
+`dataQuality` follow `DATA_ARCHITECTURE.md` §4, present but unused by any
+current call site (no source document/report to cite for a field photo; no
+lab-report data-quality state applies).
+
+**Decision 3 — classification defaults to `internal`, not `partner`.**
+`lib/partner/workspace.ts` hardcodes `classification: "partner"` for its own
+uploads; Traceability's new `finalizeLotAssetUpload` does not copy that
+constant. Every Lot in Traceability today is Néctar Nómada's own production —
+`SPECIMEN_AND_MATERIAL_TRACEABILITY.md` §7's `partner`/`confidential`
+client-site rule is written for apiary consulting engagements, which have no
+Lot/HarvestEvent chain of their own, so there is no current Traceability
+project that rule actually applies to. `internal` (visible to staff, not the
+public) is therefore the correct default for v1. Rejected: making this
+configurable now — no client-facing coffee engagement exists yet to
+configure it against, and building the choice ahead of a real need repeats
+the mistake `18_EQUIPMENT_AND_READINESS_PROMPT_REVISED.md`'s own instructions
+warn against elsewhere in this phase (don't build toward a use case that
+doesn't exist). If a client-facing coffee engagement is added later, this
+default needs a real per-project decision at that time, not a silent reuse
+of this one.
+
+**Decision 4 — `creatorPersonId`, fixed at the source rather than left for an
+audit.** `lib/partner/workspace.ts`'s `finalizeAssetUpload` hardcoded
+`creatorPersonId: userAccount.personId` — the field is a real `Person` FK,
+structurally identical in role to `operatorPersonId` elsewhere (observer vs.
+`createdBy`'s uploader/typist), but no caller could ever reach a value other
+than the uploader themselves, the exact "field exists, never exercised"
+shape T9.5 (ADR-038 decision 2) fixed for `operatorPersonId`. Fixed here
+rather than deferred: `finalizeAssetUpload` now accepts an optional
+`creatorPersonId` override (default preserved, so Partner Workspace's
+existing behavior is unchanged), and the new Traceability path
+(`finalizeLotAssetUpload`) is built with the same default-to-uploader,
+overridable shape from the start — surfaced as a "Photographed by" select on
+the new `PhotoUploadForm.tsx`, the same UX pattern as T9.5's "Observed by" on
+`MeasurementForm.tsx`. Reasoning: a field technician may photograph a
+fermentation while the operator uploads it that evening — who took the photo
+and who uploaded it are different facts, and the schema should be able to
+say so without a second field duplicating `createdBy`'s job (the same
+discipline ADR-038 decision 2 already established against a proposed
+`recordedBy` field).
+
+**Decision 5 — permission reuses `lot:manage`.** No new permission created.
+Consistent with every other Traceability write function in this phase (start
+a run, record a measurement, move storage) — `lot:manage` already expresses
+the right authority for "this operator may add a fact to this lot," and a
+photo is one more such fact.
+
+**Offline, addressed but not built.** Per the prompt's own instruction, this
+ticket does not build offline support but must not design the upload flow so
+that offline capture becomes impossible to add later. Attachment is always a
+call separate from the record it documents — every parent (Lot, HarvestEvent,
+Measurement, FermentationRun, DryingRun, Sample) already exists before
+`PhotoUploadForm` renders, so no record is ever blocked on having a photo,
+and a future offline-sync path can call `finalizeLotAssetUpload` against an
+already-synced parent with no change to this function's shape.
+
+**Open item — R2 credentials.** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`, `R2_BUCKET` did not exist in any environment as of
+this ADR's writing. `requestLotAssetUpload`'s call to
+`objectStorageProvider.putObject` would throw on first real use. This
+ticket's schema, service-layer RBAC/validation, and UI were verified live
+against real Neon (a real Harvest created through the actual UI, the new
+Photos-adjacent sections rendering correctly on Lot Detail); the actual PUT
+to R2 and a real `core.Asset` row from a completed upload were not verified
+at the time and remained blocked on credentials being provisioned. This was
+an operational blocker, not a code gap.
+
+**Relationship to the capture-or-lose-it reasoning
+(`20_CAPTURE_OR_LOSE_IT_REPORT.md` §5, ADR-039 amendment).** T12.5 is the
+same "irreversibility against a fixed calendar window" argument already
+applied to labour-time and material-consumption capture, applied here to
+photographs: a photo of a specific fermentation or drying step taken in
+January 2027 cannot be taken again in March once the window has closed. This
+ADR is a second application of that one amendment, not an independent
+justification.
+
+**Note on numbering.** This decision was drafted during T12.5 under the
+working number ADR-044; that number was taken by the time it was appended
+(ADR-044 is the capture-or-lose-it amendment above), so it is recorded here
+as ADR-047, the next number actually available in this log — chronological
+order of the underlying decision does not determine its position in this
+append-only log.

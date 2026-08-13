@@ -150,14 +150,17 @@ reading the code — a scratch Assignment was created, used to sync one
 Inspection successfully, revoked, and a second sync attempt against the
 same (now-revoked) Assignment was confirmed rejected by both
 `recordInspectionSyncAction` and `recordColonyEventSyncAction`, then the
-scratch rows were deleted. Draft ADR text for this ticket is below
-("Draft ADR-046"), not yet appended to `DECISIONS.md`.
+scratch rows were deleted. This ticket's ADR is appended to `DECISIONS.md`
+as ADR-046 (per C1 §2 — the number in this document's earlier drafts,
+"ADR-046," turned out to still be the next one available, so it kept it).
 
 **A8 (DEMO seed + E2E test) is now done — the last ticket in the original
 A1-A8 set, so the apiary track's own build is complete.** The ADR
-amendment justifying apiary's v1 inclusion is still a draft sitting inside
-the scoping report, not yet appended to `DECISIONS.md` (unlike ADR-044,
-T12.6's own amendment, which is appended). `tests/apiary/e2e.test.ts`
+amendment justifying apiary's v1 inclusion is appended to `DECISIONS.md`
+as ADR-046 (C1 §2), alongside ADR-044 (T12.6's own amendment) and ADR-047
+(T12.5's Asset-schema decision, renumbered — its working number of "044"
+was taken by ADR-044 itself by the time it was appended).
+`tests/apiary/e2e.test.ts`
 mirrors T14's own coffee E2E test structure: Hive → Colony → a season of
 Inspections/ColonyEvents (including one recorded through the *offline*
 path — a client-generated `clientDraftId`, retried exactly as a real
@@ -248,103 +251,6 @@ the intended one, confirmed empirically (`prisma migrate status` and the
 full suite both run cleanly against it) rather than assumed. `.env` is
 gitignored, so this fix never touches git; only `vitest.config.ts` was
 committed.
-
----
-
-## Draft ADR-046 (draft only — not appended to `DECISIONS.md`)
-
-**ADR-DRAFT-046 — Service worker for cold-start offline app-shell
-availability (A5.5); three offline security decisions**
-
-**Context.** A5 built `25_OFFLINE_OPTIONS_ANALYSIS.md`'s Option B: a
-vanilla IndexedDB draft queue with explicit/opportunistic sync, no
-service worker. That mechanism only ever engages once the app is already
-open in a live browser tab — it solves losing signal mid-session. It does
-nothing for the more basic failure `28_A5.5_SERVICE_WORKER_OFFLINE.md`
-names as the real field condition: an operator at a site with zero
-cellular coverage (Calovébora and equivalent sites) taps the home-screen
-icon, the browser tries to fetch from the network, fails, and shows
-nothing — the same failure mode as a device restart or a browser fully
-closed and reopened. `25_` itself anticipated this outcome and named the
-correction in advance: *if Option B proves insufficient, add a service
-worker that caches the app shell — not a jump to full Option A* (the
-heavier, cross-cutting offline architecture `OFFLINE_FIELD_CAPABILITY.md`
-describes in general). A5.5 is exactly that anticipated, narrow addition,
-confirmed necessary rather than assumed necessary, once A5 shipped and
-made the gap concrete.
-
-**Decision 1 — scope.** Add `public/sw.js`: cache-first for static/
-build-hashed assets, network-first-with-cache-fallback for navigations to
-operator routes (`/apiaries`, `/lots`), falling back further to a
-precached, locale-aware-at-runtime `public/offline.html` when nothing
-else is cached. Explicitly out of scope, per the ticket's own boundary:
-Background Sync API, automatic conflict resolution, map-tile caching,
-push notifications, offline mode for admin/report routes. This sits on
-top of A5, not instead of it — A5's IndexedDB queue and idempotent
-`clientDraftId` sync are unchanged and still do all the actual data work;
-the service worker's only job is making the shell open at all.
-
-**Decision 2 — session duration offline.** Auth.js's default JWT session
-`maxAge` (~30 days) is too long for a device that may operate for
-extended stretches without ever reaching the server to be told its
-session is revoked. Auth.js has no concept of an "offline-only" session
-lifetime — the lever is uniform, online and offline alike — so the fix is
-a single shorter `maxAge`: 7 days (`lib/auth/config.ts`). Chosen to bound
-how long a lost or stolen device stays authenticated without forcing
-daily re-login for operators who use the app most days; `SECURITY.md`
-§11's existing precedent (shorter durations for sensitive profiles) is
-the same reasoning applied to the offline case.
-
-**Decision 3 — drafts at rest.** Queued Inspection/ColonyEvent drafts sit
-in plaintext IndexedDB, and a lost/stolen device exposes them as
-`partner`-classified field data. App-level encryption was evaluated and
-rejected for v1: any key reachable by the page itself (no server round
-trip available, by construction, while offline) is reachable by anything
-that can drive the page, which protects against a reader of the raw
-IndexedDB file but not against the realistic threat — an unlocked lost
-phone. The device's own screen lock is the actual first line of defense
-here, outside this application's control. Implemented mitigation instead:
-`purgeStaleDrafts()` (`lib/apiary/offlineQueue.ts`) — a visible warning
-at 7 days unsynced, an actual purge at 21 days, always reported back to
-the UI, never silent. This is an explicit, narrowly-scoped exception to
-`OFFLINE_FIELD_CAPABILITY.md` §3's general "no expiry, ever" rule for
-captured field data — justified here specifically by the security
-exposure of an unsynced draft on a lost device, not a reversal of that
-rule for any other case. Worth reconsidering (e.g. a device-bound key via
-WebAuthn/platform keystore) for a future engagement with stronger
-data-protection requirements.
-
-**Decision 4 — revalidation on sync.** Non-negotiable per the ticket:
-the server must revalidate Assignment/scope validity fresh on every sync
-call, never trusting what the client believed when it queued the draft.
-This was already true by construction — `recordInspectionSyncAction`/
-`recordColonyEventSyncAction` call `recordInspection`/`recordColonyEvent`,
-which call `requireApiaryAccess`/`requireColonyEventWriteAccess`, which
-call `can()`, which queries `Assignment` fresh from the database on every
-invocation with no caching layer in between — but "true by construction"
-is not the same as verified. Confirmed live: a scratch Person/
-UserAccount/Assignment (Farm Operator, scoped to a scratch Location) was
-created; `recordInspection` succeeded against it; the Assignment was set
-`status: revoked`; a second, distinct `recordInspection` call and a
-`recordColonyEvent` call against the same now-revoked Assignment both
-threw `ApiaryAccessError("no_apiary_access")`. Scratch rows deleted after.
-
-**Consequence.** A5.5 does not reopen or revise A0-A5's design — it is
-the specific, bounded addition `25_` already predicted, built once A5
-made the gap real rather than speculative. No case was found for jumping
-to full Option A (`OFFLINE_FIELD_CAPABILITY.md`'s general cross-cutting
-architecture) for this ticket's scope.
-
-ADR-039 carries a clause worth repeating here: these tickets build the
-*capability* to carry a harvest end to end. They do not constitute having
-done so. A truthful "yes" on the v1 test needs a real 2026 harvest entered
-by a real operator who isn't Daniel — T14's own DEMO chain proves the
-mechanism composes (cherry → lot → sample → session → score, verified live
-via `getLotReport`), it does not itself answer ADR-039's question. Same
-distinction for apiary: a real season actually inspected by Kenis
-Rodríguez Núñez ("Kenneth" was this document's placeholder name before A7
-loaded the real people — Chayanne López and Daniel Giráldez are the
-apiario's other two real operators), once A0–A8 ship.
 
 ---
 
