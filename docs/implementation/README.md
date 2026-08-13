@@ -349,7 +349,12 @@ in the source docs (Cerro Azul altitude varies 600-650m *within* a lot)
 is an unattributed illustrative example, not a confirmed measurement of
 one specific lot, so it was recorded only as a sourced, general note on
 the Finca-level Location's `description`, not as any lot's real
-`altitudeMinM`/`altitudeMaxM`. **Appended as ADR-048** in `DECISIONS.md` —
+`altitudeMinM`/`altitudeMaxM`. **A future review querying any of the six
+real Cerro Azul Lote Locations will find `sunExposure`/`altitudeMinM`/
+`altitudeMaxM`/`slopeDescription`/`soilType` all null, repo-wide — this
+is the documented outcome of the decision above, not data loss or a
+broken migration (re-confirmed 2026-08-13, unrelated cleanup pass).**
+**Appended as ADR-048** in `DECISIONS.md` —
 see its Consequence section for the RBAC-gap follow-up
 and the full list of what `29_` still leaves unbuilt (`RoastSession`,
 defect classification, Research OS/PE protocols, map, water, climate,
