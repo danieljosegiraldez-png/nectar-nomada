@@ -632,6 +632,73 @@ entity, Kits Descubre Terroir, José Giráldez/Craft Brewing Supply
 integration, and the actual PE CSV import once the product owner supplies
 the files and confirms the open questions above.
 
+### V1 — Vocabulary fix: Lote is terrain, Batch is harvested/processed coffee
+
+A UI/i18n relabel, not a schema change (`Lot` stays `Lot` in the database —
+renaming it would cost a migration over real production data for no
+structural gain, per the ticket's own explicit instruction). The interface
+had it backwards from the product owner's own usage: "Lots" meant harvested
+coffee, and opening `/lots` (which the product owner reads as "my six
+terrain lots") showed coffee batches instead. Every `Traceability`-namespace
+key referring to harvested/processed coffee was relabeled **Batch** in both
+languages (`en.json`: "Batch"; `es.json`: literal "Batch," the loanword the
+product owner already uses for beer and mead — deliberately not translated,
+to unify vocabulary across domains instead of inventing a coffee-specific
+word) — `lotsTitle`, `createLotButton`, `lotListHeading`, `noLots`, every
+`lotType_*`/`transformationType_*`/`quantityEventType_*` label, error and
+confirmation strings, the report page, `Nav.lots`. `plotLabel` (the
+terrain-plot dropdown in `HarvestForm.tsx`) was corrected from "Parcela" to
+**"Lote"** in Spanish — the actual fix the product owner asked for — and
+stays "Plot" in English.
+
+**The link that was actually missing, not just the name (§2):**
+`RecordHarvestEventInput.locationId` was already `string`, not nullable —
+harvest already structurally required stating which terrain plot a batch
+came from; this ticket adds a test (`tests/traceability/v1-vocabulary.test.ts`)
+proving that's enforced at the data layer (Prisma/Postgres reject a
+harvest recorded without one), not just the TypeScript type a caller could
+bypass at runtime. What was genuinely missing was *visibility*: batch
+detail (`app/lots/[id]/page.tsx`) and the batch report
+(`app/lots/[id]/report/page.tsx`) now both render a dedicated "origin plot"
+section showing the plot's F1 terrain conditions (sun exposure, shade,
+altitude range, slope, soil) next to the batch's own results — F1 had
+already modeled and fetched these fields (`getLotDetail`/`getLotReport`
+both `include: { location: true }`); they were simply never rendered.
+
+**§4's screen-split decision:** kept `/lots` as the batch listing
+(relabeled "Batches") and added a new, separate `/plots` page
+(`app/plots/page.tsx`) listing the user's accessible terrain plots and
+their F1 conditions, reusing `getManageableContext().plotLocations`
+unchanged (already built, already scoped, zero service-layer work). This
+is the minimal option of the three the ticket named — not the third
+(farm-as-entry-point, `29_` §3) — because the minimal fix unblocks the
+product owner today without committing to the larger redesign `29_` §3
+already flagged as separate, larger-scoped work; that redesign remains
+noted, not built.
+
+**§6.6 — real batches missing a terrain lot: zero.** Of 8 real (non-TEST)
+`Lot` rows in production, **all 8 have `locationId` set** — confirmed by
+direct query, not assumed, and not backfilled (inferring a past batch's
+plot would be exactly the fabrication the provenance discipline
+prohibits; the ticket's own instruction is to report the count and let
+the product owner decide, not to guess). Real Location rows (the
+Cerro Azul "Lote 1"–"Lote 6" plots, Jaramillo) currently have **no F1
+attributes populated** — the "origin plot conditions" section will show
+its empty state for real batches until that data is entered; this is
+existing, unrelated state, not something this ticket's schema/UI change
+altered.
+
+**§6.7 — real data reconfirmed intact:** A7 (Cerro Azul's real
+projects/lots/locations), F1 (Location F1 attributes, unpopulated but
+present), S1 (`Lost Origin` organization), R1 (49 `RoastSession` rows),
+RO1 (14 `VariableCatalog` rows) — all present, no test residue leaked
+into production (`strayTestPrefixedLots: 0`, `strayTestOrgs: 0`).
+
+5 new tests, real Neon, RUN_ID-scoped fixtures, full 310/310 regression
+pass. No ADR — the ticket's own deliverables list didn't ask for one
+(pure relabel plus a rendering addition, not a new structural decision),
+so none was drafted.
+
 ---
 
 ## The series
@@ -672,6 +739,7 @@ the files and confirms the open questions above.
 | `33_R1_ROASTSESSION_TAXONOMIA_SENSORIAL.md` | `RoastSession` and structured sensory descriptor/defect taxonomy — schema/service layer only, no UI. See "Where things stand" above. |
 | `34_RO1_RESEARCH_OS.md` | Research OS — 24-entity schema, PE-protocol variable modeling, catalog/statistical-discipline layer. §5-scoped UI only. See "Where things stand" above. |
 | `35_RO1.1_HONEY_PORCENTAJE_CANONICO.md` | Corrected RO1 §3a-bis: no honey color↔percentage alias is loaded — percentage is canonical, color is a separate producer label. See "Where things stand" above and ADR-052. |
+| `38_V1_VOCABULARIO_LOTE_BATCH.md` | Vocabulary fix — terrain "Lote"/"Plot" vs. harvested-coffee "Batch," plus the batch→origin-plot visibility this ticket found actually missing. New `/plots` page. No schema rename. See "Where things stand" above. |
 
 ### Pending
 

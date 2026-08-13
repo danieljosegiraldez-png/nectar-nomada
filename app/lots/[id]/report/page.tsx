@@ -101,6 +101,50 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
       </section>
 
       <section className="nn-section">
+        <h2>{t("originLotHeading")}</h2>
+        {lot.location ? (
+          <>
+            <p className="nn-muted">{t("originLotConditionsIntro")}</p>
+            <p className="nn-detail-meta">
+              <span>{lot.location.name}</span>
+              {lot.location.sunExposure ? (
+                <span>
+                  {t("sunExposureLabel")}: {t(`sunExposure_${lot.location.sunExposure}` as "sunExposure_full_sun")}
+                </span>
+              ) : null}
+              {lot.location.shadePercentage ? (
+                <span>
+                  {t("shadePercentageLabel")}:{" "}
+                  {t(`shadePercentage_${lot.location.shadePercentage}` as "shadePercentage_pct_20")}
+                </span>
+              ) : null}
+              {lot.location.altitudeMinM != null || lot.location.altitudeMaxM != null ? (
+                <span>
+                  {t("altitudeRangeLabel")}:{" "}
+                  {t("altitudeRangeValue", {
+                    min: lot.location.altitudeMinM ?? "?",
+                    max: lot.location.altitudeMaxM ?? "?",
+                  })}
+                </span>
+              ) : null}
+              {lot.location.slopeDescription ? (
+                <span>
+                  {t("slopeLabel")}: {lot.location.slopeDescription}
+                </span>
+              ) : null}
+              {lot.location.soilType ? (
+                <span>
+                  {t("soilTypeLabel")}: {lot.location.soilType}
+                </span>
+              ) : null}
+            </p>
+          </>
+        ) : (
+          <p className="nn-muted">{t("noOriginLot")}</p>
+        )}
+      </section>
+
+      <section className="nn-section">
         <h2>{t("lineageHeading")}</h2>
         {ancestorLots.length === 0 && descendantLots.length === 0 ? (
           <p className="nn-muted">{t("lineageNone")}</p>

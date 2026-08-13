@@ -117,6 +117,50 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         {lot.organization ? <span>{lot.organization.name}</span> : null}
       </p>
 
+      <section className="nn-section">
+        <h2>{t("originLotHeading")}</h2>
+        {lot.location ? (
+          <>
+            <p className="nn-muted">{t("originLotConditionsIntro")}</p>
+            <p className="nn-detail-meta">
+              <span>{lot.location.name}</span>
+              {lot.location.sunExposure ? (
+                <span>
+                  {t("sunExposureLabel")}: {t(`sunExposure_${lot.location.sunExposure}` as "sunExposure_full_sun")}
+                </span>
+              ) : null}
+              {lot.location.shadePercentage ? (
+                <span>
+                  {t("shadePercentageLabel")}:{" "}
+                  {t(`shadePercentage_${lot.location.shadePercentage}` as "shadePercentage_pct_20")}
+                </span>
+              ) : null}
+              {lot.location.altitudeMinM != null || lot.location.altitudeMaxM != null ? (
+                <span>
+                  {t("altitudeRangeLabel")}:{" "}
+                  {t("altitudeRangeValue", {
+                    min: lot.location.altitudeMinM ?? "?",
+                    max: lot.location.altitudeMaxM ?? "?",
+                  })}
+                </span>
+              ) : null}
+              {lot.location.slopeDescription ? (
+                <span>
+                  {t("slopeLabel")}: {lot.location.slopeDescription}
+                </span>
+              ) : null}
+              {lot.location.soilType ? (
+                <span>
+                  {t("soilTypeLabel")}: {lot.location.soilType}
+                </span>
+              ) : null}
+            </p>
+          </>
+        ) : (
+          <p className="nn-muted">{t("noOriginLot")}</p>
+        )}
+      </section>
+
       <PhotoUploadForm lotId={lot.id} parent={{ kind: "lot" }} observers={observers} selfPersonId={selfPersonId} />
 
       {harvestEvent ? (
