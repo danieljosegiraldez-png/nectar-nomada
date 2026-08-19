@@ -74,7 +74,7 @@ export function ReceivingForm({
       </div>
       <div className="nn-field">
         <label htmlFor="r-cherryWeightKg">{t("cherryWeightLabel")}</label>
-        <input id="r-cherryWeightKg" name="cherryWeightKg" type="number" step="0.001" />
+        <input id="r-cherryWeightKg" name="cherryWeightKg" type="number" inputMode="decimal" step="0.001" />
       </div>
       <div className="nn-field">
         <label htmlFor="r-condition">{t("conditionLabel")}</label>

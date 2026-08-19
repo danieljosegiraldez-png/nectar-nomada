@@ -43,7 +43,7 @@ export function AddToCartForm({ variants }: { variants: VariantOption[] }) {
 
       <div className="nn-field">
         <label htmlFor="quantity">{t("quantityLabel")}</label>
-        <input id="quantity" name="quantity" type="number" min={1} defaultValue={1} required />
+        <input id="quantity" name="quantity" type="number" inputMode="numeric" min={1} defaultValue={1} required />
       </div>
 
       {state.error ? <p className="nn-error">{state.error}</p> : null}

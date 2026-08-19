@@ -69,11 +69,11 @@ export function HarvestForm({
       </div>
       <div className="nn-field">
         <label htmlFor="h-cherryWeightKg">{t("cherryWeightLabel")}</label>
-        <input id="h-cherryWeightKg" name="cherryWeightKg" type="number" step="0.001" />
+        <input id="h-cherryWeightKg" name="cherryWeightKg" type="number" inputMode="decimal" step="0.001" />
       </div>
       <div className="nn-field">
         <label htmlFor="h-brix">{t("brixLabel")}</label>
-        <input id="h-brix" name="brix" type="number" step="0.01" />
+        <input id="h-brix" name="brix" type="number" inputMode="decimal" step="0.01" />
       </div>
       <div className="nn-field">
         <label htmlFor="h-condition">{t("conditionLabel")}</label>

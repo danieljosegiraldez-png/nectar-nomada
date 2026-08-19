@@ -108,7 +108,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       </Link>
 
       <span className="nn-badge">{t(`lotType_${lot.lotType}` as "lotType_cherry")}</span>
-      <h1>{lot.lotCode}</h1>
+      <h1 className="nn-code">{lot.lotCode}</h1>
       <p className="nn-detail-meta">
         <span>{t("currentStageLabel", { stage: currentStage })}</span>
         <span>{t("currentQuantityLabel", { quantity: quantity.quantity.toString(), unit: quantity.unit ?? t("unitUnknown") })}</span>
@@ -310,7 +310,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               </div>
               <div className="nn-field">
                 <label htmlFor="ferm-output-quantity">{t("quantityLabel")}</label>
-                <input id="ferm-output-quantity" name="quantity" type="number" step="0.001" />
+                <input id="ferm-output-quantity" name="quantity" type="number" inputMode="decimal" step="0.001" />
               </div>
               <div className="nn-field">
                 <label htmlFor="ferm-output-unit">{t("unitLabel")}</label>
@@ -398,7 +398,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               </div>
               <div className="nn-field">
                 <label htmlFor="dry-output-quantity">{t("quantityLabel")}</label>
-                <input id="dry-output-quantity" name="quantity" type="number" step="0.001" />
+                <input id="dry-output-quantity" name="quantity" type="number" inputMode="decimal" step="0.001" />
               </div>
               <div className="nn-field">
                 <label htmlFor="dry-output-unit">{t("unitLabel")}</label>

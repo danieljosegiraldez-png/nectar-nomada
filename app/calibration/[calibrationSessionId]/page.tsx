@@ -101,8 +101,8 @@ export default async function CalibrationSessionPage({
             {t("correctlyIdentifiedLabel")}
           </label>
           <input type="text" name="perceivedDescriptorGiven" placeholder={t("perceivedDescriptorPlaceholder")} />
-          <input type="number" step="any" name="perceivedIntensityRating" placeholder={t("perceivedIntensityPlaceholder")} />
-          <input type="number" step="any" name="actualConcentrationPresented" placeholder={t("actualConcentrationPlaceholder")} />
+          <input type="number" inputMode="decimal" step="any" name="perceivedIntensityRating" placeholder={t("perceivedIntensityPlaceholder")} />
+          <input type="number" inputMode="decimal" step="any" name="actualConcentrationPresented" placeholder={t("actualConcentrationPlaceholder")} />
           <textarea name="notes" placeholder={t("notesPlaceholder")} />
           <button type="submit" className="nn-button">
             {t("recordResultButton")}
