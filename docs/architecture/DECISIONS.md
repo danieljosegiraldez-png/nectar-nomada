@@ -3836,3 +3836,71 @@ the real 1.3 g/kg figure rather than a placeholder value.
 list — `koji_substrate`, `rehydration_method`, valve type, anaeróbico's
 purge gas, and the unloaded "Honey NN%" `grado_proceso` value — are
 unaffected by this amendment and stay open.
+
+---
+
+## ADR-055 — Off-provider backup with mandatory restore verification
+
+**Context.** Every byte the platform holds lived in one Neon project
+(`neondb`, one endpoint, 12 schemas, 122 tables) and one Cloudflare R2
+bucket. The only recovery mechanism was Neon's own PITR — which is a fine
+first line of defence and a useless last one, because it lives inside the
+account that is the single point of failure. ADR-007 chose Neon partly for
+"straightforward backups" and no backup was ever taken. The
+implementation README named data sovereignty "the gap with the least
+margin for error: a provider failure today would be unrecoverable." This
+is not hypothetical for this project: T14 already lost data once to an
+unfiltered `deleteMany` and was recovered only by Neon PITR.
+
+**Decision.** `scripts/backup/` — a `pg_dump` custom-format backup
+(`npm run backup:db`) and a restore verification (`npm run backup:verify`)
+that are separate commands, because a backup nobody has restored is not a
+backup. Manual first, deliberately: automation is worth adding only once
+the thing being automated is known to work.
+
+Four specifics that are load-bearing:
+
+1. **Dump against the direct endpoint, never the pooler.** `DATABASE_URL`
+   points at Neon's PgBouncer (`-pooler` in the host). Transaction pooling
+   cannot hold the repeatable-read snapshot `pg_dump` opens, so dumping
+   through it risks a torn backup. `direct_url()` strips `-pooler`.
+
+2. **Verification restores into a throwaway local PostgreSQL cluster**,
+   created and destroyed per run, listening on a Unix socket only. A Neon
+   branch would prove the dump is readable *by Neon*; restoring into stock
+   PostgreSQL 18 proves the platform can leave. Ownership and grants are
+   captured in the dump and dropped at restore (`--no-owner
+   --no-privileges`) because `neondb_owner` and `ai_service` are Neon
+   roles that do not exist off Neon.
+
+3. **The verification is a row census diff, not an exit code.** Per-table
+   counts are taken at dump time (`rowcounts.tsv`) and recomputed on the
+   restored copy; the backup passes only if every count matches. A
+   `pg_restore` that exits 0 having quietly skipped tables would otherwise
+   read as success.
+
+4. **Client tools must be PostgreSQL 18+.** Neon runs 18.4 and `pg_dump`
+   refuses to dump a server newer than itself, so this fails outright on
+   17 rather than degrading. `require_pg_tools` checks the major version
+   and prints install instructions rather than failing obscurely.
+
+**Consequence.** Verified 2026-08-19 against real Neon: 122 tables, 12,956
+rows, dump 959K, restored into stock PostgreSQL 18.6 with zero
+`pg_restore` errors and an identical census. Provider exit for the
+database is demonstrated rather than assumed.
+
+Deliberately **not** covered, and still open: R2 media has no second copy
+(the `Asset` table's `checksum_sha256` makes a reconciling backup
+straightforward, and it is not built); there is no producer-facing data
+export; backups are manual, so the recovery point is "whenever someone
+last ran it"; and the destination is a local folder until Google Drive for
+desktop is installed, which means the backup currently shares this
+laptop's fate. `AUTH_SECRET`, R2 keys, and the Neon password are not in
+any backup — restoring to a working system needs `.env` from wherever it
+is kept, which is nowhere but this machine.
+
+**Credential hygiene note.** libpq prints the entire connection string,
+password included, on some connection errors. The first run of this script
+did exactly that. All client-tool stderr is now routed through
+`redact_secrets()`, because these logs are written beside the backup and
+are intended to be synced to cloud storage.

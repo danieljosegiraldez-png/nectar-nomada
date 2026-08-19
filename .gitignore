@@ -11,3 +11,7 @@ next-env.d.ts
 .DS_Store
 .vercel
 .env*
+
+# Local backup output (backups belong off this machine, never in git)
+/backups/
+nectar-backups/
