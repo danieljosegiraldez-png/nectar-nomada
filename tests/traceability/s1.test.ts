@@ -384,7 +384,16 @@ describe("§9.5 — completing a record later reflects when each fact was actual
 describe("§9.6 — A7 and F1 real data left untouched", () => {
   it("Cerro Azul real data and F1 tables are unaffected by S1's writes", async () => {
     const lasNubesProjects = await prisma.project.findMany({ where: { name: { contains: "Nubes" } } });
-    const lotes = await prisma.location.findMany({ where: { name: { contains: "Lote" } } });
+    // Scoped to Cerro Azul, which is what this assertion is actually about.
+    // It previously counted every Location named "Lote" anywhere on the
+    // platform and expected exactly 6 — so any legitimate new plot broke it.
+    // I1's Cafelino import creates real plots ("Lote 9 — Cafelino", "Lote 10 —
+    // Cafelino"), which made this fail without anything having touched Cerro
+    // Azul at all. The guarantee worth keeping is that Cerro Azul's own six
+    // are untouched, not that the platform never grows a seventh plot.
+    const lotes = await prisma.location.findMany({
+      where: { AND: [{ name: { contains: "Lote" } }, { name: { contains: "Cerro Azul" } }] },
+    });
     expect(lasNubesProjects.length).toBe(2);
     expect(lotes.length).toBe(6);
 
