@@ -3904,3 +3904,53 @@ password included, on some connection errors. The first run of this script
 did exactly that. All client-tool stderr is now routed through
 `redact_secrets()`, because these logs are written beside the backup and
 are intended to be synced to cloud storage.
+
+---
+
+## ADR-056 — Pin TLS verification explicitly: `sslmode=verify-full`
+
+**Context.** Every connection string used `sslmode=require`. Under
+`pg-connection-string` v2 that is silently treated as `verify-full` — the
+certificate chain *and* the hostname are checked. `pg` v9 /
+`pg-connection-string` v3 adopt libpq semantics, where `require` means
+"encrypt, but verify nothing." The library warns about this on every boot
+(it is the warning surfaced from `DiscoverPage`).
+
+The failure mode is what makes this worth an ADR rather than a silenced
+warning: a routine `npm update` would downgrade production from verified
+TLS to unauthenticated TLS, with no error, no test failure, and no visible
+change in behaviour. An attacker able to intercept the connection could
+present any certificate. Nothing in the codebase would notice.
+
+**Decision.** State the intent explicitly rather than depend on a default
+that is scheduled to change. `DATABASE_URL` and `AI_SERVICE_DATABASE_URL`
+use `sslmode=verify-full`, in `.env` and `.env.example`. Verified against
+Neon on both the pooled and direct endpoints: TLS 1.3, `authorized=true`,
+Let's Encrypt chain.
+
+**The two client libraries need different spellings of the same intent**,
+which is the non-obvious part:
+
+- **node-postgres** (the app, Prisma, the test suite) validates against
+  Node's bundled CA roots. `sslmode=verify-full` alone is sufficient and
+  correct.
+- **libpq** (`psql`, `pg_dump`, `pg_restore`) ignores those roots. It looks
+  for `~/.postgresql/root.crt`, which does not exist on this machine, and
+  refuses to connect at all. It needs `sslrootcert=system` (libpq 16+) to
+  use the OS trust store.
+
+`sslrootcert=system` therefore cannot live in `.env`: node-postgres treats
+`sslrootcert` as a file path and dies with `ENOENT: open 'system'`. It is
+appended by `libpq_url()` in `scripts/backup/pg-tools.sh`, at the same point
+the pooler host is stripped — the backup tooling already rewrites the URL for
+libpq's benefit, and this is one more item of the same kind.
+
+**Consequence.** The upgrade to `pg` v9 becomes a non-event for TLS instead
+of a silent regression. Backups continue to run: verified end to end after
+the change, including a restore into a throwaway cluster with an identical
+row census.
+
+**Not done here.** The same change must be made to `DATABASE_URL` in the
+Vercel project's environment variables, which is where production actually
+reads it. Until then production still runs `sslmode=require` and remains
+exposed to the v9 semantics change.
