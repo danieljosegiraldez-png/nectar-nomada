@@ -3954,3 +3954,53 @@ row census.
 Vercel project's environment variables, which is where production actually
 reads it. Until then production still runs `sslmode=require` and remains
 exposed to the v9 semantics change.
+
+---
+
+## ADR-057 — Secrets custody: passphrase-sealed `.env` beside the backups
+
+**Context.** ADR-055 made the database recoverable and deliberately put no
+credentials in the dump. That leaves a restored database that cannot become
+a restored *system*: without `AUTH_SECRET` every session and token is
+invalid, and without the R2 credentials the media pipeline cannot address
+its own bucket. `.env` existed on one laptop, and in Vercel's environment
+variables — one machine and one provider, which is the same shape of risk
+ADR-055 exists to remove.
+
+**Decision.** `npm run secrets:seal` encrypts `.env` to
+`<destination>/secrets/env.enc` under a passphrase the operator types and
+that is stored only in their password manager. `npm run secrets:open`
+recovers it. AES-256-CBC, PBKDF2-HMAC-SHA256, 600,000 iterations, random
+salt.
+
+Three specifics that carry the weight:
+
+1. **`openssl`, not `age` or `gpg`.** Neither is installed and there is no
+   Homebrew here, and a recovery tool that cannot run on a bare machine is
+   not a recovery tool. macOS ships LibreSSL; the recovery path depends on
+   nothing that has to be installed first.
+
+2. **Sealing verifies its own round-trip.** It decrypts what it just wrote
+   and compares against `.env`, writing nothing if they differ. An encrypted
+   file nobody has decrypted is the same failure as a backup nobody has
+   restored.
+
+3. **The passphrase is never co-located with the ciphertext.** Ciphertext in
+   Drive plus passphrase in a password manager is two custodians; both in
+   Drive is one, and would make the encryption theatre. The scripts never
+   write the passphrase anywhere, and it is not recoverable if lost — stated
+   plainly in the tooling rather than discovered during an incident.
+
+`secrets/` sits outside the timestamped set directories, so ADR-055's
+retention pruning cannot delete it. `INVENTORY.txt` records key *names* only.
+
+**Consequence.** Recovery is: this repository from git, the newest verified
+dump, and the sealed `.env` — none of which require Neon, Vercel, or this
+laptop to still exist.
+
+**Known weakness, accepted.** Nothing detects a stale seal. Rotating the Neon
+password or adding Stripe keys without re-sealing yields a recovery that
+restores a system unable to connect to anything. A checksum comparison would
+not help, since `.env` legitimately changes; the honest fix is to re-seal as
+part of rotating a credential, which the runbook says and the seal output
+repeats.

@@ -9,12 +9,13 @@ you follow when something has gone wrong, or on the schedule below.
 |---|---|---|
 | Neon Postgres (`neondb`, 12 schemas, 122 tables) | **yes** | `npm run backup:db`, verified by `npm run backup:verify` |
 | R2 media objects | **no** | only R2's own durability — see "Known gaps" |
-| `.env` secrets (`AUTH_SECRET`, R2 keys, Neon password) | **no** | held on this machine only |
+| `.env` secrets (`AUTH_SECRET`, R2 keys, Neon password) | **yes** | `npm run secrets:seal` — encrypted blob beside the backups (ADR-057) |
 | Application code, schema history | yes | git |
 
-A restored database plus this repository is a working platform. A restored
-database alone is not: you need `.env` too, and it is deliberately not in
-any backup.
+A restored database plus this repository plus the sealed `.env` is a working
+platform. The database backups deliberately contain no secrets — those are
+sealed separately under a passphrase only you hold, so that someone with the
+Drive folder has ciphertext rather than credentials.
 
 ## Taking a backup
 
@@ -73,6 +74,36 @@ NN_BACKUP_DIR="$HOME/Library/CloudStorage/GoogleDrive-<account>/My Drive/nectar-
 Set it permanently in your shell profile once Google Drive for desktop is
 installed. Until then backups sit in `~/nectar-backups` and share this
 laptop's fate.
+
+## Secrets
+
+The database backups contain no credentials. Recovering the platform needs
+`.env` too, and it is sealed separately:
+
+```bash
+npm run secrets:seal              # encrypt .env into <destination>/secrets/
+npm run secrets:open              # print it back
+npm run secrets:open -- --to .env # write it, refusing to overwrite
+```
+
+AES-256-CBC with PBKDF2-HMAC-SHA256 at 600,000 iterations and a random salt,
+via the `openssl` macOS already ships. That choice is deliberate: `age` and
+`gpg` are not installed here and there is no Homebrew, and a recovery tool you
+cannot run on a fresh machine is not a recovery tool.
+
+Sealing verifies its own round-trip before publishing — it decrypts what it
+just wrote and compares it to `.env`, refusing to leave a file behind if they
+differ. Same principle as verifying a database restore.
+
+**The passphrase lives in your password manager and nowhere else.** Not in
+this repository, not in Drive, not beside the ciphertext — ciphertext and
+passphrase in the same place is one custodian, which is no better than none.
+If you lose it, the seal is unrecoverable; there is no reset.
+
+`secrets/` sits outside the timestamped set directories, so retention pruning
+never touches it. `INVENTORY.txt` beside the blob lists key *names* only, so a
+future restorer can tell what should be present without it being a second copy
+of the secrets.
 
 ## Cadence
 
@@ -136,4 +167,10 @@ At roughly 1.3 MB per set this is about cloud tidiness, not space.
 3. **Recovery point is up to a week.** The scheduled job is weekly and only
    runs while this laptop is awake and Drive is mounted. Anything entered
    between runs is protected only by Neon's own PITR.
-4. **Secrets have no custody plan.** `.env` exists on one laptop.
+4. **The seal goes stale silently.** Nothing checks that `secrets/env.enc`
+   still matches `.env`. Re-run `npm run secrets:seal` after rotating the Neon
+   password or adding Stripe/Google keys, or recovery restores a system that
+   cannot connect to anything.
+5. **Vercel's environment variables are a separate custodian.** Production
+   reads its secrets there, not from `.env`, and they are not covered by the
+   seal. Changes made in one place do not propagate to the other.

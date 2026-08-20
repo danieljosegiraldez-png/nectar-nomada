@@ -17,7 +17,9 @@
     "prisma:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "backup:db": "bash scripts/backup/backup-db.sh",
-    "backup:verify": "bash scripts/backup/verify-restore.sh"
+    "backup:verify": "bash scripts/backup/verify-restore.sh",
+    "secrets:seal": "bash scripts/backup/secrets-seal.sh",
+    "secrets:open": "bash scripts/backup/secrets-open.sh"
   },
   "keywords": [],
   "author": "",
