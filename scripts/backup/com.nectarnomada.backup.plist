@@ -8,7 +8,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/danielsan/Downloads/nectar-nomada-package/scripts/backup/run-scheduled.sh</string>
+    <string>/Users/danielsan/Developer/nectar-nomada-package/scripts/backup/run-scheduled.sh</string>
   </array>
 
   <!-- Mondays at 09:00 local. StartCalendarInterval, not StartInterval:

@@ -13,7 +13,7 @@
 
 set -uo pipefail
 
-REPO="/Users/danielsan/Downloads/nectar-nomada-package"
+REPO="/Users/danielsan/Developer/nectar-nomada-package"
 cd "$REPO" || exit 1
 
 export PATH="/Users/danielsan/.nvm/versions/node/v24.19.0/bin:$PATH"
