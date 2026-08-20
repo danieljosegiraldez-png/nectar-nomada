@@ -199,3 +199,43 @@ real.
 
 **Reportá cuánto quedó sin interpretar.** Un importador que dice haber
 mapeado todo probablemente forzó algo.
+
+---
+
+## Aclaración del product owner — PE-107 (2026-08-20)
+
+**Qué es realmente el "guacho" de PE-107.** Una mezcla de mostos ya
+fermentados que arrastra **seis poblaciones** en un solo recipiente:
+
+- Cool Blue
+- Sunrise Orange
+- Green Origin
+- Deep Amber
+- fermentaciones espontáneas de **Catuaí**
+- fermentaciones espontáneas de **Geisha**
+
+**La celda del archivo dice menos que eso.** PE-107 registra sólo
+`S.O. G.O D.A.` — no nombra Cool Blue ni las espontáneas. La fila hermana
+PE-106 sí escribe la convención completa (`S.O. G.O D.A. C.B. SPON ... y
+pitch de 20g de cool blue`), lo que confirma que las iniciales son las
+cepas comerciales: S.O. = Sunrise Orange, G.O. = Green Origin,
+D.A. = Deep Amber, C.B. = Cool Blue, SPON = espontánea.
+
+**Procedencia distinta, y por eso está acá y no en la nota del lote.** Esta
+composición no sale del archivo: es testimonio del product owner. La nota
+que el importador escribe en `TreatmentBatch.notes` conserva el texto
+original del CSV, `original_record`, y nada más. Mezclar ambas cosas en un
+mismo campo afirmaría que el archivo dice algo que no dice.
+
+**La brecha de modelado que esto expone.** `Levadura / cultivo` es de tipo
+catálogo y de valor único: no puede representar seis poblaciones
+simultáneas. Forzar una sola afirmaría una composición que nadie midió, y
+la regla del §mapeo lo prohíbe explícitamente. Hoy el importador no asigna
+cultivo a las filas guacho y preserva el texto verbatim — correcto, pero
+incompleto: la composición real no es consultable.
+
+Resolverlo pide una decisión de diseño que este ticket no toma: o un
+cultivo multivaluado, o modelar el mosto guacho como una entidad con su
+propia composición y linaje (que es lo que realmente es — el mosto tiene
+padres, igual que un lote). Queda como brecha registrada, no como
+pendiente del importador.

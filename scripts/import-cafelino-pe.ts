@@ -464,13 +464,42 @@ export async function runImport(opts: { peCsvPath: string; cerezasCsvPath: strin
     if (agua) variableValues.push({ protocolVariableId: varId("Fuente de agua"), textValue: agua });
     if (row.nivelCama != null) variableValues.push({ protocolVariableId: varId("Nivel de cama"), numericValue: row.nivelCama });
 
+    // The ticket's own two rules: "si un término no coincide con ningún valor
+    // de catálogo, no inventes el valor ni lo fuerces al más parecido" and
+    // "el comentario original se conserva siempre". The second was not being
+    // honoured: yeastRaw was read for the guacho test and the stage split,
+    // then dropped. For rows whose culture cannot be represented as a single
+    // catalog value — the guacho musts, and the rows that map to nothing —
+    // the record therefore kept no trace of what was actually inoculated.
+    //
+    // "Levadura / cultivo" is catalog-typed and single-valued, so a blended
+    // must genuinely cannot be expressed in it (PE-107 is a blend of musts
+    // carrying Cool Blue, Sunrise Orange, Green Origin and Deep Amber plus
+    // spontaneous Catuai and Geisha ferments — six populations in one
+    // vessel). Forcing one of them in would assert a composition nobody
+    // measured. Preserving the source text verbatim keeps the fact
+    // recoverable without inventing structure the schema cannot carry.
+    const unrepresentableCulture =
+      isGuacho || (ownYeastRaw && !yeastMapped)
+        ? row.yeastRaw?.replace(/\s+/g, " ").trim() || null
+        : null;
+    const batchNotes =
+      [
+        isDeducedParent ? row.observaciones : row.descripcionTratamiento,
+        unrepresentableCulture
+          ? `Cultivo (texto original del archivo — no representable como un valor único de catálogo): ${unrepresentableCulture}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" — ") || undefined;
+
     const batch = await createTreatmentBatch(opts.actorUserAccountId, {
       protocolVersionId: setup!.version.id,
       lotId,
       projectId: CAFELINO_PROJECT_ID,
       batchLabel: row.peCode,
       startedAt: row.startDate ?? row.harvestDate ?? new Date(),
-      notes: isDeducedParent ? row.observaciones ?? undefined : row.descripcionTratamiento ?? undefined,
+      notes: batchNotes,
       provenanceClass: isDeducedParent ? "interpretation" : "original_record",
       sourceReference: isDeducedParent
         ? `Deducido — ver ${SOURCE_REFERENCE}, filas de ${row.peCode}-A/B/C`
