@@ -76,24 +76,64 @@ laptop's fate.
 
 ## Cadence
 
-Manual, deliberately (ADR-055). Automate only once the manual path has been
-run enough times to trust. Reasonable minimum while manual:
+Two paths, both writing to the same destination.
 
-- before and after any `prisma migrate` against production
-- after any real field session that entered data worth losing
-- monthly regardless
+**Manual** — `npm run backup:db` then `npm run backup:verify`. Use before and
+after any `prisma migrate` against production, and after any real field
+session that entered data worth losing.
+
+**Scheduled** — `scripts/backup/run-scheduled.sh`, driven by the launchd job
+in `scripts/backup/com.nectarnomada.backup.plist` (Mondays 09:00 local). It
+differs from an interactive run in three ways that matter on a laptop:
+
+- it **skips silently** when the destination is not mounted, because a laptop
+  spends much of its life with Drive still starting or the network down, and
+  an alarm on every one of those trains you to ignore alarms;
+- it **verifies what it just wrote**, since an unattended backup nobody
+  restores is the exact failure ADR-055 exists to prevent;
+- it logs to `scheduled.log` beside the backups, so the record lives with the
+  artifacts.
+
+`StartCalendarInterval` rather than `StartInterval`: a machine asleep at the
+scheduled time runs the job once on next wake instead of skipping the week.
+
+To install it:
+
+```bash
+cp scripts/backup/com.nectarnomada.backup.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.nectarnomada.backup.plist
+```
+
+To check or remove it:
+
+```bash
+launchctl list | grep nectarnomada
+launchctl unload ~/Library/LaunchAgents/com.nectarnomada.backup.plist
+```
+
+**Retention.** Each run keeps the newest `NN_BACKUP_KEEP` sets (default 14)
+and deletes older ones. Pruning only ever removes whole timestamped set
+directories, never the set just written and nothing else in the destination.
+At roughly 1.3 MB per set this is about cloud tidiness, not space.
 
 ## Known gaps
 
-1. **R2 media has no second copy.** The `Asset` table stores
-   `storage_key`, `storage_bucket`, `size_bytes` and `checksum_sha256`, so a
-   reconciling backup — pull every object, verify against the recorded
-   checksum, report anything missing or corrupt — is straightforward. Not
-   built.
+1. **R2 media has no second copy — but there is currently no media.**
+   Verified 2026-08-20: `core.asset` holds 0 rows and the `nectar-nomada`
+   R2 bucket holds 0 objects. The gap is real in design and empty in
+   practice, so no reconciliation tooling has been built — deliberately,
+   per `SECURITY.md`'s own rule that need justifies complexity rather than
+   anticipation of it. The same check confirmed the R2 credentials
+   authenticate. The moment real photos exist this becomes urgent, and the
+   `Asset` table already stores `storage_key`, `storage_bucket`,
+   `size_bytes` and `checksum_sha256`, so a reconciling backup — pull every
+   object, verify against the recorded checksum, report anything missing or
+   corrupt — is straightforward to write against real data.
+
 2. **No producer-facing export.** A producer cannot take their own lots,
    sensory results, or reports out of the platform. This is a product gap as
    much as an operational one.
-3. **Recovery point is "whenever someone last ran it."** Manual by design
-   for now; this is the cost of that choice, and it is the first thing to fix
-   by automating.
+3. **Recovery point is up to a week.** The scheduled job is weekly and only
+   runs while this laptop is awake and Drive is mounted. Anything entered
+   between runs is protected only by Neon's own PITR.
 4. **Secrets have no custody plan.** `.env` exists on one laptop.
