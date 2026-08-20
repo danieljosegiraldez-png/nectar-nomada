@@ -100,6 +100,13 @@ this repository, not in Drive, not beside the ciphertext — ciphertext and
 passphrase in the same place is one custodian, which is no better than none.
 If you lose it, the seal is unrecoverable; there is no reset.
 
+**Recovery drill, 2026-08-20:** `secrets:open` was run with the passphrase
+pasted from the password manager — not typed from memory — and returned the
+`.env` contents. This is the check worth repeating after any re-seal, because
+sealing only proves the passphrase you *typed* works; it says nothing about
+whether the copy you *stored* is the same string. A typo made while saving it
+stays invisible until the day it matters.
+
 `secrets/` sits outside the timestamped set directories, so retention pruning
 never touches it. `INVENTORY.txt` beside the blob lists key *names* only, so a
 future restorer can tell what should be present without it being a second copy
