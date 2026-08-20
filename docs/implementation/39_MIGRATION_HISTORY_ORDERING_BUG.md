@@ -157,3 +157,86 @@ Si esto corre sin el error `P3006`/`schema "research" does not exist`, el
 historial ya se puede reproducir desde cero. Borrar la carpeta de prueba
 que genera (`--create-only` no la aplica a ninguna base, solo prueba el
 replay) antes de terminar.
+
+---
+
+# ENSAYO COMPLETO — 2026-08-20
+
+**Nada de esto se ejecutó en producción.** Todo se probó contra copias
+locales restauradas desde un backup verificado. La carpeta sigue con su
+nombre original y `_prisma_migrations` de Neon está intacta.
+
+## A. El origen — respondido
+
+§3 pedía revisar el historial de commits como primer paso. Hecho:
+
+- `20260813112712_ro1_statistical_discipline` y
+  `20260813153349_ro1_research_os` **entraron a git en el mismo commit**,
+  `1576fed` ("RO1: Research OS — full schema..."), en la misma sesión.
+- `git log --diff-filter=R` sobre `prisma/migrations` no muestra **ningún
+  rename** en toda la historia del repositorio.
+
+O sea: las dos carpetas se generaron en una sola sesión de RO1, con cuatro
+horas de diferencia y en el orden equivocado, y se commitearon juntas.
+Nadie renombró nada después. Ningún otro archivo referencia el nombre viejo.
+
+## B. Corrección importante a la Opción 1 de §5
+
+**El destino propuesto en §5 no alcanza.** §5 sugiere renombrar a
+`20260813153350_...`, es decir justo después de `ro1_research_os`. Eso
+seguiría fallando.
+
+`statistical_discipline` hace `ALTER TABLE` sobre tres tablas:
+
+| Tabla que altera | La crea |
+|---|---|
+| `research.conclusion` | `20260813153349_ro1_research_os` |
+| `research.experiment` | `20260813153349_ro1_research_os` |
+| `research.variable_catalog_value` | **`20260813155334_ro1_variable_catalogs`** |
+
+La tercera nace en `variable_catalogs`, que corre *después* de
+`research_os`. El destino correcto es después de **`155334`**, no después
+de `153349`. Verificado: con `20260813155335_ro1_statistical_discipline`
+el replay completo pasa.
+
+## C. Lo que se probó, y con qué resultado
+
+| Prueba | Antes | Después |
+|---|---|---|
+| `migrate deploy` sobre una base vacía | falla: `schema "research" does not exist` | **40 migraciones aplican limpio** |
+| Schema resultante vs. `prisma/schema.prisma` | — | **idéntico**, sin drift |
+| Tablas replay vs. producción restaurada | — | idénticas; las 9 de diferencia son `neon_auth.*`, que las crea Neon, no las migraciones |
+| `migrate status` tras renombrar sin tocar la tabla | historial divergente, la renombrada aparece como pendiente | — |
+| `migrate status` tras el `UPDATE` | — | **limpio** |
+| `migrate dev --create-only` con shadow real | bloqueado desde RO1.2 | **funciona** |
+
+## D. Procedimiento verificado, para cuando haya luz verde
+
+Los dos pasos van juntos, en una ventana sin escrituras concurrentes.
+
+```bash
+# 1. Renombrar la carpeta (en el repo).
+git mv prisma/migrations/20260813112712_ro1_statistical_discipline \
+       prisma/migrations/20260813155335_ro1_statistical_discipline
+
+# 2. Actualizar la fila en la base REAL, en la misma operación.
+#    Afecta exactamente una fila.
+psql "$DATABASE_URL" -c "
+update _prisma_migrations
+   set migration_name = '20260813155335_ro1_statistical_discipline'
+ where migration_name = '20260813112712_ro1_statistical_discipline'"
+
+# 3. Verificar.
+npx prisma migrate status          # debe decir que está al día
+```
+
+**Reversión**, si algo sale mal: el `UPDATE` inverso más `git mv` al
+revés. No se borra ni se crea ninguna fila, no se toca ningún dato de
+aplicación, y el SQL de la migración no cambia — sólo cambia el nombre por
+el que Prisma la identifica.
+
+**Riesgo residual.** El único momento peligroso es entre el paso 1 y el
+paso 2: si algo corre `migrate deploy` ahí en medio, Prisma intentaría
+aplicar la migración renombrada de nuevo y fallaría (los objetos ya
+existen). Por eso van juntos y por eso conviene una ventana tranquila.
+Vercel corre `migrate deploy` en el build — no desplegar durante la ventana.
