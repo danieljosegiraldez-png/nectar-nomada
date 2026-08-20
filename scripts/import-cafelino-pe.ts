@@ -33,7 +33,7 @@ import {
   type PeRow,
 } from "../lib/research/cafelinoPeImport";
 import { createProtocol, createProtocolVersion, activateProtocolVersion } from "../lib/research/protocols";
-import { createTreatmentBatch, addProcessingStage, recordProcessSensoryObservation, recordProcessingStageObservation } from "../lib/research/treatments";
+import { createTreatmentBatch, addProcessingStage, recordProcessSensoryObservation, recordProcessingStageObservation, type TreatmentBatchVariableValueInput } from "../lib/research/treatments";
 import { recordHarvestEvent } from "../lib/traceability/harvest";
 import { recordTransformation } from "../lib/traceability/lots";
 import { recordMeasurement } from "../lib/traceability/measurements";
@@ -398,7 +398,10 @@ export async function runImport(opts: { peCsvPath: string; cerezasCsvPath: strin
     }
     resolvedLotId.set(row.peCode, lotId);
 
-    const variableValues: Array<{ protocolVariableId: string; catalogValueId?: string | null; textValue?: string | null; numericValue?: number | null }> = [];
+    // Typed from the service's own input rather than restated inline: the
+    // inline shape omitted dataQuality, so the unknown-identity values only
+    // typechecked because a spread bypasses excess-property checking.
+    const variableValues: TreatmentBatchVariableValueInput[] = [];
     const variables = setup!.version.variables as Array<{ id: string; name: string }>;
     const varId = (name: string) => variables.find((v) => v.name === name)!.id;
 
@@ -444,6 +447,27 @@ export async function runImport(opts: { peCsvPath: string; cerezasCsvPath: strin
       if (metodo) {
         const mId = await catalogValueId("metodo_inoculacion", metodo);
         if (mId) variableValues.push({ protocolVariableId: varId("Método de inoculación"), catalogValueId: mId });
+      }
+    }
+    else if (isGuacho) {
+      // Product owner, 2026-08-20: a spontaneous ferment needs no named
+      // organism — record it as unknown. A guacho must is a blend of already
+      // fermented musts whose combined population nobody identified, so
+      // "Spontaneous Wild" (impliesUnknownIdentity) is the honest value, and
+      // ADR-053 requires the accompanying dataQuality. Leaving the field
+      // empty said less, not more.
+      //
+      // The strain names the cell does list (S.O., G.O., D.A., C.B.) are not
+      // lost by this: the batch note preserves the source text verbatim.
+      // What is asserted here is that the resulting population is unidentified,
+      // which is true of any guacho.
+      const id = await catalogValueId("levadura_cultivo", "Spontaneous Wild");
+      if (id) {
+        variableValues.push({
+          protocolVariableId: varId("Levadura / cultivo"),
+          catalogValueId: id,
+          dataQuality: "not_tested" as const,
+        });
       }
     }
     const equipo = mapEquipo(row.equipoRaw);

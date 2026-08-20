@@ -227,15 +227,21 @@ que el importador escribe en `TreatmentBatch.notes` conserva el texto
 original del CSV, `original_record`, y nada más. Mezclar ambas cosas en un
 mismo campo afirmaría que el archivo dice algo que no dice.
 
-**La brecha de modelado que esto expone.** `Levadura / cultivo` es de tipo
-catálogo y de valor único: no puede representar seis poblaciones
-simultáneas. Forzar una sola afirmaría una composición que nadie midió, y
-la regla del §mapeo lo prohíbe explícitamente. Hoy el importador no asigna
-cultivo a las filas guacho y preserva el texto verbatim — correcto, pero
-incompleto: la composición real no es consultable.
+**Decisión del product owner: una fermentación espontánea no necesita
+cepa — va como desconocida.** `Levadura / cultivo` es de tipo catálogo y de
+valor único, así que no puede representar seis poblaciones a la vez. La
+resolución no es un modelo nuevo: es que la población resultante de un
+guacho **no está identificada**, y eso ya tiene un valor propio.
+`Spontaneous Wild` (con `impliesUnknownIdentity`) más su `dataQuality`
+—`not_tested`, porque nadie hizo identificación microbiana— dice
+exactamente eso. Dejar el campo vacío decía menos, no más.
 
-Resolverlo pide una decisión de diseño que este ticket no toma: o un
-cultivo multivaluado, o modelar el mosto guacho como una entidad con su
-propia composición y linaje (que es lo que realmente es — el mosto tiene
-padres, igual que un lote). Queda como brecha registrada, no como
-pendiente del importador.
+Las filas guacho (PE-106, PE-107) ahora registran `Spontaneous Wild` /
+`not_tested`, igual que las espontáneas puras (PE-81, PE-82, PE-84,
+PE-86). Seis filas en total.
+
+**No se pierde nada.** Los nombres de cepa que la celda sí lista
+(S.O., G.O., D.A., C.B.) quedan en `TreatmentBatch.notes`, verbatim y como
+`original_record`. Lo que el campo de cultivo afirma es que la población
+resultante no está identificada — verdadero de cualquier guacho, y
+consultable. Lo que la nota conserva es lo que el archivo dijo.
