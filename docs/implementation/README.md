@@ -812,8 +812,13 @@ so none was drafted.
 
 ### Pending
 
-**`39_MIGRATION_HISTORY_ORDERING_BUG.md`** — **found during RO1.2, not
-fixed, deliberately.** `20260813112712_ro1_statistical_discipline`'s
+**`39_MIGRATION_HISTORY_ORDERING_BUG.md`** — **FIXED 2026-08-20.**
+Renamed to `20260813162732_ro1_statistical_discipline`, its true
+application time per production's own `_prisma_migrations`, with the
+matching row updated in the same operation. `prisma migrate dev` works
+again; history replays from empty with no drift. Original diagnosis, which
+follows, is kept because it explains the problem. Found during RO1.2, and
+for a while deliberately not fixed: `20260813112712_ro1_statistical_discipline`'s
 folder timestamp predates `20260813153349_ro1_research_os`, the migration
 that creates the `research` schema its own SQL depends on. Production
 (Neon) is unaffected — `prisma migrate status` reports clean, because
