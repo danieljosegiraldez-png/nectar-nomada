@@ -75,6 +75,15 @@ a {
   color: var(--nn-ink);
 }
 
+/* S2 §4 — sign out and the locale switcher are account controls, not
+   destinations. They sit in their own cluster rather than competing with
+   navigation for the scarce horizontal space on a phone. */
+.nn-nav-account {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .nn-nav-links {
   display: flex;
   gap: 1.25rem;
@@ -521,11 +530,16 @@ a.nn-card-link:active {
     padding: 0 1rem;
   }
 
+  /* Wordmark, then destinations, then account controls. Tried fitting the
+     account cluster beside the wordmark; "Cerrar sesión" plus the locale pill
+     overflows 343px and wraps anyway, which only pushed the destinations into
+     third place. Keeping the stack costs the same height and puts navigation
+     where it belongs. */
   .nn-nav-row {
     flex-direction: column;
     align-items: stretch;
     gap: 0.25rem;
-    padding-block: 0.75rem 0.25rem;
+    padding-block: 0.5rem 0.25rem;
   }
 
   /* The ES/EN switcher is a control an operator uses one-handed, so it
@@ -561,6 +575,13 @@ a.nn-card-link:active {
 
   .nn-nav-links > * {
     flex: 0 0 auto;
+  }
+
+  /* A row, not the block it defaults to — stacked, these two controls cost
+     92px instead of 46. */
+  .nn-nav-account {
+    justify-content: flex-start;
+    gap: 1rem;
   }
 
   .nn-nav-links a,

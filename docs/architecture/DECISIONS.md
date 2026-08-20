@@ -4004,3 +4004,123 @@ restores a system unable to connect to anything. A checksum comparison would
 not help, since `.env` legitimately changes; the honest fix is to re-seal as
 part of rotating a credential, which the runbook says and the seal output
 repeats.
+
+---
+
+## ADR-058 — DRAFT, NOT RATIFIED — S2: sensory purpose and subject, and the navigation that follows
+
+**Status: DRAFT.** Written as S2 §9 requires, marked in the heading, and not
+to be cited as settled until the product owner ratifies it. The migration and
+code it describes are merged; the *reasoning* below is what awaits sign-off.
+
+**Context.** The signed-in bar carried ten items, three of which — Sensory,
+Competitions, Calibration — are not separate disciplines. They are one
+discipline used for different ends. Merging them on that observation alone
+would have been cosmetic, so S2 asked first what actually distinguishes one
+evaluation tool from another.
+
+**Decision 1 — three axes, not a list of roles.** Enumerating roles (judge,
+QC, process panel, green buyer, roaster, barista, competitor, consumer) was
+considered and rejected: the list grows without end and hides that many of
+them do the same thing to a different subject. A roaster verifying a profile
+and a brewer verifying a batch are both verifying conformance. A green buyer
+and a competitor choosing what to enter are both selecting. Three axes cover
+twelve roles without naming them and admit the thirteenth without a schema
+change.
+
+- **Purpose** — what the evaluation is for. Five: `rank`,
+  `verify_conformance`, `characterize`, `select`, `hedonic`.
+- **Subject** — what is evaluated. Three: `raw_material_in_process`,
+  `intermediate_product`, `prepared_beverage`.
+- **Role** — who evaluates. Already RBAC's job; deliberately not modelled
+  again.
+
+Session format and deliberation mode are consequences of purpose, not
+independent axes: a judge deliberates under competition rules, a QC decides
+alone against a specification. Neither needs its own column.
+
+**Decision 2 — what is comparable with what.** §2a asked for a
+recommendation with reasoning, *enforced in the model*. It lives in
+`lib/sensory/purpose.ts` as pure functions rather than as prose here.
+
+| | comparable with |
+|---|---|
+| `rank` | `rank`, `characterize` |
+| `characterize` | `characterize`, `rank` |
+| `verify_conformance` | itself only |
+| `select` | itself only |
+| `hedonic` | itself only |
+
+- **`rank` ↔ `characterize`** read the same scales on the same scoresheet.
+  What differs is what the reader does with the number afterwards, which is
+  not a property of the measurement. Allowed only across a shared protocol
+  version.
+- **`verify_conformance`** yields a verdict against a specification, not a
+  position on a shared scale. Averaging a pass with an 87.5 produces a number
+  that means nothing.
+- **`select`** yields a choice made *within* an option set; it does not
+  travel outside the set it was made in.
+- **`hedonic`** is the existing rule, not a new one
+  (`CONSUMER_SENSORY_FEEDBACK.md`, CLAUDE.md §49). S2 stops it being a special
+  case and applies the same discipline between the technical purposes.
+
+Two further constraints: subject must match, and protocol version must match
+even within a single purpose — two scores on different scoresheets are not the
+same measurement.
+
+**Decision 3 — extraction method is an attribute, not a subject.** Espresso,
+filter and press are how a cup was prepared. Modelling them as subjects would
+grow the list without end *and* would make two brews of the same coffee
+incomparable, which is exactly the comparison a barista needs. Stored as
+`preparationMethod` on the session and deliberately never consulted by the
+comparability rules.
+
+**Decision 4 — an undeclared purpose is a refusal, not a wildcard.**
+`purpose` and `subject` are nullable and unbackfilled. §6 forbids classifying
+an existing evaluation automatically: deducing what a past session was *for*
+is precisely the interpretation provenance rules prohibit. Six sessions
+predate this migration and remain null.
+
+The consequence is enforced rather than documented: `computePanelResult`
+refuses a session whose purpose is undeclared, with its own error type
+distinct from the permission error. Aggregating assessments asserts they
+measure the same thing; doing that for a session nobody has characterised
+asserts it without anybody having said what was measured or why. Legacy
+sessions therefore surface as a specific, fixable error instead of
+disappearing into a mean.
+
+**Decision 5 — AI Suggestions stays a destination, correctly hidden.** §4
+asked whether it is a destination or a cross-cutting capability. Today `/ai`
+is the suggestion review queue, gated on `ai:review_suggestion`. The
+cross-cutting permission, `ai:converse`, is deliberately absent from the
+catalog — ADR-037 decision 4 defers it until Ask Néctar is actually built —
+so there is nothing cross-cutting to place yet. It remains a destination and
+is now hidden from viewers who lack the permission. When Ask Néctar ships,
+*that* is the capability worth revisiting as cross-cutting; this one is a
+queue.
+
+**Decision 6 — navigation is filtered by permission, and that filter is not
+security.** `permissionKeysAnywhere` answers "could this person use this
+section at all", which no single-target resolution can answer: a farm
+operator's `lot:manage` sits on a project scope and is invisible to a
+platform-scoped query. It is display-only by construction and documented as
+such — the union is strictly wider than any single scope, so using it to
+authorize would broaden exactly what `resolve.ts` exists to keep narrow.
+Enforcement stays a `can()` call against a specific target, per SECURITY.md §2.
+
+The rule it implements is "nothing visible that the viewer cannot use." The
+concrete failure it fixes: `/ai` was offered to every signed-in user and
+answered "no access" to almost all of them.
+
+**Consequences.** The bar drops from ten fixed entries to at most eight
+permission-filtered ones — a judge sees two. Sign out and the locale switcher
+move out of the destination row, since neither is a destination. Competitions
+and Calibration are reachable inside `/sensory`, offered by the same filter.
+
+`16_ADAPTIVE_OPERATOR_WORKSPACE_PREAMBLE.md` remains the destination:
+navigation derived from context, not merely from permissions. This is the
+cheap intermediate step that ticket explicitly allows, and does not replace it.
+
+**Not done here, deliberately.** The evaluation tools themselves — the judge
+form, the QC form, the process panel — are their own tickets. No existing
+`Assessment` was classified. No visual redesign beyond the consolidation.

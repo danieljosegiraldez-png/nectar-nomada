@@ -21,6 +21,19 @@ import type { ScopeTarget } from "../rbac/types";
 
 export class SensoryAccessError extends Error {}
 
+/**
+ * S2 §2a — raised when something tries to aggregate a session that has not
+ * declared what it was evaluating for. Distinct from SensoryAccessError: this
+ * is not a permission problem, it is a missing declaration, and the fix is for
+ * a human to state the purpose rather than for anyone to be granted more.
+ */
+export class SensoryPurposeNotDeclaredError extends Error {
+  constructor(readonly sessionName: string) {
+    super(`sensory_purpose_not_declared:${sessionName}`);
+    this.name = "SensoryPurposeNotDeclaredError";
+  }
+}
+
 async function grantedKeysForSession(userAccountId: string, sessionId: string): Promise<Set<string>> {
   const target: ScopeTarget = { scopeType: "session", scopeRefId: sessionId };
   return resolvedPermissionKeys(userAccountId, target);
@@ -262,13 +275,25 @@ export async function getSessionForHeadJudge(userAccountId: string, sessionId: s
 export async function computePanelResult(userAccountId: string, blindSampleId: string) {
   const blindSample = await prisma.sensoryBlindSample.findUnique({
     where: { id: blindSampleId },
-    include: { flight: true },
+    include: { flight: { include: { session: true } } },
   });
   if (!blindSample) throw new SensoryAccessError("blind_sample_not_found");
 
   const grantedKeys = await grantedKeysForSession(userAccountId, blindSample.flight.sessionId);
   if (!grantedKeys.has(permissionKey("sensory", "manage_session"))) {
     throw new SensoryAccessError("no_session_access");
+  }
+
+  // S2 §2a. Aggregating assessments asserts they measure the same thing. A
+  // panel result drawn from a session whose purpose nobody declared asserts
+  // that without anyone having said what was being measured or why — and §6
+  // forbids inferring it after the fact. Refuse rather than average.
+  //
+  // This is the reason `purpose` is nullable and unbackfilled: legacy sessions
+  // surface here, as a specific error a human resolves by declaring the
+  // purpose, instead of disappearing into a mean.
+  if (blindSample.flight.session.purpose === null) {
+    throw new SensoryPurposeNotDeclaredError(blindSample.flight.session.name);
   }
 
   const assessments = await prisma.assessment.findMany({

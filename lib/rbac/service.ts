@@ -9,6 +9,7 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { can as resolveCan, resolvePermissions as resolvePermissionsPure } from "./resolve";
+import { permissionKey } from "./types";
 import type { ClassificationLevel, ResolvedAssignment, ScopeTarget, ScopeType } from "./types";
 
 async function getResolvedAssignments(userAccountId: string): Promise<ResolvedAssignment[]> {
@@ -62,6 +63,32 @@ export async function can(
 export async function resolvedPermissionKeys(userAccountId: string, target: ScopeTarget): Promise<Set<string>> {
   const assignments = await getResolvedAssignments(userAccountId);
   return resolvePermissionsPure(assignments, target);
+}
+
+/**
+ * Every permission key the user holds under ANY active assignment, whatever
+ * its scope.
+ *
+ * S2 §4 needs this and nothing else does: navigation asks "is there anywhere
+ * this person could use this section?", which no single-target resolution can
+ * answer — a farm operator's `lot:manage` lives on a project scope and is
+ * invisible to a platform-scoped query, yet they plainly should see Lots.
+ *
+ * **Display only, and never an authorization decision.** It answers "offer
+ * this link" and deliberately cannot answer "may they act on this row" —
+ * that stays a `can()` call against the specific target, per SECURITY.md §2.
+ * The union is strictly wider than any single scope, so using it to authorize
+ * would broaden exactly what resolve.ts exists to keep narrow.
+ */
+export async function permissionKeysAnywhere(userAccountId: string): Promise<Set<string>> {
+  const assignments = await getResolvedAssignments(userAccountId);
+  const granted = new Set<string>();
+  for (const assignment of assignments) {
+    for (const [resourceType, action] of assignment.permissions) {
+      granted.add(permissionKey(resourceType, action));
+    }
+  }
+  return granted;
 }
 
 /**
