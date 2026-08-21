@@ -49,6 +49,22 @@ attacks against object storage.
 
 ## 4. Classification enforcement
 
+> **Status, 2026-08-21 (ADR-062): the intent below is implemented but not yet
+> applied.** The AND-gate exists in `lib/rbac/resolve.ts` and is now covered by
+> tests, but it was being passed at **zero of thirteen** `can()` call sites,
+> because the parameter defaulted to `public` and omission was therefore
+> invisible. The parameter is now required, and every site that does not yet
+> gate passes the named `CLASSIFICATION_GATE_DEFERRED` sentinel — so the live
+> inventory of unenforced classification is `grep -rn
+> CLASSIFICATION_GATE_DEFERRED lib app`, and it can only shrink.
+>
+> Turning it on is blocked on a policy decision, not on code: every `Lot` is
+> `internal` and Farm Operator holds only `classification:clear_partner` by
+> ADR-029 decision 1's explicit choice, so enforcing today would deny operators
+> the lots they create. See ADR-062.
+>
+> This section previously stated the enforcement as fact. It described intent.
+
 The `public | registered | partner | internal | confidential | trade_secret`
 axis (`RBAC.md` §6) is enforced in the same authorization service as permission
 checks (§2 above) — never only in a query's `WHERE` clause written ad hoc per

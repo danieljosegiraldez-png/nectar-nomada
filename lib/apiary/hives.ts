@@ -12,7 +12,7 @@
  * below (reuse, not a second RBAC helper).
  */
 import { prisma } from "../db";
-import { can } from "../rbac/service";
+import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { ColonyOriginType, DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
@@ -35,7 +35,7 @@ export async function requireApiaryAccess(
 ) {
   for (const candidate of candidates) {
     for (const target of apiaryScopeTargetsFor(candidate)) {
-      if (await can(userAccountId, action, "apiary", target)) return;
+      if (await can(userAccountId, action, "apiary", target, CLASSIFICATION_GATE_DEFERRED)) return;
     }
   }
   throw new ApiaryAccessError("no_apiary_access");
@@ -56,8 +56,8 @@ export async function requireColonyEventWriteAccess(
 ) {
   for (const candidate of candidates) {
     for (const target of apiaryScopeTargetsFor(candidate)) {
-      if (await can(userAccountId, "manage", "apiary", target)) return;
-      if (await can(userAccountId, "manage", "colony_event", target)) return;
+      if (await can(userAccountId, "manage", "apiary", target, CLASSIFICATION_GATE_DEFERRED)) return;
+      if (await can(userAccountId, "manage", "colony_event", target, CLASSIFICATION_GATE_DEFERRED)) return;
     }
   }
   throw new ApiaryAccessError("no_apiary_access");

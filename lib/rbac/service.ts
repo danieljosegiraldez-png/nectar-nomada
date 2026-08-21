@@ -10,6 +10,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { can as resolveCan, resolvePermissions as resolvePermissionsPure } from "./resolve";
 import { permissionKey } from "./types";
+export { CLASSIFICATION_GATE_DEFERRED } from "./resolve";
 import type { ClassificationLevel, ResolvedAssignment, ScopeTarget, ScopeType } from "./types";
 
 async function getResolvedAssignments(userAccountId: string): Promise<ResolvedAssignment[]> {
@@ -52,7 +53,9 @@ export async function can(
   action: string,
   resourceType: string,
   target: ScopeTarget,
-  resourceClassification: ClassificationLevel = "public",
+  // Required — see resolve.ts's note. Pass CLASSIFICATION_GATE_DEFERRED where
+  // the gate is knowingly not applied yet, never a bare "public".
+  resourceClassification: ClassificationLevel,
 ): Promise<boolean> {
   if (!userAccountId) return false;
   const assignments = await getResolvedAssignments(userAccountId);

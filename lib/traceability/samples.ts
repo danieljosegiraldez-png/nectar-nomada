@@ -19,7 +19,7 @@
  * traceability write path in this module uses.
  */
 import { prisma } from "../db";
-import { can } from "../rbac/service";
+import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { scopeTargetsFor, TraceabilityAccessError } from "./lots";
 import type { DataQuality, HarvestWindowPrecision, ProvenanceClass } from "../../generated/prisma/client";
@@ -33,7 +33,7 @@ async function requireSampleAccess(
 ) {
   for (const candidate of candidates) {
     for (const target of scopeTargetsFor(candidate)) {
-      if (await can(userAccountId, action, "sample", target)) return;
+      if (await can(userAccountId, action, "sample", target, CLASSIFICATION_GATE_DEFERRED)) return;
     }
   }
   throw new TraceabilityAccessError("no_sample_access");

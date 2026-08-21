@@ -11,7 +11,7 @@
  * kind of write, a new child row, not an edit to the parent).
  */
 import { prisma } from "../db";
-import { can } from "../rbac/service";
+import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
@@ -28,7 +28,7 @@ export class LocationValidationError extends Error {}
  */
 async function requireLocationAttributeAccess(userAccountId: string, locationId: string) {
   const target: ScopeTarget = { scopeType: "location", scopeRefId: locationId };
-  if (await can(userAccountId, "manage_attributes", "location", target)) return;
+  if (await can(userAccountId, "manage_attributes", "location", target, CLASSIFICATION_GATE_DEFERRED)) return;
   throw new LocationAccessError("no_location_attribute_access");
 }
 

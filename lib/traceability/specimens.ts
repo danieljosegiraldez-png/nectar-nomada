@@ -17,7 +17,7 @@
  * building a parallel one, per the ticket's own instruction.
  */
 import { prisma } from "../db";
-import { can } from "../rbac/service";
+import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type {
@@ -39,7 +39,7 @@ async function resolveLocationScope(locationId: string) {
 
 async function requireSpecimenAccess(userAccountId: string, action: "manage" | "view", locationId: string) {
   const target: ScopeTarget = { scopeType: "location", scopeRefId: locationId };
-  if (await can(userAccountId, action, "specimen", target)) return;
+  if (await can(userAccountId, action, "specimen", target, CLASSIFICATION_GATE_DEFERRED)) return;
   throw new SpecimenAccessError("no_specimen_access");
 }
 

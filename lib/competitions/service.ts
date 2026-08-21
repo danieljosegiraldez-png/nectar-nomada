@@ -16,12 +16,12 @@
  * at that point, not assumed unnecessary.
  */
 import { prisma } from "../db";
-import { can } from "../rbac/service";
+import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
 
 export class CompetitionAccessError extends Error {}
 
 async function requireManagePermission(userAccountId: string) {
-  const allowed = await can(userAccountId, "manage", "competition", { scopeType: "platform", scopeRefId: null });
+  const allowed = await can(userAccountId, "manage", "competition", { scopeType: "platform", scopeRefId: null }, CLASSIFICATION_GATE_DEFERRED);
   if (!allowed) {
     throw new CompetitionAccessError("no_manage_access");
   }

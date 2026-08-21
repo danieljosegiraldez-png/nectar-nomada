@@ -8,7 +8,7 @@
  * against existing activities today.
  */
 import { prisma } from "../db";
-import { can } from "../rbac/service";
+import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { ResearchAccessError } from "./access";
 
@@ -67,7 +67,7 @@ export async function canReviewResearchActivity(reviewerUserAccountId: string, r
   const activity = await prisma.researchActivity.findUnique({ where: { id: researchActivityId } });
   if (!activity) return false;
   if (activity.proposedByUserAccountId === reviewerUserAccountId) return false;
-  return can(reviewerUserAccountId, "review", "research_activity", { scopeType: "platform", scopeRefId: null });
+  return can(reviewerUserAccountId, "review", "research_activity", { scopeType: "platform", scopeRefId: null }, CLASSIFICATION_GATE_DEFERRED);
 }
 
 export async function reviewResearchActivity(

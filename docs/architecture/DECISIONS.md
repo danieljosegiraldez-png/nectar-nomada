@@ -4322,3 +4322,81 @@ the read path today. That needs settling before community ships.
 with unsold capacity — campaign → brief → approved variant → publication →
 tracked link → booking — because the platform already knows the capacity and
 the conversion is unambiguous.
+
+---
+
+## ADR-062 — The classification AND-gate was never applied; the bypass is now a compile error
+
+**Context.** ADR-059 noted, while building the producer export, that the
+traceability read path applies no classification gate. That understated it.
+Audited across the codebase: the gate was passed at **zero of thirteen**
+`can()` call sites. It is fully specified (`RBAC.md` §4, `CLAUDE.md` §10),
+implemented (`lib/rbac/resolve.ts`), seeded (five `classification:clear_*`
+permissions across seven role profiles) and stored on `Lot`, `Sample`,
+`SensorySession`, `Asset` and `Story` — and never enforced anywhere.
+
+Two things kept it invisible:
+
+1. **The parameter defaulted to `public`.** Omitting it silently produced the
+   permissive answer, so no call site looked wrong.
+2. **It had no tests.** Nothing failed when it was skipped, and nothing proved
+   it worked when it wasn't.
+
+`SECURITY.md` §4 asserted the enforcement as fact. It described intent, and has
+been corrected to say so.
+
+**Decision 1 — the parameter is required.** `resourceClassification` no longer
+defaults in either `can()`. Omission is now a compile error rather than an
+invisible bypass. This produced exactly thirteen errors, which is the count of
+sites that were skipping the gate.
+
+**Decision 2 — unenforced sites are named, not silent.** They pass
+`CLASSIFICATION_GATE_DEFERRED`, a sentinel that evaluates to `public` so
+behaviour is unchanged, but which makes the debt an inventory:
+
+```
+grep -rn CLASSIFICATION_GATE_DEFERRED lib app
+```
+
+Thirteen sites today. That number should only ever fall, and a code review can
+see it move.
+
+**Decision 3 — the gate is now tested.** Six tests in
+`tests/rbac/resolve.test.ts` prove it grants at the cleared level, denies above
+it, denies when the action permission is absent regardless of clearance, and
+that Platform Admin clears everything. The mechanism is trustworthy before it
+is switched on, rather than after.
+
+**Not decided here, because it is not a code question.** Enforcement is blocked
+on a genuine inconsistency between two recorded decisions:
+
+- **ADR-029 decision 1** deliberately holds that a partner-level role *"still
+  cannot clear `internal`/`confidential`/`trade_secret`, even on their own
+  assigned project — verified live."* Farm Operator was given the same grant on
+  that basis.
+- Every `Lot` is `internal` (51 of 51), every `Sample` is `internal`, every
+  `SensorySession` is `internal`. Plain Sensory Judge holds no clearance at
+  all.
+
+Both cannot hold. Enforcing today denies operators the lots they create and
+judges the sessions they judge. The options, none of them free:
+
+1. **Grant `clear_internal` to the field roles.** Makes enforcement work
+   immediately and is a *net narrowing* — today those roles can read
+   `confidential` and `trade_secret` too, because nothing checks. But it
+   contradicts ADR-029 decision 1 and needs a superseding decision, not a
+   catalog edit.
+2. **Default operator-created records to `partner`.** Consistent with ADR-029,
+   and arguably what `partner` is for. Requires reclassifying real production
+   rows, which is a data write over research records.
+3. **Accept that operational records are not classification-gated** and say so
+   plainly, reserving the axis for `Asset`, `Story` and future client work.
+   Honest and cheapest; abandons the axis where most of the data lives.
+
+This ADR takes none of them. It makes the bypass impossible to reintroduce
+silently, proves the mechanism, tells the truth in `SECURITY.md`, and leaves
+the policy where it belongs.
+
+**Consequence for other work.** ADR-059's export and ADR-061's community and
+consent design both depend on this being settled — the export inherits whatever
+is decided, and community handles personal data under it.
