@@ -4124,3 +4124,70 @@ cheap intermediate step that ticket explicitly allows, and does not replace it.
 **Not done here, deliberately.** The evaluation tools themselves — the judge
 form, the QC form, the process panel — are their own tickets. No existing
 `Assessment` was classified. No visual redesign beyond the consolidation.
+
+---
+
+## ADR-059 — Producer data export, and the classification gate it does not apply
+
+**Context.** A producer could see their lots in the application and print one
+report at a time, but could not take their own records out. CLAUDE.md §46
+asks for exports; `docs/implementation/README.md` named client export as the
+last piece of data sovereignty still open. Sovereignty that only the
+platform's operator enjoys is not sovereignty.
+
+**Decision 1 — CSV and JSON together, in one zip.** They serve different
+people. CSVs open in the spreadsheet a producer already uses; the JSON keeps
+the lineage and nesting that CSV flattens into a column of ids, which is what
+a lab, a re-import, or another platform actually needs. Neither alone is
+sufficient, and choosing one would have been choosing which audience to
+serve.
+
+**Decision 2 — scope is the question the application already answers.**
+`resolveLotVisibility` decides which lots the caller may export, asked of
+`lot:export` rather than `lot:view`. Reusing the resolver rather than writing
+a second one means the export cannot drift from what the app shows: there is
+one implementation of "which lots are yours", and both callers ask it.
+
+**Decision 3 — `lot:export` is its own permission.** CLAUDE.md §10 lists
+Export as its own verb. Reading one record in the UI and extracting every
+record you can see as a file are different acts, and only the second is worth
+being able to withhold — from a Project Viewer, say, or a partner granted
+sight of a project but not a copy of it. Held by Farm Operator (the producer
+this exists for) and Platform Admin.
+
+**Decision 4 — the export does NOT apply a classification AND-gate, and this
+is the uncomfortable one.**
+
+Every `Lot` on this platform is classified `internal`. Farm Operator holds
+only `classification:clear_partner`. So an AND-gate here would return an
+empty file to precisely the person the feature exists for.
+
+The traceability read path does not apply one either — `lots.ts` documents
+that choice above `getSensoryLinkageForSamples`. Matching it keeps the export
+honest: it contains exactly what the application already shows the caller, no
+more and no less. Inventing a stricter rule in this one corner would have
+produced a feature that appears to work and returns nothing.
+
+**The real defect this exposes, recorded rather than papered over:** operators
+create lots that default to a classification they cannot clear. The
+classification system is effectively unwired on the traceability path, and
+export is simply the first place that becomes visible. Fixing it is a
+deliberate choice between three things — granting Farm Operator
+`clear_internal`, changing the default classification for operator-created
+lots, or accepting that lots are not classification-gated and saying so in
+`SECURITY.md`. That decision is not this ticket's to make, and making it
+silently inside an export feature would have been the worst of the options.
+
+**Consequence.** A producer gets their lots, measurements, samples and panel
+results as a dated zip. Panel results only — `getSensoryLinkageForSamples`
+never returns blind codes, mappings or evaluator identities, so the export
+inherits that narrowness for free.
+
+Every export writes an `AuditEvent` (§35) recording counts and scope, never
+contents: the trail says a copy was taken, not what was in it.
+
+**Not done here.** No per-lot export button; the whole-account zip covers the
+"send this to a buyer" case less neatly than the existing print-to-PDF report
+already does. No scheduled or emailed exports. No re-import of an exported
+archive — the JSON is shaped to make that possible later, not to make it work
+now.

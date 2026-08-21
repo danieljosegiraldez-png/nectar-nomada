@@ -479,7 +479,8 @@
     "shadePercentage_pct_90": "90%",
     "plotsTitle": "Plots",
     "plotsIntro": "Terrain plots across your accessible farms, with recorded growing conditions (F1).",
-    "noPlots": "No plots accessible yet."
+    "noPlots": "No plots accessible yet.",
+    "exportButton": "Export my data"
   },
   "Apiary": {
     "badge": "Apiary — A5",

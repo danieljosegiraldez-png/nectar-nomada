@@ -479,7 +479,8 @@
     "shadePercentage_pct_90": "90%",
     "plotsTitle": "Lotes",
     "plotsIntro": "Lotes de terreno de tus fincas accesibles, con las condiciones de cultivo registradas (F1).",
-    "noPlots": "Todavía no hay lotes accesibles."
+    "noPlots": "Todavía no hay lotes accesibles.",
+    "exportButton": "Exportar mis datos"
   },
   "Apiary": {
     "badge": "Apiario — A5",
