@@ -9,7 +9,14 @@ export default defineConfig({
     // §31) — they need DATABASE_URL loaded before lib/db.ts reads it, which
     // Next.js does automatically but a standalone vitest process does not.
     setupFiles: ["./tests/setup.ts"],
-    // Real Neon integration tests, no mocks — the default 10s was tuned
+    // Real-database integration tests, no mocks. They used to run against
+    // production Neon; tests/setup.ts now refuses a remote database unless
+    // ALLOW_REMOTE_TEST_DB=1, and `npm run test:db up` restores a local copy
+    // from the newest verified backup. The timeout below still matters:
+    // ALLOW_REMOTE_TEST_DB runs exist, and a local restore of a Neon dump
+    // keeps the same shape and cleanup behaviour.
+    //
+    // The default 10s was tuned
     // for local/pooled Postgres, not Neon's serverless compute waking from
     // a cold suspend on the first query of a fresh connection. Measured
     // live in this session: e2e.test.ts/reports.test.ts's beforeAll/

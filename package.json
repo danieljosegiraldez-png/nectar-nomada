@@ -19,7 +19,8 @@
     "backup:db": "bash scripts/backup/backup-db.sh",
     "backup:verify": "bash scripts/backup/verify-restore.sh",
     "secrets:seal": "bash scripts/backup/secrets-seal.sh",
-    "secrets:open": "bash scripts/backup/secrets-open.sh"
+    "secrets:open": "bash scripts/backup/secrets-open.sh",
+    "test:db": "bash scripts/test-db.sh"
   },
   "keywords": [],
   "author": "",

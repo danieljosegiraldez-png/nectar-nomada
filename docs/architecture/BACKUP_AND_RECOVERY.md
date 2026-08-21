@@ -112,6 +112,34 @@ never touches it. `INVENTORY.txt` beside the blob lists key *names* only, so a
 future restorer can tell what should be present without it being a second copy
 of the secrets.
 
+## The test suite runs on a restored copy
+
+`npm run test:db up` creates a local PostgreSQL cluster and restores the newest
+verified backup into it; `npm test` then runs against that.
+
+This is the third thing the backups are for, alongside disaster recovery and
+provider exit — and the one exercised most often, which is what keeps the other
+two honest. A restore that runs 382 integration tests is a considerably
+stronger claim than a restore that answers `select 1`.
+
+It replaced running the suite against production. That cost roughly 244
+`core.audit_event` rows per run, plus the occasional dangling `core.scope` when
+a cleanup hook timed out, written into the live research record. `tests/setup.ts`
+now refuses a remote database unless `ALLOW_REMOTE_TEST_DB=1` is set
+explicitly.
+
+It also finds things production runs cannot. Two "real data untouched"
+assertions counted every Location named "Lote" platform-wide and passed only
+because production happened to hold exactly six; the I1 importer's own plots
+broke them the moment it ran, and a restored copy is where that surfaced.
+
+```bash
+npm run test:db up       # start it, restore the newest backup
+npm run test:db reset    # discard and restore again
+npm run test:db status   # what is in it
+npm run test:db down     # stop it, keeping the data
+```
+
 ## Cadence
 
 Two paths, both writing to the same destination.
