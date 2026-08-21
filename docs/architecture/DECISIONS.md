@@ -4256,3 +4256,69 @@ thing this document changes about the v2 order.
 equipment relies on `classification = partner` actually gating reads. It does
 not today. Equipment does not introduce that problem and is not where it should
 be fixed, but it does depend on the answer.
+
+---
+
+## ADR-061 — `BRAND_MARKETING_COMMUNITY_SALES_ARCHITECTURE.md` accepted as planning input
+
+**Status: accepted planning input, implementation deferred.** Not a build
+order. `09_ADD_BRAND_MARKETING_PROMPT.md`'s deliverable, which had never been
+produced although its input was filed.
+
+**A filing problem, found first.** `09_` says to use the corrected input and
+place it *at* the plain `..._INPUT.md` filename. Both files are present
+instead, and the one at the plain name is the **uncorrected original** — it
+cites `MASTER_IMPLEMENTATION_ROADMAP.md` and
+`PLATFORM_ARCHITECTURE_RECONCILIATION.md`, neither of which exists, and which
+`20_CAPTURE_OR_LOSE_IT_REPORT.md` independently found missing. Anyone following
+`09_`'s own hand-off text reads the wrong document. This review was written
+from `..._INPUT_CORRECTED.md`; which file is authoritative is a product-owner
+action.
+
+**Repository state, verified not assumed.** None of the thirteen entities in
+the input's §94 exist. Everything they attach to does: `Story`, `Asset`,
+`Product`, `Experience`, `Booking`, `Order`, `Recommendation`, `Person`,
+`Organization`, `Project`, `AuditEvent`. No `Discount`/`Promotion` model, so
+campaign-linked offers have nothing to attach to.
+
+**Publer could not be verified.** This review has no access to
+`publer.com/docs`. Input §93 requires marking unconfirmed capabilities
+`UNCONFIRMED — DO NOT IMPLEMENT` rather than inferring from UI behaviour, so
+the matrix records whether the **input document cites a documentation URL** —
+a weaker claim than verification, labelled as such. Comments, AI replies,
+unified inbox/DMs and draft are uncited and marked accordingly; webhooks are
+unconfirmed, so reconciliation assumes polling. This is structural rather than
+cosmetic: it is why community is a separate provider boundary from publishing.
+
+**Two conflict checks, both required by the input's §98.**
+
+1. **Content generation genuinely overlaps.**
+   `MEDIA_INTELLIGENCE_PIPELINE.md` §3 (Phase B) already specifies AI-assisted
+   generation *as a `suggestion_type` family within the existing AI Suggestion
+   lifecycle, explicitly not a new governance model*, and already names
+   marketing copy drafts and social crops among its outputs. Resolution:
+   generation stays Phase B's; marketing supplies brand voice and claim
+   constraints and consumes suggestions; `ContentPiece` begins where a promoted
+   suggestion ends; and `ContentPiece` **references** `Story` rather than
+   copying it, since `Story` is built, flat, and first-class
+   (`DOMAIN_MODEL.md` §4). Two AI content pipelines would be the same
+   divergence `README.md` warns about for Resource.
+2. **Guardrails defer correctly; the marketing mode needs one correction.**
+   Input §95 already subordinates marketing AI to AI governance, research
+   governance, brand rules, rights and RBAC. But a marketing/community mode is
+   **not** in ADR-037 decision 3's approved MVP mode set, so it enters the
+   existing mode table as `not_yet_grounded` — the treatment every deferred
+   mode gets — rather than as a live mode with its own parallel persona and
+   tool semantics. It also inherits ADR-037 decision 4's `ai:converse` gate
+   rather than inventing one.
+
+**Consequence.** `Notification` now has **six** known consumers waiting on it
+(ADR-060 counted four; marketing and community signalling add two). And this
+document depends on ADR-059's open defect: rights, consent and community all
+handle personal data and lean on a classification gate that is not enforced on
+the read path today. That needs settling before community ships.
+
+**Recommended first slice**, endorsing the input's §89: one real experience
+with unsold capacity — campaign → brief → approved variant → publication →
+tracked link → booking — because the platform already knows the capacity and
+the conversion is unambiguous.
