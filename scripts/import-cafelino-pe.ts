@@ -631,6 +631,31 @@ export async function runImport(opts: { peCsvPath: string; cerezasCsvPath: strin
 }
 
 async function main() {
+  // Neither this script nor lib/db.ts loads dotenv, so DATABASE_URL has to
+  // come from the caller. That is the safer default for a script that writes
+  // — it cannot pick up production by accident — but the failure was obscure:
+  // PrismaPg given `undefined` falls back to localhost, and the first
+  // production run died with a bare ECONNREFUSED naming nothing. Say what is
+  // actually wrong.
+  if (!process.env.DATABASE_URL?.trim()) {
+    console.error(
+      [
+        "",
+        "DATABASE_URL is not set, and this script does not read .env.",
+        "",
+        "That is deliberate — an importer that writes should never pick up a",
+        "database by accident — but it means you have to name the target:",
+        "",
+        '  DATABASE_URL="postgresql://..." tsx scripts/import-cafelino-pe.ts \\',
+        "    --pe <path> --cerezas <path> --actor <userAccountId> [--apply]",
+        "",
+        "Without --apply it is a dry run and writes nothing.",
+        "",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+
   const args = process.argv.slice(2);
   const get = (flag: string) => {
     const i = args.indexOf(flag);

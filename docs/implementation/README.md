@@ -866,6 +866,28 @@ independently modelling Resource guarantees divergence — this one owns it.
 
 ---
 
+## Data sovereignty — closed, 2026-08-20/21
+
+The gap this README called "the one with the least margin for error" is no
+longer open. What exists now, all verified rather than asserted:
+
+- **Backups off the provider** — `pg_dump` to Google Drive, weekly via launchd,
+  with retention. ADR-055.
+- **Restore testing that is not ceremonial** — every backup is restored into a
+  throwaway PostgreSQL and diffed against a per-table row census before it
+  counts as verified. The test suite now runs on a restored copy too, so the
+  restore path is exercised on every run rather than annually.
+- **Secrets custody** — `.env` sealed under a passphrase held only in a
+  password manager, recovery drilled. ADR-057. A restored database is not a
+  restored system without it.
+- **A Neon exit runbook** — restoring into stock PostgreSQL 18 is documented
+  and demonstrated, not assumed.
+
+What remains is listed below: producer-facing export, and exit runbooks for
+Vercel and R2.
+
+---
+
 ## Not yet written
 
 - **Brand/marketing architecture review** — `09_`'s own actual deliverable
@@ -874,10 +896,12 @@ independently modelling Resource guarantees divergence — this one owns it.
   never run.
 - **Operational economics, full pass** — merge with `18_` so Resource is
   designed once. `20_` is the urgent slice already extracted from it.
-- **Data sovereignty and provider exit** — backup that isn't provider-native,
-  client export, restore testing, Neon/Vercel/R2 exit runbooks. Independent of
-  harvest timing, and the gap with the least margin for error: a provider
-  failure today would be unrecoverable.
+- **Client/producer data export** — a producer still cannot take their own
+  lots, sensory results or reports out of the platform. A product gap as much
+  as an operational one, and the last piece of data sovereignty still open.
+- **Vercel and R2 exit runbooks** — the Neon one exists (restore into stock
+  PostgreSQL, `BACKUP_AND_RECOVERY.md`); the other two providers do not have
+  theirs written.
 
 ---
 
@@ -940,8 +964,11 @@ entities that do not exist is how invented entities enter a schema.
    left one single dangling Scope (down from 37) — cleaned, but not
    forensically traced to a specific file; worth a second look only if it
    recurs at scale.
-4. **Credentials** (Stripe, R2, Google OAuth — all unset in production as of
-   the last verified check).
+4. **Credentials.** R2 is set and verified working (2026-08-20 —
+   authenticated against the real bucket, which is empty). Stripe and Google
+   OAuth remain unset in production, so cart, checkout, bookings and social
+   sign-in stay built-but-dead. Both need keys issued from those dashboards;
+   there is nothing to copy from `.env`, where they are empty too.
 5. **The real milestone**: a real apiary season actually inspected by
    Kenis, Chayanne, and Daniel — the real people and Projects now exist
    (A7) — and, in parallel, a real 2026 coffee harvest entered by a real
