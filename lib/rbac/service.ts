@@ -10,7 +10,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { can as resolveCan, resolvePermissions as resolvePermissionsPure } from "./resolve";
 import { permissionKey } from "./types";
-export { CLASSIFICATION_GATE_DEFERRED } from "./resolve";
+export { CLASSIFICATION_GATE_DEFERRED, CLASSIFICATION_NOT_APPLICABLE } from "./resolve";
 import type { ClassificationLevel, ResolvedAssignment, ScopeTarget, ScopeType } from "./types";
 
 async function getResolvedAssignments(userAccountId: string): Promise<ResolvedAssignment[]> {

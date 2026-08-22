@@ -17,7 +17,7 @@
  * building a parallel one, per the ticket's own instruction.
  */
 import { prisma } from "../db";
-import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
+import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type {
@@ -38,8 +38,21 @@ async function resolveLocationScope(locationId: string) {
 }
 
 async function requireSpecimenAccess(userAccountId: string, action: "manage" | "view", locationId: string) {
+  // A Specimen carries no classification of its own; the Location it sits at
+  // does, and that is what declares how sensitive knowing about this plant is
+  // (ADR-068). Where the specimen grows and whether that site is internal are
+  // the same question.
+  //
+  // Refuse a missing location rather than treating it as public — see the
+  // matching note in locations.ts.
+  const location = await prisma.location.findUnique({
+    where: { id: locationId },
+    select: { classification: true },
+  });
+  if (!location) throw new SpecimenAccessError("location_not_found");
+
   const target: ScopeTarget = { scopeType: "location", scopeRefId: locationId };
-  if (await can(userAccountId, action, "specimen", target, CLASSIFICATION_GATE_DEFERRED)) return;
+  if (await can(userAccountId, action, "specimen", target, location.classification)) return;
   throw new SpecimenAccessError("no_specimen_access");
 }
 

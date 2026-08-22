@@ -11,7 +11,7 @@
  * kind of write, a new child row, not an edit to the parent).
  */
 import { prisma } from "../db";
-import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
+import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
@@ -27,8 +27,22 @@ export class LocationValidationError extends Error {}
  * Assignment.
  */
 async function requireLocationAttributeAccess(userAccountId: string, locationId: string) {
+  // Gate on the Location's own classification (ADR-068). A Location is one of
+  // the records that declares its sensitivity — sixteen of them are `internal`
+  // — so the AND-gate has a real subject here, unlike the platform-wide
+  // capability checks elsewhere.
+  //
+  // A location that does not exist is refused rather than treated as public:
+  // defaulting a missing record to the most permissive level is how a gate
+  // gets bypassed by a bad id.
+  const location = await prisma.location.findUnique({
+    where: { id: locationId },
+    select: { classification: true },
+  });
+  if (!location) throw new LocationAccessError("location_not_found");
+
   const target: ScopeTarget = { scopeType: "location", scopeRefId: locationId };
-  if (await can(userAccountId, "manage_attributes", "location", target, CLASSIFICATION_GATE_DEFERRED)) return;
+  if (await can(userAccountId, "manage_attributes", "location", target, location.classification)) return;
   throw new LocationAccessError("no_location_attribute_access");
 }
 

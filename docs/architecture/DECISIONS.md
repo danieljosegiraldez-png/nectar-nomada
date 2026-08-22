@@ -4731,3 +4731,82 @@ refused for an unknown email — and its post-conditions held each time.
 the application. Both are deliberate acts by someone with database access,
 which is the correct amount of friction for creating the account that can do
 everything.
+
+---
+
+## ADR-068 — The rest of the classification sites, and the distinction between deferred and not applicable
+
+**Completes ADR-063**, which enforced the gate on the lot and sample paths and
+left eleven sites carrying `CLASSIFICATION_GATE_DEFERRED`.
+
+**Context.** Working through the eleven showed they were not eleven instances
+of one job. They fall into three kinds, and treating them uniformly — which is
+what "eleven remaining sites" implied — would have been wrong in two different
+directions.
+
+**First correction: classification lives on thirteen tables, not the four or
+five earlier ADRs record.** `asset`, `experience`, `location`, `organization`,
+`product`, `project`, `sample`, `story`, `field_submission`, `task`,
+`sensory_descriptor`, `sensory_session` and `lot` all carry it. That matters
+because it decides which sites have a subject to gate on at all.
+
+**Kind one — the record carries its own classification.** `location` does.
+`requireLocationAttributeAccess` and `requireSpecimenAccess` now load it and
+pass it. A Specimen has no classification of its own, but the Location it
+stands at does, and where a plant grows and whether that site is internal are
+the same question.
+
+Both refuse a record that cannot be loaded rather than falling back to
+`public`. Defaulting a missing record to the most permissive level is how a
+gate gets bypassed by a stale id.
+
+**Kind two — the record belongs to something that carries one.** Research
+records — Experiment, Measurement, Protocol — have no classification; the
+Project or Location the work belongs to does. `requireResearchAccess` resolves
+those in two batched queries and gates each scope target on the matching
+record, skipping any target whose record it could not load.
+
+**Kind three — there is no record.** Five checks ask *may this account manage
+competitions at all*, *review AI suggestions at all*, *manage sensory sessions
+at all*, *review research activities at all*. They resolve against
+`{ scopeType: "platform" }` and touch no row. Nothing's sensitivity is in
+question, so `public` is the correct and final answer.
+
+These were the second wrong direction: marked "deferred", they made five
+permanent no-ops look like a backlog. They now use a separate named constant,
+`CLASSIFICATION_NOT_APPLICABLE`. Both still evaluate to `public` and behaviour
+is unchanged — the point is that the grep for deferred work now counts only
+work that actually remains.
+
+**What is still deferred, and why it is a decision rather than a task.**
+Apiary: three sites (`apiary:view`, `apiary:manage`, `colony_event:manage`).
+Enforcing them would gate on the Project or Location, exactly as research now
+does — and that would lock `Apiary Colony Event Recorder` out of every internal
+location, which is sixteen of twenty-eight. The role holds `apiary:view` and
+`colony_event:manage` and clears nothing.
+
+That is ADR-063's hazard again, and it was checked the same way before writing
+any code: of every role holding a permission touched by this change, exactly
+one lacks the clearance it would need. One person currently holds that role,
+and the apiary tables are empty, so nothing breaks today — but it would break
+the moment the module is used. The choice is to grant the role
+`clear_internal`, as ADR-063 did for Farm Operator, or to leave apiary
+deferred; both are defensible and it is not a decision to slip into a
+refactor.
+
+**Verification, and why the passing suite proved nothing on its own.** The
+enforcement change passed all 411 existing tests without a single failure —
+because every seeded role holding these permissions already clears `internal`,
+so no existing fixture could exercise a refusal.
+
+`tests/traceability/classificationGate.test.ts` builds a role that holds the
+action permissions and no clearance, and drives the real service functions
+against the database. Each case is a pair: the same caller, the same record,
+refused at `internal` and allowed at `public`, so only the classification
+differs between them. Reverting `locations.ts` to pass a constant fails the
+refusal case, which is the regression these tests exist to catch.
+
+**Also removed:** three unused `CLASSIFICATION_GATE_DEFERRED` imports, one of
+them stale since ADR-063. The sentinel's entire value is that grep returns a
+true inventory; an import with no call site inflates it and makes finished work
+look pending.
