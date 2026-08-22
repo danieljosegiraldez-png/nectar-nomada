@@ -17,8 +17,15 @@
  * Argon2id hash.
  *
  * Usage:
- *   DATABASE_URL="postgresql://..." npx tsx scripts/set-password.ts <email>
+ *   npm run auth:set-password -- <email>
  */
+
+// Must come first: lib/db reads DATABASE_URL at import time, and ES module
+// imports evaluate in declaration order, so loading .env here means the
+// operator does not have to hand-assemble a connection string on the command
+// line. The rest of the tooling (scripts/backup/*) already reads .env; this
+// script asking for it separately was an inconsistency, not a safety measure.
+import "dotenv/config";
 
 import { prisma } from "../lib/db";
 import { hashPassword } from "../lib/auth/password";
@@ -88,17 +95,17 @@ async function main() {
       "The password is never taken as an argument — it would be left behind in",
       "shell history and in the process list. This prompts for it instead.",
       "",
-      "  npx tsx scripts/set-password.ts <email>",
+      "  npm run auth:set-password -- <email>",
     );
   }
   if (!email) {
-    fail("Usage: npx tsx scripts/set-password.ts <email>");
+    fail("Usage: npm run auth:set-password -- <email>");
   }
   if (!process.env.DATABASE_URL?.trim()) {
     fail(
-      "DATABASE_URL is not set, and this script does not read .env.",
+      "DATABASE_URL is not set, and .env does not define it either.",
       "",
-      '  DATABASE_URL="postgresql://..." npx tsx scripts/set-password.ts <email>',
+      "Run this from the project root, where .env lives.",
     );
   }
 
