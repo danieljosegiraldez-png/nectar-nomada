@@ -5177,3 +5177,70 @@ the paragraph before it, the server and client trees disagree, and hydration
 fails. Thirteen passing service tests said nothing about it; opening the page
 did. Verified fixed by inspecting the live DOM: zero forms inside a paragraph,
 all thirty-nine revoke forms children of a `div`.
+
+---
+
+## ADR-075 — External identities, and the Google sign-in that would have crashed
+
+**Context.** Enabling Google OAuth needs credentials from a Google Cloud
+console, which only the product owner can issue. Reviewing the flow *before*
+that setup found the flow itself was broken.
+
+The `signIn` callback resolved a Google login by finding a Person with the
+matching email and creating a `UserAccount` for them. But `person_id` is unique
+on `user_account`: one Person has at most one account. So for any Person who
+already had one, the create fails.
+
+That is every account that can currently sign in. Reproduced before changing
+anything: `Unique constraint failed on the fields: (person_id)`. The symptom
+would have been "Google sign-in doesn't work", appearing only after the console
+setup was finished, with nothing pointing at the cause.
+
+**Why the constraint is right and the code was wrong.** Assignments hang off
+`UserAccount`, so the account is what carries authority. Two accounts for one
+Person would mean their roles differ depending on how they signed in — a far
+worse failure than a crash. The model was correct; what it lacked was anywhere
+to record a *second way of proving identity* for the one account.
+
+**Decision.** `ExternalIdentity` — `(userAccountId, provider, subject)`, unique
+on `(provider, subject)` and on `(userAccountId, provider)`.
+
+Chosen over a `googleSubject` column on `UserAccount`, which would have been
+smaller but provider-specific in the schema — the scattering CLAUDE.md §44
+warns against, and needing another column for the next provider.
+
+Credentials are deliberately *not* modelled as an identity: a password is a
+property of the account (`passwordHash`), not a link to another system.
+
+`user_account.auth_subject` is dropped rather than left behind. It held the
+OAuth subject, is read nowhere once sign-in uses the new table, and had zero
+non-null values in production — fourteen accounts, all `credentials`. A dead
+column that still looks meaningful invites someone to write to it.
+
+**Sign-in now resolves in three cases:** a known identity uses its account; a
+known Person keeps their single account and Google is *linked* to it; nobody
+matching creates Person, account and identity together.
+
+**Two properties worth naming.**
+
+An unverified Google address never matches an existing Person. Matching is done
+on email alone, so without checking `email_verified` anyone able to set that
+address on a Google account could claim the matching Person. An unverified
+sign-in creates a separate Person carrying no email at all.
+
+A non-active account is refused even through Google. Status has to be a control
+that stands on its own — a second provider must not be a way back into a
+suspended account. This is the same property
+`tests/auth/setPassword.test.ts` already pins for passwords.
+
+**Verification.** Six tests drive the real callback out of `authConfig` rather
+than a copy of its logic. The linking test was mutation-tested by removing the
+link branch, which reproduces the original failure exactly —
+`Unique constraint failed on the fields: (person_id)`.
+
+**Still required from the product owner**, and not something this ADR can
+supply: a Google Cloud OAuth client, its redirect URI registered for both the
+production origin and `http://localhost:<port>` for local work, and
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` set in `.env` and in Vercel. The
+provider only registers when both values are non-empty, so until then the
+button does not appear and nothing changes.

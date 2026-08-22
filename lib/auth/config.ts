@@ -74,27 +74,68 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     /**
      * Runs before `jwt`. For the Credentials provider `user.id` is already
-     * our UserAccount id (set in `authorize` above). For Google, there is no
-     * database adapter (DECISIONS.md ADR-006), so account lookup/creation —
-     * find-or-create Person + UserAccount keyed by (authProvider,
-     * authSubject), falling back to matching an existing Person by email —
+     * our UserAccount id (set in `authorize` above). For Google there is no
+     * database adapter (DECISIONS.md ADR-006), so resolving the account
      * happens here, and the resulting UserAccount id is written onto `user`
      * so the `jwt` callback below picks it up as `token.sub`.
+     *
+     * Three cases, in order (ADR-075):
+     *
+     *   1. We have seen this Google identity before — use its account.
+     *   2. A Person already exists with this email. They keep their single
+     *      UserAccount; Google is *linked* to it. Creating a second account
+     *      was the old behaviour and it failed on `person_id`'s unique index
+     *      for every Person who could already sign in.
+     *   3. Nobody matches — create Person, UserAccount and identity together.
      */
     async signIn({ user, account, profile }) {
       if (account?.provider !== "google") return true;
 
-      const authSubject = account.providerAccountId;
-      const email = profile?.email ?? user.email ?? null;
+      const subject = account.providerAccountId;
+      const rawEmail = profile?.email ?? user.email ?? null;
+      // Normalised the way loginSchema and signUpSchema do, so a Google
+      // address matches the Person record however Google capitalises it.
+      const email = rawEmail ? rawEmail.trim().toLowerCase() : null;
 
-      let userAccount = await prisma.userAccount.findFirst({
-        where: { authProvider: "google", authSubject },
+      // 1. Known identity.
+      const identity = await prisma.externalIdentity.findUnique({
+        where: { provider_subject: { provider: "google", subject } },
+        include: { userAccount: true },
       });
 
+      let userAccount = identity?.userAccount ?? null;
+
+      if (identity) {
+        await prisma.externalIdentity.update({
+          where: { id: identity.id },
+          data: { lastUsedAt: new Date() },
+        });
+      }
+
       if (!userAccount) {
-        const existingPerson = email ? await prisma.person.findFirst({ where: { email } }) : null;
+        // Google verifies its own addresses, but say so explicitly: an
+        // unverified address must never match an existing Person, or anyone
+        // able to set that address on a Google account could claim it.
+        const emailVerified = (profile as { email_verified?: boolean } | undefined)?.email_verified === true;
+        const matchableEmail = email && emailVerified ? email : null;
+
+        const existingPerson = matchableEmail
+          ? await prisma.person.findUnique({
+              where: { email: matchableEmail },
+              include: { userAccount: true },
+            })
+          : null;
 
         userAccount = await prisma.$transaction(async (tx) => {
+          // 2. Known person — link, never create a second account.
+          if (existingPerson?.userAccount) {
+            await tx.externalIdentity.create({
+              data: { userAccountId: existingPerson.userAccount.id, provider: "google", subject, lastUsedAt: new Date() },
+            });
+            return existingPerson.userAccount;
+          }
+
+          // 3. Person with no account yet, or nobody at all.
           const person =
             existingPerson ??
             (await tx.person.create({
@@ -102,21 +143,31 @@ export const authConfig: NextAuthConfig = {
                 givenName: (profile?.given_name as string | undefined) ?? user.name ?? "Unknown",
                 familyName: (profile?.family_name as string | undefined) ?? "",
                 displayName: user.name ?? email ?? "Néctar Nómada user",
-                email,
+                email: matchableEmail,
               },
             }));
 
-          return tx.userAccount.create({
+          const created = await tx.userAccount.create({
             data: {
               personId: person.id,
               authProvider: "google",
-              authSubject,
               status: "active",
               emailVerifiedAt: new Date(),
             },
           });
+
+          await tx.externalIdentity.create({
+            data: { userAccountId: created.id, provider: "google", subject, lastUsedAt: new Date() },
+          });
+
+          return created;
         });
       }
+
+      // An account someone has disabled must not be revived by signing in
+      // through a second provider — status is the control that stands alone
+      // (the same property tests/auth/setPassword.test.ts pins for passwords).
+      if (userAccount.status !== "active") return false;
 
       user.id = userAccount.id;
       return true;
