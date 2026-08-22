@@ -5062,3 +5062,55 @@ question this whole area exists to answer.
 `{ OR: [{ id: who }, { displayName: who }] }`. Against a uuid column a display
 name is not a miss, it is a database error — so the id branch is only offered
 when the argument actually looks like a uuid.
+
+---
+
+## ADR-073 — Organizations carry their own contact details
+
+**Context.** An organizational email address (`nectarnomada@gmail.com`) was
+offered for Néctar Nómada, and there was nowhere to put it. Néctar Nómada
+exists as an Organization, not a Person, and `Organization` had no contact
+fields at all — no email, no phone, no website.
+
+The alternatives were both wrong. Creating a Person named "Néctar Nómada" to
+hold it would have made a shared login whose every action is attributed to the
+organization rather than to whoever performed it — which cuts directly against
+the provenance and `created_by` discipline the rest of the platform is built
+on. Attaching it to a member's Person record would make a fact about the
+organization depend on who currently works there.
+
+**Decision.** `Organization` gains `contactEmail`, `contactPhone` and
+`websiteUrl`, all nullable.
+
+CLAUDE.md §9 models Organizations as canonical entities — a farm, a roaster, a
+laboratory. How to reach one is a fact about it, and this is where facts about
+it live.
+
+All three are nullable because most organizations will not have them, and
+CLAUDE.md §3 is explicit that missing information stays missing rather than
+being filled in.
+
+**Not unique, unlike `Person.email` (ADR-072).** That constraint exists because
+`authorize()` resolves a login by that column, so a duplicate would make *which*
+account signs in arbitrary. An Organization never authenticates; no lookup's
+answer becomes ambiguous, and two organizations sharing an owner's address is
+ordinary rather than an error.
+
+**Visibility is already governed.** `Organization.classification` decides who
+may see the record, and these columns are part of it — an `internal`
+organization does not publish its phone number merely because the column
+exists. Néctar Nómada is currently `internal`, so recording an address here
+does not put it on the public site; that would be a separate, deliberate
+reclassification.
+
+**`scripts/set-organization-contact.ts`** accepts them from an operator.
+`--email=` normalises and shape-checks; `--website=` requires an http(s) URL
+and normalises through `URL`; `--phone=` is deliberately *not* pattern-checked,
+because phone formats vary by country and a regex there would reject real
+numbers rather than catch typos. An explicitly empty flag clears a field, while
+an absent flag leaves it untouched — so setting a phone number cannot silently
+erase a website. Matching is by exact name or id, never fuzzy, for the same
+reason as ADR-072.
+
+Run with no arguments it lists every organization and what is recorded, which
+is the fastest way to see the gap this ADR closes.

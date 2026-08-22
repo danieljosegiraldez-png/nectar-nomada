@@ -580,6 +580,21 @@ model Organization {
   organizationType OrganizationType    @map("organization_type")
   name             String
   description      String?
+  // Contact details (ADR-073). CLAUDE.md §9 models Organizations as canonical
+  // entities — a farm, a roaster, a laboratory — and reaching one is a fact
+  // about it, so it belongs here rather than being carried by whichever Person
+  // happens to be a member.
+  //
+  // Deliberately NOT unique, unlike Person.email: an Organization never
+  // authenticates, so there is no lookup whose answer a duplicate could make
+  // ambiguous, and two organizations sharing an owner's address is ordinary.
+  //
+  // Classification already governs whether these are visible — an `internal`
+  // Organization does not publish its phone number just because the column
+  // exists.
+  contactEmail     String?             @map("contact_email")
+  contactPhone     String?             @map("contact_phone")
+  websiteUrl       String?             @map("website_url")
   attributes       Json?
   status           RecordStatus        @default(draft)
   classification   ClassificationLevel @default(internal)
