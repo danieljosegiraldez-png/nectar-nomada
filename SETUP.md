@@ -86,147 +86,138 @@ Paste that into `.env` as `AI_SERVICE_DATABASE_URL`. Without it, `/ai`'s
 "Scan for suggestions" button will fail — everything else in the app works
 fine regardless.
 
-To also get a DEMO Platform Admin login for local testing
-(`demo-admin@nectar-nomada.example` / see prisma/seed.ts console output for
-the password — never do this in a shared environment):
+## Getting a login
+
+**There is no DEMO account any more.** The seeded DEMO identities were removed
+from production on 2026-08-21 (ADR-066) — they held the only three passwords in
+the database, which is why production briefly had no usable login at all
+(ADR-067). Two operator scripts replace them.
+
+```bash
+npm run auth:grant-admin -- you@example.com    # Platform Admin at platform scope
+npm run auth:set-password -- you@example.com   # prompts; needs a real TTY
+```
+
+Both act on a Person that **already exists**. Sign-up is not the way in for
+someone already in the database: it creates a *new* Person, and these people
+carry Assignments (CLAUDE.md §2 — do not duplicate canonical people).
+
+`auth:set-password` prompts with echo off and refuses a password given as an
+argument, which would survive in shell history and the process list. The first
+Platform Admin has to come from outside the app because granting that role
+requires `rbac:manage_permissions`, which only Platform Admin holds.
+
+Note that most People have no email address yet, so they cannot be given a
+password until one is set.
+
+### DEMO seed data — local only
+
+The `SEED_DEMO_*` gates still exist and still work, for a throwaway local
+database:
 
 ```bash
 SEED_DEMO_ADMIN=true npx prisma db seed
-```
-
-To also get a DEMO Partner Field Collector login, assigned to the Las Nubes
-project (`demo-partner@nectar-nomada.example` / see console output for the
-password) — this is what lets you actually see the Slice 5 Partner Workspace
-classification restriction in action (the partner sees one DEMO Task, not
-the other, deliberately internal-classified one):
-
-```bash
 SEED_DEMO_CONTENT=true SEED_DEMO_PARTNER=true npx prisma db seed
-```
-
-To also get a DEMO Sensory Judge login, assigned to the DEMO cupping session
-(`demo-judge@nectar-nomada.example` / see console output for the password) —
-lets you see the Slice 6 blind-mapping restriction in action (the judge sees
-only blind codes "A"/"B", never the real sample identity behind them):
-
-```bash
 SEED_DEMO_CONTENT=true SEED_DEMO_JUDGE=true npx prisma db seed
 ```
+
+**Never against production.** `scripts/vercel-build.sh` clears all four gates
+with `env -u` before seeding on a production deploy (ADR-064), precisely so a
+stray dashboard variable cannot write demo content into the real research
+record. Running them by hand bypasses that.
+
+If demo rows do end up in production, `npm run data:remove-demo-places` removes
+DEMO Locations and Organizations; note that ADR-066's project-subtree cleanup
+did *not* reach those, because a Location carries no `projectId`.
 
 ## Common commands
 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Start the dev server |
-| `npm run build` | Production build |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm run build` | Production build. Generates the Prisma client, builds, *then* migrates and seeds — and only on a real production deploy (ADR-064, ADR-070) |
+| `npm run typecheck` | `tsc --noEmit`. **Run before merging** — `npm test` passing says nothing about types (ADR-070) |
 | `npm run lint` | ESLint |
-| `npm test` | Vitest — RBAC resolution engine unit tests (no DB needed) |
+| `npm test` | Vitest — 419 tests across RBAC, traceability, sensory, apiary, research, auth and the build guard. **Needs a database**; see below |
+| `npm run test:db -- up` | Restore the newest *verified* backup into a local throwaway cluster and print `TEST_DATABASE_URL` |
+| `npm run backup:db` | Dump production to `~/nectar-backups/<timestamp>/` |
+| `npm run backup:verify -- <dir>` | Restore that dump into a throwaway cluster and compare row counts. A backup is unverified until this passes |
+| `npm run secrets:seal` / `secrets:open` | Encrypt/decrypt `.env` for off-machine custody |
+| `npm run auth:grant-admin -- <email>` | Grant Platform Admin at platform scope |
+| `npm run auth:set-password -- <email>` | Set a credentials password (prompts; needs a TTY) |
+| `npm run data:remove-demo-places` | Remove DEMO Locations/Organizations (ADR-071) |
 | `npx prisma studio` | Browse the database in a GUI |
 | `npx prisma migrate dev --name <description>` | New migration after a schema change |
 
+### Running the tests
+
+The suite used to run against production Neon. It no longer does, and
+`tests/setup.ts` refuses a remote database unless `ALLOW_REMOTE_TEST_DB=1`:
+
+```bash
+npm run test:db -- up          # restores the newest verified backup locally
+export TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:55433/nectar_test"
+npm test
+```
+
 ## What's verified vs. not
 
-Everything through Beverage Sensory Protocols & Panel Calibration
-(post-Slice-7) has been verified against
-**Neon**, the primary database as of ADR-022, via `npm run build`,
-`npm run lint`, `npm test`, `npx tsc --noEmit`, and real browser sessions:
+*Last checked against the running system on 2026-08-22. Everything below was
+observed, not inferred from architecture documents.*
 
-- Slice 1 (Identity): signup → login → My Néctar, RBAC resolution (unit
-  tests + a live Platform Admin permission list), `prisma migrate deploy`.
-- Foundational schema: PostGIS round trip (`ST_MakePoint`/`ST_Distance`),
-  Location hierarchy, Organization/Program/Project/Sample FKs, domain-tag
-  join.
-- Slice 2 (Discover): all five public entity types listing and linking
-  correctly, identical content for signed-in vs. signed-out visitors.
-- i18n: locale switcher, `Person.locale` persistence across login.
-- Slice 3 (Commerce): schema/migration on Neon; Discover and product pages
-  correctly show "pricing coming soon" / "not available for purchase yet"
-  for the two DEMO products (zero `ProductVariant` rows, per CLAUDE.md §54);
-  `/cart` redirects an unauthenticated visitor to `/login` and shows the
-  empty-cart state for a real logged-in user with no cart.
-- Slice 4 (Experiences, core engine): schema/migration on Neon; an
-  Experience page with zero `ExperienceSession` rows correctly shows "no
-  sessions currently scheduled"; a real (non-fabricated, date-only) test
-  session correctly renders its date/capacity and correctly withholds the
-  booking form because the DEMO Experience has no price ("booking opens
-  once pricing is set"); My Néctar's Bookings section shows "no bookings
-  yet" for a real logged-in user.
-- Slice 5 (Partner Workspace): schema/migration on Neon; logged in as the
-  real seeded DEMO Partner Field Collector account, Partner Workspace's
-  project list correctly shows only Las Nubes (the project they're
-  assigned to — a Platform Admin's platform-scoped Assignment does *not*
-  populate this list, by design, ADR-029 decision 2); the project workspace
-  correctly shows only the `partner`-classified DEMO Task, not the
-  `internal`-classified one on the same project; both write paths (task
-  status update, new field submission) exercised live and confirmed working.
-- Slice 6 (Sensory): schema/migration on Neon; logged in as the real seeded
-  DEMO Sensory Judge account, the session page shows only blind codes
-  ("Muestra A"/"Muestra B") with no real sample identity rendered anywhere;
-  submitted a real test assessment (all 7 attributes), which correctly
-  flipped that sample to "already submitted" while leaving the other
-  sample's form open; logged in as Platform Admin, the same session
-  correctly reveals real sample codes (`LN-CUP-001`/`LN-CUP-002`, via
-  RBAC.md §3's platform-containment rule) and a working "compute panel
-  result" action whose aggregate output matched the submitted values
-  exactly. Test data removed afterward.
-- Slice 7 (AI): schema/migration on Neon, including a real, separately-
-  privileged `ai_service` Postgres role — verified directly (not just
-  asserted) that it can `INSERT` into `ai.recommendation`, cannot `UPDATE`
-  it, and cannot touch any other table at all. The rule-based generator
-  correctly found zero suggestions against real seed data, then correctly
-  flagged a real temporary test Project with no description; accepting
-  that suggestion in the UI correctly moved it to "reviewed" with human
-  attribution and produced a real `AuditEvent`. Test data removed
-  afterward.
-- Competitions: schema/migration on Neon. A real, clearly-labeled TEST
-  Competition/Edition/Category/Entry, linked to the existing DEMO Sensory
-  session — judged through the *unmodified* `/sensory/[sessionId]` UI (no
-  new judging UI was written), then finalized from the new Competitions UI
-  with a `finalScore` that matched the submitted assessment exactly, and a
-  declared award rendered correctly. Test data removed afterward.
-- Beverage Sensory Protocols & Panel Calibration (DECISIONS.md ADR-035):
-  schema/migration on Neon; the seed idempotently produced all 13 protocols
-  (coffee/beer/mead/honey plus 9 `planned` placeholders) with correct
-  `standardSourceReference`/`section` values and zero duplicate
-  Organizations. A real, clearly-labeled TEST `ReferenceStandard` and
-  `CalibrationSession` were created through the live `/calibration` UI, a
-  `CalibrationResult` recorded against the existing DEMO Sensory Judge
-  Person, and the resulting `EvaluatorSensitivityProfile` upsert confirmed
-  directly against Neon (`demonstratedThreshold`/`confidenceLevel` matched
-  the recorded result). Test data removed afterward.
+**Verified now:**
 
-**Not verified yet — Slices 3, 4 & 5**: a real Stripe Checkout purchase
-(Commerce order or Experience booking) completing through the shared
-webhook (`markOrderPaid`/`markBookingPaid`), and a real Partner Workspace
-media upload completing through R2. Blocked on credentials this session
-can't supply: `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` and a decision on
-how to price at least one DEMO `ProductVariant`/Experience (DECISIONS.md
-ADR-025 decision 10, ADR-028 decision 8), and
-`R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_BUCKET`
-(ADR-029 decision 6/verification note) respectively.
+- `tsc --noEmit`, `npm run lint`, `npm run build` — all clean; `npm test` — 419
+  passing against a database restored from a verified backup.
+- Production schema: `prisma migrate status` against Neon reports 40 migrations
+  and "up to date". The last three production deployments are `Ready`.
+- Sign-in works end to end: a real login against production recorded
+  `last_login_at`, with an Argon2id hash and `status = active`.
+- The classification AND-gate is enforced at every call site that has a record
+  to gate on (ADR-068/069); `grep -rn CLASSIFICATION_GATE_DEFERRED lib app`
+  returns no call sites.
+- Producer export: `/api/export` returns 401 to an anonymous request and builds
+  a zip for a caller holding `lot:export`.
+- Backups: `backup:db` + `backup:verify` restore into stock PostgreSQL 18 with
+  identical row counts — provider exit demonstrated, not assumed.
+- Production data is real data: 43 lots, 17 people, 3 projects, 2 stories, and
+  zero DEMO rows in any table (ADR-066, ADR-071).
 
-**Not built yet — Slice 4**: `TOURISM_EXPERIENCES.md`'s gastro-tourism
-extensions (waitlist, multi-day sessions, dietary structure, pairing menus,
-live sensory feedback) — accepted planning input (ADR-026/027), layered onto
-the core engine in a future increment, not part of this verification.
+**Credentials — the real gaps:**
 
-**Not built yet — Slice 5**: an admin-facing UI for creating/reclassifying
-Tasks (Task rows currently come from seed data only — ADR-029 decision 4).
+| Variable | Local | Vercel production |
+|---|---|---|
+| `DATABASE_URL`, `AUTH_SECRET`, `AI_SERVICE_DATABASE_URL` | set | set |
+| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | set | set |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | **declared but empty** | absent |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | absent | absent |
 
-**Not built yet — Slice 6**: the Assessment-correction workflow (the schema
-supports it via `supersedesAssessmentId`; `submitAssessment` currently just
-rejects a second submission — ADR-030 decision 5), and any protocol domain
-beyond coffee cupping.
+Google sign-in therefore does not appear at all — the provider only registers
+when both values are non-empty. Stripe throws a named "see SETUP.md" error when
+checkout is attempted, rather than failing at boot.
 
-**Not verified anywhere yet**: Google OAuth (needs real credentials + a live
-redirect), email verification/transactional email (no provider wired up).
+**Not verified end to end:** a real Stripe Checkout purchase through the shared
+webhook (`markOrderPaid`/`markBookingPaid`), and a Partner Workspace media
+upload through R2. R2 *credentials* are now configured in both environments —
+what has not been re-confirmed since is an actual upload completing.
 
-**Deployment**: a real Vercel production deployment exists at
-https://nectar-nomada-package.vercel.app (linked project
-`danieljosegiraldez-4768s-projects/nectar-nomada-package`), verified working
-end to end — homepage, Discover (real Neon data), and a full login → My
-Néctar walkthrough all checked directly against production after fixing a
-`DATABASE_URL` formatting bug caught during that verification. Stripe/R2
-env vars are not set in Vercel either, so the same gaps noted above apply
-in production too.
+**Historical note.** Earlier revisions of this section described verification
+performed by signing in as `DEMO Platform Admin`, `DEMO Partner Field
+Collector` and `DEMO Sensory Judge`, and by inspecting DEMO Tasks, products,
+experiences and cupping sessions. That work was genuinely done and is recorded
+in DECISIONS.md — but none of it is reproducible now, because those accounts
+and fixtures were deleted (ADR-066). The claims were removed rather than
+rewritten, since a document asserting a state the system has left behind is
+worse than one that says less.
+
+**Not built yet:** `TOURISM_EXPERIENCES.md`'s gastro-tourism extensions
+(waitlist, multi-day sessions, dietary structure, pairing menus, live sensory
+feedback — ADR-026/027); an admin UI for creating/reclassifying Tasks
+(ADR-029 decision 4); the Assessment-correction workflow (schema supports it
+via `supersedesAssessmentId`; `submitAssessment` currently rejects a second
+submission — ADR-030 decision 5); sensory protocol domains beyond coffee
+cupping; email verification and transactional email (no provider wired up).
+
+**Deployment.** Production is live at https://nectar-nomada-package.vercel.app
+(project `danieljosegiraldez-4768s-projects/nectar-nomada-package`). The public
+`/discover` page renders the editorial register with real content only.
