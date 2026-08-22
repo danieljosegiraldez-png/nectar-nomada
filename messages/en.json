@@ -13,7 +13,8 @@
     "calibration": "Calibration",
     "signIn": "Sign in",
     "signUp": "Sign up",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "primaryNavLabel": "Primary"
   },
   "Home": {
     "badge": "Slices 1–2 — Identity and Discovery",
@@ -246,7 +247,8 @@
     "error_already_submitted": "You've already submitted an assessment for this sample.",
     "error_no_session_access": "You don't have access to this session.",
     "error_responses_required": "Enter at least one attribute response.",
-    "error_blind_sample_not_found": "This sample is no longer available."
+    "error_blind_sample_not_found": "This sample is no longer available.",
+    "toolsLabel": "Sensory tools"
   },
   "Partner": {
     "badge": "Partner Workspace",

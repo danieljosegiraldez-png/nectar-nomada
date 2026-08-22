@@ -4,6 +4,8 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getTranslations } from "next-intl/server";
 import "./globals.css";
 import { getCurrentUser } from "../lib/auth/session";
+import { permissionKeysAnywhere } from "../lib/rbac/service";
+import { buildNavigation } from "../lib/navigation";
 import { logoutAction } from "./actions/auth";
 import { LocaleSwitcher } from "./components/LocaleSwitcher";
 import { ServiceWorkerRegistration } from "./components/ServiceWorkerRegistration";
@@ -18,6 +20,12 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [user, locale, t] = await Promise.all([getCurrentUser(), getLocale(), getTranslations("Nav")]);
 
+  // S2 §4 — "ningún elemento visible que el usuario no pueda usar." The
+  // permission set is resolved once here rather than per link; see
+  // permissionKeysAnywhere for why navigation asks a deliberately wider
+  // question than authorization does, and why it must never answer one.
+  const navEntries = user ? buildNavigation(await permissionKeysAnywhere(user.userAccountId)) : [];
+
   return (
     <html lang={locale}>
       <body>
@@ -28,33 +36,33 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Link href="/" className="nn-wordmark">
                 {t("brand")}
               </Link>
-              <nav className="nn-nav-links">
+              <nav className="nn-nav-links" aria-label={t("primaryNavLabel")}>
                 {user ? (
-                  <>
-                    <Link href="/my-nectar">{t("myNectar")}</Link>
-                    <Link href="/partner">{t("partnerWorkspace")}</Link>
-                    <Link href="/lots">{t("lots")}</Link>
-                    <Link href="/plots">{t("plots")}</Link>
-                    <Link href="/apiaries">{t("apiaries")}</Link>
-                    <Link href="/research">{t("research")}</Link>
-                    <Link href="/sensory">{t("sensory")}</Link>
-                    <Link href="/ai">{t("ai")}</Link>
-                    <Link href="/competitions">{t("competitions")}</Link>
-                    <Link href="/calibration">{t("calibration")}</Link>
-                    <form action={logoutAction}>
-                      <button type="submit" className="nn-link-button">
-                        {t("signOut")}
-                      </button>
-                    </form>
-                  </>
+                  navEntries.map((entry) => (
+                    <Link key={entry.href} href={entry.href}>
+                      {t(entry.labelKey as "myNectar")}
+                    </Link>
+                  ))
                 ) : (
                   <>
                     <Link href="/login">{t("signIn")}</Link>
                     <Link href="/signup">{t("signUp")}</Link>
                   </>
                 )}
-                <LocaleSwitcher />
               </nav>
+              {/* S2 §4 — sign out does not compete for navigation space, and
+                  neither does the locale switcher. Both are account controls,
+                  so they sit beside the destinations rather than among them. */}
+              <div className="nn-nav-account">
+                <LocaleSwitcher />
+                {user ? (
+                  <form action={logoutAction}>
+                    <button type="submit" className="nn-link-button">
+                      {t("signOut")}
+                    </button>
+                  </form>
+                ) : null}
+              </div>
             </div>
           </header>
           <main className="nn-shell nn-main">{children}</main>

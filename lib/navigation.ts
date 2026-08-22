@@ -1,0 +1,104 @@
+/**
+ * S2 (docs/implementation/37_S2_PROPOSITO_SENSORIAL_NAVEGACION.md §4) —
+ * the signed-in navigation, derived from resolved permissions.
+ *
+ * Two changes from the fixed ten-item list this replaces:
+ *
+ * 1. **Sensory, Competitions and Calibration collapse into one entry.** They
+ *    are not three disciplines; they are one discipline used for three
+ *    purposes (§1). The tools themselves are offered inside `/sensory`,
+ *    crossed with the viewer's resolved role — which is what makes the
+ *    consolidation mean something rather than being cosmetic.
+ *
+ * 2. **Nothing is shown that the viewer cannot use.** SECURITY.md §2 applied
+ *    to navigation: the frontend is not the security boundary, but it should
+ *    not offer what the server will refuse. Today `AI Suggestions` is visible
+ *    to everyone and answers "no access" to almost everyone, which is exactly
+ *    the failure this rule names.
+ *
+ * `16_ADAPTIVE_OPERATOR_WORKSPACE_PREAMBLE.md` remains the destination —
+ * navigation derived from context, not just from permissions. This is the
+ * cheap intermediate step it explicitly allows, not a replacement for it.
+ *
+ * Pure function of a permission set: no I/O, no Prisma, trivially testable.
+ */
+
+export interface NavEntry {
+  /** Key under the `Nav` namespace in messages/*.json. */
+  labelKey: string;
+  href: string;
+}
+
+/**
+ * A section is visible when the viewer holds ANY of `requiresAnyOf`. An empty
+ * list means "always", used only for destinations that need no grant beyond
+ * being signed in — `/my-nectar` is the viewer's own account, which RBAC.md §5
+ * treats as a baseline rather than an Assignment.
+ */
+interface NavDefinition extends NavEntry {
+  requiresAnyOf: readonly string[];
+}
+
+const NAV: readonly NavDefinition[] = [
+  { labelKey: "myNectar", href: "/my-nectar", requiresAnyOf: [] },
+  {
+    labelKey: "partnerWorkspace",
+    href: "/partner",
+    requiresAnyOf: ["partner:submit_task", "partner:submit_data", "partner:upload_media"],
+  },
+  { labelKey: "lots", href: "/lots", requiresAnyOf: ["lot:view", "lot:manage"] },
+  {
+    labelKey: "plots",
+    href: "/plots",
+    requiresAnyOf: ["location:manage_attributes", "lot:view", "lot:manage"],
+  },
+  { labelKey: "apiaries", href: "/apiaries", requiresAnyOf: ["apiary:view", "apiary:manage"] },
+  { labelKey: "research", href: "/research", requiresAnyOf: ["research:view"] },
+  // The consolidation. Any of the three former entries' permissions opens the
+  // one section; which tools appear inside is decided by SENSORY_TOOLS below.
+  {
+    labelKey: "sensory",
+    href: "/sensory",
+    requiresAnyOf: ["sensory:submit_assessment", "sensory:manage_session", "competition:manage"],
+  },
+  // §4 asked whether AI is a destination or a cross-cutting capability. Today
+  // it is a destination: `/ai` is the suggestion review queue, gated on
+  // ai:review_suggestion. `ai:converse` — the cross-cutting one — is
+  // deliberately not in the catalog yet (ADR-037 decision 4 defers it until
+  // Ask Néctar is actually built), so there is nothing cross-cutting to place.
+  // It stays a destination, now correctly hidden from those who cannot use it.
+  { labelKey: "ai", href: "/ai", requiresAnyOf: ["ai:review_suggestion"] },
+];
+
+/**
+ * The tools inside the consolidated Sensory section. `/sensory` itself is the
+ * session list, so it is not repeated here.
+ */
+const SENSORY_TOOLS: readonly NavDefinition[] = [
+  { labelKey: "competitions", href: "/competitions", requiresAnyOf: ["competition:manage"] },
+  { labelKey: "calibration", href: "/calibration", requiresAnyOf: ["sensory:manage_session"] },
+];
+
+function visible(entry: NavDefinition, granted: ReadonlySet<string>): boolean {
+  return entry.requiresAnyOf.length === 0 || entry.requiresAnyOf.some((key) => granted.has(key));
+}
+
+/**
+ * The primary navigation for a signed-in viewer.
+ *
+ * `granted` must come from `permissionKeysAnywhere` — "could this person use
+ * this section at all", not "may they act on this particular row". Deciding
+ * what to *offer* is a wider question than deciding what to *allow*, and the
+ * two must not share a resolver.
+ */
+export function buildNavigation(granted: ReadonlySet<string>): NavEntry[] {
+  return NAV.filter((entry) => visible(entry, granted)).map(({ labelKey, href }) => ({ labelKey, href }));
+}
+
+/** The tools offered inside `/sensory`, filtered the same way. */
+export function buildSensoryTools(granted: ReadonlySet<string>): NavEntry[] {
+  return SENSORY_TOOLS.filter((entry) => visible(entry, granted)).map(({ labelKey, href }) => ({
+    labelKey,
+    href,
+  }));
+}

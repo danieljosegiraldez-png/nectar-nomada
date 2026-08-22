@@ -1571,6 +1571,33 @@ enum SensoryProtocolLicenseStatus {
   @@schema("sensory")
 }
 
+enum SensoryPurpose {
+  // S2 §2a. What an evaluation is FOR. Five, and genuinely distinct — the
+  // session format and deliberation mode are consequences of the purpose,
+  // not independent axes, so they are not modelled separately.
+  rank // score against a standard in order to rank — competition judge
+  verify_conformance // check against a specification: passes or does not — QC
+  characterize // describe what is there and how the process expressed — process panel
+  select // decide between options for an end — green buyer
+  hedonic // liking. CONSUMER_SENSORY_FEEDBACK.md / CLAUDE.md §49 already
+  // forbid mixing this with technical judgement; S2 extends the
+  // same logic to the other four.
+
+  @@schema("sensory")
+}
+
+enum SensorySubject {
+  // S2 §2b. Deliberately few. Alcohol content is a property of the product,
+  // carbonation an attribute of process, extraction method is how a cup was
+  // prepared — modelling those as subjects would grow the list without end
+  // and would wrongly make two brews of the same beverage incomparable.
+  raw_material_in_process // cherry, must, parchment
+  intermediate_product // green, roasted, a honey batch
+  prepared_beverage
+
+  @@schema("sensory")
+}
+
 model SensoryProtocol {
   id                      String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   // 'coffee' | 'honey' | 'beer' | 'wine' | 'mead' | 'spirits' | 'other' — free
@@ -1669,14 +1696,29 @@ model SensorySession {
   protocolVersion   SensoryProtocolVersion @relation(fields: [protocolVersionId], references: [id])
   scheduledAt       DateTime?              @map("scheduled_at")
   status            SensorySessionStatus   @default(draft)
+
+  // S2 §2 — the two axes that distinguish one evaluation tool from another.
+  // The third axis, role, is already RBAC's job and is deliberately not
+  // modelled here.
+  //
+  // Nullable on purpose, and never inferred: S2 §6 forbids classifying an
+  // existing evaluation automatically, because deducing what a past session
+  // was FOR is exactly the interpretation provenance rules prohibit. Six
+  // sessions predate this column and stay null until a human says otherwise.
+  purpose           SensoryPurpose?
+  subject           SensorySubject?
+  // How this particular cup was prepared — espresso, filter, press. An
+  // attribute of the subject, not a subject of its own (§2b), so two
+  // evaluations of the same beverage prepared differently remain comparable.
+  preparationMethod String?             @map("preparation_method")
   // CLAUDE.md §10 classification axis — same independent AND-gate as every
   // other module. Sensory data defaults internal (real judging results are
   // rarely public until formally released).
-  classification    ClassificationLevel    @default(internal)
-  createdAt         DateTime               @default(now()) @map("created_at")
-  updatedAt         DateTime               @updatedAt @map("updated_at")
-  createdBy         String?                @map("created_by") @db.Uuid
-  creator           UserAccount?           @relation("SensorySessionCreatedBy", fields: [createdBy], references: [id])
+  classification    ClassificationLevel @default(internal)
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") @db.Uuid
+  creator           UserAccount?        @relation("SensorySessionCreatedBy", fields: [createdBy], references: [id])
 
   flights               SensoryFlight[]
   competitionCategories CompetitionCategory[]

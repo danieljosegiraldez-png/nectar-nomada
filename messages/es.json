@@ -13,7 +13,8 @@
     "calibration": "Calibración",
     "signIn": "Iniciar sesión",
     "signUp": "Crear cuenta",
-    "signOut": "Cerrar sesión"
+    "signOut": "Cerrar sesión",
+    "primaryNavLabel": "Principal"
   },
   "Home": {
     "badge": "Slices 1–2 — Identidad y Descubrimiento",
@@ -246,7 +247,8 @@
     "error_already_submitted": "Ya enviaste una evaluación para esta muestra.",
     "error_no_session_access": "No tienes acceso a esta sesión.",
     "error_responses_required": "Ingresa al menos una respuesta de atributo.",
-    "error_blind_sample_not_found": "Esta muestra ya no está disponible."
+    "error_blind_sample_not_found": "Esta muestra ya no está disponible.",
+    "toolsLabel": "Herramientas sensoriales"
   },
   "Partner": {
     "badge": "Espacio de Socios",
