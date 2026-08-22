@@ -88,7 +88,12 @@ export function InspectionForm({ colonyId, selfPersonId }: { colonyId: string; s
       </button>
 
       {!showDetails ? (
-        <button type="button" onClick={() => setShowDetails(true)} style={{ marginTop: "0.5rem" }}>
+        <button
+          type="button"
+          className="nn-button-quiet"
+          onClick={() => setShowDetails(true)}
+          style={{ marginTop: "0.5rem" }}
+        >
           {t("inspectionRecordDetailsButton")}
         </button>
       ) : (
@@ -129,7 +134,7 @@ export function InspectionForm({ colonyId, selfPersonId }: { colonyId: string; s
             <button type="button" className="nn-button" onClick={() => void submitDetails()}>
               {t("inspectionRecordButton")}
             </button>
-            <button type="button" onClick={() => setShowDetails(false)}>
+            <button type="button" className="nn-button-quiet" onClick={() => setShowDetails(false)}>
               {t("cancelButton")}
             </button>
           </div>

@@ -464,6 +464,32 @@ button[type="submit"] {
   transform: translateY(1px);
 }
 
+/* Secondary actions. Same tap floor as a primary, visually subordinate.
+   InspectionForm is the case that forced this: it deliberately offers a
+   one-tap "nothing unusual" primary — the common case standing at a hive —
+   with "record details" as the second tier behind it. That tier being
+   quieter is correct design; it being a 22px browser-default button, on the
+   form most likely to be used with gloves on, was not. */
+.nn-button-quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--nn-tap);
+  padding: 0 1rem;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--nn-ink);
+  background: var(--nn-surface);
+  border: 1px solid var(--nn-border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.nn-button-quiet:active {
+  border-color: var(--nn-brand);
+}
+
 /* --- filter chips ------------------------------------------------------
    The lot-type filters were bare links with no hit area, and the active
    one was marked with .nn-price — a commerce class reused for state,

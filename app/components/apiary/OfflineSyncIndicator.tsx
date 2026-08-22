@@ -135,6 +135,7 @@ export function OfflineSyncIndicator() {
       {erroredCount > 0 ? (
         <button
           type="button"
+          className="nn-button-quiet"
           onClick={async () => {
             const drafts = await listDrafts();
             for (const d of drafts.filter((d) => d.status === "error")) await discardDraft(d.id);
