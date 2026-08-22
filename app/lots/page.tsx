@@ -55,70 +55,83 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
         ) : null}
       </p>
 
-      <section className="nn-section">
-        <h2>{t("activeOperationsHeading")}</h2>
-        <div className="nn-grid">
-          <div className="nn-card-link" style={{ cursor: "default" }}>
-            <h3>{t("activeFermentationHeading")}</h3>
-            {operations.activeFermentationRuns.length === 0 ? (
-              <p className="nn-muted">{t("noneActive")}</p>
-            ) : (
-              operations.activeFermentationRuns.map((entry) => (
-                <p key={entry.run.id}>
-                  <Link href={`/lots/${(entry.lot as { id: string }).id}`} className="nn-code">
-                    {(entry.lot as { lotCode: string }).lotCode}
-                  </Link>
-                </p>
-              ))
-            )}
-          </div>
+      {/* Only live work earns a card. Rendering all four buckets regardless of
+          contents opened the page with four boxes reading "nothing here",
+          pushing the batches that do exist below the fold — the emptiest part
+          of the screen was the most prominent. When nothing is running, one
+          line says so. */}
+      {(() => {
+        const buckets = [
+          {
+            key: "fermentation",
+            heading: t("activeFermentationHeading"),
+            items: operations.activeFermentationRuns.map((entry) => ({
+              id: entry.run.id,
+              label: (entry.lot as { lotCode: string }).lotCode,
+              href: `/lots/${(entry.lot as { id: string }).id}`,
+            })),
+          },
+          {
+            key: "drying",
+            heading: t("activeDryingHeading"),
+            items: operations.activeDryingRuns.map((entry) => ({
+              id: entry.run.id,
+              label: (entry.lot as { lotCode: string }).lotCode,
+              href: `/lots/${(entry.lot as { id: string }).id}`,
+            })),
+          },
+          {
+            key: "measurement",
+            heading: t("needsMeasurementHeading"),
+            items: operations.lotsNeedingMeasurement.map((lot) => ({
+              id: lot.id,
+              label: lot.lotCode,
+              href: `/lots/${lot.id}`,
+            })),
+          },
+          {
+            key: "sensory",
+            heading: t("awaitingSensoryHeading"),
+            items: operations.samplesAwaitingSensory.map((sample) => ({
+              id: sample.id,
+              label: sample.sampleCode,
+              // A sample taken from a lot links back to it; one without a
+              // source lot has nowhere to go, so it stays plain text.
+              href: sample.sourceLotId ? `/lots/${sample.sourceLotId}` : null,
+            })),
+          },
+        ].filter((bucket) => bucket.items.length > 0);
 
-          <div className="nn-card-link" style={{ cursor: "default" }}>
-            <h3>{t("activeDryingHeading")}</h3>
-            {operations.activeDryingRuns.length === 0 ? (
-              <p className="nn-muted">{t("noneActive")}</p>
+        return (
+          <section className="nn-section">
+            <h2>{t("activeOperationsHeading")}</h2>
+            {buckets.length === 0 ? (
+              <p className="nn-muted">{t("noActiveOperations")}</p>
             ) : (
-              operations.activeDryingRuns.map((entry) => (
-                <p key={entry.run.id}>
-                  <Link href={`/lots/${(entry.lot as { id: string }).id}`} className="nn-code">
-                    {(entry.lot as { lotCode: string }).lotCode}
-                  </Link>
-                </p>
-              ))
+              <div className="nn-grid">
+                {buckets.map((bucket) => (
+                  <div key={bucket.key} className="nn-card-link" style={{ cursor: "default" }}>
+                    <h3>
+                      {bucket.heading} <span className="nn-chip">{bucket.items.length}</span>
+                    </h3>
+                    {bucket.items.map((item) => (
+                      <p key={item.id}>
+                        {item.href ? (
+                          <Link href={item.href} className="nn-code">
+                            {item.label}
+                          </Link>
+                        ) : (
+                          <span className="nn-code">{item.label}</span>
+                        )}
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
             )}
-          </div>
-
-          <div className="nn-card-link" style={{ cursor: "default" }}>
-            <h3>{t("needsMeasurementHeading")}</h3>
-            {operations.lotsNeedingMeasurement.length === 0 ? (
-              <p className="nn-muted">{t("noneActive")}</p>
-            ) : (
-              operations.lotsNeedingMeasurement.map((lot) => (
-                <p key={lot.id}>
-                  <Link href={`/lots/${lot.id}`} className="nn-code">{lot.lotCode}</Link>
-                </p>
-              ))
-            )}
-          </div>
-
-          <div className="nn-card-link" style={{ cursor: "default" }}>
-            <h3>{t("awaitingSensoryHeading")}</h3>
-            {operations.samplesAwaitingSensory.length === 0 ? (
-              <p className="nn-muted">{t("noneActive")}</p>
-            ) : (
-              operations.samplesAwaitingSensory.map((sample) => (
-                <p key={sample.id}>
-                  {sample.sourceLotId ? (
-                    <Link href={`/lots/${sample.sourceLotId}`} className="nn-code">{sample.sampleCode}</Link>
-                  ) : (
-                    sample.sampleCode
-                  )}
-                </p>
-              ))
-            )}
-          </div>
-        </div>
-      </section>
+          </section>
+        );
+      })()}
 
       <section className="nn-section">
         <h2>{t("lotListHeading")}</h2>

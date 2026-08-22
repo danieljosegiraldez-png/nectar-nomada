@@ -2,13 +2,13 @@
   "Nav": {
     "brand": "Néctar Nómada",
     "myNectar": "Mi Néctar",
-    "partnerWorkspace": "Espacio de Socios",
+    "partnerWorkspace": "Socios",
     "lots": "Batches",
     "plots": "Lotes",
     "apiaries": "Apiarios",
     "research": "Investigación",
     "sensory": "Sensorial",
-    "ai": "Sugerencias de IA",
+    "ai": "IA",
     "competitions": "Competencias",
     "calibration": "Calibración",
     "signIn": "Iniciar sesión",
@@ -147,7 +147,8 @@
     "sensoryHistoryHeading": "Historial sensorial",
     "noSensoryHistory": "Aún no has enviado evaluaciones.",
     "sensoryHistorySample": "Muestra {code}",
-    "sensoryHistoryScore": "Puntaje general: {score}"
+    "sensoryHistoryScore": "Puntaje general: {score}",
+    "permissionsSummary": "{count} permisos en {areas} áreas, a nivel de plataforma."
   },
   "Competitions": {
     "badge": "Competencias",
@@ -480,7 +481,8 @@
     "plotsTitle": "Lotes",
     "plotsIntro": "Lotes de terreno de tus fincas accesibles, con las condiciones de cultivo registradas (F1).",
     "noPlots": "Todavía no hay lotes accesibles.",
-    "exportButton": "Exportar mis datos"
+    "exportButton": "Exportar mis datos",
+    "noActiveOperations": "Nada en curso ahora mismo."
   },
   "Apiary": {
     "badge": "Apiario — A5",
