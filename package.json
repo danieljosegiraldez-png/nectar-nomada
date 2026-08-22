@@ -22,7 +22,8 @@
     "secrets:open": "bash scripts/backup/secrets-open.sh",
     "test:db": "bash scripts/test-db.sh",
     "auth:set-password": "tsx scripts/set-password.ts",
-    "auth:grant-admin": "bash scripts/grant-platform-admin.sh"
+    "auth:grant-admin": "bash scripts/grant-platform-admin.sh",
+    "data:remove-demo-places": "bash scripts/remove-demo-places.sh"
   },
   "keywords": [],
   "author": "",

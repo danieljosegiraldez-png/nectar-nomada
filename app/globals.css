@@ -292,20 +292,6 @@ form.nn-form {
   color: var(--nn-brand-ink);
 }
 
-.nn-demo-banner {
-  display: flex;
-  align-items: baseline;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-  background: #f5efe0;
-  border: 1px solid #e7dbb8;
-  border-radius: var(--nn-radius);
-  padding: 0.75rem 1rem;
-  margin-bottom: 2rem;
-  font-size: 0.9rem;
-  color: var(--nn-ink-muted);
-}
-
 .nn-section {
   margin-top: 2rem;
 }
@@ -755,4 +741,101 @@ a.nn-card-link:active {
   body {
     background: #fff;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Editorial layer — public surfaces only.
+
+   CLAUDE.md §48 asks for one shared design system in which public/editorial
+   and technical/operator surfaces carry different density. The operator
+   register above is dense and sans, tuned for someone standing in a wet mill.
+   This is the other half: the register a visitor meets.
+
+   Scoped to `.nn-editorial` rather than applied by route, so a page opts in by
+   saying what it is. Colour, spacing tokens and the tap-target guarantees are
+   shared — only typography, rhythm and card weight change.
+
+   The serif is a system stack, so no webfont is fetched at build or runtime
+   and these faces already exist on the machines that will open the page.
+--------------------------------------------------------------------------- */
+.nn-editorial {
+  --nn-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+    "Times New Roman", serif;
+}
+
+.nn-editorial h1,
+.nn-editorial h2,
+.nn-editorial h3 {
+  font-family: var(--nn-display);
+  font-weight: 600;
+  /* Serif at display size does not need the negative tracking the sans did. */
+  letter-spacing: -0.005em;
+  line-height: 1.2;
+}
+
+.nn-editorial h1 {
+  font-size: clamp(2.25rem, 5vw, 3rem);
+  margin: 0 0 0.75rem;
+}
+
+/* The lead paragraph under a title: still sans, because running text is what
+   the system font is actually good at, but larger and looser than body copy. */
+.nn-editorial .nn-lead {
+  font-size: 1.125rem;
+  line-height: 1.6;
+  color: var(--nn-ink-muted);
+  max-width: 60ch;
+  margin: 0 0 1rem;
+}
+
+.nn-editorial .nn-section {
+  margin-top: 3.25rem;
+}
+
+/* A section heading here is a chapter mark, not the operator register's small
+   uppercase index label — the two surfaces genuinely want opposite things. */
+.nn-editorial .nn-section h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: -0.005em;
+  color: var(--nn-ink);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--nn-border);
+}
+
+/* Cards lose the operator elevation. On a cream ground a white box with both a
+   border and a shadow is three edges doing one job; editorial wants air. */
+.nn-editorial .nn-card-link {
+  background: transparent;
+  box-shadow: none;
+  border: 1px solid var(--nn-border);
+  border-radius: 10px;
+  padding: 1.25rem 1.35rem;
+}
+
+.nn-editorial .nn-card-link:hover {
+  border-color: var(--nn-brand);
+  background: var(--nn-surface);
+}
+
+.nn-editorial .nn-card-link h3 {
+  font-size: 1.1875rem;
+  margin-bottom: 0.35rem;
+}
+
+.nn-editorial .nn-grid {
+  gap: 1.25rem;
+}
+
+/* Wider minimum than the operator grid: a story summary needs room to be read,
+   where a batch code only needs to be scanned. */
+.nn-editorial .nn-grid-wide {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.nn-editorial .nn-card-link p {
+  font-size: 0.95rem;
+  line-height: 1.55;
 }

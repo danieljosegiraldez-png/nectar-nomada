@@ -22,19 +22,39 @@ export default async function DiscoverPage() {
   ]);
 
   return (
-    <div>
-      <div className="nn-demo-banner">
-        <span className="nn-badge">{t("badge")}</span>
-        <span>{t("demoNotice")}</span>
-      </div>
-
+    // `nn-editorial` opts this surface into the public register (CLAUDE.md §48):
+    // serif headings, chapter-mark section rules, flatter cards, more air. The
+    // operator pages keep the dense sans register. One system, two densities.
+    <div className="nn-editorial">
+      {/* The demo banner that used to sit here claimed "everything on this page
+          is demo content — fictional data, not real project information". That
+          became false: Boquete, Cerro Azul and both stories are real, and the
+          DEMO records that remained are being removed (ADR-071). A standing
+          disclaimer that is wrong is worse than none — it teaches a reader to
+          disbelieve the real material. */}
       <h1>{t("title")}</h1>
+      <p className="nn-lead">{t("intro")}</p>
 
-      <section className="nn-section">
-        <h2>{t("locationsHeading")}</h2>
-        {locations.length === 0 ? (
-          <p className="nn-muted">{t("empty")}</p>
-        ) : (
+      {/* Stories lead. They are what §48's public side is for — territory,
+          origin, craft, people — and a visitor arriving with no context needs
+          a way in, not a directory. Everything below is the directory. */}
+      {stories.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("storiesHeading")}</h2>
+          <div className="nn-grid nn-grid-wide">
+            {stories.map((story) => (
+              <Link key={story.id} href={`/stories/${story.slug}`} className="nn-card-link">
+                <h3>{story.title}</h3>
+                {story.summary ? <p className="nn-muted">{story.summary}</p> : null}
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {locations.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("locationsHeading")}</h2>
           <div className="nn-grid">
             {locations.map((location) => (
               <Link key={location.id} href={`/locations/${location.slug}`} className="nn-card-link">
@@ -43,14 +63,12 @@ export default async function DiscoverPage() {
               </Link>
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="nn-section">
-        <h2>{t("projectsHeading")}</h2>
-        {projects.length === 0 ? (
-          <p className="nn-muted">{t("empty")}</p>
-        ) : (
+      {projects.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("projectsHeading")}</h2>
           <div className="nn-grid">
             {projects.map((project) => (
               <Link key={project.id} href={`/projects/${project.slug}`} className="nn-card-link">
@@ -59,30 +77,28 @@ export default async function DiscoverPage() {
               </Link>
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="nn-section">
-        <h2>{t("storiesHeading")}</h2>
-        {stories.length === 0 ? (
-          <p className="nn-muted">{t("empty")}</p>
-        ) : (
+      {experiences.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("experiencesHeading")}</h2>
           <div className="nn-grid">
-            {stories.map((story) => (
-              <Link key={story.id} href={`/stories/${story.slug}`} className="nn-card-link">
-                <h3>{story.title}</h3>
-                {story.summary ? <p className="nn-muted">{story.summary}</p> : null}
+            {experiences.map((experience) => (
+              <Link key={experience.id} href={`/experiences/${experience.slug}`} className="nn-card-link">
+                <h3>{experience.name}</h3>
+                <p className="nn-price">
+                  {formatPrice(experience.priceAmount, experience.priceCurrency, t("priceUnavailable"))}
+                </p>
               </Link>
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="nn-section">
-        <h2>{t("productsHeading")}</h2>
-        {products.length === 0 ? (
-          <p className="nn-muted">{t("empty")}</p>
-        ) : (
+      {products.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("productsHeading")}</h2>
           <div className="nn-grid">
             {products.map((product) => {
               const price = lowestVariantPrice(product.variants);
@@ -96,26 +112,19 @@ export default async function DiscoverPage() {
               );
             })}
           </div>
-        )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="nn-section">
-        <h2>{t("experiencesHeading")}</h2>
-        {experiences.length === 0 ? (
-          <p className="nn-muted">{t("empty")}</p>
-        ) : (
-          <div className="nn-grid">
-            {experiences.map((experience) => (
-              <Link key={experience.id} href={`/experiences/${experience.slug}`} className="nn-card-link">
-                <h3>{experience.name}</h3>
-                <p className="nn-price">
-                  {formatPrice(experience.priceAmount, experience.priceCurrency, t("priceUnavailable"))}
-                </p>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+      {/* Only reachable before any public content exists at all. A visitor is
+          told the page is empty once, rather than five times in five headed
+          sections — the same correction the lots page needed. */}
+      {stories.length === 0 &&
+      locations.length === 0 &&
+      projects.length === 0 &&
+      experiences.length === 0 &&
+      products.length === 0 ? (
+        <p className="nn-muted">{t("empty")}</p>
+      ) : null}
     </div>
   );
 }
