@@ -4810,3 +4810,69 @@ refusal case, which is the regression these tests exist to catch.
 them stale since ADR-063. The sentinel's entire value is that grep returns a
 true inventory; an import with no call site inflates it and makes finished work
 look pending.
+
+---
+
+## ADR-069 — Apiary joins the gate, and the deferred inventory reaches zero
+
+**Completes ADR-068**, which left apiary as the one open decision rather than
+the one remaining task.
+
+**Decision.** `Apiary Colony Event Recorder` is granted
+`classification:clear_internal`, and the three apiary call sites now gate on
+the classification of the Project or Location the hives belong to.
+
+**Why the grant is the correction, not a loosening.** The profile holds
+`apiary:view` and `colony_event:manage` and cleared nothing. Sixteen of
+twenty-eight Locations are `internal`, and that is where hives stand — so
+enforcing the gate without this would have left the role able to reach neither.
+That is the same defect ADR-063 corrected for Farm Operator: a role that cannot
+see the records it exists to write.
+
+The profile's real boundary is the *absence* of `apiary:manage` — no
+Inspections, no Hives, documented as a competence gate on the Assignment. That
+is untouched. Clearance to see internal sites is not authority to do more at
+them, and a test pins exactly that: the recorder is denied `apiary:manage` at
+both `internal` and `public`, so the grant cannot quietly widen into the
+permission list.
+
+The exclusions ADR-063 drew still hold: Partner Field Collector clears only
+`partner`, Sensory Judge clears nothing. Both remain external parties. A
+trainee on staff is on the other side of that line, which is what made this a
+decision for the product owner rather than a refactor.
+
+**Shared resolution.** Research and apiary need identical logic — resolve the
+Project/Location classification, skip a target whose record cannot be loaded,
+treat a platform target as not applicable. That now lives once in
+`lib/rbac/scopeClassification.ts` rather than as a second hand-written copy;
+the skip-don't-default rule is subtle enough that a duplicate would eventually
+get it wrong.
+
+**Ordering, and the first change to be protected by ADR-064.** ADR-063's
+hazard was that enforcement could reach production before the clearance it
+depends on, locking people out. That required a hand-run seed, done
+deliberately and verified by counting grants.
+
+Nothing manual was needed this time. The guarded build runs `prisma db seed`
+after `migrate deploy` and *before* `next build`, and Vercel promotes a
+deployment only after its build succeeds — so the grant lands in production
+while the old code is still serving, and the enforcing code goes live after it.
+The ordering hazard is now closed by the pipeline rather than by remembering.
+
+**Verification.** 89 grants → 90, rehearsed on a restored local copy. The
+clearance table was checked directly afterwards: the recorder clears
+`internal`, Farm Operator still `internal, partner`, Partner Field Collector
+still `partner` only, Sensory Judge still nothing.
+
+A discrepancy worth recording: the local count read 92, not 90. Two of those
+were an orphaned test fixture left by a run whose cleanup threw — not a seed
+defect. Chasing the difference rather than assuming it was the change is what
+kept the production estimate right.
+
+`grep -rn CLASSIFICATION_GATE_DEFERRED lib app` now returns no call sites. The
+sentinel is deliberately kept rather than retired, with its documentation
+rewritten: a future module not yet ready to gate should use it and stay
+greppable, instead of passing a bare `"public"` and vanishing from the
+inventory. SECURITY.md §4 is updated to describe enforcement as it now is —
+that section previously overclaimed, which is what ADR-062 had to correct, and
+it should not be allowed to drift again.

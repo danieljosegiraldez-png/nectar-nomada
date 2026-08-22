@@ -76,8 +76,17 @@ export function resolvePermissions(assignments: readonly ResolvedAssignment[], t
  *
  * That list is the live inventory of unenforced classification, and it should
  * only ever shrink. See ADR-062: the gate is fully specified, implemented,
- * seeded and stored on four models, and was applied at zero of thirteen call
- * sites — because the old `= "public"` default made omission invisible.
+ * seeded and stored on thirteen tables, and was applied at zero of thirteen
+ * call sites — because the old `= "public"` default made omission invisible.
+ *
+ * **That inventory is currently empty (ADR-069).** The constant is kept, not
+ * retired: a new module that is not yet ready to gate should reach for this
+ * and stay greppable, rather than passing a bare `"public"` and disappearing
+ * from the list. If you are adding a call site, first check whether the record
+ * carries a classification, or belongs to a Project or Location that does — in
+ * which case use lib/rbac/scopeClassification.ts and gate properly. Use
+ * CLASSIFICATION_NOT_APPLICABLE instead when the check touches no record at
+ * all.
  */
 export const CLASSIFICATION_GATE_DEFERRED: ClassificationLevel = "public";
 

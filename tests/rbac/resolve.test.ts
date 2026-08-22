@@ -353,6 +353,25 @@ describe("classification is an independent AND-gate", () => {
     expect(can(partner, "submit_data", "partner", target, "internal")).toBe(false);
   });
 
+  it("a colony event recorder can reach the internal sites the hives stand at — ADR-069", () => {
+    // Sixteen of twenty-eight Locations are `internal`. Without the clearance
+    // this profile held apiary:view and colony_event:manage and could reach
+    // neither, which is the same defect ADR-063 corrected for Farm Operator.
+    const recorder = [assignmentFor("Apiary Colony Event Recorder", { scopeType: "project", scopeRefId: PROJECT_A })];
+    expect(can(recorder, "view", "apiary", target, "internal")).toBe(true);
+    expect(can(recorder, "manage", "colony_event", target, "internal")).toBe(true);
+  });
+
+  it("the clearance did not widen what a colony event recorder may do — ADR-069", () => {
+    // The real boundary for this profile is the absence of apiary:manage: no
+    // Inspections, no Hives. Clearance to see internal sites must not become
+    // authority to act at them, so this fails if the grant were ever widened
+    // into the permission list above it.
+    const recorder = [assignmentFor("Apiary Colony Event Recorder", { scopeType: "project", scopeRefId: PROJECT_A })];
+    expect(can(recorder, "manage", "apiary", target, "internal")).toBe(false);
+    expect(can(recorder, "manage", "apiary", target, "public")).toBe(false);
+  });
+
   it("a judge still holds no clearance at all — the blind-judging exclusion stands", () => {
     // Sensory Judge deliberately excludes classification:clear_* so a judge's
     // resolved permissions cannot reach the blind-code mapping (RBAC.md §7).

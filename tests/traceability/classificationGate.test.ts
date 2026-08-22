@@ -95,17 +95,18 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // ADR-045 — never a deleteMany whose where clause could silently become {}.
-  const del = async (model: { deleteMany: (a: unknown) => Promise<unknown> }, ids: string[]) => {
-    if (ids.length) await model.deleteMany({ where: assertDefinedWhere({ id: { in: ids } }) });
-  };
-  await del(prisma.specimen, created.specimenIds);
-  await del(prisma.assignment, created.assignmentIds);
-  await del(prisma.scope, created.scopeIds);
-  await del(prisma.roleProfile, created.roleProfileIds);
-  await del(prisma.userAccount, created.userAccountIds);
-  await del(prisma.person, created.personIds);
-  await del(prisma.location, created.locationIds);
-  await del(prisma.organization, created.organizationIds);
+  // Written out per model rather than through a shared helper: Prisma's
+  // delegates do not unify to one structural type, and the cast needed to make
+  // them would defeat the point of the guard.
+  const w = (ids: string[]) => assertDefinedWhere({ id: { in: ids } });
+  if (created.specimenIds.length) await prisma.specimen.deleteMany({ where: w(created.specimenIds) });
+  if (created.assignmentIds.length) await prisma.assignment.deleteMany({ where: w(created.assignmentIds) });
+  if (created.scopeIds.length) await prisma.scope.deleteMany({ where: w(created.scopeIds) });
+  if (created.roleProfileIds.length) await prisma.roleProfile.deleteMany({ where: w(created.roleProfileIds) });
+  if (created.userAccountIds.length) await prisma.userAccount.deleteMany({ where: w(created.userAccountIds) });
+  if (created.personIds.length) await prisma.person.deleteMany({ where: w(created.personIds) });
+  if (created.locationIds.length) await prisma.location.deleteMany({ where: w(created.locationIds) });
+  if (created.organizationIds.length) await prisma.organization.deleteMany({ where: w(created.organizationIds) });
 });
 
 async function setLocationClassification(level: "public" | "internal") {
