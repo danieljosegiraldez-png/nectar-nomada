@@ -16,9 +16,16 @@ const { cell, toCsv } = __testing;
 const RUN_ID = `exporttest-${Date.now()}`;
 const created = { personIds: [] as string[], userAccountIds: [] as string[] };
 
+// Each fixture needs its own address. This helper is called more than once,
+// and both callers shared one until Person.email became unique (ADR-072) —
+// which is exactly the ambiguity that constraint exists to prevent, sitting
+// unnoticed in the test suite.
+let seq = 0;
+
 async function makeUserWithoutAssignments() {
+  const email = `${RUN_ID}-${++seq}@example.test`;
   const person = await prisma.person.create({
-    data: { givenName: "EXPORT", familyName: "Test", displayName: `EXPORT Test ${RUN_ID}`, email: `${RUN_ID}@example.test` },
+    data: { givenName: "EXPORT", familyName: "Test", displayName: `EXPORT Test ${email}`, email },
   });
   const account = await prisma.userAccount.create({
     data: { personId: person.id, authProvider: "credentials", status: "active" },

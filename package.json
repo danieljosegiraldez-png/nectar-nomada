@@ -23,7 +23,8 @@
     "test:db": "bash scripts/test-db.sh",
     "auth:set-password": "tsx scripts/set-password.ts",
     "auth:grant-admin": "bash scripts/grant-platform-admin.sh",
-    "data:remove-demo-places": "bash scripts/remove-demo-places.sh"
+    "data:remove-demo-places": "bash scripts/remove-demo-places.sh",
+    "people:set-email": "tsx scripts/set-person-email.ts"
   },
   "keywords": [],
   "author": "",

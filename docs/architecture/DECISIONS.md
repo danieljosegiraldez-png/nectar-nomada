@@ -5000,3 +5000,65 @@ the lots page needed.
 
 Mobile re-checked: nav links at 44px, no sideways scroll, every card inside the
 viewport at 375px.
+
+---
+
+## ADR-072 — Person.email is unique, and email addresses arrive from a person
+
+**Context.** Only one account can sign in, because fifteen of seventeen People
+have no email address (ADR-067). Fixing that is not a code problem: an address
+is a business fact, and CLAUDE.md §61E is explicit that these are not to be
+invented. It has to come from someone who knows it.
+
+Preparing to accept them surfaced a defect underneath. `authorize()` resolves a
+login with
+
+```ts
+findFirst({ where: { authProvider: "credentials", person: { email } } })
+```
+
+and `Person.email` had **no unique constraint**. Two People sharing an address
+would have made *which* of them signs in arbitrary — and arbitrary in a way
+that decides which records a session can reach. `app/actions/auth.ts` did check
+for a duplicate before inserting, but that is an application-level check with a
+race between the read and the write, not a guarantee.
+
+**Decision.** `Person.email` is `@unique`, with a migration adding
+`person_email_key`.
+
+NULL stays allowed, because Postgres treats NULLs as distinct in a unique index
+and most People still have no address. A plain unique index is sufficient
+rather than one over `lower(email)`, because `signUpSchema` and `loginSchema`
+both `.toLowerCase()`, so a case-variant duplicate cannot arise through the
+application; the CLI below normalises the same way for the same reason.
+
+Verified against production before writing the migration: zero duplicates,
+case-insensitive. The constraint was then proven on a restored copy — a second
+insert of the same address raised `unique_violation`, and two NULL addresses
+still inserted cleanly.
+
+**It found a real duplicate immediately.** `tests/traceability/export.test.ts`
+called one fixture helper twice, and both calls used the same
+`RUN_ID`-derived address. That had always been wrong — two accounts, one
+email, resolved by `findFirst` — and nothing had ever objected. The suite went
+red on the constraint, which is the constraint working.
+
+**`scripts/set-person-email.ts`** takes the address from an operator. It
+normalises exactly as the schemas do, matches a Person by exact display name or
+id (never fuzzily — a near-match would attach someone else's address to them,
+and the mistake would surface as a login reaching the wrong records), refuses an
+address already held by someone else *by name* rather than letting the
+constraint raise, and is a no-op when the address is unchanged.
+
+It also creates the credentials `UserAccount` where none exists — three People
+had none at all, and without one they cannot be given a password even after an
+address is set. The account is created `invited` with no password, which is the
+state everyone else already occupies until `auth:set-password` runs.
+
+Run with no arguments it lists who can sign in and who cannot, which is the
+question this whole area exists to answer.
+
+**One implementation note worth keeping.** The person lookup originally tried
+`{ OR: [{ id: who }, { displayName: who }] }`. Against a uuid column a display
+name is not a miss, it is a database error — so the id branch is only offered
+when the argument actually looks like a uuid.
