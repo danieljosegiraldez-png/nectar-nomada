@@ -4476,3 +4476,65 @@ AI (two). Apiary,
 research, competitions, calibration, locations, specimens and AI still pass the
 sentinel — each is its own small decision about which record's classification
 is the right one to gate on, not a blanket sweep.
+
+---
+
+## ADR-064 — Seed-managed data is applied by the production build, not by hand
+
+**Extends ADR-058** (the guarded build), which applied migrations only.
+
+**Context.** ADR-063 shipped a permission change: Farm Operator and Project
+Viewer needed a `clear_internal` grant before the enforced classification gate
+could deploy without denying them every lot they had created. That grant lives
+in `prisma/seed.ts`, and nothing in the pipeline ran the seed. The clearances
+reached production only because they were applied by hand, deliberately, before
+the deploy — and the ordering was verified by counting the grants (86 → 89)
+rather than assumed.
+
+That worked once because someone was watching. The hazard is structural, not
+specific to ADR-063: Permissions and Role Profiles are seed-managed data
+(RBAC.md §2), not schema, so `prisma migrate deploy` never touches them. Any
+future grant has the same shape — code that depends on it can reach production
+first, and the failure is a live lockout rather than a build error.
+
+**Decision.** The production branch of `scripts/vercel-build.sh` runs
+`prisma db seed` after `prisma migrate deploy`.
+
+After, never before: the seed writes rows, so it needs the schema those rows
+live in. Both stay inside the `VERCEL_ENV = production` test, because
+`DATABASE_URL` is scoped to Production in this Vercel project and preview
+builds have no database at all.
+
+Running it on every production deploy is safe because the seed is entirely
+upserts on natural keys with no delete anywhere in it, so a re-run is a no-op.
+That property is load-bearing. If a destructive step is ever added to the seed,
+this decision has to be revisited rather than worked around.
+
+**The demo gates are cleared explicitly**, via `env -u`, rather than trusted to
+be absent from the Vercel dashboard. The gates are opt-in by design,
+specifically so a production pipeline never ships a default login — but
+"nobody has set that variable" is a weaker guarantee than "it is unset at the
+point of use", and it degrades silently. A stray `SEED_DEMO_CONTENT` would
+otherwise write demo projects into the real research record.
+
+**Verification.** The production branch was exercised against the local test
+database with all four `SEED_DEMO_*` variables deliberately set. The seed ran,
+reported 38 permissions and 11 role profiles, and left the pre-existing demo
+rows untouched — their `updated_at` unchanged at nine days old, which is the
+evidence that the gate held rather than merely that no new rows appeared.
+Real data was unchanged: 51 lots, 23 people.
+
+**What is tested, and what is not.** `tests/seed/buildGuard.test.ts` makes
+static assertions about the script, because the behaviour itself only happens
+on Vercel with production credentials attached. It pins the part that rots:
+the guard names the demo gates literally, so it silently stops covering any
+gate added to the seed afterwards. That assertion was mutation-tested — a
+renamed gate in `seed.ts` fails the suite and names the gate that was missed.
+Ordering is asserted over the script with comment lines stripped, because the
+header explains `prisma migrate deploy` many lines above the line that runs it,
+and an `indexOf` over the raw file passes for the wrong reason.
+
+**Consequence.** A permission change now ships with the code that depends on
+it, in the right order, without anyone remembering to run the seed. The manual
+pre-deploy seed done for ADR-063 remains correct and is not undone by this —
+the next production build will re-apply the same upserts to no effect.
