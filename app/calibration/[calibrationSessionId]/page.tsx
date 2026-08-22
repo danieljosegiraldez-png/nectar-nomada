@@ -51,7 +51,7 @@ export default async function CalibrationSessionPage({
       ) : null}
       {session.notes ? <p className="nn-muted">{session.notes}</p> : null}
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("resultsHeading")}</h2>
         {session.results.length === 0 ? (
           <p className="nn-muted">{t("noResults")}</p>
@@ -72,7 +72,7 @@ export default async function CalibrationSessionPage({
         )}
       </section>
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("recordResultHeading")}</h2>
         <form action={recordCalibrationResultFormAction} className="nn-form">
           <input type="hidden" name="calibrationSessionId" value={session.id} />

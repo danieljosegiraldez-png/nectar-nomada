@@ -45,7 +45,7 @@ export default async function AiSuggestionsPage() {
         </button>
       </form>
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("pendingHeading")}</h2>
         {pending.length === 0 ? (
           <p className="nn-muted">{t("noPending")}</p>
@@ -75,7 +75,7 @@ export default async function AiSuggestionsPage() {
         )}
       </section>
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("reviewedHeading")}</h2>
         {reviewed.length === 0 ? (
           <p className="nn-muted">{t("noReviewed")}</p>

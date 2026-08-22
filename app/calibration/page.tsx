@@ -40,7 +40,7 @@ export default async function CalibrationPage() {
       <h1>{t("title")}</h1>
       <p className="nn-muted">{t("intro")}</p>
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("referenceStandardsHeading")}</h2>
         {referenceStandards.length === 0 ? (
           <p className="nn-muted">{t("noReferenceStandards")}</p>
@@ -86,7 +86,7 @@ export default async function CalibrationPage() {
         </details>
       </section>
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("calibrationSessionsHeading")}</h2>
         {calibrationSessions.length === 0 ? (
           <p className="nn-muted">{t("noCalibrationSessions")}</p>
