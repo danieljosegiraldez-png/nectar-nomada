@@ -23,8 +23,6 @@
   },
   "Discover": {
     "exploreCta": "Explorar",
-    "badge": "Contenido de demostración",
-    "demoNotice": "Todo el contenido de esta página es de demostración — datos ficticios pero verosímiles para probar la arquitectura, no información real de proyectos.",
     "title": "Descubre",
     "locationsHeading": "Lugares",
     "projectsHeading": "Proyectos",
@@ -51,7 +49,8 @@
     "addToCartButton": "Agregar al carrito",
     "quantityLabel": "Cantidad",
     "outOfStock": "Agotado",
-    "noVariantsYet": "Aún no disponible para compra."
+    "noVariantsYet": "Aún no disponible para compra.",
+    "intro": "Territorio, cultivo, fermentación e investigación — la gente y los lugares detrás de cada lote."
   },
   "Cart": {
     "title": "Carrito",

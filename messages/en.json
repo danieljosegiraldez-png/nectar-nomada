@@ -23,8 +23,6 @@
   },
   "Discover": {
     "exploreCta": "Explore",
-    "badge": "Demo content",
-    "demoNotice": "Everything on this page is demo content — plausible but fictional data used to test the architecture, not real project information.",
     "title": "Discover",
     "locationsHeading": "Places",
     "projectsHeading": "Projects",
@@ -51,7 +49,8 @@
     "addToCartButton": "Add to cart",
     "quantityLabel": "Quantity",
     "outOfStock": "Out of stock",
-    "noVariantsYet": "Not available for purchase yet."
+    "noVariantsYet": "Not available for purchase yet.",
+    "intro": "Territory, cultivation, fermentation and research — the people and places behind every lot."
   },
   "Cart": {
     "title": "Cart",

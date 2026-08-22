@@ -4937,3 +4937,66 @@ mistake. A pull request should not be merged until its Vercel check has
 reported, and `npm run typecheck` is the local equivalent — `vitest` passing
 proves nothing about types, and 416 green tests were reported for a change that
 could not build.
+
+---
+
+## ADR-071 — The public register, and the DEMO places ADR-066 missed
+
+**Context.** Two problems, found by opening `/discover` as a visitor would.
+
+**First: ADR-066 did not remove all the demo data, and the report that followed
+was wrong.** That cleanup removed the demo *project subtree*, and it was
+thorough about what a project reaches. But a Location carries no `projectId`
+and an Organization carries none either, so neither was ever in scope — they
+were not spared by a judgement call, they were never looked at. Eight records
+survived: five Locations and three Organizations. Six of them are `public`, so
+"DEMO Cloudline" and "DEMO Amber Ridge" are what a visitor sees today.
+
+The lesson generalises past this instance: a cleanup scoped by reachability
+from a root only removes what that root reaches, and the verification that
+follows must check the axes the root does not touch — not just re-query the
+subtree that was deleted.
+
+Nothing real references them. Every inbound reference is DEMO to DEMO (four
+Locations belong to demo Organizations, two are children of demo parents), and
+every RESTRICT relation — specimen, hive, harvest_event, storage_assignment,
+organization_membership — counts zero.
+
+Applying the deletion to production was refused by the safety classifier, which
+is correct for a destructive production write. It ships instead as
+`npm run data:remove-demo-places`: the same guarded single transaction,
+rehearsed against a restored copy, for the product owner to run.
+
+**Second: the page carried a standing disclaimer that had become a lie.**
+`/discover` opened with "everything on this page is demo content — plausible
+but fictional data, not real project information." Boquete, Cerro Azul and both
+stories are real. A permanent disclaimer that is wrong is worse than none: it
+teaches a reader to disbelieve the real material, and it was unconditional, so
+nothing would ever have retired it. Removed, along with its now-dead strings
+and the `.nn-demo-banner` rule.
+
+**Decision — the editorial register, scoped rather than routed.** ADR's design
+pass built the operator register: dense sans, small uppercase index labels,
+card elevation, tuned for someone standing in a wet mill. CLAUDE.md §48 asks
+for *one* system in which public and operator surfaces carry different density.
+
+`.nn-editorial` is that other half — serif headings from a system stack (no
+webfont, nothing fetched at build or runtime), chapter-mark section rules
+instead of index labels, flatter cards, more air, a wider grid because a story
+summary needs room to be read where a batch code only needs to be scanned.
+
+Scoped by class, not by route, so a page opts in by saying what it is. Colour,
+spacing tokens and the tap-target guarantees stay shared: only typography,
+rhythm and card weight change. Verified both ways — `/discover` computes serif
+at 36px with a 24px chapter rule and no card shadow, while `/lots` still
+computes sans at 32px with 12.8px uppercase labels and elevation intact.
+
+**Also.** `/discover` rendered five headed sections whether or not each had
+content, so a visitor met "no public content in this category" repeatedly.
+Only sections with content render now, and stories lead, because a visitor
+arriving with no context needs a way in rather than a directory. The empty
+state is said once, and only when the whole page is empty — the same correction
+the lots page needed.
+
+Mobile re-checked: nav links at 44px, no sideways scroll, every card inside the
+viewport at 375px.
