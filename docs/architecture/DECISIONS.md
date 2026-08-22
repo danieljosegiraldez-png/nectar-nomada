@@ -4191,3 +4191,68 @@ contents: the trail says a copy was taken, not what was in it.
 already does. No scheduled or emailed exports. No re-import of an exported
 archive — the JSON is shaped to make that possible later, not to make it work
 now.
+
+---
+
+## ADR-060 — `EQUIPMENT_AND_READINESS.md` accepted as planning input
+
+**Status: accepted planning input, not a build order.** `18_`'s own framing,
+recorded here so a later session cannot mistake the document for a ticket. v2:
+it must not enter v1 or any current ticket.
+
+**Context.** `DOMAIN_MODEL.md` §3–5 names `Equipment/Calibration` in the
+Research OS chain and never specifies it. Equipment is recorded today as free
+text at the point of use (`FermentationRun.vesselNote`,
+`StorageAssignment.containerNote`) — which preserves the irreversible fact and
+answers nothing about the object.
+
+**Four of `18_`'s premises had drifted, and two changed the answer.** Recorded
+because `README.md`'s own rule is to verify a prompt's vocabulary before
+running it:
+
+1. `material.vessel` does **not** exist and has **no** production rows — it is
+   specified in `SPECIMEN_AND_MATERIAL_TRACEABILITY.md` §4 and unbuilt. The
+   schema says so in a comment on `vesselNote`. So `18_` §4's "recommend
+   whether it migrates, it has real production rows" has no migration to
+   assess; the question is instead whether two *planning documents* reconcile
+   before either ships. They should, and doing so is currently free.
+2. `Measurement.deviceId` **does** exist, with `sourceType` already
+   distinguishing `device`/`sensor`/`lab`. `18_` §7's "Measurement has no
+   instrument reference today" is wrong, which makes the migration smaller than
+   anticipated and turns the real question into what happens to existing
+   free-text device values.
+3. The provenance value is `manufacturer_specification`, not
+   `manufacturer_spec`.
+4. The attention vocabulary `18_` §6 says to map onto is **not established** —
+   it appears only in an unrun research prompt. The instruction's intent (do
+   not invent a second vocabulary) is honoured by naming no severity levels at
+   all.
+
+**Decisions recorded in the document**, none of them binding until built: one
+`Equipment` entity absorbing the planned `material.vessel`; custody as an
+append-only transfer chain with location derived; lifecycle, allocation and
+condition as three orthogonal axes with allocation derived from the run rather
+than stored; readiness as the highest-value output and recommended **ahead of
+consumables** on perishability grounds; instrument calibration under an
+`Instrument*` prefix to avoid colliding with the built panel-calibration
+vocabulary; a nullable `instrument_id` on `Measurement` with **no backfill**;
+consumables as an explicitly third inventory concept with per-site balances.
+
+**Two product decisions raised, not resolved** (§7, and the ticket asked for
+them to be raised rather than silently settled): whether an out-of-calibration
+instrument blocks or downgrades a measurement — recommended **downgrade**,
+because blocking gets routed around in the field and the platform ends up
+knowing less; and how retroactive review is bounded when an instrument fails —
+mechanism recommended (a review-flag table that never rewrites the
+measurement), bounding strategy deferred because it needs real calibration
+intervals that do not exist yet.
+
+**Consequence.** `Notification` now has four known consumers waiting on it —
+readiness signalling, the tourism waitlist, recurring field-study reminders,
+and Alerts. That convergence is an argument for building it, and is the main
+thing this document changes about the v2 order.
+
+**Dependency on ADR-059's open defect.** Client separation for partner-site
+equipment relies on `classification = partner` actually gating reads. It does
+not today. Equipment does not introduce that problem and is not where it should
+be fixed, but it does depend on the answer.
