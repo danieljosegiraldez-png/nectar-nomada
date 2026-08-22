@@ -136,6 +136,24 @@ pg_run "$PG_BIN/pg_dump" "$DUMP_URL" \
   echo "  npm run backup:verify -- $SET_DIR"
 } > "$SET_DIR/MANIFEST.txt"
 
+# --- retention -------------------------------------------------------------
+# Keep the newest NN_BACKUP_KEEP sets. Unbounded growth is a slow leak into
+# cloud storage, but pruning is deliberately conservative: it only ever
+# removes whole timestamped set directories it can see, never anything else
+# in the destination, and never the set just written.
+KEEP="${NN_BACKUP_KEEP:-14}"
+PRUNED=0
+while IFS= read -r old_set; do
+  [ -n "$old_set" ] || continue
+  [ "$old_set" = "$(basename "$SET_DIR")" ] && continue
+  rm -rf "${BACKUP_DIR:?}/$old_set"
+  PRUNED=$((PRUNED + 1))
+done < <(
+  find "$BACKUP_DIR" -maxdepth 1 -type d -name '20*T*Z' -exec basename {} \; 2>/dev/null \
+    | sort -r | tail -n +$((KEEP + 1))
+)
+[ "$PRUNED" -gt 0 ] && echo "Pruned $PRUNED set(s) beyond the newest $KEEP."
+
 # --- pointer to newest -----------------------------------------------------
 ln -sfn "$SET_DIR" "$BACKUP_DIR/latest"
 

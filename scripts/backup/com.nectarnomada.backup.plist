@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.nectarnomada.backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/danielsan/Developer/nectar-nomada-package/scripts/backup/run-scheduled.sh</string>
+  </array>
+
+  <!-- Mondays at 09:00 local. StartCalendarInterval, not StartInterval:
+       a laptop that was asleep at the scheduled time runs the job once when
+       it next wakes, rather than never. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key><integer>1</integer>
+    <key>Hour</key><integer>9</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/nectarnomada-backup.out</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/nectarnomada-backup.err</string>
+</dict>
+</plist>

@@ -75,6 +75,25 @@ direct_url() {
   echo "$1" | sed -E 's/-pooler(\.[a-z0-9.-]*neon\.tech)/\1/'
 }
 
+# DATABASE_URL carries sslmode=verify-full, which is correct for the
+# application: node-postgres validates against Node's bundled CA roots.
+# libpq does not use those roots — it looks for ~/.postgresql/root.crt and
+# refuses to connect when it is absent, which it is here. `sslrootcert=system`
+# tells libpq (16+) to use the OS trust store instead, restoring the same
+# verification the app gets.
+#
+# This parameter cannot live in .env: node-postgres treats sslrootcert as a
+# file path and dies with ENOENT trying to open a file literally named
+# "system". The two client libraries genuinely need different spellings of
+# the same intent.
+libpq_url() {
+  case "$1" in
+    *sslrootcert=*) echo "$1" ;;
+    *\?*)           echo "$1&sslrootcert=system" ;;
+    *)              echo "$1?sslrootcert=system" ;;
+  esac
+}
+
 load_env() {
   local env_file="${1:-.env}"
   [ -f "$env_file" ] || { echo "ERROR: $env_file not found" >&2; return 1; }
@@ -91,7 +110,7 @@ load_env() {
       | sed -E 's/^["'"'"']//; s/["'"'"'][[:space:]]*$//; s/[[:space:]]+$//'
   )"
   [ -n "${DATABASE_URL:-}" ] || { echo "ERROR: DATABASE_URL not set in $env_file" >&2; return 1; }
-  DUMP_URL="$(direct_url "$DATABASE_URL")"
+  DUMP_URL="$(libpq_url "$(direct_url "$DATABASE_URL")")"
   export DATABASE_URL DUMP_URL
 }
 
