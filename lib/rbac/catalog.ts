@@ -56,6 +56,11 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // keeping sharp (Operational Measurement != Approved Research Evidence).
   { resourceType: "lot", action: "manage", description: "Create/transform lots, record measurements, fermentation/drying/storage runs." },
   { resourceType: "lot", action: "view", description: "View lot detail, lineage, and measurements." },
+  // CLAUDE.md §10 lists Export as its own verb, and §46 requires exports to
+  // obey permissions. Kept separate from `view` deliberately: reading one
+  // record in the UI and extracting every record you can see as a file are
+  // different acts, and only the second is worth being able to withhold.
+  { resourceType: "lot", action: "export", description: "Export lots and their linked records as a downloadable dataset." },
   { resourceType: "sample", action: "manage", description: "Create samples, including from a traceable lot." },
 
   // A1 (docs/implementation/22_APIARY_V1_SCOPING_REPORT.md §3) — a new
@@ -231,6 +236,9 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
     permissions: [
       ["lot", "manage"],
       ["lot", "view"],
+      // A producer taking their own records out is the whole point of the
+      // export (docs/implementation/README.md's "client/producer export").
+      ["lot", "export"],
       ["sample", "manage"],
       ["apiary", "manage"],
       ["apiary", "view"],

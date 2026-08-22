@@ -303,7 +303,13 @@ export interface LotVisibility {
   locationIds: string[];
 }
 
-export async function resolveLotVisibility(userAccountId: string, action: "view" | "manage" = "view"): Promise<LotVisibility> {
+export async function resolveLotVisibility(
+  userAccountId: string,
+  // "export" reuses this resolver rather than growing a second one: the
+  // question "which lots may this person export" is the same scope question
+  // as "which may they view", asked of a different permission.
+  action: "view" | "manage" | "export" = "view",
+): Promise<LotVisibility> {
   const now = new Date();
   const assignments = await prisma.assignment.findMany({
     where: {
@@ -354,13 +360,13 @@ function scopeOrClauses(visibility: LotVisibility): Array<{ projectId: { in: str
 }
 
 /** Null return means "matches nothing" — the caller should short-circuit rather than query with an empty OR (which Prisma/Postgres would read as "matches everything"). */
-function lotWhereFromVisibility(visibility: LotVisibility): Prisma.LotWhereInput | null {
+export function lotWhereFromVisibility(visibility: LotVisibility): Prisma.LotWhereInput | null {
   if (visibility.mode === "all") return {};
   if (visibility.mode === "none") return null;
   return { OR: scopeOrClauses(visibility) };
 }
 
-function sampleWhereFromVisibility(visibility: LotVisibility): Prisma.SampleWhereInput | null {
+export function sampleWhereFromVisibility(visibility: LotVisibility): Prisma.SampleWhereInput | null {
   if (visibility.mode === "all") return {};
   if (visibility.mode === "none") return null;
   return { OR: scopeOrClauses(visibility) };

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { getActiveOperations, getLotList, type LotListFilters } from "../../lib/traceability/lots";
+import { permissionKeysAnywhere } from "../../lib/rbac/service";
 
 export const dynamic = "force-dynamic";
 
@@ -28,20 +29,30 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
   const filter = LOT_TYPES.includes(lotType as never) ? (lotType as LotListFilters["lotType"]) : undefined;
 
   const t = await getTranslations("Traceability");
-  const [operations, lots] = await Promise.all([
+  const [operations, lots, granted] = await Promise.all([
     getActiveOperations(user.userAccountId),
     getLotList(user.userAccountId, { lotType: filter }),
+    permissionKeysAnywhere(user.userAccountId),
   ]);
+  const canExport = granted.has("lot:export");
 
   return (
     <div>
       <span className="nn-badge">{t("badge")}</span>
       <h1>{t("lotsTitle")}</h1>
       <p className="nn-muted">{t("lotsIntro")}</p>
-      <p style={{ marginTop: "1rem" }}>
+      <p style={{ marginTop: "1rem", display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
         <Link href="/lots/new" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
           {t("createLotButton")}
         </Link>
+        {canExport ? (
+          // A plain anchor, not next/link: this is a file download, and
+          // client-side navigation to a route handler would fetch the zip and
+          // then have nowhere to put it.
+          <a href="/api/export" className="nn-button-quiet" style={{ textDecoration: "none" }}>
+            {t("exportButton")}
+          </a>
+        ) : null}
       </p>
 
       <section className="nn-section">

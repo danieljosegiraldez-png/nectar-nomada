@@ -896,9 +896,15 @@ Vercel and R2.
   never run.
 - **Operational economics, full pass** — merge with `18_` so Resource is
   designed once. `20_` is the urgent slice already extracted from it.
-- **Client/producer data export** — a producer still cannot take their own
-  lots, sensory results or reports out of the platform. A product gap as much
-  as an operational one, and the last piece of data sovereignty still open.
+- ~~**Client/producer data export**~~ — **built 2026-08-21**, ADR-059.
+  `lot:export` plus `/api/export` returns a dated zip of the caller's lots,
+  measurements, samples and panel results as CSV and JSON. Scope reuses
+  `resolveLotVisibility`, so it cannot contain more than the app already
+  shows. Deliberately applies no classification AND-gate — every Lot is
+  `internal` and Farm Operator can only clear `partner`, so a gate would
+  return nothing to the person it is for. That inconsistency is recorded in
+  ADR-059 as a real defect awaiting a decision, not resolved inside an export
+  feature.
 - **Vercel and R2 exit runbooks** — the Neon one exists (restore into stock
   PostgreSQL, `BACKUP_AND_RECOVERY.md`); the other two providers do not have
   theirs written.
