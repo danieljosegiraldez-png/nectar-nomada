@@ -91,7 +91,7 @@ export default async function MyNectarPage() {
       <h1>{t("greeting", { name: userAccount.person.displayName })}</h1>
       <p className="nn-muted">{userAccount.person.email}</p>
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("assignmentsHeading")}</h2>
         {userAccount.assignments.length === 0 ? (
           <p className="nn-muted">{t("noAssignments")}</p>
@@ -116,7 +116,7 @@ export default async function MyNectarPage() {
         )}
       </section>
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("permissionsHeading")}</h2>
         {platformPermissions.size === 0 ? (
           <p className="nn-muted">{t("noPermissions")}</p>
@@ -141,7 +141,7 @@ export default async function MyNectarPage() {
         )}
       </section>
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("ordersHeading")}</h2>
         {orders.length === 0 ? (
           <p className="nn-muted">{t("noOrders")}</p>
@@ -169,7 +169,7 @@ export default async function MyNectarPage() {
         )}
       </section>
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("bookingsHeading")}</h2>
         {bookings.length === 0 ? (
           <p className="nn-muted">{t("noBookings")}</p>
@@ -196,7 +196,7 @@ export default async function MyNectarPage() {
         )}
       </section>
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("sensoryHistoryHeading")}</h2>
         {assessments.length === 0 ? (
           <p className="nn-muted">{t("noSensoryHistory")}</p>

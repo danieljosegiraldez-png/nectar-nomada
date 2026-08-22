@@ -41,7 +41,7 @@ export default async function PartnerProjectPage({ params }: { params: Promise<{
       <h1>{project.name}</h1>
       {project.description ? <p className="nn-muted">{project.description}</p> : null}
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("tasksHeading")}</h2>
         {tasks.length === 0 ? (
           <p className="nn-muted">{t("noTasks")}</p>
@@ -77,7 +77,7 @@ export default async function PartnerProjectPage({ params }: { params: Promise<{
         )}
       </section>
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("submissionsHeading")}</h2>
         {submissions.length === 0 ? (
           <p className="nn-muted">{t("noSubmissions")}</p>
@@ -96,7 +96,7 @@ export default async function PartnerProjectPage({ params }: { params: Promise<{
         {canSubmitData ? <FieldSubmissionForm projectId={projectId} /> : null}
       </section>
 
-      <section style={{ marginTop: "2rem" }}>
+      <section className="nn-section">
         <h2>{t("mediaHeading")}</h2>
         {assets.length === 0 ? (
           <p className="nn-muted">{t("noMedia")}</p>
