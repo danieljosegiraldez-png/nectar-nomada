@@ -4577,3 +4577,83 @@ the build compiled. That reproduces the failing preview and shows it cleared.
 **Consequence.** A build no longer depends on what a previous build left
 behind. This was found while preparing to merge the stack: sixteen pull
 requests all reported a failing check, and the check was right.
+
+---
+
+## ADR-066 — Demo and test records removed from production
+
+**Context.** Production carried records that were never real. Two `DEMO`
+projects seeded on 2026-08-13, four `TEST RO1 Session` rows left by the test
+suite from when it still ran against production (the practice ADR-058's
+companion work ended by moving the suite to a restored local database), and
+four `DEMO` identities including a `DEMO Platform Admin` login.
+
+None of it was doing harm where it sat, but CLAUDE.md §54 asks that
+demonstration data be clearly labelled *development* seed data, and this was
+labelled demonstration data living in the production research record. The
+sensory module was the clearest case: production held six sensory sessions and
+not one of them was real.
+
+**The hazard that shaped the work.** Deleting the two `core.project` rows on
+their own would have been worse than leaving them. Most foreign keys into
+`core.project` are `SET NULL`, not `CASCADE` — including `traceability.lot`,
+`core.sample`, `research.experiment` and `research.treatment_batch`. The eight
+demo lots and five demo samples would have survived with `project_id` NULL:
+demo records sitting in the real tables with nothing left to identify them by,
+and no error raised. A cascade that silently detaches is more dangerous than
+one that refuses.
+
+**Decision.** Remove the demo subtree rather than its roots, in two rounds,
+each: verified backup → rehearsal on that exact snapshot restored locally →
+apply in one transaction whose post-conditions abort on any surprise.
+
+Round one removed 90 rows across 15 tables — projects, lots, samples, sensory
+sessions, transformation inputs and outputs, quantity events, the apiary chain
+(hive → colony → inspections), a product, a story, an experience, partner tasks
+and domain tags. Round two removed 20 more: the four TEST RO1 sessions, the
+four DEMO identities with their accounts and assignments, and four orphaned
+runs. Production went from 14,781 rows to 14,671, confirmed against the row
+census in the backup manifests either side.
+
+**Why the identities needed more care than the content.** 104 foreign keys
+reference `core.person` or `core.user_account`, nearly all `created_by` with
+`SET NULL` — `core.audit_event.actor_user_account_id` among them. Deleting an
+account that owned real provenance would have blanked it silently, which is the
+audit-trail failure §35 exists to prevent.
+
+So every one of those 104 columns was swept rather than a sample checked: only
+twelve rows referenced DEMO identities, none of them real, and no audit event
+named a DEMO actor. The script re-asserts each of those conditions at runtime,
+because the sweep measured the data rather than guaranteeing anything about it,
+and the answer has to still hold at the moment of the delete.
+
+**What the rehearsal caught.** Three things that would each have failed against
+production: a column named `session_id` that does not exist on
+`sensory_blind_mapping`, a blind-mapping chain that runs through blind samples
+and flights rather than sessions, and the demo hive's colony holding `RESTRICT`
+children. Rehearsing on a restored copy turned three production incidents into
+three cheap iterations.
+
+**A consequence worth recording.** Round one created its own residue: removing
+the demo lots took their `lot_transformation` rows, stranding two fermentation
+runs and two drying runs that pointed at nothing. They were the only rows in
+those two tables. Round two's sweep found them. Deleting a subtree can orphan
+rows *above* it, and reachability from the deleted roots does not describe that
+set — only a fresh sweep afterwards does.
+
+**Verification.** On the rehearsal copy, every foreign key in the database was
+validated after each round: zero dangling, zero orphaned lots or samples. That
+was deliberately not repeated against production, where
+`ALTER TABLE ... VALIDATE CONSTRAINT` takes table locks and the data was
+identical. Real data is unchanged at 43 lots, 17 people, 3 projects, 14
+organizations, 43 treatment batches, 4,773 audit events, 89 permission grants
+and 38 active assignments.
+
+Farm Operators clearing `internal` went from seven to six; the seventh was the
+DEMO account, and the remaining six are real people. Production now reports
+zero sensory sessions, which is accurate rather than a loss.
+
+**Backups.** `2026-08-22T004622Z` before, `2026-08-22T005229Z` between rounds,
+`2026-08-22T005913Z` after — each restore-verified into stock PostgreSQL 18,
+row counts identical. The pre-removal backup is the recovery path if any of
+this is ever wanted back.
