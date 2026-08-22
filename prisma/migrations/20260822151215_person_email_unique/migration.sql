@@ -1,0 +1,16 @@
+-- Person.email becomes unique (ADR-072).
+--
+-- `authorize()` resolves a login with
+--   findFirst({ where: { authProvider: "credentials", person: { email } } })
+-- so two People sharing an address would make *which* of them signs in
+-- arbitrary. app/actions/auth.ts already checked for a duplicate before
+-- inserting, but that is an application-level check with a race between the
+-- read and the write, not a guarantee.
+--
+-- NULL stays allowed: Postgres treats NULLs as distinct in a unique index, and
+-- most People have no address yet. Case-variant duplicates cannot arise
+-- through the app because signUpSchema and loginSchema both `.toLowerCase()`.
+--
+-- Verified against production before writing this: zero duplicates, case
+-- insensitive.
+CREATE UNIQUE INDEX "person_email_key" ON "core"."person"("email");

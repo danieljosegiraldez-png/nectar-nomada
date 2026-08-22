@@ -37,7 +37,15 @@ model Person {
   givenName             String       @map("given_name")
   familyName            String       @map("family_name")
   displayName           String       @map("display_name")
-  email                 String?
+  // Unique, because `authorize()` resolves an account by
+  // `person: { email }` with findFirst — two People sharing an address would
+  // make *which* of them signs in arbitrary (ADR-072). The application already
+  // checked for a duplicate before insert, but that is a race-prone
+  // application-level check, not a guarantee. NULL is still allowed and
+  // Postgres treats NULLs as distinct, so the many People without an address
+  // are unaffected. Both signUpSchema and loginSchema `.toLowerCase()`, so
+  // case-variant duplicates cannot arise through the app.
+  email                 String?      @unique
   phone                 String?
   locale                String       @default("es")
   bio                   String?
