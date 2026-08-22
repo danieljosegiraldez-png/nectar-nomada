@@ -66,7 +66,7 @@ export function MeasurementForm({
       </div>
       <div className="nn-field">
         <label htmlFor="value">{t("valueLabel")}</label>
-        <input id="value" name="value" type="number" step="0.01" required />
+        <input id="value" name="value" type="number" inputMode="decimal" step="0.01" required />
       </div>
       <div className="nn-field">
         <label htmlFor="unit">{t("unitLabel")}</label>

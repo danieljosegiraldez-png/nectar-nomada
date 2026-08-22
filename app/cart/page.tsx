@@ -51,7 +51,7 @@ export default async function CartPage() {
                 <input type="hidden" name="cartItemId" value={item.id} />
                 <label className="nn-field" style={{ margin: 0 }}>
                   <span className="nn-muted">{t("quantityLabel")}</span>
-                  <input name="quantity" type="number" min={0} defaultValue={item.quantity} style={{ width: "4rem" }} />
+                  <input name="quantity" type="number" inputMode="numeric" min={0} defaultValue={item.quantity} style={{ width: "4rem" }} />
                 </label>
                 <button type="submit" className="nn-button">
                   {t("updateButton")}

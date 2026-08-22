@@ -39,7 +39,7 @@ export function AssessmentForm({
         <input
           id={`overallScore-${blindSampleId}`}
           name="overallScore"
-          type="number"
+          type="number" inputMode="decimal"
           step="0.25"
           min={scoreMin}
           max={scoreMax}
@@ -55,7 +55,7 @@ export function AssessmentForm({
           <input
             id={`attr-${blindSampleId}-${attribute.id}`}
             name={`attr_${attribute.id}`}
-            type="number"
+            type="number" inputMode="decimal"
             step="0.25"
             min={attribute.scaleMin}
             max={attribute.scaleMax}

@@ -19,11 +19,11 @@ export function DryingForm({ lotId }: { lotId: string }) {
       </div>
       <div className="nn-field">
         <label htmlFor="d-layerDepthCm">{t("layerDepthLabel")}</label>
-        <input id="d-layerDepthCm" name="layerDepthCm" type="number" step="0.1" />
+        <input id="d-layerDepthCm" name="layerDepthCm" type="number" inputMode="decimal" step="0.1" />
       </div>
       <div className="nn-field">
         <label htmlFor="d-quantity">{t("quantityLabel")}</label>
-        <input id="d-quantity" name="quantity" type="number" step="0.001" />
+        <input id="d-quantity" name="quantity" type="number" inputMode="decimal" step="0.001" />
       </div>
       <div className="nn-field">
         <label htmlFor="d-unit">{t("unitLabel")}</label>

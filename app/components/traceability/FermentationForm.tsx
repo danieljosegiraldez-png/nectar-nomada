@@ -19,7 +19,7 @@ export function FermentationForm({ lotId }: { lotId: string }) {
       </div>
       <div className="nn-field">
         <label htmlFor="f-quantity">{t("quantityLabel")}</label>
-        <input id="f-quantity" name="quantity" type="number" step="0.001" />
+        <input id="f-quantity" name="quantity" type="number" inputMode="decimal" step="0.001" />
       </div>
       <div className="nn-field">
         <label htmlFor="f-unit">{t("unitLabel")}</label>

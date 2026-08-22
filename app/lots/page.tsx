@@ -54,7 +54,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
             ) : (
               operations.activeFermentationRuns.map((entry) => (
                 <p key={entry.run.id}>
-                  <Link href={`/lots/${(entry.lot as { id: string }).id}`}>
+                  <Link href={`/lots/${(entry.lot as { id: string }).id}`} className="nn-code">
                     {(entry.lot as { lotCode: string }).lotCode}
                   </Link>
                 </p>
@@ -69,7 +69,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
             ) : (
               operations.activeDryingRuns.map((entry) => (
                 <p key={entry.run.id}>
-                  <Link href={`/lots/${(entry.lot as { id: string }).id}`}>
+                  <Link href={`/lots/${(entry.lot as { id: string }).id}`} className="nn-code">
                     {(entry.lot as { lotCode: string }).lotCode}
                   </Link>
                 </p>
@@ -84,7 +84,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
             ) : (
               operations.lotsNeedingMeasurement.map((lot) => (
                 <p key={lot.id}>
-                  <Link href={`/lots/${lot.id}`}>{lot.lotCode}</Link>
+                  <Link href={`/lots/${lot.id}`} className="nn-code">{lot.lotCode}</Link>
                 </p>
               ))
             )}
@@ -98,7 +98,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
               operations.samplesAwaitingSensory.map((sample) => (
                 <p key={sample.id}>
                   {sample.sourceLotId ? (
-                    <Link href={`/lots/${sample.sourceLotId}`}>{sample.sampleCode}</Link>
+                    <Link href={`/lots/${sample.sourceLotId}`} className="nn-code">{sample.sampleCode}</Link>
                   ) : (
                     sample.sampleCode
                   )}
@@ -111,12 +111,21 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
 
       <section className="nn-section">
         <h2>{t("lotListHeading")}</h2>
-        <div style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <Link href="/lots" className={filter ? undefined : "nn-price"}>
+        <div className="nn-chips">
+          <Link
+            href="/lots"
+            className={filter ? "nn-chip" : "nn-chip nn-chip-active"}
+            aria-current={filter ? undefined : "page"}
+          >
             {t("filterAll")}
           </Link>
           {LOT_TYPES.map((type) => (
-            <Link key={type} href={`/lots?lotType=${type}`} className={filter === type ? "nn-price" : undefined}>
+            <Link
+              key={type}
+              href={`/lots?lotType=${type}`}
+              className={filter === type ? "nn-chip nn-chip-active" : "nn-chip"}
+              aria-current={filter === type ? "page" : undefined}
+            >
               {t(`lotType_${type}`)}
             </Link>
           ))}
@@ -128,7 +137,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
           <div className="nn-grid">
             {lots.map((lot) => (
               <Link key={lot.id} href={`/lots/${lot.id}`} className="nn-card-link">
-                <h3>{lot.lotCode}</h3>
+                <h3 className="nn-code">{lot.lotCode}</h3>
                 <p className="nn-muted">{t(`lotType_${lot.lotType}` as "lotType_cherry")}</p>
                 <p className="nn-detail-meta">
                   {lot.project ? <span>{lot.project.name}</span> : null}
