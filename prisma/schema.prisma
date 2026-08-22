@@ -32,6 +32,40 @@ enum PersonStatus {
   @@schema("core")
 }
 
+/// A way an account proves who it is, held by an external provider — ADR-075.
+///
+/// Authority hangs off UserAccount: Assignments, and therefore every
+/// permission, belong to the account. So a Person keeps exactly one account
+/// (person_id is unique), otherwise someone's roles would differ depending on
+/// how they signed in. What was missing was anywhere to record a *second* way
+/// of proving identity for that one account — Google sign-in tried to solve it
+/// by creating a second UserAccount and hit that unique constraint.
+///
+/// Credentials are deliberately not modelled here: a password is a property of
+/// the account (`passwordHash`), not a link to another system.
+model ExternalIdentity {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userAccountId String   @map("user_account_id") @db.Uuid
+  /// 'google' today. One row per provider per account.
+  provider      String
+  /// The provider's own stable id for this person. Never an email — an email
+  /// can change hands, a subject cannot.
+  subject       String
+  createdAt     DateTime @default(now()) @map("created_at")
+  lastUsedAt    DateTime? @map("last_used_at")
+
+  userAccount UserAccount @relation(fields: [userAccountId], references: [id], onDelete: Cascade)
+
+  /// The lookup sign-in performs, and the guarantee that one external identity
+  /// cannot be claimed by two accounts.
+  @@unique([provider, subject])
+  /// One Google account per UserAccount — linking a second would make "which
+  /// Google account signs me in" ambiguous.
+  @@unique([userAccountId, provider])
+  @@map("external_identity")
+  @@schema("core")
+}
+
 model Person {
   id                    String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   givenName             String       @map("given_name")
@@ -105,10 +139,10 @@ model UserAccount {
   id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   personId        String            @unique @map("person_id") @db.Uuid
   person          Person            @relation(fields: [personId], references: [id])
-  // 'credentials' | 'google' | ... — see lib/auth/config.ts for the concrete providers wired up.
+  // How this account was originally created — 'credentials' today for every
+  // account. External providers are recorded in ExternalIdentity instead
+  // (ADR-075), because one account may prove identity in several ways.
   authProvider    String            @map("auth_provider")
-  // OAuth provider's subject/user id. Null for credentials accounts.
-  authSubject     String?           @map("auth_subject")
   // Argon2id hash (SECURITY.md §1). Null for OAuth-only accounts.
   passwordHash    String?           @map("password_hash")
   emailVerifiedAt DateTime?         @map("email_verified_at")
@@ -119,6 +153,7 @@ model UserAccount {
   createdBy       String?           @map("created_by") @db.Uuid
   creator         UserAccount?      @relation("UserAccountCreatedBy", fields: [createdBy], references: [id])
 
+  externalIdentities                ExternalIdentity[]
   createdAccounts                   UserAccount[]                @relation("UserAccountCreatedBy")
   personsCreated                    Person[]                     @relation("PersonCreatedBy")
   roleProfilesCreated               RoleProfile[]                @relation("RoleProfileCreatedBy")
@@ -202,7 +237,6 @@ model UserAccount {
   researchActivitiesReviewed         ResearchActivity[]           @relation("ResearchActivityReviewedBy")
   researchActivitiesCreated          ResearchActivity[]           @relation("ResearchActivityCreatedBy")
 
-  @@unique([authProvider, authSubject])
   @@map("user_account")
   @@schema("core")
 }
