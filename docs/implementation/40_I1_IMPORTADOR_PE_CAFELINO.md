@@ -199,3 +199,49 @@ real.
 
 **Reportá cuánto quedó sin interpretar.** Un importador que dice haber
 mapeado todo probablemente forzó algo.
+
+---
+
+## Aclaración del product owner — PE-107 (2026-08-20)
+
+**Qué es realmente el "guacho" de PE-107.** Una mezcla de mostos ya
+fermentados que arrastra **seis poblaciones** en un solo recipiente:
+
+- Cool Blue
+- Sunrise Orange
+- Green Origin
+- Deep Amber
+- fermentaciones espontáneas de **Catuaí**
+- fermentaciones espontáneas de **Geisha**
+
+**La celda del archivo dice menos que eso.** PE-107 registra sólo
+`S.O. G.O D.A.` — no nombra Cool Blue ni las espontáneas. La fila hermana
+PE-106 sí escribe la convención completa (`S.O. G.O D.A. C.B. SPON ... y
+pitch de 20g de cool blue`), lo que confirma que las iniciales son las
+cepas comerciales: S.O. = Sunrise Orange, G.O. = Green Origin,
+D.A. = Deep Amber, C.B. = Cool Blue, SPON = espontánea.
+
+**Procedencia distinta, y por eso está acá y no en la nota del lote.** Esta
+composición no sale del archivo: es testimonio del product owner. La nota
+que el importador escribe en `TreatmentBatch.notes` conserva el texto
+original del CSV, `original_record`, y nada más. Mezclar ambas cosas en un
+mismo campo afirmaría que el archivo dice algo que no dice.
+
+**Decisión del product owner: una fermentación espontánea no necesita
+cepa — va como desconocida.** `Levadura / cultivo` es de tipo catálogo y de
+valor único, así que no puede representar seis poblaciones a la vez. La
+resolución no es un modelo nuevo: es que la población resultante de un
+guacho **no está identificada**, y eso ya tiene un valor propio.
+`Spontaneous Wild` (con `impliesUnknownIdentity`) más su `dataQuality`
+—`not_tested`, porque nadie hizo identificación microbiana— dice
+exactamente eso. Dejar el campo vacío decía menos, no más.
+
+Las filas guacho (PE-106, PE-107) ahora registran `Spontaneous Wild` /
+`not_tested`, igual que las espontáneas puras (PE-81, PE-82, PE-84,
+PE-86). Seis filas en total.
+
+**No se pierde nada.** Los nombres de cepa que la celda sí lista
+(S.O., G.O., D.A., C.B.) quedan en `TreatmentBatch.notes`, verbatim y como
+`original_record`. Lo que el campo de cultivo afirma es que la población
+resultante no está identificada — verdadero de cualquier guacho, y
+consultable. Lo que la nota conserva es lo que el archivo dijo.
