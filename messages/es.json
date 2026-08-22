@@ -14,7 +14,8 @@
     "signIn": "Iniciar sesión",
     "signUp": "Crear cuenta",
     "signOut": "Cerrar sesión",
-    "primaryNavLabel": "Principal"
+    "primaryNavLabel": "Principal",
+    "admin": "Admin"
   },
   "Home": {
     "badge": "Slices 1–2 — Identidad y Descubrimiento",
@@ -631,5 +632,38 @@
   },
   "LocaleSwitcher": {
     "label": "Idioma"
+  },
+  "Admin": {
+    "badge": "Centro de Plataforma",
+    "usersTitle": "Usuarios y permisos",
+    "usersSummary": "{total} personas · {canSignIn} pueden iniciar sesión · {withoutEmail} sin correo · {withoutRoles} sin roles.",
+    "grantHeading": "Otorgar un rol",
+    "peopleHeading": "Personas",
+    "personLabel": "Persona",
+    "roleLabel": "Rol",
+    "scopeTypeLabel": "Alcance",
+    "scopeTargetLabel": "Proyecto o lugar",
+    "scopeTargetNone": "— ninguno (solo para alcance plataforma)",
+    "scopePlatform": "Plataforma",
+    "scopeProject": "Proyecto",
+    "scopeLocation": "Lugar",
+    "scope_platform": "toda la plataforma",
+    "scope_project": "proyecto",
+    "scope_location": "lugar",
+    "scope_session": "sesión",
+    "grantButton": "Otorgar rol",
+    "revokeButton": "Revocar",
+    "noEmail": "Sin correo — no puede recibir una contraseña",
+    "noEmailSuffix": "sin correo",
+    "noRoles": "Sin roles — puede iniciar sesión pero no verá nada",
+    "stateNoAccount": "Sin cuenta de usuario",
+    "stateCanSignIn": "Puede iniciar sesión",
+    "stateCannotSignIn": "Cuenta {status} — aún sin contraseña",
+    "error_already_granted": "Esa persona ya tiene ese rol en ese alcance.",
+    "error_scope_target_required": "Elige un proyecto o lugar para ese alcance.",
+    "error_would_remove_last_platform_admin": "No se puede revocar: es el último Platform Admin de la plataforma. Otorga el rol a alguien más primero.",
+    "error_assignment_not_found": "Esa asignación ya no existe.",
+    "error_already_revoked": "Esa asignación ya estaba revocada.",
+    "error_no_permission_admin_access": "No tienes permiso para gestionar permisos."
   }
 }

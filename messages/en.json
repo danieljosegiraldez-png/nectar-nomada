@@ -14,7 +14,8 @@
     "signIn": "Sign in",
     "signUp": "Sign up",
     "signOut": "Sign out",
-    "primaryNavLabel": "Primary"
+    "primaryNavLabel": "Primary",
+    "admin": "Admin"
   },
   "Home": {
     "badge": "Slices 1–2 — Identity and Discovery",
@@ -631,5 +632,38 @@
   },
   "LocaleSwitcher": {
     "label": "Language"
+  },
+  "Admin": {
+    "badge": "Platform Command Center",
+    "usersTitle": "Users and permissions",
+    "usersSummary": "{total} people · {canSignIn} can sign in · {withoutEmail} without an email · {withoutRoles} without roles.",
+    "grantHeading": "Grant a role",
+    "peopleHeading": "People",
+    "personLabel": "Person",
+    "roleLabel": "Role",
+    "scopeTypeLabel": "Scope",
+    "scopeTargetLabel": "Project or place",
+    "scopeTargetNone": "— none (platform scope only)",
+    "scopePlatform": "Platform",
+    "scopeProject": "Project",
+    "scopeLocation": "Location",
+    "scope_platform": "platform-wide",
+    "scope_project": "project",
+    "scope_location": "location",
+    "scope_session": "session",
+    "grantButton": "Grant role",
+    "revokeButton": "Revoke",
+    "noEmail": "No email — cannot be given a password",
+    "noEmailSuffix": "no email",
+    "noRoles": "No roles — can sign in but will see nothing",
+    "stateNoAccount": "No user account",
+    "stateCanSignIn": "Can sign in",
+    "stateCannotSignIn": "Account {status} — no password yet",
+    "error_already_granted": "That person already holds that role at that scope.",
+    "error_scope_target_required": "Choose a project or location for that scope.",
+    "error_would_remove_last_platform_admin": "Cannot revoke: this is the last platform-wide Platform Admin. Grant the role to someone else first.",
+    "error_assignment_not_found": "That assignment no longer exists.",
+    "error_already_revoked": "That assignment was already revoked.",
+    "error_no_permission_admin_access": "You do not have permission to manage permissions."
   }
 }

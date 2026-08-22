@@ -68,6 +68,12 @@ const NAV: readonly NavDefinition[] = [
   // Ask Néctar is actually built), so there is nothing cross-cutting to place.
   // It stays a destination, now correctly hidden from those who cannot use it.
   { labelKey: "ai", href: "/ai", requiresAnyOf: ["ai:review_suggestion"] },
+  // Last, because it is administration rather than a place work happens
+  // (ADR-074). Gated on manage_permissions specifically: granting a role *is*
+  // managing permissions, and someone holding only manage_users would find the
+  // page refusing them — which is the failure this file's rule 2 exists to
+  // prevent.
+  { labelKey: "admin", href: "/admin/users", requiresAnyOf: ["platform:manage_permissions"] },
 ];
 
 /**
