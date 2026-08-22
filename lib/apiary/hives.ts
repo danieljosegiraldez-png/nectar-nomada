@@ -12,7 +12,8 @@
  * below (reuse, not a second RBAC helper).
  */
 import { prisma } from "../db";
-import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
+import { can } from "../rbac/service";
+import { classificationForTarget, loadScopeClassifications } from "../rbac/scopeClassification";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { ColonyOriginType, DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
@@ -33,9 +34,15 @@ export async function requireApiaryAccess(
   action: "manage" | "view",
   candidates: ReadonlyArray<{ projectId?: string | null; locationId?: string | null }>,
 ) {
+  // A Hive and a Colony carry no classification; the Location the hives stand
+  // at, and the Project the work belongs to, do (ADR-069).
+  const classifications = await loadScopeClassifications(candidates);
+
   for (const candidate of candidates) {
     for (const target of apiaryScopeTargetsFor(candidate)) {
-      if (await can(userAccountId, action, "apiary", target, CLASSIFICATION_GATE_DEFERRED)) return;
+      const classification = classificationForTarget(target, classifications);
+      if (classification === null) continue;
+      if (await can(userAccountId, action, "apiary", target, classification)) return;
     }
   }
   throw new ApiaryAccessError("no_apiary_access");
@@ -54,10 +61,16 @@ export async function requireColonyEventWriteAccess(
   userAccountId: string,
   candidates: ReadonlyArray<{ projectId?: string | null; locationId?: string | null }>,
 ) {
+  const classifications = await loadScopeClassifications(candidates);
+
   for (const candidate of candidates) {
     for (const target of apiaryScopeTargetsFor(candidate)) {
-      if (await can(userAccountId, "manage", "apiary", target, CLASSIFICATION_GATE_DEFERRED)) return;
-      if (await can(userAccountId, "manage", "colony_event", target, CLASSIFICATION_GATE_DEFERRED)) return;
+      const classification = classificationForTarget(target, classifications);
+      if (classification === null) continue;
+      // Both routes are gated on the same classification: the narrower
+      // colony_event:manage is a smaller *authority*, not a lower clearance.
+      if (await can(userAccountId, "manage", "apiary", target, classification)) return;
+      if (await can(userAccountId, "manage", "colony_event", target, classification)) return;
     }
   }
   throw new ApiaryAccessError("no_apiary_access");

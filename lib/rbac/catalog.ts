@@ -300,6 +300,18 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
     permissions: [
       ["apiary", "view"],
       ["colony_event", "manage"],
+      // ADR-069 — same correction ADR-063 made for Farm Operator. Sixteen of
+      // twenty-eight Locations are `internal`, which is where the hives are;
+      // without this the profile holds apiary:view and colony_event:manage and
+      // can reach neither. The exclusion of apiary:manage above is the real
+      // boundary for this role (no Inspections, no Hives) and it is untouched:
+      // this grants the clearance to see internal sites, not the authority to
+      // do more at them.
+      //
+      // Deliberately *not* extended to Partner Field Collector or Sensory
+      // Judge, which ADR-063 held back as external parties. A trainee on staff
+      // is on the other side of that line.
+      ["classification", "clear_internal"],
     ],
   },
 ] as const;

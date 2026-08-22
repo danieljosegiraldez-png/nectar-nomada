@@ -49,15 +49,27 @@ attacks against object storage.
 
 ## 4. Classification enforcement
 
-> **Status, 2026-08-21 (ADR-062, ADR-063): enforced on the lot and sample
-> paths; an inventory remains.** The AND-gate was passed at zero of thirteen
-> `can()` call sites, because the parameter defaulted to `public` and omission
-> was invisible. The parameter is now required, so a bypass is a compile error.
+> **Status, 2026-08-22 (ADR-062, ADR-063, ADR-068, ADR-069): enforced
+> everywhere it applies; the deferred inventory is empty.** The AND-gate was
+> passed at zero of thirteen `can()` call sites, because the parameter
+> defaulted to `public` and omission was invisible. The parameter is now
+> required, so a bypass is a compile error.
 >
-> `requireLotAccess` and `requireSampleAccess` now carry the record's own
-> classification, and it is enforced. The remaining sites that do not yet gate
-> pass the named `CLASSIFICATION_GATE_DEFERRED` sentinel, so the live inventory
-> is `grep -rn CLASSIFICATION_GATE_DEFERRED lib app` and it can only shrink.
+> Every call site now passes a real classification, one of three ways:
+>
+> - **the record's own** — Lot, Sample, Location (`classification` lives on
+>   thirteen tables);
+> - **its parent's** — a Specimen gates on the Location it stands at; research
+>   records, Hives and ColonyEvents gate on the Project or Location the work
+>   belongs to, via `lib/rbac/scopeClassification.ts`. A target whose record
+>   cannot be loaded is skipped, never treated as public;
+> - **`CLASSIFICATION_NOT_APPLICABLE`** — five platform-scoped capability
+>   checks ("may this account manage competitions at all") touch no row, so
+>   nothing's sensitivity is in question and `public` is the final answer.
+>
+> `grep -rn CLASSIFICATION_GATE_DEFERRED lib app` returns no call sites. The
+> sentinel is kept for future modules not yet ready to gate, so that any such
+> site stays greppable rather than passing a bare `"public"`.
 >
 > Enforcement required correcting two role profiles (ADR-063): Farm Operator
 > and Project Viewer now hold `classification:clear_internal`, because every
