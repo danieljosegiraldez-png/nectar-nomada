@@ -19,7 +19,7 @@ import type { ClassificationLevel } from "../rbac/types";
  * never just one.
  */
 import { prisma } from "../db";
-import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
+import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";

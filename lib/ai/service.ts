@@ -24,7 +24,7 @@
 import { prisma } from "../db";
 import { aiPrisma } from "./db";
 import { recordAuditEvent } from "../audit";
-import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
+import { can, CLASSIFICATION_NOT_APPLICABLE } from "../rbac/service";
 
 export class AiAccessError extends Error {}
 
@@ -86,7 +86,7 @@ export async function generateDataCompletenessSuggestions(): Promise<number> {
 }
 
 async function requireReviewPermission(userAccountId: string) {
-  const allowed = await can(userAccountId, "review_suggestion", "ai", { scopeType: "platform", scopeRefId: null }, CLASSIFICATION_GATE_DEFERRED);
+  const allowed = await can(userAccountId, "review_suggestion", "ai", { scopeType: "platform", scopeRefId: null }, CLASSIFICATION_NOT_APPLICABLE);
   if (!allowed) {
     throw new AiAccessError("no_review_access");
   }

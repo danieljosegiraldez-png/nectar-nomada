@@ -11,12 +11,12 @@
  * rows carry invented compound/threshold data — CLAUDE.md §54.
  */
 import { prisma } from "../db";
-import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
+import { can, CLASSIFICATION_NOT_APPLICABLE } from "../rbac/service";
 
 export class CalibrationAccessError extends Error {}
 
 async function requireManagePermission(userAccountId: string) {
-  const allowed = await can(userAccountId, "manage_session", "sensory", { scopeType: "platform", scopeRefId: null }, CLASSIFICATION_GATE_DEFERRED);
+  const allowed = await can(userAccountId, "manage_session", "sensory", { scopeType: "platform", scopeRefId: null }, CLASSIFICATION_NOT_APPLICABLE);
   if (!allowed) {
     throw new CalibrationAccessError("no_manage_access");
   }

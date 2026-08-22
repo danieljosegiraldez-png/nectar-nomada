@@ -81,6 +81,25 @@ export function resolvePermissions(assignments: readonly ResolvedAssignment[], t
  */
 export const CLASSIFICATION_GATE_DEFERRED: ClassificationLevel = "public";
 
+/**
+ * The classification an access check passes when the question "how sensitive
+ * is the record?" has no record to ask it about.
+ *
+ * Some checks are capability checks, not record checks: *may this account
+ * manage competitions at all*, *may it review AI suggestions at all*. They
+ * resolve against `{ scopeType: "platform" }` and touch no row, so there is
+ * nothing whose classification could gate them. Passing `public` there is the
+ * correct and final answer, not an unfinished one.
+ *
+ * Distinct from CLASSIFICATION_GATE_DEFERRED purely so that the grep for
+ * deferred work counts only work that actually remains. Both evaluate to
+ * `public`; conflating them made five permanent no-ops look like a backlog.
+ *
+ * A caller that *does* load a record must not use this — gate on that record's
+ * classification instead.
+ */
+export const CLASSIFICATION_NOT_APPLICABLE: ClassificationLevel = "public";
+
 export function can(
   assignments: readonly ResolvedAssignment[],
   action: string,
