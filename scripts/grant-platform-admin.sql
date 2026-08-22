@@ -1,0 +1,89 @@
+-- Grant Platform Admin at platform scope. Run via scripts/grant-platform-admin.sh.
+--
+-- Why this exists outside the application. Granting Platform Admin requires
+-- rbac:manage_permissions, and only Platform Admin holds it — so the first
+-- administrator cannot be created from inside the UI. Production reached that
+-- state exactly: zero active Platform Admin assignments and zero accounts with
+-- a password, leaving a correctly-enforced RBAC model that nobody could act
+-- within. Every administrator after the first can be granted through the app.
+--
+-- Safe to re-run: the insert is guarded by NOT EXISTS, and the audit row is
+-- written from the insert's RETURNING, so a second run changes nothing and
+-- records nothing.
+--
+-- Requires -v email=<address>.
+
+\set ON_ERROR_STOP on
+BEGIN;
+
+CREATE TEMP TABLE target ON COMMIT DROP AS
+  SELECT ua.id AS account_id
+  FROM core.user_account ua
+  JOIN core.person p ON p.id = ua.person_id
+  WHERE p.email = :'email' AND ua.auth_provider = 'credentials';
+
+DO $$
+DECLARE n int;
+BEGIN
+  SELECT count(*) INTO n FROM target;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'expected exactly 1 credentials account for that email, found %', n;
+  END IF;
+END $$;
+
+-- Reuse the existing platform scope rather than minting a second one; a
+-- duplicate would silently split platform-wide grants across two scope rows.
+CREATE TEMP TABLE pscope ON COMMIT DROP AS
+  SELECT id FROM core.scope WHERE scope_type = 'platform' ORDER BY created_at LIMIT 1;
+
+DO $$
+DECLARE n int;
+BEGIN
+  SELECT count(*) INTO n FROM pscope;
+  IF n <> 1 THEN RAISE EXCEPTION 'no platform scope exists to attach the assignment to'; END IF;
+END $$;
+
+-- One statement, so the audit row is written only for an assignment that was
+-- actually inserted. Writing the audit separately made a re-run record a
+-- creation that never happened — an append-only trail must not carry entries
+-- for events that did not occur.
+WITH inserted AS (
+  INSERT INTO core.assignment (id, user_account_id, role_profile_id, scope_id, granted_at, valid_from, status, created_at, updated_at)
+  SELECT gen_random_uuid(), t.account_id, rp.id, s.id, now(), now(), 'active', now(), now()
+  FROM target t, pscope s, core.role_profile rp
+  WHERE rp.name = 'Platform Admin'
+    AND NOT EXISTS (
+      SELECT 1 FROM core.assignment a
+      WHERE a.user_account_id = t.account_id AND a.role_profile_id = rp.id AND a.scope_id = s.id
+    )
+  RETURNING id
+)
+-- RBAC.md: Assignment changes are audited. The actor is null because no
+-- administrator existed to do the granting — this came from outside the
+-- application, and the record says so rather than naming a proxy.
+INSERT INTO core.audit_event (id, actor_user_account_id, operation, entity_type, entity_id, after, reason, source_interface, occurred_at)
+SELECT gen_random_uuid(), NULL, 'create', 'assignment', inserted.id,
+       jsonb_build_object('role', 'Platform Admin', 'scope', 'platform', 'status', 'active'),
+       'bootstrap: no Platform Admin holder existed; granted out-of-band',
+       'cli', now()
+FROM inserted;
+
+DO $$
+DECLARE n int;
+BEGIN
+  SELECT count(*) INTO n
+  FROM core.assignment a
+  JOIN core.role_profile rp ON rp.id = a.role_profile_id
+  WHERE a.user_account_id = (SELECT account_id FROM target)
+    AND rp.name = 'Platform Admin' AND a.status = 'active';
+  IF n <> 1 THEN RAISE EXCEPTION 'expected exactly 1 active Platform Admin assignment, found %', n; END IF;
+
+  -- Role definitions are seed-managed (ADR-064). This grants a role to a
+  -- person; it must never alter what the role itself means.
+  SELECT count(*) INTO n FROM core.role_profile_permission;
+  IF n <> 89 THEN RAISE EXCEPTION 'permission grants changed: % (expected 89)', n; END IF;
+
+  RAISE NOTICE 'OK — Platform Admin granted at platform scope; role definitions unchanged';
+END $$;
+
+COMMIT;

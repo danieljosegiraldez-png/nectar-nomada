@@ -4657,3 +4657,77 @@ zero sensory sessions, which is accurate rather than a loss.
 `2026-08-22T005913Z` after — each restore-verified into stock PostgreSQL 18,
 row counts identical. The pre-removal backup is the recovery path if any of
 this is ever wanted back.
+
+---
+
+## ADR-067 — Bootstrapping the first login and the first administrator
+
+**Context.** After ADR-066, production held real research data, enforced RBAC
+and classification, served a working export — and could not be used by anyone.
+Two separate deadlocks, found together:
+
+Nobody could authenticate. Fourteen accounts, all `invited`, all `credentials`,
+none holding a password hash. Checking the pre-removal backup showed why: the
+only three accounts that ever had a password, and the only three that had ever
+logged in, were the seeded `DEMO` ones. Removing them was still right — demo
+credentials in a production research record are worse than none — but it took
+the last usable login with it.
+
+Nobody could administer. Zero active `Platform Admin` assignments existed at
+all. The platform owner held Research Lead at platform scope, which is seven
+research permissions and no ability to manage users, permissions or commerce.
+
+The second deadlock is self-locking: granting Platform Admin requires
+`rbac:manage_permissions`, which only Platform Admin holds. With no holder, the
+role cannot be granted from inside the application, ever. The first
+administrator has to come from outside; every later one can be granted through
+the UI.
+
+**Why not sign-up.** The sign-up flow creates a new Person. The people here
+already exist, with Assignments attached — a second Person record for the same
+human is precisely what CLAUDE.md §2 forbids, and it would leave the
+Assignments pointing at the wrong identity.
+
+**Decision.** Two operator scripts, run deliberately from a terminal, not
+wired into the deploy.
+
+`scripts/set-password.ts` sets a credentials password on an existing account
+and activates it. The password is prompted with echo disabled and is never
+accepted as an argument: an argument survives in shell history and in the
+process list, outliving the command that used it. The value is never logged and
+never written anywhere but the Argon2id hash. The audit record says credentials
+were set and by what route — never the password, never the hash.
+
+`scripts/grant-platform-admin.sh` grants Platform Admin at platform scope. The
+insert is guarded by `NOT EXISTS` and the audit row is written from that
+insert's `RETURNING`, so a re-run changes nothing *and records nothing*. The
+first draft wrote the audit row separately, and a second run recorded a
+creation that had not happened — an append-only trail must not carry entries
+for events that did not occur. Post-conditions assert exactly one active
+assignment and that `role_profile_permission` still holds 89 rows: this grants
+a role to a person and must never alter what the role means.
+
+**On the boundary this respects.** The script sets a password without the
+password ever reaching the transcript, the model, or the machine's history.
+That is the point of prompting rather than parameterising — it is a design
+constraint, not a convenience.
+
+**Verification.** Six tests in `tests/auth/setPassword.test.ts` cover what the
+script cannot demonstrate in CI, since it deliberately requires a TTY: that
+Argon2id round-trips, salts, rejects a wrong password, produces an `$argon2id$`
+hash rather than bcrypt or scrypt, and — most importantly — that an account the
+script has written satisfies every condition `authorize()` checks, found by the
+same query `authorize()` runs. A password that hashes but does not verify would
+surface only at the login form, which is the worst place to discover it.
+
+A test also pins that a valid password is not sufficient on its own: an account
+whose status is not `active` stays locked out while its hash still verifies, so
+deactivation works as a control by itself.
+
+The grant was rehearsed against a restored copy — applied, re-applied, and
+refused for an unknown email — and its post-conditions held each time.
+
+**Consequence.** Neither script runs on deploy and neither is reachable from
+the application. Both are deliberate acts by someone with database access,
+which is the correct amount of friction for creating the account that can do
+everything.
