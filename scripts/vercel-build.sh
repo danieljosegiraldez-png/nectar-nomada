@@ -22,6 +22,23 @@
 
 set -euo pipefail
 
+# Generate the Prisma client before anything imports it. Unconditional, and
+# outside the production branch, because every build needs it and it talks to
+# no database — it reads prisma/schema.prisma and writes TypeScript.
+#
+# Why this is not optional. The generator writes to ../generated/prisma, which
+# is gitignored, so the client does not arrive with a checkout. Nothing else in
+# the pipeline creates it: `prisma migrate deploy` does not generate (verified
+# by removing the directory and running it — the client did not come back), and
+# there is no postinstall hook.
+#
+# Production builds were nonetheless succeeding, on Vercel's restored build
+# cache still holding a generated/prisma from an older deployment. Preview
+# builds, which restore a different cache, failed every time with
+# "Can't resolve '../generated/prisma/client'" — the same failure production
+# was one cache eviction away from.
+npx prisma generate
+
 if [ "${VERCEL_ENV:-}" = "production" ]; then
   echo "▲ production deployment — applying pending migrations"
   npx prisma migrate deploy

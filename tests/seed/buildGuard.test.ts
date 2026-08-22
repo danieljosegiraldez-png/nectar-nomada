@@ -61,6 +61,20 @@ describe("production build guard", () => {
     expect(commands.indexOf("else")).toBeGreaterThan(commands.indexOf("prisma db seed"));
   });
 
+  it("generates the Prisma client unconditionally, before the build needs it", () => {
+    // The failure this prevents: generated/prisma is gitignored, so the client
+    // does not arrive with a checkout, and nothing else creates it —
+    // migrate deploy does not generate, and there is no postinstall. Preview
+    // builds failed on exactly this; production only survived on a stale build
+    // cache. Generate must sit OUTSIDE the production branch, since preview
+    // builds need the client too and generating touches no database.
+    const generate = commands.indexOf("prisma generate");
+    const branch = commands.indexOf('"${VERCEL_ENV:-}" = "production"');
+    expect(generate).toBeGreaterThan(-1);
+    expect(generate).toBeLessThan(branch);
+    expect(commands.indexOf("next build")).toBeGreaterThan(generate);
+  });
+
   it("aborts the build if either step fails", () => {
     // Without -e a failed seed still ships the build, which is the ADR-063
     // hazard with extra steps: code live, grants missing.
