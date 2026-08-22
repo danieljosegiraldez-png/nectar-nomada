@@ -22,11 +22,51 @@
 
 set -euo pipefail
 
+# Generate the Prisma client before anything imports it. Unconditional, and
+# outside the production branch, because every build needs it and it talks to
+# no database — it reads prisma/schema.prisma and writes TypeScript.
+#
+# Why this is not optional. The generator writes to ../generated/prisma, which
+# is gitignored, so the client does not arrive with a checkout. Nothing else in
+# the pipeline creates it: `prisma migrate deploy` does not generate (verified
+# by removing the directory and running it — the client did not come back), and
+# there is no postinstall hook.
+#
+# Production builds were nonetheless succeeding, on Vercel's restored build
+# cache still holding a generated/prisma from an older deployment. Preview
+# builds, which restore a different cache, failed every time with
+# "Can't resolve '../generated/prisma/client'" — the same failure production
+# was one cache eviction away from.
+npx prisma generate
+
 if [ "${VERCEL_ENV:-}" = "production" ]; then
-  echo "▲ production deployment — applying pending migrations before build"
+  echo "▲ production deployment — applying pending migrations"
   npx prisma migrate deploy
+
+  # Seed after migrating, never before: the seed writes rows, so it needs the
+  # schema those rows live in.
+  #
+  # Why this runs at all. Permissions and Role Profiles are seed-managed data
+  # (RBAC.md §2), not schema — so a migration-only pipeline lets code that
+  # depends on a new grant reach production before the grant does. ADR-063 hit
+  # exactly that: shipping the enforced classification gate ahead of its
+  # clearances would have denied every Farm Operator the lots they created.
+  # Migrations were guarded; seeds were not, and the ordering hazard was real.
+  #
+  # Safe to run every time: the seed is entirely upserts on natural keys, with
+  # no delete anywhere in it, so a re-run is a no-op.
+  #
+  # The DEMO gates are unset explicitly rather than trusted to be absent. They
+  # are opt-in by design (prisma/seed.ts's own header says so, specifically so
+  # a production pipeline never ships a default login), but "absent from the
+  # Vercel dashboard" is a weaker guarantee than "cleared right here". A stray
+  # SEED_DEMO_CONTENT would otherwise write demo projects into the real
+  # research record.
+  echo "▲ production deployment — seeding permissions, role profiles and catalogs"
+  env -u SEED_DEMO_ADMIN -u SEED_DEMO_CONTENT -u SEED_DEMO_PARTNER -u SEED_DEMO_JUDGE \
+    npx prisma db seed
 else
-  echo "▲ ${VERCEL_ENV:-local} build — skipping migrate deploy (no production database here)"
+  echo "▲ ${VERCEL_ENV:-local} build — skipping migrate and seed (no production database here)"
 fi
 
 npx next build
