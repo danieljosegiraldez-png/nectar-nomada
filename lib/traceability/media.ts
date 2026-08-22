@@ -44,7 +44,7 @@ export interface RequestLotAssetUploadInput {
 export async function requestLotAssetUpload(userAccountId: string, input: RequestLotAssetUploadInput) {
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
-  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
   const ext = input.originalFilename.includes(".") ? input.originalFilename.split(".").pop() : undefined;
   const storageKey = `nectar-originals/traceability/${input.lotId}/${randomUUID()}${ext ? `.${ext}` : ""}`;
@@ -135,7 +135,7 @@ function parentData(parent: LotAssetParent, lotId: string) {
 export async function finalizeLotAssetUpload(userAccountId: string, input: FinalizeLotAssetUploadInput) {
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
-  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
   if (!input.storageKey.startsWith(`nectar-originals/traceability/${input.lotId}/`)) {
     throw new TraceabilityAccessError("invalid_storage_key");

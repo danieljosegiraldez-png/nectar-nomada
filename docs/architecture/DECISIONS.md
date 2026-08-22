@@ -4400,3 +4400,79 @@ the policy where it belongs.
 **Consequence for other work.** ADR-059's export and ADR-061's community and
 consent design both depend on this being settled — the export inherits whatever
 is decided, and community handles personal data under it.
+
+---
+
+## ADR-063 — Clearance corrected for internal roles; the classification gate is now enforced on the lot and sample paths
+
+**Supersedes ADR-029 decision 1 only as it was applied to internal roles.**
+ADR-029 itself stands, and this ADR strengthens rather than weakens it.
+
+**Context.** ADR-062 made the bypass impossible to reintroduce but could not
+enforce anything, because enforcing would have denied operators the lots they
+create. The product owner chose to grant `clear_internal`.
+
+Investigating which roles should receive it produced a better answer than a
+blanket grant, and found the actual root cause.
+
+**The root cause: a grant copied across a role boundary where its reasoning did
+not transfer.** `lib/rbac/catalog.ts` gave Farm Operator
+`classification:clear_partner` with the comment *"Same classification grant as
+Partner Field Collector (ADR-029 decision 2) — an operator on their own
+assigned project still cannot clear internal."* But ADR-029's reasoning is
+about **partners** — external parties — and a Farm Operator is not one. The
+constraint was inherited along with the grant.
+
+**Decision 1 — `clear_internal` for Farm Operator and Project Viewer.** These
+are the only non-admin profiles holding `lot:view`. Every Lot defaults to
+`internal`, so without it an enforced gate denies an operator their own records
+and leaves Project Viewer — a role whose entire purpose is *"read-only
+visibility into a project's operational data"* — seeing none of it. Project
+Viewer held **no clearance at all**, which was invisible while the gate went
+unapplied.
+
+Against today's behaviour this is a **narrowing, not a widening**: with the
+gate unenforced those roles could reach `confidential` and `trade_secret`
+records too. They now stop at `internal`.
+
+**Decision 2 — Partner Field Collector is deliberately unchanged.** ADR-029
+decision 1 is not overturned. `partner.task` still holds one `internal` row and
+one `partner` row, and a partner seeing only the second is the property ADR-029
+verified live. Granting a partner `clear_internal` would have destroyed exactly
+the thing this axis exists for.
+
+**Decision 3 — Sensory Judge is deliberately unchanged.** Its profile excludes
+`classification:clear_*` on purpose, so *"a judge's resolved permissions cannot
+reach the blind-code mapping (RBAC.md §7), regardless of what the UI shows."*
+Blind-judging integrity outranks convenience, and a judge denied an `internal`
+session is a signal that session classification needs looking at — not a reason
+to hand judges a clearance.
+
+**Decision 4 — enforce on the lot and sample paths.** `requireLotAccess` and
+`requireSampleAccess` now take the record's own `classification` as a required
+field on every candidate, and pass it to `can()`. Create paths pass
+`DEFAULT_NEW_RECORD_CLASSIFICATION`, so *"may this user create an internal
+lot"* is a question that now gets asked. A measurement's `ScopeCandidate`
+carries the subject's classification, so a measurement cannot be gated more
+loosely than the lot or sample it is about.
+
+**Verification.** 400 tests pass with the gate live, including the whole
+traceability suite — enforcement did not break real flows. The two tests that
+failed were the two ADR-062 wrote to pin the old state, one of them explicitly
+so that *"whichever way ADR-062 is decided, this test has to be revisited
+deliberately rather than quietly continuing to pass."* It did exactly that.
+Both now assert the resolution, alongside two new tests pinning the
+partner and judge exclusions so a future blanket grant fails loudly.
+
+**Deployment hazard, stated plainly.** The new clearances are seed-managed
+data. **If this code reaches production before `prisma db seed` runs there,
+Farm Operator and Project Viewer lose access to every lot.** The seed must run
+first. This is the same class of ordering problem the build guard solves for
+migrations and does not solve for seeds.
+
+**Remaining.** The inventory is now eleven sites, not thirteen — apiary
+(three), research (two), competitions, calibration, locations, specimens, and
+AI (two). Apiary,
+research, competitions, calibration, locations, specimens and AI still pass the
+sentinel — each is its own small decision about which record's classification
+is the right one to gate on, not a blanket sweep.

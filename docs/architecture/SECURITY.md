@@ -49,21 +49,24 @@ attacks against object storage.
 
 ## 4. Classification enforcement
 
-> **Status, 2026-08-21 (ADR-062): the intent below is implemented but not yet
-> applied.** The AND-gate exists in `lib/rbac/resolve.ts` and is now covered by
-> tests, but it was being passed at **zero of thirteen** `can()` call sites,
-> because the parameter defaulted to `public` and omission was therefore
-> invisible. The parameter is now required, and every site that does not yet
-> gate passes the named `CLASSIFICATION_GATE_DEFERRED` sentinel — so the live
-> inventory of unenforced classification is `grep -rn
-> CLASSIFICATION_GATE_DEFERRED lib app`, and it can only shrink.
+> **Status, 2026-08-21 (ADR-062, ADR-063): enforced on the lot and sample
+> paths; an inventory remains.** The AND-gate was passed at zero of thirteen
+> `can()` call sites, because the parameter defaulted to `public` and omission
+> was invisible. The parameter is now required, so a bypass is a compile error.
 >
-> Turning it on is blocked on a policy decision, not on code: every `Lot` is
-> `internal` and Farm Operator holds only `classification:clear_partner` by
-> ADR-029 decision 1's explicit choice, so enforcing today would deny operators
-> the lots they create. See ADR-062.
+> `requireLotAccess` and `requireSampleAccess` now carry the record's own
+> classification, and it is enforced. The remaining sites that do not yet gate
+> pass the named `CLASSIFICATION_GATE_DEFERRED` sentinel, so the live inventory
+> is `grep -rn CLASSIFICATION_GATE_DEFERRED lib app` and it can only shrink.
 >
-> This section previously stated the enforcement as fact. It described intent.
+> Enforcement required correcting two role profiles (ADR-063): Farm Operator
+> and Project Viewer now hold `classification:clear_internal`, because every
+> Lot defaults to `internal` and neither could otherwise reach records they
+> create or are assigned to read. Partner Field Collector and Sensory Judge
+> were deliberately left alone.
+>
+> This section previously stated the enforcement as fact before any of it was
+> true. It described intent.
 
 The `public | registered | partner | internal | confidential | trade_secret`
 axis (`RBAC.md` §6) is enforced in the same authorization service as permission

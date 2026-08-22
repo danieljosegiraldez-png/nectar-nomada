@@ -19,9 +19,10 @@
  * traceability write path in this module uses.
  */
 import { prisma } from "../db";
-import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
+import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
-import { scopeTargetsFor, TraceabilityAccessError } from "./lots";
+import { scopeTargetsFor, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
+import type { ClassificationLevel } from "../rbac/types";
 import type { DataQuality, HarvestWindowPrecision, ProvenanceClass } from "../../generated/prisma/client";
 
 export class SampleValidationError extends Error {}
@@ -29,11 +30,11 @@ export class SampleValidationError extends Error {}
 async function requireSampleAccess(
   userAccountId: string,
   action: "manage" | "view",
-  candidates: ReadonlyArray<{ projectId?: string | null; locationId?: string | null }>,
+  candidates: ReadonlyArray<{ projectId?: string | null; locationId?: string | null; classification: ClassificationLevel }>,
 ) {
   for (const candidate of candidates) {
     for (const target of scopeTargetsFor(candidate)) {
-      if (await can(userAccountId, action, "sample", target, CLASSIFICATION_GATE_DEFERRED)) return;
+      if (await can(userAccountId, action, "sample", target, candidate.classification)) return;
     }
   }
   throw new TraceabilityAccessError("no_sample_access");
@@ -60,7 +61,7 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   const sourceLot = await prisma.lot.findUnique({ where: { id: input.sourceLotId } });
   if (!sourceLot) throw new TraceabilityAccessError("lot_not_found");
 
-  await requireSampleAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
+  await requireSampleAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
 
   const provenanceClass = input.provenanceClass;
 
@@ -213,7 +214,7 @@ export async function recordExternalCoffeeSample(userAccountId: string, input: R
     requireDataQualityIfValuePresent(input.harvestWindowPrecision, input.harvestWindowDataQuality, "harvest_window");
   }
 
-  await requireSampleAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId }]);
+  await requireSampleAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
 
   const now = new Date();
 
@@ -308,7 +309,7 @@ export async function completeExternalCoffeeOrigin(userAccountId: string, input:
   const existing = await prisma.externalCoffeeOrigin.findUnique({ where: { sampleId: input.sampleId }, include: { sample: true } });
   if (!existing) throw new TraceabilityAccessError("external_coffee_origin_not_found");
 
-  await requireSampleAccess(userAccountId, "manage", [{ projectId: existing.sample.projectId, locationId: existing.sample.locationId }]);
+  await requireSampleAccess(userAccountId, "manage", [{ projectId: existing.sample.projectId, locationId: existing.sample.locationId, classification: existing.sample.classification }]);
 
   const nextVarietal = input.declaredVarietal !== undefined ? input.declaredVarietal : existing.declaredVarietal;
   const nextVarietalDataQuality = input.varietalDataQuality !== undefined ? input.varietalDataQuality : existing.varietalDataQuality;

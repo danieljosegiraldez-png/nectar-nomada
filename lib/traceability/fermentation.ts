@@ -61,7 +61,7 @@ export interface StartFermentationRunInput {
 export async function startFermentationRun(userAccountId: string, input: StartFermentationRunInput) {
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
-  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
   const result = await prisma.$transaction(async (tx) => {
     const run = await tx.fermentationRun.create({
@@ -116,7 +116,7 @@ export interface RecordFermentationInterventionInput {
 
 export async function recordFermentationIntervention(userAccountId: string, input: RecordFermentationInterventionInput) {
   const sourceLot = await resolveRunSourceLot(input.fermentationRunId);
-  await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
 
   return prisma.fermentationIntervention.create({
     data: {
@@ -149,7 +149,7 @@ export async function endFermentationRun(userAccountId: string, input: EndFermen
   if (run.endedAt) throw new TraceabilityAccessError("fermentation_run_already_ended");
 
   const sourceLot = await resolveRunSourceLot(input.fermentationRunId);
-  await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
 
   const provenanceClass = input.provenanceClass;
 

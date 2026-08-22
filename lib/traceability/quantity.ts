@@ -52,7 +52,7 @@ export async function recordQuantityEvent(userAccountId: string, input: RecordQu
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
 
-  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
   const quantityEvent = await prisma.quantityEvent.create({
     data: {
@@ -98,7 +98,7 @@ export async function computeCurrentQuantity(userAccountId: string, lotId: strin
   const lot = await prisma.lot.findUnique({ where: { id: lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
 
-  await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
   const events = await prisma.quantityEvent.findMany({ where: { lotId } });
   if (events.length === 0) {

@@ -55,7 +55,7 @@ export interface RecordRoastSessionInput {
 export async function recordRoastSession(userAccountId: string, input: RecordRoastSessionInput) {
   const sourceLot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!sourceLot) throw new TraceabilityAccessError("lot_not_found");
-  await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
 
   if (input.endedAt && input.endedAt < input.startedAt) {
     throw new RoastSessionValidationError("ended_before_started");
@@ -226,7 +226,7 @@ export async function getRoastSessionDetail(userAccountId: string, roastSessionI
 
   const sourceLot = session.transformations[0]?.inputs[0]?.lot;
   if (!sourceLot) throw new TraceabilityAccessError("roast_session_not_found");
-  await requireLotAccess(userAccountId, "view", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
+  await requireLotAccess(userAccountId, "view", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
 
   return session;
 }

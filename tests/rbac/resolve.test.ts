@@ -315,9 +315,10 @@ describe("classification is an independent AND-gate", () => {
     expect(can(farmOperator, "view", "lot", target, "partner")).toBe(true);
   });
 
-  it("denies above that level even though the action permission is held", () => {
+  it("denies above the cleared level even though the action permission is held", () => {
     // The point of an AND-gate: holding lot:view is not sufficient on its own.
-    for (const level of ["internal", "confidential", "trade_secret"] as const) {
+    // Farm Operator clears partner and internal (ADR-063) and nothing above.
+    for (const level of ["confidential", "trade_secret"] as const) {
       expect(can(farmOperator, "view", "lot", target, level)).toBe(false);
     }
   });
@@ -335,15 +336,29 @@ describe("classification is an independent AND-gate", () => {
     }
   });
 
-  it("records ADR-062's open decision as an executable fact", () => {
-    // Every Lot in production is classified `internal`; Farm Operator clears
-    // only `partner` (ADR-029 decision 1, deliberately). So enforcing the gate
-    // on the lot read path today would deny an operator the lots they create.
-    //
-    // This assertion is not endorsing that outcome — it pins the
-    // inconsistency so that whichever way ADR-062 is decided, this test has to
-    // be revisited deliberately rather than quietly continuing to pass.
-    expect(can(farmOperator, "view", "lot", target, "internal")).toBe(false);
-    expect(can(farmOperator, "manage", "lot", target, "internal")).toBe(false);
+  it("an operator can reach the internal lots they create — ADR-063", () => {
+    // The inconsistency this test used to pin is resolved. Every Lot defaults
+    // to `internal`, and an operator who could not clear `internal` would be
+    // denied the records they just wrote.
+    expect(can(farmOperator, "view", "lot", target, "internal")).toBe(true);
+    expect(can(farmOperator, "manage", "lot", target, "internal")).toBe(true);
+  });
+
+  it("a partner still cannot clear internal — ADR-029 decision 1 stands", () => {
+    // The grant was corrected for internal roles only. Partner Field Collector
+    // is an external party, and `partner.task` still holds one `internal` row
+    // a partner must not see — the property ADR-029 verified live.
+    const partner = [assignmentFor("Partner Field Collector", { scopeType: "project", scopeRefId: PROJECT_A })];
+    expect(can(partner, "submit_data", "partner", target, "partner")).toBe(true);
+    expect(can(partner, "submit_data", "partner", target, "internal")).toBe(false);
+  });
+
+  it("a judge still holds no clearance at all — the blind-judging exclusion stands", () => {
+    // Sensory Judge deliberately excludes classification:clear_* so a judge's
+    // resolved permissions cannot reach the blind-code mapping (RBAC.md §7).
+    const judge = [assignmentFor("Sensory Judge", { scopeType: "session", scopeRefId: SESSION_1 })];
+    const sessionTarget: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
+    expect(can(judge, "submit_assessment", "sensory", sessionTarget, "public")).toBe(true);
+    expect(can(judge, "submit_assessment", "sensory", sessionTarget, "internal")).toBe(false);
   });
 });

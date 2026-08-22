@@ -11,7 +11,7 @@
  * `locations.ts`).
  */
 import { prisma } from "../db";
-import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { requireLotAccess, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 import { recordAuditEvent } from "../audit";
 import type { DataQuality, PlantingEventType, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -40,7 +40,7 @@ export async function recordPlantingEvent(userAccountId: string, input: RecordPl
   const location = await prisma.location.findUnique({ where: { id: input.locationId } });
   if (!location) throw new TraceabilityAccessError("location_not_found");
 
-  await requireLotAccess(userAccountId, "manage", [{ locationId: input.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ locationId: input.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
 
   const plantingEvent = await prisma.plantingEvent.create({
     data: {
@@ -74,7 +74,7 @@ export async function recordPlantingEvent(userAccountId: string, input: RecordPl
 }
 
 export async function listPlantingEventsForLocation(userAccountId: string, locationId: string) {
-  await requireLotAccess(userAccountId, "view", [{ locationId }]);
+  await requireLotAccess(userAccountId, "view", [{ locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
 
   return prisma.plantingEvent.findMany({
     where: { locationId },
