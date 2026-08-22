@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "bash scripts/vercel-build.sh",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

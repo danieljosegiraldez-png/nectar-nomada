@@ -1,6 +1,25 @@
 # Bug — el historial de migraciones no se puede reconstruir desde cero
 
-**Encontrado, no arreglado.** Durante `36_RO1.2_METODOS_FERMENTACION.md`,
+**ARREGLADO — 2026-08-20.** Ejecutado en producción con autorización
+explícita del product owner. `20260813112712_ro1_statistical_discipline`
+pasó a llamarse **`20260813162732_ro1_statistical_discipline`** — su hora
+real de aplicación según `_prisma_migrations` de la propia Neon — y la fila
+correspondiente se actualizó en la misma operación (`UPDATE 1`).
+
+Verificado después: `migrate status` limpio, 40 filas en
+`_prisma_migrations`, una sola `statistical_discipline`, ninguna con el
+nombre viejo. El replay completo desde una base vacía pasa y el schema
+resultante no tiene drift contra `prisma/schema.prisma`. `prisma migrate
+dev` vuelve a funcionar.
+
+Se tomó un backup verificado (122 tablas, 13.706 filas) antes de tocar
+nada. El detalle del ensayo previo está en §ENSAYO COMPLETO más abajo; lo
+que sigue es el diagnóstico original, que se conserva porque explica el
+problema.
+
+---
+
+**Encontrado, no arreglado (estado original).** Durante `36_RO1.2_METODOS_FERMENTACION.md`,
 `prisma migrate dev` falló al intentar generar una migración nueva —no por
 el schema nuevo, sino porque el shadow database (que reproduce **todas**
 las migraciones existentes desde cero para calcular el diff) no pudo
