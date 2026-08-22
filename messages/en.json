@@ -2,13 +2,13 @@
   "Nav": {
     "brand": "Néctar Nómada",
     "myNectar": "My Néctar",
-    "partnerWorkspace": "Partner Workspace",
+    "partnerWorkspace": "Partners",
     "lots": "Batches",
     "plots": "Plots",
     "apiaries": "Apiaries",
     "research": "Research",
     "sensory": "Sensory",
-    "ai": "AI Suggestions",
+    "ai": "AI",
     "competitions": "Competitions",
     "calibration": "Calibration",
     "signIn": "Sign in",
@@ -147,7 +147,8 @@
     "sensoryHistoryHeading": "Sensory history",
     "noSensoryHistory": "No submitted assessments yet.",
     "sensoryHistorySample": "Sample {code}",
-    "sensoryHistoryScore": "Overall score: {score}"
+    "sensoryHistoryScore": "Overall score: {score}",
+    "permissionsSummary": "{count} permissions across {areas} areas, platform-wide."
   },
   "Competitions": {
     "badge": "Competitions",
@@ -480,7 +481,8 @@
     "plotsTitle": "Plots",
     "plotsIntro": "Terrain plots across your accessible farms, with recorded growing conditions (F1).",
     "noPlots": "No plots accessible yet.",
-    "exportButton": "Export my data"
+    "exportButton": "Export my data",
+    "noActiveOperations": "Nothing in progress right now."
   },
   "Apiary": {
     "badge": "Apiary — A5",

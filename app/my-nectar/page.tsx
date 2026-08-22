@@ -52,6 +52,39 @@ export default async function MyNectarPage() {
     getAssessmentHistoryForEvaluator(user.userAccountId),
   ]);
 
+  // Resolve scope references to names. A Scope carries scopeRefId and a
+  // scopeType that says which table it points at, so this is two lookups
+  // rather than a join — printing the raw UUID told the reader nothing about
+  // which project or location the role actually applies to.
+  const scopeRefIds = userAccount.assignments
+    .map((a) => a.scope.scopeRefId)
+    .filter((id): id is string => Boolean(id));
+
+  const [scopeProjects, scopeLocations] = await Promise.all([
+    scopeRefIds.length
+      ? prisma.project.findMany({ where: { id: { in: scopeRefIds } }, select: { id: true, name: true } })
+      : Promise.resolve([]),
+    scopeRefIds.length
+      ? prisma.location.findMany({ where: { id: { in: scopeRefIds } }, select: { id: true, name: true } })
+      : Promise.resolve([]),
+  ]);
+  const scopeNames = new Map<string, string>(
+    [...scopeProjects, ...scopeLocations].map((row) => [row.id, row.name]),
+  );
+
+  // Group permissions by the resource they act on. Thirty-eight keys listed
+  // flat is a data dump; "lot: view, manage, export" is a sentence someone can
+  // read. Sorted so the order does not shift between requests.
+  const permissionsByResource = new Map<string, string[]>();
+  for (const key of platformPermissions) {
+    const [resource, action] = key.split(":");
+    if (!resource || !action) continue;
+    permissionsByResource.set(resource, [...(permissionsByResource.get(resource) ?? []), action]);
+  }
+  const groupedPermissions = [...permissionsByResource.entries()]
+    .map(([resource, actions]) => [resource, actions.sort()] as const)
+    .sort(([a], [b]) => a.localeCompare(b));
+
   return (
     <div>
       <span className="nn-badge">{t("badge")}</span>
@@ -64,12 +97,21 @@ export default async function MyNectarPage() {
           <p className="nn-muted">{t("noAssignments")}</p>
         ) : (
           <ul>
-            {userAccount.assignments.map((a) => (
-              <li key={a.id}>
-                {a.roleProfile.name} — {t("assignmentScope", { scope: a.scope.scopeType })}
-                {a.scope.scopeRefId ? ` (${a.scope.scopeRefId})` : ""}
-              </li>
-            ))}
+            {userAccount.assignments.map((a) => {
+              // Name the thing the role applies to. Falling back to the id
+              // only when the referenced record cannot be found keeps a
+              // dangling scope visible rather than silently blank.
+              const target = a.scope.scopeRefId
+                ? (scopeNames.get(a.scope.scopeRefId) ?? a.scope.scopeRefId)
+                : null;
+              return (
+                <li key={a.id}>
+                  <strong>{a.roleProfile.name}</strong>
+                  {" — "}
+                  {target ?? t("assignmentScope", { scope: a.scope.scopeType })}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
@@ -79,13 +121,23 @@ export default async function MyNectarPage() {
         {platformPermissions.size === 0 ? (
           <p className="nn-muted">{t("noPermissions")}</p>
         ) : (
-          <ul>
-            {Array.from(platformPermissions).map((key) => (
-              <li key={key}>
-                <code>{key}</code>
-              </li>
-            ))}
-          </ul>
+          <>
+            <p className="nn-muted">
+              {t("permissionsSummary", {
+                count: platformPermissions.size,
+                areas: groupedPermissions.length,
+              })}
+            </p>
+            <ul>
+              {groupedPermissions.map(([resource, actions]) => (
+                <li key={resource}>
+                  <strong>{resource}</strong>
+                  {" — "}
+                  {actions.join(", ")}
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </section>
 

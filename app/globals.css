@@ -82,11 +82,23 @@ a {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  /* Account controls are a fixed pair, not content that should give way. Left
+     to shrink they wrapped "Cerrar sesión" onto two lines and clipped the
+     locale switcher's second option. */
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .nn-nav-links {
   display: flex;
-  gap: 1.25rem;
+  /* wrap whole items, never mid-phrase: with eight destinations the row does
+     not always fit, and flex items shrink below their content width by
+     default. That broke "Espacio de Socios" across three lines and left the
+     header 103px tall and ragged. Items now keep their natural width (see
+     `white-space` below) and a row that cannot fit breaks between links. */
+  flex-wrap: wrap;
+  column-gap: 1.25rem;
+  row-gap: 0.35rem;
   align-items: center;
   font-size: 0.95rem;
 }
@@ -94,6 +106,9 @@ a {
 .nn-nav-links a {
   text-decoration: none;
   color: var(--nn-ink-muted);
+  /* A destination is a single label. Breaking it mid-phrase reads as two
+     destinations. */
+  white-space: nowrap;
 }
 
 .nn-nav-links a:hover {
