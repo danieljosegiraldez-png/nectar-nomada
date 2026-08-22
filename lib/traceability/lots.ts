@@ -1,3 +1,4 @@
+import type { ClassificationLevel } from "../rbac/types";
 /**
  * Phase 1, ticket T1 (docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md
  * §8, §34). Canonical Lot + LotTransformation — the mechanism underneath
@@ -18,7 +19,7 @@
  * never just one.
  */
 import { prisma } from "../db";
-import { can } from "../rbac/service";
+import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
@@ -38,18 +39,38 @@ export function scopeTargetsFor(input: { projectId?: string | null; locationId?:
   return targets;
 }
 
+/**
+ * ADR-062/063 — `classification` is required on every candidate, deliberately.
+ *
+ * The gate was skipped here for as long as it was optional. A caller that has
+ * the Lot loaded passes `lot.classification`; a caller creating a record
+ * passes the classification the record will carry, which for a new Lot is the
+ * schema default `internal`. "May this user create an internal lot" is a real
+ * question and now gets asked.
+ */
 export async function requireLotAccess(
   userAccountId: string,
   action: "manage" | "view",
-  candidates: ReadonlyArray<{ projectId?: string | null; locationId?: string | null }>,
+  candidates: ReadonlyArray<{
+    projectId?: string | null;
+    locationId?: string | null;
+    classification: ClassificationLevel;
+  }>,
 ) {
   for (const candidate of candidates) {
     for (const target of scopeTargetsFor(candidate)) {
-      if (await can(userAccountId, action, "lot", target)) return;
+      if (await can(userAccountId, action, "lot", target, candidate.classification)) return;
     }
   }
   throw new TraceabilityAccessError("no_lot_access");
 }
+
+/**
+ * The classification a not-yet-created record will carry. Matches the schema
+ * default on Lot/Sample/SensorySession; kept as a named constant so a caller
+ * asking "can this user create one" is visibly asking about `internal`.
+ */
+export const DEFAULT_NEW_RECORD_CLASSIFICATION: ClassificationLevel = "internal";
 
 export interface CreateLotInput {
   lotCode: string;
@@ -64,7 +85,7 @@ export interface CreateLotInput {
 }
 
 export async function createLot(userAccountId: string, input: CreateLotInput) {
-  await requireLotAccess(userAccountId, "manage", [input]);
+  await requireLotAccess(userAccountId, "manage", [{ ...input, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
 
   return prisma.lot.create({
     data: {
@@ -135,7 +156,7 @@ export async function recordTransformation(userAccountId: string, input: RecordT
   await requireLotAccess(
     userAccountId,
     "manage",
-    inputLots.map((lot) => ({ projectId: lot.projectId, locationId: lot.locationId })),
+    inputLots.map((lot) => ({ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification })),
   );
 
   const provenanceClass = input.provenanceClass;
@@ -243,7 +264,7 @@ export async function getLotLineage(userAccountId: string, lotId: string) {
   const lot = await prisma.lot.findUnique({ where: { id: lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
 
-  await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
   const ancestors = await prisma.$queryRaw<Array<{ lot_id: string; depth: number }>>`
     WITH RECURSIVE ancestry AS (
@@ -487,7 +508,7 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
   });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
 
-  await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
   const [
     lineage,
@@ -799,6 +820,6 @@ export async function getObserverCandidates(userAccountId: string) {
 export async function getLotSummary(userAccountId: string, lotId: string) {
   const lot = await prisma.lot.findUnique({ where: { id: lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
-  await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
   return lot;
 }

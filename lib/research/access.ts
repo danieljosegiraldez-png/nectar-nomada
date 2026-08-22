@@ -5,7 +5,7 @@
  * lib/traceability/lots.ts's requireLotAccess, reusing its scopeTargetsFor
  * rather than re-deriving it.
  */
-import { can } from "../rbac/service";
+import { can, CLASSIFICATION_GATE_DEFERRED } from "../rbac/service";
 import { scopeTargetsFor } from "../traceability/lots";
 
 export class ResearchAccessError extends Error {}
@@ -19,7 +19,7 @@ export async function requireResearchAccess(
 ) {
   for (const candidate of candidates) {
     for (const target of scopeTargetsFor(candidate)) {
-      if (await can(userAccountId, action, "research", target)) return;
+      if (await can(userAccountId, action, "research", target, CLASSIFICATION_GATE_DEFERRED)) return;
     }
   }
   throw new ResearchAccessError("no_research_access");

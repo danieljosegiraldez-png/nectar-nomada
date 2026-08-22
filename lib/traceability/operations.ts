@@ -15,7 +15,7 @@
  * new permission.
  */
 import { prisma } from "../db";
-import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { requireLotAccess, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 import { recordAuditEvent } from "../audit";
 import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -105,12 +105,12 @@ export async function recordLabourEntry(userAccountId: string, input: RecordLabo
   if (input.parent.kind === "location") {
     const location = await prisma.location.findUnique({ where: { id: input.parent.locationId } });
     if (!location) throw new TraceabilityAccessError("location_not_found");
-    await requireLotAccess(userAccountId, "manage", [{ locationId: input.parent.locationId }]);
+    await requireLotAccess(userAccountId, "manage", [{ locationId: input.parent.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
   } else {
     if (!input.lotId) throw new LabourValidationError("lot_id_required");
     const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
     if (!lot) throw new TraceabilityAccessError("lot_not_found");
-    await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+    await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
   }
 
   const labourEntry = await prisma.labourEntry.create({
@@ -195,12 +195,12 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
   if (input.parent.kind === "location") {
     const location = await prisma.location.findUnique({ where: { id: input.parent.locationId } });
     if (!location) throw new TraceabilityAccessError("location_not_found");
-    await requireLotAccess(userAccountId, "manage", [{ locationId: input.parent.locationId }]);
+    await requireLotAccess(userAccountId, "manage", [{ locationId: input.parent.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
   } else {
     if (!input.lotId) throw new MaterialConsumptionValidationError("lot_id_required");
     const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
     if (!lot) throw new TraceabilityAccessError("lot_not_found");
-    await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+    await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
   }
 
   const materialConsumptionEntry = await prisma.materialConsumptionEntry.create({

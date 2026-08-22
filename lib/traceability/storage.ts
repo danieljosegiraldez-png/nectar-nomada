@@ -22,7 +22,7 @@ export interface MoveLotToStorageInput {
 export async function moveLotToStorage(userAccountId: string, input: MoveLotToStorageInput) {
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
-  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
   return prisma.$transaction(async (tx) => {
     const openAssignment = await tx.storageAssignment.findFirst({
@@ -50,7 +50,7 @@ export async function moveLotToStorage(userAccountId: string, input: MoveLotToSt
 export async function getCurrentStorageAssignment(userAccountId: string, lotId: string) {
   const lot = await prisma.lot.findUnique({ where: { id: lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
-  await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
   return prisma.storageAssignment.findFirst({ where: { lotId, endedAt: null } });
 }

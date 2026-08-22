@@ -49,6 +49,25 @@ attacks against object storage.
 
 ## 4. Classification enforcement
 
+> **Status, 2026-08-21 (ADR-062, ADR-063): enforced on the lot and sample
+> paths; an inventory remains.** The AND-gate was passed at zero of thirteen
+> `can()` call sites, because the parameter defaulted to `public` and omission
+> was invisible. The parameter is now required, so a bypass is a compile error.
+>
+> `requireLotAccess` and `requireSampleAccess` now carry the record's own
+> classification, and it is enforced. The remaining sites that do not yet gate
+> pass the named `CLASSIFICATION_GATE_DEFERRED` sentinel, so the live inventory
+> is `grep -rn CLASSIFICATION_GATE_DEFERRED lib app` and it can only shrink.
+>
+> Enforcement required correcting two role profiles (ADR-063): Farm Operator
+> and Project Viewer now hold `classification:clear_internal`, because every
+> Lot defaults to `internal` and neither could otherwise reach records they
+> create or are assigned to read. Partner Field Collector and Sensory Judge
+> were deliberately left alone.
+>
+> This section previously stated the enforcement as fact before any of it was
+> true. It described intent.
+
 The `public | registered | partner | internal | confidential | trade_secret`
 axis (`RBAC.md` §6) is enforced in the same authorization service as permission
 checks (§2 above) — never only in a query's `WHERE` clause written ad hoc per

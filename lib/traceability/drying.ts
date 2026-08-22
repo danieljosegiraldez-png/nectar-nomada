@@ -50,7 +50,7 @@ export interface StartDryingRunInput {
 export async function startDryingRun(userAccountId: string, input: StartDryingRunInput) {
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
-  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
   const result = await prisma.$transaction(async (tx) => {
     const run = await tx.dryingRun.create({
@@ -105,7 +105,7 @@ export interface RecordDryingTurnEventInput {
 
 export async function recordDryingTurnEvent(userAccountId: string, input: RecordDryingTurnEventInput) {
   const sourceLot = await resolveRunSourceLot(input.dryingRunId);
-  await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
 
   return prisma.dryingTurnEvent.create({
     data: {
@@ -139,7 +139,7 @@ export async function endDryingRun(userAccountId: string, input: EndDryingRunInp
   if (run.endedAt) throw new TraceabilityAccessError("drying_run_already_ended");
 
   const sourceLot = await resolveRunSourceLot(input.dryingRunId);
-  await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
 
   const provenanceClass = input.provenanceClass;
 

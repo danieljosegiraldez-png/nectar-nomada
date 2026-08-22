@@ -80,7 +80,7 @@ describe("scopeContains", () => {
 describe("can — default deny", () => {
   it("denies when there are no assignments at all", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
-    expect(can([], "view", "research", target)).toBe(false);
+    expect(can([], "view", "research", target, "public")).toBe(false);
   });
 });
 
@@ -93,7 +93,7 @@ describe("Platform Admin", () => {
 
   it("positive: can manage users anywhere, including an arbitrary project", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
-    expect(can(assignments, "manage_users", "platform", target)).toBe(true);
+    expect(can(assignments, "manage_users", "platform", target, "public")).toBe(true);
   });
 
   it("positive: clears trade_secret classification everywhere", () => {
@@ -107,7 +107,7 @@ describe("Research Lead — scoped to Project A", () => {
 
   it("positive: can approve a protocol within Project A", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
-    expect(can(assignments, "approve_protocol", "research", target)).toBe(true);
+    expect(can(assignments, "approve_protocol", "research", target, "public")).toBe(true);
   });
 
   it("positive: clears internal and confidential classification within Project A", () => {
@@ -118,12 +118,12 @@ describe("Research Lead — scoped to Project A", () => {
 
   it("negative: cannot approve a protocol in a different project (scope does not broaden)", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_B };
-    expect(can(assignments, "approve_protocol", "research", target)).toBe(false);
+    expect(can(assignments, "approve_protocol", "research", target, "public")).toBe(false);
   });
 
   it("negative: cannot manage platform users — the profile never granted that permission", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
-    expect(can(assignments, "manage_users", "platform", target)).toBe(false);
+    expect(can(assignments, "manage_users", "platform", target, "public")).toBe(false);
   });
 
   it("negative: does not clear trade_secret classification (not in this profile's grant)", () => {
@@ -137,17 +137,17 @@ describe("Research Contributor — scoped to Project A", () => {
 
   it("positive: can create a measurement within Project A", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
-    expect(can(assignments, "create_measurement", "research", target)).toBe(true);
+    expect(can(assignments, "create_measurement", "research", target, "public")).toBe(true);
   });
 
   it("negative: cannot approve a protocol (not granted to Contributor, unlike Lead)", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
-    expect(can(assignments, "approve_protocol", "research", target)).toBe(false);
+    expect(can(assignments, "approve_protocol", "research", target, "public")).toBe(false);
   });
 
   it("negative: cannot create a measurement outside Project A", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_B };
-    expect(can(assignments, "create_measurement", "research", target)).toBe(false);
+    expect(can(assignments, "create_measurement", "research", target, "public")).toBe(false);
   });
 });
 
@@ -156,18 +156,18 @@ describe("Partner Field Collector — scoped to Project A", () => {
 
   it("positive: can submit field data within Project A", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
-    expect(can(assignments, "submit_data", "partner", target)).toBe(true);
+    expect(can(assignments, "submit_data", "partner", target, "public")).toBe(true);
   });
 
   it("negative: has no research permissions at all", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
-    expect(can(assignments, "create_measurement", "research", target)).toBe(false);
-    expect(can(assignments, "approve_protocol", "research", target)).toBe(false);
+    expect(can(assignments, "create_measurement", "research", target, "public")).toBe(false);
+    expect(can(assignments, "approve_protocol", "research", target, "public")).toBe(false);
   });
 
   it("negative: cannot submit data outside Project A", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_B };
-    expect(can(assignments, "submit_data", "partner", target)).toBe(false);
+    expect(can(assignments, "submit_data", "partner", target, "public")).toBe(false);
   });
 
   it("positive: clears 'partner'-classified records within Project A (DECISIONS.md ADR-029 — the classification level named 'partner' exists for this profile to clear)", () => {
@@ -187,12 +187,12 @@ describe("Sensory Judge — scoped to Session 1 (blind-evaluation special case, 
 
   it("positive: can submit an assessment in Session 1", () => {
     const target: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
-    expect(can(assignments, "submit_assessment", "sensory", target)).toBe(true);
+    expect(can(assignments, "submit_assessment", "sensory", target, "public")).toBe(true);
   });
 
   it("negative: cannot submit an assessment in a different session", () => {
     const target: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_2 };
-    expect(can(assignments, "submit_assessment", "sensory", target)).toBe(false);
+    expect(can(assignments, "submit_assessment", "sensory", target, "public")).toBe(false);
   });
 
   it("negative: cannot view the blind-code mapping — a Judge holds no classification clearance at all, so any non-public resource (e.g. a confidential blind mapping) is denied even inside their own session", () => {
@@ -211,18 +211,18 @@ describe("Sensory Head Judge — scoped to Session 1 (RBAC.md §7's independent 
 
   it("positive: can view the blind-code mapping within Session 1", () => {
     const target: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
-    expect(can(assignments, "view", "blind_mapping", target)).toBe(true);
+    expect(can(assignments, "view", "blind_mapping", target, "public")).toBe(true);
   });
 
   it("positive: can manage the session and submit assessments within Session 1", () => {
     const target: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
-    expect(can(assignments, "manage_session", "sensory", target)).toBe(true);
-    expect(can(assignments, "submit_assessment", "sensory", target)).toBe(true);
+    expect(can(assignments, "manage_session", "sensory", target, "public")).toBe(true);
+    expect(can(assignments, "submit_assessment", "sensory", target, "public")).toBe(true);
   });
 
   it("negative: cannot view the blind-code mapping for a different session", () => {
     const target: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_2 };
-    expect(can(assignments, "view", "blind_mapping", target)).toBe(false);
+    expect(can(assignments, "view", "blind_mapping", target, "public")).toBe(false);
   });
 
   it("positive: clears 'internal'-classified session data, unlike a plain Sensory Judge", () => {
@@ -236,12 +236,12 @@ describe("Content/Ops Coordinator — non-developer collaborator role, DOMAIN_MO
 
   it("positive: can publish content platform-wide", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
-    expect(can(assignments, "publish", "content", target)).toBe(true);
+    expect(can(assignments, "publish", "content", target, "public")).toBe(true);
   });
 
   it("negative: cannot approve research protocols — explicitly excluded from this profile", () => {
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
-    expect(can(assignments, "approve_protocol", "research", target)).toBe(false);
+    expect(can(assignments, "approve_protocol", "research", target, "public")).toBe(false);
   });
 });
 
@@ -275,16 +275,90 @@ describe("resolvePermissions", () => {
     const projectTarget: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
     const sessionTarget: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
 
-    expect(can(assignments, "create_measurement", "research", projectTarget)).toBe(true);
-    expect(can(assignments, "submit_assessment", "sensory", sessionTarget)).toBe(true);
+    expect(can(assignments, "create_measurement", "research", projectTarget, "public")).toBe(true);
+    expect(can(assignments, "submit_assessment", "sensory", sessionTarget, "public")).toBe(true);
     // Neither assignment leaks into the other's scope.
-    expect(can(assignments, "submit_assessment", "sensory", projectTarget)).toBe(false);
-    expect(can(assignments, "create_measurement", "research", sessionTarget)).toBe(false);
+    expect(can(assignments, "submit_assessment", "sensory", projectTarget, "public")).toBe(false);
+    expect(can(assignments, "create_measurement", "research", sessionTarget, "public")).toBe(false);
   });
 
   it("returns an empty set for a target no assignment covers", () => {
     const assignments = [assignmentFor("Research Lead", { scopeType: "project", scopeRefId: PROJECT_A })];
     const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_B };
     expect(resolvePermissions(assignments, target).size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Classification AND-gate — RBAC.md §4 step 4, CLAUDE.md §10.
+//
+// Added by ADR-062. Until then the gate had no tests at all, which is the
+// other half of why it went unenforced at every call site for so long: nothing
+// failed when it was skipped, and nothing proved it worked when it wasn't.
+//
+// These test the mechanism, not the policy. Policy — which clearance a Farm
+// Operator should hold, and what classification an operator-created Lot should
+// default to — is ADR-062's open decision.
+// ---------------------------------------------------------------------------
+
+describe("classification is an independent AND-gate", () => {
+  const target: ScopeTarget = { scopeType: "project", scopeRefId: PROJECT_A };
+  const farmOperator = [assignmentFor("Farm Operator", { scopeType: "project", scopeRefId: PROJECT_A })];
+  const platformAdmin = [assignmentFor("Platform Admin", { scopeType: "platform", scopeRefId: null })];
+
+  it("public needs no clearance at all", () => {
+    expect(can(farmOperator, "view", "lot", target, "public")).toBe(true);
+  });
+
+  it("grants at exactly the level the profile clears", () => {
+    // Farm Operator holds classification:clear_partner and nothing above it.
+    expect(can(farmOperator, "view", "lot", target, "partner")).toBe(true);
+  });
+
+  it("denies above the cleared level even though the action permission is held", () => {
+    // The point of an AND-gate: holding lot:view is not sufficient on its own.
+    // Farm Operator clears partner and internal (ADR-063) and nothing above.
+    for (const level of ["confidential", "trade_secret"] as const) {
+      expect(can(farmOperator, "view", "lot", target, level)).toBe(false);
+    }
+  });
+
+  it("denies when the action permission is missing, whatever the clearance", () => {
+    // The gate narrows; it never grants. Farm Operator holds no competition
+    // permission, so no classification makes this true.
+    expect(can(farmOperator, "manage", "competition", target, "public")).toBe(false);
+  });
+
+  it("Platform Admin clears every level", () => {
+    const platformTarget: ScopeTarget = { scopeType: "platform", scopeRefId: null };
+    for (const level of ["public", "registered", "partner", "internal", "confidential", "trade_secret"] as const) {
+      expect(can(platformAdmin, "view", "lot", platformTarget, level)).toBe(true);
+    }
+  });
+
+  it("an operator can reach the internal lots they create — ADR-063", () => {
+    // The inconsistency this test used to pin is resolved. Every Lot defaults
+    // to `internal`, and an operator who could not clear `internal` would be
+    // denied the records they just wrote.
+    expect(can(farmOperator, "view", "lot", target, "internal")).toBe(true);
+    expect(can(farmOperator, "manage", "lot", target, "internal")).toBe(true);
+  });
+
+  it("a partner still cannot clear internal — ADR-029 decision 1 stands", () => {
+    // The grant was corrected for internal roles only. Partner Field Collector
+    // is an external party, and `partner.task` still holds one `internal` row
+    // a partner must not see — the property ADR-029 verified live.
+    const partner = [assignmentFor("Partner Field Collector", { scopeType: "project", scopeRefId: PROJECT_A })];
+    expect(can(partner, "submit_data", "partner", target, "partner")).toBe(true);
+    expect(can(partner, "submit_data", "partner", target, "internal")).toBe(false);
+  });
+
+  it("a judge still holds no clearance at all — the blind-judging exclusion stands", () => {
+    // Sensory Judge deliberately excludes classification:clear_* so a judge's
+    // resolved permissions cannot reach the blind-code mapping (RBAC.md §7).
+    const judge = [assignmentFor("Sensory Judge", { scopeType: "session", scopeRefId: SESSION_1 })];
+    const sessionTarget: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
+    expect(can(judge, "submit_assessment", "sensory", sessionTarget, "public")).toBe(true);
+    expect(can(judge, "submit_assessment", "sensory", sessionTarget, "internal")).toBe(false);
   });
 });

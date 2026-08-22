@@ -64,12 +64,32 @@ export function resolvePermissions(assignments: readonly ResolvedAssignment[], t
  * action permission itself, regardless of what that action is (view, edit,
  * approve, ...).
  */
+/**
+ * The classification an access check passes when the gate is deliberately not
+ * being applied to that resource yet.
+ *
+ * It evaluates to `public`, so behaviour is identical to the old default — but
+ * it is *named*, which the default was not. Every site that is not yet gated
+ * is greppable:
+ *
+ *     grep -rn CLASSIFICATION_GATE_DEFERRED lib app
+ *
+ * That list is the live inventory of unenforced classification, and it should
+ * only ever shrink. See ADR-062: the gate is fully specified, implemented,
+ * seeded and stored on four models, and was applied at zero of thirteen call
+ * sites — because the old `= "public"` default made omission invisible.
+ */
+export const CLASSIFICATION_GATE_DEFERRED: ClassificationLevel = "public";
+
 export function can(
   assignments: readonly ResolvedAssignment[],
   action: string,
   resourceType: string,
   target: ScopeTarget,
-  resourceClassification: ClassificationLevel = "public",
+  // Required, deliberately. A default here is what let thirteen call sites
+  // silently skip the AND-gate; making it explicit turns omission into a
+  // compile error rather than an invisible bypass.
+  resourceClassification: ClassificationLevel,
 ): boolean {
   const granted = resolvePermissions(assignments, target);
 

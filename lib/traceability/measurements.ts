@@ -17,6 +17,7 @@
  */
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import type { ClassificationLevel } from "../rbac/types";
 import { normalizeToCanonical, type MeasurementVariable } from "./units";
 import { recordAuditEvent } from "../audit";
 import type { ProvenanceClass } from "../../generated/prisma/client";
@@ -26,6 +27,9 @@ export class MeasurementValidationError extends Error {}
 interface ScopeCandidate {
   projectId?: string | null;
   locationId?: string | null;
+  // ADR-062 — the subject's own classification travels with its scope, so a
+  // measurement cannot be gated more loosely than the lot or sample it is about.
+  classification: ClassificationLevel;
 }
 
 async function scopeCandidatesForSubject(lotId?: string | null, sampleId?: string | null): Promise<ScopeCandidate[]> {
@@ -37,12 +41,12 @@ async function scopeCandidatesForSubject(lotId?: string | null, sampleId?: strin
   if (lotId) {
     const lot = await prisma.lot.findUnique({ where: { id: lotId } });
     if (!lot) throw new TraceabilityAccessError("lot_not_found");
-    candidates.push({ projectId: lot.projectId, locationId: lot.locationId });
+    candidates.push({ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification });
   }
   if (sampleId) {
     const sample = await prisma.sample.findUnique({ where: { id: sampleId } });
     if (!sample) throw new TraceabilityAccessError("sample_not_found");
-    candidates.push({ projectId: sample.projectId, locationId: sample.locationId });
+    candidates.push({ projectId: sample.projectId, locationId: sample.locationId, classification: sample.classification });
   }
   return candidates;
 }

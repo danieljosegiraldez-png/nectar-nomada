@@ -248,10 +248,20 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       ["location", "manage_attributes"],
       ["specimen", "manage"],
       ["specimen", "view"],
-      // Same classification grant as Partner Field Collector (DECISIONS.md
-      // ADR-029 decision 2) — an operator on their own assigned project
-      // still cannot clear internal/confidential/trade_secret.
+      // ADR-063. This grant was originally copied from Partner Field
+      // Collector, but that profile's reasoning does not transfer: a partner
+      // is an external party, and ADR-029 decision 1 deliberately keeps them
+      // below `internal` — `partner.task` still holds one `internal` row a
+      // partner must not see, which is the property ADR-029 verified live.
+      //
+      // A Farm Operator is not an external party. They create the lots, and
+      // every Lot defaults to `internal`, so without this grant an enforced
+      // gate denies an operator the records they just wrote. Holding
+      // `clear_internal` and enforcing is also a NARROWING against today,
+      // where the gate is not applied and they can reach `confidential` and
+      // `trade_secret` too.
       ["classification", "clear_partner"],
+      ["classification", "clear_internal"],
     ],
   },
   {
@@ -265,6 +275,18 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       ["lot", "view"],
       ["apiary", "view"],
       ["specimen", "view"],
+      // ADR-063. This profile held no clearance at all, which was invisible
+      // while the gate went unapplied. Enforcing without it would make the
+      // role useless rather than restrictive: 51 of 51 Lots and 3 of 5
+      // Projects are `internal`, so a "read-only visibility into a project's
+      // operational data" role would see none of it.
+      //
+      // Deliberately NOT granted to Partner Field Collector or Sensory Judge:
+      // the first is an external party ADR-029 keeps below `internal`, and the
+      // second excludes clear_* on purpose so a judge cannot reach the
+      // blind-code mapping (RBAC.md §7).
+      ["classification", "clear_partner"],
+      ["classification", "clear_internal"],
     ],
   },
   {

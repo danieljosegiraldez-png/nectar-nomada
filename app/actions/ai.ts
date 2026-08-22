@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "../../lib/auth/session";
-import { can } from "../../lib/rbac/service";
+import { can, CLASSIFICATION_GATE_DEFERRED } from "../../lib/rbac/service";
 import { generateDataCompletenessSuggestions, decideSuggestion, type SuggestionDecision } from "../../lib/ai/service";
 
 export async function generateSuggestionsFormAction(): Promise<void> {
@@ -17,7 +17,7 @@ export async function generateSuggestionsFormAction(): Promise<void> {
   // reachable by any authenticated user. This form action is the only
   // human-facing entry point to it in this slice, so the check belongs
   // here.
-  const allowed = await can(user.userAccountId, "review_suggestion", "ai", { scopeType: "platform", scopeRefId: null });
+  const allowed = await can(user.userAccountId, "review_suggestion", "ai", { scopeType: "platform", scopeRefId: null }, CLASSIFICATION_GATE_DEFERRED);
   if (!allowed) {
     redirect("/ai");
   }

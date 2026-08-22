@@ -13,7 +13,7 @@
  * missing" discipline rather than fabricating a zero-quantity event.
  */
 import { prisma } from "../db";
-import { requireLotAccess } from "./lots";
+import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 import { recordAuditEvent } from "../audit";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
@@ -40,7 +40,7 @@ export interface RecordHarvestEventInput {
 }
 
 export async function recordHarvestEvent(userAccountId: string, input: RecordHarvestEventInput) {
-  await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
 
   const provenanceClass = input.provenanceClass;
 
@@ -129,7 +129,7 @@ export interface RecordReceivingEventInput {
 }
 
 export async function recordReceivingEvent(userAccountId: string, input: RecordReceivingEventInput) {
-  await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId }]);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
 
   const provenanceClass = input.provenanceClass;
 
