@@ -50,6 +50,18 @@ describe("production build guard", () => {
     expect(dbSeed).toBeGreaterThan(migrate);
   });
 
+  it("builds before touching the database, so a failing build cannot write to it", () => {
+    // The failure this prevents actually happened (ADR-070): a type error
+    // failed `next build` *after* the seed had run against production. The
+    // deployment was never promoted, so nothing shipped — but the database had
+    // already been written to. A deploy that does not ship must not be able to
+    // change production data.
+    const build = commands.indexOf("next build");
+    expect(build).toBeGreaterThan(-1);
+    expect(commands.indexOf("prisma migrate deploy")).toBeGreaterThan(build);
+    expect(commands.indexOf("prisma db seed")).toBeGreaterThan(build);
+  });
+
   it("runs neither migrate nor seed outside a production deployment", () => {
     // DATABASE_URL is scoped to Production in this Vercel project; preview
     // builds have no database. Both writes must sit inside the VERCEL_ENV
@@ -59,6 +71,8 @@ describe("production build guard", () => {
     expect(commands.indexOf("prisma migrate deploy")).toBeGreaterThan(branch);
     expect(commands.indexOf("prisma db seed")).toBeGreaterThan(branch);
     expect(commands.indexOf("else")).toBeGreaterThan(commands.indexOf("prisma db seed"));
+    // next build sits outside the branch entirely — every deployment builds.
+    expect(commands.indexOf("next build")).toBeLessThan(branch);
   });
 
   it("generates the Prisma client unconditionally, before the build needs it", () => {
@@ -72,6 +86,7 @@ describe("production build guard", () => {
     const branch = commands.indexOf('"${VERCEL_ENV:-}" = "production"');
     expect(generate).toBeGreaterThan(-1);
     expect(generate).toBeLessThan(branch);
+    // Generate must precede the build that imports the client it writes.
     expect(commands.indexOf("next build")).toBeGreaterThan(generate);
   });
 

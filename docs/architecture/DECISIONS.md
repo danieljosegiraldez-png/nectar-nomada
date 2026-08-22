@@ -4876,3 +4876,64 @@ greppable, instead of passing a bare `"public"` and vanishing from the
 inventory. SECURITY.md §4 is updated to describe enforcement as it now is —
 that section previously overclaimed, which is what ADR-062 had to correct, and
 it should not be allowed to drift again.
+
+---
+
+## ADR-070 — The build runs before the database is touched
+
+**Amends ADR-064**, which added seeding to the guarded build and put it before
+`next build`.
+
+**Context — an incident, not a theory.** The production deploy for ADR-068
+failed. A TypeScript error in a test file (`classificationGate.test.ts`, a
+cleanup helper typed too generically for Prisma's model delegates) failed
+`next build`. Its own log shows the order that mattered:
+
+```
+▲ seeding permissions, role profiles and catalogs
+  Seeded 38 permissions and 11 role profiles.     <- ran
+✓ Compiled successfully
+tests/…/classificationGate.test.ts: error TS2345  <- then failed
+Error: Command "npm run build" exited with 1
+```
+
+The deployment was never promoted, so the code never reached users. But the
+seed had already run against production. **A deploy that does not ship was able
+to write to the production database.**
+
+Nothing was damaged — the seed is idempotent and that change carried no grant —
+so this is a near miss recorded as a hazard, not a loss.
+
+**Decision.** `next build` runs before `prisma migrate deploy` and
+`prisma db seed`. Any build failure — type error, compile error, bad import —
+now happens while the database is still untouched.
+
+This is safe because `next build` needs no database, which was verified rather
+than assumed: a clean checkout builds with `DATABASE_URL`, `DIRECT_URL` and
+`TEST_DATABASE_URL` all unset, compiling and statically generating every page.
+
+Ordering for the live site is unchanged, which is the property worth
+preserving: Vercel promotes a deployment only after the whole command exits 0,
+so migrations and seed still land while the old code is serving and the new
+code goes live after them. That is what ADR-064 added and ADR-069 relied on,
+and it still holds — the change only moves *when a failure stops us*, earlier,
+before any write.
+
+**Verified by reproducing the incident.** A deliberate type error was planted
+and the production path run against a restored local copy: the build failed,
+neither migrate nor seed executed, and the grant count was identical before and
+after. Under the old ordering the seed would have run first. The new assertion
+in `tests/seed/buildGuard.test.ts` was mutation-tested by moving `next build`
+back to the end, which fails it.
+
+**The process failure underneath, recorded because the code fix does not
+address it.** PR #22 was merged with its Vercel check already reporting
+`FAILURE`. In practice it was pushed and merged within seconds, so the check
+had not finished reporting — which amounts to the same thing: the signal that
+would have caught this existed and was not waited for.
+
+Building first limits the blast radius of that mistake; it does not prevent the
+mistake. A pull request should not be merged until its Vercel check has
+reported, and `npm run typecheck` is the local equivalent — `vitest` passing
+proves nothing about types, and 416 green tests were reported for a change that
+could not build.

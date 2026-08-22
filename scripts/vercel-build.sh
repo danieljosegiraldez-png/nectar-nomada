@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build entry point. Applies pending migrations before building, but only for
-# a real production deployment.
+# Build entry point. Builds first, then applies migrations and seed data — and
+# the database steps run only for a real production deployment.
 #
-# Why this exists. `next build` alone let the repository's schema and
-# production's schema drift apart: S2 added three columns to
+# Why the database steps exist at all. `next build` alone let the repository's
+# schema and production's schema drift apart: S2 added three columns to
 # sensory.sensory_session and nothing in the pipeline would ever have applied
 # them. Prisma selects every scalar on a model, so `include: { session: true }`
 # becomes SELECT ... purpose, subject, preparation_method — against a table
@@ -11,7 +11,7 @@
 # code without the migration takes the sensory module down, and nothing warned
 # about it.
 #
-# Why it is guarded rather than unconditional. DATABASE_URL is scoped to
+# Why they are guarded rather than unconditional. DATABASE_URL is scoped to
 # Production in this Vercel project — Preview deployments have no database at
 # all. An unconditional `prisma migrate deploy` would fail every preview build
 # for a reason unrelated to the change being previewed, which is a good way to
@@ -38,6 +38,26 @@ set -euo pipefail
 # "Can't resolve '../generated/prisma/client'" — the same failure production
 # was one cache eviction away from.
 npx prisma generate
+
+# Build BEFORE touching the database (ADR-070).
+#
+# This used to run last, and a real deploy showed why that was wrong: a
+# TypeScript error in a test file failed `next build` — but only *after* the
+# seed had already run against production. The deployment was never promoted,
+# so the code never shipped, yet the database had been written to. A deploy
+# that does not ship should not be able to change production data.
+#
+# Building first makes every build failure — type error, compile error, a bad
+# import — happen while the database is still untouched. It is safe because
+# `next build` needs no database: verified by building a clean checkout with
+# DATABASE_URL, DIRECT_URL and TEST_DATABASE_URL all unset, which compiled and
+# statically generated every page.
+#
+# Ordering for the live site is unchanged. Vercel promotes a deployment only
+# after this whole command exits 0, so migrations and seed still land while the
+# old code is serving, and the new code goes live after them — the property
+# ADR-064 added and ADR-069 relied on.
+npx next build
 
 if [ "${VERCEL_ENV:-}" = "production" ]; then
   echo "▲ production deployment — applying pending migrations"
@@ -68,5 +88,3 @@ if [ "${VERCEL_ENV:-}" = "production" ]; then
 else
   echo "▲ ${VERCEL_ENV:-local} build — skipping migrate and seed (no production database here)"
 fi
-
-npx next build
