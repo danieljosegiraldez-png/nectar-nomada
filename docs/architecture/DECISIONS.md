@@ -5114,3 +5114,66 @@ reason as ADR-072.
 
 Run with no arguments it lists every organization and what is recorded, which
 is the fastest way to see the gap this ADR closes.
+
+---
+
+## ADR-074 — Users & Permissions administration
+
+**Context.** The platform owner held `platform:manage_users` and
+`platform:manage_permissions` and could exercise neither. No route in the
+application created or revoked an Assignment — every role change went through a
+script or raw SQL, which meant through me.
+
+That was not a missing capability. `lib/rbac/service.ts` already had
+`createAssignment` and `revokeAssignment`, both writing an AuditEvent per
+RBAC.md §8, both correct. What was missing was any way to reach them. This is
+CLAUDE.md §4's "Platform Command Center → Users, Permissions", and it was the
+last thing standing between "Daniel's platform" and "the team's platform":
+ADR-072 gave Nathy Rubio an address, and giving her a role still required
+another round trip.
+
+**Decision.** `/admin/users` — one page listing every Person with their account
+state and roles, a form to grant, and a revoke control per assignment.
+
+**Gated on `manage_permissions`, not `manage_users`.** Granting a role *is*
+managing permissions. Someone holding only `manage_users` would have found the
+page refusing them, which is exactly the failure `lib/navigation.ts`'s second
+rule exists to prevent — never offer what the server will refuse.
+
+The check runs server-side before any data is read. The nav entry hides itself
+for someone without the permission, and the page refuses regardless, because
+SECURITY.md is explicit that a hidden control is not an authorization boundary.
+
+**Scope names, not ids.** Assignments render as "Farm Operator — Las Nubes
+Cerro Azul — Café", resolved in two batched queries. `/my-nectar` used to print
+the raw uuid (ADR-071's sibling problem) and it told the reader nothing.
+
+**Scope rows are reused, never duplicated.** Two Scope rows for the same
+(type, ref) silently split grants between them, so a permission check resolving
+against one misses an Assignment attached to the other. A platform-scoped grant
+is forced to a null ref for the same reason.
+
+**The guard that matters: the last Platform Admin cannot be revoked.** ADR-067
+recorded the deadlock — granting Platform Admin requires
+`rbac:manage_permissions`, which only Platform Admin holds, so with no holder
+the role can never be granted from inside again. Escaping it took two
+out-of-band scripts. Making revocation available through a UI makes walking
+back into it a two-click operation, including by revoking your own.
+
+The decision is a pure predicate, `wouldRemoveLastPlatformAdmin`, separated
+from the query that counts. Whether one is the last is global state, so an
+integration test could only reach the zero-remaining case by revoking the real
+administrator the suite runs as. The predicate is exhaustively unit-tested; the
+service test proves the guard does not *over*-refuse while another admin
+exists, which is the half integration can reach honestly.
+
+**Errors are returned, not thrown.** "You cannot revoke the last Platform
+Admin" is a sentence the operator needs to read; an unhandled throw renders a
+500 and loses it.
+
+**A bug the tests could not have caught.** The revoke control was first placed
+inside a `<p>`. A `<form>` cannot be a descendant of `<p>` — the browser closes
+the paragraph before it, the server and client trees disagree, and hydration
+fails. Thirteen passing service tests said nothing about it; opening the page
+did. Verified fixed by inspecting the live DOM: zero forms inside a paragraph,
+all thirty-nine revoke forms children of a `div`.
