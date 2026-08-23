@@ -11,6 +11,7 @@
  * This is the missing surface, not new authority.
  */
 import { prisma } from "../db";
+import { sortByName } from "../naturalOrder";
 import { can, createAssignment, revokeAssignment } from "./service";
 import { CLASSIFICATION_NOT_APPLICABLE } from "./resolve";
 import type { ScopeType } from "../../generated/prisma/client";
@@ -105,10 +106,12 @@ export async function listRoleProfiles() {
 
 export async function listScopeChoices() {
   const [projects, locations] = await Promise.all([
-    prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.location.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.project.findMany({ select: { id: true, name: true } }),
+    prisma.location.findMany({ select: { id: true, name: true } }),
   ]);
-  return { projects, locations };
+  // Same natural order as /plots (ADR-078) — a scope picker listing
+  // "Lote 1, Lote 10, Lote 2" is the same hazard as a page doing it.
+  return { projects: sortByName(projects, (p) => p.name), locations: sortByName(locations, (l) => l.name) };
 }
 
 export interface GrantRoleInput {

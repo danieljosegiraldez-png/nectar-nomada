@@ -55,10 +55,6 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
           </div>
         )}
       </section>
-
-      <p className="nn-muted" style={{ fontSize: "0.85rem" }}>
-        {t("noScreenNote")}
-      </p>
     </div>
   );
 }
