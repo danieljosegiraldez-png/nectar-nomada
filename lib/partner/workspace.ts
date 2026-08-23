@@ -10,7 +10,10 @@
  * gate (there is no separate `partner:view` permission in the catalog,
  * RBAC.md §5) — holding submit_task/submit_data/upload_media for this
  * project's scope, AND clearing the specific record's classification, is
- * what makes a record visible. This is a deliberate simplification: every
+ * what makes a record visible. That applies to the Project itself as well as
+ * to the Tasks, submissions and assets inside it: for a long time only the
+ * contents were filtered, so an uncleared partner could see an internal
+ * project listed and open it to read its description (ADR-079). This is a deliberate simplification: every
  * Role Profile that can act on partner data today (Partner Field Collector,
  * Platform Admin) also holds all three action permissions together, so this
  * doesn't currently under- or over-grant visibility — splitting out a
@@ -26,10 +29,23 @@ import { objectStorageProvider } from "../integrations/storage";
 
 export class PartnerAccessError extends Error {}
 
-function isVisible(grantedKeys: Set<string>, actionKey: string, classification: string): boolean {
-  if (!grantedKeys.has(actionKey)) return false;
+/**
+ * The classification half of the gate, on its own — ADR-079.
+ *
+ * A Project is a record with a classification like any other, and its name and
+ * description are the sensitive parts: "Sociedad Huerbsch. Daniel Giráldez como
+ * asesor y posible socio (en negociación)" is not something an uncleared
+ * partner should read. Tasks, submissions and assets were filtered from the
+ * start; the Project carrying them was not.
+ */
+function clearsClassification(grantedKeys: Set<string>, classification: string): boolean {
   if (classification === "public") return true;
   return grantedKeys.has(permissionKey("classification", `clear_${classification}`));
+}
+
+function isVisible(grantedKeys: Set<string>, actionKey: string, classification: string): boolean {
+  if (!grantedKeys.has(actionKey)) return false;
+  return clearsClassification(grantedKeys, classification);
 }
 
 /**
@@ -66,24 +82,32 @@ export async function getPartnerProjects(userAccountId: string) {
   ];
   if (projectIds.length === 0) return [];
 
-  const visibleProjectIds: string[] = [];
-  for (const projectId of projectIds) {
-    const target: ScopeTarget = { scopeType: "project", scopeRefId: projectId };
-    const grantedKeys = await resolvedPermissionKeys(userAccountId, target);
-    if (
-      grantedKeys.has(permissionKey("partner", "submit_task")) ||
-      grantedKeys.has(permissionKey("partner", "submit_data")) ||
-      grantedKeys.has(permissionKey("partner", "upload_media"))
-    ) {
-      visibleProjectIds.push(projectId);
-    }
-  }
-  if (visibleProjectIds.length === 0) return [];
-
-  return prisma.project.findMany({
-    where: { id: { in: visibleProjectIds } },
+  // Loaded up front so the classification gate below has the record to gate
+  // on. A project whose row cannot be found is skipped rather than listed.
+  const candidates = await prisma.project.findMany({
+    where: { id: { in: projectIds } },
     orderBy: { name: "asc" },
   });
+
+  const visible: typeof candidates = [];
+  for (const project of candidates) {
+    const target: ScopeTarget = { scopeType: "project", scopeRefId: project.id };
+    const grantedKeys = await resolvedPermissionKeys(userAccountId, target);
+
+    const holdsPartnerAction =
+      grantedKeys.has(permissionKey("partner", "submit_task")) ||
+      grantedKeys.has(permissionKey("partner", "submit_data")) ||
+      grantedKeys.has(permissionKey("partner", "upload_media"));
+
+    // Both halves, deliberately: the action permission says what this account
+    // may do in the project, the clearance says whether it may know the
+    // project exists at all (ADR-079).
+    if (holdsPartnerAction && clearsClassification(grantedKeys, project.classification)) {
+      visible.push(project);
+    }
+  }
+
+  return visible;
 }
 
 export async function getProjectWorkspace(userAccountId: string, projectId: string) {
@@ -112,6 +136,14 @@ export async function getProjectWorkspace(userAccountId: string, projectId: stri
     }),
     prisma.asset.findMany({ where: { projectId }, orderBy: { createdAt: "desc" } }),
   ]);
+
+  // The Project is a classified record too, and its name and description are
+  // the sensitive parts (ADR-079). Refusing here rather than returning a
+  // stripped project: a partner who cannot clear this project should be told
+  // no, not shown an empty workspace that implies the project is theirs.
+  if (!clearsClassification(grantedKeys, project.classification)) {
+    throw new PartnerAccessError("no_project_access");
+  }
 
   return {
     project,
