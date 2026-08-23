@@ -5244,3 +5244,54 @@ production origin and `http://localhost:<port>` for local work, and
 `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` set in `.env` and in Vercel. The
 provider only registers when both values are non-empty, so until then the
 button does not appear and nothing changes.
+
+---
+
+## ADR-076 — A way to actually start the Google flow
+
+**Context.** ADR-075 made Google sign-in resolve accounts correctly, and the
+credentials were then configured in `.env` and in Vercel. Verifying it found
+the remaining gap: **there was no button.**
+
+`app/login/page.tsx` rendered the credentials form and nothing else, and
+`signIn("credentials", …)` was the only sign-in call anywhere in the codebase.
+The provider registered server-side — `/api/auth/providers` listed it — and no
+user could reach it. Configuration alone is not a feature.
+
+**Decision.** `/login` becomes a server component that decides which sign-in
+methods exist and renders a "Continue with Google" button when the provider is
+configured. The credentials form stays a client component in `LoginForm.tsx`,
+because it uses `useActionState` for inline errors; only the decision moves,
+since `process.env` is not readable from the client.
+
+The button posts to a server action, matching every other auth path rather than
+introducing a client-side `signIn()` call.
+
+**The condition mirrors `lib/auth/config.ts` exactly** — both non-empty. Showing
+a button that leads to "provider not found" would be worse than showing none.
+This is presentation, not protection: with Google unconfigured, Auth.js has no
+`google` provider registered and rejects the request regardless. Verified by
+running the app with both variables unset and confirming the button is absent.
+
+**No separate sign-up button.** A Google sign-in for someone with no matching
+Person creates Person, account and identity together (ADR-075 case 3), so one
+button serves both. A second control on `/signup` would imply a distinction the
+flow does not have.
+
+**Two things verified rather than assumed.**
+
+`/api/auth/providers` locally reports the Google callback as
+`http://localhost:3012/api/auth/callback/google`, matching the redirect URI
+registered with Google. A mismatch there fails at Google's end, before the
+application is reached, and is the most common way this integration breaks.
+
+Production reports its base URL as the **stable alias**
+(`https://nectar-nomada-package.vercel.app`), not the per-deployment hostname.
+On Vercel that is worth confirming: had Auth.js derived the origin from
+`VERCEL_URL`, every deployment would present a different redirect URI and none
+would match what is registered.
+
+**Still outstanding at the time of writing:** production's provider list does
+not include Google, because that build predates the environment variable.
+Environment variables apply to new builds only, so a redeploy is required — this
+merge is it.
