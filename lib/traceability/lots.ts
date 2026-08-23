@@ -19,6 +19,7 @@ import type { ClassificationLevel } from "../rbac/types";
  * never just one.
  */
 import { prisma } from "../db";
+import { sortByName } from "../naturalOrder";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
@@ -796,7 +797,12 @@ export async function getManageableContext(userAccountId: string) {
   // by mistake is what produced the confusing "no lot access" reports.
   // `locations` (all types, unfiltered) stays as-is for callers like the
   // Storage move form, where a warehouse/site is a legitimate destination.
-  const plotLocations = locations.filter((l) => l.locationType === "plot");
+  // Natural order, not the query's string order: `ORDER BY name` puts
+  // "Lote 10" before "Lote 2" (ADR-078).
+  const plotLocations = sortByName(
+    locations.filter((l) => l.locationType === "plot"),
+    (l) => l.name,
+  );
 
   return { projects, locations, plotLocations, organizations };
 }

@@ -5353,3 +5353,51 @@ Vercel's `DATABASE_URL` to `sslmode=verify-full`. That decision stands and is
 untouched here — this changes only how local tooling builds its libpq
 connection string. The two are separate connections with separate trust
 mechanisms.
+
+---
+
+## ADR-078 — Internal references removed from the interface, and names sort naturally
+
+**Context.** Walking the operator surfaces signed in surfaced two classes of
+defect that no test would have caught, because both render correctly — they are
+simply wrong to show a person.
+
+**Internal references in user-facing copy.** Seven strings cited things only a
+developer can act on:
+
+- `/research` closed with "…tienen esquema y funciones de servicio pero no
+  pantalla todavía — **fuera del alcance de este ticket** por diseño", half in
+  English, describing ticket scope.
+- `/sensory`, `/partner` and `/my-nectar` told the reader an admin could grant
+  an Assignment **"(RBAC.md §5)"** — citing an architecture document.
+- `/apiaries` carried the badge **"Apiario — A5"**; `/plots` and the batch page
+  said conditions were recorded **"(F1)"**. Slice identifiers as UI copy.
+
+Each rewrite keeps what the sentence was *for* — explaining why a page is empty
+and what would change it — and drops only the reference. The research note has
+no user-facing equivalent and was deleted outright: a reader cannot act on "no
+screen yet", and DECISIONS.md already records what is unbuilt.
+
+**Names containing numbers sorted as text.** `/plots` listed
+Lote 1, Lote 10, Lote 2, Lote 3 … Both Postgres `ORDER BY name` and
+JavaScript's default sort compare codepoint by codepoint: "1" precedes "2" and
+the comparison stops there.
+
+`lib/naturalOrder.ts` wraps `Intl.Collator` with `numeric: true`, applied to
+the plot list and to the admin page's scope pickers, which draw from the same
+locations. Being locale-aware it also sorts accented names where a Spanish
+reader expects them rather than exiling them past Z — worth having in a
+Spanish-first product.
+
+Sorting happens in the application rather than in SQL because Postgres has no
+natural-order collation by default, and adding one is a database-wide change
+for a presentation concern.
+
+**Verification, and a check that first proved nothing.** Curling the pages
+returned zero matches for the offending strings — but every operator route
+answers `307` to an anonymous request, so those zeros only proved the redirect
+worked. Re-checked signed in: the badge reads "APIARIO", the ticket note is
+gone, `(F1)` is absent, and plots list 1, 2, 3, 4, 5, 6, 9, 10.
+
+A regex sweep across both message files now reports zero internal references,
+which is the check that would catch the next one.
