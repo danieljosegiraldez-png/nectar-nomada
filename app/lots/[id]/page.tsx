@@ -111,7 +111,14 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       <h1 className="nn-code">{lot.lotCode}</h1>
       <p className="nn-detail-meta">
         <span>{t("currentStageLabel", { stage: currentStage })}</span>
-        <span>{t("currentQuantityLabel", { quantity: quantity.quantity.toString(), unit: quantity.unit ?? t("unitUnknown") })}</span>
+        <span>
+          {quantity.recorded
+            ? t("currentQuantityLabel", {
+                quantity: quantity.quantity.toString(),
+                unit: quantity.unit ?? t("unitUnknown"),
+              })
+            : t("quantityNotRecorded")}
+        </span>
         {lot.project ? <span>{lot.project.name}</span> : null}
         {lot.location ? <span>{lot.location.name}</span> : null}
         {lot.organization ? <span>{lot.organization.name}</span> : null}
@@ -244,7 +251,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
             {lineage.ancestorLotIds.map((ancestorId, i) => (
               <span key={ancestorId}>
                 {i > 0 ? ", " : ""}
-                <Link href={`/lots/${ancestorId}`}>{ancestorId.slice(0, 8)}</Link>
+                <Link href={`/lots/${ancestorId}`} className="nn-code">{lineage.lotCodesById.get(ancestorId) ?? ancestorId.slice(0, 8)}</Link>
               </span>
             ))}
           </p>
@@ -255,7 +262,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
             {lineage.descendantLotIds.map((descendantId, i) => (
               <span key={descendantId}>
                 {i > 0 ? ", " : ""}
-                <Link href={`/lots/${descendantId}`}>{descendantId.slice(0, 8)}</Link>
+                <Link href={`/lots/${descendantId}`} className="nn-code">{lineage.lotCodesById.get(descendantId) ?? descendantId.slice(0, 8)}</Link>
               </span>
             ))}
           </p>

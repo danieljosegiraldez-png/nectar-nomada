@@ -297,10 +297,27 @@ export async function getLotLineage(userAccountId: string, lotId: string) {
     SELECT DISTINCT output_lot_id AS lot_id, depth FROM descent ORDER BY depth ASC;
   `;
 
+  const ancestorLotIds = ancestors.map((r) => r.lot_id);
+  const descendantLotIds = descendants.map((r) => r.lot_id);
+
+  // Resolve the ids to lot codes here rather than leaving the page to render
+  // "32311e6d" (ADR-080). A batch's parent means something as "PE-98" and
+  // nothing as a uuid prefix — the same defect /my-nectar had with scope
+  // references. One query covers both directions.
+  const related =
+    ancestorLotIds.length + descendantLotIds.length > 0
+      ? await prisma.lot.findMany({
+          where: { id: { in: [...ancestorLotIds, ...descendantLotIds] } },
+          select: { id: true, lotCode: true },
+        })
+      : [];
+
   return {
     lot,
-    ancestorLotIds: ancestors.map((r) => r.lot_id),
-    descendantLotIds: descendants.map((r) => r.lot_id),
+    ancestorLotIds,
+    descendantLotIds,
+    /** id → lotCode for everything in `ancestorLotIds` and `descendantLotIds`. */
+    lotCodesById: new Map(related.map((l) => [l.id, l.lotCode])),
   };
 }
 
@@ -817,9 +834,28 @@ export async function getManageableContext(userAccountId: string) {
 export async function getObserverCandidates(userAccountId: string) {
   const [account, people] = await Promise.all([
     prisma.userAccount.findUnique({ where: { id: userAccountId }, select: { personId: true } }),
-    prisma.person.findMany({ where: { status: "active" }, orderBy: { displayName: "asc" } }),
+    prisma.person.findMany({ where: { status: "active" } }),
   ]);
-  return { people, selfPersonId: account?.personId ?? null };
+  const selfPersonId = account?.personId ?? null;
+
+  // Self first, then everyone else in natural order (ADR-080).
+  //
+  // Every consumer renders `observers` in array order, so the ordering decided
+  // here is the ordering a person scrolls. Sorted purely by name, "Yo (Daniel
+  // Giráldez)" sat seventh of seventeen — and the overwhelmingly common answer
+  // to "who took this reading" is "I did", entered on a phone, outdoors, often
+  // with wet hands.
+  //
+  // The remainder uses the locale-aware comparator rather than the query's
+  // `ORDER BY displayName`, so "Chayanne López" and "Kenis Abdiel Rodríguez
+  // Núñez" sort where a Spanish reader expects (ADR-078).
+  const self = selfPersonId ? people.find((person) => person.id === selfPersonId) : undefined;
+  const others = sortByName(
+    people.filter((person) => person.id !== selfPersonId),
+    (person) => person.displayName,
+  );
+
+  return { people: self ? [self, ...others] : others, selfPersonId };
 }
 
 /** Lightweight lot fetch + view-access check for the simpler "record X" form pages, which don't need getLotDetail's full aggregation. */
