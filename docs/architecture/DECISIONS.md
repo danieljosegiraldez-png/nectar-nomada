@@ -5295,3 +5295,61 @@ would match what is registered.
 not include Google, because that build predates the environment variable.
 Environment variables apply to new builds only, so a redeploy is required — this
 merge is it.
+
+---
+
+## ADR-077 — libpq connections verify the server, not just encrypt
+
+**Context.** A routine production query failed:
+
+```
+weak sslmode "require" may not be used with sslrootcert=system (use "verify-full")
+```
+
+`libpq_url()` in `scripts/backup/pg-tools.sh` appends `sslrootcert=system` to
+the connection string, and `DATABASE_URL` carries `sslmode=require`. libpq
+tightened its rules and now rejects that pair.
+
+The combination was always contradictory: `require` encrypts the connection but
+verifies *nothing* — not the certificate chain, not the hostname — so pinning a
+trust store alongside it asks libpq to check against a root it was never going
+to consult. The error is libpq refusing to pretend.
+
+**Why it mattered more than one failed query.** Every psql and pg_dump path in
+the repository goes through that helper: `backup:db`, `backup:verify`,
+`auth:grant-admin`, `data:remove-demo-places`. The next failure would have been
+a backup — and the failure mode ADR-056 exists to prevent is precisely
+discovering a backup problem when you need the backup.
+
+**Decision.** `libpq_url()` upgrades a weak `sslmode` (`require`, `prefer`,
+`allow`) to `verify-full` when it attaches the system trust store.
+
+Stricter than before, not a workaround: `verify-full` checks the certificate
+chain *and* that the hostname matches. The tempting fix — dropping
+`sslrootcert=system` so `require` is accepted again — would have made the error
+disappear while leaving the connection unverified, which is the wrong direction
+for a connection carrying the entire research record.
+
+**The application is unaffected**, and the reason is worth restating because it
+is why two connection strings exist at all: Prisma connects through
+node-postgres, which uses Node's own CA bundle and rejects `sslrootcert=system`
+outright with `ENOENT: open 'system'`. Only the libpq path takes this
+treatment. Confirmed during diagnosis — the app was connecting normally while
+psql refused.
+
+**Verification.** `backup:db` and `backup:verify` were run end to end after the
+change: 123 tables, 14,673 rows, restored into stock PostgreSQL 18 with every
+count identical. `auth:grant-admin` connects and its guard fires.
+
+`tests/backup/libpqUrl.test.ts` runs the shell function *as shell* rather than
+restating it in TypeScript — a restatement can agree with itself while the
+script does something else. Six cases, including that an already-pinned URL is
+left alone and that `verify-full` is never downgraded; that last one guards
+against the exact wrong fix. Mutation-tested by restoring the previous helper,
+which fails two of them.
+
+**Note on the deferred item.** The product owner previously deferred moving
+Vercel's `DATABASE_URL` to `sslmode=verify-full`. That decision stands and is
+untouched here — this changes only how local tooling builds its libpq
+connection string. The two are separate connections with separate trust
+mechanisms.

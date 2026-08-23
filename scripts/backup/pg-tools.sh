@@ -87,10 +87,26 @@ direct_url() {
 # "system". The two client libraries genuinely need different spellings of
 # the same intent.
 libpq_url() {
-  case "$1" in
-    *sslrootcert=*) echo "$1" ;;
-    *\?*)           echo "$1&sslrootcert=system" ;;
-    *)              echo "$1?sslrootcert=system" ;;
+  # libpq refuses `sslrootcert=system` alongside a weak sslmode:
+  #   weak sslmode "require" may not be used with sslrootcert=system
+  # `require` encrypts but verifies nothing, so pinning a trust store with it
+  # is contradictory. Upgrading to verify-full is the stricter reading and the
+  # one libpq demands — it checks the certificate chain *and* the hostname.
+  #
+  # This applies only to the psql/pg_dump path. The application connects
+  # through node-postgres, which uses Node's own CA bundle and rejects
+  # `sslrootcert=system` outright (ENOENT: open 'system'), which is why the two
+  # are built differently at all.
+  local url="$1"
+  case "$url" in
+    *sslmode=require*)      url="${url/sslmode=require/sslmode=verify-full}" ;;
+    *sslmode=prefer*)       url="${url/sslmode=prefer/sslmode=verify-full}" ;;
+    *sslmode=allow*)        url="${url/sslmode=allow/sslmode=verify-full}" ;;
+  esac
+  case "$url" in
+    *sslrootcert=*) echo "$url" ;;
+    *\?*)           echo "$url&sslrootcert=system" ;;
+    *)              echo "$url?sslrootcert=system" ;;
   esac
 }
 
