@@ -135,3 +135,19 @@ export async function logoutAction(): Promise<void> {
   await signOut({ redirectTo: "/" });
   redirect("/");
 }
+
+/**
+ * Start the Google flow — ADR-076.
+ *
+ * A server action rather than a client `signIn()` call, matching every other
+ * auth path in this file. Auth.js redirects out of it, so nothing after this
+ * line runs on success.
+ *
+ * The button that calls this is rendered only when the provider is configured
+ * (see app/login/page.tsx). That is presentation, not protection: if Google is
+ * unconfigured, Auth.js has no `google` provider registered and rejects the
+ * request regardless.
+ */
+export async function signInWithGoogleAction(): Promise<void> {
+  await signIn("google", { redirectTo: "/my-nectar" });
+}

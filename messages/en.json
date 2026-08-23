@@ -121,7 +121,9 @@
     "errorInvalidInput": "Please check the fields you entered.",
     "errorIncorrectCredentials": "Incorrect email or password.",
     "errorEmailTaken": "An account with this email already exists.",
-    "errorInvalidEmailOrPassword": "Enter a valid email and password."
+    "errorInvalidEmailOrPassword": "Enter a valid email and password.",
+    "orDivider": "or",
+    "continueWithGoogle": "Continue with Google"
   },
   "MyNectar": {
     "badge": "My Néctar",
