@@ -5401,3 +5401,56 @@ gone, `(F1)` is absent, and plots list 1, 2, 3, 4, 5, 6, 9, 10.
 
 A regex sweep across both message files now reports zero internal references,
 which is the check that would catch the next one.
+
+---
+
+## ADR-079 — The Partner Workspace gates the Project, not only its contents
+
+**Context.** Walking the operator surfaces showed `/partner` rendering project
+descriptions including *"Sociedad Huerbsch. Daniel Giráldez como asesor y
+posible socio (en negociación)"* — commercial standing, on a partner-facing
+page.
+
+Reading the module found why. Its own header already stated the rule: holding a
+`partner:*` action for the project's scope **and clearing the specific
+record's classification** is what makes a record visible. `isVisible()`
+implemented exactly that for Tasks, field submissions and Assets.
+
+The Project itself was never checked. `getPartnerProjects` filtered the list by
+permission alone, and `getProjectWorkspace` returned the whole Project record —
+name and description — while filtering only the contents inside it. A partner
+assigned to an `internal` project would see it listed *and* be able to open it.
+
+**Why the classification sweep missed it.** ADR-068 inventoried `can()` call
+sites. This module calls `resolvedPermissionKeys` directly and applies its own
+comparison, so it was never in the grep. The lesson is not about this file: an
+inventory built from one function's call sites only covers code that goes
+through that function.
+
+**Decision.** The clearance test is extracted as `clearsClassification` and
+applied to the Project in both places.
+
+`getPartnerProjects` loads candidate projects before the loop so the gate has a
+record to gate on, and requires both halves — the action permission says what
+the account may *do* in the project, the clearance says whether it may know the
+project exists at all.
+
+`getProjectWorkspace` **refuses** an uncleared project rather than returning a
+stripped one. A partner who cannot clear the project should be told no, not
+shown an empty workspace implying the project is theirs. Hiding it from the
+list would not have been enough on its own: the id is guessable and the URL
+reachable, and SECURITY.md is explicit that the frontend is not the boundary.
+
+**Exposure was latent, not live.** Nobody currently holds Partner Field
+Collector, and every Project Viewer assigned to an internal project legitimately
+clears `internal`. But ADR-074 has just made granting that role two clicks, so
+the window was about to open.
+
+**Verification.** Six tests using the *real* seeded Partner Field Collector
+profile rather than a hand-built permission set, so they fail if that profile's
+clearances ever widen. The assignment and the `partner:*` permissions are both
+present in the negative cases — only the clearance is missing, so it is the
+classification gate and nothing else doing the work. A matching positive case
+proves the gate refuses *by classification* rather than refusing everything.
+
+Mutation-tested by removing both gates, which fails three of the six.
