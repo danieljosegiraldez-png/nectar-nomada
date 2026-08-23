@@ -85,6 +85,16 @@ export async function recordQuantityEvent(userAccountId: string, input: RecordQu
 export interface CurrentQuantity {
   quantity: Prisma.Decimal;
   unit: string | null;
+  /**
+   * Whether any QuantityEvent exists for this lot — ADR-080.
+   *
+   * Without this, "never recorded" and "recorded, and currently zero" are the
+   * same value, and the page stated `Cantidad: 0` for a batch nobody had ever
+   * weighed. CLAUDE.md §3: missing information must remain missing, never
+   * inferred into a fact. A lot fully consumed genuinely *is* zero, and that
+   * is a different claim worth being able to make.
+   */
+  recorded: boolean;
 }
 
 /**
@@ -102,7 +112,7 @@ export async function computeCurrentQuantity(userAccountId: string, lotId: strin
 
   const events = await prisma.quantityEvent.findMany({ where: { lotId } });
   if (events.length === 0) {
-    return { quantity: new Prisma.Decimal(0), unit: null };
+    return { quantity: new Prisma.Decimal(0), unit: null, recorded: false };
   }
 
   const unit = events[0]!.unit;
@@ -119,5 +129,5 @@ export async function computeCurrentQuantity(userAccountId: string, lotId: strin
     }
   }
 
-  return { quantity: total, unit };
+  return { quantity: total, unit, recorded: true };
 }

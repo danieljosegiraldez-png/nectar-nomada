@@ -484,7 +484,8 @@
     "plotsIntro": "Lotes de terreno de tus fincas, con las condiciones de cultivo registradas.",
     "noPlots": "Todavía no hay lotes accesibles.",
     "exportButton": "Exportar mis datos",
-    "noActiveOperations": "Nada en curso ahora mismo."
+    "noActiveOperations": "Nada en curso ahora mismo.",
+    "quantityNotRecorded": "Cantidad no registrada"
   },
   "Apiary": {
     "badge": "Apiario",

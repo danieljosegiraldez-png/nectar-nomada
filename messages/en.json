@@ -484,7 +484,8 @@
     "plotsIntro": "Terrain plots across your farms, with recorded growing conditions.",
     "noPlots": "No plots accessible yet.",
     "exportButton": "Export my data",
-    "noActiveOperations": "Nothing in progress right now."
+    "noActiveOperations": "Nothing in progress right now.",
+    "quantityNotRecorded": "Quantity not recorded"
   },
   "Apiary": {
     "badge": "Apiary",

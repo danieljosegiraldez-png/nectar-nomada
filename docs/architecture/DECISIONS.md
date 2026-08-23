@@ -5454,3 +5454,52 @@ classification gate and nothing else doing the work. A matching positive case
 proves the gate refuses *by classification* rather than refusing everything.
 
 Mutation-tested by removing both gates, which fails three of the six.
+
+---
+
+## ADR-080 — Three defects on the batch page, all in the data handed to it
+
+**Context.** Opening a real batch as an operator — the page where field work
+actually happens — surfaced three problems. None was in the page's markup; each
+was in what a service gave it.
+
+**"Who took this reading" listed the reader seventh.** `getObserverCandidates`
+returned every active Person ordered by `displayName`, and consumers render in
+array order. The overwhelmingly common answer to that question is "I did",
+entered on a phone, outdoors, often with wet hands — and it required scrolling
+past six colleagues. Self now comes first, and the remainder uses the
+locale-aware comparator from ADR-078 so accented names sort where a Spanish
+reader expects rather than after Z.
+
+**Lineage showed a uuid prefix.** "Provino de: 32311e6d" — a batch's parent
+means something as `PE-79` and nothing as eight hex characters. This is the
+same defect ADR-071 fixed on `/my-nectar`, in a place that sweep did not reach.
+The lookup lives in the service beside the recursive lineage query rather than
+in the page: a page that queries Prisma directly is how the next one gets
+missed. A missing row still renders its id, so a dangling reference stays
+visible rather than blank.
+
+**The header asserted a quantity nobody had recorded.** With no QuantityEvent,
+`computeCurrentQuantity` returned `{ quantity: 0, unit: null }`, and the page
+rendered "Cantidad: 0 unidad desconocida".
+
+That is not merely awkward phrasing — it is an inferred fact, which CLAUDE.md
+§3 forbids in as many words: missing information must remain missing. It also
+collapsed a distinction worth keeping. A lot that has been fully consumed
+genuinely *is* zero, and the platform should be able to say so. `CurrentQuantity`
+now carries `recorded`, and the page says "Cantidad no registrada" when nothing
+has been weighed.
+
+**Verification.** Five tests over the services, then the page opened signed in
+to confirm all three render: "Cantidad no registrada", "Provino de: PE-79", and
+"Yo (Daniel Giráldez)" first in every dropdown on the page.
+
+The observer test uses a fixture named "ZZZ" deliberately, so it cannot pass by
+accident of alphabet, and asserts the list still contains everyone — reordering
+must not drop anyone.
+
+**Not addressed here**, and still open from the walkthrough: the five
+equal-weight actions offer no sense of which is the expected next step for a
+batch at a given stage, the photo upload sits above those actions, and several
+sections announce their own emptiness. Those are design decisions about what a
+batch page should lead with, not defects, and worth deciding deliberately.
