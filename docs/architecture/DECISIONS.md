@@ -5865,3 +5865,77 @@ and the fact that `listRoastSessions` silently truncates at 200 with no
 pagination and no indication — which is a list that lies to a roaster with a
 long history, not only a test problem. `npm run test:db reset` clears the
 accumulated rows in the meantime.
+
+---
+
+## ADR-085 — The test suite's residue in production, and a script to remove it
+
+**Context.** ADR-084 flagged `tests/traceability/roasting.test.ts` failing about
+one run in three, caused by RoastSessions accumulating in the local test
+database. Resetting that database was expected to clear them. It did not:
+79 came back with the restore, because they are in production.
+
+The survey is unambiguous. All 79 rows in `traceability.roast_session` match
+every residue criterion simultaneously — dated 2027, no transformation, no
+measurement, no roaster, no creator — and nothing references them:
+
+```
+roast_session: total=79 future=79 noTransformations=79
+               noMeasurements=79 noRoaster=79 MATCHING_ALL=79
+inbound refs:  lot_transformation=0  measurement=0
+Lots of type roast: 0
+```
+
+**There are no real roast sessions in production.** The table is entirely
+leakage from the era `tests/setup.ts` was written to end, when the suite ran
+against the live database. That guard stopped new residue; it did not remove
+what was already there, and nothing since has looked.
+
+The mechanism is the same fixture bug ADR-084 identified: the roasting test's
+`afterAll` deletes sessions `WHERE roaster_person_id IN (gabriel, maria)`, and
+§4.1 creates three naming no roaster. Their output lots and transformations
+were cleaned up — which is why zero `roast` lots exist — and the sessions were
+not.
+
+**Decision — a reviewable script, not a write from this session.** Same shape
+as ADR-066's `remove-demo-places`: a guarded single transaction in a `.sql`
+file, run by a `.sh` that reuses the backup tooling's connection handling, and
+an npm script. Destructive production writes are handed over to be read and
+run deliberately, never performed as a side effect of an investigation.
+
+**The guard is the point, not the delete.** The script refuses outright if any
+roast session fails the residue predicate. A real roast recorded between the
+survey and the run lands there and rolls the whole transaction back, rather
+than being swept up with the rest. That is what makes the script safe to keep
+and run later, when "all 79 are residue" may no longer be true.
+
+**Post-conditions compare rather than hardcode.** ADR-066's script asserted
+literal totals — `IF n <> 90 THEN RAISE EXCEPTION 'permission grants changed'`
+— and that number has since moved to 91, correctly, via ADR-081's clearance
+grant. A hardcoded post-condition goes stale the moment a legitimate change
+lands, and a stale guard is worse than none: it fails for the wrong reason and
+teaches the reader to bypass it. This script captures every total into a temp
+table inside the transaction and asserts equality before and after, which
+proves the same property without expiring.
+
+**Rehearsed on the restored copy, three ways:**
+
+1. **It removes what it should.** 89 residue rows locally (79 restored plus 10
+   from test runs since), all deleted; lots, people, projects, transformations
+   and measurements identical before and after.
+2. **It is re-runnable.** A second run on the empty set is a clean no-op —
+   `residue roast sessions to remove: 0`, `DELETE 0`, post-conditions hold.
+3. **It refuses a real roast.** With one genuine session inserted — a roaster
+   named, dated in the past — the script aborts with `ABORT: 1 roast session(s)
+   are not residue`, exits 3, and leaves that row untouched.
+
+The third is the one worth having rehearsed. A cleanup script that has only
+ever been run against data it was written for has not been tested at all.
+
+**Not run.** Production still holds the 79 rows. The sequence when it runs is
+ADR-066's: `npm run backup:db && npm run backup:verify -- <dir>`, then
+`npm run data:remove-orphan-roasts`, then re-survey and re-backup.
+
+**Still open, and tracked separately:** the fixture leak that produces this,
+and `listRoastSessions`'s silent `take: 200` with no pagination — a list that
+lies to a roaster with a long history, not merely a test problem.
