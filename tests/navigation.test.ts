@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { buildNavigation, buildSensoryTools } from "../lib/navigation";
+import { buildNavigation, buildSensoryTools, landingDestination, DEFAULT_LANDING } from "../lib/navigation";
 
 const hrefs = (granted: string[]) => buildNavigation(new Set(granted)).map((e) => e.href);
 const toolHrefs = (granted: string[]) => buildSensoryTools(new Set(granted)).map((e) => e.href);
@@ -86,5 +86,61 @@ describe("buildNavigation", () => {
     expect(hrefs([])).not.toContain("/partner");
     expect(hrefs([])).not.toContain("/sensory");
     expect(hrefs(["partner:upload_media"])).toContain("/partner");
+  });
+});
+
+describe("landingDestination — ADR-082", () => {
+  const landing = (granted: string[]) => landingDestination(new Set(granted));
+
+  const PARTNER = ["partner:submit_task", "partner:submit_data", "partner:upload_media"];
+  const RESEARCHER = ["research:view", "research:create_measurement"];
+  const APIARY_RECORDER = ["apiary:view", "colony_event:manage"];
+
+  it("puts an operator in front of the work, not in front of their own permissions", () => {
+    // The defect this replaces: every sign-in path sent everyone to
+    // /my-nectar, whose first two sections are the viewer's Assignments and
+    // resolved permission keys.
+    expect(landing(FARM_OPERATOR)).toBe("/lots");
+  });
+
+  it("sends each role somewhere it can actually work", () => {
+    expect(landing(PARTNER)).toBe("/partner");
+    expect(landing(RESEARCHER)).toBe("/research");
+    expect(landing(JUDGE)).toBe("/sensory");
+    expect(landing(HEAD_JUDGE)).toBe("/sensory");
+    expect(landing(APIARY_RECORDER)).toBe("/apiaries");
+  });
+
+  it("does not simply take the first matching nav entry", () => {
+    // The distinction that makes this its own list rather than a reuse of NAV:
+    // /partner precedes /lots in the menu, so a viewer holding both would land
+    // in the partner workspace if landing order were menu order. A Platform
+    // Admin holds every key here and belongs on operations.
+    expect(buildNavigation(new Set(PLATFORM_ADMIN)).map((e) => e.href).indexOf("/partner"))
+      .toBeLessThan(buildNavigation(new Set(PLATFORM_ADMIN)).map((e) => e.href).indexOf("/lots"));
+    expect(landing(PLATFORM_ADMIN)).toBe("/lots");
+  });
+
+  it("never lands anyone on administration", () => {
+    // NAV places /admin/users last because it is administration rather than a
+    // place work happens. Arriving there would contradict that outright.
+    expect(landing(PLATFORM_ADMIN)).not.toBe("/admin/users");
+    expect(landing(["platform:manage_permissions", "platform:manage_users"])).toBe(DEFAULT_LANDING);
+  });
+
+  it("falls back to the account page for a viewer with no operational grant", () => {
+    // A registered customer: orders and bookings live there and nowhere else.
+    expect(landing([])).toBe(DEFAULT_LANDING);
+    expect(landing(["classification:clear_internal"])).toBe(DEFAULT_LANDING);
+  });
+
+  it("only ever returns a destination the same viewer is offered in the nav", () => {
+    // The invariant that keeps the two lists from drifting: landing somewhere
+    // absent from your own menu is how a page becomes unreachable again after
+    // the first navigation.
+    for (const granted of [FARM_OPERATOR, PARTNER, RESEARCHER, JUDGE, HEAD_JUDGE, APIARY_RECORDER, PLATFORM_ADMIN, []]) {
+      const nav = buildNavigation(new Set(granted)).map((e) => e.href);
+      expect(nav).toContain(landing(granted));
+    }
   });
 });

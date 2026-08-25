@@ -79,8 +79,28 @@ export async function signUpAction(_prevState: FormActionState, formData: FormDa
     sourceInterface: "app.signup",
   });
 
-  await signIn("credentials", { email, password, redirectTo: "/my-nectar" });
+  await signIn("credentials", { email, password, redirectTo: "/start" });
   return {};
+}
+
+/**
+ * The destination a bounced request asked to return to, or null — ADR-082.
+ *
+ * proxy.ts sets `callbackUrl` when it turns an unauthenticated request away,
+ * and nothing had ever read it: sign-in went to a hardcoded `/my-nectar`,
+ * which happened to be the only proxied prefix, so the promise looked kept.
+ * Sending everyone to `/start` instead would have made that coincidence
+ * visible as a bug, so the parameter is now honoured for real.
+ *
+ * Only a same-origin absolute path is accepted. A value beginning `//` or
+ * containing a scheme is an open redirect — the classic way a login form
+ * becomes a phishing hop — so anything that is not a single-slash-prefixed
+ * path is discarded rather than sanitised.
+ */
+function safeCallbackUrl(raw: FormDataEntryValue | null): string | null {
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
+  return raw;
 }
 
 export async function loginAction(_prevState: FormActionState, formData: FormData): Promise<FormActionState> {
@@ -118,7 +138,10 @@ export async function loginAction(_prevState: FormActionState, formData: FormDat
     await signIn("credentials", {
       email: parsed.data.email,
       password: parsed.data.password,
-      redirectTo: "/my-nectar",
+      // `/start` resolves the right destination from the account's permissions
+      // one request later; an explicit callbackUrl outranks it, because the
+      // viewer already said where they were going.
+      redirectTo: safeCallbackUrl(formData.get("callbackUrl")) ?? "/start",
     });
   } catch (error) {
     if (error instanceof AuthError) {
@@ -149,5 +172,5 @@ export async function logoutAction(): Promise<void> {
  * request regardless.
  */
 export async function signInWithGoogleAction(): Promise<void> {
-  await signIn("google", { redirectTo: "/my-nectar" });
+  await signIn("google", { redirectTo: "/start" });
 }

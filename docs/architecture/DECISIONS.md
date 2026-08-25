@@ -5614,3 +5614,96 @@ session's name/status to a Farm Operator looking at their own sample, and the
 ticket's framing gates on whether a result was computed rather than on the
 session's classification. Left as it stands, and still a one-line change if
 that turns out to be the wrong call.
+
+---
+
+## ADR-082 — Signing in lands you in your work, not in a reading of your own permissions
+
+**Context.** All three sign-in paths — credentials, signup, Google — passed
+`redirectTo: "/my-nectar"`. That page opens on the viewer's Assignments and
+then their thirty-eight resolved permission keys grouped by resource. It is a
+reasonable account page and a poor place to arrive: an operator signing in on a
+phone at a beneficio wants the lots that are fermenting, not an inventory of
+their own access.
+
+The operator's work page already existed. `/lots` leads with
+`getActiveOperations` — fermentation and drying runs under way, lots gone
+unmeasured past the staleness threshold, samples awaiting sensory — all scoped
+to what the viewer's Assignments actually reach. Nothing needed building. The
+sign-in flow simply never went there.
+
+**Decision 1 — a landing priority list, deliberately not the nav order.**
+`landingDestination` in `lib/navigation.ts` sits beside `buildNavigation` and
+takes the same `permissionKeysAnywhere` set, for the same reason: a farm
+operator's `lot:manage` lives on a project scope that a platform-scoped
+resolution cannot see, and choosing what to *offer* is a wider question than
+choosing what to *allow*.
+
+The order differs from `NAV` on purpose. `NAV` is ordered for scanning a menu
+and puts `/partner` before `/lots`; landing is ordered by how likely a section
+is to be where the holder's work happens. That only matters for someone holding
+several keys — a Platform Admin holds every one of them, and belongs on
+operations rather than on whichever menu item matched first. A test asserts
+both facts together: that `/partner` precedes `/lots` in the menu, and that an
+admin still lands on `/lots`.
+
+`/admin/users` is absent from the list entirely, for the reason `NAV` already
+gives for placing it last — it is administration, not a place work happens.
+Nobody should *arrive* there. `/my-nectar` remains the fallback and is the
+right one: a registered customer with no Assignment has orders and bookings
+there and nothing anywhere else.
+
+An invariant test closes the loop the two lists could otherwise drift through:
+for every profile, the landing destination must appear in that same viewer's
+navigation. Landing somewhere absent from your own menu is how a page becomes
+unreachable the moment you navigate away from it.
+
+**Decision 2 — `/start` resolves the destination, and renders nothing.** The
+destination depends on resolved permissions, which do not exist when `signIn()`
+is called: the password has not been checked yet, and for Google the Person may
+be about to be created by the `signIn` callback. So `redirectTo` cannot name
+the real destination. `/start` resolves it one request later, when there is a
+session to ask, and redirects. It returns no markup — a second landing page
+would be a second thing to keep consistent with the first. Reached without a
+session it redirects to `/login`, per SECURITY.md §2's rule that every server
+entry point re-checks rather than trusting how it was reached.
+
+**Decision 3 — `callbackUrl` is honoured, because this change would have
+broken it.** `proxy.ts` sets `callbackUrl` when it turns an unauthenticated
+request away, and nothing had ever read it. Sign-in went to a hardcoded
+`/my-nectar`, which is also the only proxied prefix, so the promise looked kept
+by coincidence. Sending everyone to `/start` would have turned that coincidence
+into a visible bug, so `loginAction` now reads the parameter and `LoginForm`
+carries it through.
+
+Only a same-origin absolute path is accepted. A value beginning `//`, or
+carrying a scheme, is discarded rather than sanitised — that is the classic
+route by which a login form becomes a phishing hop, and rewriting a hostile
+value is a worse habit than dropping it.
+
+**Decision 4 — `/my-nectar` keeps both sections, at the bottom.** "Which roles
+do I hold, and where" is a real question, and for a non-admin this page is the
+only place it is answered. It is simply not the question anyone arrives with.
+Orders, bookings and sensory history now lead; Assignments and resolved
+permissions follow.
+
+**Verification.** Six new tests over the pure function, and the flow walked
+signed in: `/start` redirects to `/lots`, which renders Panel del Operador with
+the real batch list, and `/my-nectar` now opens on Pedidos rather than
+Asignaciones. 479 tests pass, no console errors.
+
+Worth recording honestly: for the product owner today, Operaciones Activas
+renders "Nada en curso ahora mismo", because nothing is currently fermenting or
+drying. Landing there is still right — the page answers the question rather
+than answering a different one — but the win is smaller than it will be in
+harvest season, and this ADR should not be read as claiming otherwise.
+
+**Not addressed here.** `16_ADAPTIVE_OPERATOR_WORKSPACE_PREAMBLE.md` remains
+the destination: navigation and landing derived from context, not from
+permissions alone. `lib/navigation.ts` already describes itself as the cheap
+intermediate step that document explicitly allows, and this is the same step
+applied to arrival. It is gated on v1 scope being settled, and still is.
+
+Also unbuilt: no page anywhere reads `Task.assignedToUserAccountId`, so a task
+assigned to a specific person is invisible unless they open the project that
+holds it. That is a genuine gap this ADR does not close.

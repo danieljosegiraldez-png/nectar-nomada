@@ -92,56 +92,6 @@ export default async function MyNectarPage() {
       <p className="nn-muted">{userAccount.person.email}</p>
 
       <section className="nn-section">
-        <h2>{t("assignmentsHeading")}</h2>
-        {userAccount.assignments.length === 0 ? (
-          <p className="nn-muted">{t("noAssignments")}</p>
-        ) : (
-          <ul>
-            {userAccount.assignments.map((a) => {
-              // Name the thing the role applies to. Falling back to the id
-              // only when the referenced record cannot be found keeps a
-              // dangling scope visible rather than silently blank.
-              const target = a.scope.scopeRefId
-                ? (scopeNames.get(a.scope.scopeRefId) ?? a.scope.scopeRefId)
-                : null;
-              return (
-                <li key={a.id}>
-                  <strong>{a.roleProfile.name}</strong>
-                  {" — "}
-                  {target ?? t("assignmentScope", { scope: a.scope.scopeType })}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      <section className="nn-section">
-        <h2>{t("permissionsHeading")}</h2>
-        {platformPermissions.size === 0 ? (
-          <p className="nn-muted">{t("noPermissions")}</p>
-        ) : (
-          <>
-            <p className="nn-muted">
-              {t("permissionsSummary", {
-                count: platformPermissions.size,
-                areas: groupedPermissions.length,
-              })}
-            </p>
-            <ul>
-              {groupedPermissions.map(([resource, actions]) => (
-                <li key={resource}>
-                  <strong>{resource}</strong>
-                  {" — "}
-                  {actions.join(", ")}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
-
-      <section className="nn-section">
         <h2>{t("ordersHeading")}</h2>
         {orders.length === 0 ? (
           <p className="nn-muted">{t("noOrders")}</p>
@@ -224,6 +174,63 @@ export default async function MyNectarPage() {
           </ul>
         )}
       </section>
+      {/* Last, not first — ADR-082.
+
+          These two sections opened the page, so signing in showed you a
+          reading of your own access before anything you had actually done.
+          They are worth keeping: "which roles do I hold, and where" is a real
+          question, and the only place it is answered for a non-admin. It is
+          just not the question anyone arrives with. */}
+      <section className="nn-section">
+        <h2>{t("assignmentsHeading")}</h2>
+        {userAccount.assignments.length === 0 ? (
+          <p className="nn-muted">{t("noAssignments")}</p>
+        ) : (
+          <ul>
+            {userAccount.assignments.map((a) => {
+              // Name the thing the role applies to. Falling back to the id
+              // only when the referenced record cannot be found keeps a
+              // dangling scope visible rather than silently blank.
+              const target = a.scope.scopeRefId
+                ? (scopeNames.get(a.scope.scopeRefId) ?? a.scope.scopeRefId)
+                : null;
+              return (
+                <li key={a.id}>
+                  <strong>{a.roleProfile.name}</strong>
+                  {" — "}
+                  {target ?? t("assignmentScope", { scope: a.scope.scopeType })}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="nn-section">
+        <h2>{t("permissionsHeading")}</h2>
+        {platformPermissions.size === 0 ? (
+          <p className="nn-muted">{t("noPermissions")}</p>
+        ) : (
+          <>
+            <p className="nn-muted">
+              {t("permissionsSummary", {
+                count: platformPermissions.size,
+                areas: groupedPermissions.length,
+              })}
+            </p>
+            <ul>
+              {groupedPermissions.map(([resource, actions]) => (
+                <li key={resource}>
+                  <strong>{resource}</strong>
+                  {" — "}
+                  {actions.join(", ")}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
     </div>
   );
 }
