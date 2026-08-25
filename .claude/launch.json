@@ -2,10 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "nectar-nomada-dev",
+      "name": "nectar-nomada-dev-local",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 3000
+      "runtimeArgs": [
+        "run",
+        "dev:local"
+      ],
+      "port": 3017
     }
   ]
 }

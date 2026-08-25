@@ -5779,3 +5779,89 @@ would have made both of those pointless.
 
 **Verification.** Seven new tests through the real callback, not a copy of its
 logic. 486 tests pass.
+
+---
+
+## ADR-084 — `npm run dev` refuses to start against production
+
+**Context.** `dev` was plain `next dev`. `next dev` loads `.env`. `.env` holds
+the production `DATABASE_URL`. So the default way to run this application
+locally talked to production Neon, and nothing in the running app said so —
+the pages look identical whichever database is behind them.
+
+That is not a hypothetical clone-and-run problem. Both launch configurations on
+the product owner's own machine reached it: the repository's
+`.claude/launch.json` ran `npm run dev` on port 3000, and
+`~/.claude/nectar-dev.sh` did the same. Only the second local config
+(`nectar-dev-local.sh`) exported a local URL first, and it does so with a
+comment explaining that `dotenv` will not override an existing variable —
+which is precisely the knowledge a person has to already have for the default
+to be safe.
+
+Every write a dev session makes is a real write. Creating a batch, recording a
+transformation, submitting an assessment, signing in — all of it lands in the
+live research record, indistinguishably from real work.
+
+`tests/setup.ts` already refuses exactly this, and the reasoning it gives is
+the same reasoning: the suite was found writing ~244 audit rows per run into
+production, and it now stops rather than guess. Dev had no equivalent.
+
+**Decision 1 — guard the script, not just the launch config.** Fixing
+`.claude/launch.json` alone would leave `npm run dev` typed directly, and
+`~/.claude/nectar-dev.sh`, both still pointing at production. `dev` now runs
+`scripts/dev-guard.ts` first, which refuses a non-local `DATABASE_URL` and
+exits non-zero before `next dev` starts.
+
+**Decision 2 — an explicit escape hatch.** `ALLOW_REMOTE_DEV_DB=1` allows it,
+mirroring `ALLOW_REMOTE_TEST_DB=1`. Reading production data through the real UI
+is a legitimate thing to want, and a guard with no way past it gets deleted
+rather than respected. It should be a sentence someone typed, not the default.
+
+**Decision 3 — the rule lives in one place.** `lib/databaseHost.ts` holds
+`hostOf` and `isLocalDatabaseUrl`; `tests/setup.ts` now imports them instead of
+carrying its own copy. Two hand-written copies of a safety check is how the two
+drift into disagreeing about what "local" means — the same argument ADR-081
+made for `clearsClassification`.
+
+`isLocalDatabaseUrl` returns false for an absent or unparseable URL,
+deliberately. A guard that cannot tell where it is pointing must refuse: "I
+could not read this" is not evidence of locality.
+
+**A latent bug the extraction surfaced.** Writing the first direct test of that
+rule showed `new URL("postgresql://u@[::1]:5432/db").hostname` returns
+`"[::1]"`, brackets included, while `LOCAL_HOSTS` holds the plain `"::1"`. The
+two could never be equal, so the loopback address the rule most obviously means
+to accept was classified as remote, and `tests/setup.ts` would have refused a
+local IPv6 cluster while telling the reader it was remote. `hostOf` now strips
+the brackets. The bug had sat unnoticed because nothing ever asserted on the
+predicate directly.
+
+**Decision 4 — `dev:local` routes through `dev`.** It exports the local URL and
+then calls `npm run dev`, so the guard covers both entry points rather than
+only the unqualified one. `.claude/launch.json` points at it.
+
+**Verification.** The guard exercised in all three directions — refuses the
+production URL from `.env` naming the host it refused, passes a local URL,
+passes with the escape hatch — plus `npm run dev` itself refusing end to end.
+Seven tests over the shared predicate, including that a remote host merely
+*containing* "localhost" is rejected, since substring matching is the obvious
+wrong implementation and would pass every other case. The existing local dev
+workflow still starts, now through the guard, and `/start` still resolves to
+`/lots` signed in.
+
+**Not addressed here — a flaky test this work uncovered.** Running the suite
+repeatedly to check the change showed `tests/traceability/roasting.test.ts`
+failing roughly one run in three, on §4.1's "expected 2 to be 3".
+
+The cause is not this change and not timing. `roasting.test.ts`'s `afterAll`
+deletes RoastSessions `where roasterPersonId in [gabriel, maria]`, but §4.1
+creates three sessions with no roaster at all, so those leak on every run. 219
+have now accumulated in the local test database, every one dated 2027.
+`listRoastSessions` takes 200 ordered by `startedAt desc`, so past that
+threshold the test stops finding its own rows.
+
+Two separate things, deliberately left for their own change: the fixture leak,
+and the fact that `listRoastSessions` silently truncates at 200 with no
+pagination and no indication — which is a list that lies to a roaster with a
+long history, not only a test problem. `npm run test:db reset` clears the
+accumulated rows in the meantime.
