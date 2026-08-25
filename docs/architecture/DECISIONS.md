@@ -5503,3 +5503,114 @@ equal-weight actions offer no sense of which is the expected next step for a
 batch at a given stage, the photo upload sits above those actions, and several
 sections announce their own emptiness. Those are design decisions about what a
 batch page should lead with, not defects, and worth deciding deliberately.
+
+---
+
+## ADR-081 — Sensory enforces the classification gate, and the judge gets the clearance that makes it a restriction
+
+**Context.** ADR-079 found the Partner Workspace resolving permission keys
+directly and never applying the classification half of the gate. The obvious
+follow-up was to ask who else does that. Three callers of
+`resolvedPermissionKeys` sit outside `lib/rbac`: Partner (fixed), `/my-nectar`
+(platform scope, no record, correct as is), and `lib/sensory/service.ts`.
+
+`SensorySession` has carried a `classification` column since it was added,
+defaulting to `internal`, with this comment sitting on it:
+
+> CLAUDE.md §10 classification axis — same independent AND-gate as every other
+> module. Sensory data defaults internal (real judging results are rarely
+> public until formally released).
+
+Nothing read it. Every gate in that file resolved permission keys and stopped,
+so a judge assigned to a `confidential` session opened it on
+`sensory:submit_assessment` alone. This is the module CLAUDE.md §29 singles
+out — "never reveal sample identity to a judge during blind evaluation" — and
+while `blind_mapping:view` still held that specific line, the sensitivity axis
+beside it was inert.
+
+**Decision 1 — the gate is applied once, where the keys are resolved.** Rather
+than adding a check to each of the five entry points, `grantedKeysForSession`
+now loads the session alongside the permission resolution and refuses before
+returning. A call site cannot obtain keys without the gate having run. A
+session that cannot be loaded is refused rather than treated as public, the
+same rule `scopeClassification.ts` already states for a missing Project or
+Location: a stale id must not become the bypass. The refusal reuses
+`no_session_access` on purpose — "you lack clearance" and "you have no
+assignment here" are different facts, and which one applies is itself
+information about the session.
+
+**Decision 2 — Sensory Judge gains `classification:clear_internal`.** Every
+session defaults to `internal` and the profile held no clearance at all, so
+enforcing without this would have denied a judge every session they were
+assigned to. That is ADR-063's finding for Farm Operator and ADR-069's for the
+colony event recorder, a third time: a gate enforced against a profile with no
+clearance makes a role useless rather than restrictive.
+
+The exclusion had a stated reason — that withholding `clear_*` kept a judge's
+resolved permissions away from the blind-code mapping. RBAC.md §7 does not
+describe that mechanism. It puts the mapping in its own table behind
+`blind_mapping:view`, "so a Judge's resolved permission set genuinely cannot
+query the mapping", which remains true and is the lock that was doing the work.
+Using absence-of-clearance as a second, undocumented lock cost the clearance
+axis its own purpose. Granting `clear_internal` and enforcing is a **narrowing**
+against the previous behaviour, where the gate applied nowhere and a judge
+reached `confidential` and `trade_secret` sessions too.
+
+**Decision 3 — the session list is gated on both halves, like the open path.**
+`getJudgeSessions` filtered on the Assignment alone, so a session-scoped
+profile holding no `sensory:*` permission saw its sessions listed and hit
+`no_session_access` on opening one — the same list/open divergence ADR-079
+found in Partner. It now applies the identical two conditions
+`getSessionForJudge` gates on. A list that shows what cannot be opened is its
+own defect; a list carrying the *names* of sessions above the reader's
+clearance is the leak.
+
+**Decision 4 — sensory history is gated too, though the rows are the caller's
+own.** `getAssessmentHistoryForEvaluator` returns only assessments the caller
+authored, and ownership was treated as sufficient. It is not: each row carries
+the session and protocol names alongside, and those belong to the session's
+classification rather than to the evaluator. Without this, "My Tastings" is the
+way around the gate everything else applies, and a session reclassified upward
+keeps surfacing its name to whoever once judged it.
+
+The tradeoff is real and worth naming: a judge who loses clearance loses
+entries from their own history view. The assessment is untouched — stored,
+immutable, auditable, and back in the list the moment clearance returns. What
+the filter withholds is the reading, never the record.
+
+**`clearsClassification` moved to `lib/rbac/scopeClassification.ts`.** It was
+private to `lib/partner/workspace.ts`. Two modules independently omitting the
+same rule is the argument for it living beside the other classification
+helpers, where the second caller borrows it instead of re-deriving it — the
+reasoning that file's own header already gives.
+
+**Verification.** Fourteen tests. Every case in
+`tests/sensory/classificationGate.test.ts` is a pair in which only the
+session's classification changes, so a gate that reverted to a constant would
+show up as refusal-cases passing, and a gate that began refusing everything
+would show up in the paired allow-cases. Mutating `clearsClassification` to
+`return true` fails six of them plus ADR-079's three, which is the evidence
+that the classification is what refuses rather than something incidental. The
+roles are the real seeded profiles, so the tests fail if Sensory Judge's or
+Sensory Head Judge's clearances ever widen past `internal`.
+
+`tests/rbac/resolve.test.ts` carried an assertion that a judge holds no
+clearance at all. That test encoded the decision this ADR reverses, so it was
+replaced rather than deleted: one case asserts the judge now reaches `internal`,
+and a second asserts what must not have broken — `blind_mapping:view` is
+unreachable at every classification, and `confidential` and `trade_secret`
+sessions are closed.
+
+**Live impact today: none.** The database holds zero SensorySessions and one
+active Sensory Judge assignment, so this closes the gate before the module
+carries real judging data rather than after. The catalog grant reaches
+production through the seed on the next deploy, which is additive and
+idempotent.
+
+**Not addressed here.** `getSensoryLinkageForSamples` in
+`lib/traceability/lots.ts` still skips the check deliberately, with its
+reasoning recorded in place: it returns only a computed aggregate and the
+session's name/status to a Farm Operator looking at their own sample, and the
+ticket's framing gates on whether a result was computed rather than on the
+session's classification. Left as it stands, and still a one-line change if
+that turns out to be the wrong call.

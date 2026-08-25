@@ -16,6 +16,7 @@
  */
 import { prisma } from "../db";
 import { CLASSIFICATION_NOT_APPLICABLE } from "./resolve";
+import { permissionKey } from "./types";
 import type { ClassificationLevel } from "../../generated/prisma/client";
 import type { ScopeTarget } from "./types";
 
@@ -61,4 +62,23 @@ export function classificationForTarget(
 ): ClassificationLevel | null {
   if (target.scopeRefId === null) return CLASSIFICATION_NOT_APPLICABLE;
   return classifications.get(target.scopeRefId) ?? null;
+}
+
+/**
+ * The classification half of the AND-gate, for callers that resolve permission
+ * keys directly instead of going through `can()` — ADR-081.
+ *
+ * `can()` applies this itself. A service that calls `resolvedPermissionKeys`
+ * to build several affordances from one resolution (Partner Workspace, Sensory)
+ * gets the action half for free and silently skips the classification half,
+ * which is how ADR-079's partner leak and this one both happened. Living here
+ * rather than in one of those modules means the second caller borrows the rule
+ * instead of re-deriving it — the same reasoning as the header above.
+ *
+ * `public` clears unconditionally: it is the level that means "no clearance
+ * required", not a level nobody holds.
+ */
+export function clearsClassification(grantedKeys: ReadonlySet<string>, classification: string): boolean {
+  if (classification === "public") return true;
+  return grantedKeys.has(permissionKey("classification", `clear_${classification}`));
 }

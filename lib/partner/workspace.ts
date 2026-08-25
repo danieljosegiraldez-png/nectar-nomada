@@ -23,25 +23,17 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
 import { resolvedPermissionKeys } from "../rbac/service";
+// The classification half of the gate — ADR-079 found it missing here, then
+// ADR-081 found the same omission in Sensory, so the rule now lives beside
+// the other classification helpers rather than in whichever module first
+// needed it. A Project is a record with a classification like any other, and
+// its name and description are the sensitive parts.
+import { clearsClassification } from "../rbac/scopeClassification";
 import { permissionKey } from "../rbac/types";
 import type { ScopeTarget } from "../rbac/types";
 import { objectStorageProvider } from "../integrations/storage";
 
 export class PartnerAccessError extends Error {}
-
-/**
- * The classification half of the gate, on its own — ADR-079.
- *
- * A Project is a record with a classification like any other, and its name and
- * description are the sensitive parts: "Sociedad Huerbsch. Daniel Giráldez como
- * asesor y posible socio (en negociación)" is not something an uncleared
- * partner should read. Tasks, submissions and assets were filtered from the
- * start; the Project carrying them was not.
- */
-function clearsClassification(grantedKeys: Set<string>, classification: string): boolean {
-  if (classification === "public") return true;
-  return grantedKeys.has(permissionKey("classification", `clear_${classification}`));
-}
 
 function isVisible(grantedKeys: Set<string>, actionKey: string, classification: string): boolean {
   if (!grantedKeys.has(actionKey)) return false;
