@@ -5707,3 +5707,75 @@ applied to arrival. It is gated on v1 scope being settled, and still is.
 Also unbuilt: no page anywhere reads `Task.assignedToUserAccountId`, so a task
 assigned to a specific person is invisible unless they open the project that
 holds it. That is a genuine gap this ADR does not close.
+
+---
+
+## ADR-083 — An invitation that can be accepted
+
+**Context.** A count of who can actually use the platform returned one: the
+product owner. Thirteen of fourteen UserAccounts sat at `status = invited` with
+no password — including Bob Huerbsch and Sherry Huerbsch, holding ten active
+Assignments each, and Chini, Roberto and Eliecer holding two apiece. Every
+Assignment resolved correctly. None of it was reachable by the person it named.
+
+The cause was one line in the Google `signIn` callback:
+
+```ts
+// An account someone has disabled must not be revived by signing in
+// through a second provider — status is the control that stands alone
+if (userAccount.status !== "active") return false;
+```
+
+The comment is about `suspended` and `deactivated`, and it is right about them.
+But the check lumps `invited` in with the deliberate revocations, and `invited`
+is not a revocation — it is a state nobody has acted on yet. The only route out
+of it was `scripts/set-password.ts`, a TTY script run per person, which
+`authorize()` reaches by looking the account up by email. Eleven of these
+Persons carry no email address at all.
+
+So the platform issued invitations and then refused every attempt to accept
+one.
+
+**Decision — `invited` activates on a Google sign-in that establishes the
+identity; `suspended` and `deactivated` do not.** Reaching that line means one
+of two things happened: an `ExternalIdentity` already links this Google subject
+to the account, or the address Google verified matched a Person on record. Both
+establish that whoever holds the mailbox is the person who was invited, which
+is what accepting an invitation means. The account is set `active`, its
+`emailVerifiedAt` filled if empty, and an AuditEvent written naming the actor
+as the account itself — nobody administered this; the invited person accepted
+it (CLAUDE.md §35).
+
+The distinction is the whole decision, so it is tested from both sides. A
+mutation that widens the condition from `=== "invited"` to `!== "active"` fails
+three tests: the suspended case, the deactivated case, and the pre-existing
+ADR-075 assertion that a disabled account stays disabled.
+
+**Unverified addresses are untouched.** ADR-075 already refuses to match a
+Person on an address Google has not verified, and that path now has its own
+test here: an invited account approached with `email_verified: false` stays
+`invited`, and the callback creates a separate emailless Person instead —
+exactly as it did before. Anyone can type an address into a Google profile;
+only verification proves the mailbox, and accepting someone else's invitation
+is precisely the harm that would follow from trusting it.
+
+**Credentials sign-in is deliberately unchanged.** `authorize()` still refuses
+an `invited` account. An invited account has no password to check, and
+`set-password.ts` is what both sets one and activates. Accepting an invitation
+should be something the invited person does, never something reachable by
+guessing at a password.
+
+**What this does not fix, and it is the larger half.** This makes acceptance
+*possible*; it does not give most people anything to accept with. Only three
+Persons carry an email address — Daniel, José and Nathy — and an account with
+no email cannot be matched by any provider. Two of those three (José, Nathy)
+also hold zero Assignments, so they would sign in successfully and reach
+nothing.
+
+Turning the remaining accounts into working ones is data the product owner has
+to supply, not code: an address per person (`npm run people:set-email`) and a
+role per person (`/admin/users`, ADR-074). This ADR removes the blocker that
+would have made both of those pointless.
+
+**Verification.** Seven new tests through the real callback, not a copy of its
+logic. 486 tests pass.

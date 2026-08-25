@@ -2,6 +2,7 @@ import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { prisma } from "../db";
+import { recordAuditEvent } from "../audit";
 import { verifyPassword } from "./password";
 import { loginSchema } from "../validation/auth";
 
@@ -164,9 +165,50 @@ export const authConfig: NextAuthConfig = {
         });
       }
 
+      // Accepting the invitation — ADR-083.
+      //
+      // `invited` is not a disabled account. It is an account nobody has
+      // signed into yet, and reaching this line is exactly what accepting the
+      // invitation looks like: either an ExternalIdentity already links this
+      // Google subject, or the address Google verified matched a Person on
+      // record. Both paths establish that the human holding this mailbox is
+      // the person who was invited.
+      //
+      // Until this existed, `invited` was refused here along with the
+      // deliberate revocations, and the only route out of it was the TTY
+      // password script run per person. Thirteen of fourteen accounts sat in
+      // that state holding real Assignments they could not reach — an
+      // invitation that could never be accepted.
+      if (userAccount.status === "invited") {
+        const activated = await prisma.userAccount.update({
+          where: { id: userAccount.id },
+          data: {
+            status: "active",
+            emailVerifiedAt: userAccount.emailVerifiedAt ?? new Date(),
+            lastLoginAt: new Date(),
+          },
+        });
+        // A status change is exactly what CLAUDE.md §35 requires an audit row
+        // for. The actor is the account itself: nobody administered this, the
+        // invited person accepted it.
+        await recordAuditEvent({
+          actorUserAccountId: activated.id,
+          operation: "user_account.activate",
+          entityType: "user_account",
+          entityId: activated.id,
+          before: { status: userAccount.status },
+          after: { status: activated.status, authProvider: activated.authProvider },
+          reason: "invitation_accepted_via_google",
+          sourceInterface: "auth.google",
+        });
+        userAccount = activated;
+      }
+
       // An account someone has disabled must not be revived by signing in
       // through a second provider — status is the control that stands alone
       // (the same property tests/auth/setPassword.test.ts pins for passwords).
+      // `suspended` and `deactivated` are decisions someone made; only
+      // `invited` above is a state nobody has acted on yet.
       if (userAccount.status !== "active") return false;
 
       user.id = userAccount.id;
