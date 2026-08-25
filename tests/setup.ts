@@ -1,4 +1,7 @@
 import "dotenv/config";
+// Shared with scripts/dev-guard.ts so both guards agree on what "local" means
+// (ADR-084).
+import { hostOf, isLocalDatabaseUrl } from "../lib/databaseHost";
 
 /**
  * Decides which database the suite talks to, and refuses to guess.
@@ -21,19 +24,6 @@ import "dotenv/config";
  * quietly writing to production.
  */
 
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
-
-function hostOf(raw: string | undefined): string | null {
-  const value = (raw ?? "").trim();
-  if (!value) return null;
-  try {
-    // A unix-socket URL has an empty hostname, which is local by definition.
-    return new URL(value).hostname;
-  } catch {
-    return null;
-  }
-}
-
 const testUrl = (process.env.TEST_DATABASE_URL ?? "").trim();
 if (testUrl) {
   process.env.DATABASE_URL = testUrl;
@@ -45,9 +35,8 @@ if (testUrl) {
 }
 
 const host = hostOf(process.env.DATABASE_URL);
-const isLocal = host !== null && (host === "" || LOCAL_HOSTS.has(host));
 
-if (!isLocal && process.env.ALLOW_REMOTE_TEST_DB !== "1") {
+if (!isLocalDatabaseUrl(process.env.DATABASE_URL) && process.env.ALLOW_REMOTE_TEST_DB !== "1") {
   throw new Error(
     [
       "",

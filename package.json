@@ -7,7 +7,8 @@
     "doc": "docs"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "tsx scripts/dev-guard.ts && next dev",
+    "dev:local": "DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test PORT=3017 AUTH_URL=http://localhost:3017 AUTH_TRUST_HOST=1 npm run dev",
     "build": "bash scripts/vercel-build.sh",
     "start": "next start",
     "lint": "eslint .",
