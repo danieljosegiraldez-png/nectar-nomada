@@ -372,12 +372,31 @@ describe("classification is an independent AND-gate", () => {
     expect(can(recorder, "manage", "apiary", target, "public")).toBe(false);
   });
 
-  it("a judge still holds no clearance at all — the blind-judging exclusion stands", () => {
-    // Sensory Judge deliberately excludes classification:clear_* so a judge's
-    // resolved permissions cannot reach the blind-code mapping (RBAC.md §7).
+  it("a judge can reach the internal sessions they are assigned to — ADR-081", () => {
+    // Every SensorySession defaults to `internal`. This profile previously
+    // held no clearance at all, which was invisible while lib/sensory/service
+    // .ts never applied the gate; enforcing it without this grant would have
+    // denied a judge every session they were assigned to, exactly as ADR-063
+    // found for Farm Operator and Project Viewer.
     const judge = [assignmentFor("Sensory Judge", { scopeType: "session", scopeRefId: SESSION_1 })];
     const sessionTarget: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
     expect(can(judge, "submit_assessment", "sensory", sessionTarget, "public")).toBe(true);
-    expect(can(judge, "submit_assessment", "sensory", sessionTarget, "internal")).toBe(false);
+    expect(can(judge, "submit_assessment", "sensory", sessionTarget, "internal")).toBe(true);
+  });
+
+  it("the clearance stops at internal, and never reaches the blind mapping — RBAC.md §7", () => {
+    // The two halves of what ADR-081 must not have broken. §7's mechanism is
+    // the mapping's own table behind blind_mapping:view — "a Judge's resolved
+    // permission set genuinely cannot query the mapping" — and that is
+    // untouched by any clearance grant, at any classification. The second
+    // half is the narrowing the grant bought: a session restricted above
+    // internal is now closed to the panel, where before the gate went
+    // unapplied and every level was reachable.
+    const judge = [assignmentFor("Sensory Judge", { scopeType: "session", scopeRefId: SESSION_1 })];
+    const sessionTarget: ScopeTarget = { scopeType: "session", scopeRefId: SESSION_1 };
+    expect(can(judge, "view", "blind_mapping", sessionTarget, "public")).toBe(false);
+    expect(can(judge, "view", "blind_mapping", sessionTarget, "internal")).toBe(false);
+    expect(can(judge, "submit_assessment", "sensory", sessionTarget, "confidential")).toBe(false);
+    expect(can(judge, "submit_assessment", "sensory", sessionTarget, "trade_secret")).toBe(false);
   });
 });

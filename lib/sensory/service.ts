@@ -15,6 +15,7 @@
 import { prisma } from "../db";
 import { Prisma } from "../../generated/prisma/client";
 import { resolvedPermissionKeys } from "../rbac/service";
+import { clearsClassification } from "../rbac/scopeClassification";
 import { permissionKey } from "../rbac/types";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
@@ -34,12 +35,52 @@ export class SensoryPurposeNotDeclaredError extends Error {
   }
 }
 
+/**
+ * Permission keys for one session, refusing outright unless the caller clears
+ * that session's own classification — ADR-081.
+ *
+ * Every gate in this file used to resolve permission keys and stop there.
+ * `SensorySession.classification` has existed since the column was added, with
+ * a comment on it promising "the same independent AND-gate as every other
+ * module", and nothing read it: a judge assigned to a `confidential` session
+ * opened it on the strength of `sensory:submit_assessment` alone. The gate is
+ * applied here, once, so no call site can resolve keys without it.
+ *
+ * A session that cannot be loaded is refused rather than treated as public —
+ * the same rule scopeClassification.ts states for a missing Project or
+ * Location, and for the same reason: a stale id must not become a bypass.
+ *
+ * The refusal reuses `no_session_access` deliberately. "You lack clearance"
+ * and "you have no assignment here" are different facts, and which one applies
+ * is itself information about the session.
+ */
 async function grantedKeysForSession(userAccountId: string, sessionId: string): Promise<Set<string>> {
   const target: ScopeTarget = { scopeType: "session", scopeRefId: sessionId };
-  return resolvedPermissionKeys(userAccountId, target);
+  const [grantedKeys, session] = await Promise.all([
+    resolvedPermissionKeys(userAccountId, target),
+    prisma.sensorySession.findUnique({ where: { id: sessionId }, select: { classification: true } }),
+  ]);
+  if (!session) throw new SensoryAccessError("no_session_access");
+  if (!clearsClassification(grantedKeys, session.classification)) {
+    throw new SensoryAccessError("no_session_access");
+  }
+  return grantedKeys;
 }
 
-/** Sessions this user has an active session-scoped Assignment for — same "assignment scope is the filter" pattern as Partner Workspace (lib/partner/workspace.ts). */
+/**
+ * Sessions this user has an active session-scoped Assignment for — same
+ * "assignment scope is the filter" pattern as Partner Workspace
+ * (lib/partner/workspace.ts).
+ *
+ * Filtered on the same two conditions `getSessionForJudge` gates opening on:
+ * an action permission for that session, and clearance for its classification.
+ * ADR-079 found the partner list and the partner open-gate had drifted apart,
+ * and this list had drifted the same way — it filtered on the Assignment
+ * alone, so a session-scoped Role Profile holding no `sensory:*` permission
+ * saw its sessions listed and hit `no_session_access` on opening one. A list
+ * that shows what cannot be opened is its own defect; a list that shows the
+ * *names* of sessions above the reader's clearance is the leak.
+ */
 export async function getJudgeSessions(userAccountId: string) {
   const now = new Date();
   const assignments = await prisma.assignment.findMany({
@@ -58,11 +99,26 @@ export async function getJudgeSessions(userAccountId: string) {
   ];
   if (sessionIds.length === 0) return [];
 
-  return prisma.sensorySession.findMany({
+  const candidates = await prisma.sensorySession.findMany({
     where: { id: { in: sessionIds } },
     include: { protocolVersion: { include: { protocol: true } } },
     orderBy: { scheduledAt: "desc" },
   });
+
+  const visible: typeof candidates = [];
+  for (const session of candidates) {
+    const grantedKeys = await resolvedPermissionKeys(userAccountId, {
+      scopeType: "session",
+      scopeRefId: session.id,
+    });
+    const holdsSensoryAction =
+      grantedKeys.has(permissionKey("sensory", "submit_assessment")) ||
+      grantedKeys.has(permissionKey("sensory", "manage_session"));
+    if (holdsSensoryAction && clearsClassification(grantedKeys, session.classification)) {
+      visible.push(session);
+    }
+  }
+  return visible;
 }
 
 export async function getSessionForJudge(userAccountId: string, sessionId: string) {
@@ -201,15 +257,26 @@ export async function submitAssessment(userAccountId: string, input: SubmitAsses
 
 /**
  * An evaluator's own submitted assessments across every session — CLAUDE.md
- * §14/§27's "My Tastings, Sensory History." Ownership check is the query
- * itself (same pattern as lib/experiences/bookings.ts's getBookingsForUser)
- * — no separate permission check needed, since this only ever returns the
- * caller's own rows. Never reveals blind-sample identity (RBAC.md §7): the
- * blind code and protocol/session names are a judge's own submitted record,
- * not the real sample behind another judge's blind mapping.
+ * §14/§27's "My Tastings, Sensory History." Ownership is the query itself
+ * (same pattern as lib/experiences/bookings.ts's getBookingsForUser). Never
+ * reveals blind-sample identity (RBAC.md §7): the blind code and
+ * protocol/session names are a judge's own submitted record, not the real
+ * sample behind another judge's blind mapping.
+ *
+ * Ownership is not sufficient on its own, though, which is why this is gated
+ * too (ADR-081). The rows are the caller's, but each one carries the session
+ * and protocol *names* alongside, and those belong to the session's
+ * classification rather than to the evaluator. A session reclassified upward
+ * — or an evaluator whose clearance is withdrawn — must stop surfacing those
+ * names here, or "My Tastings" becomes the way around the gate everything
+ * else applies.
+ *
+ * The assessment itself is untouched by this: it remains stored, immutable and
+ * auditable, and returns to the list the moment clearance does. What the
+ * filter withholds is the reading, never the record.
  */
-export function getAssessmentHistoryForEvaluator(userAccountId: string) {
-  return prisma.assessment.findMany({
+export async function getAssessmentHistoryForEvaluator(userAccountId: string) {
+  const assessments = await prisma.assessment.findMany({
     where: { evaluatorUserAccountId: userAccountId, status: "submitted" },
     include: {
       blindSample: {
@@ -225,6 +292,26 @@ export function getAssessmentHistoryForEvaluator(userAccountId: string) {
     },
     orderBy: { submittedAt: "desc" },
   });
+
+  // Resolved once per distinct session rather than once per assessment: a
+  // judge commonly submits many assessments in one session, and each
+  // resolution is a full Assignment query.
+  const clearedBySession = new Map<string, boolean>();
+  const visible: typeof assessments = [];
+  for (const assessment of assessments) {
+    const session = assessment.blindSample.flight.session;
+    let cleared = clearedBySession.get(session.id);
+    if (cleared === undefined) {
+      const grantedKeys = await resolvedPermissionKeys(userAccountId, {
+        scopeType: "session",
+        scopeRefId: session.id,
+      });
+      cleared = clearsClassification(grantedKeys, session.classification);
+      clearedBySession.set(session.id, cleared);
+    }
+    if (cleared) visible.push(assessment);
+  }
+  return visible;
 }
 
 export async function getSessionForHeadJudge(userAccountId: string, sessionId: string) {

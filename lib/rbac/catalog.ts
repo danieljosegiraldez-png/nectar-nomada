@@ -203,9 +203,30 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
     name: "Sensory Judge",
     description:
       "Submit assessments within an assigned judging session only. Deliberately excludes " +
-      "classification:clear_* and blind_mapping:view — a judge's resolved permissions cannot reach the " +
-      "blind-code mapping (RBAC.md §7), regardless of what the UI shows.",
-    permissions: [["sensory", "submit_assessment"]],
+      "blind_mapping:view — a judge's resolved permissions cannot reach the blind-code mapping " +
+      "(RBAC.md §7), regardless of what the UI shows. Clears internal but not confidential, so a " +
+      "session restricted above internal is closed to the panel until someone decides otherwise.",
+    permissions: [
+      ["sensory", "submit_assessment"],
+      // ADR-081, and the same reasoning ADR-063 applied to Farm Operator and
+      // Project Viewer: enforcing a gate against a profile holding no
+      // clearance makes the role useless rather than restrictive. Every
+      // SensorySession defaults to `internal`, so without this grant an
+      // enforced gate denies a judge every session they were assigned to.
+      //
+      // This profile previously held no clear_* at all, justified as keeping
+      // the blind mapping out of a judge's reach. RBAC.md §7 does not describe
+      // that mechanism: it puts the mapping in its own table behind
+      // `blind_mapping:view`, "so a Judge's resolved permission set genuinely
+      // cannot query the mapping" — which is still true here, and is the lock
+      // that was actually doing the work. Withholding clearance as a second,
+      // undocumented lock cost the clearance axis its own purpose.
+      //
+      // Granting clear_internal and enforcing is a NARROWING against today: a
+      // judge currently reaches confidential and trade_secret sessions too,
+      // because the gate is applied nowhere.
+      ["classification", "clear_internal"],
+    ],
   },
   {
     name: "Sensory Head Judge",
@@ -281,10 +302,11 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       // Projects are `internal`, so a "read-only visibility into a project's
       // operational data" role would see none of it.
       //
-      // Deliberately NOT granted to Partner Field Collector or Sensory Judge:
-      // the first is an external party ADR-029 keeps below `internal`, and the
-      // second excludes clear_* on purpose so a judge cannot reach the
-      // blind-code mapping (RBAC.md §7).
+      // Deliberately NOT granted to Partner Field Collector: an external party
+      // ADR-029 keeps below `internal`. This note also used to cite Sensory
+      // Judge as excluding clear_* on purpose; ADR-081 grants that profile
+      // clear_internal and explains why the exclusion was never the mechanism
+      // RBAC.md §7 describes.
       ["classification", "clear_partner"],
       ["classification", "clear_internal"],
     ],
