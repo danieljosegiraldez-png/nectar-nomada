@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { loginAction, type FormActionState } from "../actions/auth";
 
@@ -10,10 +11,15 @@ const initialState: FormActionState = {};
 export default function LoginForm() {
   const [state, formAction, pending] = useActionState(loginAction, initialState);
   const t = useTranslations("Auth");
+  // Carried through so a request proxy.ts bounced returns where it was going
+  // rather than to the generic landing (ADR-082). The action re-validates it;
+  // this is transport, not trust.
+  const callbackUrl = useSearchParams().get("callbackUrl");
 
   return (
     <>
       <form className="nn-form" action={formAction}>
+        {callbackUrl ? <input type="hidden" name="callbackUrl" value={callbackUrl} /> : null}
         <div className="nn-field">
           <label htmlFor="email">{t("emailLabel")}</label>
           <input id="email" name="email" type="email" autoComplete="email" required />

@@ -85,6 +85,64 @@ const SENSORY_TOOLS: readonly NavDefinition[] = [
   { labelKey: "calibration", href: "/calibration", requiresAnyOf: ["sensory:manage_session"] },
 ];
 
+/**
+ * Where signing in should put you — ADR-082.
+ *
+ * Every sign-in path sent everyone to `/my-nectar`, which opens on an
+ * inventory of the viewer's own Assignments and resolved permissions. That is
+ * a reasonable *account* page and a poor place to arrive: an operator signing
+ * in on a phone at a beneficio wants the lots that are fermenting, not a
+ * reading of their own access.
+ *
+ * The order below is deliberately NOT the NAV order above. NAV is ordered for
+ * scanning a menu; this is ordered by how likely a section is to be where the
+ * holder's work actually happens, which matters only for someone holding
+ * several — a Platform Admin holds every key here and should land on
+ * operations, not on the first menu item that happens to match.
+ *
+ * `/admin/users` is deliberately absent for the reason NAV already gives for
+ * placing it last: it is administration, not a place work happens. Nobody
+ * should *arrive* there.
+ *
+ * `/my-nectar` remains the fallback, and it is the right one — a registered
+ * customer with no Assignment at all has orders and bookings there and
+ * nothing anywhere else. It stays reachable from the nav for everyone.
+ */
+const LANDING_PRIORITY: readonly NavDefinition[] = [
+  // Leads with getActiveOperations — fermentation and drying under way, lots
+  // gone unmeasured, samples awaiting sensory. The most work-like page there
+  // is, which is why it goes first.
+  { labelKey: "lots", href: "/lots", requiresAnyOf: ["lot:view", "lot:manage"] },
+  { labelKey: "apiaries", href: "/apiaries", requiresAnyOf: ["apiary:view", "apiary:manage"] },
+  {
+    labelKey: "partnerWorkspace",
+    href: "/partner",
+    requiresAnyOf: ["partner:submit_task", "partner:submit_data", "partner:upload_media"],
+  },
+  { labelKey: "research", href: "/research", requiresAnyOf: ["research:view"] },
+  {
+    labelKey: "sensory",
+    href: "/sensory",
+    requiresAnyOf: ["sensory:submit_assessment", "sensory:manage_session", "competition:manage"],
+  },
+];
+
+/** The fallback, and the destination for a viewer holding no operational grant. */
+export const DEFAULT_LANDING = "/my-nectar";
+
+/**
+ * `granted` must come from `permissionKeysAnywhere`, for the same reason
+ * `buildNavigation` requires it: "could this person use this section at all"
+ * is a wider question than "may they act on this row", and a farm operator's
+ * `lot:manage` lives on a project scope that a platform-scoped resolution
+ * cannot see. Choosing a destination is an offer, never an authorization —
+ * the destination re-checks on arrival, as every server entry point does.
+ */
+export function landingDestination(granted: ReadonlySet<string>): string {
+  const match = LANDING_PRIORITY.find((entry) => entry.requiresAnyOf.some((key) => granted.has(key)));
+  return match?.href ?? DEFAULT_LANDING;
+}
+
 function visible(entry: NavDefinition, granted: ReadonlySet<string>): boolean {
   return entry.requiresAnyOf.length === 0 || entry.requiresAnyOf.some((key) => granted.has(key));
 }
