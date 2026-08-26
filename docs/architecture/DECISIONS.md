@@ -6143,3 +6143,88 @@ address means anything.
 address, so they still cannot sign in. That is the data this listing exists to
 prompt for, and it has to come from someone who knows it — `set-person-email.ts`
 says so in its own header, and this ADR does not change it.
+
+---
+
+## ADR-089 — The weekly backup had been failing silently for six days
+
+**Context.** Asked what to work on next, checking the scheduled job first
+turned up `launchctl list` reporting last exit status `1`. The run of
+2026-08-24 had failed, produced no backup, and told nobody. The last
+successful scheduled run was 2026-08-20.
+
+The cause, from launchd's stderr:
+
+```
+run-scheduled.sh: line 34: echo: write error: Resource deadlock avoided
+```
+
+`$LOG` was a file inside Google Drive, and the File Provider returned EDEADLK
+on append. That alone would be a lost log line — except the backup itself ran
+as `backup-db.sh >> "$LOG"`, and **when a redirect cannot be opened the
+command never runs at all.** So a transient Drive condition silently skipped
+the backup entirely, and the wrapper exited 1 into `/tmp`, which nothing reads.
+
+The failure mode had every property you would not want: it failed early, it
+failed silently, it left an empty directory that looked like a backup, and its
+only report was an exit code delivered to a daemon.
+
+**Decision 1 — the log moves to local disk, and can never abort the run.**
+`$HOME/Library/Logs/nectar-nomada-backup.log`. Drive is for artifacts, not for
+a file appended to on every line. Every write is `>>"$LOG" 2>/dev/null || true`:
+a log that cannot be written is something to notice later, never a reason to
+skip a backup. Inverting that dependency is the actual fix — the rest is
+making failure audible.
+
+**Decision 2 — failure leaves the process.** Two channels, neither trusted
+alone because neither is guaranteed: a macOS notification with a sound
+(`osascript`, needs a logged-in session), and a `BACKUP-FAILED.txt` written
+beside the backups (needs Drive writable, but syncs, so it is visible from
+another machine). The marker is removed on the next success, so its presence
+always means "the most recent run failed". The two failure cases are worded
+differently on purpose — a dump that did not complete is bad; a set that was
+written and does **not restore** is the state ADR-055 exists to prevent.
+
+**Decision 3 — a failed backup leaves nothing that looks like a backup.**
+`backup-db.sh` runs under `set -e` and creates its destination directory
+before writing anything into it, so any later failure abandoned a
+backup-shaped directory. Two were found: the 08-24 scheduled run, and a manual
+run during ADR-085 whose `pg_dump` died with `No route to host` and left a
+0-byte dump.
+
+This is not tidiness. The retention pruner keeps the newest N directories by
+name, and an abandoned directory carries the newest name of all — so **a
+failed run could evict a good backup.** An `EXIT` trap now removes the
+incomplete set, and the pruner counts only directories carrying a
+`MANIFEST.txt`, which is written last. Belt and braces, because the cost of
+being wrong here is a backup that is not there when it is needed.
+
+`is_complete_set` lives in `pg-tools.sh` rather than inline so it can be
+exercised directly, the same reasoning ADR-077 applied to `libpq_url`. Its
+tests run the real shell function; a TypeScript restatement could agree with
+itself while the script did something else.
+
+**Decision 4 — the current state is offsite again.** The newest set on Drive
+was from 2026-08-22 and predates ADR-085's cleanup. Worse, both backups taken
+by hand during that work went to `/Users/danielsan/nectar-backups`, because
+`NN_BACKUP_DIR` was unset in that shell — so the only verified backup matching
+live production was on one laptop. A scheduled run now exists on Drive,
+verified at 123 tables and 14,600 rows.
+
+**Verification.** The partial-cleanup trap exercised with an injected failure:
+destination left empty, message printed. The failure path exercised with an
+injected dump failure: exit 1, marker written naming the reason and the log
+path, log line recorded — then a successful run clearing the marker. Five
+tests over `is_complete_set`, including the two shapes actually found in the
+wild. 512 tests overall.
+
+Finally the job run through `launchctl kickstart` rather than from a shell.
+That distinction matters here more than usual: the original fault was EDEADLK
+under launchd's own environment, so a passing run from an interactive terminal
+would have proved nothing about the thing that broke.
+
+**Not addressed.** The alert is local to this machine — a notification and a
+file on Drive. If the laptop is closed for a fortnight, nothing is backed up
+and nothing says so. Off-machine alerting (a healthcheck ping the absence of
+which raises an alarm) is the real answer and a larger decision, involving an
+external service this platform does not currently use.

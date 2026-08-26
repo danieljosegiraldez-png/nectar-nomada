@@ -172,3 +172,19 @@ pg_run() {
   rm -f "$errf"
   return "$rc"
 }
+
+# Is this directory a finished backup set, or merely something with a
+# backup-shaped name? — ADR-089.
+#
+# The manifest is written last, so its presence is what distinguishes a
+# completed set from a directory a failed run created and abandoned. This
+# matters beyond tidiness: the retention pruner keeps the newest N sets by
+# name, and an abandoned directory carries the newest name of all — so
+# counting it as a backup lets a failed run evict a good one.
+#
+# Lives here rather than inline in backup-db.sh so it can be exercised
+# directly, the same way libpq_url is (ADR-077).
+is_complete_set() {
+  [ -f "${1:-}/MANIFEST.txt" ]
+}
+
