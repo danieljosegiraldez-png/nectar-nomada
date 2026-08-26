@@ -6375,3 +6375,91 @@ a quarter of a second.
 and counted; it does not build the surfaces. The largest by far is the content
 engine (CLAUDE.md §16), which is a slice rather than a fix, and which ADR-090
 left open for the same reason.
+
+---
+
+## ADR-092 — The Story authoring surface, and the fourth profile with no clearance
+
+**Context.** ADR-090 found `content:*` granted to a real person whose job it
+names and checked by no route; ADR-091 made that visible as a counted
+inventory. `/stories` rendered approved public stories to visitors and nothing
+anywhere wrote one. This builds the missing half.
+
+Scoped to **Story**, which is the only content model in the schema. CLAUDE.md
+§16's Article, Interview, Field Note, Source, Quote and Transcript would each
+be a migration, and building them ahead of a use for them is how the
+unenforced-permission inventory got started.
+
+**Decision 1 — publishing is the consequential act, not saving.**
+`lib/discover/service.ts` selects on `{ status: "approved", classification:
+"public" }`. The moment a story becomes world-readable is the moment both are
+true, so `setStoryStatus` sets them together and requires `content:publish`.
+
+Setting them together is not a convenience. Approved-but-internal is invisible
+to visitors, which reads as a broken publish rather than a deliberate state —
+an author would reasonably conclude the feature is broken and try again. The
+service exports `PUBLICLY_VISIBLE` and `isPubliclyVisible` so the editor and
+the public query cannot drift apart silently, and a test asserts a story the
+editor calls published is found by the exact query the public site runs.
+
+**Decision 2 — an edit to an approved story requires `content:publish`, and
+history lives in the audit trail.** CLAUDE.md §3 requires that approved
+documents are not silently overwritten and that historical versions remain
+accessible. A `StoryVersion` table mirroring `ProtocolVersion` would be the
+faithful reading; the product owner chose the audit trail for now.
+
+So `updateStory` on an approved story requires the publish permission — an
+editor who may draft cannot quietly alter what visitors are already reading —
+and writes an AuditEvent carrying the **whole record** either side, not a diff.
+A partial `before` would make §3's promise false, which is why a test asserts
+the untouched fields are present too.
+
+**The limitation is real and recorded: you cannot browse or restore a previous
+version.** History is preserved and readable, through the audit trail, by
+someone who knows to look. That is a weaker guarantee than versioning and it
+was chosen deliberately, not overlooked.
+
+**Decision 3 — Content/Ops Coordinator gains `clear_partner` and
+`clear_internal`.** Enforcing the gate revealed the profile held **no
+clearance at all**, and Story defaults to `internal` — so an enforced gate
+denied the coordinator every story, including drafting one.
+
+This is the **fourth** occurrence of one shape: ADR-063 for Farm Operator and
+Project Viewer, ADR-069 for the Apiary Colony Event Recorder, ADR-081 for
+Sensory Judge. A profile holding actions and no clearance is not restricted by
+an enforced gate, it is disabled by it. Four times is a pattern worth naming
+rather than fixing again quietly: **any new resource permission granted to a
+profile needs its clearance decided at the same time**, because the two are
+only separable while the gate goes unapplied.
+
+Stops at `internal`, matching Farm Operator. Confidential and trade-secret
+stories stay out of a content role's reach, which is a narrowing against the
+previous state where `content:*` was checked nowhere and a story's
+classification restricted nobody.
+
+**Decision 4 — `/content` joins the landing priority.** Before this, a
+Content/Ops Coordinator matched nothing in `LANDING_PRIORITY` and arrived at
+`/my-nectar` — an inventory of permissions that reached nothing, which is
+precisely the complaint ADR-082 set out to fix. Nathy would have been its
+clearest case.
+
+**Verification.** Fourteen service tests covering both halves of the gate,
+including a hand-built role holding all four content actions and no clearance,
+paired against the same story made public — so a failure means the
+classification is what refused rather than something incidental. The ADR-091
+inventory drops from eight entries to four, which is the assertion that
+`content:*` is now genuinely enforced rather than merely referenced.
+
+531 tests. Then the round trip walked signed in: a draft created as
+internal-and-not-visible, published to approved-and-public, and read back on
+the public site at `/stories/cafe-de-cerro-azul-prueba-de-publicacion` — the
+accent folded rather than dropped, which `caf-de-cerro-azul` would have been.
+No console errors. The fixture was removed from the local database afterwards
+and production still holds its original two stories.
+
+**Not addressed.** Markdown is stored and rendered as plain text, as it was
+before — no renderer was added, and `app/stories/[slug]/page.tsx` already
+explains why. Media attachment, the remaining §16 content types, and a review
+workflow distinct from the status field are all untouched. `project:view`,
+`project:manage_operations`, `platform:manage_users` and `colony_event:view`
+remain in ADR-091's inventory.

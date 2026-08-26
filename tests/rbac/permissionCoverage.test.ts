@@ -32,10 +32,6 @@ import { scanPermissionUsage, isChecked } from "../helpers/permissionUsage";
  * Each needs a reason, and the reason should name what would remove it.
  */
 const UNENFORCED: Record<string, string> = {
-  "content:create": "No authoring surface exists. CLAUDE.md §16's Story/Article/Interview engine is unbuilt; /stories renders published content to the public and nothing writes it (ADR-090).",
-  "content:edit": "Same as content:create.",
-  "content:publish": "Same as content:create.",
-  "content:view": "Same as content:create.",
   "project:view": "/projects is public discovery with no gate. A permissioned project surface — distinct from the partner workspace — does not exist yet.",
   "project:manage_operations": "Same as project:view. Task and assignment management lives inside the Partner Workspace, gated on partner:* instead.",
   "platform:manage_users": "ADR-074 gated /admin/users on manage_permissions specifically, because granting a role IS managing permissions. The softer account operations this covers — deactivating, renaming — have no surface.",
