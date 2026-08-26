@@ -6228,3 +6228,73 @@ file on Drive. If the laptop is closed for a fortnight, nothing is backed up
 and nothing says so. Off-machine alerting (a healthcheck ping the absence of
 which raises an alarm) is the real answer and a larger decision, involving an
 external service this platform does not currently use.
+
+---
+
+## ADR-090 — Two role decisions, and a permission set that leads nowhere
+
+**Context.** José Giráldez and Nathy Rubio have had working addresses and zero
+Assignments since ADR-083 made invitations acceptable. Both could sign in and
+reach nothing. This records what each should be, decided rather than left.
+
+**Decision 1 — Nathy Rubio: Content/Ops Coordinator at platform scope.** Her
+OrganizationMembership at Néctar Nómada is titled "Operaciones y contenido",
+which is the profile's description almost word for word. Platform scope because
+she works across projects rather than inside one; a per-project grant would
+mean adding her again for every project she touches, and DOMAIN_MODEL.md §2 is
+explicit that the membership itself grants nothing, so the scope has to come
+from somewhere.
+
+The title is evidence for what to propose, never authority in itself. The
+decision is the product owner's, and this ADR is where it is recorded.
+
+**Decision 2 — José Giráldez: no platform access.** He is a contact at Craft
+Brewing Supply, a supplier. Not everyone the platform records is someone who
+uses it, and "invited, no roles" is a coherent state for a person who is data
+rather than a user. Written down so it reads as decided rather than forgotten —
+which is the whole difference between the two.
+
+**Decision 3 — granted through the audited path, not an INSERT.**
+`scripts/grant-role.ts` calls `grantRole` from `lib/rbac/admin.ts`, the same
+function `/admin/users` calls, so the permission check, the Scope reuse, the
+last-Platform-Admin guard and the AuditEvent all come along. An
+`assignment.create` would have written the row and none of the rest.
+
+The UI remains the intended path (ADR-074). This exists for the case the UI
+cannot serve: granting against production from a machine not signed in as an
+administrator, without a password passing through a terminal or a transcript.
+The actor is named explicitly and recorded in the audit row — "a script did it"
+is not an answer to who authorised a permission change.
+
+Rehearsed on the restored copy first, including the refusals: an unknown
+person, an unknown role, and a second identical grant, which is refused as
+`already_granted` rather than duplicated.
+
+**The finding this turned up: `content:*` is granted and enforced nowhere.**
+Nathy now holds `content:create`, `content:edit`, `content:publish` and
+`content:view`. No route in the application checks any of them. `/stories` is
+public discovery with no gate, and there is no authoring surface at all.
+
+So her resolved navigation is `/my-nectar` and `/ai`, and she lands on the
+account page. The four permissions that name her actual job reach nothing.
+
+This is ADR-062's finding in a second place, and its phrasing fits exactly:
+fully specified, seeded, and applied at zero call sites. The difference is that
+ADR-062 concerned a gate that failed to restrict; this is a grant that fails to
+enable. Both are invisible for the same reason — nothing tests that a
+permission has a destination.
+
+The grant is still correct and stands: the role is right for her, it is
+auditable, and it is the prerequisite for a content surface being useful rather
+than a consequence of one. But **this ADR must not be read as "Nathy can now do
+her job."** She can review AI suggestions and see her own account.
+
+**Not addressed.** The content surface itself — CLAUDE.md §16's Story /
+Article / Interview / Field Note engine. `/stories` renders published content
+to the public and nothing authors it. That is a slice, not a fix, and wants
+deciding on its own terms.
+
+Worth considering alongside it: a test asserting every permission in the
+catalog is checked by at least one call site would have caught this, and would
+have caught ADR-062. That is a cheap, general guard against a whole class of
+defect this codebase has now hit twice.
