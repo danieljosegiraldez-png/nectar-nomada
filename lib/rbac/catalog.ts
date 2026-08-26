@@ -136,6 +136,22 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       // deciding whether to act on it is exactly the kind of non-developer
       // collaborator task this profile exists for (RBAC.md §5).
       ["ai", "review_suggestion"],
+      // ADR-092, and the fourth time this exact shape has appeared: ADR-063
+      // for Farm Operator and Project Viewer, ADR-069 for the colony event
+      // recorder, ADR-081 for Sensory Judge. A profile holding actions and no
+      // clearance is not restricted by an enforced gate, it is disabled by it.
+      //
+      // Story defaults to `internal`, so without these the coordinator could
+      // not open, edit or publish a single story — including the two already
+      // live on the public site, which are `public` but were drafted from
+      // somewhere. Granting clearance and enforcing is a NARROWING against the
+      // previous state, where content:* was checked nowhere and the
+      // classification of a story restricted nobody.
+      //
+      // Stops at `partner`/`internal`, matching Farm Operator. Confidential
+      // and trade-secret stories stay out of reach of a content role.
+      ["classification", "clear_partner"],
+      ["classification", "clear_internal"],
     ],
   },
   {

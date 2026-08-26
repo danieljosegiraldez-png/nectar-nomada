@@ -54,6 +54,14 @@ const NAV: readonly NavDefinition[] = [
   },
   { labelKey: "apiaries", href: "/apiaries", requiresAnyOf: ["apiary:view", "apiary:manage"] },
   { labelKey: "research", href: "/research", requiresAnyOf: ["research:view"] },
+  // ADR-092. Offered on any content action: this profile's four permissions
+  // travel together in the catalog, and a create-without-view split would be
+  // a new decision rather than one this entry should anticipate.
+  {
+    labelKey: "content",
+    href: "/content",
+    requiresAnyOf: ["content:view", "content:create", "content:edit", "content:publish"],
+  },
   // The consolidation. Any of the three former entries' permissions opens the
   // one section; which tools appear inside is decided by SENSORY_TOOLS below.
   {
@@ -120,6 +128,14 @@ const LANDING_PRIORITY: readonly NavDefinition[] = [
     requiresAnyOf: ["partner:submit_task", "partner:submit_data", "partner:upload_media"],
   },
   { labelKey: "research", href: "/research", requiresAnyOf: ["research:view"] },
+  // ADR-092. Offered on any content action: this profile's four permissions
+  // travel together in the catalog, and a create-without-view split would be
+  // a new decision rather than one this entry should anticipate.
+  {
+    labelKey: "content",
+    href: "/content",
+    requiresAnyOf: ["content:view", "content:create", "content:edit", "content:publish"],
+  },
   {
     labelKey: "sensory",
     href: "/sensory",
