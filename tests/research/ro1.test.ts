@@ -909,10 +909,19 @@ describe("§9.14 — required measurements can't be silently omitted", () => {
 describe("§9.15 — A7/F1/S1/R1 real data intact", () => {
   it("confirms real Cerro Azul, RoastSession, and SensoryDescriptor rows are unaffected", async () => {
     const cerroAzulLocations = await prisma.location.count({ where: { name: { contains: "Cerro Azul" } } });
-    const roastSessions = await prisma.roastSession.count();
     const sensoryDescriptors = await prisma.sensoryDescriptor.count();
     expect(cerroAzulLocations).toBeGreaterThan(0);
-    expect(roastSessions).toBeGreaterThan(0);
     expect(sensoryDescriptors).toBeGreaterThan(0);
+
+    // The RoastSession count that used to sit here has been removed (ADR-086).
+    // It asserted `count() > 0` under the heading "real data intact", and every
+    // row it was counting was this suite's own leaked fixtures — so it proved
+    // the residue existed, not that anything real survived. With production
+    // cleaned (ADR-085) it failed honestly, which is how it was found.
+    //
+    // It is not replaced by an unchanged-across-the-run check: vitest runs
+    // files in parallel and tests/traceability/roasting.test.ts creates and
+    // deletes sessions throughout, so any global count of that table measures
+    // another file's progress rather than this one's damage.
   });
 });

@@ -5939,3 +5939,84 @@ ADR-066's: `npm run backup:db && npm run backup:verify -- <dir>`, then
 **Still open, and tracked separately:** the fixture leak that produces this,
 and `listRoastSessions`'s silent `take: 200` with no pagination — a list that
 lies to a roaster with a long history, not merely a test problem.
+
+---
+
+## ADR-086 — The fixture leak, and two assertions that were never measuring what they claimed
+
+**Context.** ADR-085 removed 79 orphaned RoastSessions from production and
+named the mechanism that produced them. This closes it, and closes two further
+things the cleanup exposed.
+
+**Decision 1 — the cleanup matches on `createdBy`, not on the roaster.**
+`roasting.test.ts`'s `afterAll` deleted sessions
+`WHERE roaster_person_id IN (gabriel, maria)`. §4.1 creates three naming no
+roaster, so those survived every run. Every session this file creates goes
+through `recordRoastSession`, which stamps `createdBy` with the acting account,
+so that is the key that catches all of them.
+
+It has to run before the UserAccounts are deleted. `createdBy` is a nullable
+FK, so removing the account first sets it to null and the sessions become
+unmatchable — which is exactly why every row ADR-085 deleted carried
+`created_by = null` despite having been written with it set. The evidence and
+the fix are the same fact seen from two ends.
+
+**Decision 2 — the cleanup asserts it worked.** A cleanup nothing checks can
+silently stop working, and this one did, for long enough to reach production.
+`afterAll` now ends with a count of sessions still owned by this run's
+accounts, asserted zero. Reverting the delete to its old form makes that
+assertion report `expected 5 to be +0` and the run exit non-zero — an
+`afterAll` failure does fail the build, which was worth confirming rather than
+assuming.
+
+The assertion is scoped to this run's accounts rather than a global count of
+the table: three other files create RoastSessions and vitest runs files in
+parallel, so a total would be measuring their progress rather than this file's
+damage.
+
+**Decision 3 — two "real data intact" assertions removed, not repaired.**
+With production genuinely clean, `tests/research/ro1.test.ts` §9.15 and
+`ro1-2.test.ts` §5.11 began failing on `expect(roastSessions).toBeGreaterThan(0)`.
+
+They were not broken by the cleanup. They had never worked. Both counted
+`roastSession` globally under the heading "real data unaffected by this run",
+and every row they were counting was this suite's own leaked fixtures — so
+they asserted that the residue existed. The only reason they passed was the
+bug they were nominally guarding against.
+
+This is the third instance of one anti-pattern. `tests/setup.ts` already
+records the first: two assertions counted every Location named "Lote"
+platform-wide and passed only because production happened to hold exactly six.
+A global count taken in a parallel suite is not a property of the code under
+test.
+
+They are removed rather than rewritten as before/after comparisons, because
+that would race with `roasting.test.ts` running alongside. The surrounding
+assertions — Cerro Azul locations, the `Lost Origin` organization, twenty-plus
+variable catalogs — are anchored on records that genuinely exist, and those
+stay.
+
+**Decision 4 — one more of the same, in a test from ADR-080.** Running the
+suite repeatedly to confirm the leak was closed surfaced
+`batchPageData.test.ts`'s "loses nobody" case failing about one run in three
+with `expected 19 to be 21`. It compared `getObserverCandidates` against
+`person.count({ status: "active" })` — two round trips, with other files
+creating and deleting Persons in between. My own test, the same defect, written
+earlier in this session.
+
+What "loses nobody" needs is that reordering is a permutation, so it now
+asserts the row it controls is present, that nothing is duplicated, and that
+nothing inactive crept in. All three hold whatever another file is doing.
+
+**Verification.** Five consecutive full-suite runs, 493 passing, exit 0 every
+time, with `traceability.roast_session` at 0 before and after each. Three
+consecutive runs of the roasting file alone leave the count unmoved where it
+previously grew by five.
+
+**Still open:** `listRoastSessions` takes 200 rows ordered by `startedAt desc`
+with no pagination and no signal that anything was dropped. It is what turned
+this leak into an intermittent failure rather than merely a slow accumulation,
+and it remains a list that lies to a roaster with a long history. Whether to
+paginate, raise the cap, or scope the query is a design decision, and the same
+silent cap should be checked for across the sibling list functions it was
+likely copied into.

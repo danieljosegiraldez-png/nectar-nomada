@@ -659,9 +659,11 @@ describe("§5.11 — real A7/F1/S1/R1/RO1 data stays intact", () => {
     const lostOrigin = await prisma.organization.findFirst({ where: { name: "Lost Origin" } });
     expect(lostOrigin).not.toBeNull();
 
-    const realRoastSessions = await prisma.roastSession.count();
-    expect(realRoastSessions).toBeGreaterThan(0);
-
+    // A `roastSession.count() > 0` assertion stood here and was removed for the
+    // reason given in tests/research/ro1.test.ts §9.15 (ADR-086): the rows it
+    // counted were leaked test fixtures, so it never measured real data.
+    // `Lost Origin` above and the catalog count below are anchored on records
+    // that genuinely exist in production.
     const catalogCount = await prisma.variableCatalog.count();
     expect(catalogCount).toBeGreaterThanOrEqual(20);
   });

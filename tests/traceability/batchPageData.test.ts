@@ -50,11 +50,28 @@ describe("who took this reading — the observer list", () => {
     created.personIds.push(person.id);
     created.accountIds.push(account.id);
 
-    const activeCount = await prisma.person.count({ where: { status: "active" } });
     const { people } = await getObserverCandidates(account.id);
 
-    expect(people.length).toBe(activeCount);
+    // Deliberately NOT compared against `person.count({ status: "active" })`.
+    // That is what this assertion used to do, and it is a race: the count and
+    // the service call are two round trips, vitest runs files in parallel, and
+    // several of them create and delete Persons throughout — so the number
+    // moved underneath it and the test failed roughly one run in three
+    // (ADR-086). It is the same defect as the "real data intact" counts removed
+    // from the RO1 suites in that ADR: a global count is not a property of the
+    // code under test.
+    //
+    // What "loses nobody" actually needs is that reordering is a permutation:
+    // the rows this test controls are present, nothing is duplicated, and
+    // nothing inactive has crept in. All three hold regardless of what another
+    // file is doing to its own fixtures.
+    expect(people.map((p) => p.id)).toContain(person.id);
     expect(new Set(people.map((p) => p.id)).size).toBe(people.length);
+
+    const inactiveReturned = await prisma.person.count({
+      where: { id: { in: people.map((p) => p.id) }, status: { not: "active" } },
+    });
+    expect(inactiveReturned).toBe(0);
   });
 
   it("orders the rest naturally, so accented names are not exiled to the end", async () => {
