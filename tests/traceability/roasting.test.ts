@@ -78,9 +78,37 @@ afterAll(async () => {
   await prisma.lotTransformation.deleteMany({
     where: assertDefinedWhere({ OR: [{ inputs: { some: { lotId: greenLotId } } }, { outputs: { some: { lotId: { in: outputLotIds } } } }] }),
   });
+  // Every session this file creates goes through recordRoastSession, which
+  // stamps `createdBy` with the acting account — so this catches all of them,
+  // including §4.1's three, which name no roaster. Matching on
+  // `roasterPersonId` alone was the leak: those three survived every run, 79
+  // of them reached production, and `listRoastSessions`'s `take: 200` turned
+  // the pile into an intermittent failure once it crossed the limit (ADR-085).
+  //
+  // This must run before the UserAccounts are deleted below. `createdBy` is a
+  // nullable FK, so removing the account first sets it to null and the sessions
+  // become unmatchable — which is precisely why every row ADR-085 removed from
+  // production carried `created_by = null` despite having been created with it
+  // set. The roaster clause stays as a second net for any session a future test
+  // writes through Prisma directly rather than through the service.
+  const roastSessionOwners = [authorizedUserAccountId, wrongProjectUserAccountId];
   await prisma.roastSession.deleteMany({
-    where: assertDefinedWhere({ roasterPersonId: { in: [gabrielPersonId, mariaPersonId] } }),
+    where: assertDefinedWhere({
+      OR: [
+        { createdBy: { in: roastSessionOwners } },
+        { roasterPersonId: { in: [gabrielPersonId, mariaPersonId] } },
+      ],
+    }),
   });
+
+  // The assertion that would have caught this the first time it happened.
+  // A cleanup nothing checks is a cleanup that can silently stop working, and
+  // this one did for long enough to reach production.
+  //
+  // Scoped to our own accounts rather than a global count: three other files
+  // create RoastSessions and vitest runs files in parallel, so a total would be
+  // measuring them too.
+  expect(await prisma.roastSession.count({ where: { createdBy: { in: roastSessionOwners } } })).toBe(0);
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: [greenLotId, ...outputLotIds] } }) });
 
   const userAccountIds = [authorizedUserAccountId, wrongProjectUserAccountId];
