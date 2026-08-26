@@ -5,6 +5,10 @@
  * can sign in (ADR-067). An address is a business fact — it cannot be derived,
  * guessed, or seeded — so it arrives here, from someone who knows it.
  *
+ * Since ADR-083 setting one is usually the whole job: the invited person signs
+ * in with Google, the verified address matches their Person, and the account
+ * activates itself. A password is only needed where Google is not an option.
+ *
  * Run with no arguments to list who is missing one.
  *
  * Usage:
@@ -34,26 +38,82 @@ function normalise(raw: string): string {
 // database — the real check is that the person receives mail at it.
 const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * What this listing says had gone out of date in three ways (ADR-088), all of
+ * them in the direction of telling the reader to do more work than they need:
+ *
+ *   1. It sent everyone to `auth:set-password`. Since ADR-083 an address is
+ *      enough on its own — the invited person signs in with Google, the
+ *      verified address matches their Person, and the account activates. No
+ *      password has to be handled by anyone.
+ *   2. It reported `can sign in` for any account holding a password hash,
+ *      including a suspended one, which `authorize()` refuses outright. A hash
+ *      is not permission to enter.
+ *   3. It never looked at ExternalIdentity, so an account already linked to
+ *      Google read as though nothing had been set up.
+ */
+export function describeAccess(person: {
+  email: string | null;
+  userAccount: { status: string; passwordHash: string | null; externalIdentities: unknown[] } | null;
+}): string {
+  const account = person.userAccount;
+
+  // Ordered by which fact actually blocks the reader, not by which field is
+  // checked most easily. A Person with no UserAccount cannot be given a login
+  // by setting an address, so saying "no email" first would repeat this
+  // listing's original sin: naming a fix that does not fix it.
+  if (!account) return "no user account — an address alone will not create one";
+
+  // No address means no login by either route: Google matches on the verified
+  // address, and `authorize()` looks the account up by it too.
+  if (!person.email) return "no email — cannot sign in by any route";
+
+  // Status stands alone, ahead of everything below it. `invited` is the one
+  // non-active state that is not a refusal — it is an invitation nobody has
+  // accepted yet (ADR-083).
+  if (account.status !== "active" && account.status !== "invited") {
+    return `account ${account.status} — sign-in refused whatever else is set`;
+  }
+
+  const viaGoogle = account.externalIdentities.length > 0;
+  const viaPassword = account.passwordHash !== null && account.status === "active";
+
+  if (account.status === "invited") {
+    return viaGoogle
+      ? "invited, Google already linked — signing in accepts the invitation"
+      : "invited — signing in with Google accepts it and activates the account";
+  }
+  if (viaPassword && viaGoogle) return "can sign in — password or Google";
+  if (viaPassword) return "can sign in — password";
+  if (viaGoogle) return "can sign in — Google";
+  // Active, addressed, and nothing attached: unusual, and worth naming rather
+  // than falling through to a cheerful default.
+  return "active but no password and no linked provider — sign in with Google to attach one";
+}
+
 async function list() {
   const people = await prisma.person.findMany({
-    include: { userAccount: { select: { id: true, status: true, passwordHash: true } } },
+    include: {
+      userAccount: {
+        select: {
+          id: true,
+          status: true,
+          passwordHash: true,
+          externalIdentities: { select: { provider: true } },
+        },
+      },
+    },
     orderBy: { displayName: "asc" },
   });
 
   console.log("\n  Who can sign in\n");
   for (const person of people) {
-    const account = person.userAccount;
-    const state = !person.email
-      ? "no email — cannot be given a login"
-      : !account
-        ? "email set, but no user account"
-        : account.passwordHash
-          ? `can sign in (${account.status})`
-          : "email set, no password yet — run auth:set-password";
     console.log(`  ${person.displayName.padEnd(30)} ${person.email ?? "—"}`);
-    console.log(`  ${"".padEnd(30)} ${state}`);
+    console.log(`  ${"".padEnd(30)} ${describeAccess(person)}`);
   }
-  console.log("\n  Set one with:  npm run people:set-email -- \"Display Name\" someone@example.com\n");
+  console.log("\n  Set one with:  npm run people:set-email -- \"Display Name\" someone@example.com");
+  console.log("  An address is enough: the person signs in with Google and the account activates.");
+  console.log("  A password is only needed where Google is not an option:  npm run auth:set-password\n");
 }
 
 async function main() {
