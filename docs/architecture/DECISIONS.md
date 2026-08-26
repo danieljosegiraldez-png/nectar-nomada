@@ -6090,3 +6090,56 @@ only. No `take: 200` remains in `lib`.
 elsewhere — `take: 50` on samples awaiting sensory, `take: 20` on a lot's
 tasks and on the AI queue — are deliberate "most recent N" panels rather than
 lists claiming completeness, and are left as they are.
+
+---
+
+## ADR-088 — The listing that told people to do work they no longer needed
+
+**Context.** `npm run people:set-email` with no arguments prints who can sign
+in, and it is the thing a person reads before deciding what to do next. Asked
+to correct one stale line, reading it turned up four wrong states — every one
+of them wrong in the direction of naming a fix that does not fix anything.
+
+**1. It sent everyone to the password script.** `"email set, no password yet —
+run auth:set-password"`. True when written; ADR-083 made it obsolete. An
+address is now usually the whole job: the invited person signs in with Google,
+the verified address matches their Person, and the account activates itself.
+`auth:set-password` is a TTY session the product owner has to run per head, so
+this was recommending real work that nobody needed to do.
+
+**2. It reported a suspended account as able to sign in.** The state was
+`account.passwordHash ? \`can sign in (${status})\` : ...`, which prints
+"can sign in (suspended)" — for a row `authorize()` refuses on status before it
+ever verifies a hash. A password hash is not permission to enter.
+
+**3. It never looked at ExternalIdentity**, so an account already linked to
+Google read as though nothing had been set up.
+
+**4. It told three people an address would help them, and it would not.**
+Found by running the listing rather than by reading it: Agustín Gómez,
+Guillermo Ungo and Kurt Ngo are Persons with no UserAccount at all. The old
+order checked `email` first, so they got "no email — cannot be given a login",
+which implies setting one is the fix. It is not; there is no account for an
+address to attach to.
+
+The states are now ordered by which fact actually blocks the reader rather
+than by which field is cheapest to check, and the missing account is named
+first. Repeating this listing's original sin while correcting it would have
+been a poor outcome.
+
+**Decision — the states become a pure function, and get tested.** `describeAccess`
+is exported and covered by seven cases, including the two that were actively
+false. A help string is not usually worth a test; one that a person acts on,
+and that had been wrong in four ways without anyone noticing, is. Nothing in
+the suite had ever read this output.
+
+**Verification.** Seven unit cases, 507 passing overall, and the listing run
+against production to read the real output — which is how the fourth defect
+was found. Two people (José, Nathy) now correctly read as invited and one
+Google sign-in away; three correctly read as needing an account before an
+address means anything.
+
+**Not addressed here.** Eleven people hold real Assignments and have no
+address, so they still cannot sign in. That is the data this listing exists to
+prompt for, and it has to come from someone who knows it — `set-person-email.ts`
+says so in its own header, and this ADR does not change it.
