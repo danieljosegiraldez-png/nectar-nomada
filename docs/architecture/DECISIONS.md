@@ -6298,3 +6298,80 @@ Worth considering alongside it: a test asserting every permission in the
 catalog is checked by at least one call site would have caught this, and would
 have caught ADR-062. That is a cheap, general guard against a whole class of
 defect this codebase has now hit twice.
+
+---
+
+## ADR-091 — A permission with nowhere to be used is now a test failure
+
+**Context.** This codebase has twice shipped a permission that was fully
+specified, seeded, resolvable, and applied at zero call sites:
+
+- **ADR-062** — the classification gate. Correct, stored on thirteen tables,
+  enforced nowhere. A gate that failed to *restrict*.
+- **ADR-090** — `content:*`. Granted to a real person whose job it names, and
+  checked by no route. A grant that failed to *enable*.
+
+Opposite directions, one cause: nothing asserted that a permission has anywhere
+to be used. Both were found by accident, months apart, while doing something
+else.
+
+**Decision — assert coverage, with a declared and shrinking inventory.**
+`tests/rbac/permissionCoverage.test.ts` walks `PERMISSIONS` and fails on any
+key no code path checks, unless it is listed in `UNENFORCED` with a reason
+naming what would remove it.
+
+This is deliberately the same trick ADR-062 used with
+`CLASSIFICATION_GATE_DEFERRED`, which went from thirteen entries to zero
+precisely because it was greppable and shrinking. A platform mid-build
+legitimately has permissions ahead of their surfaces. What it should not have
+is permissions ahead of their surfaces *and nobody counting*.
+
+**The inventory stands at eight of thirty-eight**, and each entry names its
+own removal condition: the four `content:*` (no authoring surface exists),
+`project:view` and `project:manage_operations` (`/projects` is public discovery;
+operational management lives in the Partner Workspace behind `partner:*`),
+`platform:manage_users` (ADR-074 gated the admin page on `manage_permissions`
+specifically, and the softer account operations have no surface), and
+`colony_event:view` (A1 built recording, not a reading surface).
+
+**Getting the scanner honest was most of the work.** Three of the four
+enforcement shapes never name the permission literally:
+
+```
+permissionKey("sensory", "submit_assessment")     both parts literal
+can(user, action, "specimen", target, cls)        action is a variable
+permissionKey("classification", `clear_${level}`) action built at runtime
+"lot:export"                                      combined literal
+```
+
+A first pass matching only the literal forms reported **nineteen** permissions
+as unenforced. Twelve of those were false — `research:*`, `specimen:*` and
+`classification:clear_*` are all enforced through a variable or a template
+literal. Shipping that number would have been worse than shipping nothing: an
+inventory with false entries in it teaches the reader to ignore the inventory,
+which is precisely how both original defects survived. Shapes 2 and 3 now
+contribute a wildcard for their resource type — the resource is provably gated
+and the action is decided at runtime, which is the honest reading and
+deliberately generous. This test is meant to catch a permission with no
+enforcement anywhere, not to police precision.
+
+The scanner collapses whitespace before matching, so a call split across lines
+reads the same as one on a single line. Formatting is not a security property,
+and a check that depends on it fails silently the next time someone runs a
+formatter.
+
+**Both directions are guarded, and both were mutation-tested.** Adding a
+`widget:frobnicate` permission to the catalog fails with the key named and an
+instruction not to silence it by listing it. Leaving `lot:export` in the
+inventory after it is enforced fails the honesty check — which is the half that
+makes the list shrink rather than quietly become fiction. A separate case
+rejects ghost entries for permissions that no longer exist in the catalog.
+
+**Verification.** Five cases, 517 tests overall, no database required — the
+whole thing is a pure function of the catalog and the source tree, so it costs
+a quarter of a second.
+
+**Not addressed.** The eight entries themselves. This ADR makes them visible
+and counted; it does not build the surfaces. The largest by far is the content
+engine (CLAUDE.md §16), which is a slice rather than a fix, and which ADR-090
+left open for the same reason.
