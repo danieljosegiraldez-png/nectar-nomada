@@ -66,6 +66,29 @@ STAMP="$(date -u +%Y-%m-%dT%H%M%SZ)"
 SET_DIR="$BACKUP_DIR/$STAMP"
 mkdir -p "$SET_DIR"
 
+# A failed run must not leave something shaped like a backup — ADR-089.
+#
+# Under `set -e` this directory is created before anything is written to it, so
+# any failure after this line used to leave it sitting among the real sets. Two
+# have been found that way: the scheduled run of 2026-08-24, and a manual run
+# whose pg_dump died mid-stream with "No route to host" and left a 0-byte dump.
+#
+# It is not only untidy. The pruner below keeps the newest N directories by
+# name, and an empty one carries the newest name — so a failed backup could
+# evict a good one. The trap clears on success, just before the `latest`
+# pointer moves.
+cleanup_partial() {
+  local status=$?
+  if [ "$status" -ne 0 ] && [ -n "${SET_DIR:-}" ] && [ -d "$SET_DIR" ]; then
+    rm -rf "${SET_DIR:?}"
+    echo "" >&2
+    echo "  Backup failed; removed the incomplete set $STAMP rather than leave it" >&2
+    echo "  among the real ones, where the pruner would count it as a backup." >&2
+  fi
+  exit "$status"
+}
+trap cleanup_partial EXIT
+
 echo "Néctar Nómada — database backup"
 echo "  pg tools:    $PG_BIN ($("$PG_BIN/pg_dump" --version))"
 echo "  destination: $SET_DIR"
@@ -149,13 +172,21 @@ while IFS= read -r old_set; do
   rm -rf "${BACKUP_DIR:?}/$old_set"
   PRUNED=$((PRUNED + 1))
 done < <(
-  find "$BACKUP_DIR" -maxdepth 1 -type d -name '20*T*Z' -exec basename {} \; 2>/dev/null \
+  find "$BACKUP_DIR" -maxdepth 1 -type d -name '20*T*Z' 2>/dev/null \
+    | while IFS= read -r d; do
+        # Only complete sets occupy a retention slot. A directory without a
+        # manifest is not a backup, whatever its name looks like, and must not
+        # push a real one out (ADR-089).
+        is_complete_set "$d" && basename "$d"
+      done \
     | sort -r | tail -n +$((KEEP + 1))
 )
 [ "$PRUNED" -gt 0 ] && echo "Pruned $PRUNED set(s) beyond the newest $KEEP."
 
 # --- pointer to newest -----------------------------------------------------
 ln -sfn "$SET_DIR" "$BACKUP_DIR/latest"
+# Complete: the set is written and pointed at, so it is no longer "partial".
+trap - EXIT
 
 echo ""
 echo "Backup complete:"
