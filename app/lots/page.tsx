@@ -34,6 +34,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
     getLotList(user.userAccountId, { lotType: filter }),
     permissionKeysAnywhere(user.userAccountId),
   ]);
+  const { items: lotItems, truncated: lotsTruncated, limit: lotLimit } = lots;
   const canExport = granted.has("lot:export");
 
   return (
@@ -155,11 +156,16 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
           ))}
         </div>
 
-        {lots.length === 0 ? (
+        {/* Said out loud rather than left to inference — ADR-087. A list that
+            has been cut off and does not say so presents part of the data as
+            all of it. */}
+        {lotsTruncated ? <p className="nn-muted">{t("listTruncated", { limit: lotLimit })}</p> : null}
+
+        {lotItems.length === 0 ? (
           <p className="nn-muted">{t("noLots")}</p>
         ) : (
           <div className="nn-grid">
-            {lots.map((lot) => (
+            {lotItems.map((lot) => (
               <Link key={lot.id} href={`/lots/${lot.id}`} className="nn-card-link">
                 <h3 className="nn-code">{lot.lotCode}</h3>
                 <p className="nn-muted">{t(`lotType_${lot.lotType}` as "lotType_cherry")}</p>

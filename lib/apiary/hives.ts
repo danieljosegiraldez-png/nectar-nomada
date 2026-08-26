@@ -12,6 +12,7 @@
  * below (reuse, not a second RBAC helper).
  */
 import { prisma } from "../db";
+import { LIST_LIMIT, truncate } from "../listLimit";
 import { can } from "../rbac/service";
 import { classificationForTarget, loadScopeClassifications } from "../rbac/scopeClassification";
 import { recordAuditEvent } from "../audit";
@@ -222,7 +223,9 @@ async function resolveApiaryVisibility(userAccountId: string, action: "view" | "
  */
 export async function getApiaryList(userAccountId: string) {
   const visibility = await resolveApiaryVisibility(userAccountId);
-  if (visibility.mode === "none") return [];
+  if (visibility.mode === "none") {
+    return truncate<Prisma.LocationGetPayload<{ include: { hives: true } }>>([]);
+  }
 
   const where: Prisma.LocationWhereInput = {
     locationType: "apiary_site",
@@ -236,12 +239,13 @@ export async function getApiaryList(userAccountId: string) {
       : {}),
   };
 
-  return prisma.location.findMany({
+  const rows = await prisma.location.findMany({
     where,
     include: { hives: true },
     orderBy: { name: "asc" },
-    take: 200,
+    take: LIST_LIMIT + 1,
   });
+  return truncate(rows);
 }
 
 export async function getApiaryDetail(userAccountId: string, locationId: string) {

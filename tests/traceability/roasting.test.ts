@@ -18,6 +18,7 @@ let organizationId: string;
 let projectId: string;
 let otherProjectId: string;
 let greenLotId: string;
+let wrongProjectLotId: string;
 let authorizedUserAccountId: string;
 let wrongProjectUserAccountId: string;
 let gabrielPersonId: string;
@@ -57,6 +58,14 @@ beforeAll(async () => {
   });
   greenLotId = greenLot.id;
 
+  // Lives here, not in the test that uses it: created inside the test body it
+  // was tracked by nothing and leaked one row per run — the very defect
+  // ADR-086 closed, reintroduced by the test written to prove ADR-087.
+  const wrongProjectLot = await prisma.lot.create({
+    data: { lotCode: `${RUN_ID}-other-green`, lotType: "green", organizationId, projectId: otherProjectId },
+  });
+  wrongProjectLotId = wrongProjectLot.id;
+
   authorizedUserAccountId = await createTestUserAccount("R1Operator");
   await assignFarmOperator(authorizedUserAccountId, projectId);
   wrongProjectUserAccountId = await createTestUserAccount("R1WrongProjectOperator");
@@ -76,7 +85,12 @@ afterAll(async () => {
   await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId: greenLotId }) });
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: [greenLotId, ...outputLotIds] } }) });
   await prisma.lotTransformation.deleteMany({
-    where: assertDefinedWhere({ OR: [{ inputs: { some: { lotId: greenLotId } } }, { outputs: { some: { lotId: { in: outputLotIds } } } }] }),
+    where: assertDefinedWhere({
+      OR: [
+        { inputs: { some: { lotId: { in: [greenLotId, wrongProjectLotId] } } } },
+        { outputs: { some: { lotId: { in: outputLotIds } } } },
+      ],
+    }),
   });
   // Every session this file creates goes through recordRoastSession, which
   // stamps `createdBy` with the acting account — so this catches all of them,
@@ -109,7 +123,7 @@ afterAll(async () => {
   // create RoastSessions and vitest runs files in parallel, so a total would be
   // measuring them too.
   expect(await prisma.roastSession.count({ where: { createdBy: { in: roastSessionOwners } } })).toBe(0);
-  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: [greenLotId, ...outputLotIds] } }) });
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: [greenLotId, wrongProjectLotId, ...outputLotIds] } }) });
 
   const userAccountIds = [authorizedUserAccountId, wrongProjectUserAccountId];
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
@@ -118,6 +132,15 @@ afterAll(async () => {
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectId, otherProjectId] } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
+
+  // Asked of Lots too, since this file creates those and a leak there is what
+  // the /lots page surfaced (ADR-087).
+  //
+  // At the END, after every delete. Placed mid-cleanup it throws before the
+  // later statements run, so the assertion itself strands the rows it is
+  // complaining about — which is exactly what happened when it was first
+  // written, and produced twelve orphaned lots per run rather than one.
+  expect(await prisma.lot.count({ where: { lotCode: { contains: RUN_ID } } })).toBe(0);
 });
 
 describe("recordRoastSession — validation and access", () => {
@@ -177,14 +200,14 @@ describe("§4.1 — one green lot roasted three ways, queryable by profile", () 
       expect(outputLot.lotType).toBe("roast");
     }
 
-    const claroSessions = await listRoastSessions(authorizedUserAccountId, { roastLevel: "claro filtro" });
+    const { items: claroSessions } = await listRoastSessions(authorizedUserAccountId, { roastLevel: "claro filtro" });
     expect(claroSessions.length).toBeGreaterThanOrEqual(1);
     expect(claroSessions.every((s) => s.roastLevel === "claro filtro")).toBe(true);
 
     // All three roasts share the same source green lot as input — the DAG
     // has three children from one parent, even though each is its own
     // stage_change transformation rather than one shared split.
-    const allFromThisLot = await listRoastSessions(authorizedUserAccountId, {});
+    const { items: allFromThisLot } = await listRoastSessions(authorizedUserAccountId, {});
     const ourSessions = allFromThisLot.filter((s) => s.transformations.some((t) => t.inputs.some((i) => i.lot.id === greenLotId)));
     expect(ourSessions.length).toBe(3);
   });
@@ -218,8 +241,8 @@ describe("§4.2 — same coffee, two roasters, two machines — roaster as a que
     expect(mariaSession.roasterPersonId).toBe(mariaPersonId);
     expect(gabrielSession.equipmentNote).not.toBe(mariaSession.equipmentNote);
 
-    const gabrielSessions = await listRoastSessions(authorizedUserAccountId, { roasterPersonId: gabrielPersonId });
-    const mariaSessions = await listRoastSessions(authorizedUserAccountId, { roasterPersonId: mariaPersonId });
+    const { items: gabrielSessions } = await listRoastSessions(authorizedUserAccountId, { roasterPersonId: gabrielPersonId });
+    const { items: mariaSessions } = await listRoastSessions(authorizedUserAccountId, { roasterPersonId: mariaPersonId });
     expect(gabrielSessions.some((s) => s.id === gabrielSession.id)).toBe(true);
     expect(gabrielSessions.some((s) => s.id === mariaSession.id)).toBe(false);
     expect(mariaSessions.some((s) => s.id === mariaSession.id)).toBe(true);
@@ -295,3 +318,61 @@ describe("§4.5 — A7/F1/S1 real data left untouched", () => {
     expect(roastSessionResidue.length).toBeGreaterThan(0); // still present mid-suite, cleaned in afterAll
   });
 });
+
+describe("the row cap is spent on rows the caller can see — ADR-087", () => {
+  it("returns the caller's own session even when newer invisible ones would fill the limit", async () => {
+    // The defect: `listRoastSessions` took the newest N platform-wide and only
+    // then dropped what the caller could not see, so the cap was consumed by
+    // other people's sessions. A roaster scoped to one project could be shown
+    // nothing while their own rows sat just past the limit. That is not a cap,
+    // it is a wrong answer — and it is what let ADR-086's test lose its own
+    // three rows behind 200 leaked ones.
+    //
+    // A limit of 2 reproduces at three fixtures what would otherwise need 201.
+    // Three sessions the authorized caller cannot see, all NEWER than theirs.
+    for (let i = 0; i < 3; i++) {
+      const { outputLot } = await recordRoastSession(wrongProjectUserAccountId, {
+        lotId: wrongProjectLotId,
+        outputLotCode: `${RUN_ID}-other-roast-${i}`,
+        startedAt: new Date(`2027-02-0${i + 1}T08:00:00Z`),
+        provenanceClass: "direct_observation",
+      });
+      outputLotIds.push(outputLot.id);
+    }
+
+    // With a limit of 2, the two newest rows in the whole table are now the
+    // invisible ones above. The old ordering would take those, filter them
+    // out, and hand back a list shorter than the cap — or empty. The fix
+    // spends the cap on rows this caller can see, so it comes back full.
+    const { items } = await listRoastSessions(authorizedUserAccountId, {}, 2);
+    expect(items.length).toBe(2);
+
+    // And every one of them is genuinely the caller's.
+    for (const session of items) {
+      const inputLots = session.transformations.flatMap((t) => t.inputs.map((i) => i.lot));
+      expect(inputLots.some((lot) => lot.projectId === projectId)).toBe(true);
+    }
+  });
+
+  it("never returns a session belonging to another caller's project", async () => {
+    // The filter has moved into SQL; this is the property that must survive
+    // the move. Asserted over every returned row rather than spot-checked.
+    const { items } = await listRoastSessions(authorizedUserAccountId, {});
+    for (const session of items) {
+      const inputLots = session.transformations.flatMap((t) => t.inputs.map((i) => i.lot));
+      expect(inputLots.some((lot) => lot.projectId === projectId)).toBe(true);
+    }
+  });
+
+  it("reports truncation instead of presenting a cut-off list as the whole set", async () => {
+    const capped = await listRoastSessions(authorizedUserAccountId, {}, 1);
+    expect(capped.items.length).toBe(1);
+    expect(capped.truncated).toBe(true);
+    expect(capped.limit).toBe(1);
+
+    // And says nothing was cut when nothing was.
+    const roomy = await listRoastSessions(authorizedUserAccountId, {}, 500);
+    expect(roomy.truncated).toBe(false);
+  });
+});
+

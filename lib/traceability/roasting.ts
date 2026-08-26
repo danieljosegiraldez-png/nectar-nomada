@@ -26,9 +26,10 @@
  * without touching recordTransformation or the split mechanism at all.
  */
 import { prisma } from "../db";
-import { requireLotAccess, resolveLotVisibility, lotMatchesVisibility, TraceabilityAccessError } from "./lots";
+import { LIST_LIMIT, truncate } from "../listLimit";
+import { requireLotAccess, resolveLotVisibility, lotWhereFromVisibility, TraceabilityAccessError } from "./lots";
 import { recordAuditEvent } from "../audit";
-import type { ProvenanceClass } from "../../generated/prisma/client";
+import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
 export class RoastSessionValidationError extends Error {}
 
@@ -180,14 +181,42 @@ export interface RoastSessionFilter {
  * lot (via its transformation's input), the same mechanism getLotList
  * already uses — a RoastSession carries no project/location of its own.
  */
-export async function listRoastSessions(userAccountId: string, filter: RoastSessionFilter = {}) {
-  const visibility = await resolveLotVisibility(userAccountId, "view");
-  if (visibility.mode === "none") return [];
+type RoastSessionListRow = Prisma.RoastSessionGetPayload<{
+  include: {
+    roaster: true;
+    transformations: { include: { inputs: { include: { lot: true } }; outputs: { include: { lot: true } } } };
+  };
+}>;
 
-  const sessions = await prisma.roastSession.findMany({
+export async function listRoastSessions(
+  userAccountId: string,
+  filter: RoastSessionFilter = {},
+  // Overridable so the cap's interaction with visibility is testable at all:
+  // demonstrating "the limit was spent on rows the caller cannot see" needs
+  // either LIST_LIMIT+1 fixtures or a smaller limit, and the second is the one
+  // that leaves a fast test behind (ADR-087).
+  limit: number = LIST_LIMIT,
+) {
+  const visibility = await resolveLotVisibility(userAccountId, "view");
+  if (visibility.mode === "none") return truncate<RoastSessionListRow>([], limit);
+
+  const lotWhere = lotWhereFromVisibility(visibility);
+  if (lotWhere === null) return truncate<RoastSessionListRow>([], limit);
+
+  const rows = await prisma.roastSession.findMany({
     where: {
       ...(filter.roastLevel ? { roastLevel: filter.roastLevel } : {}),
       ...(filter.roasterPersonId ? { roasterPersonId: filter.roasterPersonId } : {}),
+      // Visibility belongs in the query, not in a filter over the results —
+      // ADR-087. This used to take the newest 200 rows platform-wide and then
+      // drop the ones the caller could not see, so the cap was spent on other
+      // people's sessions: a roaster scoped to one project could be shown
+      // almost nothing while hundreds of their own rows existed just past the
+      // limit. That is not a cap, it is a wrong answer, and it is what let a
+      // test lose its own three rows behind 200 leaked ones (ADR-086).
+      ...(visibility.mode === "all"
+        ? {}
+        : { transformations: { some: { inputs: { some: { lot: lotWhere } } } } }),
     },
     include: {
       roaster: true,
@@ -199,13 +228,10 @@ export async function listRoastSessions(userAccountId: string, filter: RoastSess
       },
     },
     orderBy: { startedAt: "desc" },
-    take: 200,
+    take: limit + 1,
   });
 
-  if (visibility.mode === "all") return sessions;
-  return sessions.filter((session) =>
-    session.transformations.some((t) => t.inputs.some((i) => lotMatchesVisibility(i.lot, visibility))),
-  );
+  return truncate(rows, limit);
 }
 
 export async function getRoastSessionDetail(userAccountId: string, roastSessionId: string) {

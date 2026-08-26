@@ -11,13 +11,16 @@ export default async function ApiariesPage() {
   if (!user) redirect("/login");
 
   const t = await getTranslations("Apiary");
-  const apiaries = await getApiaryList(user.userAccountId);
+  const { items: apiaries, truncated, limit } = await getApiaryList(user.userAccountId);
 
   return (
     <div>
       <span className="nn-badge">{t("badge")}</span>
       <h1>{t("apiariesTitle")}</h1>
       <p className="nn-muted">{t("apiariesIntro")}</p>
+
+      {/* ADR-087 — a cut-off list says so. */}
+      {truncated ? <p className="nn-muted">{t("listTruncated", { limit })}</p> : null}
 
       {apiaries.length === 0 ? (
         <p className="nn-muted">{t("noApiaries")}</p>
