@@ -485,7 +485,8 @@
     "noPlots": "Todavía no hay lotes accesibles.",
     "exportButton": "Exportar mis datos",
     "noActiveOperations": "Nada en curso ahora mismo.",
-    "quantityNotRecorded": "Cantidad no registrada"
+    "quantityNotRecorded": "Cantidad no registrada",
+    "listTruncated": "Mostrando los {limit} más recientes. Hay más registros de los que caben en esta lista."
   },
   "Apiary": {
     "badge": "Apiario",
@@ -575,7 +576,8 @@
     "lastSyncLabel": "Última sincronización: {time}",
     "neverSyncedLabel": "Todavía no sincronizó",
     "storageWarning": "El almacenamiento del dispositivo se está agotando",
-    "draftsPurgedNotice": "{count, plural, one {Se eliminó # borrador antiguo sin sincronizar} other {Se eliminaron # borradores antiguos sin sincronizar}} para proteger los datos de campo si se pierde este dispositivo."
+    "draftsPurgedNotice": "{count, plural, one {Se eliminó # borrador antiguo sin sincronizar} other {Se eliminaron # borradores antiguos sin sincronizar}} para proteger los datos de campo si se pierde este dispositivo.",
+    "listTruncated": "Mostrando los {limit} más recientes. Hay más registros de los que caben en esta lista."
   },
   "Research": {
     "badge": "Research OS",

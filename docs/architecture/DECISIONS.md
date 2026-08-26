@@ -6020,3 +6020,73 @@ and it remains a list that lies to a roaster with a long history. Whether to
 paginate, raise the cap, or scope the query is a design decision, and the same
 silent cap should be checked for across the sibling list functions it was
 likely copied into.
+
+---
+
+## ADR-087 — The row cap was spent on rows the caller could not see
+
+**Context.** ADR-086 left `listRoastSessions`'s `take: 200` open as "a list
+that lies to a roaster with a long history". Surveying the four services that
+carried the same cap turned up something worse in one of them.
+
+`getLotList`, `getApiaryList` and `listTreatmentBatches` apply their filter in
+the query and then cap the result. Silent, but the 200 rows are the caller's
+own. `listRoastSessions` did it the other way round: it took the newest 200
+rows **platform-wide** and only then dropped the ones the caller could not
+see. The cap was spent on other people's sessions.
+
+That is not a cap, it is a wrong answer. A roaster scoped to one project could
+be shown almost nothing while hundreds of their own rows sat just past the
+limit — and it is exactly how ADR-086's test came to lose its own three
+sessions behind 200 leaked ones.
+
+**Decision 1 — visibility moves into the query.** `listRoastSessions` now
+filters through `lotWhereFromVisibility` on the transformation's input lot,
+which is the mechanism `getLotList` already used. Reverting to the old
+filter-after-take makes the new test return **zero** rows where the fix returns
+two: the production defect, reproduced at three fixtures rather than the 201 it
+would otherwise take.
+
+**Decision 2 — a cut-off list says so.** All four services return
+`{ items, truncated, limit }`. Truncation is detected by asking for
+`LIST_LIMIT + 1` and seeing whether the extra row comes back, not by a second
+`count()` — a separate count is another round trip against another snapshot and
+could disagree with the rows actually returned. `/lots` and `/apiaries` render
+a notice when it is set.
+
+This is deliberately **not pagination**, which CLAUDE.md §59 still wants. It is
+the smaller, prior fix: silence is the actual defect. A visible "showing the
+newest 200" is a limitation; an invisible one presents part of the data as all
+of it.
+
+**Decision 3 — the limit is a parameter.** Demonstrating "the cap was spent on
+invisible rows" needs either `LIST_LIMIT + 1` fixtures or a smaller limit, and
+only the second leaves a fast test behind. `listRoastSessions` takes an
+optional `limit`, and the regression test drives it at 2.
+
+**Two fixture leaks, one of them mine, found by opening the page.** Verifying
+the pages still rendered showed `/lots` listing six lots named
+`r1-roast-…-other-green`. The test written to prove Decision 1 created a
+wrong-project Lot inside the test body, where nothing tracked it — ADR-086's
+defect, reintroduced by the change that documents ADR-086. It now lives in
+`beforeAll` alongside the lot it mirrors, and the cleanup owns it.
+
+The second was worse and more instructive. The Lot-count self-check added
+alongside it was placed mid-cleanup, before `lot.deleteMany` ran. Throwing
+there aborted the rest of `afterAll`, so the assertion stranded the very rows
+it was complaining about — twelve per run instead of one. **A cleanup
+assertion belongs at the end of the cleanup**, and a guard that fires early
+does not merely fail to help, it causes the condition it reports. It now sits
+after every delete.
+
+**Verification.** Three consecutive full-suite runs, 500 passing, exit 0, with
+zero fixture Lots and zero RoastSessions left behind — checked in the database
+rather than inferred from a green run. Three consecutive runs of the roasting
+file alone, likewise. `/lots` reopened and confirmed showing real batch codes
+only. No `take: 200` remains in `lib`.
+
+**Still open.** Real pagination. `/lots` can now say it is showing the newest
+200 of more; it still offers no way to reach the rest. The smaller caps
+elsewhere — `take: 50` on samples awaiting sensory, `take: 20` on a lot's
+tasks and on the AI queue — are deliberate "most recent N" panels rather than
+lists claiming completeness, and are left as they are.

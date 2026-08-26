@@ -23,7 +23,9 @@ export default async function ExecuteProtocolPage({ params }: { params: Promise<
     if (error instanceof ResearchAccessError) notFound();
     throw error;
   }
-  const lots = await getLotList(user.userAccountId);
+  // Only the ids feed a picker here, so truncation has no notice to render;
+  // the cap is the same one /lots reports (ADR-087).
+  const { items: lots } = await getLotList(user.userAccountId);
 
   return (
     <div>

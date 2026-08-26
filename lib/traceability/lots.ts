@@ -19,6 +19,7 @@ import type { ClassificationLevel } from "../rbac/types";
  * never just one.
  */
 import { prisma } from "../db";
+import { LIST_LIMIT, truncate } from "../listLimit";
 import { sortByName } from "../naturalOrder";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
@@ -424,18 +425,27 @@ export interface LotListFilters {
   lotType?: CreateLotInput["lotType"];
 }
 
-/** Filterable list for the `/lots` screen (§30 screen 2) — capped at 200, newest first; Phase 1 has no pagination UI yet. */
+/**
+ * Filterable list for the `/lots` screen (§30 screen 2) — newest first, capped
+ * at LIST_LIMIT and reporting when the cap was reached (ADR-087). Still not
+ * pagination; the page can now at least say it is not showing everything,
+ * where before it silently presented the newest 200 as the whole set.
+ *
+ * Visibility is in the `where`, so the cap is spent on rows this caller can
+ * actually see.
+ */
 export async function getLotList(userAccountId: string, filters: LotListFilters = {}) {
   const visibility = await resolveLotVisibility(userAccountId);
   const where = lotWhereFromVisibility(visibility);
-  if (where === null) return [];
+  if (where === null) return truncate<Prisma.LotGetPayload<{ include: { project: true; organization: true; location: true } }>>([]);
 
-  return prisma.lot.findMany({
+  const rows = await prisma.lot.findMany({
     where: { ...where, ...(filters.lotType ? { lotType: filters.lotType } : {}) },
     include: { project: true, organization: true, location: true },
     orderBy: { createdAt: "desc" },
-    take: 200,
+    take: LIST_LIMIT + 1,
   });
+  return truncate(rows);
 }
 
 // Placeholder threshold for the "requiring attention" card (§23: "past a

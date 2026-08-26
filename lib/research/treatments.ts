@@ -8,6 +8,7 @@
  * comment.
  */
 import { prisma } from "../db";
+import { LIST_LIMIT, truncate } from "../listLimit";
 import { recordAuditEvent } from "../audit";
 import { requireResearchAccess, ResearchAccessError } from "./access";
 import { getSensoryLinkageForSamples } from "../traceability/lots";
@@ -531,7 +532,7 @@ export interface ListTreatmentBatchesFilter {
 
 export async function listTreatmentBatches(userAccountId: string, filter: ListTreatmentBatchesFilter = {}) {
   await requireResearchAccess(userAccountId, "view", [{}]);
-  return prisma.treatmentBatch.findMany({
+  const rows = await prisma.treatmentBatch.findMany({
     where: {
       ...(filter.protocolVersionId ? { protocolVersionId: filter.protocolVersionId } : {}),
       ...(filter.lotId ? { lotId: filter.lotId } : {}),
@@ -542,8 +543,9 @@ export async function listTreatmentBatches(userAccountId: string, filter: ListTr
       protocolVersion: { include: { protocol: true } },
     },
     orderBy: { startedAt: "desc" },
-    take: 200,
+    take: LIST_LIMIT + 1,
   });
+  return truncate(rows);
 }
 
 /**
