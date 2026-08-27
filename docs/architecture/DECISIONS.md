@@ -6576,3 +6576,139 @@ material as real Lots, remediation of the three overstated lots, device
 authority with Person attribution, and the ~25-table device mirror — are
 recorded in `COFFEE_FIELD_OS_AUDIT.md` §58 and will get their own ADRs as the
 tickets that implement them land, rather than being pre-registered here.
+
+---
+
+## ADR-094 — The quantity ledger only ever had one side, and a test said that was correct
+
+**Context.** `QuantityEvent` has carried `transfer_out`, `loss` and
+`adjustment_decrease` since T2. **No code path anywhere had ever written any
+of them.** `recordTransformation` created a `process_output` event for each
+output lot and no decrement for any input; `endFermentationRun`,
+`endDryingRun` and `createRoastSession` each copied that shape, defect
+included. Only `samples.ts` was correct, writing `sample_removed` when 2 kg
+left for a sample.
+
+So after every split, merge, blend and stage change the parent lot still
+reported its full intake while the children reported theirs. Splitting 200 kg
+into 120 + 80 left 400 kg visible in a system holding 200. `getLotReport`
+aggregates across ancestry, so it compounded the error rather than cancelling
+it, and "how much coffee is on hand" had no answer at all.
+
+Two things kept it invisible for fourteen tickets. `computeCurrentQuantity`
+was correct in isolation and `quantity.test.ts` proved it against hand-written
+event lists — the bug lived entirely in what never called it. And T14's
+end-to-end test **asserted the broken behaviour as intentional**, under the
+heading "gives each lot its own independent quantity ledger, not a
+decrementing running total", reasoning that a stage transition "is expressed
+through lineage, not by mutating a prior lot's own quantity."
+
+That reasoning is refuted by the same test's own numbers. It asserted the
+green lot at 398, not 400, because a 2 kg sample extraction *had* decremented
+it. Extracting 2 kg reduced the balance; moving 480 kg to the next stage did
+not. Both cannot be right, and the enum had carried the vocabulary for the
+correct answer from the beginning, unused.
+
+Measured against the 2026-08-26 restore: five lots were consumed as inputs
+without a decrement, of which **three carry a ledger and are genuinely
+overstated** — PE-79, PE-80, PE-90, Cafelino cherry, 145.3 kg. The other two
+were never weighed, so ADR-080's `recorded: false` already described them
+honestly.
+
+**Decision 1 — one implementation, not four.** `settleMassBalance`
+(`lib/traceability/balance.ts`) is the single entry point all four write paths
+call. The defect existed four times because the pattern had been copied four
+times; a fix applied four times would have drifted four ways. `balance.ts` is
+deliberately a leaf — it imports nothing from `lots.ts` or `quantity.ts`, both
+of which import it — which is what keeps the dependency acyclic now that
+`computeCurrentQuantity` delegates its summation there too.
+
+**Decision 2 — a transformation with zero outputs moves nothing.**
+`startFermentationRun` and `startDryingRun` create a `stage_change` with one
+input and no outputs: a marker saying the lot entered the stage. The coffee is
+in the tank; it has not gone anywhere. Only the closing transformation
+converts material. Decrementing on both would zero the lot the moment
+fermentation began and decrement it again at the end — a bug that would have
+*looked* like the fix working. `movesMaterial()` names this rule in one place,
+and `sample_extraction` returns false from it because `samples.ts` already
+writes its own event.
+
+**Decision 3 — full consumption decrements by the computed balance, not by the
+declared input quantity.** Nine of ten transformation inputs in real data
+carry a NULL quantity, so "decrement by what the operator declared" is
+unimplementable for almost all of them. The lot's own balance is knowable
+exactly where the declaration is not. `split` is the exception and requires an
+explicit quantity, because how much of a lot was taken cannot be inferred.
+
+`LotTransformationInput.quantity` is deliberately **not** back-filled with the
+computed figure. That column records what the operator declared; the ledger
+records what moved. Collapsing them would destroy the ability to notice they
+disagree, which is the signal a balance review is looking for.
+
+**Decision 4 — only `split`, `merge` and `blend` are reconciled against a
+tolerance.** This corrects `41_P0_MASS_BALANCE.md` §4, which said every
+material-moving transformation. Applying it to a `stage_change` looks right
+until you try it: cherry to parchment loses roughly four fifths of its mass,
+and that loss is the **yield**, the single most valuable number a mill
+computes. Treating it as an unexplained discrepancy would raise a Deviation on
+every correctly recorded depulping, which is how an alarm gets ignored and
+then switched off.
+
+A split, merge or blend re-partitions material without transforming it, so the
+masses genuinely must add up and a gap means someone mis-weighed. That is also
+exactly the shape the Phase 3 selection operation has — accepted + rejected +
+declared loss = input — so the machinery lands where it was actually needed.
+Yield stays fully derivable from the ledger; it is reported, not alarmed on.
+
+**Decision 5 — out of tolerance records and raises a Deviation; it does not
+reject.** Operators estimate weights, and a field tool that refuses real data
+stops being used and goes back to paper. The transformation is written, the
+unexplained difference is **stored** on it (not derived — it is the figure an
+audit asks about years later, and recomputing it from a since-corrected
+history would answer a different question), and a `Deviation` is raised
+against it. NULL, never zero, whenever a term is genuinely unknown.
+
+Accepting a discrepancy is a separate act from recording it, so it needs a
+separate permission: `lot:override_balance`, held by Platform Admin and
+deliberately **not** by Farm Operator. The operator records what the scale
+says. The override does not suppress the Deviation — the discrepancy happened
+either way — it answers it at write time with an attributed reason, through
+the existing `CorrectiveAction` machinery rather than a parallel concept.
+
+**Decision 6 — `lot_code` is unique per organization, and `organization_id` is
+required.** A global unique is an offline-collision hazard (two disconnected
+devices minting "PE-79") and a multi-tenant defect (two farms cannot both
+number a batch "01"). Making `organization_id` NOT NULL is what gives the
+scoped constraint something real to scope against — Postgres treats NULLs as
+distinct, so a nullable column would leave it unenforced for exactly the rows
+most likely to need it. Verified 0 NULLs and 0 duplicates before migrating,
+and the migration re-checks both and refuses rather than backfilling a guess.
+
+`Sample.sample_code` is scoped the same way but its `organization_id` stays
+**nullable**, which is a real difference and not an oversight: the S1
+external-coffee path exists for a green sample handed over at a fair, with no
+lineage and no owning organization. Forcing one onto it would push someone
+toward inventing one.
+
+**Decision 7 — the three overstated lots are flagged, not corrected.**
+`npm run data:flag-overstated-lots` sets `dataQuality = conflicting` and
+reporting excludes them. It detects **by condition** — consumed as an input,
+carries a ledger, has no subtractive event — rather than by hardcoded lot
+code, so it is self-verifying, finds nothing once the fix is in, and is a safe
+no-op on re-run. No quantity is synthesized: CLAUDE.md §3 forbids inferring a
+missing value into a fact, and a compensating adjustment would be exactly
+that. If the real weights are recoverable from the Cafelino source data they
+should be entered as genuine corrections; if not, these three stay flagged,
+and that is the honest outcome.
+
+**Consequences.** T14's assertion is reversed in `e2e.test.ts`, with the
+reasoning recorded inline so the next reader meets the argument rather than a
+silent change. A consumed lot now reads `0` with `recorded: true` — a real
+zero, distinct from never-weighed. Every fixture that creates a Lot needed a
+real organization, which is why eleven test files gained one and
+`tests/helpers/testOrganization.ts` exists.
+
+Yield reporting is now possible and was not before; it is also still unwritten,
+and Phase 6 owns it. The tolerance default of 2% is a starting value chosen to
+clear ordinary field practice, not a claim about coffee — the per-organization
+column exists precisely so a farm that knows its own scales can say so.

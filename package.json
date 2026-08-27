@@ -25,6 +25,7 @@
     "auth:set-password": "tsx scripts/set-password.ts",
     "auth:grant-admin": "bash scripts/grant-platform-admin.sh",
     "rbac:grant": "tsx scripts/grant-role.ts",
+    "data:flag-overstated-lots": "tsx scripts/p0-flag-overstated-lots.ts",
     "data:remove-demo-places": "bash scripts/remove-demo-places.sh",
     "data:remove-orphan-roasts": "bash scripts/remove-orphan-roasts.sh",
     "people:set-email": "tsx scripts/set-person-email.ts",

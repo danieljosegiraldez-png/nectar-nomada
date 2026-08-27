@@ -46,6 +46,13 @@ export async function recordApiaryHarvest(userAccountId: string, input: RecordAp
   const { hive } = colony;
   await requireApiaryAccess(userAccountId, "manage", [{ projectId: hive.projectId, locationId: hive.locationId }]);
 
+  // P0 §7 — Lot.organizationId is required now, and a Location's is not, so
+  // the apiary site must actually name its owner before it can produce a
+  // honey batch. Refused rather than defaulted: guessing which organization
+  // owns a harvest is exactly the kind of invented fact CLAUDE.md §3 forbids.
+  const lotOrganizationId = hive.location.organizationId;
+  if (!lotOrganizationId) throw new ApiaryAccessError("apiary_site_has_no_organization");
+
   const provenanceClass = input.provenanceClass;
 
   const result = await prisma.$transaction(async (tx) => {
@@ -58,7 +65,7 @@ export async function recordApiaryHarvest(userAccountId: string, input: RecordAp
       data: {
         lotCode: input.lotCode,
         lotType: "honey",
-        organizationId: hive.location.organizationId,
+        organizationId: lotOrganizationId,
         projectId: hive.projectId,
         locationId: hive.locationId,
         createdBy: userAccountId,

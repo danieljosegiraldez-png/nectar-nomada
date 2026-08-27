@@ -10,8 +10,11 @@ import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceabil
 import { recordMeasurement } from "../../lib/traceability/measurements";
 import { endFermentationRun, recordFermentationIntervention, startFermentationRun } from "../../lib/traceability/fermentation";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN_ID = `t6-${Date.now()}`;
+
+let organizationId: string;
 
 let projectAId: string;
 let projectBId: string;
@@ -38,6 +41,7 @@ async function assignFarmOperator(userAccountId: string, scope: { scopeType: "pr
 }
 
 beforeAll(async () => {
+  organizationId = await createTestOrganization(RUN_ID);
   const projectA = await prisma.project.create({
     data: { name: `TEST Project A (${RUN_ID})`, status: "approved", classification: "internal" },
   });
@@ -78,6 +82,7 @@ afterAll(async () => {
   });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectAId, projectBId] } }) });
+  await deleteTestOrganizations(RUN_ID);
 });
 
 describe("Fermentation — full start/intervene/measure/end cycle", () => {
@@ -87,6 +92,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-cycle`,
       lotType: "processing",
+      organizationId,
       projectId: projectAId,
     });
     await recordQuantityEvent(authorizedUserAccountId, {
@@ -170,6 +176,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-start-denied`,
       lotType: "processing",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -186,6 +193,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-intervention-denied`,
       lotType: "processing",
+      organizationId,
       projectId: projectAId,
     });
     const { run } = await startFermentationRun(authorizedUserAccountId, {
@@ -207,6 +215,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-double-end`,
       lotType: "processing",
+      organizationId,
       projectId: projectAId,
     });
     const { run } = await startFermentationRun(authorizedUserAccountId, {

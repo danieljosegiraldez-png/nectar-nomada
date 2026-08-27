@@ -352,7 +352,9 @@ export async function runImport(opts: { peCsvPath: string; cerezasCsvPath: strin
     // same lotCode, and aborts on lot_code uniqueness. That left the import
     // unresumable without restoring the database — survivable locally,
     // considerably worse against real Neon. Adopt the orphan instead.
-    const existingLot = await prisma.lot.findUnique({ where: { lotCode: row.peCode } });
+    const existingLot = await prisma.lot.findUnique({
+      where: { organizationId_lotCode: { organizationId: CAFELINO_ORG_ID, lotCode: row.peCode } },
+    });
 
     let lotId: string;
     if (existingLot) {

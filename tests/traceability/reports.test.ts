@@ -22,6 +22,7 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `t13-report-${Date.now()}`;
 
+
 let organizationId: string;
 let projectId: string;
 let locationId: string;
@@ -277,7 +278,7 @@ describe("getLotReport — E2E, full coffee workflow", () => {
   });
 
   it("renders no Origin/Sensory content for a lot with neither, without erroring (a bare lot created directly)", async () => {
-    const bareLot = await createLot(authorizedUserAccountId, { lotCode: `${RUN_ID}-bare`, lotType: "other", projectId });
+    const bareLot = await createLot(authorizedUserAccountId, { lotCode: `${RUN_ID}-bare`, lotType: "other", organizationId, projectId });
     try {
       const report = await getLotReport(authorizedUserAccountId, bareLot.id);
       expect(report.origins.harvestEvents).toHaveLength(0);
