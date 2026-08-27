@@ -218,24 +218,43 @@ afterAll(async () => {
 });
 
 describe("Full coffee workflow — T14 end-to-end", () => {
-  it("gives each lot its own independent quantity ledger, not a decrementing running total", async () => {
-    // Each stage-change seeds only the *output* lot's ledger (T6/T7's own
-    // documented fix) — the cherry lot's "received" event is never zeroed
-    // out just because the material moved on; that transition is expressed
-    // through lineage (LotTransformation), not by mutating a prior lot's
-    // own quantity. This is the composition fact worth pinning here: it's
-    // true by construction in every per-ticket test, but never asserted
-    // across a full chain in one place until now.
+  it("conserves material across the chain — a consumed lot reads zero, not its original weight", async () => {
+    // **This assertion is the reverse of what T14 originally pinned here**,
+    // and the reversal is deliberate (P0,
+    // docs/implementation/41_P0_MASS_BALANCE.md).
+    //
+    // The original read: "each lot keeps its own independent ledger; the
+    // cherry lot's `received` event is never zeroed out just because the
+    // material moved on; that transition is expressed through lineage, not by
+    // mutating a prior lot's quantity." It was written deliberately and it is
+    // wrong, for a reason visible in this test's own numbers.
+    //
+    // The green lot was already asserted at 398, not 400 — because
+    // `samples.ts` writes a `sample_removed` event when 2 kg leaves for a
+    // sample. So the codebase already accepted that a lot's balance falls
+    // when material leaves it. Extracting 2 kg decremented; moving 480 kg to
+    // the next stage did not. Those cannot both be right.
+    //
+    // `QuantityEventType` has always carried `transfer_out`, `loss` and
+    // `adjustment_decrease`, and no code path anywhere produced any of them —
+    // the vocabulary for the correct behaviour was there from T2, unused.
+    // With every lot retaining its full intake, summing lots double-counts
+    // every parent, so "how much coffee is on hand" had no answer.
+    //
+    // Lineage still expresses *where* material went. The ledger expresses
+    // *how much is there now*. They are different questions.
     const cherryQuantity = await computeCurrentQuantity(operatorUserAccountId, cherryLotId);
-    expect(cherryQuantity.quantity.toString()).toBe("500");
-    expect(cherryQuantity.unit).toBe("kg");
+    expect(cherryQuantity.quantity.toString()).toBe("0");
+    // Consumed, not unweighed — a real zero is a claim worth making (ADR-080).
+    expect(cherryQuantity.recorded).toBe(true);
 
     const dryingStageQuantity = await computeCurrentQuantity(operatorUserAccountId, dryingStageLotId);
-    expect(dryingStageQuantity.quantity.toString()).toBe("480");
+    expect(dryingStageQuantity.quantity.toString()).toBe("0");
 
-    // Green lot: 400 kg process_output, minus the 2 kg sample extraction.
+    // The only lot still holding material: 400 kg in, minus the 2 kg sample.
     const greenQuantity = await computeCurrentQuantity(operatorUserAccountId, greenLotId);
     expect(greenQuantity.quantity.toString()).toBe("398");
+    expect(greenQuantity.unit).toBe("kg");
   });
 
   it("walks the full lineage from the green lot back to the original harvest", async () => {

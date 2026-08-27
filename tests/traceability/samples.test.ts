@@ -10,8 +10,11 @@ import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots"
 import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceability/quantity";
 import { createSampleFromLot } from "../../lib/traceability/samples";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN_ID = `t5-${Date.now()}`;
+
+let organizationId: string;
 
 let projectAId: string;
 let projectBId: string;
@@ -39,6 +42,7 @@ async function assignFarmOperator(userAccountId: string, scope: { scopeType: "pr
 }
 
 beforeAll(async () => {
+  organizationId = await createTestOrganization(RUN_ID);
   const projectA = await prisma.project.create({
     data: { name: `TEST Project A (${RUN_ID})`, status: "approved", classification: "internal" },
   });
@@ -78,6 +82,7 @@ afterAll(async () => {
   });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectAId, projectBId] } }) });
+  await deleteTestOrganizations(RUN_ID);
 });
 
 describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
@@ -85,6 +90,7 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-sample-ok`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -116,6 +122,7 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-sample-denied`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -134,6 +141,7 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-sample-unauthorized`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -164,6 +172,7 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-sample-quantity`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
     await recordQuantityEvent(authorizedUserAccountId, {
@@ -198,6 +207,7 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-sample-no-quantity`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
 

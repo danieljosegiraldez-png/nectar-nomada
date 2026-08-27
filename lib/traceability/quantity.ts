@@ -15,11 +15,13 @@ import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { recordAuditEvent } from "../audit";
 import { Prisma } from "../../generated/prisma/client";
 import type { ProvenanceClass } from "../../generated/prisma/client";
+// P0: the additive/subtractive vocabulary and the summation itself now live
+// in balance.ts, so the transformation write path and this function cannot
+// drift on what "current quantity" means. They previously could not drift
+// only because one of them did not exist.
+import { computeLotBalance, MassBalanceError, type LotBalance } from "./balance";
 
 export class QuantityValidationError extends Error {}
-
-const ADDITIVE_EVENT_TYPES = new Set(["received", "process_output", "transfer_in", "adjustment_increase"]);
-const SUBTRACTIVE_EVENT_TYPES = new Set(["loss", "sample_removed", "transfer_out", "adjustment_decrease"]);
 
 export interface RecordQuantityEventInput {
   lotId: string;
@@ -82,20 +84,17 @@ export async function recordQuantityEvent(userAccountId: string, input: RecordQu
   return quantityEvent;
 }
 
-export interface CurrentQuantity {
-  quantity: Prisma.Decimal;
-  unit: string | null;
-  /**
-   * Whether any QuantityEvent exists for this lot — ADR-080.
-   *
-   * Without this, "never recorded" and "recorded, and currently zero" are the
-   * same value, and the page stated `Cantidad: 0` for a batch nobody had ever
-   * weighed. CLAUDE.md §3: missing information must remain missing, never
-   * inferred into a fact. A lot fully consumed genuinely *is* zero, and that
-   * is a different claim worth being able to make.
-   */
-  recorded: boolean;
-}
+/**
+ * Whether any QuantityEvent exists for this lot — ADR-080.
+ *
+ * Without `recorded`, "never recorded" and "recorded, and currently zero" are
+ * the same value, and the page stated `Cantidad: 0` for a batch nobody had
+ * ever weighed. CLAUDE.md §3: missing information must remain missing, never
+ * inferred into a fact. A lot fully consumed genuinely *is* zero, and that is
+ * a different claim worth being able to make — one that P0's decrements now
+ * make routinely true for consumed parent lots.
+ */
+export type CurrentQuantity = LotBalance;
 
 /**
  * Sums a lot's full QuantityEvent history — additive types add, subtractive
@@ -110,24 +109,12 @@ export async function computeCurrentQuantity(userAccountId: string, lotId: strin
 
   await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
-  const events = await prisma.quantityEvent.findMany({ where: { lotId } });
-  if (events.length === 0) {
-    return { quantity: new Prisma.Decimal(0), unit: null, recorded: false };
+  try {
+    return await computeLotBalance(prisma, lotId);
+  } catch (error) {
+    // Preserve this function's own error type for its existing callers — the
+    // action layer matches on QuantityValidationError by class.
+    if (error instanceof MassBalanceError) throw new QuantityValidationError(error.message);
+    throw error;
   }
-
-  const unit = events[0]!.unit;
-  if (events.some((e) => e.unit !== unit)) {
-    throw new QuantityValidationError("mixed_units");
-  }
-
-  let total = new Prisma.Decimal(0);
-  for (const event of events) {
-    if (ADDITIVE_EVENT_TYPES.has(event.eventType)) {
-      total = total.add(event.quantity);
-    } else if (SUBTRACTIVE_EVENT_TYPES.has(event.eventType)) {
-      total = total.sub(event.quantity);
-    }
-  }
-
-  return { quantity: total, unit, recorded: true };
 }

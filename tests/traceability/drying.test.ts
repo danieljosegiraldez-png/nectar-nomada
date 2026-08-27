@@ -9,8 +9,11 @@ import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots"
 import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceability/quantity";
 import { endDryingRun, recordDryingTurnEvent, startDryingRun } from "../../lib/traceability/drying";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN_ID = `t7-${Date.now()}`;
+
+let organizationId: string;
 
 let projectAId: string;
 let projectBId: string;
@@ -37,6 +40,7 @@ async function assignFarmOperator(userAccountId: string, scope: { scopeType: "pr
 }
 
 beforeAll(async () => {
+  organizationId = await createTestOrganization(RUN_ID);
   const projectA = await prisma.project.create({
     data: { name: `TEST Project A (${RUN_ID})`, status: "approved", classification: "internal" },
   });
@@ -77,6 +81,7 @@ afterAll(async () => {
   });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectAId, projectBId] } }) });
+  await deleteTestOrganizations(RUN_ID);
 });
 
 describe("Drying — full start/turn/measure/end cycle", () => {
@@ -86,6 +91,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-cycle`,
       lotType: "drying",
+      organizationId,
       projectId: projectAId,
     });
     await recordQuantityEvent(authorizedUserAccountId, {
@@ -155,6 +161,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-start-denied`,
       lotType: "drying",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -171,6 +178,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-turn-denied`,
       lotType: "drying",
+      organizationId,
       projectId: projectAId,
     });
     const { run } = await startDryingRun(authorizedUserAccountId, {
@@ -192,6 +200,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-double-end`,
       lotType: "drying",
+      organizationId,
       projectId: projectAId,
     });
     const { run } = await startDryingRun(authorizedUserAccountId, {

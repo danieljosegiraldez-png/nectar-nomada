@@ -11,6 +11,7 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `t8-${Date.now()}`;
 
+
 let projectAId: string;
 let projectBId: string;
 let organizationId: string;
@@ -96,6 +97,7 @@ describe("moveLotToStorage — location-history preservation", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-first-move`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -117,6 +119,7 @@ describe("moveLotToStorage — location-history preservation", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-second-move`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -151,6 +154,7 @@ describe("moveLotToStorage — location-history preservation", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-denied`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
 

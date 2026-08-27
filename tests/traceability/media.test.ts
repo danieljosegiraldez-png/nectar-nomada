@@ -11,8 +11,11 @@ import { prisma } from "../../lib/db";
 import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { requestLotAssetUpload, finalizeLotAssetUpload } from "../../lib/traceability/media";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN_ID = `t12-5-media-${Date.now()}`;
+
+let organizationId: string;
 
 let projectAId: string;
 let projectBId: string;
@@ -38,6 +41,7 @@ async function assignFarmOperator(userAccountId: string, projectId: string) {
 }
 
 beforeAll(async () => {
+  organizationId = await createTestOrganization(RUN_ID);
   const projectA = await prisma.project.create({ data: { name: `TEST Project A (${RUN_ID})`, status: "approved", classification: "internal" } });
   projectAId = projectA.id;
   const projectB = await prisma.project.create({ data: { name: `TEST Project B (${RUN_ID})`, status: "approved", classification: "internal" } });
@@ -49,7 +53,7 @@ beforeAll(async () => {
   await assignFarmOperator(wrongProjectUserAccountId, projectBId);
   unauthorizedUserAccountId = await createTestUserAccount("Unauthorized");
 
-  const lot = await createLot(authorizedUserAccountId, { lotCode: `${RUN_ID}-lot`, lotType: "cherry", projectId: projectAId });
+  const lot = await createLot(authorizedUserAccountId, { lotCode: `${RUN_ID}-lot`, lotType: "cherry", organizationId, projectId: projectAId });
   lotId = lot.id;
 });
 
@@ -61,6 +65,7 @@ afterAll(async () => {
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [authorizedUserAccountId, wrongProjectUserAccountId, unauthorizedUserAccountId] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectAId, projectBId] } }) });
+  await deleteTestOrganizations(RUN_ID);
 });
 
 describe("requestLotAssetUpload — RBAC (pre-R2 guard clauses only)", () => {

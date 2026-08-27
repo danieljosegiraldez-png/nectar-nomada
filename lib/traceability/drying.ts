@@ -17,6 +17,7 @@
  */
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
 import type { LotType, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -201,7 +202,22 @@ export async function endDryingRun(userAccountId: string, input: EndDryingRunInp
       });
     }
 
-    return { run: endedRun, transformation, outputLot };
+    // P0 — decrement the source lot. Only reached from the *closing*
+    // transformation: the run-opening one has zero outputs, so movesMaterial()
+    // inside settleMassBalance() correctly declines to consume anything then.
+    const reconciliation = await settleMassBalance(tx, {
+      transformationId: transformation.id,
+      transformationType: "stage_change",
+      organizationId: sourceLot.organizationId,
+      inputs: [{ lotId: sourceLot.id, quantity: input.quantity ?? null, unit: input.unit ?? null }],
+      outputs: [{ quantity: input.quantity ?? null, unit: input.unit ?? null }],
+      occurredAt: input.endedAt,
+      provenanceClass,
+      sourceReference: input.sourceReference ?? null,
+      createdBy: userAccountId,
+    });
+
+    return { run: endedRun, transformation, outputLot, reconciliation };
   });
 
   // C1 §3 pattern: an evidentiary write.

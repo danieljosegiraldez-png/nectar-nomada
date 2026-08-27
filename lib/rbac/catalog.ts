@@ -61,6 +61,14 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // record in the UI and extracting every record you can see as a file are
   // different acts, and only the second is worth being able to withhold.
   { resourceType: "lot", action: "export", description: "Export lots and their linked records as a downloadable dataset." },
+  // P0 (docs/implementation/41_P0_MASS_BALANCE.md §6) — accept a
+  // transformation whose input and output masses do not reconcile within the
+  // organization's tolerance. Deliberately NOT granted to Farm Operator: the
+  // operator records what the scale says, and accepting a discrepancy is a
+  // different act by someone else. Same separation A7 applied when it withheld
+  // `apiary:manage` from the Apiary Colony Event Recorder — a competence and
+  // authority boundary, not a tier of the same permission.
+  { resourceType: "lot", action: "override_balance", description: "Accept a lot transformation whose mass balance is outside the organization's tolerance." },
   { resourceType: "sample", action: "manage", description: "Create samples, including from a traceable lot." },
 
   // A1 (docs/implementation/22_APIARY_V1_SCOPING_REPORT.md §3) — a new

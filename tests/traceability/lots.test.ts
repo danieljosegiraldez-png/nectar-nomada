@@ -20,6 +20,7 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `t1-${Date.now()}`;
 
+
 let organizationId: string;
 let projectAId: string;
 let projectBId: string;
@@ -125,6 +126,7 @@ describe("createLot — RBAC", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-rbac-ok`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
     expect(lot.lotCode).toBe(`${RUN_ID}-rbac-ok`);
@@ -135,6 +137,7 @@ describe("createLot — RBAC", () => {
     const lot = await createLot(locationScopedUserAccountId, {
       lotCode: `${RUN_ID}-rbac-location-ok`,
       lotType: "cherry",
+      organizationId,
       locationId,
     });
     expect(lot.locationId).toBe(locationId);
@@ -145,6 +148,7 @@ describe("createLot — RBAC", () => {
       createLot(locationScopedUserAccountId, {
         lotCode: `${RUN_ID}-rbac-location-denied`,
         lotType: "cherry",
+        organizationId,
         locationId: otherLocationId,
       }),
     ).rejects.toThrow(TraceabilityAccessError);
@@ -155,6 +159,7 @@ describe("createLot — RBAC", () => {
       createLot(wrongProjectUserAccountId, {
         lotCode: `${RUN_ID}-rbac-cross-project-denied`,
         lotType: "cherry",
+        organizationId,
         projectId: projectAId,
       }),
     ).rejects.toThrow(TraceabilityAccessError);
@@ -165,6 +170,7 @@ describe("createLot — RBAC", () => {
       createLot(unauthorizedUserAccountId, {
         lotCode: `${RUN_ID}-rbac-unauthorized-denied`,
         lotType: "cherry",
+        organizationId,
         projectId: projectAId,
       }),
     ).rejects.toThrow(TraceabilityAccessError);
@@ -176,6 +182,7 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     const origin = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-split-origin`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -208,6 +215,7 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     const origin = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-split-quantity-origin`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -234,6 +242,7 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     const origin = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-provenance-default`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -250,6 +259,7 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     const origin2 = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-provenance-explicit`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
     const { transformation: explicit } = await recordTransformation(authorizedUserAccountId, {
@@ -268,11 +278,13 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     const lotA = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-merge-input-a`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
     const lotB = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-merge-input-b`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -296,11 +308,13 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     const geishaA = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-blend-geisha-a`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
     const geishaB = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-blend-geisha-b`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -329,6 +343,7 @@ describe("recordTransformation — split/merge round-trip and append-only lineag
     const origin = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-history-origin`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -362,6 +377,7 @@ describe("getLotLineage — recursive CTE correctness", () => {
     const origin = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-lineage-origin`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
     const step1 = await recordTransformation(authorizedUserAccountId, {
@@ -397,6 +413,7 @@ describe("getLotLineage — recursive CTE correctness", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-lineage-denied`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
     await expect(getLotLineage(wrongProjectUserAccountId, lot.id)).rejects.toThrow(TraceabilityAccessError);
@@ -419,6 +436,7 @@ describe("getSensoryLinkageForSamples — T12 boundary (ADR-043)", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-t12-boundary`,
       lotType: "sample",
+      organizationId,
       projectId: projectAId,
     });
     sensoryLotId = lot.id;

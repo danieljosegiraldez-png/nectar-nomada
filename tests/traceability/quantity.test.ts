@@ -9,8 +9,11 @@ import { prisma } from "../../lib/db";
 import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { computeCurrentQuantity, QuantityValidationError, recordQuantityEvent } from "../../lib/traceability/quantity";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN_ID = `t2-${Date.now()}`;
+
+let organizationId: string;
 
 let projectAId: string;
 let projectBId: string;
@@ -37,6 +40,7 @@ async function assignFarmOperator(userAccountId: string, scope: { scopeType: "pr
 }
 
 beforeAll(async () => {
+  organizationId = await createTestOrganization(RUN_ID);
   const projectA = await prisma.project.create({
     data: { name: `TEST Project A (${RUN_ID})`, status: "approved", classification: "internal" },
   });
@@ -69,6 +73,7 @@ afterAll(async () => {
   });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectAId, projectBId] } }) });
+  await deleteTestOrganizations(RUN_ID);
 });
 
 describe("recordQuantityEvent — RBAC and validation", () => {
@@ -76,6 +81,7 @@ describe("recordQuantityEvent — RBAC and validation", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-rbac-ok`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
     const event = await recordQuantityEvent(authorizedUserAccountId, {
@@ -93,6 +99,7 @@ describe("recordQuantityEvent — RBAC and validation", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-rbac-cross-project`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
     await expect(
@@ -111,6 +118,7 @@ describe("recordQuantityEvent — RBAC and validation", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-negative-rejection`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
     await expect(
@@ -141,6 +149,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-sum-basic`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -187,6 +196,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-sum-adjustment`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -224,6 +234,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-sum-empty`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
     const result = await computeCurrentQuantity(authorizedUserAccountId, lot.id);
@@ -235,6 +246,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-sum-mixed-units`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
     await recordQuantityEvent(authorizedUserAccountId, {
@@ -260,6 +272,7 @@ describe("computeCurrentQuantity — sum computation across a multi-event lot hi
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-sum-denied`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
     await expect(computeCurrentQuantity(wrongProjectUserAccountId, lot.id)).rejects.toThrow(TraceabilityAccessError);

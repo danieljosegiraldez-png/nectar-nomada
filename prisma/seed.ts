@@ -637,30 +637,32 @@ async function seedDemoSensoryContent(lasNubesProjectId: string) {
  * cleanup) without duplicating this shape.
  */
 async function seedDemoCuppingSession(protocolVersionId: string, lasNubesProjectId: string) {
-  const sample1 = await prisma.sample.upsert({
-    where: { sampleCode: "DCL-CUP-001" },
-    update: {},
-    create: {
-      sampleCode: "DCL-CUP-001",
-      sampleType: "green_coffee",
-      description: "[DEMO placeholder sample — DEMO Cloudline coffee, lot detail not populated.]",
-      projectId: lasNubesProjectId,
-      status: "approved",
-      classification: "internal",
-    },
-  });
-  const sample2 = await prisma.sample.upsert({
-    where: { sampleCode: "DCL-CUP-002" },
-    update: {},
-    create: {
-      sampleCode: "DCL-CUP-002",
-      sampleType: "green_coffee",
-      description: "[DEMO placeholder sample — DEMO Cloudline coffee, second lot, lot detail not populated.]",
-      projectId: lasNubesProjectId,
-      status: "approved",
-      classification: "internal",
-    },
-  });
+  // P0 §7 — `sampleCode` is no longer globally unique; it is scoped to
+  // `organizationId`, which these DEMO placeholders deliberately do not have.
+  // Prisma cannot key a compound unique on a NULL, so idempotency here is
+  // findFirst-then-create rather than upsert. Same guarantee, one more query:
+  // a second seed run finds the existing row instead of colliding.
+  const findOrCreateDemoSample = async (sampleCode: string, description: string) =>
+    (await prisma.sample.findFirst({ where: { sampleCode, organizationId: null } })) ??
+    (await prisma.sample.create({
+      data: {
+        sampleCode,
+        sampleType: "green_coffee",
+        description,
+        projectId: lasNubesProjectId,
+        status: "approved",
+        classification: "internal",
+      },
+    }));
+
+  const sample1 = await findOrCreateDemoSample(
+    "DCL-CUP-001",
+    "[DEMO placeholder sample — DEMO Cloudline coffee, lot detail not populated.]",
+  );
+  const sample2 = await findOrCreateDemoSample(
+    "DCL-CUP-002",
+    "[DEMO placeholder sample — DEMO Cloudline coffee, second lot, lot detail not populated.]",
+  );
 
   const session = await prisma.sensorySession.create({
     data: {

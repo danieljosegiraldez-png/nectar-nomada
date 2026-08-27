@@ -28,6 +28,7 @@
 import { prisma } from "../db";
 import { LIST_LIMIT, truncate } from "../listLimit";
 import { requireLotAccess, resolveLotVisibility, lotWhereFromVisibility, TraceabilityAccessError } from "./lots";
+import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -153,7 +154,32 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
       });
     }
 
-    return { roastSession, transformation, outputLot };
+    // P0 — decrement the green lot by what was actually charged. A roast
+    // always has an output, so this always settles.
+    const reconciliation = await settleMassBalance(tx, {
+      transformationId: transformation.id,
+      transformationType: "stage_change",
+      organizationId: sourceLot.organizationId,
+      inputs: [
+        {
+          lotId: input.lotId,
+          quantity: input.chargeWeightKg ?? null,
+          unit: input.chargeWeightKg != null ? "kg" : null,
+        },
+      ],
+      outputs: [
+        {
+          quantity: input.dischargeWeightKg ?? null,
+          unit: input.dischargeWeightKg != null ? "kg" : null,
+        },
+      ],
+      occurredAt,
+      provenanceClass,
+      sourceReference: input.sourceReference ?? null,
+      createdBy: userAccountId,
+    });
+
+    return { roastSession, transformation, outputLot, reconciliation };
   });
 
   // C1 §3 pattern: an evidentiary write — the earlier gap where T6/T7's

@@ -25,8 +25,28 @@ import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
+import { settleMassBalance } from "./balance";
 
 export class TraceabilityAccessError extends Error {}
+
+/**
+ * P0 §6 — `lot:override_balance`, held by Platform Admin and deliberately not
+ * by Farm Operator. Separate from `lot:manage` for the same reason A7 kept
+ * `apiary:manage` away from the Colony Event Recorder: recording what
+ * happened and accepting that it does not add up are different acts, and the
+ * second one is the one worth restricting.
+ */
+export async function requireBalanceOverride(
+  userAccountId: string,
+  lots: ReadonlyArray<{ projectId: string | null; locationId: string | null; classification: ClassificationLevel }>,
+) {
+  for (const lot of lots) {
+    for (const target of scopeTargetsFor(lot)) {
+      if (await can(userAccountId, "override_balance", "lot", target, lot.classification)) return;
+    }
+  }
+  throw new TraceabilityAccessError("no_balance_override");
+}
 
 /** Every concrete scope target a Lot (or a to-be-created Lot's parent context) resolves against — never just one. */
 export function scopeTargetsFor(input: { projectId?: string | null; locationId?: string | null }): ScopeTarget[] {
@@ -81,7 +101,10 @@ export interface CreateLotInput {
   // filtering a honey Lot through the generic createLot()/getLotList()
   // path needs this widened, same as every prior lotType addition.
   lotType: "cherry" | "processing" | "drying" | "green" | "roast" | "sample" | "other" | "honey";
-  organizationId?: string | null;
+  // P0 §7 — required, matching Lot.organizationId. A batch belongs to whoever
+  // owns it, and the per-organization lotCode uniqueness has nothing to scope
+  // against without it.
+  organizationId: string;
   projectId?: string | null;
   locationId?: string | null;
 }
@@ -93,7 +116,7 @@ export async function createLot(userAccountId: string, input: CreateLotInput) {
     data: {
       lotCode: input.lotCode,
       lotType: input.lotType,
-      organizationId: input.organizationId ?? null,
+      organizationId: input.organizationId,
       projectId: input.projectId ?? null,
       locationId: input.locationId ?? null,
       createdBy: userAccountId,
@@ -133,6 +156,24 @@ export interface RecordTransformationInput {
     quantity?: number | null;
     unit?: string | null;
   }>;
+  // P0 (§4) — material that leaves without becoming an output lot: mucilage,
+  // water, handling. Declaring it is what turns an unexplained difference
+  // into an explained one.
+  declaredLossQuantity?: number | null;
+  declaredLossUnit?: string | null;
+  declaredLossReason?: string | null;
+  /**
+   * P0 (§4, §6) — accept a transformation that does not reconcile within the
+   * organization's tolerance. Requires `lot:override_balance`, which Farm
+   * Operator deliberately does not hold: the operator records what the scale
+   * says; accepting a discrepancy is someone else's call.
+   *
+   * Never suppresses the Deviation — the discrepancy happened either way.
+   * What this records is that someone with the authority to do so
+   * acknowledged it at write time, with a reason, rather than leaving it open
+   * for review.
+   */
+  acceptUnexplained?: { reason: string } | null;
 }
 
 /**
@@ -160,6 +201,14 @@ export async function recordTransformation(userAccountId: string, input: RecordT
     "manage",
     inputLots.map((lot) => ({ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification })),
   );
+
+  // P0 §6 — the override is authorized before the transaction opens, not
+  // discovered halfway through it. Checked against the same scope targets as
+  // the write itself, so holding the permission platform-wide or on the
+  // relevant project/location both work.
+  if (input.acceptUnexplained) {
+    await requireBalanceOverride(userAccountId, inputLots);
+  }
 
   const provenanceClass = input.provenanceClass;
 
@@ -236,7 +285,26 @@ export async function recordTransformation(userAccountId: string, input: RecordT
       outputLots.push(outputLot);
     }
 
-    return { transformation, outputLots };
+    // P0 — the half of the ledger that was missing. Guarded by
+    // movesMaterial() so a run-opening stage_change (one input, zero outputs)
+    // records its marker without consuming anything; see balance.ts.
+    const reconciliation = await settleMassBalance(tx, {
+      transformationId: transformation.id,
+      transformationType: input.transformationType,
+      organizationId: sourceLot.organizationId,
+      inputs: input.inputs,
+      outputs: input.outputs,
+      occurredAt: input.occurredAt,
+      provenanceClass,
+      sourceReference: input.sourceReference ?? null,
+      createdBy: userAccountId,
+      declaredLossQuantity: input.declaredLossQuantity ?? null,
+      declaredLossUnit: input.declaredLossUnit ?? null,
+      declaredLossReason: input.declaredLossReason ?? null,
+      acceptUnexplained: input.acceptUnexplained ?? null,
+    });
+
+    return { transformation, outputLots, reconciliation };
   });
 
   // C1 §3: evidentiary write (LotTransformation carries provenanceClass) —

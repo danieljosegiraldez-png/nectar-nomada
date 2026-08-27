@@ -15,6 +15,7 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `t3-${Date.now()}`;
 
+
 let projectAId: string;
 let projectBId: string;
 let organizationId: string;
@@ -103,6 +104,7 @@ describe("recordMeasurement — RBAC, validation, unit conversion", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-rbac-ok`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
     const measurement = await recordMeasurement(authorizedUserAccountId, {
@@ -121,6 +123,7 @@ describe("recordMeasurement — RBAC, validation, unit conversion", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-rbac-cross-project`,
       lotType: "cherry",
+      organizationId,
       projectId: projectAId,
     });
     await expect(
@@ -151,6 +154,7 @@ describe("recordMeasurement — RBAC, validation, unit conversion", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-fahrenheit`,
       lotType: "processing",
+      organizationId,
       projectId: projectAId,
     });
     const measurement = await recordMeasurement(authorizedUserAccountId, {
@@ -169,6 +173,7 @@ describe("recordMeasurement — RBAC, validation, unit conversion", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-out-of-range`,
       lotType: "processing",
+      organizationId,
       projectId: projectAId,
     });
     await expect(
@@ -189,6 +194,7 @@ describe("correctMeasurement — append-only correction chain", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-correction`,
       lotType: "drying",
+      organizationId,
       projectId: projectAId,
     });
     const original = await recordMeasurement(authorizedUserAccountId, {
@@ -221,6 +227,7 @@ describe("correctMeasurement — append-only correction chain", () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-correction-no-reason`,
       lotType: "drying",
+      organizationId,
       projectId: projectAId,
     });
     const original = await recordMeasurement(authorizedUserAccountId, {
@@ -252,6 +259,7 @@ describe("T9.5 — provenance is chosen, never defaulted; observer independent o
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-provenance-explicit`,
       lotType: "processing",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -286,6 +294,7 @@ describe("T9.5 — provenance is chosen, never defaulted; observer independent o
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-observer-divergence`,
       lotType: "drying",
+      organizationId,
       projectId: projectAId,
     });
 
@@ -326,6 +335,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-fermentation-link`,
       lotType: "processing",
+      organizationId,
       projectId: projectAId,
     });
     const { run } = await startFermentationRun(authorizedUserAccountId, {
@@ -355,6 +365,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-fermentation-link-no-lot`,
       lotType: "processing",
+      organizationId,
       projectId: projectAId,
     });
     const { run } = await startFermentationRun(authorizedUserAccountId, {
@@ -380,6 +391,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-drying-link`,
       lotType: "drying",
+      organizationId,
       projectId: projectAId,
     });
     const { run } = await startDryingRun(authorizedUserAccountId, {
@@ -408,6 +420,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-drying-link-no-lot`,
       lotType: "drying",
+      organizationId,
       projectId: projectAId,
     });
     const { run } = await startDryingRun(authorizedUserAccountId, {
@@ -432,6 +445,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-storage-link`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
     const assignment = await moveLotToStorage(authorizedUserAccountId, {
@@ -460,6 +474,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-storage-link-no-lot`,
       lotType: "green",
+      organizationId,
       projectId: projectAId,
     });
     const assignment = await moveLotToStorage(authorizedUserAccountId, {

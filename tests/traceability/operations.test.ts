@@ -19,6 +19,7 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `t12-6-ops-${Date.now()}`;
 
+
 let organizationId: string;
 let projectAId: string;
 let projectBId: string;
@@ -99,7 +100,7 @@ beforeAll(async () => {
   });
   fermentationRunId = fermentationRun.id;
 
-  const dLot = await createLot(authorizedUserAccountId, { lotCode: `${RUN_ID}-drying-source`, lotType: "drying", projectId: projectAId });
+  const dLot = await createLot(authorizedUserAccountId, { lotCode: `${RUN_ID}-drying-source`, lotType: "drying", organizationId, projectId: projectAId });
   dryingLotId = dLot.id;
   const { run: dryingRun } = await startDryingRun(authorizedUserAccountId, {
     lotId: dryingLotId,

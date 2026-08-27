@@ -630,6 +630,15 @@ model Organization {
   contactPhone     String?             @map("contact_phone")
   websiteUrl       String?             @map("website_url")
   attributes       Json?
+  // P0 (41_P0_MASS_BALANCE.md §4) — how far a transformation may fail to
+  // reconcile before it raises a Deviation, as a percentage of input mass.
+  // A real column rather than a key inside `attributes`: that field is
+  // documented as type-specific data validated at the application layer,
+  // and a value load-bearing for a data invariant should not be reachable
+  // only through an unvalidated blob. NULL falls back to
+  // DEFAULT_MASS_BALANCE_TOLERANCE_PCT (lib/traceability/balance.ts) — a
+  // farm that has never thought about tolerance still gets one.
+  massBalanceTolerancePct Decimal?     @map("mass_balance_tolerance_pct") @db.Decimal(5, 2)
   status           RecordStatus        @default(draft)
   classification   ClassificationLevel @default(internal)
   createdAt        DateTime            @default(now()) @map("created_at")
@@ -814,8 +823,16 @@ model ProjectDomainTagAssignment {
 // TOOLS_ARCHITECTURE.md §19's sample-type list is domain-specific and will
 // be constrained (if at all) once a real consuming module exists.
 model Sample {
-  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  sampleCode     String              @unique @map("sample_code")
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // P0 (41_P0_MASS_BALANCE.md §7): scoped per organization, same reasoning
+  // as Lot.lotCode. Unlike Lot, `organizationId` stays **nullable** here —
+  // a Sample legitimately may have no organization (the S1 external-coffee
+  // path: a green sample handed over at a fair, no lineage, an
+  // ExternalCoffeeOrigin instead). Postgres treats NULLs as distinct, so
+  // the composite unique below behaves as a partial index: two org-less
+  // samples could share a code, which is a smaller problem than forcing an
+  // organization onto a sample that genuinely has none.
+  sampleCode String @map("sample_code")
   sampleType     String              @map("sample_type")
   description    String?
   projectId      String?             @map("project_id") @db.Uuid
@@ -862,6 +879,7 @@ model Sample {
   // es canónico y ya llega a Sensory... no necesita mecanismo nuevo").
   researchEvidence Evidence[]
 
+  @@unique([organizationId, sampleCode])
   @@index([projectId])
   @@index([organizationId])
   @@index([locationId])
@@ -2454,11 +2472,19 @@ enum LotType {
 }
 
 model Lot {
-  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  lotCode        String              @unique @map("lot_code")
-  lotType        LotType             @map("lot_type")
-  organizationId String?             @map("organization_id") @db.Uuid
-  organization   Organization?       @relation(fields: [organizationId], references: [id])
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // P0 (41_P0_MASS_BALANCE.md §7): scoped per organization, not globally
+  // unique. A global unique is both an offline-collision hazard (two
+  // disconnected devices minting "PE-79") and a multi-tenant defect (two
+  // farms cannot both number a batch "01"). See @@unique below.
+  lotCode String  @map("lot_code")
+  lotType LotType @map("lot_type")
+  // P0: required. Was nullable, but no row ever used that (verified 0 of 43
+  // before the migration), and a batch with no owning organization is
+  // meaningless under multi-tenancy — it is also what makes the scoped
+  // unique above a real constraint rather than one NULLs slip through.
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
   projectId      String?             @map("project_id") @db.Uuid
   project        Project?            @relation(fields: [projectId], references: [id])
   // Same project/organization/location triple every other traceable
@@ -2478,6 +2504,14 @@ model Lot {
   // overwritable column").
   status         RecordStatus        @default(draft)
   classification ClassificationLevel @default(internal)
+  // P0 (§8) — the reliability of this lot's own quantity record, distinct
+  // from `status` (its administrative lifecycle) and from the
+  // provenanceClass carried by each individual event. Set to `conflicting`
+  // on the three lots whose ledger was inflated by the pre-P0 write path
+  // (PE-79/PE-80/PE-90); reporting excludes those rather than quoting a
+  // figure known to be wrong. Nullable and unset for every other lot —
+  // absence means "no reason to doubt it", never "verified".
+  dataQuality    DataQuality?        @map("data_quality")
   createdAt      DateTime            @default(now()) @map("created_at")
   createdBy      String?             @map("created_by") @db.Uuid
   creator        UserAccount?        @relation("LotCreatedBy", fields: [createdBy], references: [id])
@@ -2503,6 +2537,7 @@ model Lot {
   // rinsing, so recording which lot the mosto came from matters.
   washMediumSourceForStages ProcessingStage[]         @relation("ProcessingStageWashMediumSourceLot")
 
+  @@unique([organizationId, lotCode])
   @@index([organizationId])
   @@index([projectId])
   @@map("lot")
@@ -2568,10 +2603,26 @@ model LotTransformation {
   roastSessionId    String?          @map("roast_session_id") @db.Uuid
   roastSession      RoastSession?    @relation(fields: [roastSessionId], references: [id])
 
+  // P0 (41_P0_MASS_BALANCE.md §4) — material that leaves the chain without
+  // becoming an output Lot: mucilage, water, handling loss. Distinct from a
+  // `loss` transformation, which is the whole lot going; this is the
+  // shrinkage inside a transformation that also produced something.
+  declaredLossQuantity Decimal? @map("declared_loss_quantity") @db.Decimal(10, 3)
+  declaredLossUnit     String?  @map("declared_loss_unit")
+  declaredLossReason   String?  @map("declared_loss_reason")
+  // Σinputs − Σoutputs − declaredLoss, computed at write time and *stored*.
+  // Stored rather than derived because it is the value an audit asks about
+  // years later, and recomputing it from a history that has since been
+  // corrected would answer a different question than "what did this
+  // reconcile to when it was recorded". NULL when any input lot has no
+  // ledger at all — unknown, never zero (ADR-080's distinction).
+  unexplainedQuantity Decimal? @map("unexplained_quantity") @db.Decimal(10, 3)
+
   inputs         LotTransformationInput[]
   outputs        LotTransformationOutput[]
   quantityEvents QuantityEvent[]
   samples        Sample[]
+  deviations     Deviation[]
 
   @@index([occurredAt])
   @@index([fermentationRunId])
@@ -4395,6 +4446,15 @@ model Deviation {
   treatmentBatch    TreatmentBatch?  @relation(fields: [treatmentBatchId], references: [id])
   processingStageId String?          @map("processing_stage_id") @db.Uuid
   processingStage   ProcessingStage? @relation(fields: [processingStageId], references: [id])
+  // P0 (41_P0_MASS_BALANCE.md §4) — a third nullable parent, the same
+  // ADR-020 decision 8 pattern every other attachment point here follows.
+  // A transformation that does not reconcile within its organization's
+  // tolerance raises one of these rather than being rejected: operators
+  // estimate weights, and a field tool that refuses real data stops being
+  // used. Deliberately reuses Deviation/CorrectiveAction/Approval rather
+  // than inventing a parallel "balance exception" concept.
+  lotTransformationId String?            @map("lot_transformation_id") @db.Uuid
+  lotTransformation   LotTransformation? @relation(fields: [lotTransformationId], references: [id])
   description       String
   occurredAt        DateTime         @map("occurred_at")
   severity          String?
@@ -4406,6 +4466,7 @@ model Deviation {
 
   @@index([treatmentBatchId])
   @@index([processingStageId])
+  @@index([lotTransformationId])
   @@map("deviation")
   @@schema("research")
 }

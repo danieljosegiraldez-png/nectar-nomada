@@ -16,8 +16,11 @@ import {
   SampleValidationError,
 } from "../../lib/traceability/samples";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN_ID = `s1-${Date.now()}`;
+
+let organizationId: string;
 
 let producerOrgId: string;
 let processorOrgId: string;
@@ -51,6 +54,7 @@ async function assignFarmOperator(userAccountId: string, projectRefId: string) {
 }
 
 beforeAll(async () => {
+  organizationId = await createTestOrganization(RUN_ID);
   const producer = await prisma.organization.create({
     data: { organizationType: "farm", name: `TEST Producer Farm (${RUN_ID})`, status: "approved", classification: "internal" },
   });
@@ -109,6 +113,7 @@ afterAll(async () => {
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectId, otherProjectId] } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: [producerOrgId, processorOrgId, brandOrgId, otherOrgId] } }) });
+  await deleteTestOrganizations(RUN_ID);
 });
 
 describe("recordExternalCoffeeSample — validation", () => {
@@ -368,7 +373,7 @@ describe("§9.5 — completing a record later reflects when each fact was actual
     });
     sampleIds.push(sample.id);
 
-    const lot = await prisma.lot.create({ data: { lotCode: `${RUN_ID}-linked-lot`, lotType: "green", projectId, createdBy: authorizedUserAccountId } });
+    const lot = await prisma.lot.create({ data: { lotCode: `${RUN_ID}-linked-lot`, lotType: "green", organizationId, projectId, createdBy: authorizedUserAccountId } });
 
     const completed = await completeExternalCoffeeOrigin(authorizedUserAccountId, { sampleId: sample.id, linkToLotId: lot.id });
 
