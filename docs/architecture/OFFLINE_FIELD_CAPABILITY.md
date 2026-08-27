@@ -1,5 +1,12 @@
 # Offline Field Capability — Néctar Nómada Digital Platform
 
+> **§1 is superseded by ADR-093 (2026-08-27).** This document's PWA-only
+> decision was made against a narrower question than the platform now asks:
+> the Specialty Coffee Field OS requires an Android operator app over local
+> SQLite working for days offline, which `25_OFFLINE_OPTIONS_ANALYSIS.md`
+> never evaluated. **§2 through §7 are unaffected and still govern** — they
+> apply to the native client unchanged. Read ADR-093 before §1.
+
 Extends `MVP_ROADMAP.md` §3 (which previously deferred full offline
 operation broadly) into a real, scoped architecture — created because two
 independent planning documents (`GUIDED_FIELD_STUDY_TOOL.md` §8 and
@@ -14,6 +21,15 @@ at a remote site with poor/no connectivity.
 ---
 
 ## 1. Technical approach — PWA, no separate native app
+
+> **Superseded — ADR-093.** Native Android is adopted, sequenced behind the
+> sync protocol (audit Phase 4 builds the API and sync and drives them from
+> this PWA; Phase 5 adds the native client). The PWA is **not** retired: it
+> remains the web operator surface, and the draft-queue design below is the
+> template for the generalised protocol, not its casualty. The decisive
+> reason is IndexedDB eviction — the browser may discard an operational
+> store under storage pressure without asking, which is survivable for a
+> cache and disqualifying for days of unsynced field work.
 
 **Progressive Web App (service worker + local storage)**, running in the
 browser at the same site — not a separate native app requiring
