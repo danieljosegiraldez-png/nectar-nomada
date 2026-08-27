@@ -6463,3 +6463,116 @@ explains why. Media attachment, the remaining §16 content types, and a review
 workflow distinct from the status field are all untouched. `project:view`,
 `project:manage_operations`, `platform:manage_users` and `colony_event:view`
 remain in ADR-091's inventory.
+
+---
+
+## ADR-093 — The offline decision was right for a question nobody is asking any more
+
+**Context.** `OFFLINE_FIELD_CAPABILITY.md` §1 states the platform's position
+without hedging: **"Progressive Web App... not a separate native app"**,
+justified by keeping `PLATFORM_OVERVIEW.md` §5's single-deployable, low-ops
+discipline intact rather than adding a second codebase and deployment target.
+`25_OFFLINE_OPTIONS_ANALYSIS.md` then sized three options with, in its own
+words, no option favoured in advance — full offline, minimal local draft, and
+paper with honest provenance. **None of the three was native.** Option B
+shipped: `lib/apiary/offlineQueue.ts`, `client_draft_id` on
+`apiary.inspection` and `apiary.colony_event`, and A5.5's service worker. It
+works, and it is in use.
+
+The Specialty Coffee Field OS specification
+(`COFFEE_FIELD_OS_AUDIT.md`) asks for something that analysis never
+evaluated: an Android operator application over local SQLite, running on
+roughly 2 GB of RAM, working for **days** with no connectivity, where the
+local database is an *operational data store and not a cache*.
+
+So this is not a decision that was wrong being corrected. It is a decision
+made against a narrower question than the one now being asked, and the honest
+thing is to say which question changed rather than to quietly edit the
+document that answered the old one.
+
+**Decision 1 — native Android is adopted, and `OFFLINE_FIELD_CAPABILITY.md`
+§1 is superseded.** Three places the PWA fails the new requirement, in
+descending order of severity:
+
+**The browser may evict IndexedDB under storage pressure, without asking and
+without the page being open to object.** For a cache that is a performance
+event. For an operational store holding a picker's week of unsynced work it is
+not a risk to be managed — it is a disqualification, because "authoritative
+store the platform can delete underneath you" is a contradiction. Nothing in
+the PWA's control surface fixes this; `navigator.storage.persist()` is a
+request, not a guarantee, and `offlineQueue.ts` already does the honest thing
+available to it by estimating quota and warning.
+
+Service-worker background sync is killed aggressively under memory pressure on
+low-end Android, and a PWA cannot reliably wake itself to fire a protocol
+alarm — the `T+6h` pH reading. Scheduled measurement is what makes protocol
+execution more than a form, and it is a stated requirement.
+
+The first of these is decisive on its own. The other two are severe and
+arguably workable.
+
+**Decision 2 — the native client is sequenced *behind* the sync protocol, not
+built alongside it.** The expensive, irreversible work here is the JSON API
+and the synchronisation protocol. The client is the cheap, replaceable part.
+Phase 4 builds both and exercises them **from the existing PWA** — a real
+client, a real queue, real idempotent replay, against the real protocol.
+Phase 5 adds the native client.
+
+Two things this buys that building both at once does not. If field trials show
+the PWA is sufficient after all, Phase 5 is *not started* rather than thrown
+away. And when the native client is built, it is built against a protocol
+something has already exercised, which is the difference between debugging one
+unknown and two at the same time.
+
+**Decision 3 — what explicitly does not change.** The PWA is not deleted; it
+remains the web operator surface, and `public/sw.js` keeps its narrow
+app-shell scope. `OFFLINE_FIELD_CAPABILITY.md` §3–§6 survive intact and apply
+to the native client unchanged: no draft expiry by default, a visible and
+honest connection indicator rather than silent background handling, a storage
+warning before writes start failing, and media syncing after structured data
+so a record is not held hostage by its slowest attachment. §4's conflict
+position — competing versions preserved for human review, never
+last-write-wins — survives and is *sharpened* by the audit's three conflict
+categories (append-mostly, controlled update, critical), which say where that
+rule actually needs to bite instead of applying it uniformly.
+
+`lib/apiary/offlineQueue.ts` is the template for the generalised protocol, not
+its casualty. Its client-generated UUID doubling as the server's idempotency
+key, its ordered replay, and above all its distinction between *the request
+never reached the server* (stay queued, retry) and *the server ran and refused*
+(mark error, show the operator, stop retrying) are the parts most sync
+implementations get wrong, and they are already right.
+
+**Decision 4 — `offline.draft_record` and `offline.sync_conflict` stay
+unbuilt, and the document should stop implying they are pending.** Neither was
+ever created; there is no `offline` Postgres schema. `draft_record` is the
+wrong shape in hindsight — the draft belongs on the device, and what the
+server needs is idempotent application plus a review queue for genuinely
+critical collisions. `sync_conflict`'s *concept* is kept and narrowed to the
+critical category; `draft_record` is dropped rather than left as a phantom
+obligation.
+
+**Alternatives considered.** *Extend the PWA only* — rejected on IndexedDB
+eviction alone; everything else about it is attractive and it remains the
+cheaper answer if the field disagrees with this analysis. *Capacitor wrapping
+the existing PWA* — rejected as the worst of both: it inherits WebView memory
+behaviour on exactly the low-end hardware being targeted, and does not solve
+eviction, because the storage is still the browser's. *Flutter* — rejected
+because it forfeits TypeScript sharing with the domain package, which is the
+principal reuse argument for React Native in a repository whose validation,
+enums and permission constants are all TypeScript. *Commit to native
+immediately, in parallel with the API* — rejected as Decision 2.
+
+**Consequences.** The repository becomes a monorepo at Phase 5, not before; a
+premature workspace conversion is churn with no consumer. A second deployment
+target and a distribution story (Play Store or sideload) arrive with it.
+`PLATFORM_OVERVIEW.md` §5's single-deployable discipline is genuinely
+weakened, and that cost is accepted here rather than argued away — it was a
+real principle, and this is a real exception to it, made for a requirement
+that did not exist when it was written.
+
+The four remaining product decisions taken alongside this one — rejected
+material as real Lots, remediation of the three overstated lots, device
+authority with Person attribution, and the ~25-table device mirror — are
+recorded in `COFFEE_FIELD_OS_AUDIT.md` §58 and will get their own ADRs as the
+tickets that implement them land, rather than being pre-registered here.
