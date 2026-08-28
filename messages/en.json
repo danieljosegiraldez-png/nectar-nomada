@@ -487,7 +487,8 @@
     "exportButton": "Export my data",
     "noActiveOperations": "Nothing in progress right now.",
     "quantityNotRecorded": "Quantity not recorded",
-    "listTruncated": "Showing the {limit} most recent. There are more records than this list can hold."
+    "listTruncated": "Showing the {limit} most recent. There are more records than this list can hold.",
+    "suggestedNextLabel": "Suggested next step"
   },
   "Apiary": {
     "badge": "Apiary",

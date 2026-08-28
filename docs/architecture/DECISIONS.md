@@ -6712,3 +6712,61 @@ Yield reporting is now possible and was not before; it is also still unwritten,
 and Phase 6 owns it. The tolerance default of 2% is a starting value chosen to
 clear ordinary field practice, not a claim about coffee — the per-organization
 column exists precisely so a farm that knows its own scales can say so.
+
+---
+
+## ADR-093 — The batch page suggests a next step, and stops leading with a photo
+
+**Context.** ADR-080 fixed three defects on the batch detail page and
+deliberately left three design questions open, on the grounds that they were
+decisions about what the page should lead with rather than things that were
+wrong. This answers them, with the product owner's answers rather than
+inferred ones.
+
+**Decision 1 — one action is drawn as the expected next step.** The page
+offered five buttons of identical weight in a single flex row: start
+fermentation, start drying, move to storage, create sample, view report.
+Nothing said which one a batch at this stage was waiting for, so the page read
+as a list of capabilities rather than a place work happens.
+
+`nextActionFor(lotType, hasActiveRun)` in `lib/traceability/batchActions.ts`
+returns that action. The sequence is the product owner's, confirmed rather than
+derived from the schema: cherry is waiting to ferment, processing to dry,
+drying to be stored; green and roasted coffee is waiting to be tasted.
+
+**It suggests, it never restricts.** Every action the page offered before is
+still rendered and still one click away; only the styling and the ordering
+change. That property is what made this safe to build over a sequence the
+platform cannot verify — real batches skip stages, and one that does costs the
+operator nothing extra. The tests assert the suggestion, and say in as many
+words that a wrong answer here is a worse hint rather than a blocked operator.
+
+`null` is a real return value, not a gap. A `sample` is an end state; `honey`
+reaches Lot through A3's "a honey batch is a Lot" decision and never travels
+the coffee sequence; `other` exists precisely because the material did not fit
+a stage, so guessing one would be inventing a fact (CLAUDE.md §3). A batch with
+a run under way also returns `null` — it is not waiting for a new stage, it is
+waiting for that run to end, and pointing at "start drying" would point away
+from the work in progress.
+
+**Decision 2 — the photo upload moves below the actions.** It sat between the
+origin-lot section and the harvest section, above every operational control, so
+the first thing a batch page offered was a file picker. Recording what happened
+to the batch comes first; the photograph complements it.
+
+**Decision 3 — empty sections stay.** "No measurements yet" also says "this is
+where measurements are recorded", and the platform is still being learned by
+the people who will use it. The page is longer than it needs to be for an
+expert and more legible to everyone else, and that trade was made deliberately
+rather than by omission. Worth revisiting once the sections are routinely full.
+
+**Verification.** Five pure tests over the function, including one that walks
+every `LotType` in the schema so a new stage must be a deliberate decision
+rather than an accidental `undefined` reaching the page. 554 tests pass,
+typecheck and lint clean.
+
+**Not addressed.** The ordering is fixed at render time from the lot's type
+alone. `16_ADAPTIVE_OPERATOR_WORKSPACE_PREAMBLE.md` describes deriving it from
+context — season, the operator's recent actions, what the rest of the site is
+doing — and that remains the destination. This is the cheap intermediate step
+that document allows, applied to a page rather than to navigation.

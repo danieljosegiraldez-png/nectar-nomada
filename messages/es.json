@@ -487,7 +487,8 @@
     "exportButton": "Exportar mis datos",
     "noActiveOperations": "Nada en curso ahora mismo.",
     "quantityNotRecorded": "Cantidad no registrada",
-    "listTruncated": "Mostrando los {limit} más recientes. Hay más registros de los que caben en esta lista."
+    "listTruncated": "Mostrando los {limit} más recientes. Hay más registros de los que caben en esta lista.",
+    "suggestedNextLabel": "Siguiente paso sugerido"
   },
   "Apiary": {
     "badge": "Apiario",
