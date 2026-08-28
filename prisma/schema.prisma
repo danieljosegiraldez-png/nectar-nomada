@@ -121,6 +121,8 @@ model Person {
   specimenObservationsObserved       SpecimenObservation[]         @relation("SpecimenObservationObserver")
   treatmentBatchesOperated           TreatmentBatch[]              @relation("TreatmentBatchOperator")
   processSensoryObservationsObserved ProcessSensoryObservation[]   @relation("ProcessSensoryObservationObserver")
+  fieldSessionsOperated              FieldSession[]                @relation("FieldSessionOperator")
+  fieldEventsOperated                FieldEvent[]                  @relation("FieldEventOperator")
 
   @@map("person")
   @@schema("core")
@@ -193,6 +195,9 @@ model UserAccount {
   fermentationInterventionsCreated  FermentationIntervention[]   @relation("FermentationInterventionCreatedBy")
   dryingRunsCreated                 DryingRun[]                  @relation("DryingRunCreatedBy")
   roastSessionsCreated              RoastSession[]               @relation("RoastSessionCreatedBy")
+  // P2 (ADR-098)
+  processRecipesCreated             ProcessRecipe[]              @relation("ProcessRecipeCreatedBy")
+  processRecipeVersionsCreated      ProcessRecipeVersion[]       @relation("ProcessRecipeVersionCreatedBy")
   dryingTurnEventsCreated           DryingTurnEvent[]            @relation("DryingTurnEventCreatedBy")
   storageAssignmentsCreated         StorageAssignment[]          @relation("StorageAssignmentCreatedBy")
   labourEntriesCreated              LabourEntry[]                @relation("LabourEntryCreatedBy")
@@ -205,6 +210,8 @@ model UserAccount {
   organizationMembershipsCreated    OrganizationMembership[]     @relation("OrganizationMembershipCreatedBy")
   plantingEventsCreated             PlantingEvent[]              @relation("PlantingEventCreatedBy")
   plantingCohortsCreated            PlantingCohort[]             @relation("PlantingCohortCreatedBy")
+  fieldSessionsCreated              FieldSession[]               @relation("FieldSessionCreatedBy")
+  fieldEventsCreated                FieldEvent[]                 @relation("FieldEventCreatedBy")
   harvestEventSourcesCreated        HarvestEventSource[]         @relation("HarvestEventSourceCreatedBy")
   specimensCreated                  Specimen[]                   @relation("SpecimenCreatedBy")
   specimenObservationsCreated       SpecimenObservation[]        @relation("SpecimenObservationCreatedBy")
@@ -578,6 +585,7 @@ model Location {
   specimens                   Specimen[]
   plantingEvents              PlantingEvent[]
   plantingCohorts             PlantingCohort[]
+  fieldSessions               FieldSession[]
   harvestEventSources         HarvestEventSource[]
   labourEntries               LabourEntry[]
   materialConsumptionEntries  MaterialConsumptionEntry[]
@@ -659,6 +667,8 @@ model Organization {
   creator          UserAccount?        @relation("OrganizationCreatedBy", fields: [createdBy], references: [id])
 
   locations                        Location[]
+  // P2 (ADR-098) — recipes belong to the farm that runs them.
+  processRecipes                   ProcessRecipe[]
   projectsOwned                    Project[]                @relation("ProjectOrganization")
   projectsAsClient                 Project[]                @relation("ProjectClientOrganization")
   samples                          Sample[]
@@ -1518,6 +1528,7 @@ model Asset {
 
   fieldSubmissions FieldSubmissionAsset[]
   evidence         Evidence[]
+  fieldEvents      FieldEvent[]
 
   @@index([projectId])
   @@index([locationId])
@@ -1576,7 +1587,8 @@ model Task {
   createdBy String?      @map("created_by") @db.Uuid
   creator   UserAccount? @relation("TaskCreatedBy", fields: [createdBy], references: [id])
 
-  submissions FieldSubmission[]
+  submissions   FieldSubmission[]
+  fieldSessions FieldSession[]
 
   @@index([projectId])
   @@index([assignedToUserAccountId])
@@ -2635,6 +2647,7 @@ model LotTransformation {
   quantityEvents QuantityEvent[]
   samples        Sample[]
   deviations     Deviation[]
+  fieldEvents    FieldEvent[]
 
   @@index([occurredAt])
   @@index([fermentationRunId])
@@ -2712,9 +2725,25 @@ model QuantityEvent {
   sourceReference  String?            @map("source_reference")
   dataQuality      DataQuality?       @map("data_quality")
   notes            String?
+  // P2 (43_P2_OPERATOR_CORE.md §5) — three different facts the schema could
+  // previously hold only one of. The audit's worked example: measured at
+  // 14:00, entered on the phone at 14:23, synced the next morning at 09:17.
+  // `occurredAt` is when it happened, `recordedAt` is the device clock when
+  // the operator entered it, `createdAt` is server receipt, `syncedAt` is when
+  // it arrived from a device.
+  //
+  // `deviceId` is a bare nullable UUID for now: the `Device` table (with token
+  // issuance and revocation) belongs to Phase 4, and the FK is added then —
+  // the same additive-FK-per-parent pattern Measurement already used for
+  // FermentationRun and DryingRun.
+  recordedAt DateTime? @map("recorded_at")
+  syncedAt   DateTime? @map("synced_at")
+  captureDeviceId  String?            @map("capture_device_id") @db.Uuid
   createdAt        DateTime           @default(now()) @map("created_at")
   createdBy        String?            @map("created_by") @db.Uuid
   creator          UserAccount?       @relation("QuantityEventCreatedBy", fields: [createdBy], references: [id])
+
+  fieldEvents FieldEvent[]
 
   @@index([lotId])
   @@index([transformationId])
@@ -2790,7 +2819,25 @@ model Measurement {
   processingStage     ProcessingStage?   @relation(fields: [processingStageId], references: [id])
 
   sourceType       MeasurementSourceType @default(manual) @map("source_type")
+  // Legacy free-text device label from T3. No code path has ever written it;
+  // left in place rather than repurposed, because a column that once meant
+  // "some string a lab machine reported" and now means "a registered device"
+  // would make old rows lie. `captureDeviceId` below is the real one.
   deviceId         String?               @map("device_id")
+  // P2 (43_P2_OPERATOR_CORE.md §5) — three different facts the schema could
+  // previously hold only one of. The audit's worked example: measured at
+  // 14:00, entered on the phone at 14:23, synced the next morning at 09:17.
+  // `occurredAt` is when it happened, `recordedAt` is the device clock when
+  // the operator entered it, `createdAt` is server receipt, `syncedAt` is when
+  // it arrived from a device.
+  //
+  // `deviceId` is a bare nullable UUID for now: the `Device` table (with token
+  // issuance and revocation) belongs to Phase 4, and the FK is added then —
+  // the same additive-FK-per-parent pattern Measurement already used for
+  // FermentationRun and DryingRun.
+  recordedAt DateTime? @map("recorded_at")
+  syncedAt   DateTime? @map("synced_at")
+  captureDeviceId String? @map("capture_device_id") @db.Uuid
   operatorPersonId String?               @map("operator_person_id") @db.Uuid
   operator         Person?               @relation(fields: [operatorPersonId], references: [id])
 
@@ -2808,8 +2855,9 @@ model Measurement {
   createdBy       String?         @map("created_by") @db.Uuid
   creator         UserAccount?    @relation("MeasurementCreatedBy", fields: [createdBy], references: [id])
 
-  assets   Asset[]
-  evidence Evidence[]
+  assets      Asset[]
+  evidence    Evidence[]
+  fieldEvents FieldEvent[]
 
   @@index([lotId])
   @@index([sampleId])
@@ -2869,6 +2917,7 @@ model HarvestEvent {
   assets        Asset[]
   labourEntries LabourEntry[]
   sources       HarvestEventSource[]
+  fieldEvents   FieldEvent[]
 
   @@index([locationId])
   @@index([organizationId])
@@ -2959,6 +3008,16 @@ model FermentationRun {
   createdBy        String?      @map("created_by") @db.Uuid
   creator          UserAccount? @relation("FermentationRunCreatedBy", fields: [createdBy], references: [id])
 
+  // P2 (ADR-098) — the recipe version this run was operated against, so its
+  // targets can be compared with what actually happened. Nullable: every run
+  // recorded before this existed has no recipe, and a run improvised without
+  // one is a legitimate state, not a gap to be backfilled.
+  //
+  // Points at the *version*, never at the recipe: editing a recipe must not
+  // rewrite what a run six months ago was aiming for (CLAUDE.md §3).
+  processRecipeVersionId String?               @map("process_recipe_version_id") @db.Uuid
+  processRecipeVersion   ProcessRecipeVersion? @relation(fields: [processRecipeVersionId], references: [id])
+
   interventions              FermentationIntervention[]
   measurements               Measurement[]
   transformations            LotTransformation[]
@@ -2966,7 +3025,107 @@ model FermentationRun {
   labourEntries              LabourEntry[]
   materialConsumptionEntries MaterialConsumptionEntry[]
 
+  @@index([processRecipeVersionId])
   @@map("fermentation_run")
+  @@schema("traceability")
+}
+
+/// P2 (ADR-098). A named, reusable process — "Lavado tradicional", "Honey 48h"
+/// — carrying the numbers a run of it is aiming for. BeerSmith's shape, and
+/// the product owner's own words: the recipe declares the target, the session
+/// records what actually happened, and the value is in the difference.
+///
+/// Deliberately NOT the research Protocol. A protocol is an experiment with
+/// approval and deviation machinery; this is routine production. Folding one
+/// into the other would make every ordinary fermentation an experiment.
+model ProcessRecipe {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  description    String?
+  organizationId String?             @map("organization_id") @db.Uuid
+  organization   Organization?       @relation(fields: [organizationId], references: [id])
+  status         RecordStatus        @default(draft)
+  classification ClassificationLevel @default(internal)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  createdBy      String?             @map("created_by") @db.Uuid
+  creator        UserAccount?        @relation("ProcessRecipeCreatedBy", fields: [createdBy], references: [id])
+
+  versions ProcessRecipeVersion[]
+
+  // Scoped to the organization rather than globally: two farms may both run a
+  // process they each call "Lavado".
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("process_recipe")
+  @@schema("traceability")
+}
+
+/// An immutable set of targets. Changing a recipe means a new version, never
+/// an edit — CLAUDE.md §3's version-preservation rule, and the reason a run
+/// points here rather than at the recipe.
+model ProcessRecipeVersion {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipeId  String       @map("recipe_id") @db.Uuid
+  recipe    ProcessRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  version   Int
+  notes     String?
+  status    RecordStatus @default(draft)
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ProcessRecipeVersionCreatedBy", fields: [createdBy], references: [id])
+
+  targets          ProcessTarget[]
+  fermentationRuns FermentationRun[]
+
+  @@unique([recipeId, version])
+  @@index([recipeId])
+  @@map("process_recipe_version")
+  @@schema("traceability")
+}
+
+/// One number a run is aiming for: "pH 3.8 at the end", "Brix 22 at the start".
+///
+/// `moment` is what makes original-vs-final work — the same variable targeted
+/// twice in one process is the ordinary case (original gravity and final
+/// gravity), not an edge case.
+///
+/// A target may be a point (`targetValue`), a range (`minValue`/`maxValue`),
+/// or both — "aim for 3.8, anywhere in 3.7–3.9 is fine". All three are
+/// nullable because a recipe that says "measure pH at the end" without
+/// declaring a number is still a useful instruction, and inventing a target
+/// to fill the column would be inventing a fact (CLAUDE.md §3).
+model ProcessTarget {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipeVersionId  String               @map("recipe_version_id") @db.Uuid
+  recipeVersion    ProcessRecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Cascade)
+  // MeasurementVariable (lib/traceability/units.ts) reused, not duplicated —
+  // the same canonical names the readings themselves use, so target and actual
+  // are comparable without a mapping table.
+  variable         String
+  moment           ProcessTargetMoment
+  targetValue      Decimal?             @map("target_value") @db.Decimal(12, 4)
+  minValue         Decimal?             @map("min_value") @db.Decimal(12, 4)
+  maxValue         Decimal?             @map("max_value") @db.Decimal(12, 4)
+  unit             String
+  note             String?
+  displayOrder     Int                  @default(0) @map("display_order")
+
+  @@unique([recipeVersionId, variable, moment])
+  @@index([recipeVersionId])
+  @@map("process_target")
+  @@schema("traceability")
+}
+
+/// When in a run a target applies. Three, because that is what the domain has:
+/// a reading at the start (original gravity/Brix), readings along the way that
+/// tell you whether to keep going, and a reading at the end (final gravity, pH
+/// drop) that says the run is done.
+enum ProcessTargetMoment {
+  initial
+  during
+  final
+
   @@schema("traceability")
 }
 
@@ -3237,6 +3396,141 @@ model MaterialConsumptionEntry {
 // CLAUDE.md §18 already warns against for Species/Cultivar. A small,
 // single-purpose new entity, same shape as HarvestEvent/ReceivingEvent —
 // not a general-purpose parallel table.
+// P2 (43_P2_OPERATOR_CORE.md §3). The envelope for one visit: "Kenneth went to
+// Lote 3 on Tuesday morning and did these eleven things."
+//
+// Nothing expressed that before. Every existing event table is anchored to its
+// own domain parent — a run, a colony, a stage — never to a visit, so the
+// chronology of a person's actual working session existed nowhere.
+//
+// This is also the natural **offline transaction boundary** and the natural
+// unit of selective sync (audit §17): a device pulls the sessions assigned to
+// its operator and pushes them back whole. Getting its shape right here is
+// what makes Phase 4 tractable.
+//
+// `operatorPersonId` is a **Person, not a UserAccount**, deliberately. Most
+// Person rows in this database have no email and therefore no account, and a
+// session recorded by someone who cannot log in is the normal case, not the
+// exception.
+model FieldSession {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id])
+
+  operatorPersonId String @map("operator_person_id") @db.Uuid
+  operator         Person @relation("FieldSessionOperator", fields: [operatorPersonId], references: [id])
+
+  // Nullable: a session may be unplanned. Somebody walking a block because
+  // they noticed something is a real session, and refusing to record it
+  // without a task first would push it back to memory.
+  taskId String? @map("task_id") @db.Uuid
+  task   Task?   @relation(fields: [taskId], references: [id])
+
+  startedAt DateTime  @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+
+  // Where the session began. Nullable — a device without a fix, or a session
+  // recorded at a desk afterwards, both genuinely have no coordinates, and a
+  // fabricated one is worse than none.
+  startLatitude  Float? @map("start_latitude")
+  startLongitude Float? @map("start_longitude")
+  startAccuracyM Float? @map("start_accuracy_m")
+
+  notes String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+  dataQuality     DataQuality?    @map("data_quality")
+
+  // P2 §5 — see the Measurement comment for the full reasoning.
+  recordedAt DateTime? @map("recorded_at")
+  syncedAt   DateTime? @map("synced_at")
+  deviceId   String?   @map("device_id") @db.Uuid
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("FieldSessionCreatedBy", fields: [createdBy], references: [id])
+
+  events FieldEvent[]
+
+  @@index([locationId])
+  @@index([operatorPersonId])
+  @@index([taskId])
+  @@index([startedAt])
+  @@map("field_session")
+  @@schema("traceability")
+}
+
+// P2 (43_P2_OPERATOR_CORE.md §4). A chronological **spine**, not a replacement.
+//
+// The temptation is one generic event table that FermentationIntervention,
+// DryingTurnEvent, SpecimenObservation, QuantityEvent and
+// ProcessingStageObservation all migrate into. That would degrade their
+// domain-specific typed columns into JSON — precisely what CLAUDE.md §49
+// forbids — and lose the validation each of them carries.
+//
+// So this table owns no domain semantics. It records *when, where and by whom*
+// something happened during a session, and points at the row that holds *what*
+// through a nullable FK per parent — the same ADR-020 decision 8 pattern
+// `Asset` already applies fifteen times. The result is one queryable timeline
+// over heterogeneous events, with every domain table left intact.
+//
+// `eventKindValueId` is a VariableCatalog value rather than an enum: what an
+// operator might record will keep growing, and P1 established that a growing
+// vocabulary is a catalog entry plus a re-seed, never a migration.
+model FieldEvent {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fieldSessionId String       @map("field_session_id") @db.Uuid
+  fieldSession   FieldSession @relation(fields: [fieldSessionId], references: [id], onDelete: Cascade)
+
+  eventKindValueId String               @map("event_kind_value_id") @db.Uuid
+  eventKindValue   VariableCatalogValue @relation("FieldEventKind", fields: [eventKindValueId], references: [id])
+
+  occurredAt DateTime @map("occurred_at")
+
+  latitude  Float? @map("latitude")
+  longitude Float? @map("longitude")
+  accuracyM Float? @map("accuracy_m")
+
+  operatorPersonId String? @map("operator_person_id") @db.Uuid
+  operator         Person? @relation("FieldEventOperator", fields: [operatorPersonId], references: [id])
+
+  notes String?
+
+  // The row that holds what actually happened. At most one is set; the event
+  // is still valid with none (a bare observation with only notes and a
+  // position is a real thing an operator records).
+  measurementId         String?              @map("measurement_id") @db.Uuid
+  measurement           Measurement?         @relation(fields: [measurementId], references: [id])
+  quantityEventId       String?              @map("quantity_event_id") @db.Uuid
+  quantityEvent         QuantityEvent?       @relation(fields: [quantityEventId], references: [id])
+  specimenObservationId String?              @map("specimen_observation_id") @db.Uuid
+  specimenObservation   SpecimenObservation? @relation(fields: [specimenObservationId], references: [id])
+  assetId               String?              @map("asset_id") @db.Uuid
+  asset                 Asset?               @relation(fields: [assetId], references: [id])
+  harvestEventId        String?              @map("harvest_event_id") @db.Uuid
+  harvestEvent          HarvestEvent?        @relation(fields: [harvestEventId], references: [id])
+  lotTransformationId   String?              @map("lot_transformation_id") @db.Uuid
+  lotTransformation     LotTransformation?   @relation(fields: [lotTransformationId], references: [id])
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+
+  recordedAt DateTime? @map("recorded_at")
+  syncedAt   DateTime? @map("synced_at")
+  deviceId   String?   @map("device_id") @db.Uuid
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("FieldEventCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([fieldSessionId])
+  @@index([occurredAt])
+  @@index([eventKindValueId])
+  @@index([measurementId])
+  @@index([assetId])
+  @@map("field_event")
+  @@schema("traceability")
+}
+
 // P1 (42_P1_LAND_FOUNDATION.md §1) — renovation is a *new* cohort, never an
 // edit to the old one. A stumped and replanted block leaves the previous
 // cohort `removed` with a removedAt, and what stood there stays true; same
@@ -3540,6 +3834,8 @@ model SpecimenObservation {
   createdBy String?      @map("created_by") @db.Uuid
   creator   UserAccount? @relation("SpecimenObservationCreatedBy", fields: [createdBy], references: [id])
 
+  fieldEvents FieldEvent[]
+
   @@index([specimenId])
   @@map("specimen_observation")
   @@schema("traceability")
@@ -3741,6 +4037,13 @@ model Inspection {
   // same field entry twice. Nullable — only offline-queued submissions
   // carry one; a direct online call (if any existed) would not.
   clientDraftId    String?           @unique @map("client_draft_id")
+  // P2 §5 — device capture time. This table already has an offline write path
+  // (clientDraftId, A5), so it is the one place where device-vs-server time
+  // genuinely diverges today rather than in theory.
+  recordedAt DateTime? @map("recorded_at")
+  syncedAt   DateTime? @map("synced_at")
+  captureDeviceId String? @map("capture_device_id") @db.Uuid
+
   createdAt        DateTime          @default(now()) @map("created_at")
   createdBy        String?           @map("created_by") @db.Uuid
   creator          UserAccount?      @relation("InspectionCreatedBy", fields: [createdBy], references: [id])
@@ -3796,6 +4099,13 @@ model ColonyEvent {
   dataQuality         DataQuality?    @map("data_quality")
   // A5/A0 — same idempotent-sync purpose as Inspection.clientDraftId above.
   clientDraftId       String?         @unique @map("client_draft_id")
+  // P2 §5 — device capture time. This table already has an offline write path
+  // (clientDraftId, A5), so it is the one place where device-vs-server time
+  // genuinely diverges today rather than in theory.
+  recordedAt DateTime? @map("recorded_at")
+  syncedAt   DateTime? @map("synced_at")
+  captureDeviceId String? @map("capture_device_id") @db.Uuid
+
   createdAt           DateTime        @default(now()) @map("created_at")
   createdBy           String?         @map("created_by") @db.Uuid
   creator             UserAccount?    @relation("ColonyEventCreatedBy", fields: [createdBy], references: [id])
@@ -4061,6 +4371,7 @@ model VariableCatalogValue {
   values             TreatmentBatchVariableValue[]
   observations       ProcessingStageObservation[]
   plantingCohorts    PlantingCohort[]              @relation("PlantingCohortCultivar")
+  fieldEvents        FieldEvent[]                  @relation("FieldEventKind")
   washMediumOfStages ProcessingStage[]             @relation("ProcessingStageWashMedium")
 
   @@unique([catalogId, value])
