@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getLotDetail, getObserverCandidates, getManageableContext, TraceabilityAccessError } from "../../../lib/traceability/lots";
 import { computeCurrentQuantity } from "../../../lib/traceability/quantity";
+import { nextActionFor, type BatchAction } from "../../../lib/traceability/batchActions";
 import { getSignedUrlForAsset } from "../../../lib/traceability/media";
 import {
   recordFermentationInterventionFormAction,
@@ -75,6 +76,37 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
 
   const activeFermentation = fermentationRuns.find((r) => r.endedAt === null) ?? null;
   const activeDrying = dryingRuns.find((r) => r.endedAt === null) ?? null;
+
+  // ADR-096 — which action this batch is waiting for, and the list to render.
+  const suggestedAction = nextActionFor(lot.lotType, Boolean(activeFermentation || activeDrying));
+
+  const availableActions: { action: BatchAction; href: string; label: string }[] = [
+    // Only offered while a run is under way, because that is the only time it
+    // is the *expected* step — the measurement form itself is always on the
+    // page, in its own section, and this is an anchor to it rather than a
+    // second way to reach it (ADR-096).
+    ...(activeFermentation || activeDrying
+      ? [{ action: "measurement" as const, href: "#measurements", label: t("recordMeasurementButton") }]
+      : []),
+    // Starting a new stage is offered only when no run is under way, exactly
+    // as before — the conditional is unchanged, only the styling below it is.
+    ...(!activeFermentation && !activeDrying
+      ? ([
+          { action: "fermentation", href: `/lots/${lot.id}/fermentation/new`, label: t("startFermentationButton") },
+          { action: "drying", href: `/lots/${lot.id}/drying/new`, label: t("startDryingButton") },
+        ] as const)
+      : []),
+    { action: "storage", href: `/lots/${lot.id}/storage/new`, label: t("moveStorageButton") },
+    { action: "sample", href: `/lots/${lot.id}/samples/new`, label: t("createSampleButton") },
+    { action: "report", href: `/lots/${lot.id}/report`, label: t("viewReportButton") },
+  ];
+
+  // The suggested action leads. Everything else keeps its original order, so
+  // an operator who already knows where a button lives still finds it there.
+  const batchActions = [
+    ...availableActions.filter((a) => a.action === suggestedAction),
+    ...availableActions.filter((a) => a.action !== suggestedAction),
+  ];
   const currentStorage = storageAssignments.find((s) => s.endedAt === null) ?? null;
 
   // T12.5: signed GET URLs computed once here (server-side, already gated
@@ -168,8 +200,6 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         )}
       </section>
 
-      <PhotoUploadForm lotId={lot.id} parent={{ kind: "lot" }} observers={observers} selfPersonId={selfPersonId} />
-
       {harvestEvent ? (
         <section className="nn-section">
           <h2>{t("harvestInfoHeading")}</h2>
@@ -217,27 +247,37 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         </section>
       ) : null}
 
-      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "1rem" }}>
-        {!activeFermentation && !activeDrying ? (
-          <>
-            <Link href={`/lots/${lot.id}/fermentation/new`} className="nn-button" style={{ textDecoration: "none" }}>
-              {t("startFermentationButton")}
-            </Link>
-            <Link href={`/lots/${lot.id}/drying/new`} className="nn-button" style={{ textDecoration: "none" }}>
-              {t("startDryingButton")}
-            </Link>
-          </>
+      {/*
+        ADR-096. The five actions used to be one flex row of identical buttons,
+        which made the page a list of capabilities rather than a place work
+        happens. The action this batch is waiting for is now drawn first and
+        solid; the rest stay quiet and remain one click away.
+
+        It suggests, it never restricts — a batch that skips a stage costs the
+        operator nothing extra, which is why this was safe to add over a
+        sequence the platform cannot actually verify.
+      */}
+      <div style={{ marginTop: "1rem" }}>
+        {suggestedAction ? (
+          <p className="nn-muted" style={{ margin: "0 0 0.5rem" }}>{t("suggestedNextLabel")}</p>
         ) : null}
-        <Link href={`/lots/${lot.id}/storage/new`} className="nn-button" style={{ textDecoration: "none" }}>
-          {t("moveStorageButton")}
-        </Link>
-        <Link href={`/lots/${lot.id}/samples/new`} className="nn-button" style={{ textDecoration: "none" }}>
-          {t("createSampleButton")}
-        </Link>
-        <Link href={`/lots/${lot.id}/report`} className="nn-button" style={{ textDecoration: "none" }}>
-          {t("viewReportButton")}
-        </Link>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          {batchActions.map(({ action, href, label }) => (
+            <Link
+              key={action}
+              href={href}
+              className={action === suggestedAction ? "nn-button" : "nn-button-quiet"}
+              style={{ textDecoration: "none" }}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
       </div>
+
+      {/* Below the actions, not above them: recording the batch's state comes
+          first, and the photo is the complement to it (ADR-096). */}
+      <PhotoUploadForm lotId={lot.id} parent={{ kind: "lot" }} observers={observers} selfPersonId={selfPersonId} />
 
       <section className="nn-section">
         <h2>{t("lineageHeading")}</h2>
@@ -454,7 +494,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         {!activeFermentation && !activeDrying && !currentStorage ? <p className="nn-muted">{t("noProcessing")}</p> : null}
       </section>
 
-      <section className="nn-section">
+      <section className="nn-section" id="measurements">
         <h2>{t("measurementsHeading")}</h2>
         {measurements.length === 0 ? (
           <p className="nn-muted">{t("noMeasurements")}</p>

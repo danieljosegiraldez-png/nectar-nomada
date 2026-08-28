@@ -17,6 +17,18 @@ export function MaterialConsumptionForm({ lotId, parent }: { lotId: string; pare
 
   return (
     <form action={recordMaterialConsumptionEntryFormAction} className="nn-form" style={{ maxWidth: 420, marginTop: "0.5rem" }}>
+      {/*
+        ADR-097. This form recorded zero entries in production, and the reason
+        was one label: the package's lot number was called "Lote/batch",
+        which spends both of the words V1 reserved — "Lote" is a plot of land,
+        "Batch" is harvested coffee — on a third thing entirely. On a batch
+        page, a field called "Lote/batch" reads as "which batch is this?".
+        The hint says what the section is for, because the fields alone
+        did not.
+      */}
+      <p className="nn-muted" style={{ margin: "0 0 0.75rem", fontSize: "0.9em" }}>
+        {t("materialConsumptionHint")}
+      </p>
       <input type="hidden" name="lotId" value={lotId} />
       <input type="hidden" name="parentKind" value={parent.kind} />
       <input

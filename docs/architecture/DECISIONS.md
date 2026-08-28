@@ -6817,3 +6817,125 @@ The four existing free-text varietal columns (`PlantingEvent.varietal`,
 `Sample.declaredVarietal`) are **left alone**. Consolidating them onto the
 catalog against one row of real data would be guessing; revisit once §4's data
 load shows which spellings actually occur.
+
+---
+
+## ADR-096 — The batch page suggests a next step, and stops leading with a photo
+
+**Context.** ADR-080 fixed three defects on the batch detail page and
+deliberately left three design questions open, on the grounds that they were
+decisions about what the page should lead with rather than things that were
+wrong. This answers them, with the product owner's answers rather than
+inferred ones.
+
+**Decision 1 — one action is drawn as the expected next step.** The page
+offered five buttons of identical weight in a single flex row: start
+fermentation, start drying, move to storage, create sample, view report.
+Nothing said which one a batch at this stage was waiting for, so the page read
+as a list of capabilities rather than a place work happens.
+
+`nextActionFor(lotType, hasActiveRun)` in `lib/traceability/batchActions.ts`
+returns that action. The sequence is the product owner's, confirmed rather than
+derived from the schema: cherry is waiting to ferment, processing to dry,
+drying to be stored; green and roasted coffee is waiting to be tasted.
+
+**It suggests, it never restricts.** Every action the page offered before is
+still rendered and still one click away; only the styling and the ordering
+change. That property is what made this safe to build over a sequence the
+platform cannot verify — real batches skip stages, and one that does costs the
+operator nothing extra. The tests assert the suggestion, and say in as many
+words that a wrong answer here is a worse hint rather than a blocked operator.
+
+`null` is a real return value, not a gap. A `sample` is an end state; `honey`
+reaches Lot through A3's "a honey batch is a Lot" decision and never travels
+the coffee sequence; `other` exists precisely because the material did not fit
+a stage, so guessing one would be inventing a fact (CLAUDE.md §3). A batch with
+a run under way also returns `null` — it is not waiting for a new stage, it is
+waiting for that run to end, and pointing at "start drying" would point away
+from the work in progress.
+
+**Decision 2 — the photo upload moves below the actions.** It sat between the
+origin-lot section and the harvest section, above every operational control, so
+the first thing a batch page offered was a file picker. Recording what happened
+to the batch comes first; the photograph complements it.
+
+**Decision 3 — empty sections stay.** "No measurements yet" also says "this is
+where measurements are recorded", and the platform is still being learned by
+the people who will use it. The page is longer than it needs to be for an
+expert and more legible to everyone else, and that trade was made deliberately
+rather than by omission. Worth revisiting once the sections are routinely full.
+
+**Verification.** Five pure tests over the function, including one that walks
+every `LotType` in the schema so a new stage must be a deliberate decision
+rather than an accidental `undefined` reaching the page. 554 tests pass,
+typecheck and lint clean.
+
+**Not addressed.** The ordering is fixed at render time from the lot's type
+alone. `16_ADAPTIVE_OPERATOR_WORKSPACE_PREAMBLE.md` describes deriving it from
+context — season, the operator's recent actions, what the rest of the site is
+doing — and that remains the destination. This is the cheap intermediate step
+that document allows, applied to a page rather than to navigation.
+
+---
+
+## ADR-097 — The one vocabulary decision the project made, broken in two fields
+
+**Context.** Opening a batch mid-fermentation, the product owner asked what a
+form was for: *"I don't understand what batch label is for with material and
+quantity, maybe a supply was used, maybe a treatment, or nutrition load?"*
+
+All three guesses were right, which is the tell. The form records an input
+consumed during a fermentation or drying run — yeast, culture, lime, nutrient,
+biochar — together with the lot number printed on its packaging. Its own source
+comment calls that number "the one irrecoverable identity fact": throw the sack
+away and no one can ever say which production lot of yeast that fermentation
+used.
+
+The form has recorded **zero entries in production**. Nobody has used it, which
+is what you would expect of a form nobody can interpret.
+
+**The cause is one label.** The field was called **"Lote/batch"** — and V1
+(`38_V1_VOCABULARIO_LOTE_BATCH.md`) reserved both of those words:
+
+| Concept | Interface word |
+|---|---|
+| A plot of land with coffee trees | **Lote** |
+| Harvested coffee being processed | **Batch** |
+
+So a field on a batch page, labelled with both reserved words, meant a third
+thing entirely. Read quickly it asks "which batch is this?" — a question the
+page has already answered in its heading.
+
+V1 exists because the product owner opened `/lots` expecting his six plots and
+found coffee batches. That document fixed the navigation and the headings. It
+did not reach this field, or its twin.
+
+**Decision 1 — the package's lot number is named as such.** `Lote/batch` →
+**"N.º de lote del envase"**. Longer, and unambiguous: it cannot be misread as
+a plot or a coffee batch, which is the entire requirement. The product owner
+chose the wording; inventing operational vocabulary on his behalf is how the
+previous label happened.
+
+`Material` → `Insumo`, and the form now carries one line saying what the
+section is for and why the number matters. The fields alone did not say it, and
+a form that needs explaining should contain the explanation.
+
+**Decision 2 — the same defect in the apiary module, found by grep.** Colony
+treatment entry asked for `Producto` and **`Lote`** — the same package lot
+number, the same reserved word, in a module V1 never looked at. Fixed
+identically. Two occurrences is the difference between a slip and a pattern:
+the word "lote" is load-bearing in this platform and any new field using it
+needs checking against V1.
+
+**No schema change**, per V1's own instruction: `material_consumption_entry.
+batch_label` keeps its name. What was wrong was what the user reads.
+
+**Verification.** 554 tests pass, typecheck and lint clean. A grep across
+`messages/` confirms every remaining use of "lote" refers to a plot, which is
+V1-correct.
+
+**Worth noting for whoever adds the next field.** This was not found by a test,
+a type, or a review. It was found by the person who uses the platform opening a
+page and saying he could not tell what a form was for — and the strongest
+evidence was already in the database: zero rows, for a feature that shipped.
+An unused write path is worth a look before it is worth a fix.
