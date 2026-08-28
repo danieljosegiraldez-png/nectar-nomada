@@ -7027,3 +7027,88 @@ and the arithmetic are the parts that are expensive to get wrong and cheap to
 verify, and the shape of the screen is worth deciding with the numbers already
 flowing. Until that screen exists, **this feature is invisible to the operator
 and should not be described as delivered.**
+
+---
+
+## ADR-099 — The screen that makes target-versus-actual visible
+
+**Context.** ADR-098 built the data model and the arithmetic and stopped
+there, saying in as many words that until a screen existed the feature was
+"invisible to the operator and should not be described as delivered". This is
+that screen, plus the two things it needed to have anything to show: a way to
+attach a recipe to a run, and a way to create one.
+
+**Decision 1 — a table, under the run's own heading.** Three columns —
+objetivo, real, desviación — one row per target, and the eye goes down the
+deviation column. The product owner described BeerSmith, and BeerSmith is a
+table.
+
+Placed directly beneath the active fermentation's heading rather than in a
+section of its own: this is the run's report card, and a separate section would
+put the numbers a scroll away from the thing they describe.
+
+**Decision 2 — each kind of "no answer" gets its own words.** ADR-098 returns
+null in four distinct places, and rendering them all as a dash would make the
+table lie by omission — the same failure ADR-080 fixed when an unweighed lot
+read "Cantidad: 0". So:
+
+| Situation | What the cell says |
+|---|---|
+| No readings for that variable yet | *sin medir todavía* |
+| Target declares no number | *sin número declarado* |
+| No range declared | the range line is simply absent |
+| One reading serving as initial *and* final | *no puede ser inicial y final a la vez* |
+
+**Decision 3 — the mean never appears without its readings.** When more than
+one reading contributed, the cell prints the mean, says *media de N lecturas*,
+and lists the values beneath: `4.6 · 4.1 · 3.785`. §28 requires a derived
+metric to carry its method; showing the mean alone would satisfy the layout and
+hide the spread, which is the information the operator is actually reading for.
+
+**Decision 4 — the recipe is chosen when the run starts, and the field hides
+when there is nothing to choose.** `listRecipeVersionsForLot` returns only
+**approved** versions belonging to the batch's organization, or shared ones
+with no organization. A draft version is someone still deciding what the
+targets should be, and a run operated against a moving target is worse than a
+run with none. When the list is empty the field is not rendered — an empty
+select is a question with no answers.
+
+Gated on `lot:manage` at the batch's own scope rather than a new `recipe:*`
+permission: choosing which process a batch runs under is an operational
+decision about that batch, and inventing a permission nobody holds would fail
+ADR-091's coverage test.
+
+**Decision 5 — a recipe and its first version are created together.**
+`createRecipeWithVersion` refuses a recipe with no targets, a target with no
+number at all, and an inverted range. A name with no targets declares nothing;
+a target with no number is an instruction to measure, which is what
+`ProtocolRequiredMeasurement` is for.
+
+**Verification.** Exercised against the local restored database with a recipe
+carrying all three shapes of target, and it produces exactly the case mix the
+design has to handle:
+
+```
+brix initial   22 Bx      21.4 Bx (1)     -0.6    ⚠ una sola lectura
+ph during      4–5 pH     4.1617 pH (3)   —  dentro
+                          lecturas: 4.6 · 4.1 · 3.785
+ph final       3.8 pH     3.785 pH (1)    -0.015
+```
+
+The last row is the product owner's own example, unchanged from how he
+described it. 592 tests pass, typecheck, lint and build clean.
+
+**Not built here.** There is no recipe-authoring *page*. `createRecipeWithVersion`
+exists, is validated and is callable, but nothing in the interface reaches it —
+a recipe must be created through a script today. So an operator can attach a
+recipe and read the comparison, and cannot yet write one.
+
+That is a narrower gap than ADR-098's and it is still a gap: the loop is
+closed for someone who already has recipes and open for someone starting from
+none. Worth building next, and worth designing with the comparison already on
+screen so the form is shaped by what the table needs.
+
+**First worktree-separated work.** Built in
+`~/Developer/nectar-worktrees/session-b` after `git add -A` in the shared
+checkout swept a parallel session's uncommitted files into PR #52. The
+separation is the actual fix; staging discipline was only a mitigation.

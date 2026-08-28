@@ -29,6 +29,7 @@
 import { prisma } from "../db";
 import { Prisma } from "../../generated/prisma/client";
 import { requireLotAccess } from "./lots";
+import { recordAuditEvent } from "../audit";
 import type { ProcessTargetMoment } from "../../generated/prisma/client";
 
 export class ProcessTargetError extends Error {}
@@ -171,4 +172,128 @@ export async function compareRunToTargets(
       ambiguousSingleReading: ambiguous,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Recipes — authoring and selection
+// ---------------------------------------------------------------------------
+
+/**
+ * Recipe versions this account may attach to a run, newest version first.
+ *
+ * Gated on `lot:manage` at the lot's own scope rather than on a permission of
+ * its own: choosing which process a batch is run against is an operational
+ * decision about that batch, made by whoever may operate it. Inventing a
+ * `recipe:*` permission would add a grant nobody holds and ADR-091 would fail
+ * the build for it.
+ */
+export async function listRecipeVersionsForLot(userAccountId: string, lotId: string) {
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) throw new ProcessTargetError("lot_not_found");
+  await requireLotAccess(userAccountId, "manage", [lot]);
+
+  const versions = await prisma.processRecipeVersion.findMany({
+    // Only approved versions are offered. A draft is someone still deciding
+    // what the targets should be, and a run operated against a moving target
+    // is worse than a run with none.
+    where: {
+      status: "approved",
+      // A recipe belonging to another organization is not this batch's to use.
+      // Null organizationId means a shared recipe, available to everyone.
+      recipe: { OR: [{ organizationId: lot.organizationId }, { organizationId: null }] },
+    },
+    include: { recipe: true, targets: { orderBy: { displayOrder: "asc" } } },
+    orderBy: [{ recipe: { name: "asc" } }, { version: "desc" }],
+  });
+  return versions;
+}
+
+export interface CreateRecipeInput {
+  name: string;
+  description?: string | null;
+  organizationId: string | null;
+  targets: ReadonlyArray<{
+    variable: string;
+    moment: ProcessTargetMoment;
+    unit: string;
+    targetValue?: number | null;
+    minValue?: number | null;
+    maxValue?: number | null;
+    note?: string | null;
+  }>;
+}
+
+/**
+ * A recipe and its first version, created together.
+ *
+ * There is no such thing as a useful recipe with no version — a name with no
+ * targets declares nothing — so the two are one operation rather than a
+ * two-step flow that can be abandoned halfway.
+ */
+export async function createRecipeWithVersion(userAccountId: string, input: CreateRecipeInput) {
+  const name = input.name.trim();
+  if (!name) throw new ProcessTargetError("name_required");
+  if (input.targets.length === 0) throw new ProcessTargetError("at_least_one_target_required");
+
+  for (const t of input.targets) {
+    // A target that declares no number at all is a instruction to measure, not
+    // a target, and belongs in ProtocolRequiredMeasurement rather than here.
+    if (t.targetValue == null && t.minValue == null && t.maxValue == null) {
+      throw new ProcessTargetError("target_needs_a_number");
+    }
+    if (t.minValue != null && t.maxValue != null && t.minValue > t.maxValue) {
+      throw new ProcessTargetError("range_inverted");
+    }
+  }
+
+  // Gated on the organization the recipe belongs to, through a lot of that
+  // organization — the same authority that operates the batches it will be
+  // applied to.
+  // A shared recipe (no organization) is gated on any lot the account can
+  // manage; an organization's recipe on a lot of that organization.
+  const anyLot = await prisma.lot.findFirst({
+    where: input.organizationId === null ? {} : { organizationId: input.organizationId },
+  });
+  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
+  await requireLotAccess(userAccountId, "manage", [anyLot]);
+
+  const recipe = await prisma.processRecipe.create({
+    data: {
+      name,
+      description: input.description?.trim() || null,
+      organizationId: input.organizationId,
+      status: "approved",
+      createdBy: userAccountId,
+      versions: {
+        create: {
+          version: 1,
+          status: "approved",
+          createdBy: userAccountId,
+          targets: {
+            create: input.targets.map((t, i) => ({
+              variable: t.variable,
+              moment: t.moment,
+              unit: t.unit,
+              targetValue: t.targetValue ?? null,
+              minValue: t.minValue ?? null,
+              maxValue: t.maxValue ?? null,
+              note: t.note?.trim() || null,
+              displayOrder: i,
+            })),
+          },
+        },
+      },
+    },
+    include: { versions: { include: { targets: true } } },
+  });
+
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "process_recipe.create",
+    entityType: "process_recipe",
+    entityId: recipe.id,
+    after: recipe,
+    sourceInterface: "traceability.processTargets",
+  });
+  return recipe;
 }
