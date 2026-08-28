@@ -51,8 +51,21 @@ afterAll(async () => {
   const w = (ids: string[]) => assertDefinedWhere({ id: { in: ids } });
   if (created.recipeIds.length) {
     await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: created.recipeIds } }) });
-    await prisma.processRecipe.deleteMany({ where: w(created.recipeIds) });
   }
+  // Deleted by RUN prefix, not only by tracked id — ADR-103.
+  //
+  // Every refusal case here names a recipe it expects never to exist, so its
+  // id is never captured. Under normal conditions that is fine, because the
+  // creation was refused. Under a *mutation* run it is not: disabling the
+  // physical-bounds check let "RECIPE Impossible …" be created, the test
+  // failed as designed, and the row survived every subsequent run because
+  // nothing had recorded it.
+  //
+  // One was found in the local database days later. The tracked-id list stays
+  // for the audit rows above, which have no name to match on.
+  await prisma.processRecipe.deleteMany({
+    where: assertDefinedWhere({ name: { contains: RUN } }),
+  });
   if (created.lotIds.length) await prisma.lot.deleteMany({ where: w(created.lotIds) });
   if (created.organizationIds.length) await prisma.organization.deleteMany({ where: w(created.organizationIds) });
 
