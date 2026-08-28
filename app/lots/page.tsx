@@ -179,7 +179,15 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
             {lotItems.map((lot) => (
               <Link key={lot.id} href={`/lots/${lot.id}`} className="nn-card-link">
                 <h3 className="nn-code">{lot.lotCode}</h3>
-                <p className="nn-muted">{t(`lotType_${lot.lotType}` as "lotType_cherry")}</p>
+                <p className="nn-muted">
+                  {t(`lotType_${lot.lotType}` as "lotType_cherry")}
+                  {/* P3 §3 — a rejection stream keeps its physical lotType, so
+                      without this a floater batch is indistinguishable from
+                      accepted coffee in this list. */}
+                  {lot.rejectionCategoryValue ? (
+                    <> · <span className="nn-badge">{t("rejectBadge", { category: lot.rejectionCategoryValue.value })}</span></>
+                  ) : null}
+                </p>
                 <p className="nn-detail-meta">
                   {lot.project ? <span>{lot.project.name}</span> : null}
                   {lot.location ? <span>{lot.location.name}</span> : null}

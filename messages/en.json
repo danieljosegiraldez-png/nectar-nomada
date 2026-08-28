@@ -588,7 +588,17 @@
     "selectionOutOfTolerance": "outside tolerance",
     "selectionSubmit": "Record selection",
     "selectionSubmitting": "Recording…",
-    "error_selection": "Could not record the selection: {detail}"
+    "error_selection": "Could not record the selection: {detail}",
+    "transformationType_selection": "Selection",
+    "selectionOutturnHeading": "Selection outturn",
+    "selectionOutturnMethod": "Method: {method}",
+    "selectionOutturnAccepted": "Accepted",
+    "selectionOutturnRejected": "Reject",
+    "selectionOutturnShare": "{share}%",
+    "selectionOutturnDeclaredLoss": "Declared loss",
+    "selectionOutturnUnexplained": "Unexplained",
+    "selectionOutturnUnknown": "no data",
+    "rejectBadge": "Reject: {category}"
   },
   "Apiary": {
     "badge": "Apiary",

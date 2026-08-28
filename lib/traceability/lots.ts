@@ -516,11 +516,19 @@ export interface LotListFilters {
 export async function getLotList(userAccountId: string, filters: LotListFilters = {}) {
   const visibility = await resolveLotVisibility(userAccountId);
   const where = lotWhereFromVisibility(visibility);
-  if (where === null) return truncate<Prisma.LotGetPayload<{ include: { project: true; organization: true; location: true } }>>([]);
+  if (where === null)
+    return truncate<
+      Prisma.LotGetPayload<{
+        include: { project: true; organization: true; location: true; rejectionCategoryValue: { select: { value: true } } };
+      }>
+    >([]);
 
   const rows = await prisma.lot.findMany({
     where: { ...where, ...(filters.lotType ? { lotType: filters.lotType } : {}) },
-    include: { project: true, organization: true, location: true },
+    // P3 §3 — a rejection stream is still `cherry` by lotType, deliberately,
+    // so without this the batch list shows floaters and accepted coffee as
+    // indistinguishable rows. The category is what tells them apart.
+    include: { project: true, organization: true, location: true, rejectionCategoryValue: { select: { value: true } } },
     orderBy: { createdAt: "desc" },
     take: LIST_LIMIT + 1,
   });
@@ -611,7 +619,10 @@ export async function getActiveOperations(userAccountId: string) {
 export async function getLotDetail(userAccountId: string, lotId: string) {
   const lot = await prisma.lot.findUnique({
     where: { id: lotId },
-    include: { project: true, organization: true, location: true },
+    // P3 §3 — the batch header marks a rejection stream; without the category
+    // a floater batch reads as ordinary cherry, which is precisely the
+    // confusion keeping lotType physical was meant to avoid creating.
+    include: { project: true, organization: true, location: true, rejectionCategoryValue: { select: { value: true } } },
   });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
 

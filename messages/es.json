@@ -588,7 +588,17 @@
     "selectionOutOfTolerance": "fuera de tolerancia",
     "selectionSubmit": "Registrar selección",
     "selectionSubmitting": "Registrando…",
-    "error_selection": "No se pudo registrar la selección: {detail}"
+    "error_selection": "No se pudo registrar la selección: {detail}",
+    "transformationType_selection": "Selección",
+    "selectionOutturnHeading": "Resultado de la selección",
+    "selectionOutturnMethod": "Método: {method}",
+    "selectionOutturnAccepted": "Aceptado",
+    "selectionOutturnRejected": "Rechazo",
+    "selectionOutturnShare": "{share}%",
+    "selectionOutturnDeclaredLoss": "Merma declarada",
+    "selectionOutturnUnexplained": "Sin explicar",
+    "selectionOutturnUnknown": "sin dato",
+    "rejectBadge": "Rechazo: {category}"
   },
   "Apiary": {
     "badge": "Apiario",
