@@ -10,7 +10,7 @@ import { recordMeasurement, MeasurementValidationError } from "../../lib/traceab
 import { UnitValidationError } from "../../lib/traceability/units";
 import { recordHarvestEvent, recordReceivingEvent } from "../../lib/traceability/harvest";
 import { startFermentationRun, recordFermentationIntervention, endFermentationRun } from "../../lib/traceability/fermentation";
-import { createRecipeWithVersion } from "../../lib/traceability/processTargets";
+import { createRecipeWithVersion, createRecipeVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { createSampleFromLot } from "../../lib/traceability/samples";
@@ -526,29 +526,7 @@ export async function createRecipeAction(
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
 
-  const targets: {
-    variable: string;
-    moment: "initial" | "during" | "final";
-    unit: string;
-    targetValue: number | null;
-    minValue: number | null;
-    maxValue: number | null;
-    note: string | null;
-  }[] = [];
-
-  for (let i = 0; i < 50; i++) {
-    const variable = formData.get(`targets[${i}][variable]`);
-    if (typeof variable !== "string" || variable === "") break;
-    targets.push({
-      variable,
-      moment: String(formData.get(`targets[${i}][moment]`) ?? "final") as "initial" | "during" | "final",
-      unit: String(formData.get(`targets[${i}][unit]`) ?? ""),
-      targetValue: emptyToNullNumber(formData.get(`targets[${i}][targetValue]`)),
-      minValue: emptyToNullNumber(formData.get(`targets[${i}][minValue]`)),
-      maxValue: emptyToNullNumber(formData.get(`targets[${i}][maxValue]`)),
-      note: emptyToNull(formData.get(`targets[${i}][note]`)),
-    });
-  }
+  const targets = parseTargetRows(formData);
 
   try {
     await createRecipeWithVersion(user.userAccountId, {
@@ -563,4 +541,81 @@ export async function createRecipeAction(
 
   revalidatePath("/recipes");
   redirect("/recipes?ok=1");
+}
+
+/** Shared by both recipe forms — the target rows arrive the same way. */
+function parseTargetRows(formData: FormData) {
+  const targets: {
+    variable: string;
+    moment: "initial" | "during" | "final";
+    unit: string;
+    targetValue: number | null;
+    minValue: number | null;
+    maxValue: number | null;
+    note: string | null;
+  }[] = [];
+  for (let i = 0; i < 50; i++) {
+    const variable = formData.get(`targets[${i}][variable]`);
+    if (typeof variable !== "string" || variable === "") break;
+    targets.push({
+      variable,
+      moment: String(formData.get(`targets[${i}][moment]`) ?? "final") as "initial" | "during" | "final",
+      unit: String(formData.get(`targets[${i}][unit]`) ?? ""),
+      targetValue: emptyToNullNumber(formData.get(`targets[${i}][targetValue]`)),
+      minValue: emptyToNullNumber(formData.get(`targets[${i}][minValue]`)),
+      maxValue: emptyToNullNumber(formData.get(`targets[${i}][maxValue]`)),
+      note: emptyToNull(formData.get(`targets[${i}][note]`)),
+    });
+  }
+  return targets;
+}
+
+/** Rename a recipe, or reword its description — ADR-102. Never its targets. */
+export async function updateRecipeAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await updateRecipeMetadata(user.userAccountId, recipeId, {
+      name: String(formData.get("name") ?? ""),
+      description: emptyToNull(formData.get("description")),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  revalidatePath("/recipes");
+  redirect(`/recipes/${recipeId}?ok=renamed`);
+}
+
+/** A new version — the only way targets ever change (ADR-102). */
+export async function createRecipeVersionAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await createRecipeVersion(
+      user.userAccountId,
+      recipeId,
+      parseTargetRows(formData),
+      emptyToNull(formData.get("notes")),
+    );
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  revalidatePath("/recipes");
+  redirect(`/recipes/${recipeId}?ok=versioned`);
 }

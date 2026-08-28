@@ -49,7 +49,9 @@ export default async function RecipesPage({
             const latest = r.versions[0];
             return (
               <div key={r.id} className="nn-card" style={{ maxWidth: "none", marginBottom: "1rem" }}>
-                <h3 style={{ margin: 0 }}>{r.name}</h3>
+                <h3 style={{ margin: 0 }}>
+                  <Link href={`/recipes/${r.id}`}>{r.name}</Link>
+                </h3>
                 <p className="nn-detail-meta">
                   {r.organization ? <span>{r.organization.name}</span> : null}
                   <span>{t("recipeVersionCount", { count: r.versions.length })}</span>

@@ -207,7 +207,20 @@ export async function listRecipeVersionsForLot(userAccountId: string, lotId: str
     include: { recipe: true, targets: { orderBy: { displayOrder: "asc" } } },
     orderBy: [{ recipe: { name: "asc" } }, { version: "desc" }],
   });
-  return versions;
+
+  // Only the newest version of each recipe is offered for a NEW run — ADR-102.
+  //
+  // Before versions could be created this returned everything approved, which
+  // was the same thing because there was only ever one. The moment v2 exists,
+  // returning all of them puts "Lavado v1", "Lavado v2" and "Lavado v3" in one
+  // picker and asks the operator to know which is current. Older versions stay
+  // attached to the runs that used them and stay readable there; they are just
+  // not offered again.
+  const newestByRecipe = new Map<string, (typeof versions)[number]>();
+  for (const v of versions) {
+    if (!newestByRecipe.has(v.recipeId)) newestByRecipe.set(v.recipeId, v);
+  }
+  return [...newestByRecipe.values()];
 }
 
 export interface CreateRecipeInput {
@@ -232,14 +245,20 @@ export interface CreateRecipeInput {
  * targets declares nothing — so the two are one operation rather than a
  * two-step flow that can be abandoned halfway.
  */
-export async function createRecipeWithVersion(userAccountId: string, input: CreateRecipeInput) {
-  const name = input.name.trim();
-  if (!name) throw new ProcessTargetError("name_required");
-  if (input.targets.length === 0) throw new ProcessTargetError("at_least_one_target_required");
+/**
+ * Every rule a set of targets must satisfy, in one place — ADR-102.
+ *
+ * Extracted when creating a *version* joined creating a *recipe* as a way to
+ * declare targets. Two copies of these checks would eventually disagree, and
+ * the one that drifted would be the one nobody was reading.
+ */
+export function validateTargets(targets: CreateRecipeInput["targets"]) {
+  if (targets.length === 0) throw new ProcessTargetError("at_least_one_target_required");
 
-  for (const t of input.targets) {
-    // A target that declares no number at all is a instruction to measure, not
-    // a target, and belongs in ProtocolRequiredMeasurement rather than here.
+  for (const t of targets) {
+    // A target that declares no number at all is an instruction to measure,
+    // not a target, and belongs in ProtocolRequiredMeasurement rather than
+    // here.
     if (t.targetValue == null && t.minValue == null && t.maxValue == null) {
       throw new ProcessTargetError("target_needs_a_number");
     }
@@ -247,10 +266,9 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
       throw new ProcessTargetError("range_inverted");
     }
 
-    // ADR-100 — a target is checked against the same physical bounds a reading
-    // is. A declared pH of 15 is not a preference to record, it is a typo, and
-    // units.ts already knew that. Refusing here is cheaper than a comparison
-    // table that reports a deviation of −11 for the rest of the run's life.
+    // A target is checked against the same physical bounds a reading is. A
+    // declared pH of 15 is a typo, and the comparison table would otherwise
+    // report a deviation of −11 for the rest of the run's life (ADR-100).
     const bounds = boundsFor(t.variable);
     if (!bounds) throw new ProcessTargetError("unknown_variable");
     if (t.unit !== bounds.canonicalUnit) throw new ProcessTargetError("wrong_unit_for_variable");
@@ -260,6 +278,22 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
       }
     }
   }
+
+  // The unique index on (recipeVersionId, variable, moment) would catch this
+  // at the database, as a P2002 the operator cannot read. Catching it here
+  // names the actual mistake.
+  const seen = new Set<string>();
+  for (const t of targets) {
+    const key = `${t.variable}:${t.moment}`;
+    if (seen.has(key)) throw new ProcessTargetError("duplicate_variable_and_moment");
+    seen.add(key);
+  }
+}
+
+export async function createRecipeWithVersion(userAccountId: string, input: CreateRecipeInput) {
+  const name = input.name.trim();
+  if (!name) throw new ProcessTargetError("name_required");
+  validateTargets(input.targets);
 
   // Gated on the organization the recipe belongs to, through a lot of that
   // organization — the same authority that operates the batches it will be
@@ -355,4 +389,145 @@ export async function listRecipeOrganizations(userAccountId: string) {
     }
   }
   return reachable.sort((a, b) => compareNames(a.name, b.name));
+}
+
+/**
+ * One recipe with every version it has ever had — ADR-102.
+ *
+ * Includes how many runs each version was used by, because that is the fact
+ * that makes version preservation legible: a version with runs attached is
+ * history, and the page can say so rather than offering a delete that would
+ * quietly rewrite what those runs were aiming for.
+ */
+export async function getRecipeForEditor(userAccountId: string, recipeId: string) {
+  const recipe = await prisma.processRecipe.findUnique({
+    where: { id: recipeId },
+    include: {
+      organization: { select: { id: true, name: true } },
+      versions: {
+        include: {
+          targets: { orderBy: { displayOrder: "asc" } },
+          _count: { select: { fermentationRuns: true } },
+        },
+        orderBy: { version: "desc" },
+      },
+    },
+  });
+  // A recipe that cannot be loaded is refused rather than treated as empty —
+  // the same rule a stale id gets everywhere else (ADR-081).
+  if (!recipe) throw new ProcessTargetError("recipe_not_found");
+
+  const anyLot = await prisma.lot.findFirst({ where: { organizationId: recipe.organizationId ?? undefined } });
+  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
+  await requireLotAccess(userAccountId, "manage", [anyLot]);
+
+  return recipe;
+}
+
+/**
+ * Rename a recipe, or reword its description. Never its targets.
+ *
+ * This is the whole distinction the two operations here turn on. A recipe's
+ * *name* is a label — correcting "Lavado tradicinal" to "Lavado tradicional"
+ * changes nothing about what any run was aiming for, so it is an edit. Its
+ * *targets* are what runs were operated against, so changing those is a new
+ * version and never an edit (CLAUDE.md §3).
+ *
+ * Conflating them would be the failure ADR-092 avoided for stories and
+ * ADR-098 designed the version table to prevent here.
+ */
+export async function updateRecipeMetadata(
+  userAccountId: string,
+  recipeId: string,
+  input: { name: string; description?: string | null },
+) {
+  const before = await prisma.processRecipe.findUnique({ where: { id: recipeId } });
+  if (!before) throw new ProcessTargetError("recipe_not_found");
+
+  const anyLot = await prisma.lot.findFirst({ where: { organizationId: before.organizationId ?? undefined } });
+  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
+  await requireLotAccess(userAccountId, "manage", [anyLot]);
+
+  const name = input.name.trim();
+  if (!name) throw new ProcessTargetError("name_required");
+
+  const after = await prisma.processRecipe.update({
+    where: { id: recipeId },
+    data: { name, description: input.description?.trim() || null },
+  });
+
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "process_recipe.update",
+    entityType: "process_recipe",
+    entityId: recipeId,
+    before,
+    after,
+    sourceInterface: "traceability.processTargets",
+  });
+  return after;
+}
+
+/**
+ * A new version of an existing recipe — the only way targets ever change.
+ *
+ * The number is `max + 1` rather than `count + 1`: those differ the moment a
+ * version is ever removed, and the second would silently reuse a number that
+ * runs already point at.
+ */
+export async function createRecipeVersion(
+  userAccountId: string,
+  recipeId: string,
+  targets: CreateRecipeInput["targets"],
+  notes?: string | null,
+) {
+  const recipe = await prisma.processRecipe.findUnique({
+    where: { id: recipeId },
+    include: { versions: { orderBy: { version: "desc" }, take: 1 } },
+  });
+  if (!recipe) throw new ProcessTargetError("recipe_not_found");
+
+  const anyLot = await prisma.lot.findFirst({ where: { organizationId: recipe.organizationId ?? undefined } });
+  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
+  await requireLotAccess(userAccountId, "manage", [anyLot]);
+
+  validateTargets(targets);
+
+  const nextVersion = (recipe.versions[0]?.version ?? 0) + 1;
+
+  const version = await prisma.processRecipeVersion.create({
+    data: {
+      recipeId,
+      version: nextVersion,
+      notes: notes?.trim() || null,
+      status: "approved",
+      createdBy: userAccountId,
+      targets: {
+        create: targets.map((t, i) => ({
+          variable: t.variable,
+          moment: t.moment,
+          unit: t.unit,
+          targetValue: t.targetValue ?? null,
+          minValue: t.minValue ?? null,
+          maxValue: t.maxValue ?? null,
+          note: t.note?.trim() || null,
+          displayOrder: i,
+        })),
+      },
+    },
+    include: { targets: true },
+  });
+
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "process_recipe_version.create",
+    entityType: "process_recipe_version",
+    entityId: version.id,
+    after: version,
+    // The fact worth searching the audit log for later: which version
+    // superseded which, and when.
+    reason: `supersedes_version_${recipe.versions[0]?.version ?? "none"}`,
+    sourceInterface: "traceability.processTargets",
+  });
+  return version;
 }
