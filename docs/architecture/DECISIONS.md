@@ -7112,3 +7112,66 @@ screen so the form is shaped by what the table needs.
 `~/Developer/nectar-worktrees/session-b` after `git add -A` in the shared
 checkout swept a parallel session's uncommitted files into PR #52. The
 separation is the actual fix; staging discipline was only a mitigation.
+
+---
+
+## ADR-100 — Authoring a recipe, and the unit the operator never types
+
+**Context.** ADR-099 put target-versus-actual on screen and said the loop was
+"closed for someone who already has recipes and open for someone starting from
+none". The product owner had none. This closes it.
+
+**Decision 1 — the unit is not an input.** It comes from the variable's own
+definition in `units.ts` and travels as a hidden field. An operator picks
+*pH* and the unit is `pH`; there is no way to record a pH target in Brix.
+
+That is the one field an operator would most plausibly get wrong, and getting
+it wrong would not fail — it would compare a pH target against Brix readings
+and quietly report nonsense for the rest of the run. Removing the field removes
+the failure.
+
+**Decision 2 — a target is checked against the same physical bounds a reading
+is.** `units.ts` already knew pH runs 0–14 and Brix 0–40; it just had no way to
+say so, since `REGISTRY` was private. `listVariableDefinitions` and `boundsFor`
+export it, the form uses them for `min`/`max` attributes, and the service
+refuses anything outside regardless — the form is not the boundary.
+
+A declared pH of 15 is not a preference to record. It is a typo, and a
+comparison table would otherwise report a deviation of −11 for the rest of that
+run's life, looking like a process problem rather than a slip of the thumb.
+Mutating the check away fails two tests.
+
+**Decision 3 — the target count is not fixed.** "Lavado tradicional" declares
+three targets, a cold-hold protocol declares eight. The form adds and removes
+rows, and the action parses `targets[i][...]` by walking indices until one
+comes up empty rather than trusting a hidden count that a truncated POST would
+make wrong. The last row cannot be removed, because a recipe with no targets
+declares nothing and the service refuses it anyway.
+
+**Decision 4 — recipes are not a top-level navigation entry.** Adding one took
+the signed-in bar from eight items to nine, and
+`tests/navigation.test.ts` failed on "consolidates three former entries into
+one, and stays short on a phone".
+
+The test was right and the change was wrong. S2 consolidated that bar from ten
+entries deliberately, for operators working one-handed outdoors, and a recipe
+is process configuration reached from the batch flow rather than a place work
+happens. The link lives on `/lots` beside "Crear Batch", gated on `lot:manage`
+to match the service.
+
+Worth recording as a small case of a test defending a decision rather than
+describing behaviour: had the assertion been `toBeLessThanOrEqual(10)` the
+regression would have shipped.
+
+**Verification.** Eleven tests, of which seven are refusals — no name, no
+targets, a target with no number, an inverted range, a value outside physical
+range, a unit belonging to another variable, a variable not in the registry —
+plus one asserting a refused creation leaves no half-built recipe row behind,
+the same shape as ADR-089's abandoned backup directory. 603 tests pass overall;
+typecheck, lint and build clean.
+
+**Not built.** Editing an existing recipe, and creating version 2. The schema
+supports both — `ProcessRecipeVersion` exists precisely so targets can change
+without rewriting what past runs were aiming for — and nothing in the interface
+reaches them. A recipe today is created once and thereafter fixed. That is a
+smaller gap than the one this ADR closes, and it is the next one.

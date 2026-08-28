@@ -10,6 +10,7 @@ import { recordMeasurement, MeasurementValidationError } from "../../lib/traceab
 import { UnitValidationError } from "../../lib/traceability/units";
 import { recordHarvestEvent, recordReceivingEvent } from "../../lib/traceability/harvest";
 import { startFermentationRun, recordFermentationIntervention, endFermentationRun } from "../../lib/traceability/fermentation";
+import { createRecipeWithVersion } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { createSampleFromLot } from "../../lib/traceability/samples";
@@ -507,4 +508,59 @@ export async function recordMaterialConsumptionEntryFormAction(formData: FormDat
   });
 
   revalidatePath(`/lots/${lotId}`);
+}
+
+/**
+ * Create a recipe and its first version — ADR-100.
+ *
+ * The targets arrive as `targets[0][variable]`, `targets[0][moment]`… because
+ * the count is not known in advance. Parsed by walking indices until one comes
+ * up empty rather than trusting a hidden count field, which a truncated POST
+ * would make wrong.
+ */
+export async function createRecipeAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const targets: {
+    variable: string;
+    moment: "initial" | "during" | "final";
+    unit: string;
+    targetValue: number | null;
+    minValue: number | null;
+    maxValue: number | null;
+    note: string | null;
+  }[] = [];
+
+  for (let i = 0; i < 50; i++) {
+    const variable = formData.get(`targets[${i}][variable]`);
+    if (typeof variable !== "string" || variable === "") break;
+    targets.push({
+      variable,
+      moment: String(formData.get(`targets[${i}][moment]`) ?? "final") as "initial" | "during" | "final",
+      unit: String(formData.get(`targets[${i}][unit]`) ?? ""),
+      targetValue: emptyToNullNumber(formData.get(`targets[${i}][targetValue]`)),
+      minValue: emptyToNullNumber(formData.get(`targets[${i}][minValue]`)),
+      maxValue: emptyToNullNumber(formData.get(`targets[${i}][maxValue]`)),
+      note: emptyToNull(formData.get(`targets[${i}][note]`)),
+    });
+  }
+
+  try {
+    await createRecipeWithVersion(user.userAccountId, {
+      name: String(formData.get("name") ?? ""),
+      description: emptyToNull(formData.get("description")),
+      organizationId: emptyToNull(formData.get("organizationId")),
+      targets,
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath("/recipes");
+  redirect("/recipes?ok=1");
 }

@@ -36,6 +36,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
   ]);
   const { items: lotItems, truncated: lotsTruncated, limit: lotLimit } = lots;
   const canExport = granted.has("lot:export");
+  const canManageLots = granted.has("lot:manage");
 
   return (
     <div>
@@ -46,6 +47,16 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
         <Link href="/lots/new" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
           {t("createLotButton")}
         </Link>
+        {/* ADR-100. Recipes live here rather than in the top navigation: they
+            are process configuration used from the batch flow, and S2
+            consolidated that bar from ten entries precisely so it would fit a
+            phone. A test asserts it stays at eight or fewer, and it was right
+            to refuse a ninth. */}
+        {canManageLots ? (
+          <Link href="/recipes" className="nn-button-quiet" style={{ display: "inline-block", textDecoration: "none" }}>
+            {t("recipesTitle")}
+          </Link>
+        ) : null}
         {canExport ? (
           // A plain anchor, not next/link: this is a file download, and
           // client-side navigation to a route handler would fetch the zip and
