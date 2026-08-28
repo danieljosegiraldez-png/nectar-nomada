@@ -18,6 +18,8 @@ import { MeasurementForm } from "../../components/traceability/MeasurementForm";
 import { PhotoUploadForm } from "../../components/traceability/PhotoUploadForm";
 import { LabourEntryForm } from "../../components/traceability/LabourEntryForm";
 import { MaterialConsumptionForm } from "../../components/traceability/MaterialConsumptionForm";
+import { SelectionForm } from "../../components/traceability/SelectionForm";
+import { getSelectionCatalogs } from "../../../lib/traceability/selection";
 import type { LabourEntry } from "../../../generated/prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -88,6 +90,13 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   const targetRows = activeFermentation
     ? await compareRunToTargets(user.userAccountId, activeFermentation.id)
     : [];
+
+  // P3 §6 — the selection form is offered for cherry that is not already in a
+  // run. A batch mid-fermentation is not waiting to be sorted, and a lot that
+  // has already been selected is a *different* lot (the accepted output), so
+  // this does not need to ask whether sorting already happened.
+  const canSelect = lot.lotType === "cherry" && !activeFermentation && !activeDrying;
+  const selectionCatalogs = canSelect ? await getSelectionCatalogs() : null;
 
   const availableActions: { action: BatchAction; href: string; label: string }[] = [
     // Only offered while a run is under way, because that is the only time it
@@ -317,6 +326,20 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           </p>
         ) : null}
       </section>
+
+      {canSelect && selectionCatalogs ? (
+        <section className="nn-section">
+          <h2>{t("selectionHeading")}</h2>
+          <SelectionForm
+            lotId={lot.id}
+            lotType={lot.lotType}
+            currentQuantity={quantity.recorded ? Number(quantity.quantity) : null}
+            unit={quantity.unit ?? "kg"}
+            methods={selectionCatalogs.methods}
+            categories={selectionCatalogs.categories}
+          />
+        </section>
+      ) : null}
 
       <section className="nn-section">
         <h2>{t("processingHeading")}</h2>

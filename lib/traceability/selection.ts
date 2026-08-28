@@ -191,3 +191,26 @@ export async function getSelectionOutturn(transformationId: string) {
     unexplainedQuantity: transformation.unexplainedQuantity != null ? Number(transformation.unexplainedQuantity) : null,
   };
 }
+
+/**
+ * The two vocabularies the selection form needs, resolved to canonical rows
+ * only — an alias would appear as a second option meaning the same thing.
+ *
+ * No RBAC check: these are seeded platform vocabularies, not tenant data, and
+ * the form that uses them is already behind the batch page's own gate.
+ */
+export async function getSelectionCatalogs() {
+  const [methods, categories] = await Promise.all([
+    prisma.variableCatalogValue.findMany({
+      where: { catalog: { key: "seleccion_metodo" }, aliasOfId: null },
+      select: { id: true, value: true },
+      orderBy: { displayOrder: "asc" },
+    }),
+    prisma.variableCatalogValue.findMany({
+      where: { catalog: { key: "rechazo_categoria" }, aliasOfId: null },
+      select: { id: true, value: true },
+      orderBy: { displayOrder: "asc" },
+    }),
+  ]);
+  return { methods, categories };
+}
