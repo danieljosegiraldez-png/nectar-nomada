@@ -7178,7 +7178,124 @@ smaller gap than the one this ADR closes, and it is the next one.
 
 ---
 
-## ADR-101 — A name may be edited; a target may only be superseded
+## ADR-101 — A field session belongs to a person who cannot log in
+
+**Context.** P2 §3–§5 (`43_P2_OPERATOR_CORE.md`) added `FieldSession`,
+`FieldEvent` and the first real capture timestamps. The code landed on main
+inside **PR #52**, whose title and description are about fermentation targets:
+two sessions were working the same tree, a broad `git add` swept four
+uncommitted files into someone else's commit, and 1,176 lines merged without
+being reviewed as their own change. The code was tested and main stayed green;
+the process was not. This ADR exists partly because that history is otherwise
+misleading — the reasoning below was never in a PR anyone read.
+
+Two facts framed the work. Nothing in the schema grouped a visit: every event
+table is anchored to its own domain parent — a run, a colony, a stage — so
+"Kenneth went to Lote 3 on Tuesday morning and did these eleven things" could
+not be expressed. And `partner.task` had **0 rows, ever**, as did
+`field_submission`: the Partner Workspace is fully built and has never been
+used, which is why §1–§2 (extending Task, task templates) were deliberately
+*not* built here. Extending a model nobody has used, for users who do not
+exist, was not worth doing before someone answers why it went unused.
+
+**Decision 1 — `operatorPersonId` is a `Person`, never a `UserAccount`.** Most
+Person rows in this database have no email and therefore no account. A session
+recorded by someone who cannot log in is the normal case at a farm, not an edge
+case, and a model that cannot express it excludes most of the people doing the
+work.
+
+This is the same defect `Task.assignedToUserAccountId` still has — a task
+literally cannot be assigned to most of the crew — and it is the single
+hardest blocker left in the operator model. `FieldSession` simply refuses to
+repeat it.
+
+The authority question is separate and unchanged: the **caller** still needs
+`location:manage_attributes` on the block. Who did the work and who is allowed
+to record it are two different facts, and conflating them is what forces the
+UserAccount requirement in the first place.
+
+**Decision 2 — `FieldEvent` is a spine, not a replacement.** The tempting
+design is one generic event table that `FermentationIntervention`,
+`DryingTurnEvent`, `SpecimenObservation`, `QuantityEvent` and
+`ProcessingStageObservation` all migrate into. That would collapse their typed
+columns into JSON, which CLAUDE.md §49 forbids outright, and discard the
+validation each of them carries.
+
+So `FieldEvent` owns no domain semantics. It records *when, where and by whom*,
+and points at the row holding *what* through a nullable FK per parent — the
+ADR-020 decision 8 pattern `Asset` already uses fifteen times. At most one
+subject may be set, enforced in the service: two would make the timeline
+ambiguous about which row a moment refers to, and being unambiguous is the
+spine's only job.
+
+Every specialised table stays exactly where it is.
+
+**Decision 3 — `eventKind` is a catalog value, not an enum.** What an operator
+might record will keep growing, and P1 established that a growing vocabulary is
+a seed entry plus a re-seed rather than a migration. The service validates that
+the value belongs to the `event_kind` catalog specifically — a cultivar is not a
+kind of moment — and follows an alias to its canonical row, the same rule
+ADR-095 set for cultivars, so a timeline does not group one kind of moment
+under two labels.
+
+**Decision 4 — three timestamps, because they are three different facts.**
+`occurredAt` is when it happened, `recordedAt` is the device clock when the
+operator entered it, `createdAt` is server receipt, `syncedAt` is arrival from a
+device. The audit's worked example — measured 14:00, entered 14:23, synced
+09:17 the next morning — was previously expressible only as one of those.
+
+**A `recordedAt` earlier than `occurredAt` is refused.** Entering something
+before it happened is a clock problem, not a record, and a fermentation curve
+reconstructed from a drifting cheap phone is wrong in a way nobody notices
+until the conclusions are drawn.
+
+Scope was **narrowed against the ticket**, which said every operationally
+captured table. The columns went to `measurement`, `quantity_event` and the two
+apiary tables that already have an offline write path (`clientDraftId`, A5) —
+the only places where device-versus-server time diverges today rather than in
+theory — plus the two new tables. The rest follow in Phase 4 alongside
+`Device`, when the FK can actually be wired and something writes them. Adding
+fifty-odd nullable columns nothing can populate is not cheap insurance, it is
+surface area; and the migration costs the same either way.
+
+`deviceId` is a bare nullable UUID for now for that reason. `Device`, with
+token issuance and revocation, is Phase 4.
+
+`measurement.device_id` — free text since T3, never written by any code path —
+was **left alone rather than repurposed**. A column that once meant "some string
+a lab machine reported" and now meant "a registered device" would make old rows
+lie. `capture_device_id` is the real one.
+
+**Decision 5 — a position is all-or-nothing.** Latitude without longitude is not
+a partial fix, it is a bug, and half a coordinate stored as data is worse than
+none because a map will plot it somewhere confidently wrong. Ranges are checked;
+a negative accuracy is refused. All three stay nullable, because a device with
+no fix and a session written up afterwards at a desk both genuinely have no
+coordinates, and a fabricated one is the failure this schema exists to prevent.
+
+**Decision 6 — the timeline orders by `occurredAt`, not `createdAt`.** For a
+batch synced the next morning, creation order is the order the server happened
+to receive rows and says nothing about the morning's work. Events before the
+session started, and events on an ended session, are both refused: the first
+belongs to a different session, and the second is a record being appended to a
+closed one.
+
+**Consequences.** A session and its events reconstruct a visit in order, which
+nothing could do before. `FieldSession` is also the intended offline
+transaction boundary and unit of selective sync (audit §17) — a device pulls the
+sessions assigned to its operator and pushes them back whole — so its shape is
+load-bearing for Phase 4 in a way none of it is exercised by yet.
+
+Sixteen tests cover it and 592 pass overall, but **no real session has ever been
+recorded**, exactly as no task ever was. P2's acceptance criterion stands
+unmet and is not a test: one real person, who is not the product owner, receives
+a task, goes to a block, records an observation and a photo with GPS, and
+completes it. Until that happens this is a well-tested guess about how field
+work goes.
+
+---
+
+## ADR-102 — A name may be edited; a target may only be superseded
 
 **Context.** ADR-100 left a recipe "created once and thereafter fixed". The
 schema always supported change — `ProcessRecipeVersion` exists for exactly that

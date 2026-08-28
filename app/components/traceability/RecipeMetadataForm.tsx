@@ -7,7 +7,7 @@ import { updateRecipeAction, type TraceabilityActionState } from "../../actions/
 const initialState: TraceabilityActionState = {};
 
 /**
- * The recipe's label, and only its label — ADR-101.
+ * The recipe's label, and only its label — ADR-102.
  *
  * There is deliberately no target field here. Correcting a typo in a name
  * changes nothing about what any run was aiming for; changing a target changes

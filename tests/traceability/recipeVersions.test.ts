@@ -1,5 +1,5 @@
 /**
- * Editing a recipe, and superseding it with a new version — ADR-101.
+ * Editing a recipe, and superseding it with a new version — ADR-102.
  *
  * The distinction under test is the one CLAUDE.md §3 exists for: a name is a
  * label and may be edited; targets are what runs were operated against and may

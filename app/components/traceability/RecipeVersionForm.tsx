@@ -17,7 +17,7 @@ export interface InitialTarget {
 }
 
 /**
- * A new version of an existing recipe — ADR-101.
+ * A new version of an existing recipe — ADR-102.
  *
  * **Prefilled from the current version, deliberately.** Creating version 2
  * almost always means changing one number, not retyping eight targets. Making

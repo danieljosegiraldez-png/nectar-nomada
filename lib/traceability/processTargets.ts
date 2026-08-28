@@ -208,7 +208,7 @@ export async function listRecipeVersionsForLot(userAccountId: string, lotId: str
     orderBy: [{ recipe: { name: "asc" } }, { version: "desc" }],
   });
 
-  // Only the newest version of each recipe is offered for a NEW run — ADR-101.
+  // Only the newest version of each recipe is offered for a NEW run — ADR-102.
   //
   // Before versions could be created this returned everything approved, which
   // was the same thing because there was only ever one. The moment v2 exists,
@@ -246,7 +246,7 @@ export interface CreateRecipeInput {
  * two-step flow that can be abandoned halfway.
  */
 /**
- * Every rule a set of targets must satisfy, in one place — ADR-101.
+ * Every rule a set of targets must satisfy, in one place — ADR-102.
  *
  * Extracted when creating a *version* joined creating a *recipe* as a way to
  * declare targets. Two copies of these checks would eventually disagree, and
@@ -392,7 +392,7 @@ export async function listRecipeOrganizations(userAccountId: string) {
 }
 
 /**
- * One recipe with every version it has ever had — ADR-101.
+ * One recipe with every version it has ever had — ADR-102.
  *
  * Includes how many runs each version was used by, because that is the fact
  * that makes version preservation legible: a version with runs attached is

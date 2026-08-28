@@ -570,7 +570,7 @@ function parseTargetRows(formData: FormData) {
   return targets;
 }
 
-/** Rename a recipe, or reword its description — ADR-101. Never its targets. */
+/** Rename a recipe, or reword its description — ADR-102. Never its targets. */
 export async function updateRecipeAction(
   _prevState: TraceabilityActionState,
   formData: FormData,
@@ -594,7 +594,7 @@ export async function updateRecipeAction(
   redirect(`/recipes/${recipeId}?ok=renamed`);
 }
 
-/** A new version — the only way targets ever change (ADR-101). */
+/** A new version — the only way targets ever change (ADR-102). */
 export async function createRecipeVersionAction(
   _prevState: TraceabilityActionState,
   formData: FormData,

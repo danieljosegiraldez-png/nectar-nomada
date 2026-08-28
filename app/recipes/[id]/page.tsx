@@ -33,7 +33,7 @@ export default async function RecipeDetailPage({
 
   const current = recipe.versions[0];
   // Prefilled from the current version: creating v2 almost always means
-  // changing one number, not retyping eight targets (ADR-101).
+  // changing one number, not retyping eight targets (ADR-102).
   const initialTargets = (current?.targets ?? []).map((tg) => ({
     variable: tg.variable,
     moment: tg.moment as "initial" | "during" | "final",
@@ -59,7 +59,7 @@ export default async function RecipeDetailPage({
       <section className="nn-section">
         <h2>{t("recipeMetadataHeading")}</h2>
         {/* Only the label. Targets are what runs were operated against, so
-            changing those is a new version and never an edit (ADR-101). */}
+            changing those is a new version and never an edit (ADR-102). */}
         <p className="nn-muted">{t("recipeMetadataIntro")}</p>
         <RecipeMetadataForm
           recipeId={recipe.id}
