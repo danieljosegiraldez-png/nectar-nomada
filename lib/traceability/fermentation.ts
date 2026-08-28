@@ -57,6 +57,9 @@ export interface StartFermentationRunInput {
   // measurement (per T9.5 §3(b)'s "lot merge or transformation" example).
   provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
+  // ADR-099 — optional. A run improvised without a recipe is a legitimate
+  // state, and most existing runs are exactly that.
+  processRecipeVersionId?: string | null;
 }
 
 export async function startFermentationRun(userAccountId: string, input: StartFermentationRunInput) {
@@ -71,6 +74,7 @@ export async function startFermentationRun(userAccountId: string, input: StartFe
         startedAt: input.startedAt,
         operatorPersonId: input.operatorPersonId ?? null,
         inoculated: input.inoculated ?? false,
+      processRecipeVersionId: input.processRecipeVersionId ?? null,
         inoculationNote: input.inoculationNote ?? null,
         createdBy: userAccountId,
       },

@@ -5,6 +5,8 @@ import { getCurrentUser } from "../../../lib/auth/session";
 import { getLotDetail, getObserverCandidates, getManageableContext, TraceabilityAccessError } from "../../../lib/traceability/lots";
 import { computeCurrentQuantity } from "../../../lib/traceability/quantity";
 import { nextActionFor, type BatchAction } from "../../../lib/traceability/batchActions";
+import { compareRunToTargets } from "../../../lib/traceability/processTargets";
+import { TargetComparisonTable } from "../../components/traceability/TargetComparisonTable";
 import { getSignedUrlForAsset } from "../../../lib/traceability/media";
 import {
   recordFermentationInterventionFormAction,
@@ -79,6 +81,13 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
 
   // ADR-096 — which action this batch is waiting for, and the list to render.
   const suggestedAction = nextActionFor(lot.lotType, Boolean(activeFermentation || activeDrying));
+
+  // ADR-099 — target versus actual for the run under way. Empty when the run
+  // was started without a recipe, which is most of them and is legitimate;
+  // the component renders nothing rather than an empty table.
+  const targetRows = activeFermentation
+    ? await compareRunToTargets(user.userAccountId, activeFermentation.id)
+    : [];
 
   const availableActions: { action: BatchAction; href: string; label: string }[] = [
     // Only offered while a run is under way, because that is the only time it
@@ -314,6 +323,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         {activeFermentation ? (
           <div className="nn-card" style={{ maxWidth: "none", marginBottom: "1rem" }}>
             <h3 style={{ margin: 0 }}>{t("activeFermentationHeading")}</h3>
+            {/* Placed directly under the run's own heading: this is the
+                run's report card, not a separate section (ADR-099). */}
+            <TargetComparisonTable rows={targetRows} />
             <p className="nn-muted">{t("startedAtLabel", { date: activeFermentation.startedAt.toISOString().slice(0, 16).replace("T", " ") })}</p>
             {activeFermentation.interventions.length > 0 ? (
               <ul>
