@@ -93,8 +93,14 @@ afterAll(async () => {
   if (created.runIds.length) await prisma.fermentationRun.deleteMany({ where: w(created.runIds) });
   if (created.recipeIds.length) {
     await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: created.recipeIds } }) });
-    await prisma.processRecipe.deleteMany({ where: w(created.recipeIds) });
   }
+  // By RUN prefix rather than tracked id alone — see ADR-104 and the same
+  // change in recipeAuthoring.test.ts. A refusal case never captures an id,
+  // so a mutation run that turns the refusal into a success leaves a row
+  // nothing will ever clean up.
+  await prisma.processRecipe.deleteMany({
+    where: assertDefinedWhere({ name: { contains: RUN } }),
+  });
   if (created.lotIds.length) await prisma.lot.deleteMany({ where: w(created.lotIds) });
   if (created.organizationIds.length) await prisma.organization.deleteMany({ where: w(created.organizationIds) });
 

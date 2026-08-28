@@ -7450,3 +7450,64 @@ Fourteen tests cover it. As with P1 and P2, **no real selection has ever been
 recorded** — this is a well-tested model of an operation nobody has yet
 performed through the platform. The first real one is what will show whether the
 rejection vocabulary matches what actually comes off a flotation tank.
+
+---
+
+## ADR-104 — A mutation run leaves rows a tracked-id cleanup will never find
+
+**Context.** Asked to remove a demo recipe from the local database, the
+cleanup turned up a second row nobody had asked about:
+
+```
+RECIPE Impossible recipe-1787941745697   →  target pH 15
+```
+
+pH 15 is the exact value `tests/traceability/recipeAuthoring.test.ts` asserts
+must be **refused**. The row existed anyway, and the test was passing.
+
+**What happened.** ADR-100's bounds check was verified by mutation: the check
+was disabled, the suite re-run, and two tests failed as designed. That is the
+evidence the check does work. But with validation disabled, the creation the
+test expected to be *refused* **succeeded** — and the test's `afterAll` deletes
+by `created.recipeIds`, a list the refusal cases never push to, because under
+normal conditions there is nothing to record.
+
+So the mutant's row was invisible to the cleanup that ran seconds later, and to
+every run afterwards. It sat in the local database for days.
+
+**Decision — refusal-heavy suites delete by run prefix, not by tracked id
+alone.** Both recipe suites now end with
+
+```ts
+await prisma.processRecipe.deleteMany({
+  where: assertDefinedWhere({ name: { contains: RUN } }),
+});
+```
+
+The tracked-id list stays for the AuditEvent rows, which have no name to match
+on. `RUN` is already a per-run timestamp, so the pattern cannot reach another
+run's data, and `assertDefinedWhere` still guards against the clause collapsing
+to `{}` (ADR-045).
+
+**Why this is worth an ADR rather than a quiet fix.** It is the third variation
+of one mistake in this repository, and the shape is now clear enough to name:
+
+- **ADR-086** — a fixture cleanup matched on `roasterPersonId`, and the three
+  sessions that named no roaster leaked, 79 of them into production.
+- **ADR-089** — a failed backup left a directory the pruner counted as a
+  backup.
+- **Here** — a cleanup matched on ids it had recorded, and the row created by a
+  path that was supposed to fail was never recorded.
+
+Each time, the cleanup was correct for the case the author had in mind and
+silent about the case they had not. **A cleanup that only removes what it
+expected to create is not a cleanup; it is a record of intentions.**
+
+There is a sharper lesson for mutation testing specifically, which this
+codebase now does routinely: *a mutant that turns a refusal into a success
+writes data the suite was never designed to remove.* Verifying a guard can
+leave behind exactly the thing the guard exists to prevent.
+
+**Verification.** Re-ran the mutation with the fix in place: two tests fail as
+before, and the database is left with **zero** recipes instead of one. 614
+tests pass with the real code.
