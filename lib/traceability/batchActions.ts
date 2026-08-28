@@ -24,7 +24,7 @@
  */
 import type { LotType } from "../../generated/prisma/client";
 
-export type BatchAction = "fermentation" | "drying" | "storage" | "sample" | "report";
+export type BatchAction = "measurement" | "fermentation" | "drying" | "storage" | "sample" | "report";
 
 /**
  * The action a batch of this type is expected to need next, or `null` when
@@ -37,11 +37,16 @@ export type BatchAction = "fermentation" | "drying" | "storage" | "sample" | "re
  * fit a stage, so guessing one for it would be inventing a fact.
  */
 export function nextActionFor(lotType: LotType, hasActiveRun: boolean): BatchAction | null {
-  // A batch already fermenting or drying is not waiting for a new stage — it is
-  // waiting for the run to end, and that control lives inside the Processing
-  // section with the run itself. Highlighting "start drying" here would point
-  // away from the work actually in progress.
-  if (hasActiveRun) return null;
+  // A batch already fermenting or drying is not waiting for a new stage — but
+  // it is not waiting for nothing either, which is what this returned at first.
+  // The product owner opened PE-96-A mid-fermentation and said plainly what the
+  // page should have said: it needs a measurement.
+  //
+  // That is what a run *is*. You do not start a fermentation and walk away; you
+  // take a reading, and another, and you end the run when the numbers say to.
+  // Suggesting a new stage here would point away from the work in progress;
+  // suggesting nothing pretended there was none.
+  if (hasActiveRun) return "measurement";
 
   switch (lotType) {
     case "cherry":

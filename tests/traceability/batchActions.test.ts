@@ -26,13 +26,14 @@ describe("nextActionFor", () => {
     expect(nextActionFor("roast", false)).toBe("sample");
   });
 
-  it("suggests nothing while a run is under way", () => {
-    // The batch is not waiting for a new stage, it is waiting for the run to
-    // end — and that control lives with the run, in the Processing section.
-    // Pointing at "start drying" here would point away from the work.
-    expect(nextActionFor("cherry", true)).toBeNull();
-    expect(nextActionFor("processing", true)).toBeNull();
-    expect(nextActionFor("drying", true)).toBeNull();
+  it("asks for a measurement while a run is under way", () => {
+    // Found by opening PE-96-A mid-fermentation: this returned null and the
+    // page therefore said nothing, when the obvious answer was "take a
+    // reading". A run in progress wants the same thing whatever the lot type.
+    expect(nextActionFor("cherry", true)).toBe("measurement");
+    expect(nextActionFor("processing", true)).toBe("measurement");
+    expect(nextActionFor("drying", true)).toBe("measurement");
+    expect(nextActionFor("green", true)).toBe("measurement");
   });
 
   it("suggests nothing for end states and non-coffee material", () => {

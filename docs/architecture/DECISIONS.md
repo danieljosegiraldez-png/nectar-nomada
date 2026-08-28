@@ -6770,3 +6770,67 @@ alone. `16_ADAPTIVE_OPERATOR_WORKSPACE_PREAMBLE.md` describes deriving it from
 context — season, the operator's recent actions, what the rest of the site is
 doing — and that remains the destination. This is the cheap intermediate step
 that document allows, applied to a page rather than to navigation.
+
+---
+
+## ADR-094 — The one vocabulary decision the project made, broken in two fields
+
+**Context.** Opening a batch mid-fermentation, the product owner asked what a
+form was for: *"I don't understand what batch label is for with material and
+quantity, maybe a supply was used, maybe a treatment, or nutrition load?"*
+
+All three guesses were right, which is the tell. The form records an input
+consumed during a fermentation or drying run — yeast, culture, lime, nutrient,
+biochar — together with the lot number printed on its packaging. Its own source
+comment calls that number "the one irrecoverable identity fact": throw the sack
+away and no one can ever say which production lot of yeast that fermentation
+used.
+
+The form has recorded **zero entries in production**. Nobody has used it, which
+is what you would expect of a form nobody can interpret.
+
+**The cause is one label.** The field was called **"Lote/batch"** — and V1
+(`38_V1_VOCABULARIO_LOTE_BATCH.md`) reserved both of those words:
+
+| Concept | Interface word |
+|---|---|
+| A plot of land with coffee trees | **Lote** |
+| Harvested coffee being processed | **Batch** |
+
+So a field on a batch page, labelled with both reserved words, meant a third
+thing entirely. Read quickly it asks "which batch is this?" — a question the
+page has already answered in its heading.
+
+V1 exists because the product owner opened `/lots` expecting his six plots and
+found coffee batches. That document fixed the navigation and the headings. It
+did not reach this field, or its twin.
+
+**Decision 1 — the package's lot number is named as such.** `Lote/batch` →
+**"N.º de lote del envase"**. Longer, and unambiguous: it cannot be misread as
+a plot or a coffee batch, which is the entire requirement. The product owner
+chose the wording; inventing operational vocabulary on his behalf is how the
+previous label happened.
+
+`Material` → `Insumo`, and the form now carries one line saying what the
+section is for and why the number matters. The fields alone did not say it, and
+a form that needs explaining should contain the explanation.
+
+**Decision 2 — the same defect in the apiary module, found by grep.** Colony
+treatment entry asked for `Producto` and **`Lote`** — the same package lot
+number, the same reserved word, in a module V1 never looked at. Fixed
+identically. Two occurrences is the difference between a slip and a pattern:
+the word "lote" is load-bearing in this platform and any new field using it
+needs checking against V1.
+
+**No schema change**, per V1's own instruction: `material_consumption_entry.
+batch_label` keeps its name. What was wrong was what the user reads.
+
+**Verification.** 554 tests pass, typecheck and lint clean. A grep across
+`messages/` confirms every remaining use of "lote" refers to a plot, which is
+V1-correct.
+
+**Worth noting for whoever adds the next field.** This was not found by a test,
+a type, or a review. It was found by the person who uses the platform opening a
+page and saying he could not tell what a form was for — and the strongest
+evidence was already in the database: zero rows, for a feature that shipped.
+An unused write path is worth a look before it is worth a fix.

@@ -81,6 +81,13 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   const suggestedAction = nextActionFor(lot.lotType, Boolean(activeFermentation || activeDrying));
 
   const availableActions: { action: BatchAction; href: string; label: string }[] = [
+    // Only offered while a run is under way, because that is the only time it
+    // is the *expected* step — the measurement form itself is always on the
+    // page, in its own section, and this is an anchor to it rather than a
+    // second way to reach it (ADR-093).
+    ...(activeFermentation || activeDrying
+      ? [{ action: "measurement" as const, href: "#measurements", label: t("recordMeasurementButton") }]
+      : []),
     // Starting a new stage is offered only when no run is under way, exactly
     // as before — the conditional is unchanged, only the styling below it is.
     ...(!activeFermentation && !activeDrying
@@ -487,7 +494,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         {!activeFermentation && !activeDrying && !currentStorage ? <p className="nn-muted">{t("noProcessing")}</p> : null}
       </section>
 
-      <section className="nn-section">
+      <section className="nn-section" id="measurements">
         <h2>{t("measurementsHeading")}</h2>
         {measurements.length === 0 ? (
           <p className="nn-muted">{t("noMeasurements")}</p>
