@@ -1,0 +1,409 @@
+/**
+ * P3 (docs/implementation/44_P3_SELECTION.md §7). Real Postgres,
+ * RUN_ID-scoped fixtures.
+ *
+ * This is the first real consumer of ADR-094's reconciliation path, so the
+ * tolerance and override cases matter as much as the material ones: selection
+ * is the operation where an out-of-balance figure means someone mis-weighed,
+ * not that coffee legitimately lost mass.
+ */
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { prisma } from "../../lib/db";
+import { createLot, getLotLineage, recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
+import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceability/quantity";
+import { recordSelection, getSelectionOutturn, SelectionValidationError } from "../../lib/traceability/selection";
+import { conservesMass } from "../../lib/traceability/balance";
+import { moveLotToStorage } from "../../lib/traceability/storage";
+import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+
+const RUN_ID = `p3-${Date.now()}`;
+
+let organizationId: string;
+let projectId: string;
+let locationId: string;
+let operatorUserAccountId: string;
+let adminUserAccountId: string;
+let flotacionId: string;
+let flotadoresId: string;
+let verdeId: string;
+let cultivarValueId: string;
+
+async function createTestUserAccount(label: string) {
+  const person = await prisma.person.create({
+    data: { givenName: "TEST", familyName: label, displayName: `TEST ${label} (${RUN_ID})`, locale: "es" },
+  });
+  const account = await prisma.userAccount.create({
+    data: { personId: person.id, authProvider: "credentials", status: "active" },
+  });
+  return account.id;
+}
+
+async function assign(userAccountId: string, profileName: string, scope: { scopeType: "project" | "platform"; scopeRefId: string | null }) {
+  const profile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: profileName } });
+  const scopeRow =
+    (await prisma.scope.findFirst({ where: { scopeType: scope.scopeType, scopeRefId: scope.scopeRefId } })) ??
+    (await prisma.scope.create({ data: { scopeType: scope.scopeType, scopeRefId: scope.scopeRefId } }));
+  await prisma.assignment.create({ data: { userAccountId, roleProfileId: profile.id, scopeId: scopeRow.id } });
+}
+
+async function catalogValue(value: string, catalogKey: string) {
+  const row = await prisma.variableCatalogValue.findFirstOrThrow({ where: { value, catalog: { key: catalogKey } } });
+  return row.id;
+}
+
+/** A cherry lot with a seeded ledger — every selection needs one. */
+async function cherryLot(code: string, kg: number) {
+  const lot = await createLot(operatorUserAccountId, {
+    lotCode: `${RUN_ID}-${code}`,
+    lotType: "cherry",
+    organizationId,
+    projectId,
+    locationId,
+  });
+  await recordQuantityEvent(operatorUserAccountId, {
+    lotId: lot.id,
+    eventType: "received",
+    quantity: kg,
+    unit: "kg",
+    occurredAt: new Date(),
+    provenanceClass: "measured_fact",
+  });
+  return lot;
+}
+
+beforeAll(async () => {
+  const organization = await prisma.organization.create({
+    data: { organizationType: "farm", name: `TEST Farm (${RUN_ID})`, status: "approved", classification: "internal" },
+  });
+  organizationId = organization.id;
+
+  const project = await prisma.project.create({
+    data: { name: `TEST Project (${RUN_ID})`, status: "approved", classification: "internal" },
+  });
+  projectId = project.id;
+
+  const location = await prisma.location.create({
+    data: { locationType: "site", name: `TEST Beneficio (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
+  });
+  locationId = location.id;
+
+  operatorUserAccountId = await createTestUserAccount("Operator");
+  await assign(operatorUserAccountId, "Farm Operator", { scopeType: "project", scopeRefId: projectId });
+
+  adminUserAccountId = await createTestUserAccount("Admin");
+  await assign(adminUserAccountId, "Platform Admin", { scopeType: "platform", scopeRefId: null });
+
+  flotacionId = await catalogValue("flotacion", "seleccion_metodo");
+  flotadoresId = await catalogValue("flotadores", "rechazo_categoria");
+  verdeId = await catalogValue("cereza_verde", "rechazo_categoria");
+  cultivarValueId = await catalogValue("Caturra", "cultivar");
+});
+
+afterAll(async () => {
+  const lots = await prisma.lot.findMany({ where: { lotCode: { startsWith: RUN_ID } }, select: { id: true } });
+  const lotIds = lots.map((l) => l.id);
+  const transformationIds = (
+    await prisma.lotTransformation.findMany({
+      where: { OR: [{ inputs: { some: { lotId: { in: lotIds } } } }, { outputs: { some: { lotId: { in: lotIds } } } }] },
+      select: { id: true },
+    })
+  ).map((t) => t.id);
+  const deviationIds = (
+    await prisma.deviation.findMany({ where: { lotTransformationId: { in: transformationIds } }, select: { id: true } })
+  ).map((d) => d.id);
+
+  await prisma.correctiveAction.deleteMany({ where: assertDefinedWhere({ deviationId: { in: deviationIds } }) });
+  await prisma.deviation.deleteMany({ where: assertDefinedWhere({ id: { in: deviationIds } }) });
+  await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
+  await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
+  await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: transformationIds } }) });
+  await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: transformationIds } }) });
+  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: transformationIds } }) });
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
+
+  const userIds = [operatorUserAccountId, adminUserAccountId];
+  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userIds } }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: projectId }) });
+  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userIds } }) });
+  await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: locationId }) });
+  await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
+  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
+});
+
+describe("selection conserves mass", () => {
+  it("is registered as a conserving type", () => {
+    // The load-bearing line of the whole ticket.
+    expect(conservesMass("selection")).toBe(true);
+  });
+
+  it("reconciles accepted + rejected + declared loss against the input", async () => {
+    const source = await cherryLot("balanced", 186.4);
+
+    const { transformation } = await recordSelection(operatorUserAccountId, {
+      inputLotId: source.id,
+      inputQuantity: 186.4,
+      unit: "kg",
+      selectionMethodValueId: flotacionId,
+      occurredAt: new Date(),
+      provenanceClass: "measured_fact",
+      accepted: { lotCode: `${RUN_ID}-balanced-ok`, lotType: "cherry", quantity: 171.8 },
+      rejected: [
+        { lotCode: `${RUN_ID}-balanced-flot`, lotType: "cherry", quantity: 8.7, rejectionCategoryValueId: flotadoresId },
+        { lotCode: `${RUN_ID}-balanced-verde`, lotType: "cherry", quantity: 3.4, rejectionCategoryValueId: verdeId },
+      ],
+      declaredLossQuantity: 2.5,
+      declaredLossReason: "Manipulación",
+    });
+
+    const stored = await prisma.lotTransformation.findUniqueOrThrow({ where: { id: transformation.id } });
+    // 186.4 − (171.8 + 8.7 + 3.4) − 2.5 = 0
+    expect(Number(stored.unexplainedQuantity)).toBe(0);
+    expect(await prisma.deviation.count({ where: { lotTransformationId: transformation.id } })).toBe(0);
+
+    const inputAfter = await computeCurrentQuantity(operatorUserAccountId, source.id);
+    expect(inputAfter.quantity.toNumber()).toBe(0);
+    expect(inputAfter.recorded).toBe(true);
+  });
+
+  it("raises exactly one Deviation when the streams do not add up", async () => {
+    const source = await cherryLot("gap", 100);
+
+    const { transformation } = await recordSelection(operatorUserAccountId, {
+      inputLotId: source.id,
+      inputQuantity: 100,
+      unit: "kg",
+      occurredAt: new Date(),
+      provenanceClass: "measured_fact",
+      accepted: { lotCode: `${RUN_ID}-gap-ok`, lotType: "cherry", quantity: 75 },
+      rejected: [{ lotCode: `${RUN_ID}-gap-flot`, lotType: "cherry", quantity: 5, rejectionCategoryValueId: flotadoresId }],
+    });
+
+    const stored = await prisma.lotTransformation.findUniqueOrThrow({ where: { id: transformation.id } });
+    expect(Number(stored.unexplainedQuantity)).toBe(20);
+
+    const deviations = await prisma.deviation.findMany({ where: { lotTransformationId: transformation.id } });
+    expect(deviations).toHaveLength(1);
+    expect(deviations[0]!.severity).toBe("mass_balance");
+    // Recorded regardless — a field tool that refuses real data goes back to paper.
+    expect(transformation.id).toBeTruthy();
+  });
+});
+
+describe("rejected material is real material", () => {
+  it("creates a queryable Lot per rejection stream, carrying its category", async () => {
+    const source = await cherryLot("streams", 50);
+
+    const { outputLots } = await recordSelection(operatorUserAccountId, {
+      inputLotId: source.id,
+      inputQuantity: 50,
+      unit: "kg",
+      occurredAt: new Date(),
+      provenanceClass: "measured_fact",
+      accepted: { lotCode: `${RUN_ID}-streams-ok`, lotType: "cherry", quantity: 45 },
+      rejected: [{ lotCode: `${RUN_ID}-streams-flot`, lotType: "cherry", quantity: 5, rejectionCategoryValueId: flotadoresId }],
+    });
+
+    const floaters = await prisma.lot.findFirstOrThrow({
+      where: { lotCode: `${RUN_ID}-streams-flot` },
+      include: { rejectionCategoryValue: true },
+    });
+    expect(floaters.rejectionCategoryValue?.value).toBe("flotadores");
+    // The stage stays physically accurate — floaters are still cherry.
+    expect(floaters.lotType).toBe("cherry");
+
+    const accepted = await prisma.lot.findFirstOrThrow({ where: { lotCode: `${RUN_ID}-streams-ok` } });
+    expect(accepted.rejectionCategoryValueId).toBeNull();
+    expect(outputLots).toHaveLength(2);
+  });
+
+  it("lets a rejected lot be stored and sold — not every rejection is waste", async () => {
+    const source = await cherryLot("sellable", 100);
+    await recordSelection(operatorUserAccountId, {
+      inputLotId: source.id,
+      inputQuantity: 100,
+      unit: "kg",
+      occurredAt: new Date(),
+      provenanceClass: "measured_fact",
+      accepted: { lotCode: `${RUN_ID}-sellable-ok`, lotType: "cherry", quantity: 90 },
+      rejected: [{ lotCode: `${RUN_ID}-sellable-flot`, lotType: "cherry", quantity: 10, rejectionCategoryValueId: flotadoresId }],
+    });
+
+    const floaters = await prisma.lot.findFirstOrThrow({ where: { lotCode: `${RUN_ID}-sellable-flot` } });
+
+    // Storable...
+    const assignment = await moveLotToStorage(operatorUserAccountId, {
+      lotId: floaters.id,
+      locationId,
+      startedAt: new Date(),
+    });
+    expect(assignment.lotId).toBe(floaters.id);
+
+    // ...and sellable through the ordinary transformation path.
+    const { transformation } = await recordTransformation(operatorUserAccountId, {
+      transformationType: "sale",
+      occurredAt: new Date(),
+      provenanceClass: "original_record",
+      inputs: [{ lotId: floaters.id }],
+      outputs: [],
+    });
+    expect(transformation.transformationType).toBe("sale");
+    const afterSale = await computeCurrentQuantity(operatorUserAccountId, floaters.id);
+    expect(afterSale.quantity.toNumber()).toBe(0);
+  });
+
+  it("keeps a floater lot's lineage back to the original cherry", async () => {
+    const source = await cherryLot("lineage", 30);
+    await recordSelection(operatorUserAccountId, {
+      inputLotId: source.id,
+      inputQuantity: 30,
+      unit: "kg",
+      occurredAt: new Date(),
+      provenanceClass: "measured_fact",
+      accepted: { lotCode: `${RUN_ID}-lineage-ok`, lotType: "cherry", quantity: 27 },
+      rejected: [{ lotCode: `${RUN_ID}-lineage-flot`, lotType: "cherry", quantity: 3, rejectionCategoryValueId: flotadoresId }],
+    });
+
+    const floaters = await prisma.lot.findFirstOrThrow({ where: { lotCode: `${RUN_ID}-lineage-flot` } });
+    const lineage = await getLotLineage(operatorUserAccountId, floaters.id);
+    expect(lineage.ancestorLotIds).toContain(source.id);
+  });
+});
+
+describe("validation", () => {
+  it("refuses a rejected output with no category", async () => {
+    const source = await cherryLot("nocat", 20);
+    await expect(
+      recordSelection(operatorUserAccountId, {
+        inputLotId: source.id,
+        inputQuantity: 20,
+        unit: "kg",
+        occurredAt: new Date(),
+        provenanceClass: "measured_fact",
+        accepted: { lotCode: `${RUN_ID}-nocat-ok`, lotType: "cherry", quantity: 18 },
+        rejected: [{ lotCode: `${RUN_ID}-nocat-r`, lotType: "cherry", quantity: 2, rejectionCategoryValueId: "" }],
+      }),
+    ).rejects.toThrow(SelectionValidationError);
+  });
+
+  it("refuses a category from the wrong catalog", async () => {
+    const source = await cherryLot("wrongcat", 20);
+    await expect(
+      recordSelection(operatorUserAccountId, {
+        inputLotId: source.id,
+        inputQuantity: 20,
+        unit: "kg",
+        occurredAt: new Date(),
+        provenanceClass: "measured_fact",
+        accepted: { lotCode: `${RUN_ID}-wrongcat-ok`, lotType: "cherry", quantity: 18 },
+        // A cultivar is not a rejection reason.
+        rejected: [{ lotCode: `${RUN_ID}-wrongcat-r`, lotType: "cherry", quantity: 2, rejectionCategoryValueId: cultivarValueId }],
+      }),
+    ).rejects.toThrow(SelectionValidationError);
+  });
+
+  it("refuses a selection with no input quantity — the outturn is the point", async () => {
+    const source = await cherryLot("noqty", 20);
+    await expect(
+      recordSelection(operatorUserAccountId, {
+        inputLotId: source.id,
+        inputQuantity: 0,
+        unit: "kg",
+        occurredAt: new Date(),
+        provenanceClass: "measured_fact",
+        accepted: { lotCode: `${RUN_ID}-noqty-ok`, lotType: "cherry", quantity: 18 },
+        rejected: [],
+      }),
+    ).rejects.toThrow(SelectionValidationError);
+  });
+
+  it("refuses duplicate output lot codes within one selection", async () => {
+    const source = await cherryLot("dup", 20);
+    await expect(
+      recordSelection(operatorUserAccountId, {
+        inputLotId: source.id,
+        inputQuantity: 20,
+        unit: "kg",
+        occurredAt: new Date(),
+        provenanceClass: "measured_fact",
+        accepted: { lotCode: `${RUN_ID}-dup-same`, lotType: "cherry", quantity: 18 },
+        rejected: [{ lotCode: `${RUN_ID}-dup-same`, lotType: "cherry", quantity: 2, rejectionCategoryValueId: flotadoresId }],
+      }),
+    ).rejects.toThrow(SelectionValidationError);
+  });
+});
+
+describe("lot:override_balance", () => {
+  it("denies a Farm Operator accepting an out-of-tolerance selection", async () => {
+    const source = await cherryLot("ovr-denied", 100);
+    await expect(
+      recordSelection(operatorUserAccountId, {
+        inputLotId: source.id,
+        inputQuantity: 100,
+        unit: "kg",
+        occurredAt: new Date(),
+        provenanceClass: "measured_fact",
+        accepted: { lotCode: `${RUN_ID}-ovr-denied-ok`, lotType: "cherry", quantity: 70 },
+        rejected: [],
+        acceptUnexplained: { reason: "Balanza descalibrada" },
+      }),
+    ).rejects.toThrow(TraceabilityAccessError);
+  });
+
+  it("lets a Platform Admin accept it, recording the reason", async () => {
+    const source = await cherryLot("ovr-ok", 100);
+    const { transformation } = await recordSelection(adminUserAccountId, {
+      inputLotId: source.id,
+      inputQuantity: 100,
+      unit: "kg",
+      occurredAt: new Date(),
+      provenanceClass: "measured_fact",
+      accepted: { lotCode: `${RUN_ID}-ovr-ok-ok`, lotType: "cherry", quantity: 70 },
+      rejected: [],
+      acceptUnexplained: { reason: "Romana verificada contra patrón" },
+    });
+
+    const deviation = await prisma.deviation.findFirstOrThrow({ where: { lotTransformationId: transformation.id } });
+    const actions = await prisma.correctiveAction.findMany({ where: { deviationId: deviation.id } });
+    expect(actions).toHaveLength(1);
+    expect(actions[0]!.actionText).toContain("Romana verificada");
+  });
+});
+
+describe("outturn", () => {
+  it("reports each stream's share of the input, computed not stored", async () => {
+    const source = await cherryLot("outturn", 200);
+    const { transformation } = await recordSelection(operatorUserAccountId, {
+      inputLotId: source.id,
+      inputQuantity: 200,
+      unit: "kg",
+      selectionMethodValueId: flotacionId,
+      equipmentNote: "Tanque de flotación 2",
+      occurredAt: new Date(),
+      provenanceClass: "measured_fact",
+      accepted: { lotCode: `${RUN_ID}-outturn-ok`, lotType: "cherry", quantity: 180 },
+      rejected: [{ lotCode: `${RUN_ID}-outturn-flot`, lotType: "cherry", quantity: 20, rejectionCategoryValueId: flotadoresId }],
+    });
+
+    const outturn = await getSelectionOutturn(transformation.id);
+    expect(outturn.method).toBe("flotacion");
+    expect(outturn.equipmentNote).toBe("Tanque de flotación 2");
+    expect(outturn.inputTotal).toBe(200);
+    expect(outturn.accepted[0]!.sharePct).toBe(90);
+    expect(outturn.rejected[0]!.sharePct).toBe(10);
+    expect(outturn.rejected[0]!.rejectionCategory).toBe("flotadores");
+    expect(outturn.unexplainedQuantity).toBe(0);
+  });
+
+  it("refuses to report outturn for a transformation that is not a selection", async () => {
+    const source = await cherryLot("notsel", 10);
+    const { transformation } = await recordTransformation(operatorUserAccountId, {
+      transformationType: "stage_change",
+      occurredAt: new Date(),
+      provenanceClass: "original_record",
+      inputs: [{ lotId: source.id }],
+      outputs: [{ lotCode: `${RUN_ID}-notsel-out`, lotType: "processing", quantity: 9, unit: "kg" }],
+    });
+    await expect(getSelectionOutturn(transformation.id)).rejects.toThrow(SelectionValidationError);
+  });
+});
