@@ -26,7 +26,7 @@ export class LocationValidationError extends Error {}
  * (RBAC.md §3) doing the rest for a location-scoped Farm Operator
  * Assignment.
  */
-async function requireLocationAttributeAccess(userAccountId: string, locationId: string) {
+export async function requireLocationAttributeAccess(userAccountId: string, locationId: string) {
   // Gate on the Location's own classification (ADR-068). A Location is one of
   // the records that declares its sensitivity — sixteen of them are `internal`
   // — so the AND-gate has a real subject here, unlike the platform-wide
@@ -55,6 +55,11 @@ export interface UpdateLocationAttributesInput {
   slopeDescription?: string | null;
   soilType?: string | null;
   plantSpacingMeters?: number | null;
+  // P1 §3 — declared block area. Not derived from a boundary polygon: none
+  // exists, and a producer knows their hectares before anyone walks the
+  // perimeter. When polygons arrive this becomes the value to reconcile the
+  // computed one against.
+  areaHectares?: number | null;
   description?: string | null;
 }
 
@@ -89,6 +94,7 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
       ...(input.slopeDescription !== undefined ? { slopeDescription: input.slopeDescription } : {}),
       ...(input.soilType !== undefined ? { soilType: input.soilType } : {}),
       ...(input.plantSpacingMeters !== undefined ? { plantSpacingMeters: input.plantSpacingMeters } : {}),
+      ...(input.areaHectares !== undefined ? { areaHectares: input.areaHectares } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
     },
   });
