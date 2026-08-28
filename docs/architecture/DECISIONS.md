@@ -7175,3 +7175,69 @@ supports both — `ProcessRecipeVersion` exists precisely so targets can change
 without rewriting what past runs were aiming for — and nothing in the interface
 reaches them. A recipe today is created once and thereafter fixed. That is a
 smaller gap than the one this ADR closes, and it is the next one.
+
+---
+
+## ADR-101 — A name may be edited; a target may only be superseded
+
+**Context.** ADR-100 left a recipe "created once and thereafter fixed". The
+schema always supported change — `ProcessRecipeVersion` exists for exactly that
+— and nothing in the interface reached it. This is that half.
+
+**Decision 1 — the two operations are separated, and the separation is the
+point.** Renaming a recipe and changing its targets look like the same action
+in a form and are opposite in kind:
+
+- A **name** is a label. Correcting "Lavado tradicinal" changes nothing about
+  what any run was aiming for, so it is an edit, and it is audited with both
+  sides.
+- **Targets** are what runs were operated against. Changing those is a new
+  version and never an edit, which is CLAUDE.md §3's version-preservation rule
+  applied to production rather than to protocols.
+
+`updateRecipeMetadata` takes name and description and nothing else — there is
+no target field to reach. Conflating the two is the failure ADR-092 avoided for
+stories and ADR-098 built this table to prevent.
+
+**Decision 2 — the new-version form is prefilled from the current version.**
+Creating v2 almost always means changing one number, not retyping eight
+targets. An empty form is why people edit the database directly, or give up and
+let the recipe drift out of date — which is the outcome the version table
+exists to prevent. The prefill is a starting point, not a diff: what is
+submitted becomes the new version in full.
+
+**Decision 3 — only the newest version is offered for a new run, and this was
+a defect this change would otherwise have introduced.**
+`listRecipeVersionsForLot` returned every approved version. That was correct
+while a recipe could only ever have one, and wrong the moment v2 existed: the
+picker would have listed "Lavado v1", "Lavado v2", "Lavado v3" and asked the
+operator to know which was current.
+
+Older versions stay attached to the runs that used them and stay readable
+there. They are simply not offered again.
+
+**Decision 4 — the history shows how many runs used each version.** That is
+what makes version preservation legible rather than abstract: a version with
+runs attached is history, and the page says so, instead of implying it could be
+tidied away.
+
+**Decision 5 — a duplicate (variable, moment) is caught before the database.**
+The unique index would raise `P2002`, which an operator cannot read. Validation
+names the actual mistake — two targets for the same variable at the same
+moment.
+
+`validateTargets` is now shared between creating a recipe and creating a
+version. Two copies would eventually disagree, and the copy that drifted would
+be the one nobody was reading.
+
+**Verification.** Eleven tests, and the one that matters most asserts a run
+operated against v1 still compares against **3.8** after v2 declares 4.0.
+Mutating `compareRunToTargets` to use the recipe's newest version instead of
+the run's own fails that test *and* ADR-098's equivalent — two suites, written
+weeks apart, guarding the same rule. 614 tests pass overall.
+
+**Not built.** Retiring a recipe, and deleting a version. Both are deliberate
+omissions rather than gaps: a version with runs attached must not be removable,
+and a recipe nobody uses is harmless. When retirement is wanted it should be a
+status change with the runs left intact, not a delete — and that is a decision
+worth making when something actually needs retiring.
