@@ -368,6 +368,37 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
   // Deliberately NOT exhaustive. This seeds what the farms actually grow plus
   // the varieties already named in the repository; adding one later is an
   // entry here and a re-seed, never a migration (RO1 §9.3).
+  // P2 (43_P2_OPERATOR_CORE.md §4). What an operator did at a moment during a
+  // field session. A catalog rather than an enum because this list will keep
+  // growing as real field work reveals what people actually record — and P1
+  // already established that a growing vocabulary is an entry here plus a
+  // re-seed, never a migration.
+  //
+  // These are *kinds of moment*, not domain records. The row holding what
+  // actually happened (a Measurement, a QuantityEvent, an Asset) hangs off
+  // FieldEvent's nullable FKs; this only says what sort of thing it was, so a
+  // timeline reads sensibly even where no domain row is attached.
+  {
+    key: "event_kind",
+    name: "Tipo de evento de campo",
+    description:
+      "Qué hizo un operario en un momento dado durante una sesión de campo. No sustituye al registro de dominio (Measurement, QuantityEvent, Asset) — lo etiqueta.",
+    values: [
+      { value: "observacion", definition: "Algo notado y anotado, sin medición ni muestra asociada." },
+      { value: "medicion", definition: "Una lectura numérica — pH, Brix, temperatura, humedad. El valor vive en Measurement." },
+      { value: "foto" },
+      { value: "video" },
+      { value: "nota_de_voz" },
+      { value: "punto_gps", definition: "Una posición registrada por sí misma, sin otro contenido." },
+      { value: "recoleccion_muestra" },
+      { value: "pesaje", definition: "Material pesado. La cantidad vive en QuantityEvent, nunca solo acá." },
+      { value: "tarea_completada" },
+      { value: "incidencia", definition: "Algo que salió mal o requiere atención — plaga, daño, equipo averiado." },
+      { value: "movimiento_material", definition: "Material que cambió de lugar o de estado. El linaje vive en LotTransformation." },
+      { value: "otro", definition: "Siempre acompañado de nota libre. La regla de F1 §1: una lista tipada siempre necesita dónde poner lo que no encaja." },
+    ],
+  },
+
   {
     key: "cultivar",
     name: "Cultivar",

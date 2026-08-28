@@ -6939,3 +6939,91 @@ a type, or a review. It was found by the person who uses the platform opening a
 page and saying he could not tell what a form was for — and the strongest
 evidence was already in the database: zero rows, for a feature that shipped.
 An unused write path is worth a look before it is worth a fix.
+
+---
+
+## ADR-098 — Target versus actual, and the mean that must never eat its inputs
+
+**Context.** The product owner asked for BeerSmith's shape, in his own words:
+*"we have a desired measurement or batch size, and then what actually happens
+… we target 3.8 or 4.0 and then if it's 3.785, or after taking a few samples
+and average them, we get the actual result versus target."*
+
+The platform stored only actuals. 25 pH readings, 11 temperature, 2 moisture —
+every one a number with nothing to compare it to. A measurement says what
+happened; on its own it cannot say whether that was what you wanted.
+
+**Decision 1 — targets live in a reusable, versioned recipe.** `ProcessRecipe`
+→ `ProcessRecipeVersion` → `ProcessTarget`, chosen over the two alternatives
+after putting all three to the product owner.
+
+Not on the run itself: that works on day one and makes twenty batches
+incomparable, because each run's targets are retyped rather than shared. Not
+the research `Protocol` either — that carries approval, deviation and
+experiment machinery, and folding routine production into it would make every
+ordinary fermentation an experiment.
+
+A `FermentationRun` points at the **version**, never at the recipe. Editing a
+recipe must not rewrite what a run six months ago was aiming for, which is
+CLAUDE.md §3's version-preservation rule applied to production rather than to
+protocols. A test creates version 2 with a different target and asserts the
+existing run still compares against version 1.
+
+**Decision 2 — `moment` is part of the target's identity.** `initial`,
+`during`, `final`, with a unique constraint on
+`(recipeVersionId, variable, moment)`. Original gravity and final gravity are
+the same variable targeted twice in one process; that is the ordinary case in
+fermentation, not an edge case, and a schema that could not express it would
+have failed at the first thing asked of it.
+
+**Decision 3 — the mean is derived, computed on read, and never replaces its
+readings.** CLAUDE.md §49 forbids combining raw measurement with calculated
+value; §28 requires a derived metric to carry its method. So a comparison
+returns `actual.readings` *and* `actual.mean`, with `method:
+"mean_of_readings"` naming how the second came from the first.
+
+Three readings of 3.7/3.8/3.9 and three of 3.78/3.79/3.79 have the same mean
+and mean very different things. Storing only the average would satisfy the
+feature request and destroy the information that makes it worth having.
+Mutating the code to return the mean without its readings fails two tests.
+
+Nothing is stored: the mean is computed when read. A stored aggregate would
+need method, formula, source dataset and timestamp per §28, and there is no
+call for that until something needs to cite the number rather than display it.
+
+**Decision 4 — null is an answer, in four places.** No readings yet, no target
+declared, no range declared, no recipe on the run. Each returns null or an
+empty comparison rather than a zero, a `false`, or an error. Reporting a
+deviation of `0` for a target nobody measured asserts an agreement nobody
+established — the same failure ADR-080 fixed when a lot with no weighing read
+"Cantidad: 0".
+
+**`ambiguousSingleReading`.** The rule mapping readings to moments is
+positional: earliest is initial, latest is final, `during` is all of them. It
+has one honest failure — with a single reading, earliest and latest are the
+same row, and one measurement cannot truthfully be both an original and a final
+gravity. Rather than quietly reporting a deviation against both, the comparison
+says so and lets the page tell the operator.
+
+**A pattern this deliberately does not follow.** `units.ts` already contains
+`cold_hold_target_temperature_min` and `..._max` — targets modelled as
+*measurement variables*, which stores a declared intention as though it were an
+observed fact. That is exactly the distinction CLAUDE.md §3 asks the system to
+keep. It predates this work and is left alone; it is noted here so the next
+person meets the argument rather than copying the precedent.
+
+**Verification.** Nine tests against a real database, including the product
+owner's own figures: target 3.8, actual 3.785, deviation −0.015. The mutation
+described above fails two of them.
+
+**Not built here, and it is a real boundary.** There is no UI. No screen
+creates a recipe, attaches a version to a run, or displays a comparison —
+`compareRunToTargets` is called by tests only. Recipes must currently be
+created through a script, the same way A7/F1/S1 loaded real named entities
+before their surfaces existed.
+
+That is a deliberate stopping point rather than an oversight: the data model
+and the arithmetic are the parts that are expensive to get wrong and cheap to
+verify, and the shape of the screen is worth deciding with the numbers already
+flowing. Until that screen exists, **this feature is invisible to the operator
+and should not be described as delivered.**
