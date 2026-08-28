@@ -368,6 +368,54 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
   // Deliberately NOT exhaustive. This seeds what the farms actually grow plus
   // the varieties already named in the repository; adding one later is an
   // entry here and a re-seed, never a migration (RO1 §9.3).
+  // P3 (44_P3_SELECTION.md §2). How cherry was sorted. Free-standing from the
+  // `cereza_seleccion`/`cereza_flotado` observation catalogs, which stay valid
+  // and complementary: those record what was *seen* ("5-10% flotadores"), this
+  // records what was *done* and produces material with weights behind it.
+  {
+    key: "seleccion_metodo",
+    name: "Método de selección",
+    description:
+      "Cómo se separó la cereza. El resultado — aceptado y rechazos con peso — se registra como LotTransformation de tipo `selection`, no acá.",
+    values: [
+      { value: "flotacion", definition: "Separación por densidad en agua. El rechazo típico son flotadores." },
+      { value: "manual", definition: "Selección a mano, en mesa o tolva." },
+      { value: "madurez", definition: "Por grado de maduración — verde, pinton, maduro, sobremaduro." },
+      { value: "densidad", definition: "Por densidad en seco, no en agua (mesa densimétrica)." },
+      { value: "color" },
+      { value: "optica", definition: "Clasificadora óptica automática." },
+      { value: "tamano", definition: "Por tamaño o criba." },
+      { value: "defectos", definition: "Retirando defectos identificados uno a uno." },
+      { value: "otro", definition: "Siempre con nota libre — la regla de F1 §1." },
+    ],
+  },
+
+  // P3 §3. Por qué se rechazó un lote. Vive en Lot.rejectionCategoryValueId,
+  // no en lotType: un lote de flotadores sigue siendo cereza físicamente, y
+  // mezclar etapa con calidad haría que lotType significara dos cosas.
+  //
+  // Un rechazo NO es necesariamente merma (audit §18). Un lote rechazado
+  // puede almacenarse, venderse (`sale`), compostarse (`disposal`) o volver a
+  // procesarse — todo eso ya funciona porque es un Lot de verdad.
+  {
+    key: "rechazo_categoria",
+    name: "Categoría de rechazo",
+    description:
+      "Por qué se separó este material. Presente solo en lotes que son una corriente de rechazo; ausente en un lote ordinario.",
+    values: [
+      { value: "flotadores", definition: "Cereza que flota — grano vano, broca, sobremadura. Frecuentemente vendible como comercial." },
+      { value: "cereza_verde" },
+      { value: "sobremadura" },
+      { value: "cereza_seca", definition: "Cereza pasada o secada en el árbol." },
+      { value: "danada", definition: "Daño mecánico o por manipulación." },
+      { value: "broca", definition: "Daño por Hypothenemus hampei." },
+      { value: "moho" },
+      { value: "materia_extrana", definition: "Hojas, ramas, piedras — no es café." },
+      { value: "pergamino_defectuoso", definition: "Rechazo en etapa de pergamino, no de cereza." },
+      { value: "otro", definition: "Siempre con nota libre." },
+    ],
+  },
+
   // P2 (43_P2_OPERATOR_CORE.md §4). What an operator did at a moment during a
   // field session. A catalog rather than an enum because this list will keep
   // growing as real field work reveals what people actually record — and P1

@@ -76,6 +76,11 @@ const FULL_CONSUMPTION_TYPES: ReadonlySet<LotTransformationType> = new Set([
   "sale",
 ] as const);
 
+// P3 — `selection` is deliberately absent from FULL_CONSUMPTION_TYPES, so it
+// takes the partial path and an explicit input quantity is required. A
+// selection whose input was never weighed cannot reconcile against anything,
+// and the outturn is the entire point of the operation.
+
 /**
  * Types that legitimately produce no output Lot yet still consume material.
  * Everything else with zero outputs is a marker, not a movement — see
@@ -115,6 +120,13 @@ const CONSERVING_TYPES: ReadonlySet<LotTransformationType> = new Set([
   "split",
   "merge",
   "blend",
+  // P3 (44_P3_SELECTION.md §1). Selection is conserving by definition:
+  // accepted + rejected + declared loss = input. It is the operation this
+  // whole reconciliation path was built for — the first transformation where
+  // a gap means someone mis-weighed or material went missing, rather than a
+  // yield. Everything before it either re-partitioned material (split/merge/
+  // blend) or transformed it (stage_change, deliberately excluded).
+  "selection",
 ] as const);
 
 /** Whether a difference between input and output mass is suspicious for this type. */

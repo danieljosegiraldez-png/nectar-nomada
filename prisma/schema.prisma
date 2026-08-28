@@ -2536,6 +2536,21 @@ model Lot {
   // figure known to be wrong. Nullable and unset for every other lot —
   // absence means "no reason to doubt it", never "verified".
   dataQuality    DataQuality?        @map("data_quality")
+  // P3 (44_P3_SELECTION.md §3) — why this lot was rejected, when it was.
+  //
+  // Deliberately NOT a new `LotType` value, diverging from the audit's §25.
+  // `lotType` describes the material's *stage*, and a lot of floaters is
+  // physically still cherry; a rejected parchment is still parchment. Folding
+  // a quality judgement into the stage enum would make it mean two things at
+  // once, and could not express rejected material at a later stage at all.
+  // Stage and quality are two axes here, the same separation `dataQuality`
+  // already has from `status`.
+  //
+  // Null for every ordinary lot. Its presence is what marks a lot as a
+  // rejection stream — which can still be stored, sold or reprocessed, since
+  // audit §18's rule is that not every rejection is waste.
+  rejectionCategoryValueId String?               @map("rejection_category_value_id") @db.Uuid
+  rejectionCategoryValue   VariableCatalogValue? @relation("LotRejectionCategory", fields: [rejectionCategoryValueId], references: [id])
   createdAt      DateTime            @default(now()) @map("created_at")
   createdBy      String?             @map("created_by") @db.Uuid
   creator        UserAccount?        @relation("LotCreatedBy", fields: [createdBy], references: [id])
@@ -2564,6 +2579,7 @@ model Lot {
   @@unique([organizationId, lotCode])
   @@index([organizationId])
   @@index([projectId])
+  @@index([rejectionCategoryValueId])
   @@map("lot")
   @@schema("traceability")
 }
@@ -2577,6 +2593,13 @@ enum LotTransformationType {
   loss
   disposal
   sale
+  // P3 (44_P3_SELECTION.md §1). Cherry sorting as a material operation:
+  // one input, an accepted output and one output per rejection stream.
+  // Registered in balance.ts's CONSERVING_TYPES — accepted + rejected +
+  // declared loss must equal the input, which is the first transformation
+  // where an out-of-balance figure means a real discrepancy rather than a
+  // yield (ADR-094 Decision 4).
+  selection
 
   @@schema("traceability")
 }
@@ -2631,6 +2654,13 @@ model LotTransformation {
   // becoming an output Lot: mucilage, water, handling loss. Distinct from a
   // `loss` transformation, which is the whole lot going; this is the
   // shrinkage inside a transformation that also produced something.
+  // P3 §1 — both nullable and only meaningful for transformationType
+  // `selection`. equipmentNote stays free text, matching
+  // FermentationRun.vesselNote's precedent: no Equipment entity exists yet.
+  selectionMethodValueId String?               @map("selection_method_value_id") @db.Uuid
+  selectionMethodValue   VariableCatalogValue? @relation("LotTransformationSelectionMethod", fields: [selectionMethodValueId], references: [id])
+  equipmentNote          String?               @map("equipment_note")
+
   declaredLossQuantity Decimal? @map("declared_loss_quantity") @db.Decimal(10, 3)
   declaredLossUnit     String?  @map("declared_loss_unit")
   declaredLossReason   String?  @map("declared_loss_reason")
@@ -2652,6 +2682,7 @@ model LotTransformation {
   @@index([occurredAt])
   @@index([fermentationRunId])
   @@index([dryingRunId])
+  @@index([selectionMethodValueId])
   @@map("lot_transformation")
   @@schema("traceability")
 }
@@ -4372,6 +4403,8 @@ model VariableCatalogValue {
   observations       ProcessingStageObservation[]
   plantingCohorts    PlantingCohort[]              @relation("PlantingCohortCultivar")
   fieldEvents        FieldEvent[]                  @relation("FieldEventKind")
+  selectionMethodOf  LotTransformation[]           @relation("LotTransformationSelectionMethod")
+  rejectionCategoryOf Lot[]                        @relation("LotRejectionCategory")
   washMediumOfStages ProcessingStage[]             @relation("ProcessingStageWashMedium")
 
   @@unique([catalogId, value])

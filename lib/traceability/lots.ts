@@ -133,7 +133,9 @@ export interface RecordTransformationInput {
     | "sample_extraction"
     | "loss"
     | "disposal"
-    | "sale";
+    | "sale"
+    // P3 — kept in sync with the DB enum by hand, same as CreateLotInput.lotType.
+    | "selection";
   occurredAt: Date;
   operatorPersonId?: string | null;
   notes?: string | null;
@@ -155,6 +157,9 @@ export interface RecordTransformationInput {
     lotType: CreateLotInput["lotType"];
     quantity?: number | null;
     unit?: string | null;
+    // P3 §3 — set on a rejection stream. Its presence is what marks the
+    // resulting Lot as a reject; `lotType` still states the material's stage.
+    rejectionCategoryValueId?: string | null;
   }>;
   // P0 (§4) — material that leaves without becoming an output lot: mucilage,
   // water, handling. Declaring it is what turns an unexplained difference
@@ -162,6 +167,9 @@ export interface RecordTransformationInput {
   declaredLossQuantity?: number | null;
   declaredLossUnit?: string | null;
   declaredLossReason?: string | null;
+  // P3 §1 — only meaningful for transformationType `selection`.
+  selectionMethodValueId?: string | null;
+  equipmentNote?: string | null;
   /**
    * P0 (§4, §6) — accept a transformation that does not reconcile within the
    * organization's tolerance. Requires `lot:override_balance`, which Farm
@@ -222,6 +230,8 @@ export async function recordTransformation(userAccountId: string, input: RecordT
         createdBy: userAccountId,
         provenanceClass,
         sourceReference: input.sourceReference ?? null,
+        selectionMethodValueId: input.selectionMethodValueId ?? null,
+        equipmentNote: input.equipmentNote ?? null,
         inputs: {
           create: input.inputs.map((i) => ({
             lotId: i.lotId,
@@ -248,6 +258,7 @@ export async function recordTransformation(userAccountId: string, input: RecordT
           organizationId: sourceLot.organizationId,
           projectId: sourceLot.projectId,
           locationId: sourceLot.locationId,
+          rejectionCategoryValueId: output.rejectionCategoryValueId ?? null,
           createdBy: userAccountId,
         },
       });
