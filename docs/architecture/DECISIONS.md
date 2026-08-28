@@ -7361,7 +7361,99 @@ worth making when something actually needs retiring.
 
 ---
 
-## ADR-103 — A mutation run leaves rows a tracked-id cleanup will never find
+## ADR-103 — Floaters are coffee, and coffee that is not recorded does not exist
+
+**Context.** Selection was the first specialty-coffee operation the platform
+could not express. What existed was `cereza_seleccion` and `cereza_flotado` —
+`VariableCatalog` values recorded as `ProcessingStageObservation` rows. They
+capture what was *seen* ("5-10% flotadores") and they remain valid and
+complementary. They capture **no weight, produce no material, and leave rejected
+coffee with no existence in the system.** Floaters sold as commercial grade were,
+as far as the database was concerned, not there.
+
+The audit's §57 named this the most architecturally meaningful slice to build,
+and it was blocked on the mass-balance work. ADR-094 shipped, so it isn't.
+
+**Decision 1 — a selection is a `LotTransformation`, not a new entity.** It
+already has exactly the shape the graph handles: one input lot, several typed
+outputs with quantities, plus method, operator, time and equipment. A
+specialised `SelectionEvent` table was considered and rejected in the audit
+(§11): it would need its own inputs, outputs, quantities, lineage edges and mass
+balance — a second transformation system differing only in vocabulary.
+
+`recordSelection` (`lib/traceability/selection.ts`) is a thin domain wrapper
+over `recordTransformation`, never a parallel write path.
+
+**Decision 2 — `selection` joins `CONSERVING_TYPES`, and that is the point of
+the ticket.** Accepted + rejected + declared loss must equal the input, so the
+reconciliation path ADR-094 built now has its first real consumer. It is also
+the first transformation where an out-of-balance figure means something: a
+`stage_change` legitimately loses four fifths of its mass and that loss is the
+yield, whereas a selection that does not add up means someone mis-weighed or
+material went missing.
+
+`selection` is deliberately **absent** from `FULL_CONSUMPTION_TYPES`, so it takes
+the partial path and an explicit input quantity is required. A selection whose
+input was never weighed cannot reconcile against anything, and the outturn is
+the entire reason the operation exists.
+
+**Decision 3 — rejected material is a real `Lot`, but its `lotType` stays
+physical.** §58 Decision B settled that each rejection stream becomes an output
+Lot, so it keeps identity, weight, storage and a sale path, and mass balance
+falls out with no special case.
+
+This **diverges from the audit's §25**, which proposed a new `LotType` value for
+rejected material. `LotType` describes the material's *stage* — cherry,
+processing, drying, green — and a lot of floaters is physically still cherry; a
+rejected parchment is still parchment. Folding a quality judgement into the
+stage enum would make it mean two things at once, and the moment there is
+rejected material at a later stage the enum could not say so.
+
+So `Lot.rejectionCategoryValueId` instead: stage and quality as two axes, the
+same separation `dataQuality` already has from `status`. "Is this sellable
+coffee or a reject" becomes one nullable column, and a floater lot still
+correctly reports as cherry.
+
+**Not every rejection is waste** (audit §18). A rejected lot can be stored, sold
+through the existing `sale` transformation, composted through `disposal`, or
+reprocessed as the input to another transformation. All of that works because it
+is a Lot; none of it works if rejection is an attribute. A test asserts the
+store-and-sell path specifically, because it is the whole argument.
+
+**Decision 4 — two catalogs, not two enums.** `seleccion_metodo` (flotación,
+manual, madurez, densidad, color, óptica, tamaño, defectos, otro) and
+`rechazo_categoria` (flotadores, cereza verde, sobremadura, cereza seca, dañada,
+broca, moho, materia extraña, pergamino defectuoso, otro). This vocabulary grows
+with real practice, and P1 and P2 both established that growth is a seed entry
+plus a re-seed rather than a migration. Both carry `otro`, always paired with a
+free note — F1 §1's rule. Aliases resolve to canonical rows before storing, the
+rule ADR-095 set for cultivars, so reporting cannot split one category across
+two spellings.
+
+Every rejected output **must** carry a category. A rejected lot with no reason is
+indistinguishable from ordinary material a week later, which is the failure this
+ticket exists to prevent.
+
+**Decision 5 — standards are explicitly not here.** The audit pairs selection
+with `OperatingStandard` ("Specialty Cherry Intake v3: max floaters 5%"). Nobody
+has decided what the real thresholds are, and building a threshold engine with
+no thresholds would repeat the mistake P2 §0 identifies — infrastructure for
+users and data that do not exist. Record selections first; the observed
+distribution then becomes the input to that conversation.
+
+**Consequences.** Cherry outturn is computable for the first time, and per
+stream: `getSelectionOutturn` reports each stream's share of the input, computed
+never stored, because storing both a quantity and its percentage invites the two
+to disagree and the quantities are the facts.
+
+Fourteen tests cover it. As with P1 and P2, **no real selection has ever been
+recorded** — this is a well-tested model of an operation nobody has yet
+performed through the platform. The first real one is what will show whether the
+rejection vocabulary matches what actually comes off a flotation tank.
+
+---
+
+## ADR-104 — A mutation run leaves rows a tracked-id cleanup will never find
 
 **Context.** Asked to remove a demo recipe from the local database, the
 cleanup turned up a second row nobody had asked about:

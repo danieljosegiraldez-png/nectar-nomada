@@ -52,7 +52,7 @@ afterAll(async () => {
   if (created.recipeIds.length) {
     await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: created.recipeIds } }) });
   }
-  // Deleted by RUN prefix, not only by tracked id — ADR-103.
+  // Deleted by RUN prefix, not only by tracked id — ADR-104.
   //
   // Every refusal case here names a recipe it expects never to exist, so its
   // id is never captured. Under normal conditions that is fine, because the
