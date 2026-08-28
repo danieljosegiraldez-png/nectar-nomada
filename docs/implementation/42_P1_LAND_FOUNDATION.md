@@ -150,10 +150,31 @@ reconcile the computed one against — which is more useful than either alone.
 `HarvestEvent.locationId` is already required, so every batch already names
 its plot. What is missing is everything above the batch.
 
-For Las Nubes Cerro Azul and Finca Las Nubes Jaramillo, load: each plot's
-area, its cohorts (cultivar, planting year, plant count, density), and link
-the existing `PlantingEvent` (the 600 Caturra plantones from Cafelino) to the
-cohort it established.
+**One farm, corrected 2026-08-27 by the product owner: `Finca Rosina`, in
+Cerro Azul.** Cerro Azul is the *place* (a `locality`), Finca Rosina is the
+*farm* (an `Organization`). An earlier draft of this section named two farms
+and got both wrong.
+
+The other coffee organizations in the database are not this farm and are not
+in scope here: `Cafelino` is the Boquete partner whose PE protocols I1
+imported, and `Finca Las Nubes (Jaramillo Arriba, Boquete)` is a separate
+property. Neither should acquire cohorts as part of this ticket.
+
+**A naming inconsistency to resolve before loading anything.** Finca Rosina
+owns a `site` named **"Finca Las Nubes Cerro Azul"**, and all eleven of its
+children inherit that string: `Lote 1`–`Lote 6`, the beneficio, the drying
+room, and two apiary sites. So the organization says Rosina and every location
+under it says Las Nubes. Loading cohorts against plots named for a farm that
+does not own them would bake the confusion in one level deeper.
+
+This is a product-owner decision, not a repair to make unilaterally — the
+site may legitimately be a property called "Las Nubes" that Finca Rosina
+operates, which is a different fact from a mistyped name. Ask, then either
+leave it or rename the site and its eleven children in one audited pass.
+
+Then load: each plot's area, its cohorts (cultivar, planting year, plant
+count, density), and link the existing `PlantingEvent` (the 600 Caturra
+plantones from Cafelino) to the cohort it established.
 
 **Ask the product owner for the real figures. Do not infer them.** The audit's
 §9 remediation is a live example of what inferred quantities cost: three lots
