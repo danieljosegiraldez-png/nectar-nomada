@@ -30,6 +30,8 @@ import { prisma } from "../db";
 import { Prisma } from "../../generated/prisma/client";
 import { requireLotAccess } from "./lots";
 import { recordAuditEvent } from "../audit";
+import { boundsFor } from "./units";
+import { compareNames } from "../naturalOrder";
 import type { ProcessTargetMoment } from "../../generated/prisma/client";
 
 export class ProcessTargetError extends Error {}
@@ -244,6 +246,19 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
     if (t.minValue != null && t.maxValue != null && t.minValue > t.maxValue) {
       throw new ProcessTargetError("range_inverted");
     }
+
+    // ADR-100 — a target is checked against the same physical bounds a reading
+    // is. A declared pH of 15 is not a preference to record, it is a typo, and
+    // units.ts already knew that. Refusing here is cheaper than a comparison
+    // table that reports a deviation of −11 for the rest of the run's life.
+    const bounds = boundsFor(t.variable);
+    if (!bounds) throw new ProcessTargetError("unknown_variable");
+    if (t.unit !== bounds.canonicalUnit) throw new ProcessTargetError("wrong_unit_for_variable");
+    for (const v of [t.targetValue, t.minValue, t.maxValue]) {
+      if (v != null && (v < bounds.min || v > bounds.max)) {
+        throw new ProcessTargetError("target_out_of_physical_range");
+      }
+    }
   }
 
   // Gated on the organization the recipe belongs to, through a lot of that
@@ -296,4 +311,48 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
     sourceInterface: "traceability.processTargets",
   });
   return recipe;
+}
+
+/**
+ * Recipes this account can see, with their versions and target counts.
+ *
+ * Gated the same way creation is — through a lot the account may manage —
+ * rather than on a `recipe:*` permission that does not exist (ADR-099).
+ */
+export async function listRecipes(userAccountId: string) {
+  const anyLot = await prisma.lot.findFirst({ where: {} });
+  if (!anyLot) return [];
+  await requireLotAccess(userAccountId, "manage", [anyLot]);
+
+  return prisma.processRecipe.findMany({
+    include: {
+      organization: { select: { name: true } },
+      versions: { include: { targets: { orderBy: { displayOrder: "asc" } } }, orderBy: { version: "desc" } },
+    },
+    orderBy: { name: "asc" },
+  });
+}
+
+/** Organizations this account may create a recipe for. */
+export async function listRecipeOrganizations(userAccountId: string) {
+  // Every organization that actually owns batches. One with none has nothing
+  // to run a recipe against, so offering it would be offering a dead end.
+  const organizations = await prisma.organization.findMany({
+    where: { lots: { some: {} } },
+    select: { id: true, name: true },
+  });
+
+  const reachable: { id: string; name: string }[] = [];
+  for (const org of organizations) {
+    const sample = await prisma.lot.findFirst({ where: { organizationId: org.id } });
+    if (!sample) continue;
+    try {
+      await requireLotAccess(userAccountId, "manage", [sample]);
+      reachable.push(org);
+    } catch {
+      // Not an error: an organization this account cannot operate is simply
+      // not offered.
+    }
+  }
+  return reachable.sort((a, b) => compareNames(a.name, b.name));
 }

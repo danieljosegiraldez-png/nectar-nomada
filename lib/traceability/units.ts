@@ -255,3 +255,32 @@ export function normalizeToCanonical(
   }
   return { value: normalized, unit: definition.canonicalUnit };
 }
+
+/**
+ * Every canonical variable with its unit and physical bounds — ADR-100.
+ *
+ * Added so the recipe form can offer a picker instead of a free-text field,
+ * and so a target can be checked against the same bounds a reading is. A
+ * declared target of pH 15 is not a preference the platform should record; it
+ * is a typo, and the registry already knew that.
+ */
+export function listVariableDefinitions(): {
+  variable: MeasurementVariable;
+  canonicalUnit: string;
+  min: number;
+  max: number;
+}[] {
+  return (Object.keys(REGISTRY) as MeasurementVariable[]).map((variable) => ({
+    variable,
+    canonicalUnit: REGISTRY[variable].canonicalUnit,
+    min: REGISTRY[variable].min,
+    max: REGISTRY[variable].max,
+  }));
+}
+
+/** The bounds for one variable, or null when the name is not canonical. */
+export function boundsFor(variable: string): { canonicalUnit: string; min: number; max: number } | null {
+  if (!isKnownVariable(variable)) return null;
+  const d = REGISTRY[variable];
+  return { canonicalUnit: d.canonicalUnit, min: d.min, max: d.max };
+}
