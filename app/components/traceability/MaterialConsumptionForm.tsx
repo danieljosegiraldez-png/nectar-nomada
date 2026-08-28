@@ -18,7 +18,7 @@ export function MaterialConsumptionForm({ lotId, parent }: { lotId: string; pare
   return (
     <form action={recordMaterialConsumptionEntryFormAction} className="nn-form" style={{ maxWidth: 420, marginTop: "0.5rem" }}>
       {/*
-        ADR-094. This form recorded zero entries in production, and the reason
+        ADR-097. This form recorded zero entries in production, and the reason
         was one label: the package's lot number was called "Lote/batch",
         which spends both of the words V1 reserved — "Lote" is a plot of land,
         "Batch" is harvested coffee — on a third thing entirely. On a batch

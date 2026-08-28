@@ -1,5 +1,5 @@
 /**
- * The expected next action for a batch — ADR-093.
+ * The expected next action for a batch — ADR-096.
  *
  * Pure, like tests/navigation.test.ts: the interesting cases are cheap to
  * assert exhaustively and need no database.

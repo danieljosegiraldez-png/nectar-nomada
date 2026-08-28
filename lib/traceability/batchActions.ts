@@ -1,5 +1,5 @@
 /**
- * Which action a batch is waiting for — ADR-093.
+ * Which action a batch is waiting for — ADR-096.
  *
  * The batch detail page offered five buttons of identical weight: start
  * fermentation, start drying, move to storage, create sample, view report.

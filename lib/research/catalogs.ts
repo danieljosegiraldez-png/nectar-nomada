@@ -19,6 +19,12 @@ export interface VariableCatalogValueDef {
   // §3a — "Spontaneous Wild ... no es una cepa, es ausencia de cepa
   // conocida." Only true for values that themselves assert unknown origin.
   impliesUnknownIdentity?: boolean;
+  // P1 (42_P1_LAND_FOUNDATION.md §2) — the canonical value this one is an
+  // alias of, by `value` string within the same catalog. Resolved in a second
+  // seeding pass, since the canonical row must exist first. One level only:
+  // an alias points directly at a canonical row and never chains, matching
+  // resolveCatalogValue's single hop (lib/research/protocols.ts).
+  aliasOf?: string;
   // RO1.1 (35_RO1.1_HONEY_PORCENTAJE_CANONICO.md §2) — seeded straight into
   // VariableCatalogValue.definition, not left for a later runtime call.
   // honey_color's four values are the first real use: each definition must
@@ -339,6 +345,50 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       {
         value: "ninguno_natural",
         definition: "Sin lavado — proceso natural; la cereza no pasa por medio líquido de lavado.",
+      },
+    ],
+  },
+
+  // P1 (42_P1_LAND_FOUNDATION.md §2). The first catalog here that is not a
+  // *process* vocabulary — the other twenty all describe how coffee was
+  // treated, this one describes what was planted.
+  //
+  // A VariableCatalog rather than Species/Cultivar tables: DOMAIN_MODEL.md §4
+  // specifies that taxonomy, F1 and RO1 each declined to build it, and this
+  // declines it a third time for the same reason. What is actually needed is
+  // controlled values with aliases and definitions, which this mechanism
+  // already provides.
+  //
+  // Aliases matter more here than anywhere else: "Catuaí" / "Catuai" /
+  // "Catuaí Rojo" are the same plant written three ways, and resolving them
+  // to one canonical row is the difference between "cultivar performance
+  // across seasons" being answerable or not. The alias preserves what someone
+  // actually typed instead of overwriting it.
+  //
+  // Deliberately NOT exhaustive. This seeds what the farms actually grow plus
+  // the varieties already named in the repository; adding one later is an
+  // entry here and a re-seed, never a migration (RO1 §9.3).
+  {
+    key: "cultivar",
+    name: "Cultivar",
+    description:
+      "Variedad de café sembrada. Vocabulario controlado con alias — no una taxonomía Species/Cultivar, que sigue especificada y sin construir (DOMAIN_MODEL.md §4).",
+    values: [
+      { value: "Caturra" },
+      { value: "Catuaí" },
+      { value: "Catuai", aliasOf: "Catuaí" },
+      { value: "Castillo" },
+      { value: "Geisha" },
+      { value: "Gesha", aliasOf: "Geisha" },
+      { value: "Pink Bourbon" },
+      { value: "Bourbon" },
+      { value: "Typica" },
+      { value: "Típica", aliasOf: "Typica" },
+      {
+        value: "desconocido",
+        impliesUnknownIdentity: true,
+        definition:
+          "La variedad no se conoce. Valor legítimo, no un hueco a rellenar — un lote sembrado antes de que alguien llevara registro suele no tener respuesta, y adivinarla la convertiría en un hecho (CLAUDE.md §3). Exige dataQuality, igual que 'Spontaneous Wild' en fuente_microbiana.",
       },
     ],
   },

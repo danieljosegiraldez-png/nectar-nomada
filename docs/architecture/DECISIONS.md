@@ -6715,7 +6715,112 @@ column exists precisely so a farm that knows its own scales can say so.
 
 ---
 
-## ADR-093 — The batch page suggests a next step, and stops leading with a photo
+## ADR-095 — A cohort is what stands on a block, and renovation does not erase what stood there before
+
+**Context.** P1 (`42_P1_LAND_FOUNDATION.md`) closes the one genuine gap on the
+land side. Three things partially answered "what is planted in this block, how
+old, how dense" and none answered it: `PlantingEvent` records *that* material
+went into the ground — an event, not a population, and there was exactly **one
+row** in the whole database; `Specimen` tracks *individual* plants and traps,
+right for the broca traps and far too granular for four thousand trees; and
+`Location.plantSpacingMeters` is a single value for a whole plot.
+
+Worth stating plainly, because it shaped the ticket: measured 2026-08-27, the
+land side holds 8 plots, 6 sites, **1 planting event, 0 specimens and 1
+distinct varietal**. F1 built that schema deliberately ahead of the data — the
+plantones are six months old and will not fruit until 2031 — and that was
+right. But it means P1 stacks a third unexercised layer on two others, and the
+ticket therefore makes *loading the real land data* its real acceptance
+criterion rather than the schema. That half is not in this change.
+
+**Decision 1 — cultivar is a `VariableCatalog`, for the third time.**
+`DOMAIN_MODEL.md` §4 specifies Species and Cultivar tables. F1 declined to
+build them, RO1 declined again, and this declines a third time. What is
+actually needed is controlled values with aliases and definitions, which the
+existing mechanism already provides, and adding a variety later is an entry in
+`lib/research/catalogs.ts` plus a re-seed rather than a migration.
+
+This is the twenty-first catalog and the first that is not a *process*
+vocabulary — the other twenty describe how coffee was treated; this one
+describes what was planted. That is a widening of what `VariableCatalog` is
+for, made deliberately rather than by drift.
+
+**Decision 2 — aliases finally have a seeder.** `VariableCatalogValue.aliasOfId`
+has existed since RO1 and nothing ever populated it. Cultivars are where it
+earns its place: "Catuaí", "Catuai" and "Catuaí Rojo" are one plant written
+three ways, and `createPlantingCohort` resolves an alias to its canonical row
+before storing, because otherwise "cultivar performance across seasons" —
+the first question a producer actually asks — silently splits one plant across
+spellings. The alias row still preserves what someone typed.
+
+The seeder resolves aliases in a **second pass** and throws if an alias names a
+value absent from its own catalog, since the canonical row must exist first and
+a dangling alias would otherwise seed silently as a plain value.
+
+**Decision 3 — renovation creates a cohort; it never edits one.** A stumped and
+replanted block leaves the outgoing cohort `renovated` with a `removedAt`, and
+its cultivar, planting date and plant count stay exactly as recorded. The
+reason is not tidiness: a block stumped in 2027 was still Caturra in 2019, and
+a yield figure from 2019 is only interpretable against the population that
+actually produced it. Editing the cohort in place would silently reassign
+every historical number to a plant that was not there — the same class of
+error V1 already ruled out when it forbade reattributing a pre-microlot batch
+to a microlot.
+
+**Decision 4 — planting dates carry their own precision, reusing S1's
+`HarvestWindowPrecision`.** "Sembrado en 2019" and "sembrado el 14 de marzo de
+2019" are different claims, and a producer usually knows the first and not the
+second. A date with no stated precision is refused, because a bare timestamp
+claims more than anyone knows. No second precision vocabulary was invented.
+
+**Decision 5 — `location:manage_attributes`, not a new permission.** A cohort
+describes what stands on a Location, which is the same authority as editing
+that Location's altitude or soil, so `requireLocationAttributeAccess` is reused
+directly. This deliberately diverges from `Specimen`, which *did* get its own
+permission pair under F1: a Specimen is an individually tracked object with its
+own lifecycle and observations; a cohort is an aggregate description of the
+block. ADR-091 also makes a permission with nowhere to be used a build
+failure, so inventing one for symmetry would be a regression.
+
+**Decision 6 — multi-block harvest is additive, and its arithmetic is reported
+rather than enforced.** `HarvestEvent.locationId` stays **required and
+unchanged** — it is the primary plot, the one a single-block harvest names, and
+V1's own test asserts it is structurally required. `HarvestEventSource` rows
+are *additional* contributions, so every existing harvest stays valid with
+none, which a nullable-and-migrate approach would not have achieved.
+
+The sum of source weights is compared to `HarvestEvent.cherryWeightKg` and the
+difference is returned, never rejected. This is intake, not a conserving
+transformation: nobody weighs each block's contribution on a calibrated scale
+before tipping it into the same hopper. ADR-094 Decision 4 is the precedent and
+the reasoning is identical — an alarm that fires on ordinary practice is an
+alarm someone switches off. An unweighed contribution yields `null`, not `0`,
+following ADR-080.
+
+**Decision 7 — `Location.areaHectares`, declared not derived.** F1 added sun,
+shade, altitude range, slope, soil and spacing but no area, so planted area,
+yield per hectare and cultivar distribution by area could not be computed at
+all. Deliberately not derived from a boundary polygon: none exists — the audit
+found `geoPoint` referenced by zero lines of application code — and a producer
+knows their block's hectares long before anyone walks its perimeter with GPS.
+When polygons arrive in Phase 7 this becomes the declared value to reconcile
+the computed one against, which is more useful than either alone.
+
+**Consequences.** Planted area, plant age distribution, yield per hectare and
+yield per cohort all become computable — and are trustworthy only because
+ADR-094 fixed the ledger first; before it, every one of those figures would
+have been inflated by whatever transformations sat between harvest and
+measurement.
+
+The four existing free-text varietal columns (`PlantingEvent.varietal`,
+`Specimen.varietalNote`, `HarvestEvent.cultivarNotes`,
+`Sample.declaredVarietal`) are **left alone**. Consolidating them onto the
+catalog against one row of real data would be guessing; revisit once §4's data
+load shows which spellings actually occur.
+
+---
+
+## ADR-096 — The batch page suggests a next step, and stops leading with a photo
 
 **Context.** ADR-080 fixed three defects on the batch detail page and
 deliberately left three design questions open, on the grounds that they were
@@ -6773,7 +6878,7 @@ that document allows, applied to a page rather than to navigation.
 
 ---
 
-## ADR-094 — The one vocabulary decision the project made, broken in two fields
+## ADR-097 — The one vocabulary decision the project made, broken in two fields
 
 **Context.** Opening a batch mid-fermentation, the product owner asked what a
 form was for: *"I don't understand what batch label is for with material and

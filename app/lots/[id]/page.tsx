@@ -77,14 +77,14 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   const activeFermentation = fermentationRuns.find((r) => r.endedAt === null) ?? null;
   const activeDrying = dryingRuns.find((r) => r.endedAt === null) ?? null;
 
-  // ADR-093 — which action this batch is waiting for, and the list to render.
+  // ADR-096 — which action this batch is waiting for, and the list to render.
   const suggestedAction = nextActionFor(lot.lotType, Boolean(activeFermentation || activeDrying));
 
   const availableActions: { action: BatchAction; href: string; label: string }[] = [
     // Only offered while a run is under way, because that is the only time it
     // is the *expected* step — the measurement form itself is always on the
     // page, in its own section, and this is an anchor to it rather than a
-    // second way to reach it (ADR-093).
+    // second way to reach it (ADR-096).
     ...(activeFermentation || activeDrying
       ? [{ action: "measurement" as const, href: "#measurements", label: t("recordMeasurementButton") }]
       : []),
@@ -248,7 +248,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       ) : null}
 
       {/*
-        ADR-093. The five actions used to be one flex row of identical buttons,
+        ADR-096. The five actions used to be one flex row of identical buttons,
         which made the page a list of capabilities rather than a place work
         happens. The action this batch is waiting for is now drawn first and
         solid; the rest stay quiet and remain one click away.
@@ -276,7 +276,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       </div>
 
       {/* Below the actions, not above them: recording the batch's state comes
-          first, and the photo is the complement to it (ADR-093). */}
+          first, and the photo is the complement to it (ADR-096). */}
       <PhotoUploadForm lotId={lot.id} parent={{ kind: "lot" }} observers={observers} selfPersonId={selfPersonId} />
 
       <section className="nn-section">
