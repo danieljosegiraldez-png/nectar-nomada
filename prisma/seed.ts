@@ -98,6 +98,27 @@ async function seedVariableCatalogs() {
         },
       });
     }
+
+    // P1 §2 — aliases in a second pass, because the canonical row an alias
+    // points at must already exist. `aliasOfId` was in the schema from RO1 and
+    // nothing seeded it until the cultivar catalog needed it: "Catuai" and
+    // "Catuaí" are the same plant, and resolving them to one row is what makes
+    // cultivar performance across seasons answerable.
+    for (const value of catalog.values) {
+      if (!value.aliasOf) continue;
+      const canonical = await prisma.variableCatalogValue.findUnique({
+        where: { catalogId_value: { catalogId: row.id, value: value.aliasOf } },
+      });
+      if (!canonical) {
+        throw new Error(
+          `Catalog "${catalog.key}": value "${value.value}" aliases "${value.aliasOf}", which is not defined in the same catalog.`,
+        );
+      }
+      await prisma.variableCatalogValue.update({
+        where: { catalogId_value: { catalogId: row.id, value: value.value } },
+        data: { aliasOfId: canonical.id },
+      });
+    }
   }
 }
 
