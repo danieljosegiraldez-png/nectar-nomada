@@ -25,7 +25,7 @@ flip-test el 2026-08-28, en ambas direcciones.
 | P-A | Alerta de backup **fuera de esta máquina** | Necesita un servicio externo que el proyecto no usa: es cuenta y gasto suyos. Hoy la alerta es local, y un portátil cerrado quince días no respalda nada y no dice nada | `! grep -rqiE "healthcheck\|hc-ping\|cronitor" scripts/backup/` |
 | P-B | A qué proyecto apunta el dominio de marca — **cerrada el 2026-08-28** | Decisión de Daniel. Se deja la fila porque vuelve a abrirse sola si el dominio volviera a este proyecto | `curl -s -L https://www.nectarnomada.com/ \| grep -q 'href="/login"'` |
 | P-C | Quiénes reciben correo y, con él, acceso | Casi nadie en la base tiene correo; sin correo no hay contraseña. Hoy solo Daniel y José. Quién entra no lo decide el sistema | `! grep -qi "correos de las personas" docs/architecture/DECISIONS.md` |
-| P-D | Nombres y roles de la **familia Huerbsch** | Son los dueños de Finca Rosina y no están en la base. Daniel los suministra; **no se inventan filas de Persona** | `! grep -qi "huerbsch registrada" docs/architecture/DECISIONS.md` |
+| P-D | Nombres y roles de la **familia Huerbsch** — **cerrada el 2026-08-29** | La premisa era falsa: sí están en la base desde A7 — Bob (copropietario), Sherry (copropietaria) y Chris (representante familiar), con membresías reales. Faltaba el ADR, que es lo único que la prueba mira. Ver ADR-106 | `! grep -qi "huerbsch registrada" docs/architecture/DECISIONS.md` |
 | P-E | Destino de backup fuera de la máquina | *Cerrada hoy* — `NN_BACKUP_DIR` está en `~/.zshrc`. Se deja en la tabla porque vuelve a abrirse sola si alguien lo quita, y porque una tabla donde todo dice «abierta» no demuestra que el mecanismo discrimine | `! grep -q "NN_BACKUP_DIR" "$HOME/.zshrc"` |
 
 **P-C y P-D no cambian ningún artefacto por sí solas.** Su veredicto aterriza
@@ -36,6 +36,23 @@ de «hecho y sin rastro».
 ---
 
 ## 2. Lo que se entregó — más nuevo primero
+
+### 2026-08-29 · P-D estaba cerrada desde A7 y nadie lo había mirado
+
+El comentario sobre la prueba de P-D afirmaba que la familia Huerbsch **no**
+estaba en la base como Personas. Medido contra producción: sí lo está, con
+cargos y membresías reales, desde A7. Cada sesión leía esa línea y llevaba a
+Daniel una pregunta ya contestada.
+
+ADR-106 lo registra citando de dónde sale cada dato —
+`27_A7_PROYECTOS_ASSIGNMENTS_DATOS_REALES.md` §2 y §4, y el comentario del seed
+sobre el nombre pre-aprobado por Sherry — y el comentario falso se corrigió en
+su sitio, no se anotó. Flip-testeado: con el encabezado, P-D sale **cerrada**;
+sin él, vuelve a **abierta**.
+
+Van 3 abiertas → 2, por una corrección, no por avance: no se construyó nada, se
+midió algo. Lo que sigue sin resolver es P-C, y es lo único que separa a los
+dueños de la finca de poder abrir la plataforma.
 
 ### 2026-08-28 · Este repositorio ya tiene CI
 
@@ -157,8 +174,12 @@ fermentación— siguen sin contrastar contra un tanque de flotación.
 - **Aviso fiable de que un backup no corrió** — bloqueado en P-A. Hoy la señal
   es local: una notificación de macOS, un `BACKUP-FAILED.txt` junto a los
   backups, y `launchctl list | grep nectar` como único rastro pasivo.
-- **Dar acceso a alguien más que Daniel y José** — bloqueado en P-C.
-- **Registrar a los dueños de Finca Rosina** — bloqueado en P-D.
+- **Dar acceso a alguien más que Daniel y José** — bloqueado en P-C. Medido el
+  2026-08-29: 13 de 14 cuentas siguen en `invited` sin clave. Bob y Sherry
+  tienen 10 Assignments cada uno y Chris 2 — 22 en total que resuelven bien y
+  no llegan a nadie, porque ninguna de las tres Personas tiene correo.
+  ADR-083 ya arregló el callback que rechazaba `invited`: la puerta funciona,
+  falta a quién darle la llave.
 - **Que la compuerta sea *obligatoria* para fusionar** — CI existe desde el
   2026-08-28 (`.github/workflows/ci.yml` → `scripts/ci.sh`: typecheck,
   presupuesto de estado, inventario de rutas, lint y dos archivos de test

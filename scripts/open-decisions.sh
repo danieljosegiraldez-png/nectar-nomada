@@ -67,8 +67,11 @@ probar "P-B" "www.nectarnomada.com expone el OS (/login, /signup) en la URL de m
 probar "P-C" "Quiénes reciben correo y acceso (hoy solo Daniel y José lo tienen)" \
   '! grep -qiE "^## ADR-[0-9]+.*correos de las personas" docs/architecture/DECISIONS.md'
 
-# P-D · La familia Huerbsch es dueña de Finca Rosina y NO está en la base como
-# Personas. Daniel suministra nombres y roles; no se inventan filas de Persona.
+# P-D · La familia Huerbsch es dueña de Finca Rosina. La premisa original de
+# esta prueba decía que NO estaban en la base como Personas; medido contra
+# producción el 2026-08-29, sí lo están — Bob, Sherry y Chris, con sus cargos,
+# desde A7. Lo que faltaba era el ADR, que es lo único que esta prueba mira.
+# Ver ADR-106. Sigue valiendo: no se inventan filas de Persona.
 probar "P-D" "Nombres y roles de la familia Huerbsch como Personas" \
   '! grep -qiE "^## ADR-[0-9]+.*huerbsch registrada" docs/architecture/DECISIONS.md'
 
