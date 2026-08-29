@@ -33,7 +33,8 @@
     "org:set-contact": "tsx scripts/set-organization-contact.ts",
     "check:state": "node scripts/check-state-budget.mjs",
     "decisiones": "bash scripts/open-decisions.sh",
-    "verify": "npm run typecheck && npm run check:state && npm run lint"
+    "verify": "npm run typecheck && npm run check:state && npm run check:rutas && npm run lint",
+    "check:rutas": "node scripts/inventario-de-rutas.mjs"
   },
   "keywords": [],
   "author": "",

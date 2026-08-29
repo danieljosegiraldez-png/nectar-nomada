@@ -11,7 +11,7 @@ idea se pierda cuando la respuesta es «ahora no».
 | [001](001-alerta-backup-fuera-de-la-maquina.md) | Aviso cuando un backup **no** corre | P-A · servicio externo |
 | [002](002-reconciliacion-de-medios-r2.md) | Reconciliar `core.asset` con el bucket R2 | Todavía no hay fotos reales |
 | [003](003-correos-de-las-personas.md) | Correo y acceso para más personas | P-C · decisión del dueño |
-| [005](005-enumerar-rutas-privilegiadas.md) | Derivar del router la lista de rutas privilegiadas | Nada — trabajo pendiente |
+| [005](005-enumerar-rutas-privilegiadas.md) | Probar la frontera de RBAC, no sólo el router | Nada — trabajo pendiente |
 | [006](006-sin-ci-en-este-repositorio.md) | Este repositorio no tiene CI | Decisión de proceso de Daniel |
 
 Hecho y retirado de esta lista: **004 · apuntar `nectarnomada.com` al sitio
