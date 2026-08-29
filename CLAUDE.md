@@ -1,3 +1,20 @@
+<!-- Añadido 2026-08-28. Nada del documento original se modificó: solo este
+     bloque al principio y las secciones al final. -->
+
+> **Antes que nada, leer `SESSION_STATE.md`.** Este archivo dice **cómo se
+> construye** el proyecto; ése dice **dónde está**. Empieza con las decisiones
+> que solo Daniel puede tomar: corre `bash scripts/open-decisions.sh` y llévale
+> las que sigan abiertas **antes de proponer trabajo**.
+>
+> Lo que sigue a este bloque es la especificación original de la plataforma, en
+> inglés, y son unas 2.200 líneas. **Su último párrafo pide «empezar
+> inspeccionando el repositorio y producir la evaluación arquitectónica y el
+> plan de implementación». Eso ya se hizo:** el proyecto va por el PR #58 y por
+> ADR-103 en `docs/architecture/DECISIONS.md`. Esa frase es un arranque
+> histórico, no una instrucción para hoy. Ver «Trampas» al final.
+
+---
+
 # CLAUDE.md
 ## NÉCTAR NÓMADA — Digital Platform / Cloud Application / Operating System
 
@@ -2206,3 +2223,178 @@ This is the core objective.
 Build toward this architecture incrementally without compromising the integrity of the underlying data model.
 
 Begin by inspecting the repository and producing the architectural assessment and implementation plan before making substantial architectural changes.
+
+
+---
+
+<!-- ===================================================================== -->
+<!-- Añadido 2026-08-28. Todo lo de arriba es el documento original.        -->
+<!-- ===================================================================== -->
+
+# Cómo se trabaja aquí
+
+## Dos reglas sobre este archivo
+
+**Una instrucción vieja es peor que ninguna.** Se actúa cada sesión, así que una
+afirmación que se volvió falsa desorienta activamente. Cuando encuentres una,
+**corrígela y dilo**, en vez de trabajar a su alrededor.
+
+**Una regla en prosa la deshace una entrada equivalente en la lista de
+permisos.** Cuando te apoyes en una regla de este archivo, comprueba que nada en
+`.claude/settings*.json` pre-aprueba lo que prohíbe.
+
+## Este repositorio no es el sitio público
+
+El sitio editorial vive en `~/Developer/nectarnomada-web` y **no se toca desde
+aquí**. `~/Developer/nectar-worktrees/session-a` y `session-b` son worktrees de
+*este* repositorio: **otras sesiones trabajan en el mismo checkout**, así que
+**nunca `git add -A`** — se añade archivo por archivo.
+
+## Comandos
+
+Node no está en el PATH por defecto:
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
+```
+
+```bash
+npm run dev            # con dev-guard delante
+npm run dev:local      # contra la copia local restaurada, puerto 3017
+npm run verify         # typecheck + presupuesto de estado + lint (sin base de datos)
+npm run typecheck
+npm test               # vitest; EXIGE base local (ver abajo)
+npm run test:db -- up  # restaura el backup verificado más nuevo en :55433/nectar_test
+npm run check:state    # SESSION_STATE.md cabe en una lectura
+npm run decisiones     # qué decisiones de Daniel siguen abiertas
+node tools/browser-checks/rutas-protegidas.mjs   # autorización en el artefacto vivo
+```
+
+**La suite se niega a hablar con una base remota** salvo `ALLOW_REMOTE_TEST_DB=1`
+(`tests/setup.ts`). Hasta el 2026-08-21 corría contra Neon de producción y
+escribía unas 244 filas de `core.audit_event` por corrida.
+
+**Encadenar la compuerta al commit, y nunca canalizarla.** El estado de salida
+de una tubería es el del último comando, así que `npm test | grep …&& git commit`
+commitea sobre una suite en rojo:
+
+```bash
+npm test; test $? -eq 0 && git commit -F msg.txt
+```
+
+Usar `git commit -F <archivo>`. En un `-m` entre comillas dobles los backticks
+son peores que las comillas: la shell ejecuta la palabra y la borra en silencio.
+
+## Cómo se despliega
+
+Push a `main` → Vercel construye `nectar-nomada-package`
+(`prj_9EkGhnZZgdgsEOJGsxGNFOd24Bvm`), con `scripts/vercel-build.sh`.
+**Esperar el check de Vercel antes de fusionar.**
+
+**Un deploy que dice «success» dice que la subida funcionó, no que la página
+funcione.**
+
+## Revisión independiente
+
+`docs/CODEX_REVIEW.md`. El CLI de Codex funciona y está autenticado; **no está
+en el PATH**: `/Applications/ChatGPT.app/Contents/Resources/codex`. El paquete de
+revisión lo arma `tools/pack-for-review.sh`, mecánicamente.
+
+## Salud del repositorio — comprobado el 2026-08-28
+
+- Remoto `https://github.com/danieljosegiraldez-png/nectar-nomada.git`, rama `main`, árbol limpio.
+- `vercel` autenticado; vive en `~/.nvm/versions/node/v24.19.0/bin`.
+- Codex `0.150.0-alpha.12.2`, `login status` → «Logged in using ChatGPT».
+- Backups: `NN_BACKUP_DIR` está en `~/.zshrc` y apunta a Google Drive; el
+  destino existe; `com.nectarnomada.backup` está cargado en launchd con último
+  estado de salida 0; el log vive en `~/Library/Logs/nectar-nomada-backup.log`.
+- **La alerta de backup es local a esta máquina** (P-A sigue abierta).
+- `timeout` no existe en este macOS; usar el timeout de la herramienta.
+
+## Trampas que han costado tiempo real
+
+### El último párrafo de la especificación de arriba ya no aplica
+
+**Síntoma.** El documento termina pidiendo «empezar inspeccionando el
+repositorio y producir la evaluación arquitectónica y el plan de
+implementación». Cargado cada sesión, invita a re-hacer un arranque.
+
+**Causa.** Es el prompt fundacional del proyecto, y el proyecto avanzó: PR #58,
+ADR-103, 43 documentos de arquitectura, 50 de implementación.
+
+**Arreglo.** El bloque del principio lo dice. El documento original no se
+reescribe por instrucción de Daniel; se neutraliza nombrándolo.
+
+### El dominio de marca sirve esta aplicación
+
+**Síntoma.** `https://www.nectarnomada.com` responde con este OS: `/login`,
+`/signup` y `/discover` dan 200 ahí.
+
+**Causa.** El dominio apunta a este proyecto de Vercel, no al del sitio público.
+
+**Arreglo.** Es P-B: decisión de Daniel sobre su dominio. Verificado el
+2026-08-28 que la exposición es de superficie, no de datos — las ocho rutas
+privilegiadas redirigen a `/login` también en el dominio.
+
+### Una prueba que se encuentra a sí misma
+
+**Síntoma.** La prueba de P-A («¿hay una alerta de backup fuera de la máquina?»)
+buscaba `healthcheck|hc-ping|cronitor` en `scripts/` y reportó **cerrada**.
+
+**Causa.** Encontró su **propio texto**. Evidencia falsa *a favor* de la regla
+que estaba probando, fabricada por el error exacto que la regla describe.
+
+**Arreglo.** La prueba mira solo `scripts/backup/`, donde el ping viviría.
+Todas las pruebas de `open-decisions.sh` pasaron flip-test en las dos
+direcciones — incluida P-E, que se **abre** sola si alguien quita
+`NN_BACKUP_DIR` de `~/.zshrc`.
+
+### Un `exit` dentro de un `eval` mata el script entero
+
+**Síntoma.** Sin red, `open-decisions.sh` no imprimía ninguna decisión, ni
+siquiera las que sí había evaluado.
+
+**Causa.** Una prueba hacía `exit 2` para decir «no se pudo determinar», y
+`eval` corre en la shell actual: terminaba el script y truncaba la lista **sin
+decir nada**.
+
+**Arreglo.** Cada prueba corre en subshell. Lo encontró el flip-test de «sin
+red», no la lectura del código.
+
+### 18 errores de tipos que no son errores de código
+
+**Síntoma.** `npm run typecheck` falla con ~18 errores en
+`lib/traceability/selection.ts`, `lots.ts`, `balance.ts` y
+`tests/traceability/selection.test.ts`: `"selection"` no asignable a
+`LotTransformationType`, `rejectionCategoryValue` no existe en `LotInclude`.
+Parece que `main` está roto.
+
+**Causa.** El cliente de Prisma generado estaba viejo respecto al esquema. El
+código era correcto; el que mentía era el cliente.
+
+**Arreglo.** `npm run prisma:generate`. Comprobado el 2026-08-28: 18 errores → 0.
+Después de traer una migración, regenerar antes de creer al typecheck.
+
+### Canalizar la compuerta la vuelve verde
+
+**Síntoma.** `npm run verify 2>&1 | tail -20` reportó **salida 0** mientras
+imprimía 18 errores de tipos justo encima.
+
+**Causa.** El estado de salida de una tubería es el del último comando: `tail`
+siempre sale 0. Pasó en esta misma sesión, escribiendo la regla que lo prohíbe.
+
+**Arreglo.** Correr la compuerta sin tubería y leer el código de salida:
+
+```bash
+npm run verify > /tmp/verify.txt 2>&1; echo "salida=$?"; tail -20 /tmp/verify.txt
+```
+
+Hay un hook en `~/.claude/hooks/preguntar-patrones-caros.py` que **pregunta**
+cuando una tubería precede a un `git commit`. No cubre leer un resultado
+canalizado: eso sigue siendo cosa de quien mira.
+
+## Al cerrar la sesión
+
+Los ocho pasos están en `SESSION_STATE.md` §5. El primero es actualizar
+`SESSION_STATE.md`: **es el entregable, no el diff.** Ninguna lección se escribe
+solo en un log de sesión — nada los lee.
