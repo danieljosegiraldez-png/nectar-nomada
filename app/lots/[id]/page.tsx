@@ -82,7 +82,12 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   const activeDrying = dryingRuns.find((r) => r.endedAt === null) ?? null;
 
   // ADR-096 — which action this batch is waiting for, and the list to render.
-  const suggestedAction = nextActionFor(lot.lotType, Boolean(activeFermentation || activeDrying));
+  const suggestedAction = nextActionFor(
+    lot.lotType,
+    Boolean(activeFermentation || activeDrying),
+    // Resolved below from this batch's own transformations; see `alreadySelected`.
+    transformations.some((tr) => tr.transformationType === "selection"),
+  );
 
   // ADR-099 — target versus actual for the run under way. Empty when the run
   // was started without a recipe, which is most of them and is legitimate;
@@ -103,6 +108,13 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   // computable from #58 and visible nowhere, so recording one told the operator
   // nothing back.
   const selectionTransformation = transformations.find((tr) => tr.transformationType === "selection") ?? null;
+
+  // Has this batch already been sorted? True when a selection names it at all —
+  // either it was the input (this batch was sorted) or it is an output (it came
+  // out of one). Both mean the page should stop suggesting selección: the first
+  // because it is done, the second because sorting the accepted stream again is
+  // a different decision an operator would make deliberately, not a next step.
+  const alreadySelected = selectionTransformation != null;
   const outturn = selectionTransformation ? await getSelectionOutturn(selectionTransformation.id) : null;
 
   const availableActions: { action: BatchAction; href: string; label: string }[] = [
@@ -115,6 +127,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       : []),
     // Starting a new stage is offered only when no run is under way, exactly
     // as before — the conditional is unchanged, only the styling below it is.
+    // Selección is an anchor to the form already in its own section, not a
+    // second route to it — the same treatment `measurement` gets above.
+    ...(canSelect ? [{ action: "selection" as const, href: "#seleccion", label: t("recordSelectionButton") }] : []),
     ...(!activeFermentation && !activeDrying
       ? ([
           { action: "fermentation", href: `/lots/${lot.id}/fermentation/new`, label: t("startFermentationButton") },
@@ -381,7 +396,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       ) : null}
 
       {canSelect && selectionCatalogs ? (
-        <section className="nn-section">
+        <section className="nn-section" id="seleccion">
           <h2>{t("selectionHeading")}</h2>
           <SelectionForm
             lotId={lot.id}

@@ -598,7 +598,8 @@
     "selectionOutturnDeclaredLoss": "Merma declarada",
     "selectionOutturnUnexplained": "Sin explicar",
     "selectionOutturnUnknown": "sin dato",
-    "rejectBadge": "Rechazo: {category}"
+    "rejectBadge": "Rechazo: {category}",
+    "recordSelectionButton": "Registrar selección"
   },
   "Apiary": {
     "badge": "Apiario",
