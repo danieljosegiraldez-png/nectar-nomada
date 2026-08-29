@@ -2325,16 +2325,20 @@ ADR-103, 43 documentos de arquitectura, 50 de implementación.
 **Arreglo.** El bloque del principio lo dice. El documento original no se
 reescribe por instrucción de Daniel; se neutraliza nombrándolo.
 
-### El dominio de marca sirve esta aplicación
+### El dominio de marca sirvió esta aplicación — **resuelto el 2026-08-28**
 
-**Síntoma.** `https://www.nectarnomada.com` responde con este OS: `/login`,
-`/signup` y `/discover` dan 200 ahí.
+**Síntoma.** `https://www.nectarnomada.com` respondía con este OS: `/login`,
+`/signup` y `/discover` daban 200 ahí.
 
-**Causa.** El dominio apunta a este proyecto de Vercel, no al del sitio público.
+**Causa.** El dominio apuntaba a este proyecto de Vercel, no al del sitio
+público. Se reasignó la misma noche; ahí `/login` ya da 404.
 
-**Arreglo.** Es P-B: decisión de Daniel sobre su dominio. Verificado el
-2026-08-28 que la exposición es de superficie, no de datos — las ocho rutas
-privilegiadas redirigen a `/login` también en el dominio.
+**Lo que quedó comprobado mientras duró:** la exposición era de superficie, no
+de datos — las ocho rutas privilegiadas redirigían a `/login` también en el
+dominio. Y **la prueba de P-B se cerró sola** al cambiar el mundo, sin que
+nadie editara nada.
+
+**Este OS vive ahora solo en `nectar-nomada-package.vercel.app`.**
 
 ### Una prueba que se encuentra a sí misma
 

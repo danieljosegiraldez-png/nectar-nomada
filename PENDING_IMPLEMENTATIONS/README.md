@@ -11,6 +11,8 @@ idea se pierda cuando la respuesta es «ahora no».
 | [001](001-alerta-backup-fuera-de-la-maquina.md) | Aviso cuando un backup **no** corre | P-A · servicio externo |
 | [002](002-reconciliacion-de-medios-r2.md) | Reconciliar `core.asset` con el bucket R2 | Todavía no hay fotos reales |
 | [003](003-correos-de-las-personas.md) | Correo y acceso para más personas | P-C · decisión del dueño |
-| [004](004-dominio-al-sitio-publico.md) | Apuntar `nectarnomada.com` al sitio público | P-B · decisión del dueño |
 | [005](005-enumerar-rutas-privilegiadas.md) | Derivar del router la lista de rutas privilegiadas | Nada — trabajo pendiente |
 | [006](006-sin-ci-en-este-repositorio.md) | Este repositorio no tiene CI | Decisión de proceso de Daniel |
+
+Hecho y retirado de esta lista: **004 · apuntar `nectarnomada.com` al sitio
+público**, resuelto el 2026-08-28. Queda en `SESSION_STATE.md` §2.

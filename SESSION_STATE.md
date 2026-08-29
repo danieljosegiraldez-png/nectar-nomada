@@ -23,7 +23,7 @@ flip-test el 2026-08-28, en ambas direcciones.
 | Id | Decisión | Por qué es de Daniel | Prueba |
 |----|----------|----------------------|--------|
 | P-A | Alerta de backup **fuera de esta máquina** | Necesita un servicio externo que el proyecto no usa: es cuenta y gasto suyos. Hoy la alerta es local, y un portátil cerrado quince días no respalda nada y no dice nada | `! grep -rqiE "healthcheck\|hc-ping\|cronitor" scripts/backup/` |
-| P-B | `www.nectarnomada.com` expone este OS (`/login`, `/signup`) en la URL de marca | Apuntar un dominio es decisión suya. Visto desde el sitio público es la misma decisión (allí es D-H) | `curl -s -L https://www.nectarnomada.com/ \| grep -q 'href="/login"'` |
+| P-B | A qué proyecto apunta el dominio de marca — **cerrada el 2026-08-28** | Decisión de Daniel. Se deja la fila porque vuelve a abrirse sola si el dominio volviera a este proyecto | `curl -s -L https://www.nectarnomada.com/ \| grep -q 'href="/login"'` |
 | P-C | Quiénes reciben correo y, con él, acceso | Casi nadie en la base tiene correo; sin correo no hay contraseña. Hoy solo Daniel y José. Quién entra no lo decide el sistema | `! grep -qi "correos de las personas" docs/architecture/DECISIONS.md` |
 | P-D | Nombres y roles de la **familia Huerbsch** | Son los dueños de Finca Rosina y no están en la base. Daniel los suministra; **no se inventan filas de Persona** | `! grep -qi "huerbsch registrada" docs/architecture/DECISIONS.md` |
 | P-E | Destino de backup fuera de la máquina | *Cerrada hoy* — `NN_BACKUP_DIR` está en `~/.zshrc`. Se deja en la tabla porque vuelve a abrirse sola si alguien lo quita, y porque una tabla donde todo dice «abierta» no demuestra que el mecanismo discrimine | `! grep -q "NN_BACKUP_DIR" "$HOME/.zshrc"` |
@@ -80,11 +80,16 @@ Verificado contra el despliegue vivo: las ocho rutas privilegiadas
 (`/admin/users`, `/lots`, `/plots`, `/recipes`, `/research`, `/sensory`,
 `/partner`, `/apiaries`) redirigen a `/login` para un visitante anónimo.
 
-### 2026-08-28 · El dominio de marca sirve este OS, no el sitio público
+### 2026-08-28 · El dominio de marca deja de servir este OS — resuelto
 
-`https://www.nectarnomada.com` responde con esta aplicación. Confirmado por el
-hash idéntico del chunk de CSS y por `/login`, `/signup` y `/discover`
-respondiendo 200 en el dominio. Es P-B. **No se tocó nada.**
+Durante el día `https://www.nectarnomada.com` respondía con esta aplicación
+(confirmado por el hash idéntico del chunk de CSS y por `/login`, `/signup` y
+`/discover` en 200). El dominio se reasignó al proyecto del sitio público esa
+misma noche: ahora `/login` y `/discover` dan 404 ahí.
+
+**La prueba de P-B se cerró sola** cuando el mundo cambió, sin editar nada.
+Este OS sigue accesible en `https://nectar-nomada-package.vercel.app`, y sus
+ocho rutas privilegiadas siguen exigiendo sesión — verificado tras la fusión.
 
 ### 2026-08-28 · Selección de cereza como operación que produce material
 
@@ -104,6 +109,9 @@ PR #58, `0aa7544`. Antes: versiones de receta (PR #56).
   build de Vercel. `typecheck`, `test` y `check:state` no corren solos nunca.
   Hoy mismo `main` tenía 18 errores de `tsc` y nada los miraba. Ver
   `PENDING_IMPLEMENTATIONS/006`.
+- **Un nombre propio para este OS** — al mover el dominio, esta aplicación queda
+  solo en `nectar-nomada-package.vercel.app`. Si quiere algo como
+  `app.nectarnomada.com`, es decisión suya. No es urgente: nada depende de ello.
 - **Reconciliación de medios en R2** — no está bloqueada, está *aplazada*:
   `core.asset` y el bucket estaban vacíos al 2026-08-20. Ver
   `PENDING_IMPLEMENTATIONS/002`.
