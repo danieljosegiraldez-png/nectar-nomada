@@ -2246,9 +2246,14 @@ permisos.** Cuando te apoyes en una regla de este archivo, comprueba que nada en
 ## Este repositorio no es el sitio público
 
 El sitio editorial vive en `~/Developer/nectarnomada-web` y **no se toca desde
-aquí**. `~/Developer/nectar-worktrees/session-a` y `session-b` son worktrees de
-*este* repositorio: **otras sesiones trabajan en el mismo checkout**, así que
-**nunca `git add -A`** — se añade archivo por archivo.
+aquí**. `~/Developer/nectar-worktrees/` lleva worktrees de *este* repositorio:
+**otras sesiones trabajan en el mismo checkout**, así que **nunca `git add -A`**
+— se añade archivo por archivo.
+
+**Todo trabajo que vaya a producir un commit empieza con un worktree propio**
+(instrucción de Daniel, 2026-08-28; procedimiento en `~/.claude/CLAUDE.md`).
+Commitear sobre el `main` local de este árbol dejó que el push de otra sesión
+arrastrara un commit a `main` sin PR y sin CI encima.
 
 ## Comandos
 
