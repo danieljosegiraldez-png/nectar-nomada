@@ -30,7 +30,10 @@
     "data:remove-demo-places": "bash scripts/remove-demo-places.sh",
     "data:remove-orphan-roasts": "bash scripts/remove-orphan-roasts.sh",
     "people:set-email": "tsx scripts/set-person-email.ts",
-    "org:set-contact": "tsx scripts/set-organization-contact.ts"
+    "org:set-contact": "tsx scripts/set-organization-contact.ts",
+    "check:state": "node scripts/check-state-budget.mjs",
+    "decisiones": "bash scripts/open-decisions.sh",
+    "verify": "npm run typecheck && npm run check:state && npm run lint"
   },
   "keywords": [],
   "author": "",
