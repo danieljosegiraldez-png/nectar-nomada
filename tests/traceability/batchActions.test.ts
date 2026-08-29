@@ -16,7 +16,15 @@ import type { LotType } from "../../generated/prisma/client";
 
 describe("nextActionFor", () => {
   it("follows the sequence the product owner confirmed", () => {
+    // P3: an unsorted cherry batch is waiting to be selected; one that has
+    // already been through a selection is waiting to ferment. The third
+    // argument defaults to `true`, so this original assertion still describes
+    // ADR-096's behaviour for a caller that does not resolve lineage.
     expect(nextActionFor("cherry", false)).toBe("fermentation");
+    expect(nextActionFor("cherry", false, true)).toBe("fermentation");
+    expect(nextActionFor("cherry", false, false)).toBe("selection");
+    // A run under way still outranks everything, sorted or not.
+    expect(nextActionFor("cherry", true, false)).toBe("measurement");
     expect(nextActionFor("processing", false)).toBe("drying");
     expect(nextActionFor("drying", false)).toBe("storage");
   });

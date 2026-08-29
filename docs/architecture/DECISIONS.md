@@ -7511,3 +7511,61 @@ leave behind exactly the thing the guard exists to prevent.
 **Verification.** Re-ran the mutation with the fix in place: two tests fail as
 before, and the database is left with **zero** recipes instead of one. 614
 tests pass with the real code.
+
+---
+
+## ADR-105 — The step the page recommends had a right answer that stopped being right
+
+**Context.** ADR-096 gave the batch page a suggested next action, and recorded
+its sequence as **the product owner's, confirmed rather than inferred**: cherry
+is waiting to ferment, processing to dry, drying to be stored.
+
+That was true when it was written, and it is the reason this change was not
+made unilaterally. Selección did not exist then. It does now (ADR-103), and at
+a mill it comes first: cherry arrives, is sorted, and only then ferments. So
+the page was recommending the second step of a two-step sequence and never
+mentioning the first — leaving an operation that shipped with a form
+discoverable only by scrolling past it.
+
+**Decision 1 — unsorted cherry suggests `selection`; sorted cherry keeps
+suggesting `fermentation`.** The distinction is load-bearing rather than
+cosmetic. An accepted output *is* a cherry lot: it has the same `lotType` as
+the batch it came from, deliberately (ADR-103 keeps `lotType` physical). A rule
+that simply said "cherry suggests selección" would tell an operator who had
+just finished sorting to sort the result again, which reads as the page not
+knowing what happened to the batch in front of them.
+
+`alreadySelected` is resolved from the batch's own transformations — a
+selection naming this lot at all, as input or output, means the page stops
+suggesting one. Sorting an accepted stream a second time is a real thing
+someone might do, but it is a deliberate decision rather than the expected next
+step, and the button remains one click away.
+
+**Decision 2 — the new parameter defaults to `true`, which preserves ADR-096's
+behaviour.** A caller that has not been taught to resolve lineage keeps getting
+`fermentation` for cherry, exactly as before. The alternative — defaulting to
+`false` — would have quietly given every existing and future caller a new
+suggestion the moment they upgraded, which is how a "suggests, never restricts"
+feature turns into a surprise. The one caller that *does* resolve lineage, the
+batch page, passes the real answer.
+
+**Decision 3 — the action is an anchor, not a route.** `#seleccion` scrolls to
+the form already in its own section on the same page, the same treatment
+`measurement` gets. Fermentation and drying navigate because they genuinely
+start something elsewhere; selección does not.
+
+**Consequences.** ADR-096's own promise still holds without qualification:
+**this suggests, it never restricts.** Every action the page offered is still
+offered, in its original order, one click away. What changed is which one is
+drawn as expected, for one lot type, in one state.
+
+The sequence recorded in ADR-096 is not wrong and is not being corrected — it
+was a complete answer to the question as it stood. This is what that answer
+becomes once the platform can perform an operation it previously could not, and
+it was confirmed with the product owner before being written rather than
+inferred from the domain.
+
+Still unverified by use: no real selección has been recorded, so whether
+sorting actually precedes fermentation at Finca Rosina — rather than in the
+general case — is a claim this ADR makes on domain reasoning, not on evidence
+from the farm.

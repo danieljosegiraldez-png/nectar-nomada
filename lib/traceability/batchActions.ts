@@ -24,7 +24,7 @@
  */
 import type { LotType } from "../../generated/prisma/client";
 
-export type BatchAction = "measurement" | "fermentation" | "drying" | "storage" | "sample" | "report";
+export type BatchAction = "measurement" | "selection" | "fermentation" | "drying" | "storage" | "sample" | "report";
 
 /**
  * The action a batch of this type is expected to need next, or `null` when
@@ -36,7 +36,7 @@ export type BatchAction = "measurement" | "fermentation" | "drying" | "storage" 
  * coffee sequence at all. `other` exists precisely because the material did not
  * fit a stage, so guessing one for it would be inventing a fact.
  */
-export function nextActionFor(lotType: LotType, hasActiveRun: boolean): BatchAction | null {
+export function nextActionFor(lotType: LotType, hasActiveRun: boolean, alreadySelected = true): BatchAction | null {
   // A batch already fermenting or drying is not waiting for a new stage — but
   // it is not waiting for nothing either, which is what this returned at first.
   // The product owner opened PE-96-A mid-fermentation and said plainly what the
@@ -49,8 +49,22 @@ export function nextActionFor(lotType: LotType, hasActiveRun: boolean): BatchAct
   if (hasActiveRun) return "measurement";
 
   switch (lotType) {
+    // P3 follow-up, product owner 2026-08-28. ADR-096 recorded "cherry is
+    // waiting to ferment" as the product owner's own confirmed sequence — and
+    // it was, in a world where selección was not an operation the platform
+    // could perform. It is now, and at a mill it comes first: cherry arrives,
+    // is sorted, and only then ferments.
+    //
+    // `alreadySelected` is what keeps this from suggesting the same step
+    // twice. An accepted output is *also* a cherry lot, so a batch that has
+    // just been sorted would otherwise be told to sort it again, which reads
+    // as the page not knowing what happened to it.
+    //
+    // Defaults to `true` so an existing caller that has not been taught to
+    // resolve lineage keeps ADR-096's original behaviour rather than silently
+    // acquiring a new suggestion.
     case "cherry":
-      return "fermentation";
+      return alreadySelected ? "fermentation" : "selection";
     case "processing":
       return "drying";
     case "drying":

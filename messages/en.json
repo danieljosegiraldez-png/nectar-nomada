@@ -598,7 +598,8 @@
     "selectionOutturnDeclaredLoss": "Declared loss",
     "selectionOutturnUnexplained": "Unexplained",
     "selectionOutturnUnknown": "no data",
-    "rejectBadge": "Reject: {category}"
+    "rejectBadge": "Reject: {category}",
+    "recordSelectionButton": "Record selection"
   },
   "Apiary": {
     "badge": "Apiary",
