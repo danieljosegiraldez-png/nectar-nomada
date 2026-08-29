@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# Sólo lectura: esta compuerta no publica, no comenta y no despliega.
+permissions:
+  contents: read
+
+# Cancela corridas viejas de la misma rama: sólo importa la última.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compuerta:
+    name: Compuerta · tipos, estado, rutas, lint y tests herméticos
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Fijada. Local es v24.19.0 y el repositorio del sitio público
+          # también fija 24; dejarla al azar del runner haría que la compuerta
+          # dijera algo distinto cada mes.
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Un solo paso a propósito: el contrato vive en scripts/ci.sh, que corre
+      # igual en local. Enumerar aquí sus pasos es cómo se separaron las dos
+      # compuertas en el otro repositorio.
+      - name: Compuerta (scripts/ci.sh)
+        run: bash scripts/ci.sh

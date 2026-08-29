@@ -37,6 +37,25 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-08-28 · Este repositorio ya tiene CI
+
+`.github/workflows/ci.yml` invoca `scripts/ci.sh` en **un solo paso**, y ese
+script corre igual en tu máquina. Genera el cliente de Prisma, corre
+`npm run verify` y dos archivos de test herméticos. Node fijado en 24,
+permisos de solo lectura, timeout de 10 minutos, concurrencia con cancelación.
+
+**La revisión del plan volvió a impedir ejecutarlo como estaba.** Siete puntos,
+todos aceptados: el contrato se repartía otra vez entre `package.json` y YAML
+—la separación que ocurrió hoy mismo en el otro repositorio—, no fijaba Node, y
+metía en CI un test que lee `~/.zshrc`.
+
+Flip-testeado en las dos direcciones: sin `.env` ni `DATABASE_URL` sale **0**
+(no se pone roja por falta de base, que es el fallo que haría que se borrara), y
+con un error de tipos deliberado sale **2** nombrando el archivo.
+
+**CI informa, no impide:** la protección de ramas no está disponible en un
+repositorio privado de este plan. Ver `PENDING_IMPLEMENTATIONS/006`.
+
 ### 2026-08-28 · Control de higiene del router (PENDING 005 sigue abierto)
 
 Las 50 entradas del router se **declaran** en `scripts/rutas-declaradas.mjs`
