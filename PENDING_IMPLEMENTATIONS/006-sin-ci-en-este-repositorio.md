@@ -1,28 +1,34 @@
-# 006 · Este repositorio no tiene CI
+# 006 · CI: qué cubre hoy, y qué sigue sin cubrirse
 
-**Estado:** señalado, no hecho. Es una decisión de proceso de Daniel.
+**Estado: parcialmente hecho el 2026-08-28.** Existe `.github/workflows/ci.yml`,
+que en un solo paso invoca `scripts/ci.sh`.
 
-**Lo comprobado el 2026-08-28:** no existe `.github/workflows/`. El único check
-que ve una PR aquí es el build de Vercel. Es decir: **`npm run typecheck`,
-`npm test` y `npm run check:state` no corren automáticamente nunca**, ni en una
-PR ni al fusionar.
+## Qué cubre ahora
 
-**Por qué importa hoy y no en abstracto:** esta misma sesión encontró `main` con
-18 errores de `tsc` (cliente de Prisma viejo). Nadie lo estaba viendo porque
-nada lo mira. La disciplina de envío dice «typecheck antes de fusionar», y hoy
-eso depende enteramente de que alguien se acuerde.
+`scripts/ci.sh` —el mismo comando en local y en CI— genera el cliente de Prisma,
+corre `npm run verify` (typecheck, presupuesto de estado, inventario de rutas,
+lint) y dos archivos de test herméticos.
 
-**Por qué no lo añadí:** montar CI cambia el proceso de fusión de Daniel y gasta
-minutos de Actions de su cuenta. Además `npm test` exige una base local, así que
-un workflow ingenuo se pondría rojo por falta de base de datos — y un guardia
-que no puede pasar es peor que ninguno.
+Eso es lo que habría atrapado el fallo que motivó este pendiente: `main` con 18
+errores de `tsc` por un cliente de Prisma viejo, que nadie estaba viendo porque
+nada lo miraba.
 
-**Qué haría falta, si se decide hacerlo:**
+## Qué sigue SIN cubrirse
 
-1. Un job barato sin base de datos: `npm run verify`
-   (typecheck + `check:state` + lint). Eso ya atrapa lo de hoy.
-2. Los tests que necesitan base van aparte, con `npm run test:db -- up`
-   restaurando el backup verificado más nuevo, o no van.
-3. El repositorio del sitio público ya lo hace así: un solo paso que corre
-   `npm run verify`, para que la compuerta de CI y la local no puedan separarse.
-   Enumerar los pasos uno a uno fue precisamente lo que las separó allí.
+- **La suite completa.** Necesita `npm run test:db -- up`, que restaura el
+  backup verificado más nuevo en un cluster local. Un runner no tiene ese
+  backup. Meterla produciría rojo por falta de base — el fallo que hace que
+  alguien borre el workflow.
+- **`tests/open-decisions.test.ts`**, a propósito: su prueba P-E lee
+  `~/.zshrc`. Es una decisión sobre *esta máquina*, no sobre el código, y un
+  veredicto de CI no debe depender de los dotfiles de nadie.
+- **Que la compuerta sea obligatoria para fusionar.** La protección de ramas no
+  está disponible en un repositorio privado del plan actual: la API de GitHub
+  responde «Upgrade to GitHub Pro». Hoy CI **informa**, no **impide**. Es una
+  diferencia real y es de Daniel decidir si la cierra.
+
+## Qué haría falta para cerrarlo del todo
+
+Una base efímera en el runner —un servicio PostgreSQL más migraciones— y decidir
+qué tests valen su tiempo ahí. Es un plan aparte: la suite es de integración
+real, sin mocks, y arrastra datos de semilla.
