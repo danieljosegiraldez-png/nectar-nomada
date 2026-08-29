@@ -37,6 +37,24 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-08-28 · Control de higiene del router (PENDING 005 sigue abierto)
+
+Las 50 entradas del router se **declaran** en `scripts/rutas-declaradas.mjs`
+con su clase y su razón; `npm run check:rutas`, dentro de `verify`, falla si
+aparece una sin declarar, si el manifiesto nombra una que ya no existe, o si el
+código contradice lo declarado. `respuesta-anonima.mjs` contrasta 26 rutas
+estáticas contra el despliegue: 26 coinciden, 0 contradicen.
+
+**La revisión del plan (compuerta 2) impidió construir lo que estaba escrito.**
+Nueve hallazgos, ocho aceptados: clasificar por grep mide «presencia de una
+señal», no «página gateada»; el flip-test que propuse era circular; el nombre
+`rutas-protegidas` y un ✓ verde se leen como garantía de seguridad pase lo que
+pase. El alcance se redujo y las palabras cambiaron.
+
+**Sigue sin probarse** que los datos estén protegidos: la frontera es el
+servicio de RBAC (`SECURITY.md` §2), no la ruta. Por eso 005 sigue abierto, con
+sus límites escritos.
+
 ### 2026-08-28 · Revisión independiente de la PR #60, y lo que cambió
 
 Codex revisó el cambio en una sesión nueva, con sandbox de solo lectura y un
