@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
+import { recordSelection, SelectionValidationError } from "../../lib/traceability/selection";
 import { recordQuantityEvent, QuantityValidationError } from "../../lib/traceability/quantity";
 import { recordMeasurement, MeasurementValidationError } from "../../lib/traceability/measurements";
 import { UnitValidationError } from "../../lib/traceability/units";
@@ -37,6 +38,7 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof QuantityValidationError) return t("error_quantity", { detail: error.message });
   if (error instanceof MeasurementValidationError) return t("error_measurement", { detail: error.message });
   if (error instanceof UnitValidationError) return t("error_unit", { detail: error.message });
+  if (error instanceof SelectionValidationError) return t("error_selection", { detail: error.message });
   throw error;
 }
 
@@ -339,6 +341,72 @@ export async function createSampleAction(
 
   revalidatePath(`/lots/${lotId}`);
   redirect(`/lots/${lotId}`);
+}
+
+// --- P3: selección (44_P3_SELECTION.md §6) ---------------------------------
+
+/**
+ * Records a selection from the batch page.
+ *
+ * Rejection rows arrive as parallel indexed fields (`rejectedCategory.0`,
+ * `rejectedQuantity.0`, `rejectedLotCode.0`, ...) because the operator adds and
+ * removes rows client-side and FormData has no nested shape. Rows whose weight
+ * is blank are dropped rather than sent as zero: an operator who added a row
+ * and then did not use it has not weighed nothing, they have not weighed.
+ */
+export async function recordSelectionFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  const unit = String(formData.get("unit") ?? "kg");
+
+  const rejected: Array<{ lotCode: string; lotType: never; quantity: number; rejectionCategoryValueId: string }> = [];
+  for (let i = 0; i < 20; i++) {
+    const quantity = emptyToNullNumber(formData.get(`rejectedQuantity.${i}`));
+    const category = emptyToNull(formData.get(`rejectedCategory.${i}`));
+    const code = emptyToNull(formData.get(`rejectedLotCode.${i}`));
+    if (quantity == null || !category || !code) continue;
+    rejected.push({
+      lotCode: code,
+      lotType: String(formData.get("acceptedLotType") ?? "cherry") as never,
+      quantity,
+      rejectionCategoryValueId: category,
+    });
+  }
+
+  try {
+    await recordSelection(user.userAccountId, {
+      inputLotId: lotId,
+      inputQuantity: Number(formData.get("inputQuantity") ?? 0),
+      unit,
+      selectionMethodValueId: emptyToNull(formData.get("selectionMethod")),
+      equipmentNote: emptyToNull(formData.get("equipmentNote")),
+      accepted: {
+        lotCode: String(formData.get("acceptedLotCode") ?? ""),
+        lotType: String(formData.get("acceptedLotType") ?? "cherry") as never,
+        quantity: Number(formData.get("acceptedQuantity") ?? 0),
+      },
+      rejected,
+      declaredLossQuantity: emptyToNullNumber(formData.get("declaredLossQuantity")),
+      declaredLossReason: emptyToNull(formData.get("declaredLossReason")),
+      occurredAt: new Date(),
+      notes: emptyToNull(formData.get("notes")),
+      // T9.5 §3(b): a selection is an action taken against the material, and
+      // the weights on it are read off a scale — measured_fact, not a
+      // recollection.
+      provenanceClass: "measured_fact",
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}`);
+  return {};
 }
 
 // --- Split / merge / blend / stage_change, used by the Lot Detail "record processing step" mini-forms ---

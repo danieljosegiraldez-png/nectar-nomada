@@ -18,6 +18,8 @@ import { MeasurementForm } from "../../components/traceability/MeasurementForm";
 import { PhotoUploadForm } from "../../components/traceability/PhotoUploadForm";
 import { LabourEntryForm } from "../../components/traceability/LabourEntryForm";
 import { MaterialConsumptionForm } from "../../components/traceability/MaterialConsumptionForm";
+import { SelectionForm } from "../../components/traceability/SelectionForm";
+import { getSelectionCatalogs, getSelectionOutturn } from "../../../lib/traceability/selection";
 import type { LabourEntry } from "../../../generated/prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -89,6 +91,20 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
     ? await compareRunToTargets(user.userAccountId, activeFermentation.id)
     : [];
 
+  // P3 §6 — the selection form is offered for cherry that is not already in a
+  // run. A batch mid-fermentation is not waiting to be sorted, and a lot that
+  // has already been selected is a *different* lot (the accepted output), so
+  // this does not need to ask whether sorting already happened.
+  const canSelect = lot.lotType === "cherry" && !activeFermentation && !activeDrying;
+  const selectionCatalogs = canSelect ? await getSelectionCatalogs() : null;
+
+  // P3 §6 follow-through — a selection recorded against this batch produced an
+  // outturn, and the outturn is the number a producer actually asks for. It was
+  // computable from #58 and visible nowhere, so recording one told the operator
+  // nothing back.
+  const selectionTransformation = transformations.find((tr) => tr.transformationType === "selection") ?? null;
+  const outturn = selectionTransformation ? await getSelectionOutturn(selectionTransformation.id) : null;
+
   const availableActions: { action: BatchAction; href: string; label: string }[] = [
     // Only offered while a run is under way, because that is the only time it
     // is the *expected* step — the measurement form itself is always on the
@@ -149,6 +165,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       </Link>
 
       <span className="nn-badge">{t(`lotType_${lot.lotType}` as "lotType_cherry")}</span>
+      {lot.rejectionCategoryValue ? (
+        <span className="nn-badge">{t("rejectBadge", { category: lot.rejectionCategoryValue.value })}</span>
+      ) : null}
       <h1 className="nn-code">{lot.lotCode}</h1>
       <p className="nn-detail-meta">
         <span>{t("currentStageLabel", { stage: currentStage })}</span>
@@ -317,6 +336,63 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           </p>
         ) : null}
       </section>
+
+      {outturn ? (
+        <section className="nn-section">
+          <h2>{t("selectionOutturnHeading")}</h2>
+          {outturn.method ? <p className="nn-muted">{t("selectionOutturnMethod", { method: outturn.method })}</p> : null}
+          <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
+            <tbody>
+              {outturn.accepted.map((stream) => (
+                <tr key={stream.lotId}>
+                  <td>{t("selectionOutturnAccepted")}</td>
+                  <td><Link href={`/lots/${stream.lotId}`} className="nn-code">{stream.lotCode}</Link></td>
+                  <td>{stream.quantity} {stream.unit}</td>
+                  <td>{stream.sharePct != null ? t("selectionOutturnShare", { share: stream.sharePct }) : t("selectionOutturnUnknown")}</td>
+                </tr>
+              ))}
+              {outturn.rejected.map((stream) => (
+                <tr key={stream.lotId}>
+                  <td>{t("selectionOutturnRejected")}{stream.rejectionCategory ? ` — ${stream.rejectionCategory}` : ""}</td>
+                  <td><Link href={`/lots/${stream.lotId}`} className="nn-code">{stream.lotCode}</Link></td>
+                  <td>{stream.quantity} {stream.unit}</td>
+                  <td>{stream.sharePct != null ? t("selectionOutturnShare", { share: stream.sharePct }) : t("selectionOutturnUnknown")}</td>
+                </tr>
+              ))}
+              {outturn.declaredLossQuantity != null ? (
+                <tr>
+                  <td>{t("selectionOutturnDeclaredLoss")}</td>
+                  <td />
+                  <td>{outturn.declaredLossQuantity}</td>
+                  <td />
+                </tr>
+              ) : null}
+              <tr>
+                <td>{t("selectionOutturnUnexplained")}</td>
+                <td />
+                {/* null is "unknown", never 0 — ADR-080's distinction, and the
+                    figure stored at write time rather than recomputed. */}
+                <td>{outturn.unexplainedQuantity != null ? outturn.unexplainedQuantity : t("selectionOutturnUnknown")}</td>
+                <td />
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      ) : null}
+
+      {canSelect && selectionCatalogs ? (
+        <section className="nn-section">
+          <h2>{t("selectionHeading")}</h2>
+          <SelectionForm
+            lotId={lot.id}
+            lotType={lot.lotType}
+            currentQuantity={quantity.recorded ? Number(quantity.quantity) : null}
+            unit={quantity.unit ?? "kg"}
+            methods={selectionCatalogs.methods}
+            categories={selectionCatalogs.categories}
+          />
+        </section>
+      ) : null}
 
       <section className="nn-section">
         <h2>{t("processingHeading")}</h2>
