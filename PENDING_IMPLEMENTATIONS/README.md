@@ -13,3 +13,4 @@ idea se pierda cuando la respuesta es «ahora no».
 | [003](003-correos-de-las-personas.md) | Correo y acceso para más personas | P-C · decisión del dueño |
 | [004](004-dominio-al-sitio-publico.md) | Apuntar `nectarnomada.com` al sitio público | P-B · decisión del dueño |
 | [005](005-enumerar-rutas-privilegiadas.md) | Derivar del router la lista de rutas privilegiadas | Nada — trabajo pendiente |
+| [006](006-sin-ci-en-este-repositorio.md) | Este repositorio no tiene CI | Decisión de proceso de Daniel |

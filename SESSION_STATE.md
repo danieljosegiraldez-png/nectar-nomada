@@ -99,6 +99,11 @@ PR #58, `0aa7544`. Antes: versiones de receta (PR #56).
   backups, y `launchctl list | grep nectar` como único rastro pasivo.
 - **Dar acceso a alguien más que Daniel y José** — bloqueado en P-C.
 - **Registrar a los dueños de Finca Rosina** — bloqueado en P-D.
+- **Cualquier garantía automática de que `main` está sano** — **este repositorio
+  no tiene CI**: no hay `.github/workflows/`, y el único check de una PR es el
+  build de Vercel. `typecheck`, `test` y `check:state` no corren solos nunca.
+  Hoy mismo `main` tenía 18 errores de `tsc` y nada los miraba. Ver
+  `PENDING_IMPLEMENTATIONS/006`.
 - **Reconciliación de medios en R2** — no está bloqueada, está *aplazada*:
   `core.asset` y el bucket estaban vacíos al 2026-08-20. Ver
   `PENDING_IMPLEMENTATIONS/002`.
