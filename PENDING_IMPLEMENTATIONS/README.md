@@ -12,3 +12,4 @@ idea se pierda cuando la respuesta es «ahora no».
 | [002](002-reconciliacion-de-medios-r2.md) | Reconciliar `core.asset` con el bucket R2 | Todavía no hay fotos reales |
 | [003](003-correos-de-las-personas.md) | Correo y acceso para más personas | P-C · decisión del dueño |
 | [004](004-dominio-al-sitio-publico.md) | Apuntar `nectarnomada.com` al sitio público | P-B · decisión del dueño |
+| [005](005-enumerar-rutas-privilegiadas.md) | Derivar del router la lista de rutas privilegiadas | Nada — trabajo pendiente |

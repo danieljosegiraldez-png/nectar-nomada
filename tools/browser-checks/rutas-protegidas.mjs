@@ -14,6 +14,11 @@
 const BASE = (process.argv[2] ?? "https://nectar-nomada-package.vercel.app").replace(/\/$/, "");
 
 // Rutas que NO deben servir contenido a un visitante anónimo.
+//
+// **Esto es una MUESTRA, no una enumeración.** No se deriva de `app/`, así que
+// un ✓ aquí no demuestra que el conjunto de caminos que llegan al estado
+// privilegiado esté completo: demuestra que estos ocho están cubiertos. Derivar
+// la lista del router es trabajo aparte, anotado en PENDING_IMPLEMENTATIONS.
 const PROTEGIDAS = ["/admin/users", "/lots", "/plots", "/recipes", "/research", "/sensory", "/partner", "/apiaries"];
 // Rutas públicas por diseño: si estas fallan, la fila patrón lo dirá.
 const PUBLICAS = ["/", "/login", "/discover"];
@@ -84,6 +89,7 @@ if (problemas) {
   process.exit(1);
 }
 console.log(`✓ Ninguna de las ${leidas} rutas leídas sirve contenido privilegiado en anónimo.`);
+console.log(`  Es una muestra de ${PROTEGIDAS.length}, no la enumeración de todas las rutas privilegiadas.`);
 if (sinLeer.length) {
   console.log(`  Sin pronunciarse sobre ${sinLeer.length}: ${sinLeer.join(", ")}`);
   process.exit(1);

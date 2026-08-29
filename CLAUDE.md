@@ -2393,6 +2393,31 @@ Hay un hook en `~/.claude/hooks/preguntar-patrones-caros.py` que **pregunta**
 cuando una tubería precede a un `git commit`. No cubre leer un resultado
 canalizado: eso sigue siendo cosa de quien mira.
 
+### Un guardia que pasa igual con y sin la regresión
+
+**Síntoma.** `tests/session-state-budget.test.ts` estaba en verde. También lo
+estaba con el guardia sustituido por `process.exit(0)`.
+
+**Causa.** Solo corría el guardia contra el archivo bueno y exigía salida 0.
+
+**Arreglo.** Cinco fixtures negativos. Comprobado: con el guardia neutralizado
+caen los 6 tests, y vuelven a pasar al restaurarlo.
+
+### Una prueba puede cerrarse sola por una errata
+
+**Síntoma.** `open-decisions.sh` trataba **cualquier** código distinto de 0 y 2
+como «cerrada». Una orden mal escrita sale 127; una decisión que solo Daniel
+puede tomar desaparecía del primer mensaje sin dejar rastro.
+
+**Arreglo.** Solo el `1` cierra. Cualquier otro código imprime `ROTA` y el
+script sale 3. Los sitios de aterrizaje exigen un **encabezado** `## ADR-NNN`,
+para que «los correos de las personas siguen pendientes» no cierre P-C. P-A
+exige una **invocación** (`curl`/`wget` a un servicio de healthcheck), no una
+mención. P-E exige una asignación con valor no vacío.
+
+**Las dos las encontró la revisión independiente de Codex** sobre la PR #60, no
+una lectura nuestra. La adjudicación está en `SESSION_STATE.md`.
+
 ## Al cerrar la sesión
 
 Los ocho pasos están en `SESSION_STATE.md` §5. El primero es actualizar

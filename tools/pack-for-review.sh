@@ -54,7 +54,10 @@ fi
   echo '```'
   echo
   echo "## Texto actual COMPLETO de cada archivo tocado"
-  for f in $TOCADOS; do
+  # `while read` y no `for f in $TOCADOS`: la separación por palabras rompe
+  # cualquier ruta con espacios, y el paquete saldría incompleto sin decirlo.
+  printf '%s\n' "$TOCADOS" | while IFS= read -r f; do
+    [ -n "$f" ] || continue
     [ -f "$f" ] || { echo; echo "### $f — borrado en este rango"; continue; }
     echo
     echo "### $f  ($(wc -l < "$f" | tr -d ' ') líneas)"
@@ -96,8 +99,22 @@ fi
 LINEAS=$(wc -l < "$SALIDA" | tr -d ' ')
 BYTES=$(wc -c < "$SALIDA" | tr -d ' ')
 ARCHIVOS=$(printf '%s\n' "$TOCADOS" | wc -l | tr -d ' ')
+FALTAN=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  grep -qF "### $f" "$SALIDA" || FALTAN="$FALTAN $f"
+done <<EOF_TOCADOS
+$TOCADOS
+EOF_TOCADOS
 if ! grep -q "^## Diff completo del rango" "$SALIDA" || [ "$BYTES" -lt 500 ]; then
   echo "✗ El paquete salió incompleto ($BYTES bytes). No lo mandes." >&2
+  exit 1
+fi
+if [ -n "$FALTAN" ]; then
+  # Un revisor que cree haber recibido el cambio entero y no lo recibió repite
+  # el mismo defecto que este script existe para evitar: afirmar, no demostrar.
+  echo "✗ Faltan archivos tocados en el paquete:$FALTAN" >&2
+  echo "  No lo mandes: una revisión sobre un paquete incompleto es peor que ninguna." >&2
   exit 1
 fi
 echo "$SALIDA"

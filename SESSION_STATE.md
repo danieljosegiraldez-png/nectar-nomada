@@ -37,6 +37,37 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-08-28 · Revisión independiente de la PR #60, y lo que cambió
+
+Codex revisó el cambio en una sesión nueva, con sandbox de solo lectura y un
+paquete armado mecánicamente. Ocho hallazgos; **seis se arreglaron, uno se
+aceptó con matiz y uno se rechazó con razón declarada**:
+
+- **Arreglado —** cualquier código de salida distinto de 0/2 contaba como
+  «cerrada»: una errata cerraba una decisión de Daniel. Ahora solo el `1` cierra.
+- **Arreglado —** P-C, P-D y P-A podían cerrarse con una mención en prosa o un
+  comentario. Ahora exigen un encabezado `## ADR-NNN` o una invocación real.
+- **Arreglado —** P-B daba «cerrada» ante un 404 con cuerpo. Ahora exige 200.
+- **Arreglado —** P-E se cerraba con `NN_BACKUP_DIR=""`. Ahora exige valor.
+- **Arreglado —** el test del presupuesto pasaba igual con el guardia
+  neutralizado. Cinco fixtures negativos; comprobado que caen los 6.
+- **Arreglado —** `caracteres / 3` no es una cota. Techo duro de bytes añadido,
+  que atrapa prosa acentuada que la estimación no veía.
+- **Arreglado —** el consejo de archivar nombraba una sección aunque hicieran
+  falta tres, y una sección sin terminar se tragaba el resto del archivo.
+- **Arreglado —** `pack-for-review.sh` partía rutas con espacios y no
+  comprobaba que todos los archivos tocados estuvieran en el paquete.
+- **Aceptado con matiz —** «byte a byte» era una afirmación, no una
+  comprobación: ahora hay `scripts/check-claude-md-intact.mjs`, reproducible.
+- **Rechazado —** meter `npm run decisiones` dentro de `npm run verify`. Dos
+  pruebas salen a la red y una compuerta que se pone roja por una wifi mala
+  enseña a ignorar una línea roja. En su lugar, `OD_SIN_RED=1` y un test que
+  comprueba sin red que cada decisión declarada recibe veredicto y que ninguna
+  prueba está rota. **Coste si me equivoco:** el mecanismo podría pudrirse por
+  una vía que ese test no cubre — que una prueba sea *válida pero equivocada*.
+
+Corregido además: decía «las siete rutas privilegiadas» sobre una lista de ocho.
+
 ### 2026-08-28 · Andamiaje de sesión
 
 `SESSION_STATE.md`, `PENDING_IMPLEMENTATIONS/`, `docs/plans/`, `docs/specs/`,
@@ -45,7 +76,7 @@ de «hecho y sin rastro».
 `CLAUDE.md` **no se reescribió**: se le añadió el puntero al principio y las
 secciones nuevas al final, por instrucción de Daniel.
 
-Verificado contra el despliegue vivo: las siete rutas privilegiadas
+Verificado contra el despliegue vivo: las ocho rutas privilegiadas
 (`/admin/users`, `/lots`, `/plots`, `/recipes`, `/research`, `/sensory`,
 `/partner`, `/apiaries`) redirigen a `/login` para un visitante anónimo.
 
