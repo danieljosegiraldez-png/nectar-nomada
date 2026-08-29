@@ -138,3 +138,25 @@ De «inventario de rutas privilegiadas» a **control de higiene del router**:
 **No ejecuto todavía.** El alcance cambió materialmente respecto de lo que
 Daniel aprobó («enumerar las rutas privilegiadas»), y construir algo distinto y
 más pequeño es decisión suya, no mía.
+
+---
+
+## Compuerta 5 — revisión del trabajo terminado
+
+**Veredicto de Codex: NO PASA.** Tres defectos de coste alto, todos reales y
+comprobados antes de tocar nada:
+
+| # | Hallazgo | Veredicto | Qué se hizo |
+|---|----------|-----------|-------------|
+| 1 | Sólo reconocía `page.tsx`/`route.ts`: un `page.js` sería una ruta viva e invisible, y con `allowJs: false` ni `tsc` la vería | **CONFIRMADO** | Reconoce las extensiones válidas y **para la corrida** ante cualquier `page.*`/`route.*` desconocida. Dos fixtures |
+| 2 | El 404 se contaba como ambiguo pero la corrida salía 0 | **CONFIRMADO** | Sale distinto de cero. Flip-testeado contra un manifiesto que declara una ruta inexistente: salida 1 |
+| 3 | El tripwire de `"use server"` sólo miraba dentro de `app/` | **CONFIRMADO** | Recorre el repositorio entero menos `node_modules`, `.next`, `generated`; con comentarios quitados |
+| 4 | El contraste puede ponerse verde con contradicciones reales (rama muerta, `redirect` incondicional, lectura por otro helper) | **ACEPTADO como límite** | Se amplía la lista de límites escritos. **No se resuelve**: resolverlo es el ayudante obligatorio de 005, no un grep mejor |
+| 5 | «cada consulta filtra `PUBLIC_WHERE`» es más fuerte que lo observado: las relaciones incluidas no se comprobaron | **CONFIRMADO** | El manifiesto lo dice ahora explícitamente |
+| 6 | «sólo traducciones» es literalmente falso para `/login` y `/signup`, y no es fuente normativa | **CONFIRMADO** | Las razones pasan a «GET sin lectura de datos observada», con fecha |
+| 7 | `razon` no se validaba; `CLASES_PUBLICAS` se exportaba sin uso; faltaban flip-tests | **CONFIRMADO** | Se valida la razón, se borra la lista duplicada, y hay flip-test para los cuatro tripwires |
+| 8 | `pages/` sólo miraba la raíz | **CONFIRMADO** | También `src/pages` y `src/app` |
+| 9 | «el código no contradice lo declarado» excede un contraste léxico | **CONFIRMADO** | La salida dice ahora «no se detectaron las contradicciones textuales conocidas» |
+
+Los tests pasan de 7 a 12. Ninguna corrección amplía lo que el control afirma:
+todas lo estrechan o lo hacen fallar donde antes callaba.

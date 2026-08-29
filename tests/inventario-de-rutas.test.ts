@@ -135,6 +135,66 @@ export default async function P() {
     expect(salida).toContain("DISCREPA");
   });
 
+  // Los tripwires que la revisión de la compuerta 5 señaló sin flip-test.
+  it("no ignora en silencio un page.js: extensión que Next enruta y tsc no ve", () => {
+    const raiz = join(dir, "page-js");
+    mkdirSync(join(raiz, "app", "nueva"), { recursive: true });
+    writeFileSync(join(raiz, "app", "nueva", "page.js"), "export default function P(){return null}", "utf8");
+    mkdirSync(join(raiz, "app"), { recursive: true });
+    writeFileSync(join(raiz, "app", "page.tsx"), GATEADA, "utf8");
+    mkdirSync(join(raiz, "scripts"), { recursive: true });
+    writeFileSync(join(raiz, "scripts", "m.mjs"), `export const RUTAS = { "/": { clase: "requiere-sesion", razon: "x" } };`, "utf8");
+    const { codigo, salida } = correr(["--raiz", raiz, "--manifiesto", join(raiz, "scripts", "m.mjs")]);
+    expect(codigo).toBe(1);
+    expect(salida).toContain("SIN DECLARAR: /nueva");
+  });
+
+  it("para la corrida ante una extensión de entrada que no reconoce", () => {
+    const raiz = join(dir, "ext-rara");
+    mkdirSync(join(raiz, "app", "rara"), { recursive: true });
+    writeFileSync(join(raiz, "app", "rara", "page.mts"), "export default function P(){return null}", "utf8");
+    writeFileSync(join(raiz, "app", "page.tsx"), GATEADA, "utf8");
+    mkdirSync(join(raiz, "scripts"), { recursive: true });
+    writeFileSync(join(raiz, "scripts", "m.mjs"), `export const RUTAS = { "/": { clase: "requiere-sesion", razon: "x" } };`, "utf8");
+    const { codigo, salida } = correr(["--raiz", raiz, "--manifiesto", join(raiz, "scripts", "m.mjs")]);
+    expect(codigo).toBe(1);
+    expect(salida).toContain("EXTENSIÓN DESCONOCIDA");
+  });
+
+  it("para la corrida ante un segundo router (pages/ o src/pages/)", () => {
+    const args = mundo("segundo-router", { "/": GATEADA }, `export const RUTAS = { "/": { clase: "requiere-sesion", razon: "x" } };`);
+    mkdirSync(join(dir, "segundo-router", "src", "pages"), { recursive: true });
+    const { codigo, salida } = correr(args);
+    expect(codigo).toBe(1);
+    expect(salida).toContain("src/pages/");
+  });
+
+  it("para la corrida ante generateMetadata, y no ante su mención en un comentario", () => {
+    const args = mundo(
+      "meta",
+      { "/": GATEADA, "/con-meta": `export async function generateMetadata(){return {}}\n${GATEADA}` },
+      `export const RUTAS = {
+        "/": { clase: "requiere-sesion", razon: "x" },
+        "/con-meta": { clase: "requiere-sesion", razon: "x" } };`
+    );
+    expect(correr(args).salida).toContain("generateMetadata");
+
+    const soloComentario = mundo(
+      "meta-comentario",
+      { "/": `// aquí NO hay generateMetadata, sólo se nombra\n${GATEADA}` },
+      `export const RUTAS = { "/": { clase: "requiere-sesion", razon: "x" } };`
+    );
+    const r = correr(soloComentario);
+    expect(r.codigo, r.salida).toBe(0);
+  });
+
+  it("exige una razón declarada para cada ruta", () => {
+    const args = mundo("sin-razon", { "/": GATEADA }, `export const RUTAS = { "/": { clase: "requiere-sesion", razon: "  " } };`);
+    const { codigo, salida } = correr(args);
+    expect(codigo).toBe(1);
+    expect(salida).toContain("Sin razón declarada");
+  });
+
   it("para la corrida si aparece una acción servidor fuera de app/actions", () => {
     const args = mundo("use-server", { "/": GATEADA }, `export const RUTAS = { "/": { clase: "requiere-sesion", razon: "x" } };`);
     writeFileSync(join(dir, "use-server", "app", "suelta.ts"), `"use server";\nexport async function x() {}\n`, "utf8");

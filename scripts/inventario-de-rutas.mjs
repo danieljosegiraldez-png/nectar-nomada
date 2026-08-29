@@ -52,28 +52,58 @@ const sinComentarios = (src) =>
   src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 const archivos = recorrer(join(RAIZ, "app")).map((f) => f.slice(RAIZ.length));
+
+const EXCLUIDOS = /^(node_modules|\.next|\.git|generated|coverage)(\/|$)/;
+const todoElRepo = recorrer(RAIZ)
+  .map((f) => f.slice(RAIZ.length))
+  .filter((f) => !EXCLUIDOS.test(f) && /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(f));
 const rutaDe = (f) => {
-  const s = f.replace(/^app/, "").replace(/\/(page|route)\.tsx?$/, "");
+  const s = f.replace(/^app/, "").replace(/\/(page|route)\.[^/.]+$/, "");
   return s === "" ? "/" : s;
 };
 
 // ── Tripwires: superficies que este control no sabe inventariar ──────────────
 // Medidas hoy como vacías. Si aparece una, el inventario dejaría de cubrir la
 // superficie HTTP y callaría; por eso para la corrida en vez de seguir.
-const usaServer = archivos.filter(
-  (f) => /\.tsx?$/.test(f) && !f.startsWith("app/actions/") && /["']use server["']/.test(readFileSync(join(RAIZ, f), "utf8"))
+// Recorre el repositorio entero, no sólo app/: la afirmación es «fuera de
+// app/actions», y limitarla a app/ la volvía falsa. Con los comentarios
+// quitados, para que una mención en prosa no dispare el guardia.
+const usaServer = todoElRepo.filter(
+  (f) => !f.startsWith("app/actions/") && /^\s*["']use server["']/m.test(sinComentarios(readFileSync(join(RAIZ, f), "utf8")))
 );
 if (usaServer.length) fallo(`Acciones servidor fuera de app/actions/: ${usaServer.join(", ")}`);
-if (existsSync(join(RAIZ, "pages"))) fallo("Existe un directorio pages/: hay un segundo router sin inventariar.");
+for (const d of ["pages", "src/pages", "src/app"])
+  if (existsSync(join(RAIZ, d))) fallo(`Existe ${d}/: hay un segundo router sin inventariar.`);
 const grupos = archivos.filter((f) => /\/\([^)]+\)\//.test(f) || /\/@[^/]+\//.test(f));
 if (grupos.length) fallo(`Route groups o parallel routes sin soporte: ${grupos.slice(0, 3).join(", ")}`);
-const meta = archivos.filter((f) => /\.tsx?$/.test(f) && /generateMetadata/.test(readFileSync(join(RAIZ, f), "utf8")));
+const meta = archivos.filter(
+  (f) => /\.tsx?$/.test(f) && /\bgenerateMetadata\b/.test(sinComentarios(readFileSync(join(RAIZ, f), "utf8")))
+);
 if (meta.length) fallo(`generateMetadata sin inventariar: ${meta.join(", ")}`);
 
 // ── Inventario real ─────────────────────────────────────────────────────────
+// Next enruta page/route con varias extensiones. Reconocer sólo `page.tsx` y
+// `route.ts` dejaba invisible un `page.js` — ruta viva que ni este guardia ni
+// `tsc` verían, porque el proyecto tiene `allowJs: false`. Ahora se reconocen
+// las válidas y **cualquier extensión desconocida para el guardia para la
+// corrida**, en vez de desaparecer.
+const EXT_VALIDAS = /\/(page|route)\.(tsx|ts|jsx|js|mjs)$/;
+const CUALQUIER_ENTRADA = /\/(page|route)\.[^/.]+$/;
+
+for (const f of archivos) {
+  if (CUALQUIER_ENTRADA.test(f) && !EXT_VALIDAS.test(f))
+    fallo(`EXTENSIÓN DESCONOCIDA: ${f}. El guardia no sabe si Next la enruta; no la ignora en silencio.`);
+}
+
 const entradas = archivos
-  .filter((f) => /\/(page\.tsx|route\.ts)$/.test(f))
-  .map((f) => ({ archivo: f, ruta: rutaDe(f), tipo: f.endsWith("route.ts") ? "handler" : "página" }));
+  .filter((f) => EXT_VALIDAS.test(f))
+  .map((f) => ({ archivo: f, ruta: rutaDe(f), tipo: /\/route\./.test(f) ? "handler" : "página" }));
+
+const CLASES = ["publica-discover", "publica-sin-datos", "flujo-auth", "firma", "requiere-sesion"];
+for (const [ruta, d] of Object.entries(RUTAS)) {
+  if (!CLASES.includes(d?.clase)) fallo(`Clase desconocida para ${ruta}: ${d?.clase}`);
+  if (!d?.razon || !String(d.razon).trim()) fallo(`Sin razón declarada para ${ruta}. La razón es el punto del manifiesto.`);
+}
 
 const declaradas = new Set(Object.keys(RUTAS));
 const reales = new Set(entradas.map((e) => e.ruta));
@@ -139,9 +169,11 @@ if (process.argv.includes("--json")) {
     console.error("");
     console.error(`${problemas.length} discrepancia(s) entre lo declarado y el código.`);
   } else {
-    console.log("Todas las entradas del router están declaradas, y el código no contradice");
-    console.log("la declaración. Esto NO dice que los datos estén protegidos: la frontera");
-    console.log("es el servicio de RBAC (SECURITY.md §2), no la ruta.");
+    console.log("Todas las entradas del router reconocidas están declaradas, y **no se");
+    console.log("detectaron las contradicciones textuales conocidas** entre código y");
+    console.log("declaración. El contraste es léxico: no demuestra control efectivo, y");
+    console.log("no dice nada sobre si los datos están protegidos — la frontera es el");
+    console.log("servicio de RBAC (SECURITY.md §2), no la ruta.");
   }
 }
 process.exit(problemas.length ? 1 : 0);

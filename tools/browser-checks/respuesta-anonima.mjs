@@ -14,9 +14,19 @@
  * Uso: node tools/browser-checks/respuesta-anonima.mjs [base-url]
  */
 
-import { RUTAS } from "../../scripts/rutas-declaradas.mjs";
+const argManifiesto = (() => {
+  const i = process.argv.indexOf("--manifiesto");
+  return i === -1 ? null : process.argv[i + 1];
+})();
+// `--manifiesto` existe para poder flip-testear el veredicto contra un mundo
+// donde una ruta declarada no existe: sin eso, «el 404 nunca cuenta como
+// éxito» sería una afirmación sin prueba.
+const { RUTAS } = await import(
+  argManifiesto ? `file://${argManifiesto}` : new URL("../../scripts/rutas-declaradas.mjs", import.meta.url).href
+);
 
-const BASE = (process.argv[2] ?? "https://nectar-nomada-package.vercel.app").replace(/\/$/, "");
+const posicional = process.argv.slice(2).find((a) => a.startsWith("http"));
+const BASE = (posicional ?? "https://nectar-nomada-package.vercel.app").replace(/\/$/, "");
 
 /**
  * Respuestas aceptables por clase. Fuera de esta tabla, nada cuenta como
@@ -84,4 +94,7 @@ console.log(`Coinciden ${coinciden} · contradicen ${contradicen} · ambiguas ${
 console.log(`Sin pronunciarse: ${dinamicas.length} dinámicas (no se inventan slugs) y ${fuera.length} fuera de alcance.`);
 console.log("Esto observa respuestas, no demuestra que los datos estén protegidos:");
 console.log("la frontera es el servicio de RBAC (SECURITY.md §2), no la ruta.");
-process.exit(contradicen > 0 || sinLeer > 0 ? 1 : 0);
+// Una ambigua también sale distinto de cero: «el 404 nunca cuenta como éxito»
+// no se cumplía si la corrida entera terminaba en 0 con una ambigua dentro.
+if (ambiguas > 0) console.log(`\n${ambiguas} ambigua(s): la corrida no puede llamarse limpia.`);
+process.exit(contradicen > 0 || sinLeer > 0 || ambiguas > 0 ? 1 : 0);

@@ -12,9 +12,15 @@
  * Categorías:
  *
  * - `publica-discover`   Lee por `lib/discover/service.ts`, cuyo `PUBLIC_WHERE`
- *                        exige `classification: 'public'` Y `status: 'approved'`.
- *                        ADR-024 §3: «the single path every public route reads».
- * - `publica-sin-datos`  No lee ningún dato: sólo traducciones.
+ *                        exige `classification: 'public'` Y `status: 'approved'`
+ *                        en las consultas de nivel superior. ADR-024 §3: «the
+ *                        single path every public route reads». **No se ha
+ *                        comprobado que cada relación incluida (program, tags,
+ *                        autor, variantes) lleve el mismo filtro**; eso es parte
+ *                        de la frontera de RBAC, no de este manifiesto.
+ * - `publica-sin-datos`  **GET sin lectura de datos observada** (inspección del
+ *                        2026-08-28). No es una fuente normativa: si mañana la
+ *                        portada incorpora contenido, la clase cambia.
  * - `flujo-auth`         Es el propio flujo de autenticación.
  * - `firma`              Se autentica por firma, no por sesión.
  * - `requiere-sesion`    Debe exigir sesión antes de servir.
@@ -36,9 +42,9 @@ export const RUTAS = {
   "/locations/[slug]": { clase: "publica-discover", razon: "Detalle de lugar aprobado y público." },
 
   // — Públicas que no leen datos —
-  "/": { clase: "publica-sin-datos", razon: "Portada: sólo traducciones, ninguna consulta." },
-  "/login": { clase: "publica-sin-datos", razon: "Formulario de acceso: sólo traducciones." },
-  "/signup": { clase: "publica-sin-datos", razon: "Formulario de alta: sólo traducciones." },
+  "/": { clase: "publica-sin-datos", razon: "GET sin lectura de datos observada (2026-08-28): sólo traducciones." },
+  "/login": { clase: "publica-sin-datos", razon: "GET sin lectura de datos observada: traducciones y una acción importada, ninguna consulta." },
+  "/signup": { clase: "publica-sin-datos", razon: "GET sin lectura de datos observada: traducciones y una acción importada, ninguna consulta." },
 
   // — Autenticación y firma —
   "/api/auth/[...nextauth]": { clase: "flujo-auth", razon: "Handler de Auth.js. Exigirle sesión sería imposible de satisfacer." },
@@ -86,4 +92,5 @@ export const RUTAS = {
   "/start": { clase: "requiere-sesion", razon: "Aterrizaje tras iniciar sesión." },
 };
 
-export const CLASES_PUBLICAS = ["publica-discover", "publica-sin-datos", "flujo-auth", "firma"];
+// Las clases válidas las valida `inventario-de-rutas.mjs`; no se exporta una
+// segunda lista que pudiera desincronizarse en silencio.
