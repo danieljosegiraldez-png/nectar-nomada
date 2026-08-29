@@ -7569,3 +7569,68 @@ Still unverified by use: no real selección has been recorded, so whether
 sorting actually precedes fermentation at Finca Rosina — rather than in the
 general case — is a claim this ADR makes on domain reasoning, not on evidence
 from the farm.
+
+---
+
+## ADR-106 — La familia Huerbsch registrada, and a decision that closed before anyone checked
+
+**Context.** `scripts/open-decisions.sh` carried this premise in the comment
+above P-D's test: *"La familia Huerbsch es dueña de Finca Rosina y NO está en
+la base como Personas."* Every session since has read that line and carried
+P-D to the product owner as blocked on him supplying names and roles.
+
+Production disagrees. Measured 2026-08-29:
+
+| Persona | Título en `OrganizationMembership` | UserAccount | Assignments |
+|---|---|---|---|
+| Bob Huerbsch | Copropietario | `invited`, sin clave, nunca ingresó | 10 |
+| Sherry Huerbsch | Copropietaria | `invited`, sin clave, nunca ingresó | 10 |
+| Chris Huerbsch | Representante familiar | `invited`, sin clave, nunca ingresó | 2 |
+
+These rows are neither invented nor DEMO.
+`docs/implementation/27_A7_PROYECTOS_ASSIGNMENTS_DATOS_REALES.md` §2 names all
+three with those roles and §4 assigns the memberships — a specification written
+by the product owner, not inferred by a session. `prisma/seed.ts` records the
+farm organization's name as pre-approved by Sherry Huerbsch and deliberately
+excludes it from DEMO seeding, precisely so `SEED_DEMO_CONTENT=true` could never
+attach fictional content to the real organization.
+
+So P-D was answered by the work that created those rows. It kept being asked
+because its test looks for an ADR heading that nobody had written — which is
+exactly what that test was built to look for, after a different test closed
+itself on its own text. The guard did its job. The prose above it went stale,
+and no session re-read it against the database.
+
+**Decision 1 — the three Persons above, with those titles, are P-D's answer.**
+Nothing is created here. This ADR records that the rows already carry the names
+and roles the decision asked for, and cites where each came from, so the claim
+can be re-checked instead of re-litigated.
+
+**Decision 2 — closing P-D asserts nothing about whether they can use the
+platform.** `OrganizationMembership` is descriptive and grants no permissions
+(`DOMAIN_MODEL.md` §2). Access comes from the 22 Assignments, which resolve
+correctly and reach nobody: all three accounts sit at `invited` with no
+password, and all three Persons have `email = NULL`. ADR-083 already removed
+the sign-in callback that rejected `invited` accounts, so the door works — there
+is nobody to hand a key to. That is P-C, still open, and it is the reason these
+are two decisions rather than one. Registering a person and reaching them are
+different facts, the same way ADR-080 keeps "never recorded" different from
+"recorded and zero."
+
+**Decision 3 — the stale comment is corrected in place, not annotated.** A
+comment that says the opposite of the database is worse than no comment: it is
+read every session as context and reasoned around. `CLAUDE.md`'s rule is that a
+false rule gets corrected rather than reinforced, and this is that case.
+
+**Consequences.** P-D closes and drops out of the first message to the product
+owner, leaving P-A and P-C. The count of open decisions goes 3 → 2 for a reason
+that is a correction, not progress: nothing was built, something was measured.
+
+Flip-tested in both directions: with this heading present `open-decisions.sh`
+reports P-D **cerrada**; with the heading removed it reports **abierta** again.
+The heading is the landing site, so the verdict survives in a file rather than
+in a session that ends.
+
+Unverified by use, and worth stating plainly: nothing in this ADR makes the
+farm's owners able to open the platform. Twenty-two Assignments have resolved
+correctly to nobody since they were created.
