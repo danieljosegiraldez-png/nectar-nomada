@@ -128,9 +128,27 @@ misma noche: ahora `/login` y `/discover` dan 404 ahí.
 Este OS sigue accesible en `https://nectar-nomada-package.vercel.app`, y sus
 ocho rutas privilegiadas siguen exigiendo sesión — verificado tras la fusión.
 
-### 2026-08-28 · Selección de cereza como operación que produce material
+### 2026-08-28 · Selección de cereza, de operación a pantalla usable
 
-PR #58, `0aa7544`. Antes: versiones de receta (PR #56).
+PR #58 `0aa7544` (dominio), #59 `43f97d4` (pantalla), #62 `18c6c26` (paso
+sugerido). ADR-103 y ADR-105. Antes: versiones de receta (PR #56).
+
+`selection` entra en `CONSERVING_TYPES`: aceptado + rechazos + merma declarada
+debe cuadrar contra la entrada, y es la primera transformación donde un
+descuadre significa que alguien pesó mal y no un rendimiento. El rechazo es un
+`Lot` de verdad con `rejectionCategoryValueId`; su `lotType` sigue siendo
+físico, porque un flotador sigue siendo cereza. La pantalla lleva balance en
+vivo — el único momento en que un operario puede actuar sobre un descuadre es
+antes de enviar, con el café delante.
+
+Tres huecos que solo aparecieron al usarlo, cerrados en #59/#62: faltaba
+`transformationType_selection` en los catálogos (la línea de tiempo salía rota
+para cualquier lote con selección), `getSelectionOutturn` no se mostraba en
+ninguna parte, y la cereza sin seleccionar seguía sugiriendo fermentación.
+
+**Nadie ha registrado todavía una selección real.** El vocabulario de rechazo y
+la afirmación de ADR-105 —que en el beneficio la selección precede a la
+fermentación— siguen sin contrastar contra un tanque de flotación.
 
 ---
 
@@ -141,10 +159,14 @@ PR #58, `0aa7544`. Antes: versiones de receta (PR #56).
   backups, y `launchctl list | grep nectar` como único rastro pasivo.
 - **Dar acceso a alguien más que Daniel y José** — bloqueado en P-C.
 - **Registrar a los dueños de Finca Rosina** — bloqueado en P-D.
-- **Cualquier garantía automática de que `main` está sano** — **este repositorio
-  no tiene CI**: no hay `.github/workflows/`, y el único check de una PR es el
-  build de Vercel. `typecheck`, `test` y `check:state` no corren solos nunca.
-  Hoy mismo `main` tenía 18 errores de `tsc` y nada los miraba. Ver
+- **Que la compuerta sea *obligatoria* para fusionar** — CI existe desde el
+  2026-08-28 (`.github/workflows/ci.yml` → `scripts/ci.sh`: typecheck,
+  presupuesto de estado, inventario de rutas, lint y dos archivos de test
+  herméticos), y corre en cada push y cada PR. Lo que sigue bloqueado es que
+  **impida** fusionar: la protección de ramas no está disponible en un
+  repositorio privado de este plan («Upgrade to GitHub Pro»). Hoy CI informa,
+  no impide, y esa diferencia es de Daniel. Tampoco cubre la suite completa —
+  necesita `npm run test:db -- up` y un runner no tiene ese backup. Ver
   `PENDING_IMPLEMENTATIONS/006`.
 - **Un nombre propio para este OS** — al mover el dominio, esta aplicación queda
   solo en `nectar-nomada-package.vercel.app`. Si quiere algo como
