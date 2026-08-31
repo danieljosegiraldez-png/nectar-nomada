@@ -37,6 +37,35 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-08-31 · El rendimiento por hectárea no existía, y ahora sí
+
+Se había dicho varias veces que lo construido «es kg por hectárea comparable
+entre lotes y entre años». **No se seguía solo.** Había plantas/ha y kg por
+bloque, y nada unía el peso de la cosecha con el área: buscar `rendimiento`,
+`yield` o `kgPerHectare` en `lib/` y `app/` daba **cero**. Las entradas estaban;
+la cifra no la calculaba nadie.
+
+`computePlotYield`, por **año calendario de cosecha** (decisión del dueño). Tres
+cosas que cambian el número:
+
+- **Se lee por `HarvestEventSource`, no por `HarvestEvent.locationId`.** El
+  segundo es el lote *principal* de la cosecha; una cosecha de varios bloques
+  sólo nombra uno ahí, y contar por él daría todo el peso a un bloque y cero a
+  los demás.
+- **El total es un mínimo.** Un aporte sin pesar no se suma como cero — eso lo
+  subestimaría *y lo haría parecer medido*. El conteo de aportes sin pesar va
+  junto al número, no en una nota.
+- **Sin área el año no se descarta**: se muestran los kilos y se dice que falta
+  el área.
+
+Antes, el mismo día: **formulario de siembra** (`createPlantingCohort`) y
+`updatePlantingCohort`, que faltaba entero — corregir un conteo **no es
+renovar**, porque renovar declara que esos árboles salieron del suelo. La
+corrección exige un motivo: «conté mal» y «se murieron cuarenta matas» dejan la
+misma cifra y son hechos distintos.
+
+PR #77 y #79. Suite 685/685.
+
 ### 2026-08-31 · La cadena de febrero, entera y sin scripts
 
 Cohorte → hectáreas → cosecha → bloque. Los tres eslabones que faltaban tienen
@@ -259,11 +288,16 @@ fermentación— siguen sin contrastar contra un tanque de flotación.
   entre lotes y entre años. Desde el 2026-08-31 el dueño puede cargarlas él
   mismo en la página de cada lote; cada página dice en pantalla que faltan. **La
   cosecha llega en febrero**; después, el dato ya no sirve para esa cosecha.
-- **Que alguien que no sea una sesión registre una siembra** — `createPlantingCohort`,
-  `renovatePlantingCohort` y `recordPlantingEvent` siguen sin pantalla. Las
-  cuatro cohortes que existen las escribió un script. El dueño avisó que va a
-  **corregir los conteos por lote**, y hoy eso exige que una sesión lo haga por
-  él: es el mismo hueco que acaban de cerrar los otros dos formularios.
+- **Que el rendimiento se pueda calcular con datos reales** — bloqueado en el
+  dueño, y ya no en construir nada. La cadena entera (siembra → hectáreas →
+  cosecha → bloques → kg/ha) está en pantalla desde el 2026-08-31. Faltan las
+  dos entradas: **0 de 8 lotes tienen área** y **0 cosechas están atribuidas a
+  bloques**, aunque 15 de las 33 ya tienen peso declarado. Las dos las carga él
+  ahora sin ayuda.
+- **Nadie ha usado ninguna de las cuatro pantallas nuevas.** Todo lo que se sabe
+  de ellas se sabe de la copia local restaurada. Que un operador real las
+  recorra es la única prueba que falta, y la que suele encontrar lo que ninguna
+  verificación encuentra.
 - **Lotes 5 y 6** — bloqueado en el dueño. Dijo que tienen 200 plantones cada
   uno, y eso **contradice** la nota del evento del Lote 4, que afirma que los
   otros 400 de Cafelino siguen sin sembrar. 200+200 son exactamente esos 400. No
