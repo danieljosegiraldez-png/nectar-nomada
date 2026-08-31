@@ -28,8 +28,14 @@ desde `app/**`. Los cuatro ponen algo en rojo.
 - **Nada sobre operaciones.** Un archivo ya inventariado puede añadir cien
   consultas sin que nada lo note. Hay **375** expresiones `prisma.*`/`aiPrisma.*`
   en 51 archivos: los archivos no son las decisiones de acceso.
-- **`$transaction` y `Prisma.TransactionClient`** propagan acceso por otra vía.
-  28 usos hoy, sin cubrir.
+- **Qué hace un archivo con la transacción que recibe.** Desde 2026-08-31 se
+  inventaría **quién** puede recibir un `Prisma.TransactionClient`: hoy uno solo,
+  `lib/traceability/balance.ts`, que no importa ningún cliente y aun así podía
+  consultar cualquier cosa con el `tx` que le pasan — invisible a la
+  comprobación de imports. Lo que sigue sin mirarse es qué consulta hace con él.
+- **Detección por tipo, no por comportamiento.** Un archivo que reciba el
+  cliente con otro tipo —`typeof prisma`, un alias— no lo vería. Es el mismo
+  límite de siempre: se reconoce una forma escrita, no una propiedad.
 
 ## El intento que se rechazó, para que nadie lo repita
 
