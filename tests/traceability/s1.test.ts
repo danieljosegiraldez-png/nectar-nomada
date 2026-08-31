@@ -388,7 +388,13 @@ describe("§9.5 — completing a record later reflects when each fact was actual
 
 describe("§9.6 — A7 and F1 real data left untouched", () => {
   it("Cerro Azul real data and F1 tables are unaffected by S1's writes", async () => {
-    const lasNubesProjects = await prisma.project.findMany({ where: { name: { contains: "Nubes" } } });
+        // Renombrado 2026-08-29 (scripts/rename-finca-rosina.ts): la finca es
+    // **Finca Rosina**, Cerro Azul es la localidad donde está, y "Las Nubes" es
+    // el nombre del beneficio. Los dos proyectos y los seis lotes son los
+    // mismos de siempre; lo que cambió es cómo se llaman. Buscar "Nubes" o
+    // "Cerro Azul" en estos nombres devolvía 0 y hacía fallar la aserción sin
+    // que nada hubiera tocado los datos que promete proteger.
+    const fincaRosinaProjects = await prisma.project.findMany({ where: { name: { contains: "Finca Rosina" } } });
     // Scoped to Cerro Azul, which is what this assertion is actually about.
     // It previously counted every Location named "Lote" anywhere on the
     // platform and expected exactly 6 — so any legitimate new plot broke it.
@@ -397,9 +403,9 @@ describe("§9.6 — A7 and F1 real data left untouched", () => {
     // Azul at all. The guarantee worth keeping is that Cerro Azul's own six
     // are untouched, not that the platform never grows a seventh plot.
     const lotes = await prisma.location.findMany({
-      where: { AND: [{ name: { contains: "Lote" } }, { name: { contains: "Cerro Azul" } }] },
+      where: { AND: [{ name: { contains: "Lote" } }, { name: { contains: "Finca Rosina" } }] },
     });
-    expect(lasNubesProjects.length).toBe(2);
+    expect(fincaRosinaProjects.length).toBe(2);
     expect(lotes.length).toBe(6);
 
     const testResidue = await prisma.externalCoffeeOrigin.findMany({

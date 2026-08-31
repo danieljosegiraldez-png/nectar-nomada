@@ -2269,7 +2269,8 @@ npm run dev:local      # contra la copia local restaurada, puerto 3017
 npm run verify         # typecheck + presupuesto de estado + lint (sin base de datos)
 npm run typecheck
 npm test               # vitest; EXIGE base local (ver abajo)
-npm run test:db -- up  # restaura el backup verificado más nuevo en :55433/nectar_test
+npm run test:db -- up     # levanta el clúster; NO restaura si ya hay datos
+npm run test:db -- reset  # tira los datos y restaura de verdad
 npm run check:state    # SESSION_STATE.md cabe en una lectura
 npm run decisiones     # qué decisiones de Daniel siguen abiertas
 node tools/browser-checks/rutas-protegidas.mjs   # autorización en el artefacto vivo
@@ -2401,6 +2402,48 @@ npm run verify > /tmp/verify.txt 2>&1; echo "salida=$?"; tail -20 /tmp/verify.tx
 Hay un hook en `~/.claude/hooks/preguntar-patrones-caros.py` que **pregunta**
 cuando una tubería precede a un `git commit`. No cubre leer un resultado
 canalizado: eso sigue siendo cosa de quien mira.
+
+### `test:db -- up` dice «ready» y te da una base de hace dos días
+
+**Síntoma.** Tras `npm run test:db -- up`, la copia local seguía teniendo los
+lotes con el nombre viejo («Finca Las Nubes Cerro Azul») y cero cohortes. La
+salida terminaba en «Test database ready», y la verificación en el navegador
+habría descrito una aplicación que no existe.
+
+**Dos causas encadenadas.** `up` **no restaura si ya hay datos** — imprime
+«Already up, with data. Use 'reset' to restore it again.» varias líneas antes
+del «ready», donde es fácil que un `tail` se la coma. Y `newest_backup()` lee
+`${NN_BACKUP_DIR:-$HOME/nectar-backups}`: una shell que no ha leído `~/.zshrc`
+**no tiene esa variable** y restaura del directorio local, que aquí estaba dos
+semanas atrasado. Las dos veces el veredicto fue «listo».
+
+**Arreglo.** `reset`, no `up`, y exportar `NN_BACKUP_DIR` antes. Y leer la línea
+`Restoring from ...Z`, que dice de qué backup salió:
+
+```bash
+export NN_BACKUP_DIR="$HOME/Library/CloudStorage/GoogleDrive-<cuenta>/My Drive/nectar-backups"
+npm run test:db -- reset
+```
+
+**Antes de creer nada, imprimir una fila patrón conocida** y leerla. Aquí fue
+`select count(*) from traceability.planting_cohort` — debía dar 4 y dio 0.
+
+### La suite completa ve regresiones que CI no puede ver
+
+**Síntoma.** `main` en verde en CI, y `npm test` en local con **2 fallos**:
+`s1.test.ts` y `roasting.test.ts`, ambos en la aserción «los datos reales de
+Cerro Azul siguen intactos».
+
+**Causa.** El renombrado del 2026-08-29 dejó los tests buscando `contains:
+"Nubes"` y `contains: "Cerro Azul"`, que ya no existen como nombres. Los datos
+estaban perfectos; los que miraban al sitio equivocado eran los tests. **CI no
+lo vio y no podía verlo:** corre tres archivos herméticos, y la suite entera
+necesita `npm run test:db`, que un runner no tiene.
+
+**Consecuencia práctica.** Un cambio de datos en producción puede romper la
+suite sin que ningún check se ponga rojo. Después de correr cualquier script de
+`data:*` contra producción, correr `npm test` en local antes de dar por cerrada
+la sesión.
 
 ### Un guardia que pasa igual con y sin la regresión
 
