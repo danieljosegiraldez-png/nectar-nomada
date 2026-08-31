@@ -29,6 +29,12 @@
 #   2. Logging can never abort the run. Every write is best-effort.
 #   3. Failure is announced where a person will see it, not returned as an
 #      exit code to a daemon.
+#
+# All three announce *into this machine*, and that is the gap this wrapper
+# could never close on its own: a laptop closed for a fortnight backs nothing
+# up and says nothing, because there is nobody here to say it to. The ping
+# below is the other half — a dead man's switch whose *silence* raises the
+# alarm somewhere else. See PENDING_IMPLEMENTATIONS/001.
 
 set -uo pipefail
 
@@ -41,11 +47,32 @@ export NN_BACKUP_DIR
 
 # Local, always writable, and the conventional place for it on macOS. The
 # previous location — inside NN_BACKUP_DIR — is what broke.
+# The ping URL is a capability credential: anyone holding it can signal "the
+# backup is fine" and mask a real failure. So it lives outside the repository
+# and outside Drive, in a file only this user can read — never in a tracked
+# file, where gitignoring it afterwards would not help.
+# Absent file, or absent variable, means no ping and a backup that otherwise
+# behaves exactly as before.
+[ -r "$HOME/.config/nectar-nomada/backup.env" ] && . "$HOME/.config/nectar-nomada/backup.env"
+
 LOG_DIR="$HOME/Library/Logs"
 LOG="$LOG_DIR/nectar-nomada-backup.log"
 mkdir -p "$LOG_DIR" 2>/dev/null
 
 stamp() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+# Best-effort, like every other write here (rule 2): a monitoring service that
+# is down must never be the reason a backup does not run. The URL is never
+# logged — only whether the ping left.
+ping_health() {
+  local suffix="${1:-}"
+  [ -n "${NN_HEALTHCHECK_URL:-}" ] || return 0
+  if curl -fsS -m 10 --retry 2 -o /dev/null "${NN_HEALTHCHECK_URL}${suffix}" 2>/dev/null; then
+    log "    ping ${suffix:-/success} enviado"
+  else
+    log "    ping ${suffix:-/success} NO salió (la máquina sigue con su backup hecho)"
+  fi
+}
 
 # Rule 2: `|| true` on every write. A log that cannot be written is a thing to
 # notice later, never a reason to skip the backup.
@@ -58,6 +85,11 @@ log() { echo "$*" >>"$LOG" 2>/dev/null || true; }
 announce_failure() {
   local message="$1"
   log "=== $(stamp) FAILED — $message ==="
+
+  # Explicit failure, so the service says "failed" instead of waiting out the
+  # grace period and saying "late". The two mean different things to whoever
+  # reads the alert.
+  ping_health "/fail"
 
   osascript -e "display notification \"$message\" with title \"Néctar Nómada backup FAILED\" sound name \"Basso\"" \
     >/dev/null 2>&1 || true
@@ -83,6 +115,10 @@ fi
 mkdir -p "$NN_BACKUP_DIR" 2>/dev/null || exit 0
 
 log "=== $(stamp) scheduled backup starting ==="
+# Marks the run as started, so a hung run is distinguishable from one that
+# never began. The destination-unavailable skip above deliberately happens
+# BEFORE this: a skipped run sends nothing, and its silence is the signal.
+ping_health "/start"
 
 if ! bash scripts/backup/backup-db.sh >>"$LOG" 2>&1; then
   announce_failure "the dump did not complete"
@@ -97,6 +133,11 @@ if ! bash scripts/backup/verify-restore.sh >>"$LOG" 2>&1; then
   exit 1
 fi
 
+# The success ping goes here and nowhere earlier: after the restore was
+# verified, not after the dump was written. A ping that only means "the script
+# finished" would reproduce the exact failure this is meant to catch — a set
+# that exists and cannot be restored.
 log "=== $(stamp) OK — backup written and verified ==="
+ping_health
 clear_failure_marker
 exit 0
