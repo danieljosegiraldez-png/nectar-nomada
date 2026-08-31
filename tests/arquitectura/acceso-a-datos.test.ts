@@ -82,6 +82,14 @@ const importaClienteTotal = (f: string, s: string) =>
 const importaClienteAi = (f: string, s: string) =>
   f !== "lib/ai/db.ts" && destinos(f, s).includes("lib/ai/db");
 
+/**
+ * Recibe un cliente de transacción por parámetro. `lib/traceability/balance.ts`
+ * no importa ningún cliente y aun así puede consultar cualquier cosa con el
+ * `tx` que le pasan: la comprobación de imports no lo veía.
+ */
+const recibeTransaccion = (s: string) =>
+  /\bPrisma\.TransactionClient\b/.test(s) || /\bTransactionClient\b/.test(s);
+
 const listado = (xs: { archivo: string }[]) => new Set(xs.map((x) => x.archivo));
 
 describe("acceso a datos: el inventario manda", () => {
@@ -120,6 +128,21 @@ describe("acceso a datos: el inventario manda", () => {
   it("sólo lib/ai/service.ts toca el cliente atado al rol ai_service", () => {
     const reales = TODOS.filter((f) => importaClienteAi(f, leer(f))).sort();
     expect(reales).toEqual([...listado(allowlist.importan_cliente_ai)].sort());
+  });
+
+  it("nadie recibe un cliente de transacción sin estar inventariado", () => {
+    const reales = TODOS.filter((f) => f !== "lib/db.ts" && recibeTransaccion(leer(f))).sort();
+    const permitidos = [...listado(allowlist.reciben_transaccion)].sort();
+    expect(
+      reales.filter((f) => !permitidos.includes(f)),
+      "Recibe una transacción abierta y puede consultar cualquier cosa sin importar un cliente. " +
+        "Justifícalo en la allowlist o pásale sólo los datos que necesita."
+    ).toEqual([]);
+    expect(permitidos.filter((f) => !reales.includes(f)), "ya no recibe transacción: bórralo").toEqual([]);
+  });
+
+  it("cada quien recibe transacción explica por qué", () => {
+    for (const e of allowlist.reciben_transaccion) expect(e.razon?.trim(), e.archivo).toBeTruthy();
   });
 
   it("app/** no crece: hoy son cinco y están justificados", () => {
