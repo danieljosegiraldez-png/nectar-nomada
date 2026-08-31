@@ -40,6 +40,7 @@ echo "── Tests herméticos ────────────────�
 #   existe para evitar.
 TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:55432/no-se-conecta" \
   npx vitest run tests/session-state-budget.test.ts tests/inventario-de-rutas.test.ts \
+              tests/arquitectura/acceso-a-datos.test.ts \
     tests/traceability/plotDensity.test.ts
 
 echo "── Todo verde ──────────────────────────────────────────────────────────"

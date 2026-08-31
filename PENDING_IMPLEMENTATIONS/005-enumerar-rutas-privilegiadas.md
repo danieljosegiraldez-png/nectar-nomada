@@ -1,51 +1,59 @@
-# 005 · Probar la frontera de RBAC, no sólo el router
+# 005 · Probar la frontera de RBAC
 
-**Estado: sigue abierto**, y a propósito. Lo que se construyó el 2026-08-28 es
-un control de **higiene del router**, que es una propiedad distinta y más
-modesta que la que pide este pendiente.
+**Estado: parcialmente hecho.** Lo que hay demuestra dos propiedades concretas.
+Lo que falta está escrito abajo, con el intento que se rechazó y por qué.
 
-## Lo que ya existe, y qué prueba
+## Lo que sí queda demostrado
 
-- `scripts/rutas-declaradas.mjs` — las 50 entradas del router, **declaradas**
-  con su clase y su razón. La clasificación no se infiere.
-- `scripts/check:rutas` (`scripts/inventario-de-rutas.mjs`) — falla si aparece
-  una ruta sin declarar, si el manifiesto nombra una que ya no existe, o si el
-  código contradice lo declarado. Corre dentro de `npm run verify`.
-- `tools/browser-checks/respuesta-anonima.mjs` — observa qué contesta el
-  despliegue a un anónimo en las **26 rutas estáticas** y lo contrasta con la
-  declaración. Dice en su salida de cuántas se pronuncia y de cuántas no.
+**1 · Higiene del router** (2026-08-28). Las 50 entradas se declaran en
+`scripts/rutas-declaradas.mjs`; `npm run check:rutas` falla ante una sin
+declarar, una declarada que ya no existe, o código que contradice lo declarado.
+`respuesta-anonima.mjs` contrasta 26 rutas estáticas contra el despliegue.
 
-**Prueba:** que toda entrada del router está clasificada, y que ni el código ni
-el edge contradicen la clasificación.
+**2 · Un acceso crudo nuevo no aparece en silencio** (2026-08-31).
+`tests/arquitectura/acceso-a-datos.test.ts` inventaría quién construye o importa
+un cliente de base de datos, contra
+`docs/arquitectura/acceso-a-datos.allowlist.json`, y falla ante cualquier
+entrada nueva. ESLint prohíbe además importar un cliente desde `app/**`, con
+cinco excepciones inventariadas y con razón escrita.
 
-**No prueba:** que los datos estén protegidos. La frontera de autorización es el
-servicio único de RBAC (`SECURITY.md` §2), no la ruta. `proxy.ts` sólo gatea
-`/my-nectar` y dice de sí mismo que es una conveniencia de interfaz.
+Flip-testeado en las cuatro direcciones: un tercer cliente, un import nuevo del
+cliente total, un import del cliente restringido desde otro archivo, y un import
+desde `app/**`. Los cuatro ponen algo en rojo.
 
-## Lo que falta para cerrar este pendiente
+## Lo que NO demuestra, y hay que decirlo
 
-Demostrar que **toda lectura o escritura de datos gobernados por RBAC atraviesa
-el servicio compartido**. Eso no se ve desde el router: se ve desde el acceso a
-datos. Haría falta algo como un ayudante obligatorio que combine autorización y
-acceso al contexto, detectable estructuralmente, de modo que saltárselo sea un
-error de compilación y no una omisión invisible — como ya se hizo en ADR-062 con
-la puerta de clasificación, que pasó de ser una convención a ser un error de
-tipos.
+- **Que la autorización sea correcta.** Un `requireLotAccess` con el permiso
+  equivocado pasa igual.
+- **Nada sobre operaciones.** Un archivo ya inventariado puede añadir cien
+  consultas sin que nada lo note. Hay **375** expresiones `prisma.*`/`aiPrisma.*`
+  en 51 archivos: los archivos no son las decisiones de acceso.
+- **`$transaction` y `Prisma.TransactionClient`** propagan acceso por otra vía.
+  28 usos hoy, sin cubrir.
 
-## Límites conocidos del control actual, escritos para que nadie los descubra creyendo otra cosa
+## El intento que se rechazó, para que nadie lo repita
 
-- El contraste es **sintáctico** sobre el archivo sin comentarios. Atrapa una
-  señal que quedó sólo en un comentario —hay un test que lo demuestra— pero
-  **no** atrapa una rama muerta ni una comprobación cuyo resultado no controla
-  la respuesta.
-- **23 rutas dinámicas no se comprueban en vivo.** No se fabrican slugs: un slug
-  inventado devuelve 404, y leer ese 404 como «protegida» sería inventarse un
-  veredicto.
-- El **404 se trata como ambiguo**, nunca como éxito: puede significar «no
-  existe» tanto como «no te lo doy».
+Se planificó un `AuthzContext` universal: un tipo que sólo devolviera el
+servicio de autorización, exigido por un envoltorio del cliente, con un
+centinela `AUTHZ_DEFERRED` para la deuda — copiando ADR-062. **La revisión
+independiente lo rechazó en compuerta 2**, antes de escribir código: «el coste
+no vale la garantía obtenida».
 
-Todo esto salió de la revisión independiente del plan (compuerta 2), que
-concluyó que construir lo que decía el plan original habría producido «un
-guardia útil para disciplina de archivos, pero demasiado fácil de interpretar
-como control de seguridad». La adjudicación completa está en
-`docs/plans/2026-08-28-inventario-de-rutas-privilegiadas.md`.
+Tenía razón, y su hallazgo principal fue un fallo de medición mío:
+
+- **Se me escapó un segundo cliente entero.** `lib/ai/db.ts` exporta `aiPrisma`,
+  y mi grep buscaba `prisma\.` en minúscula, que no aparece en `aiPrisma.`.
+- **La unidad correcta es la operación, no el archivo.**
+- Al comprobarlo apareció un patrón que ninguno de los dos tenía: **la frontera
+  del camino de IA está en la base de datos**, no en el código — rol
+  `ai_service`, `INSERT`+`SELECT` sobre `ai.recommendation` y nada más
+  (AI_GOVERNANCE.md §3, ADR-033). Un `AuthzContext` habría envuelto en ceremonia
+  el único camino ya protegido mejor que cualquier tipo.
+
+## Lo que haría falta para cerrarlo del todo
+
+Un inventario **por operación** —principal, modelos, si el dato está gobernado,
+qué guardia domina la consulta, scope y clasificación, acceso transitivo— y, a
+partir de ahí, capacidades estrechas por dominio o repositorios que lleven el
+scope dentro de sus métodos. **Un token universal para todo Prisma no basta**, y
+eso ya está comprobado sobre el terreno en vez de supuesto.
