@@ -5,6 +5,7 @@ import { getCurrentUser } from "../../../lib/auth/session";
 import { getPlotDetail } from "../../../lib/traceability/plantingCohorts";
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { PlotAttributesForm } from "../../components/traceability/PlotAttributesForm";
+import { PlantingCohortForm } from "../../components/traceability/PlantingCohortForm";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
     throw error;
   }
 
-  const { location, cohorts, density, organizationName } = detail;
+  const { location, cohorts, cultivarOptions, density, organizationName } = detail;
   const activas = cohorts.filter((c) => c.status === "active");
 
   return (
@@ -104,6 +105,34 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             </tbody>
           </table>
         )}
+
+        {activas.map((cohort) => (
+          <details key={`edit-${cohort.id}`}>
+            <summary>
+              {t("cohortEditSummary", {
+                cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
+              })}
+            </summary>
+            <PlantingCohortForm
+              locationId={location.id}
+              cultivars={cultivarOptions}
+              cohort={{
+                id: cohort.id,
+                cultivarValueId: cohort.cultivarValueId,
+                plantCount: cohort.plantCount,
+                plantedAt: cohort.plantedAt ? cohort.plantedAt.toISOString() : null,
+                plantedPrecision: cohort.plantedPrecision,
+                dataQuality: cohort.dataQuality,
+                notes: cohort.notes,
+              }}
+            />
+          </details>
+        ))}
+
+        <details>
+          <summary>{t("cohortCreateSummary")}</summary>
+          <PlantingCohortForm locationId={location.id} cultivars={cultivarOptions} />
+        </details>
 
         {activas.some((c) => c.notes) ? (
           <div className="nn-detail-meta">

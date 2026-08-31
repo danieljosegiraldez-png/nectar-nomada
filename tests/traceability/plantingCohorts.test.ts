@@ -11,6 +11,7 @@ import {
   createPlantingCohort,
   listPlantingCohorts,
   recordHarvestSources,
+  updatePlantingCohort,
   getHarvestSourceContext,
   renovatePlantingCohort,
   PlantingCohortValidationError,
@@ -496,6 +497,115 @@ describe("el contexto de la pantalla ofrece sólo lo que se puede usar", () => {
     expect(contexto.declaredTotalKg).toBe(60);
     // Ningún aporte pesado: desconocido, no cero (ADR-080).
     expect(contexto.alreadyRecordedKg).toBeNull();
+  });
+});
+
+describe("corregir una cohorte sin decir que el bloque cambió", () => {
+  it("cambia el conteo y guarda el motivo, dejando el estado en active", async () => {
+    const cohort = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotAId,
+      cultivarValueId: caturraValueId,
+      plantCount: 833,
+      provenanceClass: "direct_observation",
+      dataQuality: "provisional",
+    });
+
+    const corregida = await updatePlantingCohort(authorizedUserAccountId, {
+      cohortId: cohort.id,
+      plantCount: 812,
+      reason: "Conteo real del bloque; el 833 era el total repartido entre tres.",
+    });
+
+    expect(corregida.plantCount).toBe(812);
+    // Lo que NO debe pasar: renovar habría cerrado la cohorte y afirmado que
+    // esos árboles salieron del suelo.
+    expect(corregida.status).toBe("active");
+    expect(corregida.removedAt).toBeNull();
+
+    const audit = await prisma.auditEvent.findFirst({
+      where: { entityId: cohort.id, operation: "planting_cohort.update" },
+      orderBy: { occurredAt: "desc" },
+    });
+    expect(audit?.reason).toContain("Conteo real");
+    // El valor anterior queda en el registro append-only, no se pierde.
+    expect((audit?.before as { plantCount: number }).plantCount).toBe(833);
+  });
+
+  it("exige un motivo: sin él no se distingue «conté mal» de «se murieron»", async () => {
+    const cohort = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotAId,
+      cultivarValueId: caturraValueId,
+      plantCount: 100,
+      provenanceClass: "direct_observation",
+    });
+    await expect(
+      updatePlantingCohort(authorizedUserAccountId, {
+        cohortId: cohort.id,
+        plantCount: 90,
+        reason: "   ",
+      }),
+    ).rejects.toThrow(PlantingCohortValidationError);
+  });
+
+  it("vaciar el conteo lo deja sin registrar, no en cero", async () => {
+    const cohort = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotAId,
+      cultivarValueId: caturraValueId,
+      plantCount: 500,
+      provenanceClass: "direct_observation",
+    });
+    const corregida = await updatePlantingCohort(authorizedUserAccountId, {
+      cohortId: cohort.id,
+      plantCount: null,
+      reason: "Nadie contó nunca este bloque; el 500 era una suposición.",
+    });
+    // ADR-080: sin registrar y cero son hechos distintos.
+    expect(corregida.plantCount).toBeNull();
+  });
+
+  it("rechaza un conteo negativo", async () => {
+    const cohort = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotAId,
+      plantCount: 10,
+      provenanceClass: "direct_observation",
+    });
+    await expect(
+      updatePlantingCohort(authorizedUserAccountId, {
+        cohortId: cohort.id,
+        plantCount: -1,
+        reason: "prueba",
+      }),
+    ).rejects.toThrow(PlantingCohortValidationError);
+  });
+
+  it("no deja poner fecha sin precisión", async () => {
+    const cohort = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotAId,
+      plantCount: 10,
+      provenanceClass: "direct_observation",
+    });
+    await expect(
+      updatePlantingCohort(authorizedUserAccountId, {
+        cohortId: cohort.id,
+        plantedAt: new Date("2022-01-01"),
+        reason: "prueba",
+      }),
+    ).rejects.toThrow(PlantingCohortValidationError);
+  });
+
+  it("no deja corregir una cohorte de un lote fuera de alcance", async () => {
+    const cohort = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotAId,
+      plantCount: 10,
+      provenanceClass: "direct_observation",
+    });
+    await expect(
+      updatePlantingCohort(wrongLocationUserAccountId, {
+        cohortId: cohort.id,
+        plantCount: 11,
+        reason: "prueba",
+      }),
+    ).rejects.toThrow(LocationAccessError);
   });
 });
 

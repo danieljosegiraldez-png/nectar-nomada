@@ -413,9 +413,19 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     orderBy: [{ status: "asc" }, { plantedAt: "desc" }],
   });
 
+  // Las variedades que el formulario puede ofrecer. Del catálogo, no de una
+  // lista escrita a mano: el vocabulario crece sembrando una fila, no editando
+  // código, y los alias («Catuai» sin tilde) resuelven al valor canónico.
+  const cultivarOptions = await prisma.variableCatalogValue.findMany({
+    where: { catalog: { name: "Cultivar" }, aliasOfId: null },
+    select: { id: true, value: true, impliesUnknownIdentity: true },
+    orderBy: { value: "asc" },
+  });
+
   return {
     location,
     cohorts,
+    cultivarOptions,
     density: computePlotDensity(cohorts, location.areaHectares),
     // The farm's own name is usually on the parent site, not the plot: eleven
     // of Finca Rosina's locations carry a null `organizationId` and inherit it
@@ -498,4 +508,89 @@ export async function getHarvestSourceContext(userAccountId: string, harvestEven
     existing,
     plotLocations,
   };
+}
+
+export interface UpdatePlantingCohortInput {
+  cohortId: string;
+  cultivarValueId?: string | null;
+  plantedAt?: Date | null;
+  plantedPrecision?: HarvestWindowPrecision | null;
+  plantCount?: number | null;
+  dataQuality?: DataQuality | null;
+  notes?: string | null;
+  /** Obligatorio: sin él, el audit registra un cambio sin decir por qué. */
+  reason: string;
+}
+
+/**
+ * Corregir lo que dice una cohorte, sin afirmar que el bloque cambió.
+ *
+ * **No es `renovatePlantingCohort`.** Renovar declara que esos árboles salieron
+ * del suelo y otros entraron; usarlo para arreglar un conteo mal apuntado
+ * inventaría un arranque y una siembra que no ocurrieron. Y no es un supersede:
+ * `PlantingCohort` no tiene `correctsId` mientras `Measurement` sí, y esa
+ * asimetría del esquema es deliberada — el valor de una medición **fue
+ * observado** y sigue siéndolo, mientras que el conteo de una cohorte es una
+ * cifra que se escribió y puede haberse escrito mal. Es la regla de ADR-102: un
+ * nombre se edita, un objetivo se supersede.
+ *
+ * El `reason` es obligatorio porque estas dos cosas se ven idénticas en la
+ * columna y son hechos distintos: «conté mal» y «se murieron cuarenta matas».
+ * El before/after va a `AuditEvent`, que es append-only y guarda las dos.
+ *
+ * Forma de `PATCH`: una clave ausente se deja intacta, un `null` explícito
+ * borra. Un conteo que se vacía vuelve a «sin registrar», que no es cero.
+ */
+export async function updatePlantingCohort(userAccountId: string, input: UpdatePlantingCohortInput) {
+  const existing = await prisma.plantingCohort.findUnique({ where: { id: input.cohortId } });
+  if (!existing) throw new PlantingCohortValidationError("cohort_not_found");
+  await requireLocationAttributeAccess(userAccountId, existing.locationId);
+
+  if (!input.reason.trim()) throw new PlantingCohortValidationError("reason_required");
+  if (input.plantCount != null && input.plantCount < 0) {
+    throw new PlantingCohortValidationError("negative_plant_count");
+  }
+
+  const nextPlantedAt = input.plantedAt !== undefined ? input.plantedAt : existing.plantedAt;
+  const nextPrecision =
+    input.plantedPrecision !== undefined ? input.plantedPrecision : existing.plantedPrecision;
+  // La misma regla que en la creación: una fecha sin precisión afirma más de lo
+  // que sabe.
+  if (nextPlantedAt && !nextPrecision) throw new PlantingCohortValidationError("planted_precision_required");
+
+  const resolvedCultivarValueId =
+    input.cultivarValueId !== undefined
+      ? input.cultivarValueId
+        ? await resolveCultivarValueId(input.cultivarValueId)
+        : null
+      : undefined;
+  await requireDataQualityForUnknownCultivar(
+    resolvedCultivarValueId !== undefined ? resolvedCultivarValueId : existing.cultivarValueId,
+    input.dataQuality !== undefined ? input.dataQuality : existing.dataQuality,
+  );
+
+  const after = await prisma.plantingCohort.update({
+    where: { id: input.cohortId },
+    data: {
+      ...(resolvedCultivarValueId !== undefined ? { cultivarValueId: resolvedCultivarValueId } : {}),
+      ...(input.plantedAt !== undefined ? { plantedAt: input.plantedAt } : {}),
+      ...(input.plantedPrecision !== undefined ? { plantedPrecision: input.plantedPrecision } : {}),
+      ...(input.plantCount !== undefined ? { plantCount: input.plantCount } : {}),
+      ...(input.dataQuality !== undefined ? { dataQuality: input.dataQuality } : {}),
+      ...(input.notes !== undefined ? { notes: input.notes } : {}),
+    },
+  });
+
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "planting_cohort.update",
+    entityType: "planting_cohort",
+    entityId: after.id,
+    before: existing,
+    after,
+    reason: input.reason,
+    sourceInterface: "traceability.service",
+  });
+
+  return after;
 }
