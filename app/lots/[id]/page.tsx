@@ -20,6 +20,8 @@ import { LabourEntryForm } from "../../components/traceability/LabourEntryForm";
 import { MaterialConsumptionForm } from "../../components/traceability/MaterialConsumptionForm";
 import { SelectionForm } from "../../components/traceability/SelectionForm";
 import { getSelectionCatalogs, getSelectionOutturn } from "../../../lib/traceability/selection";
+import { getHarvestSourceContext } from "../../../lib/traceability/plantingCohorts";
+import { HarvestSourcesForm } from "../../components/traceability/HarvestSourcesForm";
 import type { LabourEntry } from "../../../generated/prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +46,11 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   }
 
   const quantity = await computeCurrentQuantity(user.userAccountId, id);
+  // Sólo si este batch nació de una cosecha. Un lote recibido de un tercero no
+  // tiene bloques propios que atribuir.
+  const harvestSources = detail.harvestEvent
+    ? await getHarvestSourceContext(user.userAccountId, detail.harvestEvent.id)
+    : null;
   const { people: observers, selfPersonId } = await getObserverCandidates(user.userAccountId);
   // T12.6: organizations for the labour form's "provided in-kind by" toggle
   // — same convenience-not-security-boundary reasoning as getManageableContext's
@@ -264,6 +271,48 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
             organizations={organizations}
           />
           <PhotoUploadForm lotId={lot.id} parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }} observers={observers} selfPersonId={selfPersonId} />
+
+          {harvestSources ? (
+            <>
+              <h3>{t("harvestSourcesHeading")}</h3>
+              {harvestSources.existing.length > 0 ? (
+                <ul className="nn-detail-meta">
+                  {harvestSources.existing.map((source) => (
+                    <li key={source.id}>
+                      {source.location.name}
+                      {source.plantingCohort ? ` · ${source.plantingCohort.cultivarValue?.value ?? ""}` : ""}
+                      {" — "}
+                      {/* Sin peso NO es cero: el bloque aportó y nadie lo pesó
+                          aparte, que es el caso normal en un beneficio. */}
+                      {source.cherryWeightKg != null
+                        ? t("sourceWeightValue", { kg: Number(source.cherryWeightKg) })
+                        : t("sourceWeightUnweighed")}
+                      {source.notes ? ` · ${source.notes}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="nn-muted">{t("harvestSourcesNone")}</p>
+              )}
+              <HarvestSourcesForm
+                lotId={lot.id}
+                harvestEventId={harvestSources.harvestEventId}
+                declaredTotalKg={harvestSources.declaredTotalKg}
+                alreadyRecordedKg={harvestSources.alreadyRecordedKg}
+                plots={harvestSources.plotLocations.map((plot) => ({
+                  id: plot.id,
+                  name: plot.name,
+                  cohorts: plot.plantingCohorts.map((cohort) => ({
+                    id: cohort.id,
+                    label: t("sourceCohortOption", {
+                      cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
+                      plants: cohort.plantCount ?? 0,
+                    }),
+                  })),
+                }))}
+              />
+            </>
+          ) : null}
         </section>
       ) : null}
 

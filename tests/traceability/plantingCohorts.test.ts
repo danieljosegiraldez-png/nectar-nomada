@@ -11,6 +11,7 @@ import {
   createPlantingCohort,
   listPlantingCohorts,
   recordHarvestSources,
+  getHarvestSourceContext,
   renovatePlantingCohort,
   PlantingCohortValidationError,
 } from "../../lib/traceability/plantingCohorts";
@@ -349,6 +350,152 @@ describe("RBAC", () => {
         sources: [{ locationId: otherPlotId, cherryWeightKg: 10 }],
       }),
     ).rejects.toThrow(LocationAccessError);
+  });
+});
+
+describe("una cohorte nombrada tiene que ser del lote que la acompaña", () => {
+  it("rechaza una cohorte que vive en otro lote", async () => {
+    // El caso que importa: el rendimiento por bloque sale de estas filas, así
+    // que atribuir la cereza de un bloque a los árboles de otro no es un error
+    // de captura, es un dato falso con aspecto de medición.
+    const cohortEnB = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotBId,
+      cultivarValueId: caturraValueId,
+      plantCount: 100,
+      provenanceClass: "direct_observation",
+    });
+    const harvestEvent = await recordHarvestEvent(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-cohorte-cruzada`,
+      locationId: plotAId,
+      organizationId,
+      projectId,
+      harvestedAt: new Date(),
+      cherryWeightKg: 50,
+      provenanceClass: "measured_fact",
+    });
+
+    await expect(
+      recordHarvestSources(authorizedUserAccountId, {
+        harvestEventId: harvestEvent.harvestEvent.id,
+        sources: [{ locationId: plotAId, plantingCohortId: cohortEnB.id, cherryWeightKg: 50 }],
+      }),
+    ).rejects.toThrow(PlantingCohortValidationError);
+
+    // Y no deja nada a medias: la transacción no llegó a abrirse.
+    const escritas = await prisma.harvestEventSource.count({
+      where: { harvestEventId: harvestEvent.harvestEvent.id },
+    });
+    expect(escritas).toBe(0);
+  });
+
+  it("acepta la misma cohorte cuando sí es del lote nombrado", async () => {
+    const cohortEnA = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotAId,
+      cultivarValueId: caturraValueId,
+      plantCount: 120,
+      provenanceClass: "direct_observation",
+    });
+    const harvestEvent = await recordHarvestEvent(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-cohorte-correcta`,
+      locationId: plotAId,
+      organizationId,
+      projectId,
+      harvestedAt: new Date(),
+      cherryWeightKg: 40,
+      provenanceClass: "measured_fact",
+    });
+
+    const reconciliacion = await recordHarvestSources(authorizedUserAccountId, {
+      harvestEventId: harvestEvent.harvestEvent.id,
+      sources: [{ locationId: plotAId, plantingCohortId: cohortEnA.id, cherryWeightKg: 40 }],
+    });
+    expect(reconciliacion.differenceKg).toBe(0);
+  });
+
+  it("rechaza una cohorte inexistente con un error que dice qué pasó", async () => {
+    const harvestEvent = await recordHarvestEvent(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-cohorte-fantasma`,
+      locationId: plotAId,
+      organizationId,
+      projectId,
+      harvestedAt: new Date(),
+      provenanceClass: "measured_fact",
+    });
+    await expect(
+      recordHarvestSources(authorizedUserAccountId, {
+        harvestEventId: harvestEvent.harvestEvent.id,
+        sources: [
+          { locationId: plotAId, plantingCohortId: "00000000-0000-0000-0000-000000000000" },
+        ],
+      }),
+    ).rejects.toThrow(PlantingCohortValidationError);
+  });
+
+  it("rechaza un aporte de peso negativo", async () => {
+    const harvestEvent = await recordHarvestEvent(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-peso-negativo`,
+      locationId: plotAId,
+      organizationId,
+      projectId,
+      harvestedAt: new Date(),
+      cherryWeightKg: 10,
+      provenanceClass: "measured_fact",
+    });
+    await expect(
+      recordHarvestSources(authorizedUserAccountId, {
+        harvestEventId: harvestEvent.harvestEvent.id,
+        sources: [{ locationId: plotAId, cherryWeightKg: -5 }],
+      }),
+    ).rejects.toThrow(PlantingCohortValidationError);
+  });
+});
+
+describe("el contexto de la pantalla ofrece sólo lo que se puede usar", () => {
+  it("no lista bloques fuera del alcance del operador", async () => {
+    const harvestEvent = await recordHarvestEvent(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-contexto`,
+      locationId: plotAId,
+      organizationId,
+      projectId,
+      harvestedAt: new Date(),
+      cherryWeightKg: 80,
+      provenanceClass: "measured_fact",
+    });
+
+    const contexto = await getHarvestSourceContext(
+      authorizedUserAccountId,
+      harvestEvent.harvestEvent.id,
+    );
+    const ofrecidos = contexto.plotLocations.map((p) => p.id);
+
+    // otherPlotId queda fuera del alcance de este operador. Que la escritura
+    // lo rechace no basta: el desplegable no debe nombrarlo siquiera.
+    expect(ofrecidos).not.toContain(otherPlotId);
+    expect(ofrecidos).toContain(plotAId);
+  });
+
+  it("informa el peso declarado y deja los aportes sin pesar como desconocido", async () => {
+    const harvestEvent = await recordHarvestEvent(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-sin-pesar`,
+      locationId: plotAId,
+      organizationId,
+      projectId,
+      harvestedAt: new Date(),
+      cherryWeightKg: 60,
+      provenanceClass: "measured_fact",
+    });
+    await recordHarvestSources(authorizedUserAccountId, {
+      harvestEventId: harvestEvent.harvestEvent.id,
+      sources: [{ locationId: plotAId }],
+    });
+
+    const contexto = await getHarvestSourceContext(
+      authorizedUserAccountId,
+      harvestEvent.harvestEvent.id,
+    );
+    expect(contexto.declaredTotalKg).toBe(60);
+    // Ningún aporte pesado: desconocido, no cero (ADR-080).
+    expect(contexto.alreadyRecordedKg).toBeNull();
   });
 });
 
