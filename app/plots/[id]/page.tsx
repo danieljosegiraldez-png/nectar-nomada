@@ -36,6 +36,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
   }
 
   const { location, cohorts, cultivarOptions, density, organizationName } = detail;
+  const rendimiento = detail.yield;
   const activas = cohorts.filter((c) => c.status === "active");
 
   return (
@@ -171,6 +172,55 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             purpose: this is computed on read, never written to
             `PlantingCohort.densityPerHectare`. */}
         <p className="nn-detail-meta">{t("densityComputedNote")}</p>
+      </section>
+
+      <section className="nn-section">
+        <h2>{t("yieldHeading")}</h2>
+        {rendimiento.status === "sin_cosechas" ? (
+          // No es «rendimiento cero»: es que a este bloque todavía no se le ha
+          // atribuido ninguna cosecha. Decirlo así apunta a la acción que falta.
+          <p className="nn-muted">{t("yieldNoHarvests")}</p>
+        ) : (
+          <>
+            <table className="nn-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", padding: "0.4rem 0.75rem 0.4rem 0" }}>{t("yieldYearLabel")}</th>
+                  <th style={{ textAlign: "right", padding: "0.4rem 0.75rem" }}>{t("yieldWeighedLabel")}</th>
+                  <th style={{ textAlign: "right", padding: "0.4rem 0 0.4rem 0.75rem" }}>{t("yieldPerHectareLabel")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rendimiento.years.map((y) => (
+                  <tr key={y.year}>
+                    <td style={{ padding: "0.4rem 0.75rem 0.4rem 0" }}>{y.year}</td>
+                    <td style={{ fontVariantNumeric: "tabular-nums", textAlign: "right", padding: "0.4rem 0.75rem" }}>
+                      {t("sourceWeightValue", { kg: y.weighedKg })}
+                      {y.unweighedContributions > 0 ? (
+                        // El total es un MÍNIMO. Sin esto, un número más bajo
+                        // de lo real se leería como medido.
+                        <>
+                          <br />
+                          <span className="nn-muted">
+                            {t("yieldUnweighedNote", { count: y.unweighedContributions })}
+                          </span>
+                        </>
+                      ) : null}
+                    </td>
+                    <td style={{ fontVariantNumeric: "tabular-nums", textAlign: "right", padding: "0.4rem 0 0.4rem 0.75rem" }}>
+                      {y.kgPerHectare != null ? (
+                        <strong>{t("yieldPerHectareValue", { kg: y.kgPerHectare })}</strong>
+                      ) : (
+                        <span className="nn-muted">{t("yieldMissingArea")}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="nn-detail-meta">{t("yieldComputedNote")}</p>
+          </>
+        )}
       </section>
 
       <section className="nn-section">

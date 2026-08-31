@@ -632,7 +632,7 @@
     "dataQuality_working_hypothesis": "Hipótesis de trabajo",
     "dataQuality_not_tested": "Sin comprobar",
     "dataQuality_missing_source_record": "Falta el registro de origen",
-    "plotAttributesIntro": "Todo es opcional. Lo que dejes vacío queda «Sin registrar», que no es lo mismo que cero. El área en hectáreas es la que permite calcular la densidad.",
+    "plotAttributesIntro": "Todo es opcional. Lo que dejes vacío queda «Sin registrar», que no es lo mismo que cero. El área en hectáreas es la que permite calcular la densidad y el rendimiento por hectárea.",
     "savePlotAttributesButton": "Guardar condiciones",
     "altitudeMinLabel": "Altitud mínima (m)",
     "altitudeMaxLabel": "Altitud máxima (m)",
@@ -673,7 +673,16 @@
     "provenanceClassChoose": "— elegir —",
     "provenanceClass_original_record": "De un registro de siembra escrito",
     "dataQualityLabel": "Calidad del dato",
-    "dataQualityNone": "Sin marca (no hay motivo para dudarlo)"
+    "dataQualityNone": "Sin marca (no hay motivo para dudarlo)",
+    "yieldHeading": "Rendimiento",
+    "yieldNoHarvests": "A este bloque no se le ha atribuido ninguna cosecha todavía. Se atribuyen desde la cosecha del batch, en «¿De qué bloques salió?».",
+    "yieldYearLabel": "Año de cosecha",
+    "yieldWeighedLabel": "Cereza pesada",
+    "yieldPerHectareLabel": "Por hectárea",
+    "yieldPerHectareValue": "{kg} kg/ha",
+    "yieldMissingArea": "Falta el área",
+    "yieldUnweighedNote": "y {count} aporte(s) sin pesar: el total es un mínimo",
+    "yieldComputedNote": "Por año calendario de cosecha. Se calcula al mostrarlo, a partir de los aportes por bloque y del área; no se guarda, para que no envejezca cuando cualquiera de los dos se corrija."
   },
   "Apiary": {
     "badge": "Apiario",
