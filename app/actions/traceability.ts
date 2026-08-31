@@ -14,6 +14,7 @@ import { startFermentationRun, recordFermentationIntervention, endFermentationRu
 import { createRecipeWithVersion, createRecipeVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
 import { moveLotToStorage } from "../../lib/traceability/storage";
+import { recordHarvestSources, PlantingCohortValidationError } from "../../lib/traceability/plantingCohorts";
 import {
   updateLocationAttributes,
   LocationAccessError,
@@ -46,6 +47,7 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof SelectionValidationError) return t("error_selection", { detail: error.message });
   if (error instanceof LocationAccessError) return t("error_access", { detail: error.message });
   if (error instanceof LocationValidationError) return t("error_location", { detail: error.message });
+  if (error instanceof PlantingCohortValidationError) return t("error_harvest_sources", { detail: error.message });
   throw error;
 }
 
@@ -737,5 +739,60 @@ export async function updatePlotAttributesAction(
 
   revalidatePath(`/plots/${locationId}`);
   revalidatePath("/plots");
+  return {};
+}
+
+// --- De qué bloques salió una cosecha (P1 §5) ----------------------------
+
+/**
+ * Añade aportes; **no reemplaza** los que ya hay. El servicio crea filas, así
+ * que enviar dos veces suma dos veces, y la pantalla enseña siempre el total
+ * acumulado para que eso se vea en lugar de sorprender.
+ *
+ * Una fila sin lote se salta en silencio: el formulario arranca con tres filas
+ * vacías y llenar sólo una es lo normal. Lo que **no** se salta es una fila con
+ * lote y sin peso — ese es el caso honesto de «este bloque aportó, y nadie lo
+ * pesó por separado», que la reconciliación cuenta como desconocido y no como
+ * cero (ADR-080).
+ */
+export async function recordHarvestSourcesFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  const harvestEventId = String(formData.get("harvestEventId") ?? "");
+
+  const sources: Array<{
+    locationId: string;
+    plantingCohortId: string | null;
+    cherryWeightKg: number | null;
+    notes: string | null;
+  }> = [];
+  for (let i = 0; i < 20; i++) {
+    const locationId = emptyToNull(formData.get(`sourceLocation.${i}`));
+    if (!locationId) continue;
+    sources.push({
+      locationId,
+      plantingCohortId: emptyToNull(formData.get(`sourceCohort.${i}`)),
+      cherryWeightKg: emptyToNullNumber(formData.get(`sourceWeight.${i}`)),
+      notes: emptyToNull(formData.get(`sourceNotes.${i}`)),
+    });
+  }
+
+  if (sources.length === 0) {
+    return { error: t("error_harvest_sources", { detail: "sources_required" }) };
+  }
+
+  try {
+    await recordHarvestSources(user.userAccountId, { harvestEventId, sources });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}`);
   return {};
 }

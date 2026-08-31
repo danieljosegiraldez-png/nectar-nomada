@@ -236,6 +236,41 @@ export async function recordHarvestSources(
     await requireLocationAttributeAccess(userAccountId, source);
   }
 
+  // Una cohorte nombrada junto a un lote que no es el suyo produciría una fila
+  // que afirma que ese bloque aportó cereza cuando sus árboles están en otro
+  // sitio — y de ahí sale el rendimiento por bloque. Impedirlo sólo en el
+  // formulario no sirve: la frontera es el servicio (SECURITY.md §2), y esta
+  // pareja llega como dos campos independientes que nada obligaba a casar.
+  const cohortIds = [...new Set(input.sources.map((s) => s.plantingCohortId).filter((id): id is string => !!id))];
+  if (cohortIds.length > 0) {
+    const cohorts = await prisma.plantingCohort.findMany({
+      where: { id: { in: cohortIds } },
+      select: { id: true, locationId: true },
+    });
+    const locationByCohort = new Map(cohorts.map((c) => [c.id, c.locationId]));
+    for (const source of input.sources) {
+      if (!source.plantingCohortId) continue;
+      const cohortLocation = locationByCohort.get(source.plantingCohortId);
+      // Una cohorte inexistente se rechaza en vez de guardarse como referencia
+      // rota: la FK lo atraparía igual, pero con un error de base de datos en
+      // vez de uno que diga qué pasó.
+      if (cohortLocation === undefined) {
+        throw new PlantingCohortValidationError("planting_cohort_not_found");
+      }
+      if (cohortLocation !== source.locationId) {
+        throw new PlantingCohortValidationError("cohort_not_in_location");
+      }
+    }
+  }
+
+  // Un aporte negativo no es un aporte: descuadraría la reconciliación hacia
+  // arriba y haría que el total de fuentes pareciera menor que la suma real.
+  for (const source of input.sources) {
+    if (source.cherryWeightKg != null && source.cherryWeightKg < 0) {
+      throw new PlantingCohortValidationError("negative_cherry_weight");
+    }
+  }
+
   const created = await prisma.$transaction(async (tx) =>
     Promise.all(
       input.sources.map((source) =>
@@ -387,5 +422,80 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     // through the hierarchy. Reading only the plot's own column would show a
     // farm block with no farm.
     organizationName: location.organization?.name ?? location.parentLocation?.organization?.name ?? null,
+  };
+}
+
+/**
+ * Todo lo que necesita la pantalla de «¿de qué bloques salió esta cosecha?»,
+ * detrás de la misma compuerta que la escritura.
+ *
+ * Devuelve los aportes ya guardados —para que se vea que el formulario **suma**
+ * y no reemplaza— y los lotes candidatos con sus cohortes vivas. Las cohortes
+ * van agrupadas por lote a propósito: la pareja lote/cohorte tiene que casar, y
+ * darlas en una lista plana invitaría a cruzarlas.
+ */
+export async function getHarvestSourceContext(userAccountId: string, harvestEventId: string) {
+  const harvestEvent = await prisma.harvestEvent.findUnique({
+    where: { id: harvestEventId },
+    select: { id: true, locationId: true, cherryWeightKg: true },
+  });
+  if (!harvestEvent) throw new LocationAccessError("harvest_event_not_found");
+  await requireLocationAttributeAccess(userAccountId, harvestEvent.locationId);
+
+  const existing = await prisma.harvestEventSource.findMany({
+    where: { harvestEventId },
+    select: {
+      id: true,
+      cherryWeightKg: true,
+      notes: true,
+      location: { select: { name: true } },
+      plantingCohort: { select: { plantCount: true, cultivarValue: { select: { value: true } } } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const pesados = existing.filter((s) => s.cherryWeightKg != null);
+  // Desconocido, no cero: si ningún aporte se pesó no hay nada que comparar, y
+  // decir 0 sería una afirmación (ADR-080).
+  const alreadyRecordedKg =
+    pesados.length > 0 ? Number(pesados.reduce((sum, s) => sum + Number(s.cherryWeightKg), 0).toFixed(3)) : null;
+
+  const todosLosPlots = await prisma.location.findMany({
+    where: { locationType: "plot" },
+    select: {
+      id: true,
+      name: true,
+      plantingCohorts: {
+        where: { status: "active" },
+        select: { id: true, plantCount: true, cultivarValue: { select: { value: true } } },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  // Se ofrecen sólo los bloques que este usuario podría nombrar de verdad. La
+  // escritura ya exige `manage_attributes` sobre cada uno, así que sin este
+  // filtro el desplegable listaría fincas ajenas para luego rechazarlas: el
+  // nombre de un bloque de otro productor ya es información, y una lista que
+  // enseña lo que no se puede usar enseña de más y confunde.
+  const permitidos = await Promise.all(
+    todosLosPlots.map(async (plot) => {
+      try {
+        await requireLocationAttributeAccess(userAccountId, plot.id);
+        return plot;
+      } catch (error) {
+        if (error instanceof LocationAccessError) return null;
+        throw error;
+      }
+    }),
+  );
+  const plotLocations = permitidos.filter((plot): plot is (typeof todosLosPlots)[number] => plot !== null);
+
+  return {
+    harvestEventId: harvestEvent.id,
+    declaredTotalKg: harvestEvent.cherryWeightKg != null ? Number(harvestEvent.cherryWeightKg) : null,
+    alreadyRecordedKg,
+    existing,
+    plotLocations,
   };
 }
