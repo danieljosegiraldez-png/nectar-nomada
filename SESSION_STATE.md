@@ -37,6 +37,41 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-08-31 · Finca Rosina existe en el registro, y se puede ver
+
+Hasta hoy la finca tenía **cero cohortes**. La base productiva real —los ~2.500
+Catuaí de tres a cuatro años de los Lotes 1, 2 y 3— no estaba en ningún lado, y
+lo único registrado eran 600 plantones *recibidos*, que no es lo mismo que
+sembrados (F1 separa los dos hechos a propósito).
+
+Ahora hay 4 cohortes y **2.699 plantas**: 833 Catuaí en cada uno de los Lotes
+1–3 y 200 Caturra en el Lote 4. Tres decisiones las tomó el dueño al
+preguntarle, ninguna se infirió: `plantedAt` **nulo** en los Catuaí porque «3–4
+años» ubica la siembra en 2022 *o* 2023 y `HarvestWindowPrecision` no baja de
+`year`; **833 por lote** y no 834/833/833, porque darle la planta sobrante a un
+lote sería una decisión nuestra; `direct_observation` + `provisional`, porque el
+conteo por lote es derivado de un total.
+
+Los 200 Caturra estaban en el Lote 3 y se movieron al **Lote 4**: el registro
+nunca fue cierto, se transcribió mal el lote. Es un *edit* con `AuditEvent`, no
+un supersede — `PlantingCohort` no tiene `correctsId` y `Measurement` sí, y esa
+asimetría del esquema es la que decide.
+
+**Y por primera vez se ve.** `/plots/[id]` muestra lo sembrado, y `/plots` ya
+enlaza. Un campo ausente dice «Sin registrar» en vez de desaparecer, para que la
+página se pueda leer como lista de lo que falta. La densidad **se calcula al
+mostrarla y no se guarda** —el dueño avisó que los conteos van a cambiar y un
+cociente guardado de entradas móviles envejece en silencio— y cuando no se puede
+dividir dice **cuál** de las tres razones.
+
+Lo que revela: `npm test` daba **2 fallos** en `main` con CI en verde. El
+renombrado del 29 dejó dos tests buscando «Nubes» y «Cerro Azul». Los datos
+estaban bien; miraban al sitio equivocado. **CI no puede ver esto** — corre tres
+archivos herméticos y la suite entera necesita base local. Tras cualquier script
+`data:*` contra producción, correr `npm test` en local antes de cerrar.
+
+PR #67, #68, #69, #71, #72. Suite 658/658 sobre `main` fusionado.
+
 ### 2026-08-29 · P-D estaba cerrada desde A7 y nadie lo había mirado
 
 El comentario sobre la prueba de P-D afirmaba que la familia Huerbsch **no**
@@ -189,6 +224,19 @@ fermentación— siguen sin contrastar contra un tanque de flotación.
   no impide, y esa diferencia es de Daniel. Tampoco cubre la suite completa —
   necesita `npm run test:db -- up` y un runner no tiene ese backup. Ver
   `PENDING_IMPLEMENTATIONS/006`.
+- **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño.
+  Los seis lotes tienen `areaHectares` nulo, así que no hay densidad por
+  hectárea ni rendimiento por hectárea, que es lo único comparable entre lotes y
+  entre años. Cada página de lote lo dice ahora en pantalla. **La cosecha llega
+  en febrero**; después, el dato ya no sirve para esa cosecha.
+- **Lotes 5 y 6** — bloqueado en el dueño. Dijo que tienen 200 plantones cada
+  uno, y eso **contradice** la nota del evento del Lote 4, que afirma que los
+  otros 400 de Cafelino siguen sin sembrar. 200+200 son exactamente esos 400. No
+  se registró nada hasta saber si son ese material o uno anterior y distinto; de
+  la respuesta dependen la variedad, la fecha, y si hay que corregir esa nota.
+- **Si los 200 Caturra del Lote 4 llevan marca de calidad** — hoy no la llevan,
+  que aquí significa «no hay motivo para dudar». El dueño avisó que puede
+  cambiar los conteos de cada lote, así que puede que corresponda `provisional`.
 - **Un nombre propio para este OS** — al mover el dominio, esta aplicación queda
   solo en `nectar-nomada-package.vercel.app`. Si quiere algo como
   `app.nectarnomada.com`, es decisión suya. No es urgente: nada depende de ello.
