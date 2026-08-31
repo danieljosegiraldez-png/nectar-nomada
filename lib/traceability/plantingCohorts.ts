@@ -413,6 +413,16 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     orderBy: [{ status: "asc" }, { plantedAt: "desc" }],
   });
 
+  // Lo que este bloque aportó a cosechas, para el rendimiento. Se lee por
+  // `HarvestEventSource` y NO por `HarvestEvent.locationId`: el segundo es el
+  // lote principal de la cosecha, y una cosecha de varios bloques sólo nombra
+  // uno ahí. Contar por el principal atribuiría todo el peso a un bloque y cero
+  // a los demás.
+  const harvestContributions = await prisma.harvestEventSource.findMany({
+    where: { locationId },
+    select: { cherryWeightKg: true, harvestEvent: { select: { harvestedAt: true } } },
+  });
+
   // Las variedades que el formulario puede ofrecer. Del catálogo, no de una
   // lista escrita a mano: el vocabulario crece sembrando una fila, no editando
   // código, y los alias («Catuai» sin tilde) resuelven al valor canónico.
@@ -427,6 +437,13 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     cohorts,
     cultivarOptions,
     density: computePlotDensity(cohorts, location.areaHectares),
+    yield: computePlotYield(
+      harvestContributions.map((c) => ({
+        harvestedAt: c.harvestEvent.harvestedAt,
+        cherryWeightKg: c.cherryWeightKg,
+      })),
+      location.areaHectares,
+    ),
     // The farm's own name is usually on the parent site, not the plot: eleven
     // of Finca Rosina's locations carry a null `organizationId` and inherit it
     // through the hierarchy. Reading only the plot's own column would show a
@@ -593,4 +610,71 @@ export async function updatePlantingCohort(userAccountId: string, input: UpdateP
   });
 
   return after;
+}
+
+/**
+ * Rendimiento de un bloque: kilos de cereza por hectárea, **por año
+ * calendario de cosecha** (decisión del dueño, 2026-08-31).
+ *
+ * Es la cifra que hace comparables dos lotes y dos años, y la razón por la que
+ * las hectáreas tienen fecha límite: sin área no hay rendimiento, sólo un peso
+ * suelto.
+ *
+ * **Calculado al leer, nunca almacenado**, por lo mismo que la densidad: los
+ * dos insumos se siguen corrigiendo —el área se acaba de poder capturar y los
+ * aportes por bloque se registran después de la cosecha— y un cociente guardado
+ * de entradas móviles envejece en silencio.
+ *
+ * **El total es un mínimo, no un total.** Un aporte sin pesar es normal: nadie
+ * pesa cada bloque antes de volcarlo en la misma tolva. Contarlo como cero
+ * subestimaría el rendimiento y lo haría parecer medido, así que el resultado
+ * dice cuántos aportes quedaron sin pesar y quien lo lea decide si le sirve
+ * (ADR-080: sin registrar y cero son hechos distintos).
+ */
+export interface PlotYearYield {
+  year: number;
+  /** Suma de los aportes **pesados** de ese año. */
+  weighedKg: number;
+  /** Aportes de ese año sin peso: el `weighedKg` los excluye. */
+  unweighedContributions: number;
+  /** Null cuando falta el área o no es positiva; el peso sigue siendo útil. */
+  kgPerHectare: number | null;
+}
+
+export type PlotYield =
+  | { status: "ok"; hectares: number | null; years: PlotYearYield[] }
+  | { status: "sin_cosechas" };
+
+export function computePlotYield(
+  contributions: ReadonlyArray<{ harvestedAt: Date; cherryWeightKg: Prisma.Decimal | number | null }>,
+  areaHectares: Prisma.Decimal | number | null,
+): PlotYield {
+  if (contributions.length === 0) return { status: "sin_cosechas" };
+
+  const hectaresRaw = areaHectares == null ? null : Number(areaHectares);
+  const hectares =
+    hectaresRaw != null && Number.isFinite(hectaresRaw) && hectaresRaw > 0 ? hectaresRaw : null;
+
+  const porAnio = new Map<number, { weighedKg: number; unweighed: number }>();
+  for (const c of contributions) {
+    // Año calendario en UTC, igual que el resto de las fechas del sistema.
+    const year = c.harvestedAt.getUTCFullYear();
+    const acc = porAnio.get(year) ?? { weighedKg: 0, unweighed: 0 };
+    if (c.cherryWeightKg == null) acc.unweighed += 1;
+    else acc.weighedKg += Number(c.cherryWeightKg);
+    porAnio.set(year, acc);
+  }
+
+  const years = [...porAnio.entries()]
+    .map(([year, acc]) => ({
+      year,
+      weighedKg: Number(acc.weighedKg.toFixed(3)),
+      unweighedContributions: acc.unweighed,
+      // Sin área no hay rendimiento, pero el peso del año sigue siendo un dato
+      // que vale la pena enseñar — por eso esto es null y no se descarta el año.
+      kgPerHectare: hectares != null ? Number((acc.weighedKg / hectares).toFixed(1)) : null,
+    }))
+    .sort((a, b) => b.year - a.year);
+
+  return { status: "ok", hectares, years };
 }

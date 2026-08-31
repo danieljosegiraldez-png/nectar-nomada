@@ -632,7 +632,7 @@
     "dataQuality_working_hypothesis": "Working hypothesis",
     "dataQuality_not_tested": "Not tested",
     "dataQuality_missing_source_record": "Missing source record",
-    "plotAttributesIntro": "Everything is optional. What you leave blank stays “Not recorded”, which is not the same as zero. The area in hectares is what makes density computable.",
+    "plotAttributesIntro": "Everything is optional. What you leave blank stays “Not recorded”, which is not the same as zero. The area in hectares is what makes density and yield per hectare computable.",
     "savePlotAttributesButton": "Save conditions",
     "altitudeMinLabel": "Minimum altitude (m)",
     "altitudeMaxLabel": "Maximum altitude (m)",
@@ -673,7 +673,16 @@
     "provenanceClassChoose": "— choose —",
     "provenanceClass_original_record": "From a written planting record",
     "dataQualityLabel": "Data quality",
-    "dataQualityNone": "No marker (no reason to doubt it)"
+    "dataQualityNone": "No marker (no reason to doubt it)",
+    "yieldHeading": "Yield",
+    "yieldNoHarvests": "No harvest has been attributed to this block yet. Attribution happens on the batch's harvest, under “Which blocks did this come from?”.",
+    "yieldYearLabel": "Harvest year",
+    "yieldWeighedLabel": "Cherry weighed",
+    "yieldPerHectareLabel": "Per hectare",
+    "yieldPerHectareValue": "{kg} kg/ha",
+    "yieldMissingArea": "Area missing",
+    "yieldUnweighedNote": "plus {count} unweighed contribution(s): the total is a floor",
+    "yieldComputedNote": "By harvest calendar year. Computed when shown, from the per-block contributions and the area; not stored, so it cannot go stale when either input is corrected."
   },
   "Apiary": {
     "badge": "Apiary",
