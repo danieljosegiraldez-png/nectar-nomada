@@ -15,6 +15,12 @@ import { createRecipeWithVersion, createRecipeVersion, updateRecipeMetadata } fr
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import {
+  startFieldSession,
+  endFieldSession,
+  recordFieldEvent,
+  FieldSessionValidationError,
+} from "../../lib/traceability/fieldSessions";
+import {
   recordHarvestSources,
   createPlantingCohort,
   updatePlantingCohort,
@@ -53,6 +59,7 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof LocationAccessError) return t("error_access", { detail: error.message });
   if (error instanceof LocationValidationError) return t("error_location", { detail: error.message });
   if (error instanceof PlantingCohortValidationError) return t("error_harvest_sources", { detail: error.message });
+  if (error instanceof FieldSessionValidationError) return t("error_field_session", { detail: error.message });
   throw error;
 }
 
@@ -880,5 +887,98 @@ export async function updatePlantingCohortFormAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  return {};
+}
+
+// --- Jornada de campo (P2 §3–§5) ----------------------------------------
+
+/**
+ * Las coordenadas van todas o ninguna. El servicio ya lo exige; aquí se
+ * respeta no mandando un objeto a medias: media coordenada no ubica nada y
+ * guardarla sugeriría que sí.
+ */
+function parseCoordinates(formData: FormData) {
+  const latitude = emptyToNullNumber(formData.get("latitude"));
+  const longitude = emptyToNullNumber(formData.get("longitude"));
+  const accuracyM = emptyToNullNumber(formData.get("accuracyM"));
+  if (latitude == null && longitude == null) return undefined;
+  return { latitude, longitude, accuracyM };
+}
+
+export async function startFieldSessionFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  let sessionId: string;
+  try {
+    const session = await startFieldSession(user.userAccountId, {
+      locationId,
+      operatorPersonId: String(formData.get("operatorPersonId") ?? ""),
+      startedAt: new Date(String(formData.get("startedAt") ?? "")),
+      start: parseCoordinates(formData),
+      notes: emptyToNull(formData.get("notes")),
+      // Una jornada la abre quien está en el sitio: es observación directa de
+      // que la visita ocurrió, no un registro transcrito de otra fuente.
+      provenanceClass: "direct_observation",
+    });
+    sessionId = session.id;
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  redirect(`/field-sessions/${sessionId}`);
+}
+
+export async function recordFieldEventFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const fieldSessionId = String(formData.get("fieldSessionId") ?? "");
+  try {
+    await recordFieldEvent(user.userAccountId, {
+      fieldSessionId,
+      eventKindValueId: String(formData.get("eventKindValueId") ?? ""),
+      occurredAt: new Date(String(formData.get("occurredAt") ?? "")),
+      position: parseCoordinates(formData),
+      operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
+      notes: emptyToNull(formData.get("notes")),
+      provenanceClass: "direct_observation",
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/field-sessions/${fieldSessionId}`);
+  return {};
+}
+
+export async function endFieldSessionFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const fieldSessionId = String(formData.get("fieldSessionId") ?? "");
+  try {
+    await endFieldSession(user.userAccountId, {
+      fieldSessionId,
+      endedAt: new Date(String(formData.get("endedAt") ?? "")),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/field-sessions/${fieldSessionId}`);
   return {};
 }

@@ -220,6 +220,10 @@
     {
       "archivo": "lib/traceability/storage.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
+      "archivo": "lib/traceability/fieldSessionCatalog.ts",
+      "razon": "Lectura del catálogo `event_kind` para el desplegable de la jornada de campo. No tiene sujeto sobre el que comprobar permisos —no hay jornada ni ubicación— y el vocabulario no es dato gobernado: es la misma lista que `recordFieldEvent` exige al validar `event_kind_wrong_catalog`. Meterla en `fieldSessions.ts` obligaría a inventarle una compuerta o a dejarla sin ella entre funciones que sí la tienen."
     }
   ],
   "reciben_transaccion": [
