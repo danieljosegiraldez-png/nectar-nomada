@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getPlotDetail } from "../../../lib/traceability/plantingCohorts";
 import { LocationAccessError } from "../../../lib/traceability/locations";
+import { PlotAttributesForm } from "../../components/traceability/PlotAttributesForm";
 
 export const dynamic = "force-dynamic";
 
@@ -145,48 +146,35 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
 
       <section className="nn-section">
         <h2>{t("groundConditionsHeading")}</h2>
-        <dl className="nn-detail-meta">
-          <Field label={t("areaLabel")} value={location.areaHectares != null ? t("areaValue", { hectares: Number(location.areaHectares) }) : null} missing={t("notRecorded")} />
-          <Field label={t("spacingLabel")} value={location.plantSpacingMeters != null ? t("spacingValue", { meters: Number(location.plantSpacingMeters) }) : null} missing={t("notRecorded")} />
-          <Field
-            label={t("altitudeRangeLabel")}
-            value={
-              location.altitudeMinM != null || location.altitudeMaxM != null
-                ? t("altitudeRangeValue", { min: location.altitudeMinM ?? "?", max: location.altitudeMaxM ?? "?" })
-                : null
-            }
-            missing={t("notRecorded")}
-          />
-          <Field
-            label={t("sunExposureLabel")}
-            value={location.sunExposure ? t(`sunExposure_${location.sunExposure}` as "sunExposure_full_sun") : null}
-            missing={t("notRecorded")}
-          />
-          <Field
-            label={t("shadePercentageLabel")}
-            value={location.shadePercentage ? t(`shadePercentage_${location.shadePercentage}` as "shadePercentage_pct_20") : null}
-            missing={t("notRecorded")}
-          />
-          <Field label={t("slopeLabel")} value={location.slopeDescription} missing={t("notRecorded")} />
-          <Field label={t("soilTypeLabel")} value={location.soilType} missing={t("notRecorded")} />
-        </dl>
+
+        {/* Editable en vez de solo lectura. La lista de antes decía «Sin
+            registrar» y no ofrecía forma de arreglarlo: el dato tenía que
+            pasar por una conversación y un script. El formulario dice lo
+            mismo —una casilla vacía con «Sin registrar» de marcador— y
+            además deja llenarlo. `areaHectares` es el que desbloquea la
+            densidad, que la sección de arriba ya está lista para mostrar. */}
+        <PlotAttributesForm
+          locationId={location.id}
+          attributes={{
+            // Decimal se pasa como cadena, no como número: `Number()` sobre
+            // Decimal(10,4) puede redondear, y este valor va de vuelta a una
+            // casilla que el usuario reenvía tal cual.
+            areaHectares: location.areaHectares?.toString() ?? null,
+            plantSpacingMeters: location.plantSpacingMeters?.toString() ?? null,
+            altitudeMinM: location.altitudeMinM,
+            altitudeMaxM: location.altitudeMaxM,
+            sunExposure: location.sunExposure,
+            shadePercentage: location.shadePercentage,
+            slopeDescription: location.slopeDescription,
+            soilType: location.soilType,
+          }}
+        />
+
       </section>
     </div>
   );
 }
 
-/**
- * A field that is absent says so, rather than disappearing. A page that simply
- * omits what it does not know cannot be read as a checklist of what is still
- * needed — which is most of this page's value while the farm is half recorded.
- */
-function Field({ label, value, missing }: { label: string; value: string | null; missing: string }) {
-  return (
-    <p>
-      {label}: {value ?? <span className="nn-muted">{missing}</span>}
-    </p>
-  );
-}
 
 /**
  * A date is shown only as precisely as it was recorded. "Sembrado en 2019" and

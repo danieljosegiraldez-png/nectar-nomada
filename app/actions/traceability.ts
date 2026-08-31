@@ -14,6 +14,11 @@ import { startFermentationRun, recordFermentationIntervention, endFermentationRu
 import { createRecipeWithVersion, createRecipeVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
 import { moveLotToStorage } from "../../lib/traceability/storage";
+import {
+  updateLocationAttributes,
+  LocationAccessError,
+  LocationValidationError,
+} from "../../lib/traceability/locations";
 import { createSampleFromLot } from "../../lib/traceability/samples";
 import { requestLotAssetUpload, finalizeLotAssetUpload, type LotAssetParent } from "../../lib/traceability/media";
 import {
@@ -39,6 +44,8 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof MeasurementValidationError) return t("error_measurement", { detail: error.message });
   if (error instanceof UnitValidationError) return t("error_unit", { detail: error.message });
   if (error instanceof SelectionValidationError) return t("error_selection", { detail: error.message });
+  if (error instanceof LocationAccessError) return t("error_access", { detail: error.message });
+  if (error instanceof LocationValidationError) return t("error_location", { detail: error.message });
   throw error;
 }
 
@@ -686,4 +693,49 @@ export async function createRecipeVersionAction(
   revalidatePath(`/recipes/${recipeId}`);
   revalidatePath("/recipes");
   redirect(`/recipes/${recipeId}?ok=versioned`);
+}
+
+// --- Atributos de un lote de terreno (F1 §1 / P1 §3) ---------------------
+
+/**
+ * El servicio tiene forma de `PATCH`: una clave ausente se deja intacta y un
+ * `null` explícito **borra** el valor. Este formulario muestra los ocho campos
+ * a la vez, así que aquí se manda siempre el juego completo — lo que ves es lo
+ * que se guarda, y vaciar una casilla la borra de verdad en vez de dejar un
+ * valor viejo que la pantalla ya no muestra.
+ *
+ * `emptyToNullNumber` es lo que impide el fallo que de verdad importa: una
+ * casilla de área vacía tiene que llegar como `null`, nunca como `0`. Un lote
+ * de 0 ha no es un lote sin medir — es una afirmación, y encima haría que la
+ * densidad se leyera como «área no positiva» en vez de «falta el área»
+ * (ADR-080).
+ */
+export async function updatePlotAttributesAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await updateLocationAttributes(user.userAccountId, {
+      locationId,
+      areaHectares: emptyToNullNumber(formData.get("areaHectares")),
+      plantSpacingMeters: emptyToNullNumber(formData.get("plantSpacingMeters")),
+      altitudeMinM: emptyToNullNumber(formData.get("altitudeMinM")),
+      altitudeMaxM: emptyToNullNumber(formData.get("altitudeMaxM")),
+      sunExposure: emptyToNull(formData.get("sunExposure")) as never,
+      shadePercentage: emptyToNull(formData.get("shadePercentage")) as never,
+      slopeDescription: emptyToNull(formData.get("slopeDescription")),
+      soilType: emptyToNull(formData.get("soilType")),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath("/plots");
+  return {};
 }
