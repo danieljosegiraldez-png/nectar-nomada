@@ -48,8 +48,19 @@ echo
 # PROPIO texto, así que reportó "cerrada": evidencia falsa a favor de la regla
 # que estaba probando, fabricada por el error exacto que la regla describe.
 # Ahora mira solo donde el ping viviría de verdad.
-probar "P-A" "Alerta de backup fuera de esta máquina (un servicio externo)" \
-  '! grep -rqiE "(curl|wget)[^|;]*(healthchecks?\\.io|hc-ping|cronitor|betteruptime|uptimerobot)" scripts/backup/'
+# La segunda versión buscaba el nombre del servicio dentro de scripts/backup/.
+# Dejó de servir en cuanto el código pasó a mandar el ping a una URL guardada en
+# una variable: el nombre del servicio ya no aparece en ninguna línea, así que
+# la prueba habría dicho "abierta" para siempre por la razón equivocada.
+#
+# Ahora se comprueban las DOS mitades, que es lo que hace falta para que exista
+# una alerta de verdad: que el código mande el ping, y que haya una URL
+# configurada fuera del repositorio. Con una sola de las dos no hay alarma.
+probar "P-A" "Alerta de backup fuera de esta máquina (código + URL configurada)" \
+  'codigo=0; url=0;
+   grep -q "ping_health" scripts/backup/run-scheduled.sh && codigo=1;
+   grep -qE "^[[:space:]]*(export[[:space:]]+)?NN_HEALTHCHECK_URL=.?https" "$HOME/.config/nectar-nomada/backup.env" 2>/dev/null && url=1;
+   [ "$codigo" = 1 ] && [ "$url" = 1 ] && exit 1 || exit 0'
 
 # P-B · El dominio de marca sirve ESTA aplicación. /login y /signup del OS
 # quedan expuestos en la URL pública. Comprobado contra el artefacto vivo.
