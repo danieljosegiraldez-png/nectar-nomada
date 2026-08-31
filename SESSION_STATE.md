@@ -37,6 +37,35 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-08-31 · La cadena de febrero, entera y sin scripts
+
+Cohorte → hectáreas → cosecha → bloque. Los tres eslabones que faltaban tienen
+pantalla, y **ninguno depende ya de que una sesión corra un script**.
+
+`updateLocationAttributes` y `recordHarvestSources` existían desde F1 y P1 §5,
+con RBAC y auditoría, y su único consumidor era su propio test. El dueño tenía
+que dictar las hectáreas para que alguien las escribiera por él.
+
+- **Formulario de condiciones** en la página del lote. Una casilla vacía llega
+  como `NULL`, nunca como `0` — un lote de 0 ha no es un lote sin medir, y
+  además haría que la densidad dijera «área no positiva» en vez de «falta el
+  área». Vaciar una casilla con valor la borra: el formulario muestra los ocho
+  campos, así que manda siempre el juego completo.
+- **«¿De qué bloques salió?»** en la sección de cosecha, con reconciliación en
+  vivo. La diferencia contra el peso declarado casi nunca es cero —nadie pesa
+  cada bloque antes de volcarlo en la misma tolva— y el sistema la informa, no
+  la rechaza. Sin ningún peso escrito **no dice «0 kg»**, dice «todavía sin
+  pesos de bloque».
+
+Dos huecos del servicio, encontrados al construir encima y arreglados antes:
+`recordHarvestSources` **no comprobaba que la cohorte fuera del lote nombrado**
+(llegan como dos campos sueltos, y una pareja cruzada afirma que un bloque
+aportó cereza teniendo sus árboles en otro sitio), y el contexto de la pantalla
+**ofrecía todos los lotes de la plataforma**, incluidas fincas ajenas, para
+rechazarlos al guardar. Los dos con test y flip-test.
+
+PR #74 y #75. Suite 664/664 sobre `main` fusionado.
+
 ### 2026-08-31 · Finca Rosina existe en el registro, y se puede ver
 
 Hasta hoy la finca tenía **cero cohortes**. La base productiva real —los ~2.500
@@ -224,11 +253,17 @@ fermentación— siguen sin contrastar contra un tanque de flotación.
   no impide, y esa diferencia es de Daniel. Tampoco cubre la suite completa —
   necesita `npm run test:db -- up` y un runner no tiene ese backup. Ver
   `PENDING_IMPLEMENTATIONS/006`.
-- **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño.
-  Los seis lotes tienen `areaHectares` nulo, así que no hay densidad por
-  hectárea ni rendimiento por hectárea, que es lo único comparable entre lotes y
-  entre años. Cada página de lote lo dice ahora en pantalla. **La cosecha llega
-  en febrero**; después, el dato ya no sirve para esa cosecha.
+- **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
+  y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así
+  que no hay densidad ni rendimiento por hectárea, que es lo único comparable
+  entre lotes y entre años. Desde el 2026-08-31 el dueño puede cargarlas él
+  mismo en la página de cada lote; cada página dice en pantalla que faltan. **La
+  cosecha llega en febrero**; después, el dato ya no sirve para esa cosecha.
+- **Que alguien que no sea una sesión registre una siembra** — `createPlantingCohort`,
+  `renovatePlantingCohort` y `recordPlantingEvent` siguen sin pantalla. Las
+  cuatro cohortes que existen las escribió un script. El dueño avisó que va a
+  **corregir los conteos por lote**, y hoy eso exige que una sesión lo haga por
+  él: es el mismo hueco que acaban de cerrar los otros dos formularios.
 - **Lotes 5 y 6** — bloqueado en el dueño. Dijo que tienen 200 plantones cada
   uno, y eso **contradice** la nota del evento del Lote 4, que afirma que los
   otros 400 de Cafelino siguen sin sembrar. 200+200 son exactamente esos 400. No
