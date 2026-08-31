@@ -17,7 +17,13 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
-import type { DataQuality, HarvestWindowPrecision, ProvenanceClass } from "../../generated/prisma/client";
+import type {
+  DataQuality,
+  HarvestWindowPrecision,
+  PlantingCohortStatus,
+  Prisma,
+  ProvenanceClass,
+} from "../../generated/prisma/client";
 
 export class PlantingCohortValidationError extends Error {}
 
@@ -272,5 +278,114 @@ export async function recordHarvestSources(
     sourceTotalKg,
     differenceKg:
       declaredTotalKg != null && sourceTotalKg != null ? Number((declaredTotalKg - sourceTotalKg).toFixed(3)) : null,
+  };
+}
+
+/**
+ * Plants per hectare for a block, **computed and never stored.**
+ *
+ * `PlantingCohort.densityPerHectare` exists as a column and stays null here on
+ * purpose. Density is a quotient of two numbers that are still moving — the
+ * owner has said the per-block counts will be revised, and no block has an
+ * area yet — and a stored quotient of moving inputs is a derived value that
+ * goes stale in silence every time either input is corrected. Storing it would
+ * be the same failure the platform already avoids by keeping raw measurements
+ * and calculated values apart (CLAUDE.md §49).
+ *
+ * Returns a reason rather than a number when it cannot divide, because the
+ * three ways this fails are different facts and a page should say which one it
+ * hit. `null` collapses them into "no data", and zero would be a claim
+ * (ADR-080: never recorded and recorded-as-zero must stay distinguishable).
+ */
+export type PlotDensity =
+  | { status: "ok"; plantsPerHectare: number; totalPlants: number; hectares: number }
+  | { status: "sin_area" }
+  | { status: "area_no_positiva"; hectares: number }
+  | { status: "sin_cohortes" }
+  | { status: "conteo_incompleto"; cohortesSinConteo: number; cohortesTotales: number };
+
+export function computePlotDensity(
+  cohorts: ReadonlyArray<{ plantCount: number | null; status: PlantingCohortStatus }>,
+  areaHectares: Prisma.Decimal | number | null,
+): PlotDensity {
+  // A removed block's trees are not standing in the field, so counting them
+  // would overstate what is planted. `renovatePlantingCohort` is what puts a
+  // cohort into a non-active status, and this is the read side of that.
+  const vivas = cohorts.filter((c) => c.status === "active");
+  if (vivas.length === 0) return { status: "sin_cohortes" };
+
+  const sinConteo = vivas.filter((c) => c.plantCount == null).length;
+  if (sinConteo > 0) {
+    return { status: "conteo_incompleto", cohortesSinConteo: sinConteo, cohortesTotales: vivas.length };
+  }
+
+  if (areaHectares == null) return { status: "sin_area" };
+  const hectares = Number(areaHectares);
+  // Guards the division and a nonsense area alike. An area recorded as 0 is a
+  // bad record, not an infinite density.
+  if (!Number.isFinite(hectares) || hectares <= 0) return { status: "area_no_positiva", hectares };
+
+  const totalPlants = vivas.reduce((sum, c) => sum + (c.plantCount ?? 0), 0);
+  return {
+    status: "ok",
+    totalPlants,
+    hectares,
+    plantsPerHectare: Number((totalPlants / hectares).toFixed(1)),
+  };
+}
+
+/**
+ * Everything the plot page shows, behind **one** gate.
+ *
+ * Deliberately not assembled in the page from two different reads:
+ * `getManageableContext` resolves *lot* visibility, while a cohort is gated by
+ * `location:manage_attributes`. Mixing them would mean a page whose title bar
+ * answers to one authority and whose contents answer to another — and the one
+ * that governs the data here is the location gate, so it is the only one used.
+ *
+ * Lives here rather than in `locations.ts` because that module is imported by
+ * this one; the reverse direction would close a cycle.
+ */
+export async function getPlotDetail(userAccountId: string, locationId: string) {
+  await requireLocationAttributeAccess(userAccountId, locationId);
+
+  const location = await prisma.location.findUnique({
+    where: { id: locationId },
+    select: {
+      id: true,
+      name: true,
+      locationType: true,
+      areaHectares: true,
+      plantSpacingMeters: true,
+      altitudeMinM: true,
+      altitudeMaxM: true,
+      sunExposure: true,
+      shadePercentage: true,
+      slopeDescription: true,
+      soilType: true,
+      description: true,
+      organization: { select: { name: true } },
+      parentLocation: { select: { id: true, name: true, organization: { select: { name: true } } } },
+    },
+  });
+  // `requireLocationAttributeAccess` already refuses a missing id, so reaching
+  // here with nothing means the row vanished between the two queries.
+  if (!location) throw new LocationAccessError("location_not_found");
+
+  const cohorts = await prisma.plantingCohort.findMany({
+    where: { locationId },
+    include: { cultivarValue: { select: { id: true, value: true } } },
+    orderBy: [{ status: "asc" }, { plantedAt: "desc" }],
+  });
+
+  return {
+    location,
+    cohorts,
+    density: computePlotDensity(cohorts, location.areaHectares),
+    // The farm's own name is usually on the parent site, not the plot: eleven
+    // of Finca Rosina's locations carry a null `organizationId` and inherit it
+    // through the hierarchy. Reading only the plot's own column would show a
+    // farm block with no farm.
+    organizationName: location.organization?.name ?? location.parentLocation?.organization?.name ?? null,
   };
 }

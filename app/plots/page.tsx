@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
@@ -33,9 +34,18 @@ export default async function PlotsPage() {
                 plot.soilType != null;
 
               return (
-                <div key={plot.id} className="nn-card-link" style={{ cursor: "default" }}>
+                <Link key={plot.id} href={`/plots/${plot.id}`} className="nn-card-link">
                   <h3>{plot.name}</h3>
                   {plot.organization ? <p className="nn-detail-meta">{plot.organization.name}</p> : null}
+
+                  <p className="nn-detail-meta">
+                    {t("areaLabel")}:{" "}
+                    {plot.areaHectares != null ? (
+                      t("areaValue", { hectares: Number(plot.areaHectares) })
+                    ) : (
+                      <span className="nn-muted">{t("notRecorded")}</span>
+                    )}
+                  </p>
 
                   {hasConditions ? (
                     <dl className="nn-detail-meta">
@@ -73,7 +83,7 @@ export default async function PlotsPage() {
                   ) : (
                     <p className="nn-muted">{t("noConditionsRecorded")}</p>
                   )}
-                </div>
+                </Link>
               );
             })}
           </div>

@@ -70,7 +70,7 @@ export default async function P() {
 describe("el inventario del router", () => {
   it("el repositorio real está entero y sin contradicciones", () => {
     const { codigo, salida } = correr([]);
-    expect(salida).toContain("50 entradas");
+    expect(salida).toContain("51 entradas");
     expect(codigo, salida).toBe(0);
   });
 

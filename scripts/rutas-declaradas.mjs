@@ -79,6 +79,7 @@ export const RUTAS = {
   "/partner": { clase: "requiere-sesion", razon: "Espacio de socios, por asignación." },
   "/partner/[projectId]": { clase: "requiere-sesion", razon: "Espacio de socios, por asignación." },
   "/plots": { clase: "requiere-sesion", razon: "Parcelas de finca." },
+  "/plots/[id]": { clase: "requiere-sesion", razon: "Lo sembrado en una parcela." },
   "/recipes": { clase: "requiere-sesion", razon: "Recetas y formulación." },
   "/recipes/new": { clase: "requiere-sesion", razon: "Recetas y formulación." },
   "/recipes/[id]": { clase: "requiere-sesion", razon: "Recetas y formulación." },
