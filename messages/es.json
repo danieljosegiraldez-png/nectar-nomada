@@ -631,7 +631,12 @@
     "dataQuality_superseded": "Reemplazado",
     "dataQuality_working_hypothesis": "Hipótesis de trabajo",
     "dataQuality_not_tested": "Sin comprobar",
-    "dataQuality_missing_source_record": "Falta el registro de origen"
+    "dataQuality_missing_source_record": "Falta el registro de origen",
+    "plotAttributesIntro": "Todo es opcional. Lo que dejes vacío queda «Sin registrar», que no es lo mismo que cero. El área en hectáreas es la que permite calcular la densidad.",
+    "savePlotAttributesButton": "Guardar condiciones",
+    "altitudeMinLabel": "Altitud mínima (m)",
+    "altitudeMaxLabel": "Altitud máxima (m)",
+    "error_location": "No se pudo guardar: {detail}"
   },
   "Apiary": {
     "badge": "Apiario",

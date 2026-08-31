@@ -631,7 +631,12 @@
     "dataQuality_superseded": "Superseded",
     "dataQuality_working_hypothesis": "Working hypothesis",
     "dataQuality_not_tested": "Not tested",
-    "dataQuality_missing_source_record": "Missing source record"
+    "dataQuality_missing_source_record": "Missing source record",
+    "plotAttributesIntro": "Everything is optional. What you leave blank stays “Not recorded”, which is not the same as zero. The area in hectares is what makes density computable.",
+    "savePlotAttributesButton": "Save conditions",
+    "altitudeMinLabel": "Minimum altitude (m)",
+    "altitudeMaxLabel": "Maximum altitude (m)",
+    "error_location": "Could not save: {detail}"
   },
   "Apiary": {
     "badge": "Apiary",
