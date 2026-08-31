@@ -14,7 +14,12 @@ import { startFermentationRun, recordFermentationIntervention, endFermentationRu
 import { createRecipeWithVersion, createRecipeVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
 import { moveLotToStorage } from "../../lib/traceability/storage";
-import { recordHarvestSources, PlantingCohortValidationError } from "../../lib/traceability/plantingCohorts";
+import {
+  recordHarvestSources,
+  createPlantingCohort,
+  updatePlantingCohort,
+  PlantingCohortValidationError,
+} from "../../lib/traceability/plantingCohorts";
 import {
   updateLocationAttributes,
   LocationAccessError,
@@ -794,5 +799,86 @@ export async function recordHarvestSourcesFormAction(
   }
 
   revalidatePath(`/lots/${lotId}`);
+  return {};
+}
+
+// --- Registrar y corregir una siembra (P1 §1) ----------------------------
+
+/**
+ * La fecha llega como dos campos: el valor y su precisión. Un año suelto se
+ * guarda como el 1 de enero de ese año **con `plantedPrecision: "year"`**, que
+ * es lo que impide que la pantalla lo lea después como un día concreto. Sin
+ * fecha, los dos van nulos: «no se sabe cuándo» es una respuesta legítima y
+ * frecuente, y el servicio la acepta.
+ */
+function parsePlantedAt(formData: FormData): { plantedAt: Date | null; plantedPrecision: string | null } {
+  const raw = String(formData.get("plantedAt") ?? "").trim();
+  if (!raw) return { plantedAt: null, plantedPrecision: null };
+  // <input type="date"> da YYYY-MM-DD; los otros dos modos recortan.
+  const precision = String(formData.get("plantedPrecision") ?? "date");
+  if (precision === "year") return { plantedAt: new Date(`${raw.slice(0, 4)}-01-01T00:00:00Z`), plantedPrecision: "year" };
+  if (precision === "month") return { plantedAt: new Date(`${raw.slice(0, 7)}-01T00:00:00Z`), plantedPrecision: "month" };
+  return { plantedAt: new Date(`${raw.slice(0, 10)}T00:00:00Z`), plantedPrecision: "date" };
+}
+
+export async function createPlantingCohortFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  const { plantedAt, plantedPrecision } = parsePlantedAt(formData);
+
+  try {
+    await createPlantingCohort(user.userAccountId, {
+      locationId,
+      cultivarValueId: emptyToNull(formData.get("cultivarValueId")),
+      plantCount: emptyToNullNumber(formData.get("plantCount")),
+      plantedAt,
+      plantedPrecision: plantedPrecision as never,
+      // ADR-038: sin valor por defecto. El formulario obliga a elegirlo porque
+      // «de dónde sale este dato» no lo puede decidir una acción.
+      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      dataQuality: emptyToNull(formData.get("dataQuality")) as never,
+      notes: emptyToNull(formData.get("notes")),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  return {};
+}
+
+export async function updatePlantingCohortFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  const { plantedAt, plantedPrecision } = parsePlantedAt(formData);
+
+  try {
+    await updatePlantingCohort(user.userAccountId, {
+      cohortId: String(formData.get("cohortId") ?? ""),
+      cultivarValueId: emptyToNull(formData.get("cultivarValueId")),
+      plantCount: emptyToNullNumber(formData.get("plantCount")),
+      plantedAt,
+      plantedPrecision: plantedPrecision as never,
+      dataQuality: emptyToNull(formData.get("dataQuality")) as never,
+      notes: emptyToNull(formData.get("notes")),
+      reason: String(formData.get("reason") ?? ""),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
   return {};
 }
