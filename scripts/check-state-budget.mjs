@@ -83,7 +83,13 @@ function seccionesFechadas(src) {
         bytes: Buffer.byteLength(cuerpo, "utf8"),
       };
     })
-    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+    // Con la MISMA fecha, `localeCompare` devuelve 0 y el orden del documento
+    // decide — y decide al revés. §2 va «más nuevo primero», así que entre
+    // empatadas la más vieja es la que está **más abajo**. Sin este desempate el
+    // aviso nombraba la entrada recién escrita como «la más vieja»: pasó el
+    // 2026-08-31, cuando cinco entradas compartían fecha. Buscar por fecha no
+    // basta si la fecha no discrimina.
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || b.inicio - a.inicio);
 }
 
 if (excesos.length > 0) {

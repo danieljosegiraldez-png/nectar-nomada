@@ -137,6 +137,27 @@ describe("el aviso al 80 %", () => {
       .toContain("### 2026-01-01 · la más vieja");
   });
 
+  /**
+   * Todas las entradas de un mismo día empatan en fecha, y con el empate
+   * decidía el orden del documento — que en §2 va **de más nuevo a más viejo**.
+   * El aviso nombraba entonces la entrada recién escrita como «la más vieja».
+   * Encontrado el 2026-08-31 al cerrar la sesión, usando el propio aviso:
+   * cinco entradas compartían fecha.
+   */
+  it("con fechas empatadas nombra la de más abajo, que es la más vieja", () => {
+    const contenido =
+      "# Estado\n\n## 2. Lo que se entregó — más nuevo primero\n\n" +
+      `### 2026-05-05 · la nueva de hoy\n${relleno(160)}\n\n` +
+      `### 2026-05-05 · la vieja de hoy\n${relleno(160)}\n`;
+    const { codigo, salida } = correr(fixture("empate.md", contenido));
+    expect(codigo, salida).toBe(0);
+    expect(salida).toContain("⚠");
+    expect(salida, "entre fechas iguales, la más vieja es la de más abajo")
+      .toContain("### 2026-05-05 · la vieja de hoy");
+    expect(salida, "no puede nombrar la recién escrita")
+      .not.toContain("### 2026-05-05 · la nueva de hoy");
+  });
+
   it("no dice nada por debajo del 80 %", () => {
     const { codigo, salida } = correr(fixture("holgado.md", `# Estado\n\n${relleno(50)}\n`));
     expect(codigo).toBe(0);

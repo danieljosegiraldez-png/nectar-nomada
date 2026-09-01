@@ -190,3 +190,33 @@ archivos herméticos y la suite entera necesita base local. Tras cualquier scrip
 
 PR #67, #68, #69, #71, #72. Suite 658/658 sobre `main` fusionado.
 
+## 2026-08-31
+
+### 2026-08-31 · La cadena de febrero, entera y sin scripts
+
+Cohorte → hectáreas → cosecha → bloque. Los tres eslabones que faltaban tienen
+pantalla, y **ninguno depende ya de que una sesión corra un script**.
+
+`updateLocationAttributes` y `recordHarvestSources` existían desde F1 y P1 §5,
+con RBAC y auditoría, y su único consumidor era su propio test. El dueño tenía
+que dictar las hectáreas para que alguien las escribiera por él.
+
+- **Formulario de condiciones** en la página del lote. Una casilla vacía llega
+  como `NULL`, nunca como `0` — un lote de 0 ha no es un lote sin medir, y
+  además haría que la densidad dijera «área no positiva» en vez de «falta el
+  área». Vaciar una casilla con valor la borra: el formulario muestra los ocho
+  campos, así que manda siempre el juego completo.
+- **«¿De qué bloques salió?»** en la sección de cosecha, con reconciliación en
+  vivo. La diferencia contra el peso declarado casi nunca es cero —nadie pesa
+  cada bloque antes de volcarlo en la misma tolva— y el sistema la informa, no
+  la rechaza. Sin ningún peso escrito **no dice «0 kg»**, dice «todavía sin
+  pesos de bloque».
+
+Dos huecos del servicio, encontrados al construir encima y arreglados antes:
+`recordHarvestSources` **no comprobaba que la cohorte fuera del lote nombrado**
+(llegan como dos campos sueltos, y una pareja cruzada afirma que un bloque
+aportó cereza teniendo sus árboles en otro sitio), y el contexto de la pantalla
+**ofrecía todos los lotes de la plataforma**, incluidas fincas ajenas, para
+rechazarlos al guardar. Los dos con test y flip-test.
+
+PR #74 y #75. Suite 664/664 sobre `main` fusionado.
