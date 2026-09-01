@@ -5,7 +5,7 @@ import { getCurrentUser } from "../../../lib/auth/session";
 import { getBiocharBatch, computeBatchAgingDays } from "../../../lib/traceability/biocharBatches";
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { BiocharBatchForm } from "../../components/traceability/BiocharBatchForm";
-import { BiocharMeasurementForm } from "../../components/traceability/BiocharMeasurementForm";
+import { LabMeasurementForm } from "../../components/traceability/LabMeasurementForm";
 import { listVariableDefinitions } from "../../../lib/traceability/units";
 
 export const dynamic = "force-dynamic";
@@ -79,8 +79,9 @@ export default async function BiocharBatchPage({ params }: { params: Promise<{ i
           </table>
         )}
 
-        <BiocharMeasurementForm
-          biocharBatchId={batch.id}
+        <LabMeasurementForm
+          sujeto="biocharBatchId"
+          sujetoId={batch.id}
           variables={listVariableDefinitions("analisis_de_enmienda")}
         />
       </section>

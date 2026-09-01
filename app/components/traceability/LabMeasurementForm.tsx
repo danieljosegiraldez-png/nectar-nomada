@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
-import { recordBiocharMeasurementAction, type TraceabilityActionState } from "../../actions/traceability";
+import { recordLabMeasurementAction, type TraceabilityActionState } from "../../actions/traceability";
 
 const initialState: TraceabilityActionState = {};
 
@@ -16,7 +16,12 @@ export interface VariableChoice {
 }
 
 /**
- * Una lectura de la Tabla 7 sobre un lote de biochar.
+ * Una lectura de laboratorio sobre un sujeto que no es café.
+ *
+ * Uno solo para los tres —lote de biochar, muestra de suelo, muestra foliar—
+ * porque los tres hacen exactamente lo mismo: elegir un parámetro de su panel,
+ * escribir un valor con unidad, y decir de dónde salió. Tres componentes casi
+ * idénticos habrían divergido en el primer arreglo que sólo se aplicara a dos.
  *
  * La lista de variables **no está escrita aquí**: viene del registro canónico
  * de `lib/traceability/units.ts`, filtrado al dominio de análisis de enmienda.
@@ -29,27 +34,34 @@ export interface VariableChoice {
  * y el servicio convierte. Lo que no se hace es **suponer** la unidad — un
  * número sin unidad no es una medición.
  */
-export function BiocharMeasurementForm({
-  biocharBatchId,
+export type SujetoDeLaboratorio = "biocharBatchId" | "soilSampleId" | "foliarSampleId";
+
+export function LabMeasurementForm({
+  sujeto,
+  sujetoId,
   variables,
 }: {
-  biocharBatchId: string;
+  sujeto: SujetoDeLaboratorio;
+  sujetoId: string;
   variables: VariableChoice[];
 }) {
   const t = useTranslations("Traceability");
-  const [state, formAction, pending] = useActionState(recordBiocharMeasurementAction, initialState);
+  const [state, formAction, pending] = useActionState(recordLabMeasurementAction, initialState);
   const [variable, setVariable] = useState("");
 
   const elegida = variables.find((v) => v.variable === variable);
 
   return (
     <form action={formAction} className="nn-form">
-      <input type="hidden" name="biocharBatchId" value={biocharBatchId} />
+      {/* El nombre del campo ES la clase de sujeto. La acción no adivina: lee
+          exactamente el que llegó, y el servicio rechaza que llegue más de uno. */}
+      <input type="hidden" name="sujeto" value={sujeto} />
+      <input type="hidden" name="sujetoId" value={sujetoId} />
 
       <div className="nn-field">
-        <label htmlFor="variable">{t("biocharVariableLabel")}</label>
+        <label htmlFor={`variable-${sujetoId}`}>{t("biocharVariableLabel")}</label>
         <select
-          id="variable"
+          id={`variable-${sujetoId}`}
           name="variable"
           required
           value={variable}

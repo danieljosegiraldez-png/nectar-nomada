@@ -212,6 +212,8 @@ model UserAccount {
   plantingCohortsCreated            PlantingCohort[]             @relation("PlantingCohortCreatedBy")
   biocharBatchesCreated             BiocharBatch[]               @relation("BiocharBatchCreatedBy")
   soilProfilesCreated               SoilProfile[]                @relation("SoilProfileCreatedBy")
+  soilSamplesCreated                SoilSample[]                 @relation("SoilSampleCreatedBy")
+  foliarSamplesCreated              FoliarSample[]               @relation("FoliarSampleCreatedBy")
   fieldSessionsCreated              FieldSession[]               @relation("FieldSessionCreatedBy")
   fieldEventsCreated                FieldEvent[]                 @relation("FieldEventCreatedBy")
   harvestEventSourcesCreated        HarvestEventSource[]         @relation("HarvestEventSourceCreatedBy")
@@ -629,6 +631,8 @@ model Location {
   // S1 — lotes de biochar producidos AQUÍ, que no es donde se aplican.
   biocharBatchesProduced      BiocharBatch[]               @relation("BiocharBatchProducedAt")
   soilProfiles                SoilProfile[]
+  soilSamples                 SoilSample[]
+  foliarSamples               FoliarSample[]
   labourEntries               LabourEntry[]
   materialConsumptionEntries  MaterialConsumptionEntry[]
   processingStages            ProcessingStage[]
@@ -2902,6 +2906,13 @@ model Measurement {
   // `recordMeasurement` resuelve el ámbito por rama y no por acumulación.
   biocharBatchId      String?            @map("biochar_batch_id") @db.Uuid
   biocharBatch        BiocharBatch?      @relation(fields: [biocharBatchId], references: [id])
+  // S1 §2 — los otros dos sujetos que no son café. Misma forma que
+  // `biocharBatchId`: independientes, excluyen `lotId` en vez de exigirlo, y su
+  // ámbito es la Location del bloque muestreado.
+  soilSampleId        String?            @map("soil_sample_id") @db.Uuid
+  soilSample          SoilSample?        @relation(fields: [soilSampleId], references: [id])
+  foliarSampleId      String?            @map("foliar_sample_id") @db.Uuid
+  foliarSample        FoliarSample?      @relation(fields: [foliarSampleId], references: [id])
 
   sourceType       MeasurementSourceType @default(manual) @map("source_type")
   // Legacy free-text device label from T3. No code path has ever written it;
@@ -2953,6 +2964,8 @@ model Measurement {
   @@index([treatmentBatchId])
   @@index([processingStageId])
   @@index([biocharBatchId])
+  @@index([soilSampleId])
+  @@index([foliarSampleId])
   @@index([correctsId])
   @@map("measurement")
   @@schema("traceability")
@@ -3718,6 +3731,154 @@ model HarvestEventSource {
   @@index([locationId])
   @@index([plantingCohortId])
   @@map("harvest_event_source")
+  @@schema("traceability")
+}
+
+// S1 (45_S1_SUELO_AMBIENTE_TAZA.md §2, semanas 6–10) — la muestra de suelo que
+// va al laboratorio.
+//
+// **La muestra y el resultado son dos cosas distintas y no se funden.** Aquí
+// vive la muestra: de dónde salió, de qué profundidad, de cuántas submuestras
+// se compuso, a qué laboratorio fue y con qué método se extrajo. Los resultados
+// de la Tabla 3 son `Measurement` —lecturas con unidad, procedencia y calidad
+// de dato, corregibles sin borrar la original— colgados de esta fila.
+//
+// **Por qué no reusar `Sample`.** `Sample` es de café: lleva `sourceLotId`,
+// `sourceTransformationId`, `externalOrigin`, códigos ciegos de sensorial y
+// entradas de competencia. Ninguno de esos campos significa nada para un puñado
+// de tierra. Es la misma línea que ya se trazó entre `Specimen` y `Lot`.
+model SoilSample {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  sampleCode String @map("sample_code")
+
+  // El bloque, y el ancla de RBAC.
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id])
+
+  // La parcela de tratamiento dentro del bloque. Texto por ahora: el diseño del
+  // ensayo (T0–T4, bloques al azar con repeticiones) es el Paso 8 y todavía no
+  // existe como entidad. Cuando exista, esto pasa a ser una clave — pero el
+  // muestreo del Paso 6 ocurre ANTES y no puede esperar a que el ensayo esté
+  // trazado.
+  treatmentPlotLabel String? @map("treatment_plot_label")
+
+  // El punto permanente y etiquetado de §14.1, «para que las rondas siguientes
+  // vuelvan al mismo sitio». Sin él, una serie temporal de química de suelo
+  // compara sitios distintos y lo llama cambio.
+  samplingPointLabel String? @map("sampling_point_label")
+
+  // §14.1 pide 0–20, 20–40 y 40–60 cm «aproximadamente». Dos enteros y no un
+  // enum de tres bandas justamente por ese «aproximadamente»: una cuarta
+  // profundidad o un 0–15 real no deben obligar a mentir ni a migrar.
+  depthTopCm    Int? @map("depth_top_cm")
+  depthBottomCm Int? @map("depth_bottom_cm")
+
+  sampledAt DateTime @map("sampled_at")
+
+  // §14.1: «10–15 submuestras a la misma profundidad dentro de una parcela,
+  // mezcladas, y una submuestra representativa enviada. Compositar dentro de
+  // una parcela y una profundidad; NUNCA entre tratamientos ni entre
+  // profundidades.» Esa regla es estructural aquí: una fila ES un compuesto de
+  // una parcela y una profundidad, y el conteo dice de cuántas.
+  subSampleCount Int? @map("sub_sample_count")
+
+  laboratory String?
+  // «El fósforo es muy dependiente del método — anotar el extractante»
+  // (Tabla 3). Un P Bray y un P Mehlich no se comparan, y sin esto un
+  // histórico de fósforo mezcla dos escalas sin avisar.
+  extractionMethod String? @map("extraction_method")
+
+  notes String?
+
+  // ADR-038 — requerido, sin default.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  sourceReference String?         @map("source_reference")
+  dataQuality     DataQuality?    @map("data_quality")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("SoilSampleCreatedBy", fields: [createdBy], references: [id])
+
+  measurements Measurement[]
+
+  @@unique([locationId, sampleCode])
+  @@index([locationId])
+  @@map("soil_sample")
+  @@schema("traceability")
+}
+
+// S1 §2 (semanas 6–10) — la muestra foliar.
+//
+// §7.1 es el motivo de que casi todos estos campos existan: «la concentración
+// foliar varía sistemáticamente con la posición de la hoja, su edad, el
+// cultivar, el estado fenológico y la estación. Si el muestreo no está
+// estandarizado, la comparación entre años **no significa nada** y las
+// diferencias entre tratamientos quedan ahogadas por el ruido del muestreo.»
+//
+// Por eso el marco enumera lo que hay que **registrar en cada muestra**, y esa
+// lista es literalmente esta tabla. Un análisis foliar sin su protocolo no es
+// un dato peor: es un dato incomparable, que es peor que no tenerlo porque
+// parece que sirve.
+model FoliarSample {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  sampleCode String @map("sample_code")
+
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id])
+
+  treatmentPlotLabel String? @map("treatment_plot_label")
+
+  sampledAt DateTime @map("sampled_at")
+
+  // «El par de hojas definido — normalmente el tercero o cuarto contando desde
+  // la punta». Un entero, no un enum: el marco dice explícitamente que fijar el
+  // número exacto es un acuerdo con el laboratorio, no una constante nuestra.
+  leafPairPosition Int? @map("leaf_pair_position")
+
+  // «Posición de la rama en el dosel (tercio superior, medio, inferior)» — la
+  // lista la da el marco, así que aquí sí se enumera.
+  canopyPosition CanopyPosition? @map("canopy_position")
+
+  // «Edad del árbol y cultivar», «estado fenológico al muestrear».
+  treeAgeYears        Int?    @map("tree_age_years")
+  cultivar            String?
+  phenologicalStage   String? @map("phenological_stage")
+
+  // «Y si la rama muestreada llevaba fruto». Booleano nullable y no tres
+  // estados como en la calicata: aquí no hay «no se miró» plausible — quien
+  // arranca la hoja tiene la rama en la mano. `null` sigue siendo «no
+  // registrado».
+  branchBearingFruit Boolean? @map("branch_bearing_fruit")
+
+  laboratory String?
+  notes      String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+  sourceReference String?         @map("source_reference")
+  dataQuality     DataQuality?    @map("data_quality")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("FoliarSampleCreatedBy", fields: [createdBy], references: [id])
+
+  measurements Measurement[]
+
+  @@unique([locationId, sampleCode])
+  @@index([locationId])
+  @@map("foliar_sample")
+  @@schema("traceability")
+}
+
+// §7.1 — «tercio superior, medio o inferior». La lista es del marco.
+enum CanopyPosition {
+  upper
+  middle
+  lower
+
   @@schema("traceability")
 }
 

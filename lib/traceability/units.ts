@@ -109,7 +109,29 @@ export type MeasurementVariable =
   | "manganese"
   | "zinc"
   | "copper"
-  | "boron";
+  | "boron"
+  // S1 §2 (semanas 6–10) — la Tabla 3 del marco: el panel de química de suelo
+  // base. Lo que no aparece aquí es porque ya estaba arriba: `ph` (en agua),
+  // `electrical_conductivity`, `total_carbon`, `total_nitrogen`,
+  // `carbon_nitrogen_ratio`, `phosphorus` y los micronutrientes.
+  //
+  // Los cationes intercambiables SÍ son variables propias y no las de arriba:
+  // se reportan en cmol/kg, que son equivalentes de carga, no masa. Pasar de
+  // mg/kg a cmol/kg exige peso atómico y valencia — es química, no conversión
+  // de unidad, y fingir lo segundo produciría números falsos con aspecto de
+  // buenos.
+  | "ph_kcl"
+  | "organic_matter"
+  | "cec"
+  | "effective_cec"
+  | "exchangeable_acidity"
+  | "exchangeable_aluminium"
+  | "aluminium_saturation"
+  | "base_saturation"
+  | "exchangeable_potassium"
+  | "exchangeable_calcium"
+  | "exchangeable_magnesium"
+  | "sulphur";
 
 export class UnitValidationError extends Error {}
 
@@ -119,6 +141,29 @@ interface VariableDefinition {
   max: number;
   acceptedUnits: Record<string, (value: number) => number>;
 }
+
+/**
+ * Un nutriente reportado como fracción de masa.
+ *
+ * **Una constante y no diez copias del mismo literal.** Estaban repetidas, y un
+ * flip-test lo destapó: mutar la conversión de UNA de ellas no rompía ningún
+ * test, porque sólo el potasio tenía aserción. Con una definición compartida
+ * hay un solo sitio que romper, y romperlo se ve.
+ *
+ * Las cuatro unidades son la misma magnitud con conversión exacta: un
+ * laboratorio reporta % y otro mg/kg para el mismo análisis, y el foliar viene
+ * en g/kg (§7.2 del marco da ahí los rangos de suficiencia). Obligar a
+ * convertir a mano es cómo se cuelan los errores de dos órdenes de magnitud.
+ *
+ * El tope no es una opinión sobre qué es plausible: 1.000.000 mg/kg es el 100 %,
+ * el límite aritmético de una fracción de masa.
+ */
+const NUTRIENTE_POR_MASA: VariableDefinition = {
+  canonicalUnit: "mg/kg",
+  min: 0,
+  max: 1_000_000,
+  acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000, "g/kg": (v) => v * 1_000 },
+};
 
 const REGISTRY: Record<MeasurementVariable, VariableDefinition> = {
   temperature: {
@@ -263,120 +308,43 @@ const REGISTRY: Record<MeasurementVariable, VariableDefinition> = {
   },
   ash_content: { canonicalUnit: "%", min: 0, max: 100, acceptedUnits: { "%": (v) => v } },
   total_carbon: { canonicalUnit: "%", min: 0, max: 100, acceptedUnits: { "%": (v) => v } },
-  total_nitrogen: { canonicalUnit: "%", min: 0, max: 100, acceptedUnits: { "%": (v) => v } },
+  total_nitrogen: { canonicalUnit: "%", min: 0, max: 100, acceptedUnits: { "%": (v) => v, "g/kg": (v) => v / 10 } },
   // Adimensional. El tope es alto a propósito: un biochar de madera sin cargar
   // pasa de 300 con facilidad, y ése es justo el caso que el marco advierte
   // —«un char de C:N alto sin cargar puede reducir temporalmente el nitrógeno
   // disponible»—, así que rechazarlo escondería lo que hay que ver.
   carbon_nitrogen_ratio: { canonicalUnit: "C:N", min: 0, max: 1000, acceptedUnits: { "C:N": (v) => v } },
-  phosphorus: {
-    canonicalUnit: "mg/kg",
-    min: 0,
-    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
-    // plausible, es el límite aritmético de una fracción de masa.
-    max: 1_000_000,
-    // Las tres unidades son la misma magnitud con conversión exacta, así que
-    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
-    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
-    // los errores de dos órdenes de magnitud.
-    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
-  },
-  potassium: {
-    canonicalUnit: "mg/kg",
-    min: 0,
-    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
-    // plausible, es el límite aritmético de una fracción de masa.
-    max: 1_000_000,
-    // Las tres unidades son la misma magnitud con conversión exacta, así que
-    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
-    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
-    // los errores de dos órdenes de magnitud.
-    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
-  },
-  calcium: {
-    canonicalUnit: "mg/kg",
-    min: 0,
-    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
-    // plausible, es el límite aritmético de una fracción de masa.
-    max: 1_000_000,
-    // Las tres unidades son la misma magnitud con conversión exacta, así que
-    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
-    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
-    // los errores de dos órdenes de magnitud.
-    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
-  },
-  magnesium: {
-    canonicalUnit: "mg/kg",
-    min: 0,
-    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
-    // plausible, es el límite aritmético de una fracción de masa.
-    max: 1_000_000,
-    // Las tres unidades son la misma magnitud con conversión exacta, así que
-    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
-    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
-    // los errores de dos órdenes de magnitud.
-    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
-  },
-  iron: {
-    canonicalUnit: "mg/kg",
-    min: 0,
-    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
-    // plausible, es el límite aritmético de una fracción de masa.
-    max: 1_000_000,
-    // Las tres unidades son la misma magnitud con conversión exacta, así que
-    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
-    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
-    // los errores de dos órdenes de magnitud.
-    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
-  },
-  manganese: {
-    canonicalUnit: "mg/kg",
-    min: 0,
-    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
-    // plausible, es el límite aritmético de una fracción de masa.
-    max: 1_000_000,
-    // Las tres unidades son la misma magnitud con conversión exacta, así que
-    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
-    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
-    // los errores de dos órdenes de magnitud.
-    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
-  },
-  zinc: {
-    canonicalUnit: "mg/kg",
-    min: 0,
-    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
-    // plausible, es el límite aritmético de una fracción de masa.
-    max: 1_000_000,
-    // Las tres unidades son la misma magnitud con conversión exacta, así que
-    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
-    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
-    // los errores de dos órdenes de magnitud.
-    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
-  },
-  copper: {
-    canonicalUnit: "mg/kg",
-    min: 0,
-    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
-    // plausible, es el límite aritmético de una fracción de masa.
-    max: 1_000_000,
-    // Las tres unidades son la misma magnitud con conversión exacta, así que
-    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
-    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
-    // los errores de dos órdenes de magnitud.
-    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
-  },
-  boron: {
-    canonicalUnit: "mg/kg",
-    min: 0,
-    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
-    // plausible, es el límite aritmético de una fracción de masa.
-    max: 1_000_000,
-    // Las tres unidades son la misma magnitud con conversión exacta, así que
-    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
-    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
-    // los errores de dos órdenes de magnitud.
-    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
-  },
+  phosphorus: NUTRIENTE_POR_MASA,
+  potassium: NUTRIENTE_POR_MASA,
+  calcium: NUTRIENTE_POR_MASA,
+  magnesium: NUTRIENTE_POR_MASA,
+  iron: NUTRIENTE_POR_MASA,
+  manganese: NUTRIENTE_POR_MASA,
+  zinc: NUTRIENTE_POR_MASA,
+  copper: NUTRIENTE_POR_MASA,
+  boron: NUTRIENTE_POR_MASA,
+
+  // --- S1, Tabla 3: química de suelo base ------------------------------
+  // El marco pide pH en agua Y en KCl: «medir los dos revela la acidez de
+  // reserva». Son dos lecturas distintas del mismo suelo, así que dos
+  // variables — no una con una nota.
+  ph_kcl: { canonicalUnit: "pH", min: 0, max: 14, acceptedUnits: { pH: (v) => v } },
+  organic_matter: { canonicalUnit: "%", min: 0, max: 100, acceptedUnits: { "%": (v) => v } },
+  // cmol/kg y meq/100 g son la MISMA unidad con dos nombres, no una conversión:
+  // 1 cmol(+)/kg = 1 meq/100 g exactamente. Los laboratorios usan las dos.
+  cec: { canonicalUnit: "cmol/kg", min: 0, max: 200, acceptedUnits: { "cmol/kg": (v) => v, "meq/100g": (v) => v } },
+  effective_cec: { canonicalUnit: "cmol/kg", min: 0, max: 200, acceptedUnits: { "cmol/kg": (v) => v, "meq/100g": (v) => v } },
+  exchangeable_acidity: { canonicalUnit: "cmol/kg", min: 0, max: 200, acceptedUnits: { "cmol/kg": (v) => v, "meq/100g": (v) => v } },
+  // «El número más importante para la salud radicular en este tipo de suelo»
+  // (Tabla 3).
+  exchangeable_aluminium: { canonicalUnit: "cmol/kg", min: 0, max: 200, acceptedUnits: { "cmol/kg": (v) => v, "meq/100g": (v) => v } },
+  exchangeable_potassium: { canonicalUnit: "cmol/kg", min: 0, max: 200, acceptedUnits: { "cmol/kg": (v) => v, "meq/100g": (v) => v } },
+  exchangeable_calcium: { canonicalUnit: "cmol/kg", min: 0, max: 200, acceptedUnits: { "cmol/kg": (v) => v, "meq/100g": (v) => v } },
+  exchangeable_magnesium: { canonicalUnit: "cmol/kg", min: 0, max: 200, acceptedUnits: { "cmol/kg": (v) => v, "meq/100g": (v) => v } },
+  // Saturaciones: porcentajes de la CIC efectiva.
+  aluminium_saturation: { canonicalUnit: "%", min: 0, max: 100, acceptedUnits: { "%": (v) => v } },
+  base_saturation: { canonicalUnit: "%", min: 0, max: 100, acceptedUnits: { "%": (v) => v } },
+  sulphur: { canonicalUnit: "mg/kg", min: 0, max: 1_000_000, acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000, "g/kg": (v) => v * 1_000 } },
 };
 
 export function isKnownVariable(variable: string): variable is MeasurementVariable {
@@ -407,37 +375,144 @@ export function normalizeToCanonical(
 }
 
 /**
- * Qué análisis de laboratorio mide cada variable — S1 §2, Tabla 7.
+ * En qué formulario se ofrece cada variable — S1 §2.
  *
- * Un registro global tiene un efecto que no se ve hasta que se añade algo: la
- * lista la ofrece el formulario de recetas de café como desplegable, así que
- * meter «contenido de cenizas» sin más lo habría puesto a elegir como
- * objetivo de proceso de un café. Son la misma clase de dato —magnitud,
- * unidad, límites— y sitios de trabajo distintos.
+ * Un registro global tiene un efecto que no se ve hasta que se le añade algo:
+ * la lista la consume el formulario de recetas de café como desplegable, así
+ * que meter «contenido de cenizas» sin más lo habría puesto a elegir como
+ * objetivo de proceso de un café. Son la misma clase de dato —magnitud, unidad,
+ * límites— en sitios de trabajo distintos.
  *
- * `ph` y `moisture` están en los DOS conjuntos a propósito: son la misma
- * magnitud física, y lo que dice de qué se habla es el sujeto de la fila.
+ * **Un mapa explícito, no un conjunto invertido.** La primera versión de esto
+ * filtraba con `!ANALISIS.has(v) || v === "ph" || v === "moisture"`: dos
+ * excepciones cosidas a mano con sólo dos dominios. Con cuatro sería ilegible,
+ * y es la clase de expresión donde un error no se ve. Aquí cada variable de
+ * laboratorio dice a qué paneles pertenece, y lo que no aparece es de proceso
+ * de café — que era todo el registro antes de S1.
+ *
+ * Varias variables están en varios paneles a propósito. `ph` se mide en el
+ * biochar y en el suelo; el fósforo, en los dos y además en la hoja. Es la
+ * misma magnitud física, y lo que dice de qué se habla es **el sujeto de la
+ * fila**, no el nombre de la variable — el precedente que este archivo ya cita
+ * para `roastSessionId`.
  */
-const ANALISIS_DE_ENMIENDA = new Set<MeasurementVariable>([
-  "ph",
-  "moisture",
-  "electrical_conductivity",
-  "ash_content",
-  "total_carbon",
-  "total_nitrogen",
-  "carbon_nitrogen_ratio",
-  "phosphorus",
-  "potassium",
-  "calcium",
-  "magnesium",
-  "iron",
-  "manganese",
-  "zinc",
-  "copper",
-  "boron",
-]);
+const PANELES: Record<MeasurementVariable, readonly DominioDeVariable[]> = {
+  // --- Proceso de café: todo el registro anterior a S1. Se listan una por
+  // una y no por defecto, para que el compilador obligue a decidir el panel
+  // de cada variable NUEVA en vez de adoptarla en silencio.
+  temperature: ["proceso_de_cafe"],
+  brix: ["proceso_de_cafe"],
+  relative_humidity: ["proceso_de_cafe"],
+  water_activity: ["proceso_de_cafe"],
+  water_volume_pulping: ["proceso_de_cafe"],
+  water_volume_washing: ["proceso_de_cafe"],
+  water_to_coffee_ratio: ["proceso_de_cafe"],
+  wash_medium_volume: ["proceso_de_cafe"],
+  wash_medium_ph: ["proceso_de_cafe"],
+  wash_medium_brix: ["proceso_de_cafe"],
+  wash_medium_temperature: ["proceso_de_cafe"],
+  cold_hold_initial_temperature: ["proceso_de_cafe"],
+  cold_hold_target_temperature_min: ["proceso_de_cafe"],
+  cold_hold_target_temperature_max: ["proceso_de_cafe"],
+  cold_hold_descent_rate: ["proceso_de_cafe"],
+  cold_hold_plateau_duration: ["proceso_de_cafe"],
+  bioprotective_yeast_dose: ["proceso_de_cafe"],
+  rehydration_time: ["proceso_de_cafe"],
+  cold_hold_pre_seal_temperature: ["proceso_de_cafe"],
+  cold_hold_arrival_temperature: ["proceso_de_cafe"],
+  cold_hold_post_rinse_temperature: ["proceso_de_cafe"],
+  thermal_shock_cycle_duration: ["proceso_de_cafe"],
+  thermal_shock_cutoff_temperature: ["proceso_de_cafe"],
+  cold_shock_start_temperature: ["proceso_de_cafe"],
+  cold_shock_end_temperature: ["proceso_de_cafe"],
+  cold_shock_descent_duration: ["proceso_de_cafe"],
+  river_water_temperature: ["proceso_de_cafe"],
+  submersion_depth: ["proceso_de_cafe"],
+  vessel_pressure: ["proceso_de_cafe"],
+  brine_concentration: ["proceso_de_cafe"],
+  co_ferment_quantity: ["proceso_de_cafe"],
+  koji_propagation_duration: ["proceso_de_cafe"],
 
-export type DominioDeVariable = "proceso_de_cafe" | "analisis_de_enmienda";
+  ph: ["proceso_de_cafe", "analisis_de_enmienda", "analisis_de_suelo"],
+  moisture: ["proceso_de_cafe", "analisis_de_enmienda"],
+  electrical_conductivity: ["analisis_de_enmienda", "analisis_de_suelo"],
+  ash_content: ["analisis_de_enmienda"],
+  total_carbon: ["analisis_de_enmienda", "analisis_de_suelo"],
+  total_nitrogen: ["analisis_de_enmienda", "analisis_de_suelo", "analisis_foliar"],
+  carbon_nitrogen_ratio: ["analisis_de_enmienda", "analisis_de_suelo"],
+  phosphorus: ["analisis_de_enmienda", "analisis_de_suelo", "analisis_foliar"],
+  potassium: ["analisis_de_enmienda", "analisis_foliar"],
+  calcium: ["analisis_de_enmienda", "analisis_foliar"],
+  magnesium: ["analisis_de_enmienda", "analisis_foliar"],
+  iron: ["analisis_de_enmienda", "analisis_de_suelo", "analisis_foliar"],
+  manganese: ["analisis_de_enmienda", "analisis_de_suelo", "analisis_foliar"],
+  zinc: ["analisis_de_enmienda", "analisis_de_suelo", "analisis_foliar"],
+  copper: ["analisis_de_enmienda", "analisis_de_suelo", "analisis_foliar"],
+  boron: ["analisis_de_enmienda", "analisis_de_suelo", "analisis_foliar"],
+  // Tabla 3 — sólo suelo. Los cationes intercambiables van en cmol/kg, que no
+  // es la unidad en que se reporta la hoja, así que no se ofrecen en foliar
+  // aunque el elemento sea el mismo.
+  ph_kcl: ["analisis_de_suelo"],
+  organic_matter: ["analisis_de_suelo"],
+  cec: ["analisis_de_suelo"],
+  effective_cec: ["analisis_de_suelo"],
+  exchangeable_acidity: ["analisis_de_suelo"],
+  exchangeable_aluminium: ["analisis_de_suelo"],
+  aluminium_saturation: ["analisis_de_suelo"],
+  base_saturation: ["analisis_de_suelo"],
+  exchangeable_potassium: ["analisis_de_suelo"],
+  exchangeable_calcium: ["analisis_de_suelo"],
+  exchangeable_magnesium: ["analisis_de_suelo"],
+  // §7.1 pide azufre en la hoja; la Tabla 3 lo pide en el suelo.
+  sulphur: ["analisis_de_suelo", "analisis_foliar"],
+};
+
+export type DominioDeVariable =
+  | "proceso_de_cafe"
+  | "analisis_de_enmienda"
+  | "analisis_de_suelo"
+  | "analisis_foliar";
+
+/**
+ * Los cuatro paneles, para que un guardia pueda recorrerlos todos sin
+ * enumerarlos a mano y quedarse corto cuando aparezca el quinto.
+ */
+export const DOMINIOS_DE_VARIABLE = [
+  "proceso_de_cafe",
+  "analisis_de_enmienda",
+  "analisis_de_suelo",
+  "analisis_foliar",
+] as const;
+
+/**
+ * El registro entero, sin filtrar por panel.
+ *
+ * Existe para el guardia de cobertura: comparar la unión de los paneles contra
+ * ESTO es lo único que detecta una variable que se quedó fuera de todos. La
+ * versión anterior de ese test comparaba la unión de dos paneles contra la
+ * unión de esos mismos dos paneles — no podía fallar.
+ */
+export function listAllVariableNames(): MeasurementVariable[] {
+  return Object.keys(REGISTRY) as MeasurementVariable[];
+}
+
+/**
+ * A qué paneles pertenece una variable.
+ *
+ * **Sin valor por defecto, y es deliberado.** La primera versión hacía
+ * `PANELES[v] ?? ["proceso_de_cafe"]`, y ese `??` volvía infalsificable el
+ * guardia de cobertura: ninguna variable podía quedar huérfana porque el
+ * default la adoptaba. Peor: una variable de laboratorio nueva sin entrada
+ * caía en silencio en el desplegable de recetas de café, que es exactamente el
+ * fallo que esta separación existe para impedir.
+ *
+ * `PANELES` es ahora un `Record` total, así que **el compilador** obliga a
+ * declarar el panel de cada variable nueva. Es un guardia más fuerte que un
+ * test: no se puede fusionar sin decidirlo.
+ */
+function panelesDe(v: MeasurementVariable): readonly DominioDeVariable[] {
+  return PANELES[v];
+}
 
 /**
  * Every canonical variable with its unit and physical bounds — ADR-100.
@@ -449,7 +524,7 @@ export type DominioDeVariable = "proceso_de_cafe" | "analisis_de_enmienda";
  *
  * S1 §2: el dominio es **obligatorio**, no opcional con un valor por defecto.
  * Un parámetro que se puede omitir se omite, y el primer formulario nuevo
- * habría vuelto a mezclar las dos listas sin que nadie lo notara.
+ * habría vuelto a mezclar las listas sin que nadie lo notara.
  */
 export function listVariableDefinitions(dominio: DominioDeVariable): {
   variable: MeasurementVariable;
@@ -458,7 +533,7 @@ export function listVariableDefinitions(dominio: DominioDeVariable): {
   max: number;
 }[] {
   return (Object.keys(REGISTRY) as MeasurementVariable[])
-    .filter((v) => (dominio === "analisis_de_enmienda" ? ANALISIS_DE_ENMIENDA.has(v) : !ANALISIS_DE_ENMIENDA.has(v) || v === "ph" || v === "moisture"))
+    .filter((v) => panelesDe(v).includes(dominio))
     .map((variable) => ({
       variable,
       canonicalUnit: REGISTRY[variable].canonicalUnit,

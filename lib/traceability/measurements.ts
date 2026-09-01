@@ -52,22 +52,65 @@ interface ScopeCandidate {
  * tienen que decidir igual: una corrección de una lectura de biochar no puede
  * pedir permisos de café sólo porque el camino de corrección sea más viejo.
  */
-async function requireSubjectAccess(
-  userAccountId: string,
-  subject: { lotId?: string | null; sampleId?: string | null; biocharBatchId?: string | null },
-) {
-  if (subject.biocharBatchId) {
-    // Exclusivo, no acumulativo: si alguien manda las dos cosas, no hay un
-    // ámbito que resolver sino dos, y elegir uno sería elegir el más laxo.
-    if (subject.lotId || subject.sampleId) {
-      throw new MeasurementValidationError("biochar_batch_subject_is_exclusive");
+export interface SujetoDeMedicion {
+  lotId?: string | null;
+  sampleId?: string | null;
+  biocharBatchId?: string | null;
+  soilSampleId?: string | null;
+  foliarSampleId?: string | null;
+}
+
+/**
+ * Los sujetos que NO son café, y la Location contra la que se autoriza cada uno.
+ *
+ * Una tabla y no tres `if`: al añadir el tercero, la cadena de condiciones ya
+ * repetía la misma forma tres veces, y esa repetición es donde se cuela el que
+ * comprueba la exclusividad de uno y se olvida del otro.
+ */
+const SUJETOS_NO_CAFE = [
+  {
+    campo: "biocharBatchId",
+    error: "biochar_batch_not_found",
+    async ubicacion(id: string) {
+      const fila = await prisma.biocharBatch.findUnique({
+        where: { id },
+        select: { producedAtLocationId: true },
+      });
+      return fila?.producedAtLocationId ?? null;
+    },
+  },
+  {
+    campo: "soilSampleId",
+    error: "soil_sample_not_found",
+    async ubicacion(id: string) {
+      const fila = await prisma.soilSample.findUnique({ where: { id }, select: { locationId: true } });
+      return fila?.locationId ?? null;
+    },
+  },
+  {
+    campo: "foliarSampleId",
+    error: "foliar_sample_not_found",
+    async ubicacion(id: string) {
+      const fila = await prisma.foliarSample.findUnique({ where: { id }, select: { locationId: true } });
+      return fila?.locationId ?? null;
+    },
+  },
+] as const;
+
+async function requireSubjectAccess(userAccountId: string, subject: SujetoDeMedicion) {
+  const presentes = SUJETOS_NO_CAFE.filter((s) => subject[s.campo]);
+
+  if (presentes.length > 0) {
+    // Exclusivo, no acumulativo. Dos sujetos son dos ámbitos, y elegir uno
+    // sería elegir el más laxo. Incluye dos sujetos NO-café entre sí: una
+    // lectura no es a la vez de una muestra de suelo y de una foliar.
+    if (presentes.length > 1 || subject.lotId || subject.sampleId) {
+      throw new MeasurementValidationError("non_coffee_subject_is_exclusive");
     }
-    const lote = await prisma.biocharBatch.findUnique({
-      where: { id: subject.biocharBatchId },
-      select: { producedAtLocationId: true },
-    });
-    if (!lote) throw new TraceabilityAccessError("biochar_batch_not_found");
-    await requireLocationAttributeAccess(userAccountId, lote.producedAtLocationId);
+    const s = presentes[0]!;
+    const locationId = await s.ubicacion(subject[s.campo]!);
+    if (!locationId) throw new TraceabilityAccessError(s.error);
+    await requireLocationAttributeAccess(userAccountId, locationId);
     return;
   }
 
@@ -128,10 +171,12 @@ export interface RecordMeasurementInput {
   // reasoning as roastSessionId's own comment.
   treatmentBatchId?: string | null;
   processingStageId?: string | null;
-  // S1 §2 — un sujeto independiente, no un enlace más: no exige `lotId`, lo
-  // excluye. Es la Tabla 7 del marco (pH, CEC, ceniza, carbono, N, macros)
-  // sobre un lote de biochar.
+  // S1 §2 — sujetos independientes, no enlaces más: no exigen `lotId`, lo
+  // excluyen, y son exclusivos también entre sí. Tabla 7 (biochar), Tabla 3
+  // (suelo) y §7.1 (foliar) del marco.
   biocharBatchId?: string | null;
+  soilSampleId?: string | null;
+  foliarSampleId?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
   // T9.5: required, no fallback. The MeasurementForm UI (app/components/
@@ -182,6 +227,8 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
       treatmentBatchId: input.treatmentBatchId ?? null,
       processingStageId: input.processingStageId ?? null,
       biocharBatchId: input.biocharBatchId ?? null,
+      soilSampleId: input.soilSampleId ?? null,
+      foliarSampleId: input.foliarSampleId ?? null,
       sourceType: "manual",
       operatorPersonId: input.operatorPersonId ?? null,
       notes: input.notes ?? null,
@@ -273,6 +320,8 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
       // convierte en la otra. Es anterior a este cambio y toca módulos que
       // este trabajo no examinó; se señala en vez de tocarlo de paso.
       biocharBatchId: original.biocharBatchId,
+      soilSampleId: original.soilSampleId,
+      foliarSampleId: original.foliarSampleId,
       sourceType: "manual",
       operatorPersonId: input.operatorPersonId ?? null,
       notes: input.notes ?? null,

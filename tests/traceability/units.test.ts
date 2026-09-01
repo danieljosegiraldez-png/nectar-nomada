@@ -4,6 +4,8 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  DOMINIOS_DE_VARIABLE,
+  listAllVariableNames,
   listVariableDefinitions,
   normalizeToCanonical,
   UnitValidationError,
@@ -73,17 +75,39 @@ describe("los dominios del registro (S1 §2)", () => {
     }
   });
 
-  it("los dos dominios juntos cubren el registro entero", () => {
-    // Sin esto, una variable nueva podría quedarse fuera de los dos y no
-    // aparecer en ningún formulario, que es el fallo silencioso simétrico.
-    const todas = new Set([...proceso, ...enmienda]);
-    const registro = new Set([
-      ...listVariableDefinitions("proceso_de_cafe").map((v) => v.variable),
-      ...listVariableDefinitions("analisis_de_enmienda").map((v) => v.variable),
-    ]);
-    expect(todas.size).toBe(registro.size);
-    expect(enmienda.length).toBeGreaterThan(0);
-    expect(proceso.length).toBeGreaterThan(0);
+  it("los cuatro paneles juntos cubren el registro entero", () => {
+    // El fallo silencioso simétrico: una variable nueva que no se declara en
+    // ningún panel existe en la base, se puede escribir por script, y no
+    // aparece en ningún formulario.
+    //
+    // **Esta prueba estaba rota hasta el 2026-09-01.** Comparaba la unión de
+    // dos paneles contra la unión de esos mismos dos paneles: no podía fallar.
+    // Ahora se compara contra el registro entero, que es la única forma de
+    // detectar lo que dice detectar.
+    const cubiertas = new Set(
+      DOMINIOS_DE_VARIABLE.flatMap((d) => listVariableDefinitions(d).map((v) => v.variable)),
+    );
+    const registro = listAllVariableNames();
+    const huerfanas = registro.filter((v) => !cubiertas.has(v));
+    expect(huerfanas, "variables que no aparecen en ningún formulario").toEqual([]);
+    expect(cubiertas.size).toBe(registro.length);
+  });
+
+  it("cada panel ofrece algo", () => {
+    for (const d of DOMINIOS_DE_VARIABLE) {
+      expect(listVariableDefinitions(d).length, `el panel ${d} está vacío`).toBeGreaterThan(0);
+    }
+  });
+
+  it("la Tabla 3 sólo se ofrece en suelo, y los cationes no en hoja", () => {
+    const suelo = listVariableDefinitions("analisis_de_suelo").map((v) => v.variable);
+    const foliar = listVariableDefinitions("analisis_foliar").map((v) => v.variable);
+    for (const v of ["exchangeable_aluminium", "aluminium_saturation", "effective_cec", "ph_kcl"]) {
+      expect(suelo).toContain(v);
+      // Un catión intercambiable va en cmol/kg —equivalentes de carga— y la
+      // hoja se reporta en g/kg. Ofrecerlo ahí invitaría a mezclar dos escalas.
+      expect(foliar).not.toContain(v);
+    }
   });
 });
 
