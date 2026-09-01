@@ -271,6 +271,12 @@ PR #74 y #75. Suite 664/664 sobre `main` fusionado.
 - **Un nombre propio para este OS** — al mover el dominio, esta aplicación queda
   solo en `nectar-nomada-package.vercel.app`. Si quiere algo como
   `app.nectarnomada.com`, es decisión suya. No es urgente: nada depende de ello.
+- **El inventario de acceso lee texto, no programa** — no está bloqueado, está
+  *aplazado*: el detector actual no tiene ningún fallo conocido sin escribir, y
+  los que quedan están documentados con su mutación. La respuesta estructural
+  —un AST, con TypeScript que ya es dependencia— está en
+  `PENDING_IMPLEMENTATIONS/007`, con lo que arregla y lo que no.
+
 - **Reconciliación de medios en R2** — no está bloqueada, está *aplazada*:
   `core.asset` y el bucket estaban vacíos al 2026-08-20. Ver
   `PENDING_IMPLEMENTATIONS/002`.
