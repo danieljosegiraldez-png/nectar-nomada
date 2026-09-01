@@ -37,6 +37,36 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-08-31 · La visita al apiario como unidad, y el módulo que no necesitaba código
+
+El dueño tiene **reportes de visita a apiarios ya escritos**. Medido antes de
+construir: el módulo de apiario **no tenía el hueco de siempre** — sus 21
+funciones ya tienen pantalla, incluida una cola offline. Y de §19 no faltaban
+«Honey Batch» ni «Extraction»: son `Lot` con `lotType: "honey"` (A3) y
+`extractedWeightKg`. Dos veces creí ver un fallo y las dos veces leí mal.
+
+Lo que sí faltaba era **lo que hace que un reporte sea un reporte**: que las
+inspecciones de una misma salida sean *la misma salida*. Las inspecciones son
+por colonia, así que una visita a cuatro colmenas eran cuatro registros sueltos.
+
+`fieldSessions` llevaba desde P2 §3–§5 construido y probado con **0 pantallas,
+0 filas y 5 funciones** que sólo tocaba su test. Ahora hay `/field-sessions/[id]`
+y una sección en la página del lote. El operador es una **Persona**, no una
+cuenta (ADR-101): quien camina el apiario no suele tener con qué iniciar sesión.
+
+El **guardia de acceso a datos de la PR #78 atrapó el archivo nuevo del
+catálogo** y exigió justificarlo — sobre código de otra sesión, que es
+exactamente para lo que sirve.
+
+Rebasada sobre las PR #81 y #82 y probada junto a ellas antes de fusionar: CI
+había probado la rama sola, nunca el resultado. PR #83. Suite 687/687.
+
+**Sigue sin construirse, y a propósito:** el puente flora↔miel (lo único de §19
+que falta) uniría hoy dos tablas vacías —0 especímenes, 0 cosechas de miel— y
+las **propuestas con presupuesto** no caben en ningún sitio: `budget`,
+`presupuesto`, `proposal` dan **cero** en el esquema. `Project` no tiene dinero,
+ni plan, ni aprobación. Eso exige modelo nuevo y una decisión, no improvisación.
+
 ### 2026-08-31 · El rendimiento por hectárea no existía, y ahora sí
 
 Se había dicho varias veces que lo construido «es kg por hectárea comparable
@@ -198,10 +228,17 @@ repositorio privado de este plan. Ver `PENDING_IMPLEMENTATIONS/006`.
   dos entradas: **0 de 8 lotes tienen área** y **0 cosechas están atribuidas a
   bloques**, aunque 15 de las 33 ya tienen peso declarado. Las dos las carga él
   ahora sin ayuda.
-- **Nadie ha usado ninguna de las cuatro pantallas nuevas.** Todo lo que se sabe
+- **Nadie ha usado ninguna de las cinco pantallas nuevas.** Todo lo que se sabe
   de ellas se sabe de la copia local restaurada. Que un operador real las
   recorra es la única prueba que falta, y la que suele encontrar lo que ninguna
   verificación encuentra.
+- **Un reporte de visita a apiario, tal como está escrito** — pedido dos veces
+  al dueño, sin llegar. De su contenido dependen tres decisiones distintas: si
+  traen qué estaba floreciendo, el puente flora↔miel deja de ser teórico; si
+  traen conteos por colmena, puede que la inspección se quede corta; si traen
+  acciones y costos, empuja hacia el modelo de propuestas. Sin verlos, lo que se
+  construya en apiario va contra una idea nuestra de un reporte, no contra el
+  suyo.
 - **Lotes 5 y 6** — bloqueado en el dueño. Dijo que tienen 200 plantones cada
   uno, y eso **contradice** la nota del evento del Lote 4, que afirma que los
   otros 400 de Cafelino siguen sin sembrar. 200+200 son exactamente esos 400. No
