@@ -15,6 +15,11 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 **208 operaciones** que tocan la base, en **53 archivos**:
 
+<!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
+     contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
+     la compuerta falla y dice cuál. Todo el trabajo del 2026-08-31 empezó por
+     una discrepancia de uno entre este documento y la medición. -->
+
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
 | **151** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
