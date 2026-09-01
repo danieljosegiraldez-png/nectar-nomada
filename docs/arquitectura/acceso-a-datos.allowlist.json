@@ -252,5 +252,121 @@
       "operacion": "listScopeChoices",
       "razon": "No recibe principal. La llama app/admin/users/page.tsx, que antes hace requirePermissionAdmin. Verificado el 2026-08-31."
     }
+  ],
+  "dependen_del_llamador": [
+    {
+      "archivo": "lib/ai/service.ts",
+      "operacion": "generateDataCompletenessSuggestions",
+      "razon": "Su único llamador, app/actions/ai.ts, guarda.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/audit.ts",
+      "operacion": "recordAuditEvent",
+      "razon": "Escribe una fila de auditoría; no lee datos gobernados. Es infraestructura posterior a una operación ya autorizada. De sus 30+ llamadores, cuatro no gatean —los flujos de alta, sesión y comercio—, y ninguno le pasa datos ajenos.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/commerce/orders.ts",
+      "operacion": "createCheckoutSessionForOrder",
+      "razon": "Su acción exige sesión y construye el pedido desde user.userAccountId, nunca desde un id recibido.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/commerce/orders.ts",
+      "operacion": "markOrderPaid",
+      "razon": "La invoca el webhook de Stripe, autenticado por firma y no por sesión. Actor de sistema.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/experiences/bookings.ts",
+      "operacion": "createCheckoutSessionForBooking",
+      "razon": "Su acción exige sesión y construye la reserva desde user.userAccountId, nunca desde un id recibido.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/experiences/bookings.ts",
+      "operacion": "markBookingPaid",
+      "razon": "La invoca el webhook de Stripe, autenticado por firma y no por sesión. Actor de sistema.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/rbac/admin.ts",
+      "operacion": "listPeopleForAdmin",
+      "razon": "La llama app/admin/users/page.tsx, que antes hace requirePermissionAdmin.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/rbac/admin.ts",
+      "operacion": "listRoleProfiles",
+      "razon": "La llama app/admin/users/page.tsx, que antes hace requirePermissionAdmin.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/rbac/scopeClassification.ts",
+      "operacion": "loadScopeClassifications",
+      "razon": "Sus dos llamadores, lib/apiary/hives.ts y lib/research/access.ts, guardan.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/rbac/service.ts",
+      "operacion": "revokeAssignment",
+      "razon": "Su llamador, lib/rbac/admin.ts, guarda.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/research/treatments.ts",
+      "operacion": "getBedLevelContext",
+      "razon": "Sin llamador de producción: sólo la usan los tests. Exportada para poder probarla.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/research/treatments.ts",
+      "operacion": "hasProcessingStage",
+      "razon": "Sin llamador de producción: sólo la usan los tests. Exportada para poder probarla.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/traceability/balance.ts",
+      "operacion": "applyInputDecrements",
+      "razon": "La llama settleMassBalance() en su propio archivo, que sí guarda.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/traceability/balance.ts",
+      "operacion": "computeLotBalance",
+      "razon": "Su llamador, lib/traceability/quantity.ts, guarda.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/traceability/balance.ts",
+      "operacion": "settleMassBalance",
+      "razon": "Sus cuatro llamadores (drying, fermentation, lots, roasting) guardan.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/traceability/fieldSessionCatalog.ts",
+      "operacion": "getFieldEventKinds",
+      "razon": "Lee variableCatalogValue, catálogo de referencia y no dato gobernado. Su página exige sesión.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/traceability/lots.ts",
+      "operacion": "getSensoryLinkageForSamples",
+      "razon": "Su único llamador de produccion, buildProducerExport(), resuelve resolveLotVisibility(userAccountId, 'export') y le pasa solo ids ya dentro del alcance. El detector marca ese llamador sin guardia porque no cuenta los resolutores como guardias.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/traceability/selection.ts",
+      "operacion": "getSelectionCatalogs",
+      "razon": "La llama app/lots/[id]/page.tsx, que gatea antes.",
+      "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/traceability/selection.ts",
+      "operacion": "getSelectionOutturn",
+      "razon": "La llama app/lots/[id]/page.tsx, que gatea antes.",
+      "verificado": "2026-08-31"
+    }
   ]
 }

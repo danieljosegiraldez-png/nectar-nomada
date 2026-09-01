@@ -204,3 +204,54 @@ describe("inventario de acceso: ninguna operación sin explicar", () => {
     }
   });
 });
+
+/**
+ * El conjunto que «depende del llamador» deja de ser una foto.
+ *
+ * Estas operaciones no reciben principal: su autorización, si existe, está en
+ * quien las llama, y sólo un humano puede decir si ese llamador basta. Se
+ * verificaron una a una el 2026-08-31 — y hasta hoy nada detectaba que el
+ * conjunto cambiara. Una operación nueva caía en este cajón y nadie la volvía
+ * a mirar.
+ *
+ * Comprobado por mutación el 2026-08-31: añadir una consulta sin guardia a un
+ * archivo **ya inventariado** pasaba la compuerta en verde. Con esto, falla.
+ */
+describe("depende del llamador: el conjunto está fijado, no fotografiado", () => {
+  const inventario = JSON.parse(
+    execFileSync("node", ["scripts/inventario-de-acceso.mjs", "--json"], {
+      cwd: new URL("../..", import.meta.url).pathname,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    })
+  ) as { archivo: string; nombre: string; clase: string }[];
+  const dependientes = inventario
+    .filter((o) => o.clase.startsWith("depende del llamador"))
+    .map((o) => `${o.archivo}:${o.nombre}`);
+  const fijadas = new Set(
+    allowlist.dependen_del_llamador.map((e) => `${e.archivo}:${e.operacion}`)
+  );
+
+  it("ninguna operación nueva entra sin que alguien mire a su llamador", () => {
+    expect(
+      dependientes.filter((k) => !fijadas.has(k)),
+      "Operación nueva sin principal. Mira quién la llama: si ese llamador " +
+        "autoriza, anótalo en dependen_del_llamador; si no, ponle guardia."
+    ).toEqual([]);
+  });
+
+  it("no quedan fijadas operaciones que ya no dependen del llamador", () => {
+    const vivas = new Set(dependientes);
+    expect(
+      [...fijadas].filter((k) => !vivas.has(k)),
+      "ya no dependen del llamador: bórralas de dependen_del_llamador"
+    ).toEqual([]);
+  });
+
+  it("cada una dice por qué su llamador basta, y desde cuándo", () => {
+    for (const e of allowlist.dependen_del_llamador) {
+      expect(e.razon?.trim(), `${e.archivo}:${e.operacion}`).toBeTruthy();
+      expect(e.verificado, `${e.archivo}:${e.operacion}`).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+});

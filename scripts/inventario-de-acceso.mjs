@@ -40,7 +40,33 @@ function archivos(dir, out = []) {
 }
 
 const GUARDIAS = /\b(require[A-Z]\w*(?:Access|Admin|Override)|can|resolvedPermissionKeys|permissionKeysAnywhere)\s*\(/g;
-const MODELOS = /\b(?:prisma|aiPrisma|tx|client)\.(\w+)\.(findMany|findFirst|findUnique|create|createMany|update|updateMany|upsert|delete|deleteMany|count|aggregate|groupBy)\b/g;
+/**
+ * Los métodos se enumeran, y por eso hay que enumerarlos **enteros**.
+ *
+ * La primera versión listaba `findUnique` con `\b` detrás, y `findUniqueOrThrow`
+ * no tiene frontera de palabra ahí: 13 archivos usaban esa variante y sus
+ * operaciones **desaparecían del inventario**, no quedaban «sin clasificar».
+ * `app/actions/checkout.ts` y `app/actions/bookings.ts` salían con cero
+ * operaciones teniendo una consulta cada uno. El sufijo va antes del `\b`.
+ *
+ * El SQL crudo no tiene modelo que capturar —`prisma.$queryRaw` no lleva
+ * `.modelo.`— y es justo el que más importa ver, porque se salta la capa de
+ * modelos entera. Se registra con el modelo `SQL-crudo` para que exista como
+ * operación y haya que explicarla como cualquier otra.
+ */
+const METODOS =
+  "findMany|findFirstOrThrow|findFirst|findUniqueOrThrow|findUnique|createManyAndReturn|createMany|create|updateManyAndReturn|updateMany|update|upsert|deleteMany|delete|count|aggregate|groupBy";
+const MODELOS = new RegExp(
+  // El cliente puede no ser un identificador. `lib/audit.ts` escribe
+  // `(tx ?? prisma).auditEvent.create(...)`, y un nombre suelto no lo ve: el
+  // archivo entero salía con cero operaciones. Se acepta también un `)`.
+  // Medido: en todo el árbol hay **una** coincidencia de `).modelo.metodo(`,
+  // y es justo esa. Un falso positivo aquí sólo obliga a explicar de más;
+  // un falso negativo es silencio, que es la dirección peligrosa.
+  String.raw`(?:\b(?:prisma|aiPrisma|tx|client)|\))\.(\w+)\.(?:${METODOS})\b`,
+  "g"
+);
+const CRUDO = /\b(?:prisma|aiPrisma|tx|client)\.\$(?:query|execute)Raw(?:Unsafe)?\b/g;
 
 const TODOS = [...archivos("app"), ...archivos("lib")];
 const fuentes = new Map(TODOS.map((f) => [f, readFileSync(join(RAIZ, f), "utf8")]));
@@ -97,6 +123,8 @@ for (const [archivo, src] of fuentes) {
 const filas = ops
   .map((o) => {
     const modelos = [...new Set([...o.cuerpo.matchAll(MODELOS)].map((m) => m[1]))];
+    if (CRUDO.test(o.cuerpo)) modelos.push("SQL-crudo");
+    CRUDO.lastIndex = 0;
     if (modelos.length === 0) return null;
     const propios = [...new Set((o.cuerpo.match(GUARDIAS) ?? []).map((g) => g.replace(/\s*\($/, "")))];
     const locales = [...guardanDirecto].filter(
