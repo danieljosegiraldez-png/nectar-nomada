@@ -225,6 +225,25 @@ export async function recordFieldEvent(userAccountId: string, input: RecordField
   if (!kind) throw new FieldSessionValidationError("event_kind_not_found");
   if (kind.catalog.key !== "event_kind") throw new FieldSessionValidationError("event_kind_wrong_catalog");
 
+  // Misma comprobación que hace `startFieldSession` diez líneas más arriba:
+  // que la Persona exista. Aquí faltaba, así que un id mal tecleado reventaba
+  // contra la clave foránea con un error opaco de base de datos en vez de decir
+  // cuál era el problema. Lo señaló una revisión independiente.
+  //
+  // **No es un control de permisos, y no debe serlo.** `operatorPersonId` es
+  // atribución, no autoridad: T9.5 §3(c) lo dice de `getObserverCandidates`
+  // —«not a security boundary; operatorPersonId carries no RBAC weight of its
+  // own»— y este módulo depende de ello, porque el operador es una Persona que
+  // normalmente NO tiene cuenta. Restringir por ámbito excluiría justo a quien
+  // hace el trabajo. La revisión propuso ese control; se descartó a propósito.
+  if (input.operatorPersonId) {
+    const operator = await prisma.person.findUnique({
+      where: { id: input.operatorPersonId },
+      select: { id: true },
+    });
+    if (!operator) throw new FieldSessionValidationError("operator_not_found");
+  }
+
   validateCoordinates(input.position, "position");
   validateCaptureTimes(input.occurredAt, input.capture);
 

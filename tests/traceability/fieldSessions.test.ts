@@ -439,6 +439,72 @@ describe("event kind is validated against its own catalog", () => {
   });
 });
 
+describe("el operador de un evento se comprueba igual que el de la jornada", () => {
+  it("rechaza una Persona inexistente con un error que dice cuál es el problema", async () => {
+    // `startFieldSession` ya lo comprobaba; `recordFieldEvent` no, así que un
+    // id mal tecleado reventaba contra la clave foránea con un error opaco.
+    const sesion = await startFieldSession(authorizedUserAccountId, {
+      locationId: plotId,
+      operatorPersonId,
+      startedAt: new Date("2026-03-12T07:00:00Z"),
+      provenanceClass: "direct_observation",
+    });
+
+    await expect(
+      recordFieldEvent(authorizedUserAccountId, {
+        fieldSessionId: sesion.id,
+        eventKindValueId: observacionKindId,
+        occurredAt: new Date("2026-03-12T08:00:00Z"),
+        operatorPersonId: "00000000-0000-0000-0000-000000000000",
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow("operator_not_found");
+
+    // Y no dejó nada a medias.
+    const eventos = await prisma.fieldEvent.count({ where: { fieldSessionId: sesion.id } });
+    expect(eventos).toBe(0);
+  });
+
+  it("acepta a CUALQUIER Persona activa, incluida una sin cuenta", async () => {
+    // Deliberado, no un descuido: `operatorPersonId` es atribución y no
+    // autoridad (T9.5 §3(c)). El operador es normalmente alguien que no puede
+    // iniciar sesión, y restringir por ámbito excluiría a quien hace el
+    // trabajo. Este test existe para que un futuro «endurecimiento» tenga que
+    // romperlo a conciencia en vez de por descuido.
+    const sesion = await startFieldSession(authorizedUserAccountId, {
+      locationId: plotId,
+      operatorPersonId,
+      startedAt: new Date("2026-03-12T07:00:00Z"),
+      provenanceClass: "direct_observation",
+    });
+
+    const evento = await recordFieldEvent(authorizedUserAccountId, {
+      fieldSessionId: sesion.id,
+      eventKindValueId: observacionKindId,
+      occurredAt: new Date("2026-03-12T08:00:00Z"),
+      operatorPersonId: secondPersonId,
+      provenanceClass: "direct_observation",
+    });
+    expect(evento.operatorPersonId).toBe(secondPersonId);
+  });
+
+  it("sin operador hereda el de la jornada", async () => {
+    const sesion = await startFieldSession(authorizedUserAccountId, {
+      locationId: plotId,
+      operatorPersonId,
+      startedAt: new Date("2026-03-12T07:00:00Z"),
+      provenanceClass: "direct_observation",
+    });
+    const evento = await recordFieldEvent(authorizedUserAccountId, {
+      fieldSessionId: sesion.id,
+      eventKindValueId: observacionKindId,
+      occurredAt: new Date("2026-03-12T08:00:00Z"),
+      provenanceClass: "direct_observation",
+    });
+    expect(evento.operatorPersonId).toBe(operatorPersonId);
+  });
+});
+
 describe("dos escrituras que compiten de verdad", () => {
   /** Abre una jornada lista para competir contra ella. */
   async function abrirJornada(sufijo: string) {
