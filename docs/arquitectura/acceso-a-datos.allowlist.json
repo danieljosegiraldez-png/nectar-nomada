@@ -238,16 +238,6 @@
   ],
   "operaciones_sin_patron": [
     {
-      "archivo": "lib/auth/config.ts",
-      "operacion": "authConfig",
-      "razon": "Es la configuración de Auth.js: el propio flujo de autenticación, previo a que exista sesión. Exigirle un guardia sería imposible de satisfacer."
-    },
-    {
-      "archivo": "lib/commerce/cart.ts",
-      "operacion": "addToCart",
-      "razon": "Lee la variante aplicando la misma puerta pública que lib/discover/service.ts, y escribe el carrito del propio titular, identificado por el userAccountId que recibe."
-    },
-    {
       "archivo": "lib/rbac/admin.ts",
       "operacion": "listScopeChoices",
       "razon": "No recibe principal. La llama app/admin/users/page.tsx, que antes hace requirePermissionAdmin. Verificado el 2026-08-31."

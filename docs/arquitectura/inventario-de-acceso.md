@@ -13,16 +13,16 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-08-31
 
-**202 operaciones** que tocan la base, en **53 archivos**:
+**208 operaciones** que tocan la base, en **53 archivos**:
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **143** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **25** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **151** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **23** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **19** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
-| **3** | recibía principal sin guardia visible | **Las tres miradas a mano y explicadas** (abajo) |
-| **2** | previo a la sesión | El flujo de autenticación |
+| **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
+| **1** | recibía principal sin guardia visible | `listScopeChoices()`, mirada a mano y explicada |
 
 > Estas cifras son de la segunda medición. La primera decía 195 y 51, y estaba
 > mal por un defecto del propio detector — la historia está abajo, en «El
@@ -56,7 +56,7 @@ Las once restantes, miradas a mano:
 | `applyInputDecrements()` | La llama `settleMassBalance()` en su **propio archivo**, que sí guarda |
 | `getSelectionOutturn()` · `getSelectionCatalogs()` | `app/lots/[id]/page.tsx`, que gatea antes |
 
-**Ninguna de las 202 operaciones quedó sin explicar.**
+**Ninguna de las 208 operaciones quedó sin explicar.**
 
 ### Lo que esta verificación NO establece
 
@@ -182,3 +182,60 @@ comprobadas por mutación:
 Lo que sigue **sin** demostrarse es lo de siempre, y conviene no confundirlo con
 esto: que el guardia del llamador sea *el debido*. Aquí sólo se asegura que
 nadie entre en el cajón sin que un humano lo mire y lo firme.
+
+
+## Lo que encontró la revisión independiente (2026-08-31)
+
+Rechazó las afirmaciones de cobertura, y con razón en dos de tres. Ambas
+comprobadas por mutación antes de creerlas, y ambas cerradas.
+
+**1 · Una consulta delegada a un ayudante privado desaparecía entera.** Una
+función exportada que delega todo su acceso en un ayudante no exportado del
+mismo archivo no aparecía: ni ella ni el ayudante. `modelos.length === 0`, y la
+compuerta en verde. Era el **mismo modo de fallo** que `findUniqueOrThrow`, que
+se creía cerrado ese mismo día, sobreviviendo en otra forma.
+
+Ahora el cuerpo de una operación exportada absorbe el de los ayudantes privados
+que llama, transitivamente, y un ayudante con acceso al que no llega ninguna
+exportada se emite como operación propia.
+
+Un efecto secundario que merece decirse: `addToCart()` pasó de «sin patrón» a
+**acotado por construcción**, porque la absorción trajo el
+`where: { userAccountId }` de `getOrCreateActiveCart()`. Lo que antes era una
+razón escrita a mano ahora lo demuestra la estructura. De tres excepciones
+anotadas quedó **una**.
+
+**2 · Los guardias se reconocían por nombre suelto, sin identidad de archivo.**
+`guardanDirecto` era un `Set` global: una función homónima de un guardia de
+cualquier otro archivo promovía la operación a «guardia directo» — justo la
+transición que el detector de podredumbre da por buena.
+
+Ahora un guardia cuenta si el archivo **lo declara o lo importa**. Limitarse al
+propio archivo era demasiado estricto y degradaba `getLotReport()`, que delega
+en `getLotDetail()` importado de `./lots`; la conciencia de `import` es lo que
+pedía la propia revisión.
+
+**3 · Rechazado: una validación de Persona supuestamente retirada.** No existió.
+El paquete de revisión se armó con `git diff origin/main..HEAD`, que compara los
+dos extremos, y presentó como bajas de este cambio 85 líneas que **otra sesión
+había añadido** en `main` (PR #98). El revisor gastó un hallazgo entero en una
+regresión fantasma, y su recomendación —«restaurar la comprobación»— habría
+borrado un arreglo real de otro. Corregido en `tools/pack-for-review.sh`.
+
+### Lo que sigue abierto, y se comprueba que sigue abierto
+
+Un nombre con forma de guardia basta. Comprobado por mutación:
+
+```ts
+function requireFakeAccess(_x: string) { return true; }
+export async function fugaPorConvencion(x: string) {
+  requireFakeAccess(x);
+  return prisma.lot.findUniqueOrThrow({ where: { id: x } });
+}
+```
+
+sale como **guardia directo** y la compuerta pasa en verde. `GUARDIAS` reconoce
+`require\w*(Access|Admin|Override)` como convención deliberada, y cerrarlo exige
+resolver el símbolo hasta el servicio de autorización de verdad. No se hace
+aquí. Se deja escrito, con la mutación que lo demuestra, para que nadie lea
+«208 operaciones inventariadas» como «208 operaciones autorizadas».

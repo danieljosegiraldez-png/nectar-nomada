@@ -81,17 +81,59 @@ const fuentes = new Map(TODOS.map((f) => [f, readFileSync(join(RAIZ, f), "utf8")
  * forma «siguiente export» en vez del final real de la función es el mismo
  * error que este inventario existe para no cometer.
  */
-function operaciones(archivo, src) {
+function declaraciones(archivo, src) {
   const decl = /^(?:export )?(?:async )?(?:function|const) (\w+)/gm;
   const todas = [...src.matchAll(decl)];
-  return todas
-    .map((m, i) => {
-      if (!/^export /.test(m[0])) return null;
-      const ini = m.index ?? 0;
-      const fin = i + 1 < todas.length ? todas[i + 1].index : src.length;
-      return { archivo, nombre: m[1], cuerpo: src.slice(ini, fin) };
-    })
-    .filter(Boolean);
+  return todas.map((m, i) => ({
+    archivo,
+    nombre: m[1],
+    exportada: /^export /.test(m[0]),
+    cuerpo: src.slice(m.index ?? 0, i + 1 < todas.length ? todas[i + 1].index : src.length),
+  }));
+}
+
+/**
+ * Una consulta delegada a un ayudante **no exportado** desaparecía entera.
+ *
+ * Lo encontró la revisión independiente del 2026-08-31 y se comprobó por
+ * mutación: una función exportada que delega toda su consulta en un ayudante
+ * privado del mismo archivo no aparecía en el inventario —ni ella ni el
+ * ayudante—, `modelos.length === 0`, y la compuerta seguía en verde. Es el
+ * mismo modo de fallo que `findUniqueOrThrow`, que se creía cerrado: descartar
+ * en silencio.
+ *
+ * Ahora el cuerpo de una operación exportada **absorbe** el de los ayudantes
+ * privados que llama, transitivamente. Y un ayudante privado con acceso al que
+ * no llega ninguna exportada se emite como operación propia, para que tampoco
+ * ése pueda esconderse.
+ */
+function operaciones(archivo, src) {
+  const todas = declaraciones(archivo, src);
+  const privadas = new Map(todas.filter((d) => !d.exportada).map((d) => [d.nombre, d]));
+
+  const absorber = (d) => {
+    let cuerpo = d.cuerpo;
+    const alcanza = new Set([d.nombre]);
+    for (let cambio = true; cambio; ) {
+      cambio = false;
+      for (const [nombre, ayudante] of privadas) {
+        if (alcanza.has(nombre)) continue;
+        if (!new RegExp(`\\b${nombre}\\s*\\(`).test(cuerpo)) continue;
+        cuerpo += "\n" + ayudante.cuerpo;
+        alcanza.add(nombre);
+        cambio = true;
+      }
+    }
+    return { archivo, nombre: d.nombre, cuerpo, alcanza };
+  };
+
+  const exportadas = todas.filter((d) => d.exportada).map(absorber);
+  const alcanzadas = new Set(exportadas.flatMap((o) => [...o.alcanza]));
+  const huerfanas = todas
+    .filter((d) => !d.exportada && !alcanzadas.has(d.nombre))
+    .map(absorber);
+
+  return [...exportadas, ...huerfanas].map(({ alcanza, ...o }) => o);
 }
 
 const ops = TODOS.flatMap((f) => operaciones(f, fuentes.get(f) ?? ""));
@@ -108,16 +150,59 @@ const ops = TODOS.flatMap((f) => operaciones(f, fuentes.get(f) ?? ""));
  * archivo cuyo cuerpo invoque el servicio de autorización, y llamar a una de
  * ellas cuenta como guardar. Reconocer un nombre no es reconocer un guardia.
  */
+/**
+ * **Por archivo, no global.** Era un `Set` de nombres sueltos de todo el árbol,
+ * así que una función llamada como un guardia de cualquier otro archivo
+ * promovía la operación a «guardia directo» sin que nada resolviera el símbolo.
+ * Lo señaló la revisión independiente del 2026-08-31: es justo la transición
+ * —salir del cajón revisado— que el detector de podredumbre da por buena.
+ *
+ * Un guardia local guarda en **su** archivo. Los que cruzan archivos siguen
+ * reconociéndose por `GUARDIAS`, que es una convención de nombres deliberada y
+ * documentada abajo, no una resolución de símbolos.
+ */
 const CUALQUIER_FN = /^(?:export )?(?:async )?(?:function|const) (\w+)/gm;
-const guardanDirecto = new Set();
+
+/**
+ * Qué nombres entran en cada archivo por un `import`. Un guardia de otro
+ * archivo cuenta **si está importado aquí**; si no, es una homonimia y no
+ * guarda nada. Sin esto, limitarse al propio archivo degradaba a
+ * `getLotReport()`, que delega en `getLotDetail()` importado de `./lots`.
+ */
+const importados = new Map();
+for (const [archivo, src] of fuentes) {
+  const nombres = new Set();
+  for (const m of src.matchAll(/import\s*\{([^}]+)\}\s*from/g)) {
+    for (const parte of m[1].split(",")) {
+      const nombre = parte.trim().split(/\s+as\s+/).pop()?.trim();
+      if (nombre) nombres.add(nombre);
+    }
+  }
+  importados.set(archivo, nombres);
+}
+
+const guardanPorArchivo = new Map();
 for (const [archivo, src] of fuentes) {
   const decl = [...src.matchAll(CUALQUIER_FN)];
+  const aqui = new Set();
+  guardanPorArchivo.set(archivo, aqui);
   for (let i = 0; i < decl.length; i++) {
     const ini = decl[i].index ?? 0;
     const fin = i + 1 < decl.length ? decl[i + 1].index : src.length;
-    if (GUARDIAS.test(src.slice(ini, fin))) guardanDirecto.add(decl[i][1]);
+    if (GUARDIAS.test(src.slice(ini, fin))) aqui.add(decl[i][1]);
     GUARDIAS.lastIndex = 0;
   }
+}
+
+/**
+ * Los guardias visibles desde un archivo: los que declara y los que importa.
+ * Nunca los homónimos de un archivo con el que no tiene relación.
+ */
+const guardanEnAlgunSitio = new Set([...guardanPorArchivo.values()].flatMap((s) => [...s]));
+function guardanVisiblesEn(archivo) {
+  const propios = guardanPorArchivo.get(archivo) ?? new Set();
+  const traidos = [...(importados.get(archivo) ?? [])].filter((n) => guardanEnAlgunSitio.has(n));
+  return new Set([...propios, ...traidos]);
 }
 
 const filas = ops
@@ -127,13 +212,13 @@ const filas = ops
     CRUDO.lastIndex = 0;
     if (modelos.length === 0) return null;
     const propios = [...new Set((o.cuerpo.match(GUARDIAS) ?? []).map((g) => g.replace(/\s*\($/, "")))];
-    const locales = [...guardanDirecto].filter(
+    const locales = [...guardanVisiblesEn(o.archivo)].filter(
       (n) => n !== o.nombre && new RegExp(`\\b${n}\\s*\\(`).test(o.cuerpo)
     );
     const guardias = [...new Set([...propios, ...locales])];
     const principal = /\buserAccountId\b/.test(o.cuerpo);
     // Un salto: ¿llama a alguna función que sí guarda?
-    const transitivo = [...guardanDirecto].filter(
+    const transitivo = [...guardanVisiblesEn(o.archivo)].filter(
       (n) => n !== o.nombre && new RegExp(`\\b${n}\\s*\\(`).test(o.cuerpo)
     );
     /**
@@ -161,7 +246,11 @@ const filas = ops
      */
     const dependeDelLlamador = !o.cuerpo?.includes("userAccountId");
     const publica = /discover\/service/.test(o.archivo);
-    const preSesion = /actions\/auth/.test(o.archivo);
+    // `lib/auth/config.ts` es el flujo de autenticación en sí: `authConfig` y
+    // `providers` corren **antes** de que exista sesión, así que no hay
+    // principal contra el que autorizar. Estaba escrito a mano en el
+    // inventario de excepciones; reconocer la propiedad es mejor que anotarla.
+    const preSesion = /actions\/auth|lib\/auth\/config/.test(o.archivo);
     const firma = /webhooks/.test(o.archivo);
 
     let clase;

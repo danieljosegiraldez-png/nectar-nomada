@@ -29,8 +29,8 @@ patrón explica y que no esté justificada en el inventario. Dos comprobaciones 
 acompañan: que el inventario de excepciones **no nombre** operaciones que ya se
 explican (detector de podredumbre), y que cada excepción **diga por qué**.
 
-Medido el 2026-08-31, tras arreglar el detector: **202 operaciones** sobre 53
-archivos. Tres no las explica ningún patrón, y las tres están inventariadas con
+Medido el 2026-08-31, tras arreglar el detector y atender la revisión
+independiente: **208 operaciones** sobre 53 archivos. Tres no las explica ningún patrón, y las tres están inventariadas con
 su razón:
 
 | Operación | Razón inventariada |
@@ -44,12 +44,12 @@ autorizar en este código:
 
 | Clase | Operaciones |
 |---|---|
-| guardia directo | 143 |
-| acotado por construcción | 25 |
+| guardia directo | 151 |
+| acotado por construcción | 23 |
 | depende del llamador — **fijadas**, ver abajo | 19 |
 | público por diseño (`PUBLIC_WHERE`, ADR-024 §3) | 10 |
-| recibe principal, sin guardia visible | 3 |
-| previo a la sesión | 2 |
+| previo a la sesión | 4 |
+| recibe principal, sin guardia visible | 1 |
 
 Hay un séptimo patrón que **el inventario no puede emitir porque no está en el
 código**: la frontera del camino de IA es una concesión de base de datos —el rol
