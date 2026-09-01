@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { Aspect, ShadePercentageBracket, SunExposure } from "../../generated/prisma/enums";
+import {
+  Aspect,
+  BiocharCooling,
+  BiocharMoistureCondition,
+  ShadePercentageBracket,
+  SunExposure,
+} from "../../generated/prisma/enums";
 
 /**
  * Un valor enumerado nuevo no llega sin su etiqueta ni sin su opción.
@@ -37,6 +43,8 @@ const CASOS = [
   { nombre: "Aspect", prefijo: "aspect", valores: Object.values(Aspect) },
   { nombre: "SunExposure", prefijo: "sunExposure", valores: Object.values(SunExposure) },
   { nombre: "ShadePercentageBracket", prefijo: "shadePercentage", valores: Object.values(ShadePercentageBracket) },
+  { nombre: "BiocharMoistureCondition", prefijo: "biocharMoisture", valores: Object.values(BiocharMoistureCondition) },
+  { nombre: "BiocharCooling", prefijo: "biocharCooling", valores: Object.values(BiocharCooling) },
 ] as const;
 
 describe("cada valor enumerado tiene etiqueta en los dos idiomas", () => {
@@ -68,11 +76,11 @@ describe("cada valor enumerado tiene etiqueta en los dos idiomas", () => {
  * constante — por eso se comprueba primero que encontró algo, y así un
  * renombrado hace **fallar** el test en vez de vaciarlo.
  */
-function listaDelFormulario(constante: string): string[] {
-  const src = leer("app/components/traceability/PlotAttributesForm.tsx");
+function listaDelFormulario(archivo: string, constante: string): string[] {
+  const src = leer(`app/components/traceability/${archivo}`);
   const m = src.match(new RegExp(`const ${constante} = \\[([^\\]]*)\\] as const;`));
   const cuerpo = m?.[1];
-  expect(cuerpo, `no se encontró la constante ${constante} en PlotAttributesForm.tsx`).toBeTruthy();
+  expect(cuerpo, `no se encontró la constante ${constante} en ${archivo}`).toBeTruthy();
   return [...cuerpo!.matchAll(/"([a-z_0-9]+)"/g)].map((x) => x[1]!);
 }
 
@@ -80,14 +88,24 @@ describe("el formulario ofrece exactamente los valores que la base acepta", () =
   it("ASPECTS coincide con el enum Aspect, en el mismo orden", () => {
     // El orden importa y no es alfabético: los ocho rumbos primero, y después
     // `flat` y `variable`, que no son direcciones.
-    expect(listaDelFormulario("ASPECTS")).toEqual(Object.values(Aspect));
+    expect(listaDelFormulario("PlotAttributesForm.tsx", "ASPECTS")).toEqual(Object.values(Aspect));
   });
 
   it("SUN_EXPOSURES coincide con el enum SunExposure", () => {
-    expect(listaDelFormulario("SUN_EXPOSURES")).toEqual(Object.values(SunExposure));
+    expect(listaDelFormulario("PlotAttributesForm.tsx", "SUN_EXPOSURES")).toEqual(Object.values(SunExposure));
   });
 
   it("SHADE_BRACKETS coincide con el enum ShadePercentageBracket", () => {
-    expect(listaDelFormulario("SHADE_BRACKETS")).toEqual(Object.values(ShadePercentageBracket));
+    expect(listaDelFormulario("PlotAttributesForm.tsx", "SHADE_BRACKETS")).toEqual(Object.values(ShadePercentageBracket));
+  });
+
+  it("MOISTURE_CONDITIONS coincide con el enum BiocharMoistureCondition", () => {
+    expect(listaDelFormulario("BiocharBatchForm.tsx", "MOISTURE_CONDITIONS")).toEqual(
+      Object.values(BiocharMoistureCondition),
+    );
+  });
+
+  it("COOLINGS coincide con el enum BiocharCooling", () => {
+    expect(listaDelFormulario("BiocharBatchForm.tsx", "COOLINGS")).toEqual(Object.values(BiocharCooling));
   });
 });

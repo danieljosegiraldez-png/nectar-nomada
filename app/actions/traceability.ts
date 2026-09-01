@@ -40,6 +40,11 @@ import {
   LocationAccessError,
   LocationValidationError,
 } from "../../lib/traceability/locations";
+import {
+  createBiocharBatch,
+  updateBiocharBatch,
+  BiocharBatchValidationError,
+} from "../../lib/traceability/biocharBatches";
 import { createSampleFromLot } from "../../lib/traceability/samples";
 import { requestLotAssetUpload, finalizeLotAssetUpload, type LotAssetParent } from "../../lib/traceability/media";
 import {
@@ -69,6 +74,7 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof LocationValidationError) return t("error_location", { detail: error.message });
   if (error instanceof PlantingCohortValidationError) return t("error_harvest_sources", { detail: error.message });
   if (error instanceof FieldSessionValidationError) return t("error_field_session", { detail: error.message });
+  if (error instanceof BiocharBatchValidationError) return t("error_biochar", { detail: error.message });
   if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });
   throw error;
 }
@@ -1095,5 +1101,103 @@ export async function correctMeasurementFormAction(
   }
 
   revalidatePath(`/lots/${lotId}`);
+  return {};
+}
+
+// --- Lote de biochar (S1 §2, semanas 1-4) --------------------------------
+
+/**
+ * Fecha de producción: sólo el día, sin hora.
+ *
+ * `<input type="date">` da `YYYY-MM-DD`, y una cadena ISO de sólo fecha se
+ * interpreta en UTC por especificación — así que aquí NO hace falta el desfase
+ * del dispositivo que sí necesita `datetime-local` (ver `fechaLocal`). Un lote
+ * de biochar se anota por día; nadie registra a qué hora se apagó el horno.
+ */
+const fechaDeDia = (formData: FormData, campo: string) => {
+  const raw = String(formData.get(campo) ?? "").trim();
+  return raw ? new Date(`${raw.slice(0, 10)}T00:00:00Z`) : null;
+};
+
+/** Los campos de la Tabla 6 que comparten crear y corregir. */
+function camposDeBiochar(formData: FormData) {
+  const marcada = (campo: string) => formData.get(campo) != null;
+  return {
+    producedAt: fechaDeDia(formData, "producedAt"),
+    feedstock: emptyToNull(formData.get("feedstock")),
+    feedstockSource: emptyToNull(formData.get("feedstockSource")),
+    moistureCondition: emptyToNull(formData.get("moistureCondition")) as never,
+    kilnDesign: emptyToNull(formData.get("kilnDesign")),
+    peakTemperatureC: emptyToNullNumber(formData.get("peakTemperatureC")),
+    temperatureMethod: emptyToNull(formData.get("temperatureMethod")),
+    burnDurationMinutes: emptyToNullNumber(formData.get("burnDurationMinutes")),
+    timeAtPeakMinutes: emptyToNullNumber(formData.get("timeAtPeakMinutes")),
+    oxygenManagement: emptyToNull(formData.get("oxygenManagement")),
+    cooling: emptyToNull(formData.get("cooling")) as never,
+    quenchWaterSource: emptyToNull(formData.get("quenchWaterSource")),
+    particleSize: emptyToNull(formData.get("particleSize")),
+    storageConditions: emptyToNull(formData.get("storageConditions")),
+    chargingMaterial: emptyToNull(formData.get("chargingMaterial")),
+    chargingRatio: emptyToNull(formData.get("chargingRatio")),
+    // Una casilla sin marcar no llega en el FormData, así que «no marcada» y
+    // «no registrada» son indistinguibles en el POST. Un campo oculto declara
+    // que la casilla estuvo en el formulario: sólo entonces su ausencia
+    // significa `false`. Sin él, un lote co-compostado que alguien desmarca al
+    // corregir se quedaría en `true` para siempre.
+    coComposted: marcada("coCompostedPresent") ? marcada("coComposted") : null,
+    chargingDurationDays: emptyToNullNumber(formData.get("chargingDurationDays")),
+    analysisLaboratory: emptyToNull(formData.get("analysisLaboratory")),
+    notes: emptyToNull(formData.get("notes")),
+    dataQuality: emptyToNull(formData.get("dataQuality")) as never,
+  };
+}
+
+export async function createBiocharBatchAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  try {
+    await createBiocharBatch(user.userAccountId, {
+      batchCode: String(formData.get("batchCode") ?? ""),
+      organizationId: String(formData.get("organizationId") ?? ""),
+      producedAtLocationId: String(formData.get("producedAtLocationId") ?? ""),
+      // ADR-038: sin valor por defecto. Lo elige el formulario, que obliga.
+      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      ...camposDeBiochar(formData),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath("/biochar");
+  return {};
+}
+
+export async function updateBiocharBatchAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const biocharBatchId = String(formData.get("biocharBatchId") ?? "");
+  try {
+    await updateBiocharBatch(user.userAccountId, {
+      biocharBatchId,
+      batchCode: String(formData.get("batchCode") ?? ""),
+      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      ...camposDeBiochar(formData),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/biochar/${biocharBatchId}`);
+  revalidatePath("/biochar");
   return {};
 }

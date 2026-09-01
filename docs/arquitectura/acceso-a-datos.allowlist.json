@@ -1,5 +1,5 @@
 {
-  "_nota": "Inventario versionado de quién puede tocar un cliente de base de datos. Lo comprueba tests/arquitectura/acceso-a-datos.test.ts. Añadir una entrada es un acto deliberado: exige una razón y se ve en el diff. Esto NO demuestra que la autorización sea correcta; demuestra que un camino de acceso crudo nuevo no aparece en silencio, ni por import de un cliente ni por recibir una transacción abierta. `operaciones_sin_patron` inventaría las operaciones que ningún patrón de autorización explica: hoy UNA, `listScopeChoices`. Eran tres hasta el 2026-08-31; `authConfig` pasó a reconocerse como previo a la sesión y `addToCart` como acotado por construcción, las dos por mejoras del detector, no por cambios en el código. Que aparezca una segunda es lo que el guardia quiere que se vea.",
+  "_nota": "Inventario versionado de quién puede tocar un cliente de base de datos. Lo comprueba tests/arquitectura/acceso-a-datos.test.ts. Añadir una entrada es un acto deliberado: exige una razón y se ve en el diff. Esto NO demuestra que la autorización sea correcta; demuestra que un camino de acceso crudo nuevo no aparece en silencio, ni por import de un cliente ni por recibir una transacción abierta. `operaciones_sin_patron` inventaría las operaciones que ningún patrón de autorización explica: hoy DOS, `listScopeChoices` y `listBiocharBatches`. Eran tres hasta el 2026-08-31; `authConfig` pasó a reconocerse como previo a la sesión y `addToCart` como acotado por construcción, las dos por mejoras del detector, no por cambios en el código. Que aparezca una segunda es lo que el guardia quiere que se vea.",
   "clientes": [
     {
       "archivo": "lib/db.ts",
@@ -186,6 +186,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/biocharBatches.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
       "archivo": "lib/traceability/plantingEvents.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
@@ -241,6 +245,11 @@
       "archivo": "lib/rbac/admin.ts",
       "operacion": "listScopeChoices",
       "razon": "No recibe principal. La llama app/admin/users/page.tsx, que antes hace requirePermissionAdmin. Verificado el 2026-08-31."
+    },
+    {
+      "archivo": "lib/traceability/biocharBatches.ts",
+      "operacion": "listBiocharBatches",
+      "razon": "Recibe el principal y filtra por el conjunto de Locations visibles que devuelve getManageableContext, que es la misma visibilidad con la que /plots lista sus parcelas — pero no llama a ningún require*, así que el detector no la reconoce y hace bien en señalarla. Es el filtro de una LISTA, no la frontera: cada lectura de detalle y cada escritura pasan por requireLocationAttributeAccess. Verificado el 2026-09-01."
     }
   ],
   "dependen_del_llamador": [
