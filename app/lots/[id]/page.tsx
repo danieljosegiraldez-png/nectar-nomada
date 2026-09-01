@@ -311,10 +311,17 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                   name: plot.name,
                   cohorts: plot.plantingCohorts.map((cohort) => ({
                     id: cohort.id,
-                    label: t("sourceCohortOption", {
-                      cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
-                      plants: cohort.plantCount ?? 0,
-                    }),
+                    // Sin conteo NO es «0 plantas»: es que nadie lo contó.
+                    // Un 0 aquí se lee como un bloque vacío (ADR-080).
+                    label:
+                      cohort.plantCount != null
+                        ? t("sourceCohortOption", {
+                            cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
+                            plants: cohort.plantCount,
+                          })
+                        : t("sourceCohortOptionNoCount", {
+                            cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
+                          }),
                   })),
                 }))}
               />

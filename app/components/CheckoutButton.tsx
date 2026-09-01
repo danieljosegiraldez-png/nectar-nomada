@@ -12,7 +12,7 @@ export function CheckoutButton() {
 
   return (
     <form action={formAction} style={{ marginTop: "1rem" }}>
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("checkoutButton")}
       </button>

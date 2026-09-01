@@ -68,7 +68,7 @@ export function AssessmentForm({
         <textarea id={`comment-${blindSampleId}`} name="comment" rows={3} />
       </div>
 
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
 
       <button type="submit" className="nn-button" disabled={pending}>
         {t("submitAssessmentButton")}

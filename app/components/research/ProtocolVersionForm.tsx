@@ -21,7 +21,7 @@ export function ProtocolVersionForm({ protocolId, catalogs }: { protocolId: stri
     <form action={formAction} className="nn-form" style={{ maxWidth: 640 }}>
       <input type="hidden" name="protocolId" value={protocolId} />
       <ProtocolVersionFields catalogs={catalogs} />
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("createVersionButton")}
       </button>

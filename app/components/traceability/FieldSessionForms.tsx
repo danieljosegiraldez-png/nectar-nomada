@@ -136,7 +136,7 @@ export function FieldSessionStartForm({
         <textarea id="sessionNotes" name="notes" rows={2} />
       </div>
 
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("fieldSessionStartButton")}
       </button>
@@ -204,7 +204,7 @@ export function FieldEventForm({
         <textarea id="eventNotes" name="notes" rows={2} />
       </div>
 
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("fieldEventRecordButton")}
       </button>
@@ -225,7 +225,7 @@ export function FieldSessionEndForm({ fieldSessionId }: { fieldSessionId: string
         <label htmlFor="endedAt">{t("fieldSessionEndedAtLabel")}</label>
         <input id="endedAt" type="datetime-local" name="endedAt" required defaultValue={ahoraLocal()} />
       </div>
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("fieldSessionEndButton")}
       </button>

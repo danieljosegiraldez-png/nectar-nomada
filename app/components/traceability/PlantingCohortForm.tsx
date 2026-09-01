@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
+import { recortarPorPrecision } from "../../../lib/time/recortarPorPrecision";
 import {
   createPlantingCohortFormAction,
   updatePlantingCohortFormAction,
@@ -73,14 +74,24 @@ export function PlantingCohortForm({
   // El tipo de campo sigue a la precisión elegida, así que un año no ofrece
   // siquiera un selector de día.
   const inputType = precision === "date" ? "date" : precision === "month" ? "month" : "number";
-  const fechaPorDefecto =
-    cohort?.plantedAt == null
-      ? ""
-      : precision === "year"
-        ? cohort.plantedAt.slice(0, 4)
-        : precision === "month"
-          ? cohort.plantedAt.slice(0, 7)
-          : cohort.plantedAt.slice(0, 10);
+
+  // **Controlado, no `defaultValue`.** Antes la fecha era un input no
+  // controlado cuyo `defaultValue` se recalculaba desde la cohorte ORIGINAL
+  // cada vez que cambiaba la precisión. Caso que lo rompía: el usuario cambia
+  // 2019-05-12 por 2020-06-10, luego pasa la precisión a «mes», y el campo
+  // volvía a 2019-05 — descartando lo que acababa de escribir, sin avisar.
+  // Lo señaló una revisión independiente.
+  const [fecha, setFecha] = useState(
+    cohort?.plantedAt == null ? "" : recortarPorPrecision(cohort.plantedAt, cohort.plantedPrecision ?? "year"),
+  );
+
+  // Cambiar de precisión recorta lo ESCRITO, no lo original. Pasar de día a mes
+  // pierde el día —es inevitable, la precisión menor no lo admite— pero
+  // conserva el año y el mes que el usuario eligió.
+  const cambiarPrecision = (nueva: string) => {
+    setPrecision(nueva);
+    setFecha((actual) => recortarPorPrecision(actual, nueva));
+  };
 
   return (
     <form action={formAction} className="nn-form">
@@ -125,7 +136,7 @@ export function PlantingCohortForm({
           id={`plantedPrecision-${cohort?.id ?? "new"}`}
           name="plantedPrecision"
           value={precision}
-          onChange={(e) => setPrecision(e.target.value)}
+          onChange={(e) => cambiarPrecision(e.target.value)}
         >
           {PRECISIONS.map((p) => (
             <option key={p} value={p}>
@@ -142,7 +153,8 @@ export function PlantingCohortForm({
           type={inputType}
           name="plantedAt"
           {...(inputType === "number" ? { min: 1900, max: 2200, step: 1, inputMode: "numeric" as const } : {})}
-          defaultValue={fechaPorDefecto}
+          value={fecha}
+          onChange={(e) => setFecha(e.target.value)}
           placeholder={t("plantedUnknown")}
         />
       </div>
@@ -196,7 +208,7 @@ export function PlantingCohortForm({
         </div>
       ) : null}
 
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {editando ? t("cohortSaveEditButton") : t("cohortCreateButton")}
       </button>
