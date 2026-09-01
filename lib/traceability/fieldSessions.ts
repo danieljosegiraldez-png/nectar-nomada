@@ -137,10 +137,21 @@ export async function endFieldSession(userAccountId: string, input: { fieldSessi
 
   await requireLocationAttributeAccess(userAccountId, existing.locationId);
 
-  const ended = await prisma.fieldSession.update({
-    where: { id: input.fieldSessionId },
+  // Escritura CONDICIONADA a que siga abierta. La comprobación de arriba lee y
+  // la escritura de abajo escribe, y entre las dos cabe otra petición: sin la
+  // condición, dos cierres simultáneos pasaban los dos y el segundo pisaba la
+  // hora del primero, dejando dos auditorías de una transición que sólo ocurre
+  // una vez. Lo señaló una revisión independiente.
+  //
+  // `updateMany` es lo que permite condicionar por algo que no es la clave
+  // primaria; `count` es cero exactamente cuando otra petición ganó.
+  const { count } = await prisma.fieldSession.updateMany({
+    where: { id: input.fieldSessionId, endedAt: null },
     data: { endedAt: input.endedAt },
   });
+  if (count === 0) throw new FieldSessionValidationError("session_already_ended");
+
+  const ended = await prisma.fieldSession.findUniqueOrThrow({ where: { id: input.fieldSessionId } });
 
   await recordAuditEvent({
     actorUserAccountId: userAccountId,
@@ -189,7 +200,16 @@ const SUBJECT_KEYS = [
 export async function recordFieldEvent(userAccountId: string, input: RecordFieldEventInput) {
   const session = await prisma.fieldSession.findUnique({ where: { id: input.fieldSessionId } });
   if (!session) throw new FieldSessionValidationError("session_not_found");
-  if (session.endedAt) throw new FieldSessionValidationError("session_already_ended");
+  // Una jornada cerrada rechaza el evento, pero DICE cuál de los dos casos es.
+  // Son hechos distintos: «anoté esto durante la visita y sincronizó tarde» y
+  // «esto pasó cuando la visita ya había terminado». El segundo no pertenece a
+  // esa jornada aunque llegue por la misma vía, y quien lea el error necesita
+  // saber si le falta una jornada o si se equivocó de jornada.
+  if (session.endedAt) {
+    throw new FieldSessionValidationError(
+      input.occurredAt > session.endedAt ? "event_after_session_end" : "session_already_ended",
+    );
+  }
 
   await requireLocationAttributeAccess(userAccountId, session.locationId);
 
@@ -210,6 +230,28 @@ export async function recordFieldEvent(userAccountId: string, input: RecordField
 
   // An event before its session started belongs to a different session.
   if (input.occurredAt < session.startedAt) throw new FieldSessionValidationError("event_before_session_start");
+
+  // Se relee el estado de la jornada JUSTO antes de insertar, y se rechaza si
+  // se cerró mientras tanto. No es una carrera exótica: `FieldEvent` lleva
+  // `recordedAt`, `syncedAt` y `deviceId` porque está pensado para llegar
+  // TARDE, sincronizado desde un dispositivo que estuvo sin señal. Un evento
+  // anotado en el campo y sincronizado después de que alguien cerrara la
+  // jornada desde otro sitio es el camino previsto, no el borde.
+  //
+  // La relectura estrecha la ventana; no la cierra —eso pediría un bloqueo o
+  // una restricción en la base— y por eso también se valida contra `endedAt`
+  // cuando lo hay: un evento fechado DESPUÉS del cierre no pertenece a esa
+  // jornada aunque llegue a tiempo.
+  const alInsertar = await prisma.fieldSession.findUniqueOrThrow({
+    where: { id: input.fieldSessionId },
+    select: { endedAt: true },
+  });
+  if (alInsertar.endedAt) {
+    if (input.occurredAt > alInsertar.endedAt) {
+      throw new FieldSessionValidationError("event_after_session_end");
+    }
+    throw new FieldSessionValidationError("session_already_ended");
+  }
 
   const event = await prisma.fieldEvent.create({
     data: {

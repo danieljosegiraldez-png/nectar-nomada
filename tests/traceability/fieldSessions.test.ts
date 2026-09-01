@@ -439,6 +439,86 @@ describe("event kind is validated against its own catalog", () => {
   });
 });
 
+describe("dos escrituras que compiten de verdad", () => {
+  /** Abre una jornada lista para competir contra ella. */
+  async function abrirJornada(sufijo: string) {
+    return startFieldSession(authorizedUserAccountId, {
+      locationId: plotId,
+      operatorPersonId,
+      startedAt: new Date("2026-03-12T07:00:00Z"),
+      notes: `carrera-${sufijo}`,
+      provenanceClass: "direct_observation",
+    });
+  }
+
+  it("dos cierres simultáneos: uno gana, el otro se entera", async () => {
+    const sesion = await abrirJornada("cierre");
+    // Sin `await` entre medias: las dos salen antes de que ninguna termine, que
+    // es lo que la versión anterior no soportaba — leía, comprobaba, y escribía
+    // sin condición, así que las dos pasaban.
+    const resultados = await Promise.allSettled([
+      endFieldSession(authorizedUserAccountId, {
+        fieldSessionId: sesion.id,
+        endedAt: new Date("2026-03-12T11:00:00Z"),
+      }),
+      endFieldSession(authorizedUserAccountId, {
+        fieldSessionId: sesion.id,
+        endedAt: new Date("2026-03-12T12:00:00Z"),
+      }),
+    ]);
+
+    const ok = resultados.filter((r) => r.status === "fulfilled");
+    const fallidas = resultados.filter((r) => r.status === "rejected");
+    expect(ok).toHaveLength(1);
+    expect(fallidas).toHaveLength(1);
+
+    // Y la hora guardada es la de quien ganó, no la de la última en llegar.
+    const guardada = await prisma.fieldSession.findUniqueOrThrow({ where: { id: sesion.id } });
+    expect(guardada.endedAt).not.toBeNull();
+    const auditorias = await prisma.auditEvent.count({
+      where: { entityId: sesion.id, operation: "field_session.end" },
+    });
+    expect(auditorias).toBe(1);
+  });
+
+  it("un evento que llega después del cierre no entra", async () => {
+    const sesion = await abrirJornada("tardio");
+    await endFieldSession(authorizedUserAccountId, {
+      fieldSessionId: sesion.id,
+      endedAt: new Date("2026-03-12T11:00:00Z"),
+    });
+
+    await expect(
+      recordFieldEvent(authorizedUserAccountId, {
+        fieldSessionId: sesion.id,
+        eventKindValueId: observacionKindId,
+        occurredAt: new Date("2026-03-12T09:00:00Z"),
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow("session_already_ended");
+  });
+
+  it("un evento fechado DESPUÉS del cierre se distingue del que llega tarde", async () => {
+    // Dos hechos distintos: «anoté algo durante la visita y sincronizó tarde» y
+    // «esto pasó cuando la visita ya había terminado». El segundo no pertenece
+    // a esa jornada aunque llegue por la misma vía.
+    const sesion = await abrirJornada("posterior");
+    await endFieldSession(authorizedUserAccountId, {
+      fieldSessionId: sesion.id,
+      endedAt: new Date("2026-03-12T11:00:00Z"),
+    });
+
+    await expect(
+      recordFieldEvent(authorizedUserAccountId, {
+        fieldSessionId: sesion.id,
+        eventKindValueId: observacionKindId,
+        occurredAt: new Date("2026-03-12T15:00:00Z"),
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow("event_after_session_end");
+  });
+});
+
 describe("RBAC", () => {
   it("denies opening a session on a block the operator cannot manage", async () => {
     await expect(
