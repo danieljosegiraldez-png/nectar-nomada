@@ -37,6 +37,38 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-08-31 · La revisión independiente encontró lo que doce compuertas verdes no
+
+Doce PR fusionadas con un solo par de ojos encima. Codex revisó el núcleo lógico
+—1.439 líneas— y encontró **siete problemas**. Cuatro eran de código de ese día
+y están arreglados (PR #87).
+
+El más incómodo: **un año sin ningún aporte pesado devolvía `0 kg/ha`, y el
+propio test lo exigía**, con un comentario que admitía que el 0 era «engañoso
+por sí solo». Se vio el problema, se escribió en un comentario y se despachó
+igual, confiando en que el conteo de aportes sin pesar al lado lo salvara. No lo
+salva: un 0 en una columna de kilos se lee como medición (ADR-080).
+
+Los otros tres: `getHarvestSourceContext` filtraba los bloques que **ofrece** y
+no los que **muestra**, devolviendo datos de bloques ajenos mientras su
+comentario afirmaba lo contrario; `createPlantingCohort` guardaba una densidad
+derivada que sobrevivía a la corrección de sus dos insumos; y tres tests exigían
+la **clase** del error en vez del código, así que pasaban por la validación
+equivocada.
+
+**Y al arreglarlos pasó otra vez.** El flip-test de los dos primeros arreglos
+pasó con los fallos reintroducidos: no existía un usuario que alcanzara el
+bloque A y no el B, ni una aserción que mirara la columna de densidad. El mismo
+defecto que la revisión acababa de señalar, cometido al corregirlo. Ahora con
+cada fallo puesto cae un test.
+
+**La lección operativa, no la moral:** compuerta, suite y verificación en
+navegador comprueban *ejecución*. Ninguna comprueba *criterio* — que un cero sea
+una afirmación, que un comentario diga la verdad. Para eso está
+`tools/pack-for-review.sh`, y el paquete completo del día salía en 48.000 líneas
+porque incluye el cuerpo entero de cada archivo tocado: **acotar el rango al
+núcleo lógico** lo dejó en 2.958 y en una pasada.
+
 ### 2026-08-31 · La visita al apiario como unidad, y el módulo que no necesitaba código
 
 El dueño tiene **reportes de visita a apiarios ya escritos**. Medido antes de
@@ -232,6 +264,19 @@ repositorio privado de este plan. Ver `PENDING_IMPLEMENTATIONS/006`.
   de ellas se sabe de la copia local restaurada. Que un operador real las
   recorra es la única prueba que falta, y la que suele encontrar lo que ninguna
   verificación encuentra.
+- **Escritura y auditoría no son atómicas** — deuda de arquitectura, señalada
+  por la revisión del 2026-08-31 y **no arreglada a la ligera**.
+  `recordAuditEvent` es el único escritor de `AuditEvent` y usa el cliente
+  global, así que no puede unirse a la transacción que confirma la escritura: si
+  falla, la fila queda guardada sin auditoría. Afecta a `recordHarvestSources`,
+  `updatePlantingCohort` y las escrituras de jornada. Cambiarlo toca el diseño
+  de auditoría de toda la plataforma, no un servicio.
+- **Dos carreras en jornadas de campo** — misma revisión, misma razón para no
+  improvisar. `endFieldSession` lee `endedAt`, lo comprueba y actualiza sin
+  condición, así que dos peticiones simultáneas cierran dos veces; y
+  `recordFieldEvent` puede insertar entre la lectura y el cierre de otra
+  petición, dejando un evento en una jornada cerrada. Hace falta escritura
+  condicional sobre `endedAt: null`, y validar `occurredAt <= endedAt`.
 - **Un reporte de visita a apiario, tal como está escrito** — pedido dos veces
   al dueño, sin llegar. De su contenido dependen tres decisiones distintas: si
   traen qué estaba floreciendo, el puente flora↔miel deja de ser teórico; si
