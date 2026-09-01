@@ -59,6 +59,12 @@ import {
 import { createSampleFromLot } from "../../lib/traceability/samples";
 import { requestLotAssetUpload, finalizeLotAssetUpload, type LotAssetParent } from "../../lib/traceability/media";
 import {
+  requestLandAssetUpload,
+  finalizeLandAssetUpload,
+  LandMediaValidationError,
+  type LandAssetParent,
+} from "../../lib/traceability/landMedia";
+import {
   recordLabourEntry,
   recordMaterialConsumptionEntry,
   type LabourEntryParent,
@@ -88,6 +94,7 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof BiocharBatchValidationError) return t("error_biochar", { detail: error.message });
   if (error instanceof SoilProfileValidationError) return t("error_soil_profile", { detail: error.message });
   if (error instanceof SampleValidationError) return t("error_sample", { detail: error.message });
+  if (error instanceof LandMediaValidationError) return t("error_land_media", { detail: error.message });
   if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });
   throw error;
 }
@@ -1437,4 +1444,58 @@ export async function createFoliarSampleAction(
 
   revalidatePath(`/plots/${locationId}`);
   return {};
+}
+
+// --- Fotografías de la tierra (S1 §2) ------------------------------------
+
+export async function requestLandAssetUploadAction(
+  locationId: string,
+  originalFilename: string,
+  contentType: string,
+): Promise<{ uploadUrl: string; storageKey: string } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const t = await getTranslations("Traceability");
+  try {
+    return await requestLandAssetUpload(user.userAccountId, { locationId, originalFilename, contentType });
+  } catch (error) {
+    if (error instanceof LocationAccessError) return { error: t("error_access", { detail: error.message }) };
+    if (error instanceof Error) return { error: error.message };
+    throw error;
+  }
+}
+
+export async function finalizeLandAssetUploadAction(
+  locationId: string,
+  storageKey: string,
+  mimeType: string,
+  sizeBytes: number,
+  originalFilename: string,
+  parent: LandAssetParent,
+  creatorPersonId: string | null,
+): Promise<{ ok: true } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const t = await getTranslations("Traceability");
+  try {
+    await finalizeLandAssetUpload(user.userAccountId, {
+      locationId,
+      storageKey,
+      mimeType,
+      sizeBytes,
+      originalFilename,
+      parent,
+      // Una fotografía de campo es evidencia original: la tomó quien estaba
+      // ahí. No es `measured_fact` —no hay instrumento— ni una interpretación.
+      provenanceClass: "direct_observation",
+      creatorPersonId,
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  return { ok: true };
 }

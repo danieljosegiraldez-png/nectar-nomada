@@ -6,6 +6,9 @@ import { getBiocharBatch, computeBatchAgingDays } from "../../../lib/traceabilit
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { BiocharBatchForm } from "../../components/traceability/BiocharBatchForm";
 import { LabMeasurementForm } from "../../components/traceability/LabMeasurementForm";
+import { LandPhotoUploadForm } from "../../components/traceability/LandPhotoUploadForm";
+import { listLandAssets } from "../../../lib/traceability/landMedia";
+import { getObserverCandidates } from "../../../lib/traceability/lots";
 import { listVariableDefinitions } from "../../../lib/traceability/units";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +32,14 @@ export default async function BiocharBatchPage({ params }: { params: Promise<{ i
 
   // Derivado al leer, nunca guardado: las dos entradas se pueden corregir.
   const aging = computeBatchAgingDays(batch.producedAt, new Date());
+
+  // Misma compuerta que el resto de la página: si llegaste aquí, esto no puede
+  // negarte. Las fotos se filtran por el lote, no sólo por el sitio.
+  const [fotos, { people, selfPersonId }] = await Promise.all([
+    listLandAssets(user.userAccountId, batch.producedAtLocationId),
+    getObserverCandidates(user.userAccountId),
+  ]);
+  const delLote = fotos.filter((f) => f.biocharBatchId === batch.id);
 
   return (
     <div>
@@ -83,6 +94,32 @@ export default async function BiocharBatchPage({ params }: { params: Promise<{ i
           sujeto="biocharBatchId"
           sujetoId={batch.id}
           variables={listVariableDefinitions("analisis_de_enmienda")}
+        />
+      </section>
+
+      <section className="nn-section">
+        <h2>{t("landPhotosHeading")}</h2>
+        {/* Paso 2 del marco: «fotografiar el retorte y el proceso». El diseño
+            del horno es un campo de texto, y una foto dice de él lo que ninguna
+            descripción alcanza. */}
+        <p className="nn-muted">{t("biocharPhotosIntro")}</p>
+        {delLote.length === 0 ? (
+          <p className="nn-muted">{t("landPhotosNone")}</p>
+        ) : (
+          <div className="nn-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
+            {delLote.map((a) => (
+              // URL firmada de vida corta: `next/image` la cachearía, que es
+              // justo lo que no debe pasar con un objeto restringido.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={a.id} src={a.url} alt={a.originalFilename ?? ""} style={{ width: "100%", borderRadius: 4 }} />
+            ))}
+          </div>
+        )}
+        <LandPhotoUploadForm
+          locationId={batch.producedAtLocationId}
+          parent={{ kind: "biocharBatch", biocharBatchId: batch.id }}
+          observers={people}
+          selfPersonId={selfPersonId}
         />
       </section>
 

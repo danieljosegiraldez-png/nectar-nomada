@@ -923,7 +923,12 @@
     "variable_exchangeable_magnesium": "Magnesio intercambiable",
     "variable_sulphur": "Azufre (S)",
     "error_sample": "No se pudo guardar la muestra: {detail}",
-    "labSamplesHeading": "Muestras al laboratorio"
+    "labSamplesHeading": "Muestras al laboratorio",
+    "landPhotosHeading": "Fotografías",
+    "landPhotosIntro": "Fotos generales del bloque, además de las que cuelgan de una calicata.",
+    "landPhotosNone": "Sin fotografías.",
+    "biocharPhotosIntro": "El retorte y el proceso. El diseño del horno es un campo de texto, y una foto dice de él lo que ninguna descripción alcanza.",
+    "error_land_media": "No se pudo guardar la fotografía: {detail}"
   },
   "Apiary": {
     "badge": "Apiario",

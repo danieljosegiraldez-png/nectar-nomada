@@ -6,6 +6,8 @@ import { getPlotDetail } from "../../../lib/traceability/plantingCohorts";
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { PlotAttributesForm } from "../../components/traceability/PlotAttributesForm";
 import { SoilProfileForm } from "../../components/traceability/SoilProfileForm";
+import { LandPhotoUploadForm } from "../../components/traceability/LandPhotoUploadForm";
+import { listLandAssets } from "../../../lib/traceability/landMedia";
 import { SoilSampleForm, FoliarSampleForm } from "../../components/traceability/SampleForms";
 import { LabMeasurementForm } from "../../components/traceability/LabMeasurementForm";
 import { listVariableDefinitions } from "../../../lib/traceability/units";
@@ -60,6 +62,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
     listSoilProfilesForLocation(user.userAccountId, id),
   ]);
   const muestras = await listSamplesForLocation(user.userAccountId, id);
+  const fotos = await listLandAssets(user.userAccountId, id);
   const activas = cohorts.filter((c) => c.status === "active");
 
   return (
@@ -437,6 +440,17 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
                   <p className="nn-muted">{t("soilNoHorizons")}</p>
                 )}
 
+                {/* Paso 4 del marco: «fotografiar cada perfil con una
+                    escala». La escala es lo que hace la foto interpretable, y
+                    por eso el texto de ayuda la nombra. */}
+                <FotosDe assets={fotos.filter((f) => f.soilProfileId === c.id)} etiqueta={t} />
+                <LandPhotoUploadForm
+                  locationId={location.id}
+                  parent={{ kind: "soilProfile", soilProfileId: c.id }}
+                  observers={people}
+                  selfPersonId={selfPersonId}
+                />
+
                 <details>
                   <summary>{t("soilCorrectHeading")}</summary>
                   <SoilProfileForm
@@ -467,6 +481,19 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         {/* Sigue disponible aunque ya haya perfiles: volver a describir el
             mismo bloque dentro de tres años NO es corregir el de hoy. §14 pide
             repetir el muestreo justamente para ver el cambio. */}
+        <h3>{t("landPhotosHeading")}</h3>
+        <p className="nn-muted">{t("landPhotosIntro")}</p>
+        <FotosDe
+          assets={fotos.filter((f) => f.soilProfileId == null && f.biocharBatchId == null)}
+          etiqueta={t}
+        />
+        <LandPhotoUploadForm
+          locationId={location.id}
+          parent={{ kind: "location" }}
+          observers={people}
+          selfPersonId={selfPersonId}
+        />
+
         <details>
           <summary>{t("soilDescribeHeading")}</summary>
           <SoilProfileForm
@@ -566,5 +593,33 @@ function ResultadosDeLaboratorio({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Las fotografías de algo, o el hecho de que no las hay.
+ *
+ * Se dice «sin fotografías» en vez de no pintar nada: una sección vacía y una
+ * sección ausente se ven igual, y el Paso 4 pide una foto por perfil — que
+ * falte tiene que verse.
+ */
+function FotosDe({
+  assets,
+  etiqueta,
+}: {
+  assets: { id: string; url: string; originalFilename: string | null }[];
+  etiqueta: (clave: string) => string;
+}) {
+  if (assets.length === 0) return <p className="nn-muted">{etiqueta("landPhotosNone")}</p>;
+  return (
+    <div className="nn-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
+      {assets.map((a) => (
+        // URL firmada de vida corta contra R2: `next/image` la optimizaría y
+        // la cachearía, que es justo lo que no debe pasar con un objeto de
+        // acceso restringido.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img key={a.id} src={a.url} alt={a.originalFilename ?? ""} style={{ width: "100%", borderRadius: 4 }} />
+      ))}
+    </div>
   );
 }
