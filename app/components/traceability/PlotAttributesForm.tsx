@@ -8,6 +8,22 @@ const initialState: TraceabilityActionState = {};
 
 const SUN_EXPOSURES = ["full_sun", "morning", "afternoon", "both"] as const;
 const SHADE_BRACKETS = ["pct_20", "pct_30", "pct_50", "pct_70", "pct_90"] as const;
+// S1 §2 — rosa de los vientos, más las dos salidas que un terreno real
+// necesita: `flat` (sin pendiente, así que sin orientación) y `variable`
+// (varias dentro del mismo bloque). Van al final, después de los ocho
+// rumbos, porque no son direcciones.
+const ASPECTS = [
+  "north",
+  "northeast",
+  "east",
+  "southeast",
+  "south",
+  "southwest",
+  "west",
+  "northwest",
+  "flat",
+  "variable",
+] as const;
 
 export interface PlotAttributes {
   areaHectares: string | null;
@@ -17,6 +33,7 @@ export interface PlotAttributes {
   sunExposure: string | null;
   shadePercentage: string | null;
   slopeDescription: string | null;
+  aspect: string | null;
   soilType: string | null;
 }
 
@@ -139,6 +156,21 @@ export function PlotAttributesForm({
           defaultValue={attributes.slopeDescription ?? ""}
           placeholder={t("notRecorded")}
         />
+      </div>
+
+      {/* Pegado a la pendiente, que es la otra mitad del mismo hecho. Y con
+          «Sin registrar» como opción real: un lote cuya orientación nadie ha
+          mirado no es un lote que mire al norte. */}
+      <div className="nn-field">
+        <label htmlFor="aspect">{t("aspectLabel")}</label>
+        <select id="aspect" name="aspect" defaultValue={attributes.aspect ?? ""}>
+          <option value="">{t("notRecorded")}</option>
+          {ASPECTS.map((value) => (
+            <option key={value} value={value}>
+              {t(`aspect_${value}` as "aspect_north")}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="nn-field">

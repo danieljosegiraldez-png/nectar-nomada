@@ -292,6 +292,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             sunExposure: location.sunExposure,
             shadePercentage: location.shadePercentage,
             slopeDescription: location.slopeDescription,
+            aspect: location.aspect,
             soilType: location.soilType,
           }}
         />
