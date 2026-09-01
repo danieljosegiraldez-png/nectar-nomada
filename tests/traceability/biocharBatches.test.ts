@@ -195,7 +195,10 @@ describe("createBiocharBatch", () => {
     expect(lote.dataQuality).toBeNull();
   });
 
-  it("escribe el AuditEvent en la misma transacción que el lote", async () => {
+  // Comprueba que quedó auditada, no la atomicidad — cuando nada falla las dos
+  // filas existen igual aunque el audit vaya por su cuenta. Eso lo cubre
+  // `tests/arquitectura/audit-atomico.test.ts`, leyendo la fuente.
+  it("deja el AuditEvent de la operación", async () => {
     const evento = await prisma.auditEvent.findFirst({
       where: assertDefinedWhere({ entityType: "biochar_batch", entityId: batchId, operation: "biochar_batch.create" }),
     });
@@ -258,8 +261,22 @@ describe("lectura", () => {
   });
 
   it("listBiocharBatchesForLocation sólo devuelve los de ese sitio", async () => {
+    // Un cuarto lote, por la misma razón que la cuarta lectura de arriba.
+    await createBiocharBatch(authorizedUserAccountId, {
+      batchCode: "LN-BC-2026-004",
+      producedAtLocationId: locationId,
+      provenanceClass: "original_record",
+    });
+
     const lotes = await listBiocharBatchesForLocation(authorizedUserAccountId, locationId);
-    expect(lotes.length).toBeGreaterThanOrEqual(3);
+    // Conjunto exacto: `>= 3` dejaba pasar un `take: 3`.
+    const todosLosLotes = new Set(
+      (await prisma.biocharBatch.findMany({ where: { producedAtLocationId: locationId }, select: { id: true } })).map(
+        (l) => l.id,
+      ),
+    );
+    expect(todosLosLotes.size).toBeGreaterThan(3);
+    expect(new Set(lotes.map((l) => l.id))).toEqual(todosLosLotes);
     expect(lotes.every((l) => l.producedAtLocationId === locationId)).toBe(true);
   });
 
@@ -413,8 +430,32 @@ describe("Measurement con un sujeto que no es café", () => {
   });
 
   it("las mediciones salen en la ficha del lote", async () => {
+    // **Conjunto exacto, no «al menos N».** Con `>= 3` bastaba meter `take: 3`
+    // en la consulta para esconder todo el historial posterior y seguir en
+    // verde. En una plataforma de trazabilidad «aparecen algunas» no es «se
+    // conserva el historial». Lo señaló la segunda revisión.
+    // Una cuarta lectura a propósito: con exactamente tres, un `take: 3` en la
+    // consulta del servicio seguiría pasando. El límite tentador es el tamaño
+    // del fixture, así que el fixture tiene que pasarlo.
+    await recordMeasurement(authorizedUserAccountId, {
+      biocharBatchId: batchId,
+      variable: "ash_content",
+      value: 18,
+      unit: "%",
+      occurredAt: new Date("2026-06-02T00:00:00Z"),
+      provenanceClass: "measured_fact",
+    });
+
     const lote = await getBiocharBatch(authorizedUserAccountId, batchId);
-    expect(lote.measurements.length).toBeGreaterThanOrEqual(3);
+    const esperadas = new Set(
+      (await prisma.measurement.findMany({ where: { biocharBatchId: batchId }, select: { id: true } })).map(
+        (m) => m.id,
+      ),
+    );
+    // Más filas que cualquier `take` tentador: si sólo hubiera tres, un
+    // `take: 3` seguiría pasando.
+    expect(esperadas.size).toBeGreaterThan(3);
+    expect(new Set(lote.measurements.map((m) => m.id))).toEqual(esperadas);
     expect(lote.measurements.some((m) => m.correctsId != null)).toBe(true);
   });
 });

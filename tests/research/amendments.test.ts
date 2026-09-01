@@ -19,7 +19,7 @@ import {
 import { ResearchAccessError } from "../../lib/research/access";
 import { createResearchProgram, createResearchQuestion, createHypothesis, createExperiment } from "../../lib/research/programs";
 import { createProtocol, createProtocolVersion, activateProtocolVersion } from "../../lib/research/protocols";
-import { createTreatmentBatch } from "../../lib/research/treatments";
+import { createTreatmentBatch, TreatmentBatchValidationError } from "../../lib/research/treatments";
 import { createSoilProfile } from "../../lib/traceability/soilProfiles";
 import { createSoilSample } from "../../lib/traceability/soilSamples";
 import { createBiocharBatch } from "../../lib/traceability/biocharBatches";
@@ -44,6 +44,7 @@ let borradorVersionId: string;
 let biocharId: string;
 let soilSampleId: string;
 const muestrasExtra: string[] = [];
+const bloquesExtra: string[] = [];
 const batchIds: string[] = [];
 
 async function createTestUserAccount(label: string) {
@@ -163,15 +164,27 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // **Todas las Locations del archivo en una sola lista.** Antes había dos
+  // listas —la fija y `bloquesExtra`— y la limpieza borraba muestras sólo de
+  // la primera: al añadir bloques con fixture propio, el borrado de Location
+  // chocó con el `RESTRICT` de `soil_sample`. Una lista, y todo cuelga de ella.
+  const todosLosBloques = [locationId, locationVirgenId, ...bloquesExtra];
+
   await prisma.treatmentBatchVariableValue.deleteMany({ where: assertDefinedWhere({ treatmentBatchId: { in: batchIds } }) });
-  await prisma.treatmentBatch.deleteMany({ where: assertDefinedWhere({ id: { in: batchIds } }) });
+  // Por bloque Y por id: el test de la puerta trasera crea uno por el camino
+  // del café, que por definición **no tiene** locationId. Filtrar sólo por
+  // bloque lo dejaba vivo y el borrado del protocolo chocaba con su FK.
+  await prisma.treatmentBatch.deleteMany({
+    where: assertDefinedWhere({ OR: [{ id: { in: batchIds } }, { locationId: { in: todosLosBloques } }] }),
+  });
   await prisma.measurement.deleteMany({
     where: assertDefinedWhere({ OR: [{ biocharBatchId: biocharId }, { soilSampleId }] }),
   });
-  await prisma.measurement.deleteMany({ where: assertDefinedWhere({ soilSampleId: { in: muestrasExtra } }) });
-  await prisma.soilSample.deleteMany({ where: assertDefinedWhere({ locationId: { in: [locationId, locationVirgenId] } }) });
-  await prisma.soilProfile.deleteMany({ where: assertDefinedWhere({ locationId: { in: [locationId, locationVirgenId] } }) });
-  await prisma.biocharBatch.deleteMany({ where: assertDefinedWhere({ producedAtLocationId: { in: [locationId, locationVirgenId] } }) });
+  await prisma.measurement.deleteMany({ where: assertDefinedWhere({ soilSample: { locationId: { in: todosLosBloques } } }) });
+  await prisma.soilSample.deleteMany({ where: assertDefinedWhere({ locationId: { in: todosLosBloques } }) });
+  await prisma.soilHorizon.deleteMany({ where: assertDefinedWhere({ soilProfile: { locationId: { in: todosLosBloques } } }) });
+  await prisma.soilProfile.deleteMany({ where: assertDefinedWhere({ locationId: { in: todosLosBloques } }) });
+  await prisma.biocharBatch.deleteMany({ where: assertDefinedWhere({ producedAtLocationId: { in: todosLosBloques } }) });
   await prisma.protocolVariable.deleteMany({ where: assertDefinedWhere({ protocolVersionId: { in: [protocolVersionId, borradorVersionId] } }) });
   await prisma.protocolVersion.deleteMany({ where: assertDefinedWhere({ id: { in: [protocolVersionId, borradorVersionId] } }) });
   await prisma.protocol.deleteMany({ where: assertDefinedWhere({ name: { contains: RUN_ID } }) });
@@ -185,10 +198,56 @@ afterAll(async () => {
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: [researchScopeId, farmScopeId] } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: ids } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [locationId, locationVirgenId] } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: todosLosBloques } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
 });
+
+/** Fecha contra la que se juzga en los tests que traen su propio fixture. */
+const FECHA_TRATAMIENTO = new Date("2026-07-10T00:00:00Z");
+
+/**
+ * Un bloque nuevo con Gate 0 ABIERTO, sin depender de ningún otro test.
+ *
+ * Existe porque la segunda revisión encontró que varios tests tomaban prestado
+ * el estado que otro había dejado: en aislamiento, o reordenados, pasaban
+ * porque `applyAmendment` lanzaba por Gate 0 y no por lo que decían medir.
+ */
+async function bloqueConGate0Abierto(etiqueta: string): Promise<string> {
+  const bloque = await prisma.location.create({
+    data: {
+      locationType: "plot",
+      name: `TEST Bloque ${etiqueta} (${RUN_ID})`,
+      organizationId,
+      status: "approved",
+      classification: "internal",
+    },
+  });
+  bloquesExtra.push(bloque.id);
+
+  const muestra = await createSoilSample(farmUserId, {
+    locationId: bloque.id,
+    sampleCode: `SS-${etiqueta}-${RUN_ID}`,
+    sampledAt: new Date("2026-05-02T00:00:00Z"),
+    provenanceClass: "original_record",
+  });
+  muestrasExtra.push(muestra.id);
+  await recordMeasurement(farmUserId, {
+    soilSampleId: muestra.id,
+    variable: "exchangeable_aluminium",
+    value: 1.2,
+    unit: "cmol/kg",
+    occurredAt: new Date("2026-06-01T00:00:00Z"),
+    provenanceClass: "measured_fact",
+  });
+  await createSoilProfile(farmUserId, {
+    locationId: bloque.id,
+    describedAt: new Date("2026-04-20T00:00:00Z"),
+    provenanceClass: "direct_observation",
+    rootingDepthCm: 45,
+  });
+  return bloque.id;
+}
 
 describe("Gate 0 — la compuerta que el marco firma", () => {
   it("un bloque sin nada las debe las tres que le corresponden", async () => {
@@ -259,18 +318,49 @@ describe("Gate 0 — la compuerta que el marco firma", () => {
     expect(faltan).toContain("baseline_soil_chemistry");
   });
 
-  it("una lectura POSTERIOR al tratamiento no es línea base", async () => {
-    // Nadie lo había mirado: una medición fechada después de la enmienda
-    // servía igual, que es justo lo contrario de una línea base.
-    const faltan = await getGate0Status(researchUserId, {
-      locationId,
-      biocharBatchId: biocharId,
-      protocolVersionId,
-      // Anterior a toda la evidencia que el fixture crea después.
-      startedAt: new Date("2026-01-01T00:00:00Z"),
+  it("una calicata descrita DESPUÉS del tratamiento no es física base", async () => {
+    // El test que había aquí no probaba nada: preguntaba por un bloque que en
+    // ese punto del archivo **no tenía evidencia ninguna**, así que las dos
+    // condiciones faltaban con o sin comprobación temporal. Mi propio
+    // comentario lo admitía —«anterior a toda la evidencia que el fixture crea
+    // después»— y no lo vi. Es el patrón que CLAUDE.md ya nombra: ausencia de lo
+    // malo sobre contenido ausente. Lo destapó la segunda revisión.
+    //
+    // Éste sí: se describe una calicata de verdad, y se pregunta con una fecha
+    // ANTERIOR a ella. La física sigue faltando porque la evidencia es
+    // posterior, no porque no exista.
+    const bloque = await prisma.location.create({
+      data: {
+        locationType: "plot",
+        name: `TEST Bloque calicata tardía (${RUN_ID})`,
+        organizationId,
+        status: "approved",
+        classification: "internal",
+      },
     });
-    expect(faltan).toContain("baseline_soil_chemistry");
-    expect(faltan).toContain("baseline_soil_physics");
+    bloquesExtra.push(bloque.id);
+    await createSoilProfile(farmUserId, {
+      locationId: bloque.id,
+      describedAt: new Date("2026-08-20T00:00:00Z"),
+      provenanceClass: "direct_observation",
+      rootingDepthCm: 40,
+    });
+
+    // Control positivo: con una fecha posterior a la calicata, la física deja
+    // de faltar. Sin esto, «falta» podría estar faltando por cualquier motivo.
+    const despues = await getGate0Status(researchUserId, {
+      locationId: bloque.id,
+      protocolVersionId,
+      startedAt: new Date("2026-09-01T00:00:00Z"),
+    });
+    expect(despues).not.toContain("baseline_soil_physics");
+
+    const antes = await getGate0Status(researchUserId, {
+      locationId: bloque.id,
+      protocolVersionId,
+      startedAt: new Date("2026-07-01T00:00:00Z"),
+    });
+    expect(antes).toContain("baseline_soil_physics");
   });
 
   it("un resultado FECHADO DESPUÉS del tratamiento no es línea base", async () => {
@@ -462,30 +552,34 @@ describe("applyAmendment", () => {
   });
 
   it("rechaza un valor fuera del enum cerrado que declara el protocolo", async () => {
-    // Antes sólo se comprobaba que la variable estuviera DECLARADA, así que
-    // este camino creaba TreatmentBatch que `createTreatmentBatch` habría
-    // rechazado: la misma entidad con invariantes distintos según por dónde
-    // entres. Lo señaló la revisión independiente del 2026-09-01.
+    // **Fixture propio, y clase de error concreta.** Antes usaba un
+    // `.toThrow()` pelado y dependía de que un test anterior hubiera abierto
+    // Gate 0: en aislamiento lanzaba `Gate0NotPassedError` y pasaba por una
+    // razón que no tiene nada que ver con el enum. Volví a cometer el mismo
+    // error que había arreglado horas antes en este archivo; lo destapó la
+    // segunda revisión independiente.
+    const bloque = await bloqueConGate0Abierto("enum-malo");
     await expect(
       applyAmendment(researchUserId, {
         protocolVersionId,
-        locationId,
+        locationId: bloque,
         batchLabel: "T4",
-        startedAt: new Date("2026-07-04T00:00:00Z"),
+        startedAt: FECHA_TRATAMIENTO,
         provenanceClass: "original_record",
         variableValues: [{ protocolVariableId: metodoVariableId, textValue: "a lo loco" }],
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(TreatmentBatchValidationError);
   });
 
   it("acepta el mismo campo con un valor que SÍ está en el enum", async () => {
-    // El control positivo: sin él, «rechaza» podría estar rechazando por
-    // cualquier otra razón.
+    // El control positivo, también con fixture propio: sin él, «rechaza»
+    // podría estar rechazando por cualquier otra razón.
+    const bloque = await bloqueConGate0Abierto("enum-bueno");
     const batch = await applyAmendment(researchUserId, {
       protocolVersionId,
-      locationId,
+      locationId: bloque,
       batchLabel: "T4",
-      startedAt: new Date("2026-07-04T00:00:00Z"),
+      startedAt: FECHA_TRATAMIENTO,
       provenanceClass: "original_record",
       variableValues: [{ protocolVariableId: metodoVariableId, textValue: "banda" }],
     });
@@ -506,7 +600,13 @@ describe("applyAmendment", () => {
     ).rejects.toThrow(AmendmentValidationError);
   });
 
-  it("escribe el AuditEvent en la misma transacción", async () => {
+  // La atomicidad NO se prueba aquí: cuando nada falla, las dos filas existen
+  // igual aunque el audit vaya por su cuenta. Lo señaló la segunda revisión
+  // independiente. Que el audit viaje CON la transacción lo comprueba
+  // `tests/arquitectura/audit-atomico.test.ts`, leyendo la fuente; y que el
+  // mecanismo revierta de verdad, `plantingCohorts.test.ts`, forzando el fallo.
+  // Esto sólo comprueba que la operación quedó auditada, que también importa.
+  it("deja el AuditEvent de la operación", async () => {
     const evento = await prisma.auditEvent.findFirst({
       where: assertDefinedWhere({
         entityType: "treatment_batch",
@@ -537,8 +637,27 @@ describe("applyAmendment", () => {
 
 describe("listAmendmentsForLocation", () => {
   it("devuelve lo aplicado a ese bloque, con su lote de biochar", async () => {
+    // Una enmienda SIN biochar sobre este mismo bloque —el T3 de la Tabla 8 es
+    // enmienda orgánica sin char—, para que el listado tenga las dos clases.
+    // Antes venía de otro test; desde que los del enum traen su propio bloque,
+    // este test tiene que crear lo que mide.
+    const sinChar = await applyAmendment(researchUserId, {
+      protocolVersionId,
+      locationId,
+      batchLabel: "T3",
+      startedAt: new Date("2026-07-06T00:00:00Z"),
+      provenanceClass: "original_record",
+    });
+    batchIds.push(sinChar.id);
+
     const filas = await listAmendmentsForLocation(researchUserId, locationId);
-    expect(filas).toHaveLength(3);
+    // Conjunto exacto contra la base, no un número escrito a mano: un `take`
+    // en la consulta del servicio pasaría inadvertido, y un número fijo se
+    // rompe cada vez que otro test añade una enmienda.
+    const todas = new Set(
+      (await prisma.treatmentBatch.findMany({ where: { locationId }, select: { id: true } })).map((t) => t.id),
+    );
+    expect(new Set(filas.map((f) => f.id))).toEqual(todas);
     // Se busca la fila, no se asume la posición: el orden es por `startedAt`
     // descendente, y el T4 —que no lleva biochar, como el T3 de la Tabla 8—
     // es más reciente que el T1 que sí lo lleva.

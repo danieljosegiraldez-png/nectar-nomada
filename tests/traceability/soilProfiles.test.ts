@@ -180,7 +180,10 @@ describe("createSoilProfile", () => {
     expect(perfil.sourSmell).toBe("not_observed");
   });
 
-  it("escribe el AuditEvent en la misma transacción", async () => {
+  // Comprueba que quedó auditada, no la atomicidad — cuando nada falla las dos
+  // filas existen igual aunque el audit vaya por su cuenta. Eso lo cubre
+  // `tests/arquitectura/audit-atomico.test.ts`, leyendo la fuente.
+  it("deja el AuditEvent de la operación", async () => {
     const evento = await prisma.auditEvent.findFirst({
       where: assertDefinedWhere({ entityType: "soil_profile", entityId: perfilId, operation: "soil_profile.create" }),
     });
@@ -279,8 +282,23 @@ describe("listSoilProfilesForLocation", () => {
   it("devuelve TODAS las calicatas, no sólo la última", async () => {
     // Repetir la descripción existe para ver el cambio; una lista que esconde
     // las viejas lo impide.
+    // Una cuarta calicata: con tres, un `take: 3` no se distinguiría de
+    // «devuelve todas».
+    await createSoilProfile(authorizedUserAccountId, {
+      locationId,
+      describedAt: new Date("2026-04-25T00:00:00Z"),
+      provenanceClass: "direct_observation",
+      rootingDepthCm: 50,
+    });
+
     const perfiles = await listSoilProfilesForLocation(authorizedUserAccountId, locationId);
-    expect(perfiles.length).toBeGreaterThanOrEqual(3);
+    // Conjunto exacto: con `>= 3`, añadir `take: 3` a la consulta pasaba
+    // inadvertido y la función dejaba de devolver «todas» a partir de la cuarta.
+    const todosLosPerfiles = new Set(
+      (await prisma.soilProfile.findMany({ where: { locationId }, select: { id: true } })).map((p) => p.id),
+    );
+    expect(todosLosPerfiles.size).toBeGreaterThan(3);
+    expect(new Set(perfiles.map((p) => p.id))).toEqual(todosLosPerfiles);
     // Más reciente primero.
     expect(perfiles[0]!.describedAt.getTime()).toBeGreaterThanOrEqual(perfiles[1]!.describedAt.getTime());
   });

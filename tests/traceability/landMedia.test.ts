@@ -163,7 +163,10 @@ describe("finalizeLandAssetUpload", () => {
     expect(asset.assetType).toBe("photo");
   });
 
-  it("escribe el AuditEvent en la misma transacción", async () => {
+  // Comprueba que quedó auditada, no la atomicidad — cuando nada falla las dos
+  // filas existen igual aunque el audit vaya por su cuenta. Eso lo cubre
+  // `tests/arquitectura/audit-atomico.test.ts`, leyendo la fuente.
+  it("deja el AuditEvent de la operación", async () => {
     const evento = await prisma.auditEvent.findFirst({
       where: assertDefinedWhere({ entityType: "asset", entityId: assetIds[0], operation: "asset.create" }),
     });
