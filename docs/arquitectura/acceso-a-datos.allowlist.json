@@ -1,5 +1,5 @@
 {
-  "_nota": "Inventario versionado de quién puede tocar un cliente de base de datos. Lo comprueba tests/arquitectura/acceso-a-datos.test.ts. Añadir una entrada es un acto deliberado: exige una razón y se ve en el diff. Esto NO demuestra que la autorización sea correcta; demuestra que un camino de acceso crudo nuevo no aparece en silencio, ni por import de un cliente ni por recibir una transacción abierta.",
+  "_nota": "Inventario versionado de quién puede tocar un cliente de base de datos. Lo comprueba tests/arquitectura/acceso-a-datos.test.ts. Añadir una entrada es un acto deliberado: exige una razón y se ve en el diff. Esto NO demuestra que la autorización sea correcta; demuestra que un camino de acceso crudo nuevo no aparece en silencio, ni por import de un cliente ni por recibir una transacción abierta. `operaciones_sin_patron` inventaría las operaciones que ningún patrón de autorización explica: hoy tres, todas miradas a mano. Que aparezca una cuarta es lo que el guardia quiere que se vea.",
   "clientes": [
     {
       "archivo": "lib/db.ts",
@@ -234,6 +234,23 @@
     {
       "archivo": "lib/audit.ts",
       "razon": "`recordAuditEvent` acepta un `tx` OPCIONAL para que el AuditEvent se confirme con la escritura que lo produjo — sin él, una fila confirmada podía quedarse sin auditoría si el insert fallaba después del commit (revisión independiente, 2026-08-31). No recibe el cliente entero: el parámetro es `Pick<Prisma.TransactionClient, \"auditEvent\">`, así que dentro de esta función no se puede consultar ninguna otra tabla. Es exactamente lo que pide el mensaje de este guardia: pasarle sólo lo que necesita. Sigue siendo el único escritor de AuditEvent."
+    }
+  ],
+  "operaciones_sin_patron": [
+    {
+      "archivo": "lib/auth/config.ts",
+      "operacion": "authConfig",
+      "razon": "Es la configuración de Auth.js: el propio flujo de autenticación, previo a que exista sesión. Exigirle un guardia sería imposible de satisfacer."
+    },
+    {
+      "archivo": "lib/commerce/cart.ts",
+      "operacion": "addToCart",
+      "razon": "Lee la variante aplicando la misma puerta pública que lib/discover/service.ts, y escribe el carrito del propio titular, identificado por el userAccountId que recibe."
+    },
+    {
+      "archivo": "lib/rbac/admin.ts",
+      "operacion": "listScopeChoices",
+      "razon": "No recibe principal. La llama app/admin/users/page.tsx, que antes hace requirePermissionAdmin. Verificado el 2026-08-31."
     }
   ]
 }

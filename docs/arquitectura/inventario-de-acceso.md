@@ -94,6 +94,20 @@ Reconoce **formas escritas, no propiedades**:
 
 Sirve para **decidir dónde mirar**, no para dar nada por bueno.
 
+## El inventario ya no sólo informa
+
+Desde el 2026-08-31, `tests/arquitectura/acceso-a-datos.test.ts` **falla** si
+aparece una operación que ningún patrón explique. Las tres excepciones de hoy
+—`authConfig()`, `addToCart()`, `listScopeChoices()`— están inventariadas en
+`acceso-a-datos.allowlist.json` con su razón, y el test también falla si el
+inventario nombra una que ya pasó a explicarse sola.
+
+Antes esto era un informe: una operación nueva sin patrón aparecía en una salida
+que nadie corre. Ahora la cuarta hay que justificarla o arreglarla, que es
+exactamente la decisión que no conviene tomar en silencio.
+
+Flip-testeado en las dos direcciones.
+
 ## Qué hacer con las 41
 
 Clasificarlas a mano, una a una, y anotar el resultado. Sólo entonces se puede
