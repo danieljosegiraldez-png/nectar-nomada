@@ -21,7 +21,6 @@ const DATA_QUALITIES = ["verified", "provisional", "unconfirmed", "not_tested"] 
 export interface BiocharBatchValues {
   id?: string;
   batchCode: string;
-  organizationId: string;
   producedAtLocationId: string;
   producedAt: string | null;
   feedstock: string | null;
@@ -67,14 +66,20 @@ export interface BiocharOption {
  * Lo único obligatorio son el código —sin él no hay a qué atribuir un resultado
  * después—, dónde se produjo, y la procedencia.
  */
+/**
+ * La organización YA NO se elige: se deriva de la Location donde se produjo el
+ * lote (`resolveOrganizationForLocation`). Lo pidió la revisión independiente
+ * del 2026-09-01 — aceptarla del formulario dejaba que un lote quedara
+ * producido en una finca y propiedad de otra organización, y el repositorio
+ * tiene una regla explícita: el dueño de una Location se mira en
+ * `core.location.organization_id`.
+ */
 export function BiocharBatchForm({
   values,
   locations,
-  organizations,
 }: {
   values: BiocharBatchValues;
   locations: BiocharOption[];
-  organizations: BiocharOption[];
 }) {
   const t = useTranslations("Traceability");
   const editando = values.id != null;
@@ -105,20 +110,10 @@ export function BiocharBatchForm({
           no los pierda. */}
       {editando ? (
         <>
-          <input type="hidden" name="organizationId" value={values.organizationId} />
           <input type="hidden" name="producedAtLocationId" value={values.producedAtLocationId} />
         </>
       ) : (
         <>
-          <div className="nn-field">
-            <label htmlFor="organizationId">{t("biocharOrganizationLabel")}</label>
-            <select id="organizationId" name="organizationId" required defaultValue={values.organizationId}>
-              <option value="">{t("biocharOrganizationChoose")}</option>
-              {organizations.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </select>
-          </div>
 
           <div className="nn-field">
             <label htmlFor="producedAtLocationId">{t("biocharProducedAtLabel")}</label>

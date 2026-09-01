@@ -127,11 +127,9 @@ export default async function BiocharBatchPage({ params }: { params: Promise<{ i
         <h2>{t("biocharEditHeading")}</h2>
         <BiocharBatchForm
           locations={[{ id: batch.producedAtLocation.id, name: batch.producedAtLocation.name }]}
-          organizations={[{ id: batch.organization.id, name: batch.organization.name }]}
           values={{
             id: batch.id,
             batchCode: batch.batchCode,
-            organizationId: batch.organizationId,
             producedAtLocationId: batch.producedAtLocationId,
             producedAt: batch.producedAt ? batch.producedAt.toISOString().slice(0, 10) : null,
             feedstock: batch.feedstock,

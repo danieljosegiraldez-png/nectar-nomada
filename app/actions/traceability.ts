@@ -1236,7 +1236,7 @@ export async function createBiocharBatchAction(
   try {
     await createBiocharBatch(user.userAccountId, {
       batchCode: String(formData.get("batchCode") ?? ""),
-      organizationId: String(formData.get("organizationId") ?? ""),
+      // La organización ya no viaja: se deriva de la Location en el servicio.
       producedAtLocationId: String(formData.get("producedAtLocationId") ?? ""),
       // ADR-038: sin valor por defecto. Lo elige el formulario, que obliga.
       provenanceClass: String(formData.get("provenanceClass") ?? "") as never,

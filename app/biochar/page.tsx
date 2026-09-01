@@ -66,10 +66,8 @@ export default async function BiocharPage() {
         <h2>{t("biocharNewHeading")}</h2>
         <BiocharBatchForm
           locations={locations.map((l) => ({ id: l.id, name: l.name }))}
-          organizations={organizations.map((o) => ({ id: o.id, name: o.name }))}
           values={{
             batchCode: "",
-            organizationId: "",
             producedAtLocationId: "",
             producedAt: null,
             feedstock: null,

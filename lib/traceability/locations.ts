@@ -17,6 +17,48 @@ import type { ScopeTarget } from "../rbac/types";
 import type { Aspect, ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
 
 export class LocationAccessError extends Error {}
+
+/**
+ * La organización a la que pertenece una Location, subiendo por la jerarquía.
+ *
+ * Existe por un hallazgo de la revisión independiente del 2026-09-01:
+ * `createBiocharBatch` aceptaba `organizationId` del llamador y sólo comprobaba
+ * que existiera, así que un lote podía quedar **producido en la finca A y
+ * propiedad de la organización B**. Eso contradice la regla del repositorio —
+ * el dueño de una Location se mira en `core.location.organization_id`, y leer
+ * otra cosa es exactamente lo que salió mal en el renombrado de Finca Rosina.
+ *
+ * Sube por `parentLocationId` porque una parcela puede no llevar organización
+ * propia y heredarla de su finca; es la misma resolución que
+ * `getManageableContext` hace para decidir visibilidad, aquí extraída para que
+ * no viva sólo dentro de aquella función.
+ *
+ * Devuelve `null` cuando ni ella ni ningún ancestro la declaran. Quien llame
+ * decide si eso es un error: para un lote de biochar lo es, porque un lote sin
+ * dueño no se puede atribuir.
+ */
+export async function resolveOrganizationForLocation(locationId: string): Promise<string | null> {
+  const vistos = new Set<string>();
+  let actual: { id: string; organizationId: string | null; parentLocationId: string | null } | null =
+    await prisma.location.findUnique({
+      where: { id: locationId },
+      select: { id: true, organizationId: true, parentLocationId: true },
+    });
+
+  while (actual) {
+    if (actual.organizationId) return actual.organizationId;
+    // Un ciclo en la jerarquía colgaría el bucle. No debería haberlos, pero
+    // «no debería» no es una garantía y el coste de comprobarlo es un Set.
+    if (vistos.has(actual.id)) return null;
+    vistos.add(actual.id);
+    if (!actual.parentLocationId) return null;
+    actual = await prisma.location.findUnique({
+      where: { id: actual.parentLocationId },
+      select: { id: true, organizationId: true, parentLocationId: true },
+    });
+  }
+  return null;
+}
 export class LocationValidationError extends Error {}
 
 /**

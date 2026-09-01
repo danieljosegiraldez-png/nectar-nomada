@@ -26,7 +26,11 @@
  */
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
+import {
+  requireLocationAttributeAccess,
+  resolveOrganizationForLocation,
+  LocationAccessError,
+} from "./locations";
 import { getManageableContext } from "./lots";
 import type {
   BiocharCooling,
@@ -65,7 +69,10 @@ export interface BiocharBatchFields {
 
 export interface CreateBiocharBatchInput extends BiocharBatchFields {
   batchCode: string;
-  organizationId: string;
+  // `organizationId` NO se acepta, y su ausencia es el arreglo. Lo aceptaba, y
+  // sólo comprobaba que la organización existiera: un lote podía quedar
+  // producido en la finca A y propiedad de la organización B. Ahora se deriva
+  // de la Location, que es donde el repositorio dice que vive el dueño.
   producedAtLocationId: string;
   // ADR-038 — requerido, sin default.
   provenanceClass: ProvenanceClass;
@@ -148,8 +155,11 @@ export async function createBiocharBatch(userAccountId: string, input: CreateBio
   await requireLocationAttributeAccess(userAccountId, input.producedAtLocationId);
   validarCampos(input);
 
-  const organizacion = await prisma.organization.findUnique({ where: { id: input.organizationId } });
-  if (!organizacion) throw new LocationAccessError("organization_not_found");
+  // Derivada, no recibida. Si ni la Location ni sus ancestros declaran dueño,
+  // falla: un lote de biochar sin organización no se puede atribuir, y
+  // inventarle una sería exactamente lo que ADR-080 prohíbe.
+  const organizationId = await resolveOrganizationForLocation(input.producedAtLocationId);
+  if (!organizationId) throw new BiocharBatchValidationError("location_has_no_organization");
 
   // Escritura y auditoría en la MISMA transacción: si el audit falla, el lote
   // no queda guardado sin él.
@@ -157,7 +167,7 @@ export async function createBiocharBatch(userAccountId: string, input: CreateBio
     const creado = await tx.biocharBatch.create({
       data: {
         batchCode: codigo,
-        organizationId: input.organizationId,
+        organizationId,
         producedAtLocationId: input.producedAtLocationId,
         provenanceClass: input.provenanceClass,
         ...datosDeCampos(input),

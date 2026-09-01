@@ -101,7 +101,6 @@ describe("createBiocharBatch", () => {
     await expect(
       createBiocharBatch(wrongLocationUserAccountId, {
         batchCode: "LN-BC-2026-999",
-        organizationId,
         producedAtLocationId: locationId,
         provenanceClass: "original_record",
       }),
@@ -112,7 +111,6 @@ describe("createBiocharBatch", () => {
     await expect(
       createBiocharBatch(authorizedUserAccountId, {
         batchCode: "   ",
-        organizationId,
         producedAtLocationId: locationId,
         provenanceClass: "original_record",
       }),
@@ -123,7 +121,6 @@ describe("createBiocharBatch", () => {
     await expect(
       createBiocharBatch(authorizedUserAccountId, {
         batchCode: "LN-BC-2026-998",
-        organizationId,
         producedAtLocationId: locationId,
         provenanceClass: "original_record",
         burnDurationMinutes: 120,
@@ -135,7 +132,6 @@ describe("createBiocharBatch", () => {
   it("registra la quema completa de la Tabla 6 — el camino bueno", async () => {
     const lote = await createBiocharBatch(authorizedUserAccountId, {
       batchCode: "  LN-BC-2026-001  ",
-      organizationId,
       producedAtLocationId: locationId,
       producedAt: new Date("2026-03-10T00:00:00Z"),
       feedstock: "Poda de guaba, 70%; cascarilla de café, 30%",
@@ -175,7 +171,6 @@ describe("createBiocharBatch", () => {
     // registrado porque incomoda es cómo un sistema empieza a mentir.
     const lote = await createBiocharBatch(authorizedUserAccountId, {
       batchCode: "LN-BC-2026-002",
-      organizationId,
       producedAtLocationId: locationId,
       peakTemperatureC: 810,
       provenanceClass: "direct_observation",
@@ -189,7 +184,6 @@ describe("createBiocharBatch", () => {
     // Paso 2 documenta lo que Bob YA hace, no le obliga a medir de nuevo.
     const lote = await createBiocharBatch(authorizedUserAccountId, {
       batchCode: "LN-BC-2026-003",
-      organizationId,
       producedAtLocationId: locationId,
       provenanceClass: "original_record",
     });

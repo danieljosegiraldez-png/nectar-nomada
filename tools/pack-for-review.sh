@@ -9,8 +9,16 @@
 # **Nunca comprimir quitando cuerpos.** Un paquete sin cuerpos borró en silencio
 # las dos constantes de las que trataba la revisión. Se comprime por selección.
 #
-# Uso: bash tools/pack-for-review.sh <rango-git> [salida]
+# Uso: bash tools/pack-for-review.sh <rango-git> [salida] [ruta...]
 #      bash tools/pack-for-review.sh origin/main..HEAD
+#      bash tools/pack-for-review.sh 866339f..main /tmp/p.md lib/
+#
+# **Las rutas son la única forma legítima de comprimir.** La cabecera de arriba
+# ya decía «se comprime por selección» y el script no ofrecía ninguna: el
+# 2026-09-01 un rango de un día entero salió en 8.255 líneas, que es el tamaño
+# que hizo colgar la revisión del 2026-08-31. Acotar a `lib/` lo dejó en 1.713.
+# Lo que NO se hace es quitar cuerpos: el paquete de un archivo seleccionado
+# sigue llevándolo entero.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -37,7 +45,16 @@ DETRAS=$(git rev-list --count "${PUNTA}..${BASE}" 2>/dev/null || echo 0)
 SALIDA="${2:-/private/tmp/claude-501/pack-$(date +%Y%m%d-%H%M%S).md}"
 mkdir -p "$(dirname "$SALIDA")"
 
-TOCADOS=$(git diff --name-only "$RANGO_DIFF" -- | grep -v '^node_modules/' || true)
+# Rutas opcionales a partir del tercer argumento. Sin ellas, todo el rango.
+shift 2 2>/dev/null || shift $# 
+RUTAS=("$@")
+if [ ${#RUTAS[@]} -gt 0 ]; then
+  ALCANCE="$RANGO_DIFF, acotado a: ${RUTAS[*]}"
+else
+  ALCANCE="$RANGO_DIFF (todo el rango)"
+fi
+
+TOCADOS=$(git diff --name-only "$RANGO_DIFF" -- "${RUTAS[@]}" | grep -v '^node_modules/' || true)
 if [ -z "$TOCADOS" ]; then
   echo "El rango $RANGO no toca ningún archivo. No hay nada que revisar." >&2
   exit 1
@@ -55,7 +72,8 @@ fi
   echo "HEAD:   $(git rev-parse HEAD)"
   echo "base:   $(git merge-base HEAD "${RANGO%%..*}" 2>/dev/null || echo n/d)"
   echo "sucio:  $(git status --porcelain | wc -l | tr -d ' ') archivo(s) sin commitear"
-  echo "diff:   $RANGO_DIFF (tres puntos: desde la base común)"
+  echo "diff:   $ALCANCE"
+  echo "        (tres puntos: desde la base común)"
   echo "detrás: $DETRAS commit(s) de $BASE que esta rama no tiene"
   echo '```'
   if [ "$DETRAS" -gt 0 ]; then
@@ -65,10 +83,16 @@ fi
     echo "> árbol que juzgas no es el que se fusionará. Pide una re-medición si"
     echo "> tu juicio depende de código que pudo cambiar en la base."
   fi
+  if [ ${#RUTAS[@]} -gt 0 ]; then
+    echo
+    echo "> **Aviso al revisor:** este paquete está ACOTADO a \`${RUTAS[*]}\`."
+    echo "> El cambio completo toca más archivos —tests, migraciones, pantallas—"
+    echo "> que no están aquí. Se acotó por tamaño, no porque el resto no importe."
+  fi
   echo
   echo "## Medidas"
   echo '```'
-  git diff --stat "$RANGO_DIFF" --
+  git diff --stat "$RANGO_DIFF" -- "${RUTAS[@]}"
   echo '```'
   echo
   echo "## Mensajes de commit del rango"
@@ -78,7 +102,7 @@ fi
   echo
   echo "## Diff completo del rango (sin extractos)"
   echo '```diff'
-  git diff "$RANGO_DIFF" --
+  git diff "$RANGO_DIFF" -- "${RUTAS[@]}"
   echo '```'
   echo
   echo "## Texto actual COMPLETO de cada archivo tocado"

@@ -485,6 +485,24 @@ export const DOMINIOS_DE_VARIABLE = [
 ] as const;
 
 /**
+ * ¿Pertenece esta variable a este panel de laboratorio?
+ *
+ * Existe porque la revisión independiente del 2026-09-01 encontró que `PANELES`
+ * sólo filtraba **listas de formulario**: `recordMeasurement` aceptaba cualquier
+ * variable para cualquier sujeto, así que la separación de dominios era
+ * conveniencia de pantalla y no regla de integridad. Gate 0 dependía de eso —
+ * una lectura de Brix colgada de una muestra de suelo abría «química base».
+ *
+ * Acepta un `string` y no un `MeasurementVariable` a propósito: quien pregunta
+ * suele tener el `variable` de una fila de `Measurement`, que es texto libre en
+ * el esquema. Una variable desconocida no pertenece a ningún panel.
+ */
+export function variablePerteneceAlPanel(variable: string, dominio: DominioDeVariable): boolean {
+  if (!isKnownVariable(variable)) return false;
+  return panelesDe(variable).includes(dominio);
+}
+
+/**
  * El registro entero, sin filtrar por panel.
  *
  * Existe para el guardia de cobertura: comparar la unión de los paneles contra

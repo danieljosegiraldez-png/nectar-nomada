@@ -254,6 +254,10 @@
     {
       "archivo": "lib/audit.ts",
       "razon": "`recordAuditEvent` acepta un `tx` OPCIONAL para que el AuditEvent se confirme con la escritura que lo produjo — sin él, una fila confirmada podía quedarse sin auditoría si el insert fallaba después del commit (revisión independiente, 2026-08-31). No recibe el cliente entero: el parámetro es `Pick<Prisma.TransactionClient, \"auditEvent\">`, así que dentro de esta función no se puede consultar ninguna otra tabla. Es exactamente lo que pide el mensaje de este guardia: pasarle sólo lo que necesita. Sigue siendo el único escritor de AuditEvent."
+    },
+    {
+      "archivo": "lib/research/amendments.ts",
+      "razon": "`evaluarGate0` acepta un `Prisma.TransactionClient` para poder reevaluarse DENTRO de la transacción que crea el TreatmentBatch. Sin eso, la compuerta juzgaba un estado que podía cambiar antes del commit — el protocolo puede dejar de estar `active`. Lo pidió la revisión independiente del 2026-09-01. No amplía acceso: la autorización corre antes, fuera de la transacción."
     }
   ],
   "operaciones_sin_patron": [
@@ -387,6 +391,18 @@
       "archivo": "lib/traceability/measurements.ts",
       "operacion": "SUJETOS_NO_CAFE",
       "razon": "Tabla de tres búsquedas —biochar, muestra de suelo, muestra foliar— que sólo resuelven a qué Location pertenece un sujeto. No reciben principal a propósito: su ÚNICO llamador es requireSubjectAccess, tres líneas más abajo en el mismo archivo, que con esa Location llama a requireLocationAttributeAccess. Se escribió como tabla y no como tres `if` porque la cadena repetía la misma forma tres veces, y ahí es donde se cuela el que comprueba la exclusividad de uno y se olvida del otro. Verificado el 2026-09-01.",
+      "verificado": "2026-09-01"
+    },
+    {
+      "archivo": "lib/research/treatments.ts",
+      "operacion": "validateTreatmentBatchVariableValue",
+      "razon": "Validación semántica pura de un valor de variable contra su ProtocolVariable: lee el catálogo para comprobar pertenencia. No recibe principal porque no decide acceso, sino forma. Sus dos llamadores —createTreatmentBatch y applyAmendment— autorizan antes. Se exportó el 2026-09-01 justamente para que el segundo dejara de tener invariantes más laxos que el primero. Verificado el 2026-09-01.",
+      "verificado": "2026-09-01"
+    },
+    {
+      "archivo": "lib/traceability/locations.ts",
+      "operacion": "resolveOrganizationForLocation",
+      "razon": "Resuelve a qué organización pertenece una Location subiendo por la jerarquía. No recibe principal a propósito: no expone datos gobernados —devuelve un UUID de organización— y su papel es sustituir un `organizationId` que antes llegaba del llamador sin comprobar, que es el hallazgo que la motivó. Sus llamadores autorizan contra la Location antes. Verificado el 2026-09-01.",
       "verificado": "2026-09-01"
     }
   ]

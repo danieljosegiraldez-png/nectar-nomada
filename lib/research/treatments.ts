@@ -45,7 +45,15 @@ type ProtocolVariableForValidation = {
  * ProtocolVariable's own frozen enumValues; the "Spontaneous Wild" case
  * requires dataQuality to be explicitly set, never silently defaulted.
  */
-async function validateTreatmentBatchVariableValue(
+/**
+ * Exportada desde el 2026-09-01: `applyAmendment` sólo comprobaba que la
+ * variable estuviera declarada en la versión, así que el camino nuevo podía
+ * crear `TreatmentBatch` que el canónico habría rechazado — catálogo
+ * equivocado, valor fuera de un enum cerrado, identidad desconocida sin
+ * `dataQuality`. Lo señaló la revisión independiente: la misma entidad con
+ * invariantes distintos según por qué función entres.
+ */
+export async function validateTreatmentBatchVariableValue(
   variable: ProtocolVariableForValidation,
   value: TreatmentBatchVariableValueInput,
 ) {
