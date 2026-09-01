@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { addProcessingStageAction, completeProcessingStageAction, type ResearchActionState } from "../../actions/research";
+import { TimezoneOffsetField } from "../TimezoneOffsetField";
 
 const initialState: ResearchActionState = {};
 
@@ -12,6 +13,7 @@ export function AddProcessingStageForm({ treatmentBatchId, nextSequenceOrder }: 
 
   return (
     <form action={formAction} className="nn-form" style={{ maxWidth: 480 }}>
+      <TimezoneOffsetField />
       <input type="hidden" name="treatmentBatchId" value={treatmentBatchId} />
       <input type="hidden" name="sequenceOrder" value={nextSequenceOrder} />
       <div className="nn-field">
@@ -40,6 +42,7 @@ export function CompleteProcessingStageForm({ treatmentBatchId, processingStageI
 
   return (
     <form action={formAction} style={{ display: "inline" }}>
+      <TimezoneOffsetField />
       <input type="hidden" name="treatmentBatchId" value={treatmentBatchId} />
       <input type="hidden" name="processingStageId" value={processingStageId} />
       {state.error ? <p className="nn-error">{state.error}</p> : null}

@@ -9,6 +9,7 @@ import { createTreatmentBatch, addProcessingStage, completeProcessingStage, Trea
 import { ResearchAccessError } from "../../lib/research/access";
 import type { ProtocolVariableValueType, ProvenanceClass } from "../../generated/prisma/client";
 import type { MeasurementVariable } from "../../lib/traceability/units";
+import { parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
 
 export interface ResearchActionState {
   error?: string;
@@ -172,7 +173,7 @@ export async function createTreatmentBatchAction(_prevState: ResearchActionState
       protocolVersionId,
       lotId: emptyToNull(formData.get("lotId")),
       batchLabel: String(formData.get("batchLabel") ?? ""),
-      startedAt: new Date(String(formData.get("startedAt") ?? new Date().toISOString())),
+      startedAt: parseLocalDateTime(String(formData.get("startedAt") ?? ""), String(formData.get(TZ_OFFSET_FIELD) ?? "")),
       notes: emptyToNull(formData.get("notes")),
       provenanceClass: (formData.get("provenanceClass") as ProvenanceClass) || "measured_fact",
       variableValues,
@@ -195,7 +196,7 @@ export async function addProcessingStageAction(_prevState: ResearchActionState, 
       treatmentBatchId,
       name: String(formData.get("name") ?? ""),
       sequenceOrder: Number(formData.get("sequenceOrder") ?? 0),
-      startedAt: new Date(String(formData.get("startedAt") ?? new Date().toISOString())),
+      startedAt: parseLocalDateTime(String(formData.get("startedAt") ?? ""), String(formData.get(TZ_OFFSET_FIELD) ?? "")),
       notes: emptyToNull(formData.get("notes")),
     });
   } catch (error) {

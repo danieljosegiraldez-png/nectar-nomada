@@ -725,7 +725,8 @@
     "correctionReasonLabel": "Why is it being corrected?",
     "correctionReasonPlaceholder": "e.g. I wrote 24 and the instrument read 42",
     "correctionSubmitButton": "Record the correction",
-    "supersededLabel": "superseded"
+    "supersededLabel": "superseded",
+    "error_datetime": "Could not interpret the date: {detail}"
   },
   "Apiary": {
     "badge": "Apiary",

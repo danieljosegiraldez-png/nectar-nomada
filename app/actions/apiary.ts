@@ -12,6 +12,7 @@ import { requestApiaryAssetUpload, finalizeApiaryAssetUpload } from "../../lib/a
 import type { RecordInspectionInput } from "../../lib/apiary/inspections";
 import type { RecordColonyEventInput } from "../../lib/apiary/colonyEvents";
 import type { ApiaryAssetParent } from "../../lib/apiary/media";
+import { parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
 
 const emptyToNull = (value: FormDataEntryValue | null) => {
   const str = String(value ?? "").trim();
@@ -34,7 +35,7 @@ export async function createHiveFormAction(formData: FormData): Promise<void> {
     identifier: String(formData.get("identifier") ?? ""),
     locationId,
     projectId: emptyToNull(formData.get("projectId")),
-    installedAt: emptyToNull(formData.get("installedAt")) ? new Date(String(formData.get("installedAt"))) : null,
+    installedAt: parseOptionalLocalDateTime(String(formData.get("installedAt") ?? ""), String(formData.get(TZ_OFFSET_FIELD) ?? "")),
   });
 
   revalidatePath(`/apiaries/${locationId}`);

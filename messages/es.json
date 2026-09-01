@@ -725,7 +725,8 @@
     "correctionReasonLabel": "¿Por qué se corrige?",
     "correctionReasonPlaceholder": "Ej.: apunté 24 y el instrumento marcaba 42",
     "correctionSubmitButton": "Registrar la corrección",
-    "supersededLabel": "reemplazada"
+    "supersededLabel": "reemplazada",
+    "error_datetime": "No se pudo interpretar la fecha: {detail}"
   },
   "Apiary": {
     "badge": "Apiario",

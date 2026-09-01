@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { createTreatmentBatchAction, type ResearchActionState } from "../../actions/research";
+import { TimezoneOffsetField } from "../TimezoneOffsetField";
 
 const initialState: ResearchActionState = {};
 
@@ -57,6 +58,7 @@ export function TreatmentBatchForm({
 
   return (
     <form action={formAction} className="nn-form" style={{ maxWidth: 640 }}>
+      <TimezoneOffsetField />
       <input type="hidden" name="protocolVersionId" value={protocolVersionId} />
       <div className="nn-field">
         <label htmlFor="batchLabel">{t("batchLabelLabel")}</label>
