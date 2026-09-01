@@ -121,3 +121,31 @@ describe("el guardia del presupuesto", () => {
     expect(salida).toContain("no existe");
   });
 });
+
+describe("el aviso al 80 %", () => {
+  const relleno = (n: number) => Array.from({ length: n }, (_, i) => `linea ${i}`).join("\n");
+
+  it("avisa cerca del techo sin romper la compuerta", () => {
+    // ~84 % de las 400 líneas: avisa, pero sale 0. Un aviso que falla a los
+    // pocos días de cada archivado enseñaría a ignorar la compuerta entera.
+    const contenido = `# Estado\n\n### 2026-01-01 · la más vieja\n${relleno(330)}\n`;
+    const { codigo, salida } = correr(fixture("cerca.md", contenido));
+    expect(codigo, salida).toBe(0);
+    expect(salida).toContain("⚠");
+    expect(salida).toMatch(/Al \d+ % del presupuesto/);
+    expect(salida, "tiene que decir cuál archivar, no sólo que hay prisa")
+      .toContain("### 2026-01-01 · la más vieja");
+  });
+
+  it("no dice nada por debajo del 80 %", () => {
+    const { codigo, salida } = correr(fixture("holgado.md", `# Estado\n\n${relleno(50)}\n`));
+    expect(codigo).toBe(0);
+    expect(salida).not.toContain("⚠");
+  });
+
+  it("por encima del techo sigue fallando, no avisando", () => {
+    const { codigo, salida } = correr(fixture("pasado.md", `# Estado\n\n${relleno(450)}\n`));
+    expect(codigo).toBe(1);
+    expect(salida).toContain("excede el presupuesto");
+  });
+});

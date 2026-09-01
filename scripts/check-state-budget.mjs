@@ -136,3 +136,36 @@ console.log(
   `✓ ${basename(ruta)} cabe en una lectura: ${lineas}/${MAX_LINEAS} líneas, ` +
     `~${tokens}/${MAX_TOKENS} tokens, ${bytes}/${MAX_BYTES} bytes.`
 );
+
+/**
+ * Aviso al 80 %, sin fallar.
+ *
+ * El guardia sólo se quejaba al 100 %, y el 2026-08-31 hubo que archivar dos
+ * veces en un día: con varias sesiones escribiendo, este archivo crece del
+ * orden de cien líneas diarias. Descubrirlo al chocar con el techo significa
+ * archivar con prisa, que es cuando se tira algo que todavía dirigía trabajo.
+ *
+ * **No falla a propósito.** Un aviso que rompe la compuerta a los pocos días de
+ * cada archivado enseña a ignorar la compuerta entera, y entonces tampoco se
+ * lee el fallo de verdad al 100 %.
+ */
+const AVISO = 0.8;
+const cerca = [
+  ["líneas", lineas, MAX_LINEAS],
+  ["tokens", tokens, MAX_TOKENS],
+  ["bytes", bytes, MAX_BYTES],
+].filter(([, v, tope]) => v / tope >= AVISO);
+
+if (cerca.length > 0) {
+  const peor = cerca.sort((a, b) => b[1] / b[2] - a[1] / a[2])[0];
+  console.log("");
+  console.log(`⚠  Al ${Math.round((peor[1] / peor[2]) * 100)} % del presupuesto en ${peor[0]}.`);
+  const secciones = seccionesFechadas(texto);
+  if (secciones.length > 0) {
+    console.log(`   Archiva ya la más vieja, sin prisa, en vez de al chocar con el techo:`);
+    console.log(`       ${secciones[0].titulo}`);
+    console.log(`   Va a docs/SESSION_STATE_ARCHIVE.md, la más vieja primero.`);
+  } else {
+    console.log(`   No hay entradas fechadas que archivar: el peso está en la prosa.`);
+  }
+}
