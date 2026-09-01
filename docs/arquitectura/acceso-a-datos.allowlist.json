@@ -230,6 +230,10 @@
     {
       "archivo": "lib/traceability/balance.ts",
       "razon": "Cálculo puro de balance de masa. No abre conexión: opera dentro de una transacción que ya abrió un llamador autorizado (lots.ts, fermentation.ts, quantity.ts, todos con requireLotAccess). Recibir el cliente por parámetro es inyección de dependencia, no un atajo — pero lo vuelve invisible a la comprobación de imports, y por eso se inventaría aquí."
+    },
+    {
+      "archivo": "lib/audit.ts",
+      "razon": "`recordAuditEvent` acepta un `tx` OPCIONAL para que el AuditEvent se confirme con la escritura que lo produjo — sin él, una fila confirmada podía quedarse sin auditoría si el insert fallaba después del commit (revisión independiente, 2026-08-31). No recibe el cliente entero: el parámetro es `Pick<Prisma.TransactionClient, \"auditEvent\">`, así que dentro de esta función no se puede consultar ninguna otra tabla. Es exactamente lo que pide el mensaje de este guardia: pasarle sólo lo que necesita. Sigue siendo el único escritor de AuditEvent."
     }
   ]
 }
