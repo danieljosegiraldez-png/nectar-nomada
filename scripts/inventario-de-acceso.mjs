@@ -17,7 +17,11 @@
  * guardia». Por eso la salida separa lo que sabe de lo que no, en vez de dar un
  * número único.
  *
- * Uso: node scripts/inventario-de-acceso.mjs [--json]
+ * Uso: node scripts/inventario-de-acceso.mjs [--json] [--llamadores]
+ *
+ * `--llamadores` resuelve, para cada operación que no recibe principal, quién
+ * la llama y si ese llamador autoriza. Sin eso, «depende del llamador» es una
+ * categoría donde las dudas se acumulan sin que nadie las mire.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -146,7 +150,30 @@ const filas = ops
   })
   .filter(Boolean);
 
-if (process.argv.includes("--json")) {
+if (process.argv.includes("--llamadores")) {
+  const objetivo = filas.filter((f) => f.clase === "depende del llamador (verificar a mano)");
+  console.log(`${objetivo.length} operaciones que dependen del llamador\n`);
+  let pendientes = 0;
+  for (const op of objetivo) {
+    const llamadores = TODOS.filter(
+      (f) => f !== op.archivo && new RegExp(`\\b${op.nombre}\\s*\\(`).test(fuentes.get(f) ?? "")
+    );
+    const guardados = llamadores.filter((f) => GUARDIAS.test(fuentes.get(f) ?? ""));
+    GUARDIAS.lastIndex = 0;
+    const ok = llamadores.length > 0 && guardados.length === llamadores.length;
+    if (!ok) pendientes++;
+    console.log(`  ${ok ? "OK   " : "MIRAR"} ${op.archivo} ${op.nombre}()`);
+    for (const f of llamadores) {
+      const g = GUARDIAS.test(fuentes.get(f) ?? "");
+      GUARDIAS.lastIndex = 0;
+      console.log(`         ${g ? "✓" : "✗"} ${f}`);
+    }
+    if (!llamadores.length) console.log(`         (ningún llamador fuera de su propio archivo)`);
+  }
+  console.log(`\n  ${pendientes} necesitan juicio humano. Las conclusiones del 2026-08-31 están`);
+  console.log(`  en docs/arquitectura/inventario-de-acceso.md — este modo dice a quién mirar,`);
+  console.log(`  no si está bien.`);
+} else if (process.argv.includes("--json")) {
   console.log(JSON.stringify(filas, null, 2));
 } else {
   const porClase = {};

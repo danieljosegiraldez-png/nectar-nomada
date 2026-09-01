@@ -36,13 +36,34 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 **Ninguna es un agujero.**
 
-### Lo que sigue sin verificar, dicho con precisión
+### Las 19 que dependen del llamador: verificadas una a una (2026-08-31)
 
-De las **19** que dependen del llamador, **verifiqué dos**:
-`listPeopleForAdmin()` y `listScopeChoices()`, ambas gateadas por
-`requirePermissionAdmin` en la misma página. **Quedan 17 por comprobar
-llamador a llamador.** No es lo mismo «el script no las explica» que «están
-mal», y tampoco es lo mismo «miré dos» que «están todas bien».
+`node scripts/inventario-de-acceso.mjs --llamadores` resuelve quién llama a cada
+una y si ese llamador autoriza. Ocho salen con guardia en todos sus llamadores.
+Las once restantes, miradas a mano:
+
+| Operación | Por qué está bien |
+|---|---|
+| `lib/audit.ts recordAuditEvent()` | Escribe una fila de auditoría; no **lee** datos gobernados. Es infraestructura posterior a una operación ya autorizada. De sus 30+ llamadores, cuatro no gatean —los flujos de alta, sesión y comercio—, y ninguno le pasa datos ajenos |
+| `markOrderPaid()` · `markBookingPaid()` | Los invoca el webhook de Stripe, **autenticado por firma** y no por sesión. Actor de sistema |
+| `createCheckoutSessionForOrder()` · `createCheckoutSessionForBooking()` | Sus acciones exigen sesión y construyen el pedido o la reserva **desde `user.userAccountId`**: nunca desde un id recibido |
+| `getFieldEventKinds()` | Lee `variableCatalogValue` — catálogo de referencia, no datos gobernados. Su página exige sesión |
+| `hasProcessingStage()` · `getBedLevelContext()` | **Sin llamador de producción**: sólo las usan los tests. Exportadas para poder probarlas |
+| `applyInputDecrements()` | La llama `settleMassBalance()` en su **propio archivo**, que sí guarda |
+| `getSelectionOutturn()` · `getSelectionCatalogs()` | `app/lots/[id]/page.tsx`, que gatea antes |
+
+**Ninguna de las 195 operaciones quedó sin explicar.**
+
+### Lo que esta verificación NO establece
+
+Que la autorización sea **correcta**. Un `requireLotAccess` con el permiso
+equivocado sigue contando como guardia, y un llamador que gatea sobre el recurso
+equivocado también. Lo que queda demostrado es más modesto y más comprobable:
+**no hay operaciones cuyo camino de autorización nadie haya mirado.**
+
+Dos cosas menores que salieron al mirar, anotadas y no arregladas:
+`hasProcessingStage()` y `getBedLevelContext()` son código de producción con
+llamadores sólo en tests.
 
 ### Cómo cambió el mapa al arreglar el detector
 
