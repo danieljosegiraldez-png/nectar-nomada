@@ -2445,6 +2445,35 @@ suite sin que ningún check se ponga rojo. Después de correr cualquier script d
 `data:*` contra producción, correr `npm test` en local antes de dar por cerrada
 la sesión.
 
+### Verificar en local no puede ver un fallo de husos horarios
+
+**Síntoma.** Se abre una jornada escribiendo las 07:30 y la pantalla muestra
+12:30. Parece «la aplicación muestra en UTC» y se anota como decisión de
+producto.
+
+**Causa.** Un `<input type="datetime-local">` entrega un reloj de pared **sin
+zona**: `"2026-03-12T07:30"`. `new Date()` sobre esa cadena la interpreta en la
+zona **del servidor**. En desarrollo el servidor y el navegador comparten zona,
+así que el error se cancela y el instante guardado es correcto. **En producción
+el servidor corre en UTC** y no: un 07:30 de Panamá se guarda como las 02:30.
+
+Estuvo en nueve sitios de tres módulos —incluidos cosecha y recepción, que son
+los que más filas reales tienen— y ninguna compuerta, suite ni verificación en
+navegador lo vio. Lo encontró una revisión independiente el 2026-08-31.
+
+**Arreglo.** `lib/time/localDateTime.ts`: el formulario manda el desfase del
+dispositivo (`<TimezoneOffsetField />`) y el servidor los combina. Si el desfase
+falta, **falla** en vez de suponer una zona.
+
+**Cómo verificarlo.** Un dev server con `TZ=UTC`, que es lo que hace Vercel:
+
+```bash
+TZ=UTC PORT=3033 DATABASE_URL=... npm run dev
+```
+
+Con la zona local no se ve nada. Comprobar leyendo la base con
+`at time zone 'UTC' at time zone 'America/Panama'`, no la pantalla.
+
 ### Un guardia que pasa igual con y sin la regresión
 
 **Síntoma.** `tests/session-state-budget.test.ts` estaba en verde. También lo
