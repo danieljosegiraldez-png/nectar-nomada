@@ -38,9 +38,11 @@ let farmScopeId: string;
 let sinAccesoUserId: string;
 let protocolVersionId: string;
 let dosisVariableId: string;
+let metodoVariableId: string;
 let borradorVersionId: string;
 let biocharId: string;
 let soilSampleId: string;
+const muestrasExtra: string[] = [];
 const batchIds: string[] = [];
 
 async function createTestUserAccount(label: string) {
@@ -117,7 +119,7 @@ beforeAll(async () => {
     notes: "TEST v1",
     variables: [
       { name: "Dosis de aplicación (t/ha)", valueType: "numeric" },
-      { name: "Método de colocación", valueType: "text" },
+      { name: "Método de colocación", valueType: "closed_enum", enumValues: ["banda", "voleo", "hoyo"] },
       { name: "Profundidad de incorporación (cm)", valueType: "numeric" },
     ],
     requiredMeasurements: [],
@@ -126,6 +128,11 @@ beforeAll(async () => {
   dosisVariableId = (
     await prisma.protocolVariable.findFirstOrThrow({
       where: { protocolVersionId, name: { contains: "Dosis" } },
+    })
+  ).id;
+  metodoVariableId = (
+    await prisma.protocolVariable.findFirstOrThrow({
+      where: { protocolVersionId, name: { contains: "Método" } },
     })
   ).id;
   await activateProtocolVersion(researchUserId, protocolVersionId);
@@ -148,7 +155,6 @@ beforeAll(async () => {
 
   const lote = await createBiocharBatch(farmUserId, {
     batchCode: `LN-BC-${RUN_ID}`,
-    organizationId,
     producedAtLocationId: locationId,
     provenanceClass: "original_record",
   });
@@ -161,6 +167,7 @@ afterAll(async () => {
   await prisma.measurement.deleteMany({
     where: assertDefinedWhere({ OR: [{ biocharBatchId: biocharId }, { soilSampleId }] }),
   });
+  await prisma.measurement.deleteMany({ where: assertDefinedWhere({ soilSampleId: { in: muestrasExtra } }) });
   await prisma.soilSample.deleteMany({ where: assertDefinedWhere({ locationId: { in: [locationId, locationVirgenId] } }) });
   await prisma.soilProfile.deleteMany({ where: assertDefinedWhere({ locationId: { in: [locationId, locationVirgenId] } }) });
   await prisma.biocharBatch.deleteMany({ where: assertDefinedWhere({ producedAtLocationId: { in: [locationId, locationVirgenId] } }) });
@@ -188,6 +195,7 @@ describe("Gate 0 — la compuerta que el marco firma", () => {
       locationId: locationVirgenId,
       biocharBatchId: biocharId,
       protocolVersionId,
+      startedAt: new Date("2026-07-01T00:00:00Z"),
     });
     // El protocolo SÍ está activo, así que ésa no falta.
     expect(faltan).toEqual([
@@ -202,6 +210,95 @@ describe("Gate 0 — la compuerta que el marco firma", () => {
     // caracterizado ahí sería inventar una condición que la firma no pone.
     const faltan = await getGate0Status(researchUserId, { locationId: locationVirgenId, protocolVersionId });
     expect(faltan).not.toContain("characterised_biochar");
+  });
+
+  it("una calicata VACÍA no es física base", async () => {
+    // Antes bastaba con que existiera la fila. El Paso 4 pide describir
+    // horizontes, profundidad de raíces y señales; una fila con sólo la fecha
+    // no describe nada y abría la compuerta igual.
+    const vacia = await createSoilProfile(farmUserId, {
+      locationId: locationVirgenId,
+      describedAt: new Date("2026-04-20T00:00:00Z"),
+      provenanceClass: "direct_observation",
+    });
+    expect(vacia.id).toBeTruthy();
+    const faltan = await getGate0Status(researchUserId, {
+      locationId: locationVirgenId,
+      protocolVersionId,
+      startedAt: new Date("2026-07-01T00:00:00Z"),
+    });
+    expect(faltan).toContain("baseline_soil_physics");
+  });
+
+  it("una lectura que NO es del panel de suelo no es química base", async () => {
+    // El agujero que encontró la revisión: `measurements: { some: {} }`
+    // aceptaba cualquier medición. Un Brix colgado de una muestra de suelo
+    // abría la compuerta.
+    const muestra = await createSoilSample(farmUserId, {
+      locationId: locationVirgenId,
+      sampleCode: `SS-brix-${RUN_ID}`,
+      sampledAt: new Date("2026-05-02T00:00:00Z"),
+      provenanceClass: "original_record",
+    });
+    muestrasExtra.push(muestra.id);
+    await recordMeasurement(farmUserId, {
+      soilSampleId: muestra.id,
+      variable: "brix",
+      value: 12,
+      unit: "Bx",
+      occurredAt: new Date("2026-06-01T00:00:00Z"),
+      provenanceClass: "measured_fact",
+    });
+
+    const faltan = await getGate0Status(researchUserId, {
+      locationId: locationVirgenId,
+      protocolVersionId,
+      startedAt: new Date("2026-07-01T00:00:00Z"),
+    });
+    expect(faltan).toContain("baseline_soil_chemistry");
+  });
+
+  it("una lectura POSTERIOR al tratamiento no es línea base", async () => {
+    // Nadie lo había mirado: una medición fechada después de la enmienda
+    // servía igual, que es justo lo contrario de una línea base.
+    const faltan = await getGate0Status(researchUserId, {
+      locationId,
+      biocharBatchId: biocharId,
+      protocolVersionId,
+      // Anterior a toda la evidencia que el fixture crea después.
+      startedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    expect(faltan).toContain("baseline_soil_chemistry");
+    expect(faltan).toContain("baseline_soil_physics");
+  });
+
+  it("un resultado FECHADO DESPUÉS del tratamiento no es línea base", async () => {
+    // El caso que de verdad pasa: la muestra se toma en mayo, el laboratorio
+    // responde en agosto, y la enmienda se aplicó en julio. La muestra es
+    // anterior; el RESULTADO no. Sin filtrar por `occurredAt` esto abría la
+    // compuerta, y filtrar sólo por la fecha de muestreo no lo detecta.
+    const muestra = await createSoilSample(farmUserId, {
+      locationId: locationVirgenId,
+      sampleCode: `SS-tarde-${RUN_ID}`,
+      sampledAt: new Date("2026-05-02T00:00:00Z"),
+      provenanceClass: "original_record",
+    });
+    muestrasExtra.push(muestra.id);
+    await recordMeasurement(farmUserId, {
+      soilSampleId: muestra.id,
+      variable: "exchangeable_aluminium",
+      value: 1.1,
+      unit: "cmol/kg",
+      occurredAt: new Date("2026-08-15T00:00:00Z"),
+      provenanceClass: "measured_fact",
+    });
+
+    const faltan = await getGate0Status(researchUserId, {
+      locationId: locationVirgenId,
+      protocolVersionId,
+      startedAt: new Date("2026-07-01T00:00:00Z"),
+    });
+    expect(faltan).toContain("baseline_soil_chemistry");
   });
 
   it("un protocolo en borrador no es un protocolo escrito", async () => {
@@ -304,10 +401,16 @@ describe("applyAmendment", () => {
       occurredAt: new Date("2026-06-01T00:00:00Z"),
       provenanceClass: "measured_fact",
     });
+    // Descrita de verdad, no una fila vacía: desde el 2026-09-01 la compuerta
+    // exige que la calicata tenga algo dentro —horizontes, profundidad de
+    // raíces o alguna señal de anaerobiosis—. Una `SoilProfile` con sólo fecha
+    // abría «física base» sin describir nada.
     await createSoilProfile(farmUserId, {
       locationId,
       describedAt: new Date("2026-04-20T00:00:00Z"),
       provenanceClass: "direct_observation",
+      rootingDepthCm: 45,
+      mottling: "present",
     });
     await recordMeasurement(farmUserId, {
       biocharBatchId: biocharId,
@@ -357,6 +460,38 @@ describe("applyAmendment", () => {
     expect(Number(batch.variableValues[0]?.numericValue)).toBe(10);
   });
 
+  it("rechaza un valor fuera del enum cerrado que declara el protocolo", async () => {
+    // Antes sólo se comprobaba que la variable estuviera DECLARADA, así que
+    // este camino creaba TreatmentBatch que `createTreatmentBatch` habría
+    // rechazado: la misma entidad con invariantes distintos según por dónde
+    // entres. Lo señaló la revisión independiente del 2026-09-01.
+    await expect(
+      applyAmendment(researchUserId, {
+        protocolVersionId,
+        locationId,
+        batchLabel: "T4",
+        startedAt: new Date("2026-07-04T00:00:00Z"),
+        provenanceClass: "original_record",
+        variableValues: [{ protocolVariableId: metodoVariableId, textValue: "a lo loco" }],
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("acepta el mismo campo con un valor que SÍ está en el enum", async () => {
+    // El control positivo: sin él, «rechaza» podría estar rechazando por
+    // cualquier otra razón.
+    const batch = await applyAmendment(researchUserId, {
+      protocolVersionId,
+      locationId,
+      batchLabel: "T4",
+      startedAt: new Date("2026-07-04T00:00:00Z"),
+      provenanceClass: "original_record",
+      variableValues: [{ protocolVariableId: metodoVariableId, textValue: "banda" }],
+    });
+    batchIds.push(batch.id);
+    expect(batch.variableValues[0]?.textValue).toBe("banda");
+  });
+
   it("rechaza un valor de una variable que ese protocolo no declara", async () => {
     await expect(
       applyAmendment(researchUserId, {
@@ -402,8 +537,17 @@ describe("applyAmendment", () => {
 describe("listAmendmentsForLocation", () => {
   it("devuelve lo aplicado a ese bloque, con su lote de biochar", async () => {
     const filas = await listAmendmentsForLocation(researchUserId, locationId);
-    expect(filas).toHaveLength(2);
-    expect(filas[0]?.biocharBatch?.batchCode).toBe(`LN-BC-${RUN_ID}`);
+    expect(filas).toHaveLength(3);
+    // Se busca la fila, no se asume la posición: el orden es por `startedAt`
+    // descendente, y el T4 —que no lleva biochar, como el T3 de la Tabla 8—
+    // es más reciente que el T1 que sí lo lleva.
+    const conBiochar = filas.filter((f) => f.biocharBatchId != null);
+    expect(conBiochar.length).toBeGreaterThan(0);
+    // Y toda fila que lleva lote lleva EL lote: la relación se resuelve, no se
+    // queda en un id suelto.
+    expect(conBiochar.every((f) => f.biocharBatch?.batchCode === `LN-BC-${RUN_ID}`)).toBe(true);
+    // El T4 no lleva ninguno, como el T3 de la Tabla 8: enmienda sin biochar.
+    expect(filas.some((f) => f.biocharBatchId == null)).toBe(true);
   });
 
   it("rechaza a quien no puede ejecutar protocolos", async () => {

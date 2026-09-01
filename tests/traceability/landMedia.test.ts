@@ -82,7 +82,6 @@ beforeAll(async () => {
   perfilDeBId = perfil.id;
   const lote = await createBiocharBatch(userBId, {
     batchCode: `LN-BC-${RUN_ID}`,
-    organizationId,
     producedAtLocationId: locationBId,
     provenanceClass: "original_record",
   });

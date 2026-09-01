@@ -212,7 +212,13 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
 
   const normalized = normalizeToCanonical(input.variable, input.value, input.unit);
 
-  const measurement = await prisma.measurement.create({
+  // Escritura y auditoría en la MISMA transacción. Lo pidió la revisión
+  // independiente del 2026-09-01 con un argumento que no era el de siempre:
+  // desde S1 estas filas **abren Gate 0**, así que una medición que persiste
+  // sin su audit no sólo pierde trazabilidad — puede habilitar una aplicación
+  // de enmienda irreversible. `correctMeasurement` ya lo hacía; esto lo iguala.
+  const measurement = await prisma.$transaction(async (tx) => {
+  const creada = await tx.measurement.create({
     data: {
       variable: input.variable,
       value: normalized.value,
@@ -239,13 +245,18 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
   });
 
   // C1 §3: evidentiary write (carries provenanceClass).
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "measurement.create",
-    entityType: "measurement",
-    entityId: measurement.id,
-    after: measurement,
-    sourceInterface: "traceability.service",
+  await recordAuditEvent(
+    {
+      actorUserAccountId: userAccountId,
+      operation: "measurement.create",
+      entityType: "measurement",
+      entityId: creada.id,
+      after: creada,
+      sourceInterface: "traceability.service",
+    },
+    tx,
+  );
+  return creada;
   });
 
   return measurement;
