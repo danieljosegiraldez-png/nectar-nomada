@@ -37,6 +37,33 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-01 · Lo mecánico del cierre deja de re-teclearse
+
+`scripts/cierre-de-sesion.sh`. §5 describía el cierre en prosa; esa prosa se
+re-tecleó seis veces el 2026-08-31 y **una salió mal**: la comprobación de
+sincronía trataba cualquier archivo sucio —incluido uno **sin seguimiento** de
+otra sesión— como razón para no sincronizar. El checkout se quedó detrás de un
+merge propio y el informe dio 11 pruebas donde había 14. La propiedad es
+«¿chocaría el pull?», no «¿hay algo sucio?».
+
+Comprueba sincronía con `origin/main` en las tres direcciones, cambios con
+seguimiento sin commitear, worktrees ajenos con trabajo sin empujar, presupuesto
+del estado, pruebas de decisión rotas, disco libre contra lo que cuesta un
+`npm ci`, y la compuerta. **No commitea, no empuja, no borra**, y los worktrees
+ajenos los informa sin tocarlos. Termina nombrando lo que ningún script puede
+hacer —estado al día, lección escrita donde se cargue, verificado contra
+asumido— en vez de fingir que el cierre ha terminado.
+
+Dos de sus ramas se dispararon solas mientras se escribía: «detrás de
+origin/main», porque otra sesión empujó, y «commits sin empujar», sobre su
+propio commit. Son la mejor prueba del cambio porque no las construí yo.
+
+También de esta sesión: **una fusión limpia duplicó una sección archivada** —dos
+sesiones archivaron la misma, en posiciones distintas, git no vio solape—. Lo
+comprueban ahora `tests/archivo-de-estado.test.ts` y su gemelo en el repositorio
+web. `SESSION_STATE.md` sí dio conflicto y por eso se miró; el archivo histórico
+no dio ninguno. Una fusión limpia no dice que el resultado sea correcto.
+
 ### 2026-09-01 · El marco de suelo y taza, y las tres primeras piezas del plan
 
 `origin/main` = `674f80b`. PR #103 (plan), #105 (`aspect`), #108 (biochar), #110
