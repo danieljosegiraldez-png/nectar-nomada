@@ -37,6 +37,104 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-01 · El plan S1, y la revisión que desmontó su pieza central
+
+`origin/main` = `83d12d9`. Nueve PR de código —#103 (plan), #105 (`aspect`),
+#108 (biochar), #110 (sujeto no-café), #111 (calicata), #115 (muestras), #117
+(fotos), #122 (enmienda), #125 (los arreglos de la revisión)— más cuatro de
+estado. Suite 731 → **855**.
+
+Daniel aportó *«Las Nubes Cerro Azul — Soil, Environment and Cup Quality:
+Research Framework v1.0»* (13.345 palabras, firmado por Bob, Sherry y Daniel).
+`docs/implementation/45_S1_SUELO_AMBIENTE_TAZA.md` traduce su Tabla 15 al
+esquema. **No es un resumen del marco; el marco manda.** De sus catorce
+entidades, ocho ya tenían dónde vivir; **de las seis que faltaban, cinco se
+construyeron** y sólo el microclima sigue abierto, por una decisión.
+
+**§0 manda sobre todo: la recomendación principal del marco es un ALTO.** Ningún
+bloque nuevo recibe biochar hasta que existan la química base, la física base,
+un lote caracterizado y el protocolo escrito — firmado como Gate 0. Lo que eso
+implica para el software es una sola cosa: la primera fila que el sistema
+escriba sobre un bloque tiene que poder ser **la línea base, no la enmienda**.
+
+**El orden de construcción es el del Plan de Acción del marco**: se construye en
+el orden en que el dato aparece, no en el que el modelo se lee.
+
+| pieza | qué la define |
+|---|---|
+| `Location.aspect` | Enum, rompiendo con el precedente de texto libre: la rosa de los vientos no se inventa |
+| `BiocharBatch` | Dosis, frecuencia y parcela **no** están: un lote se aplica en varios bloques |
+| `Measurement` no-café | Autorización **por rama** y sujeto **exclusivo**: dos permisos no se acumulan sin que el más laxo abra lo del otro |
+| `SoilProfile` | **Tres estados, no un booleano**: «no se miró» ≠ «no había», y confundirlos manda a fertilizar un problema de aire |
+| `SoilSample` / `FoliarSample` | Un análisis foliar sin protocolo es **incomparable**, peor que no tenerlo porque parece que sirve |
+| Fotos de Location | El padre debe pertenecer a la Location autorizada, o quien tiene A cuelga en B |
+| Aplicación de enmienda | Gate 0: se niega mientras falte cualquiera de las cuatro, y dice cuáles |
+
+---
+
+**Y entonces la revisión independiente desmontó justo esa última pieza.**
+
+Codex miró los 9 archivos de `lib/` y encontró **siete cosas: seis reales**.
+
+**La cara es sobre lo que yo afirmé.** Escribí «Gate 0 hecho estructura» sobre
+una compuerta que comprobaba **que existiera una fila**: `measurements: { some:
+{} }` aceptaba cualquier medición, así que un Brix colgado de una muestra de
+suelo abría «química base». `PANELES` sólo filtraba desplegables —
+`recordMeasurement` acepta cualquier variable para cualquier sujeto—, de modo
+que la separación de dominios era **conveniencia de pantalla, no regla de
+integridad**.
+
+Y algo que nadie había mirado: **no había comprobación temporal**. Una medición
+fechada *después* del tratamiento servía de línea base. El caso real es trivial:
+muestra en mayo, resultado del laboratorio en agosto, enmienda en julio.
+
+Los otros cinco:
+
+- `requireResearchAccess` **retorna al primer target que pasa** — autorización
+  alternativa, no coherencia. Como aquí el `locationId` llega del usuario y no
+  derivado de un lote, pasar también el proyecto dejaba enmendar la parcela de
+  otra finca.
+- `createBiocharBatch` aceptaba `organizationId` del llamador: un lote podía
+  quedar producido en la finca A y ser propiedad de la B.
+- `applyAmendment` no validaba catálogos ni enums cerrados: la misma entidad con
+  invariantes distintos según por qué función entraras.
+- `recordMeasurement` auditaba fuera de transacción — deuda conocida, argumento
+  nuevo: **esas filas abren Gate 0**.
+- Gate 0 se evaluaba fuera de la transacción que escribe.
+
+**Lo rechazado:** `creatorPersonId` del llamador — la misma propuesta que §4 ya
+guarda desde el 2026-08-31; el fotógrafo suele **no tener cuenta**. El revisor no
+podía saberlo: el brief no le da §4.
+
+---
+
+**Cuatro guardias del repositorio pararon trabajo, y los cuatro tenían razón.**
+El que más: `navigation.test.ts` exige ≤8 entradas de menú y yo había añadido una
+novena. Se revirtió.
+
+**Y seis veces en el día un guardia mío resultó falso.** Un test que comparaba
+una unión contra sí misma; un valor por defecto que lo volvía infalsificable y
+además metía variables de laboratorio en el desplegable de recetas; y **cuatro
+flip-tests que pasaron por la razón equivocada** — uno porque la mutación cayó
+donde nada la miraba, uno porque ni siquiera se aplicó, dos porque el test que
+yo creía que lo cubría probaba otra cosa.
+
+La regla que queda: **un flip-test no vale hasta ver caer al test que se cree
+que lo cubre** — mirar *cuál* cae, no sólo que caiga alguno. Y antes de creer
+que una mutación probó algo, comprobar que se aplicó (`diffstat`).
+
+`tools/pack-for-review.sh` gana filtro de rutas: su cabecera prometía «se
+comprime por selección» y no ofrecía ninguna. 8.255 líneas → 1.713.
+
+**Lo que la revisión NO pudo mirar:** migraciones, esquema, acciones, pantallas
+y **todos los tests**. Dos preguntas suyas siguen abiertas — si
+`createTreatmentBatch` puede crear un tratamiento de terreno saltándose Gate 0,
+y si los tests discriminan de verdad.
+
+**Sin comprobar:** el esquema vivo consultado contra la base. El `DATABASE_URL`
+de producción sólo vive en la config de Vercel y no se descargó. Falta abrir
+`/plots/<lote>` en producción y ver que renderiza.
+
 ### 2026-09-01 · Lo mecánico del cierre deja de re-teclearse
 
 `scripts/cierre-de-sesion.sh`. §5 describía el cierre en prosa; esa prosa se
@@ -63,86 +161,6 @@ sesiones archivaron la misma, en posiciones distintas, git no vio solape—. Lo
 comprueban ahora `tests/archivo-de-estado.test.ts` y su gemelo en el repositorio
 web. `SESSION_STATE.md` sí dio conflicto y por eso se miró; el archivo histórico
 no dio ninguno. Una fusión limpia no dice que el resultado sea correcto.
-
-### 2026-09-01 · El plan S1 entero, salvo el microclima
-
-`origin/main` = `34c5dc8`. PR #103 (plan), #105 (`aspect`), #108 (biochar),
-#110 (sujeto no-café), #111 (calicata), #115 (muestras), #117 (fotos), #122
-(enmienda). Suite 731 → **849**.
-
-De las seis entidades que le faltaban a la Tabla 15, **cinco se construyeron**.
-Sólo el microclima sigue abierto, y sólo por una decisión.
-
-Daniel aportó *«Las Nubes Cerro Azul — Soil, Environment and Cup Quality:
-Research Framework v1.0»* (13.345 palabras, firmado por Bob, Sherry y Daniel).
-`docs/implementation/45_S1_SUELO_AMBIENTE_TAZA.md` traduce su Tabla 15 al
-esquema. **No es un resumen del marco; el marco manda.** De sus catorce
-entidades, ocho ya tenían dónde vivir; **de las seis que faltaban, cinco se
-construyeron hoy** y sólo el microclima sigue abierto, bloqueado en una decisión.
-
-**§0 manda sobre todo lo demás: la recomendación principal del marco es un
-ALTO.** Ningún bloque nuevo recibe biochar hasta que existan la química base, la
-física base, un lote caracterizado y el protocolo escrito — firmado como Gate 0.
-Lo que implica para el software es una sola cosa: la primera fila que el sistema
-escriba sobre un bloque tiene que poder ser **la línea base, no la enmienda**.
-
-**El orden de construcción es el del Plan de Acción del marco, con sus semanas**
-— se construye en el orden en que el dato aparece, no en el que el modelo se lee.
-
-| pieza | qué la define |
-|---|---|
-| `Location.aspect` | Enum, rompiendo con el precedente de texto libre: la rosa de los vientos no se inventa, y el uso del marco es **comparativo** |
-| `BiocharBatch` | Dosis, frecuencia y parcela **NO** están: la Tabla 6 las lista porque es papel, pero un lote se aplica en varios bloques |
-| `Measurement` no-café | Autorización **por rama** y sujeto **exclusivo**: dos permisos distintos no se acumulan sin que el más laxo abra lo del otro |
-| `SoilProfile` | **Tres estados, no un booleano**: «no se miró» ≠ «no había», y confundirlos manda a fertilizar un problema de aire |
-| `SoilSample` / `FoliarSample` | Un análisis foliar sin protocolo es **incomparable**, que es peor que no tenerlo porque parece que sirve |
-| Fotos de Location | El padre debe pertenecer a la Location autorizada, o quien tiene A cuelga en B |
-| Aplicación de enmienda | **Gate 0 hecho estructura**: se niega mientras falte cualquiera de las cuatro condiciones firmadas, y dice cuáles |
-
-**Cuatro guardias del repositorio pararon trabajo, y los cuatro tenían razón.**
-El que más: `navigation.test.ts` exige ≤8 entradas de menú y yo había añadido una
-novena. Se revirtió; el enlace vive en `/plots`.
-
-**Tres guardias resultaron falsos, y dos los había escrito yo el mismo día:**
-
-- Un test de cobertura de dominios comparaba la unión de dos paneles contra la
-  unión de **esos mismos dos paneles**. No podía fallar.
-- Un `?? ["proceso_de_cafe"]` volvía infalsificable ese guardia *y* metía en
-  silencio cualquier variable de laboratorio nueva en el desplegable de recetas
-  de café. Ahora `PANELES` es un `Record` total: **el compilador** obliga a
-  declarar el panel de cada variable nueva.
-- Un flip-test pasó porque la mutación cayó sobre fósforo y sólo potasio tenía
-  aserción — la definición del nutriente estaba repetida **nueve veces**.
-  Extraída a una constante.
-
-**Y un flip-test que salió verde sin haberse aplicado:** la mutación tocaba un
-JSON que se reescribe al guardarse, la cadena ancla ya no existía y el `replace`
-no hizo nada. Sólo lo dijo el `diffstat`. Desde entonces **cada mutación imprime
-que se aplicó** antes de que se lea el veredicto.
-
-**Desplegado y comprobado contra el registro, no contra el «success».** La cuenta
-de Vercel agotó su límite diario de builds a media tanda, así que cinco merges no
-construyeron; al despejarse, un solo despliegue aplicó **las seis migraciones**,
-nombradas una a una en el log de construcción, con cero errores y el seed
-después.
-
-**Y el límite volvió a saltar con #122**, así que su migración quedó fuera. La
-forma se repitió lo bastante como para nombrarla: el check de Vercel que pasa en
-una PR es el de **preview**, y no dice nada sobre si producción puede desplegar.
-Dos veces lo di por bueno y las dos me equivoqué; lo que sí lo dice es el estado
-del commit fusionado (`gh api .../commits/<sha>/status`).
-
-**Lo que más importa de todo el día cabe en una frase:** la recomendación
-principal del marco no es construir nada, es un **ALTO** firmado, y ahora es
-código. `applyAmendment` se niega mientras falte la química base, la física
-base, el biochar caracterizado o el protocolo escrito — y **se abre** en cuanto
-existen, con un test que lo demuestra. Enmendar antes de medir no retrasa la
-ciencia: la imposibilita.
-
-**Sin comprobar:** el esquema vivo consultado contra la base. El `DATABASE_URL`
-de producción sólo existe en la config de Vercel y no se descargó — un secreto
-que no hace falta no se toca. La comprobación que falta es abrir
-`/plots/<lote>` en producción y ver que renderiza.
 
 ## 3. Bloqueado, y en qué
 
@@ -183,7 +201,8 @@ que no hace falta no se toca. La comprobación que falta es abrir
   dos entradas: **0 de 8 lotes tienen área** y **0 cosechas están atribuidas a
   bloques**, aunque 15 de las 33 ya tienen peso declarado. Las dos las carga él
   ahora sin ayuda.
-- **Una migración sin desplegar: `20260901090000_s1_amendment_application`** —
+- **Una migración y los arreglos de la revisión, sin desplegar** —
+  `20260901090000_s1_amendment_application`, y con ella el código de #125 —
   el límite diario de builds de Vercel volvió a saltar con el merge de #122, así
   que no construyó. **No hay inconsistencia**: código y migración quedaron fuera
   juntos. Cuando se despeje, un despliegue de producción la aplica.
@@ -191,6 +210,16 @@ que no hace falta no se toca. La comprobación que falta es abrir
   que pasa en una PR es el de *preview* y no dice nada de producción. El que sí
   lo dice es `gh api repos/<owner>/<repo>/commits/<sha>/status`, y después el
   log de construcción, que nombra cada migración aplicada.
+- **Dos preguntas que la revisión independiente dejó abiertas** — no está
+  bloqueado, está *sin mirar*. El paquete se acotó a `lib/`, así que quedaron
+  fuera migraciones, esquema, acciones, pantallas y todos los tests. Las dos que
+  el propio revisor escribió en «Qué no me mostró el brief»:
+  **(a)** ¿puede `createTreatmentBatch` —que sigue siendo público y no conoce
+  Gate 0— crear un tratamiento de terreno saltándose la compuerta? Hoy la única
+  barrera es que su firma no acepta `locationId`; comprobarlo es leer sus
+  llamadores. **(b)** ¿discriminan los tests? Cuatro flip-tests míos pasaron por
+  la razón equivocada en un solo día, así que la pregunta no es retórica.
+  Una segunda revisión sobre lo que quedó fuera es el trabajo que las contesta.
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
   separada para la serie temporal —~35.000 filas por sensor y año— y no dice
@@ -214,7 +243,9 @@ que no hace falta no se toca. La comprobación que falta es abrir
   89 llamadas existentes no cambian. Lo adoptan ya `plantingCohorts.ts` (con un
   test que fuerza el fallo del audit y comprueba que la cohorte tampoco queda) y
   **todos los módulos de S1**: `biocharBatches.ts`, `soilProfiles.ts`,
-  `soilSamples.ts`, `landMedia.ts` y la corrección de `measurements.ts`. Módulo
+  `soilSamples.ts`, `landMedia.ts`, `research/amendments.ts` y **`measurements.ts`
+  entero** —la corrección desde el 2026-08-31, y la creación desde que la
+  revisión señaló que esas filas abren Gate 0—. Módulo
   nuevo, `tx` desde el principio; el coste sólo existe al convertir lo viejo.
   **Quedan 13 archivos que abren transacción y auditan fuera:**
   `research/analysis.ts` (7 llamadas), `research/protocols.ts` (6),
