@@ -187,9 +187,24 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
   const candidates = await scopeCandidatesForSubject(original.lotId, original.sampleId);
   await requireLotAccess(userAccountId, "manage", candidates);
 
+  // No se corrige lo ya corregido: se corrige lo vigente. Dos correcciones de
+  // la misma lectura no se ordenan entre sí —ninguna supersede a la otra— y
+  // dejarían dos valores compitiendo por ser el bueno, que es exactamente lo
+  // que `correctsId` existe para evitar. Quien quiera enmendar una corrección,
+  // corrige la corrección.
+  const yaCorregida = await prisma.measurement.findFirst({
+    where: { correctsId: original.id },
+    select: { id: true },
+  });
+  if (yaCorregida) throw new MeasurementValidationError("measurement_already_corrected");
+
   const normalized = normalizeToCanonical(original.variable as MeasurementVariable, input.value, input.unit);
 
-  const correction = await prisma.measurement.create({
+  // Escritura y auditoría en la misma transacción (mecanismo de la PR #92):
+  // corregir un hecho evidencial es en sí una escritura evidencial, y una
+  // corrección guardada sin su audit es peor que ninguna.
+  const correction = await prisma.$transaction(async (tx) => {
+  const creada = await tx.measurement.create({
     data: {
       variable: original.variable,
       value: normalized.value,
@@ -209,15 +224,20 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
   });
 
   // C1 §3: correcting an evidentiary fact is itself an evidentiary write.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "measurement.correct",
-    entityType: "measurement",
-    entityId: correction.id,
-    before: original,
-    after: correction,
-    reason: input.reason,
-    sourceInterface: "traceability.service",
+  await recordAuditEvent(
+    {
+      actorUserAccountId: userAccountId,
+      operation: "measurement.correct",
+      entityType: "measurement",
+      entityId: creada.id,
+      before: original,
+      after: creada,
+      reason: input.reason,
+      sourceInterface: "traceability.service",
+    },
+    tx,
+  );
+  return creada;
   });
 
   return correction;

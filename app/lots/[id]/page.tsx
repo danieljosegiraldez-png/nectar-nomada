@@ -15,6 +15,7 @@ import {
   endDryingFormAction,
 } from "../../actions/traceability";
 import { MeasurementForm } from "../../components/traceability/MeasurementForm";
+import { MeasurementCorrectionForm } from "../../components/traceability/MeasurementCorrectionForm";
 import { PhotoUploadForm } from "../../components/traceability/PhotoUploadForm";
 import { LabourEntryForm } from "../../components/traceability/LabourEntryForm";
 import { MaterialConsumptionForm } from "../../components/traceability/MaterialConsumptionForm";
@@ -76,6 +77,12 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
     labourEntries,
     materialConsumptionEntries,
   } = detail;
+
+  // Qué mediciones han sido superadas por una corrección. Se calcula de la
+  // lista que ya se cargó, sin otra consulta.
+  const supersededMeasurementIds = new Set(
+    measurements.map((m) => m.correctsId).filter((id): id is string => id != null),
+  );
 
   const formatDate = (date: Date) => date.toISOString().slice(0, 16).replace("T", " ");
   const labourEntryLine = (entry: LabourEntry) =>
@@ -652,13 +659,43 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           <p className="nn-muted">{t("noMeasurements")}</p>
         ) : (
           <ul>
-            {measurements.map((m) => (
-              <li key={m.id}>
-                {m.variable}: {m.value.toString()} {m.unit} — {m.occurredAt.toISOString().slice(0, 16).replace("T", " ")}
-                {m.correctsId ? ` (${t("correctionLabel")})` : ""}
-                <PhotoUploadForm lotId={lot.id} parent={{ kind: "measurement", measurementId: m.id }} observers={observers} selfPersonId={selfPersonId} />
-              </li>
-            ))}
+            {measurements.map((m) => {
+              // Reemplazada = existe otra medición que la corrige. Se deriva de
+              // la misma lista, así que una cadena de correcciones se resuelve
+              // sola: sólo la última queda sin marcar.
+              const reemplazada = supersededMeasurementIds.has(m.id);
+              return (
+                <li key={m.id}>
+                  <span style={reemplazada ? { textDecoration: "line-through" } : undefined}>
+                    {m.variable}: {m.value.toString()} {m.unit} — {m.occurredAt.toISOString().slice(0, 16).replace("T", " ")}
+                  </span>
+                  {m.correctsId ? ` (${t("correctionLabel")})` : ""}
+                  {/* La tachadura sola no basta: no se ve en un lector de
+                      pantalla ni en blanco y negro. El texto lo dice. */}
+                  {reemplazada ? <> · <strong>{t("supersededLabel")}</strong></> : null}
+                  <PhotoUploadForm lotId={lot.id} parent={{ kind: "measurement", measurementId: m.id }} observers={observers} selfPersonId={selfPersonId} />
+                  {/* Sólo se corrige lo vigente. Corregir una lectura ya
+                      corregida bifurcaría el historial, y el servicio lo
+                      rechaza; la página no ofrece lo que sería rechazado. */}
+                  {!reemplazada ? (
+                    <details>
+                      <summary>{t("correctionSummary")}</summary>
+                      <MeasurementCorrectionForm
+                        lotId={lot.id}
+                        measurement={{
+                          id: m.id,
+                          variable: m.variable,
+                          value: m.value.toString(),
+                          unit: m.unit,
+                          occurredAt: m.occurredAt.toISOString(),
+                          provenanceClass: m.provenanceClass,
+                        }}
+                      />
+                    </details>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
         <MeasurementForm

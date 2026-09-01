@@ -717,7 +717,15 @@
     "longitudeLabel": "Longitud",
     "accuracyLabel": "Precisión (m)",
     "error_field_session": "No se pudo registrar la jornada: {detail}",
-    "yieldNothingWeighed": "Nada pesado"
+    "yieldNothingWeighed": "Nada pesado",
+    "correctionSummary": "Corregir esta lectura",
+    "correctionIntro": "La lectura original ({variable}: {value} {unit}) NO se borra: queda en el registro marcada como reemplazada. Esto crea una lectura nueva que la supersede.",
+    "correctionValueLabel": "Valor correcto",
+    "correctionOccurredAtLabel": "Cuándo se tomó la lectura correcta",
+    "correctionReasonLabel": "¿Por qué se corrige?",
+    "correctionReasonPlaceholder": "Ej.: apunté 24 y el instrumento marcaba 42",
+    "correctionSubmitButton": "Registrar la corrección",
+    "supersededLabel": "reemplazada"
   },
   "Apiary": {
     "badge": "Apiario",
