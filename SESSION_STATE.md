@@ -301,6 +301,17 @@ paquete roto, y se rechazó.
 
 ## 5. Al cerrar la sesión
 
+**Lo mecánico lo comprueba un script**, porque esta lista se re-tecleó a mano
+seis veces el 2026-08-31 y una salió mal:
+
+```bash
+bash scripts/cierre-de-sesion.sh            # con compuerta
+bash scripts/cierre-de-sesion.sh --rapido   # si ya la corriste
+```
+
+Mira y dice; no commitea, no empuja, no borra. Sale 0 cuando lo mecánico está
+bien. Lo de abajo es lo que **ningún script puede hacer por ti**.
+
 1. Actualizar este archivo. **Es el entregable, no el diff.**
 2. `npm run check:state` — si se queja, mover la sección que nombra a
    `docs/SESSION_STATE_ARCHIVE.md`.
