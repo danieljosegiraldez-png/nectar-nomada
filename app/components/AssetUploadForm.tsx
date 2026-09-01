@@ -71,7 +71,7 @@ export function AssetUploadForm({ projectId }: { projectId: string }) {
         <label htmlFor="asset-upload">{t("uploadLabel")}</label>
         <input ref={inputRef} id="asset-upload" type="file" accept="image/*,video/*,application/pdf" />
       </div>
-      {error ? <p className="nn-error">{error}</p> : null}
+      {error ? <p className="nn-error" role="alert">{error}</p> : null}
       <button type="button" className="nn-button" disabled={status === "uploading"} onClick={handleUpload}>
         {status === "uploading" ? t("uploadingButton") : t("uploadButton")}
       </button>

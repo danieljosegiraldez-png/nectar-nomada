@@ -149,7 +149,7 @@ export function TreatmentBatchForm({
         </div>
       ))}
 
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("createTreatmentButton")}
       </button>

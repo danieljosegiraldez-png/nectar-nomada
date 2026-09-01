@@ -21,7 +21,7 @@ export function FieldSubmissionForm({ projectId }: { projectId: string }) {
         <label htmlFor="notes">{t("submissionNotesLabel")}</label>
         <textarea id="notes" name="notes" rows={4} required />
       </div>
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("submitButton")}
       </button>

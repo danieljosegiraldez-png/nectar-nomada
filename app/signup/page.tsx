@@ -31,7 +31,7 @@ export default function SignUpPage() {
           <label htmlFor="password">{t("passwordLabel")}</label>
           <input id="password" name="password" type="password" autoComplete="new-password" minLength={10} required />
         </div>
-        {state.error ? <p className="nn-error">{state.error}</p> : null}
+        {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
         <button type="submit" className="nn-button" disabled={pending}>
           {pending ? t("signUpButtonPending") : t("signUpButton")}
         </button>

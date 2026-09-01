@@ -147,7 +147,7 @@ export function InspectionForm({ colonyId, selfPersonId }: { colonyId: string; s
         </p>
       ) : null}
       {saveError ? (
-        <p className="nn-error" style={{ marginTop: "0.5rem" }}>
+        <p className="nn-error" role="alert" style={{ marginTop: "0.5rem" }}>
           {saveError}
         </p>
       ) : null}

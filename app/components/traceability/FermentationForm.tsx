@@ -50,7 +50,7 @@ export function FermentationForm({ lotId , recipeVersions = [] }: { lotId: strin
         <label htmlFor="f-inoculationNote">{t("inoculationNoteLabel")}</label>
         <input id="f-inoculationNote" name="inoculationNote" type="text" />
       </div>
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("startFermentationButton")}
       </button>

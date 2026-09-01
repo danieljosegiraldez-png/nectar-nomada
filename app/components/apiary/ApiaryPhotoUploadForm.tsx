@@ -106,7 +106,7 @@ export function ApiaryPhotoUploadForm({
           </select>
         </div>
       ) : null}
-      {error ? <p className="nn-error">{error}</p> : null}
+      {error ? <p className="nn-error" role="alert">{error}</p> : null}
       <button type="button" className="nn-button" disabled={status === "uploading"} onClick={handleUpload}>
         {status === "uploading" ? t("uploadingButton") : t("addPhotoButton")}
       </button>
