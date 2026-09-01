@@ -2,6 +2,8 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { execFileSync } from "node:child_process";
+
 import allowlist from "../../docs/arquitectura/acceso-a-datos.allowlist.json";
 
 /**
@@ -149,5 +151,56 @@ describe("acceso a datos: el inventario manda", () => {
     const enApp = allowlist.importan_cliente_total.filter((e) => e.archivo.startsWith("app/"));
     expect(enApp.length, "si sube, alguien añadió acceso crudo desde una página o acción").toBeLessThanOrEqual(5);
     for (const e of enApp) expect(e.razon, e.archivo).toMatch(/\S/);
+  });
+});
+
+/**
+ * El inventario deja de sólo informar.
+ *
+ * `scripts/inventario-de-acceso.mjs` clasifica cada operación que toca la base
+ * según cómo autoriza. Hasta ahora era un informe: una operación nueva que
+ * ningún patrón explicara aparecía en una salida que nadie corre.
+ *
+ * Aquí falla. Las tres excepciones de hoy están inventariadas con su razón, y
+ * la cuarta hay que justificarla o arreglarla — que es exactamente la decisión
+ * que no se quiere tomar en silencio.
+ */
+describe("inventario de acceso: ninguna operación sin explicar", () => {
+  const salida = execFileSync("node", ["scripts/inventario-de-acceso.mjs", "--json"], {
+    cwd: new URL("../..", import.meta.url).pathname,
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  const ops = JSON.parse(salida) as { archivo: string; nombre: string; clase: string }[];
+  const sinPatron = ops.filter((o) =>
+    ["SIN CLASIFICAR", "recibe principal, sin guardia visible"].includes(o.clase)
+  );
+
+  it("las que ningún patrón explica están inventariadas", () => {
+    const permitidas = new Set(
+      allowlist.operaciones_sin_patron.map((e) => `${e.archivo}:${e.operacion}`)
+    );
+    const nuevas = sinPatron
+      .map((o) => `${o.archivo}:${o.nombre}`)
+      .filter((k) => !permitidas.has(k));
+    expect(
+      nuevas,
+      "Operación nueva que ningún patrón de autorización explica. Mírala: si está " +
+        "bien, justifícala en docs/arquitectura/acceso-a-datos.allowlist.json; si no, arréglala."
+    ).toEqual([]);
+  });
+
+  it("el inventario de excepciones no nombra operaciones que ya se explican", () => {
+    const reales = new Set(sinPatron.map((o) => `${o.archivo}:${o.nombre}`));
+    const sobran = allowlist.operaciones_sin_patron
+      .map((e) => `${e.archivo}:${e.operacion}`)
+      .filter((k) => !reales.has(k));
+    expect(sobran, "ya tienen patrón reconocible: bórralas del inventario").toEqual([]);
+  });
+
+  it("cada excepción explica por qué", () => {
+    for (const e of allowlist.operaciones_sin_patron) {
+      expect(e.razon?.trim(), `${e.archivo}:${e.operacion}`).toBeTruthy();
+    }
   });
 });
