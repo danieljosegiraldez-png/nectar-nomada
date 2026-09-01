@@ -22,7 +22,7 @@ flip-test el 2026-08-28, en ambas direcciones.
 
 | Id | Decisión | Por qué es de Daniel | Prueba |
 |----|----------|----------------------|--------|
-| P-A | Alerta de backup **fuera de esta máquina** | Necesita un servicio externo que el proyecto no usa: es cuenta y gasto suyos. Hoy la alerta es local, y un portátil cerrado quince días no respalda nada y no dice nada | `! grep -rqiE "healthcheck\|hc-ping\|cronitor" scripts/backup/` |
+| P-A | Alerta de backup **fuera de esta máquina** | Necesita un servicio externo que el proyecto no usa: es cuenta y gasto suyos. El código del ping ya está hecho (`ping_health` en `run-scheduled.sh`, con `/start`, `/fail` y éxito solo tras verificar la restauración); falta la URL, que es la cuenta de Daniel. Sin ella, un portátil cerrado quince días no respalda nada y no dice nada | Las **dos** mitades, y la fuente única es `scripts/open-decisions.sh` — no duplicar aquí: código (`ping_health` presente) **y** URL (`NN_HEALTHCHECK_URL=https…` activa en `~/.config/nectar-nomada/backup.env`, hoy comentada). Una sola mitad no es una alarma |
 | P-B | A qué proyecto apunta el dominio de marca — **cerrada el 2026-08-28** | Decisión de Daniel. Se deja la fila porque vuelve a abrirse sola si el dominio volviera a este proyecto | `curl -s -L https://www.nectarnomada.com/ \| grep -q 'href="/login"'` |
 | P-C | Quiénes reciben correo y, con él, acceso | Casi nadie en la base tiene correo; sin correo no hay contraseña. Hoy solo Daniel y José. Quién entra no lo decide el sistema | `! grep -qi "correos de las personas" docs/architecture/DECISIONS.md` |
 | P-D | Nombres y roles de la **familia Huerbsch** — **cerrada el 2026-08-29** | La premisa era falsa: sí están en la base desde A7 — Bob (copropietario), Sherry (copropietaria) y Chris (representante familiar), con membresías reales. Faltaba el ADR, que es lo único que la prueba mira. Ver ADR-106 | `! grep -qi "huerbsch registrada" docs/architecture/DECISIONS.md` |
@@ -129,9 +129,16 @@ que no hace falta no se toca. La comprobación que falta es abrir
 
 ## 3. Bloqueado, y en qué
 
-- **Aviso fiable de que un backup no corrió** — bloqueado en P-A. Hoy la señal
-  es local: una notificación de macOS, un `BACKUP-FAILED.txt` junto a los
-  backups, y `launchctl list | grep nectar` como único rastro pasivo.
+- **Aviso fiable de que un backup no corrió** — bloqueado en P-A, y ya solo por
+  la URL. El código está hecho y en main: `ping_health` manda `/start`, `/fail`
+  y el ping de éxito *después* de verificar la restauración, con la URL leída de
+  `~/.config/nectar-nomada/backup.env` — fuera del repositorio, porque quien
+  tenga esa URL puede señalar «el backup va bien» y tapar un fallo real.
+  Mientras la línea siga comentada no sale ningún ping, y la señal es solo
+  local: una notificación de macOS, un `BACKUP-FAILED.txt` junto a los backups,
+  y `launchctl list | grep nectar` como único rastro pasivo. Los tres hablan
+  hacia dentro de esta máquina, que es exactamente lo que P-A no arregla sin
+  cuenta externa.
 - **Dar acceso a alguien más que Daniel y José** — bloqueado en P-C. Medido el
   2026-08-29: 13 de 14 cuentas siguen en `invited` sin clave. Bob y Sherry
   tienen 10 Assignments cada uno y Chris 2 — 22 en total que resuelven bien y
