@@ -7,7 +7,11 @@ import { getCurrentUser } from "../../lib/auth/session";
 import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { recordSelection, SelectionValidationError } from "../../lib/traceability/selection";
 import { recordQuantityEvent, QuantityValidationError } from "../../lib/traceability/quantity";
-import { recordMeasurement, MeasurementValidationError } from "../../lib/traceability/measurements";
+import {
+  recordMeasurement,
+  correctMeasurement,
+  MeasurementValidationError,
+} from "../../lib/traceability/measurements";
 import { UnitValidationError } from "../../lib/traceability/units";
 import { recordHarvestEvent, recordReceivingEvent } from "../../lib/traceability/harvest";
 import { startFermentationRun, recordFermentationIntervention, endFermentationRun } from "../../lib/traceability/fermentation";
@@ -980,5 +984,48 @@ export async function endFieldSessionFormAction(
   }
 
   revalidatePath(`/field-sessions/${fieldSessionId}`);
+  return {};
+}
+
+// --- Corregir una medición (C1 §3) --------------------------------------
+
+/**
+ * Una corrección **no borra ni edita** la lectura original: crea una medición
+ * nueva que la supersede vía `correctsId`, y la vieja se queda en el registro.
+ * Es lo contrario del `PATCH` con que se corrige una cohorte, y la asimetría es
+ * deliberada: el valor de una medición **fue observado** y sigue siéndolo
+ * aunque estuviera mal apuntado; el conteo de una cohorte es una cifra que se
+ * escribió, sin más.
+ *
+ * El motivo es obligatorio en el servicio. Aquí no se inventa uno por defecto.
+ */
+export async function correctMeasurementFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    await correctMeasurement(user.userAccountId, {
+      measurementId: String(formData.get("measurementId") ?? ""),
+      value: Number(formData.get("value") ?? 0),
+      unit: String(formData.get("unit") ?? ""),
+      // Cuándo ocurrió la lectura CORRECTA. No es «ahora»: corregir a las seis
+      // de la tarde una lectura de las nueve de la mañana no la mueve a la
+      // tarde, y ponerlo por defecto invitaría a dejarlo mal.
+      occurredAt: new Date(String(formData.get("occurredAt") ?? "")),
+      reason: String(formData.get("reason") ?? ""),
+      operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
+      notes: emptyToNull(formData.get("notes")),
+      provenanceClass: String(formData.get("provenanceClass") ?? "measured_fact") as never,
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}`);
   return {};
 }

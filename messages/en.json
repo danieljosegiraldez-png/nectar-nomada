@@ -717,7 +717,15 @@
     "longitudeLabel": "Longitude",
     "accuracyLabel": "Accuracy (m)",
     "error_field_session": "Could not record the session: {detail}",
-    "yieldNothingWeighed": "Nothing weighed"
+    "yieldNothingWeighed": "Nothing weighed",
+    "correctionSummary": "Correct this reading",
+    "correctionIntro": "The original reading ({variable}: {value} {unit}) is NOT deleted: it stays in the record marked as superseded. This creates a new reading that supersedes it.",
+    "correctionValueLabel": "Correct value",
+    "correctionOccurredAtLabel": "When the correct reading was taken",
+    "correctionReasonLabel": "Why is it being corrected?",
+    "correctionReasonPlaceholder": "e.g. I wrote 24 and the instrument read 42",
+    "correctionSubmitButton": "Record the correction",
+    "supersededLabel": "superseded"
   },
   "Apiary": {
     "badge": "Apiary",

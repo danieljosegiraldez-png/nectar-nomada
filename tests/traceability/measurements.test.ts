@@ -223,6 +223,57 @@ describe("correctMeasurement — append-only correction chain", () => {
     expect(originalReloaded.correctsId).toBeNull();
   });
 
+  it("no deja corregir dos veces la misma lectura: se corrige la vigente", async () => {
+    // Dos correcciones de la misma original no se ordenan entre sí —ninguna
+    // supersede a la otra— y dejarían dos valores compitiendo por ser el bueno,
+    // que es lo que `correctsId` existe para evitar. Quien quiera enmendar una
+    // corrección, corrige la corrección.
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-doble-correccion`,
+      lotType: "drying",
+      organizationId,
+      projectId: projectAId,
+    });
+    const original = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      variable: "moisture",
+      value: 12,
+      unit: "%",
+      occurredAt: new Date("2026-01-01"),
+      lotId: lot.id,
+    });
+    const primera = await correctMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      measurementId: original.id,
+      value: 11.5,
+      unit: "%",
+      occurredAt: new Date("2026-01-01T01:00:00Z"),
+      reason: "La báscula no estaba tarada.",
+    });
+
+    await expect(
+      correctMeasurement(authorizedUserAccountId, {
+        provenanceClass: "measured_fact",
+        measurementId: original.id,
+        value: 10,
+        unit: "%",
+        occurredAt: new Date("2026-01-01T02:00:00Z"),
+        reason: "Segundo intento sobre la misma original.",
+      }),
+    ).rejects.toThrow("measurement_already_corrected");
+
+    // Y la cadena sí sigue: corregir la CORRECCIÓN es legítimo.
+    const segunda = await correctMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      measurementId: primera.id,
+      value: 11.2,
+      unit: "%",
+      occurredAt: new Date("2026-01-01T03:00:00Z"),
+      reason: "Relectura con el instrumento calibrado.",
+    });
+    expect(segunda.correctsId).toBe(primera.id);
+  });
+
   it("requires a non-empty reason", async () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-correction-no-reason`,
