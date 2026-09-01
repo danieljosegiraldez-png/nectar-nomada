@@ -136,6 +136,14 @@ compara total, archivos y cada fila contra la salida del script, y falla si
 aparece una clase que el documento no nombre. Era el mecanismo que faltaba: ese
 día se arreglaron las cifras y no lo que las dejó divergir.
 
+Y una tercera: **una fusión limpia duplicó una sección archivada**. Dos sesiones
+archivaron la misma el mismo día, en posiciones distintas del archivo histórico;
+git no vio solape y quedó dos veces. `SESSION_STATE.md` sí dio conflicto y por
+eso se miró — el archivo histórico no dio ninguno. Lo comprueban ahora
+`tests/archivo-de-estado.test.ts` y su gemelo en el repositorio web: ninguna
+sección repetida, ninguna en los dos sitios a la vez, y todas con el formato que
+el archivador necesita para no partir una entrada por la mitad.
+
 **Lo que sigue abierto, con su mutación escrita:** un nombre con forma de
 guardia basta. `requireFakeAccess()` que no hace nada sale como guardia directo
 y la compuerta pasa. Cerrarlo exige resolver el símbolo — es
@@ -152,41 +160,6 @@ forma de tres puntos, y ahora el paquete avisa si la rama está por detrás.
 **Dos rondas de revisión independiente, seis hallazgos reales, ninguno lo había
 visto la suite en verde.** El tercero de la primera ronda fue un fantasma del
 paquete roto, y se rechazó.
-
-### 2026-08-31 · La segunda revisión encontró que la hora estaba mal en producción
-
-Se revisó la interfaz —seis pantallas, ~1.400 líneas que la primera revisión no
-cubrió— prediciendo que rendiría **menos**. Rindió más: diez hallazgos, cuatro
-altos, y el peor fallo del día.
-
-**Un `datetime-local` entrega un reloj de pared sin zona.** Pasarlo a
-`new Date()` lo interpreta en la zona **del servidor**, que en producción es
-UTC: un operador en Panamá que escribía las 07:30 quedaba registrado a las
-**02:30**. Nueve sitios en tres módulos, **dos anteriores a esta sesión** —
-cosecha y recepción, los que más filas reales tienen.
-
-**Era invisible en desarrollo**, porque navegador y servidor comparten zona y el
-error se cancela. Se había mirado ese síntoma exacto horas antes —«escribí 07:30
-y la pantalla dice 12:30»— y se había diagnosticado como una convención de
-mostrar en UTC. Ahora el dispositivo manda su desfase y, si falta, **se falla en
-vez de suponer**. Para verificar esto hay que levantar el dev server con
-`TZ=UTC`; con la zona local no se ve nada.
-
-Los otros: aportes de cosecha **descartados en silencio desde la fila 21** (el
-formulario deja añadir filas sin límite y la acción recorría 0..19 — la
-selección tenía el mismo tope, y ahí el balance de masa habría culpado al
-operador); un valor ausente que se volvía **una medición de cero** en dos
-acciones; la precisión de fecha que **descartaba lo que el usuario acababa de
-escribir**; `plantCount ?? 0` mostrando «0 plantas» por un conteo nulo; y 39
-mensajes de error sin `role="alert"` en 36 archivos — **seis ya lo tenían**, así
-que la convención existía y estos formularios no la siguieron.
-
-**Dos hallazgos NO se implementaron** porque chocaban con decisiones ya tomadas
-que el revisor no podía ver: el ámbito RBAC sobre `operatorPersonId` (§4) y el
-`null` de `nextActionFor` para miel. Un hallazgo es una afirmación; la diferencia
-entre «esto falta» y «esto se decidió que no estuviera» sólo la da ir a leer.
-
-PR #97, #98 y #99. Suite 717/717.
 
 ## 3. Bloqueado, y en qué
 
