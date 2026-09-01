@@ -2889,6 +2889,17 @@ model Measurement {
   treatmentBatch      TreatmentBatch?    @relation(fields: [treatmentBatchId], references: [id])
   processingStageId   String?            @map("processing_stage_id") @db.Uuid
   processingStage     ProcessingStage?   @relation(fields: [processingStageId], references: [id])
+  // S1 (45_S1_SUELO_AMBIENTE_TAZA.md §2) — el primer sujeto de Measurement
+  // que NO es café. Los anteriores son todos eslabones de la misma cadena
+  // (Lot, Sample, y los seis enlaces que exigen un Lot al lado); un lote de
+  // biochar no está en esa cadena.
+  //
+  // Por eso es un sujeto INDEPENDIENTE y no un enlace más: no exige `lotId`,
+  // lo excluye. Y su autorización es otra — `location:manage_attributes`
+  // contra la Location donde el lote se produjo, no `lot:manage` —, así que
+  // `recordMeasurement` resuelve el ámbito por rama y no por acumulación.
+  biocharBatchId      String?            @map("biochar_batch_id") @db.Uuid
+  biocharBatch        BiocharBatch?      @relation(fields: [biocharBatchId], references: [id])
 
   sourceType       MeasurementSourceType @default(manual) @map("source_type")
   // Legacy free-text device label from T3. No code path has ever written it;
@@ -2939,6 +2950,7 @@ model Measurement {
   @@index([roastSessionId])
   @@index([treatmentBatchId])
   @@index([processingStageId])
+  @@index([biocharBatchId])
   @@index([correctsId])
   @@map("measurement")
   @@schema("traceability")
@@ -3809,6 +3821,12 @@ model BiocharBatch {
   provenanceClass ProvenanceClass @map("provenance_class")
   sourceReference String?         @map("source_reference")
   dataQuality     DataQuality?    @map("data_quality")
+
+  // S1 §2 — la caracterización de la Tabla 7. Cada parámetro (pH, CEC, ceniza,
+  // carbono, N, macros) es una lectura con unidad, procedencia y calidad de
+  // dato, corregible sin borrar la original: eso es `Measurement`, no una
+  // columna por parámetro en esta tabla.
+  measurements Measurement[]
 
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")

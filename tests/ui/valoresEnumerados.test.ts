@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { listVariableDefinitions } from "../../lib/traceability/units";
 import {
   Aspect,
   BiocharCooling,
@@ -59,6 +60,21 @@ describe("cada valor enumerado tiene etiqueta en los dos idiomas", () => {
       }
     });
   }
+
+  /**
+   * Las variables del registro canónico no son un enum de Prisma, pero fallan
+   * igual: el formulario de caracterización de biochar las ofrece por nombre y
+   * las pinta con `variable_<nombre>`. Una variable nueva sin etiqueta rompe el
+   * renderizado de esa página y de ninguna otra.
+   */
+  it("cada parámetro de análisis de enmienda tiene etiqueta en los dos idiomas", () => {
+    const variables = listVariableDefinitions("analisis_de_enmienda").map((v) => v.variable);
+    expect(variables.length).toBeGreaterThan(0);
+    for (const v of variables) {
+      expect(es[`variable_${v}`], `falta variable_${v} en es.json`).toBeTruthy();
+      expect(en[`variable_${v}`], `falta variable_${v} en en.json`).toBeTruthy();
+    }
+  });
 
   it("la etiqueta del campo de orientación existe en los dos idiomas", () => {
     expect(es.aspectLabel).toBeTruthy();

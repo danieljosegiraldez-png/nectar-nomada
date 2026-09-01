@@ -29,7 +29,7 @@ export default async function RecipeDetailPage({
   }
 
   const [t, query] = await Promise.all([getTranslations("Traceability"), searchParams]);
-  const variables = listVariableDefinitions();
+  const variables = listVariableDefinitions("proceso_de_cafe");
 
   const current = recipe.versions[0];
   // Prefilled from the current version: creating v2 almost always means

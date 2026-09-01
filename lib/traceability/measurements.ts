@@ -14,9 +14,22 @@
  * from Approved Research Evidence). A Measurement's subject may be a Lot or
  * a Sample; both carry the same project/location scope shape, so access is
  * checked against whichever subject is present.
+ *
+ * **S1 (45_S1_SUELO_AMBIENTE_TAZA.md §2) añade un sujeto que NO es café**: el
+ * lote de biochar. Y con él, una segunda ruta de autorización.
+ *
+ * Lo que hace falta decir, porque no se ve al leer la firma: Lot y Sample
+ * comparten forma de ámbito —los dos llevan `projectId` y `locationId`— y por
+ * eso `requireLotAccess` puede recibir los dos juntos. Un `BiocharBatch` no:
+ * su ámbito es la Location donde se produjo, y su permiso es
+ * `location:manage_attributes`, el mismo con el que se registró el lote. Dos
+ * permisos distintos no se pueden acumular en una lista de candidatos —eso
+ * dejaría que el más laxo abriera lo del otro—, así que se resuelve **por
+ * rama**, y el sujeto es exclusivo: o café, o biochar, nunca los dos.
  */
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { requireLocationAttributeAccess } from "./locations";
 import type { ClassificationLevel } from "../rbac/types";
 import { normalizeToCanonical, type MeasurementVariable } from "./units";
 import { recordAuditEvent } from "../audit";
@@ -30,6 +43,36 @@ interface ScopeCandidate {
   // ADR-062 — the subject's own classification travels with its scope, so a
   // measurement cannot be gated more loosely than the lot or sample it is about.
   classification: ClassificationLevel;
+}
+
+/**
+ * Autoriza la lectura contra su sujeto, sea de la cadena del café o no.
+ *
+ * Una sola función y no dos porque `recordMeasurement` y `correctMeasurement`
+ * tienen que decidir igual: una corrección de una lectura de biochar no puede
+ * pedir permisos de café sólo porque el camino de corrección sea más viejo.
+ */
+async function requireSubjectAccess(
+  userAccountId: string,
+  subject: { lotId?: string | null; sampleId?: string | null; biocharBatchId?: string | null },
+) {
+  if (subject.biocharBatchId) {
+    // Exclusivo, no acumulativo: si alguien manda las dos cosas, no hay un
+    // ámbito que resolver sino dos, y elegir uno sería elegir el más laxo.
+    if (subject.lotId || subject.sampleId) {
+      throw new MeasurementValidationError("biochar_batch_subject_is_exclusive");
+    }
+    const lote = await prisma.biocharBatch.findUnique({
+      where: { id: subject.biocharBatchId },
+      select: { producedAtLocationId: true },
+    });
+    if (!lote) throw new TraceabilityAccessError("biochar_batch_not_found");
+    await requireLocationAttributeAccess(userAccountId, lote.producedAtLocationId);
+    return;
+  }
+
+  const candidates = await scopeCandidatesForSubject(subject.lotId, subject.sampleId);
+  await requireLotAccess(userAccountId, "manage", candidates);
 }
 
 async function scopeCandidatesForSubject(lotId?: string | null, sampleId?: string | null): Promise<ScopeCandidate[]> {
@@ -85,6 +128,10 @@ export interface RecordMeasurementInput {
   // reasoning as roastSessionId's own comment.
   treatmentBatchId?: string | null;
   processingStageId?: string | null;
+  // S1 §2 — un sujeto independiente, no un enlace más: no exige `lotId`, lo
+  // excluye. Es la Tabla 7 del marco (pH, CEC, ceniza, carbono, N, macros)
+  // sobre un lote de biochar.
+  biocharBatchId?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
   // T9.5: required, no fallback. The MeasurementForm UI (app/components/
@@ -97,8 +144,7 @@ export interface RecordMeasurementInput {
 }
 
 export async function recordMeasurement(userAccountId: string, input: RecordMeasurementInput) {
-  const candidates = await scopeCandidatesForSubject(input.lotId, input.sampleId);
-  await requireLotAccess(userAccountId, "manage", candidates);
+  await requireSubjectAccess(userAccountId, input);
 
   if (input.roastSessionId && !input.lotId) {
     throw new MeasurementValidationError("roast_session_link_requires_lot_id");
@@ -135,6 +181,7 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
       storageAssignmentId: input.storageAssignmentId ?? null,
       treatmentBatchId: input.treatmentBatchId ?? null,
       processingStageId: input.processingStageId ?? null,
+      biocharBatchId: input.biocharBatchId ?? null,
       sourceType: "manual",
       operatorPersonId: input.operatorPersonId ?? null,
       notes: input.notes ?? null,
@@ -184,8 +231,7 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
   const original = await prisma.measurement.findUnique({ where: { id: input.measurementId } });
   if (!original) throw new TraceabilityAccessError("measurement_not_found");
 
-  const candidates = await scopeCandidatesForSubject(original.lotId, original.sampleId);
-  await requireLotAccess(userAccountId, "manage", candidates);
+  await requireSubjectAccess(userAccountId, original);
 
   // No se corrige lo ya corregido: se corrige lo vigente. Dos correcciones de
   // la misma lectura no se ordenan entre sí —ninguna supersede a la otra— y
@@ -212,6 +258,21 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
       occurredAt: input.occurredAt,
       lotId: original.lotId,
       sampleId: original.sampleId,
+      // S1 §2 — el sujeto tiene que viajar a la fila que corrige. Sin esto,
+      // una corrección de una lectura de biochar quedaría SIN SUJETO: no
+      // aparecería en la ficha del lote, y corregirla otra vez fallaría con
+      // `subject_required`. Con Lot/Sample no se notaba porque siempre había
+      // uno de los dos.
+      //
+      // OBSERVADO al hacer esto, y NO arreglado aquí: los otros seis enlaces
+      // (`roastSessionId`, `fermentationRunId`, `dryingRunId`,
+      // `storageAssignmentId`, `treatmentBatchId`, `processingStageId`)
+      // tampoco viajan, y ahí sí se pierde información — el esquema dice que
+      // la presencia de `roastSessionId` es lo único que distingue una lectura
+      // de humedad pre-tueste de una de almacenamiento, así que corregirla la
+      // convierte en la otra. Es anterior a este cambio y toca módulos que
+      // este trabajo no examinó; se señala en vez de tocarlo de paso.
+      biocharBatchId: original.biocharBatchId,
       sourceType: "manual",
       operatorPersonId: input.operatorPersonId ?? null,
       notes: input.notes ?? null,

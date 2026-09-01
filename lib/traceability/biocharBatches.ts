@@ -268,6 +268,11 @@ export async function getBiocharBatch(userAccountId: string, biocharBatchId: str
     include: {
       organization: { select: { id: true, name: true } },
       producedAtLocation: { select: { id: true, name: true } },
+      // S1 §2 — la caracterización de la Tabla 7. Se traen TODAS, incluidas
+      // las corregidas: ocultarlas dejaría la ficha diciendo un número sin
+      // rastro de que antes decía otro, que es lo contrario de por qué
+      // `Measurement` corrige por sucesión y no por edición.
+      measurements: { orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }] },
     },
   });
   if (!lote) throw new LocationAccessError("biochar_batch_not_found");
