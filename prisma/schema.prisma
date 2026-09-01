@@ -210,6 +210,7 @@ model UserAccount {
   organizationMembershipsCreated    OrganizationMembership[]     @relation("OrganizationMembershipCreatedBy")
   plantingEventsCreated             PlantingEvent[]              @relation("PlantingEventCreatedBy")
   plantingCohortsCreated            PlantingCohort[]             @relation("PlantingCohortCreatedBy")
+  biocharBatchesCreated             BiocharBatch[]               @relation("BiocharBatchCreatedBy")
   fieldSessionsCreated              FieldSession[]               @relation("FieldSessionCreatedBy")
   fieldEventsCreated                FieldEvent[]                 @relation("FieldEventCreatedBy")
   harvestEventSourcesCreated        HarvestEventSource[]         @relation("HarvestEventSourceCreatedBy")
@@ -624,6 +625,8 @@ model Location {
   plantingCohorts             PlantingCohort[]
   fieldSessions               FieldSession[]
   harvestEventSources         HarvestEventSource[]
+  // S1 — lotes de biochar producidos AQUÍ, que no es donde se aplican.
+  biocharBatchesProduced      BiocharBatch[]               @relation("BiocharBatchProducedAt")
   labourEntries               LabourEntry[]
   materialConsumptionEntries  MaterialConsumptionEntry[]
   processingStages            ProcessingStage[]
@@ -716,6 +719,7 @@ model Organization {
   referenceStandardsSupplied       ReferenceStandard[]
   lots                             Lot[]
   harvestEvents                    HarvestEvent[]
+  biocharBatches                   BiocharBatch[]
   receivingEvents                  ReceivingEvent[]
   labourEntriesProvided            LabourEntry[]
   memberships                      OrganizationMembership[]
@@ -3700,6 +3704,143 @@ model HarvestEventSource {
   @@index([locationId])
   @@index([plantingCohortId])
   @@map("harvest_event_source")
+  @@schema("traceability")
+}
+
+// S1 (45_S1_SUELO_AMBIENTE_TAZA.md §2, semanas 1–4) — el lote de biochar, con
+// los campos de la Tabla 6 del marco de investigación.
+//
+// **Por qué entidad propia y no `Lot`.** Un lote de biochar no recorre la
+// cadena de trazabilidad del café: no se cosecha, no se fermenta, no se cata, y
+// el balance de masa no tiene nada que decir sobre él. Reusar `Lot` obligaría a
+// un `lotType` que no describe nada y pondría la maquinaria de conservación a
+// opinar sobre un material que no es café.
+//
+// **Por qué no es `TreatmentBatch` tampoco.** Ese modela la ejecución de un
+// protocolo sobre material que se procesa. Esto es materia prima producida
+// antes y con independencia de cualquier experimento; el vínculo entre ambos lo
+// hará la aplicación de enmienda (§2, semanas 10–14), que está pendiente de una
+// decisión del dueño.
+//
+// **§9.2 del marco se titula «Biochar is not one material»**, y ése es el punto
+// entero: sin régimen térmico, materia prima y carga documentados, «10 t/ha de
+// biochar» describe un volumen, no un tratamiento (§10.1). Por eso casi todo
+// aquí es nullable pero nada tiene default: lo que no se midió queda vacío, y
+// vacío se lee como «sin registrar», nunca como cero (ADR-080).
+model BiocharBatch {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // «LN-BC-2026-001» en el ejemplo del marco. Único por organización, mismo
+  // razonamiento que `Lot.lotCode`: dos fincas pueden numerar desde 001.
+  batchCode      String       @map("batch_code")
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // Dónde se PRODUJO, que no es dónde se aplicará. Se llama así justamente
+  // para que nadie lo confunda con la parcela tratada: un lote se quema una vez
+  // y puede aplicarse en varios bloques, a dosis distintas y en fechas
+  // distintas — por eso «dosis», «frecuencia» y «parcela», que la Tabla 6 lista
+  // aquí porque es un formulario de papel, viven en la aplicación de enmienda y
+  // no en esta fila.
+  //
+  // Requerido, y no sólo porque todo lote se hace en algún sitio: es el ancla
+  // de RBAC. Sin un ámbito concreto contra el que resolver, no hay autorización
+  // que comprobar.
+  producedAtLocationId String   @map("produced_at_location_id") @db.Uuid
+  producedAtLocation   Location @relation("BiocharBatchProducedAt", fields: [producedAtLocationId], references: [id])
+
+  // Nullable a propósito: el Paso 2 del plan de acción es documentar lo que Bob
+  // **ya hace**, y un lote descrito de memoria puede no tener fecha exacta. El
+  // envejecimiento (Tabla 6, «Aging») se deriva de esta fecha y la de
+  // aplicación al leer; no se guarda, porque las dos entradas se pueden
+  // corregir — misma regla que densidad y rendimiento.
+  producedAt DateTime? @map("produced_at")
+
+  // --- Materia prima -------------------------------------------------------
+  // Texto libre, no un enum, y es deliberado. §9.2 sí distingue clases que
+  // importan —madera, residuo de cosecha, gallinaza— pero la Tabla 6 pide
+  // «tipo de material y proporciones si va mezclado», que es una descripción,
+  // no una casilla. Inventar aquí un vocabulario cerrado es exactamente lo que
+  // `Location.slopeDescription` decidió no hacer.
+  feedstock       String?
+  feedstockSource String? @map("feedstock_source")
+
+  // --- Régimen térmico -----------------------------------------------------
+  moistureCondition   BiocharMoistureCondition? @map("moisture_condition")
+  kilnDesign          String?                   @map("kiln_design")
+  // «Aproximada donde sea medible; anotar el método» — por eso van juntos. Un
+  // 550 leído con termopar y un 550 estimado por el color de la llama son
+  // afirmaciones distintas, y sin el método no se distinguen.
+  peakTemperatureC    Int?                      @map("peak_temperature_c")
+  temperatureMethod   String?                   @map("temperature_method")
+  burnDurationMinutes Int?                      @map("burn_duration_minutes")
+  timeAtPeakMinutes   Int?                      @map("time_at_peak_minutes")
+  // «La variable que separa pirólisis de combustión.»
+  oxygenManagement    String?                   @map("oxygen_management")
+
+  // --- Enfriado y forma ----------------------------------------------------
+  cooling           BiocharCooling? @map("cooling")
+  quenchWaterSource String?         @map("quench_water_source")
+  particleSize      String?         @map("particle_size")
+  storageConditions String?         @map("storage_conditions")
+
+  // --- Carga ---------------------------------------------------------------
+  // «Determina si el material actúa de portador de nutrientes o de sumidero»:
+  // un biochar sin cargar puede adsorber nitrógeno del suelo al principio.
+  chargingMaterial     String?  @map("charging_material")
+  chargingRatio        String?  @map("charging_ratio")
+  coComposted          Boolean? @map("co_composted")
+  chargingDurationDays Int?     @map("charging_duration_days")
+
+  // --- Laboratorio ---------------------------------------------------------
+  // Sólo cuál. Los resultados de la Tabla 7 son `Measurement` —lecturas con
+  // unidad, procedencia y calidad de dato, corregibles sin borrar la
+  // original— y todavía no están conectados: `recordMeasurement` exige hoy un
+  // Lot o un Sample como sujeto, y admitir un tercero exige darle su propia
+  // ruta de ámbito. Es el paso siguiente, no éste.
+  analysisLaboratory String? @map("analysis_laboratory")
+
+  notes String?
+
+  // ADR-038 — requerido, sin default. Un lote transcrito del cuaderno de Bob
+  // mientras quemaba es `original_record`; uno reconstruido de memoria dos años
+  // después no lo es, y fingir que sí es justo el fallo que esta columna existe
+  // para impedir.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  sourceReference String?         @map("source_reference")
+  dataQuality     DataQuality?    @map("data_quality")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("BiocharBatchCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([organizationId, batchCode])
+  @@index([organizationId])
+  @@index([producedAtLocationId])
+  @@map("biochar_batch")
+  @@schema("traceability")
+}
+
+// Tabla 6, «Moisture condition»: la lista la da el marco —«green, air-dried, or
+// dried»—, así que aquí no se inventa nada. La humedad aproximada en cifra es
+// un `Measurement` (Tabla 7), no un valor de este enum.
+enum BiocharMoistureCondition {
+  green
+  air_dried
+  dried
+
+  @@schema("traceability")
+}
+
+// Tabla 6, «Cooling / quenching»: también enumerado por el marco —«water
+// quench, sealed cooling, or open cooling»—. La fuente del agua va aparte, en
+// texto, porque el marco la pide y no da lista.
+enum BiocharCooling {
+  water_quench
+  sealed_cooling
+  open_cooling
+
   @@schema("traceability")
 }
 

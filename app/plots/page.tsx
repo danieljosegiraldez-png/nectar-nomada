@@ -19,6 +19,15 @@ export default async function PlotsPage() {
       <h1>{t("plotsTitle")}</h1>
       <p className="nn-muted">{t("plotsIntro")}</p>
 
+      {/* El biochar se produce en la finca y se aplica al terreno, así que se
+          llega desde aquí y no desde la barra superior: `navigation.test.ts`
+          exige que el menú más privilegiado quepa en un móvil (≤8 entradas), y
+          esa regla tiene razón — una sección de registro puntual no compite
+          con Batches, Lotes o Investigación por un sitio ahí arriba. */}
+      <p>
+        <Link href="/biochar">{t("biocharTitle")}</Link>
+      </p>
+
       <section className="nn-section">
         {plotLocations.length === 0 ? (
           <p className="nn-muted">{t("noPlots")}</p>
