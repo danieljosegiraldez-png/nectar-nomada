@@ -16,6 +16,12 @@ trabajo salió de `SESSION_STATE.md`.
 Comprobado al moverlas: de las 75 líneas quitadas del estado, **cero** con
 contenido faltaban en este archivo.
 
+**Cuarto archivado, 2026-09-01**, con el estado en 357/400 líneas (89 %). La
+entrada de la primera revisión independiente. Su lección central —flip-test a
+todo guardia— vive en los dos `CLAUDE.md`, que sí se cargan; la operativa, que
+el paquete de revisión se comprime **acotando el rango** y no el contenido, se
+movió a `docs/CODEX_REVIEW.md` antes de archivar, porque sólo vivía aquí.
+
 **Tercer archivado, 2026-09-01**, con el estado en 332/400 líneas (83 %). Dos
 entradas: la del rendimiento por hectárea: su contenido vive en el código
 (`computePlotYield`) y en sus pruebas, que sí se cargan; y la de la visita al
@@ -287,3 +293,35 @@ que falta) uniría hoy dos tablas vacías —0 especímenes, 0 cosechas de miel�
 las **propuestas con presupuesto** no caben en ningún sitio: `budget`,
 `presupuesto`, `proposal` dan **cero** en el esquema. `Project` no tiene dinero,
 ni plan, ni aprobación. Eso exige modelo nuevo y una decisión, no improvisación.
+
+### 2026-08-31 · La revisión independiente encontró lo que doce compuertas verdes no
+
+Doce PR fusionadas con un solo par de ojos encima. Codex revisó el núcleo lógico
+—1.439 líneas— y encontró **siete problemas**. Cuatro eran de código de ese día
+y están arreglados (PR #87).
+
+El más incómodo: **un año sin ningún aporte pesado devolvía `0 kg/ha`, y el
+propio test lo exigía**, con un comentario que admitía que el 0 era «engañoso
+por sí solo». Se vio el problema, se escribió en un comentario y se despachó
+igual, confiando en que el conteo de aportes sin pesar al lado lo salvara. No lo
+salva: un 0 en una columna de kilos se lee como medición (ADR-080).
+
+Los otros tres: `getHarvestSourceContext` filtraba los bloques que **ofrece** y
+no los que **muestra**, devolviendo datos de bloques ajenos mientras su
+comentario afirmaba lo contrario; `createPlantingCohort` guardaba una densidad
+derivada que sobrevivía a la corrección de sus dos insumos; y tres tests exigían
+la **clase** del error en vez del código, así que pasaban por la validación
+equivocada.
+
+**Y al arreglarlos pasó otra vez.** El flip-test de los dos primeros arreglos
+pasó con los fallos reintroducidos: no existía un usuario que alcanzara el
+bloque A y no el B, ni una aserción que mirara la columna de densidad. El mismo
+defecto que la revisión acababa de señalar, cometido al corregirlo. Ahora con
+cada fallo puesto cae un test.
+
+**La lección operativa, no la moral:** compuerta, suite y verificación en
+navegador comprueban *ejecución*. Ninguna comprueba *criterio* — que un cero sea
+una afirmación, que un comentario diga la verdad. Para eso está
+`tools/pack-for-review.sh`, y el paquete completo del día salía en 48.000 líneas
+porque incluye el cuerpo entero de cada archivo tocado: **acotar el rango al
+núcleo lógico** lo dejó en 2.958 y en una pasada.
