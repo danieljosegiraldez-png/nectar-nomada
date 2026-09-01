@@ -28,7 +28,11 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > mal por un defecto del propio detector — la historia está abajo, en «El
 > detector no veía siete operaciones».
 
-### Las tres que no encajaban en ninguna regla
+### Las tres que no encajaban en ninguna regla (medición del 2026-08-31, por la mañana)
+
+> **Hoy queda una.** `authConfig()` y `addToCart()` dejaron de ser excepciones esa misma
+> tarde, al mejorar el detector — no porque cambiara su código. Se conservan aquí porque
+> el razonamiento a mano sigue siendo el que sostiene la clasificación automática.
 
 - **`lib/auth/config.ts authConfig()`** — es la configuración de Auth.js: el
   propio flujo de autenticación, previo a que exista sesión.
@@ -101,8 +105,8 @@ Sirve para **decidir dónde mirar**, no para dar nada por bueno.
 ## El inventario ya no sólo informa
 
 Desde el 2026-08-31, `tests/arquitectura/acceso-a-datos.test.ts` **falla** si
-aparece una operación que ningún patrón explique. Las tres excepciones de hoy
-—`authConfig()`, `addToCart()`, `listScopeChoices()`— están inventariadas en
+aparece una operación que ningún patrón explique. La excepción que queda
+—`listScopeChoices()`— está inventariada en
 `acceso-a-datos.allowlist.json` con su razón, y el test también falla si el
 inventario nombra una que ya pasó a explicarse sola.
 
@@ -186,7 +190,8 @@ nadie entre en el cajón sin que un humano lo mire y lo firme.
 
 ## Lo que encontró la revisión independiente (2026-08-31)
 
-Rechazó las afirmaciones de cobertura, y con razón en dos de tres. Ambas
+Rechazó las afirmaciones de cobertura dos veces. La primera vez acertó en dos de
+tres hallazgos; ambos
 comprobadas por mutación antes de creerlas, y ambas cerradas.
 
 **1 · Una consulta delegada a un ayudante privado desaparecía entera.** Una

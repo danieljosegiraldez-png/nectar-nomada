@@ -85,7 +85,7 @@ recuento corto, no un agujero. La historia entera está en
   cualquier cosa con el `tx` que les pasan sin importar ningún cliente. Sus
   operaciones sí entran en el inventario; lo que no se comprueba es que el
   llamador que abrió la transacción hubiera autorizado *ese* alcance.
-- **Las tres excepciones están justificadas, no arregladas.** Justificar no es
+- **La excepción que queda está justificada, no arreglada.** Justificar no es
   cerrar: son decisiones tomadas en voz alta, que es lo único que se pedía.
 
 ## El intento que se rechazó, para que nadie lo repita

@@ -82,7 +82,13 @@ const fuentes = new Map(TODOS.map((f) => [f, readFileSync(join(RAIZ, f), "utf8")
  * error que este inventario existe para no cometer.
  */
 function declaraciones(archivo, src) {
-  const decl = /^(?:export )?(?:async )?(?:function|const) (\w+)/gm;
+  // `export default async function` faltaba, y su omisión no dejaba un hueco:
+  // dejaba una **identidad falsa**. En `app/my-nectar/page.tsx` la declaración
+  // anterior es `export const dynamic = "force-dynamic"`, que absorbía el resto
+  // del archivo, así que las tres consultas de `MyNectarPage()` se inventariaban
+  // bajo el nombre `dynamic` — una constante de configuración. Fijar
+  // `archivo:operacion` sobre eso es fijar un fragmento de texto, no un camino.
+  const decl = /^(?:export )?(?:default )?(?:async )?(?:function|const) (\w+)/gm;
   const todas = [...src.matchAll(decl)];
   return todas.map((m, i) => ({
     archivo,
@@ -161,7 +167,7 @@ const ops = TODOS.flatMap((f) => operaciones(f, fuentes.get(f) ?? ""));
  * reconociéndose por `GUARDIAS`, que es una convención de nombres deliberada y
  * documentada abajo, no una resolución de símbolos.
  */
-const CUALQUIER_FN = /^(?:export )?(?:async )?(?:function|const) (\w+)/gm;
+const CUALQUIER_FN = /^(?:export )?(?:default )?(?:async )?(?:function|const) (\w+)/gm;
 
 /**
  * Qué nombres entran en cada archivo por un `import`. Un guardia de otro
@@ -169,16 +175,33 @@ const CUALQUIER_FN = /^(?:export )?(?:async )?(?:function|const) (\w+)/gm;
  * guarda nada. Sin esto, limitarse al propio archivo degradaba a
  * `getLotReport()`, que delega en `getLotDetail()` importado de `./lots`.
  */
+function resolver(archivoOrigen, especificador) {
+  if (!especificador.startsWith(".")) return null;
+  const partes = archivoOrigen.split("/").slice(0, -1);
+  for (const seg of especificador.split("/")) {
+    if (seg === "." || seg === "") continue;
+    if (seg === "..") partes.pop();
+    else partes.push(seg);
+  }
+  const base = partes.join("/");
+  for (const cand of [`${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`]) {
+    if (fuentes.has(cand)) return cand;
+  }
+  return null;
+}
+
 const importados = new Map();
 for (const [archivo, src] of fuentes) {
-  const nombres = new Set();
-  for (const m of src.matchAll(/import\s*\{([^}]+)\}\s*from/g)) {
+  const deDonde = new Map();
+  for (const m of src.matchAll(/import\s*\{([^}]+)\}\s*from\s*"([^"]+)"/g)) {
+    const destino = resolver(archivo, m[2]);
+    if (!destino) continue;
     for (const parte of m[1].split(",")) {
       const nombre = parte.trim().split(/\s+as\s+/).pop()?.trim();
-      if (nombre) nombres.add(nombre);
+      if (nombre) deDonde.set(nombre, destino);
     }
   }
-  importados.set(archivo, nombres);
+  importados.set(archivo, deDonde);
 }
 
 const guardanPorArchivo = new Map();
@@ -198,10 +221,15 @@ for (const [archivo, src] of fuentes) {
  * Los guardias visibles desde un archivo: los que declara y los que importa.
  * Nunca los homónimos de un archivo con el que no tiene relación.
  */
-const guardanEnAlgunSitio = new Set([...guardanPorArchivo.values()].flatMap((s) => [...s]));
 function guardanVisiblesEn(archivo) {
   const propios = guardanPorArchivo.get(archivo) ?? new Set();
-  const traidos = [...(importados.get(archivo) ?? [])].filter((n) => guardanEnAlgunSitio.has(n));
+  // Un nombre importado cuenta sólo si guarda **en el archivo del que viene**.
+  // Antes bastaba con que guardara en cualquier sitio del árbol: eso reconocía
+  // la presencia del import, no la identidad de su destino, y dos dominios
+  // pueden exportar legítimamente el mismo nombre.
+  const traidos = [...(importados.get(archivo) ?? new Map())]
+    .filter(([nombre, destino]) => (guardanPorArchivo.get(destino) ?? new Set()).has(nombre))
+    .map(([nombre]) => nombre);
   return new Set([...propios, ...traidos]);
 }
 

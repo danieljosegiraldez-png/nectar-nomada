@@ -255,3 +255,49 @@ describe("depende del llamador: el conjunto está fijado, no fotografiado", () =
     }
   });
 });
+
+/**
+ * La identidad de una operación, no sólo el conjunto.
+ *
+ * Las pruebas de arriba fijan **qué conjunto** sale del inventario; ninguna
+ * comprobaba que cada fila se llame como el código que de verdad consulta. Lo
+ * señaló la revisión independiente del 2026-08-31 con un caso real: el
+ * troceador no reconocía `export default async function`, así que las tres
+ * consultas de `MyNectarPage()` se inventariaban bajo `dynamic` —la constante
+ * `export const dynamic = "force-dynamic"` de la línea anterior, que absorbía
+ * el resto del archivo—. Fijar `archivo:operacion` sobre eso es fijar un
+ * fragmento de texto, no un camino de ejecución.
+ */
+describe("identidad: cada operación se llama como el código que consulta", () => {
+  const inventario = JSON.parse(
+    execFileSync("node", ["scripts/inventario-de-acceso.mjs", "--json"], {
+      cwd: new URL("../..", import.meta.url).pathname,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    })
+  ) as { archivo: string; nombre: string }[];
+
+  it("las consultas de app/my-nectar/page.tsx son de MyNectarPage, no de dynamic", () => {
+    const nombres = inventario
+      .filter((o) => o.archivo === "app/my-nectar/page.tsx")
+      .map((o) => o.nombre);
+    expect(nombres).toContain("MyNectarPage");
+    expect(nombres).not.toContain("dynamic");
+  });
+
+  /**
+   * Estos nombres son configuración de Next, nunca funciones que consulten. Si
+   * uno aparece como operación, una declaración se ha tragado a la de al lado y
+   * la identidad de esa fila es falsa — aunque el recuento cuadre.
+   */
+  it("ninguna operación se llama como una constante de configuración de Next", () => {
+    const CONFIG = ["dynamic", "revalidate", "runtime", "metadata", "fetchCache", "preferredRegion"];
+    const impostoras = inventario
+      .filter((o) => CONFIG.includes(o.nombre))
+      .map((o) => `${o.archivo}:${o.nombre}`);
+    expect(
+      impostoras,
+      "una constante de configuración salió como operación: el troceador absorbió la función de al lado"
+    ).toEqual([]);
+  });
+});
