@@ -107,7 +107,12 @@ export async function createPlantingCohort(userAccountId: string, input: CreateP
     : null;
   await requireDataQualityForUnknownCultivar(resolvedCultivarValueId, input.dataQuality);
 
-  const cohort = await prisma.plantingCohort.create({
+  // Escritura y auditoría en la MISMA transacción: si el audit falla, la
+  // cohorte no queda guardada sin él. `renovatePlantingCohort` llama a esta
+  // función, y por eso hace su propia llamada FUERA de su transacción — Prisma
+  // no anida transacciones interactivas.
+  const cohort = await prisma.$transaction(async (tx) => {
+  const creada = await tx.plantingCohort.create({
     data: {
       locationId: input.locationId,
       cultivarValueId: resolvedCultivarValueId,
@@ -124,13 +129,18 @@ export async function createPlantingCohort(userAccountId: string, input: CreateP
     },
   });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "planting_cohort.create",
-    entityType: "planting_cohort",
-    entityId: cohort.id,
-    after: cohort,
-    sourceInterface: "traceability.service",
+  await recordAuditEvent(
+    {
+      actorUserAccountId: userAccountId,
+      operation: "planting_cohort.create",
+      entityType: "planting_cohort",
+      entityId: creada.id,
+      after: creada,
+      sourceInterface: "traceability.service",
+    },
+    tx,
+  );
+  return creada;
   });
 
   return cohort;
@@ -162,7 +172,13 @@ export async function renovatePlantingCohort(userAccountId: string, input: Renov
 
   await requireLocationAttributeAccess(userAccountId, existing.locationId);
 
-  const closed = await prisma.plantingCohort.update({
+  // El cierre y su auditoría, juntos. La cohorte de reemplazo se crea DESPUÉS y
+  // fuera de esta transacción, porque `createPlantingCohort` abre la suya.
+  // Consecuencia honesta: cerrar y reemplazar siguen sin ser un solo hecho
+  // atómico — lo eran menos antes, cuando además el audit del cierre podía
+  // perderse.
+  const closed = await prisma.$transaction(async (tx) => {
+  const cerrada = await tx.plantingCohort.update({
     where: { id: input.cohortId },
     data: {
       status: input.replacement ? "renovated" : "removed",
@@ -171,15 +187,20 @@ export async function renovatePlantingCohort(userAccountId: string, input: Renov
     },
   });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "planting_cohort.renovate",
-    entityType: "planting_cohort",
-    entityId: closed.id,
-    before: existing,
-    after: closed,
-    reason: input.reason ?? undefined,
-    sourceInterface: "traceability.service",
+  await recordAuditEvent(
+    {
+      actorUserAccountId: userAccountId,
+      operation: "planting_cohort.renovate",
+      entityType: "planting_cohort",
+      entityId: cerrada.id,
+      before: existing,
+      after: cerrada,
+      reason: input.reason ?? undefined,
+      sourceInterface: "traceability.service",
+    },
+    tx,
+  );
+  return cerrada;
   });
 
   const replacement = input.replacement
@@ -278,8 +299,11 @@ export async function recordHarvestSources(
     }
   }
 
-  const created = await prisma.$transaction(async (tx) =>
-    Promise.all(
+  // La auditoría va DENTRO de esta transacción. Antes se confirmaba fuera: las
+  // filas quedaban guardadas y el audit podía fallar después — el caso exacto
+  // que señaló la revisión independiente.
+  const created = await prisma.$transaction(async (tx) => {
+    const filas = await Promise.all(
       input.sources.map((source) =>
         tx.harvestEventSource.create({
           data: {
@@ -292,16 +316,20 @@ export async function recordHarvestSources(
           },
         }),
       ),
-    ),
-  );
+    );
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "harvest_event.record_sources",
-    entityType: "harvest_event",
-    entityId: input.harvestEventId,
-    after: { sourceIds: created.map((c) => c.id) },
-    sourceInterface: "traceability.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "harvest_event.record_sources",
+        entityType: "harvest_event",
+        entityId: input.harvestEventId,
+        after: { sourceIds: filas.map((c) => c.id) },
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+    return filas;
   });
 
   const allSources = await prisma.harvestEventSource.findMany({
@@ -619,7 +647,8 @@ export async function updatePlantingCohort(userAccountId: string, input: UpdateP
     input.dataQuality !== undefined ? input.dataQuality : existing.dataQuality,
   );
 
-  const after = await prisma.plantingCohort.update({
+  const after = await prisma.$transaction(async (tx) => {
+  const actualizada = await tx.plantingCohort.update({
     where: { id: input.cohortId },
     data: {
       ...(resolvedCultivarValueId !== undefined ? { cultivarValueId: resolvedCultivarValueId } : {}),
@@ -631,15 +660,20 @@ export async function updatePlantingCohort(userAccountId: string, input: UpdateP
     },
   });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "planting_cohort.update",
-    entityType: "planting_cohort",
-    entityId: after.id,
-    before: existing,
-    after,
-    reason: input.reason,
-    sourceInterface: "traceability.service",
+  await recordAuditEvent(
+    {
+      actorUserAccountId: userAccountId,
+      operation: "planting_cohort.update",
+      entityType: "planting_cohort",
+      entityId: actualizada.id,
+      before: existing,
+      after: actualizada,
+      reason: input.reason,
+      sourceInterface: "traceability.service",
+    },
+    tx,
+  );
+  return actualizada;
   });
 
   return after;

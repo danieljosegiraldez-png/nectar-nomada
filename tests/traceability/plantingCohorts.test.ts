@@ -17,6 +17,7 @@ import {
   PlantingCohortValidationError,
 } from "../../lib/traceability/plantingCohorts";
 import { recordHarvestEvent } from "../../lib/traceability/harvest";
+import { recordAuditEvent } from "../../lib/audit";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `p1-${Date.now()}`;
@@ -553,6 +554,55 @@ describe("el contexto de la pantalla ofrece sólo lo que se puede usar", () => {
     expect(contexto.declaredTotalKg).toBe(60);
     // Ningún aporte pesado: desconocido, no cero (ADR-080).
     expect(contexto.alreadyRecordedKg).toBeNull();
+  });
+});
+
+describe("la escritura y su auditoría se confirman juntas", () => {
+  it("si la auditoría no puede escribirse, la cohorte tampoco queda", async () => {
+    // Se fuerza el fallo del audit violando su clave foránea: `actor` apunta a
+    // `UserAccount`, así que un actor inexistente revienta el INSERT DENTRO de
+    // la transacción. Ese es el punto: antes la cohorte ya estaba confirmada
+    // cuando el audit fallaba.
+    const antes = await prisma.plantingCohort.count({ where: { locationId: plotCId } });
+
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.plantingCohort.create({
+          data: {
+            locationId: plotCId,
+            plantCount: 7,
+            provenanceClass: "direct_observation",
+            createdBy: authorizedUserAccountId,
+          },
+        });
+        await recordAuditEvent(
+          {
+            actorUserAccountId: "00000000-0000-0000-0000-000000000000",
+            operation: "prueba.atomicidad",
+            entityType: "planting_cohort",
+            entityId: "00000000-0000-0000-0000-000000000000",
+            sourceInterface: "test",
+          },
+          tx,
+        );
+      }),
+    ).rejects.toThrow();
+
+    // La cohorte NO sobrevivió al fallo del audit: eso es la atomicidad.
+    const despues = await prisma.plantingCohort.count({ where: { locationId: plotCId } });
+    expect(despues).toBe(antes);
+  });
+
+  it("una creación normal deja cohorte Y auditoría", async () => {
+    const cohort = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotCId,
+      plantCount: 11,
+      provenanceClass: "direct_observation",
+    });
+    const audits = await prisma.auditEvent.count({
+      where: { entityId: cohort.id, operation: "planting_cohort.create" },
+    });
+    expect(audits).toBe(1);
   });
 });
 

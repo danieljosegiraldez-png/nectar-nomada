@@ -271,13 +271,24 @@ repositorio privado de este plan. Ver `PENDING_IMPLEMENTATIONS/006`.
   distinguido de «llegó tarde», porque `FieldEvent` lleva `recordedAt`,
   `syncedAt` y `deviceId` — está pensado para llegar tarde, así que un evento
   sincronizado tras el cierre es el camino previsto y no un borde.
-- **Escritura y auditoría no son atómicas** — deuda de arquitectura, señalada
-  por la revisión del 2026-08-31 y **no arreglada a la ligera**.
-  `recordAuditEvent` es el único escritor de `AuditEvent` y usa el cliente
-  global, así que no puede unirse a la transacción que confirma la escritura: si
-  falla, la fila queda guardada sin auditoría. Afecta a `recordHarvestSources`,
-  `updatePlantingCohort` y las escrituras de jornada. Cambiarlo toca el diseño
-  de auditoría de toda la plataforma, no un servicio.
+- **Escritura y auditoría no son atómicas — salvo en `plantingCohorts.ts`.**
+  Desde el 2026-08-31 `recordAuditEvent` acepta un `tx` **opcional** que confirma
+  el audit junto a la escritura; por defecto usa el cliente global, así que las
+  89 llamadas existentes no cambian. Adoptado en las cuatro de
+  `plantingCohorts.ts`, con un test que fuerza el fallo del audit y comprueba
+  que la cohorte tampoco queda.
+  **Quedan 13 archivos que abren transacción y auditan fuera:**
+  `research/analysis.ts` (7 llamadas), `research/protocols.ts` (6),
+  `traceability/harvest.ts`, `samples.ts`, `drying.ts`, `fermentation.ts`,
+  `lots.ts`, `roasting.ts`, `apiary/harvest.ts`, `commerce/orders.ts`,
+  `experiences/bookings.ts`, `sensory/service.ts`, `auth/config.ts`. Los otros
+  28 que auditan **no** abren transacción, así que no tienen nada que hacer
+  atómico.
+  **Restricción al adoptarlo:** pasar `tx` obliga a que el llamador no abra otra
+  transacción dentro — Prisma no las anida, y por eso `renovatePlantingCohort`
+  crea su cohorte de reemplazo fuera de la suya.
+  Lo que queda es decisión, no trabajo mecánico: si los 13 se convierten de una
+  o al tocarlos.
 - **Un reporte de visita a apiario, tal como está escrito** — pedido dos veces
   al dueño, sin llegar. De su contenido dependen tres decisiones distintas: si
   traen qué estaba floreciendo, el puente flora↔miel deja de ser teórico; si
