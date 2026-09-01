@@ -16,6 +16,14 @@ trabajo salió de `SESSION_STATE.md`.
 Comprobado al moverlas: de las 75 líneas quitadas del estado, **cero** con
 contenido faltaban en este archivo.
 
+**Tercer archivado, 2026-09-01**, con el estado en 332/400 líneas (83 %). Dos
+entradas: la del rendimiento por hectárea: su contenido vive en el código
+(`computePlotYield`) y en sus pruebas, que sí se cargan; y la de la visita al
+apiario, cuyo párrafo final **sí seguía dirigiendo trabajo** — la medición de que
+una propuesta con presupuesto no cabe en el esquema se movió a §3 antes de
+archivar el resto, en vez de irse con ella. Se archiva al añadir la entrada del
+día en vez de al chocar con el techo, que es lo que el propio guardia pide.
+
 **Segundo archivado, el mismo día**, con el estado de vuelta en 347/400 líneas
 apenas unas horas después del primero. Tres entradas más — 55 líneas, cero
 perdidas. Lo que enseña el ritmo: con varias sesiones escribiendo, el estado
@@ -249,3 +257,33 @@ aportó cereza teniendo sus árboles en otro sitio), y el contexto de la pantall
 rechazarlos al guardar. Los dos con test y flip-test.
 
 PR #74 y #75. Suite 664/664 sobre `main` fusionado.
+
+### 2026-08-31 · La visita al apiario como unidad, y el módulo que no necesitaba código
+
+El dueño tiene **reportes de visita a apiarios ya escritos**. Medido antes de
+construir: el módulo de apiario **no tenía el hueco de siempre** — sus 21
+funciones ya tienen pantalla, incluida una cola offline. Y de §19 no faltaban
+«Honey Batch» ni «Extraction»: son `Lot` con `lotType: "honey"` (A3) y
+`extractedWeightKg`. Dos veces creí ver un fallo y las dos veces leí mal.
+
+Lo que sí faltaba era **lo que hace que un reporte sea un reporte**: que las
+inspecciones de una misma salida sean *la misma salida*. Las inspecciones son
+por colonia, así que una visita a cuatro colmenas eran cuatro registros sueltos.
+
+`fieldSessions` llevaba desde P2 §3–§5 construido y probado con **0 pantallas,
+0 filas y 5 funciones** que sólo tocaba su test. Ahora hay `/field-sessions/[id]`
+y una sección en la página del lote. El operador es una **Persona**, no una
+cuenta (ADR-101): quien camina el apiario no suele tener con qué iniciar sesión.
+
+El **guardia de acceso a datos de la PR #78 atrapó el archivo nuevo del
+catálogo** y exigió justificarlo — sobre código de otra sesión, que es
+exactamente para lo que sirve.
+
+Rebasada sobre las PR #81 y #82 y probada junto a ellas antes de fusionar: CI
+había probado la rama sola, nunca el resultado. PR #83. Suite 687/687.
+
+**Sigue sin construirse, y a propósito:** el puente flora↔miel (lo único de §19
+que falta) uniría hoy dos tablas vacías —0 especímenes, 0 cosechas de miel— y
+las **propuestas con presupuesto** no caben en ningún sitio: `budget`,
+`presupuesto`, `proposal` dan **cero** en el esquema. `Project` no tiene dinero,
+ni plan, ni aprobación. Eso exige modelo nuevo y una decisión, no improvisación.

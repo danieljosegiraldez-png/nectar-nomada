@@ -37,6 +37,59 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-01 · El marco de suelo y taza, traducido al esquema, y su primer campo
+
+`origin/main` = `accd59b`. PR #103 (plan) y #105 (`Location.aspect`). Suite
+731/731.
+
+Daniel aportó *«Las Nubes Cerro Azul — Soil, Environment and Cup Quality:
+Research Framework v1.0»* (13.345 palabras, firmado por Bob, Sherry y Daniel).
+`docs/implementation/45_S1_SUELO_AMBIENTE_TAZA.md` traduce su Tabla 15 al
+esquema. **No es un resumen del marco; el marco manda.** Ocho de sus catorce
+entidades ya tienen dónde vivir; **seis no**: microclima, muestra de suelo,
+registro físico de suelo, aplicación de enmienda, lote de biochar, muestra
+foliar.
+
+Tres cosas que salieron de medir contra el esquema, no de recordarlo:
+
+- **`Experiment.controlTreatmentBatchId` ya existe** y modela el control sin
+  tratar que §10.3 llama no negociable. Por eso la enmienda debería reusar
+  `TreatmentBatch` con `locationId`: una entidad paralela dejaría al T0 sin
+  poder ocupar ese campo.
+- **`Sensor`, `SensorDeployment` y `EnvironmentalObservation` no existen**, pese
+  a estar en la lista de `CLAUDE.md` §52.
+- Los resultados de laboratorio son `Measurement`: falta **vocabulario, no
+  estructura**.
+
+**El orden de construcción es el del Plan de Acción del marco, con sus semanas**
+— se construye en el orden en que el dato aparece, no en el que el modelo se lee.
+Empezar por el microclima daría una pantalla sin filas durante dos meses, el
+error ya cometido con apiario y con selección.
+
+**Primer paso hecho: `Location.aspect`** (semanas 1–4). La orientación se colaba
+dentro de `slopeDescription` como prosa —el test de F1 decía `"moderate,
+east-facing"`— donde ninguna consulta la agrupa, que es justo lo que el Paso 3
+necesita. Enum y no texto libre, rompiendo a propósito con el precedente de
+`slopeDescription`/`soilType`: aquellos son texto porque nadie dio una lista, y
+la rosa de los vientos no se inventa. `flat` y `variable` existen para que un
+lote plano, o uno que mira a tres lados, no declare un rumbo que no tiene.
+Nullable, sin default, sin backfill.
+
+**El bug real lo encontró el typecheck:** `getPlotDetail` usa un `select`
+explícito, así que sin `aspect: true` el campo habría salido **siempre en
+blanco** por bien que se guardara.
+
+`tests/ui/valoresEnumerados.test.ts` ata las tres listas que deben coincidir y
+viven en archivos distintos —enum de Prisma, lista del formulario, claves de
+traducción en los dos idiomas— y cubre también `SunExposure` y
+`ShadePercentageBracket`. Lo justifica el fallo silencioso: un valor que existe
+en la base y que nadie puede elegir desde la aplicación. Hermético, así que entra
+en `scripts/ci.sh`.
+
+**Sin verificar: la pantalla viva.** Un worktree no hereda `.env`, así que auth
+no arranca ahí (`MissingSecret`) y `/plots` redirige a `/login` — correcto, pero
+no deja ver el formulario.
+
 ### 2026-08-31 · El detector de acceso leía texto, y dos revisiones lo demostraron
 
 `origin/main` = `866339f`. Compuerta `scripts/ci.sh` = 0, 69 pruebas.
@@ -159,36 +212,6 @@ una afirmación, que un comentario diga la verdad. Para eso está
 porque incluye el cuerpo entero de cada archivo tocado: **acotar el rango al
 núcleo lógico** lo dejó en 2.958 y en una pasada.
 
-### 2026-08-31 · La visita al apiario como unidad, y el módulo que no necesitaba código
-
-El dueño tiene **reportes de visita a apiarios ya escritos**. Medido antes de
-construir: el módulo de apiario **no tenía el hueco de siempre** — sus 21
-funciones ya tienen pantalla, incluida una cola offline. Y de §19 no faltaban
-«Honey Batch» ni «Extraction»: son `Lot` con `lotType: "honey"` (A3) y
-`extractedWeightKg`. Dos veces creí ver un fallo y las dos veces leí mal.
-
-Lo que sí faltaba era **lo que hace que un reporte sea un reporte**: que las
-inspecciones de una misma salida sean *la misma salida*. Las inspecciones son
-por colonia, así que una visita a cuatro colmenas eran cuatro registros sueltos.
-
-`fieldSessions` llevaba desde P2 §3–§5 construido y probado con **0 pantallas,
-0 filas y 5 funciones** que sólo tocaba su test. Ahora hay `/field-sessions/[id]`
-y una sección en la página del lote. El operador es una **Persona**, no una
-cuenta (ADR-101): quien camina el apiario no suele tener con qué iniciar sesión.
-
-El **guardia de acceso a datos de la PR #78 atrapó el archivo nuevo del
-catálogo** y exigió justificarlo — sobre código de otra sesión, que es
-exactamente para lo que sirve.
-
-Rebasada sobre las PR #81 y #82 y probada junto a ellas antes de fusionar: CI
-había probado la rama sola, nunca el resultado. PR #83. Suite 687/687.
-
-**Sigue sin construirse, y a propósito:** el puente flora↔miel (lo único de §19
-que falta) uniría hoy dos tablas vacías —0 especímenes, 0 cosechas de miel— y
-las **propuestas con presupuesto** no caben en ningún sitio: `budget`,
-`presupuesto`, `proposal` dan **cero** en el esquema. `Project` no tiene dinero,
-ni plan, ni aprobación. Eso exige modelo nuevo y una decisión, no improvisación.
-
 ## 3. Bloqueado, y en qué
 
 - **Aviso fiable de que un backup no corrió** — bloqueado en P-A. Hoy la señal
@@ -221,6 +244,14 @@ ni plan, ni aprobación. Eso exige modelo nuevo y una decisión, no improvisaci�
   dos entradas: **0 de 8 lotes tienen área** y **0 cosechas están atribuidas a
   bloques**, aunque 15 de las 33 ya tienen peso declarado. Las dos las carga él
   ahora sin ayuda.
+- **`main` va por delante de producción, y `Location.aspect` no está desplegado**
+  — la cuenta de Vercel agotó su límite diario de builds el 2026-09-01
+  («Deployment rate limited — retry in 24 hours»), así que el merge de #105 no
+  construyó. **No hay inconsistencia**: código y migración quedaron sin
+  desplegar juntos, y producción sigue sirviendo el build de #103. Cuando el
+  límite se despeje hay que **disparar un despliegue de producción** para que
+  `scripts/vercel-build.sh` corra `prisma migrate deploy` y la columna aparezca.
+  Hasta entonces, `core.location` en producción **no tiene** `aspect`.
 - **Nadie ha usado ninguna de las cinco pantallas nuevas.** Todo lo que se sabe
   de ellas se sabe de la copia local restaurada. Que un operador real las
   recorra es la única prueba que falta, y la que suele encontrar lo que ninguna
@@ -256,7 +287,10 @@ ni plan, ni aprobación. Eso exige modelo nuevo y una decisión, no improvisaci�
   traen conteos por colmena, puede que la inspección se quede corta; si traen
   acciones y costos, empuja hacia el modelo de propuestas. Sin verlos, lo que se
   construya en apiario va contra una idea nuestra de un reporte, no contra el
-  suyo.
+  suyo. Medido el 2026-08-31: **una propuesta con presupuesto no cabe en ningún
+  sitio** — `budget`, `presupuesto` y `proposal` dan **cero** en el esquema, y
+  `Project` no tiene dinero, ni plan, ni aprobación. Eso es modelo nuevo y una
+  decisión, no improvisación.
 - **Lotes 5 y 6** — bloqueado en el dueño. Dijo que tienen 200 plantones cada
   uno, y eso **contradice** la nota del evento del Lote 4, que afirma que los
   otros 400 de Cafelino siguen sin sembrar. 200+200 son exactamente esos 400. No
