@@ -236,7 +236,13 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
                   <tr key={y.year}>
                     <td style={{ padding: "0.4rem 0.75rem 0.4rem 0" }}>{y.year}</td>
                     <td style={{ fontVariantNumeric: "tabular-nums", textAlign: "right", padding: "0.4rem 0.75rem" }}>
-                      {t("sourceWeightValue", { kg: y.weighedKg })}
+                      {/* Nada pesado en el año: se dice, no se muestra un 0
+                          que se leería como medición (ADR-080). */}
+                      {y.weighedKg != null ? (
+                        t("sourceWeightValue", { kg: y.weighedKg })
+                      ) : (
+                        <span className="nn-muted">{t("yieldNothingWeighed")}</span>
+                      )}
                       {y.unweighedContributions > 0 ? (
                         // El total es un MÍNIMO. Sin esto, un número más bajo
                         // de lo real se leería como medido.
