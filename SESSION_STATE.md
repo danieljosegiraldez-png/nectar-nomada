@@ -64,11 +64,14 @@ comprueban ahora `tests/archivo-de-estado.test.ts` y su gemelo en el repositorio
 web. `SESSION_STATE.md` sí dio conflicto y por eso se miró; el archivo histórico
 no dio ninguno. Una fusión limpia no dice que el resultado sea correcto.
 
-### 2026-09-01 · El plan S1 entero, salvo el microclima — y desplegado
+### 2026-09-01 · El plan S1 entero, salvo el microclima
 
-`origin/main` = `44fece6`. PR #103 (plan), #105 (`aspect`), #108 (biochar),
-#110 (sujeto no-café), #111 (calicata), #115 (muestras), #117 (fotos).
-Suite 731 → **834**.
+`origin/main` = `34c5dc8`. PR #103 (plan), #105 (`aspect`), #108 (biochar),
+#110 (sujeto no-café), #111 (calicata), #115 (muestras), #117 (fotos), #122
+(enmienda). Suite 731 → **849**.
+
+De las seis entidades que le faltaban a la Tabla 15, **cinco se construyeron**.
+Sólo el microclima sigue abierto, y sólo por una decisión.
 
 Daniel aportó *«Las Nubes Cerro Azul — Soil, Environment and Cup Quality:
 Research Framework v1.0»* (13.345 palabras, firmado por Bob, Sherry y Daniel).
@@ -94,6 +97,7 @@ escriba sobre un bloque tiene que poder ser **la línea base, no la enmienda**.
 | `SoilProfile` | **Tres estados, no un booleano**: «no se miró» ≠ «no había», y confundirlos manda a fertilizar un problema de aire |
 | `SoilSample` / `FoliarSample` | Un análisis foliar sin protocolo es **incomparable**, que es peor que no tenerlo porque parece que sirve |
 | Fotos de Location | El padre debe pertenecer a la Location autorizada, o quien tiene A cuelga en B |
+| Aplicación de enmienda | **Gate 0 hecho estructura**: se niega mientras falte cualquiera de las cuatro condiciones firmadas, y dice cuáles |
 
 **Cuatro guardias del repositorio pararon trabajo, y los cuatro tenían razón.**
 El que más: `navigation.test.ts` exige ≤8 entradas de menú y yo había añadido una
@@ -120,7 +124,20 @@ que se aplicó** antes de que se lea el veredicto.
 de Vercel agotó su límite diario de builds a media tanda, así que cinco merges no
 construyeron; al despejarse, un solo despliegue aplicó **las seis migraciones**,
 nombradas una a una en el log de construcción, con cero errores y el seed
-después. `main` y producción vuelven a estar al día.
+después.
+
+**Y el límite volvió a saltar con #122**, así que su migración quedó fuera. La
+forma se repitió lo bastante como para nombrarla: el check de Vercel que pasa en
+una PR es el de **preview**, y no dice nada sobre si producción puede desplegar.
+Dos veces lo di por bueno y las dos me equivoqué; lo que sí lo dice es el estado
+del commit fusionado (`gh api .../commits/<sha>/status`).
+
+**Lo que más importa de todo el día cabe en una frase:** la recomendación
+principal del marco no es construir nada, es un **ALTO** firmado, y ahora es
+código. `applyAmendment` se niega mientras falte la química base, la física
+base, el biochar caracterizado o el protocolo escrito — y **se abre** en cuanto
+existen, con un test que lo demuestra. Enmendar antes de medir no retrasa la
+ciencia: la imposibilita.
 
 **Sin comprobar:** el esquema vivo consultado contra la base. El `DATABASE_URL`
 de producción sólo existe en la config de Vercel y no se descargó — un secreto
@@ -166,12 +183,20 @@ que no hace falta no se toca. La comprobación que falta es abrir
   dos entradas: **0 de 8 lotes tienen área** y **0 cosechas están atribuidas a
   bloques**, aunque 15 de las 33 ya tienen peso declarado. Las dos las carga él
   ahora sin ayuda.
+- **Una migración sin desplegar: `20260901090000_s1_amendment_application`** —
+  el límite diario de builds de Vercel volvió a saltar con el merge de #122, así
+  que no construyó. **No hay inconsistencia**: código y migración quedaron fuera
+  juntos. Cuando se despeje, un despliegue de producción la aplica.
+  **Cómo comprobarlo, y no como lo comprobé mal dos veces:** el check de Vercel
+  que pasa en una PR es el de *preview* y no dice nada de producción. El que sí
+  lo dice es `gh api repos/<owner>/<repo>/commits/<sha>/status`, y después el
+  log de construcción, que nombra cada migración aplicada.
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
   separada para la serie temporal —~35.000 filas por sensor y año— y no dice
-  cuál. La otra decisión abierta es la aplicación de enmienda: reusar
-  `TreatmentBatch` con `locationId`, o entidad propia. Las dos están en §6 de
-  `docs/implementation/45_S1_SUELO_AMBIENTE_TAZA.md`, con recomendación.
+  cuál. **Es la única decisión de §6 que sigue abierta**: la de la enmienda la
+  cerró Daniel el 2026-09-01 (opción A, `TreatmentBatch` con `locationId`) y ya
+  está construida en #122.
 - **Nadie ha usado ninguna de las pantallas nuevas** —cinco en agosto, más las de biochar, calicata, muestras y fotos. Todo lo que se sabe
   de ellas se sabe de la copia local restaurada. Que un operador real las
   recorra es la única prueba que falta, y la que suele encontrar lo que ninguna
