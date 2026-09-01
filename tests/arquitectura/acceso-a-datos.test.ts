@@ -204,3 +204,100 @@ describe("inventario de acceso: ninguna operación sin explicar", () => {
     }
   });
 });
+
+/**
+ * El conjunto que «depende del llamador» deja de ser una foto.
+ *
+ * Estas operaciones no reciben principal: su autorización, si existe, está en
+ * quien las llama, y sólo un humano puede decir si ese llamador basta. Se
+ * verificaron una a una el 2026-08-31 — y hasta hoy nada detectaba que el
+ * conjunto cambiara. Una operación nueva caía en este cajón y nadie la volvía
+ * a mirar.
+ *
+ * Comprobado por mutación el 2026-08-31: añadir una consulta sin guardia a un
+ * archivo **ya inventariado** pasaba la compuerta en verde. Con esto, falla.
+ */
+describe("depende del llamador: el conjunto está fijado, no fotografiado", () => {
+  const inventario = JSON.parse(
+    execFileSync("node", ["scripts/inventario-de-acceso.mjs", "--json"], {
+      cwd: new URL("../..", import.meta.url).pathname,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    })
+  ) as { archivo: string; nombre: string; clase: string }[];
+  const dependientes = inventario
+    .filter((o) => o.clase.startsWith("depende del llamador"))
+    .map((o) => `${o.archivo}:${o.nombre}`);
+  const fijadas = new Set(
+    allowlist.dependen_del_llamador.map((e) => `${e.archivo}:${e.operacion}`)
+  );
+
+  it("ninguna operación nueva entra sin que alguien mire a su llamador", () => {
+    expect(
+      dependientes.filter((k) => !fijadas.has(k)),
+      "Operación nueva sin principal. Mira quién la llama: si ese llamador " +
+        "autoriza, anótalo en dependen_del_llamador; si no, ponle guardia."
+    ).toEqual([]);
+  });
+
+  it("no quedan fijadas operaciones que ya no dependen del llamador", () => {
+    const vivas = new Set(dependientes);
+    expect(
+      [...fijadas].filter((k) => !vivas.has(k)),
+      "ya no dependen del llamador: bórralas de dependen_del_llamador"
+    ).toEqual([]);
+  });
+
+  it("cada una dice por qué su llamador basta, y desde cuándo", () => {
+    for (const e of allowlist.dependen_del_llamador) {
+      expect(e.razon?.trim(), `${e.archivo}:${e.operacion}`).toBeTruthy();
+      expect(e.verificado, `${e.archivo}:${e.operacion}`).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+});
+
+/**
+ * La identidad de una operación, no sólo el conjunto.
+ *
+ * Las pruebas de arriba fijan **qué conjunto** sale del inventario; ninguna
+ * comprobaba que cada fila se llame como el código que de verdad consulta. Lo
+ * señaló la revisión independiente del 2026-08-31 con un caso real: el
+ * troceador no reconocía `export default async function`, así que las tres
+ * consultas de `MyNectarPage()` se inventariaban bajo `dynamic` —la constante
+ * `export const dynamic = "force-dynamic"` de la línea anterior, que absorbía
+ * el resto del archivo—. Fijar `archivo:operacion` sobre eso es fijar un
+ * fragmento de texto, no un camino de ejecución.
+ */
+describe("identidad: cada operación se llama como el código que consulta", () => {
+  const inventario = JSON.parse(
+    execFileSync("node", ["scripts/inventario-de-acceso.mjs", "--json"], {
+      cwd: new URL("../..", import.meta.url).pathname,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    })
+  ) as { archivo: string; nombre: string }[];
+
+  it("las consultas de app/my-nectar/page.tsx son de MyNectarPage, no de dynamic", () => {
+    const nombres = inventario
+      .filter((o) => o.archivo === "app/my-nectar/page.tsx")
+      .map((o) => o.nombre);
+    expect(nombres).toContain("MyNectarPage");
+    expect(nombres).not.toContain("dynamic");
+  });
+
+  /**
+   * Estos nombres son configuración de Next, nunca funciones que consulten. Si
+   * uno aparece como operación, una declaración se ha tragado a la de al lado y
+   * la identidad de esa fila es falsa — aunque el recuento cuadre.
+   */
+  it("ninguna operación se llama como una constante de configuración de Next", () => {
+    const CONFIG = ["dynamic", "revalidate", "runtime", "metadata", "fetchCache", "preferredRegion"];
+    const impostoras = inventario
+      .filter((o) => CONFIG.includes(o.nombre))
+      .map((o) => `${o.archivo}:${o.nombre}`);
+    expect(
+      impostoras,
+      "una constante de configuración salió como operación: el troceador absorbió la función de al lado"
+    ).toEqual([]);
+  });
+});
