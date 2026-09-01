@@ -264,6 +264,13 @@ repositorio privado de este plan. Ver `PENDING_IMPLEMENTATIONS/006`.
   de ellas se sabe de la copia local restaurada. Que un operador real las
   recorra es la única prueba que falta, y la que suele encontrar lo que ninguna
   verificación encuentra.
+- ~~Dos carreras en jornadas de campo~~ — **cerradas el 2026-08-31**. Estaban
+  agrupadas aquí con la deuda de auditoría bajo «las tres tocan diseño de
+  plataforma», y eso era falso de estas dos: el arreglo era local. Cierre con
+  `updateMany` condicionado a `endedAt: null`, y `occurredAt > endedAt`
+  distinguido de «llegó tarde», porque `FieldEvent` lleva `recordedAt`,
+  `syncedAt` y `deviceId` — está pensado para llegar tarde, así que un evento
+  sincronizado tras el cierre es el camino previsto y no un borde.
 - **Escritura y auditoría no son atómicas** — deuda de arquitectura, señalada
   por la revisión del 2026-08-31 y **no arreglada a la ligera**.
   `recordAuditEvent` es el único escritor de `AuditEvent` y usa el cliente
@@ -271,12 +278,6 @@ repositorio privado de este plan. Ver `PENDING_IMPLEMENTATIONS/006`.
   falla, la fila queda guardada sin auditoría. Afecta a `recordHarvestSources`,
   `updatePlantingCohort` y las escrituras de jornada. Cambiarlo toca el diseño
   de auditoría de toda la plataforma, no un servicio.
-- **Dos carreras en jornadas de campo** — misma revisión, misma razón para no
-  improvisar. `endFieldSession` lee `endedAt`, lo comprueba y actualiza sin
-  condición, así que dos peticiones simultáneas cierran dos veces; y
-  `recordFieldEvent` puede insertar entre la lectura y el cierre de otra
-  petición, dejando un evento en una jornada cerrada. Hace falta escritura
-  condicional sobre `endedAt: null`, y validar `occurredAt <= endedAt`.
 - **Un reporte de visita a apiario, tal como está escrito** — pedido dos veces
   al dueño, sin llegar. De su contenido dependen tres decisiones distintas: si
   traen qué estaba floreciendo, el puente flora↔miel deja de ser teórico; si
