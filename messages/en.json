@@ -923,7 +923,12 @@
     "variable_exchangeable_magnesium": "Exchangeable magnesium",
     "variable_sulphur": "Sulphur (S)",
     "error_sample": "Could not save the sample: {detail}",
-    "labSamplesHeading": "Laboratory samples"
+    "labSamplesHeading": "Laboratory samples",
+    "landPhotosHeading": "Photographs",
+    "landPhotosIntro": "General photos of the block, alongside those attached to a soil pit.",
+    "landPhotosNone": "No photographs.",
+    "biocharPhotosIntro": "The retort and the process. Kiln design is a text field, and a photo says what no description reaches.",
+    "error_land_media": "Could not save the photograph: {detail}"
   },
   "Apiary": {
     "badge": "Apiary",

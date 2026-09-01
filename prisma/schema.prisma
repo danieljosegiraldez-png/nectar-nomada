@@ -1532,6 +1532,18 @@ model Asset {
   dryingRun         DryingRun?       @relation(fields: [dryingRunId], references: [id])
   sampleId          String?          @map("sample_id") @db.Uuid
   sample            Sample?          @relation(fields: [sampleId], references: [id])
+  // S1 (45_S1_SUELO_AMBIENTE_TAZA.md §2) — los dos sitios donde el marco pide
+  // fotografía explícitamente: el Paso 2 «fotografiar el retorte y el proceso»
+  // y el Paso 4 «fotografiar cada perfil con una escala».
+  //
+  // NO se añade una FK para las muestras de suelo y foliares: el marco no pide
+  // fotos de ellas, y una columna que nada escribe es peso muerto que además
+  // parece una capacidad que el sistema no tiene. Una foto general de un bloque
+  // ya cabe en `locationId`, que existe desde el principio.
+  biocharBatchId    String?          @map("biochar_batch_id") @db.Uuid
+  biocharBatch      BiocharBatch?    @relation(fields: [biocharBatchId], references: [id])
+  soilProfileId     String?          @map("soil_profile_id") @db.Uuid
+  soilProfile       SoilProfile?     @relation(fields: [soilProfileId], references: [id])
 
   // A6 (22_APIARY_V1_SCOPING_REPORT.md — Photo attachment): same "specific
   // nullable FK per parent, not polymorphic" convention as the six
@@ -1592,6 +1604,8 @@ model Asset {
   @@index([specimenId])
   @@index([treatmentBatchId])
   @@index([processingStageId])
+  @@index([biocharBatchId])
+  @@index([soilProfileId])
   @@map("asset")
   @@schema("core")
 }
@@ -3952,6 +3966,7 @@ model SoilProfile {
   creator   UserAccount? @relation("SoilProfileCreatedBy", fields: [createdBy], references: [id])
 
   horizons SoilHorizon[]
+  assets   Asset[]
 
   @@index([locationId])
   @@map("soil_profile")
@@ -4116,6 +4131,7 @@ model BiocharBatch {
   // dato, corregible sin borrar la original: eso es `Measurement`, no una
   // columna por parámetro en esta tabla.
   measurements Measurement[]
+  assets       Asset[]
 
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")
