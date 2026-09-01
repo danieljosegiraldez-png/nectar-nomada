@@ -31,6 +31,7 @@ export default async function PlotsPage() {
                 plot.altitudeMinM != null ||
                 plot.altitudeMaxM != null ||
                 plot.slopeDescription != null ||
+                plot.aspect != null ||
                 plot.soilType != null;
 
               return (
@@ -72,6 +73,11 @@ export default async function PlotsPage() {
                       {plot.slopeDescription ? (
                         <p>
                           {t("slopeLabel")}: {plot.slopeDescription}
+                        </p>
+                      ) : null}
+                      {plot.aspect ? (
+                        <p>
+                          {t("aspectLabel")}: {t(`aspect_${plot.aspect}` as "aspect_north")}
                         </p>
                       ) : null}
                       {plot.soilType ? (

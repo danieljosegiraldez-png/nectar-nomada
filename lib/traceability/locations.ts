@@ -14,7 +14,7 @@ import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
-import type { ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
+import type { Aspect, ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
 
 export class LocationAccessError extends Error {}
 export class LocationValidationError extends Error {}
@@ -53,6 +53,9 @@ export interface UpdateLocationAttributesInput {
   altitudeMinM?: number | null;
   altitudeMaxM?: number | null;
   slopeDescription?: string | null;
+  // S1 §2 — orientación de la ladera. Enumerada, no texto: el marco la usa
+  // para comparar bloques entre sí, y eso exige que el valor agrupe.
+  aspect?: Aspect | null;
   soilType?: string | null;
   plantSpacingMeters?: number | null;
   // P1 §3 — declared block area. Not derived from a boundary polygon: none
@@ -92,6 +95,7 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
       ...(input.altitudeMinM !== undefined ? { altitudeMinM: input.altitudeMinM } : {}),
       ...(input.altitudeMaxM !== undefined ? { altitudeMaxM: input.altitudeMaxM } : {}),
       ...(input.slopeDescription !== undefined ? { slopeDescription: input.slopeDescription } : {}),
+      ...(input.aspect !== undefined ? { aspect: input.aspect } : {}),
       ...(input.soilType !== undefined ? { soilType: input.soilType } : {}),
       ...(input.plantSpacingMeters !== undefined ? { plantSpacingMeters: input.plantSpacingMeters } : {}),
       ...(input.areaHectares !== undefined ? { areaHectares: input.areaHectares } : {}),

@@ -126,7 +126,12 @@ describe("updateLocationAttributes", () => {
       shadePercentage: "pct_30",
       altitudeMinM: 600,
       altitudeMaxM: 650,
-      slopeDescription: "moderate, east-facing",
+      slopeDescription: "moderate",
+      // S1 §2 — antes esto decía "moderate, east-facing": la orientación
+      // viajaba dentro de la prosa de la pendiente, donde ninguna consulta la
+      // podía agrupar. Ahora es un valor propio y la pendiente vuelve a
+      // describir sólo la pendiente.
+      aspect: "east",
       soilType: "volcanic loam",
       plantSpacingMeters: 2,
       description: "TEST attribute note",
@@ -135,7 +140,31 @@ describe("updateLocationAttributes", () => {
     expect(updated.shadePercentage).toBe("pct_30");
     expect(updated.altitudeMinM).toBe(600);
     expect(updated.altitudeMaxM).toBe(650);
+    expect(updated.aspect).toBe("east");
     expect(getAltitudeRange(updated)).toBe(50);
+  });
+
+  it("deja la orientación sin registrar cuando nadie la ha mirado — null, no un rumbo por defecto", async () => {
+    // ADR-080: «sin registrar» y «mira al norte» son hechos distintos. La
+    // columna es nullable y no tiene default justamente por eso, y esta
+    // aserción es lo que impide que alguien le ponga uno más adelante.
+    const sinTocar = await prisma.location.create({
+      data: { name: "TEST orientación sin registrar", locationType: "plot", createdBy: authorizedUserAccountId },
+    });
+    expect(sinTocar.aspect).toBeNull();
+    await prisma.location.delete({ where: { id: sinTocar.id } });
+  });
+
+  it("acepta `flat` y `variable`, que no son rumbos", async () => {
+    // Un lote plano no tiene orientación y uno que mira a tres lados tampoco
+    // tiene una sola. Forzarlos a un punto cardinal inventaría el dato.
+    const plano = await updateLocationAttributes(authorizedUserAccountId, { locationId, aspect: "flat" });
+    expect(plano.aspect).toBe("flat");
+    const varias = await updateLocationAttributes(authorizedUserAccountId, { locationId, aspect: "variable" });
+    expect(varias.aspect).toBe("variable");
+    // Se devuelve a `east` para que el test de PATCH de abajo siga midiendo lo
+    // que dice medir, corra en el orden que corra dentro de este describe.
+    await updateLocationAttributes(authorizedUserAccountId, { locationId, aspect: "east" });
   });
 
   it("is a PATCH — updating one field leaves previously-set fields untouched", async () => {
@@ -143,6 +172,7 @@ describe("updateLocationAttributes", () => {
     expect(updated.soilType).toBe("volcanic loam, revised");
     // sunExposure was set in the prior test and not passed here — must survive.
     expect(updated.sunExposure).toBe("morning");
+    expect(updated.aspect).toBe("east");
     expect(updated.altitudeMinM).toBe(600);
   });
 });

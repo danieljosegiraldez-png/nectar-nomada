@@ -432,6 +432,7 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
       sunExposure: true,
       shadePercentage: true,
       slopeDescription: true,
+      aspect: true,
       soilType: true,
       description: true,
       organization: { select: { name: true } },

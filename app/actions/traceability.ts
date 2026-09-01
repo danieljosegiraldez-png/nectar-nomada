@@ -805,6 +805,7 @@ export async function updatePlotAttributesAction(
       sunExposure: emptyToNull(formData.get("sunExposure")) as never,
       shadePercentage: emptyToNull(formData.get("shadePercentage")) as never,
       slopeDescription: emptyToNull(formData.get("slopeDescription")),
+      aspect: emptyToNull(formData.get("aspect")) as never,
       soilType: emptyToNull(formData.get("soilType")),
     });
   } catch (error) {

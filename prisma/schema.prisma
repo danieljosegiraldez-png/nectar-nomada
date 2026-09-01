@@ -477,6 +477,37 @@ enum ShadePercentageBracket {
   @@schema("core")
 }
 
+// S1 (45_S1_SUELO_AMBIENTE_TAZA.md §2) — la orientación de la ladera, que el
+// marco de investigación pide junto a pendiente y sombra para elegir bloques
+// que abarquen la variación real del terreno (Paso 3, §14.1).
+//
+// Enumerado, a diferencia de `slopeDescription`/`soilType`, que son texto
+// libre justamente porque nadie dio una lista de valores. Aquí la lista no se
+// inventa: es la rosa de los vientos. Y el uso es **comparativo** — «cuatro
+// bloques que abarquen orientaciones distintas» sólo se puede responder si el
+// valor agrupa, cosa que «hacia el este» y «E» y «este-noreste» no hacen.
+// `flat` y `variable` existen para que el terreno que no tiene una orientación
+// única no se vea forzado a declarar una: un lote plano y un lote que mira a
+// tres lados son hechos distintos, y ninguno es `north`.
+enum Aspect {
+  north
+  northeast
+  east
+  southeast
+  south
+  southwest
+  west
+  northwest
+  // Sin pendiente apreciable: no tiene orientación, y decir que la tiene sería
+  // inventarla.
+  flat
+  // Varias orientaciones dentro del mismo bloque. Es la señal de que el bloque
+  // quizá deba subdividirse (F1 §2), no un valor que haya que limpiar.
+  variable
+
+  @@schema("core")
+}
+
 // F1 §2 — the reason a microlot was subdivided, recorded on the *child*
 // Location (the microlot itself), not the parent. Only meaningful when
 // parentLocationId is set; nullable everywhere else, same as every other
@@ -533,6 +564,12 @@ model Location {
   // exposure/shade, both enumerated directly by the product owner) — free
   // text rather than inventing a controlled vocabulary nobody asked for.
   slopeDescription   String?                 @map("slope_description")
+  // S1 §2 — orientación de la ladera. Va aquí, pegada a la pendiente, porque
+  // es la otra mitad del mismo hecho: una pendiente sin orientación no dice
+  // cuánto sol ni cuánta lluvia recibe la ladera. Hasta ahora se colaba dentro
+  // de `slopeDescription` como prosa ("moderate, east-facing"), donde ninguna
+  // consulta la podía agrupar.
+  aspect             Aspect?                 @map("aspect")
   soilType           String?                 @map("soil_type")
   plantSpacingMeters Decimal?                @map("plant_spacing_meters") @db.Decimal(5, 2)
   // P1 §3 — F1 added sun, shade, altitude range, slope, soil and spacing but
