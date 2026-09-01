@@ -19,6 +19,7 @@ import {
 import { ResearchAccessError } from "../../lib/research/access";
 import { createResearchProgram, createResearchQuestion, createHypothesis, createExperiment } from "../../lib/research/programs";
 import { createProtocol, createProtocolVersion, activateProtocolVersion } from "../../lib/research/protocols";
+import { createTreatmentBatch } from "../../lib/research/treatments";
 import { createSoilProfile } from "../../lib/traceability/soilProfiles";
 import { createSoilSample } from "../../lib/traceability/soilSamples";
 import { createBiocharBatch } from "../../lib/traceability/biocharBatches";
@@ -554,5 +555,54 @@ describe("listAmendmentsForLocation", () => {
     await expect(listAmendmentsForLocation(sinAccesoUserId, locationId)).rejects.toThrow(
       ResearchAccessError,
     );
+  });
+});
+
+/**
+ * La pregunta que la revisión independiente del 2026-09-01 dejó escrita y no
+ * pudo responder: **¿hay una puerta trasera a Gate 0?**
+ *
+ * `createTreatmentBatch` sigue siendo público y no sabe nada de la compuerta.
+ * Si pudiera crear un tratamiento con `locationId`, todo lo que
+ * `applyAmendment` comprueba sería opcional — bastaría con llamar al otro.
+ *
+ * Comprobado el 2026-09-01 leyendo el código: en todo el repositorio hay **tres**
+ * escritores de `TreatmentBatch` —`createTreatmentBatch`, `endTreatmentBatch`
+ * (que sólo escribe `endedAt`) y `applyAmendment`—, ningún SQL crudo contra
+ * `treatment_batch`, y ni el importador de Cafelino ni la semilla lo tocan.
+ *
+ * Pero eso es un hecho sobre el código de hoy, no una regla. Estos dos tests lo
+ * convierten en una: el primero fija el comportamiento, el segundo la forma.
+ */
+describe("Gate 0 no tiene puerta trasera por createTreatmentBatch", () => {
+  it("un tratamiento creado por el camino del café NUNCA lleva terreno", async () => {
+    // Se le pasa `locationId` a la fuerza, como haría un llamador que no
+    // supiera lo que hace o un tipo que alguien ampliara sin pensarlo. La fila
+    // tiene que salir sin terreno igual.
+    const batch = await createTreatmentBatch(researchUserId, {
+      protocolVersionId,
+      batchLabel: "T-cafe",
+      startedAt: new Date("2026-07-05T00:00:00Z"),
+      provenanceClass: "original_record",
+      variableValues: [],
+      ...({ locationId } as Record<string, unknown>),
+    });
+    batchIds.push(batch.id);
+    expect(batch.locationId).toBeNull();
+  });
+
+  it("y su entrada no declara `locationId`", async () => {
+    // El primero pasaría igual si alguien añadiera el campo al tipo pero se
+    // olvidara de escribirlo. Éste mira la forma: si el campo apareciera en la
+    // entrada, el camino del café empezaría a ofrecer algo que no debe.
+    const fuente = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("../../lib/research/treatments.ts", import.meta.url), "utf8"),
+    );
+    const entrada = fuente.slice(
+      fuente.indexOf("export interface CreateTreatmentBatchInput"),
+      fuente.indexOf("export async function createTreatmentBatch"),
+    );
+    expect(entrada.length).toBeGreaterThan(0);
+    expect(entrada).not.toContain("locationId");
   });
 });
