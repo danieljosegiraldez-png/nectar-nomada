@@ -6,6 +6,13 @@ import { getPlotDetail } from "../../../lib/traceability/plantingCohorts";
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { PlotAttributesForm } from "../../components/traceability/PlotAttributesForm";
 import { SoilProfileForm } from "../../components/traceability/SoilProfileForm";
+import { SoilSampleForm, FoliarSampleForm } from "../../components/traceability/SampleForms";
+import { LabMeasurementForm } from "../../components/traceability/LabMeasurementForm";
+import { listVariableDefinitions } from "../../../lib/traceability/units";
+import {
+  listSamplesForLocation,
+  camposDeProtocoloQueFaltan,
+} from "../../../lib/traceability/soilSamples";
 import {
   listSoilProfilesForLocation,
   computeAnaerobicSignals,
@@ -52,6 +59,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
     getObserverCandidates(user.userAccountId),
     listSoilProfilesForLocation(user.userAccountId, id),
   ]);
+  const muestras = await listSamplesForLocation(user.userAccountId, id);
   const activas = cohorts.filter((c) => c.status === "active");
 
   return (
@@ -277,6 +285,88 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
       </section>
 
       <section className="nn-section">
+        <h2>{t("labSamplesHeading")}</h2>
+        <p className="nn-muted">{t("samplesIntro")}</p>
+
+        <h3>{t("samplesSoilHeading")}</h3>
+        {muestras.soil.length === 0 ? (
+          <p className="nn-muted">{t("samplesNoSoil")}</p>
+        ) : (
+          muestras.soil.map((m) => (
+            <article key={m.id} className="nn-card">
+              <h4>
+                {m.sampleCode} · {m.sampledAt.toISOString().slice(0, 10)}
+                {m.depthTopCm != null || m.depthBottomCm != null
+                  ? ` · ${m.depthTopCm ?? "?"}–${m.depthBottomCm ?? "?"} cm`
+                  : ""}
+              </h4>
+              <p className="nn-detail-meta">
+                {t("sampleLaboratoryLabel")}: {m.laboratory ?? <span className="nn-muted">{t("notRecorded")}</span>}
+                {" · "}
+                {t("sampleExtractionLabel")}:{" "}
+                {m.extractionMethod ?? <span className="nn-muted">{t("notRecorded")}</span>}
+              </p>
+              <ResultadosDeLaboratorio filas={m.measurements} vacio={t("samplesNoResults")} etiqueta={t} />
+              <details>
+                <summary>{t("samplesAddResult")}</summary>
+                <LabMeasurementForm
+                  sujeto="soilSampleId"
+                  sujetoId={m.id}
+                  variables={listVariableDefinitions("analisis_de_suelo")}
+                />
+              </details>
+            </article>
+          ))
+        )}
+        <details>
+          <summary>{t("samplesSoilAdd")}</summary>
+          <SoilSampleForm locationId={location.id} />
+        </details>
+
+        <h3>{t("samplesFoliarHeading")}</h3>
+        {muestras.foliar.length === 0 ? (
+          <p className="nn-muted">{t("samplesNoFoliar")}</p>
+        ) : (
+          muestras.foliar.map((m) => {
+            const faltan = camposDeProtocoloQueFaltan(m);
+            return (
+              <article key={m.id} className="nn-card">
+                <h4>
+                  {m.sampleCode} · {m.sampledAt.toISOString().slice(0, 10)}
+                </h4>
+                {/* §7.1: un análisis foliar sin su protocolo es INCOMPARABLE, y
+                    eso es peor que no tenerlo porque parece que sirve. Se dice
+                    qué falta, no sólo que falta algo. */}
+                {faltan.length > 0 ? (
+                  <p className="nn-detail-meta">
+                    <strong>{t("sampleProtocolIncomplete", { n: faltan.length })}</strong>{" "}
+                    <span className="nn-muted">
+                      {faltan.map((f) => t(`sampleProtocolField_${f}` as "sampleProtocolField_leafPairPosition")).join(", ")}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="nn-detail-meta">{t("sampleProtocolComplete")}</p>
+                )}
+                <ResultadosDeLaboratorio filas={m.measurements} vacio={t("samplesNoResults")} etiqueta={t} />
+                <details>
+                  <summary>{t("samplesAddResult")}</summary>
+                  <LabMeasurementForm
+                    sujeto="foliarSampleId"
+                    sujetoId={m.id}
+                    variables={listVariableDefinitions("analisis_foliar")}
+                  />
+                </details>
+              </article>
+            );
+          })
+        )}
+        <details>
+          <summary>{t("samplesFoliarAdd")}</summary>
+          <FoliarSampleForm locationId={location.id} />
+        </details>
+      </section>
+
+      <section className="nn-section">
         <h2>{t("soilProfileHeading")}</h2>
         <p className="nn-muted">{t("soilProfileIntro")}</p>
 
@@ -447,4 +537,34 @@ function formatPlanted(plantedAt: Date, precision: "year" | "month" | "date" | n
   // No precision recorded: show the coarsest reading rather than the most
   // precise, since the stored instant is not evidence of a known day.
   return iso.slice(0, 4);
+}
+
+/**
+ * Los resultados de laboratorio de una muestra.
+ *
+ * Se muestran TODAS las filas, incluidas las corregidas y sus originales:
+ * esconder la original dejaría la ficha diciendo un número sin rastro de que
+ * antes decía otro, que es lo contrario de por qué `Measurement` corrige por
+ * sucesión y no por edición.
+ */
+function ResultadosDeLaboratorio({
+  filas,
+  vacio,
+  etiqueta,
+}: {
+  filas: { id: string; variable: string; value: unknown; unit: string; correctsId: string | null }[];
+  vacio: string;
+  etiqueta: (clave: string) => string;
+}) {
+  if (filas.length === 0) return <p className="nn-muted">{vacio}</p>;
+  return (
+    <ul className="nn-detail-meta">
+      {filas.map((m) => (
+        <li key={m.id}>
+          {etiqueta(`variable_${m.variable}`)}: <strong>{String(m.value)}</strong> {m.unit}
+          {m.correctsId ? <> · <span className="nn-muted">{etiqueta("biocharCorrectionTag")}</span></> : null}
+        </li>
+      ))}
+    </ul>
+  );
 }

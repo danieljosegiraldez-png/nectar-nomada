@@ -51,6 +51,11 @@ import {
   SoilProfileValidationError,
   type SoilHorizonInput,
 } from "../../lib/traceability/soilProfiles";
+import {
+  createSoilSample,
+  createFoliarSample,
+  SampleValidationError,
+} from "../../lib/traceability/soilSamples";
 import { createSampleFromLot } from "../../lib/traceability/samples";
 import { requestLotAssetUpload, finalizeLotAssetUpload, type LotAssetParent } from "../../lib/traceability/media";
 import {
@@ -82,6 +87,7 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof FieldSessionValidationError) return t("error_field_session", { detail: error.message });
   if (error instanceof BiocharBatchValidationError) return t("error_biochar", { detail: error.message });
   if (error instanceof SoilProfileValidationError) return t("error_soil_profile", { detail: error.message });
+  if (error instanceof SampleValidationError) return t("error_sample", { detail: error.message });
   if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });
   throw error;
 }
@@ -1114,14 +1120,22 @@ export async function correctMeasurementFormAction(
 // --- Caracterización de un lote de biochar (S1 §2, Tabla 7) --------------
 
 /**
- * Una lectura de laboratorio sobre un lote de biochar.
+ * Una lectura de laboratorio sobre un sujeto que no es café.
  *
  * Acción propia y no un parámetro más de `recordMeasurementAction`: aquélla
- * empieza leyendo `lotId` y revalida `/lots/[id]`, y el sujeto aquí no es un
- * lote de café. Compartirla habría obligado a que una acción decidiera por
- * `if` qué clase de sujeto tiene y a qué ruta pertenece.
+ * empieza leyendo `lotId` y revalida `/lots/[id]`, y aquí el sujeto no es un
+ * lote de café. Compartirla habría obligado a que una acción decidiera por `if`
+ * qué clase de sujeto tiene y a qué ruta pertenece.
+ *
+ * La clase de sujeto llega como un campo y **se valida contra una lista
+ * cerrada**: es un valor de formulario, y un valor de formulario que se usa
+ * como nombre de campo sin comprobar es cómo se escribe en una columna que
+ * nadie pretendía.
  */
-export async function recordBiocharMeasurementAction(
+const SUJETOS_DE_LABORATORIO = ["biocharBatchId", "soilSampleId", "foliarSampleId"] as const;
+type SujetoDeLaboratorio = (typeof SUJETOS_DE_LABORATORIO)[number];
+
+export async function recordLabMeasurementAction(
   _prevState: TraceabilityActionState,
   formData: FormData,
 ): Promise<TraceabilityActionState> {
@@ -1129,19 +1143,21 @@ export async function recordBiocharMeasurementAction(
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
 
-  const biocharBatchId = String(formData.get("biocharBatchId") ?? "");
+  const sujeto = String(formData.get("sujeto") ?? "") as SujetoDeLaboratorio;
+  const sujetoId = String(formData.get("sujetoId") ?? "");
+  if (!SUJETOS_DE_LABORATORIO.includes(sujeto)) {
+    return { error: t("error_sample", { detail: "unknown_subject" }) };
+  }
+
   try {
     await recordMeasurement(user.userAccountId, {
-      biocharBatchId,
+      [sujeto]: sujetoId,
       variable: String(formData.get("variable") ?? "") as never,
       // Nunca `?? 0`: una casilla vacía no es una lectura de cero (ADR-080).
       value: requiredNumber(formData, "value"),
       unit: String(formData.get("unit") ?? ""),
       occurredAt: fechaDeDia(formData, "occurredAt") ?? new Date(),
       notes: emptyToNull(formData.get("notes")),
-      // Un resultado de laboratorio es `measured_fact` por defecto, pero se
-      // elige: el mismo número puede llegar transcrito de un informe en papel
-      // (`original_record`) y eso no es lo mismo.
       provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
       sourceReference: emptyToNull(formData.get("sourceReference")),
     });
@@ -1149,7 +1165,8 @@ export async function recordBiocharMeasurementAction(
     return { error: friendlyError(t, error) };
   }
 
-  revalidatePath(`/biochar/${biocharBatchId}`);
+  // La ficha del biochar vive en su propia ruta; las muestras, en la del lote.
+  revalidatePath(sujeto === "biocharBatchId" ? `/biochar/${sujetoId}` : "/plots", "layout");
   return {};
 }
 
@@ -1339,6 +1356,80 @@ export async function updateSoilProfileAction(
       describedAt: fechaDeDia(formData, "describedAt") ?? undefined,
       provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
       ...camposDeCalicata(formData),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  return {};
+}
+
+// --- Muestras al laboratorio (S1 §2, semanas 6-10) -----------------------
+
+export async function createSoilSampleAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await createSoilSample(user.userAccountId, {
+      locationId,
+      sampleCode: String(formData.get("sampleCode") ?? ""),
+      sampledAt: fechaDeDia(formData, "sampledAt") ?? new Date(),
+      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      treatmentPlotLabel: emptyToNull(formData.get("treatmentPlotLabel")),
+      samplingPointLabel: emptyToNull(formData.get("samplingPointLabel")),
+      depthTopCm: emptyToNullNumber(formData.get("depthTopCm")),
+      depthBottomCm: emptyToNullNumber(formData.get("depthBottomCm")),
+      subSampleCount: emptyToNullNumber(formData.get("subSampleCount")),
+      laboratory: emptyToNull(formData.get("laboratory")),
+      extractionMethod: emptyToNull(formData.get("extractionMethod")),
+      notes: emptyToNull(formData.get("notes")),
+      dataQuality: emptyToNull(formData.get("dataQuality")) as never,
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  return {};
+}
+
+export async function createFoliarSampleAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await createFoliarSample(user.userAccountId, {
+      locationId,
+      sampleCode: String(formData.get("sampleCode") ?? ""),
+      sampledAt: fechaDeDia(formData, "sampledAt") ?? new Date(),
+      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      treatmentPlotLabel: emptyToNull(formData.get("treatmentPlotLabel")),
+      leafPairPosition: emptyToNullNumber(formData.get("leafPairPosition")),
+      canopyPosition: emptyToNull(formData.get("canopyPosition")) as never,
+      treeAgeYears: emptyToNullNumber(formData.get("treeAgeYears")),
+      cultivar: emptyToNull(formData.get("cultivar")),
+      phenologicalStage: emptyToNull(formData.get("phenologicalStage")),
+      // Igual que `coComposted` en el biochar: un campo oculto declara que la
+      // casilla estuvo en el formulario, para que «no marcada» y «no
+      // registrada» no lleguen idénticas al servidor.
+      branchBearingFruit: formData.get("branchBearingFruitPresent") != null
+        ? formData.get("branchBearingFruit") != null
+        : null,
+      laboratory: emptyToNull(formData.get("laboratory")),
+      notes: emptyToNull(formData.get("notes")),
+      dataQuality: emptyToNull(formData.get("dataQuality")) as never,
     });
   } catch (error) {
     return { error: friendlyError(t, error) };

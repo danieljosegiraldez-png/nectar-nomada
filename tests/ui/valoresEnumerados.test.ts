@@ -7,6 +7,7 @@ import {
   Aspect,
   BiocharCooling,
   BiocharMoistureCondition,
+  CanopyPosition,
   ShadePercentageBracket,
   SoilFeatureObservation,
   SunExposure,
@@ -48,6 +49,7 @@ const CASOS = [
   { nombre: "BiocharMoistureCondition", prefijo: "biocharMoisture", valores: Object.values(BiocharMoistureCondition) },
   { nombre: "BiocharCooling", prefijo: "biocharCooling", valores: Object.values(BiocharCooling) },
   { nombre: "SoilFeatureObservation", prefijo: "soilObservation", valores: Object.values(SoilFeatureObservation) },
+  { nombre: "CanopyPosition", prefijo: "canopyPosition", valores: Object.values(CanopyPosition) },
 ] as const;
 
 describe("cada valor enumerado tiene etiqueta en los dos idiomas", () => {
@@ -69,9 +71,15 @@ describe("cada valor enumerado tiene etiqueta en los dos idiomas", () => {
    * las pinta con `variable_<nombre>`. Una variable nueva sin etiqueta rompe el
    * renderizado de esa página y de ninguna otra.
    */
-  it("cada parámetro de análisis de enmienda tiene etiqueta en los dos idiomas", () => {
-    const variables = listVariableDefinitions("analisis_de_enmienda").map((v) => v.variable);
-    expect(variables.length).toBeGreaterThan(0);
+  it("cada parámetro de laboratorio tiene etiqueta en los dos idiomas", () => {
+    // Los tres paneles de laboratorio, no sólo el de enmienda: los tres se
+    // pintan con `variable_<nombre>` y los tres revientan igual sin etiqueta.
+    const variables = new Set(
+      (["analisis_de_enmienda", "analisis_de_suelo", "analisis_foliar"] as const).flatMap((d) =>
+        listVariableDefinitions(d).map((v) => v.variable),
+      ),
+    );
+    expect(variables.size).toBeGreaterThan(0);
     for (const v of variables) {
       expect(es[`variable_${v}`], `falta variable_${v} en es.json`).toBeTruthy();
       expect(en[`variable_${v}`], `falta variable_${v} en en.json`).toBeTruthy();
@@ -125,6 +133,10 @@ describe("el formulario ofrece exactamente los valores que la base acepta", () =
 
   it("COOLINGS coincide con el enum BiocharCooling", () => {
     expect(listaDelFormulario("BiocharBatchForm.tsx", "COOLINGS")).toEqual(Object.values(BiocharCooling));
+  });
+
+  it("CANOPY_POSITIONS coincide con el enum CanopyPosition", () => {
+    expect(listaDelFormulario("SampleForms.tsx", "CANOPY_POSITIONS")).toEqual(Object.values(CanopyPosition));
   });
 
   it("OBSERVACIONES coincide con el enum SoilFeatureObservation", () => {

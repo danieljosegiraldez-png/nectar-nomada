@@ -194,6 +194,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/soilSamples.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
       "archivo": "lib/traceability/plantingEvents.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
@@ -370,6 +374,12 @@
       "operacion": "getSelectionOutturn",
       "razon": "La llama app/lots/[id]/page.tsx, que gatea antes.",
       "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/traceability/measurements.ts",
+      "operacion": "SUJETOS_NO_CAFE",
+      "razon": "Tabla de tres búsquedas —biochar, muestra de suelo, muestra foliar— que sólo resuelven a qué Location pertenece un sujeto. No reciben principal a propósito: su ÚNICO llamador es requireSubjectAccess, tres líneas más abajo en el mismo archivo, que con esa Location llama a requireLocationAttributeAccess. Se escribió como tabla y no como tres `if` porque la cadena repetía la misma forma tres veces, y ahí es donde se cuela el que comprueba la exclusividad de uno y se olvida del otro. Verificado el 2026-09-01.",
+      "verificado": "2026-09-01"
     }
   ]
 }
