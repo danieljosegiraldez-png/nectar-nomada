@@ -5,6 +5,11 @@ import { getCurrentUser } from "../../../lib/auth/session";
 import { getPlotDetail } from "../../../lib/traceability/plantingCohorts";
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { PlotAttributesForm } from "../../components/traceability/PlotAttributesForm";
+import { SoilProfileForm } from "../../components/traceability/SoilProfileForm";
+import {
+  listSoilProfilesForLocation,
+  computeAnaerobicSignals,
+} from "../../../lib/traceability/soilProfiles";
 import { PlantingCohortForm } from "../../components/traceability/PlantingCohortForm";
 import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
@@ -42,9 +47,10 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
   const rendimiento = detail.yield;
   // Misma compuerta que el resto de la página (`requireLocationAttributeAccess`),
   // así que si llegaste hasta aquí, esto no puede negarte.
-  const [jornadas, { people, selfPersonId }] = await Promise.all([
+  const [jornadas, { people, selfPersonId }, calicatas] = await Promise.all([
     listFieldSessions(user.userAccountId, id),
     getObserverCandidates(user.userAccountId),
+    listSoilProfilesForLocation(user.userAccountId, id),
   ]);
   const activas = cohorts.filter((c) => c.status === "active");
 
@@ -268,6 +274,130 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             <p className="nn-detail-meta">{t("yieldComputedNote")}</p>
           </>
         )}
+      </section>
+
+      <section className="nn-section">
+        <h2>{t("soilProfileHeading")}</h2>
+        <p className="nn-muted">{t("soilProfileIntro")}</p>
+
+        {calicatas.length === 0 ? (
+          <p className="nn-muted">{t("soilNoProfiles")}</p>
+        ) : (
+          calicatas.map((c) => {
+            const señales = computeAnaerobicSignals(c);
+            return (
+              <article key={c.id} className="nn-card">
+                <h3>{c.describedAt.toISOString().slice(0, 10)}</h3>
+                <dl className="nn-detail-meta">
+                  <p>
+                    {t("soilRootingDepthLabel")}:{" "}
+                    {c.rootingDepthCm != null ? `${c.rootingDepthCm} cm` : <span className="nn-muted">{t("notRecorded")}</span>}
+                  </p>
+                  <p>
+                    {t("soilImpedingDepthLabel")}:{" "}
+                    {c.impedingLayerDepthCm != null ? `${c.impedingLayerDepthCm} cm` : <span className="nn-muted">{t("notRecorded")}</span>}
+                  </p>
+                  {/* `anyPresent` es null cuando NINGUNA de las cuatro señales
+                      se miró, y entonces la pantalla lo dice en vez de escribir
+                      «no». Contestar «no» a una pregunta que nadie hizo es lo
+                      que mandaría a la finca a fertilizar un problema de aire
+                      (§6.1 del marco). */}
+                  <p>
+                    {t("soilAnaerobicHeading")}:{" "}
+                    {señales.anyPresent == null ? (
+                      <span className="nn-muted">{t("soilAnaerobicUnobserved")}</span>
+                    ) : señales.anyPresent ? (
+                      <strong>{t("soilAnaerobicPresent", { n: señales.present, total: señales.observed })}</strong>
+                    ) : (
+                      t("soilAnaerobicAbsent", { total: señales.observed })
+                    )}
+                  </p>
+                </dl>
+
+                {c.horizons.length > 0 ? (
+                  <table className="nn-table">
+                    <thead>
+                      <tr>
+                        <th>{t("soilHorizonNumber", { n: "#" })}</th>
+                        <th>{t("soilHorizonDepthColumn")}</th>
+                        <th>{t("soilHorizonDesignationPlaceholder")}</th>
+                        <th>{t("soilHorizonColourPlaceholder")}</th>
+                        <th>{t("soilHorizonTexturePlaceholder")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {c.horizons.map((h) => (
+                        <tr key={h.id}>
+                          <td>{h.ordinal}</td>
+                          <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                            {h.topCm != null || h.bottomCm != null ? (
+                              `${h.topCm ?? "?"}–${h.bottomCm ?? "?"} cm`
+                            ) : (
+                              <span className="nn-muted">{t("notRecorded")}</span>
+                            )}
+                          </td>
+                          <td>{h.designation ?? <span className="nn-muted">—</span>}</td>
+                          <td>{h.colour ?? <span className="nn-muted">—</span>}</td>
+                          <td>{h.textureByFeel ?? <span className="nn-muted">—</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="nn-muted">{t("soilNoHorizons")}</p>
+                )}
+
+                <details>
+                  <summary>{t("soilCorrectHeading")}</summary>
+                  <SoilProfileForm
+                    locationId={location.id}
+                    values={{
+                      id: c.id,
+                      describedAt: c.describedAt.toISOString().slice(0, 10),
+                      pitDepthCm: c.pitDepthCm,
+                      rootingDepthCm: c.rootingDepthCm,
+                      rootDistribution: c.rootDistribution,
+                      mottling: c.mottling,
+                      greyColours: c.greyColours,
+                      rootChannelConcretions: c.rootChannelConcretions,
+                      sourSmell: c.sourSmell,
+                      impedingLayerDepthCm: c.impedingLayerDepthCm,
+                      impedingLayerNote: c.impedingLayerNote,
+                      provenanceClass: c.provenanceClass,
+                      dataQuality: c.dataQuality,
+                      notes: c.notes,
+                    }}
+                  />
+                </details>
+              </article>
+            );
+          })
+        )}
+
+        {/* Sigue disponible aunque ya haya perfiles: volver a describir el
+            mismo bloque dentro de tres años NO es corregir el de hoy. §14 pide
+            repetir el muestreo justamente para ver el cambio. */}
+        <details>
+          <summary>{t("soilDescribeHeading")}</summary>
+          <SoilProfileForm
+            locationId={location.id}
+            values={{
+              describedAt: null,
+              pitDepthCm: null,
+              rootingDepthCm: null,
+              rootDistribution: null,
+              mottling: null,
+              greyColours: null,
+              rootChannelConcretions: null,
+              sourSmell: null,
+              impedingLayerDepthCm: null,
+              impedingLayerNote: null,
+              provenanceClass: "",
+              dataQuality: null,
+              notes: null,
+            }}
+          />
+        </details>
       </section>
 
       <section className="nn-section">
