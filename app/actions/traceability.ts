@@ -4,6 +4,11 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
+import {
+  parseLocalDateTime,
+  LocalDateTimeError,
+  TZ_OFFSET_FIELD,
+} from "../../lib/time/localDateTime";
 import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { recordSelection, SelectionValidationError } from "../../lib/traceability/selection";
 import { recordQuantityEvent, QuantityValidationError } from "../../lib/traceability/quantity";
@@ -64,13 +69,44 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof LocationValidationError) return t("error_location", { detail: error.message });
   if (error instanceof PlantingCohortValidationError) return t("error_harvest_sources", { detail: error.message });
   if (error instanceof FieldSessionValidationError) return t("error_field_session", { detail: error.message });
+  if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });
   throw error;
 }
+
+/**
+ * La hora que escribió el operador, en el instante que de verdad significa.
+ *
+ * `new Date("2026-03-12T07:30")` la interpretaba en la zona DEL SERVIDOR — en
+ * producción, UTC — así que un 07:30 de Panamá se guardaba como las 02:30. En
+ * desarrollo no se veía: navegador y servidor comparten zona y el error se
+ * cancela. Lo encontró una revisión independiente el 2026-08-31.
+ */
+const fechaLocal = (formData: FormData, campo: string) =>
+  parseLocalDateTime(String(formData.get(campo) ?? ""), asString(formData.get(TZ_OFFSET_FIELD)));
+
+const asString = (v: FormDataEntryValue | null) => (v == null ? null : String(v));
 
 const emptyToNull = (value: FormDataEntryValue | null) => {
   const str = String(value ?? "").trim();
   return str.length ? str : null;
 };
+/**
+ * El índice más alto que trae el formulario para un prefijo dado.
+ *
+ * Se deriva de lo enviado en vez de fijar un tope: cualquier tope es una
+ * suposición sobre cuántas filas cabe que use alguien, y equivocarse descarta
+ * datos en silencio. Devuelve -1 si no hay ninguna.
+ */
+function maxIndiceDeFilas(formData: FormData, prefijo: string): number {
+  let max = -1;
+  for (const clave of formData.keys()) {
+    if (!clave.startsWith(`${prefijo}.`)) continue;
+    const n = Number(clave.slice(prefijo.length + 1));
+    if (Number.isInteger(n) && n > max) max = n;
+  }
+  return max;
+}
+
 const emptyToNullNumber = (value: FormDataEntryValue | null) => {
   const str = String(value ?? "").trim();
   return str.length ? Number(str) : null;
@@ -93,7 +129,7 @@ export async function recordHarvestAction(
       locationId: String(formData.get("locationId") ?? ""),
       organizationId: String(formData.get("organizationId") ?? ""),
       projectId: emptyToNull(formData.get("projectId")),
-      harvestedAt: new Date(String(formData.get("harvestedAt") ?? "")),
+      harvestedAt: fechaLocal(formData, "harvestedAt"),
       cherryWeightKg: emptyToNullNumber(formData.get("cherryWeightKg")),
       brix: emptyToNullNumber(formData.get("brix")),
       condition: emptyToNull(formData.get("condition")),
@@ -126,7 +162,7 @@ export async function recordReceivingAction(
       organizationId: String(formData.get("organizationId") ?? ""),
       locationId: emptyToNull(formData.get("locationId")),
       projectId: emptyToNull(formData.get("projectId")),
-      receivedAt: new Date(String(formData.get("receivedAt") ?? "")),
+      receivedAt: fechaLocal(formData, "receivedAt"),
       deliveryNote: emptyToNull(formData.get("deliveryNote")),
       cherryWeightKg: emptyToNullNumber(formData.get("cherryWeightKg")),
       condition: emptyToNull(formData.get("condition")),
@@ -391,7 +427,12 @@ export async function recordSelectionFormAction(
   const unit = String(formData.get("unit") ?? "kg");
 
   const rejected: Array<{ lotCode: string; lotType: never; quantity: number; rejectionCategoryValueId: string }> = [];
-  for (let i = 0; i < 20; i++) {
+  // Mismo fallo que el de aportes de cosecha, mismo arreglo: el formulario deja
+  // añadir filas de rechazo sin límite y este bucle paraba en 20. Un lote con
+  // 21 categorías de rechazo perdía la última en silencio — y aquí el balance
+  // de masa lo habría marcado como faltante sin explicar, culpando al operador.
+  const totalRechazos = maxIndiceDeFilas(formData, "rejectedQuantity");
+  for (let i = 0; i <= totalRechazos; i++) {
     const quantity = emptyToNullNumber(formData.get(`rejectedQuantity.${i}`));
     const category = emptyToNull(formData.get(`rejectedCategory.${i}`));
     const code = emptyToNull(formData.get(`rejectedLotCode.${i}`));
@@ -788,7 +829,12 @@ export async function recordHarvestSourcesFormAction(
     cherryWeightKg: number | null;
     notes: string | null;
   }> = [];
-  for (let i = 0; i < 20; i++) {
+  // Se recorren TODAS las filas que mandó el formulario, no las primeras veinte.
+  // El formulario deja añadir filas sin límite y este bucle paraba en 20: una
+  // cosecha de 21 bloques guardaba los primeros y decía que había ido bien.
+  // Lo encontró una revisión independiente el 2026-08-31.
+  const totalFilas = maxIndiceDeFilas(formData, "sourceLocation");
+  for (let i = 0; i <= totalFilas; i++) {
     const locationId = emptyToNull(formData.get(`sourceLocation.${i}`));
     if (!locationId) continue;
     sources.push({
@@ -923,7 +969,7 @@ export async function startFieldSessionFormAction(
     const session = await startFieldSession(user.userAccountId, {
       locationId,
       operatorPersonId: String(formData.get("operatorPersonId") ?? ""),
-      startedAt: new Date(String(formData.get("startedAt") ?? "")),
+      startedAt: fechaLocal(formData, "startedAt"),
       start: parseCoordinates(formData),
       notes: emptyToNull(formData.get("notes")),
       // Una jornada la abre quien está en el sitio: es observación directa de
@@ -951,7 +997,7 @@ export async function recordFieldEventFormAction(
     await recordFieldEvent(user.userAccountId, {
       fieldSessionId,
       eventKindValueId: String(formData.get("eventKindValueId") ?? ""),
-      occurredAt: new Date(String(formData.get("occurredAt") ?? "")),
+      occurredAt: fechaLocal(formData, "occurredAt"),
       position: parseCoordinates(formData),
       operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
       notes: emptyToNull(formData.get("notes")),
@@ -977,7 +1023,7 @@ export async function endFieldSessionFormAction(
   try {
     await endFieldSession(user.userAccountId, {
       fieldSessionId,
-      endedAt: new Date(String(formData.get("endedAt") ?? "")),
+      endedAt: fechaLocal(formData, "endedAt"),
     });
   } catch (error) {
     return { error: friendlyError(t, error) };
@@ -1016,7 +1062,7 @@ export async function correctMeasurementFormAction(
       // Cuándo ocurrió la lectura CORRECTA. No es «ahora»: corregir a las seis
       // de la tarde una lectura de las nueve de la mañana no la mueve a la
       // tarde, y ponerlo por defecto invitaría a dejarlo mal.
-      occurredAt: new Date(String(formData.get("occurredAt") ?? "")),
+      occurredAt: fechaLocal(formData, "occurredAt"),
       reason: String(formData.get("reason") ?? ""),
       operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
       notes: emptyToNull(formData.get("notes")),

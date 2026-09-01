@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { correctMeasurementFormAction, type TraceabilityActionState } from "../../actions/traceability";
+import { TimezoneOffsetField } from "../TimezoneOffsetField";
 
 const initialState: TraceabilityActionState = {};
 
@@ -52,6 +53,7 @@ export function MeasurementCorrectionForm({
 
   return (
     <form action={formAction} className="nn-form">
+      <TimezoneOffsetField />
       <input type="hidden" name="lotId" value={lotId} />
       <input type="hidden" name="measurementId" value={measurement.id} />
       {/* La variable no se corrige: cambiarla no sería la misma lectura, sería

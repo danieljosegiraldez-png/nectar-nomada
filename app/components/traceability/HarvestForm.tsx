@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { recordHarvestAction, type TraceabilityActionState } from "../../actions/traceability";
+import { TimezoneOffsetField } from "../TimezoneOffsetField";
 
 const initialState: TraceabilityActionState = {};
 
@@ -28,6 +29,7 @@ export function HarvestForm({
 
   return (
     <form action={formAction} className="nn-form" style={{ maxWidth: 480 }}>
+      <TimezoneOffsetField />
       <div className="nn-field">
         <label htmlFor="h-lotCode">{t("lotCodeLabel")}</label>
         <input id="h-lotCode" name="lotCode" type="text" required />

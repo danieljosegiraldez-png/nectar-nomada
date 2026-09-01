@@ -8,6 +8,7 @@ import {
   endFieldSessionFormAction,
   type TraceabilityActionState,
 } from "../../actions/traceability";
+import { TimezoneOffsetField } from "../TimezoneOffsetField";
 
 const initialState: TraceabilityActionState = {};
 
@@ -105,6 +106,7 @@ export function FieldSessionStartForm({
 
   return (
     <form action={formAction} className="nn-form">
+      <TimezoneOffsetField />
       <input type="hidden" name="locationId" value={locationId} />
       <p className="nn-muted">{t("fieldSessionStartIntro")}</p>
 
@@ -159,6 +161,7 @@ export function FieldEventForm({
 
   return (
     <form action={formAction} className="nn-form">
+      <TimezoneOffsetField />
       <input type="hidden" name="fieldSessionId" value={fieldSessionId} />
 
       <div className="nn-field">
@@ -216,6 +219,7 @@ export function FieldSessionEndForm({ fieldSessionId }: { fieldSessionId: string
 
   return (
     <form action={formAction} className="nn-form">
+      <TimezoneOffsetField />
       <input type="hidden" name="fieldSessionId" value={fieldSessionId} />
       <div className="nn-field">
         <label htmlFor="endedAt">{t("fieldSessionEndedAtLabel")}</label>
