@@ -118,6 +118,16 @@ export async function createTreatmentBatch(userAccountId: string, input: CreateT
     data: {
       protocolVersionId: input.protocolVersionId,
       lotId: input.lotId ?? null,
+      // **Explícito, no por ausencia.** Este camino no crea tratamientos de
+      // TERRENO: ésos pasan por `applyAmendment`, que comprueba Gate 0 —la
+      // química base, la física base, el biochar caracterizado y el protocolo
+      // escrito— antes de escribir nada. Sin esta línea la garantía dependía de
+      // que nadie añadiera `locationId` a `CreateTreatmentBatchInput`, que es
+      // una ausencia y no una regla. Lo preguntó la revisión independiente del
+      // 2026-09-01: «no puedo verificar que todas las rutas capaces de crear un
+      // TreatmentBatch experimental pasen por applyAmendment». Ahora sí se
+      // puede, y hay un test que lo fija.
+      locationId: null,
       projectId,
       batchLabel: input.batchLabel,
       operatorPersonId: input.operatorPersonId ?? null,
