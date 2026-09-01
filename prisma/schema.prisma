@@ -631,6 +631,7 @@ model Location {
   // S1 — lotes de biochar producidos AQUÍ, que no es donde se aplican.
   biocharBatchesProduced      BiocharBatch[]               @relation("BiocharBatchProducedAt")
   soilProfiles                SoilProfile[]
+  treatmentBatches            TreatmentBatch[]
   soilSamples                 SoilSample[]
   foliarSamples               FoliarSample[]
   labourEntries               LabourEntry[]
@@ -4130,8 +4131,9 @@ model BiocharBatch {
   // carbono, N, macros) es una lectura con unidad, procedencia y calidad de
   // dato, corregible sin borrar la original: eso es `Measurement`, no una
   // columna por parámetro en esta tabla.
-  measurements Measurement[]
-  assets       Asset[]
+  measurements     Measurement[]
+  assets           Asset[]
+  treatmentBatches TreatmentBatch[]
 
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")
@@ -5001,6 +5003,33 @@ model TreatmentBatch {
   protocolVersion   ProtocolVersion @relation(fields: [protocolVersionId], references: [id])
   lotId             String?         @map("lot_id") @db.Uuid
   lot               Lot?            @relation(fields: [lotId], references: [id])
+  // S1 (45_S1_SUELO_AMBIENTE_TAZA.md §2, semanas 10–14) — el otro sujeto sobre
+  // el que se ejecuta un protocolo: **terreno**, no material.
+  //
+  // Decisión del dueño (opción A, 2026-09-01): reusar `TreatmentBatch` en vez
+  // de una entidad `AmendmentApplication` aparte. La razón no es economía: el
+  // control experimental ya vive en `Experiment.controlTreatmentBatchId`
+  // apuntando a un `TreatmentBatch`, y una entidad paralela habría dejado al T0
+  // del marco —el control sin tratar que §10.3 llama no negociable— sin poder
+  // ocupar ese campo.
+  //
+  // El coste, y se paga a la vista: `TreatmentBatch` significa dos cosas según
+  // a qué apunte. La restricción `treatment_batch_un_solo_sujeto` impide que
+  // apunte a las dos, porque dos sujetos son dos ámbitos de RBAC y elegir uno
+  // sería elegir el más laxo.
+  locationId        String?         @map("location_id") @db.Uuid
+  // `Restrict`, no el `SetNull` que Prisma asume por defecto en una relación
+  // opcional: un tratamiento que pierde su terreno se queda sin sujeto, y una
+  // fila sin sujeto es justo lo que el CHECK y el servicio existen para
+  // impedir. Borrar el bloque tiene que fallar, no vaciar la fila en silencio.
+  location          Location?       @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  // Qué lote de biochar se aplicó. Es el vínculo que la Tabla 15 pide entre
+  // «aplicación de enmienda» y «lote de biochar», y sin él «10 t/ha» sigue
+  // describiendo un volumen y no un tratamiento (§10.1).
+  biocharBatchId    String?         @map("biochar_batch_id") @db.Uuid
+  // Igual: un lote de biochar que ya se aplicó a un bloque no se borra sin
+  // enterarse. Es la trazabilidad del tratamiento.
+  biocharBatch      BiocharBatch?   @relation(fields: [biocharBatchId], references: [id], onDelete: Restrict)
   projectId         String?         @map("project_id") @db.Uuid
   project           Project?        @relation(fields: [projectId], references: [id])
   batchLabel        String          @map("batch_label")
@@ -5029,6 +5058,8 @@ model TreatmentBatch {
 
   @@index([protocolVersionId])
   @@index([lotId])
+  @@index([locationId])
+  @@index([biocharBatchId])
   @@index([projectId])
   @@map("treatment_batch")
   @@schema("research")
