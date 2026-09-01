@@ -66,16 +66,39 @@ function operaciones(archivo, src) {
 
 const ops = TODOS.flatMap((f) => operaciones(f, fuentes.get(f) ?? ""));
 
-/** Funciones que guardan directamente: para resolver el caso transitivo. */
-const guardanDirecto = new Set(
-  ops.filter((o) => (o.cuerpo.match(GUARDIAS) ?? []).length > 0).map((o) => o.nombre)
-);
+/**
+ * Qué funciones guardan de verdad — exportadas **o no**.
+ *
+ * Una versión anterior reconocía `require\w*(Access|Admin|Override)` por el
+ * nombre, y se perdía `requireManagePermission()`: un guardia local, no
+ * exportado, que llama a `can()` y protege las siete operaciones de
+ * `lib/sensory/calibration.ts`. Las daba por «sin guardia visible».
+ *
+ * Ahora se resuelve la propiedad: se recogen **todas** las funciones de cada
+ * archivo cuyo cuerpo invoque el servicio de autorización, y llamar a una de
+ * ellas cuenta como guardar. Reconocer un nombre no es reconocer un guardia.
+ */
+const CUALQUIER_FN = /^(?:export )?(?:async )?(?:function|const) (\w+)/gm;
+const guardanDirecto = new Set();
+for (const [archivo, src] of fuentes) {
+  const decl = [...src.matchAll(CUALQUIER_FN)];
+  for (let i = 0; i < decl.length; i++) {
+    const ini = decl[i].index ?? 0;
+    const fin = i + 1 < decl.length ? decl[i + 1].index : src.length;
+    if (GUARDIAS.test(src.slice(ini, fin))) guardanDirecto.add(decl[i][1]);
+    GUARDIAS.lastIndex = 0;
+  }
+}
 
 const filas = ops
   .map((o) => {
     const modelos = [...new Set([...o.cuerpo.matchAll(MODELOS)].map((m) => m[1]))];
     if (modelos.length === 0) return null;
-    const guardias = [...new Set((o.cuerpo.match(GUARDIAS) ?? []).map((g) => g.replace(/\s*\($/, "")))];
+    const propios = [...new Set((o.cuerpo.match(GUARDIAS) ?? []).map((g) => g.replace(/\s*\($/, "")))];
+    const locales = [...guardanDirecto].filter(
+      (n) => n !== o.nombre && new RegExp(`\\b${n}\\s*\\(`).test(o.cuerpo)
+    );
+    const guardias = [...new Set([...propios, ...locales])];
     const principal = /\buserAccountId\b/.test(o.cuerpo);
     // Un salto: ¿llama a alguna función que sí guarda?
     const transitivo = [...guardanDirecto].filter(
@@ -89,6 +112,22 @@ const filas = ops
      */
     const acotado = /where:\s*\{[^}]*userAccountId/s.test(o.cuerpo ?? "") ||
       /userAccountId,\s*$/m.test(o.cuerpo ?? "");
+    /**
+     * Resolutor de visibilidad: `resolveLotVisibility(userAccountId)` calcula
+     * el alcance a partir de las asignaciones y el `where` se construye desde
+     * él, así que la consulta no puede devolver filas de fuera. Es acotado por
+     * construcción, sólo que a través de un resolutor — invisible tanto al
+     * detector de guardias como al de `where: { userAccountId }`.
+     */
+    const resolutor = /\bresolve\w*Visibility\s*\(/.test(o.cuerpo ?? "");
+    /**
+     * Sin principal y sin guardia: la autorización, si existe, la hace quien
+     * la llama. `listPeopleForAdmin()` no recibe usuario, y su única página
+     * llama antes a `requirePermissionAdmin`. Verificarlas exige mirar a los
+     * llamadores, cosa que este script no hace: los separa para que alguien lo
+     * haga, en vez de mezclarlas con las de verdad desconocidas.
+     */
+    const dependeDelLlamador = !o.cuerpo?.includes("userAccountId");
     const publica = /discover\/service/.test(o.archivo);
     const preSesion = /actions\/auth/.test(o.archivo);
     const firma = /webhooks/.test(o.archivo);
@@ -96,13 +135,14 @@ const filas = ops
     let clase;
     if (guardias.length) clase = "guardia directo";
     else if (transitivo.length) clase = "guardia transitivo";
-    else if (acotado) clase = "acotado por construcción";
+    else if (acotado || resolutor) clase = "acotado por construcción";
     else if (publica) clase = "público por diseño";
     else if (preSesion) clase = "previo a la sesión";
     else if (firma) clase = "firma";
     else if (principal) clase = "recibe principal, sin guardia visible";
+    else if (dependeDelLlamador) clase = "depende del llamador (verificar a mano)";
     else clase = "SIN CLASIFICAR";
-    return { ...o, cuerpo: undefined, modelos, guardias, principal, transitivo, acotado, clase };
+    return { ...o, cuerpo: undefined, modelos, guardias, principal, transitivo, acotado: acotado || resolutor, clase };
   })
   .filter(Boolean);
 
@@ -115,7 +155,7 @@ if (process.argv.includes("--json")) {
   for (const [clase, xs] of Object.entries(porClase).sort((a, b) => b[1].length - a[1].length)) {
     console.log(`  ${String(xs.length).padStart(3)}  ${clase}`);
   }
-  const dudosas = [...(porClase["SIN CLASIFICAR"] ?? []), ...(porClase["recibe principal, sin guardia visible"] ?? [])];
+  const dudosas = [...(porClase["SIN CLASIFICAR"] ?? []), ...(porClase["recibe principal, sin guardia visible"] ?? []), ...(porClase["depende del llamador (verificar a mano)"] ?? [])];
   if (dudosas.length) {
     console.log(`\n  Las que ninguna regla explica, y hay que mirar a mano:`);
     for (const f of dudosas) console.log(`    ${f.archivo}  ${f.nombre}()  [${f.modelos.slice(0, 4).join(", ")}]`);

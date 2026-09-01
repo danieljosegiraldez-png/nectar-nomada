@@ -13,19 +13,52 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-08-31
 
-**194 operaciones** que tocan la base, en **50 archivos**:
+**195 operaciones** que tocan la base, en **51 archivos**:
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **119** | guardia directo | Llama a `requireLotAccess`, `can()` y compañía |
-| **23** | recibe principal, sin guardia visible | Toma `userAccountId` y consulta sin puerta reconocible |
-| **20** | acotado por construcción | La consulta filtra por el propio principal: **no puede** devolver lo ajeno |
-| **18** | sin clasificar | Ninguna regla las explica |
-| **10** | público por diseño | `lib/discover/service.ts`, con su `PUBLIC_WHERE` (ADR-024 §3) |
-| **2** | previo a la sesión | `app/actions/auth.ts` |
-| **2** | guardia transitivo | Delegan en una función que sí guarda |
+| **138** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **23** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **19** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
+| **3** | recibía principal sin guardia visible | **Las tres miradas a mano y explicadas** (abajo) |
+| **2** | previo a la sesión | El flujo de autenticación |
 
-**79 % está explicado por un patrón reconocible. 41 operaciones (21 %) no.**
+### Las tres que no encajaban en ninguna regla
+
+- **`lib/auth/config.ts authConfig()`** — es la configuración de Auth.js: el
+  propio flujo de autenticación, previo a que exista sesión.
+- **`lib/commerce/cart.ts addToCart()`** — lee una variante aplicando «la misma
+  puerta pública que `lib/discover/service.ts`» y escribe **el carrito del
+  propio titular**.
+- **`lib/rbac/admin.ts listScopeChoices()`** — la llama
+  `app/admin/users/page.tsx`, que antes hace `requirePermissionAdmin`.
+
+**Ninguna es un agujero.**
+
+### Lo que sigue sin verificar, dicho con precisión
+
+De las **19** que dependen del llamador, **verifiqué dos**:
+`listPeopleForAdmin()` y `listScopeChoices()`, ambas gateadas por
+`requirePermissionAdmin` en la misma página. **Quedan 17 por comprobar
+llamador a llamador.** No es lo mismo «el script no las explica» que «están
+mal», y tampoco es lo mismo «miré dos» que «están todas bien».
+
+### Cómo cambió el mapa al arreglar el detector
+
+| | Sin explicar |
+|---|---:|
+| Primer intento | 42 |
+| Tras resolver **guardias locales** | 28 |
+| Tras reconocer **resolutores de visibilidad** y **dependencia del llamador** | 3 |
+| Tras mirar esas tres a mano | **0** |
+
+El salto de 42 a 28 fue un fallo mío: el detector reconocía
+`require\w*(Access|Admin|Override)` **por el nombre**, y se perdía
+`requireManagePermission()` —un guardia local, no exportado, que llama a
+`can()`— y con él las siete operaciones de `lib/sensory/calibration.ts`.
+Reconocer un nombre no es reconocer un guardia. Es la sexta vez en esta jornada
+que el mismo defecto aparece en un sitio distinto.
 
 ## Lo que esto NO dice
 
