@@ -15,10 +15,29 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 RANGO="${1:?falta el rango, p.ej. origin/main..HEAD}"
+
+# `git diff A..B` compara los DOS EXTREMOS, no el cambio del autor. Si la base
+# avanzó mientras trabajabas, lo que otro añadió allí sale aquí como si tú lo
+# hubieras **borrado**. Pasó el 2026-08-31: el paquete presentó al revisor 66
+# líneas de test y 19 de `lib/traceability/fieldSessions.ts` como bajas de este
+# cambio, cuando eran altas de otra sesión en `main` (#98, un arreglo de
+# autorización). `git log A..B` sí es correcto, así que la lista de commits se
+# veía bien y el diffstat no — la incoherencia entre ambos fue la única señal.
+#
+# Para diffs se usa siempre la forma de tres puntos, que parte de la base común.
+NORM="${RANGO/.../..}"
+BASE="${NORM%%..*}"
+PUNTA="${NORM##*..}"
+[ -n "$PUNTA" ] || PUNTA=HEAD
+RANGO_DIFF="${BASE}...${PUNTA}"
+
+# Y si la rama está detrás de su base, el revisor tiene que saberlo: juzga un
+# árbol que no es el que se va a fusionar.
+DETRAS=$(git rev-list --count "${PUNTA}..${BASE}" 2>/dev/null || echo 0)
 SALIDA="${2:-/private/tmp/claude-501/pack-$(date +%Y%m%d-%H%M%S).md}"
 mkdir -p "$(dirname "$SALIDA")"
 
-TOCADOS=$(git diff --name-only "$RANGO" -- | grep -v '^node_modules/' || true)
+TOCADOS=$(git diff --name-only "$RANGO_DIFF" -- | grep -v '^node_modules/' || true)
 if [ -z "$TOCADOS" ]; then
   echo "El rango $RANGO no toca ningún archivo. No hay nada que revisar." >&2
   exit 1
@@ -36,11 +55,20 @@ fi
   echo "HEAD:   $(git rev-parse HEAD)"
   echo "base:   $(git merge-base HEAD "${RANGO%%..*}" 2>/dev/null || echo n/d)"
   echo "sucio:  $(git status --porcelain | wc -l | tr -d ' ') archivo(s) sin commitear"
+  echo "diff:   $RANGO_DIFF (tres puntos: desde la base común)"
+  echo "detrás: $DETRAS commit(s) de $BASE que esta rama no tiene"
   echo '```'
+  if [ "$DETRAS" -gt 0 ]; then
+    echo
+    echo "> **Aviso al revisor:** esta rama está $DETRAS commit(s) por detrás de"
+    echo "> \`$BASE\`. El diff de abajo es sólo lo que aportó el autor, pero el"
+    echo "> árbol que juzgas no es el que se fusionará. Pide una re-medición si"
+    echo "> tu juicio depende de código que pudo cambiar en la base."
+  fi
   echo
   echo "## Medidas"
   echo '```'
-  git diff --stat "$RANGO" --
+  git diff --stat "$RANGO_DIFF" --
   echo '```'
   echo
   echo "## Mensajes de commit del rango"
@@ -50,7 +78,7 @@ fi
   echo
   echo "## Diff completo del rango (sin extractos)"
   echo '```diff'
-  git diff "$RANGO" --
+  git diff "$RANGO_DIFF" --
   echo '```'
   echo
   echo "## Texto actual COMPLETO de cada archivo tocado"
