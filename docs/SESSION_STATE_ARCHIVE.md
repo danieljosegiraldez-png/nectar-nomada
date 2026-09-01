@@ -7,7 +7,7 @@ control. Si algo de aquí todavía dirige el trabajo, no pertenece a este archiv
 El registro largo de decisiones vive en `docs/architecture/DECISIONS.md`
 (ADR-001 … ADR-103). Este archivo es solo el desbordamiento del estado.
 
-**Primer archivado: 2026-08-31**, con el estado en 315/400 líneas. Se movieron
+**Archivados: 2026-08-31 (dos veces)**, con el estado en 315/400 líneas. Se movieron
 las cinco entradas más viejas, todas del 2026-08-28, elegidas porque su
 contenido ya vive en un sitio que sí se carga: las trampas de `CLAUDE.md`, los
 `PENDING_IMPLEMENTATIONS/`, o el propio código. Nada que siguiera dirigiendo el
@@ -15,6 +15,13 @@ trabajo salió de `SESSION_STATE.md`.
 
 Comprobado al moverlas: de las 75 líneas quitadas del estado, **cero** con
 contenido faltaban en este archivo.
+
+**Segundo archivado, el mismo día**, con el estado de vuelta en 347/400 líneas
+apenas unas horas después del primero. Tres entradas más — 55 líneas, cero
+perdidas. Lo que enseña el ritmo: con varias sesiones escribiendo, el estado
+crece del orden de **cien líneas al día**, así que archivar es rutina diaria y
+no una limpieza ocasional. El criterio no cambia: sale lo más viejo cuyo
+contenido ya viva en un sitio que se carga.
 
 ### 2026-08-28 · Selección de cereza, de operación a pantalla usable
 
@@ -111,4 +118,75 @@ pase. El alcance se redujo y las palabras cambiaron.
 **Sigue sin probarse** que los datos estén protegidos: la frontera es el
 servicio de RBAC (`SECURITY.md` §2), no la ruta. Por eso 005 sigue abierto, con
 sus límites escritos.
+
+### 2026-08-28 · Este repositorio ya tiene CI
+
+`.github/workflows/ci.yml` invoca `scripts/ci.sh` en **un solo paso**, y ese
+script corre igual en tu máquina. Genera el cliente de Prisma, corre
+`npm run verify` y dos archivos de test herméticos. Node fijado en 24,
+permisos de solo lectura, timeout de 10 minutos, concurrencia con cancelación.
+
+**La revisión del plan volvió a impedir ejecutarlo como estaba.** Siete puntos,
+todos aceptados: el contrato se repartía otra vez entre `package.json` y YAML
+—la separación que ocurrió hoy mismo en el otro repositorio—, no fijaba Node, y
+metía en CI un test que lee `~/.zshrc`.
+
+Flip-testeado en las dos direcciones: sin `.env` ni `DATABASE_URL` sale **0**
+(no se pone roja por falta de base, que es el fallo que haría que se borrara), y
+con un error de tipos deliberado sale **2** nombrando el archivo.
+
+**CI informa, no impide:** la protección de ramas no está disponible en un
+repositorio privado de este plan. Ver `PENDING_IMPLEMENTATIONS/006`.
+
+### 2026-08-29 · P-D estaba cerrada desde A7 y nadie lo había mirado
+
+El comentario sobre la prueba de P-D afirmaba que la familia Huerbsch **no**
+estaba en la base como Personas. Medido contra producción: sí lo está, con
+cargos y membresías reales, desde A7. Cada sesión leía esa línea y llevaba a
+Daniel una pregunta ya contestada.
+
+ADR-106 lo registra citando de dónde sale cada dato —
+`27_A7_PROYECTOS_ASSIGNMENTS_DATOS_REALES.md` §2 y §4, y el comentario del seed
+sobre el nombre pre-aprobado por Sherry — y el comentario falso se corrigió en
+su sitio, no se anotó. Flip-testeado: con el encabezado, P-D sale **cerrada**;
+sin él, vuelve a **abierta**.
+
+Van 3 abiertas → 2, por una corrección, no por avance: no se construyó nada, se
+midió algo. Lo que sigue sin resolver es P-C, y es lo único que separa a los
+dueños de la finca de poder abrir la plataforma.
+
+### 2026-08-31 · Finca Rosina existe en el registro, y se puede ver
+
+Hasta hoy la finca tenía **cero cohortes**. La base productiva real —los ~2.500
+Catuaí de tres a cuatro años de los Lotes 1, 2 y 3— no estaba en ningún lado, y
+lo único registrado eran 600 plantones *recibidos*, que no es lo mismo que
+sembrados (F1 separa los dos hechos a propósito).
+
+Ahora hay 4 cohortes y **2.699 plantas**: 833 Catuaí en cada uno de los Lotes
+1–3 y 200 Caturra en el Lote 4. Tres decisiones las tomó el dueño al
+preguntarle, ninguna se infirió: `plantedAt` **nulo** en los Catuaí porque «3–4
+años» ubica la siembra en 2022 *o* 2023 y `HarvestWindowPrecision` no baja de
+`year`; **833 por lote** y no 834/833/833, porque darle la planta sobrante a un
+lote sería una decisión nuestra; `direct_observation` + `provisional`, porque el
+conteo por lote es derivado de un total.
+
+Los 200 Caturra estaban en el Lote 3 y se movieron al **Lote 4**: el registro
+nunca fue cierto, se transcribió mal el lote. Es un *edit* con `AuditEvent`, no
+un supersede — `PlantingCohort` no tiene `correctsId` y `Measurement` sí, y esa
+asimetría del esquema es la que decide.
+
+**Y por primera vez se ve.** `/plots/[id]` muestra lo sembrado, y `/plots` ya
+enlaza. Un campo ausente dice «Sin registrar» en vez de desaparecer, para que la
+página se pueda leer como lista de lo que falta. La densidad **se calcula al
+mostrarla y no se guarda** —el dueño avisó que los conteos van a cambiar y un
+cociente guardado de entradas móviles envejece en silencio— y cuando no se puede
+dividir dice **cuál** de las tres razones.
+
+Lo que revela: `npm test` daba **2 fallos** en `main` con CI en verde. El
+renombrado del 29 dejó dos tests buscando «Nubes» y «Cerro Azul». Los datos
+estaban bien; miraban al sitio equivocado. **CI no puede ver esto** — corre tres
+archivos herméticos y la suite entera necesita base local. Tras cualquier script
+`data:*` contra producción, correr `npm test` en local antes de cerrar.
+
+PR #67, #68, #69, #71, #72. Suite 658/658 sobre `main` fusionado.
 
