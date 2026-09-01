@@ -2295,10 +2295,21 @@ son peores que las comillas: la shell ejecuta la palabra y la borra en silencio.
 
 Push a `main` → Vercel construye `nectar-nomada-package`
 (`prj_9EkGhnZZgdgsEOJGsxGNFOd24Bvm`), con `scripts/vercel-build.sh`.
-**Esperar el check de Vercel antes de fusionar.**
+**Esperar el check de Vercel antes de fusionar** — y saber que ese check no
+promete que producción vaya a construir; ver abajo.
 
 **Un deploy que dice «success» dice que la subida funcionó, no que la página
 funcione.**
+
+**El check de Vercel que pasa en una PR es el de *preview*.** No dice nada sobre
+si producción puede desplegar. El 2026-09-01 lo di por bueno dos veces y las dos
+me equivoqué: la PR estaba verde y el merge no construía. Lo que sí lo dice es
+el estado del commit fusionado, y después el log, que nombra cada migración:
+
+```bash
+gh api repos/danieljosegiraldez-png/nectar-nomada/commits/<sha>/status
+vercel inspect --logs <url-de-produccion> --scope <scope>
+```
 
 ## Revisión independiente
 
@@ -2483,6 +2494,58 @@ estaba con el guardia sustituido por `process.exit(0)`.
 
 **Arreglo.** Cinco fixtures negativos. Comprobado: con el guardia neutralizado
 caen los 6 tests, y vuelven a pasar al restaurarlo.
+
+### El límite de despliegues de Vercel es una cuota, no un fallo del cambio
+
+**Síntoma.** El merge a `main` no construye. En GitHub el check dice
+`Vercel: failure — Deployment rate limited — retry in 24 hours`, que se lee como
+un fallo del cambio. La PR estaba verde minutos antes.
+
+**Causa.** Es una cuota de **cuenta**, del plan gratuito, y sólo sale con nombre
+propio al intentarlo desde el CLI: `more than 100, code:
+"api-deployments-free-per-day"`. El 2026-09-01, diez PR con sus previews la
+agotaron en una tarde.
+
+Se junta con lo que dice «Cómo se despliega»: el check verde de la PR es el de
+*preview*, así que ni siquiera avisa.
+
+**Consecuencia.** Un merge con migración se queda sin desplegar sin que nada más
+avise, y `main` se va por delante de producción. No hay inconsistencia mientras
+código y migración queden fuera **juntos** —`vercel-build.sh` construye antes de
+migrar, ADR-070— pero hay que anotarlo en `SESSION_STATE.md` §3 o la siguiente
+sesión no lo sabrá.
+
+**Arreglo.** Leer el estado del commit fusionado, no el de la PR, y después el
+log, que nombra cada migración aplicada:
+
+```bash
+gh api repos/danieljosegiraldez-png/nectar-nomada/commits/<sha>/status
+vercel inspect --logs <url-de-produccion> --scope <scope>
+```
+
+Al día siguiente, el botón *Redeploy* del panel sobre el commit fallido. Usa la
+integración de git, queda atado al commit, y no necesita CLI.
+
+### `vercel --prod` sin enlace previo crea un proyecto nuevo
+
+**Síntoma.** Un despliegue «de producción» que falla en `prisma migrate deploy`
+con `The datasource.url property is required`. Producción intacta, y en la cuenta
+aparece un proyecto que nadie creó.
+
+**Causa.** Sin `.vercel/project.json`, el CLI toma el **nombre del directorio** y
+crea un proyecto con él. En un worktree eso es el nombre de la carpeta: el
+2026-09-01 nació uno llamado `estado4`, sin ninguna variable de entorno, que
+murió al migrar. Hubo que borrarlo, y consumió un intento de la cuota.
+
+**Arreglo.** Enlazar antes, y comprobar el **id**, no el nombre:
+
+```bash
+vercel link --yes --project nectar-nomada-package --scope <scope>
+cat .vercel/project.json   # debe decir prj_9EkGhnZZgdgsEOJGsxGNFOd24Bvm
+```
+
+`vercel link` además escribe un `.env.local` con lo que el proyecto tenga. Está
+gitignorado (`.env*`), pero es un secreto en disco: mirar qué trajo y borrarlo.
 
 ### Una prueba puede cerrarse sola por una errata
 
