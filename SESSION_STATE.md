@@ -64,66 +64,68 @@ comprueban ahora `tests/archivo-de-estado.test.ts` y su gemelo en el repositorio
 web. `SESSION_STATE.md` sí dio conflicto y por eso se miró; el archivo histórico
 no dio ninguno. Una fusión limpia no dice que el resultado sea correcto.
 
-### 2026-09-01 · El marco de suelo y taza, y las tres primeras piezas del plan
+### 2026-09-01 · El plan S1 entero, salvo el microclima — y desplegado
 
-`origin/main` = `674f80b`. PR #103 (plan), #105 (`aspect`), #108 (biochar), #110
-(sujeto no-café), #111 (calicata). Suite 731 → **798**.
+`origin/main` = `44fece6`. PR #103 (plan), #105 (`aspect`), #108 (biochar),
+#110 (sujeto no-café), #111 (calicata), #115 (muestras), #117 (fotos).
+Suite 731 → **834**.
 
 Daniel aportó *«Las Nubes Cerro Azul — Soil, Environment and Cup Quality:
 Research Framework v1.0»* (13.345 palabras, firmado por Bob, Sherry y Daniel).
 `docs/implementation/45_S1_SUELO_AMBIENTE_TAZA.md` traduce su Tabla 15 al
-esquema. **No es un resumen del marco; el marco manda.** Ocho de sus catorce
-entidades ya tenían dónde vivir. **El orden de construcción es el del Plan de
-Acción del marco, con sus semanas** — se construye en el orden en que el dato
-aparece, no en el que el modelo se lee.
+esquema. **No es un resumen del marco; el marco manda.** De sus catorce
+entidades, ocho ya tenían dónde vivir; **de las seis que faltaban, cinco se
+construyeron hoy** y sólo el microclima sigue abierto, bloqueado en una decisión.
 
-**§0 del plan manda sobre todo lo demás: la recomendación principal del marco es
-un ALTO.** Ningún bloque nuevo recibe biochar hasta que existan la química base,
-la física base, un lote caracterizado y el protocolo escrito. Está firmado como
-Gate 0. Lo que implica para el software es una sola cosa: la primera fila que el
-sistema escriba sobre un bloque tiene que poder ser la línea base, no la
-enmienda.
+**§0 manda sobre todo lo demás: la recomendación principal del marco es un
+ALTO.** Ningún bloque nuevo recibe biochar hasta que existan la química base, la
+física base, un lote caracterizado y el protocolo escrito — firmado como Gate 0.
+Lo que implica para el software es una sola cosa: la primera fila que el sistema
+escriba sobre un bloque tiene que poder ser **la línea base, no la enmienda**.
 
-**Lo construido, en el orden del marco:**
+**El orden de construcción es el del Plan de Acción del marco, con sus semanas**
+— se construye en el orden en que el dato aparece, no en el que el modelo se lee.
 
-- **`Location.aspect`** (semanas 1–4). La orientación se colaba dentro de
-  `slopeDescription` como prosa —el test de F1 decía `"moderate, east-facing"`—
-  donde ninguna consulta la agrupa. Enum y no texto libre, rompiendo a propósito
-  con el precedente de `slopeDescription`/`soilType`: aquellos son texto porque
-  nadie dio una lista, y **la rosa de los vientos no se inventa**.
-- **`BiocharBatch`** (semanas 1–4), con los campos de la Tabla 6. **Dosis,
-  frecuencia y parcela tratada NO están ahí**: la Tabla 6 las lista porque es un
-  formulario de papel, pero un lote se quema una vez y se aplica en varios
-  bloques a dosis distintas. Van a la aplicación de enmienda, que sigue
-  bloqueada en Daniel.
-- **`Measurement` acepta un sujeto que no es café** (PR #110). Los ocho FK que
-  tenía eran todos de la cadena del café. La autorización se resuelve **por
-  rama** y el sujeto es **exclusivo**: `BiocharBatch` se gatea con
-  `location:manage_attributes`, y dos permisos distintos no se pueden acumular
-  en una lista de candidatos sin que el más laxo abra lo del otro.
-- **`SoilProfile` + `SoilHorizon`** (semanas 3–6), la calicata. **Tres estados,
-  no un booleano**, en las cuatro señales de anaerobiosis: un booleano nullable
-  confunde «no se miró» con «no había», y ésa es la confusión que mandaría a la
-  finca a fertilizar un problema de aire (§6.1 del marco).
+| pieza | qué la define |
+|---|---|
+| `Location.aspect` | Enum, rompiendo con el precedente de texto libre: la rosa de los vientos no se inventa, y el uso del marco es **comparativo** |
+| `BiocharBatch` | Dosis, frecuencia y parcela **NO** están: la Tabla 6 las lista porque es papel, pero un lote se aplica en varios bloques |
+| `Measurement` no-café | Autorización **por rama** y sujeto **exclusivo**: dos permisos distintos no se acumulan sin que el más laxo abra lo del otro |
+| `SoilProfile` | **Tres estados, no un booleano**: «no se miró» ≠ «no había», y confundirlos manda a fertilizar un problema de aire |
+| `SoilSample` / `FoliarSample` | Un análisis foliar sin protocolo es **incomparable**, que es peor que no tenerlo porque parece que sirve |
+| Fotos de Location | El padre debe pertenecer a la Location autorizada, o quien tiene A cuelga en B |
 
 **Cuatro guardias del repositorio pararon trabajo, y los cuatro tenían razón.**
 El que más: `navigation.test.ts` exige ≤8 entradas de menú y yo había añadido una
-novena para el biochar. Se revirtió — el enlace vive en `/plots`. Los otros tres
-eran contadores fijados a propósito (rutas, inventario de acceso) y una nota que
-había dejado de ser cierta.
+novena. Se revirtió; el enlace vive en `/plots`.
 
-**Un flip-test salió verde por la razón equivocada** (PR #110): la mutación
-tocaba un JSON que se reescribe al guardarse, la cadena ancla ya no existía y el
-`replace` no hizo nada. Sólo lo dijo el `diffstat`. Desde #111, **cada mutación
-imprime que se aplicó** antes de que se lea el veredicto.
+**Tres guardias resultaron falsos, y dos los había escrito yo el mismo día:**
 
-`tests/ui/valoresEnumerados.test.ts` nació con `aspect` y ya cubre seis enums más
-las etiquetas de las variables de laboratorio, **sin tocar su lógica**: sólo hubo
-que nombrarlos. `tests/traceability/units.test.ts` entró en `scripts/ci.sh`.
+- Un test de cobertura de dominios comparaba la unión de dos paneles contra la
+  unión de **esos mismos dos paneles**. No podía fallar.
+- Un `?? ["proceso_de_cafe"]` volvía infalsificable ese guardia *y* metía en
+  silencio cualquier variable de laboratorio nueva en el desplegable de recetas
+  de café. Ahora `PANELES` es un `Record` total: **el compilador** obliga a
+  declarar el panel de cada variable nueva.
+- Un flip-test pasó porque la mutación cayó sobre fósforo y sólo potasio tenía
+  aserción — la definición del nutriente estaba repetida **nueve veces**.
+  Extraída a una constante.
 
-**Sin verificar en ninguna de las cinco: la pantalla viva.** Un worktree no
-hereda `.env`, así que auth no arranca ahí (`MissingSecret`) y las rutas
-redirigen a `/login` — correcto, pero no deja ver los formularios.
+**Y un flip-test que salió verde sin haberse aplicado:** la mutación tocaba un
+JSON que se reescribe al guardarse, la cadena ancla ya no existía y el `replace`
+no hizo nada. Sólo lo dijo el `diffstat`. Desde entonces **cada mutación imprime
+que se aplicó** antes de que se lea el veredicto.
+
+**Desplegado y comprobado contra el registro, no contra el «success».** La cuenta
+de Vercel agotó su límite diario de builds a media tanda, así que cinco merges no
+construyeron; al despejarse, un solo despliegue aplicó **las seis migraciones**,
+nombradas una a una en el log de construcción, con cero errores y el seed
+después. `main` y producción vuelven a estar al día.
+
+**Sin comprobar:** el esquema vivo consultado contra la base. El `DATABASE_URL`
+de producción sólo existe en la config de Vercel y no se descargó — un secreto
+que no hace falta no se toca. La comprobación que falta es abrir
+`/plots/<lote>` en producción y ver que renderiza.
 
 ## 3. Bloqueado, y en qué
 
@@ -157,34 +159,13 @@ redirigen a `/login` — correcto, pero no deja ver los formularios.
   dos entradas: **0 de 8 lotes tienen área** y **0 cosechas están atribuidas a
   bloques**, aunque 15 de las 33 ya tienen peso declarado. Las dos las carga él
   ahora sin ayuda.
-- **`main` va por delante de producción: CUATRO migraciones sin desplegar** —
-  la cuenta de Vercel agotó su límite diario de builds el 2026-09-01
-  («Deployment rate limited — retry in 24 hours»), así que los merges de #105,
-  #108, #110 y #111 no construyeron. **No hay inconsistencia**: código y
-  migraciones quedaron sin desplegar juntos, y producción sigue sirviendo el
-  build de #103. Cuando el límite se despeje hay que **disparar un despliegue de
-  producción** para que `scripts/vercel-build.sh` corra `prisma migrate deploy`.
-  Las cuatro, en orden: `20260901030000_s1_location_aspect`,
-  `20260901040000_s1_biochar_batch`,
-  `20260901050000_s1_measurement_biochar_subject`,
-  `20260901060000_s1_soil_profile`.
-- **Fotos con ámbito de Location** — no está bloqueado, está *pendiente*, y ya
-  hace falta en dos sitios: el Paso 2 del marco pide fotografiar el retorte y el
-  proceso, y el Paso 4 fotografiar cada perfil de calicata **con escala**. El
-  flujo de subida actual (`requestLotAssetUpload`) cuelga de un `Lot` y se gatea
-  con `lot:manage`, así que un lote de biochar y una calicata no tienen por
-  dónde. Es una pieza que desbloquea dos cosas ya construidas, igual que hizo el
-  sujeto no-café de `Measurement`.
-- **Del plan S1 quedan dos entidades de la Tabla 15.** `SoilSample` y
-  `FoliarSample` (semanas 6–10) no dependen de ninguna decisión: el patrón está
-  entero desde la PR #110 —sujeto propio en `Measurement`, rama de autorización,
-  vocabulario en el registro canónico— y falta el de la Tabla 3 (CEC efectiva,
-  acidez intercambiable, Al intercambiable) y las cifras físicas de la Tabla 4.
-  El **microclima** (semanas 4–10) sí está bloqueado: `CLAUDE.md` §38 pide
-  arquitectura separada para la serie temporal y no dice cuál, y esa decisión es
-  de Daniel. Ver §6 de `docs/implementation/45_S1_SUELO_AMBIENTE_TAZA.md`, donde
-  están las tres abiertas.
-- **Nadie ha usado ninguna de las cinco pantallas nuevas.** Todo lo que se sabe
+- **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
+  (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
+  separada para la serie temporal —~35.000 filas por sensor y año— y no dice
+  cuál. La otra decisión abierta es la aplicación de enmienda: reusar
+  `TreatmentBatch` con `locationId`, o entidad propia. Las dos están en §6 de
+  `docs/implementation/45_S1_SUELO_AMBIENTE_TAZA.md`, con recomendación.
+- **Nadie ha usado ninguna de las pantallas nuevas** —cinco en agosto, más las de biochar, calicata, muestras y fotos. Todo lo que se sabe
   de ellas se sabe de la copia local restaurada. Que un operador real las
   recorra es la única prueba que falta, y la que suele encontrar lo que ninguna
   verificación encuentra.
@@ -195,12 +176,14 @@ redirigen a `/login` — correcto, pero no deja ver los formularios.
   distinguido de «llegó tarde», porque `FieldEvent` lleva `recordedAt`,
   `syncedAt` y `deviceId` — está pensado para llegar tarde, así que un evento
   sincronizado tras el cierre es el camino previsto y no un borde.
-- **Escritura y auditoría no son atómicas — salvo en `plantingCohorts.ts`.**
+- **Escritura y auditoría no son atómicas en 13 archivos.**
   Desde el 2026-08-31 `recordAuditEvent` acepta un `tx` **opcional** que confirma
   el audit junto a la escritura; por defecto usa el cliente global, así que las
-  89 llamadas existentes no cambian. Adoptado en las cuatro de
-  `plantingCohorts.ts`, con un test que fuerza el fallo del audit y comprueba
-  que la cohorte tampoco queda.
+  89 llamadas existentes no cambian. Lo adoptan ya `plantingCohorts.ts` (con un
+  test que fuerza el fallo del audit y comprueba que la cohorte tampoco queda) y
+  **todos los módulos de S1**: `biocharBatches.ts`, `soilProfiles.ts`,
+  `soilSamples.ts`, `landMedia.ts` y la corrección de `measurements.ts`. Módulo
+  nuevo, `tx` desde el principio; el coste sólo existe al convertir lo viejo.
   **Quedan 13 archivos que abren transacción y auditan fuera:**
   `research/analysis.ts` (7 llamadas), `research/protocols.ts` (6),
   `traceability/harvest.ts`, `samples.ts`, `drying.ts`, `fermentation.ts`,
