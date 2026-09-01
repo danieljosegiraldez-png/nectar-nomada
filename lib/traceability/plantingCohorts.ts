@@ -34,7 +34,13 @@ export interface CreatePlantingCohortInput {
   plantedAt?: Date | null;
   plantedPrecision?: HarvestWindowPrecision | null;
   plantCount?: number | null;
-  densityPerHectare?: number | null;
+  // `densityPerHectare` NO se acepta aquí, a propósito. Es un derivado de
+  // conteo y área, los dos corregibles, y `computePlotDensity` lo calcula al
+  // leer. Aceptarlo dejaba que un llamador guardara un 400 que sobrevivía a la
+  // corrección de sus dos insumos — justo lo que el comentario de
+  // `computePlotDensity` decía que no pasaba. Lo señaló una revisión
+  // independiente: el comentario era cierto para nuestros llamadores y no
+  // estaba impuesto por el código.
   spacingMeters?: number | null;
   notes?: string | null;
   // ADR-038 — required, no default. A cohort transcribed from a planting
@@ -108,7 +114,8 @@ export async function createPlantingCohort(userAccountId: string, input: CreateP
       plantedAt: input.plantedAt ?? null,
       plantedPrecision: input.plantedPrecision ?? null,
       plantCount: input.plantCount ?? null,
-      densityPerHectare: input.densityPerHectare ?? null,
+      // Ver la nota en CreatePlantingCohortInput: derivado, nunca almacenado.
+      densityPerHectare: null,
       spacingMeters: input.spacingMeters ?? null,
       notes: input.notes ?? null,
       provenanceClass: input.provenanceClass,
@@ -457,7 +464,10 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
  * detrás de la misma compuerta que la escritura.
  *
  * Devuelve los aportes ya guardados —para que se vea que el formulario **suma**
- * y no reemplaza— y los lotes candidatos con sus cohortes vivas. Las cohortes
+ * y no reemplaza— y los lotes candidatos con sus cohortes vivas. **Ambas listas
+ * se filtran por la misma compuerta que la escritura**, bloque por bloque: la
+ * primera versión sólo comprobaba el bloque principal de la cosecha y devolvía
+ * aportes de bloques ajenos. Las cohortes
  * van agrupadas por lote a propósito: la pareja lote/cohorte tiene que casar, y
  * darlas en una lista plana invitaría a cruzarlas.
  */
@@ -469,10 +479,11 @@ export async function getHarvestSourceContext(userAccountId: string, harvestEven
   if (!harvestEvent) throw new LocationAccessError("harvest_event_not_found");
   await requireLocationAttributeAccess(userAccountId, harvestEvent.locationId);
 
-  const existing = await prisma.harvestEventSource.findMany({
+  const todosLosAportes = await prisma.harvestEventSource.findMany({
     where: { harvestEventId },
     select: {
       id: true,
+      locationId: true,
       cherryWeightKg: true,
       notes: true,
       location: { select: { name: true } },
@@ -480,6 +491,27 @@ export async function getHarvestSourceContext(userAccountId: string, harvestEven
     },
     orderBy: { createdAt: "asc" },
   });
+
+  // Un aporte se lee sólo si se puede gestionar SU bloque, no sólo el bloque
+  // principal de la cosecha. La escritura ya exigía las dos cosas; esta lectura
+  // sólo exigía la primera, así que un usuario con acceso al bloque A veía el
+  // nombre, el cultivar, el peso y las notas de un bloque B que no administra.
+  // Lo señaló una revisión independiente, y el comentario de esta función
+  // afirmaba justo lo contrario.
+  const accesibles = new Set<string>();
+  for (const locId of new Set(todosLosAportes.map((a) => a.locationId))) {
+    try {
+      await requireLocationAttributeAccess(userAccountId, locId);
+      accesibles.add(locId);
+    } catch (error) {
+      if (!(error instanceof LocationAccessError)) throw error;
+    }
+  }
+  const existing = todosLosAportes.filter((a) => accesibles.has(a.locationId));
+  // Cuántos se ocultaron. Se informa el número y nada más: callarlos haría que
+  // la reconciliación pareciera cuadrar con menos aportes de los que hay, y
+  // nombrarlos sería filtrar lo que este filtro existe para no filtrar.
+  const hiddenContributions = todosLosAportes.length - existing.length;
 
   const pesados = existing.filter((s) => s.cherryWeightKg != null);
   // Desconocido, no cero: si ningún aporte se pesó no hay nada que comparar, y
@@ -523,6 +555,7 @@ export async function getHarvestSourceContext(userAccountId: string, harvestEven
     declaredTotalKg: harvestEvent.cherryWeightKg != null ? Number(harvestEvent.cherryWeightKg) : null,
     alreadyRecordedKg,
     existing,
+    hiddenContributions,
     plotLocations,
   };
 }
@@ -633,11 +666,16 @@ export async function updatePlantingCohort(userAccountId: string, input: UpdateP
  */
 export interface PlotYearYield {
   year: number;
-  /** Suma de los aportes **pesados** de ese año. */
-  weighedKg: number;
+  /**
+   * Suma de los aportes **pesados** de ese año, o `null` si no se pesó ninguno.
+   * Null y 0 son hechos distintos: 0 sería «se pesó y dio cero».
+   */
+  weighedKg: number | null;
+  /** Cuántos aportes de ese año llevan peso. Cero significa que `weighedKg` es null. */
+  weighedContributions: number;
   /** Aportes de ese año sin peso: el `weighedKg` los excluye. */
   unweighedContributions: number;
-  /** Null cuando falta el área o no es positiva; el peso sigue siendo útil. */
+  /** Null cuando falta el área, no es positiva, o no hay nada pesado que dividir. */
   kgPerHectare: number | null;
 }
 
@@ -655,24 +693,36 @@ export function computePlotYield(
   const hectares =
     hectaresRaw != null && Number.isFinite(hectaresRaw) && hectaresRaw > 0 ? hectaresRaw : null;
 
-  const porAnio = new Map<number, { weighedKg: number; unweighed: number }>();
+  const porAnio = new Map<number, { weighedKg: number; weighed: number; unweighed: number }>();
   for (const c of contributions) {
     // Año calendario en UTC, igual que el resto de las fechas del sistema.
     const year = c.harvestedAt.getUTCFullYear();
-    const acc = porAnio.get(year) ?? { weighedKg: 0, unweighed: 0 };
+    const acc = porAnio.get(year) ?? { weighedKg: 0, weighed: 0, unweighed: 0 };
     if (c.cherryWeightKg == null) acc.unweighed += 1;
-    else acc.weighedKg += Number(c.cherryWeightKg);
+    else {
+      acc.weighedKg += Number(c.cherryWeightKg);
+      acc.weighed += 1;
+    }
     porAnio.set(year, acc);
   }
 
   const years = [...porAnio.entries()]
     .map(([year, acc]) => ({
       year,
-      weighedKg: Number(acc.weighedKg.toFixed(3)),
+      // Null, no 0, cuando nadie pesó nada en ese año. Un año sin ninguna
+      // medición no pesó cero kilos: no se sabe cuánto pesó. Esto lo señaló una
+      // revisión independiente, y tenía razón — la versión anterior devolvía 0
+      // y su propio comentario admitía que era «engañoso por sí solo»,
+      // confiando en que el conteo de aportes sin pesar al lado lo salvara. No
+      // lo salva: un 0 en la columna se lee como medición (ADR-080).
+      weighedKg: acc.weighed > 0 ? Number(acc.weighedKg.toFixed(3)) : null,
+      weighedContributions: acc.weighed,
       unweighedContributions: acc.unweighed,
       // Sin área no hay rendimiento, pero el peso del año sigue siendo un dato
       // que vale la pena enseñar — por eso esto es null y no se descarta el año.
-      kgPerHectare: hectares != null ? Number((acc.weighedKg / hectares).toFixed(1)) : null,
+      // Y sin nada pesado tampoco hay numerador que dividir.
+      kgPerHectare:
+        hectares != null && acc.weighed > 0 ? Number((acc.weighedKg / hectares).toFixed(1)) : null,
     }))
     .sort((a, b) => b.year - a.year);
 

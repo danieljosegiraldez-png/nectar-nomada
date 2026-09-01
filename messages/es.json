@@ -716,7 +716,8 @@
     "latitudeLabel": "Latitud",
     "longitudeLabel": "Longitud",
     "accuracyLabel": "Precisión (m)",
-    "error_field_session": "No se pudo registrar la jornada: {detail}"
+    "error_field_session": "No se pudo registrar la jornada: {detail}",
+    "yieldNothingWeighed": "Nada pesado"
   },
   "Apiary": {
     "badge": "Apiario",

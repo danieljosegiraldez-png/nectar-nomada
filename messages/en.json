@@ -716,7 +716,8 @@
     "latitudeLabel": "Latitude",
     "longitudeLabel": "Longitude",
     "accuracyLabel": "Accuracy (m)",
-    "error_field_session": "Could not record the session: {detail}"
+    "error_field_session": "Could not record the session: {detail}",
+    "yieldNothingWeighed": "Nothing weighed"
   },
   "Apiary": {
     "badge": "Apiary",

@@ -29,6 +29,8 @@ let plotCId: string;
 let otherPlotId: string;
 let authorizedUserAccountId: string;
 let wrongLocationUserAccountId: string;
+/** Alcanza el bloque A y NO el B: el único perfil que puede exponer la fuga. */
+let soloPlotAUserAccountId: string;
 
 let caturraValueId: string;
 let catuaiAliasValueId: string;
@@ -47,7 +49,11 @@ async function createTestUserAccount(label: string) {
 
 async function assignFarmOperator(userAccountId: string, locationRefId: string) {
   const profile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
-  const scope = await prisma.scope.create({ data: { scopeType: "location", scopeRefId: locationRefId } });
+  // Reutiliza el Scope si ya existe: (scopeType, scopeRefId) es único, así que
+  // dar el mismo bloque a un segundo usuario reventaba el setup entero.
+  const scope =
+    (await prisma.scope.findFirst({ where: { scopeType: "location", scopeRefId: locationRefId } })) ??
+    (await prisma.scope.create({ data: { scopeType: "location", scopeRefId: locationRefId } }));
   await prisma.assignment.create({ data: { userAccountId, roleProfileId: profile.id, scopeId: scope.id } });
 }
 
@@ -93,6 +99,9 @@ beforeAll(async () => {
   wrongLocationUserAccountId = await createTestUserAccount("P1WrongLocation");
   await assignFarmOperator(wrongLocationUserAccountId, otherPlotId);
 
+  soloPlotAUserAccountId = await createTestUserAccount("P1SoloPlotA");
+  await assignFarmOperator(soloPlotAUserAccountId, plotAId);
+
   caturraValueId = await cultivarValue("Caturra");
   catuaiAliasValueId = await cultivarValue("Catuai");
   catuaiCanonicalValueId = await cultivarValue("Catuaí");
@@ -111,7 +120,7 @@ afterAll(async () => {
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
   await prisma.plantingCohort.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
 
-  const userIds = [authorizedUserAccountId, wrongLocationUserAccountId];
+  const userIds = [authorizedUserAccountId, wrongLocationUserAccountId, soloPlotAUserAccountId];
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userIds } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: locationIds } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userIds } }) });
@@ -380,7 +389,11 @@ describe("una cohorte nombrada tiene que ser del lote que la acompaña", () => {
         harvestEventId: harvestEvent.harvestEvent.id,
         sources: [{ locationId: plotAId, plantingCohortId: cohortEnB.id, cherryWeightKg: 50 }],
       }),
-    ).rejects.toThrow(PlantingCohortValidationError);
+      // El código exacto, no la clase: con `toThrow(PlantingCohortValidationError)`
+      // este test pasaba también si fallaba por `planting_cohort_not_found`, que
+      // es justo el caso que NO está probando. Lo señaló una revisión
+      // independiente.
+    ).rejects.toThrow("cohort_not_in_location");
 
     // Y no deja nada a medias: la transacción no llegó a abrirse.
     const escritas = await prisma.harvestEventSource.count({
@@ -429,7 +442,7 @@ describe("una cohorte nombrada tiene que ser del lote que la acompaña", () => {
           { locationId: plotAId, plantingCohortId: "00000000-0000-0000-0000-000000000000" },
         ],
       }),
-    ).rejects.toThrow(PlantingCohortValidationError);
+    ).rejects.toThrow("planting_cohort_not_found");
   });
 
   it("rechaza un aporte de peso negativo", async () => {
@@ -447,7 +460,7 @@ describe("una cohorte nombrada tiene que ser del lote que la acompaña", () => {
         harvestEventId: harvestEvent.harvestEvent.id,
         sources: [{ locationId: plotAId, cherryWeightKg: -5 }],
       }),
-    ).rejects.toThrow(PlantingCohortValidationError);
+    ).rejects.toThrow("negative_cherry_weight");
   });
 });
 
@@ -475,6 +488,49 @@ describe("el contexto de la pantalla ofrece sólo lo que se puede usar", () => {
     expect(ofrecidos).toContain(plotAId);
   });
 
+  it("no devuelve aportes de bloques que el operador no administra", async () => {
+    // El hueco que encontró la revisión independiente: la escritura exigía
+    // acceso al bloque principal Y a cada contribuyente, pero esta lectura sólo
+    // exigía el principal, así que devolvía nombre, cultivar, peso y notas de
+    // bloques ajenos.
+    const harvestEvent = await recordHarvestEvent(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-fuga`,
+      locationId: plotAId,
+      organizationId,
+      projectId,
+      harvestedAt: new Date(),
+      cherryWeightKg: 100,
+      provenanceClass: "measured_fact",
+    });
+    // Se escriben los dos aportes con un usuario que sí alcanza los dos.
+    await recordHarvestSources(authorizedUserAccountId, {
+      harvestEventId: harvestEvent.harvestEvent.id,
+      sources: [
+        { locationId: plotAId, cherryWeightKg: 60 },
+        { locationId: plotBId, cherryWeightKg: 40 },
+      ],
+    });
+
+    const paraTodos = await getHarvestSourceContext(
+      authorizedUserAccountId,
+      harvestEvent.harvestEvent.id,
+    );
+    expect(paraTodos.existing).toHaveLength(2);
+    expect(paraTodos.hiddenContributions).toBe(0);
+
+    // Quien alcanza el bloque principal A pero NO el B ve un aporte, no dos, y
+    // en ninguna parte el nombre de B. Sin este caso el test anterior pasaba
+    // igual con el filtro quitado — comprobado por flip-test.
+    const soloA = await getHarvestSourceContext(
+      soloPlotAUserAccountId,
+      harvestEvent.harvestEvent.id,
+    );
+    expect(soloA.existing).toHaveLength(1);
+    expect(soloA.hiddenContributions).toBe(1);
+    expect(JSON.stringify(soloA.existing)).not.toContain("Plot B");
+    expect(soloA.plotLocations.map((p) => p.id)).not.toContain(plotBId);
+  });
+
   it("informa el peso declarado y deja los aportes sin pesar como desconocido", async () => {
     const harvestEvent = await recordHarvestEvent(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-sin-pesar`,
@@ -497,6 +553,24 @@ describe("el contexto de la pantalla ofrece sólo lo que se puede usar", () => {
     expect(contexto.declaredTotalKg).toBe(60);
     // Ningún aporte pesado: desconocido, no cero (ADR-080).
     expect(contexto.alreadyRecordedKg).toBeNull();
+  });
+});
+
+describe("la densidad es derivada y no se guarda", () => {
+  it("ignora un densityPerHectare que llegue en la creación", async () => {
+    // El input lo aceptaba y lo persistía, así que un 400 sobrevivía a que se
+    // corrigieran sus dos insumos. Sin este test, quitar el campo o volver a
+    // aceptarlo daba lo mismo — comprobado por flip-test.
+    const cohort = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotAId,
+      plantCount: 100,
+      provenanceClass: "direct_observation",
+      // @ts-expect-error el campo ya no existe en el input; el test comprueba
+      // que tampoco llega a la columna si alguien lo manda igual.
+      densityPerHectare: 400,
+    });
+    const guardada = await prisma.plantingCohort.findUniqueOrThrow({ where: { id: cohort.id } });
+    expect(guardada.densityPerHectare).toBeNull();
   });
 });
 

@@ -114,7 +114,9 @@ describe("computePlotYield", () => {
     expect(r).toEqual<PlotYield>({
       status: "ok",
       hectares: 2,
-      years: [{ year: 2026, weighedKg: 500, unweighedContributions: 0, kgPerHectare: 250 }],
+      years: [
+        { year: 2026, weighedKg: 500, weighedContributions: 1, unweighedContributions: 0, kgPerHectare: 250 },
+      ],
     });
   });
 
@@ -161,13 +163,28 @@ describe("computePlotYield", () => {
     expect(computePlotYield([], 2)).toEqual<PlotYield>({ status: "sin_cosechas" });
   });
 
-  it("un año entero sin pesar da 0 kg pesados y lo dice, en vez de fingir un rendimiento", () => {
+  it("un año entero sin pesar no tiene rendimiento CERO, tiene rendimiento desconocido", () => {
+    // Este test exigía lo contrario —0 kg y 0 kg/ha— y su propio comentario
+    // admitía que el 0 era «engañoso por sí solo», confiando en que el conteo
+    // de aportes sin pesar al lado lo salvara. Una revisión independiente lo
+    // señaló: un 0 en una columna de kilos se lee como medición. Un año donde
+    // nadie pesó nada no pesó cero; no se sabe cuánto pesó (ADR-080).
     const r = computePlotYield([aporte("2026-03-01T00:00:00Z", null)], 2);
-        expect(anio(r).weighedKg).toBe(0);
+    expect(anio(r).weighedKg).toBeNull();
+    expect(anio(r).kgPerHectare).toBeNull();
+    expect(anio(r).weighedContributions).toBe(0);
     expect(anio(r).unweighedContributions).toBe(1);
-    // El 0/ha es aritméticamente cierto y engañoso por sí solo; el conteo de
-    // aportes sin pesar al lado es lo que impide leerlo como una medición.
-    expect(anio(r).kgPerHectare).toBe(0);
+  });
+
+  it("con algo pesado y algo sin pesar, divide sólo lo pesado y lo dice", () => {
+    const r = computePlotYield(
+      [aporte("2026-03-01T00:00:00Z", 300), aporte("2026-03-02T00:00:00Z", null)],
+      2,
+    );
+    expect(anio(r).weighedKg).toBe(300);
+    expect(anio(r).kgPerHectare).toBe(150);
+    expect(anio(r).weighedContributions).toBe(1);
+    expect(anio(r).unweighedContributions).toBe(1);
   });
 
   it("acepta el Decimal que devuelve Prisma para el peso y el área", () => {
