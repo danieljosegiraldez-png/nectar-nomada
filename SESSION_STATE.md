@@ -116,6 +116,18 @@ vez y nada detectaba que el conjunto cambiara. Las excepciones escritas a mano
 pasaron de tres a **una**, porque el detector ahora demuestra por estructura lo
 que antes afirmaba una nota.
 
+**Dos consecuencias, cerradas después.** El aviso del presupuesto nombraba la
+entrada recién escrita como «la más vieja»: las secciones se ordenan por fecha,
+las de un mismo día empatan, y con el empate decidía el orden del documento —que
+va de más nuevo a más viejo—. Arreglado con desempate por posición, con prueba
+de regresión, y portado al repositorio web para que las dos copias no diverjan.
+
+Y las cifras de `docs/arquitectura/inventario-de-acceso.md` ya no pueden
+separarse de la medición: `tests/arquitectura/cifras-del-inventario.test.ts`
+compara total, archivos y cada fila contra la salida del script, y falla si
+aparece una clase que el documento no nombre. Era el mecanismo que faltaba: ese
+día se arreglaron las cifras y no lo que las dejó divergir.
+
 **Lo que sigue abierto, con su mutación escrita:** un nombre con forma de
 guardia basta. `requireFakeAccess()` que no hace nada sale como guardia directo
 y la compuerta pasa. Cerrarlo exige resolver el símbolo — es
