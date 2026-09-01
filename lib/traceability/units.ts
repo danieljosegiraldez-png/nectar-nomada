@@ -85,7 +85,31 @@ export type MeasurementVariable =
   // required free-text field (service layer), quantity is this variable.
   | "co_ferment_quantity"
   // §2 Koji.
-  | "koji_propagation_duration";
+  | "koji_propagation_duration"
+  // S1 (45_S1_SUELO_AMBIENTE_TAZA.md §2) — la Tabla 7 del marco de
+  // investigación: la caracterización de un lote de biochar. Entran aquí y no
+  // en un registro aparte porque son exactamente lo que este registro es —una
+  // magnitud física con unidad canónica y límites—, y porque `Measurement` ya
+  // sabe superseder una corrección sin borrar la original.
+  //
+  // `ph` y `moisture` NO se repiten: son la misma magnitud física que ya está
+  // arriba, y lo que distingue «el pH de este biochar» de «el pH de este lote
+  // de café» es el sujeto de la fila, no el nombre de la variable. Es el
+  // precedente que este archivo ya cita para `roastSessionId`.
+  | "electrical_conductivity"
+  | "ash_content"
+  | "total_carbon"
+  | "total_nitrogen"
+  | "carbon_nitrogen_ratio"
+  | "phosphorus"
+  | "potassium"
+  | "calcium"
+  | "magnesium"
+  | "iron"
+  | "manganese"
+  | "zinc"
+  | "copper"
+  | "boron";
 
 export class UnitValidationError extends Error {}
 
@@ -227,6 +251,132 @@ const REGISTRY: Record<MeasurementVariable, VariableDefinition> = {
   brine_concentration: { canonicalUnit: "%", min: 0, max: 100, acceptedUnits: { "%": (v) => v } },
   co_ferment_quantity: { canonicalUnit: "kg", min: 0, max: 10000, acceptedUnits: { kg: (v) => v } },
   koji_propagation_duration: { canonicalUnit: "h", min: 0, max: 500, acceptedUnits: { h: (v) => v } },
+
+  // --- S1, Tabla 7: caracterización de biochar --------------------------
+  // 1 dS/m = 1 mS/cm exactamente; se aceptan las dos porque los informes usan
+  // ambas y la conversión no da lugar a duda.
+  electrical_conductivity: {
+    canonicalUnit: "dS/m",
+    min: 0,
+    max: 100,
+    acceptedUnits: { "dS/m": (v) => v, "mS/cm": (v) => v },
+  },
+  ash_content: { canonicalUnit: "%", min: 0, max: 100, acceptedUnits: { "%": (v) => v } },
+  total_carbon: { canonicalUnit: "%", min: 0, max: 100, acceptedUnits: { "%": (v) => v } },
+  total_nitrogen: { canonicalUnit: "%", min: 0, max: 100, acceptedUnits: { "%": (v) => v } },
+  // Adimensional. El tope es alto a propósito: un biochar de madera sin cargar
+  // pasa de 300 con facilidad, y ése es justo el caso que el marco advierte
+  // —«un char de C:N alto sin cargar puede reducir temporalmente el nitrógeno
+  // disponible»—, así que rechazarlo escondería lo que hay que ver.
+  carbon_nitrogen_ratio: { canonicalUnit: "C:N", min: 0, max: 1000, acceptedUnits: { "C:N": (v) => v } },
+  phosphorus: {
+    canonicalUnit: "mg/kg",
+    min: 0,
+    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
+    // plausible, es el límite aritmético de una fracción de masa.
+    max: 1_000_000,
+    // Las tres unidades son la misma magnitud con conversión exacta, así que
+    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
+    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
+    // los errores de dos órdenes de magnitud.
+    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
+  },
+  potassium: {
+    canonicalUnit: "mg/kg",
+    min: 0,
+    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
+    // plausible, es el límite aritmético de una fracción de masa.
+    max: 1_000_000,
+    // Las tres unidades son la misma magnitud con conversión exacta, así que
+    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
+    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
+    // los errores de dos órdenes de magnitud.
+    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
+  },
+  calcium: {
+    canonicalUnit: "mg/kg",
+    min: 0,
+    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
+    // plausible, es el límite aritmético de una fracción de masa.
+    max: 1_000_000,
+    // Las tres unidades son la misma magnitud con conversión exacta, así que
+    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
+    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
+    // los errores de dos órdenes de magnitud.
+    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
+  },
+  magnesium: {
+    canonicalUnit: "mg/kg",
+    min: 0,
+    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
+    // plausible, es el límite aritmético de una fracción de masa.
+    max: 1_000_000,
+    // Las tres unidades son la misma magnitud con conversión exacta, así que
+    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
+    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
+    // los errores de dos órdenes de magnitud.
+    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
+  },
+  iron: {
+    canonicalUnit: "mg/kg",
+    min: 0,
+    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
+    // plausible, es el límite aritmético de una fracción de masa.
+    max: 1_000_000,
+    // Las tres unidades son la misma magnitud con conversión exacta, así que
+    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
+    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
+    // los errores de dos órdenes de magnitud.
+    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
+  },
+  manganese: {
+    canonicalUnit: "mg/kg",
+    min: 0,
+    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
+    // plausible, es el límite aritmético de una fracción de masa.
+    max: 1_000_000,
+    // Las tres unidades son la misma magnitud con conversión exacta, así que
+    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
+    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
+    // los errores de dos órdenes de magnitud.
+    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
+  },
+  zinc: {
+    canonicalUnit: "mg/kg",
+    min: 0,
+    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
+    // plausible, es el límite aritmético de una fracción de masa.
+    max: 1_000_000,
+    // Las tres unidades son la misma magnitud con conversión exacta, así que
+    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
+    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
+    // los errores de dos órdenes de magnitud.
+    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
+  },
+  copper: {
+    canonicalUnit: "mg/kg",
+    min: 0,
+    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
+    // plausible, es el límite aritmético de una fracción de masa.
+    max: 1_000_000,
+    // Las tres unidades son la misma magnitud con conversión exacta, así que
+    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
+    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
+    // los errores de dos órdenes de magnitud.
+    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
+  },
+  boron: {
+    canonicalUnit: "mg/kg",
+    min: 0,
+    // 1.000.000 mg/kg es el 100 %: el tope no es una opinión sobre qué es
+    // plausible, es el límite aritmético de una fracción de masa.
+    max: 1_000_000,
+    // Las tres unidades son la misma magnitud con conversión exacta, así que
+    // aceptarlas no es inventar nada: un laboratorio reporta % y otro mg/kg
+    // para el mismo análisis, y obligar a convertir a mano es cómo se cuelan
+    // los errores de dos órdenes de magnitud.
+    acceptedUnits: { "mg/kg": (v) => v, ppm: (v) => v, "%": (v) => v * 10_000 },
+  },
 };
 
 export function isKnownVariable(variable: string): variable is MeasurementVariable {
@@ -257,25 +407,64 @@ export function normalizeToCanonical(
 }
 
 /**
+ * Qué análisis de laboratorio mide cada variable — S1 §2, Tabla 7.
+ *
+ * Un registro global tiene un efecto que no se ve hasta que se añade algo: la
+ * lista la ofrece el formulario de recetas de café como desplegable, así que
+ * meter «contenido de cenizas» sin más lo habría puesto a elegir como
+ * objetivo de proceso de un café. Son la misma clase de dato —magnitud,
+ * unidad, límites— y sitios de trabajo distintos.
+ *
+ * `ph` y `moisture` están en los DOS conjuntos a propósito: son la misma
+ * magnitud física, y lo que dice de qué se habla es el sujeto de la fila.
+ */
+const ANALISIS_DE_ENMIENDA = new Set<MeasurementVariable>([
+  "ph",
+  "moisture",
+  "electrical_conductivity",
+  "ash_content",
+  "total_carbon",
+  "total_nitrogen",
+  "carbon_nitrogen_ratio",
+  "phosphorus",
+  "potassium",
+  "calcium",
+  "magnesium",
+  "iron",
+  "manganese",
+  "zinc",
+  "copper",
+  "boron",
+]);
+
+export type DominioDeVariable = "proceso_de_cafe" | "analisis_de_enmienda";
+
+/**
  * Every canonical variable with its unit and physical bounds — ADR-100.
  *
  * Added so the recipe form can offer a picker instead of a free-text field,
  * and so a target can be checked against the same bounds a reading is. A
  * declared target of pH 15 is not a preference the platform should record; it
  * is a typo, and the registry already knew that.
+ *
+ * S1 §2: el dominio es **obligatorio**, no opcional con un valor por defecto.
+ * Un parámetro que se puede omitir se omite, y el primer formulario nuevo
+ * habría vuelto a mezclar las dos listas sin que nadie lo notara.
  */
-export function listVariableDefinitions(): {
+export function listVariableDefinitions(dominio: DominioDeVariable): {
   variable: MeasurementVariable;
   canonicalUnit: string;
   min: number;
   max: number;
 }[] {
-  return (Object.keys(REGISTRY) as MeasurementVariable[]).map((variable) => ({
-    variable,
-    canonicalUnit: REGISTRY[variable].canonicalUnit,
-    min: REGISTRY[variable].min,
-    max: REGISTRY[variable].max,
-  }));
+  return (Object.keys(REGISTRY) as MeasurementVariable[])
+    .filter((v) => (dominio === "analisis_de_enmienda" ? ANALISIS_DE_ENMIENDA.has(v) : !ANALISIS_DE_ENMIENDA.has(v) || v === "ph" || v === "moisture"))
+    .map((variable) => ({
+      variable,
+      canonicalUnit: REGISTRY[variable].canonicalUnit,
+      min: REGISTRY[variable].min,
+      max: REGISTRY[variable].max,
+    }));
 }
 
 /** The bounds for one variable, or null when the name is not canonical. */

@@ -17,6 +17,11 @@ import {
   listBiocharBatchesForLocation,
   updateBiocharBatch,
 } from "../../lib/traceability/biocharBatches";
+import {
+  correctMeasurement,
+  MeasurementValidationError,
+  recordMeasurement,
+} from "../../lib/traceability/measurements";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `biochar-${Date.now()}`;
@@ -68,6 +73,15 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Las mediciones primero: apuntan al lote, y borrar el lote antes dejaría
+  // el FK colgando (ON DELETE SET NULL) y filas TEST sin sujeto en la base.
+  const lotes = await prisma.biocharBatch.findMany({
+    where: assertDefinedWhere({ producedAtLocationId: { in: [locationId, otherLocationId] } }),
+    select: { id: true },
+  });
+  await prisma.measurement.deleteMany({
+    where: assertDefinedWhere({ biocharBatchId: { in: lotes.map((l) => l.id) } }),
+  });
   await prisma.biocharBatch.deleteMany({
     where: assertDefinedWhere({ producedAtLocationId: { in: [locationId, otherLocationId] } }),
   });
@@ -275,5 +289,138 @@ describe("computeBatchAgingDays", () => {
 
   it("una fecha futura devuelve null, no un negativo", () => {
     expect(computeBatchAgingDays(new Date("2026-05-01T00:00:00Z"), new Date("2026-04-09T00:00:00Z"))).toBeNull();
+  });
+});
+
+/**
+ * S1 §2 — la Tabla 7 sobre un lote de biochar: el primer sujeto de
+ * `Measurement` que no es café, y con él una segunda ruta de autorización.
+ */
+describe("Measurement con un sujeto que no es café", () => {
+  let medicionId: string;
+
+  it("rechaza a quien no alcanza el sitio donde el lote se produjo", async () => {
+    // El punto entero de la rama: este usuario es Farm Operator con ámbito en
+    // OTRO sitio. Si la autorización se hubiera acumulado con la de café en
+    // vez de ramificarse, el permiso más laxo habría abierto esto.
+    await expect(
+      recordMeasurement(wrongLocationUserAccountId, {
+        biocharBatchId: batchId,
+        variable: "ph",
+        value: 9.4,
+        unit: "pH",
+        occurredAt: new Date("2026-04-01T00:00:00Z"),
+        provenanceClass: "measured_fact",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("el sujeto es exclusivo: café o biochar, nunca los dos", async () => {
+    await expect(
+      recordMeasurement(authorizedUserAccountId, {
+        biocharBatchId: batchId,
+        // Un lotId cualquiera basta: la exclusividad se comprueba ANTES de
+        // resolver nada, justamente para no tener dos ámbitos que reconciliar.
+        lotId: "00000000-0000-0000-0000-000000000000",
+        variable: "ph",
+        value: 9.4,
+        unit: "pH",
+        occurredAt: new Date("2026-04-01T00:00:00Z"),
+        provenanceClass: "measured_fact",
+      }),
+    ).rejects.toThrow(MeasurementValidationError);
+  });
+
+  it("sigue exigiendo un sujeto cuando no llega ninguno", async () => {
+    await expect(
+      recordMeasurement(authorizedUserAccountId, {
+        variable: "ph",
+        value: 9.4,
+        unit: "pH",
+        occurredAt: new Date("2026-04-01T00:00:00Z"),
+        provenanceClass: "measured_fact",
+      }),
+    ).rejects.toThrow(MeasurementValidationError);
+  });
+
+  it("registra un pH de la Tabla 7 contra el lote — el camino bueno", async () => {
+    const m = await recordMeasurement(authorizedUserAccountId, {
+      biocharBatchId: batchId,
+      variable: "ph",
+      value: 9.4,
+      unit: "pH",
+      occurredAt: new Date("2026-04-01T00:00:00Z"),
+      provenanceClass: "measured_fact",
+      sourceReference: "IDIAP informe 2026-0412",
+    });
+    medicionId = m.id;
+    expect(m.biocharBatchId).toBe(batchId);
+    expect(m.lotId).toBeNull();
+    expect(m.sampleId).toBeNull();
+    expect(Number(m.value)).toBe(9.4);
+  });
+
+  it("convierte la unidad del informe a la canónica", async () => {
+    // 0,35 % de fósforo son 3.500 mg/kg. Que lo haga el sistema es lo que
+    // evita el error de dos órdenes de magnitud al teclear.
+    const m = await recordMeasurement(authorizedUserAccountId, {
+      biocharBatchId: batchId,
+      variable: "phosphorus",
+      value: 0.35,
+      unit: "%",
+      occurredAt: new Date("2026-04-01T00:00:00Z"),
+      provenanceClass: "measured_fact",
+    });
+    expect(Number(m.value)).toBe(3500);
+    expect(m.unit).toBe("mg/kg");
+  });
+
+  it("rechaza un valor fuera de los límites físicos del parámetro", async () => {
+    await expect(
+      recordMeasurement(authorizedUserAccountId, {
+        biocharBatchId: batchId,
+        variable: "ph",
+        value: 15,
+        unit: "pH",
+        occurredAt: new Date("2026-04-01T00:00:00Z"),
+        provenanceClass: "measured_fact",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("la corrección conserva el sujeto — sin esto quedaría huérfana", async () => {
+    const correccion = await correctMeasurement(authorizedUserAccountId, {
+      measurementId: medicionId,
+      value: 9.1,
+      unit: "pH",
+      occurredAt: new Date("2026-04-01T00:00:00Z"),
+      reason: "El informe decía 9,1; se transcribió 9,4",
+      provenanceClass: "measured_fact",
+    });
+    expect(correccion.biocharBatchId).toBe(batchId);
+    expect(correccion.correctsId).toBe(medicionId);
+
+    // Y la original sigue ahí, con su 9,4: corregir no reescribe.
+    const original = await prisma.measurement.findUnique({ where: { id: medicionId } });
+    expect(Number(original?.value)).toBe(9.4);
+  });
+
+  it("corregir también exige alcanzar el sitio del lote", async () => {
+    await expect(
+      correctMeasurement(wrongLocationUserAccountId, {
+        measurementId: medicionId,
+        value: 9.2,
+        unit: "pH",
+        occurredAt: new Date("2026-04-01T00:00:00Z"),
+        reason: "intento sin permiso",
+        provenanceClass: "measured_fact",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("las mediciones salen en la ficha del lote", async () => {
+    const lote = await getBiocharBatch(authorizedUserAccountId, batchId);
+    expect(lote.measurements.length).toBeGreaterThanOrEqual(3);
+    expect(lote.measurements.some((m) => m.correctsId != null)).toBe(true);
   });
 });

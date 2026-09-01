@@ -21,7 +21,7 @@ export default async function NewRecipePage() {
   // to. Refusing here beats rendering a form whose first field is empty.
   if (organizations.length === 0) redirect("/recipes");
 
-  const variables = listVariableDefinitions();
+  const variables = listVariableDefinitions("proceso_de_cafe");
 
   return (
     <div>

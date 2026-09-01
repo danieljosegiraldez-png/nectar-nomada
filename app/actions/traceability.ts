@@ -1104,6 +1104,48 @@ export async function correctMeasurementFormAction(
   return {};
 }
 
+// --- Caracterización de un lote de biochar (S1 §2, Tabla 7) --------------
+
+/**
+ * Una lectura de laboratorio sobre un lote de biochar.
+ *
+ * Acción propia y no un parámetro más de `recordMeasurementAction`: aquélla
+ * empieza leyendo `lotId` y revalida `/lots/[id]`, y el sujeto aquí no es un
+ * lote de café. Compartirla habría obligado a que una acción decidiera por
+ * `if` qué clase de sujeto tiene y a qué ruta pertenece.
+ */
+export async function recordBiocharMeasurementAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const biocharBatchId = String(formData.get("biocharBatchId") ?? "");
+  try {
+    await recordMeasurement(user.userAccountId, {
+      biocharBatchId,
+      variable: String(formData.get("variable") ?? "") as never,
+      // Nunca `?? 0`: una casilla vacía no es una lectura de cero (ADR-080).
+      value: requiredNumber(formData, "value"),
+      unit: String(formData.get("unit") ?? ""),
+      occurredAt: fechaDeDia(formData, "occurredAt") ?? new Date(),
+      notes: emptyToNull(formData.get("notes")),
+      // Un resultado de laboratorio es `measured_fact` por defecto, pero se
+      // elige: el mismo número puede llegar transcrito de un informe en papel
+      // (`original_record`) y eso no es lo mismo.
+      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      sourceReference: emptyToNull(formData.get("sourceReference")),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/biochar/${biocharBatchId}`);
+  return {};
+}
+
 // --- Lote de biochar (S1 §2, semanas 1-4) --------------------------------
 
 /**
