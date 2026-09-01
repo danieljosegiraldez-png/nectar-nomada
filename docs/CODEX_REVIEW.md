@@ -51,6 +51,12 @@ medidas y estado de git.
 **Nunca comprimir quitando cuerpos.** Un paquete sin cuerpos borró en silencio
 las dos constantes de las que trataba la revisión. Se comprime por selección.
 
+**Se comprime acotando el RANGO, no el contenido.** Medido el 2026-08-31: el
+paquete de las doce PR del día salía en **48.000 líneas** —incluye el cuerpo
+entero de cada archivo tocado, que es la regla de arriba— y acotarlo al núcleo
+lógico lo dejó en **2.958** y en una sola pasada. Un rango grande no se revisa
+mejor por ser grande; se revisa peor, o no se revisa.
+
 **El alcance decide la herramienta.** Un paquete de diff sirve para revisar *un
 cambio*. Para «dónde está el bug, ubicación desconocida», dejarlo buscar, con
 presupuesto de tiempo.

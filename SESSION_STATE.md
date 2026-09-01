@@ -37,58 +37,66 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-01 · El marco de suelo y taza, traducido al esquema, y su primer campo
+### 2026-09-01 · El marco de suelo y taza, y las tres primeras piezas del plan
 
-`origin/main` = `accd59b`. PR #103 (plan) y #105 (`Location.aspect`). Suite
-731/731.
+`origin/main` = `674f80b`. PR #103 (plan), #105 (`aspect`), #108 (biochar), #110
+(sujeto no-café), #111 (calicata). Suite 731 → **798**.
 
 Daniel aportó *«Las Nubes Cerro Azul — Soil, Environment and Cup Quality:
 Research Framework v1.0»* (13.345 palabras, firmado por Bob, Sherry y Daniel).
 `docs/implementation/45_S1_SUELO_AMBIENTE_TAZA.md` traduce su Tabla 15 al
 esquema. **No es un resumen del marco; el marco manda.** Ocho de sus catorce
-entidades ya tienen dónde vivir; **seis no**: microclima, muestra de suelo,
-registro físico de suelo, aplicación de enmienda, lote de biochar, muestra
-foliar.
+entidades ya tenían dónde vivir. **El orden de construcción es el del Plan de
+Acción del marco, con sus semanas** — se construye en el orden en que el dato
+aparece, no en el que el modelo se lee.
 
-Tres cosas que salieron de medir contra el esquema, no de recordarlo:
+**§0 del plan manda sobre todo lo demás: la recomendación principal del marco es
+un ALTO.** Ningún bloque nuevo recibe biochar hasta que existan la química base,
+la física base, un lote caracterizado y el protocolo escrito. Está firmado como
+Gate 0. Lo que implica para el software es una sola cosa: la primera fila que el
+sistema escriba sobre un bloque tiene que poder ser la línea base, no la
+enmienda.
 
-- **`Experiment.controlTreatmentBatchId` ya existe** y modela el control sin
-  tratar que §10.3 llama no negociable. Por eso la enmienda debería reusar
-  `TreatmentBatch` con `locationId`: una entidad paralela dejaría al T0 sin
-  poder ocupar ese campo.
-- **`Sensor`, `SensorDeployment` y `EnvironmentalObservation` no existen**, pese
-  a estar en la lista de `CLAUDE.md` §52.
-- Los resultados de laboratorio son `Measurement`: falta **vocabulario, no
-  estructura**.
+**Lo construido, en el orden del marco:**
 
-**El orden de construcción es el del Plan de Acción del marco, con sus semanas**
-— se construye en el orden en que el dato aparece, no en el que el modelo se lee.
-Empezar por el microclima daría una pantalla sin filas durante dos meses, el
-error ya cometido con apiario y con selección.
+- **`Location.aspect`** (semanas 1–4). La orientación se colaba dentro de
+  `slopeDescription` como prosa —el test de F1 decía `"moderate, east-facing"`—
+  donde ninguna consulta la agrupa. Enum y no texto libre, rompiendo a propósito
+  con el precedente de `slopeDescription`/`soilType`: aquellos son texto porque
+  nadie dio una lista, y **la rosa de los vientos no se inventa**.
+- **`BiocharBatch`** (semanas 1–4), con los campos de la Tabla 6. **Dosis,
+  frecuencia y parcela tratada NO están ahí**: la Tabla 6 las lista porque es un
+  formulario de papel, pero un lote se quema una vez y se aplica en varios
+  bloques a dosis distintas. Van a la aplicación de enmienda, que sigue
+  bloqueada en Daniel.
+- **`Measurement` acepta un sujeto que no es café** (PR #110). Los ocho FK que
+  tenía eran todos de la cadena del café. La autorización se resuelve **por
+  rama** y el sujeto es **exclusivo**: `BiocharBatch` se gatea con
+  `location:manage_attributes`, y dos permisos distintos no se pueden acumular
+  en una lista de candidatos sin que el más laxo abra lo del otro.
+- **`SoilProfile` + `SoilHorizon`** (semanas 3–6), la calicata. **Tres estados,
+  no un booleano**, en las cuatro señales de anaerobiosis: un booleano nullable
+  confunde «no se miró» con «no había», y ésa es la confusión que mandaría a la
+  finca a fertilizar un problema de aire (§6.1 del marco).
 
-**Primer paso hecho: `Location.aspect`** (semanas 1–4). La orientación se colaba
-dentro de `slopeDescription` como prosa —el test de F1 decía `"moderate,
-east-facing"`— donde ninguna consulta la agrupa, que es justo lo que el Paso 3
-necesita. Enum y no texto libre, rompiendo a propósito con el precedente de
-`slopeDescription`/`soilType`: aquellos son texto porque nadie dio una lista, y
-la rosa de los vientos no se inventa. `flat` y `variable` existen para que un
-lote plano, o uno que mira a tres lados, no declare un rumbo que no tiene.
-Nullable, sin default, sin backfill.
+**Cuatro guardias del repositorio pararon trabajo, y los cuatro tenían razón.**
+El que más: `navigation.test.ts` exige ≤8 entradas de menú y yo había añadido una
+novena para el biochar. Se revirtió — el enlace vive en `/plots`. Los otros tres
+eran contadores fijados a propósito (rutas, inventario de acceso) y una nota que
+había dejado de ser cierta.
 
-**El bug real lo encontró el typecheck:** `getPlotDetail` usa un `select`
-explícito, así que sin `aspect: true` el campo habría salido **siempre en
-blanco** por bien que se guardara.
+**Un flip-test salió verde por la razón equivocada** (PR #110): la mutación
+tocaba un JSON que se reescribe al guardarse, la cadena ancla ya no existía y el
+`replace` no hizo nada. Sólo lo dijo el `diffstat`. Desde #111, **cada mutación
+imprime que se aplicó** antes de que se lea el veredicto.
 
-`tests/ui/valoresEnumerados.test.ts` ata las tres listas que deben coincidir y
-viven en archivos distintos —enum de Prisma, lista del formulario, claves de
-traducción en los dos idiomas— y cubre también `SunExposure` y
-`ShadePercentageBracket`. Lo justifica el fallo silencioso: un valor que existe
-en la base y que nadie puede elegir desde la aplicación. Hermético, así que entra
-en `scripts/ci.sh`.
+`tests/ui/valoresEnumerados.test.ts` nació con `aspect` y ya cubre seis enums más
+las etiquetas de las variables de laboratorio, **sin tocar su lógica**: sólo hubo
+que nombrarlos. `tests/traceability/units.test.ts` entró en `scripts/ci.sh`.
 
-**Sin verificar: la pantalla viva.** Un worktree no hereda `.env`, así que auth
-no arranca ahí (`MissingSecret`) y `/plots` redirige a `/login` — correcto, pero
-no deja ver el formulario.
+**Sin verificar en ninguna de las cinco: la pantalla viva.** Un worktree no
+hereda `.env`, así que auth no arranca ahí (`MissingSecret`) y las rutas
+redirigen a `/login` — correcto, pero no deja ver los formularios.
 
 ### 2026-08-31 · El detector de acceso leía texto, y dos revisiones lo demostraron
 
@@ -180,38 +188,6 @@ entre «esto falta» y «esto se decidió que no estuviera» sólo la da ir a le
 
 PR #97, #98 y #99. Suite 717/717.
 
-### 2026-08-31 · La revisión independiente encontró lo que doce compuertas verdes no
-
-Doce PR fusionadas con un solo par de ojos encima. Codex revisó el núcleo lógico
-—1.439 líneas— y encontró **siete problemas**. Cuatro eran de código de ese día
-y están arreglados (PR #87).
-
-El más incómodo: **un año sin ningún aporte pesado devolvía `0 kg/ha`, y el
-propio test lo exigía**, con un comentario que admitía que el 0 era «engañoso
-por sí solo». Se vio el problema, se escribió en un comentario y se despachó
-igual, confiando en que el conteo de aportes sin pesar al lado lo salvara. No lo
-salva: un 0 en una columna de kilos se lee como medición (ADR-080).
-
-Los otros tres: `getHarvestSourceContext` filtraba los bloques que **ofrece** y
-no los que **muestra**, devolviendo datos de bloques ajenos mientras su
-comentario afirmaba lo contrario; `createPlantingCohort` guardaba una densidad
-derivada que sobrevivía a la corrección de sus dos insumos; y tres tests exigían
-la **clase** del error en vez del código, así que pasaban por la validación
-equivocada.
-
-**Y al arreglarlos pasó otra vez.** El flip-test de los dos primeros arreglos
-pasó con los fallos reintroducidos: no existía un usuario que alcanzara el
-bloque A y no el B, ni una aserción que mirara la columna de densidad. El mismo
-defecto que la revisión acababa de señalar, cometido al corregirlo. Ahora con
-cada fallo puesto cae un test.
-
-**La lección operativa, no la moral:** compuerta, suite y verificación en
-navegador comprueban *ejecución*. Ninguna comprueba *criterio* — que un cero sea
-una afirmación, que un comentario diga la verdad. Para eso está
-`tools/pack-for-review.sh`, y el paquete completo del día salía en 48.000 líneas
-porque incluye el cuerpo entero de cada archivo tocado: **acotar el rango al
-núcleo lógico** lo dejó en 2.958 y en una pasada.
-
 ## 3. Bloqueado, y en qué
 
 - **Aviso fiable de que un backup no corrió** — bloqueado en P-A. Hoy la señal
@@ -225,7 +201,7 @@ núcleo lógico** lo dejó en 2.958 y en una pasada.
   falta a quién darle la llave.
 - **Que la compuerta sea *obligatoria* para fusionar** — CI existe desde el
   2026-08-28 (`.github/workflows/ci.yml` → `scripts/ci.sh`: typecheck,
-  presupuesto de estado, inventario de rutas, lint y dos archivos de test
+  presupuesto de estado, inventario de rutas, lint y **ocho** archivos de test
   herméticos), y corre en cada push y cada PR. Lo que sigue bloqueado es que
   **impida** fusionar: la protección de ramas no está disponible en un
   repositorio privado de este plan («Upgrade to GitHub Pro»). Hoy CI informa,
@@ -244,14 +220,33 @@ núcleo lógico** lo dejó en 2.958 y en una pasada.
   dos entradas: **0 de 8 lotes tienen área** y **0 cosechas están atribuidas a
   bloques**, aunque 15 de las 33 ya tienen peso declarado. Las dos las carga él
   ahora sin ayuda.
-- **`main` va por delante de producción, y `Location.aspect` no está desplegado**
-  — la cuenta de Vercel agotó su límite diario de builds el 2026-09-01
-  («Deployment rate limited — retry in 24 hours»), así que el merge de #105 no
-  construyó. **No hay inconsistencia**: código y migración quedaron sin
-  desplegar juntos, y producción sigue sirviendo el build de #103. Cuando el
-  límite se despeje hay que **disparar un despliegue de producción** para que
-  `scripts/vercel-build.sh` corra `prisma migrate deploy` y la columna aparezca.
-  Hasta entonces, `core.location` en producción **no tiene** `aspect`.
+- **`main` va por delante de producción: CUATRO migraciones sin desplegar** —
+  la cuenta de Vercel agotó su límite diario de builds el 2026-09-01
+  («Deployment rate limited — retry in 24 hours»), así que los merges de #105,
+  #108, #110 y #111 no construyeron. **No hay inconsistencia**: código y
+  migraciones quedaron sin desplegar juntos, y producción sigue sirviendo el
+  build de #103. Cuando el límite se despeje hay que **disparar un despliegue de
+  producción** para que `scripts/vercel-build.sh` corra `prisma migrate deploy`.
+  Las cuatro, en orden: `20260901030000_s1_location_aspect`,
+  `20260901040000_s1_biochar_batch`,
+  `20260901050000_s1_measurement_biochar_subject`,
+  `20260901060000_s1_soil_profile`.
+- **Fotos con ámbito de Location** — no está bloqueado, está *pendiente*, y ya
+  hace falta en dos sitios: el Paso 2 del marco pide fotografiar el retorte y el
+  proceso, y el Paso 4 fotografiar cada perfil de calicata **con escala**. El
+  flujo de subida actual (`requestLotAssetUpload`) cuelga de un `Lot` y se gatea
+  con `lot:manage`, así que un lote de biochar y una calicata no tienen por
+  dónde. Es una pieza que desbloquea dos cosas ya construidas, igual que hizo el
+  sujeto no-café de `Measurement`.
+- **Del plan S1 quedan dos entidades de la Tabla 15.** `SoilSample` y
+  `FoliarSample` (semanas 6–10) no dependen de ninguna decisión: el patrón está
+  entero desde la PR #110 —sujeto propio en `Measurement`, rama de autorización,
+  vocabulario en el registro canónico— y falta el de la Tabla 3 (CEC efectiva,
+  acidez intercambiable, Al intercambiable) y las cifras físicas de la Tabla 4.
+  El **microclima** (semanas 4–10) sí está bloqueado: `CLAUDE.md` §38 pide
+  arquitectura separada para la serie temporal y no dice cuál, y esa decisión es
+  de Daniel. Ver §6 de `docs/implementation/45_S1_SUELO_AMBIENTE_TAZA.md`, donde
+  están las tres abiertas.
 - **Nadie ha usado ninguna de las cinco pantallas nuevas.** Todo lo que se sabe
   de ellas se sabe de la copia local restaurada. Que un operador real las
   recorra es la única prueba que falta, y la que suele encontrar lo que ninguna
