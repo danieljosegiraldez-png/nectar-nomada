@@ -6,6 +6,9 @@ import { getPlotDetail } from "../../../lib/traceability/plantingCohorts";
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { PlotAttributesForm } from "../../components/traceability/PlotAttributesForm";
 import { PlantingCohortForm } from "../../components/traceability/PlantingCohortForm";
+import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
+import { getObserverCandidates } from "../../../lib/traceability/lots";
+import { FieldSessionStartForm } from "../../components/traceability/FieldSessionForms";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +40,12 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
 
   const { location, cohorts, cultivarOptions, density, organizationName } = detail;
   const rendimiento = detail.yield;
+  // Misma compuerta que el resto de la página (`requireLocationAttributeAccess`),
+  // así que si llegaste hasta aquí, esto no puede negarte.
+  const [jornadas, { people, selfPersonId }] = await Promise.all([
+    listFieldSessions(user.userAccountId, id),
+    getObserverCandidates(user.userAccountId),
+  ]);
   const activas = cohorts.filter((c) => c.status === "active");
 
   return (
@@ -172,6 +181,38 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             purpose: this is computed on read, never written to
             `PlantingCohort.densityPerHectare`. */}
         <p className="nn-detail-meta">{t("densityComputedNote")}</p>
+      </section>
+
+      <section className="nn-section">
+        <h2>{t("fieldSessionsHeading")}</h2>
+        {jornadas.length === 0 ? (
+          <p className="nn-muted">{t("fieldSessionsNone")}</p>
+        ) : (
+          <ul className="nn-detail-meta">
+            {jornadas.map((j) => (
+              <li key={j.id}>
+                <Link href={`/field-sessions/${j.id}`}>
+                  {j.startedAt.toISOString().slice(0, 16).replace("T", " ")}
+                </Link>
+                {" · "}
+                {j.operator.displayName}
+                {" · "}
+                {t("fieldSessionEventCount", { count: j._count.events })}
+                {/* Una jornada sin cerrar es una visita que sigue en curso, no
+                    un registro incompleto: se marca en vez de esconderse. */}
+                {j.endedAt == null ? <> · <strong>{t("fieldSessionOpen")}</strong></> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        <details>
+          <summary>{t("fieldSessionStartSummary")}</summary>
+          <FieldSessionStartForm
+            locationId={location.id}
+            people={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
+            selfPersonId={selfPersonId}
+          />
+        </details>
       </section>
 
       <section className="nn-section">
