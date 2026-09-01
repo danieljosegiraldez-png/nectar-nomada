@@ -107,6 +107,19 @@ function maxIndiceDeFilas(formData: FormData, prefijo: string): number {
   return max;
 }
 
+/**
+ * Un número que el formulario **debe** traer. Un campo ausente o ilegible falla
+ * en vez de convertirse en 0: un 0 en una columna de medida se lee como que
+ * alguien midió cero, y eso es una afirmación (ADR-080).
+ */
+function requiredNumber(formData: FormData, campo: string): number {
+  const crudo = String(formData.get(campo) ?? "").trim();
+  if (!crudo) throw new MeasurementValidationError(`${campo}_required`);
+  const n = Number(crudo);
+  if (!Number.isFinite(n)) throw new MeasurementValidationError(`${campo}_not_a_number`);
+  return n;
+}
+
 const emptyToNullNumber = (value: FormDataEntryValue | null) => {
   const str = String(value ?? "").trim();
   return str.length ? Number(str) : null;
@@ -195,7 +208,11 @@ export async function recordMeasurementAction(
     await recordMeasurement(user.userAccountId, {
       lotId,
       variable: String(formData.get("variable") ?? "") as never,
-      value: Number(formData.get("value") ?? 0),
+      // `?? 0` convertía un valor ausente en una medición de CERO. El
+      // `required` del formulario sólo protege la interfaz: invocando la acción
+      // sin `value` se creaba una lectura de 0 con aspecto de medida. Ahora se
+      // exige, y el servicio ya distingue el 0 legítimo del ausente (ADR-080).
+      value: requiredNumber(formData, "value"),
       unit: String(formData.get("unit") ?? ""),
       occurredAt: new Date(),
       notes: emptyToNull(formData.get("notes")),
@@ -1057,7 +1074,11 @@ export async function correctMeasurementFormAction(
   try {
     await correctMeasurement(user.userAccountId, {
       measurementId: String(formData.get("measurementId") ?? ""),
-      value: Number(formData.get("value") ?? 0),
+      // `?? 0` convertía un valor ausente en una medición de CERO. El
+      // `required` del formulario sólo protege la interfaz: invocando la acción
+      // sin `value` se creaba una lectura de 0 con aspecto de medida. Ahora se
+      // exige, y el servicio ya distingue el 0 legítimo del ausente (ADR-080).
+      value: requiredNumber(formData, "value"),
       unit: String(formData.get("unit") ?? ""),
       // Cuándo ocurrió la lectura CORRECTA. No es «ahora»: corregir a las seis
       // de la tarde una lectura de las nueve de la mañana no la mueve a la

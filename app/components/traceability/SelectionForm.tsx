@@ -241,7 +241,7 @@ export function SelectionForm({
         <input id="sel-notes" name="notes" type="text" />
       </div>
 
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
 
       <button type="submit" disabled={pending}>
         {pending ? t("selectionSubmitting") : t("selectionSubmit")}

@@ -28,7 +28,7 @@ export function AddProcessingStageForm({ treatmentBatchId, nextSequenceOrder }: 
         <label htmlFor="stageNotes">{t("notesLabel")}</label>
         <textarea id="stageNotes" name="notes" rows={2} />
       </div>
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("addStageButton")}
       </button>
@@ -45,7 +45,7 @@ export function CompleteProcessingStageForm({ treatmentBatchId, processingStageI
       <TimezoneOffsetField />
       <input type="hidden" name="treatmentBatchId" value={treatmentBatchId} />
       <input type="hidden" name="processingStageId" value={processingStageId} />
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending} style={{ fontSize: "0.85rem", padding: "0.25rem 0.6rem" }}>
         {t("completeStageButton")}
       </button>

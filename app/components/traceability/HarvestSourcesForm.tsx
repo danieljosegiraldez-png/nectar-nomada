@@ -132,7 +132,10 @@ export function HarvestSourcesForm({
               placeholder={t("sourceWeightUnweighed")}
             />
 
-            <input type="text" name={`sourceNotes.${i}`} placeholder={t("notesLabel")} />
+            {/* Etiqueta real, no sólo `placeholder`: el marcador desaparece
+                al escribir y un lector de pantalla no sabría qué fila es. */}
+            <label htmlFor={`sourceNotes.${i}`}>{t("sourceNotesLabel", { n: i + 1 })}</label>
+            <input id={`sourceNotes.${i}`} type="text" name={`sourceNotes.${i}`} />
 
             <button
               type="button"
@@ -193,7 +196,7 @@ export function HarvestSourcesForm({
         <p className="nn-muted">{t("harvestSourcesNoDeclaredWeight")}</p>
       )}
 
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("recordHarvestSourcesButton")}
       </button>

@@ -86,7 +86,7 @@ export function ReceivingForm({
         <label htmlFor="r-notes">{t("notesLabel")}</label>
         <textarea id="r-notes" name="notes" rows={2} />
       </div>
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("recordReceivingButton")}
       </button>

@@ -46,7 +46,7 @@ export function AddToCartForm({ variants }: { variants: VariantOption[] }) {
         <input id="quantity" name="quantity" type="number" inputMode="numeric" min={1} defaultValue={1} required />
       </div>
 
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
 
       <button type="submit" className="nn-button" disabled={pending || variants.every((v) => v.inventoryCount === 0)}>
         {t("addToCartButton")}

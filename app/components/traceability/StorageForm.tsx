@@ -35,7 +35,7 @@ export function StorageForm({ lotId, locations }: { lotId: string; locations: Lo
         <label htmlFor="s-containerNote">{t("containerNoteLabel")}</label>
         <input id="s-containerNote" name="containerNote" type="text" placeholder="Bag #14" />
       </div>
-      {state.error ? <p className="nn-error">{state.error}</p> : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("moveStorageButton")}
       </button>

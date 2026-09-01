@@ -726,7 +726,9 @@
     "correctionReasonPlaceholder": "Ej.: apunté 24 y el instrumento marcaba 42",
     "correctionSubmitButton": "Registrar la corrección",
     "supersededLabel": "reemplazada",
-    "error_datetime": "No se pudo interpretar la fecha: {detail}"
+    "error_datetime": "No se pudo interpretar la fecha: {detail}",
+    "sourceCohortOptionNoCount": "{cultivar} · sin conteo",
+    "sourceNotesLabel": "Notas del bloque {n}"
   },
   "Apiary": {
     "badge": "Apiario",

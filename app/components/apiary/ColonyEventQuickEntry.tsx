@@ -108,7 +108,7 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
   return (
     <div>
       {saveError ? (
-        <p className="nn-error" style={{ marginBottom: "0.5rem" }}>
+        <p className="nn-error" role="alert" style={{ marginBottom: "0.5rem" }}>
           {saveError}
         </p>
       ) : null}
