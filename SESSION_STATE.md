@@ -63,6 +63,18 @@ vez y nada detectaba que el conjunto cambiara. Las excepciones escritas a mano
 pasaron de tres a **una**, porque el detector ahora demuestra por estructura lo
 que antes afirmaba una nota.
 
+**Dos consecuencias, cerradas después.** El aviso del presupuesto nombraba la
+entrada recién escrita como «la más vieja»: las secciones se ordenan por fecha,
+las de un mismo día empatan, y con el empate decidía el orden del documento —que
+va de más nuevo a más viejo—. Arreglado con desempate por posición, con prueba
+de regresión, y portado al repositorio web para que las dos copias no diverjan.
+
+Y las cifras de `docs/arquitectura/inventario-de-acceso.md` ya no pueden
+separarse de la medición: `tests/arquitectura/cifras-del-inventario.test.ts`
+compara total, archivos y cada fila contra la salida del script, y falla si
+aparece una clase que el documento no nombre. Era el mecanismo que faltaba: ese
+día se arreglaron las cifras y no lo que las dejó divergir.
+
 **Lo que sigue abierto, con su mutación escrita:** un nombre con forma de
 guardia basta. `requireFakeAccess()` que no hace nada sale como guardia directo
 y la compuerta pasa. Cerrarlo exige resolver el símbolo — es
@@ -176,35 +188,6 @@ que falta) uniría hoy dos tablas vacías —0 especímenes, 0 cosechas de miel�
 las **propuestas con presupuesto** no caben en ningún sitio: `budget`,
 `presupuesto`, `proposal` dan **cero** en el esquema. `Project` no tiene dinero,
 ni plan, ni aprobación. Eso exige modelo nuevo y una decisión, no improvisación.
-
-### 2026-08-31 · El rendimiento por hectárea no existía, y ahora sí
-
-Se había dicho varias veces que lo construido «es kg por hectárea comparable
-entre lotes y entre años». **No se seguía solo.** Había plantas/ha y kg por
-bloque, y nada unía el peso de la cosecha con el área: buscar `rendimiento`,
-`yield` o `kgPerHectare` en `lib/` y `app/` daba **cero**. Las entradas estaban;
-la cifra no la calculaba nadie.
-
-`computePlotYield`, por **año calendario de cosecha** (decisión del dueño). Tres
-cosas que cambian el número:
-
-- **Se lee por `HarvestEventSource`, no por `HarvestEvent.locationId`.** El
-  segundo es el lote *principal* de la cosecha; una cosecha de varios bloques
-  sólo nombra uno ahí, y contar por él daría todo el peso a un bloque y cero a
-  los demás.
-- **El total es un mínimo.** Un aporte sin pesar no se suma como cero — eso lo
-  subestimaría *y lo haría parecer medido*. El conteo de aportes sin pesar va
-  junto al número, no en una nota.
-- **Sin área el año no se descarta**: se muestran los kilos y se dice que falta
-  el área.
-
-Antes, el mismo día: **formulario de siembra** (`createPlantingCohort`) y
-`updatePlantingCohort`, que faltaba entero — corregir un conteo **no es
-renovar**, porque renovar declara que esos árboles salieron del suelo. La
-corrección exige un motivo: «conté mal» y «se murieron cuarenta matas» dejan la
-misma cifra y son hechos distintos.
-
-PR #77 y #79. Suite 685/685.
 
 ## 3. Bloqueado, y en qué
 

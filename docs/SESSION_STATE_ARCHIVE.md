@@ -192,6 +192,35 @@ PR #67, #68, #69, #71, #72. Suite 658/658 sobre `main` fusionado.
 
 ## 2026-08-31
 
+### 2026-08-31 · El rendimiento por hectárea no existía, y ahora sí
+
+Se había dicho varias veces que lo construido «es kg por hectárea comparable
+entre lotes y entre años». **No se seguía solo.** Había plantas/ha y kg por
+bloque, y nada unía el peso de la cosecha con el área: buscar `rendimiento`,
+`yield` o `kgPerHectare` en `lib/` y `app/` daba **cero**. Las entradas estaban;
+la cifra no la calculaba nadie.
+
+`computePlotYield`, por **año calendario de cosecha** (decisión del dueño). Tres
+cosas que cambian el número:
+
+- **Se lee por `HarvestEventSource`, no por `HarvestEvent.locationId`.** El
+  segundo es el lote *principal* de la cosecha; una cosecha de varios bloques
+  sólo nombra uno ahí, y contar por él daría todo el peso a un bloque y cero a
+  los demás.
+- **El total es un mínimo.** Un aporte sin pesar no se suma como cero — eso lo
+  subestimaría *y lo haría parecer medido*. El conteo de aportes sin pesar va
+  junto al número, no en una nota.
+- **Sin área el año no se descarta**: se muestran los kilos y se dice que falta
+  el área.
+
+Antes, el mismo día: **formulario de siembra** (`createPlantingCohort`) y
+`updatePlantingCohort`, que faltaba entero — corregir un conteo **no es
+renovar**, porque renovar declara que esos árboles salieron del suelo. La
+corrección exige un motivo: «conté mal» y «se murieron cuarenta matas» dejan la
+misma cifra y son hechos distintos.
+
+PR #77 y #79. Suite 685/685.
+
 ### 2026-08-31 · La cadena de febrero, entera y sin scripts
 
 Cohorte → hectáreas → cosecha → bloque. Los tres eslabones que faltaban tienen
