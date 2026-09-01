@@ -45,6 +45,12 @@ import {
   updateBiocharBatch,
   BiocharBatchValidationError,
 } from "../../lib/traceability/biocharBatches";
+import {
+  createSoilProfile,
+  updateSoilProfile,
+  SoilProfileValidationError,
+  type SoilHorizonInput,
+} from "../../lib/traceability/soilProfiles";
 import { createSampleFromLot } from "../../lib/traceability/samples";
 import { requestLotAssetUpload, finalizeLotAssetUpload, type LotAssetParent } from "../../lib/traceability/media";
 import {
@@ -75,6 +81,7 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof PlantingCohortValidationError) return t("error_harvest_sources", { detail: error.message });
   if (error instanceof FieldSessionValidationError) return t("error_field_session", { detail: error.message });
   if (error instanceof BiocharBatchValidationError) return t("error_biochar", { detail: error.message });
+  if (error instanceof SoilProfileValidationError) return t("error_soil_profile", { detail: error.message });
   if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });
   throw error;
 }
@@ -1241,5 +1248,102 @@ export async function updateBiocharBatchAction(
 
   revalidatePath(`/biochar/${biocharBatchId}`);
   revalidatePath("/biochar");
+  return {};
+}
+
+// --- Calicata (S1 §2, semanas 3-6) ---------------------------------------
+
+/** Los campos que comparten describir y corregir. */
+function camposDeCalicata(formData: FormData) {
+  return {
+    pitDepthCm: emptyToNullNumber(formData.get("pitDepthCm")),
+    rootingDepthCm: emptyToNullNumber(formData.get("rootingDepthCm")),
+    rootDistribution: emptyToNull(formData.get("rootDistribution")),
+    mottling: emptyToNull(formData.get("mottling")) as never,
+    greyColours: emptyToNull(formData.get("greyColours")) as never,
+    rootChannelConcretions: emptyToNull(formData.get("rootChannelConcretions")) as never,
+    sourSmell: emptyToNull(formData.get("sourSmell")) as never,
+    impedingLayerDepthCm: emptyToNullNumber(formData.get("impedingLayerDepthCm")),
+    impedingLayerNote: emptyToNull(formData.get("impedingLayerNote")),
+    notes: emptyToNull(formData.get("notes")),
+    dataQuality: emptyToNull(formData.get("dataQuality")) as never,
+  };
+}
+
+/**
+ * Los horizontes que trae el formulario.
+ *
+ * Una fila entera vacía se descarta —el formulario ofrece más de las que se
+ * suelen usar— pero una fila con CUALQUIER dato entra, aunque le falte la
+ * profundidad: un horizonte que se vio y no se midió sigue siendo un horizonte,
+ * y el ordinal existe justamente para no depender de `topCm`.
+ */
+function horizontesDelFormulario(formData: FormData): SoilHorizonInput[] {
+  const filas: SoilHorizonInput[] = [];
+  const total = maxIndiceDeFilas(formData, "horizonOrdinal");
+  for (let i = 0; i <= total; i++) {
+    const campos = {
+      topCm: emptyToNullNumber(formData.get(`horizonTopCm.${i}`)),
+      bottomCm: emptyToNullNumber(formData.get(`horizonBottomCm.${i}`)),
+      designation: emptyToNull(formData.get(`horizonDesignation.${i}`)),
+      colour: emptyToNull(formData.get(`horizonColour.${i}`)),
+      structure: emptyToNull(formData.get(`horizonStructure.${i}`)),
+      textureByFeel: emptyToNull(formData.get(`horizonTexture.${i}`)),
+      notes: emptyToNull(formData.get(`horizonNotes.${i}`)),
+    };
+    const vacia = Object.values(campos).every((v) => v == null);
+    if (vacia) continue;
+    filas.push({ ordinal: filas.length + 1, ...campos });
+  }
+  return filas;
+}
+
+export async function createSoilProfileAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await createSoilProfile(user.userAccountId, {
+      locationId,
+      describedAt: fechaDeDia(formData, "describedAt") ?? new Date(),
+      // ADR-038: sin valor por defecto. El formulario obliga a elegirlo.
+      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      horizons: horizontesDelFormulario(formData),
+      ...camposDeCalicata(formData),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  return {};
+}
+
+export async function updateSoilProfileAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await updateSoilProfile(user.userAccountId, {
+      soilProfileId: String(formData.get("soilProfileId") ?? ""),
+      describedAt: fechaDeDia(formData, "describedAt") ?? undefined,
+      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      ...camposDeCalicata(formData),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
   return {};
 }

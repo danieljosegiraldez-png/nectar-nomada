@@ -211,6 +211,7 @@ model UserAccount {
   plantingEventsCreated             PlantingEvent[]              @relation("PlantingEventCreatedBy")
   plantingCohortsCreated            PlantingCohort[]             @relation("PlantingCohortCreatedBy")
   biocharBatchesCreated             BiocharBatch[]               @relation("BiocharBatchCreatedBy")
+  soilProfilesCreated               SoilProfile[]                @relation("SoilProfileCreatedBy")
   fieldSessionsCreated              FieldSession[]               @relation("FieldSessionCreatedBy")
   fieldEventsCreated                FieldEvent[]                 @relation("FieldEventCreatedBy")
   harvestEventSourcesCreated        HarvestEventSource[]         @relation("HarvestEventSourceCreatedBy")
@@ -627,6 +628,7 @@ model Location {
   harvestEventSources         HarvestEventSource[]
   // S1 — lotes de biochar producidos AQUÍ, que no es donde se aplican.
   biocharBatchesProduced      BiocharBatch[]               @relation("BiocharBatchProducedAt")
+  soilProfiles                SoilProfile[]
   labourEntries               LabourEntry[]
   materialConsumptionEntries  MaterialConsumptionEntry[]
   processingStages            ProcessingStage[]
@@ -3716,6 +3718,132 @@ model HarvestEventSource {
   @@index([locationId])
   @@index([plantingCohortId])
   @@map("harvest_event_source")
+  @@schema("traceability")
+}
+
+// S1 (45_S1_SUELO_AMBIENTE_TAZA.md §2, semanas 3–6) — la calicata: la
+// descripción del perfil de suelo de un bloque.
+//
+// El marco es inusualmente rotundo sobre este paso: «cuesta casi nada y
+// probablemente producirá la observación más útil del Año 0» (Paso 4), y §19 lo
+// llama la actividad de mayor valor y menor coste de todo el programa. La razón
+// está en §6.1: humedad alta y encharcamiento **no son lo mismo**, y confundirlos
+// lleva a la intervención equivocada. Un suelo húmedo y bien estructurado es un
+// activo; uno húmedo y compactado, o húmedo sobre una capa de arcilla que
+// impide, es un techo de rendimiento y de taza que ningún programa de
+// fertilización levanta. Lo que distingue los dos casos **se ve en la calicata**
+// y en ningún otro sitio.
+//
+// Descripción, no análisis: **no depende de ningún laboratorio**, y por eso
+// puede aterrizar antes que nada químico. Las cifras físicas —densidad aparente,
+// resistencia a la penetración, infiltración— llegan con la ronda de muestreo
+// del Paso 6 y son `Measurement`, no columnas de aquí.
+model SoilProfile {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // El bloque descrito, y el ancla de RBAC. Requerido: una descripción de
+  // perfil que no diga de qué suelo habla no describe nada.
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id])
+
+  // Requerida. Una calicata es una observación de un día, y §14 pide repetirla:
+  // la del Año 0 y la de dentro de tres años son dos filas, no una editada. Lo
+  // que se corrige con PATCH es una errata de transcripción; volver a describir
+  // el mismo bloque es una fila nueva.
+  describedAt DateTime @map("described_at")
+
+  // El Paso 4 pide 80–100 cm «donde el terreno lo permita», así que la
+  // profundidad alcanzada es un dato y no un supuesto: una calicata de 40 cm
+  // porque salió roca dice algo, y decir que llegó a 100 sería falso.
+  pitDepthCm Int? @map("pit_depth_cm")
+
+  // «El número más importante para la salud radicular en este tipo de suelo»
+  // (§5). Las raíces finas del café se concentran arriba, así que una
+  // restricción somera hace un daño desproporcionado.
+  rootingDepthCm   Int?    @map("rooting_depth_cm")
+  rootDistribution String? @map("root_distribution")
+
+  // §6.1 — las tres señales visuales de anaerobiosis periódica, más el olor.
+  // Cada una por separado y con tres estados, no un booleano: «no se miró» y
+  // «se miró y no había» son hechos distintos (ADR-080), y un booleano nullable
+  // los confunde en cuanto alguien lee `!mottling`.
+  mottling               SoilFeatureObservation? @map("mottling")
+  greyColours            SoilFeatureObservation? @map("grey_colours")
+  rootChannelConcretions SoilFeatureObservation? @map("root_channel_concretions")
+  sourSmell              SoilFeatureObservation? @map("sour_smell")
+
+  // La capa que impide, si la hay. La profundidad va aparte de la nota porque
+  // es la cifra que decide si el problema es de drenaje o de nutrición.
+  impedingLayerDepthCm Int?    @map("impeding_layer_depth_cm")
+  impedingLayerNote    String? @map("impeding_layer_note")
+
+  notes String?
+
+  // ADR-038 — requerido, sin default. Una calicata descrita por quien la cavó
+  // es `direct_observation`; una transcrita de la libreta de otro no lo es.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  sourceReference String?         @map("source_reference")
+  dataQuality     DataQuality?    @map("data_quality")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("SoilProfileCreatedBy", fields: [createdBy], references: [id])
+
+  horizons SoilHorizon[]
+
+  @@index([locationId])
+  @@map("soil_profile")
+  @@schema("traceability")
+}
+
+// Un horizonte del perfil. Tabla hija y no un bloque de texto en `SoilProfile`
+// porque el Paso 4 pide describir **los horizontes** —en plural— con color,
+// estructura y textura al tacto cada uno, y porque la profundidad a la que
+// cambia el material es justo lo que hay que poder comparar entre bloques y
+// entre años. Un párrafo no se compara.
+model SoilHorizon {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  soilProfileId String      @map("soil_profile_id") @db.Uuid
+  soilProfile   SoilProfile @relation(fields: [soilProfileId], references: [id], onDelete: Cascade)
+
+  // Orden desde la superficie. Explícito y no derivado de `topCm`, porque un
+  // horizonte cuya profundidad nadie midió sigue teniendo un sitio en la
+  // secuencia observada.
+  ordinal Int
+
+  topCm    Int? @map("top_cm")
+  bottomCm Int? @map("bottom_cm")
+
+  // «A», «Bt», «C»… Texto libre y no un enum: la nomenclatura de horizontes es
+  // un sistema entero, el marco no da lista, y quien describe puede no usarla.
+  designation String?
+
+  // Color, estructura y textura al tacto. Los tres en texto por la misma razón
+  // que `Location.slopeDescription`: son descripciones, y el marco no enumera
+  // valores. El color puede venir en notación Munsell o en palabras; forzar una
+  // sola forma perdería la que el describiente sí sabe dar.
+  colour        String?
+  structure     String?
+  textureByFeel String? @map("texture_by_feel")
+
+  notes String?
+
+  @@unique([soilProfileId, ordinal])
+  @@index([soilProfileId])
+  @@map("soil_horizon")
+  @@schema("traceability")
+}
+
+// §6.1 — tres estados, no dos. «Presente» y «ausente» son las dos
+// observaciones; `not_observed` es la tercera, y existe porque quien describe
+// una calicata a veces no busca una señal concreta, y un hueco que se lea como
+// «no había» convierte una omisión en un hallazgo.
+enum SoilFeatureObservation {
+  present
+  absent
+  not_observed
+
   @@schema("traceability")
 }
 

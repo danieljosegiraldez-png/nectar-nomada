@@ -8,6 +8,7 @@ import {
   BiocharCooling,
   BiocharMoistureCondition,
   ShadePercentageBracket,
+  SoilFeatureObservation,
   SunExposure,
 } from "../../generated/prisma/enums";
 
@@ -46,6 +47,7 @@ const CASOS = [
   { nombre: "ShadePercentageBracket", prefijo: "shadePercentage", valores: Object.values(ShadePercentageBracket) },
   { nombre: "BiocharMoistureCondition", prefijo: "biocharMoisture", valores: Object.values(BiocharMoistureCondition) },
   { nombre: "BiocharCooling", prefijo: "biocharCooling", valores: Object.values(BiocharCooling) },
+  { nombre: "SoilFeatureObservation", prefijo: "soilObservation", valores: Object.values(SoilFeatureObservation) },
 ] as const;
 
 describe("cada valor enumerado tiene etiqueta en los dos idiomas", () => {
@@ -123,5 +125,13 @@ describe("el formulario ofrece exactamente los valores que la base acepta", () =
 
   it("COOLINGS coincide con el enum BiocharCooling", () => {
     expect(listaDelFormulario("BiocharBatchForm.tsx", "COOLINGS")).toEqual(Object.values(BiocharCooling));
+  });
+
+  it("OBSERVACIONES coincide con el enum SoilFeatureObservation", () => {
+    // Las tres, y en ese orden: «no se miró» va la última porque no es una
+    // observación del suelo sino la ausencia de una.
+    expect(listaDelFormulario("SoilProfileForm.tsx", "OBSERVACIONES")).toEqual(
+      Object.values(SoilFeatureObservation),
+    );
   });
 });
