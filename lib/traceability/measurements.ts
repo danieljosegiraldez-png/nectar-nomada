@@ -31,7 +31,12 @@ import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { requireLocationAttributeAccess } from "./locations";
 import type { ClassificationLevel } from "../rbac/types";
-import { normalizeToCanonical, type MeasurementVariable } from "./units";
+import {
+  normalizeToCanonical,
+  variablePerteneceAlPanel,
+  type DominioDeVariable,
+  type MeasurementVariable,
+} from "./units";
 import { recordAuditEvent } from "../audit";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
@@ -67,6 +72,25 @@ export interface SujetoDeMedicion {
  * repetía la misma forma tres veces, y esa repetición es donde se cuela el que
  * comprueba la exclusividad de uno y se olvida del otro.
  */
+/**
+ * Qué panel de laboratorio corresponde a cada sujeto.
+ *
+ * `PANELES` sólo filtraba desplegables: `recordMeasurement` aceptaba cualquier
+ * variable para cualquier sujeto, así que un POST con `variable=brix` sobre una
+ * muestra de suelo dejaba evidencia semánticamente falsa en su ficha. La
+ * autorización pasaba legítimamente; lo que fallaba era la integridad. Lo
+ * encontró la cuarta revisión independiente, y el formulario no es la frontera
+ * (SECURITY.md §2).
+ *
+ * Los sujetos de café **no** se validan contra un panel: sus variables las
+ * gobierna el protocolo y la receta, no un panel de laboratorio.
+ */
+const PANEL_DEL_SUJETO: Record<string, DominioDeVariable> = {
+  biocharBatchId: "analisis_de_enmienda",
+  soilSampleId: "analisis_de_suelo",
+  foliarSampleId: "analisis_foliar",
+};
+
 const SUJETOS_NO_CAFE = [
   {
     campo: "biocharBatchId",
@@ -208,6 +232,14 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
   }
   if (input.processingStageId && !input.lotId) {
     throw new MeasurementValidationError("processing_stage_link_requires_lot_id");
+  }
+
+  // La variable tiene que pertenecer al panel del sujeto. Se comprueba después
+  // de autorizar: qué puede ver alguien no depende de si el dato es coherente.
+  for (const [campo, dominio] of Object.entries(PANEL_DEL_SUJETO)) {
+    if (input[campo as keyof typeof input] && !variablePerteneceAlPanel(input.variable, dominio)) {
+      throw new MeasurementValidationError(`variable_not_in_panel:${input.variable}:${dominio}`);
+    }
   }
 
   const normalized = normalizeToCanonical(input.variable, input.value, input.unit);

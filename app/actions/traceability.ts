@@ -95,6 +95,7 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof SoilProfileValidationError) return t("error_soil_profile", { detail: error.message });
   if (error instanceof SampleValidationError) return t("error_sample", { detail: error.message });
   if (error instanceof LandMediaValidationError) return t("error_land_media", { detail: error.message });
+  if (error instanceof FechaInvalidaError) return t("error_datetime", { detail: error.message });
   if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });
   throw error;
 }
@@ -1163,7 +1164,7 @@ export async function recordLabMeasurementAction(
       // Nunca `?? 0`: una casilla vacía no es una lectura de cero (ADR-080).
       value: requiredNumber(formData, "value"),
       unit: String(formData.get("unit") ?? ""),
-      occurredAt: fechaDeDia(formData, "occurredAt") ?? new Date(),
+      occurredAt: fechaDeDiaRequerida(formData, "occurredAt"),
       notes: emptyToNull(formData.get("notes")),
       provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
       sourceReference: emptyToNull(formData.get("sourceReference")),
@@ -1189,10 +1190,66 @@ export async function recordLabMeasurementAction(
  */
 const fechaDeDia = (formData: FormData, campo: string) => {
   const raw = String(formData.get(campo) ?? "").trim();
-  return raw ? new Date(`${raw.slice(0, 10)}T00:00:00Z`) : null;
+  if (!raw) return null;
+  const dia = raw.slice(0, 10);
+  const fecha = new Date(`${dia}T00:00:00Z`);
+  // `new Date("2026-02-31T00:00:00Z")` **no falla**: normaliza al 3 de marzo.
+  // Un día que no existe se convertía en silencio en otro hecho histórico. El
+  // `type="date"` del navegador lo evita, pero una llamada directa no pasa por
+  // ahí — y el formulario no es la frontera (SECURITY.md §2). Lo encontró la
+  // cuarta revisión independiente.
+  if (Number.isNaN(fecha.getTime()) || fecha.toISOString().slice(0, 10) !== dia) {
+    throw new FechaInvalidaError(`fecha_invalida:${campo}:${dia}`);
+  }
+  return fecha;
+};
+
+/** Una fecha que el POST trae y no existe en el calendario. */
+export class FechaInvalidaError extends Error {}
+
+/**
+ * Una fecha que el registro EXIGE. Ausente falla, no se inventa.
+ *
+ * Cuatro acciones hacían `fechaDeDia(...) ?? new Date()`: si el POST omitía la
+ * fecha, la fila afirmaba que la muestra se tomó hoy. Es el mismo patrón que el
+ * `?? 0` que ya creó mediciones de cero — convertir una ausencia en una
+ * afirmación (ADR-080). Lo encontró la cuarta revisión.
+ */
+const fechaDeDiaRequerida = (formData: FormData, campo: string) => {
+  const fecha = fechaDeDia(formData, campo);
+  if (!fecha) throw new FechaInvalidaError(`${campo}_required`);
+  return fecha;
 };
 
 /** Los campos de la Tabla 6 que comparten crear y corregir. */
+/**
+ * Quita las claves cuyo campo **no venía en el POST**.
+ *
+ * Los servicios tienen contrato PATCH: `undefined` conserva, `null` borra. Las
+ * acciones de corrección construían el objeto con TODAS las claves, mapeando
+ * ausencia a `null`, así que una invocación parcial **vaciaba** lo que no
+ * mencionaba — el régimen térmico de un lote de biochar, las señales de
+ * anaerobiosis de una calicata. Por la pantalla no pasaba, porque el formulario
+ * de edición pinta todos los campos; pero el formulario no es la frontera
+ * (SECURITY.md §2), y el contrato que el servicio documenta quedaba desmentido
+ * por la acción que lo llama. Lo encontró la cuarta revisión independiente.
+ *
+ * Al CREAR no se usa: ahí no hay nada que conservar, y ausente = `null` es
+ * correcto.
+ */
+function soloLoQueVino<T extends Record<string, unknown>>(
+  formData: FormData,
+  campos: T,
+  /** Campos que no son casillas y cuyo nombre en el POST difiere de la clave. */
+  alias: Record<string, string> = {},
+): Partial<T> {
+  const salida: Partial<T> = {};
+  for (const clave of Object.keys(campos) as (keyof T & string)[]) {
+    if (formData.has(alias[clave] ?? clave)) salida[clave] = campos[clave];
+  }
+  return salida;
+}
+
 function camposDeBiochar(formData: FormData) {
   const marcada = (campo: string) => formData.get(campo) != null;
   return {
@@ -1264,7 +1321,7 @@ export async function updateBiocharBatchAction(
       biocharBatchId,
       batchCode: String(formData.get("batchCode") ?? ""),
       provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
-      ...camposDeBiochar(formData),
+      ...soloLoQueVino(formData, camposDeBiochar(formData), { coComposted: "coCompostedPresent" }),
     });
   } catch (error) {
     return { error: friendlyError(t, error) };
@@ -1334,7 +1391,7 @@ export async function createSoilProfileAction(
   try {
     await createSoilProfile(user.userAccountId, {
       locationId,
-      describedAt: fechaDeDia(formData, "describedAt") ?? new Date(),
+      describedAt: fechaDeDiaRequerida(formData, "describedAt"),
       // ADR-038: sin valor por defecto. El formulario obliga a elegirlo.
       provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
       horizons: horizontesDelFormulario(formData),
@@ -1356,19 +1413,24 @@ export async function updateSoilProfileAction(
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
 
-  const locationId = String(formData.get("locationId") ?? "");
   try {
-    await updateSoilProfile(user.userAccountId, {
+    // El servicio devuelve el perfil corregido, y de ahí sale la ruta a
+    // revalidar. Antes se usaba el `locationId` **del POST**, que es un campo
+    // independiente: corregir un perfil del bloque B revalidaba el bloque A si
+    // el POST lo decía. No permitía escribir donde no se debe —el ámbito lo
+    // deriva el servicio del propio perfil— pero dejaba la página de B
+    // cacheada con el valor viejo. Lo encontró la cuarta revisión.
+    const perfil = await updateSoilProfile(user.userAccountId, {
       soilProfileId: String(formData.get("soilProfileId") ?? ""),
-      describedAt: fechaDeDia(formData, "describedAt") ?? undefined,
+      describedAt: formData.has("describedAt") ? fechaDeDiaRequerida(formData, "describedAt") : undefined,
       provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
-      ...camposDeCalicata(formData),
+      ...soloLoQueVino(formData, camposDeCalicata(formData)),
     });
+    revalidatePath(`/plots/${perfil.locationId}`);
   } catch (error) {
     return { error: friendlyError(t, error) };
   }
 
-  revalidatePath(`/plots/${locationId}`);
   return {};
 }
 
@@ -1387,7 +1449,7 @@ export async function createSoilSampleAction(
     await createSoilSample(user.userAccountId, {
       locationId,
       sampleCode: String(formData.get("sampleCode") ?? ""),
-      sampledAt: fechaDeDia(formData, "sampledAt") ?? new Date(),
+      sampledAt: fechaDeDiaRequerida(formData, "sampledAt"),
       provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
       treatmentPlotLabel: emptyToNull(formData.get("treatmentPlotLabel")),
       samplingPointLabel: emptyToNull(formData.get("samplingPointLabel")),
@@ -1420,7 +1482,7 @@ export async function createFoliarSampleAction(
     await createFoliarSample(user.userAccountId, {
       locationId,
       sampleCode: String(formData.get("sampleCode") ?? ""),
-      sampledAt: fechaDeDia(formData, "sampledAt") ?? new Date(),
+      sampledAt: fechaDeDiaRequerida(formData, "sampledAt"),
       provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
       treatmentPlotLabel: emptyToNull(formData.get("treatmentPlotLabel")),
       leafPairPosition: emptyToNullNumber(formData.get("leafPairPosition")),

@@ -23,7 +23,7 @@ import { createTreatmentBatch, TreatmentBatchValidationError } from "../../lib/r
 import { createSoilProfile } from "../../lib/traceability/soilProfiles";
 import { createSoilSample } from "../../lib/traceability/soilSamples";
 import { createBiocharBatch } from "../../lib/traceability/biocharBatches";
-import { recordMeasurement } from "../../lib/traceability/measurements";
+import { recordMeasurement, MeasurementValidationError } from "../../lib/traceability/measurements";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `enmienda-${Date.now()}`;
@@ -203,6 +203,29 @@ afterAll(async () => {
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
 });
 
+/**
+ * Un bloque nuevo y VACÍO, propio del test que lo pide.
+ *
+ * Hizo falta al arreglar el hallazgo del panel: el control positivo de ese test
+ * —una lectura de pH válida— abría «química base» en el bloque compartido y
+ * tumbaba dos tests posteriores que lo esperaban vacío. Es el mismo estado
+ * narrativo que la segunda revisión señaló, cometido otra vez al arreglar otra
+ * cosa. Un bloque por test lo cierra.
+ */
+async function bloqueVirgen(etiqueta: string): Promise<string> {
+  const bloque = await prisma.location.create({
+    data: {
+      locationType: "plot",
+      name: `TEST Bloque ${etiqueta} (${RUN_ID})`,
+      organizationId,
+      status: "approved",
+      classification: "internal",
+    },
+  });
+  bloquesExtra.push(bloque.id);
+  return bloque.id;
+}
+
 /** Fecha contra la que se juzga en los tests que traen su propio fixture. */
 const FECHA_TRATAMIENTO = new Date("2026-07-10T00:00:00Z");
 
@@ -290,28 +313,70 @@ describe("Gate 0 — la compuerta que el marco firma", () => {
     expect(faltan).toContain("baseline_soil_physics");
   });
 
-  it("una lectura que NO es del panel de suelo no es química base", async () => {
-    // El agujero que encontró la revisión: `measurements: { some: {} }`
-    // aceptaba cualquier medición. Un Brix colgado de una muestra de suelo
-    // abría la compuerta.
+  it("el servicio RECHAZA una variable que no es del panel del sujeto", async () => {
+    // El agujero que encontró la cuarta revisión: `recordMeasurement` aceptaba
+    // cualquier variable para cualquier sujeto, así que un POST con `brix`
+    // sobre una muestra de suelo dejaba evidencia semánticamente falsa. La
+    // autorización pasaba; lo que fallaba era la integridad.
+    const bloque = await bloqueVirgen("panel");
     const muestra = await createSoilSample(farmUserId, {
-      locationId: locationVirgenId,
+      locationId: bloque,
       sampleCode: `SS-brix-${RUN_ID}`,
       sampledAt: new Date("2026-05-02T00:00:00Z"),
       provenanceClass: "original_record",
     });
     muestrasExtra.push(muestra.id);
-    await recordMeasurement(farmUserId, {
+
+    await expect(
+      recordMeasurement(farmUserId, {
+        soilSampleId: muestra.id,
+        variable: "brix",
+        value: 12,
+        unit: "Bx",
+        occurredAt: new Date("2026-06-01T00:00:00Z"),
+        provenanceClass: "measured_fact",
+      }),
+    ).rejects.toThrow(MeasurementValidationError);
+
+    // Control positivo: la misma muestra acepta una variable que SÍ es de
+    // suelo. Sin esto, «rechaza» podría estar rechazando por cualquier motivo.
+    const buena = await recordMeasurement(farmUserId, {
       soilSampleId: muestra.id,
-      variable: "brix",
-      value: 12,
-      unit: "Bx",
+      variable: "ph",
+      value: 5.4,
+      unit: "pH",
       occurredAt: new Date("2026-06-01T00:00:00Z"),
       provenanceClass: "measured_fact",
     });
+    expect(buena.soilSampleId).toBe(muestra.id);
+  });
+
+  it("y Gate 0 tampoco la contaría si entrara por otra vía", async () => {
+    // Defensa en profundidad: el servicio ya no la deja entrar, pero un
+    // importador o una reparación operativa escriben directo. Gate 0 filtra por
+    // panel, así que una fila así no abre «química base».
+    const bloque = await bloqueVirgen("directa");
+    const muestra = await createSoilSample(farmUserId, {
+      locationId: bloque,
+      sampleCode: `SS-directa-${RUN_ID}`,
+      sampledAt: new Date("2026-05-02T00:00:00Z"),
+      provenanceClass: "original_record",
+    });
+    muestrasExtra.push(muestra.id);
+    await prisma.measurement.create({
+      data: {
+        soilSampleId: muestra.id,
+        variable: "brix",
+        value: 12,
+        unit: "Bx",
+        occurredAt: new Date("2026-06-01T00:00:00Z"),
+        provenanceClass: "measured_fact",
+        createdBy: farmUserId,
+      },
+    });
 
     const faltan = await getGate0Status(researchUserId, {
-      locationId: locationVirgenId,
+      locationId: bloque,
       protocolVersionId,
       startedAt: new Date("2026-07-01T00:00:00Z"),
     });
@@ -368,8 +433,9 @@ describe("Gate 0 — la compuerta que el marco firma", () => {
     // responde en agosto, y la enmienda se aplicó en julio. La muestra es
     // anterior; el RESULTADO no. Sin filtrar por `occurredAt` esto abría la
     // compuerta, y filtrar sólo por la fecha de muestreo no lo detecta.
+    const bloque = await bloqueVirgen("tarde");
     const muestra = await createSoilSample(farmUserId, {
-      locationId: locationVirgenId,
+      locationId: bloque,
       sampleCode: `SS-tarde-${RUN_ID}`,
       sampledAt: new Date("2026-05-02T00:00:00Z"),
       provenanceClass: "original_record",
@@ -385,7 +451,7 @@ describe("Gate 0 — la compuerta que el marco firma", () => {
     });
 
     const faltan = await getGate0Status(researchUserId, {
-      locationId: locationVirgenId,
+      locationId: bloque,
       protocolVersionId,
       startedAt: new Date("2026-07-01T00:00:00Z"),
     });

@@ -1542,9 +1542,9 @@ model Asset {
   // parece una capacidad que el sistema no tiene. Una foto general de un bloque
   // ya cabe en `locationId`, que existe desde el principio.
   biocharBatchId    String?          @map("biochar_batch_id") @db.Uuid
-  biocharBatch      BiocharBatch?    @relation(fields: [biocharBatchId], references: [id])
+  biocharBatch      BiocharBatch?    @relation(fields: [biocharBatchId], references: [id], onDelete: Restrict)
   soilProfileId     String?          @map("soil_profile_id") @db.Uuid
-  soilProfile       SoilProfile?     @relation(fields: [soilProfileId], references: [id])
+  soilProfile       SoilProfile?     @relation(fields: [soilProfileId], references: [id], onDelete: Restrict)
 
   // A6 (22_APIARY_V1_SCOPING_REPORT.md — Photo attachment): same "specific
   // nullable FK per parent, not polymorphic" convention as the six
@@ -2920,14 +2920,14 @@ model Measurement {
   // contra la Location donde el lote se produjo, no `lot:manage` —, así que
   // `recordMeasurement` resuelve el ámbito por rama y no por acumulación.
   biocharBatchId      String?            @map("biochar_batch_id") @db.Uuid
-  biocharBatch        BiocharBatch?      @relation(fields: [biocharBatchId], references: [id])
+  biocharBatch        BiocharBatch?      @relation(fields: [biocharBatchId], references: [id], onDelete: Restrict)
   // S1 §2 — los otros dos sujetos que no son café. Misma forma que
   // `biocharBatchId`: independientes, excluyen `lotId` en vez de exigirlo, y su
   // ámbito es la Location del bloque muestreado.
   soilSampleId        String?            @map("soil_sample_id") @db.Uuid
-  soilSample          SoilSample?        @relation(fields: [soilSampleId], references: [id])
+  soilSample          SoilSample?        @relation(fields: [soilSampleId], references: [id], onDelete: Restrict)
   foliarSampleId      String?            @map("foliar_sample_id") @db.Uuid
-  foliarSample        FoliarSample?      @relation(fields: [foliarSampleId], references: [id])
+  foliarSample        FoliarSample?      @relation(fields: [foliarSampleId], references: [id], onDelete: Restrict)
 
   sourceType       MeasurementSourceType @default(manual) @map("source_type")
   // Legacy free-text device label from T3. No code path has ever written it;
