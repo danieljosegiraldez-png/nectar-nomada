@@ -30,6 +30,18 @@ git fetch origin --quiet 2>/dev/null || nota "sin red: se compara contra el últ
 HEAD_SHA=$(git rev-parse HEAD)
 MAIN_SHA=$(git rev-parse origin/main 2>/dev/null || echo "")
 RAMA=$(git branch --show-current)
+# Con HEAD desacoplada `git branch --show-current` devuelve vacío, y los
+# mensajes salían como «estás en «», no en main». El veredicto era correcto
+# —una HEAD suelta no es main— pero se leía como un fallo del script. Y el
+# consejo tampoco valía: en desacoplado un pull no adelanta ninguna rama, que
+# es un problema distinto y peor de explicar después.
+if [ -n "$RAMA" ]; then
+  RAMA_TXT="«$RAMA»"
+  AVISO_RAMA="un pull aquí mueve esa rama"
+else
+  RAMA_TXT="HEAD desacoplada, sin rama"
+  AVISO_RAMA="un pull aquí no actualiza ninguna rama y lo que commitees se queda sin referencia"
+fi
 # Sólo lo con seguimiento bloquea un fast-forward.
 SUCIOS=$(git status --porcelain | grep -vc '^??' || true)
 SIN_SEG=$(git status --porcelain | grep -c '^??' || true)
@@ -41,13 +53,13 @@ SIN_SEG=$(git status --porcelain | grep -c '^??' || true)
 if [ "$HEAD_SHA" = "$MAIN_SHA" ] && [ "$RAMA" = "main" ]; then
   bien "en main, al día con origin/main ($(git rev-parse --short HEAD))"
 elif [ "$HEAD_SHA" = "$MAIN_SHA" ]; then
-  mal "estás en «$RAMA», no en main — apunta al mismo commit, pero no es lo mismo: un pull aquí mueve esa rama"
+  mal "estás en $RAMA_TXT, no en main — apunta al mismo commit, pero no es lo mismo: $AVISO_RAMA"
 elif [ -n "$MAIN_SHA" ] && git merge-base --is-ancestor "$HEAD_SHA" "$MAIN_SHA" 2>/dev/null; then
   mal "detrás de origin/main por $(git rev-list --count "$HEAD_SHA".."$MAIN_SHA") commit(s) — sincroniza"
 elif [ -n "$MAIN_SHA" ] && git merge-base --is-ancestor "$MAIN_SHA" "$HEAD_SHA" 2>/dev/null; then
-  mal "$(git rev-list --count "$MAIN_SHA".."$HEAD_SHA") commit(s) SIN EMPUJAR en «$RAMA»"
+  mal "$(git rev-list --count "$MAIN_SHA".."$HEAD_SHA") commit(s) SIN EMPUJAR en $RAMA_TXT"
 else
-  mal "«$RAMA» y origin/main han divergido"
+  mal "$RAMA_TXT y origin/main han divergido"
 fi
 [ "$SUCIOS" -eq 0 ] && bien "sin cambios con seguimiento sin commitear" \
                      || mal "$SUCIOS archivo(s) con seguimiento sin commitear"
