@@ -206,17 +206,37 @@ export const STALE_WARNING_DAYS = 7;
 export const STALE_PURGE_DAYS = 21;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+export type DraftAgeVerdict = "purge" | "warn" | "keep";
+
+/**
+ * The age rule, separated from the storage it drives.
+ *
+ * `purgeStaleDrafts` below deletes a beekeeper's unsynced field work, so the
+ * rule deciding that deserves to be readable and testable on its own — and it
+ * could not be, entangled with IndexedDB calls that need a browser. Pulling it
+ * out changes no behaviour: the boundaries and their order are the same.
+ *
+ * Order matters: `purge` is checked first, so a draft past the purge cutoff is
+ * purged rather than merely warned about.
+ */
+export function classifyDraftAge(createdAt: number, now: number): DraftAgeVerdict {
+  const ageDays = (now - createdAt) / DAY_MS;
+  if (ageDays >= STALE_PURGE_DAYS) return "purge";
+  if (ageDays >= STALE_WARNING_DAYS) return "warn";
+  return "keep";
+}
+
 export async function purgeStaleDrafts(): Promise<{ purged: number; warningCount: number }> {
   const drafts = await listDrafts();
   const now = Date.now();
   let purged = 0;
   let warningCount = 0;
   for (const draft of drafts) {
-    const ageDays = (now - draft.createdAt) / DAY_MS;
-    if (ageDays >= STALE_PURGE_DAYS) {
+    const verdict = classifyDraftAge(draft.createdAt, now);
+    if (verdict === "purge") {
       await discardDraft(draft.id);
       purged++;
-    } else if (ageDays >= STALE_WARNING_DAYS) {
+    } else if (verdict === "warn") {
       warningCount++;
     }
   }
