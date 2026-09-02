@@ -457,3 +457,123 @@ sesiones archivaron la misma, en posiciones distintas, git no vio solape—. Lo
 comprueban ahora `tests/archivo-de-estado.test.ts` y su gemelo en el repositorio
 web. `SESSION_STATE.md` sí dio conflicto y por eso se miró; el archivo histórico
 no dio ninguno. Una fusión limpia no dice que el resultado sea correcto.
+
+## 2026-09-01
+
+### 2026-09-01 · El plan S1, y la revisión que desmontó su pieza central
+
+`origin/main` = `84a51de`. Nueve PR de código —#103 (plan), #105 (`aspect`),
+#108 (biochar), #110 (sujeto no-café), #111 (calicata), #115 (muestras), #117
+(fotos), #122 (enmienda), #125, #127, #128 y #130 (los arreglos de las cuatro
+revisiones)— más cinco de estado. Suite 731 → **865**.
+
+Daniel aportó *«Las Nubes Cerro Azul — Soil, Environment and Cup Quality:
+Research Framework v1.0»* (13.345 palabras, firmado por Bob, Sherry y Daniel).
+`docs/implementation/45_S1_SUELO_AMBIENTE_TAZA.md` traduce su Tabla 15 al
+esquema. **No es un resumen del marco; el marco manda.** De sus catorce
+entidades, ocho ya tenían dónde vivir; **de las seis que faltaban, cinco se
+construyeron** y sólo el microclima sigue abierto, por una decisión.
+
+**§0 manda sobre todo: la recomendación principal del marco es un ALTO.** Ningún
+bloque nuevo recibe biochar hasta que existan la química base, la física base,
+un lote caracterizado y el protocolo escrito — firmado como Gate 0. Lo que eso
+implica para el software es una sola cosa: la primera fila que el sistema
+escriba sobre un bloque tiene que poder ser **la línea base, no la enmienda**.
+
+**El orden de construcción es el del Plan de Acción del marco**: se construye en
+el orden en que el dato aparece, no en el que el modelo se lee.
+
+| pieza | qué la define |
+|---|---|
+| `Location.aspect` | Enum, rompiendo con el precedente de texto libre: la rosa de los vientos no se inventa |
+| `BiocharBatch` | Dosis, frecuencia y parcela **no** están: un lote se aplica en varios bloques |
+| `Measurement` no-café | Autorización **por rama** y sujeto **exclusivo**: dos permisos no se acumulan sin que el más laxo abra lo del otro |
+| `SoilProfile` | **Tres estados, no un booleano**: «no se miró» ≠ «no había», y confundirlos manda a fertilizar un problema de aire |
+| `SoilSample` / `FoliarSample` | Un análisis foliar sin protocolo es **incomparable**, peor que no tenerlo porque parece que sirve |
+| Fotos de Location | El padre debe pertenecer a la Location autorizada, o quien tiene A cuelga en B |
+| Aplicación de enmienda | Gate 0: se niega mientras falte cualquiera de las cuatro, y dice cuáles |
+
+---
+
+**Y entonces cuatro revisiones independientes desmontaron buena parte de eso.**
+
+Se revisó por partes, porque un paquete de un día entero son 8.255 líneas y ése
+es el tamaño que ya colgó una revisión: **servicios** (`lib/`), **tests**,
+**migraciones** y **acciones de servidor**. Quedan sin revisar las páginas.
+
+| pasada | halla | reales | rechazados |
+|---|---|---|---|
+| servicios | 7 | 6 | 1 |
+| tests | 5 | 5 | 0 |
+| migraciones | 8 | 4 | 2 (+2 imposibles) |
+| acciones | 5 | 5 | 0 |
+
+**Un solo patrón las une, y es sobre cómo escribo.** Llamé «estructural» a lo que
+sólo comprobaba el servicio — tres veces:
+
+- «**Gate 0 hecho estructura**» sobre una compuerta que miraba *que existiera una
+  fila*: un Brix colgado de una muestra de suelo abría «química base», y no había
+  comprobación temporal, así que una lectura fechada **después** del tratamiento
+  servía de línea base.
+- «cada sujeto nuevo **excluye** `lot_id`» en el SQL, cuando
+  `traceability.measurement` **no tenía ni un solo CHECK**.
+- «la regla es estructural aquí» sobre el compuesto de una muestra de suelo.
+
+Lo demás, en una línea cada uno: `requireResearchAccess` **retorna al primer
+target que pasa** —autorización alternativa, no coherencia— y el `locationId`
+aquí lo elige el usuario; `createBiocharBatch` aceptaba la organización del
+llamador; `applyAmendment` no validaba catálogos ni enums; el audit se escribía
+fuera de la transacción; las acciones de corrección **borraban lo que el POST no
+mencionaba**; cuatro fechas obligatorias se inventaban como «ahora»;
+`2026-02-31` se convertía en el 3 de marzo en silencio.
+
+**Y cuatro tests llamados «en la misma transacción» no podían fallar**:
+comprobaban que el audit existiera *después de que todo salió bien*. Con el `tx`
+quitado, la suite de `soilProfiles` pasaba 20/20. Ahora hay un guardia de fuente
+—`tests/arquitectura/audit-atomico.test.ts`— que lee los siete servicios.
+
+**Lo rechazado, con su razón escrita:** `creatorPersonId` del llamador (§4 ya lo
+guarda: el fotógrafo suele no tener cuenta) y hacer `NOT NULL` los campos de
+protocolo — prohibir la fila **perdería el dato en vez de señalarlo**, y la ficha
+ya dice cuáles faltan.
+
+**Lo que no se puede hacer como se propuso:** atar por FK compuesta la
+organización de un lote a la de su Location. `location.organization_id` es
+nullable porque una parcela hereda el dueño de su finca, y una FK compuesta con
+columna nula pasa por `MATCH SIMPLE`. Queda **escrito en la migración**.
+
+**Cuatro guardias del repositorio pararon trabajo, y los cuatro tenían razón.**
+El que más: `navigation.test.ts` exige ≤8 entradas de menú y yo había añadido una
+novena. Se revirtió.
+
+**Y ocho veces en el día un guardia o una sonda míos resultaron falsos.** Un test que comparaba
+una unión contra sí misma; un valor por defecto que lo volvía infalsificable y
+además metía variables de laboratorio en el desplegable de recetas; y **cuatro
+flip-tests que pasaron por la razón equivocada** — uno porque la mutación cayó
+donde nada la miraba, uno porque ni siquiera se aplicó, dos porque el test que
+yo creía que lo cubría probaba otra cosa.
+
+Dos más al final, comprobando las restricciones nuevas contra la base: la sonda
+salió **vacía** porque las subconsultas devolvían `NULL` con la base de test
+limpia, y una llegó a insertar una fila sin sujetos. Se leía igual que un verde.
+
+Las reglas que quedan, y son tres:
+
+1. **Un flip-test no vale hasta ver caer al test que se cree que lo cubre** —
+   mirar *cuál* cae, no sólo que caiga alguno.
+2. **Antes de creer que una mutación probó algo, comprobar que se aplicó**
+   (`diffstat`).
+3. **Una sonda contra la base necesita control positivo**: si la fila que debía
+   ser rechazada no llegó a construirse, «no entró» no prueba nada.
+
+`tools/pack-for-review.sh` gana filtro de rutas: su cabecera prometía «se
+comprime por selección» y no ofrecía ninguna. 8.255 líneas → 1.713.
+
+**Lo que la revisión NO pudo mirar:** migraciones, esquema, acciones, pantallas
+y **todos los tests**. Dos preguntas suyas siguen abiertas — si
+`createTreatmentBatch` puede crear un tratamiento de terreno saltándose Gate 0,
+y si los tests discriminan de verdad.
+
+**Sin comprobar:** el esquema vivo consultado contra la base. El `DATABASE_URL`
+de producción sólo vive en la config de Vercel y no se descargó. Falta abrir
+`/plots/<lote>` en producción y ver que renderiza.
