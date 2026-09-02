@@ -48,6 +48,8 @@ TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:55432/no-se-conecta" \
     tests/traceability/units.test.ts \
     tests/arquitectura/audit-atomico.test.ts \
     tests/arquitectura/use-server-solo-async.test.ts \
-    tests/apiary/offlineQueue.test.ts
+    tests/apiary/offlineQueue.test.ts \
+    tests/backup/completeSet.test.ts \
+    tests/backup/libpqUrl.test.ts
 
 echo "── Todo verde ──────────────────────────────────────────────────────────"
