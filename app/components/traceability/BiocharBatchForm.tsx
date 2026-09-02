@@ -7,6 +7,7 @@ import {
   updateBiocharBatchAction,
   type TraceabilityActionState,
 } from "../../actions/traceability";
+import { TriStateField } from "./TriStateField";
 
 const initialState: TraceabilityActionState = {};
 
@@ -246,16 +247,12 @@ export function BiocharBatchForm({
         <input id="chargingRatio" type="text" name="chargingRatio" defaultValue={values.chargingRatio ?? ""} placeholder={t("notRecorded")} />
       </div>
 
-      <div className="nn-field">
-        {/* El campo oculto declara que la casilla estuvo en el formulario. Sin
-            él, «no marcada» y «no registrada» llegan idénticas al servidor —
-            las dos como ausencia— y desmarcarla al corregir no borraría nada. */}
-        <input type="hidden" name="coCompostedPresent" value="1" />
-        <label htmlFor="coComposted">
-          <input id="coComposted" type="checkbox" name="coComposted" defaultChecked={values.coComposted === true} />{" "}
-          {t("biocharCoCompostedLabel")}
-        </label>
-      </div>
+      <TriStateField
+        id="coComposted"
+        name="coComposted"
+        label={t("biocharCoCompostedLabel")}
+        value={values.coComposted}
+      />
 
       <div className="nn-field">
         <label htmlFor="chargingDurationDays">{t("biocharChargingDaysLabel")}</label>

@@ -20,7 +20,7 @@ export default async function BiocharPage() {
   if (!user) redirect("/login");
 
   const t = await getTranslations("Traceability");
-  const { batches, locations, organizations } = await listBiocharBatches(user.userAccountId);
+  const { batches, locations } = await listBiocharBatches(user.userAccountId);
 
   return (
     <div>

@@ -64,6 +64,19 @@ mismo que lo que todavía dirige el trabajo no le pertenece.
 ## 3. Bloqueado, y en qué
 
 
+### Un vocabulario de procedencia por formulario, y nadie lo declaró
+
+Ocho formularios ofrecen ocho subconjuntos distintos de `ProvenanceClass` y
+cuatro de `DataQuality`, con dos nombres para la misma constante
+(`PROVENANCES` / `PROVENANCE_CLASSES`). `SoilProfileForm` y `SampleForms`
+ofrecen **el mismo conjunto en distinto orden**. Los recortes parecen
+deliberados —quien registra una muestra no elige «hipótesis»— pero **nada lo
+dice y nada impide que deriven**: sólo `CANOPY_POSITIONS` está atado al enum por
+un test, y `as never` aparece 37 veces en las acciones, así que el compilador
+tampoco mira. Lo encontró la quinta revisión (2026-09-01) y se dejó abierto: es
+una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo mecánico.
+
+
 ### Producción va por detrás de `main` — build roto una hora, ya arreglado
 
 `export class FechaInvalidaError` en `app/actions/traceability.ts`, que es

@@ -117,6 +117,36 @@ const emptyToNull = (value: FormDataEntryValue | null) => {
   const str = String(value ?? "").trim();
   return str.length ? str : null;
 };
+
+/**
+ * Un booleano que puede no haberse registrado: `""` → `null`, `"yes"` → `true`,
+ * `"no"` → `false`.
+ *
+ * **Sustituye a una casilla con campo oculto, que no distinguía los tres
+ * estados desde el formulario.** El patrón anterior era: un `<input type=
+ * "hidden" name="XPresent" value="1">` junto a la casilla, y en la acción
+ * `marcada("XPresent") ? marcada("X") : null`. Pero el oculto se enviaba
+ * SIEMPRE, así que la rama `null` era inalcanzable: dejar la casilla intacta
+ * guardaba `false`, es decir «no», no «no lo sé».
+ *
+ * Lo caro no era el valor sino lo que se deriva de él. `camposDeProtocoloQue
+ * Faltan` cuenta `null` como ausente y `false` como registrado, así que una
+ * muestra foliar guardada sin tocar la casilla afirmaba que la rama no llevaba
+ * fruto **y** se presentaba como comparable. Ausencia convertida en afirmación,
+ * que es justo lo que ADR-080 prohíbe. Lo encontró la quinta revisión
+ * independiente, la de la capa de pantalla.
+ *
+ * Un `<select>` de tres opciones lo arregla por partida doble: el operario
+ * puede decir «sin registrar» a propósito, y la clave viaja SIEMPRE en el
+ * `FormData`, que es lo que `soloLoQueVino` necesita para que una corrección
+ * pueda borrar un valor anterior. Por eso el oculto ya no hace falta.
+ */
+const booleanoDeTresEstados = (value: FormDataEntryValue | null): boolean | null => {
+  const texto = String(value ?? "").trim();
+  if (texto === "yes") return true;
+  if (texto === "no") return false;
+  return null;
+};
 /**
  * El índice más alto que trae el formulario para un prefijo dado.
  *
@@ -1263,7 +1293,6 @@ function soloLoQueVino<T extends Record<string, unknown>>(
 }
 
 function camposDeBiochar(formData: FormData) {
-  const marcada = (campo: string) => formData.get(campo) != null;
   return {
     producedAt: fechaDeDia(formData, "producedAt"),
     feedstock: emptyToNull(formData.get("feedstock")),
@@ -1281,12 +1310,7 @@ function camposDeBiochar(formData: FormData) {
     storageConditions: emptyToNull(formData.get("storageConditions")),
     chargingMaterial: emptyToNull(formData.get("chargingMaterial")),
     chargingRatio: emptyToNull(formData.get("chargingRatio")),
-    // Una casilla sin marcar no llega en el FormData, así que «no marcada» y
-    // «no registrada» son indistinguibles en el POST. Un campo oculto declara
-    // que la casilla estuvo en el formulario: sólo entonces su ausencia
-    // significa `false`. Sin él, un lote co-compostado que alguien desmarca al
-    // corregir se quedaría en `true` para siempre.
-    coComposted: marcada("coCompostedPresent") ? marcada("coComposted") : null,
+    coComposted: booleanoDeTresEstados(formData.get("coComposted")),
     chargingDurationDays: emptyToNullNumber(formData.get("chargingDurationDays")),
     analysisLaboratory: emptyToNull(formData.get("analysisLaboratory")),
     notes: emptyToNull(formData.get("notes")),
@@ -1333,7 +1357,7 @@ export async function updateBiocharBatchAction(
       biocharBatchId,
       batchCode: String(formData.get("batchCode") ?? ""),
       provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
-      ...soloLoQueVino(formData, camposDeBiochar(formData), { coComposted: "coCompostedPresent" }),
+      ...soloLoQueVino(formData, camposDeBiochar(formData)),
     });
   } catch (error) {
     return { error: friendlyError(t, error) };
@@ -1502,12 +1526,7 @@ export async function createFoliarSampleAction(
       treeAgeYears: emptyToNullNumber(formData.get("treeAgeYears")),
       cultivar: emptyToNull(formData.get("cultivar")),
       phenologicalStage: emptyToNull(formData.get("phenologicalStage")),
-      // Igual que `coComposted` en el biochar: un campo oculto declara que la
-      // casilla estuvo en el formulario, para que «no marcada» y «no
-      // registrada» no lleguen idénticas al servidor.
-      branchBearingFruit: formData.get("branchBearingFruitPresent") != null
-        ? formData.get("branchBearingFruit") != null
-        : null,
+      branchBearingFruit: booleanoDeTresEstados(formData.get("branchBearingFruit")),
       laboratory: emptyToNull(formData.get("laboratory")),
       notes: emptyToNull(formData.get("notes")),
       dataQuality: emptyToNull(formData.get("dataQuality")) as never,

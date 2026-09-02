@@ -7,6 +7,7 @@ import {
   createFoliarSampleAction,
   type TraceabilityActionState,
 } from "../../actions/traceability";
+import { TriStateField } from "./TriStateField";
 
 const initialState: TraceabilityActionState = {};
 
@@ -56,8 +57,8 @@ export function SoilSampleForm({ locationId }: { locationId: string }) {
 
       <div className="nn-field">
         <label htmlFor="depthTopCm">{t("sampleDepthLabel")}</label>
-        <input id="depthTopCm" type="number" name="depthTopCm" step="1" min="0" placeholder={t("sampleDepthTopPlaceholder")} />
-        <input type="number" name="depthBottomCm" step="1" min="0" placeholder={t("sampleDepthBottomPlaceholder")} />
+        <input id="depthTopCm" type="number" name="depthTopCm" step="1" min="0" placeholder={t("sampleDepthTopPlaceholder")} aria-label={t("sampleDepthTopPlaceholder")} />
+        <input id="depthBottomCm" type="number" name="depthBottomCm" step="1" min="0" placeholder={t("sampleDepthBottomPlaceholder")} aria-label={t("sampleDepthBottomPlaceholder")} />
         <p className="nn-muted">{t("sampleDepthHelp")}</p>
       </div>
 
@@ -146,15 +147,11 @@ export function FoliarSampleForm({ locationId }: { locationId: string }) {
         <p className="nn-muted">{t("samplePhenologyHelp")}</p>
       </div>
 
-      <div className="nn-field">
-        {/* El campo oculto declara que la casilla estuvo en el formulario, para
-            que «no marcada» y «no registrada» no lleguen idénticas al servidor. */}
-        <input type="hidden" name="branchBearingFruitPresent" value="1" />
-        <label htmlFor="branchBearingFruit">
-          <input id="branchBearingFruit" type="checkbox" name="branchBearingFruit" />{" "}
-          {t("sampleBearingLabel")}
-        </label>
-      </div>
+      <TriStateField
+        id="branchBearingFruit"
+        name="branchBearingFruit"
+        label={t("sampleBearingLabel")}
+      />
 
       <div className="nn-field">
         <label htmlFor="treeAgeYears">{t("sampleTreeAgeLabel")}</label>

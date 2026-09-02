@@ -579,16 +579,41 @@ function ResultadosDeLaboratorio({
   vacio,
   etiqueta,
 }: {
-  filas: { id: string; variable: string; value: unknown; unit: string; correctsId: string | null }[];
+  filas: {
+    id: string;
+    variable: string;
+    value: unknown;
+    unit: string;
+    correctsId: string | null;
+    occurredAt: Date;
+    provenanceClass: string;
+  }[];
   vacio: string;
   etiqueta: (clave: string) => string;
 }) {
   if (filas.length === 0) return <p className="nn-muted">{vacio}</p>;
+
+  // **Qué fila está vigente se DERIVA, no se almacena.** Una fila está
+  // supersedida si otra la corrige. Antes se marcaba sólo la corrección y la
+  // original quedaba sin marca, así que con dos valores de la misma variable el
+  // operario tenía que inferir cuál manda por el orden en que aparecen — y el
+  // orden es por fecha de análisis, no por la relación de sucesión. «Se ven las
+  // dos filas» no basta en una plataforma de trazabilidad. Lo encontró la
+  // quinta revisión independiente.
+  const supersedidas = new Set(filas.map((m) => m.correctsId).filter((id): id is string => id != null));
+
   return (
     <ul className="nn-detail-meta">
       {filas.map((m) => (
-        <li key={m.id}>
+        <li key={m.id} className={supersedidas.has(m.id) ? "nn-muted" : undefined}>
           {etiqueta(`variable_${m.variable}`)}: <strong>{String(m.value)}</strong> {m.unit}
+          {" · "}
+          <span className="nn-muted">{m.occurredAt.toISOString().slice(0, 10)}</span>
+          {" · "}
+          <span className="nn-muted">{etiqueta(`provenanceClass_${m.provenanceClass}`)}</span>
+          {supersedidas.has(m.id) ? (
+            <> · <span className="nn-muted">{etiqueta("labSupersededTag")}</span></>
+          ) : null}
           {m.correctsId ? <> · <span className="nn-muted">{etiqueta("biocharCorrectionTag")}</span></> : null}
         </li>
       ))}
