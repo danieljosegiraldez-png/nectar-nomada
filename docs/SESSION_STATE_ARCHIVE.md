@@ -22,6 +22,13 @@ todo guardia— vive en los dos `CLAUDE.md`, que sí se cargan; la operativa, qu
 el paquete de revisión se comprime **acotando el rango** y no el contenido, se
 movió a `docs/CODEX_REVIEW.md` antes de archivar, porque sólo vivía aquí.
 
+**Quinto archivado, 2026-09-01**, con el estado en 90 % y las cuatro revisiones
+del día ya recogidas. Sale la entrada del script de cierre: lo que dirige el
+trabajo vive en sitios que sí se cargan — el script existe y §5 lo invoca por
+nombre, y el guardia de la fusión que duplicó una sección archivada es
+`tests/archivo-de-estado.test.ts`, que corre en la suite. Comprobado antes de
+mover, no después.
+
 **Tercer archivado, 2026-09-01**, con el estado en 332/400 líneas (83 %). Dos
 entradas: la del rendimiento por hectárea: su contenido vive en el código
 (`computePlotYield`) y en sus pruebas, que sí se cargan; y la de la visita al
@@ -423,3 +430,30 @@ una afirmación, que un comentario diga la verdad. Para eso está
 `tools/pack-for-review.sh`, y el paquete completo del día salía en 48.000 líneas
 porque incluye el cuerpo entero de cada archivo tocado: **acotar el rango al
 núcleo lógico** lo dejó en 2.958 y en una pasada.
+
+### 2026-09-01 · Lo mecánico del cierre deja de re-teclearse
+
+`scripts/cierre-de-sesion.sh`. §5 describía el cierre en prosa; esa prosa se
+re-tecleó seis veces el 2026-08-31 y **una salió mal**: la comprobación de
+sincronía trataba cualquier archivo sucio —incluido uno **sin seguimiento** de
+otra sesión— como razón para no sincronizar. El checkout se quedó detrás de un
+merge propio y el informe dio 11 pruebas donde había 14. La propiedad es
+«¿chocaría el pull?», no «¿hay algo sucio?».
+
+Comprueba sincronía con `origin/main` en las tres direcciones, cambios con
+seguimiento sin commitear, worktrees ajenos con trabajo sin empujar, presupuesto
+del estado, pruebas de decisión rotas, disco libre contra lo que cuesta un
+`npm ci`, y la compuerta. **No commitea, no empuja, no borra**, y los worktrees
+ajenos los informa sin tocarlos. Termina nombrando lo que ningún script puede
+hacer —estado al día, lección escrita donde se cargue, verificado contra
+asumido— en vez de fingir que el cierre ha terminado.
+
+Dos de sus ramas se dispararon solas mientras se escribía: «detrás de
+origin/main», porque otra sesión empujó, y «commits sin empujar», sobre su
+propio commit. Son la mejor prueba del cambio porque no las construí yo.
+
+También de esta sesión: **una fusión limpia duplicó una sección archivada** —dos
+sesiones archivaron la misma, en posiciones distintas, git no vio solape—. Lo
+comprueban ahora `tests/archivo-de-estado.test.ts` y su gemelo en el repositorio
+web. `SESSION_STATE.md` sí dio conflicto y por eso se miró; el archivo histórico
+no dio ninguno. Una fusión limpia no dice que el resultado sea correcto.

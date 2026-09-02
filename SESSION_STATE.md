@@ -39,10 +39,10 @@ de «hecho y sin rastro».
 
 ### 2026-09-01 · El plan S1, y la revisión que desmontó su pieza central
 
-`origin/main` = `83d12d9`. Nueve PR de código —#103 (plan), #105 (`aspect`),
+`origin/main` = `84a51de`. Nueve PR de código —#103 (plan), #105 (`aspect`),
 #108 (biochar), #110 (sujeto no-café), #111 (calicata), #115 (muestras), #117
-(fotos), #122 (enmienda), #125 (los arreglos de la revisión)— más cuatro de
-estado. Suite 731 → **855**.
+(fotos), #122 (enmienda), #125, #127, #128 y #130 (los arreglos de las cuatro
+revisiones)— más cinco de estado. Suite 731 → **865**.
 
 Daniel aportó *«Las Nubes Cerro Azul — Soil, Environment and Cup Quality:
 Research Framework v1.0»* (13.345 palabras, firmado por Bob, Sherry y Daniel).
@@ -72,56 +72,76 @@ el orden en que el dato aparece, no en el que el modelo se lee.
 
 ---
 
-**Y entonces la revisión independiente desmontó justo esa última pieza.**
+**Y entonces cuatro revisiones independientes desmontaron buena parte de eso.**
 
-Codex miró los 9 archivos de `lib/` y encontró **siete cosas: seis reales**.
+Se revisó por partes, porque un paquete de un día entero son 8.255 líneas y ése
+es el tamaño que ya colgó una revisión: **servicios** (`lib/`), **tests**,
+**migraciones** y **acciones de servidor**. Quedan sin revisar las páginas.
 
-**La cara es sobre lo que yo afirmé.** Escribí «Gate 0 hecho estructura» sobre
-una compuerta que comprobaba **que existiera una fila**: `measurements: { some:
-{} }` aceptaba cualquier medición, así que un Brix colgado de una muestra de
-suelo abría «química base». `PANELES` sólo filtraba desplegables —
-`recordMeasurement` acepta cualquier variable para cualquier sujeto—, de modo
-que la separación de dominios era **conveniencia de pantalla, no regla de
-integridad**.
+| pasada | halla | reales | rechazados |
+|---|---|---|---|
+| servicios | 7 | 6 | 1 |
+| tests | 5 | 5 | 0 |
+| migraciones | 8 | 4 | 2 (+2 imposibles) |
+| acciones | 5 | 5 | 0 |
 
-Y algo que nadie había mirado: **no había comprobación temporal**. Una medición
-fechada *después* del tratamiento servía de línea base. El caso real es trivial:
-muestra en mayo, resultado del laboratorio en agosto, enmienda en julio.
+**Un solo patrón las une, y es sobre cómo escribo.** Llamé «estructural» a lo que
+sólo comprobaba el servicio — tres veces:
 
-Los otros cinco:
+- «**Gate 0 hecho estructura**» sobre una compuerta que miraba *que existiera una
+  fila*: un Brix colgado de una muestra de suelo abría «química base», y no había
+  comprobación temporal, así que una lectura fechada **después** del tratamiento
+  servía de línea base.
+- «cada sujeto nuevo **excluye** `lot_id`» en el SQL, cuando
+  `traceability.measurement` **no tenía ni un solo CHECK**.
+- «la regla es estructural aquí» sobre el compuesto de una muestra de suelo.
 
-- `requireResearchAccess` **retorna al primer target que pasa** — autorización
-  alternativa, no coherencia. Como aquí el `locationId` llega del usuario y no
-  derivado de un lote, pasar también el proyecto dejaba enmendar la parcela de
-  otra finca.
-- `createBiocharBatch` aceptaba `organizationId` del llamador: un lote podía
-  quedar producido en la finca A y ser propiedad de la B.
-- `applyAmendment` no validaba catálogos ni enums cerrados: la misma entidad con
-  invariantes distintos según por qué función entraras.
-- `recordMeasurement` auditaba fuera de transacción — deuda conocida, argumento
-  nuevo: **esas filas abren Gate 0**.
-- Gate 0 se evaluaba fuera de la transacción que escribe.
+Lo demás, en una línea cada uno: `requireResearchAccess` **retorna al primer
+target que pasa** —autorización alternativa, no coherencia— y el `locationId`
+aquí lo elige el usuario; `createBiocharBatch` aceptaba la organización del
+llamador; `applyAmendment` no validaba catálogos ni enums; el audit se escribía
+fuera de la transacción; las acciones de corrección **borraban lo que el POST no
+mencionaba**; cuatro fechas obligatorias se inventaban como «ahora»;
+`2026-02-31` se convertía en el 3 de marzo en silencio.
 
-**Lo rechazado:** `creatorPersonId` del llamador — la misma propuesta que §4 ya
-guarda desde el 2026-08-31; el fotógrafo suele **no tener cuenta**. El revisor no
-podía saberlo: el brief no le da §4.
+**Y cuatro tests llamados «en la misma transacción» no podían fallar**:
+comprobaban que el audit existiera *después de que todo salió bien*. Con el `tx`
+quitado, la suite de `soilProfiles` pasaba 20/20. Ahora hay un guardia de fuente
+—`tests/arquitectura/audit-atomico.test.ts`— que lee los siete servicios.
 
----
+**Lo rechazado, con su razón escrita:** `creatorPersonId` del llamador (§4 ya lo
+guarda: el fotógrafo suele no tener cuenta) y hacer `NOT NULL` los campos de
+protocolo — prohibir la fila **perdería el dato en vez de señalarlo**, y la ficha
+ya dice cuáles faltan.
+
+**Lo que no se puede hacer como se propuso:** atar por FK compuesta la
+organización de un lote a la de su Location. `location.organization_id` es
+nullable porque una parcela hereda el dueño de su finca, y una FK compuesta con
+columna nula pasa por `MATCH SIMPLE`. Queda **escrito en la migración**.
 
 **Cuatro guardias del repositorio pararon trabajo, y los cuatro tenían razón.**
 El que más: `navigation.test.ts` exige ≤8 entradas de menú y yo había añadido una
 novena. Se revirtió.
 
-**Y seis veces en el día un guardia mío resultó falso.** Un test que comparaba
+**Y ocho veces en el día un guardia o una sonda míos resultaron falsos.** Un test que comparaba
 una unión contra sí misma; un valor por defecto que lo volvía infalsificable y
 además metía variables de laboratorio en el desplegable de recetas; y **cuatro
 flip-tests que pasaron por la razón equivocada** — uno porque la mutación cayó
 donde nada la miraba, uno porque ni siquiera se aplicó, dos porque el test que
 yo creía que lo cubría probaba otra cosa.
 
-La regla que queda: **un flip-test no vale hasta ver caer al test que se cree
-que lo cubre** — mirar *cuál* cae, no sólo que caiga alguno. Y antes de creer
-que una mutación probó algo, comprobar que se aplicó (`diffstat`).
+Dos más al final, comprobando las restricciones nuevas contra la base: la sonda
+salió **vacía** porque las subconsultas devolvían `NULL` con la base de test
+limpia, y una llegó a insertar una fila sin sujetos. Se leía igual que un verde.
+
+Las reglas que quedan, y son tres:
+
+1. **Un flip-test no vale hasta ver caer al test que se cree que lo cubre** —
+   mirar *cuál* cae, no sólo que caiga alguno.
+2. **Antes de creer que una mutación probó algo, comprobar que se aplicó**
+   (`diffstat`).
+3. **Una sonda contra la base necesita control positivo**: si la fila que debía
+   ser rechazada no llegó a construirse, «no entró» no prueba nada.
 
 `tools/pack-for-review.sh` gana filtro de rutas: su cabecera prometía «se
 comprime por selección» y no ofrecía ninguna. 8.255 líneas → 1.713.
@@ -134,33 +154,6 @@ y si los tests discriminan de verdad.
 **Sin comprobar:** el esquema vivo consultado contra la base. El `DATABASE_URL`
 de producción sólo vive en la config de Vercel y no se descargó. Falta abrir
 `/plots/<lote>` en producción y ver que renderiza.
-
-### 2026-09-01 · Lo mecánico del cierre deja de re-teclearse
-
-`scripts/cierre-de-sesion.sh`. §5 describía el cierre en prosa; esa prosa se
-re-tecleó seis veces el 2026-08-31 y **una salió mal**: la comprobación de
-sincronía trataba cualquier archivo sucio —incluido uno **sin seguimiento** de
-otra sesión— como razón para no sincronizar. El checkout se quedó detrás de un
-merge propio y el informe dio 11 pruebas donde había 14. La propiedad es
-«¿chocaría el pull?», no «¿hay algo sucio?».
-
-Comprueba sincronía con `origin/main` en las tres direcciones, cambios con
-seguimiento sin commitear, worktrees ajenos con trabajo sin empujar, presupuesto
-del estado, pruebas de decisión rotas, disco libre contra lo que cuesta un
-`npm ci`, y la compuerta. **No commitea, no empuja, no borra**, y los worktrees
-ajenos los informa sin tocarlos. Termina nombrando lo que ningún script puede
-hacer —estado al día, lección escrita donde se cargue, verificado contra
-asumido— en vez de fingir que el cierre ha terminado.
-
-Dos de sus ramas se dispararon solas mientras se escribía: «detrás de
-origin/main», porque otra sesión empujó, y «commits sin empujar», sobre su
-propio commit. Son la mejor prueba del cambio porque no las construí yo.
-
-También de esta sesión: **una fusión limpia duplicó una sección archivada** —dos
-sesiones archivaron la misma, en posiciones distintas, git no vio solape—. Lo
-comprueban ahora `tests/archivo-de-estado.test.ts` y su gemelo en el repositorio
-web. `SESSION_STATE.md` sí dio conflicto y por eso se miró; el archivo histórico
-no dio ninguno. Una fusión limpia no dice que el resultado sea correcto.
 
 ## 3. Bloqueado, y en qué
 
@@ -201,25 +194,26 @@ no dio ninguno. Una fusión limpia no dice que el resultado sea correcto.
   dos entradas: **0 de 8 lotes tienen área** y **0 cosechas están atribuidas a
   bloques**, aunque 15 de las 33 ya tienen peso declarado. Las dos las carga él
   ahora sin ayuda.
-- **Una migración y los arreglos de la revisión, sin desplegar** —
-  `20260901090000_s1_amendment_application`, y con ella el código de #125 —
-  el límite diario de builds de Vercel volvió a saltar con el merge de #122, así
-  que no construyó. **No hay inconsistencia**: código y migración quedaron fuera
-  juntos. Cuando se despeje, un despliegue de producción la aplica.
+- **DOS migraciones sin desplegar, y todo el código desde #122** —
+  `20260901090000_s1_amendment_application` y
+  `20260901100000_s1_invariantes_en_la_base`. El límite diario de builds de
+  Vercel saltó a media tanda y no volvió a despejarse. **No hay
+  inconsistencia**: código y migraciones quedaron fuera juntos, y producción
+  sirve un build anterior. Cuando se despeje, un *Redeploy* sobre el último
+  commit de `main` las aplica las dos.
   **Cómo comprobarlo, y no como lo comprobé mal dos veces:** el check de Vercel
   que pasa en una PR es el de *preview* y no dice nada de producción. El que sí
   lo dice es `gh api repos/<owner>/<repo>/commits/<sha>/status`, y después el
   log de construcción, que nombra cada migración aplicada.
-- **Dos preguntas que la revisión independiente dejó abiertas** — no está
-  bloqueado, está *sin mirar*. El paquete se acotó a `lib/`, así que quedaron
-  fuera migraciones, esquema, acciones, pantallas y todos los tests. Las dos que
-  el propio revisor escribió en «Qué no me mostró el brief»:
-  **(a)** ¿puede `createTreatmentBatch` —que sigue siendo público y no conoce
-  Gate 0— crear un tratamiento de terreno saltándose la compuerta? Hoy la única
-  barrera es que su firma no acepta `locationId`; comprobarlo es leer sus
-  llamadores. **(b)** ¿discriminan los tests? Cuatro flip-tests míos pasaron por
-  la razón equivocada en un solo día, así que la pregunta no es retórica.
-  Una segunda revisión sobre lo que quedó fuera es el trabajo que las contesta.
+- **Las páginas de `app/` no las ha revisado nadie** — no está bloqueado, está
+  *sin mirar*. Cuatro pasadas cubrieron servicios, tests, migraciones y acciones;
+  quedan las páginas (12.625 líneas, el paquete ya se sabe armar). Las cuatro
+  encontraron algo real cada vez —6, 5, 4 y 5 hallazgos— así que la curva no
+  baja, y eso dice más sobre el ritmo del día que sobre los defectos concretos.
+  Las dos preguntas que la primera revisión dejó abiertas **ya están
+  contestadas**: `createTreatmentBatch` no puede crear un tratamiento de terreno
+  (#127, con `locationId: null` explícito y dos tests), y la pasada de tests
+  contestó la segunda encontrando cinco que no discriminaban.
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
   separada para la serie temporal —~35.000 filas por sensor y año— y no dice
