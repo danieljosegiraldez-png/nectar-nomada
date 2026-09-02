@@ -25,6 +25,16 @@ mal() { printf '  ✗ %s\n' "$1"; FALLOS=$((FALLOS + 1)); }
 bien() { printf '  ✓ %s\n' "$1"; }
 nota() { printf '  · %s\n' "$1"; }
 
+# Qué repositorio es, dicho por el propio repositorio.
+#
+# El 2026-09-02 creé dos veces un worktree desde el checkout equivocado y
+# corrí el cierre del repo que no era, rotulándolo como el otro. La segunda
+# vez llevaba una comprobación de identidad puesta a mano en el comando: la
+# imprimió vacía y la leí por encima. Un dato que hay que cotejar se pasa por
+# alto; uno que sale en la cabecera del informe, no.
+REPO=$(node -p "require('./package.json').name" 2>/dev/null || basename "$(pwd)")
+echo "Cierre de «$REPO» · $(git rev-parse --short HEAD)"
+
 echo "── Árbol ───────────────────────────────────────────────────────────────"
 git fetch origin --quiet 2>/dev/null || nota "sin red: se compara contra el último fetch"
 HEAD_SHA=$(git rev-parse HEAD)
