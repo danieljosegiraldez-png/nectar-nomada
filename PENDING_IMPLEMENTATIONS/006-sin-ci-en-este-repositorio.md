@@ -13,6 +13,27 @@ Eso es lo que habría atrapado el fallo que motivó este pendiente: `main` con 1
 errores de `tsc` por un cliente de Prisma viejo, que nadie estaba viendo porque
 nada lo miraba.
 
+## Cuánto es, medido el 2026-09-02
+
+| | |
+|---|---:|
+| Archivos de test en el repositorio | 79 |
+| Archivos que CI corre | **14** |
+| `it(` en el repositorio | 865 |
+| `it(` en los archivos que CI corre | **123** |
+
+**CI ejerce el 17 % de los archivos y el 14 % de las pruebas.** La compuerta
+reporta 195 al correr —más que 123— porque algunos bloques generan casos en
+bucle; el conteo estático sirve para la proporción, no para el total exacto.
+
+Los 65 archivos que no corre no están repartidos: 31 son de `tests/traceability`
+y el resto se agrupa en `apiary`, `research`, `sensory`, `rbac` y `auth`. Casi
+todos necesitan Postgres restaurado, que es la razón documentada abajo — no un
+descuido.
+
+Sirve para dimensionar la decisión, no para forzarla: pasar del 14 % al 100 %
+es el trabajo de los 65 archivos que describe «El orden que sí funcionaría».
+
 ## Qué sigue SIN cubrirse
 
 - **La suite completa.** Necesita `npm run test:db -- up`, que restaura el
