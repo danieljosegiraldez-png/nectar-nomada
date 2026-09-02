@@ -2576,6 +2576,42 @@ vercel inspect --logs <url-de-produccion> --scope <scope>
 Al día siguiente, el botón *Redeploy* del panel sobre el commit fallido. Usa la
 integración de git, queda atado al commit, y no necesita CLI.
 
+### …y el reverso: no todo rojo de Vercel es la cuota
+
+**El mismo día, la sección de arriba me hizo el daño.** Vi
+`Vercel — fail` en una PR, lo leí como la cuota conocida, y fusioné. Producción
+llevaba **una hora** rechazando cada despliegue, ocho seguidos, y el sitio servía
+un build viejo mientras `main` seguía avanzando.
+
+No era la cuota: era `npm run build` saliendo con 1. Y la pista estaba a la
+vista sin abrir nada — **los rechazos por cuota no duran 18 segundos**. Un build
+de verdad tarda 33-59 s; los fallos tardaban 18-20 s, que es demasiado para una
+cuota y muy poco para un build completo. La duración distinguía los dos casos y
+no la miré.
+
+**La causa raíz era mía y de una clase que la compuerta no ve:**
+
+```
+Error: Only async functions are allowed to be exported in a "use server" file.
+> export class FechaInvalidaError extends Error {}
+```
+
+De un archivo `"use server"` Next.js sólo deja exportar funciones `async` —cada
+export es un punto de entrada invocable desde el navegador—. Una clase exportada
+rompe el módulo entero: **69 errores en 26 archivos** desde una línea. Y `npm run
+verify` corre tipos, lint y tests, **no `next build`**, así que para TypeScript
+el archivo era válido y las PR salieron en verde.
+
+**Las dos reglas:**
+
+- **Antes de atribuir un rojo a la cuota, leer el log.** `vercel ls` da estado y
+  **duración**; una duración de build significa que se construyó y falló.
+  Atribuir sin leer es la lectura que halaga la hipótesis.
+- **Un guardia de fuente no sustituye al build, lo adelanta.** El de esta regla
+  está en `tests/arquitectura/use-server-solo-async.test.ts`. Cubre un error
+  concreto que ya costó una hora; el resto de los que sólo ve `next build`
+  siguen fuera, y la compuerta sigue sin correrlo.
+
 ### `vercel --prod` sin enlace previo crea un proyecto nuevo
 
 **Síntoma.** Un despliegue «de producción» que falla en `prisma migrate deploy`
