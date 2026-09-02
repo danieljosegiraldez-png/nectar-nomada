@@ -2495,6 +2495,56 @@ estaba con el guardia sustituido por `process.exit(0)`.
 **Arreglo.** Cinco fixtures negativos. Comprobado: con el guardia neutralizado
 caen los 6 tests, y vuelven a pasar al restaurarlo.
 
+### Ocho guardias falsos en un día, y las tres reglas que quedaron
+
+**Síntoma.** Compuertas en verde sobre propiedades que nadie medía. El
+2026-09-01, cuatro revisiones independientes destaparon **ocho** casos míos, y
+ninguno lo vio la suite.
+
+**Las formas que tomaron**, porque reconocerlas es el arreglo:
+
+- **Un test que se compara consigo mismo.** Comprobaba que la unión de dos
+  paneles fuera igual a la unión de esos mismos dos paneles.
+- **Un valor por defecto que vuelve infalsificable un guardia.** Un
+  `?? ["proceso_de_cafe"]` hacía imposible que una variable quedara huérfana, y
+  además metía en silencio las de laboratorio en el desplegable de recetas.
+  **Arreglo estructural:** el mapa pasó a ser un `Record` total, así que **el
+  compilador** obliga a declarar cada variable nueva. Un tipo que no compila es
+  mejor guardia que un test que hay que acordarse de mirar.
+- **Cuatro tests que prometían atomicidad y sólo comprobaban existencia.**
+  «Escribe el AuditEvent en la misma transacción» hacía
+  `expect(evento).not.toBeNull()` **después de que todo salió bien**: quitar el
+  `tx` los dejaba verdes a los cuatro. Comprobado: la suite de `soilProfiles`
+  pasaba 20/20 con el `tx` quitado. Hoy lo cubre
+  `tests/arquitectura/audit-atomico.test.ts`, que lee la fuente.
+- **Una comprobación negativa sobre contenido ausente.** Un test de temporalidad
+  corría antes de que existiera la evidencia que decía medir: pasaba porque no
+  había nada. Su propio comentario lo admitía —«anterior a toda la evidencia que
+  el fixture crea después»— y no se vio.
+- **Sondas contra la base que salieron vacías** porque las subconsultas
+  devolvían `NULL` con la base de test limpia. Una llegó a insertar una fila sin
+  sujetos que hubo que borrar.
+
+**Las tres reglas.** Salieron de ahí y valen para cualquier guardia:
+
+1. **Un flip-test no vale hasta ver caer al test que se cree que lo cubre.**
+   Mirar *cuál* cae, no sólo que caiga alguno. Dos veces cayó otro test y el
+   guardia que se estaba probando era ciego.
+2. **Antes de creer que una mutación probó algo, comprobar que se aplicó.** Una
+   salió verde sin haberse aplicado siquiera: la cadena ancla ya no existía y el
+   `replace` no hizo nada. Sólo lo dijo el `diffstat`.
+3. **Una sonda contra la base necesita control positivo.** Si la fila que debía
+   ser rechazada no llegó a construirse, «no entró» no prueba nada. Crear las
+   filas primero, probar con `SAVEPOINT`, y comprobar además que **lo válido sí
+   entra**.
+
+**Y el patrón que las explica todas:** llamar «estructural» a lo que sólo
+comprueba el servicio. Pasó tres veces el mismo día —«Gate 0 hecho estructura»,
+«cada sujeto nuevo excluye `lot_id`» sobre una tabla sin un solo `CHECK`, y «la
+regla es estructural aquí»—. Una restricción que vive en TypeScript o en un
+comentario **no existe para la base**: un importador, una reparación operativa o
+SQL directo se la saltan.
+
 ### El límite de despliegues de Vercel es una cuota, no un fallo del cambio
 
 **Síntoma.** El merge a `main` no construye. En GitHub el check dice

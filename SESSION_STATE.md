@@ -37,6 +37,30 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-01 · El plan S1 y cuatro revisiones — el detalle está archivado
+
+`origin/main` = `0612df1`. Suite 731 → **865**. Diecisiete PR: nueve de
+construcción, cuatro de arreglos de revisión, cuatro de estado.
+
+**De las seis entidades que le faltaban a la Tabla 15 del marco de
+investigación, cinco se construyeron.** Sólo queda el microclima, y sólo por una
+decisión de Daniel (§3). Más `Location.aspect`, el sujeto no-café de
+`Measurement` y las fotografías con ámbito de Location, que no eran entidades
+pero desbloqueaban el resto.
+
+**Cuatro revisiones independientes** —servicios, tests, migraciones y acciones—
+encontraron **25 cosas**: 21 arregladas, 3 rechazadas con la razón escrita y 2
+imposibles como se propusieron, también escrito. Las páginas de `app/` siguen sin
+revisar (§3).
+
+**El detalle vive en `docs/SESSION_STATE_ARCHIVE.md`**, donde otra sesión lo
+archivó el mismo día. Esta entrada existe porque §2 se quedó **vacía**: un
+archivo que promete «lo que se entregó» y no entrega nada desorienta más que una
+línea de más. **Las lecciones no se quedaron ahí:** las tres reglas de
+flip-tests y el patrón de llamar «estructural» a lo que sólo comprueba el
+servicio están en `CLAUDE.md`, que sí se carga — el archivo histórico dice de sí
+mismo que lo que todavía dirige el trabajo no le pertenece.
+
 ## 3. Bloqueado, y en qué
 
 - **Aviso fiable de que un backup no corrió** — bloqueado en P-A, y ya solo por
