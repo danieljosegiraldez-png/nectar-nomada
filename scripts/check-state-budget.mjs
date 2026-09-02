@@ -51,6 +51,20 @@ if (lineas > MAX_LINEAS) excesos.push(["líneas", lineas, MAX_LINEAS]);
 if (tokens > MAX_TOKENS) excesos.push(["tokens (estimados)", tokens, MAX_TOKENS]);
 if (bytes > MAX_BYTES) excesos.push(["bytes", bytes, MAX_BYTES]);
 
+/**
+ * Suelo: al menos una entrada fechada se queda **viva**.
+ *
+ * El 2026-09-01 seguí al aviso hasta que se calló y **vació §2**: era la última
+ * sección, el aviso la nombró, y archivarla dejó «Lo que se entregó» en blanco.
+ * Nada se perdió —todo estaba en el archivo— pero una sesión nueva abre el
+ * estado y no ve trabajo reciente ninguno, que es justo lo que este archivo
+ * existe para contar.
+ *
+ * El guardia sabía de presupuesto y no de propósito: cumplir «cabe en una
+ * lectura» a costa de dejar el registro vacío es seguir la letra contra el fin.
+ */
+const MINIMO_EN_VIVO = 1;
+
 // Secciones archivables: encabezados `### AAAA-MM-DD …`, de la más vieja a la
 // más nueva. Se busca por fecha y no por posición para que un orden roto no
 // produzca un consejo falso.
@@ -114,7 +128,9 @@ if (excesos.length > 0) {
     // seguir la instrucción al pie de la letra.
     let l = lineas, c = texto.length, b = bytes, n = 0;
     const aMover = [];
-    for (const s of secciones) {
+    // Nunca proponer moverlas todas: la última se queda viva (MINIMO_EN_VIVO).
+    const archivables = secciones.slice(0, Math.max(0, secciones.length - MINIMO_EN_VIVO));
+    for (const s of archivables) {
       if (l <= MAX_LINEAS && Math.ceil(c / CHARS_POR_TOKEN) <= MAX_TOKENS && b <= MAX_BYTES) break;
       l -= s.lineas;
       c -= s.chars;
@@ -123,14 +139,17 @@ if (excesos.length > 0) {
       n++;
     }
     const bastan = l <= MAX_LINEAS && Math.ceil(c / CHARS_POR_TOKEN) <= MAX_TOKENS && b <= MAX_BYTES;
-    console.error(
-      `  Mover ${n} sección(es) a docs/SESSION_STATE_ARCHIVE.md (al final, la más vieja primero):`
-    );
-    for (const s of aMover) console.error(`      ${s.titulo}`);
+    if (n > 0) {
+      console.error(
+        `  Mover ${n} sección(es) a docs/SESSION_STATE_ARCHIVE.md (al final, la más vieja primero):`
+      );
+      for (const s of aMover) console.error(`      ${s.titulo}`);
+    }
     if (!bastan) {
       console.error("");
-      console.error("  Aun archivando TODAS las entradas fechadas sigue sin caber:");
-      console.error("  el exceso está en la prosa, no en el historial. Recortar.");
+      console.error("  Aun archivando todo lo archivable sigue sin caber. La última entrada");
+      console.error("  se queda viva a propósito: vaciar §2 dejaría a la próxima sesión sin");
+      console.error("  ver trabajo reciente. El resto del exceso está en la prosa. Recortar.");
     }
   }
   console.error("");
@@ -167,10 +186,14 @@ if (cerca.length > 0) {
   console.log("");
   console.log(`⚠  Al ${Math.round((peor[1] / peor[2]) * 100)} % del presupuesto en ${peor[0]}.`);
   const secciones = seccionesFechadas(texto);
-  if (secciones.length > 0) {
+  if (secciones.length > MINIMO_EN_VIVO) {
     console.log(`   Archiva ya la más vieja, sin prisa, en vez de al chocar con el techo:`);
     console.log(`       ${secciones[0].titulo}`);
     console.log(`   Va a docs/SESSION_STATE_ARCHIVE.md, la más vieja primero.`);
+  } else if (secciones.length > 0) {
+    console.log(`   Queda ${secciones.length} entrada fechada y NO se archiva: dejaría §2`);
+    console.log(`   vacía, y una sesión nueva abriría el estado sin ver trabajo reciente.`);
+    console.log(`   El peso que sobra está en la prosa: recórtala ahí.`);
   } else {
     console.log(`   No hay entradas fechadas que archivar: el peso está en la prosa.`);
   }

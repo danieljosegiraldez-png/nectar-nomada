@@ -102,7 +102,7 @@ describe("el guardia del presupuesto", () => {
       Array.from({ length: 600 }, () => "prosa que no se puede archivar").join("\n");
     const { salida } = correr(fixture("insuficiente.md", contenido));
 
-    expect(salida).toContain("Aun archivando TODAS las entradas fechadas");
+    expect(salida).toContain("Aun archivando todo lo archivable sigue sin caber");
   });
 
   it("dice qué hacer cuando no hay nada fechado que archivar", () => {
@@ -128,7 +128,7 @@ describe("el aviso al 80 %", () => {
   it("avisa cerca del techo sin romper la compuerta", () => {
     // ~84 % de las 400 líneas: avisa, pero sale 0. Un aviso que falla a los
     // pocos días de cada archivado enseñaría a ignorar la compuerta entera.
-    const contenido = `# Estado\n\n### 2026-01-01 · la más vieja\n${relleno(330)}\n`;
+    const contenido = `# Estado\n\n### 2026-01-01 · la más vieja\n${relleno(165)}\n\n### 2026-02-02 · la nueva\n${relleno(165)}\n`;
     const { codigo, salida } = correr(fixture("cerca.md", contenido));
     expect(codigo, salida).toBe(0);
     expect(salida).toContain("⚠");
@@ -156,6 +156,31 @@ describe("el aviso al 80 %", () => {
       .toContain("### 2026-05-05 · la vieja de hoy");
     expect(salida, "no puede nombrar la recién escrita")
       .not.toContain("### 2026-05-05 · la nueva de hoy");
+  });
+
+  /**
+   * El suelo: al menos una entrada fechada se queda viva.
+   *
+   * El 2026-09-01 seguí al aviso hasta que se calló y **vació §2**: era la
+   * última sección, el aviso la nombró, y archivarla dejó «Lo que se entregó»
+   * en blanco. Nada se perdió, pero una sesión nueva abre el estado y no ve
+   * trabajo reciente — que es lo que ese archivo existe para contar.
+   */
+  it("con una sola entrada no la nombra: archivarla vaciaría §2", () => {
+    const contenido = `# Estado\n\n### 2026-01-01 · la única\n${relleno(330)}\n`;
+    const { codigo, salida } = correr(fixture("suelo.md", contenido));
+    expect(codigo, salida).toBe(0);
+    expect(salida).toContain("⚠");
+    expect(salida, "no puede proponer archivar la última").not.toContain("### 2026-01-01 · la única");
+    expect(salida).toContain("dejaría §2");
+  });
+
+  it("por encima del techo con una sola entrada, tampoco propone moverla", () => {
+    const contenido = `# Estado\n\n### 2026-01-01 · la única\n${relleno(500)}\n`;
+    const { codigo, salida } = correr(fixture("suelo-duro.md", contenido));
+    expect(codigo, salida).toBe(1);
+    expect(salida, "no debe listarla como movible").not.toContain("### 2026-01-01 · la única");
+    expect(salida).toContain("La última entrada");
   });
 
   it("no dice nada por debajo del 80 %", () => {
