@@ -63,6 +63,18 @@ mismo que lo que todavía dirige el trabajo no le pertenece.
 
 ## 3. Bloqueado, y en qué
 
+
+### Producción va por detrás de `main` — build roto una hora, ya arreglado
+
+`export class FechaInvalidaError` en `app/actions/traceability.ts`, que es
+`"use server"`, tumbó `next build` con 69 errores. Ocho despliegues de producción
+en error entre las 20:50 y las 21:00; el último bueno es de una hora antes. **El
+sitio no se cayó** —sirve el build viejo—, pero todo lo fusionado desde entonces
+no está vivo. La compuerta no lo vio porque no corre `next build`; ahora hay
+guardia de fuente (`tests/arquitectura/use-server-solo-async.test.ts`) y la
+trampa está en `CLAUDE.md`. **Queda comprobar que el primer despliegue tras el
+arreglo llega a *Ready*** y que las dos migraciones pendientes se aplican.
+
 - **Aviso fiable de que un backup no corrió** — bloqueado en P-A, y ya solo por
   la URL. El código está hecho y en main: `ping_health` manda `/start`, `/fail`
   y el ping de éxito *después* de verificar la restauración, con la URL leída de

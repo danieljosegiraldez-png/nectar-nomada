@@ -1204,8 +1204,20 @@ const fechaDeDia = (formData: FormData, campo: string) => {
   return fecha;
 };
 
-/** Una fecha que el POST trae y no existe en el calendario. */
-export class FechaInvalidaError extends Error {}
+/**
+ * Una fecha que el POST trae y no existe en el calendario.
+ *
+ * **Sin `export`, y no es estilo.** Este archivo es `"use server"`, y de uno de
+ * esos Next.js sólo deja exportar funciones `async`: cada export se convierte en
+ * un punto de entrada invocable desde el navegador, y una clase no lo es. Con el
+ * `export` puesto, `next build` cae con 69 errores —todo lo que importa el
+ * módulo deja de resolver— mientras tipos, lint y tests siguen en verde, porque
+ * para TypeScript el archivo es válido. Estuvo así una hora en `main`.
+ *
+ * Sólo se lanza y se captura aquí dentro, así que el `export` nunca hizo falta.
+ * El guardia está en `tests/arquitectura/use-server-solo-async.test.ts`.
+ */
+class FechaInvalidaError extends Error {}
 
 /**
  * Una fecha que el registro EXIGE. Ausente falla, no se inventa.
