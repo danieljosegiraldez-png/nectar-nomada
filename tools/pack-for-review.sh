@@ -118,6 +118,23 @@ fi
     echo '```'
   done
 
+  # `dirname/../..` se resuelve ANTES de deduplicar.
+  #
+  # El 2026-09-01 un paquete de 8 archivos salió en 22.888 líneas: 60 secciones
+  # para 34 archivos únicos, **9.435 líneas repetidas, el 46 %**. `lots.ts`
+  # (967 líneas) venía tres veces y `traceability.ts` (1.575) dos. La causa es
+  # que el candidato se arma como `"$d/$m"` —`app/actions/../../lib/.../lots.ts`—
+  # y `sort -u` compara TEXTO: el mismo archivo alcanzado desde dos importadores
+  # son dos cadenas distintas. El `sed` de arriba colapsa `//` y `./`, pero no
+  # resuelve `..`, así que la deduplicación nunca llegó a ocurrir.
+  #
+  # Importa porque este script existe para que el paquete quepa: su propia
+  # cabecera cuenta que 8.255 líneas colgaron una revisión.
+  normaliza() { python3 -c 'import os,sys
+for l in sys.stdin:
+    l = l.strip()
+    if l: print(os.path.normpath(l))'; }
+
   # Un salto de imports. Sin criterio: lo que importan los archivos tocados.
   VECINOS=$(
     for f in $TOCADOS; do
@@ -129,7 +146,7 @@ fi
           if [ -f "$c$ext" ]; then printf '%s\n' "$c$ext"; break; fi
         done
       done || true
-    done | sed 's|//|/|g; s|^\./||' | sort -u
+    done | sed 's|//|/|g; s|^\./||' | normaliza | sort -u
   )
   VECINOS=$(comm -23 <(printf '%s\n' "$VECINOS" | sort -u) <(printf '%s\n' "$TOCADOS" | sort -u) 2>/dev/null || printf '%s\n' "$VECINOS")
   if [ -n "$(printf '%s' "$VECINOS" | tr -d '[:space:]')" ]; then

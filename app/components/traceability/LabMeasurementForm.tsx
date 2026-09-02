@@ -77,9 +77,9 @@ export function LabMeasurementForm({
       </div>
 
       <div className="nn-field">
-        <label htmlFor="value">{t("biocharValueLabel")}</label>
+        <label htmlFor={`value-${sujetoId}`}>{t("biocharValueLabel")}</label>
         <input
-          id="value"
+          id={`value-${sujetoId}`}
           type="number"
           name="value"
           step="any"
@@ -94,14 +94,14 @@ export function LabMeasurementForm({
       </div>
 
       <div className="nn-field">
-        <label htmlFor="unit">{t("biocharUnitLabel")}</label>
+        <label htmlFor={`unit-${sujetoId}`}>{t("biocharUnitLabel")}</label>
         {/* `key` fuerza a React a recrear la casilla al cambiar de variable,
             que es lo que hace que `defaultValue` vuelva a aplicarse. Sin eso,
             la unidad de la variable anterior se quedaría puesta y se enviaría
             una lectura con la unidad de otra cosa. */}
         <input
           key={variable}
-          id="unit"
+          id={`unit-${sujetoId}`}
           type="text"
           name="unit"
           required
@@ -111,13 +111,13 @@ export function LabMeasurementForm({
       </div>
 
       <div className="nn-field">
-        <label htmlFor="occurredAt">{t("biocharMeasuredOnLabel")}</label>
-        <input id="occurredAt" type="date" name="occurredAt" />
+        <label htmlFor={`occurredAt-${sujetoId}`}>{t("biocharMeasuredOnLabel")}</label>
+        <input id={`occurredAt-${sujetoId}`} type="date" name="occurredAt" required />
       </div>
 
       <div className="nn-field">
-        <label htmlFor="provenanceClass">{t("provenanceClassLabel")}</label>
-        <select id="provenanceClass" name="provenanceClass" required defaultValue="">
+        <label htmlFor={`provenanceClass-${sujetoId}`}>{t("provenanceClassLabel")}</label>
+        <select id={`provenanceClass-${sujetoId}`} name="provenanceClass" required defaultValue="">
           <option value="">{t("provenanceClassChoose")}</option>
           {PROVENANCES.map((v) => (
             <option key={v} value={v}>
@@ -128,14 +128,14 @@ export function LabMeasurementForm({
       </div>
 
       <div className="nn-field">
-        <label htmlFor="sourceReference">{t("biocharSourceRefLabel")}</label>
-        <input id="sourceReference" type="text" name="sourceReference" placeholder={t("notRecorded")} />
+        <label htmlFor={`sourceReference-${sujetoId}`}>{t("biocharSourceRefLabel")}</label>
+        <input id={`sourceReference-${sujetoId}`} type="text" name="sourceReference" placeholder={t("notRecorded")} />
         <p className="nn-muted">{t("biocharSourceRefHelp")}</p>
       </div>
 
       <div className="nn-field">
-        <label htmlFor="measurementNotes">{t("notesLabel")}</label>
-        <input id="measurementNotes" type="text" name="notes" placeholder={t("notRecorded")} />
+        <label htmlFor={`measurementNotes-${sujetoId}`}>{t("notesLabel")}</label>
+        <input id={`measurementNotes-${sujetoId}`} type="text" name="notes" placeholder={t("notRecorded")} />
       </div>
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}

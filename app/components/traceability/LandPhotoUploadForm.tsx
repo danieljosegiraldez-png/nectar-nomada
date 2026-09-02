@@ -42,7 +42,17 @@ export function LandPhotoUploadForm({
   const t = useTranslations("Traceability");
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [creatorPersonId, setCreatorPersonId] = useState(selfPersonId ?? "");
+  // **El valor inicial se normaliza contra la lista, no se supone.**
+  // `getObserverCandidates` sólo devuelve personas activas, pero incluye la
+  // propia aunque no lo esté. Con `useState(selfPersonId ?? "")` el estado
+  // podía quedarse en un id que no era ninguna opción: el navegador enseñaba
+  // la primera de la lista y al subir se enviaba la que React guardaba. La
+  // atribución de una fotografía no puede depender de eso. Lo encontró la
+  // quinta revisión independiente.
+  const propioEsElegible = observers.some((p) => p.id === selfPersonId);
+  const [creatorPersonId, setCreatorPersonId] = useState(
+    propioEsElegible ? (selfPersonId as string) : "",
+  );
   const [status, setStatus] = useState<"idle" | "uploading" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const idDelCampo = `land-photo-${locationId}-${JSON.stringify(parent)}`;
@@ -104,6 +114,9 @@ export function LandPhotoUploadForm({
         <div className="nn-field">
           <label htmlFor={idDelCampo}>{t("photographedByLabel")}</label>
           <select id={idDelCampo} value={creatorPersonId} onChange={(e) => setCreatorPersonId(e.target.value)}>
+            {/* Sin esta opción, un valor que no coincide con ninguna no tiene
+                representación y el desplegable muestra otra cosa. */}
+            <option value="">{t("notRecorded")}</option>
             {observers.map((person) => (
               <option key={person.id} value={person.id}>
                 {person.id === selfPersonId ? t("observerSelfOption", { name: person.displayName }) : person.displayName}
