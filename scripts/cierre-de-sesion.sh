@@ -33,8 +33,15 @@ RAMA=$(git branch --show-current)
 # Sólo lo con seguimiento bloquea un fast-forward.
 SUCIOS=$(git status --porcelain | grep -vc '^??' || true)
 SIN_SEG=$(git status --porcelain | grep -c '^??' || true)
-if [ "$HEAD_SHA" = "$MAIN_SHA" ]; then
-  bien "en origin/main ($(git rev-parse --short HEAD))"
+# La rama se nombra SIEMPRE. Decir «en origin/main» porque el SHA coincide es
+# reconocer una forma, no una propiedad: el 2026-09-01 otra sesión dejó el
+# checkout compartido en una rama suya que apuntaba al mismo commit, este script
+# dijo «✓ en origin/main», y el `git pull --ff-only origin main` de mi barrido
+# adelantó **la rama ajena**. Se restauró sin pérdida, pero nada lo habría dicho.
+if [ "$HEAD_SHA" = "$MAIN_SHA" ] && [ "$RAMA" = "main" ]; then
+  bien "en main, al día con origin/main ($(git rev-parse --short HEAD))"
+elif [ "$HEAD_SHA" = "$MAIN_SHA" ]; then
+  mal "estás en «$RAMA», no en main — apunta al mismo commit, pero no es lo mismo: un pull aquí mueve esa rama"
 elif [ -n "$MAIN_SHA" ] && git merge-base --is-ancestor "$HEAD_SHA" "$MAIN_SHA" 2>/dev/null; then
   mal "detrás de origin/main por $(git rev-list --count "$HEAD_SHA".."$MAIN_SHA") commit(s) — sincroniza"
 elif [ -n "$MAIN_SHA" ] && git merge-base --is-ancestor "$MAIN_SHA" "$HEAD_SHA" 2>/dev/null; then
