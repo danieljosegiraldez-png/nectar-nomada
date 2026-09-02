@@ -211,6 +211,13 @@ arreglo llega a *Ready*** y que las dos migraciones pendientes se aplican.
   —un AST, con TypeScript que ya es dependencia— está en
   `PENDING_IMPLEMENTATIONS/007`, con lo que arregla y lo que no.
 
+- **Un test hermético nuevo no corre en CI** — `scripts/ci.sh` los enumera a
+  mano, así que uno nuevo queda fuera en silencio y la compuerta sale verde.
+  Comprobado el 2026-09-01: sólo se vio porque el recuento no subió. La
+  comprobación que falta exige decidir **cómo se reconoce que un test necesita
+  base de datos**, y las tres opciones no cuestan lo mismo. Ver
+  `PENDING_IMPLEMENTATIONS/008`.
+
 - **Reconciliación de medios en R2** — no está bloqueada, está *aplazada*:
   `core.asset` y el bucket estaban vacíos al 2026-08-20. Ver
   `PENDING_IMPLEMENTATIONS/002`.

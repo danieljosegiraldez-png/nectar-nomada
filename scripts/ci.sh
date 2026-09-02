@@ -24,7 +24,7 @@ echo "── Compuerta: tipos, presupuesto de estado, inventario de rutas, lint 
 npm run verify
 
 echo "── Tests herméticos ────────────────────────────────────────────────────"
-# Sólo estos once, POR NOMBRE y a propósito:
+# Sólo estos 14, POR NOMBRE y a propósito:
 #
 # - No consultan la base. `tests/setup.ts` se niega a arrancar contra una base
 #   remota, así que se le da una URL de forma local que no apunta a ninguna
@@ -48,6 +48,9 @@ TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:55432/no-se-conecta" \
     tests/traceability/units.test.ts \
     tests/arquitectura/audit-atomico.test.ts \
     tests/arquitectura/use-server-solo-async.test.ts \
-    tests/arquitectura/booleanos-de-tres-estados.test.ts
+    tests/arquitectura/booleanos-de-tres-estados.test.ts \
+    tests/apiary/offlineQueue.test.ts \
+    tests/backup/completeSet.test.ts \
+    tests/backup/libpqUrl.test.ts
 
 echo "── Todo verde ──────────────────────────────────────────────────────────"
