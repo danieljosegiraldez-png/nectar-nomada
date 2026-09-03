@@ -77,16 +77,52 @@ tampoco mira. Lo encontró la quinta revisión (2026-09-01) y se dejó abierto: 
 una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo mecánico.
 
 
-### Producción va por detrás de `main` — build roto una hora, ya arreglado
+### El rojo de `main` es cuota, no código — y se queda rojo para siempre
 
-`export class FechaInvalidaError` en `app/actions/traceability.ts`, que es
-`"use server"`, tumbó `next build` con 69 errores. Ocho despliegues de producción
-en error entre las 20:50 y las 21:00; el último bueno es de una hora antes. **El
-sitio no se cayó** —sirve el build viejo—, pero todo lo fusionado desde entonces
-no está vivo. La compuerta no lo vio porque no corre `next build`; ahora hay
-guardia de fuente (`tests/arquitectura/use-server-solo-async.test.ts`) y la
-trampa está en `CLAUDE.md`. **Queda comprobar que el primer despliegue tras el
-arreglo llega a *Ready*** y que las dos migraciones pendientes se aplican.
+**Comprobado el 2026-09-03. Si lees `main` en rojo, empieza por aquí antes de
+tocar nada.**
+
+`3858cde` y los cinco commits anteriores tienen el check de Vercel en `failure`
+con «Deployment rate limited — retry in 24 hours». **No es un build roto: es el
+tope diario del plan gratuito, que diez PR con sus previews agotaron.** Ese rojo
+no se va a arreglar solo ni con el cambio de plan: es un estado histórico de un
+commit que Vercel rechazó sin llegar a construir.
+
+**Cómo distinguir cuota de build roto, en orden de fiabilidad:**
+
+1. **La URL del check.** Una cuota apunta a la página de venta
+   (`?upgradeToPro=build-rate-limit`); un build real apunta al despliegue
+   (`/nectar-nomada-package/<id>`). Es el discriminante limpio:
+
+   ```bash
+   gh api repos/danieljosegiraldez-png/nectar-nomada/commits/<sha>/status \
+     --jq '.statuses[] | select(.context=="Vercel") | .state + " -> " + .target_url'
+   ```
+
+2. **No hay fila en el panel.** Una cuota no crea despliegue, así que **no hay
+   nada que redesplegar** — buscar el botón *Redeploy* de ese commit es buscar
+   algo que no existe. Sólo un push nuevo despliega.
+3. **La duración**, ya en `CLAUDE.md`: 18-20 s es un build que corrió y falló;
+   33-59 s uno bueno. Sirve cuando sí hay fila.
+
+**Daniel subió a PRO el 2026-09-02.** Verificado que funciona: un preview
+construyó en 35 s después del cambio. Lo que el PRO **no** hace es volver atrás
+a construir lo ya rechazado.
+
+**Qué hay sin desplegar, medido y no estimado:** seis commits, y tocan sólo
+documentación y herramientas — **ni código de la app, ni esquema, ni migración
+pendiente**. Producción sirve el build de `2026-09-02 00:20` (Ready, 51 s) y no
+le falta nada que un usuario pueda ver. El hueco se cierra solo con la próxima
+fusión de cualquier sesión.
+
+**Lo que sí quedó cerrado:** el `export class FechaInvalidaError` en un archivo
+`"use server"` que tumbó `next build` con 69 errores el 2026-09-01 **está
+arreglado y desplegado** — el despliegue de las 00:20 llegó a *Ready*, que era la
+comprobación que esta sección dejaba pendiente. La migración
+`20260901100000_s1_invariantes_en_la_base` entró con él. El guardia de fuente
+(`tests/arquitectura/use-server-solo-async.test.ts`) pasó flip-test el
+2026-09-03: 16/16 con el código bueno, y con la clase exportada reintroducida
+cae uno solo, nombrando la línea. La compuerta sigue sin correr `next build`.
 
 - **Aviso fiable de que un backup no corrió** — bloqueado en P-A, y ya solo por
   la URL. El código está hecho y en main: `ping_health` manda `/start`, `/fail`
