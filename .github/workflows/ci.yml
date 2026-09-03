@@ -1,8 +1,20 @@
 name: CI
 
 on:
+  # `push` sólo en `main`. Con `["**"]`, un empuje a una rama con PR abierto
+  # disparaba DOS corridas —una por `push` y otra por `pull_request`— y no se
+  # cancelaban entre sí porque el grupo de concurrencia usa `github.ref`, que
+  # vale `refs/heads/<rama>` en una y `refs/pull/<n>/merge` en la otra.
+  #
+  # Medido sobre las últimas 100 corridas de este repositorio: 34 eran `push` a
+  # ramas distintas de `main`, y 33 de los 67 commits dispararon los dos
+  # eventos. El mismo cambio se hizo en `nectarnomada-web`, donde pesaba 42 %.
+  #
+  # Lo que se pierde: una rama sin PR abierto no tiene CI hasta que se abre.
+  # La compuerta local (`npm run verify`) sigue siendo la primera línea, y el
+  # PR vuelve a cubrirla antes de que nada pueda fusionarse.
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
 
 # Sólo lectura: esta compuerta no publica, no comenta y no despliega.
