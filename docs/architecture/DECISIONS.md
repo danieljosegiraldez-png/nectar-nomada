@@ -7634,3 +7634,53 @@ in a session that ends.
 Unverified by use, and worth stating plainly: nothing in this ADR makes the
 farm's owners able to open the platform. Twenty-two Assignments have resolved
 correctly to nobody since they were created.
+
+---
+
+## ADR-107 — Los correos de las personas se dan por función, no por jerarquía
+
+**Contexto.** Sin correo no hay contraseña, así que la lista de quién tiene
+correo *es* la lista de quién puede entrar. Hasta hoy eran dos personas. P-C
+llevaba abierta desde el 2026-08-28 porque quién recibe la llave no lo decide
+el sistema.
+
+Medido el 2026-09-04 contra una copia local restaurada del backup
+`2026-09-04T202018Z` —no contra producción directamente, y con control
+positivo: `traceability.planting_cohort` dio 4, que es su valor conocido—:
+
+| | |
+|---|---|
+| Personas en `core.person` | 17 |
+| Con correo | 3 |
+| Sin correo | 14 |
+
+Los tres con correo son Daniel Giráldez, José Giráldez y **Nathy Rubio**.
+
+**Decisión del dueño, 2026-09-04.** El acceso se concede por **la función que
+la persona ejerce**, no por su posición en la organización. Nathy Rubio lleva
+administración y operaciones: opera el sistema como parte de su trabajo, y por
+eso tiene cuenta.
+
+De ahí se sigue lo que esta regla **no** dice: ser propietario no otorga acceso
+por sí mismo, y no tenerlo no es una degradación. Son ejes distintos.
+
+**Los Huerbsch siguen sin correo, y la razón importa.** Bob, Sherry y Chris
+—copropietarios y representante familiar, con 22 Assignments entre los tres
+según ADR-106— **no están excluidos por decisión: todavía no han dado sus
+direcciones.** Es un hecho pendiente, no un veredicto.
+
+La distinción no es retórica. Una tabla con la casilla vacía se lee igual en los
+dos casos, y quien la mire dentro de seis meses no podrá saber si es que nadie
+preguntó o si se decidió que no. Aquí queda dicho: se preguntó, y falta el dato.
+Cuando lleguen los correos, darlos de alta **no requiere volver a abrir P-C** —
+ya están cubiertos por esta regla, porque su función lo justifica.
+
+**Lo que esto no arregla.** Las 22 asignaciones de los Huerbsch siguen
+resolviendo correctamente a nadie, igual que el día que se crearon. La puerta
+funciona desde ADR-083; lo que falta es a quién dársela, y de ellos tres sigue
+faltando.
+
+**Cómo se comprueba.** La prueba de P-C exige la frase en el encabezado de un
+ADR, no en el cuerpo: `^## ADR-[0-9]+.*correos de las personas`. Se pide así
+desde que una mención de pasada —«los correos de las personas siguen
+pendientes»— habría cerrado la decisión sin que nadie la tomara.
