@@ -37,6 +37,38 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-04 · El diff invertido volvió, disfrazado de trabajo ajeno
+
+Encontrado en el checkout compartido al ponerlo al día. `git status` daba dos
+archivos **`M `** —modificados y escenificados—, 31 borrados y cero altas: la
+medición del 14 % de `PENDING_IMPLEMENTATIONS/006` y la cabecera de identidad
+de repositorio de `scripts/cierre-de-sesion.sh`.
+
+**Nadie borró nada.** Esos bloques *entraron* en `main` el 2026-09-02
+(`c768f97` 01:22, `a7a8f65` 01:47) y el árbol es anterior (`mtime` 2026-08-31
+y 2026-09-02 00:58); el reflog enseña `branch: Reset to origin/main` a las
+01:43 y 01:59. El puntero avanzó sin tocar el árbol y git reportó al revés lo
+que había llegado — la sección «Adelantar el puntero de una rama no mueve el
+árbol» de `CLAUDE.md`, repitiéndose dos días después de escribirse.
+
+**Lo único nuevo, y lo que hay que recordar: la firma se lee como trabajo en
+curso de otra sesión.** `M ` significa escenificado, así que la lectura amable
+—«es de alguien, no lo toco»— es la equivocada, y es la que lo mantuvo dos
+días armado; estuve a punto de dejarlo por respeto. Lo deshace fechar: si los
+archivos del árbol son **anteriores** a los commits que traen esas líneas,
+nadie borró, llegó.
+
+Importaba porque entre lo «borrado» estaba la cabecera que dice de qué
+repositorio habla el informe de cierre —puesta tras correr el cierre del repo
+equivocado dos veces—: cualquier commit ahí la habría revertido en silencio.
+
+Resuelto con `git restore --staged --worktree` y verificado **por presencia**
+(`grep -c` = 1 y 1). Barridos los nueve worktrees de los dos repositorios:
+**ninguno más**, y lo dice un detector con flip-test —`git diff --shortstat
+HEAD` no vacío sobre un árbol rezagado de su puntero, reproducido en un repo
+de juguete—, no un verde sin control. Los dos checkouts compartidos quedan en
+`main` con el árbol coincidiendo con su `HEAD`.
+
 ### 2026-09-04 · La Fase 2 del Field OS, cerrada por lo que NO se construyó
 
 `43_P2_OPERATOR_CORE.md` §0 exigía contestar «¿por qué no se ha creado nunca
@@ -67,30 +99,6 @@ columna el diff la nombra.
   implementó nada» y su tabla de validación daba 531 tests; hoy son cuatro
   fases construidas y 940. Corregido con un bloque de estado fechado, porque
   esa página es lo primero que lee quien retoma el Field OS.
-
-### 2026-09-01 · El plan S1 y cuatro revisiones — el detalle está archivado
-
-`origin/main` = `0612df1`. Suite 731 → **865**. Diecisiete PR: nueve de
-construcción, cuatro de arreglos de revisión, cuatro de estado.
-
-**De las seis entidades que le faltaban a la Tabla 15 del marco de
-investigación, cinco se construyeron.** Sólo queda el microclima, y sólo por una
-decisión de Daniel (§3). Más `Location.aspect`, el sujeto no-café de
-`Measurement` y las fotografías con ámbito de Location, que no eran entidades
-pero desbloqueaban el resto.
-
-**Cuatro revisiones independientes** —servicios, tests, migraciones y acciones—
-encontraron **25 cosas**: 21 arregladas, 3 rechazadas con la razón escrita y 2
-imposibles como se propusieron, también escrito. Las páginas de `app/` siguen sin
-revisar (§3).
-
-**El detalle vive en `docs/SESSION_STATE_ARCHIVE.md`**, donde otra sesión lo
-archivó el mismo día. Esta entrada existe porque §2 se quedó **vacía**: un
-archivo que promete «lo que se entregó» y no entrega nada desorienta más que una
-línea de más. **Las lecciones no se quedaron ahí:** las tres reglas de
-flip-tests y el patrón de llamar «estructural» a lo que sólo comprueba el
-servicio están en `CLAUDE.md`, que sí se carga — el archivo histórico dice de sí
-mismo que lo que todavía dirige el trabajo no le pertenece.
 
 ## 3. Bloqueado, y en qué
 
