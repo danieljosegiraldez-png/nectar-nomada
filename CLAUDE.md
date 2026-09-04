@@ -2325,7 +2325,12 @@ revisión lo arma `tools/pack-for-review.sh`, mecánicamente.
 - Backups: `NN_BACKUP_DIR` está en `~/.zshrc` y apunta a Google Drive; el
   destino existe; `com.nectarnomada.backup` está cargado en launchd con último
   estado de salida 0; el log vive en `~/Library/Logs/nectar-nomada-backup.log`.
-- **La alerta de backup es local a esta máquina** (P-A sigue abierta).
+- **La alerta de backup ya vive fuera de esta máquina** — P-A cerrada el
+  2026-09-04. `ping_health` en `run-scheduled.sh` manda `/start`, `/fail` y el
+  éxito *sólo tras verificar la restauración*, contra la URL de healthchecks.io
+  que Daniel guarda en `~/.config/nectar-nomada/backup.env`, fuera del
+  repositorio. El backup es **semanal, lunes 09:00**; el check está con periodo
+  de 1 semana y margen de 2 días.
 - `timeout` no existe en este macOS; usar el timeout de la herramienta.
 
 ## Trampas que han costado tiempo real
