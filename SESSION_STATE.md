@@ -22,7 +22,7 @@ flip-test el 2026-08-28, en ambas direcciones.
 
 | Id | Decisión | Por qué es de Daniel | Prueba |
 |----|----------|----------------------|--------|
-| P-A | Alerta de backup **fuera de esta máquina** | Necesita un servicio externo que el proyecto no usa: es cuenta y gasto suyos. El código del ping ya está hecho (`ping_health` en `run-scheduled.sh`, con `/start`, `/fail` y éxito solo tras verificar la restauración); falta la URL, que es la cuenta de Daniel. Sin ella, un portátil cerrado quince días no respalda nada y no dice nada | Las **dos** mitades, y la fuente única es `scripts/open-decisions.sh` — no duplicar aquí: código (`ping_health` presente) **y** URL (`NN_HEALTHCHECK_URL=https…` activa en `~/.config/nectar-nomada/backup.env`, hoy comentada). Una sola mitad no es una alarma |
+| P-A | Alerta de backup **fuera de esta máquina** — **cerrada el 2026-09-04** | Daniel creó el check en healthchecks.io y puso su URL. Se deja la fila porque **vuelve a abrirse sola** si alguien borra la línea o caduca la cuenta: la alarma depende de un servicio externo que el repositorio no controla | Las **dos** mitades, y la fuente única es `scripts/open-decisions.sh` — no duplicar aquí: código (`ping_health` presente) **y** URL activa en `~/.config/nectar-nomada/backup.env`. Una sola mitad no es una alarma |
 | P-B | A qué proyecto apunta el dominio de marca — **cerrada el 2026-08-28** | Decisión de Daniel. Se deja la fila porque vuelve a abrirse sola si el dominio volviera a este proyecto | `curl -s -L https://www.nectarnomada.com/ \| grep -q 'href="/login"'` |
 | P-C | Quiénes reciben correo y, con él, acceso | Casi nadie en la base tiene correo; sin correo no hay contraseña. Hoy solo Daniel y José. Quién entra no lo decide el sistema | `! grep -qi "correos de las personas" docs/architecture/DECISIONS.md` |
 | P-D | Nombres y roles de la **familia Huerbsch** — **cerrada el 2026-08-29** | La premisa era falsa: sí están en la base desde A7 — Bob (copropietario), Sherry (copropietaria) y Chris (representante familiar), con membresías reales. Faltaba el ADR, que es lo único que la prueba mira. Ver ADR-106 | `! grep -qi "huerbsch registrada" docs/architecture/DECISIONS.md` |
@@ -124,16 +124,23 @@ comprobación que esta sección dejaba pendiente. La migración
 2026-09-03: 16/16 con el código bueno, y con la clase exportada reintroducida
 cae uno solo, nombrando la línea. La compuerta sigue sin correr `next build`.
 
-- **Aviso fiable de que un backup no corrió** — bloqueado en P-A, y ya solo por
-  la URL. El código está hecho y en main: `ping_health` manda `/start`, `/fail`
-  y el ping de éxito *después* de verificar la restauración, con la URL leída de
-  `~/.config/nectar-nomada/backup.env` — fuera del repositorio, porque quien
-  tenga esa URL puede señalar «el backup va bien» y tapar un fallo real.
-  Mientras la línea siga comentada no sale ningún ping, y la señal es solo
-  local: una notificación de macOS, un `BACKUP-FAILED.txt` junto a los backups,
-  y `launchctl list | grep nectar` como único rastro pasivo. Los tres hablan
-  hacia dentro de esta máquina, que es exactamente lo que P-A no arregla sin
-  cuenta externa.
+- **Aviso fiable de que un backup no corrió** — **desbloqueado el 2026-09-04.**
+  Probado de punta a punta con una corrida real de `run-scheduled.sh`: salió el
+  ping `/start`, el backup se escribió, `verify-restore` dio PASS —135 tablas,
+  14.706 filas, conteos idénticos en un PostgreSQL 18 limpio, sin Neon— y solo
+  entonces salió el ping de éxito. Daniel confirmó la recepción en el panel de
+  healthchecks.io, que es la mitad que no se puede verificar desde aquí.
+  **El log no se cree a sí mismo:** «ping enviado» solo se escribe si `curl -fsS`
+  recibió un 2xx. Flip-test el mismo día: un UUID inexistente y un dominio
+  inválido dan los dos «NO salió».
+  **Lo que cubre y lo que no.** El backup corre **los lunes a las 09:00**, no a
+  diario, así que el check está configurado con periodo de 1 semana y margen de
+  2 días — margen ancho a propósito, porque `StartCalendarInterval` hace que un
+  portátil dormido corra el trabajo **al despertar**, y un margen corto daría
+  falsas alarmas cada fin de semana largo. Sigue sin cubrirse el caso de destino
+  no montado: el wrapper sale 0 **en silencio** y no manda ni `/start`, de modo
+  que su ausencia es la señal — eso es el diseño, no un descuido, y es justo lo
+  que healthchecks.io convierte en alarma pasado el margen.
 - **Dar acceso a alguien más que Daniel y José** — bloqueado en P-C. Medido el
   2026-08-29: 13 de 14 cuentas siguen en `invited` sin clave. Bob y Sherry
   tienen 10 Assignments cada uno y Chris 2 — 22 en total que resuelven bien y
