@@ -1503,6 +1503,21 @@ model Asset {
   creatorPersonId  String?             @map("creator_person_id") @db.Uuid
   creatorPerson    Person?             @relation("AssetCreatorPerson", fields: [creatorPersonId], references: [id])
   capturedAt       DateTime?           @map("captured_at")
+
+  // P2 (43_P2_OPERATOR_CORE.md §6) — dónde se tomó la foto, que no es lo mismo
+  // que `locationId`. Esa FK apunta a una `Location` *entidad*: un bloque, una
+  // finca, una bodega. Una foto tomada en un punto de una ladera no tiene fila
+  // de `Location` y **no debe crear una** — inventar una entidad para poder
+  // guardar dos números ensucia el modelo de terreno para siempre.
+  //
+  // Mismos tres campos y mismos tipos que `FieldEvent`, a propósito: cuando la
+  // Fase 4 suba fotos desde un dispositivo, las dos tablas se leen igual.
+  // Anulables las tres: un teléfono sin fix, una foto escaneada de archivo y
+  // una subida desde el escritorio no tienen coordenadas, y una fabricada es
+  // peor que ninguna (ADR-038).
+  latitude         Float?              @map("latitude")
+  longitude        Float?              @map("longitude")
+  accuracyM        Float?              @map("accuracy_m")
   locationId       String?             @map("location_id") @db.Uuid
   location         Location?           @relation(fields: [locationId], references: [id])
   projectId        String?             @map("project_id") @db.Uuid
@@ -2832,6 +2847,9 @@ model QuantityEvent {
   recordedAt DateTime? @map("recorded_at")
   syncedAt   DateTime? @map("synced_at")
   captureDeviceId  String?            @map("capture_device_id") @db.Uuid
+  // P2 §5 — desfase de reloj al sincronizar. La explicación completa está en el
+  // comentario de `Measurement.clockOffsetMs`.
+  clockOffsetMs Int? @map("clock_offset_ms")
   createdAt        DateTime           @default(now()) @map("created_at")
   createdBy        String?            @map("created_by") @db.Uuid
   creator          UserAccount?       @relation("QuantityEventCreatedBy", fields: [createdBy], references: [id])
@@ -2949,6 +2967,22 @@ model Measurement {
   recordedAt DateTime? @map("recorded_at")
   syncedAt   DateTime? @map("synced_at")
   captureDeviceId String? @map("capture_device_id") @db.Uuid
+  // P2 (43_P2_OPERATOR_CORE.md §5) — el desfase del reloj del dispositivo en el
+  // momento de sincronizar, en milisegundos: `recordedAt` menos la hora real de
+  // ese instante. Positivo = el teléfono va adelantado.
+  //
+  // Por qué importa y por qué aquí: `recordedAt` es hora *del teléfono*, y los
+  // teléfonos baratos derivan. Una curva de fermentación reconstruida desde un
+  // reloj derivado sale mal de una forma que nadie va a notar, porque cada
+  // punto es plausible y sólo el conjunto está torcido. Guardando el desfase,
+  // `recordedAt` sigue siendo el dato crudo que el operador vio y la corrección
+  // se puede aplicar después, en lugar de reescribir la hora al entrar y perder
+  // para siempre lo que realmente marcaba el aparato.
+  //
+  // Anulable: una fila creada en la web no tiene desfase, y 0 significaría
+  // «medido y sin deriva», que es una afirmación distinta de «no se midió».
+  // La Fase 4 es quien lo escribe, al mismo tiempo que `syncedAt`.
+  clockOffsetMs Int? @map("clock_offset_ms")
   operatorPersonId String?               @map("operator_person_id") @db.Uuid
   operator         Person?               @relation(fields: [operatorPersonId], references: [id])
 
@@ -3559,6 +3593,9 @@ model FieldSession {
   recordedAt DateTime? @map("recorded_at")
   syncedAt   DateTime? @map("synced_at")
   deviceId   String?   @map("device_id") @db.Uuid
+  // P2 §5 — desfase de reloj al sincronizar. La explicación completa está en el
+  // comentario de `Measurement.clockOffsetMs`.
+  clockOffsetMs Int? @map("clock_offset_ms")
 
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
@@ -3631,6 +3668,9 @@ model FieldEvent {
   recordedAt DateTime? @map("recorded_at")
   syncedAt   DateTime? @map("synced_at")
   deviceId   String?   @map("device_id") @db.Uuid
+  // P2 §5 — desfase de reloj al sincronizar. La explicación completa está en el
+  // comentario de `Measurement.clockOffsetMs`.
+  clockOffsetMs Int? @map("clock_offset_ms")
 
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
@@ -4577,6 +4617,9 @@ model Inspection {
   recordedAt DateTime? @map("recorded_at")
   syncedAt   DateTime? @map("synced_at")
   captureDeviceId String? @map("capture_device_id") @db.Uuid
+  // P2 §5 — desfase de reloj al sincronizar. La explicación completa está en el
+  // comentario de `Measurement.clockOffsetMs`.
+  clockOffsetMs Int? @map("clock_offset_ms")
 
   createdAt        DateTime          @default(now()) @map("created_at")
   createdBy        String?           @map("created_by") @db.Uuid
@@ -4639,6 +4682,9 @@ model ColonyEvent {
   recordedAt DateTime? @map("recorded_at")
   syncedAt   DateTime? @map("synced_at")
   captureDeviceId String? @map("capture_device_id") @db.Uuid
+  // P2 §5 — desfase de reloj al sincronizar. La explicación completa está en el
+  // comentario de `Measurement.clockOffsetMs`.
+  clockOffsetMs Int? @map("clock_offset_ms")
 
   createdAt           DateTime        @default(now()) @map("created_at")
   createdBy           String?         @map("created_by") @db.Uuid

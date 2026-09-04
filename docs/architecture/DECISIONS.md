@@ -7684,3 +7684,69 @@ faltando.
 ADR, no en el cuerpo: `^## ADR-[0-9]+.*correos de las personas`. Se pide así
 desde que una mención de pasada —«los correos de las personas siguen
 pendientes»— habría cerrado la decisión sin que nadie la tomara.
+
+---
+
+## ADR-107 — Nadie asignó nunca una tarea, así que la Fase 2 se cierra sin extender `Task`
+
+**Contexto.** `docs/implementation/43_P2_OPERATOR_CORE.md` §0 midió el
+2026-08-28 que `partner.task` y `partner.field_submission` tenían **0 filas
+desde siempre**, y dejó escrita una condición antes de construir §1 (extender
+`partner.Task` con objetivo, asignado `Person`, planeado-vs-real y evidencia
+requerida) y §2 (`TaskTemplate`): *contestar por qué no se ha creado nunca
+ninguna tarea*, porque de la respuesta depende si `Task` es siquiera el padre
+correcto.
+
+Re-medido el 2026-09-04 contra producción, con control positivo en la misma
+consulta para que un cero no pudiera venir de mirar donde no era:
+
+| | filas |
+|---|---|
+| `core.person` *(control)* | 17 |
+| `core.project` *(control)* | 3 |
+| `core.assignment` *(control)* | 40 |
+| `partner.task` | **0** |
+| `partner.field_submission` | **0** |
+| `traceability.field_session` | **0** |
+| `traceability.field_event` | **0** |
+
+Las dos últimas son lo que la Fase 2 **sí** construyó (ADR-101), desplegado
+hace una semana. Nadie ha abierto una jornada de campo desde que la pantalla
+existe.
+
+**Decisión — la respuesta del dueño del producto, 2026-09-04: nunca se asignó
+trabajo por la plataforma.** El trabajo se reparte hablando, y el sistema no
+entró en esa rutina. §0 nombra esa rama y dice qué hacer con ella: *la brecha
+es de adopción, no de esquema, y las extensiones de §1 son especulativas.*
+
+Así que §1 y §2 **no se construyen**, y la Fase 2 se cierra con §5 y §6, que
+§0 pide igual porque la sincronización los necesita y porque son caros de
+añadir a posteriori.
+
+**Por qué esto no es aplazar por pereza.** Extender `Task` ahora significaría
+añadir siete columnas y una tabla nueva a un modelo con cero filas, para
+servir a operadores que no tienen cuenta (3 de 17 Personas tienen correo), en
+un flujo que nadie ha recorrido de punta a punta. Son tres suposiciones
+apiladas. Y hay una cuarta que sólo se ve con el dato de hoy: la mitad de la
+Fase 2 que sí se construyó tampoco tiene una sola fila, así que extender
+`Task` sería apilar un segundo modelo sin usar encima de un primero sin usar.
+
+**Lo que reabre esta decisión.** No es una fecha: es una fila. En cuanto
+exista una `FieldSession` real —alguien que no sea Daniel recorriendo un
+bloque y registrando algo— se sabrá qué le faltó al modelo para expresar su
+trabajo, y esa observación será mejor especificación para §1 que la conjetura
+del ticket. El §7 del ticket ya dice cuál sería lo primero en ese caso:
+`assignedToPersonId`, porque la mayoría de quienes harían el trabajo no
+tienen cuenta.
+
+**Lo que NO decide este ADR.** No dice que `Task` sea el padre equivocado
+—esa era la tercera rama de §0 y no es la que se tomó—, ni toca
+`assignedToUserAccountId`, ni descarta `TaskTemplate` para siempre. Dice que
+hoy no hay evidencia para diseñarlos.
+
+**Cómo se comprueba.** Que la Fase 2 está cerrada sin §1–§2 se ve en que
+`partner.task` no tiene columnas nuevas y no existe `task_template`, y en que
+la migración `20260904150000_p2_cierre_gps_asset_y_desfase_reloj` sólo añade
+las nueve columnas de §5 y §6. Que la premisa sigue viva se comprueba
+volviendo a contar `traceability.field_session`: mientras dé 0, este ADR
+describe el mundo.

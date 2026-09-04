@@ -1337,8 +1337,37 @@ power and connectivity, not at a fermentation tank.
 
 ---
 
-## 59. Not Implemented
+## 59. Not Implemented — *as of 2026-08-27, the day this audit was written*
 
 No models were added, no migrations generated, no mobile app scaffolded,
 no speculative code written. The only repository change is this document.
 All five validation commands pass, unchanged from before the audit.
+
+**This section has not been true since 2026-08-27, and the paragraph above
+is kept only as the record of the audit's own footprint.** See §60 for what
+has actually been built since. A reader who takes §59 at face value will
+re-plan work that already shipped; one session nearly did on 2026-09-04.
+
+---
+
+## 60. Phase status — measured 2026-09-04, not reported
+
+Verified against `prisma/migrations/`, `prisma/schema.prisma` and
+`DECISIONS.md`, because this document froze on the day it was written and
+every status claim in it aged badly.
+
+| Phase | State |
+| --- | --- |
+| **0 — Correctness (mass balance)** | **Shipped.** `20260827193000_p0_mass_balance`, ADR-094. |
+| **1 — Land foundation** | **Shipped.** `20260827214500_p1_land_foundation`, ADR-095. `PlantingCohort` and `HarvestEventSource` exist. |
+| **2 — Operator core** | **Closed, deliberately incomplete.** `FieldSession`, `FieldEvent`, process targets and the time-integrity columns shipped (`20260828131007`, `20260828131500`, ADR-098/099/101); `20260904150000` added GPS on `Asset` (§6) and `clock_offset_ms` (§5). **§1 (extend `Task`) and §2 (`TaskTemplate`) were deliberately not built — see ADR-107.** |
+| **3 — Quality and selection** | **Partial.** The selection slice of §57 shipped (`20260828143000_p3_selection`, ADR-103). Still missing: `OperatingStandard` and versioned thresholds, `Deviation` override records, `AssetAnnotation`, physical QC vocabulary (green-stage defects, screen size). |
+| **4 — API and sync** | **Not started.** No `Device` model; `app/api` holds only auth, export and the Stripe webhook; `clientDraftId` exists only inside the apiary module and was never generalised. |
+| **5 — Android operator app** | **Not started.** No native client anywhere in either repository. |
+| **6 — Reporting** | **Not started.** `getLotReport` is still the only report. |
+| **7 — Geospatial** | **Not started**, as planned. `schema.prisma` still records in a comment that no boundary polygon exists. |
+
+**The §26 sequence still holds; only §57's slice was reordered ahead of the
+rest of Phase 3.** The one place where reality diverges from this document's
+plan is Phase 2, and ADR-107 gives the reason: the model §1 would extend has
+never carried a row, and neither has the half of Phase 2 that shipped.
