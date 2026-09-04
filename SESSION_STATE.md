@@ -37,6 +37,37 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-04 · La Fase 2 del Field OS, cerrada por lo que NO se construyó
+
+`43_P2_OPERATOR_CORE.md` §0 exigía contestar «¿por qué no se ha creado nunca
+ninguna tarea?» antes de extender `partner.Task`. Re-medido contra producción
+con control positivo (17 personas, 3 proyectos, 40 assignments): `partner.task`
+**0**, `field_submission` **0**, y —lo nuevo— `field_session` **0** y
+`field_event` **0**. La mitad de la Fase 2 que sí se construyó hace una semana
+tampoco tiene una sola fila. Daniel contestó: nunca se asignó trabajo por la
+plataforma. Es la rama que §0 nombra, y su instrucción es aplazar §1–§2 por
+especulativos. **ADR-107.**
+
+Entregado: §6 (GPS en `core.asset` — `latitude`/`longitude`/`accuracy_m`, que
+`locationId` no puede expresar porque una ladera no es una `Location`) y el
+resto de §5 (`clock_offset_ms` en las seis tablas que ya llevan `recorded_at`,
+`synced_at` y columna de dispositivo). Nueve columnas, todas anulables, cero
+backfill. Verificado con `migrate diff` vacío **y su flip-test**: quitando una
+columna el diff la nombra.
+
+**Dos cosas que encontré de paso y no son mías:**
+
+- **La suite de `main` estaba roja y CI verde.** Dos secciones de §3 usaban
+  `###` sin fecha y `tests/archivo-de-estado.test.ts` las rechaza — con razón:
+  un `###` no fechado trunca a su padre al archivar. Bajadas a `####` aquí.
+  **CI no lo vio porque ese test no está en la lista enumerada a mano de
+  `scripts/ci.sh`**, que es exactamente `PENDING_IMPLEMENTATIONS/008` pasando
+  de verdad en lugar de en teoría.
+- **`COFFEE_FIELD_OS_AUDIT.md` afirmaba cosas falsas.** Su §59 decía «no se
+  implementó nada» y su tabla de validación daba 531 tests; hoy son cuatro
+  fases construidas y 940. Corregido con un bloque de estado fechado, porque
+  esa página es lo primero que lee quien retoma el Field OS.
+
 ### 2026-09-01 · El plan S1 y cuatro revisiones — el detalle está archivado
 
 `origin/main` = `0612df1`. Suite 731 → **865**. Diecisiete PR: nueve de
@@ -64,7 +95,7 @@ mismo que lo que todavía dirige el trabajo no le pertenece.
 ## 3. Bloqueado, y en qué
 
 
-### Un vocabulario de procedencia por formulario, y nadie lo declaró
+#### Un vocabulario de procedencia por formulario, y nadie lo declaró
 
 Ocho formularios ofrecen ocho subconjuntos distintos de `ProvenanceClass` y
 cuatro de `DataQuality`, con dos nombres para la misma constante
@@ -77,7 +108,7 @@ tampoco mira. Lo encontró la quinta revisión (2026-09-01) y se dejó abierto: 
 una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo mecánico.
 
 
-### El rojo de `main` es cuota, no código — y se queda rojo para siempre
+#### El rojo de `main` es cuota, no código — y se queda rojo para siempre
 
 **Comprobado el 2026-09-03. Si lees `main` en rojo, empieza por aquí antes de
 tocar nada.**

@@ -1,5 +1,24 @@
 # P2 — Operator core: tasks people actually receive, sessions, events, and honest timestamps
 
+> **ESTADO — cerrado el 2026-09-04, y a propósito sin §1 ni §2.**
+>
+> - **§3 `FieldSession`, §4 `FieldEvent`, §5 columnas de integridad temporal,
+>   §6 GPS:** construidos. ADR-098/099/101 y la migración
+>   `20260904150000_p2_cierre_gps_asset_y_desfase_reloj`, que cerró lo que
+>   faltaba de §5 (`clock_offset_ms`) y todo §6 (`latitude`/`longitude`/
+>   `accuracy_m` en `core.asset`).
+> - **§1 (extender `partner.Task`) y §2 (`TaskTemplate`): NO construidos.**
+>   Se contestó la pregunta que §0 exige contestar antes de tocarlos, y la
+>   respuesta fue la primera de sus tres ramas: nunca se asignó trabajo por la
+>   plataforma. **ADR-107** lleva la medición, el razonamiento y —lo que
+>   importa para retomarlo— qué lo reabre: la primera `FieldSession` real.
+> - **§7 (aceptación) sigue sin cumplirse**, y no puede cumplirse hoy: exige
+>   que una persona que no sea Daniel reciba una tarea y recorra un bloque.
+>   Sigue siendo el criterio correcto.
+>
+> §0 de abajo se conserva entero: es el razonamiento que produjo esta decisión,
+> no un preámbulo superado.
+
 Phase 2 of `docs/architecture/COFFEE_FIELD_OS_AUDIT.md` §26. The last phase
 before the API and synchronisation work, and the one that decides whether any
 of that is worth building.
