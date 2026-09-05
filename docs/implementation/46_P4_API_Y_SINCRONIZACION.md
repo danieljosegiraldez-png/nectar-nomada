@@ -184,12 +184,33 @@ comprobarse en el cliente**. Este ticket la hereda, no la inventa.
 
 ## 7. Cola de medios, aparte
 
-Cola independiente, reintento independiente, subida reanudable, ligada a las
-filas estructuradas por `clientDraftId` para que **una foto pueda llegar días
-después de la observación que documenta**.
+Cola independiente, reintento independiente, ligada por `clientDraftId` para
+que **una foto pueda llegar días después de lo que documenta**.
+
+**Cómo se resolvió eso, que no es como se lee (2026-09-05).** La lectura obvia
+—colgar la foto de un evento anterior— exigiría **actualizar** ese evento, y
+`FieldEvent` es append-only: el pull por cursor de §5 **ya depende de ello**,
+porque usa `createdAt` en vez de `updatedAt` precisamente porque nada lo
+modifica. Un `UPDATE` aquí haría que ningún dispositivo se enterara nunca de
+que la foto llegó — la foto estaría en la base y en ningún aparato.
+
+Así que **una foto de campo ES un `FieldEvent`** de tipo `foto`, `video` o
+`nota_de_voz` —los tres ya están en el catálogo `event_kind`— con su `assetId`.
+Queda junto a lo que documenta porque comparten `FieldSession` y se ordenan por
+`occurredAt`, que es para lo que P2 §4 llama a `FieldEvent` «una espina dorsal,
+no un reemplazo». **Sin cambio de esquema.**
+
+Subida en dos pasos, la forma que `lib/traceability/media.ts` ya usa: el
+servidor firma una URL y **nunca sostiene los bytes**. La clave la acuña el
+servidor y se **re-comprueba** al finalizar — devolverla es cosa del cliente, y
+confiar en ella sería dejarle reclamar cualquier objeto del bucket.
 
 `Asset` ya tiene `latitude`/`longitude`/`accuracyM` desde P2 §6, así que una
 foto de campo llega con su posición sin depender de crear una `Location`.
+
+**Lo que sigue sin construirse de §7: la subida reanudable.** Una subida
+cortada se reintenta entera. Con fotos de finca es aceptable; con vídeo largo
+sobre datos móviles no lo será, y entonces hace falta multipart.
 
 ---
 

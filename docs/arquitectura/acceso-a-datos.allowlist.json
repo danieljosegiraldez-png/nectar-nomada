@@ -256,6 +256,10 @@
     {
       "archivo": "lib/sync/pullFieldWork.ts",
       "razon": "P4 §5. Pull por cursor: resuelve el ámbito llamando a can() por Location y pagina por clave. No escribe."
+    },
+    {
+      "archivo": "lib/sync/fieldMedia.ts",
+      "razon": "P4 §7. Medios de campo: gatea por la Location de la jornada, y crea Asset + FieldEvent en una transacción con el audit dentro."
     }
   ],
   "reciben_transaccion": [

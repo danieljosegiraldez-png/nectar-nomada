@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05
 
-**230 operaciones** que tocan la base, en **61 archivos**:
+**232 operaciones** que tocan la base, en **62 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,7 +22,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **168** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **170** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **24** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **22** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -47,6 +47,10 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > pull por cursor de P4 §5. Cuenta como «guardia directo» y es correcto: llama
 > a `can()` por Location para resolver el ámbito antes de leer nada, que es
 > justo lo que esa clase describe.
+>
+> **Subida del 2026-09-05 (230→232, 61→62):** `lib/sync/fieldMedia.ts`, la cola
+> de medios de P4 §7. Dos operaciones y un archivo: gatea por la Location de la
+> jornada antes de tocar nada, así que las dos cuentan como «guardia directo».
 
 ### Las tres que no encajaban en ninguna regla (medición del 2026-08-31, por la mañana)
 
