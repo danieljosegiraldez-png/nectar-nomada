@@ -1,4 +1,7 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -9,69 +12,79 @@ import { describe, expect, it } from "vitest";
  * `docs/SESSION_STATE_ARCHIVE.md`, así que git **no vio texto solapado**, la
  * fusión salió limpia, y el archivo quedó con la sección **dos veces**.
  *
- * Eso es lo que hace falta comprobar y no otra cosa: `SESSION_STATE.md` sí dio
- * conflicto y por eso se miró. El archivo histórico no dio ninguno. Una fusión
- * limpia no dice que el resultado sea correcto, sólo que git no encontró nada
- * que le pareciera solapado — y con seis worktrees vivos esto se repite.
+ * **Qué cambió el 2026-09-05, y por qué importa.** Estas tres comprobaciones
+ * vivían aquí dentro, en TypeScript. Ese día se estrenó el carril ligero de CI
+ * para cambios de sólo documentación —el 57 % de las PR— y ese carril no corre
+ * vitest: el guardia del archivo histórico dejaba de correr exactamente en los
+ * cambios que tocan el archivo histórico. Ahora la lógica vive en
+ * `scripts/check-archivo-de-estado.mjs`, que no importa nada y corre en los dos
+ * carriles; este archivo pasó a comprobar que ese guardia **discrimina**.
  *
- * Se comprobó a mano ese día. A mano significa: la próxima vez, no.
+ * Una definición, dos consumidores. Dos definiciones habrían derivado, que es
+ * como la prueba de P-A acabó diciendo «cerrada» durante días.
  */
-const raiz = new URL("../", import.meta.url).pathname;
-const titulos = (ruta: string): string[] => {
-  let texto: string;
+
+const guardia = "scripts/check-archivo-de-estado.mjs";
+
+function correr(estado: string, archivo: string): { codigo: number; salida: string } {
   try {
-    texto = readFileSync(`${raiz}${ruta}`, "utf8");
-  } catch {
-    return [];
+    const salida = execFileSync("node", [guardia, estado, archivo], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return { codigo: 0, salida };
+  } catch (e) {
+    const err = e as { status?: number; stdout?: string; stderr?: string };
+    return { codigo: err.status ?? -1, salida: `${err.stdout ?? ""}${err.stderr ?? ""}` };
   }
-  return [...texto.matchAll(/^### (.+)$/gm)].map((m) => m[1]!.trim());
-};
+}
 
-const ESTADO = "SESSION_STATE.md";
-const ARCHIVO = "docs/SESSION_STATE_ARCHIVE.md";
+/** Escribe un par estado/archivo en un directorio temporal y devuelve sus rutas. */
+function par(estado: string, archivo: string): [string, string] {
+  const dir = mkdtempSync(join(tmpdir(), "nn-archivo-"));
+  const rutaEstado = join(dir, "estado.md");
+  const rutaArchivo = join(dir, "archivo.md");
+  writeFileSync(rutaEstado, estado, "utf8");
+  writeFileSync(rutaArchivo, archivo, "utf8");
+  return [rutaEstado, rutaArchivo];
+}
 
-describe("el archivo histórico del estado", () => {
-  it("no repite ninguna sección", () => {
-    const vistos = new Set<string>();
-    const repetidos: string[] = [];
-    for (const t of titulos(ARCHIVO)) {
-      if (vistos.has(t)) repetidos.push(t);
-      vistos.add(t);
-    }
-    expect(
-      repetidos,
-      `${ARCHIVO} tiene secciones repetidas. Suele ser una fusión limpia entre ` +
-        `dos sesiones que archivaron lo mismo: git no ve solape y duplica. ` +
-        `Deja una sola copia.`
-    ).toEqual([]);
+const ESTADO_SANO = "# Estado\n\n### 2026-09-01 · Una\n\n### 2026-09-02 · Dos\n";
+const ARCHIVO_SANO = "# Hist\n\n### 2026-08-01 · Vieja\n";
+
+describe("el guardia del archivo histórico", () => {
+  it("acepta los archivos reales del repositorio", () => {
+    const { codigo, salida } = correr("SESSION_STATE.md", "docs/SESSION_STATE_ARCHIVE.md");
+    expect(codigo, salida).toBe(0);
   });
 
-  it("no comparte ninguna sección con el estado vivo", () => {
-    const enArchivo = new Set(titulos(ARCHIVO));
-    const enAmbos = titulos(ESTADO).filter((t) => enArchivo.has(t));
-    expect(
-      enAmbos,
-      `una sección está a la vez en ${ESTADO} y en ${ARCHIVO}. Archivar es ` +
-        `mover, no copiar: bórrala del estado vivo.`
-    ).toEqual([]);
+  it("acepta un par sano", () => {
+    const { codigo, salida } = correr(...par(ESTADO_SANO, ARCHIVO_SANO));
+    expect(codigo, salida).toBe(0);
   });
 
-  /**
-   * El archivador corta cada sección en el **siguiente encabezado de nivel 1 a
-   * 3** (`siguienteEncabezado` en `scripts/check-state-budget.mjs`). Un `###`
-   * que no sea una entrada fechada —un subtítulo dentro de una entrada, por
-   * ejemplo— truncaría a su padre: al archivar se movería sólo el trozo de
-   * arriba y el resto quedaría huérfano en el estado, sin encabezado propio.
-   *
-   * Así que esto no es una preferencia de formato: es la condición que el
-   * archivador necesita para no partir una entrada por la mitad.
-   */
-  it("toda sección fechada del estado tiene el formato que el archivador espera", () => {
-    const malFormadas = titulos(ESTADO).filter((t) => !/^\d{4}-\d{2}-\d{2} · /.test(t));
-    expect(
-      malFormadas,
-      `secciones de ${ESTADO} que el guardia del presupuesto no sabrá archivar ` +
-        `(espera «### AAAA-MM-DD · título»)`
-    ).toEqual([]);
+  // Los tres de abajo son el flip-test: cada mutación golpea UNA propiedad, y
+  // se comprueba además que el mensaje nombra la correcta. Sin esto último, un
+  // guardia que fallara siempre pasaría estos tres tests.
+
+  it("rechaza una sección repetida en el histórico", () => {
+    const [e, a] = par(ESTADO_SANO, "# Hist\n\n### 2026-08-01 · Vieja\n\ntexto\n\n### 2026-08-01 · Vieja\n");
+    const { codigo, salida } = correr(e, a);
+    expect(codigo, salida).toBe(1);
+    expect(salida).toMatch(/repetida/);
+  });
+
+  it("rechaza una sección que está a la vez en el estado y en el histórico", () => {
+    const [e, a] = par(ESTADO_SANO, "# Hist\n\n### 2026-09-01 · Una\n");
+    const { codigo, salida } = correr(e, a);
+    expect(codigo, salida).toBe(1);
+    expect(salida).toMatch(/a la vez/);
+  });
+
+  it("rechaza una sección del estado sin fecha, que el archivador no sabría cortar", () => {
+    const [e, a] = par("# Estado\n\n### Un subtitulo cualquiera\n", ARCHIVO_SANO);
+    const { codigo, salida } = correr(e, a);
+    expect(codigo, salida).toBe(1);
+    expect(salida).toMatch(/no sabrá cortar/);
   });
 });

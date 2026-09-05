@@ -35,6 +35,15 @@ echo "── Presupuesto de SESSION_STATE.md ───────────�
 node scripts/check-state-budget.mjs
 
 echo
+echo "── Salud del archivo histórico ─────────────────────────────────────────"
+echo "   Añadido el 2026-09-05, el mismo día que este carril: sus tres"
+echo "   comprobaciones vivían sólo en un test de vitest, que este carril no"
+echo "   corre. O sea que el guardia del archivo histórico dejaba de correr"
+echo "   justo en los cambios que tocan el archivo histórico. Lo encontré"
+echo "   archivando, veinte minutos después de estrenar esto."
+node scripts/check-archivo-de-estado.mjs
+
+echo
 echo "── Decisiones del dueño ────────────────────────────────────────────────"
 echo "   Corre sin dependencias y sin red para las pruebas locales. Un veredicto"
 echo "   ROTA (salida 3) significa que una prueba de decisión está mal escrita,"
