@@ -300,6 +300,8 @@
     "lotListHeading": "Todos los Batches",
     "filterAll": "Todos",
     "noLots": "Ningún batch coincide con este filtro todavía.",
+    "sinAmbitoHeading": "No tienes acceso a ningún lote todavía",
+    "sinAmbitoBody": "Esto no significa que la finca esté vacía: significa que tu cuenta aún no tiene asignaciones. Un administrador puede dártelas.",
     "lineageHeading": "Genealogía",
     "ancestorsLabel": "{count} batch(es) de origen",
     "descendantsLabel": "{count} batch(es) derivado(s)",

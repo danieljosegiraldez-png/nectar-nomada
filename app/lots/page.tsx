@@ -35,6 +35,12 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
     permissionKeysAnywhere(user.userAccountId),
   ]);
   const { items: lotItems, truncated: lotsTruncated, limit: lotLimit } = lots;
+  // Una cuenta sin asignaciones ve las mismas listas vacías que una finca sin
+  // nada. Decirle «nada en curso ahora mismo» es afirmar algo sobre la finca
+  // que puede ser falso — y es la primera pantalla de quien acaba de recibir
+  // acceso. Mismo trato que `Partner.noProjects` ya daba: se nombra la causa y
+  // se dice a quién pedirle el acceso.
+  const sinAmbito = lots.sinAmbito && operations.sinAmbito;
   const canExport = granted.has("lot:export");
   const canManageLots = granted.has("lot:manage");
 
@@ -118,7 +124,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
           <section className="nn-section">
             <h2>{t("activeOperationsHeading")}</h2>
             {buckets.length === 0 ? (
-              <p className="nn-muted">{t("noActiveOperations")}</p>
+              <p className="nn-muted">{sinAmbito ? t("sinAmbitoBody") : t("noActiveOperations")}</p>
             ) : (
               <div className="nn-grid">
                 {buckets.map((bucket) => (
@@ -173,7 +179,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
         {lotsTruncated ? <p className="nn-muted">{t("listTruncated", { limit: lotLimit })}</p> : null}
 
         {lotItems.length === 0 ? (
-          <p className="nn-muted">{t("noLots")}</p>
+          <p className="nn-muted">{sinAmbito ? t("sinAmbitoHeading") : t("noLots")}</p>
         ) : (
           <div className="nn-grid">
             {lotItems.map((lot) => (
