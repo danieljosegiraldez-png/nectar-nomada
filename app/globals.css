@@ -8,8 +8,12 @@
   --nn-ink-muted: #574a3b;
   --nn-border: #e6ddcc;
   /* A field control's border must read as an edge outdoors, where the
-     screen is washed out; --nn-border is a divider, not an edge. */
-  --nn-border-strong: #b9ab93;
+     screen is washed out; --nn-border is a divider, not an edge.
+     El valor anterior (#b9ab93) no cumplía esa frase: 2.26:1 sobre
+     --nn-surface, por debajo del 3:1 que WCAG 1.4.11 exige al borde que
+     identifica un control. #948976 da 3.44 sobre --nn-surface y 3.20 sobre
+     --nn-bg, así que pasa en las dos superficies donde hay campos. */
+  --nn-border-strong: #948976;
   --nn-brand: #7a3b1e;
   --nn-brand-ink: #ffffff;
   --nn-accent: #3f5c3f;
@@ -201,18 +205,19 @@ form.nn-form {
   color: var(--nn-ink-muted);
 }
 
+/* Estos campos son controles, no divisores: van con --nn-border-strong, que
+   es lo que dice el comentario del token. Con --nn-border daban 1.25:1 y el
+   borde desaparecía sobre el fondo — el caso exacto que ese comentario
+   describe, en los 50 archivos que usan .nn-field.
+   No se declara aquí ni el foco ni min-height: los pone la regla global de
+   `input` más abajo, y duplicarlos es lo que los dejó divergir. */
 .nn-field input {
-  border: 1px solid var(--nn-border);
-  border-radius: 6px;
-  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--nn-border-strong);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
   font-size: 1rem;
-  background: var(--nn-bg);
+  background: var(--nn-surface);
   color: var(--nn-ink);
-}
-
-.nn-field input:focus {
-  outline: 2px solid var(--nn-accent);
-  outline-offset: 1px;
 }
 
 .nn-button {
