@@ -27,8 +27,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ¿Hace falta la compuerta entera? Medido el 2026-09-05 sobre las últimas 30
+  # PR fusionadas: 17 tocaban SÓLO documentación, y las 17 corrían Prisma,
+  # tipos, lint y once archivos de test sobre archivos `.md`.
+  #
+  # La definición de "sólo documentación" vive en scripts/solo-documentacion.sh
+  # y la comparte el `ignoreCommand` de Vercel. Una sola definición a propósito:
+  # dos derivarían, y este repositorio ya sabe cómo acaba eso.
+  cambios:
+    name: ¿Hay código en este cambio?
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      solo_docs: ${{ steps.detectar.outputs.solo_docs }}
+    steps:
+      # depth 2 basta: en `pull_request` el HEAD es el merge de la PR y su
+      # primer padre es la base, así que HEAD^..HEAD es el diff entero de la PR.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: detectar
+        # `|| true` porque el script sale 1 cuando hay código, y eso NO es un
+        # fallo del paso: es su respuesta. El veredicto se lee de la salida.
+        run: bash scripts/solo-documentacion.sh >> "$GITHUB_OUTPUT" || true
+
+  compuerta-documentacion:
+    name: Compuerta ligera · sólo documentación
+    needs: cambios
+    if: needs.cambios.outputs.solo_docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Sin `npm ci` a propósito: lo que corre aquí no importa dependencias.
+      - name: Compuerta ligera (scripts/ci-documentacion.sh)
+        run: bash scripts/ci-documentacion.sh
+
   compuerta:
     name: Compuerta · tipos, estado, rutas, lint y tests herméticos
+    needs: cambios
+    if: needs.cambios.outputs.solo_docs != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
