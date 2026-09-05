@@ -50,9 +50,17 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
       <h1>{t("lotsTitle")}</h1>
       <p className="nn-muted">{t("lotsIntro")}</p>
       <p style={{ marginTop: "1rem", display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <Link href="/lots/new" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
-          {t("createLotButton")}
-        </Link>
+        {/* Crear un lote exige `lot:manage` —lo pide el servicio de cosecha—, y
+            este botón se pintaba a todo el mundo mientras el enlace a Recetas,
+            tres líneas más abajo, ya consultaba ese mismo permiso, calculado
+            aquí al lado. Ocultarlo es lo que SECURITY.md §2 llama esconder por
+            UX: la escritura se sigue re-comprobando en el servidor pase lo que
+            pase. */}
+        {canManageLots ? (
+          <Link href="/lots/new" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
+            {t("createLotButton")}
+          </Link>
+        ) : null}
         {/* ADR-100. Recipes live here rather than in the top navigation: they
             are process configuration used from the batch flow, and S2
             consolidated that bar from ten entries precisely so it would fit a

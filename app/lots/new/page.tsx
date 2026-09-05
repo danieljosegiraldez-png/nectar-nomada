@@ -21,17 +21,35 @@ export default async function NewLotPage() {
         {t("backToLots")}
       </Link>
       <h1>{t("createLotButton")}</h1>
-      <p className="nn-muted">{t("createLotIntro")}</p>
 
-      <section className="nn-section">
-        <h2>{t("harvestHeading")}</h2>
-        <HarvestForm organizations={context.organizations} locations={context.plotLocations} projects={context.projects} />
-      </section>
+      {/* Sin ámbito de gestión, `getManageableContext` devuelve las tres listas
+          vacías y los dos formularios salían igual: `organizationId` y
+          `locationId` son `<select required>` sin opciones, así que no se podían
+          enviar y nada decía por qué. SECURITY.md §2 ya garantiza que la
+          escritura se re-comprueba —`recordHarvestEvent` llama al guardia de
+          lotes con acción `"manage"`—, de modo que esto no era un agujero: era
+          una pantalla afirmando una oferta falsa. Se nombra la causa, igual que
+          en `/lots`. */}
+      {context.sinAmbito ? (
+        <>
+          <p className="nn-muted">{t("sinAmbitoGestionHeading")}</p>
+          <p className="nn-muted">{t("sinAmbitoGestionBody")}</p>
+        </>
+      ) : (
+        <>
+          <p className="nn-muted">{t("createLotIntro")}</p>
 
-      <section className="nn-section">
-        <h2>{t("receivingHeading")}</h2>
-        <ReceivingForm organizations={context.organizations} locations={context.plotLocations} projects={context.projects} />
-      </section>
+          <section className="nn-section">
+            <h2>{t("harvestHeading")}</h2>
+            <HarvestForm organizations={context.organizations} locations={context.plotLocations} projects={context.projects} />
+          </section>
+
+          <section className="nn-section">
+            <h2>{t("receivingHeading")}</h2>
+            <ReceivingForm organizations={context.organizations} locations={context.plotLocations} projects={context.projects} />
+          </section>
+        </>
+      )}
     </div>
   );
 }

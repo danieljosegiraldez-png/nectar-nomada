@@ -30,7 +30,19 @@ export default async function NewStorageMovePage({ params }: { params: Promise<{
         {t("backToLot", { lotCode: lot.lotCode })}
       </Link>
       <h1>{t("moveStorageButton")}</h1>
-      <StorageForm lotId={id} locations={context.locations} />
+      {/* `getLotSummary` de arriba gatea por *ver*, no por *gestionar*: quien
+          sólo puede ver el lote llegaba aquí y se encontraba un
+          `<select required>` de ubicaciones sin ninguna opción, imposible de
+          enviar y sin explicación. La escritura ya se re-comprueba en el
+          servicio; lo que faltaba era decirlo en la pantalla. */}
+      {context.sinAmbito ? (
+        <>
+          <p className="nn-muted">{t("sinAmbitoGestionHeading")}</p>
+          <p className="nn-muted">{t("sinAmbitoGestionBody")}</p>
+        </>
+      ) : (
+        <StorageForm lotId={id} locations={context.locations} />
+      )}
     </div>
   );
 }
