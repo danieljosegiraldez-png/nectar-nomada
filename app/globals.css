@@ -1,7 +1,11 @@
 :root {
-  --nn-bg: #faf6ef;
+  /* Papel y tinta son los valores del sitio público (`nectarnomada-web`,
+     app/globals.css: --papel-calido y --tinta). Copiados, no compartidos: los
+     dos repositorios son independientes y CI no puede detectar que se separen.
+     Deuda declarada en docs/superpowers/specs/2026-09-05-marca-en-el-os-design.md §6. */
+  --nn-bg: #faf7f0;
   --nn-surface: #ffffff;
-  --nn-ink: #241c14;
+  --nn-ink: #141210;
   /* Was #6b5f4f (4.9:1). Muted text carries real data in the operator
      routes — lot type, project, location — and 4.9:1 is legible at a desk
      and marginal on a phone in direct sun. #574a3b is 6.6:1 on --nn-bg. */
@@ -18,6 +22,12 @@
   --nn-brand-ink: #ffffff;
   --nn-accent: #3f5c3f;
   --nn-accent-bg: #eef1e8;
+  /* La miel es el acento de la marca (`--miel` en el sitio público) Y resulta
+     ser el contraste más alto disponible: 15.10 con tinta encima. NUNCA con
+     texto blanco, que da 1.24 — por eso --nn-miel-ink apunta a la tinta y no
+     es un valor suelto que alguien pueda cambiar sin verlo. */
+  --nn-miel: #fcea3c;
+  --nn-miel-ink: var(--nn-ink);
   --nn-error: #a3311a;
   --nn-radius: 10px;
   /* Archivo es la de la marca; la pila del sistema queda de respaldo por si la
