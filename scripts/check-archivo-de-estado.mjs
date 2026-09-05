@@ -28,17 +28,40 @@ import { readFileSync } from "node:fs";
 const ESTADO = process.argv[2] ?? "SESSION_STATE.md";
 const ARCHIVO = process.argv[3] ?? "docs/SESSION_STATE_ARCHIVE.md";
 
-function titulos(ruta) {
+/**
+ * Lee los `###` de un fichero. `opcional` decide qué significa que no esté.
+ *
+ * **Por qué no basta con devolver `[]` siempre**, que es lo que hacía la primera
+ * versión: entonces un estado ausente o mal nombrado dejaba las comprobaciones
+ * 2 y 3 sin nada que mirar, el guardia salía 0, y el mensaje de éxito afirmaba
+ * «ninguna compartida con el estado» sin haberlo comprobado. Reproducido:
+ *
+ *     node scripts/check-archivo-de-estado.mjs NO_EXISTE.md docs/…_ARCHIVE.md
+ *     ✓ … 23 secciones, ninguna repetida, ninguna compartida con el estado…
+ *     $? = 0
+ *
+ * Es la forma que la cabecera de arriba cita —la prueba de P-A que leyó una
+ * línea ausente como una línea buena—, reaparecida en el guardia escrito para
+ * evitarla. El histórico SÍ puede no existir todavía; el estado, nunca.
+ */
+function titulos(ruta, { opcional }) {
   let texto;
   try {
     texto = readFileSync(ruta, "utf8");
-  } catch {
-    // Un archivo que no existe no es un fallo: el histórico puede no haberse
-    // creado todavía. Lo que sí sería un fallo es inventarse su contenido.
-    return [];
+  } catch (error) {
+    if (opcional && error.code === "ENOENT") return [];
+    // Cualquier otra cosa —el estado ausente, un permiso, un directorio— es un
+    // fallo ruidoso. Un guardia que no puede leer lo que vigila no ha dicho
+    // que esté sano: ha dicho que no miró.
+    console.error(`✗ no se pudo leer ${ruta}: ${error.code ?? error.message}`);
+    console.error(`  Un guardia que no lee lo que vigila no puede pronunciarse.`);
+    process.exit(1);
   }
   return [...texto.matchAll(/^### (.+)$/gm)].map((m) => m[1].trim());
 }
+
+const delEstado = () => titulos(ESTADO, { opcional: false });
+const delArchivo = () => titulos(ARCHIVO, { opcional: true });
 
 const problemas = [];
 
@@ -46,24 +69,28 @@ const problemas = [];
 {
   const vistos = new Set();
   const repetidos = [];
-  for (const t of titulos(ARCHIVO)) {
+  for (const t of delArchivo()) {
     if (vistos.has(t)) repetidos.push(t);
     vistos.add(t);
   }
-  if (repetidos.length > 0) {
+  // Un `Set`: una sección que aparece tres veces es UNA repetida, no dos. La
+  // primera versión contaba copias sobrantes y listaba el mismo título dos
+  // veces, así que quien leyera «2» buscaría dos títulos distintos.
+  const repetidosUnicos = [...new Set(repetidos)];
+  if (repetidosUnicos.length > 0) {
     problemas.push(
-      `${ARCHIVO} tiene ${repetidos.length} sección(es) repetida(s). Suele ser una\n` +
+      `${ARCHIVO} tiene ${repetidosUnicos.length} sección(es) repetida(s). Suele ser una\n` +
         `  fusión limpia entre dos sesiones que archivaron lo mismo: git no ve solape\n` +
         `  y duplica. Deja una sola copia.\n` +
-        repetidos.map((t) => `      ### ${t}`).join("\n")
+        repetidosUnicos.map((t) => `      ### ${t}`).join("\n")
     );
   }
 }
 
 // 2. Ninguna sección está a la vez en el estado vivo y en el histórico.
 {
-  const enArchivo = new Set(titulos(ARCHIVO));
-  const enAmbos = titulos(ESTADO).filter((t) => enArchivo.has(t));
+  const enArchivo = new Set(delArchivo());
+  const enAmbos = delEstado().filter((t) => enArchivo.has(t));
   if (enAmbos.length > 0) {
     problemas.push(
       `una sección está a la vez en ${ESTADO} y en ${ARCHIVO}. Archivar es mover,\n` +
@@ -81,7 +108,7 @@ const problemas = [];
 // arriba y el resto quedaría huérfano. No es preferencia de formato, es la
 // condición que el archivador necesita para no partir una entrada por la mitad.
 {
-  const malFormadas = titulos(ESTADO).filter((t) => !/^\d{4}-\d{2}-\d{2} · /.test(t));
+  const malFormadas = delEstado().filter((t) => !/^\d{4}-\d{2}-\d{2} · /.test(t));
   if (malFormadas.length > 0) {
     problemas.push(
       `secciones de ${ESTADO} que el archivador no sabrá cortar (espera\n` +
@@ -97,7 +124,7 @@ if (problemas.length > 0) {
 }
 
 console.log(
-  `✓ El archivo histórico está sano: ${titulos(ARCHIVO).length} secciones, ninguna repetida,\n` +
-    `  ninguna compartida con el estado, y las ${titulos(ESTADO).length} del estado tienen el\n` +
+  `✓ El archivo histórico está sano: ${delArchivo().length} secciones, ninguna repetida,\n` +
+    `  ninguna compartida con el estado, y las ${delEstado().length} del estado tienen el\n` +
     `  formato que el archivador espera.`
 );
