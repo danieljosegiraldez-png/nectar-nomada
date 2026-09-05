@@ -252,6 +252,10 @@
     {
       "archivo": "lib/sync/pushFieldEvents.ts",
       "razon": "P4 §4. Push por lotes: comprueba el aparato, distingue duplicado de aplicado y delega la escritura en recordFieldEvent, que es quien autoriza."
+    },
+    {
+      "archivo": "lib/sync/pullFieldWork.ts",
+      "razon": "P4 §5. Pull por cursor: resuelve el ámbito llamando a can() por Location y pagina por clave. No escribe."
     }
   ],
   "reciben_transaccion": [

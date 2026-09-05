@@ -135,12 +135,26 @@ red es la que la cola de apiario ya implementa y ya se enseña al operador.
 
 ## 5. Pull por cursor
 
-Cursor por tabla sobre `updatedAt` más una secuencia monótona.
+Cursor por tabla sobre `(marca de tiempo, id)`. El id no es adorno: es el
+desempate, y sin él dos filas que comparten milisegundo hacen que la página
+siguiente se salte una. Paginación por clave, nunca por desplazamiento — un
+`skip/take` sobre datos que cambian mientras se pagina salta filas o las repite.
 
-**`Lot`, `Measurement`, `QuantityEvent` y `LotTransformation` no tienen
-`updatedAt` y no se les añade**: son append-only por diseño, y `createdAt`
-más orden por id basta. Añadirles `updatedAt` para satisfacer un cursor sería
-mentir sobre su naturaleza para comodidad del cliente.
+**Qué marca usa cada tabla, y esto lo corrigió la construcción (2026-09-05):**
+
+- **Las que cambian van por `updatedAt`.** Este párrafo daba por hecho que
+  `FieldSession` ya lo tenía, y **no lo tenía**: `endFieldSession` la modifica,
+  así que un aparato que la descargó abierta no se habría enterado nunca de que
+  cerró. La columna se añadió en `20260905040000_p4_cursor_de_pull`.
+- **`Lot`, `Measurement`, `QuantityEvent`, `LotTransformation` y `FieldEvent`
+  van por `createdAt` y NO se les añade `updatedAt`**: son append-only por
+  diseño —comprobado para `FieldEvent`: cero sitios que lo actualicen o borren—
+  y dárselo para uniformar el cursor sería mentir sobre su naturaleza para
+  comodidad del cliente.
+
+La regla, dicha de forma que se pueda aplicar a la siguiente tabla: **la marca
+del cursor es la que se mueve cuando el hecho cambia.** Si nada la mueve,
+`createdAt`; si algo la mueve, hace falta `updatedAt` y hay que añadirlo.
 
 **Descarga selectiva derivada de permisos**, no del ámbito que pida el
 dispositivo: lo que se manda es lo que el operador puede ver, resuelto en el
