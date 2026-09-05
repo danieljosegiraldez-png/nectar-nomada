@@ -20,7 +20,9 @@
   --nn-accent-bg: #eef1e8;
   --nn-error: #a3311a;
   --nn-radius: 10px;
-  --nn-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  /* Archivo es la de la marca; la pila del sistema queda de respaldo por si la
+     fuente no llega — en el campo, con señal mala, eso pasa. */
+  --nn-font: var(--nn-fuente-texto), -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
 
   /* Minimum comfortable touch target. Apple and WCAG 2.2 both land near
      44px; gloved or wet hands in a wet mill are the reason this is a token
@@ -764,7 +766,10 @@ a.nn-card-link:active {
    and these faces already exist on the machines that will open the page.
 --------------------------------------------------------------------------- */
 .nn-editorial {
-  --nn-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+  /* Bodoni Moda es la display de la marca. Los serif del sistema quedan de
+     respaldo: si la fuente no llega, un encabezado sigue leyéndose como
+     encabezado. */
+  --nn-display: var(--nn-fuente-display), "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
     "Times New Roman", serif;
 }
 
