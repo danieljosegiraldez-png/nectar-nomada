@@ -341,7 +341,11 @@ export async function getFieldSessionTimeline(userAccountId: string, fieldSessio
   const session = await prisma.fieldSession.findUnique({
     where: { id: fieldSessionId },
     include: {
-      location: { select: { id: true, name: true, locationType: true } },
+      // `timezone` para MOSTRAR las horas donde ocurrieron, no en UTC. Ver
+      // lib/time/mostrarInstante.ts: hoy está en NULL en las 26 Locations y cae
+      // en el respaldo, pero se selecciona ya para que rellenarla sea una tarea
+      // de datos y no otro cambio de código.
+      location: { select: { id: true, name: true, locationType: true, timezone: true } },
       operator: { select: { id: true, displayName: true } },
       task: { select: { id: true, title: true, status: true } },
     },

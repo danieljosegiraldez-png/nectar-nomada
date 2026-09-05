@@ -8,11 +8,21 @@ import { getObserverCandidates } from "../../../lib/traceability/lots";
 import { getFieldEventKinds } from "../../../lib/traceability/fieldSessionCatalog";
 import { FieldEventForm, FieldSessionEndForm } from "../../components/traceability/FieldSessionForms";
 import { FieldSyncControls } from "../../components/traceability/FieldSyncControls";
+import { mostrarInstante } from "../../../lib/time/mostrarInstante";
 
 export const dynamic = "force-dynamic";
 
-/** Fecha y hora en el mismo formato en toda la página, sin inventar precisión. */
-const cuando = (d: Date) => d.toISOString().slice(0, 16).replace("T", " ");
+/**
+ * Fecha y hora en el mismo formato en toda la página, sin inventar precisión.
+ *
+ * Antes esto era `d.toISOString().slice(0, 16)`, que siempre devuelve UTC.
+ * Medido el 2026-09-05 en un móvil con datos reales: una jornada abierta a las
+ * 07:30 se titulaba «12:30» y un evento anotado a las 11:31 se listaba a las
+ * «16:31». El instante guardado era correcto —comprobado contra la base— y lo
+ * que mentía era la pantalla. Cinco horas, en el campo, sobre el dato que ES el
+ * registro. Ver `lib/time/mostrarInstante.ts`.
+ */
+const cuando = (d: Date, zona: string | null | undefined) => mostrarInstante(d, zona);
 
 /**
  * Una jornada de campo: la visita, y lo que pasó dentro.
@@ -58,11 +68,11 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
       </p>
 
       <span className="nn-badge">{t("badge")}</span>
-      <h1>{t("fieldSessionTitle", { location: session.location.name, date: cuando(session.startedAt) })}</h1>
+      <h1>{t("fieldSessionTitle", { location: session.location.name, date: cuando(session.startedAt, session.location.timezone) })}</h1>
       <p className="nn-detail-meta">
         {t("fieldSessionOperatorLabel")}: {session.operator.displayName}
         {" · "}
-        {enCurso ? <strong>{t("fieldSessionOpen")}</strong> : t("fieldSessionClosedAt", { date: cuando(session.endedAt!) })}
+        {enCurso ? <strong>{t("fieldSessionOpen")}</strong> : t("fieldSessionClosedAt", { date: cuando(session.endedAt!, session.location.timezone) })}
       </p>
       {session.notes ? <p className="nn-muted">{session.notes}</p> : null}
       {session.startLatitude != null && session.startLongitude != null ? (
@@ -80,7 +90,7 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
           <ol className="nn-detail-meta">
             {events.map((e) => (
               <li key={e.id}>
-                <strong>{e.eventKindValue.value}</strong> · {cuando(e.occurredAt)}
+                <strong>{e.eventKindValue.value}</strong> · {cuando(e.occurredAt, session.location.timezone)}
                 {/* El operador del evento sólo se nombra cuando difiere del de
                     la jornada; repetirlo en cada línea sería ruido. */}
                 {e.operator && e.operator.id !== session.operatorPersonId ? ` · ${e.operator.displayName}` : ""}
