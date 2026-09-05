@@ -263,12 +263,21 @@ mutación— y la decisión de que eso NO es autorización está registrada y
 protegida por `tests/traceability/batchPageData.test.ts`, que comprueba que
 `getObserverCandidates` devuelve toda Persona activa **a propósito**.
 
-**Lo que falta es el conjunto de operadores del aparato**, y está bloqueado en
-la decisión que este ticket ya listaba como de Daniel: si el teléfono del
-molino es compartido o personal. `Device.operatorPersonId` es hoy un único
-campo anulable; un conjunto pide una tabla, y construirla para un escenario que
-nadie ha confirmado que exista es la forma que ADR-107 rechazó. **No se
-construye hasta que la respuesta llegue.**
+**Y la otra mitad se cerró el mismo día, cuando llegó la respuesta: los
+aparatos son PERSONALES, uno por persona (ADR-109).** Eso elimina el conjunto de
+operadores: `Device.operatorPersonId` basta, no hay tabla, no hay migración y no
+hay PIN — con un aparato por persona no hay entre quién cambiar sin volver a
+autenticarse.
+
+Lo que sí quedó construido es el guardia, porque con aparatos personales la
+tentación se invierte: leer «este aparato es de Kenneth» y usarlo para decidir
+qué puede escribir. `tests/sync/deviceOperator.test.ts` fija que **no**: la
+autorización es la cuenta contra la Location, y un aparato registrado a una
+Persona real no abre un lote que su cuenta no tiene ni atribuyendo el evento a
+su propio dueño.
+
+La regla de §9 se queda escrita para el día que exista un teléfono compartido de
+verdad: el PIN sería atribución, nunca autenticación.
 
 ---
 

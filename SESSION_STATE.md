@@ -51,13 +51,17 @@ deliberado: los borradores viven en IndexedDB en claro y cifrarlos dejaría la
 clave en el mismo almacenamiento. La pantalla dice lo purgado, porque un borrado
 silencioso es indistinguible de haber perdido los datos.
 
-**§9 — la mitad ya estaba hecha antes de este ticket.** El cambio de atribución
-funciona y su «esto no es autorización» está protegido por
-`batchPageData.test.ts`. Lo que falta es el **conjunto de operadores del
-aparato**, y está bloqueado en una decisión del §11 del ticket: si el teléfono
-del molino es compartido o personal. `Device.operatorPersonId` es hoy un campo
-único; un conjunto pide tabla, y construirla para un escenario sin confirmar es
-la forma que ADR-107 rechazó.
+**§9 — cerrada el mismo día, y sin construir casi nada.** La mitad ya estaba:
+el cambio de atribución funciona y su «esto no es autorización» ya estaba
+protegido. La otra mitad dependía de una decisión, Daniel la dio —**los aparatos
+son personales, uno por persona, ADR-109**— y eso **elimina** el conjunto de
+operadores: sin tabla, sin migración, sin PIN.
+
+Lo que sí se construyó es el guardia, porque con aparatos personales la
+tentación se invierte: leer «este aparato es de Kenneth» y decidir con eso qué
+puede escribir. Tres tests fijan que no — y el flip-test, acotado a
+`recordFieldEvent`, tumba exactamente los dos de guardia dejando pasar el de
+atribución.
 
 ### 2026-09-05 · P4 §8: la instantánea de autorización, que a propósito no autoriza
 
