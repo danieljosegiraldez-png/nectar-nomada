@@ -504,6 +504,29 @@ export interface LotListFilters {
   lotType?: CreateLotInput["lotType"];
 }
 
+// La organización se trae ACOTADA a lo que se pinta, y no entera.
+//
+// El gate de estas consultas es la clasificación del LOTE: `requireLotAccess`
+// recibe `classification: lot.classification`. (Sin paréntesis a propósito —
+// `scripts/inventario-de-acceso.mjs` reconoce formas escritas: el nombre de un
+// guardia seguido de un paréntesis de apertura, aunque esté en un comentario,
+// asciende a guardia la declaración que lo contenga.
+// Pasó el 2026-09-05: promovió `lotMatchesVisibility` y con ella
+// `getActiveOperations`, que no se había tocado.) La organización
+// tiene la suya propia y no se comprueba aquí, así que `organization: true`
+// cargaba `contactEmail`, `contactPhone`, `websiteUrl` y `attributes` de una
+// organización que puede estar clasificada por encima del lote.
+//
+// **Medido el 2026-09-05: hoy no expone nada.** Ningún consumidor usa más que
+// `name` —comprobado en todo el código—, los componentes cliente reciben
+// `{ id, name }`, y en producción no hay ni un lote menos restringido que su
+// organización (0 de 43). Lo que se arregla es que eso lo garantizaban los
+// datos y el hábito, no el código: el día que alguien pinte un teléfono o pase
+// `lot.organization` a un cliente, se envía, y nada avisa.
+//
+// No se inventa política de clasificación: se deja de traer lo que nadie pinta.
+const ORGANIZACION_VISIBLE = { select: { id: true, name: true } } as const;
+
 /**
  * Filterable list for the `/lots` screen (§30 screen 2) — newest first, capped
  * at LIST_LIMIT and reporting when the cap was reached (ADR-087). Still not
@@ -526,7 +549,7 @@ export async function getLotList(userAccountId: string, filters: LotListFilters 
     return {
       ...truncate<
         Prisma.LotGetPayload<{
-          include: { project: true; organization: true; location: true; rejectionCategoryValue: { select: { value: true } } };
+          include: { project: true; organization: { select: { id: true; name: true } }; location: true; rejectionCategoryValue: { select: { value: true } } };
         }>
       >([]),
       sinAmbito: true,
@@ -537,7 +560,7 @@ export async function getLotList(userAccountId: string, filters: LotListFilters 
     // P3 §3 — a rejection stream is still `cherry` by lotType, deliberately,
     // so without this the batch list shows floaters and accepted coffee as
     // indistinguishable rows. The category is what tells them apart.
-    include: { project: true, organization: true, location: true, rejectionCategoryValue: { select: { value: true } } },
+    include: { project: true, organization: ORGANIZACION_VISIBLE, location: true, rejectionCategoryValue: { select: { value: true } } },
     orderBy: { createdAt: "desc" },
     take: LIST_LIMIT + 1,
   });
@@ -633,7 +656,7 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     // P3 §3 — the batch header marks a rejection stream; without the category
     // a floater batch reads as ordinary cherry, which is precisely the
     // confusion keeping lotType physical was meant to avoid creating.
-    include: { project: true, organization: true, location: true, rejectionCategoryValue: { select: { value: true } } },
+    include: { project: true, organization: ORGANIZACION_VISIBLE, location: true, rejectionCategoryValue: { select: { value: true } } },
   });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
 
