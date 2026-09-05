@@ -228,6 +228,20 @@ rechaza vuelve como `rejected` y el operador lo ve.
 Y por eso un dispositivo robado deja de poder **preparar** trabajo al llegar
 al techo, aunque no vuelva a conectarse nunca.
 
+**Construido el 2026-09-05.** `GET /api/v1/sync/authorization`, HMAC con clave
+derivada de `AUTH_SECRET` por propósito —separación de claves, sin variable de
+entorno nueva que habría que pedirle al dueño— y techo de 14 días.
+
+**Qué añade sobre el pull de §5**, que ya devuelve las Locations: (1) *qué*
+puede hacer el operador en cada sitio y no sólo dónde, para que la interfaz deje
+de ofrecer botones que el servidor va a negar; y (2) **la caducidad**, que la
+lista del pull no tiene y que es la propiedad de seguridad entera de §8.
+
+**Y lo que un test demuestra explícitamente:** una instantánea forjada que se
+conceda otro lote **no consigue nada** — `startFieldSession` y `recordFieldEvent`
+siguen negando. Si eso fallara, §8 habría convertido una ayuda de interfaz en
+una frontera, que es justo lo que no debe ser.
+
 ---
 
 ## 9. Cambio de operador: un PIN es atribución, no autenticación

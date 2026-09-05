@@ -260,6 +260,10 @@
     {
       "archivo": "lib/sync/fieldMedia.ts",
       "razon": "P4 §7. Medios de campo: gatea por la Location de la jornada, y crea Asset + FieldEvent en una transacción con el audit dentro."
+    },
+    {
+      "archivo": "lib/sync/authorizationSnapshot.ts",
+      "razon": "P4 §8. Lee Locations y resuelve permisos por can()/resolvedPermissionKeys para construir la instantánea. Sólo lectura; no autoriza nada por sí misma."
     }
   ],
   "reciben_transaccion": [
