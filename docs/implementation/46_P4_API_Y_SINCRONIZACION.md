@@ -256,12 +256,45 @@ Esto es exactamente lo que §4 de `SESSION_STATE.md` ya recoge para
 `operatorPersonId`: no es una frontera de seguridad, y hay un test que rompe
 si alguien lo endurece por descuido.
 
+**Estado al 2026-09-05: la mitad está hecha desde antes de este ticket.** El
+cambio de atribución funciona —el formulario de evento ofrece «quién, si no
+quien abrió la jornada», y `pushFieldEvents` lleva `operatorPersonId` por
+mutación— y la decisión de que eso NO es autorización está registrada y
+protegida por `tests/traceability/batchPageData.test.ts`, que comprueba que
+`getObserverCandidates` devuelve toda Persona activa **a propósito**.
+
+**Y la otra mitad se cerró el mismo día, cuando llegó la respuesta: los
+aparatos son PERSONALES, uno por persona (ADR-109).** Eso elimina el conjunto de
+operadores: `Device.operatorPersonId` basta, no hay tabla, no hay migración y no
+hay PIN — con un aparato por persona no hay entre quién cambiar sin volver a
+autenticarse.
+
+Lo que sí quedó construido es el guardia, porque con aparatos personales la
+tentación se invierte: leer «este aparato es de Kenneth» y usarlo para decidir
+qué puede escribir. `tests/sync/deviceOperator.test.ts` fija que **no**: la
+autorización es la cuenta contra la Location, y un aparato registrado a una
+Persona real no abre un lote que su cuenta no tiene ni atribuyendo el evento a
+su propio dueño.
+
+La regla de §9 se queda escrita para el día que exista un teléfono compartido de
+verdad: el PIN sería atribución, nunca autenticación.
+
 ---
 
 ## 10. Caducidad de borradores sin sincronizar
 
 Se conserva el concepto de A5.5: avisar a los 7 días, purgar a los 21. Viven
 en almacenamiento local en claro.
+
+**Construido el 2026-09-05, y la regla NO se copió.** `classifyDraftAge` y sus
+dos constantes se movieron de `lib/apiary/offlineQueue.ts` a
+`lib/sync/draftAge.ts`; apiario la re-exporta desde ahí. Dos copias de «7 y 21»
+serían dos ventanas de exposición para el mismo riesgo, separables sin que nadie
+lo note — y hay un test que falla si alguien vuelve a definirla aparte, incluso
+con los mismos valores.
+
+La pantalla **dice lo purgado**: un borrado silencioso de trabajo de campo es
+indistinguible de haberlo perdido.
 
 ---
 

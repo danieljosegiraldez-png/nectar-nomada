@@ -5,7 +5,10 @@ import { useTranslations } from "next-intl";
 import {
   listFieldEventDrafts,
   syncFieldEvents,
+  purgeStaleFieldDrafts,
   FIELD_DRAFTS_CHANGED_EVENT,
+  STALE_WARNING_DAYS,
+  STALE_PURGE_DAYS,
   type SyncSummary,
 } from "../../../lib/sync/offlineQueue";
 
@@ -44,8 +47,17 @@ export function FieldSyncControls() {
     typeof window !== "undefined" ? !navigator.onLine : false,
   );
 
+  const [purgados, setPurgados] = useState(0);
+  const [rancios, setRancios] = useState(0);
+
   const recontar = useCallback(async () => {
     try {
+      // P4 §10 — la purga corre ANTES de contar, para que el número que se
+      // enseña sea el que queda y no el que había. Y lo purgado se dice: un
+      // borrado silencioso es indistinguible de haber perdido los datos.
+      const { purgados: p, avisados } = await purgeStaleFieldDrafts();
+      if (p > 0) setPurgados((n) => n + p);
+      setRancios(avisados);
       setPendientes((await listFieldEventDrafts()).length);
     } catch {
       // IndexedDB no disponible (navegación privada en algunos navegadores).
@@ -98,6 +110,16 @@ export function FieldSyncControls() {
     <div className="nn-field-sync" role="group">
       <p>{t("fieldSyncPending", { count: pendientes })}</p>
       {sinConexion ? <p className="nn-note">{t("fieldSyncOffline")}</p> : null}
+      {purgados > 0 ? (
+        <p className="nn-error" role="alert">
+          {t("fieldDraftsPurged", { count: purgados, dias: STALE_PURGE_DAYS })}
+        </p>
+      ) : null}
+      {rancios > 0 ? (
+        <p className="nn-note" role="status">
+          {t("fieldDraftsStale", { count: rancios, dias: STALE_WARNING_DAYS, purga: STALE_PURGE_DAYS })}
+        </p>
+      ) : null}
       <button type="button" className="nn-button" onClick={sincronizar} disabled={enviando || pendientes === 0}>
         {enviando ? t("fieldSyncWorking") : t("fieldSyncButton")}
       </button>

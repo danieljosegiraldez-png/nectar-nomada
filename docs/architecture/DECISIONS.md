@@ -7815,3 +7815,55 @@ sed -n '/^model Device {/,/^}/p' prisma/schema.prisma | grep -E '^\s+organizatio
 Vacío es la ausencia; con el campo puesto imprime la línea. Que las tres
 decisiones no rompen el criterio de aceptación: `tests/sync/pushFieldEvents.test.ts`,
 once casos, dos de ellos con flip-test hecho contra cada guardia de idempotencia.
+
+---
+
+## ADR-109 — Los aparatos de campo son personales, así que §9 se cierra sin tabla de operadores
+
+**Contexto.** `46_P4_API_Y_SINCRONIZACION.md` §9 pide que un PIN verificado sin
+red sea **atribución y no autenticación**, y que nunca desbloquee permisos más
+amplios que «el conjunto de operadores registrado en el dispositivo». Ese
+conjunto suponía un teléfono compartido en el molino, y el propio ticket listaba
+la pregunta como decisión del dueño.
+
+**Decisión del dueño, 2026-09-05: los aparatos son personales, uno por
+persona.**
+
+**Qué cierra.** `Device.operatorPersonId` —un único campo anulable, que ya
+existe— basta. **No se crea tabla de roster, no hay migración y no hay PIN**:
+con un aparato por persona, no hay nadie entre quien cambiar sin volver a
+autenticarse contra el servidor.
+
+**Qué NO cambia, y es lo que había que proteger.** El operador de un aparato
+sigue sin conceder autoridad ninguna. La autorización es la **cuenta** que
+sincroniza, comprobada contra la `Location` de la jornada en cada mutación. Con
+aparatos personales la tentación es justo la contraria a la de §9: leer «este
+aparato es de Kenneth» y usarlo para decidir qué puede escribir. Eso sería un
+fallo de seguridad silencioso, porque la lectura es plausible.
+
+`tests/sync/deviceOperator.test.ts` lo fija con tres casos: atribuir a otra
+Persona funciona sin más —quien hace el trabajo normalmente no tiene cuenta, y
+restringirlo excluiría a esa gente, que es lo que §4 del estado prohíbe volver a
+proponer—; y un aparato registrado a una Persona real **no abre** una Location
+que su cuenta no tiene, ni siquiera atribuyendo el evento a su propio dueño.
+
+**Flip-test hecho:** quitando `requireLocationAttributeAccess` de
+`recordFieldEvent` —mutación acotada a esa función, comprobado por sha y que
+compila— caen exactamente los dos casos de guardia y sigue pasando el de
+atribución.
+
+**Qué lo reabre.** Un teléfono compartido de verdad. Entonces vuelve la
+pregunta del roster, y con ella el PIN — y la regla de §9 sigue escrita esperando
+ese día: el PIN sería atribución, nunca autenticación.
+
+**Cómo se comprueba — y la comprobación obvia NO sirve.** `grep -c
+"DeviceOperator" prisma/schema.prisma` da **2**, porque ése es el nombre de la
+relación que ya existe entre `Device` y `Person`. Un cero ahí sería imposible y
+un dos no dice nada. La buena mira si hay un MODELO con ese nombre:
+
+```bash
+grep -cE '^model DeviceOperator ' prisma/schema.prisma          # 0 = no hay roster
+sed -n '/^model Device {/,/^}/p' prisma/schema.prisma | grep -cE '^  operatorPersonId '   # 1 = un solo campo
+```
+
+Que el aparato no autoriza: los tres casos de `tests/sync/deviceOperator.test.ts`.

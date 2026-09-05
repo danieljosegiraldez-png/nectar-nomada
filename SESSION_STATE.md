@@ -37,6 +37,32 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-05 · P4 §10 cerrada, §9 a medias y bloqueada en Daniel
+
+**§10 — la purga de borradores rancios, sin copiar la regla.** `classifyDraftAge`
+y sus dos constantes (7 y 21 días, A5.5 §4) se **movieron** de la cola de
+apiario a `lib/sync/draftAge.ts`; apiario la re-exporta. Dos copias serían dos
+ventanas de exposición para el mismo riesgo, separables sin que nadie lo note.
+Hay un test que falla si alguien vuelve a definirla aparte **aunque sea con los
+mismos valores** — el flip-test lo confirmó con una copia que compilaba.
+
+Esto **borra trabajo de campo** que no está en ningún otro sitio, y es
+deliberado: los borradores viven en IndexedDB en claro y cifrarlos dejaría la
+clave en el mismo almacenamiento. La pantalla dice lo purgado, porque un borrado
+silencioso es indistinguible de haber perdido los datos.
+
+**§9 — cerrada el mismo día, y sin construir casi nada.** La mitad ya estaba:
+el cambio de atribución funciona y su «esto no es autorización» ya estaba
+protegido. La otra mitad dependía de una decisión, Daniel la dio —**los aparatos
+son personales, uno por persona, ADR-109**— y eso **elimina** el conjunto de
+operadores: sin tabla, sin migración, sin PIN.
+
+Lo que sí se construyó es el guardia, porque con aparatos personales la
+tentación se invierte: leer «este aparato es de Kenneth» y decidir con eso qué
+puede escribir. Tres tests fijan que no — y el flip-test, acotado a
+`recordFieldEvent`, tumba exactamente los dos de guardia dejando pasar el de
+atribución.
+
 ### 2026-09-05 · P4 §8: la instantánea de autorización, que a propósito no autoriza
 
 `GET /api/v1/sync/authorization`. HMAC con clave **derivada de `AUTH_SECRET` por
@@ -112,30 +138,6 @@ sólo el de la jornada que cierra. Ningún guardia hace doble trabajo.
 por Location — N+1 con N=16 en producción. La alternativa era una segunda copia
 de la resolución de ámbitos, y un ámbito de RBAC que deriva del real es un fallo
 de seguridad silencioso. Escrito en el código qué hacer si llega a miles.
-
-### 2026-09-04 · Fase 4: el ticket y su primera rebanada, construida
-
-`46_P4_API_Y_SINCRONIZACION.md` (el ticket precede al código, como 41–44) y
-después la rebanada que nombra: **`Device`, `clientDraftId` en `FieldEvent`,
-push por lotes con resultado por mutación, y la PWA encolando sin señal.**
-`/api/v1/devices` y `/api/v1/sync/field-events`, ambas declaradas en el
-manifiesto de rutas.
-
-**Once tests, y dos flip-tests que enseñaron algo:** hay DOS guardias de
-idempotencia —el pre-chequeo del push y el del servicio— y los primeros seis
-tests sólo ejercían el primero. Se vio quitando el del servicio y viendo que
-nada fallaba. Ahora cada guardia tiene un test que se cae si lo borras.
-
-**Tres desviaciones del ticket, en ADR-108 con su razón:** sin carril de tokens
-(§2 no tendría llamador hasta la Fase 5 — ADR-107 aplicado a otra pieza), sin
-`organizationId` en `Device` (`ScopeType` no tiene `organization`, así que nada
-lo leería), y sin refactorizar la cola de apiario (su protocolo es de una en
-una; el de P4 es por lotes — la deuda queda escrita en la cabecera del módulo
-nuevo).
-
-**Falta la aceptación de campo**, que es de flujo y no de test: un evento
-anotado en modo avión, sincronizado al volver la señal. El código está; nadie
-lo ha recorrido en un navegador de verdad.
 
 ## 3. Bloqueado, y en qué
 

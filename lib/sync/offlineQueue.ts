@@ -18,6 +18,8 @@
  * un Server Component ni desde un módulo de servidor.
  */
 
+import { classifyDraftAge, STALE_WARNING_DAYS, STALE_PURGE_DAYS } from "./draftAge";
+
 const DB_NAME = "nectar-field-offline";
 const DB_VERSION = 1;
 const STORE = "drafts";
@@ -129,6 +131,42 @@ export async function ensureDeviceId(): Promise<string> {
   localStorage.setItem(DEVICE_KEY, id);
   return id;
 }
+
+/**
+ * P4 §10 — los borradores sin sincronizar no viven para siempre.
+ *
+ * **Esto BORRA trabajo de campo que no está en ningún otro sitio**, y es
+ * deliberado: A5.5 §4 lo decidió como la mitigación del aparato perdido, porque
+ * los borradores están en IndexedDB **en claro** y cifrarlos dejaría la clave en
+ * el mismo almacenamiento que protege. La ventana se acota en vez de blindarse.
+ *
+ * El invariante que lo hace humano —y que un test de apiario vigila desde A5.5—
+ * es que **se avisa antes de borrar**: 7 días de aviso, 21 de purga. Si el
+ * umbral de aviso llegara a igualar al de purga, el borrado caería sin que
+ * nadie hubiera visto una advertencia.
+ *
+ * Se devuelve lo purgado para que la pantalla lo diga. Una purga silenciosa es
+ * indistinguible de haber perdido los datos.
+ */
+export async function purgeStaleFieldDrafts(
+  ahora: number = Date.now(),
+): Promise<{ purgados: number; avisados: number }> {
+  const drafts = await listFieldEventDrafts();
+  let purgados = 0;
+  let avisados = 0;
+  for (const d of drafts) {
+    const veredicto = classifyDraftAge(d.createdAt, ahora);
+    if (veredicto === "purge") {
+      await discardFieldEventDraft(d.id);
+      purgados++;
+    } else if (veredicto === "warn") {
+      avisados++;
+    }
+  }
+  return { purgados, avisados };
+}
+
+export { STALE_WARNING_DAYS, STALE_PURGE_DAYS };
 
 export interface SyncSummary {
   applied: number;
