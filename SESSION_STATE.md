@@ -37,6 +37,30 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-05 · P4 §5: el pull por cursor, y una línea falsa de mi propio ticket
+
+`GET /api/v1/sync/field-work`. Paginación **por clave** `(marca, id)`, nunca por
+desplazamiento: un `skip/take` sobre datos que cambian mientras se pagina salta
+filas, y aquí una fila saltada es trabajo de campo que el aparato no vuelve a
+ver.
+
+**El ticket §5 estaba mal y lo dijo la construcción.** Daba por hecho que
+`FieldSession` tenía `updatedAt`; no lo tenía, y **sí cambia** —`endFieldSession`
+la cierra—, así que un aparato que la descargó abierta no se habría enterado
+nunca. Columna añadida, y la regla reescrita para que sirva a la próxima tabla:
+*la marca del cursor es la que se mueve cuando el hecho cambia.* `FieldEvent`
+sigue por `createdAt` porque nada lo actualiza — comprobado, cero sitios.
+
+**Siete tests y tres flip-tests, cada uno golpeando su propia propiedad:** quitar
+el filtro de ámbito tumba sólo el de la fuga; quitar el desempate por id tumba
+sólo el de las marcas empatadas; poner `createdAt` donde va `updatedAt` tumba
+sólo el de la jornada que cierra. Ningún guardia hace doble trabajo.
+
+**Un límite aceptado a ojos abiertos:** el ámbito se resuelve llamando a `can()`
+por Location — N+1 con N=16 en producción. La alternativa era una segunda copia
+de la resolución de ámbitos, y un ámbito de RBAC que deriva del real es un fallo
+de seguridad silencioso. Escrito en el código qué hacer si llega a miles.
+
 ### 2026-09-04 · Fase 4: el ticket y su primera rebanada, construida
 
 `46_P4_API_Y_SINCRONIZACION.md` (el ticket precede al código, como 41–44) y

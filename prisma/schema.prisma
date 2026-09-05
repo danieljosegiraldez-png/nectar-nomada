@@ -3600,6 +3600,16 @@ model FieldSession {
   clockOffsetMs Int? @map("clock_offset_ms")
 
   createdAt DateTime     @default(now()) @map("created_at")
+  // P4 §5 — una jornada SÍ cambia: `endFieldSession` la cierra. Sin
+  // `updatedAt`, un dispositivo que la descargó abierta no se enteraría nunca
+  // de que cerró, porque no habría por dónde mover el cursor. El ticket sólo
+  // eximía a las tablas append-only (Lot, Measurement, QuantityEvent,
+  // LotTransformation) y daba por hecho que ésta ya lo tenía; no lo tenía.
+  //
+  // `FieldEvent`, en cambio, no lo lleva y no debe llevarlo: nada lo actualiza
+  // ni lo borra —comprobado, cero sitios de llamada— así que `createdAt` más
+  // el id basta y añadírselo sería mentir sobre su naturaleza.
+  updatedAt DateTime     @updatedAt @map("updated_at")
   createdBy String?      @map("created_by") @db.Uuid
   creator   UserAccount? @relation("FieldSessionCreatedBy", fields: [createdBy], references: [id])
 
@@ -3609,6 +3619,9 @@ model FieldSession {
   @@index([operatorPersonId])
   @@index([taskId])
   @@index([startedAt])
+  // Sostiene el cursor de §5. Sin él, la paginación por clave hace recorrido
+  // secuencial y el cursor sólo evita repetir filas, no leerlas.
+  @@index([updatedAt, id])
   @@map("field_session")
   @@schema("traceability")
 }
@@ -3750,6 +3763,9 @@ model FieldEvent {
 
   @@index([fieldSessionId])
   @@index([occurredAt])
+  // P4 §5 — el cursor de esta tabla va por `createdAt` y no por `updatedAt`,
+  // porque es append-only de verdad: nada la actualiza ni la borra.
+  @@index([createdAt, id])
   @@index([eventKindValueId])
   @@index([measurementId])
   @@index([assetId])
