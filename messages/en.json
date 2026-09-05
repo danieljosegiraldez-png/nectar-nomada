@@ -724,6 +724,7 @@
     "fieldEventOperatorInherit": "— same as the session —",
     "fieldEventRecordButton": "Record",
     "fieldEventQueuedOffline": "Saved on this device. No signal: it will be sent when you sync.",
+    "fieldEventQueueFailed": "Could not save on this device. Do NOT leave this screen: press “Record” again.",
     "fieldSyncPending": "{count, plural, =0 {Nothing waiting to send} one {1 note not sent} other {# notes not sent}}",
     "fieldSyncButton": "Sync now",
     "fieldSyncWorking": "Sending…",

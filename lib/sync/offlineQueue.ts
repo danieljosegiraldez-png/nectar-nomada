@@ -70,7 +70,26 @@ async function write(fn: (store: IDBObjectStore) => void): Promise<void> {
 export async function queueFieldEvent(payload: Record<string, unknown>): Promise<FieldEventDraft> {
   const draft: FieldEventDraft = { id: newDraftId(), payload, createdAt: Date.now(), status: "pending" };
   await write((s) => s.add(draft));
+  avisarDeCambio();
   return draft;
+}
+
+/**
+ * El formulario y el contador son componentes hermanos sin estado compartido, y
+ * un evento de ventana es todo el mecanismo que hace falta — el mismo que usa
+ * `OfflineSyncIndicator` en apiario, y por la misma razón: mover un número no
+ * justifica un contexto ni pasar props por tres niveles.
+ *
+ * **Se avisa desde aquí y no desde el componente** para que no dependa de que
+ * quien encole se acuerde. Sin esto, anotar sin señal dejaba el contador en
+ * «nada pendiente» y el botón de sincronizar DESHABILITADO: el operador no
+ * podía enviar su propio trabajo sin recargar la página, y nada en pantalla le
+ * decía que hiciera falta. Encontrado recorriendo el modo avión, no leyendo.
+ */
+export const FIELD_DRAFTS_CHANGED_EVENT = "nn-field-drafts-changed";
+
+function avisarDeCambio(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(FIELD_DRAFTS_CHANGED_EVENT));
 }
 
 export async function listFieldEventDrafts(): Promise<FieldEventDraft[]> {
@@ -86,6 +105,7 @@ export async function listFieldEventDrafts(): Promise<FieldEventDraft[]> {
 
 export async function discardFieldEventDraft(id: string): Promise<void> {
   await write((s) => s.delete(id));
+  avisarDeCambio();
 }
 
 /**

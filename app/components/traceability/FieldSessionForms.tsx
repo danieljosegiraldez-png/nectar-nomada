@@ -9,8 +9,8 @@ import {
   type TraceabilityActionState,
 } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
-import { parseLocalDateTime } from "../../../lib/time/localDateTime";
 import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
+import { construirEventoEncolado } from "../../../lib/sync/fieldEventPayload";
 
 const initialState: TraceabilityActionState = {};
 
@@ -161,6 +161,7 @@ export function FieldEventForm({
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(recordFieldEventFormAction, initialState);
   const [encolado, setEncolado] = useState(false);
+  const [errorLocal, setErrorLocal] = useState(false);
 
   /**
    * P4 §11 — sin señal, el evento se guarda en la cola local en vez de perderse.
@@ -169,44 +170,30 @@ export function FieldEventForm({
    * `onLine === false` es una certeza («no hay interfaz de red»), mientras que
    * un `fetch` que tarda es indistinguible de un servidor lento, y esperar a
    * que falle deja al operador mirando un botón girando en mitad de un cafetal.
+   * Lo que `onLine === true` NO garantiza es que haya internet — una wifi de
+   * finca sin salida da `true`; ese caso lo recoge la otra mitad, porque la
+   * acción del servidor falla y el operador lo ve.
    *
-   * Lo que `onLine === true` NO garantiza es que haya internet de verdad — una
-   * wifi de finca sin salida da `true`. Ese caso lo recoge la otra mitad: la
-   * acción del servidor falla, el operador lo ve, y el botón de sincronizar
-   * sigue ahí. No se intenta adivinar la conectividad real desde aquí.
+   * **El `try` no es decorativo.** Una vez llamado `preventDefault()` la Server
+   * Action ya está cancelada, así que cualquier fallo aquí dejaría la anotación
+   * en ninguna parte. Eso ya pasó: el desfase horario se leía de un campo con
+   * nombre inventado, `parseLocalDateTime` lanzaba, y la pantalla seguía
+   * diciendo «guardado en este dispositivo». Un fallo al encolar tiene que
+   * verse, porque es la única copia que existe.
    */
   const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
     if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal: la Server Action
     e.preventDefault();
     const form = e.currentTarget;
-    const fd = new FormData(form);
-    const numero = (name: string) => {
-      const v = String(fd.get(name) ?? "").trim();
-      return v === "" ? null : Number(v);
-    };
-    const texto = (name: string) => {
-      const v = String(fd.get(name) ?? "").trim();
-      return v === "" ? null : v;
-    };
-    await queueFieldEvent({
-      fieldSessionId,
-      eventKindValueId: String(fd.get("eventKindValueId") ?? ""),
-      // Mismo instante que calcularía el servidor: la misma función pura, con
-      // el mismo desfase que `TimezoneOffsetField` ya pone en el formulario.
-      occurredAt: parseLocalDateTime(
-        String(fd.get("occurredAt") ?? ""),
-        fd.get("timezoneOffsetMinutes") as string | null,
-      ).toISOString(),
-      // El reloj del aparato al anotarlo, que es un hecho distinto de cuándo
-      // pasó (P2 §5). Aquí coinciden casi siempre; en un evento fechado hacia
-      // atrás, no.
-      recordedAt: new Date().toISOString(),
-      operatorPersonId: texto("operatorPersonId"),
-      notes: texto("notes"),
-      position: { latitude: numero("latitude"), longitude: numero("longitude"), accuracyM: numero("accuracyM") },
-    });
-    form.reset();
-    setEncolado(true);
+    try {
+      await queueFieldEvent({ ...construirEventoEncolado(new FormData(form), fieldSessionId) });
+      form.reset();
+      setEncolado(true);
+      setErrorLocal(false);
+    } catch {
+      setEncolado(false);
+      setErrorLocal(true);
+    }
   };
 
   return (
@@ -258,6 +245,11 @@ export function FieldEventForm({
       {encolado ? (
         <p className="nn-note" role="status">
           {t("fieldEventQueuedOffline")}
+        </p>
+      ) : null}
+      {errorLocal ? (
+        <p className="nn-error" role="alert">
+          {t("fieldEventQueueFailed")}
         </p>
       ) : null}
       <button type="submit" className="nn-button" disabled={pending}>

@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { listFieldEventDrafts, syncFieldEvents, type SyncSummary } from "../../../lib/sync/offlineQueue";
+import {
+  listFieldEventDrafts,
+  syncFieldEvents,
+  FIELD_DRAFTS_CHANGED_EVENT,
+  type SyncSummary,
+} from "../../../lib/sync/offlineQueue";
 
 /**
  * P4 §11 — lo que el operador ve de la cola: cuánto falta por enviar, un botón
@@ -62,11 +67,14 @@ export function FieldSyncControls() {
 
     const conectado = () => setSinConexion(false);
     const desconectado = () => setSinConexion(true);
+    const cambiaronLosBorradores = () => void recontar();
     window.addEventListener("online", conectado);
     window.addEventListener("offline", desconectado);
+    window.addEventListener(FIELD_DRAFTS_CHANGED_EVENT, cambiaronLosBorradores);
     return () => {
       window.removeEventListener("online", conectado);
       window.removeEventListener("offline", desconectado);
+      window.removeEventListener(FIELD_DRAFTS_CHANGED_EVENT, cambiaronLosBorradores);
     };
   }, [recontar]);
 

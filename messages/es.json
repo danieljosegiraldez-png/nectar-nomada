@@ -724,6 +724,7 @@
     "fieldEventOperatorInherit": "— el mismo de la jornada —",
     "fieldEventRecordButton": "Anotar",
     "fieldEventQueuedOffline": "Guardado en este dispositivo. Sin señal: se enviará al sincronizar.",
+    "fieldEventQueueFailed": "No se pudo guardar en este dispositivo. NO te vayas de la pantalla: vuelve a pulsar «Registrar».",
     "fieldSyncPending": "{count, plural, =0 {Nada pendiente de enviar} one {1 anotación sin enviar} other {# anotaciones sin enviar}}",
     "fieldSyncButton": "Sincronizar ahora",
     "fieldSyncWorking": "Enviando…",
