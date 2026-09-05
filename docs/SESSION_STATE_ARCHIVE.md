@@ -603,3 +603,36 @@ línea de más. **Las lecciones no se quedaron ahí:** las tres reglas de
 flip-tests y el patrón de llamar «estructural» a lo que sólo comprueba el
 servicio están en `CLAUDE.md`, que sí se carga — el archivo histórico dice de sí
 mismo que lo que todavía dirige el trabajo no le pertenece.
+
+---
+
+### 2026-09-04 · La Fase 2 del Field OS, cerrada por lo que NO se construyó
+
+`43_P2_OPERATOR_CORE.md` §0 exigía contestar «¿por qué no se ha creado nunca
+ninguna tarea?» antes de extender `partner.Task`. Re-medido contra producción
+con control positivo (17 personas, 3 proyectos, 40 assignments): `partner.task`
+**0**, `field_submission` **0**, y —lo nuevo— `field_session` **0** y
+`field_event` **0**. La mitad de la Fase 2 que sí se construyó hace una semana
+tampoco tiene una sola fila. Daniel contestó: nunca se asignó trabajo por la
+plataforma. Es la rama que §0 nombra, y su instrucción es aplazar §1–§2 por
+especulativos. **ADR-107.**
+
+Entregado: §6 (GPS en `core.asset` — `latitude`/`longitude`/`accuracy_m`, que
+`locationId` no puede expresar porque una ladera no es una `Location`) y el
+resto de §5 (`clock_offset_ms` en las seis tablas que ya llevan `recorded_at`,
+`synced_at` y columna de dispositivo). Nueve columnas, todas anulables, cero
+backfill. Verificado con `migrate diff` vacío **y su flip-test**: quitando una
+columna el diff la nombra.
+
+**Dos cosas que encontré de paso y no son mías:**
+
+- **La suite de `main` estaba roja y CI verde.** Dos secciones de §3 usaban
+  `###` sin fecha y `tests/archivo-de-estado.test.ts` las rechaza — con razón:
+  un `###` no fechado trunca a su padre al archivar. Bajadas a `####` aquí.
+  **CI no lo vio porque ese test no está en la lista enumerada a mano de
+  `scripts/ci.sh`**, que es exactamente `PENDING_IMPLEMENTATIONS/008` pasando
+  de verdad en lugar de en teoría.
+- **`COFFEE_FIELD_OS_AUDIT.md` afirmaba cosas falsas.** Su §59 decía «no se
+  implementó nada» y su tabla de validación daba 531 tests; hoy son cuatro
+  fases construidas y 940. Corregido con un bloque de estado fechado, porque
+  esa página es lo primero que lee quien retoma el Field OS.
