@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Bodoni_Moda, Archivo } from "next/font/google";
 import Link from "next/link";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getTranslations } from "next-intl/server";
@@ -9,6 +10,26 @@ import { buildNavigation } from "../lib/navigation";
 import { logoutAction } from "./actions/auth";
 import { LocaleSwitcher } from "./components/LocaleSwitcher";
 import { ServiceWorkerRegistration } from "./components/ServiceWorkerRegistration";
+
+/**
+ * Las dos familias de la marca, las mismas que sirve el sitio público
+ * (`nectarnomada-web`). SIL OFL, y `next/font` las aloja en nuestro origen:
+ * ninguna petición a fonts.googleapis.com en tiempo de ejecución.
+ *
+ * Bodoni Moda es un serif de alto contraste: va SOLO en encabezados. En texto
+ * pequeño y al sol se lee peor que una grotesca, y este OS se usa en el campo.
+ */
+const fuenteDisplay = Bodoni_Moda({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--nn-fuente-display",
+});
+
+const fuenteTexto = Archivo({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--nn-fuente-texto",
+});
 
 export const metadata: Metadata = {
   title: "Néctar Nómada",
@@ -27,7 +48,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const navEntries = user ? buildNavigation(await permissionKeysAnywhere(user.userAccountId)) : [];
 
   return (
-    <html lang={locale}>
+    <html lang={locale} className={`${fuenteTexto.variable} ${fuenteDisplay.variable}`}>
       <body>
         <ServiceWorkerRegistration />
         <NextIntlClientProvider>

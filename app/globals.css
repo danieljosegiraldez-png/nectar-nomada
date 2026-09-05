@@ -1,7 +1,11 @@
 :root {
-  --nn-bg: #faf6ef;
+  /* Papel y tinta son los valores del sitio público (`nectarnomada-web`,
+     app/globals.css: --papel-calido y --tinta). Copiados, no compartidos: los
+     dos repositorios son independientes y CI no puede detectar que se separen.
+     Deuda declarada en docs/superpowers/specs/2026-09-05-marca-en-el-os-design.md §6. */
+  --nn-bg: #faf7f0;
   --nn-surface: #ffffff;
-  --nn-ink: #241c14;
+  --nn-ink: #141210;
   /* Was #6b5f4f (4.9:1). Muted text carries real data in the operator
      routes — lot type, project, location — and 4.9:1 is legible at a desk
      and marginal on a phone in direct sun. #574a3b is 6.6:1 on --nn-bg. */
@@ -18,9 +22,17 @@
   --nn-brand-ink: #ffffff;
   --nn-accent: #3f5c3f;
   --nn-accent-bg: #eef1e8;
+  /* La miel es el acento de la marca (`--miel` en el sitio público) Y resulta
+     ser el contraste más alto disponible: 15.10 con tinta encima. NUNCA con
+     texto blanco, que da 1.24 — por eso --nn-miel-ink apunta a la tinta y no
+     es un valor suelto que alguien pueda cambiar sin verlo. */
+  --nn-miel: #fcea3c;
+  --nn-miel-ink: var(--nn-ink);
   --nn-error: #a3311a;
   --nn-radius: 10px;
-  --nn-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  /* Archivo es la de la marca; la pila del sistema queda de respaldo por si la
+     fuente no llega — en el campo, con señal mala, eso pasa. */
+  --nn-font: var(--nn-fuente-texto), -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
 
   /* Minimum comfortable touch target. Apple and WCAG 2.2 both land near
      44px; gloved or wet hands in a wet mill are the reason this is a token
@@ -764,7 +776,10 @@ a.nn-card-link:active {
    and these faces already exist on the machines that will open the page.
 --------------------------------------------------------------------------- */
 .nn-editorial {
-  --nn-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+  /* Bodoni Moda es la display de la marca. Los serif del sistema quedan de
+     respaldo: si la fuente no llega, un encabezado sigue leyéndose como
+     encabezado. */
+  --nn-display: var(--nn-fuente-display), "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
     "Times New Roman", serif;
 }
 
