@@ -86,8 +86,16 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         {activas.length === 0 ? (
           <p className="nn-muted">{t("noCohorts")}</p>
         ) : (
-          <table className="nn-table" style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
+          /* Medido el 2026-09-05 recorriendo la pantalla en un móvil de 375 px:
+             la tabla mide 370 y arranca en el margen de 16, así que su borde
+             derecho cae en 386 y desplaza LA PÁGINA ENTERA de lado. Es la misma
+             forma que `.nn-nav-links` ya tuvo —su comentario en globals.css lo
+             dice: «scrolls the whole PAGE sideways instead of just the nav
+             strip»— y el mismo arreglo que `TargetComparisonTable` ya usa: que
+             se desplace la tabla, no el documento. */
+          <div style={{ overflowX: "auto" }}>
+            <table className="nn-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
               <tr>
                 <th style={{ textAlign: "left", padding: "0.4rem 0.75rem 0.4rem 0" }}>{t("cultivarLabel")}</th>
                 <th style={{ textAlign: "right", padding: "0.4rem 0.75rem" }}>{t("plantCountLabel")}</th>
@@ -128,9 +136,10 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
                     ) : null}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {activas.map((cohort) => (
