@@ -300,6 +300,8 @@
     "lotListHeading": "All Batches",
     "filterAll": "All",
     "noLots": "No batches match this filter yet.",
+    "sinAmbitoHeading": "You do not have access to any batch yet",
+    "sinAmbitoBody": "This does not mean the farm is empty: it means your account has no assignments yet. An administrator can grant them.",
     "lineageHeading": "Lineage",
     "ancestorsLabel": "{count} ancestor batch(es)",
     "descendantsLabel": "{count} descendant batch(es)",

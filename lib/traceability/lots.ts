@@ -516,12 +516,21 @@ export interface LotListFilters {
 export async function getLotList(userAccountId: string, filters: LotListFilters = {}) {
   const visibility = await resolveLotVisibility(userAccountId);
   const where = lotWhereFromVisibility(visibility);
+  // `sinAmbito` distingue «no hay lotes» de «no puedes ver ninguno», que hasta
+  // hoy llegaban a la pantalla como el mismo array vacío. La quinta revisión
+  // (2026-09-05) lo encontró: `/lots` decía «Nada en curso ahora mismo» a una
+  // cuenta sin asignaciones — una afirmación sobre la finca, cuando puede haber
+  // fermentaciones corriendo. Y es lo primero que ve alguien recién dado de
+  // alta: 13 de 14 cuentas siguen sin poder entrar (P-C).
   if (where === null)
-    return truncate<
-      Prisma.LotGetPayload<{
-        include: { project: true; organization: true; location: true; rejectionCategoryValue: { select: { value: true } } };
-      }>
-    >([]);
+    return {
+      ...truncate<
+        Prisma.LotGetPayload<{
+          include: { project: true; organization: true; location: true; rejectionCategoryValue: { select: { value: true } } };
+        }>
+      >([]),
+      sinAmbito: true,
+    };
 
   const rows = await prisma.lot.findMany({
     where: { ...where, ...(filters.lotType ? { lotType: filters.lotType } : {}) },
@@ -532,7 +541,7 @@ export async function getLotList(userAccountId: string, filters: LotListFilters 
     orderBy: { createdAt: "desc" },
     take: LIST_LIMIT + 1,
   });
-  return truncate(rows);
+  return { ...truncate(rows), sinAmbito: false };
 }
 
 // Placeholder threshold for the "requiring attention" card (§23: "past a
@@ -548,7 +557,9 @@ const ATTENTION_MEASUREMENT_STALENESS_HOURS = 24;
 export async function getActiveOperations(userAccountId: string) {
   const visibility = await resolveLotVisibility(userAccountId);
   if (visibility.mode === "none") {
-    return { activeFermentationRuns: [], activeDryingRuns: [], lotsNeedingMeasurement: [], samplesAwaitingSensory: [] };
+    // Ver el comentario de `getLotList`: un vacío por falta de ámbito no es un
+    // vacío, y la pantalla necesita poder decirlo.
+    return { activeFermentationRuns: [], activeDryingRuns: [], lotsNeedingMeasurement: [], samplesAwaitingSensory: [], sinAmbito: true };
   }
 
   const runInclude = {
@@ -603,7 +614,7 @@ export async function getActiveOperations(userAccountId: string) {
           take: 50,
         });
 
-  return { activeFermentationRuns, activeDryingRuns, lotsNeedingMeasurement, samplesAwaitingSensory };
+  return { activeFermentationRuns, activeDryingRuns, lotsNeedingMeasurement, samplesAwaitingSensory, sinAmbito: false };
 }
 
 /**

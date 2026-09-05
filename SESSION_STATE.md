@@ -185,8 +185,24 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   `lib/traceability/reconciliacionDeCosecha.ts` para poder probarla — dentro del
   componente no se puede, y ahí fue donde se coló.
 
-  **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes, y con
-  otras lentes. Ésta sólo buscaba ausencias convertidas en valor.
+  **Segunda lente (misma fecha): «no hay» contra «no puedes ver».** Un hallazgo
+  más, y sistémico: `getLotList` y `getActiveOperations` devolvían el mismo array
+  vacío para una finca sin nada y para una cuenta sin asignaciones, así que
+  `/lots` decía **«Nada en curso ahora mismo»** — una afirmación sobre la finca,
+  cuando puede haber fermentaciones corriendo. Es la **primera pantalla** de
+  quien acaba de recibir acceso, y 13 de 14 cuentas siguen sin poder entrar
+  (P-C).
+
+  Arreglado en esas dos y en `/lots`, con la forma que `Partner.noProjects` ya
+  usaba: se nombra la causa y se dice a quién pedir el acceso. **Quedan seis
+  sitios con el mismo colapso** —`apiary/hives.ts` (dos), `roasting.ts`,
+  `export.ts` y dos ramas más de `lots.ts`— y ninguna de sus pantallas puede
+  distinguir todavía.
+
+  **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes. Dos
+  lentes usadas de las que se ocurren: quedan fugas de clasificación al
+  renderizar, estados de carga que mienten, y formularios que ofrecen lo que el
+  servicio niega.
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
   separada para la serie temporal —~35.000 filas por sensor y año— y no dice
