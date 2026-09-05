@@ -139,15 +139,21 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   no llegan a nadie, porque ninguna de las tres Personas tiene correo.
   ADR-083 ya arregló el callback que rechazaba `invited`: la puerta funciona,
   falta a quién darle la llave.
-- **Que la compuerta sea *obligatoria* para fusionar** — CI existe desde el
-  2026-08-28 (`.github/workflows/ci.yml` → `scripts/ci.sh`: typecheck,
-  presupuesto de estado, inventario de rutas, lint y **ocho** archivos de test
-  herméticos), y corre en cada push y cada PR. Lo que sigue bloqueado es que
-  **impida** fusionar: la protección de ramas no está disponible en un
-  repositorio privado de este plan («Upgrade to GitHub Pro»). Hoy CI informa,
-  no impide, y esa diferencia es de Daniel. Tampoco cubre la suite completa —
-  necesita `npm run test:db -- up` y un runner no tiene ese backup. Ver
-  `PENDING_IMPLEMENTATIONS/006`.
+- ~~**Que la compuerta sea *obligatoria* para fusionar**~~ — **cerrado el
+  2026-09-05, y la premisa era falsa.** Esta entrada decía durante semanas que
+  la protección de ramas «no está disponible en un repositorio privado de este
+  plan («Upgrade to GitHub Pro»)». **Sí estaba**: se activó por API sin cambiar
+  de plan, al primer intento. Nadie lo había vuelto a probar desde que se
+  escribió.
+
+  Puesto en `main`: exige los dos checks de compuerta —el pesado y el ligero—,
+  prohíbe force-push y borrar la rama. **Sin revisiones exigidas a propósito**:
+  hay una sola cuenta humana y GitHub no deja aprobar el propio PR, así que
+  exigirlas dejaría el repositorio sin poder fusionar nada.
+
+  `enforce_admins` queda en **false**, también a propósito: si CI se cae por
+  cuota —ya pasó el 2026-09-03— hay que poder fusionar un arreglo sin
+  desactivar la protección primero.
 - **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
   y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así
   que no hay densidad ni rendimiento por hectárea, que es lo único comparable
