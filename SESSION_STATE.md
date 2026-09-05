@@ -225,12 +225,22 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   el mundo **mientras el enlace a Recetas, tres líneas más abajo, ya consultaba
   ese mismo permiso ya calculado**; ahora lo usa.
 
-  **Lo que esta lente encontró y NO arregló, y por qué:** `/lots/[id]` no
-  consulta ningún permiso de escritura. Ofrece seis botones de acción y pinta
-  **16 formularios en línea** en 825 líneas. Gatearlo bien exige decidir qué
-  permiso pide cada uno —foto, jornal, consumo de material no son `lot:manage`—
-  y eso es diseño, no una edición quirúrgica. Medio arreglarlo sería peor:
-  ocultar los botones y dejar los formularios *parecería* gateado.
+  **`/lots/[id]`: encontrado, medido y arreglado — y de paso, una afirmación
+  mía que era falsa.** La página no consultaba ningún permiso de escritura:
+  seis botones de acción y **16 formularios en línea** en 825 líneas. Al
+  archivarlo escribí que gatearlo era diseño «porque foto, jornal y consumo de
+  material no son `lot:manage`». **No lo medí, y es falso:** trazadas las ocho
+  cadenas de servicio, **15 de los 16** exigen exactamente `lot:manage`
+  —`PhotoUploadForm` (6), `LabourEntryForm` (4), `MaterialConsumptionForm` (2),
+  `SelectionForm` vía `recordTransformation`, `MeasurementForm` y
+  `MeasurementCorrectionForm` vía `requireSubjectAccess`—. El único distinto es
+  `HarvestSourcesForm`, que pide `location:manage_attributes`.
+
+  Ninguno estaba desprotegido: los ocho servicios guardan. Era UX, como el
+  resto de la lente. Decisión de Daniel: un **aviso único arriba** y los
+  formularios y botones ocultos —repetir el mensaje 16 veces sería ruido—, y
+  `HarvestSourcesForm` gateado con **su propio** permiso, para no esconderlo a
+  quien sí puede usarlo.
 
   **Medido, después de que Daniel dijera que varias cuentas ven y no gestionan
   — tenía razón.** Sobre la copia restaurada (fresca: 43 lotes, los mismos que

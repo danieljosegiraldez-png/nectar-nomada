@@ -304,6 +304,7 @@
     "sinAmbitoBody": "Esto no significa que la finca esté vacía: significa que tu cuenta aún no tiene asignaciones. Un administrador puede dártelas.",
     "sinAmbitoGestionHeading": "Todavía no puedes registrar lotes",
     "sinAmbitoGestionBody": "Esto no significa que no haya trabajo en la finca: tu cuenta no tiene asignaciones que permitan gestionar lotes. Un administrador puede dártelas.",
+    "soloLecturaEnEsteLote": "Puedes ver este lote, pero no registrar trabajo en él.",
     "lineageHeading": "Genealogía",
     "ancestorsLabel": "{count} batch(es) de origen",
     "descendantsLabel": "{count} batch(es) derivado(s)",

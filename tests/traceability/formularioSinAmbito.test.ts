@@ -22,7 +22,8 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import { getLotList, getManageableContext } from "../../lib/traceability/lots";
+import { getLotList, getManageableContext, puedeGestionarLote } from "../../lib/traceability/lots";
+import { puedeGestionarAtributosDeUbicacion } from "../../lib/traceability/locations";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `formulario-${Date.now()}`;
@@ -32,6 +33,7 @@ let sinAsignaciones: string;
 let soloVer: string;
 let gestiona: string;
 let scopeId: string;
+let loteId: string;
 
 async function cuenta(label: string) {
   const p = await prisma.person.create({
@@ -67,10 +69,15 @@ beforeAll(async () => {
   // concede los dos. Comprobado contra la base, no supuesto.
   await asignar(soloVer, "Project Viewer");
   await asignar(gestiona, "Farm Operator");
+
+  loteId = (await prisma.lot.create({
+    data: { lotCode: `TEST-${RUN_ID}`, lotType: "cherry", organizationId, locationId: plotId, createdBy: gestiona },
+  })).id;
 });
 
 afterAll(async () => {
   const ids = [sinAsignaciones, soloVer, gestiona];
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: loteId }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: ids } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: plotId }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: ids } }) });
@@ -108,5 +115,36 @@ describe("el contexto de registro dice si la cuenta puede registrar", () => {
     expect(context.sinAmbito, "tiene permisos: el formulario sí se le puede ofrecer").toBe(false);
     expect(context.plotLocations.length, "y con opciones de verdad, no un desplegable vacío").toBeGreaterThan(0);
     expect(context.organizations.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Los dos ayudantes que la pantalla usa para decidir si ofrece un formulario.
+ * Preguntan al MISMO guardia que la escritura: si divergieran, volvería el
+ * defecto —una pantalla que ofrece lo que el servicio niega— por la puerta de
+ * atrás, con la regla duplicada en dos sitios.
+ */
+describe("la pantalla pregunta al mismo guardia que la escritura", () => {
+  it("quien sólo ve el lote no puede registrar en él", async () => {
+    const lot = await prisma.lot.findUniqueOrThrow({ where: { id: loteId } });
+    expect(await puedeGestionarLote(soloVer, lot), "los 15 formularios de `lot:manage` no se le pueden ofrecer").toBe(false);
+  });
+
+  it("quien lo gestiona, sí — control positivo sobre el MISMO lote", async () => {
+    const lot = await prisma.lot.findUniqueOrThrow({ where: { id: loteId } });
+    expect(await puedeGestionarLote(gestiona, lot), "si esto fuera false, el ayudante escondería la página a todo el mundo").toBe(true);
+  });
+
+  it("los atributos de ubicación son OTRO permiso, y por eso son otra pregunta", async () => {
+    // `HarvestSourcesForm` exige `location:manage_attributes`, no `lot:manage`.
+    // Colapsar las dos preguntas escondería el formulario a quien sí puede
+    // usarlo, que es el defecto inverso al que arregla esta lente.
+    expect(await puedeGestionarAtributosDeUbicacion(soloVer, plotId)).toBe(false);
+
+    // Control positivo, sin el cual el `false` de arriba no prueba nada: podría
+    // venir de que la ubicación no se encuentra y no de que falte el permiso.
+    // `Farm Operator` SÍ concede `location:manage_attributes` —comprobado
+    // contra la base—, y sobre la misma ubicación responde que sí.
+    expect(await puedeGestionarAtributosDeUbicacion(gestiona, plotId)).toBe(true);
   });
 });

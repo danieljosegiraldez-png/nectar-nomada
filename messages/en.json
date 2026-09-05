@@ -304,6 +304,7 @@
     "sinAmbitoBody": "This does not mean the farm is empty: it means your account has no assignments yet. An administrator can grant them.",
     "sinAmbitoGestionHeading": "You cannot register batches yet",
     "sinAmbitoGestionBody": "This does not mean there is no work on the farm: your account has no assignments that allow managing batches. An administrator can grant them.",
+    "soloLecturaEnEsteLote": "You can see this batch, but you cannot record work on it.",
     "lineageHeading": "Lineage",
     "ancestorsLabel": "{count} ancestor batch(es)",
     "descendantsLabel": "{count} descendant batch(es)",

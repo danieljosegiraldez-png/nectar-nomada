@@ -68,6 +68,21 @@ export class LocationValidationError extends Error {}
  * (RBAC.md §3) doing the rest for a location-scoped Farm Operator
  * Assignment.
  */
+/**
+ * La versión que pregunta en vez de exigir, para que una pantalla pueda decidir
+ * si ofrece el formulario. Misma comprobación que la escritura —no una copia—,
+ * y sólo se traga la negativa.
+ */
+export async function puedeGestionarAtributosDeUbicacion(userAccountId: string, locationId: string): Promise<boolean> {
+  try {
+    await requireLocationAttributeAccess(userAccountId, locationId);
+    return true;
+  } catch (error) {
+    if (error instanceof LocationAccessError) return false;
+    throw error;
+  }
+}
+
 export async function requireLocationAttributeAccess(userAccountId: string, locationId: string) {
   // Gate on the Location's own classification (ADR-068). A Location is one of
   // the records that declares its sensitivity — sixteen of them are `internal`

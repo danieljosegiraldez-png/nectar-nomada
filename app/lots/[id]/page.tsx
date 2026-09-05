@@ -2,7 +2,14 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { getLotDetail, getObserverCandidates, getManageableContext, TraceabilityAccessError } from "../../../lib/traceability/lots";
+import {
+  getLotDetail,
+  getObserverCandidates,
+  getManageableContext,
+  puedeGestionarLote,
+  TraceabilityAccessError,
+} from "../../../lib/traceability/lots";
+import { puedeGestionarAtributosDeUbicacion } from "../../../lib/traceability/locations";
 import { computeCurrentQuantity } from "../../../lib/traceability/quantity";
 import { nextActionFor, type BatchAction } from "../../../lib/traceability/batchActions";
 import { compareRunToTargets } from "../../../lib/traceability/processTargets";
@@ -77,6 +84,21 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
     labourEntries,
     materialConsumptionEntries,
   } = detail;
+
+  // La página no consultaba NINGÚN permiso de escritura: ofrecía seis botones y
+  // 16 formularios a cualquiera que pudiera *ver* el lote. Trazadas las ocho
+  // cadenas de servicio, 15 de los 16 exigen `lot:manage` y uno
+  // —`HarvestSourcesForm`— exige `location:manage_attributes`; por eso son dos
+  // preguntas y no una: colapsarlas escondería el formulario de fuentes a quien
+  // sí puede usarlo.
+  //
+  // Se le pregunta al MISMO guardia que usa la escritura en vez de reimplementar
+  // la regla aquí, que es exactamente cómo la pantalla y el servicio acaban
+  // discrepando.
+  const puedeRegistrar = await puedeGestionarLote(user.userAccountId, lot);
+  const puedeEditarFuentes = harvestEvent
+    ? await puedeGestionarAtributosDeUbicacion(user.userAccountId, harvestEvent.locationId)
+    : false;
 
   // Qué mediciones han sido superadas por una corrección. Se calcula de la
   // lista que ya se cargó, sin otra consulta.
@@ -157,9 +179,16 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
 
   // The suggested action leads. Everything else keeps its original order, so
   // an operator who already knows where a button lives still finds it there.
+  // Sin permiso de registro sólo sobrevive `report`, que es la única de lectura.
+  // Se filtra ANTES de ordenar por acción sugerida: si no, la sugerencia podría
+  // ser una acción ya retirada y encabezaría una lista donde no está.
+  const accionesVisibles = puedeRegistrar
+    ? availableActions
+    : availableActions.filter((a) => a.action === "report");
+
   const batchActions = [
-    ...availableActions.filter((a) => a.action === suggestedAction),
-    ...availableActions.filter((a) => a.action !== suggestedAction),
+    ...accionesVisibles.filter((a) => a.action === suggestedAction),
+    ...accionesVisibles.filter((a) => a.action !== suggestedAction),
   ];
   const currentStorage = storageAssignments.find((s) => s.endedAt === null) ?? null;
 
@@ -212,6 +241,16 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         {lot.location ? <span>{lot.location.name}</span> : null}
         {lot.organization ? <span>{lot.organization.name}</span> : null}
       </p>
+
+      {/* Un aviso, no dieciséis: repetir el motivo junto a cada formulario sería
+          ruido en una página de 825 líneas. La trazabilidad se sigue leyendo
+          entera —ése es el punto de poder ver el lote—; lo que desaparece es lo
+          que el servidor iba a rechazar. */}
+      {!puedeRegistrar ? (
+        <p className="nn-muted" role="status">
+          {t("soloLecturaEnEsteLote")} {t("sinAmbitoGestionBody")}
+        </p>
+      ) : null}
 
       <section className="nn-section">
         <h2>{t("originLotHeading")}</h2>
@@ -270,14 +309,18 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                 ))}
             </ul>
           ) : null}
-          <LabourEntryForm
-            lotId={lot.id}
-            parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }}
-            observers={observers}
-            selfPersonId={selfPersonId}
-            organizations={organizations}
-          />
-          <PhotoUploadForm lotId={lot.id} parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }} observers={observers} selfPersonId={selfPersonId} />
+          {puedeRegistrar ? (
+            <LabourEntryForm
+              lotId={lot.id}
+              parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }}
+              observers={observers}
+              selfPersonId={selfPersonId}
+              organizations={organizations}
+            />
+          ) : null}
+          {puedeRegistrar ? (
+            <PhotoUploadForm lotId={lot.id} parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }} observers={observers} selfPersonId={selfPersonId} />
+          ) : null}
 
           {harvestSources ? (
             <>
@@ -301,35 +344,37 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               ) : (
                 <p className="nn-muted">{t("harvestSourcesNone")}</p>
               )}
-              <HarvestSourcesForm
-                lotId={lot.id}
-                harvestEventId={harvestSources.harvestEventId}
-                declaredTotalKg={harvestSources.declaredTotalKg}
-                alreadyRecordedKg={harvestSources.alreadyRecordedKg}
-                // Los dos números que hacen honesta a la diferencia: aportes
-                // guardados sin peso, y aportes que el RBAC oculta. El servicio
-                // los tenía calculados y la pantalla los dejaba caer.
-                sinPesar={harvestSources.existing.filter((s) => s.cherryWeightKg == null).length}
-                ocultos={harvestSources.hiddenContributions}
-                plots={harvestSources.plotLocations.map((plot) => ({
-                  id: plot.id,
-                  name: plot.name,
-                  cohorts: plot.plantingCohorts.map((cohort) => ({
-                    id: cohort.id,
-                    // Sin conteo NO es «0 plantas»: es que nadie lo contó.
-                    // Un 0 aquí se lee como un bloque vacío (ADR-080).
-                    label:
-                      cohort.plantCount != null
-                        ? t("sourceCohortOption", {
-                            cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
-                            plants: cohort.plantCount,
-                          })
-                        : t("sourceCohortOptionNoCount", {
-                            cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
-                          }),
-                  })),
-                }))}
-              />
+              {puedeEditarFuentes ? (
+                <HarvestSourcesForm
+                  lotId={lot.id}
+                  harvestEventId={harvestSources.harvestEventId}
+                  declaredTotalKg={harvestSources.declaredTotalKg}
+                  alreadyRecordedKg={harvestSources.alreadyRecordedKg}
+                  // Los dos números que hacen honesta a la diferencia: aportes
+                  // guardados sin peso, y aportes que el RBAC oculta. El servicio
+                  // los tenía calculados y la pantalla los dejaba caer.
+                  sinPesar={harvestSources.existing.filter((s) => s.cherryWeightKg == null).length}
+                  ocultos={harvestSources.hiddenContributions}
+                  plots={harvestSources.plotLocations.map((plot) => ({
+                    id: plot.id,
+                    name: plot.name,
+                    cohorts: plot.plantingCohorts.map((cohort) => ({
+                      id: cohort.id,
+                      // Sin conteo NO es «0 plantas»: es que nadie lo contó.
+                      // Un 0 aquí se lee como un bloque vacío (ADR-080).
+                      label:
+                        cohort.plantCount != null
+                          ? t("sourceCohortOption", {
+                              cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
+                              plants: cohort.plantCount,
+                            })
+                          : t("sourceCohortOptionNoCount", {
+                              cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
+                            }),
+                    })),
+                  }))}
+                />
+              ) : null}
             </>
           ) : null}
         </section>
@@ -348,13 +393,15 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                 ))}
             </ul>
           ) : null}
-          <LabourEntryForm
-            lotId={lot.id}
-            parent={{ kind: "receivingEvent", receivingEventId: receivingEvent.id }}
-            observers={observers}
-            selfPersonId={selfPersonId}
-            organizations={organizations}
-          />
+          {puedeRegistrar ? (
+            <LabourEntryForm
+              lotId={lot.id}
+              parent={{ kind: "receivingEvent", receivingEventId: receivingEvent.id }}
+              observers={observers}
+              selfPersonId={selfPersonId}
+              organizations={organizations}
+            />
+          ) : null}
         </section>
       ) : null}
 
@@ -388,7 +435,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
 
       {/* Below the actions, not above them: recording the batch's state comes
           first, and the photo is the complement to it (ADR-096). */}
-      <PhotoUploadForm lotId={lot.id} parent={{ kind: "lot" }} observers={observers} selfPersonId={selfPersonId} />
+      {puedeRegistrar ? (
+        <PhotoUploadForm lotId={lot.id} parent={{ kind: "lot" }} observers={observers} selfPersonId={selfPersonId} />
+      ) : null}
 
       <section className="nn-section">
         <h2>{t("lineageHeading")}</h2>
@@ -466,14 +515,16 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       {canSelect && selectionCatalogs ? (
         <section className="nn-section" id="seleccion">
           <h2>{t("selectionHeading")}</h2>
-          <SelectionForm
-            lotId={lot.id}
-            lotType={lot.lotType}
-            currentQuantity={quantity.recorded ? Number(quantity.quantity) : null}
-            unit={quantity.unit ?? "kg"}
-            methods={selectionCatalogs.methods}
-            categories={selectionCatalogs.categories}
-          />
+          {puedeRegistrar ? (
+            <SelectionForm
+              lotId={lot.id}
+              lotType={lot.lotType}
+              currentQuantity={quantity.recorded ? Number(quantity.quantity) : null}
+              unit={quantity.unit ?? "kg"}
+              methods={selectionCatalogs.methods}
+              categories={selectionCatalogs.categories}
+            />
+          ) : null}
         </section>
       ) : null}
 
@@ -538,7 +589,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                 {t("endFermentationButton")}
               </button>
             </form>
-            <PhotoUploadForm lotId={lot.id} parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }} observers={observers} selfPersonId={selfPersonId} />
+            {puedeRegistrar ? (
+              <PhotoUploadForm lotId={lot.id} parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }} observers={observers} selfPersonId={selfPersonId} />
+            ) : null}
 
             {labourEntries.filter((le) => le.fermentationRunId === activeFermentation.id).length > 0 ? (
               <ul>
@@ -549,13 +602,15 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                   ))}
               </ul>
             ) : null}
-            <LabourEntryForm
-              lotId={lot.id}
-              parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }}
-              observers={observers}
-              selfPersonId={selfPersonId}
-              organizations={organizations}
-            />
+            {puedeRegistrar ? (
+              <LabourEntryForm
+                lotId={lot.id}
+                parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }}
+                observers={observers}
+                selfPersonId={selfPersonId}
+                organizations={organizations}
+              />
+            ) : null}
 
             {materialConsumptionEntries.filter((mc) => mc.fermentationRunId === activeFermentation.id).length > 0 ? (
               <ul>
@@ -566,7 +621,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                   ))}
               </ul>
             ) : null}
-            <MaterialConsumptionForm lotId={lot.id} parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }} />
+            {puedeRegistrar ? (
+              <MaterialConsumptionForm lotId={lot.id} parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }} />
+            ) : null}
           </div>
         ) : null}
 
@@ -626,7 +683,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                 {t("endDryingButton")}
               </button>
             </form>
-            <PhotoUploadForm lotId={lot.id} parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }} observers={observers} selfPersonId={selfPersonId} />
+            {puedeRegistrar ? (
+              <PhotoUploadForm lotId={lot.id} parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }} observers={observers} selfPersonId={selfPersonId} />
+            ) : null}
 
             {labourEntries.filter((le) => le.dryingRunId === activeDrying.id).length > 0 ? (
               <ul>
@@ -637,13 +696,15 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                   ))}
               </ul>
             ) : null}
-            <LabourEntryForm
-              lotId={lot.id}
-              parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }}
-              observers={observers}
-              selfPersonId={selfPersonId}
-              organizations={organizations}
-            />
+            {puedeRegistrar ? (
+              <LabourEntryForm
+                lotId={lot.id}
+                parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }}
+                observers={observers}
+                selfPersonId={selfPersonId}
+                organizations={organizations}
+              />
+            ) : null}
 
             {materialConsumptionEntries.filter((mc) => mc.dryingRunId === activeDrying.id).length > 0 ? (
               <ul>
@@ -654,7 +715,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                   ))}
               </ul>
             ) : null}
-            <MaterialConsumptionForm lotId={lot.id} parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }} />
+            {puedeRegistrar ? (
+              <MaterialConsumptionForm lotId={lot.id} parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }} />
+            ) : null}
           </div>
         ) : null}
 
@@ -685,24 +748,28 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                   {/* La tachadura sola no basta: no se ve en un lector de
                       pantalla ni en blanco y negro. El texto lo dice. */}
                   {reemplazada ? <> · <strong>{t("supersededLabel")}</strong></> : null}
-                  <PhotoUploadForm lotId={lot.id} parent={{ kind: "measurement", measurementId: m.id }} observers={observers} selfPersonId={selfPersonId} />
+                  {puedeRegistrar ? (
+                    <PhotoUploadForm lotId={lot.id} parent={{ kind: "measurement", measurementId: m.id }} observers={observers} selfPersonId={selfPersonId} />
+                  ) : null}
                   {/* Sólo se corrige lo vigente. Corregir una lectura ya
                       corregida bifurcaría el historial, y el servicio lo
                       rechaza; la página no ofrece lo que sería rechazado. */}
                   {!reemplazada ? (
                     <details>
                       <summary>{t("correctionSummary")}</summary>
-                      <MeasurementCorrectionForm
-                        lotId={lot.id}
-                        measurement={{
-                          id: m.id,
-                          variable: m.variable,
-                          value: m.value.toString(),
-                          unit: m.unit,
-                          occurredAt: m.occurredAt.toISOString(),
-                          provenanceClass: m.provenanceClass,
-                        }}
-                      />
+                      {puedeRegistrar ? (
+                        <MeasurementCorrectionForm
+                          lotId={lot.id}
+                          measurement={{
+                            id: m.id,
+                            variable: m.variable,
+                            value: m.value.toString(),
+                            unit: m.unit,
+                            occurredAt: m.occurredAt.toISOString(),
+                            provenanceClass: m.provenanceClass,
+                          }}
+                        />
+                      ) : null}
                     </details>
                   ) : null}
                 </li>
@@ -710,14 +777,16 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
             })}
           </ul>
         )}
-        <MeasurementForm
-          lotId={lot.id}
-          observers={observers}
-          selfPersonId={selfPersonId}
-          fermentationRunId={activeFermentation?.id ?? null}
-          dryingRunId={activeDrying?.id ?? null}
-          storageAssignmentId={currentStorage?.id ?? null}
-        />
+        {puedeRegistrar ? (
+          <MeasurementForm
+            lotId={lot.id}
+            observers={observers}
+            selfPersonId={selfPersonId}
+            fermentationRunId={activeFermentation?.id ?? null}
+            dryingRunId={activeDrying?.id ?? null}
+            storageAssignmentId={currentStorage?.id ?? null}
+          />
+        ) : null}
       </section>
 
       <section className="nn-section">
@@ -744,7 +813,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
             {samples.map((s) => (
               <li key={s.id}>
                 {s.sampleCode} ({s.sampleType})
-                <PhotoUploadForm lotId={lot.id} parent={{ kind: "sample", sampleId: s.id }} observers={observers} selfPersonId={selfPersonId} />
+                {puedeRegistrar ? (
+                  <PhotoUploadForm lotId={lot.id} parent={{ kind: "sample", sampleId: s.id }} observers={observers} selfPersonId={selfPersonId} />
+                ) : null}
               </li>
             ))}
           </ul>

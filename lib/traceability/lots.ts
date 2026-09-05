@@ -491,6 +491,33 @@ export function sampleWhereFromVisibility(visibility: LotVisibility): Prisma.Sam
   return { OR: scopeOrClauses(visibility) };
 }
 
+/**
+ * ¿Puede esta cuenta **registrar** en este lote?
+ *
+ * Pregunta al mismo guardia que usa la escritura en vez de reimplementar la
+ * regla, que es justo lo que hacía que la pantalla y el servicio pudieran
+ * discrepar: `/lots/[id]` ofrecía seis botones y 16 formularios sin consultar
+ * ningún permiso, y los 15 que exigen `lot:manage` los negaba el servicio
+ * después. Reimplementar aquí «proyecto o ubicación en el alcance» habría
+ * dejado fuera la clasificación, que `requireLotAccess` sí comprueba.
+ *
+ * Sólo se traga `TraceabilityAccessError` —la negativa—; cualquier otro error
+ * sube, porque un fallo de base leído como «no puedes» es un permiso denegado
+ * en silencio.
+ */
+export async function puedeGestionarLote(
+  userAccountId: string,
+  lot: { projectId?: string | null; locationId?: string | null; classification: ClassificationLevel },
+): Promise<boolean> {
+  try {
+    await requireLotAccess(userAccountId, "manage", [lot]);
+    return true;
+  } catch (error) {
+    if (error instanceof TraceabilityAccessError) return false;
+    throw error;
+  }
+}
+
 export function lotMatchesVisibility(lot: { projectId: string | null; locationId: string | null }, visibility: LotVisibility): boolean {
   if (visibility.mode === "all") return true;
   if (visibility.mode === "none") return false;
