@@ -825,11 +825,17 @@ columns, so a client *may* supply an id today with no migration. The
 `clientDraftId` route is preferable: it keeps the server authoritative
 over PKs while making replay idempotent, and it is already proven.
 
-**Blocking prerequisite:** `Lot.lotCode` and `Sample.sampleCode` are
-globally `@unique`. Two offline devices minting the same code collide on
-sync, and two organizations cannot use the same numbering. Change to
-`@@unique([organizationId, lotCode])`, or generate codes server-side at
-sync and let the device carry a provisional label.
+**Blocking prerequisite — ~~blocking~~ RESOLVED, verified 2026-09-04.**
+The original finding read: `Lot.lotCode` and `Sample.sampleCode` are
+globally `@unique`, so two offline devices minting the same code collide
+on sync and two organizations cannot use the same numbering.
+
+**P0 already fixed it.** `schema.prisma` now carries
+`@@unique([organizationId, lotCode])` and
+`@@unique([organizationId, sampleCode])`. Phase 4 does not start blocked,
+and a reader who takes this paragraph at face value will spend a day
+fixing something that is fixed. The recommendation is kept above only so
+the resolution can be checked against what was asked for.
 
 **Push.** Batched mutations, ordered by device sequence, each with
 `clientDraftId`, `recordedAt` (device), `deviceId`, and the operator's
@@ -1362,7 +1368,7 @@ every status claim in it aged badly.
 | **1 — Land foundation** | **Shipped.** `20260827214500_p1_land_foundation`, ADR-095. `PlantingCohort` and `HarvestEventSource` exist. |
 | **2 — Operator core** | **Closed, deliberately incomplete.** `FieldSession`, `FieldEvent`, process targets and the time-integrity columns shipped (`20260828131007`, `20260828131500`, ADR-098/099/101); `20260904150000` added GPS on `Asset` (§6) and `clock_offset_ms` (§5). **§1 (extend `Task`) and §2 (`TaskTemplate`) were deliberately not built — see ADR-107.** |
 | **3 — Quality and selection** | **Partial.** The selection slice of §57 shipped (`20260828143000_p3_selection`, ADR-103). Still missing: `OperatingStandard` and versioned thresholds, `Deviation` override records, `AssetAnnotation`, physical QC vocabulary (green-stage defects, screen size). |
-| **4 — API and sync** | **Not started.** No `Device` model; `app/api` holds only auth, export and the Stripe webhook; `clientDraftId` exists only inside the apiary module and was never generalised. |
+| **4 — API and sync** | **Not started; ticket written 2026-09-04** (`docs/implementation/46_P4_API_Y_SINCRONIZACION.md`). No `Device` model; `app/api` holds only auth, export and the Stripe webhook; `clientDraftId` exists only inside the apiary module and was never generalised. §18's "blocking prerequisite" is resolved — see the correction there. |
 | **5 — Android operator app** | **Not started.** No native client anywhere in either repository. |
 | **6 — Reporting** | **Not started.** `getLotReport` is still the only report. |
 | **7 — Geospatial** | **Not started**, as planned. `schema.prisma` still records in a comment that no boundary polygon exists. |
