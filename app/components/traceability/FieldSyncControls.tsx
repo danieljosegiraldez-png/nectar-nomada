@@ -95,12 +95,24 @@ export function FieldSyncControls() {
       </button>
       {ultimo ? (
         <>
-          <p role="status">{t("fieldSyncDone", { applied: ultimo.applied })}</p>
-          {ultimo.rejected > 0 ? (
-            <p className="nn-error" role="alert">
-              {t("fieldSyncRejected", { count: ultimo.rejected })}
+          {/* Un servidor caído NO es un rechazo, y decirlo así al operador
+              sería mentirle sobre su propio trabajo: nadie llegó a mirarlo.
+              Por eso este caso excluye el resumen de enviados en vez de
+              acompañarlo — no hay nada que resumir. */}
+          {ultimo.serverUnavailable ? (
+            <p className="nn-note" role="status">
+              {t("fieldSyncUnavailable")}
             </p>
-          ) : null}
+          ) : (
+            <>
+              <p role="status">{t("fieldSyncDone", { applied: ultimo.applied })}</p>
+              {ultimo.rejected > 0 ? (
+                <p className="nn-error" role="alert">
+                  {t("fieldSyncRejected", { count: ultimo.rejected })}
+                </p>
+              ) : null}
+            </>
+          )}
         </>
       ) : null}
     </div>

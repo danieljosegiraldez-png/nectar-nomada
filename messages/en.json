@@ -729,6 +729,7 @@
     "fieldSyncWorking": "Sending…",
     "fieldSyncDone": "{applied, plural, =0 {Nothing new to send} one {1 note sent} other {# notes sent}}",
     "fieldSyncRejected": "{count, plural, one {1 note was refused by the server} other {# notes were refused by the server}}. Look at them: retrying will not fix them.",
+    "fieldSyncUnavailable": "Could not send: the server did not respond. What you recorded is still here, untouched, and can be retried.",
     "fieldSyncOffline": "Offline. What you recorded is stored here and will be sent when signal returns.",
     "coordinatesLegend": "Coordinates",
     "coordinatesUseDevice": "Use the device's location",

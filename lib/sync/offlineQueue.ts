@@ -115,6 +115,42 @@ export interface SyncSummary {
   duplicate: number;
   rejected: number;
   stillPending: number;
+  /** El servidor no pudo responder. Nada se marcó como error: sigue en cola. */
+  serverUnavailable: boolean;
+}
+
+/**
+ * Qué significa el código de estado de un push, y por qué no basta con
+ * `res.ok`.
+ *
+ * La primera versión de este módulo trataba **todo** `!res.ok` como rechazo, y
+ * eso contradecía a su propia ruta: `app/api/v1/sync/field-events/route.ts`
+ * deja subir los errores inesperados precisamente para que el cliente los lea
+ * como «no llegué» y conserve la cola intacta. Un 500 marcaba las anotaciones
+ * como rechazadas y le decía al operador que el servidor había negado su
+ * trabajo, cuando lo que había pasado es que se cayó. Las dos mitades del mismo
+ * diseño, escritas con una hora de diferencia, discrepaban.
+ *
+ * Se extrae como función pura por el mismo motivo que `classifyDraftAge` en la
+ * cola de apiario: este repositorio no tiene `fake-indexeddb` ni entorno DOM,
+ * así que lo que toca IndexedDB o `fetch` no se puede probar aquí. La decisión
+ * sí, y es la parte que se puede equivocar en silencio.
+ *
+ * - `aplicar`   — el servidor respondió; hay un resultado por mutación que leer.
+ * - `reintentar`— el servidor no pudo atender (caído, saturado, tiempo agotado).
+ *                 Los borradores se quedan **pendientes**, no en error: nadie
+ *                 evaluó su contenido.
+ * - `rechazar`  — el servidor corrió y se negó al lote entero (aparato
+ *                 revocado, petición mal formada). Reintentar no lo arreglará.
+ */
+export type DecisionDeRespuesta = "aplicar" | "reintentar" | "rechazar";
+
+export function clasificarRespuesta(status: number): DecisionDeRespuesta {
+  if (status >= 200 && status < 300) return "aplicar";
+  // 5xx es el servidor cayéndose; 408 y 429 son «ahora no, vuelve». Ninguno de
+  // los tres es un juicio sobre lo que el operador anotó.
+  if (status >= 500 || status === 408 || status === 429) return "reintentar";
+  return "rechazar";
 }
 
 type ServerResult = { clientDraftId: string; status: "applied" | "duplicate" | "rejected"; reason?: string };
@@ -134,7 +170,9 @@ type ServerResult = { clientDraftId: string; status: "applied" | "duplicate" | "
  */
 export async function syncFieldEvents(): Promise<SyncSummary> {
   const drafts = (await listFieldEventDrafts()).filter((d) => d.status === "pending" || d.status === "error");
-  if (drafts.length === 0) return { applied: 0, duplicate: 0, rejected: 0, stillPending: 0 };
+  if (drafts.length === 0) {
+    return { applied: 0, duplicate: 0, rejected: 0, stillPending: 0, serverUnavailable: false };
+  }
 
   const deviceId = await ensureDeviceId();
   const res = await fetch("/api/v1/sync/field-events", {
@@ -149,14 +187,20 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   // El lote entero negado (aparato revocado) es una respuesta del servidor, no
   // una caída: marcarlo error evita reintentar para siempre algo que ya no va
   // a ser aceptado hasta que alguien reactive el aparato.
-  if (!res.ok) {
+  const decision = clasificarRespuesta(res.status);
+  if (decision === "reintentar") {
+    // No se toca ni un borrador: nadie ha evaluado su contenido. Quedan
+    // pendientes y el operador puede volver a darle a sincronizar.
+    return { applied: 0, duplicate: 0, rejected: 0, stillPending: drafts.length, serverUnavailable: true };
+  }
+  if (decision === "rechazar") {
     const razon = `HTTP ${res.status}`;
     for (const d of drafts) await write((s) => s.put({ ...d, status: "error", errorMessage: razon }));
-    return { applied: 0, duplicate: 0, rejected: drafts.length, stillPending: drafts.length };
+    return { applied: 0, duplicate: 0, rejected: drafts.length, stillPending: drafts.length, serverUnavailable: false };
   }
 
   const { results } = (await res.json()) as { results: ServerResult[] };
-  const resumen: SyncSummary = { applied: 0, duplicate: 0, rejected: 0, stillPending: 0 };
+  const resumen: SyncSummary = { applied: 0, duplicate: 0, rejected: 0, stillPending: 0, serverUnavailable: false };
 
   for (const r of results) {
     const draft = drafts.find((d) => d.id === r.clientDraftId);

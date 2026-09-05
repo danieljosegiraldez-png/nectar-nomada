@@ -729,6 +729,7 @@
     "fieldSyncWorking": "Enviando…",
     "fieldSyncDone": "{applied, plural, =0 {Nada nuevo que enviar} one {1 anotación enviada} other {# anotaciones enviadas}}",
     "fieldSyncRejected": "{count, plural, one {1 anotación fue rechazada por el servidor} other {# anotaciones fueron rechazadas por el servidor}}. Revísalas: reintentar no va a arreglarlas.",
+    "fieldSyncUnavailable": "No se pudo enviar: el servidor no respondió. Lo anotado sigue aquí, intacto, y se puede reintentar.",
     "fieldSyncOffline": "Sin conexión. Lo anotado está guardado aquí y se enviará cuando vuelva la señal.",
     "coordinatesLegend": "Coordenadas",
     "coordinatesUseDevice": "Usar la ubicación del dispositivo",

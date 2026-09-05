@@ -50,6 +50,7 @@ TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:55432/no-se-conecta" \
     tests/arquitectura/use-server-solo-async.test.ts \
     tests/arquitectura/booleanos-de-tres-estados.test.ts \
     tests/arquitectura/columnas-de-sincronizacion.test.ts \
+    tests/sync/clasificarRespuesta.test.ts \
     tests/archivo-de-estado.test.ts \
     tests/apiary/offlineQueue.test.ts \
     tests/backup/completeSet.test.ts \
