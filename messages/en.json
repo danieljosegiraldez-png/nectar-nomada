@@ -731,6 +731,8 @@
     "fieldSyncDone": "{applied, plural, =0 {Nothing new to send} one {1 note sent} other {# notes sent}}",
     "fieldSyncRejected": "{count, plural, one {1 note was refused by the server} other {# notes were refused by the server}}. Look at them: retrying will not fix them.",
     "fieldSyncUnavailable": "Could not send: the server did not respond. What you recorded is still here, untouched, and can be retried.",
+    "fieldDraftsPurged": "{count, plural, one {1 unsent note was deleted} other {# unsent notes were deleted}} after more than {dias} days on this device.",
+    "fieldDraftsStale": "{count, plural, one {1 note has been} other {# notes have been}} unsent for more than {dias} days. They are deleted after {purga}.",
     "fieldSyncOffline": "Offline. What you recorded is stored here and will be sent when signal returns.",
     "coordinatesLegend": "Coordinates",
     "coordinatesUseDevice": "Use the device's location",

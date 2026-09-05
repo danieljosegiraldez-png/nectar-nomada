@@ -670,3 +670,29 @@ Resuelto con `git restore --staged --worktree` y verificado **por presencia**
 HEAD` no vacío sobre un árbol rezagado de su puntero, reproducido en un repo
 de juguete—, no un verde sin control. Los dos checkouts compartidos quedan en
 `main` con el árbol coincidiendo con su `HEAD`.
+
+---
+
+### 2026-09-04 · Fase 4: el ticket y su primera rebanada, construida
+
+`46_P4_API_Y_SINCRONIZACION.md` (el ticket precede al código, como 41–44) y
+después la rebanada que nombra: **`Device`, `clientDraftId` en `FieldEvent`,
+push por lotes con resultado por mutación, y la PWA encolando sin señal.**
+`/api/v1/devices` y `/api/v1/sync/field-events`, ambas declaradas en el
+manifiesto de rutas.
+
+**Once tests, y dos flip-tests que enseñaron algo:** hay DOS guardias de
+idempotencia —el pre-chequeo del push y el del servicio— y los primeros seis
+tests sólo ejercían el primero. Se vio quitando el del servicio y viendo que
+nada fallaba. Ahora cada guardia tiene un test que se cae si lo borras.
+
+**Tres desviaciones del ticket, en ADR-108 con su razón:** sin carril de tokens
+(§2 no tendría llamador hasta la Fase 5 — ADR-107 aplicado a otra pieza), sin
+`organizationId` en `Device` (`ScopeType` no tiene `organization`, así que nada
+lo leería), y sin refactorizar la cola de apiario (su protocolo es de una en
+una; el de P4 es por lotes — la deuda queda escrita en la cabecera del módulo
+nuevo).
+
+**Falta la aceptación de campo**, que es de flujo y no de test: un evento
+anotado en modo avión, sincronizado al volver la señal. El código está; nadie
+lo ha recorrido en un navegador de verdad.

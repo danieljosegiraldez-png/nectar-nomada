@@ -202,29 +202,18 @@ export function getLastSyncAt(): number | null {
 // protection requirements (e.g. a client-supplied device-bound key via
 // WebAuthn/platform keystore), but not justified here against this
 // threat model.
-export const STALE_WARNING_DAYS = 7;
-export const STALE_PURGE_DAYS = 21;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-export type DraftAgeVerdict = "purge" | "warn" | "keep";
-
-/**
- * The age rule, separated from the storage it drives.
- *
- * `purgeStaleDrafts` below deletes a beekeeper's unsynced field work, so the
- * rule deciding that deserves to be readable and testable on its own — and it
- * could not be, entangled with IndexedDB calls that need a browser. Pulling it
- * out changes no behaviour: the boundaries and their order are the same.
- *
- * Order matters: `purge` is checked first, so a draft past the purge cutoff is
- * purged rather than merely warned about.
- */
-export function classifyDraftAge(createdAt: number, now: number): DraftAgeVerdict {
-  const ageDays = (now - createdAt) / DAY_MS;
-  if (ageDays >= STALE_PURGE_DAYS) return "purge";
-  if (ageDays >= STALE_WARNING_DAYS) return "warn";
-  return "keep";
-}
+// A5.5 §4 — la regla de edad vive ahora en `lib/sync/draftAge.ts`, porque la
+// cola de campo de P4 §10 necesita exactamente la misma y dos copias son dos
+// ventanas de exposición que se pueden separar sin que nadie lo note. Se
+// re-exporta para no tocar a los llamadores ni a los tests de este módulo, que
+// son los que garantizan que el traslado no cambió nada.
+export {
+  STALE_WARNING_DAYS,
+  STALE_PURGE_DAYS,
+  classifyDraftAge,
+  type DraftAgeVerdict,
+} from "../sync/draftAge";
+import { classifyDraftAge } from "../sync/draftAge";
 
 export async function purgeStaleDrafts(): Promise<{ purged: number; warningCount: number }> {
   const drafts = await listDrafts();

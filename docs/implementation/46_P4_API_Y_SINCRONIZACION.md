@@ -256,12 +256,36 @@ Esto es exactamente lo que §4 de `SESSION_STATE.md` ya recoge para
 `operatorPersonId`: no es una frontera de seguridad, y hay un test que rompe
 si alguien lo endurece por descuido.
 
+**Estado al 2026-09-05: la mitad está hecha desde antes de este ticket.** El
+cambio de atribución funciona —el formulario de evento ofrece «quién, si no
+quien abrió la jornada», y `pushFieldEvents` lleva `operatorPersonId` por
+mutación— y la decisión de que eso NO es autorización está registrada y
+protegida por `tests/traceability/batchPageData.test.ts`, que comprueba que
+`getObserverCandidates` devuelve toda Persona activa **a propósito**.
+
+**Lo que falta es el conjunto de operadores del aparato**, y está bloqueado en
+la decisión que este ticket ya listaba como de Daniel: si el teléfono del
+molino es compartido o personal. `Device.operatorPersonId` es hoy un único
+campo anulable; un conjunto pide una tabla, y construirla para un escenario que
+nadie ha confirmado que exista es la forma que ADR-107 rechazó. **No se
+construye hasta que la respuesta llegue.**
+
 ---
 
 ## 10. Caducidad de borradores sin sincronizar
 
 Se conserva el concepto de A5.5: avisar a los 7 días, purgar a los 21. Viven
 en almacenamiento local en claro.
+
+**Construido el 2026-09-05, y la regla NO se copió.** `classifyDraftAge` y sus
+dos constantes se movieron de `lib/apiary/offlineQueue.ts` a
+`lib/sync/draftAge.ts`; apiario la re-exporta desde ahí. Dos copias de «7 y 21»
+serían dos ventanas de exposición para el mismo riesgo, separables sin que nadie
+lo note — y hay un test que falla si alguien vuelve a definirla aparte, incluso
+con los mismos valores.
+
+La pantalla **dice lo purgado**: un borrado silencioso de trabajo de campo es
+indistinguible de haberlo perdido.
 
 ---
 
