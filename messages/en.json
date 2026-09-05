@@ -671,6 +671,8 @@
     "recordHarvestSourcesButton": "Record the blocks",
     "error_harvest_sources": "Could not record: {detail}",
     "harvestSourcesNothingWeighedYet": "no block weights yet",
+    "harvestSourcesUnweighedWarning": "{count, plural, one {1 recorded contribution has no weight} other {# recorded contributions have no weight}}: their cherry is NOT in this sum, so the difference overstates what is actually missing.",
+    "harvestSourcesHiddenWarning": "{count, plural, one {1 contribution is not visible with your permissions} other {# contributions are not visible with your permissions}}: they are not in this sum either.",
     "cohortCreateSummary": "Record a planting in this plot",
     "cohortCreateIntro": "Everything except “how this is known” is optional. What you leave blank stays not recorded, which is not the same as zero.",
     "cohortCreateButton": "Record the planting",
