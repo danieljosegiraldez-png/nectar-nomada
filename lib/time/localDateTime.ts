@@ -56,3 +56,37 @@ export function parseLocalDateTime(wallClock: string, offsetMinutes: string | nu
 export function parseOptionalLocalDateTime(wallClock: string, offsetMinutes: string | null): Date | null {
   return wallClock.trim() ? parseLocalDateTime(wallClock, offsetMinutes) : null;
 }
+
+/**
+ * El inverso exacto de `parseLocalDateTime`: de un instante al reloj de pared
+ * que hay que poner en un `datetime-local` **de este dispositivo**.
+ *
+ * **El fallo que esto arregla, y es de datos, no de pantalla.**
+ * `MeasurementCorrectionForm` precargaba el campo con
+ * `measurement.occurredAt.slice(0, 16)` — el reloj de pared en UTC. El campo es
+ * `datetime-local` y el formulario manda `TZ_OFFSET_FIELD`, así que al guardar
+ * el servidor re-interpretaba ese reloj como hora local. Demostrado el
+ * 2026-09-05 con la ida y vuelta completa:
+ *
+ *     en la base              2026-09-05T16:31:00.000Z
+ *     el campo mostraba       2026-09-05T16:31
+ *     se volvía a guardar     2026-09-05T21:31:00.000Z   (+5 h)
+ *
+ * Abrir una corrección y guardar **sin tocar la hora** movía la medición cinco
+ * horas. Cada vez. Sobre un registro de trazabilidad, y en silencio.
+ *
+ * **Por qué la zona del dispositivo y no la de la finca.** Este valor lo va a
+ * releer `parseLocalDateTime` con el desfase que manda ESTE dispositivo. El
+ * reloj de pared tiene que estar en esa misma zona o la vuelta no cierra —
+ * aunque para MOSTRAR una fecha la zona correcta sea la del sitio
+ * (`lib/time/mostrarInstante.ts`). Son dos preguntas distintas.
+ *
+ * **Sólo tiene sentido en el navegador.** En el servidor `getTimezoneOffset()`
+ * devuelve el desfase del servidor —0 en producción—, que es justo el valor
+ * equivocado. Quien lo use debe hacerlo en un efecto, como `TimezoneOffsetField`.
+ */
+export function paraCampoLocal(instante: Date): string {
+  const desfase = instante.getTimezoneOffset();
+  const comoSiFueraUtc = new Date(instante.getTime() - desfase * 60_000);
+  return comoSiFueraUtc.toISOString().slice(0, 16);
+}

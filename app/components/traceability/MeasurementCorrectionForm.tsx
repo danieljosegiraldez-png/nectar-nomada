@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { correctMeasurementFormAction, type TraceabilityActionState } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
+import { paraCampoLocal } from "../../../lib/time/localDateTime";
 
 const initialState: TraceabilityActionState = {};
 
@@ -51,6 +52,21 @@ export function MeasurementCorrectionForm({
   const [state, formAction, pending] = useActionState(correctMeasurementFormAction, initialState);
   const id = (campo: string) => `${campo}-${measurement.id}`;
 
+  /**
+   * El reloj de pared se escribe en el DOM al montar, no se renderiza en el
+   * servidor: mismo motivo que `TimezoneOffsetField`. El valor depende de la
+   * zona del DISPOSITIVO, y en el servidor sería la suya —0 en producción—.
+   *
+   * Antes esto era `defaultValue={measurement.occurredAt.slice(0, 16)}`, el
+   * reloj de pared en UTC. Como el campo se re-interpreta con el desfase del
+   * dispositivo, guardar sin tocar la hora adelantaba la medición cinco horas.
+   * Ver `paraCampoLocal` para la ida y vuelta medida.
+   */
+  const refCuando = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (refCuando.current) refCuando.current.value = paraCampoLocal(new Date(measurement.occurredAt));
+  }, [measurement.occurredAt]);
+
   return (
     <form action={formAction} className="nn-form">
       <TimezoneOffsetField />
@@ -95,7 +111,8 @@ export function MeasurementCorrectionForm({
           type="datetime-local"
           name="occurredAt"
           required
-          defaultValue={measurement.occurredAt.slice(0, 16)}
+          ref={refCuando}
+          defaultValue=""
         />
       </div>
 
