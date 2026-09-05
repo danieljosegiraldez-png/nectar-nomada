@@ -800,3 +800,59 @@ cae uno solo, nombrando la línea. La compuerta sigue sin correr `next build`.
   que pasa en una PR es el de *preview* y no dice nada de producción. El que sí
   lo dice es `gh api repos/<owner>/<repo>/commits/<sha>/status`, y después el
   log de construcción, que nombra cada migración aplicada.
+
+---
+
+### 2026-09-05 · P4 §5: el pull por cursor, y una línea falsa de mi propio ticket
+
+`GET /api/v1/sync/field-work`. Paginación **por clave** `(marca, id)`, nunca por
+desplazamiento: un `skip/take` sobre datos que cambian mientras se pagina salta
+filas, y aquí una fila saltada es trabajo de campo que el aparato no vuelve a
+ver.
+
+**El ticket §5 estaba mal y lo dijo la construcción.** Daba por hecho que
+`FieldSession` tenía `updatedAt`; no lo tenía, y **sí cambia** —`endFieldSession`
+la cierra—, así que un aparato que la descargó abierta no se habría enterado
+nunca. Columna añadida, y la regla reescrita para que sirva a la próxima tabla:
+*la marca del cursor es la que se mueve cuando el hecho cambia.* `FieldEvent`
+sigue por `createdAt` porque nada lo actualiza — comprobado, cero sitios.
+
+**Siete tests y tres flip-tests, cada uno golpeando su propia propiedad:** quitar
+el filtro de ámbito tumba sólo el de la fuga; quitar el desempate por id tumba
+sólo el de las marcas empatadas; poner `createdAt` donde va `updatedAt` tumba
+sólo el de la jornada que cierra. Ningún guardia hace doble trabajo.
+
+**Un límite aceptado a ojos abiertos:** el ámbito se resuelve llamando a `can()`
+por Location — N+1 con N=16 en producción. La alternativa era una segunda copia
+de la resolución de ámbitos, y un ámbito de RBAC que deriva del real es un fallo
+de seguridad silencioso. Escrito en el código qué hacer si llega a miles.
+
+---
+
+### 2026-09-05 · P4 §7: la cola de medios, y dos flip-tests que no discriminaban
+
+`POST /api/v1/sync/field-media` en dos pasos: el servidor firma una URL y
+**nunca sostiene los bytes**. **Sin cambio de esquema**, y ésa es la decisión:
+la lectura obvia de §7 —colgar la foto de un evento anterior— exigiría
+actualizar ese evento, y `FieldEvent` es append-only porque el pull por cursor
+de §5 **ya depende de ello**. Una foto de campo **es** un `FieldEvent` de tipo
+`foto`; el catálogo ya los tenía.
+
+**Dos flip-tests fallaron antes de que uno funcionara, y eso es el hallazgo.**
+El test de atomicidad pasaba con y sin `$transaction`: forzaba el fallo en la
+primera escritura, así que nunca había estado a medias. Reescrito, seguía sin
+discriminar — un sondeo lo explicó: el `Asset` usa el mismo `operatorPersonId`
+como `creatorPersonId`, así que **ningún input puede romper el evento sin
+romper antes el Asset**. La atomicidad no es provocable por la interfaz
+pública, y ahora el archivo lo dice en vez de insinuarlo.
+
+Lo que quedó del intento es un defecto real: faltaba comprobar que la Persona
+existe —la misma que `recordFieldEvent` tiene desde que una revisión la pidió—
+y sin ella un id mal tecleado daba un error opaco de clave foránea.
+
+**Y una lección de arnés:** una de esas mutaciones rompió la sintaxis en vez de
+mutar, y «no tests» se lee como «no falló». Desde entonces cada mutación
+imprime el sha antes y después y si el archivo compila.
+
+Diez tests. Tres guardias con flip-test que sí discrimina: prefijo de la clave
+de almacenamiento, idempotencia y Persona inexistente.

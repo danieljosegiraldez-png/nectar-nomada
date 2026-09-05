@@ -3691,6 +3691,26 @@ model Device {
   lastSeenAt   DateTime? @map("last_seen_at")
   revokedAt    DateTime? @map("revoked_at")
 
+  // P4 §2 (46_P4_API_Y_SINCRONIZACION.md) — el carril de tokens, construido
+  // cuando la Fase 5 lo pidió: un cliente nativo no puede usar la cookie de
+  // sesión de la PWA.
+  //
+  // Se guarda el HASH del refresh, nunca el token. Quien lea la base no puede
+  // suplantar a un aparato — que es exactamente lo que un volcado robado o un
+  // backup mal guardado permitirían si estuviera en claro.
+  //
+  // SHA-256 y no argon2, a diferencia de `UserAccount.passwordHash`: un refresh
+  // token son 32 bytes aleatorios, no una contraseña humana. El endurecimiento
+  // de argon2 existe para resistir fuerza bruta sobre baja entropía; aquí no hay
+  // qué adivinar, y encarecer cada refresco no compra nada.
+  //
+  // Sin rotación en esta versión: un refresh usado no se reemplaza. Es una
+  // mitigación real contra el robo del token, pero pide manejar la carrera de
+  // dos refrescos simultáneos, y un aparato de campo con mala cobertura los
+  // produce. Se anota como pendiente en vez de hacerse a medias.
+  refreshTokenHash      String?   @unique @map("refresh_token_hash")
+  refreshTokenIssuedAt  DateTime? @map("refresh_token_issued_at")
+
   createdBy String?      @map("created_by") @db.Uuid
   creator   UserAccount? @relation("DeviceCreatedBy", fields: [createdBy], references: [id])
 

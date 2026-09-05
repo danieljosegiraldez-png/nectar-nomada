@@ -37,6 +37,36 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-05 · La Fase 5 arranca por el ticket, y su prerrequisito ya está hecho
+
+**El ticket `47_P5_CLIENTE_ANDROID.md`, y NADA de código nativo**, porque
+medirlo primero dijo que no se puede: esta máquina no tiene Android Studio, ni
+SDK, ni `adb`; quedan 6,2 GB libres (Studio con emulador son ~15) y no se conoce
+ningún teléfono Android físico, que el audit exige para validar en gama baja.
+
+**El prerrequisito sí se construyó: §2, el carril de tokens** —que pertenece al
+ticket 46, no a la Fase 5—. ADR-108 lo aplazó «hasta que exista un cliente
+nativo que lo llame»; medir la Fase 5 fue darse cuenta de que **ese día es
+éste**, porque un cliente nativo no puede usar la cookie de la PWA.
+
+`POST /api/v1/auth/device`, `POST /api/v1/auth/token`, y `resolverPrincipal`
+para que las cinco rutas de sincronización acepten cookie o Bearer sin saber
+cuál fue. Refresh **hasheado** en la base; access firmado con clave derivada y
+guardado en ninguna parte. Trece tests y cuatro flip-tests: guardar el refresh
+en claro, ignorar la revocación, distinguir correo desconocido de contraseña
+mala (un oráculo de qué correos tienen cuenta), y firmar con `AUTH_SECRET` en
+crudo.
+
+**Dos cosas que el guardia de rutas me obligó a hacer bien.** Sustituir
+`getCurrentUser` por `resolverPrincipal` rompió su contraste: le enseñé la señal
+nueva y **le hice flip-test**, para comprobar que sigue cazando una ruta que de
+verdad no identifica a nadie. Y `revocarAparato` no tenía llamador fuera de mis
+tests: la quité en vez de declararla.
+
+**Lo que la Fase 5 necesita de Daniel** está en §3 de su ticket: si hay
+teléfono, si se instala Studio o se va por Expo Go, quién lleva el aparato —13
+de 14 personas siguen sin contraseña— y si antes o después de la cosecha.
+
 ### 2026-09-05 · P4 §10 cerrada, §9 a medias y bloqueada en Daniel
 
 **§10 — la purga de borradores rancios, sin copiar la regla.** `classifyDraftAge`
@@ -86,58 +116,6 @@ firmar con `AUTH_SECRET` en crudo, y no comprobar la firma.
 **Con esto la Fase 4 queda casi cerrada.** Faltan la subida reanudable, §9
 (cambio de operador) y §10 (purga de borradores rancios), más el carril de
 tokens de §2, aplazado hasta que exista cliente nativo.
-
-### 2026-09-05 · P4 §7: la cola de medios, y dos flip-tests que no discriminaban
-
-`POST /api/v1/sync/field-media` en dos pasos: el servidor firma una URL y
-**nunca sostiene los bytes**. **Sin cambio de esquema**, y ésa es la decisión:
-la lectura obvia de §7 —colgar la foto de un evento anterior— exigiría
-actualizar ese evento, y `FieldEvent` es append-only porque el pull por cursor
-de §5 **ya depende de ello**. Una foto de campo **es** un `FieldEvent` de tipo
-`foto`; el catálogo ya los tenía.
-
-**Dos flip-tests fallaron antes de que uno funcionara, y eso es el hallazgo.**
-El test de atomicidad pasaba con y sin `$transaction`: forzaba el fallo en la
-primera escritura, así que nunca había estado a medias. Reescrito, seguía sin
-discriminar — un sondeo lo explicó: el `Asset` usa el mismo `operatorPersonId`
-como `creatorPersonId`, así que **ningún input puede romper el evento sin
-romper antes el Asset**. La atomicidad no es provocable por la interfaz
-pública, y ahora el archivo lo dice en vez de insinuarlo.
-
-Lo que quedó del intento es un defecto real: faltaba comprobar que la Persona
-existe —la misma que `recordFieldEvent` tiene desde que una revisión la pidió—
-y sin ella un id mal tecleado daba un error opaco de clave foránea.
-
-**Y una lección de arnés:** una de esas mutaciones rompió la sintaxis en vez de
-mutar, y «no tests» se lee como «no falló». Desde entonces cada mutación
-imprime el sha antes y después y si el archivo compila.
-
-Diez tests. Tres guardias con flip-test que sí discrimina: prefijo de la clave
-de almacenamiento, idempotencia y Persona inexistente.
-
-### 2026-09-05 · P4 §5: el pull por cursor, y una línea falsa de mi propio ticket
-
-`GET /api/v1/sync/field-work`. Paginación **por clave** `(marca, id)`, nunca por
-desplazamiento: un `skip/take` sobre datos que cambian mientras se pagina salta
-filas, y aquí una fila saltada es trabajo de campo que el aparato no vuelve a
-ver.
-
-**El ticket §5 estaba mal y lo dijo la construcción.** Daba por hecho que
-`FieldSession` tenía `updatedAt`; no lo tenía, y **sí cambia** —`endFieldSession`
-la cierra—, así que un aparato que la descargó abierta no se habría enterado
-nunca. Columna añadida, y la regla reescrita para que sirva a la próxima tabla:
-*la marca del cursor es la que se mueve cuando el hecho cambia.* `FieldEvent`
-sigue por `createdAt` porque nada lo actualiza — comprobado, cero sitios.
-
-**Siete tests y tres flip-tests, cada uno golpeando su propia propiedad:** quitar
-el filtro de ámbito tumba sólo el de la fuga; quitar el desempate por id tumba
-sólo el de las marcas empatadas; poner `createdAt` donde va `updatedAt` tumba
-sólo el de la jornada que cierra. Ningún guardia hace doble trabajo.
-
-**Un límite aceptado a ojos abiertos:** el ámbito se resuelve llamando a `can()`
-por Location — N+1 con N=16 en producción. La alternativa era una segunda copia
-de la resolución de ámbitos, y un ámbito de RBAC que deriva del real es un fallo
-de seguridad silencioso. Escrito en el código qué hacer si llega a miles.
 
 ## 3. Bloqueado, y en qué
 

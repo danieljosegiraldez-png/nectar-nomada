@@ -10,7 +10,7 @@
  * Lo que sí es 4xx: el lote entero negado (aparato desconocido o revocado) y el
  * cuerpo mal formado.
  */
-import { getCurrentUser } from "../../../../../lib/auth/session";
+import { resolverPrincipal } from "../../../../../lib/sync/requestPrincipal";
 import { pushFieldEvents, DeviceError, type PushMutation } from "../../../../../lib/sync/pushFieldEvents";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,8 @@ function toDate(v: unknown): Date | null {
 }
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
+  // P4 §2 — cookie o token de aparato, indistinto para esta ruta.
+  const user = await resolverPrincipal(request);
   if (!user) return Response.json({ error: "not_authenticated" }, { status: 401 });
 
   let body: unknown;

@@ -10,13 +10,14 @@
  * revocar. La caducidad es el techo para un aparato sin señal, no una excusa
  * para no releer cuando sí la hay.
  */
-import { getCurrentUser } from "../../../../../lib/auth/session";
+import { resolverPrincipal } from "../../../../../lib/sync/requestPrincipal";
 import { issueAuthorizationSnapshot, SnapshotError } from "../../../../../lib/sync/authorizationSnapshot";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const user = await getCurrentUser();
+export async function GET(request: Request) {
+  // P4 §2 — cookie o token de aparato, indistinto para esta ruta.
+  const user = await resolverPrincipal(request);
   if (!user) return Response.json({ error: "not_authenticated" }, { status: 401 });
 
   try {

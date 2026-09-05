@@ -14,13 +14,14 @@
  *
  * Toda la validación vive en `lib/sync/devices.ts`: aquí sólo se traduce HTTP.
  */
-import { getCurrentUser } from "../../../../lib/auth/session";
+import { resolverPrincipal } from "../../../../lib/sync/requestPrincipal";
 import { registerDevice, DeviceValidationError } from "../../../../lib/sync/devices";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
+  // P4 §2 — cookie o token de aparato, indistinto para esta ruta.
+  const user = await resolverPrincipal(request);
   if (!user) return Response.json({ error: "not_authenticated" }, { status: 401 });
 
   let body: unknown;
