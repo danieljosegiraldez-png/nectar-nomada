@@ -37,6 +37,30 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-05 · P4 §8: la instantánea de autorización, que a propósito no autoriza
+
+`GET /api/v1/sync/authorization`. HMAC con clave **derivada de `AUTH_SECRET` por
+propósito** —separación de claves, sin variable nueva que pedirle a Daniel— y
+techo de 14 días.
+
+**Qué añade sobre el pull, que ya devuelve las Locations:** *qué* puede hacer el
+operador en cada sitio, y sobre todo **una caducidad**. La lista del pull no
+tiene ninguna, así que un aparato perdido podría seguir preparando trabajo para
+siempre contra un ámbito revocado. Ésa es la propiedad entera de §8.
+
+**El test que más importa demuestra que la instantánea NO sirve de nada como
+autoridad:** una forjada que se conceda otro lote no consigue escribir —
+`startFieldSession` y `recordFieldEvent` siguen negando. Si eso fallara,
+habríamos convertido una ayuda de interfaz en una frontera de seguridad.
+
+Siete tests. Tres flip-tests, cada uno con su sha antes/después y comprobando
+que el archivo compila —la lección del arnés de ayer—: quitar la caducidad,
+firmar con `AUTH_SECRET` en crudo, y no comprobar la firma.
+
+**Con esto la Fase 4 queda casi cerrada.** Faltan la subida reanudable, §9
+(cambio de operador) y §10 (purga de borradores rancios), más el carril de
+tokens de §2, aplazado hasta que exista cliente nativo.
+
 ### 2026-09-05 · P4 §7: la cola de medios, y dos flip-tests que no discriminaban
 
 `POST /api/v1/sync/field-media` en dos pasos: el servidor firma una URL y
