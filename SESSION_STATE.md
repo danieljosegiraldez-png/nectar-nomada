@@ -119,6 +119,37 @@ tokens de §2, aplazado hasta que exista cliente nativo.
 
 ## 3. Bloqueado, y en qué
 
+#### Lo que se vio al recorrer las pantallas en un móvil de verdad
+
+**2026-09-05, primera vez que alguien las usa** — hasta hoy todo lo que se sabía
+de ellas venía de tests. Sesión con sesión iniciada, 375×812, datos de la copia
+local. Se arregló lo objetivo (PR #166, la tabla que desplazaba la página); lo
+de abajo **queda abierto porque es decisión de producto, no arreglo mecánico**.
+
+- **El guardia de navegación afirma lo contrario de lo que pasa.**
+  `tests/navigation.test.ts` exige `nav.length <= 8` para «even the most
+  privileged viewer» y dice que consolidó «the fixed ten-item bar this
+  replaced». Medido: `NAV` tiene **10 entradas** y su unión real de permisos son
+  **18**; el fixture `PLATFORM_ADMIN` del test es una lista de **10 permisos
+  escrita a mano** a la que le faltan `platform:manage_permissions` y los de
+  contenido — justo los dos que abren las dos entradas de más. Por eso pasa en
+  verde. **Arreglar el fixture lo pone en rojo con 10**, y elegir entre acortar
+  el menú o mover el objetivo es de Daniel; lo eligió dejar así el 2026-09-05.
+  En el teléfono son **234 px de cabecera en tres filas: el 29 % de la pantalla**
+  antes de ver nada.
+- **«Batches» en una interfaz en español.** El menú ofrece «Lotes» para
+  `/plots` (parcelas de terreno) y **«Batches»** para `/lots` (lotes de café).
+  Quien busque sus lotes de café pulsará «Lotes» y verá terreno.
+- **`/plots` no ofrece nada que pulsar.** Cero botones de acción; 2,6 pantallas
+  de scroll donde las once entradas repiten «Sin registrar» y «Aún no hay
+  condiciones de terreno registradas», once veces cada una. Es lo que abre un
+  operario en el campo.
+- **Lo que sí aguantó:** cero objetivos de toque por debajo de 44 px en un
+  formulario de 134 campos.
+
+**Y lo que esto no prueba.** Fue un ratón sobre una pantalla de 375 px: ni
+guantes, ni sol, ni una conexión que se cae a mitad de un formulario. Sigue
+faltando que una persona registre un dato real en el campo.
 
 #### Un vocabulario de procedencia por formulario, y nadie lo declaró
 
