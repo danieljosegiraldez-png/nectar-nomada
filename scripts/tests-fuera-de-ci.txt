@@ -1,0 +1,86 @@
+# Pruebas que NO corren en CI, y por qué. `scripts/ci.sh` corre TODO lo demás.
+#
+# La lista es de EXCLUSIÓN a propósito. Antes era de inclusión, escrita a mano
+# en `ci.sh`, y se desincronizó en silencio: el 2026-09-05 corrían 22 de 97
+# archivos y 17 de los ausentes no necesitaban base para nada. Una lista de
+# inclusión pierde cobertura callándose; una de exclusión se queja:
+#
+#   · si añades una prueba que necesita base y no la apuntas aquí, CI se pone
+#     en rojo al no poder conectar, y el error dice cuál es;
+#   · si apuntas una ruta que ya no existe, `tests/ci-cobertura.test.ts` falla.
+#
+# Qué NO es criterio: «importa lib/db». Se probó y clasifica mal. Esta lista se
+# midió EJECUTANDO la suite contra la URL inconectable que usa CI:
+#   TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/no-se-conecta npx vitest run
+
+# ── Necesitan una base de datos ──────────────────────────────────────────────
+# `npm run test:db -- up` restaura un backup verificado que no existe en un
+# runner. Meterlas en CI daría rojo por falta de base, que es justo el fallo que
+# `ci.sh` existe para evitar.
+tests/apiary/ambitoVacioApiarios.test.ts
+tests/apiary/colonyEvents.test.ts
+tests/apiary/e2e.test.ts
+tests/apiary/harvest.test.ts
+tests/apiary/hives.test.ts
+tests/apiary/inspections.test.ts
+tests/apiary/media.test.ts
+tests/auth/googleLinking.test.ts
+tests/auth/setPassword.test.ts
+tests/content/stories.test.ts
+tests/discover/service.test.ts
+tests/partner/projectClassification.test.ts
+tests/rbac/admin.test.ts
+tests/research/amendments.test.ts
+tests/research/ro1-2.test.ts
+tests/research/ro1.test.ts
+tests/seed/organizationGuard.test.ts
+tests/sensory/classificationGate.test.ts
+tests/sensory/descriptors.test.ts
+tests/sync/authorizationSnapshot.test.ts
+tests/sync/deviceOperator.test.ts
+tests/sync/deviceTokens.test.ts
+tests/sync/fieldMedia.test.ts
+tests/sync/pullFieldWork.test.ts
+tests/sync/pushFieldEvents.test.ts
+tests/traceability/ambitoVacio.test.ts
+tests/traceability/batchPageData.test.ts
+tests/traceability/biocharBatches.test.ts
+tests/traceability/classificationGate.test.ts
+tests/traceability/drying.test.ts
+tests/traceability/e2e.test.ts
+tests/traceability/export.test.ts
+tests/traceability/f1.test.ts
+tests/traceability/fermentation.test.ts
+tests/traceability/fieldSessions.test.ts
+tests/traceability/formularioSinAmbito.test.ts
+tests/traceability/harvest.test.ts
+tests/traceability/landMedia.test.ts
+tests/traceability/lots.test.ts
+tests/traceability/massBalance.test.ts
+tests/traceability/measurements.test.ts
+tests/traceability/media.test.ts
+tests/traceability/operations.test.ts
+tests/traceability/organizacionAcotada.test.ts
+tests/traceability/plantingCohorts.test.ts
+tests/traceability/processTargets.test.ts
+tests/traceability/quantity.test.ts
+tests/traceability/recipeAuthoring.test.ts
+tests/traceability/recipeVersions.test.ts
+tests/traceability/reports.test.ts
+tests/traceability/roasting.test.ts
+tests/traceability/s1.test.ts
+tests/traceability/samples.test.ts
+tests/traceability/selection.test.ts
+tests/traceability/soilProfiles.test.ts
+tests/traceability/soilSamples.test.ts
+tests/traceability/storage.test.ts
+tests/traceability/v1-vocabulary.test.ts
+
+# ── Dependen de estado personal de la máquina ────────────────────────────────
+# La prueba P-E lee `$HOME/.zshrc` a través de `scripts/open-decisions.sh`. Un
+# veredicto de CI no debe depender de los dotfiles de nadie. Se corre en local.
+#
+# Cuidado: ésta **pasa** contra la base inconectable, así que la regla por sí
+# sola la metería en CI. Está aquí por una razón distinta, y por eso la lista
+# tiene dos secciones en vez de llamarse «las que necesitan base».
+tests/open-decisions.test.ts

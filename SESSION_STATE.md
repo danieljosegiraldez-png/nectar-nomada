@@ -187,20 +187,17 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   en un `include` a-uno: una organización `confidential` vuelve `null`—; y ni
   `DomainTag` ni `ProductVariant` llevan clasificación.
 
-  El cuarto es real pero **latente, no una fuga viva**, y conviene decirlo así:
-  `getLotDetail`/`getLotList` gatean por la clasificación del **lote** y luego
-  traían `organization: true`, es decir `contactEmail`, `contactPhone`,
-  `websiteUrl` y `attributes` de una organización que tiene clasificación
-  propia y no se comprueba. Una sonda contra la base confirmó que ese correo
-  vuelve. Lo que impide que salga hoy son los datos y el hábito, no el código:
-  ningún consumidor usa más que `name`, los componentes cliente reciben
-  `{ id, name }`, la exportación escribe sólo `.name`, y en producción hay
-  **0 de 43** lotes menos restringidos que su organización. Arreglado acotando
-  a `{ id, name }` en los dos sitios; el flip-test —devolver `organization:
-  true`— tumba las dos pruebas nuevas por nombre.
+  El cuarto es real pero **latente, no una fuga viva**:
+  `getLotDetail`/`getLotList` gatean por la clasificación del **lote** y traían
+  `organization: true` —`contactEmail`, `contactPhone`, `websiteUrl`,
+  `attributes`— de una organización con clasificación propia que ahí no se
+  comprueba; una sonda confirmó que el correo vuelve. Lo que impide que salga
+  son los datos y el hábito, no el código: nadie usa más que `name` y hay
+  **0 de 43** lotes menos restringidos que su organización. Acotado a
+  `{ id, name }`; el flip-test tumba las dos pruebas nuevas por nombre.
 
-  De paso, una trampa del instrumento: escribir el nombre de un guardia seguido
-  de paréntesis **dentro de un comentario** asciende a guardia la declaración
+  Trampa del instrumento: el nombre de un guardia seguido de paréntesis
+  **dentro de un comentario** asciende a guardia la declaración
   que lo contenga en `scripts/inventario-de-acceso.mjs`. Movió
   `getActiveOperations` de clase sin que nadie la tocara, y el guardia de cifras
   lo cazó. Queda anotado en el propio comentario.
@@ -242,20 +239,15 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   `HarvestSourcesForm` gateado con **su propio** permiso, para no esconderlo a
   quien sí puede usarlo.
 
-  **Medido, después de que Daniel dijera que varias cuentas ven y no gestionan
-  — tenía razón.** Sobre la copia restaurada (fresca: 43 lotes, los mismos que
-  producción, y la última cuenta creada ese mismo día), **3 de 14** cuentas
-  reales ven lotes y no pueden gestionarlos: Chini Ameglio, Chris Huerbsch y
-  Rory Beitia. Las tres están en `invited` y **sin correo**, así que hoy no
-  entra ninguna: el formulario muerto no lo ha visto nadie todavía, y lo verán
-  las tres el día que P-C se desbloquee. La sonda contra Neon vivo quedó
-  bloqueada por el clasificador y no se rodeó; esto se midió contra la copia,
-  que es lo que había. Excluir los fixtures `TEST %` es lo que baja el total de
-  20 a 14 — sin ese filtro el recuento cuenta la propia suite.
+  **Medido, y Daniel tenía razón:** sobre la copia restaurada (fresca: 43
+  lotes, como producción), **3 de 14** cuentas reales ven lotes y no pueden
+  gestionarlos —Chini Ameglio, Chris Huerbsch, Rory Beitia—, las tres en
+  `invited` y **sin correo**: hoy no entra ninguna, y lo verán el día que P-C se
+  desbloquee. Excluir los fixtures `TEST %` baja el total de 20 a 14; sin ese
+  filtro el recuento cuenta la propia suite.
 
-  **Del método:** prettier **no** es el formateador de este proyecto —no está
-  en `package.json` ni en `ci.sh`, y estos archivos no están limpios en `main`—.
-  Pasarlo a `app/lots/page.tsx` reescribió 92 líneas para un cambio de 11.
+  **Del método:** prettier **no** es el formateador de este proyecto —ni en
+  `package.json` ni en `ci.sh`—; pasarlo reescribió 92 líneas por un cambio de 11.
 
   **Los «seis sitios» de la segunda lente eran uno.** Medidos de uno en uno:
   dos son ayudantes que devuelven un `where`, uno es un predicado donde `false`
@@ -268,6 +260,16 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
 
   **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes, y los
   estados de carga que mienten.
+- **CI corría 22 de 97 archivos de prueba**, nombrados a mano sin nada que
+  vigilara la lista; **17 de los ausentes no necesitaban base**. Invertida a
+  exclusión (`scripts/tests-fuera-de-ci.txt`, con su motivo por sección): CI
+  corre todo lo demás — **39 archivos, 414 pruebas** — y `ci-cobertura.test.ts`
+  caza la ruta muerta. El criterio se midió **ejecutando** contra la URL
+  inconectable: «importa `lib/db`» clasifica mal, y `open-decisions.test.ts`
+  pasa sin base pero lee `$HOME/.zshrc`. **Siguen fuera los 59 que necesitan
+  base, incluidos los cuatro guardias de las lentes**: pide un Postgres de
+  servicio, y antes medir si `db:seed` basta o dependen del backup.
+
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
   separada para la serie temporal —~35.000 filas por sensor y año— y no dice
