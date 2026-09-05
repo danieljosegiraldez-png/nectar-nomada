@@ -257,9 +257,17 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   en `package.json` ni en `ci.sh`, y estos archivos no están limpios en `main`—.
   Pasarlo a `app/lots/page.tsx` reescribió 92 líneas para un cambio de 11.
 
-  **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes. Quedan
-  los estados de carga que mienten, y los seis sitios con el colapso «no hay» /
-  «no puedes ver» de la segunda lente.
+  **Los «seis sitios» de la segunda lente eran uno.** Medidos de uno en uno:
+  dos son ayudantes que devuelven un `where`, uno es un predicado donde `false`
+  es correcto, `getActiveOperations` ya estaba arreglado, `buildProducerExport`
+  **lanza** en vez de exportar un vacío y `NewHiveForm` ya comprueba longitud y
+  tiene marcador. El único real era `getApiaryList`: `/apiaries` decía «Todavía
+  no hay apiarios» a quien no tiene asignaciones. Arreglado como `/lots`.
+  **Una lista de pendientes escrita de memoria infla el trabajo: cinco de seis
+  no existían.**
+
+  **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes, y los
+  estados de carga que mienten.
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
   separada para la serie temporal —~35.000 filas por sensor y año— y no dice

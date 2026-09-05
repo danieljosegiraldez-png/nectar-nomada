@@ -956,6 +956,8 @@
     "apiariesTitle": "Apiaries",
     "apiariesIntro": "Hives, colonies, inspections, and honey harvests.",
     "noApiaries": "No apiaries yet.",
+    "sinAmbitoHeading": "You do not have access to any apiary yet",
+    "sinAmbitoBody": "This does not mean there are none: it means your account has no assignments yet. An administrator can grant them.",
     "hiveCount": "{count, plural, =0 {No hives} one {# hive} other {# hives}}",
     "backToApiaries": "← All apiaries",
     "hivesHeading": "Hives",

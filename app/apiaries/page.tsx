@@ -11,7 +11,7 @@ export default async function ApiariesPage() {
   if (!user) redirect("/login");
 
   const t = await getTranslations("Apiary");
-  const { items: apiaries, truncated, limit } = await getApiaryList(user.userAccountId);
+  const { items: apiaries, truncated, limit, sinAmbito } = await getApiaryList(user.userAccountId);
 
   return (
     <div>
@@ -22,8 +22,18 @@ export default async function ApiariesPage() {
       {/* ADR-087 — a cut-off list says so. */}
       {truncated ? <p className="nn-muted">{t("listTruncated", { limit })}</p> : null}
 
+      {/* Segunda lente: «no hay» y «no puedes ver» no son el mismo hecho. Esta
+          pantalla afirmaba lo primero a quien le pasaba lo segundo. Se nombra
+          la causa y a quién pedirle el acceso, igual que en `/lots`. */}
       {apiaries.length === 0 ? (
-        <p className="nn-muted">{t("noApiaries")}</p>
+        sinAmbito ? (
+          <>
+            <p className="nn-muted">{t("sinAmbitoHeading")}</p>
+            <p className="nn-muted">{t("sinAmbitoBody")}</p>
+          </>
+        ) : (
+          <p className="nn-muted">{t("noApiaries")}</p>
+        )
       ) : (
         <div className="nn-grid">
           {apiaries.map((apiary) => (

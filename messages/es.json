@@ -956,6 +956,8 @@
     "apiariesTitle": "Apiarios",
     "apiariesIntro": "Colmenas, colonias, inspecciones y cosechas de miel.",
     "noApiaries": "Todavía no hay apiarios.",
+    "sinAmbitoHeading": "No tienes acceso a ningún apiario todavía",
+    "sinAmbitoBody": "Esto no significa que no haya: significa que tu cuenta aún no tiene asignaciones. Un administrador puede dártelas.",
     "hiveCount": "{count, plural, =0 {Sin colmenas} one {# colmena} other {# colmenas}}",
     "backToApiaries": "← Todos los apiarios",
     "hivesHeading": "Colmenas",
