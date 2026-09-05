@@ -34,30 +34,24 @@ echo "── Tests herméticos ────────────────�
 # - `tests/open-decisions.test.ts` queda FUERA: la prueba P-E lee
 #   `$HOME/.zshrc`, que es estado personal de una máquina. Un veredicto de CI no
 #   debe depender de los dotfiles de nadie. Ese test se corre en local.
-# - La suite completa queda fuera: necesita `npm run test:db -- up`, que
-#   restaura un backup verificado que no existe en un runner. Meterla aquí
-#   produciría rojo por falta de base, que es justo el fallo que este archivo
-#   existe para evitar.
+# - Las que no pueden correr aquí van nombradas UNA A UNA, con su motivo, en
+#   `scripts/tests-fuera-de-ci.txt`. Aquí se corre **todo lo demás**.
+#
+#   Era al revés —una lista de inclusión escrita a mano en este archivo— y se
+#   desincronizó en silencio: el 2026-09-05 corrían 22 de 97 archivos, y 17 de
+#   los ausentes no necesitaban base para nada. Una lista de inclusión pierde
+#   cobertura callándose. Con la exclusión, las dos formas de equivocarse hacen
+#   ruido: una prueba nueva que necesite base y no se apunte pone CI en rojo al
+#   no poder conectar, y una ruta que sobre la caza `tests/ci-cobertura.test.ts`.
+EXCLUIDAS="$(cd "$(dirname "$0")/.." && grep -vE '^\s*(#|$)' scripts/tests-fuera-de-ci.txt)"
+A_CORRER="$(cd "$(dirname "$0")/.." && find tests -name '*.test.ts' | sort | grep -vxF "$EXCLUIDAS")"
+
+# Fila patrón, leída antes que nada: si la selección sale vacía o absurda, el
+# verde de abajo no significaría nada. Es el control positivo de este bloque.
+echo "── CI correrá $(echo "$A_CORRER" | wc -l | tr -d ' ') archivos de prueba; $(echo "$EXCLUIDAS" | wc -l | tr -d ' ') quedan fuera por scripts/tests-fuera-de-ci.txt"
+test "$(echo "$A_CORRER" | wc -l | tr -d ' ')" -ge 30 || { echo "ABORTA: la selección de pruebas salió demasiado corta"; exit 1; }
+
 TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:55432/no-se-conecta" \
-  npx vitest run tests/session-state-budget.test.ts tests/inventario-de-rutas.test.ts \
-              tests/arquitectura/acceso-a-datos.test.ts \
-    tests/traceability/plotDensity.test.ts \
-    tests/traceability/reconciliacionDeCosecha.test.ts \
-    tests/time/localDateTime.test.ts \
-    tests/ui/recorteDeFecha.test.ts \
-    tests/ui/valoresEnumerados.test.ts \
-    tests/traceability/units.test.ts \
-    tests/arquitectura/audit-atomico.test.ts \
-    tests/arquitectura/use-server-solo-async.test.ts \
-    tests/arquitectura/booleanos-de-tres-estados.test.ts \
-    tests/arquitectura/columnas-de-sincronizacion.test.ts \
-    tests/sync/clasificarRespuesta.test.ts \
-    tests/sync/fieldEventPayload.test.ts \
-    tests/sync/draftAge.test.ts \
-    tests/archivo-de-estado.test.ts \
-    tests/arquitectura/temporales-se-limpian.test.ts \
-    tests/apiary/offlineQueue.test.ts \
-    tests/backup/completeSet.test.ts \
-    tests/backup/libpqUrl.test.ts
+  npx vitest run $A_CORRER
 
 echo "── Todo verde ──────────────────────────────────────────────────────────"
