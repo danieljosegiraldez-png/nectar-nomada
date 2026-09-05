@@ -12,13 +12,14 @@
  * Se autentica por la sesión de cookie existente, igual que el push. El carril
  * de tokens sigue aplazado (ADR-108).
  */
-import { getCurrentUser } from "../../../../../lib/auth/session";
+import { resolverPrincipal } from "../../../../../lib/sync/requestPrincipal";
 import { pullFieldWork, LIMITE_POR_PAGINA, type PullCursor } from "../../../../../lib/sync/pullFieldWork";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const user = await getCurrentUser();
+  // P4 §2 — cookie o token de aparato, indistinto para esta ruta.
+  const user = await resolverPrincipal(request);
   if (!user) return Response.json({ error: "not_authenticated" }, { status: 401 });
 
   const q = new URL(request.url).searchParams;

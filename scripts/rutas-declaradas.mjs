@@ -55,6 +55,8 @@ export const RUTAS = {
   "/ai": { clase: "requiere-sesion", razon: "Asistente sobre datos del titular." },
   "/api/export": { clase: "requiere-sesion", razon: "Descarga de datos. Responde 401/403, no redirige: es una descarga." },
   "/api/v1/devices": { clase: "requiere-sesion", razon: "P4 §1. Registra un aparato que sincronizará. Responde 401 en JSON, no redirige: la llama un cliente, no un navegador que navega." },
+  "/api/v1/auth/device": { clase: "flujo-auth", razon: "P4 §2. Alta de aparato con credenciales: es el propio flujo de autenticación del carril de tokens, así que exigirle sesión sería imposible de satisfacer." },
+  "/api/v1/auth/token": { clase: "flujo-auth", razon: "P4 §2. Canje de refresh por access. Se autentica con el refresh, no con sesión." },
   "/api/v1/sync/field-events": { clase: "requiere-sesion", razon: "P4 §4. Push por lotes. 401 en JSON; 200 aunque haya rechazos, porque un rechazo es respuesta del protocolo y no fallo de la petición." },
   "/api/v1/sync/authorization": { clase: "requiere-sesion", razon: "P4 §8. Instantánea de autorización firmada. Decide qué OFRECE la interfaz; la autorización real sigue siendo can() en cada mutación." },
   "/api/v1/sync/field-media": { clase: "requiere-sesion", razon: "P4 §7. Cola de medios en dos pasos: firma una URL y luego registra el Asset y su FieldEvent. El servidor nunca sostiene los bytes." },

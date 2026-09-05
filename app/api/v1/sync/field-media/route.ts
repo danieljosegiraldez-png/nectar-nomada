@@ -12,7 +12,7 @@
  * fuera —«guardar esta foto»— y separarlas obligaría a declarar, documentar y
  * vigilar dos entradas del router para un flujo que nunca se usa a medias.
  */
-import { getCurrentUser } from "../../../../../lib/auth/session";
+import { resolverPrincipal } from "../../../../../lib/sync/requestPrincipal";
 import {
   requestFieldMediaUpload,
   finalizeFieldMedia,
@@ -30,7 +30,8 @@ const fecha = (v: unknown): Date | null => {
 };
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
+  // P4 §2 — cookie o token de aparato, indistinto para esta ruta.
+  const user = await resolverPrincipal(request);
   if (!user) return Response.json({ error: "not_authenticated" }, { status: 401 });
 
   const paso = new URL(request.url).searchParams.get("paso");

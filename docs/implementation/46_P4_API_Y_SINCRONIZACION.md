@@ -104,6 +104,24 @@ como está. La PWA existente se autentica como hoy. Esto añade un carril
 paralelo para dispositivos; convertir el carril viejo sería trabajo sin
 beneficio y con riesgo de dejar a todo el mundo fuera.
 
+**Construido el 2026-09-05, cuando la Fase 5 lo pidió.** ADR-108 lo aplazó
+«hasta que exista un cliente nativo que lo llame»; ese día llegó, porque un
+cliente nativo **no puede** usar la cookie. `POST /api/v1/auth/device` (alta con
+credenciales) y `POST /api/v1/auth/token` (canje de refresh por access), más
+`resolverPrincipal`, que hace que las cinco rutas de sincronización acepten
+cualquiera de los dos carriles sin saber cuál fue.
+
+El refresh se guarda **hasheado**; el access va firmado con clave derivada por
+propósito y **no se guarda en ninguna parte**, que es lo que permite atender a
+un aparato sin consultar la base. Revocar corta el refresco en el acto, y un
+access ya emitido sigue verificando hasta que expira —inherente a un token sin
+estado— pero **no escribe**: el push comprueba `revokedAt` en cada lote. Hay un
+test de esa combinación exacta.
+
+**Sin rotación de refresh**, y dicho en vez de omitido: rotar es una mitigación
+real contra el robo del token, pero obliga a resolver la carrera de dos
+refrescos simultáneos, que un aparato con cobertura intermitente produce.
+
 ---
 
 ## 3. `clientDraftId` generalizado

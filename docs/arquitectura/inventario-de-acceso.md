@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05
 
-**233 operaciones** que tocan la base, en **63 archivos**:
+**235 operaciones** que tocan la base, en **64 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -27,7 +27,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | **22** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **2** | recibía principal sin guardia visible | `listScopeChoices()` y `listBiocharBatches()`, miradas a mano y explicadas |
+| **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
 
 > Estas cifras son de la segunda medición. La primera decía 195 y 51, y estaba
 > mal por un defecto del propio detector — la historia está abajo, en «El
@@ -56,6 +56,14 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > de P4 §8. «Guardia directo» porque resuelve con `can()` antes de incluir nada
 > — pero conviene decirlo: lo que produce es una ayuda de interfaz, no una
 > frontera. La frontera sigue siendo `can()` en cada mutación.
+>
+> **Y (233→235, 63→64):** `lib/sync/deviceTokens.ts`, el carril de tokens de
+> P4 §2. Sus dos operaciones caen en «recibía principal sin guardia visible», y
+> la etiqueta es literal pero engañosa aquí: **no comprueban principal porque lo
+> ESTABLECEN**. `registrarAparato` valida correo y contraseña; `refrescarAcceso`
+> se autentica con el refresh token y es donde muerde la revocación. Son el
+> equivalente de la clase «flujo-auth» del inventario del router, que este
+> detector no tiene.
 
 ### Las tres que no encajaban en ninguna regla (medición del 2026-08-31, por la mañana)
 

@@ -264,6 +264,10 @@
     {
       "archivo": "lib/sync/authorizationSnapshot.ts",
       "razon": "P4 §8. Lee Locations y resuelve permisos por can()/resolvedPermissionKeys para construir la instantánea. Sólo lectura; no autoriza nada por sí misma."
+    },
+    {
+      "archivo": "lib/sync/deviceTokens.ts",
+      "razon": "P4 §2. Alta y refresco de tokens de aparato: verifica credenciales, guarda el hash del refresh y comprueba revocación. Es el propio flujo de autenticación."
     }
   ],
   "reciben_transaccion": [
@@ -281,6 +285,16 @@
     }
   ],
   "operaciones_sin_patron": [
+    {
+      "archivo": "lib/sync/deviceTokens.ts",
+      "operacion": "registrarAparato",
+      "razon": "P4 §2. No comprueba principal porque lo ESTABLECE: es el alta del aparato contra correo y contraseña. Equivale a la clase «flujo-auth» del router. Verificado el 2026-09-05."
+    },
+    {
+      "archivo": "lib/sync/deviceTokens.ts",
+      "operacion": "refrescarAcceso",
+      "razon": "P4 §2. Se autentica con el refresh token, no con sesión, y es donde muerde la revocación. También flujo de autenticación. Verificado el 2026-09-05."
+    },
     {
       "archivo": "lib/rbac/admin.ts",
       "operacion": "listScopeChoices",

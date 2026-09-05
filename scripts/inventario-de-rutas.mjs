@@ -122,7 +122,13 @@ for (const e of entradas) {
   if (!d) continue;
   conteo[d.clase] = (conteo[d.clase] ?? 0) + 1;
   const src = sinComentarios(readFileSync(join(RAIZ, e.archivo), "utf8"));
-  const pideUsuario = /getCurrentUser|permissionKeysAnywhere|requirePermission|\bauth\(\)/.test(src);
+  // `resolverPrincipal` (P4 §2) se añade al vocabulario porque hace lo mismo que
+  // `getCurrentUser` desde el carril de tokens: devuelve null si nadie se
+  // identificó, y las rutas que lo usan responden 401. Añadir un nombre aquí
+  // sólo es legítimo cuando la función de verdad corta — un vocabulario que
+  // crece con cualquier cosa deja de reconocer la pérdida del control, que es
+  // lo único que este contraste sabe hacer.
+  const pideUsuario = /getCurrentUser|resolverPrincipal|permissionKeysAnywhere|requirePermission|\bauth\(\)/.test(src);
   const cortaLaRespuesta = /redirect\("\/login"\)|requirePermission|status:\s*40[13]|new Response\([^)]*40[13]/.test(src);
   const leePublico = /lib\/discover|discover\/service/.test(src);
   const leeDatos = /prisma\.|lib\/discover|discover\/service/.test(src);
