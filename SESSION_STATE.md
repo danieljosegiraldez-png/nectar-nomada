@@ -232,9 +232,16 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   y eso es diseño, no una edición quirúrgica. Medio arreglarlo sería peor:
   ocultar los botones y dejar los formularios *parecería* gateado.
 
-  **Sin medir, y se dice:** cuántas cuentas de producción ven pero no gestionan
-  — la sonda contra Neon quedó bloqueada y no se rodeó. La prueba demuestra la
-  forma con un `Project Viewer`, no el recuento.
+  **Medido, después de que Daniel dijera que varias cuentas ven y no gestionan
+  — tenía razón.** Sobre la copia restaurada (fresca: 43 lotes, los mismos que
+  producción, y la última cuenta creada ese mismo día), **3 de 14** cuentas
+  reales ven lotes y no pueden gestionarlos: Chini Ameglio, Chris Huerbsch y
+  Rory Beitia. Las tres están en `invited` y **sin correo**, así que hoy no
+  entra ninguna: el formulario muerto no lo ha visto nadie todavía, y lo verán
+  las tres el día que P-C se desbloquee. La sonda contra Neon vivo quedó
+  bloqueada por el clasificador y no se rodeó; esto se midió contra la copia,
+  que es lo que había. Excluir los fixtures `TEST %` es lo que baja el total de
+  20 a 14 — sin ese filtro el recuento cuenta la propia suite.
 
   **Del método:** prettier **no** es el formateador de este proyecto —no está
   en `package.json` ni en `ci.sh`, y estos archivos no están limpios en `main`—.
