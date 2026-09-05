@@ -224,7 +224,11 @@ async function resolveApiaryVisibility(userAccountId: string, action: "view" | "
 export async function getApiaryList(userAccountId: string) {
   const visibility = await resolveApiaryVisibility(userAccountId);
   if (visibility.mode === "none") {
-    return truncate<Prisma.LocationGetPayload<{ include: { hives: true } }>>([]);
+    // `sinAmbito` distingue «no hay apiarios» de «no puedes ver ninguno», que
+    // hasta aquí llegaban a la pantalla como el mismo array vacío: `/apiaries`
+    // decía «Todavía no hay apiarios», una afirmación sobre la finca hecha a
+    // quien simplemente no tiene asignaciones. Misma forma que `getLotList`.
+    return { ...truncate<Prisma.LocationGetPayload<{ include: { hives: true } }>>([]), sinAmbito: true };
   }
 
   const where: Prisma.LocationWhereInput = {
@@ -245,7 +249,7 @@ export async function getApiaryList(userAccountId: string) {
     orderBy: { name: "asc" },
     take: LIST_LIMIT + 1,
   });
-  return truncate(rows);
+  return { ...truncate(rows), sinAmbito: false };
 }
 
 export async function getApiaryDetail(userAccountId: string, locationId: string) {
