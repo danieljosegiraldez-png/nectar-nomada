@@ -696,3 +696,107 @@ nuevo).
 **Falta la aceptación de campo**, que es de flujo y no de test: un evento
 anotado en modo avión, sincronizado al volver la señal. El código está; nadie
 lo ha recorrido en un navegador de verdad.
+
+
+---
+
+### 2026-09-05 · Tres bloques que §3 llamaba «bloqueado» y ya no lo estaban
+
+Archivados con el estado en **391/400 líneas — el 98 % del presupuesto**, que es
+la cifra que obligó a mirar. La sorpresa fue dónde estaba la presión: §2 «lo que
+se entregó» eran cuatro entradas y 104 líneas, todas del mismo día; **§3
+«Bloqueado» ocupaba 206**, más de la mitad del archivo, y tres de sus bloques
+describían cosas ya resueltas.
+
+- **El rojo de `main` es cuota** — dejó de dirigir trabajo cuando la cuota se
+  levantó. Antes de moverlo aquí, sus dos piezas vivas se llevaron a
+  `CLAUDE.md`, que sí se carga: el discriminante de la URL del check y que una
+  cuota **no crea fila que redesplegar**. Ninguna de las dos estaba en ningún
+  `CLAUDE.md` — comprobado con `grep`, cero apariciones — así que archivar sin
+  moverlas las habría perdido. La regla de la duración sí estaba ya.
+- **Aviso fiable de que un backup no corrió** — decía «desbloqueado» dentro de
+  la sección llamada «Bloqueado». P-A se cerró el 2026-09-04.
+- **DOS migraciones sin desplegar** — falsa desde el 2026-09-05 06:34. El log de
+  producción dice `No pending migrations to apply.`, comprobado por la vía que la
+  propia entrada exigía. Una instrucción vieja es peor que ninguna, y ésta
+  mandaba hacer un *Redeploy* que ya no hacía falta.
+
+Resultado: 391 → 316 líneas, del 98 % al 79 %.
+
+#### El rojo de `main` es cuota, no código — y se queda rojo para siempre
+
+**Comprobado el 2026-09-03. Si lees `main` en rojo, empieza por aquí antes de
+tocar nada.**
+
+`3858cde` y los cinco commits anteriores tienen el check de Vercel en `failure`
+con «Deployment rate limited — retry in 24 hours». **No es un build roto: es el
+tope diario del plan gratuito, que diez PR con sus previews agotaron.** Ese rojo
+no se va a arreglar solo ni con el cambio de plan: es un estado histórico de un
+commit que Vercel rechazó sin llegar a construir.
+
+**Cómo distinguir cuota de build roto, en orden de fiabilidad:**
+
+1. **La URL del check.** Una cuota apunta a la página de venta
+   (`?upgradeToPro=build-rate-limit`); un build real apunta al despliegue
+   (`/nectar-nomada-package/<id>`). Es el discriminante limpio:
+
+   ```bash
+   gh api repos/danieljosegiraldez-png/nectar-nomada/commits/<sha>/status \
+     --jq '.statuses[] | select(.context=="Vercel") | .state + " -> " + .target_url'
+   ```
+
+2. **No hay fila en el panel.** Una cuota no crea despliegue, así que **no hay
+   nada que redesplegar** — buscar el botón *Redeploy* de ese commit es buscar
+   algo que no existe. Sólo un push nuevo despliega.
+3. **La duración**, ya en `CLAUDE.md`: 18-20 s es un build que corrió y falló;
+   33-59 s uno bueno. Sirve cuando sí hay fila.
+
+**Daniel subió a PRO el 2026-09-02.** Verificado que funciona: un preview
+construyó en 35 s después del cambio. Lo que el PRO **no** hace es volver atrás
+a construir lo ya rechazado.
+
+**Qué hay sin desplegar, medido y no estimado:** seis commits, y tocan sólo
+documentación y herramientas — **ni código de la app, ni esquema, ni migración
+pendiente**. Producción sirve el build de `2026-09-02 00:20` (Ready, 51 s) y no
+le falta nada que un usuario pueda ver. El hueco se cierra solo con la próxima
+fusión de cualquier sesión.
+
+**Lo que sí quedó cerrado:** el `export class FechaInvalidaError` en un archivo
+`"use server"` que tumbó `next build` con 69 errores el 2026-09-01 **está
+arreglado y desplegado** — el despliegue de las 00:20 llegó a *Ready*, que era la
+comprobación que esta sección dejaba pendiente. La migración
+`20260901100000_s1_invariantes_en_la_base` entró con él. El guardia de fuente
+(`tests/arquitectura/use-server-solo-async.test.ts`) pasó flip-test el
+2026-09-03: 16/16 con el código bueno, y con la clase exportada reintroducida
+cae uno solo, nombrando la línea. La compuerta sigue sin correr `next build`.
+
+
+- **Aviso fiable de que un backup no corrió** — **desbloqueado el 2026-09-04.**
+  Probado de punta a punta con una corrida real de `run-scheduled.sh`: salió el
+  ping `/start`, el backup se escribió, `verify-restore` dio PASS —135 tablas,
+  14.706 filas, conteos idénticos en un PostgreSQL 18 limpio, sin Neon— y solo
+  entonces salió el ping de éxito. Daniel confirmó la recepción en el panel de
+  healthchecks.io, que es la mitad que no se puede verificar desde aquí.
+  **El log no se cree a sí mismo:** «ping enviado» solo se escribe si `curl -fsS`
+  recibió un 2xx. Flip-test el mismo día: un UUID inexistente y un dominio
+  inválido dan los dos «NO salió».
+  **Lo que cubre y lo que no.** El backup corre **los lunes a las 09:00**, no a
+  diario, así que el check está configurado con periodo de 1 semana y margen de
+  2 días — margen ancho a propósito, porque `StartCalendarInterval` hace que un
+  portátil dormido corra el trabajo **al despertar**, y un margen corto daría
+  falsas alarmas cada fin de semana largo. Sigue sin cubrirse el caso de destino
+  no montado: el wrapper sale 0 **en silencio** y no manda ni `/start`, de modo
+  que su ausencia es la señal — eso es el diseño, no un descuido, y es justo lo
+  que healthchecks.io convierte en alarma pasado el margen.
+
+- **DOS migraciones sin desplegar, y todo el código desde #122** —
+  `20260901090000_s1_amendment_application` y
+  `20260901100000_s1_invariantes_en_la_base`. El límite diario de builds de
+  Vercel saltó a media tanda y no volvió a despejarse. **No hay
+  inconsistencia**: código y migraciones quedaron fuera juntos, y producción
+  sirve un build anterior. Cuando se despeje, un *Redeploy* sobre el último
+  commit de `main` las aplica las dos.
+  **Cómo comprobarlo, y no como lo comprobé mal dos veces:** el check de Vercel
+  que pasa en una PR es el de *preview* y no dice nada de producción. El que sí
+  lo dice es `gh api repos/<owner>/<repo>/commits/<sha>/status`, y después el
+  log de construcción, que nombra cada migración aplicada.

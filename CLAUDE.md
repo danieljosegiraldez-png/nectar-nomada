@@ -2578,8 +2578,33 @@ gh api repos/danieljosegiraldez-png/nectar-nomada/commits/<sha>/status
 vercel inspect --logs <url-de-produccion> --scope <scope>
 ```
 
-Al día siguiente, el botón *Redeploy* del panel sobre el commit fallido. Usa la
-integración de git, queda atado al commit, y no necesita CLI.
+**El discriminante limpio no es la duración: es la URL del check.** Una cuota
+apunta a la página de venta, un build real apunta al despliegue:
+
+```bash
+gh api repos/danieljosegiraldez-png/nectar-nomada/commits/<sha>/status \
+  --jq '.statuses[] | select(.context=="Vercel") | .state + " -> " + .target_url'
+# cuota:      https://vercel.com/<scope>?upgradeToPro=build-rate-limit
+# build real: https://vercel.com/<scope>/nectar-nomada-package/<id>
+```
+
+La duración sigue valiendo, pero sólo cuando hay fila que mirar — y con una
+cuota **no la hay**.
+
+**Y de ahí lo que cuesta un rato descubrir: una cuota no crea despliegue, así
+que no existe el botón *Redeploy* de ese commit.** El 2026-09-03 se perdió
+tiempo buscándolo. Lo que despliega esos commits es un **push nuevo**: la
+siguiente fusión de cualquier sesión los arrastra a todos. Subir de plan levanta
+el tope de ahí en adelante y **no vuelve atrás** a construir lo ya rechazado.
+
+**Y el tope que bloquea es de cantidad, no de dinero** —`api-deployments-free-per-day`—
+así que puede quedar crédito de sobra y estar bloqueado igual. Son dos
+medidores distintos y confundirlos lleva a pagar por un problema que no era de
+pago. Desde el 2026-09-05 hay `vercel.json` con `ignoreCommand`: un cambio que
+sólo toca documentación no construye. Ver `scripts/solo-documentacion.sh`.
+
+Cuando sí haya fila, el botón *Redeploy* del panel sobre el commit fallido usa
+la integración de git, queda atado al commit, y no necesita CLI.
 
 ### …y el reverso: no todo rojo de Vercel es la cuota
 
