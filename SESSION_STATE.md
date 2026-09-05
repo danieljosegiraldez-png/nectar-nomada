@@ -37,6 +37,34 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-05 · P4 §7: la cola de medios, y dos flip-tests que no discriminaban
+
+`POST /api/v1/sync/field-media` en dos pasos: el servidor firma una URL y
+**nunca sostiene los bytes**. **Sin cambio de esquema**, y ésa es la decisión:
+la lectura obvia de §7 —colgar la foto de un evento anterior— exigiría
+actualizar ese evento, y `FieldEvent` es append-only porque el pull por cursor
+de §5 **ya depende de ello**. Una foto de campo **es** un `FieldEvent` de tipo
+`foto`; el catálogo ya los tenía.
+
+**Dos flip-tests fallaron antes de que uno funcionara, y eso es el hallazgo.**
+El test de atomicidad pasaba con y sin `$transaction`: forzaba el fallo en la
+primera escritura, así que nunca había estado a medias. Reescrito, seguía sin
+discriminar — un sondeo lo explicó: el `Asset` usa el mismo `operatorPersonId`
+como `creatorPersonId`, así que **ningún input puede romper el evento sin
+romper antes el Asset**. La atomicidad no es provocable por la interfaz
+pública, y ahora el archivo lo dice en vez de insinuarlo.
+
+Lo que quedó del intento es un defecto real: faltaba comprobar que la Persona
+existe —la misma que `recordFieldEvent` tiene desde que una revisión la pidió—
+y sin ella un id mal tecleado daba un error opaco de clave foránea.
+
+**Y una lección de arnés:** una de esas mutaciones rompió la sintaxis en vez de
+mutar, y «no tests» se lee como «no falló». Desde entonces cada mutación
+imprime el sha antes y después y si el archivo compila.
+
+Diez tests. Tres guardias con flip-test que sí discrimina: prefijo de la clave
+de almacenamiento, idempotencia y Persona inexistente.
+
 ### 2026-09-05 · P4 §5: el pull por cursor, y una línea falsa de mi propio ticket
 
 `GET /api/v1/sync/field-work`. Paginación **por clave** `(marca, id)`, nunca por
@@ -84,38 +112,6 @@ nuevo).
 **Falta la aceptación de campo**, que es de flujo y no de test: un evento
 anotado en modo avión, sincronizado al volver la señal. El código está; nadie
 lo ha recorrido en un navegador de verdad.
-
-### 2026-09-04 · El diff invertido volvió, disfrazado de trabajo ajeno
-
-Encontrado en el checkout compartido al ponerlo al día. `git status` daba dos
-archivos **`M `** —modificados y escenificados—, 31 borrados y cero altas: la
-medición del 14 % de `PENDING_IMPLEMENTATIONS/006` y la cabecera de identidad
-de repositorio de `scripts/cierre-de-sesion.sh`.
-
-**Nadie borró nada.** Esos bloques *entraron* en `main` el 2026-09-02
-(`c768f97` 01:22, `a7a8f65` 01:47) y el árbol es anterior (`mtime` 2026-08-31
-y 2026-09-02 00:58); el reflog enseña `branch: Reset to origin/main` a las
-01:43 y 01:59. El puntero avanzó sin tocar el árbol y git reportó al revés lo
-que había llegado — la sección «Adelantar el puntero de una rama no mueve el
-árbol» de `CLAUDE.md`, repitiéndose dos días después de escribirse.
-
-**Lo único nuevo, y lo que hay que recordar: la firma se lee como trabajo en
-curso de otra sesión.** `M ` significa escenificado, así que la lectura amable
-—«es de alguien, no lo toco»— es la equivocada, y es la que lo mantuvo dos
-días armado; estuve a punto de dejarlo por respeto. Lo deshace fechar: si los
-archivos del árbol son **anteriores** a los commits que traen esas líneas,
-nadie borró, llegó.
-
-Importaba porque entre lo «borrado» estaba la cabecera que dice de qué
-repositorio habla el informe de cierre —puesta tras correr el cierre del repo
-equivocado dos veces—: cualquier commit ahí la habría revertido en silencio.
-
-Resuelto con `git restore --staged --worktree` y verificado **por presencia**
-(`grep -c` = 1 y 1). Barridos los nueve worktrees de los dos repositorios:
-**ninguno más**, y lo dice un detector con flip-test —`git diff --shortstat
-HEAD` no vacío sobre un árbol rezagado de su puntero, reproducido en un repo
-de juguete—, no un verde sin control. Los dos checkouts compartidos quedan en
-`main` con el árbol coincidiendo con su `HEAD`.
 
 ## 3. Bloqueado, y en qué
 
