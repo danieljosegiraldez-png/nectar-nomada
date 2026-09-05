@@ -9,6 +9,8 @@ import {
   type TraceabilityActionState,
 } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
+import { parseLocalDateTime } from "../../../lib/time/localDateTime";
+import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
 
 const initialState: TraceabilityActionState = {};
 
@@ -158,9 +160,57 @@ export function FieldEventForm({
 }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(recordFieldEventFormAction, initialState);
+  const [encolado, setEncolado] = useState(false);
+
+  /**
+   * P4 §11 — sin señal, el evento se guarda en la cola local en vez de perderse.
+   *
+   * Se decide por `navigator.onLine` y no intentando la petición primero:
+   * `onLine === false` es una certeza («no hay interfaz de red»), mientras que
+   * un `fetch` que tarda es indistinguible de un servidor lento, y esperar a
+   * que falle deja al operador mirando un botón girando en mitad de un cafetal.
+   *
+   * Lo que `onLine === true` NO garantiza es que haya internet de verdad — una
+   * wifi de finca sin salida da `true`. Ese caso lo recoge la otra mitad: la
+   * acción del servidor falla, el operador lo ve, y el botón de sincronizar
+   * sigue ahí. No se intenta adivinar la conectividad real desde aquí.
+   */
+  const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
+    if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal: la Server Action
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const numero = (name: string) => {
+      const v = String(fd.get(name) ?? "").trim();
+      return v === "" ? null : Number(v);
+    };
+    const texto = (name: string) => {
+      const v = String(fd.get(name) ?? "").trim();
+      return v === "" ? null : v;
+    };
+    await queueFieldEvent({
+      fieldSessionId,
+      eventKindValueId: String(fd.get("eventKindValueId") ?? ""),
+      // Mismo instante que calcularía el servidor: la misma función pura, con
+      // el mismo desfase que `TimezoneOffsetField` ya pone en el formulario.
+      occurredAt: parseLocalDateTime(
+        String(fd.get("occurredAt") ?? ""),
+        fd.get("timezoneOffsetMinutes") as string | null,
+      ).toISOString(),
+      // El reloj del aparato al anotarlo, que es un hecho distinto de cuándo
+      // pasó (P2 §5). Aquí coinciden casi siempre; en un evento fechado hacia
+      // atrás, no.
+      recordedAt: new Date().toISOString(),
+      operatorPersonId: texto("operatorPersonId"),
+      notes: texto("notes"),
+      position: { latitude: numero("latitude"), longitude: numero("longitude"), accuracyM: numero("accuracyM") },
+    });
+    form.reset();
+    setEncolado(true);
+  };
 
   return (
-    <form action={formAction} className="nn-form">
+    <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <TimezoneOffsetField />
       <input type="hidden" name="fieldSessionId" value={fieldSessionId} />
 
@@ -205,6 +255,11 @@ export function FieldEventForm({
       </div>
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
+      {encolado ? (
+        <p className="nn-note" role="status">
+          {t("fieldEventQueuedOffline")}
+        </p>
+      ) : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("fieldEventRecordButton")}
       </button>

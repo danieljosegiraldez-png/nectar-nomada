@@ -73,7 +73,7 @@ describe("el inventario del router", () => {
     // El número está FIJADO a propósito: es el disparador que hace que una ruta
     // nueva se vea. 52 → 54 el 2026-09-01, con /biochar y /biochar/[id]
     // declaradas en el manifiesto en el mismo cambio.
-    expect(salida).toContain("54 entradas");
+    expect(salida).toContain("56 entradas");
     expect(codigo, salida).toBe(0);
   });
 
