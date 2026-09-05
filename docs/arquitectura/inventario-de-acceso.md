@@ -11,9 +11,9 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-08-31
+## Lo medido el 2026-09-04
 
-**227 operaciones** que tocan la base, en **58 archivos**:
+**229 operaciones** que tocan la base, en **60 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,8 +22,8 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **166** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **23** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **167** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **24** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **22** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
@@ -32,6 +32,16 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > Estas cifras son de la segunda medición. La primera decía 195 y 51, y estaba
 > mal por un defecto del propio detector — la historia está abajo, en «El
 > detector no veía siete operaciones».
+>
+> **Subida del 2026-09-04 (227→229, 58→60):** los dos archivos nuevos de la
+> primera rebanada de P4, `lib/sync/devices.ts` y `lib/sync/pushFieldEvents.ts`.
+> Uno cuenta como «guardia directo» y el otro como «acotado por construcción»:
+> `pushFieldEvents` no llama al servicio de autorización por su cuenta —lo hace
+> `recordFieldEvent`, en cada mutación—, y su propia consulta previa sólo mira
+> `client_draft_id` y el estado del aparato. Que el detector lo clasifique así
+> es correcto y vale la pena decirlo, porque «acotado por construcción» aquí no
+> significa «sin autorización»: significa que la autorización está una capa más
+> abajo, en la escritura, que es donde el audit §18 la quiere.
 
 ### Las tres que no encajaban en ninguna regla (medición del 2026-08-31, por la mañana)
 

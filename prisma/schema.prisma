@@ -123,6 +123,7 @@ model Person {
   processSensoryObservationsObserved ProcessSensoryObservation[]   @relation("ProcessSensoryObservationObserver")
   fieldSessionsOperated              FieldSession[]                @relation("FieldSessionOperator")
   fieldEventsOperated                FieldEvent[]                  @relation("FieldEventOperator")
+  devicesOperated                    Device[]                      @relation("DeviceOperator")
 
   @@map("person")
   @@schema("core")
@@ -249,6 +250,7 @@ model UserAccount {
   researchActivitiesProposed         ResearchActivity[]           @relation("ResearchActivityProposedBy")
   researchActivitiesReviewed         ResearchActivity[]           @relation("ResearchActivityReviewedBy")
   researchActivitiesCreated          ResearchActivity[]           @relation("ResearchActivityCreatedBy")
+  devicesCreated                     Device[]                     @relation("DeviceCreatedBy")
 
   @@map("user_account")
   @@schema("core")
@@ -3628,6 +3630,63 @@ model FieldSession {
 // `eventKindValueId` is a VariableCatalog value rather than an enum: what an
 // operator might record will keep growing, and P1 established that a growing
 // vocabulary is a catalog entry plus a re-seed, never a migration.
+/**
+ * P4 §1 (46_P4_API_Y_SINCRONIZACION.md) — un aparato que escribe, no una persona.
+ *
+ * Una fila por instalación que sincroniza: hoy un navegador que corre la PWA,
+ * mañana un teléfono Android. La distinción con `Person` importa porque el
+ * operador puede no tener cuenta y el molino puede compartir el aparato: quien
+ * hizo el trabajo es `operatorPersonId` en la fila de datos, y esto es DESDE
+ * DÓNDE llegó.
+ *
+ * `revokedAt` anulable y no un booleano: «revocado» y «cuándo» son el mismo
+ * hecho, y un booleano pierde la mitad — el mismo razonamiento que vigila
+ * `booleanos-de-tres-estados.test.ts` en las pantallas.
+ *
+ * `operatorPersonId` es anulable a propósito (§9): un teléfono compartido no
+ * tiene dueño único, y forzarlo obligaría a inventar uno.
+ */
+model Device {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // SIN `organizationId`, a diferencia de lo que pedían el audit §19 y el
+  // ticket §1 — y esto es una desviación deliberada, no un olvido.
+  //
+  // `ScopeType` no tiene `organization`: los ámbitos de RBAC son platform,
+  // program, project, location, competition, session y experience. Una FK a
+  // `Organization` aquí no la leería ni la validaría nada, y una columna así
+  // es una capacidad aparente que el sistema no tiene — exactamente lo que
+  // este mismo archivo evita en `Asset` («una columna que nada escribe es peso
+  // muerto que además parece una capacidad»).
+  //
+  // Lo que hoy sí acota a un dispositivo: quién lo registró (`createdBy`) y,
+  // evento a evento, el RBAC de la `Location` de su jornada, que es donde la
+  // autorización vive de verdad. La columna vuelve cuando exista algo que la
+  // lea — revocación por organización, que necesita un ámbito que el RBAC aún
+  // no expresa.
+
+  operatorPersonId String? @map("operator_person_id") @db.Uuid
+  operator         Person? @relation("DeviceOperator", fields: [operatorPersonId], references: [id])
+
+  /** Legible por una persona: «Teléfono del molino», «Chrome de Kenneth». */
+  label    String
+  /** `pwa` hoy. `android` cuando exista la Fase 5. Texto y no enum: el conjunto
+   *  no está cerrado y un enum obligaría a migrar para añadir un cliente. */
+  platform String
+
+  registeredAt DateTime  @default(now()) @map("registered_at")
+  lastSeenAt   DateTime? @map("last_seen_at")
+  revokedAt    DateTime? @map("revoked_at")
+
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("DeviceCreatedBy", fields: [createdBy], references: [id])
+
+  fieldEvents FieldEvent[]
+
+  @@map("device")
+  @@schema("core")
+}
+
 model FieldEvent {
   id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   fieldSessionId String       @map("field_session_id") @db.Uuid
@@ -3667,7 +3726,20 @@ model FieldEvent {
 
   recordedAt DateTime? @map("recorded_at")
   syncedAt   DateTime? @map("synced_at")
+  // P4 §1 — de UUID suelto a FK real, que es lo que P2 §5 dejó preparado
+  // («a bare nullable UUID for now: the Device table belongs to Phase 4»).
+  // Sólo aquí y no en las otras cinco tablas de captura: es la única que un
+  // dispositivo escribe en esta rebanada, y una FK sobre una columna que nada
+  // escribe es una capacidad aparente que el sistema no tiene.
   deviceId   String?   @map("device_id") @db.Uuid
+  device     Device?   @relation(fields: [deviceId], references: [id])
+
+  // P4 §3 — la clave de idempotencia. Anulable a propósito: sólo la llevan las
+  // escrituras que pasaron por una cola offline. Una llamada directa desde la
+  // web no tiene ninguna, y rellenarla en el servidor haría que la columna
+  // dejara de significar «esto vino de una cola». Precedente exacto:
+  // `Inspection.clientDraftId` (A5/A0).
+  clientDraftId String? @unique @map("client_draft_id")
   // P2 §5 — desfase de reloj al sincronizar. La explicación completa está en el
   // comentario de `Measurement.clockOffsetMs`.
   clockOffsetMs Int? @map("clock_offset_ms")

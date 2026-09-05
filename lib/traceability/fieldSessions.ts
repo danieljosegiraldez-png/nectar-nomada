@@ -186,6 +186,12 @@ export interface RecordFieldEventInput extends FieldEventSubject {
   notes?: string | null;
   provenanceClass: ProvenanceClass;
   capture?: CaptureMetadata;
+  /**
+   * P4 §3 — la clave de idempotencia que trae una cola offline. Ausente en una
+   * llamada directa desde la web, y eso es información: la columna significa
+   * «esto vino de una cola», no «esto tiene un id».
+   */
+  clientDraftId?: string | null;
 }
 
 const SUBJECT_KEYS = [
@@ -198,6 +204,20 @@ const SUBJECT_KEYS = [
 ] as const;
 
 export async function recordFieldEvent(userAccountId: string, input: RecordFieldEventInput) {
+  // P4 §4 — reintentar un push cuya respuesta se perdió devuelve la fila que ya
+  // existe, no una segunda. Va ANTES de toda validación a propósito: este
+  // evento ya se aceptó una vez, y volver a validarlo lo rechazaría por cosas
+  // que cambiaron después —la jornada pudo cerrarse mientras el aparato estaba
+  // sin señal—, convirtiendo un reintento inocuo en un error irresoluble para
+  // el operador.
+  //
+  // No audita: el hecho quedó registrado en el primer intento, y un audit por
+  // reintento contaría dos veces lo que pasó una. Precedente: `recordInspection`.
+  if (input.clientDraftId) {
+    const existing = await prisma.fieldEvent.findUnique({ where: { clientDraftId: input.clientDraftId } });
+    if (existing) return existing;
+  }
+
   const session = await prisma.fieldSession.findUnique({ where: { id: input.fieldSessionId } });
   if (!session) throw new FieldSessionValidationError("session_not_found");
   // Una jornada cerrada rechaza el evento, pero DICE cuál de los dos casos es.
@@ -293,6 +313,7 @@ export async function recordFieldEvent(userAccountId: string, input: RecordField
       provenanceClass: input.provenanceClass,
       recordedAt: input.capture?.recordedAt ?? null,
       deviceId: input.capture?.captureDeviceId ?? null,
+      clientDraftId: input.clientDraftId ?? null,
       createdBy: userAccountId,
     },
   });

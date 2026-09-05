@@ -9,6 +9,8 @@ import {
   type TraceabilityActionState,
 } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
+import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
+import { construirEventoEncolado } from "../../../lib/sync/fieldEventPayload";
 
 const initialState: TraceabilityActionState = {};
 
@@ -158,9 +160,44 @@ export function FieldEventForm({
 }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(recordFieldEventFormAction, initialState);
+  const [encolado, setEncolado] = useState(false);
+  const [errorLocal, setErrorLocal] = useState(false);
+
+  /**
+   * P4 §11 — sin señal, el evento se guarda en la cola local en vez de perderse.
+   *
+   * Se decide por `navigator.onLine` y no intentando la petición primero:
+   * `onLine === false` es una certeza («no hay interfaz de red»), mientras que
+   * un `fetch` que tarda es indistinguible de un servidor lento, y esperar a
+   * que falle deja al operador mirando un botón girando en mitad de un cafetal.
+   * Lo que `onLine === true` NO garantiza es que haya internet — una wifi de
+   * finca sin salida da `true`; ese caso lo recoge la otra mitad, porque la
+   * acción del servidor falla y el operador lo ve.
+   *
+   * **El `try` no es decorativo.** Una vez llamado `preventDefault()` la Server
+   * Action ya está cancelada, así que cualquier fallo aquí dejaría la anotación
+   * en ninguna parte. Eso ya pasó: el desfase horario se leía de un campo con
+   * nombre inventado, `parseLocalDateTime` lanzaba, y la pantalla seguía
+   * diciendo «guardado en este dispositivo». Un fallo al encolar tiene que
+   * verse, porque es la única copia que existe.
+   */
+  const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
+    if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal: la Server Action
+    e.preventDefault();
+    const form = e.currentTarget;
+    try {
+      await queueFieldEvent({ ...construirEventoEncolado(new FormData(form), fieldSessionId) });
+      form.reset();
+      setEncolado(true);
+      setErrorLocal(false);
+    } catch {
+      setEncolado(false);
+      setErrorLocal(true);
+    }
+  };
 
   return (
-    <form action={formAction} className="nn-form">
+    <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <TimezoneOffsetField />
       <input type="hidden" name="fieldSessionId" value={fieldSessionId} />
 
@@ -205,6 +242,16 @@ export function FieldEventForm({
       </div>
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
+      {encolado ? (
+        <p className="nn-note" role="status">
+          {t("fieldEventQueuedOffline")}
+        </p>
+      ) : null}
+      {errorLocal ? (
+        <p className="nn-error" role="alert">
+          {t("fieldEventQueueFailed")}
+        </p>
+      ) : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("fieldEventRecordButton")}
       </button>

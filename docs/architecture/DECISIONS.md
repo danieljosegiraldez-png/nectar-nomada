@@ -7750,3 +7750,68 @@ la migración `20260904150000_p2_cierre_gps_asset_y_desfase_reloj` sólo añade
 las nueve columnas de §5 y §6. Que la premisa sigue viva se comprueba
 volviendo a contar `traceability.field_session`: mientras dé 0, este ADR
 describe el mundo.
+
+---
+
+## ADR-108 — La primera rebanada de P4 se construye sin tokens y sin `organizationId`, y las dos ausencias son la decisión
+
+**Contexto.** `46_P4_API_Y_SINCRONIZACION.md` §11 nombra la primera rebanada
+como «`Device` + tokens + push por lotes de UNA categoría append-mostly,
+ejercida desde la PWA existente». Al construirla, dos piezas que el ticket y el
+audit dan por hechas resultaron no tener nada que las ejerciera.
+
+**Decisión 1 — el carril de tokens (§2) NO se construye todavía.** La PWA se
+autentica por la cookie de sesión que ya existe, y las dos rutas nuevas
+(`/api/v1/devices` y `/api/v1/sync/field-events`) la usan sin tocarla. Unos
+endpoints de emisión y refresco de token no tendrían hoy **ni un llamador**: el
+cliente que los necesita es el Android de la Fase 5.
+
+Es exactamente el razonamiento de ADR-107 aplicado a otra pieza — construir
+autenticación para un cliente que no existe es diseñar a ciegas la parte más
+cara de equivocarse. Y no bloquea nada: el criterio de aceptación de §11 es que
+un evento anotado sin señal llegue a la base y que repetir el push no duplique
+la fila, y eso se demuestra entero por cookie.
+
+**Lo que esta decisión NO dice:** que el diseño de §2 y del audit §19 esté mal.
+Sigue siendo el correcto, y el protocolo se construyó para admitirlo — el push
+recibe `deviceId` explícito, así que cambiar quién autentica no cambia la forma
+de la petición. Lo que dice es que se construye cuando exista quien lo llame.
+
+**Decisión 2 — `Device` va SIN `organizationId`**, contra el audit §19 y el
+ticket §1. `ScopeType` no tiene `organization`: los ámbitos de RBAC de este
+repositorio son platform, program, project, location, competition, session y
+experience. Una FK a `Organization` en `device` no la leería ni la validaría
+nada, y una columna así es una capacidad aparente que el sistema no tiene —
+justo lo que `schema.prisma` ya evita en `Asset` («una columna que nada escribe
+es peso muerto que además parece una capacidad»).
+
+Lo que hoy acota a un dispositivo es quién lo registró y, **evento a evento**,
+el RBAC de la `Location` de su jornada, que es donde la autorización vive de
+verdad. La columna vuelve cuando exista revocación por organización, que
+necesita un ámbito que el RBAC todavía no expresa.
+
+**Decisión 3 — la cola local nueva no refactoriza la de apiario.**
+`lib/apiary/offlineQueue.ts` sincroniza de una en una porque su protocolo es de
+una en una; el de P4 es por lotes con resultado por mutación, que es otra forma.
+`lib/sync/offlineQueue.ts` nace aparte y la duplicación queda **escrita en su
+cabecera**, con el momento de colapsarlas: cuando apiario pase a push por lotes.
+Refactorizar hoy una cola offline que funciona, para dar de comer a una pantalla
+distinta, mezcla dos revisiones y arriesga lo que ya andaba.
+
+**Qué reabre esto.** La Decisión 1 se cierra sola cuando empiece la Fase 5: el
+primer cliente nativo no puede usar una cookie. La 2, cuando alguien pida
+revocar todos los aparatos de una finca. La 3, cuando apiario cambie de
+protocolo.
+
+**Cómo se comprueba.** Que no hay tokens: `grep -r "refresh_token\|accessToken"
+lib/sync app/api/v1` no da nada. Que `device` no tiene organización — y la
+comprobación obvia NO sirve, porque el comentario del modelo menciona la
+palabra y un `grep` simple la cuenta. Hay que mirar la declaración del campo:
+
+```bash
+sed -n '/^model Device {/,/^}/p' prisma/schema.prisma | grep -E '^\s+organizationId\s'
+```
+
+Vacío es la ausencia; con el campo puesto imprime la línea. Que las tres
+decisiones no rompen el criterio de aceptación: `tests/sync/pushFieldEvents.test.ts`,
+once casos, dos de ellos con flip-test hecho contra cada guardia de idempotencia.

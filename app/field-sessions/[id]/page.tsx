@@ -7,6 +7,7 @@ import { FieldSessionValidationError } from "../../../lib/traceability/fieldSess
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 import { getFieldEventKinds } from "../../../lib/traceability/fieldSessionCatalog";
 import { FieldEventForm, FieldSessionEndForm } from "../../components/traceability/FieldSessionForms";
+import { FieldSyncControls } from "../../components/traceability/FieldSyncControls";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +104,10 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
               people={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
               selfPersonId={selfPersonId}
             />
+            {/* P4 §11 — la cola vive junto al formulario que la llena, no en
+                una pantalla aparte: quien anota sin señal es quien tiene que
+                ver que lo suyo sigue sin enviarse. */}
+            <FieldSyncControls />
           </section>
 
           <section className="nn-section">

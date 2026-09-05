@@ -37,22 +37,29 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-04 · La Fase 4 arranca por el ticket
+### 2026-09-04 · Fase 4: el ticket y su primera rebanada, construida
 
-`46_P4_API_Y_SINCRONIZACION.md`, como 41–44: el ticket precede al código.
-**Primera rebanada nombrada:** `Device` + tokens + push por lotes de UNA
-categoría append-mostly, ejercida desde la PWA existente — lo que §26 del
-audit ordena y lo que evita repetir la forma de P2 a mayor escala.
+`46_P4_API_Y_SINCRONIZACION.md` (el ticket precede al código, como 41–44) y
+después la rebanada que nombra: **`Device`, `clientDraftId` en `FieldEvent`,
+push por lotes con resultado por mutación, y la PWA encolando sin señal.**
+`/api/v1/devices` y `/api/v1/sync/field-events`, ambas declaradas en el
+manifiesto de rutas.
 
-Su §0 contesta por adelantado la pregunta que saldrá sola —por qué esto no se
-aplaza si P2 §1 sí se aplazó— y **corrige en el audit un «blocking
-prerequisite» que P0 ya había resuelto**: `lotCode` y `sampleCode` son únicos
-por organización desde hace una semana. Corregido en §18, no anotado.
+**Once tests, y dos flip-tests que enseñaron algo:** hay DOS guardias de
+idempotencia —el pre-chequeo del push y el del servicio— y los primeros seis
+tests sólo ejercían el primero. Se vio quitando el del servicio y viendo que
+nada fallaba. Ahora cada guardia tiene un test que se cae si lo borras.
 
-**Tres decisiones son de Daniel**, al final del ticket: duración del refresh
-token y de la instantánea de autorización, si el teléfono del molino es
-compartido o personal, y qué pasa con una mutación rechazada que el operador
-cree correcta. Ninguna bloquea la primera rebanada.
+**Tres desviaciones del ticket, en ADR-108 con su razón:** sin carril de tokens
+(§2 no tendría llamador hasta la Fase 5 — ADR-107 aplicado a otra pieza), sin
+`organizationId` en `Device` (`ScopeType` no tiene `organization`, así que nada
+lo leería), y sin refactorizar la cola de apiario (su protocolo es de una en
+una; el de P4 es por lotes — la deuda queda escrita en la cabecera del módulo
+nuevo).
+
+**Falta la aceptación de campo**, que es de flujo y no de test: un evento
+anotado en modo avión, sincronizado al volver la señal. El código está; nadie
+lo ha recorrido en un navegador de verdad.
 
 ### 2026-09-04 · El diff invertido volvió, disfrazado de trabajo ajeno
 

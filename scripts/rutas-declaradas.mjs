@@ -54,6 +54,8 @@ export const RUTAS = {
   "/admin/users": { clase: "requiere-sesion", razon: "Administración de usuarios y permisos." },
   "/ai": { clase: "requiere-sesion", razon: "Asistente sobre datos del titular." },
   "/api/export": { clase: "requiere-sesion", razon: "Descarga de datos. Responde 401/403, no redirige: es una descarga." },
+  "/api/v1/devices": { clase: "requiere-sesion", razon: "P4 §1. Registra un aparato que sincronizará. Responde 401 en JSON, no redirige: la llama un cliente, no un navegador que navega." },
+  "/api/v1/sync/field-events": { clase: "requiere-sesion", razon: "P4 §4. Push por lotes. 401 en JSON; 200 aunque haya rechazos, porque un rechazo es respuesta del protocolo y no fallo de la petición." },
   "/apiaries": { clase: "requiere-sesion", razon: "Operación de apiarios." },
   "/apiaries/[id]": { clase: "requiere-sesion", razon: "Operación de apiarios." },
   "/apiaries/[id]/hives/[hiveId]": { clase: "requiere-sesion", razon: "Operación de apiarios." },
