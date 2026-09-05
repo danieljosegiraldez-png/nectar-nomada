@@ -671,6 +671,8 @@
     "recordHarvestSourcesButton": "Registrar los bloques",
     "error_harvest_sources": "No se pudo registrar: {detail}",
     "harvestSourcesNothingWeighedYet": "todavía sin pesos de bloque",
+    "harvestSourcesUnweighedWarning": "{count, plural, one {Hay 1 aporte registrado sin peso} other {Hay # aportes registrados sin peso}}: su cereza NO está en esta suma, así que la diferencia es mayor de lo que falta de verdad.",
+    "harvestSourcesHiddenWarning": "{count, plural, one {1 aporte no es visible con tus permisos} other {# aportes no son visibles con tus permisos}}: tampoco están en esta suma.",
     "cohortCreateSummary": "Registrar una siembra en este lote",
     "cohortCreateIntro": "Todo salvo «cómo se sabe» es opcional. Lo que dejes vacío queda sin registrar, que no es lo mismo que cero.",
     "cohortCreateButton": "Registrar la siembra",

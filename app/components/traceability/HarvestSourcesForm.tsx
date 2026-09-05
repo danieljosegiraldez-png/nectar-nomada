@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { reconciliarCosecha } from "../../../lib/traceability/reconciliacionDeCosecha";
 import { useTranslations } from "next-intl";
 import { recordHarvestSourcesFormAction, type TraceabilityActionState } from "../../actions/traceability";
 
@@ -48,13 +49,19 @@ export function HarvestSourcesForm({
   plots,
   declaredTotalKg,
   alreadyRecordedKg,
+  sinPesar,
+  ocultos,
 }: {
   lotId: string;
   harvestEventId: string;
   plots: ReadonlyArray<SourcePlotOption>;
   declaredTotalKg: number | null;
-  /** Suma de los aportes ya guardados. Los nuevos se suman encima. */
+  /** Suma de los aportes ya guardados QUE SE PESARON. Los nuevos se suman encima. */
   alreadyRecordedKg: number | null;
+  /** Aportes guardados y visibles a los que nadie puso peso. */
+  sinPesar: number;
+  /** Aportes que existen pero el RBAC oculta a este usuario. */
+  ocultos: number;
 }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(recordHarvestSourcesFormAction, initialState);
@@ -68,9 +75,16 @@ export function HarvestSourcesForm({
   const update = (key: number, patch: Partial<Row>) =>
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
-  const nuevoTotal = (alreadyRecordedKg ?? 0) + rows.reduce((sum, r) => sum + num(r.weight), 0);
-  const hayPesos = rows.some((r) => r.weight.trim().length > 0) || alreadyRecordedKg != null;
-  const diferencia = declaredTotalKg != null && hayPesos ? declaredTotalKg - nuevoTotal : null;
+  // La decisión vive en `lib/traceability/reconciliacionDeCosecha.ts`, donde se
+  // puede probar: aquí dentro no hay entorno DOM, y ahí es donde se coló el
+  // defecto que esto arregla.
+  const rec = reconciliarCosecha({
+    declaredTotalKg,
+    alreadyRecordedKg,
+    pesosEnPantalla: rows.map((r) => num(r.weight)),
+    sinPesar,
+    ocultos,
+  });
 
   return (
     <form action={formAction} className="nn-form">
@@ -174,14 +188,14 @@ export function HarvestSourcesForm({
             cero — y lo que pasa es que todavía no se sabe. La misma distinción
             que el resto del sistema mantiene (ADR-080).
           */}
-          {hayPesos ? (
+          {rec.totalDeBloques != null ? (
             <>
               {" · "}
-              {t("harvestSourcesFromBlocks", { kg: Number(nuevoTotal.toFixed(3)) })}
-              {diferencia != null ? (
+              {t("harvestSourcesFromBlocks", { kg: rec.totalDeBloques })}
+              {rec.diferenciaKg != null ? (
                 <>
                   {" · "}
-                  <strong>{t("harvestSourcesDifference", { kg: Number(diferencia.toFixed(3)) })}</strong>
+                  <strong>{t("harvestSourcesDifference", { kg: rec.diferenciaKg })}</strong>
                 </>
               ) : null}
             </>
@@ -191,6 +205,22 @@ export function HarvestSourcesForm({
               <span className="nn-muted">{t("harvestSourcesNothingWeighedYet")}</span>
             </>
           )}
+        </p>
+      ) : null}
+
+      {/*
+        La advertencia que hace honesta a la diferencia. Sin ella, un declarado
+        de 500 con 120 escritos y tres aportes SIN PESAR decía «diferencia:
+        380 kg» — y eso se lee como «faltan 380 kg de cereza» cuando lo cierto
+        es que hay tres bloques cuyo peso nadie anotó. Lo mismo con los aportes
+        que el RBAC oculta: el servicio los cuenta precisamente para que la
+        reconciliación no parezca cuadrar con menos aportes de los que hay.
+      */}
+      {rec.incompleta ? (
+        <p className="nn-error" role="alert">
+          {rec.sinPesar > 0 ? t("harvestSourcesUnweighedWarning", { count: rec.sinPesar }) : null}
+          {rec.sinPesar > 0 && rec.ocultos > 0 ? " " : null}
+          {rec.ocultos > 0 ? t("harvestSourcesHiddenWarning", { count: rec.ocultos }) : null}
         </p>
       ) : (
         <p className="nn-muted">{t("harvestSourcesNoDeclaredWeight")}</p>

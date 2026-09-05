@@ -166,15 +166,27 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   dos entradas: **0 de 8 lotes tienen área** y **0 cosechas están atribuidas a
   bloques**, aunque 15 de las 33 ya tienen peso declarado. Las dos las carga él
   ahora sin ayuda.
-- **Las páginas de `app/` no las ha revisado nadie** — no está bloqueado, está
-  *sin mirar*. Cuatro pasadas cubrieron servicios, tests, migraciones y acciones;
-  quedan las páginas (12.625 líneas, el paquete ya se sabe armar). Las cuatro
-  encontraron algo real cada vez —6, 5, 4 y 5 hallazgos— así que la curva no
-  baja, y eso dice más sobre el ritmo del día que sobre los defectos concretos.
-  Las dos preguntas que la primera revisión dejó abiertas **ya están
-  contestadas**: `createTreatmentBatch` no puede crear un tratamiento de terreno
-  (#127, con `locationId: null` explícito y dos tests), y la pasada de tests
-  contestó la segunda encontrando cinco que no discriminaban.
+- **Las páginas de `app/`: primera pasada hecha, quedan las demás** — la quinta
+  revisión (2026-09-05) miró la capa que las cuatro anteriores no podían ver, con
+  una lente concreta: **dónde una página convierte una ausencia en un valor**.
+  Dos hallazgos, los dos con la misma forma —*el servicio tuvo cuidado y la
+  pantalla lo deshizo*— y los dos arreglados:
+
+  La reconciliación de cosecha hacía `alreadyRecordedKg ?? 0` sobre un `null` que
+  el servicio pone a propósito citando ADR-080. Con tres aportes **sin pesar** y
+  120 kg escritos contra 500 declarados, la pantalla decía «diferencia: 380 kg»
+  en negrita — que se lee como «faltan 380 kg de cereza». Y `hiddenContributions`,
+  que el servicio calcula precisamente para que la reconciliación no parezca
+  cuadrar con menos aportes de los que hay, **no lo pintaba ninguna página**:
+  `grep` en `app/` daba cero.
+
+  Decisión del dueño: la diferencia **se muestra, con advertencia**. Verla es el
+  punto del diseño; presentarla como completa era el defecto. La regla salió a
+  `lib/traceability/reconciliacionDeCosecha.ts` para poder probarla — dentro del
+  componente no se puede, y ahí fue donde se coló.
+
+  **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes, y con
+  otras lentes. Ésta sólo buscaba ausencias convertidas en valor.
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
   separada para la serie temporal —~35.000 filas por sensor y año— y no dice

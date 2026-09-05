@@ -306,6 +306,11 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                 harvestEventId={harvestSources.harvestEventId}
                 declaredTotalKg={harvestSources.declaredTotalKg}
                 alreadyRecordedKg={harvestSources.alreadyRecordedKg}
+                // Los dos números que hacen honesta a la diferencia: aportes
+                // guardados sin peso, y aportes que el RBAC oculta. El servicio
+                // los tenía calculados y la pantalla los dejaba caer.
+                sinPesar={harvestSources.existing.filter((s) => s.cherryWeightKg == null).length}
+                ocultos={harvestSources.hiddenContributions}
                 plots={harvestSources.plotLocations.map((plot) => ({
                   id: plot.id,
                   name: plot.name,
