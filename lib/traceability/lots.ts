@@ -955,7 +955,13 @@ export async function getManageableContext(userAccountId: string) {
     (l) => l.name,
   );
 
-  return { projects, locations, plotLocations, organizations };
+  // `sinAmbito` distingue —igual que en `getLotList`— «no hay dónde registrar»
+  // de «tu cuenta no puede registrar en ningún sitio». Las dos llegaban a la
+  // pantalla como tres listas vacías, y un `<select required>` sin opciones no
+  // se puede enviar ni dice por qué: el formulario ofrecía lo que el servicio
+  // iba a negar. `mode === "none"` es la segunda, y es la única que la página
+  // puede explicar.
+  return { projects, locations, plotLocations, organizations, sinAmbito: visibility.mode === "none" };
 }
 
 /**

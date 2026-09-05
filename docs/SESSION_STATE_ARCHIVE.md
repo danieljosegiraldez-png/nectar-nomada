@@ -856,3 +856,53 @@ imprime el sha antes y después y si el archivo compila.
 
 Diez tests. Tres guardias con flip-test que sí discrimina: prefijo de la clave
 de almacenamiento, idempotencia y Persona inexistente.
+
+### 2026-09-05 · P4 §8: la instantánea de autorización, que a propósito no autoriza
+
+`GET /api/v1/sync/authorization`. HMAC con clave **derivada de `AUTH_SECRET` por
+propósito** —separación de claves, sin variable nueva que pedirle a Daniel— y
+techo de 14 días.
+
+**Qué añade sobre el pull, que ya devuelve las Locations:** *qué* puede hacer el
+operador en cada sitio, y sobre todo **una caducidad**. La lista del pull no
+tiene ninguna, así que un aparato perdido podría seguir preparando trabajo para
+siempre contra un ámbito revocado. Ésa es la propiedad entera de §8.
+
+**El test que más importa demuestra que la instantánea NO sirve de nada como
+autoridad:** una forjada que se conceda otro lote no consigue escribir —
+`startFieldSession` y `recordFieldEvent` siguen negando. Si eso fallara,
+habríamos convertido una ayuda de interfaz en una frontera de seguridad.
+
+Siete tests. Tres flip-tests, cada uno con su sha antes/después y comprobando
+que el archivo compila —la lección del arnés de ayer—: quitar la caducidad,
+firmar con `AUTH_SECRET` en crudo, y no comprobar la firma.
+
+**Con esto la Fase 4 queda casi cerrada.** Faltan la subida reanudable, §9
+(cambio de operador) y §10 (purga de borradores rancios), más el carril de
+tokens de §2, aplazado hasta que exista cliente nativo.
+
+### 2026-09-05 · P4 §10 cerrada, §9 a medias y bloqueada en Daniel
+
+**§10 — la purga de borradores rancios, sin copiar la regla.** `classifyDraftAge`
+y sus dos constantes (7 y 21 días, A5.5 §4) se **movieron** de la cola de
+apiario a `lib/sync/draftAge.ts`; apiario la re-exporta. Dos copias serían dos
+ventanas de exposición para el mismo riesgo, separables sin que nadie lo note.
+Hay un test que falla si alguien vuelve a definirla aparte **aunque sea con los
+mismos valores** — el flip-test lo confirmó con una copia que compilaba.
+
+Esto **borra trabajo de campo** que no está en ningún otro sitio, y es
+deliberado: los borradores viven en IndexedDB en claro y cifrarlos dejaría la
+clave en el mismo almacenamiento. La pantalla dice lo purgado, porque un borrado
+silencioso es indistinguible de haber perdido los datos.
+
+**§9 — cerrada el mismo día, y sin construir casi nada.** La mitad ya estaba:
+el cambio de atribución funciona y su «esto no es autorización» ya estaba
+protegido. La otra mitad dependía de una decisión, Daniel la dio —**los aparatos
+son personales, uno por persona, ADR-109**— y eso **elimina** el conjunto de
+operadores: sin tabla, sin migración, sin PIN.
+
+Lo que sí se construyó es el guardia, porque con aparatos personales la
+tentación se invierte: leer «este aparato es de Kenneth» y decidir con eso qué
+puede escribir. Tres tests fijan que no — y el flip-test, acotado a
+`recordFieldEvent`, tumba exactamente los dos de guardia dejando pasar el de
+atribución.

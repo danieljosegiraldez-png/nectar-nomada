@@ -67,56 +67,6 @@ tests: la quité en vez de declararla.
 teléfono, si se instala Studio o se va por Expo Go, quién lleva el aparato —13
 de 14 personas siguen sin contraseña— y si antes o después de la cosecha.
 
-### 2026-09-05 · P4 §10 cerrada, §9 a medias y bloqueada en Daniel
-
-**§10 — la purga de borradores rancios, sin copiar la regla.** `classifyDraftAge`
-y sus dos constantes (7 y 21 días, A5.5 §4) se **movieron** de la cola de
-apiario a `lib/sync/draftAge.ts`; apiario la re-exporta. Dos copias serían dos
-ventanas de exposición para el mismo riesgo, separables sin que nadie lo note.
-Hay un test que falla si alguien vuelve a definirla aparte **aunque sea con los
-mismos valores** — el flip-test lo confirmó con una copia que compilaba.
-
-Esto **borra trabajo de campo** que no está en ningún otro sitio, y es
-deliberado: los borradores viven en IndexedDB en claro y cifrarlos dejaría la
-clave en el mismo almacenamiento. La pantalla dice lo purgado, porque un borrado
-silencioso es indistinguible de haber perdido los datos.
-
-**§9 — cerrada el mismo día, y sin construir casi nada.** La mitad ya estaba:
-el cambio de atribución funciona y su «esto no es autorización» ya estaba
-protegido. La otra mitad dependía de una decisión, Daniel la dio —**los aparatos
-son personales, uno por persona, ADR-109**— y eso **elimina** el conjunto de
-operadores: sin tabla, sin migración, sin PIN.
-
-Lo que sí se construyó es el guardia, porque con aparatos personales la
-tentación se invierte: leer «este aparato es de Kenneth» y decidir con eso qué
-puede escribir. Tres tests fijan que no — y el flip-test, acotado a
-`recordFieldEvent`, tumba exactamente los dos de guardia dejando pasar el de
-atribución.
-
-### 2026-09-05 · P4 §8: la instantánea de autorización, que a propósito no autoriza
-
-`GET /api/v1/sync/authorization`. HMAC con clave **derivada de `AUTH_SECRET` por
-propósito** —separación de claves, sin variable nueva que pedirle a Daniel— y
-techo de 14 días.
-
-**Qué añade sobre el pull, que ya devuelve las Locations:** *qué* puede hacer el
-operador en cada sitio, y sobre todo **una caducidad**. La lista del pull no
-tiene ninguna, así que un aparato perdido podría seguir preparando trabajo para
-siempre contra un ámbito revocado. Ésa es la propiedad entera de §8.
-
-**El test que más importa demuestra que la instantánea NO sirve de nada como
-autoridad:** una forjada que se conceda otro lote no consigue escribir —
-`startFieldSession` y `recordFieldEvent` siguen negando. Si eso fallara,
-habríamos convertido una ayuda de interfaz en una frontera de seguridad.
-
-Siete tests. Tres flip-tests, cada uno con su sha antes/después y comprobando
-que el archivo compila —la lección del arnés de ayer—: quitar la caducidad,
-firmar con `AUTH_SECRET` en crudo, y no comprobar la firma.
-
-**Con esto la Fase 4 queda casi cerrada.** Faltan la subida reanudable, §9
-(cambio de operador) y §10 (purga de borradores rancios), más el carril de
-tokens de §2, aplazado hasta que exista cliente nativo.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
@@ -255,9 +205,44 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   `getActiveOperations` de clase sin que nadie la tocara, y el guardia de cifras
   lo cazó. Queda anotado en el propio comentario.
 
-  **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes. Tres
-  lentes usadas de las que se ocurren: quedan estados de carga que mienten y
-  formularios que ofrecen lo que el servicio niega.
+  **Cuarta lente (misma fecha): formularios que ofrecen lo que el servicio
+  niega.** De 15 `<select required>` alimentados por una lista, 11 tienen
+  marcador o comprueban el vacío. Los **cuatro** que no —`organizationId` y
+  `locationId` en `HarvestForm`, `organizationId` en `ReceivingForm`,
+  `locationId` en `StorageForm`— se alimentan todos de `getManageableContext`,
+  que sin ámbito de gestión devuelve las listas vacías. Un `<select required>`
+  con cero opciones **no se puede enviar y no dice por qué**.
+
+  No era un agujero —SECURITY.md §2 dice que la UI oculta por UX y que la
+  escritura se re-comprueba, y así es—: era una pantalla con una oferta falsa.
+  Y se alcanza sin escribir una URL: `/lots/[id]/storage/new` gatea con
+  `getLotSummary`, que pregunta por **ver**, así que un `Project Viewer` llega
+  desde el botón «Mover almacenamiento» y encuentra el desplegable vacío.
+
+  Arreglado: `getManageableContext` devuelve `sinAmbito`, y `/lots/new` y
+  `/lots/[id]/storage/new` nombran la causa en vez de pintar el formulario. Y
+  en `/lots`, el botón «Crear lote» —que exige `lot:manage`— se pintaba a todo
+  el mundo **mientras el enlace a Recetas, tres líneas más abajo, ya consultaba
+  ese mismo permiso ya calculado**; ahora lo usa.
+
+  **Lo que esta lente encontró y NO arregló, y por qué:** `/lots/[id]` no
+  consulta ningún permiso de escritura. Ofrece seis botones de acción y pinta
+  **16 formularios en línea** en 825 líneas. Gatearlo bien exige decidir qué
+  permiso pide cada uno —foto, jornal, consumo de material no son `lot:manage`—
+  y eso es diseño, no una edición quirúrgica. Medio arreglarlo sería peor:
+  ocultar los botones y dejar los formularios *parecería* gateado.
+
+  **Sin medir, y se dice:** cuántas cuentas de producción ven pero no gestionan
+  — la sonda contra Neon quedó bloqueada y no se rodeó. La prueba demuestra la
+  forma con un `Project Viewer`, no el recuento.
+
+  **Del método:** prettier **no** es el formateador de este proyecto —no está
+  en `package.json` ni en `ci.sh`, y estos archivos no están limpios en `main`—.
+  Pasarlo a `app/lots/page.tsx` reescribió 92 líneas para un cambio de 11.
+
+  **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes. Quedan
+  los estados de carga que mienten, y los seis sitios con el colapso «no hay» /
+  «no puedes ver» de la segunda lente.
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
   separada para la serie temporal —~35.000 filas por sensor y año— y no dice
