@@ -230,10 +230,34 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   `export.ts` y dos ramas más de `lots.ts`— y ninguna de sus pantallas puede
   distinguir todavía.
 
-  **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes. Dos
-  lentes usadas de las que se ocurren: quedan fugas de clasificación al
-  renderizar, estados de carga que mienten, y formularios que ofrecen lo que el
-  servicio niega.
+  **Tercera lente (misma fecha): fugas de clasificación al renderizar.** De
+  cuatro sitios mirados, tres salieron limpios **y así consta**: el inventario
+  `CLASSIFICATION_GATE_DEFERRED` está vacío; `discover` aplica su `PUBLIC_WHERE`
+  a cada relación —y se comprobó contra la base que Prisma respeta un `where`
+  en un `include` a-uno: una organización `confidential` vuelve `null`—; y ni
+  `DomainTag` ni `ProductVariant` llevan clasificación.
+
+  El cuarto es real pero **latente, no una fuga viva**, y conviene decirlo así:
+  `getLotDetail`/`getLotList` gatean por la clasificación del **lote** y luego
+  traían `organization: true`, es decir `contactEmail`, `contactPhone`,
+  `websiteUrl` y `attributes` de una organización que tiene clasificación
+  propia y no se comprueba. Una sonda contra la base confirmó que ese correo
+  vuelve. Lo que impide que salga hoy son los datos y el hábito, no el código:
+  ningún consumidor usa más que `name`, los componentes cliente reciben
+  `{ id, name }`, la exportación escribe sólo `.name`, y en producción hay
+  **0 de 43** lotes menos restringidos que su organización. Arreglado acotando
+  a `{ id, name }` en los dos sitios; el flip-test —devolver `organization:
+  true`— tumba las dos pruebas nuevas por nombre.
+
+  De paso, una trampa del instrumento: escribir el nombre de un guardia seguido
+  de paréntesis **dentro de un comentario** asciende a guardia la declaración
+  que lo contenga en `scripts/inventario-de-acceso.mjs`. Movió
+  `getActiveOperations` de clase sin que nadie la tocara, y el guardia de cifras
+  lo cazó. Queda anotado en el propio comentario.
+
+  **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes. Tres
+  lentes usadas de las que se ocurren: quedan estados de carga que mienten y
+  formularios que ofrecen lo que el servicio niega.
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
   separada para la serie temporal —~35.000 filas por sensor y año— y no dice
