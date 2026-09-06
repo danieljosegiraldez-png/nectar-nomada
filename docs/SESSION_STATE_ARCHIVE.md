@@ -906,3 +906,112 @@ tentación se invierte: leer «este aparato es de Kenneth» y decidir con eso qu
 puede escribir. Tres tests fijan que no — y el flip-test, acotado a
 `recordFieldEvent`, tumba exactamente los dos de guardia dejando pasar el de
 atribución.
+
+---
+
+### 2026-09-06 · Las páginas de `app/`, primera pasada — el detalle
+
+Archivado con el estado en **400/400 líneas, el techo exacto**. Esta entrada
+sola ocupaba **94 de esas 400** —el 24 %— y vivía en §3 «Bloqueado» aun siendo
+un registro de lo *entregado*: su propio texto dice «los dos arreglados».
+
+Archivar §2 no era opción: le quedaba **una** entrada fechada, y vaciarla
+dejaría a una sesión nueva abriendo el estado sin ver trabajo reciente. El
+propio guardia del presupuesto lo dice y propone recortar prosa en su lugar.
+
+Se conserva entero. En §3 queda sólo lo que sigue abierto: que quedan páginas
+sin mirar con esas lentes.
+- **Las páginas de `app/`: primera pasada hecha, quedan las demás** — la quinta
+  revisión (2026-09-05) miró la capa que las cuatro anteriores no podían ver, con
+  una lente concreta: **dónde una página convierte una ausencia en un valor**.
+  Dos hallazgos, los dos con la misma forma —*el servicio tuvo cuidado y la
+  pantalla lo deshizo*— y los dos arreglados:
+
+  La reconciliación de cosecha hacía `alreadyRecordedKg ?? 0` sobre un `null` que
+  el servicio pone a propósito citando ADR-080. Con tres aportes **sin pesar** y
+  120 kg escritos contra 500 declarados, la pantalla decía «diferencia: 380 kg»
+  en negrita — que se lee como «faltan 380 kg de cereza». Y `hiddenContributions`,
+  que el servicio calcula precisamente para que la reconciliación no parezca
+  cuadrar con menos aportes de los que hay, **no lo pintaba ninguna página**:
+  `grep` en `app/` daba cero.
+
+  Decisión del dueño: la diferencia **se muestra, con advertencia**. La regla
+  salió a `lib/traceability/reconciliacionDeCosecha.ts` para poder probarla —
+  dentro del componente no se puede, y ahí fue donde se coló.
+
+  **Segunda lente (misma fecha): «no hay» contra «no puedes ver».** Un hallazgo
+  más, y sistémico: `getLotList` y `getActiveOperations` devolvían el mismo array
+  vacío para una finca sin nada y para una cuenta sin asignaciones, así que
+  `/lots` decía **«Nada en curso ahora mismo»** — una afirmación sobre la finca,
+  cuando puede haber fermentaciones corriendo. Es la **primera pantalla** de
+  quien acaba de recibir acceso, y 13 de 14 cuentas siguen sin poder entrar
+  (P-C).
+
+  Arreglado en esas dos y en `/lots`, con la forma que `Partner.noProjects` ya
+  usaba: se nombra la causa y se dice a quién pedir el acceso.
+
+  **Tercera lente (misma fecha): fugas de clasificación al renderizar.** De
+  cuatro sitios, tres limpios **y consta cuáles** (`CLASSIFICATION_GATE_DEFERRED`
+  vacío, `PUBLIC_WHERE` aplicado a cada relación, `DomainTag`/`ProductVariant`
+  sin clasificación). El cuarto, **latente**: `getLotDetail`/`getLotList` gatean
+  por la clasificación del **lote** y traían la organización entera con su
+  `contactEmail`. No salía por los datos, no por el código —0 de 43 lotes menos
+  restringidos que su organización—. Acotado a `{ id, name }`, con flip-test.
+
+  Trampa: un nombre de guardia con paréntesis **dentro de un comentario**
+  asciende a guardia la declaración que lo contenga en `inventario-de-acceso.mjs`.
+
+  **Cuarta lente (misma fecha): formularios que ofrecen lo que el servicio
+  niega.** De 15 `<select required>` alimentados por una lista, 11 tienen
+  marcador o comprueban el vacío. Los **cuatro** que no —`organizationId` y
+  `locationId` en `HarvestForm`, `organizationId` en `ReceivingForm`,
+  `locationId` en `StorageForm`— se alimentan todos de `getManageableContext`,
+  que sin ámbito de gestión devuelve las listas vacías. Un `<select required>`
+  con cero opciones **no se puede enviar y no dice por qué**.
+
+  No era un agujero —SECURITY.md §2 dice que la UI oculta por UX y que la
+  escritura se re-comprueba, y así es—: era una pantalla con una oferta falsa.
+  Y se alcanza sin escribir una URL: `/lots/[id]/storage/new` gatea con
+  `getLotSummary`, que pregunta por **ver**, así que un `Project Viewer` llega
+  desde el botón «Mover almacenamiento» y encuentra el desplegable vacío.
+
+  Arreglado: `getManageableContext` devuelve `sinAmbito`, y `/lots/new` y
+  `/lots/[id]/storage/new` nombran la causa en vez de pintar el formulario. Y
+  en `/lots`, el botón «Crear lote» —que exige `lot:manage`— se pintaba a todo
+  el mundo **mientras el enlace a Recetas, tres líneas más abajo, ya consultaba
+  ese mismo permiso ya calculado**; ahora lo usa.
+
+  **`/lots/[id]`: encontrado, medido y arreglado — y de paso, una afirmación
+  mía que era falsa.** La página no consultaba ningún permiso de escritura:
+  seis botones de acción y **16 formularios en línea** en 825 líneas. Al
+  archivarlo escribí que gatearlo era diseño «porque foto, jornal y consumo de
+  material no son `lot:manage`». **No lo medí, y es falso:** trazadas las ocho
+  cadenas de servicio, **15 de los 16** exigen exactamente `lot:manage`
+  —`PhotoUploadForm` (6), `LabourEntryForm` (4), `MaterialConsumptionForm` (2),
+  `SelectionForm` vía `recordTransformation`, `MeasurementForm` y
+  `MeasurementCorrectionForm` vía `requireSubjectAccess`—. El único distinto es
+  `HarvestSourcesForm`, que pide `location:manage_attributes`.
+
+  Ninguno estaba desprotegido: los ocho servicios guardan. Era UX, como el
+  resto de la lente. Decisión de Daniel: un **aviso único arriba** y los
+  formularios y botones ocultos —repetir el mensaje 16 veces sería ruido—, y
+  `HarvestSourcesForm` gateado con **su propio** permiso, para no esconderlo a
+  quien sí puede usarlo.
+
+  **Medido, y Daniel tenía razón:** sobre la copia restaurada (fresca: 43
+  lotes, como producción), **3 de 14** cuentas reales ven lotes y no pueden
+  gestionarlos —Chini Ameglio, Chris Huerbsch, Rory Beitia—, las tres en
+  `invited` y **sin correo**: hoy no entra ninguna, y lo verán el día que P-C se
+  desbloquee. Excluir los fixtures `TEST %` baja el total de 20 a 14; sin ese
+  filtro el recuento cuenta la propia suite.
+
+  **Del método:** prettier no es el formateador aquí; pasarlo reescribió 92
+  líneas por un cambio de 11.
+
+  **Los «seis sitios» de la segunda lente eran uno.** Cinco no eran el defecto
+  (ayudantes, un predicado, uno ya arreglado, uno que lanza, y `NewHiveForm` que
+  ya comprueba). El único real era `getApiaryList`, arreglado como `/lots`.
+  **Una lista de pendientes escrita de memoria infla el trabajo.**
+
+  **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes, y los
+  estados de carga que mienten.
