@@ -26,13 +26,32 @@ nada lo miraba.
 reporta 195 al correr —más que 123— porque algunos bloques generan casos en
 bucle; el conteo estático sirve para la proporción, no para el total exacto.
 
-Los 65 archivos que no corre no están repartidos: 31 son de `tests/traceability`
-y el resto se agrupa en `apiary`, `research`, `sensory`, `rbac` y `auth`. Casi
-todos necesitan Postgres restaurado, que es la razón documentada abajo — no un
-descuido.
-
-Sirve para dimensionar la decisión, no para forzarla: pasar del 14 % al 100 %
-es el trabajo de los 65 archivos que describe «El orden que sí funcionaría».
+> **Obsoleto desde el 2026-09-06.** Las cifras de arriba son de cuando se
+> escribió esto y se dejan como estaban: la tabla dice qué se medía entonces.
+> Hoy, medido igual:
+>
+> | | entonces | ahora |
+> |---|---|---|
+> | archivos de test | 79 | **101** |
+> | archivos que CI corre | 14 | **94** |
+>
+> Dos cambios lo hicieron, y ninguno fue «migrar los 65 archivos»:
+>
+> - **PR #177** invirtió la lista (ver `008`): `ci.sh` corre todo lo que no esté
+>   excluido, así que una prueba hermética nueva entra sola. De 22 a 39.
+> - **PR #178/#179** dieron a CI un **Postgres de servicio** con `migrate deploy`
+>   + `db:seed` y las banderas `SEED_DEMO_*`. Los 53 archivos que sólo necesitan
+>   una base sembrada corren ahí. De 39 a 92, y 94 al añadirse pruebas después.
+>
+> **Quedan 6 fuera, y cada uno con su motivo escrito** en
+> `scripts/pruebas-por-compuerta.txt`: `roasting` y `s1` afirman hechos de la
+> finca a propósito —comprueban que los datos reales siguen intactos, así que su
+> valor ES depender del backup—, tres piden datos que ninguna bandera de semilla
+> produce, y `open-decisions` lee `$HOME/.zshrc`.
+>
+> Lo que sigue valiendo de este documento es el razonamiento de por qué la
+> distinción existe. Lo que caducó son los números y la conclusión de que hacía
+> falta tocar 65 archivos.
 
 ## Qué sigue SIN cubrirse
 

@@ -1,6 +1,35 @@
 # 008 · Un test hermético nuevo no corre en CI, y la compuerta sale verde igual
 
-**Estado: no empezado.** Encontrado el 2026-09-01 y comprobado, no supuesto.
+**Estado: HECHO el 2026-09-06** (PR #177). Encontrado el 2026-09-01 y comprobado,
+no supuesto; resuelto por una vía que este documento no contemplaba.
+
+> **Cómo se resolvió, y por qué no fue ninguna de las tres opciones de abajo.**
+> Se **invirtió la lista**: `scripts/pruebas-por-compuerta.txt` nombra lo que
+> **no** corre y por qué, y `ci.sh` corre todo lo demás. Una lista de inclusión
+> pierde cobertura callándose; una de exclusión se queja — una prueba nueva que
+> necesite base la corre `ci.sh` y **pone CI en rojo al no poder conectar**,
+> diciendo cuál es.
+>
+> Así la pregunta «¿cómo se reconoce que un test necesita base?» deja de haber
+> que contestarla por adelantado: se contesta **ejecutando**. La lista se midió
+> corriendo la suite contra la URL inconectable que usa CI, y de paso quedó
+> demostrado que la tercera opción de abajo —«por lo que importa: ¿alcanza
+> `lib/db`?»— **clasifica mal**: da 97 de 97.
+>
+> **La evidencia de que funciona no es una mutación, es la historia del propio
+> día:** `ci.sh` pasó de 39 a 40 a 41 archivos al añadirse pruebas nuevas **sin
+> que nadie tocara ninguna lista**. El control positivo que este documento pedía
+> existe en dos sitios: `ci.sh` aborta si la selección cae por debajo de 30, y
+> `tests/ci-cobertura.test.ts` afirma que hay >50 archivos y >30 corriendo antes
+> de comparar nada.
+>
+> Lo que el documento **no** anticipó y hubo que añadir: la lista necesita
+> **grupos**, no una sola categoría. `tests/open-decisions.test.ts` pasa sin base
+> y aun así no debe correr en CI porque lee `$HOME/.zshrc`.
+>
+> Y de propina, PR #178/#179: los que **sí** necesitan base ya corren en CI, en
+> un job aparte con Postgres de servicio. La cobertura pasó de **22 de 97** a
+> **94 de 101** archivos.
 
 ## Lo que pasa
 
