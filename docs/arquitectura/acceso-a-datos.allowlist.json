@@ -312,11 +312,6 @@
       "archivo": "lib/traceability/biocharBatches.ts",
       "operacion": "listBiocharBatches",
       "razon": "Recibe el principal y filtra por el conjunto de Locations visibles que devuelve getManageableContext, que es la misma visibilidad con la que /plots lista sus parcelas — pero no llama a ningún require*, así que el detector no la reconoce y hace bien en señalarla. Es el filtro de una LISTA, no la frontera: cada lectura de detalle y cada escritura pasan por requireLocationAttributeAccess. Verificado el 2026-09-01."
-    },
-    {
-      "archivo": "lib/envios/unaVezPorEnvio.ts",
-      "operacion": "unaVezPorEnvio",
-      "razon": "Idempotencia de envíos web (2026-09-06). Recibe el principal pero NO autoriza, y es correcto: el servicio de dominio ya aplicó su guardia antes de llamar — `recordLabourEntry` hace `requireLotAccess(..., \"manage\", ...)` arriba. Lo que sí comprueba es que la clave sea de quien la envía y del tipo esperado; sin eso, adivinar una clave devolvería la fila de otro. Verificado el 2026-09-06."
     }
   ],
   "dependen_del_llamador": [

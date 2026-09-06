@@ -13,7 +13,7 @@ import { prisma } from "../../lib/db";
 import { recordLabourEntry, recordMaterialConsumptionEntry } from "../../lib/traceability/operations";
 import { recordMeasurement } from "../../lib/traceability/measurements";
 import { moveLotToStorage } from "../../lib/traceability/storage";
-import { unaVezPorEnvio, ClaveDeEnvioAjena } from "../../lib/envios/unaVezPorEnvio";
+import { unaVezPorEnvio, ClaveDeEnvioAjena, DIAS_DE_VIDA_DE_UNA_CLAVE } from "../../lib/envios/unaVezPorEnvio";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `envio-${Date.now()}`;
@@ -174,5 +174,60 @@ describe("las otras tres entidades sin índice único", () => {
 
     await moveLotToStorage(cuenta, { ...base, claveDeEnvio: `st-${RUN}-otra` });
     expect((await cuantos()) - antes, "control positivo: con otra clave sí escribe").toBe(2);
+  });
+});
+
+/**
+ * Una clave no vale para siempre. Treinta días, decidido por Daniel el
+ * 2026-09-06: pasado el plazo, reenviar el mismo formulario cuenta como
+ * intención nueva. El plazo existe para que la tabla no crezca sin fin — el
+ * caso real se mide en segundos, no en semanas.
+ */
+describe("una clave caduca a los 30 días", () => {
+  /** Retrasa la fecha de una clave ya guardada, que es la única forma de
+   *  envejecerla sin esperar un mes. */
+  async function envejecer(key: string, dias: number) {
+    await prisma.submissionKey.update({
+      where: { key },
+      data: { createdAt: new Date(Date.now() - dias * 24 * 60 * 60 * 1000) },
+    });
+  }
+
+  it("pasada la caducidad, el mismo envío escribe otra fila", async () => {
+    const antes = await jornales(cuenta);
+    const clave = `cad-${RUN}-vieja`;
+    const primera = await recordLabourEntry(cuenta, { ...entrada(), claveDeEnvio: clave });
+    await envejecer(clave, DIAS_DE_VIDA_DE_UNA_CLAVE + 1);
+
+    const segunda = await recordLabourEntry(cuenta, { ...entrada(), claveDeEnvio: clave });
+    expect(segunda.id, "una clave caducada no debe devolver la fila vieja").not.toBe(primera.id);
+    expect((await jornales(cuenta)) - antes).toBe(2);
+  });
+
+  /**
+   * El control positivo, y es el que da sentido al de arriba: justo por debajo
+   * del plazo la clave SÍ vale. Sin esto, «escribe otra fila» saldría verde
+   * también si la caducidad fuera de cero días y ninguna clave valiera nunca.
+   */
+  it("justo por debajo del plazo, la clave sigue valiendo", async () => {
+    const antes = await jornales(cuenta);
+    const clave = `cad-${RUN}-fresca`;
+    const primera = await recordLabourEntry(cuenta, { ...entrada(), claveDeEnvio: clave });
+    await envejecer(clave, DIAS_DE_VIDA_DE_UNA_CLAVE - 1);
+
+    const segunda = await recordLabourEntry(cuenta, { ...entrada(), claveDeEnvio: clave });
+    expect(segunda.id).toBe(primera.id);
+    expect((await jornales(cuenta)) - antes).toBe(1);
+  });
+
+  it("al escribir se barren las claves caducadas de esa cuenta", async () => {
+    const vieja = `cad-${RUN}-barrida`;
+    await recordLabourEntry(cuenta, { ...entrada(), claveDeEnvio: vieja });
+    await envejecer(vieja, DIAS_DE_VIDA_DE_UNA_CLAVE + 5);
+    expect(await prisma.submissionKey.findUnique({ where: { key: vieja } }), "control: sigue ahí antes del barrido").not.toBeNull();
+
+    await recordLabourEntry(cuenta, { ...entrada(), claveDeEnvio: `cad-${RUN}-nueva` });
+    expect(await prisma.submissionKey.findUnique({ where: { key: vieja } }), "la caducada debe haberse ido").toBeNull();
+    expect(await prisma.submissionKey.findUnique({ where: { key: `cad-${RUN}-nueva` } }), "la nueva se queda").not.toBeNull();
   });
 });
