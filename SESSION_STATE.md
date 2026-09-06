@@ -37,6 +37,47 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-06 · Husos horarios, atomicidad de auditoría, y tres inventarios que mentían
+
+**Nada de esto estaba en una lista al empezar.** Salió de mirar: recorrer las
+pantallas en un móvil, leer un comentario que decía lo contrario de lo que
+pasaba, y medir en vez de creer una cifra escrita a mano.
+
+**El fallo con más consecuencia fue de datos, no de pantalla.**
+`MeasurementCorrectionForm` precargaba su `datetime-local` con el reloj de pared
+en **UTC**, y el servidor lo re-interpretaba con el desfase del dispositivo:
+abrir una corrección y guardar **sin tocar la hora movía la medición cinco
+horas**, en silencio. Demostrado con la ida y vuelta completa antes de
+afirmarlo. Arreglado con `paraCampoLocal`, el inverso exacto de
+`parseLocalDateTime`, y con flip-test que demuestra que la forma vieja sí
+desplazaba.
+
+**Y su mitad de pantalla**, que `localDateTime.ts` daba por resuelta: 26 sitios
+usaban `toISOString()`, que siempre devuelve UTC. Se arreglaron 15. **Los otros
+11 NO se tocan y eso es lo importante**: son campos de DÍA guardados como
+medianoche UTC —`sampledAt`, `describedAt`, `plantedAt`, `producedAt`— cuya ida
+y vuelta ya cierra. Convertirlos los movería un día atrás. La distinción vive en
+la cabecera de `lib/time/mostrarInstante.ts`.
+
+**Atomicidad de auditoría: 24 llamadas, en tres formas distintas.** §3 decía
+«13 archivos, 28 llamadas» contando *audits en archivos con transacción*, no
+*audits que puedan viajar con una*. Las formas eran: audit tras el `});` (pasar
+`tx`), audit sin transacción ninguna (introducirla), y `$transaction([array])`,
+que no da cliente y dejaba el audit fuera **por construcción**. El guardia pasó
+de una lista de 15 archivos a una **regla por llamada** sobre los 41 de `lib/`,
+así que un servicio nuevo entra solo.
+
+**Infraestructura, porque el día empezó con 42 MB de disco.** Se recuperaron
+~19 GB; `vercel.json` con `ignoreCommand` y un carril ligero de CI para los
+cambios de sólo documentación —**el 57 % de las PR**, medido— que corre en 7 s y
+no despliega; y el estado, de 400/400 al techo exacto, bajado a 302 moviendo al
+histórico 94 líneas de registro de entrega que vivían en «Bloqueado».
+
+**Lo que quedó sin hacer, con su razón:** dos conversiones de auditoría —
+`sensory/service.ts`, cuyo `try/catch` convertiría un error en otro, y
+`auth/config.ts`, en el camino de autenticación— y el guardia de navegación, que
+afirma ≤8 entradas cuando un admin real ve 10 (§3).
+
 ### 2026-09-05 · La Fase 5 arranca por el ticket, y su prerrequisito ya está hecho
 
 **El ticket `47_P5_CLIENTE_ANDROID.md`, y NADA de código nativo**, porque

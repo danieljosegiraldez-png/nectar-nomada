@@ -2490,6 +2490,45 @@ TZ=UTC PORT=3033 DATABASE_URL=... npm run dev
 Con la zona local no se ve nada. Comprobar leyendo la base con
 `at time zone 'UTC' at time zone 'America/Panama'`, no la pantalla.
 
+### Precargar un `datetime-local` con `toISOString()` corrompe el dato
+
+**Síntoma.** Abrir un formulario de corrección y guardar **sin tocar la hora**
+adelanta el registro cinco horas. Cada vez. En silencio.
+
+**Causa.** `defaultValue={x.occurredAt.slice(0, 16)}` pone el reloj de pared en
+**UTC**. El campo es `datetime-local` y el formulario manda `TZ_OFFSET_FIELD`,
+así que al guardar `parseLocalDateTime` lo re-interpreta como hora **local**.
+Medido el 2026-09-06: `16:31Z` → el campo muestra `16:31` → se vuelve a guardar
+`21:31Z`. Con una medición de medianoche cambia también **la fecha**.
+
+**Arreglo.** `paraCampoLocal` en `lib/time/localDateTime.ts`, el inverso exacto
+de `parseLocalDateTime`, escrito en el DOM con un efecto —como
+`TimezoneOffsetField`— porque en el servidor `getTimezoneOffset()` devuelve el
+desfase del *servidor*.
+
+**Y la distinción que hay que hacer antes de tocar nada de esto**, porque un
+arreglo mecánico rompe seis sitios: hay **campos de día** —`sampledAt`,
+`describedAt`, `plantedAt`, `producedAt`: vienen de un `type="date"` y se
+guardan como medianoche UTC— cuya ida y vuelta **ya cierra** con
+`toISOString().slice(0,10)`, y convertirlos a la zona del sitio los movería un
+día atrás. Y hay **instantes**, que sí hay que convertir. Se distingue mirando
+cómo se PARSEA el campo, no cómo se muestra.
+
+### Un guardia que lee la fuente no puede fiarse de la indentación
+
+**Síntoma.** Un test de arquitectura señala como incorrectos tres archivos que
+están bien, entre ellos el primero que adoptó la práctica que vigila.
+
+**Causa.** Cerraba el bloque buscando el `});` a la misma indentación que lo
+abría. `lib/traceability/plantingCohorts.ts` tiene el cuerpo de su
+`$transaction` **al mismo nivel** que la apertura, así que el `});` de un
+`create` interno pasaba por el cierre y todo lo posterior quedaba «fuera».
+
+**Arreglo.** Contar paréntesis desde el `(`, que no depende del formato. Y un
+control positivo del **análisis**, no del código: un test que comprueba que el
+detector *encuentra* algo. Sin él, un cambio de formato lo deja ciego y el
+guardia pasa sin mirar nada — que es lo que casi ocurre aquí.
+
 ### Un guardia que pasa igual con y sin la regresión
 
 **Síntoma.** `tests/session-state-budget.test.ts` estaba en verde. También lo
