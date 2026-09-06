@@ -43,6 +43,17 @@ const SERVICIOS_ATOMICOS = [
   // revierte con ella. El fallo real era el contrario, y es el que
   // `lib/audit.ts` documenta: una escritura confirmada sin su AuditEvent.
   "lib/traceability/lots.ts",
+  // 2026-09-06, los cuatro de una sola llamada que SÍ eran de este patrón: su
+  // audit iba justo después del `});` de la transacción. Los otros dos de la
+  // lista de §3 —`sensory/service.ts` y `auth/config.ts`— resultaron NO serlo:
+  // auditan una escritura suelta (`prisma.assessment.create`,
+  // `prisma.userAccount.update`), no una transacción. Tienen el mismo hueco,
+  // pero su arreglo es introducir una transacción, no pasar `tx`, y eso es otro
+  // cambio.
+  "lib/traceability/roasting.ts",
+  "lib/apiary/harvest.ts",
+  "lib/commerce/orders.ts",
+  "lib/experiences/bookings.ts",
 ];
 
 /**
