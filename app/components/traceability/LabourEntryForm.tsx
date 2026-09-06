@@ -29,18 +29,24 @@ export function LabourEntryForm({
   observers,
   selfPersonId,
   organizations,
+  claveDeEnvio,
 }: {
   lotId: string;
   parent: LabourEntryParent;
   observers: ObserverOption[];
   selfPersonId: string | null;
   organizations: OrganizationOption[];
+  // La genera el servidor al pintar la página, no el cliente: un `useState` con
+  // `crypto.randomUUID()` daría un valor en el render del servidor y otro al
+  // hidratar, que es un desajuste de hidratación.
+  claveDeEnvio: string;
 }) {
   const t = useTranslations("Traceability");
   const [showInKind, setShowInKind] = useState(false);
 
   return (
     <form action={recordLabourEntryFormAction} className="nn-form" style={{ maxWidth: 420, marginTop: "0.5rem" }}>
+      <input type="hidden" name="claveDeEnvio" value={claveDeEnvio} />
       <input type="hidden" name="lotId" value={lotId} />
       <input type="hidden" name="parentKind" value={parent.kind} />
       <input

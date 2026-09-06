@@ -178,17 +178,14 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
 
   **Tercera lente (misma fecha): fugas de clasificación al renderizar.** De
   cuatro sitios, tres limpios **y consta cuáles** (`CLASSIFICATION_GATE_DEFERRED`
-  vacío; `PUBLIC_WHERE` de discover aplicado a cada relación —comprobado: una
-  organización `confidential` vuelve `null`—; `DomainTag` y `ProductVariant` sin
-  clasificación). El cuarto, real pero **latente**: `getLotDetail`/`getLotList`
-  gatean por la clasificación del **lote** y traían la organización entera, con
-  su `contactEmail`. No salía por los datos y el hábito, no por el código —nadie
-  usa más que `name`, y 0 de 43 lotes están menos restringidos que su
-  organización—. Acotado a `{ id, name }`, con flip-test.
+  vacío, `PUBLIC_WHERE` aplicado a cada relación, `DomainTag`/`ProductVariant`
+  sin clasificación). El cuarto, **latente**: `getLotDetail`/`getLotList` gatean
+  por la clasificación del **lote** y traían la organización entera con su
+  `contactEmail`. No salía por los datos, no por el código —0 de 43 lotes menos
+  restringidos que su organización—. Acotado a `{ id, name }`, con flip-test.
 
-  Trampa del instrumento: un nombre de guardia seguido de paréntesis **dentro de
-  un comentario** asciende a guardia la declaración que lo contenga en
-  `inventario-de-acceso.mjs`. Movió `getActiveOperations` de clase sin tocarla.
+  Trampa: un nombre de guardia con paréntesis **dentro de un comentario**
+  asciende a guardia la declaración que lo contenga en `inventario-de-acceso.mjs`.
 
   **Cuarta lente (misma fecha): formularios que ofrecen lo que el servicio
   niega.** De 15 `<select required>` alimentados por una lista, 11 tienen
@@ -237,31 +234,24 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   **Del método:** prettier no es el formateador aquí; pasarlo reescribió 92
   líneas por un cambio de 11.
 
-  **Los «seis sitios» de la segunda lente eran uno.** Medidos de uno en uno:
-  dos son ayudantes que devuelven un `where`, uno es un predicado donde `false`
-  es correcto, `getActiveOperations` ya estaba arreglado, `buildProducerExport`
-  **lanza** en vez de exportar un vacío y `NewHiveForm` ya comprueba longitud y
-  tiene marcador. El único real era `getApiaryList`: `/apiaries` decía «Todavía
-  no hay apiarios» a quien no tiene asignaciones. Arreglado como `/lots`.
-  **Una lista de pendientes escrita de memoria infla el trabajo: cinco de seis
-  no existían.**
+  **Los «seis sitios» de la segunda lente eran uno.** Cinco no eran el defecto
+  (ayudantes, un predicado, uno ya arreglado, uno que lanza, y `NewHiveForm` que
+  ya comprueba). El único real era `getApiaryList`, arreglado como `/lots`.
+  **Una lista de pendientes escrita de memoria infla el trabajo.**
 
   **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes, y los
   estados de carga que mienten.
-- **CI corría 22 de 97 archivos de prueba; ahora corre 92 de 98.** `ci.sh` los
+- **CI corría 22 de 97 archivos de prueba; ahora 94 de 100.** `ci.sh` los
   nombraba a mano y se desincronizó en silencio. Invertido a grupos
-  (`scripts/pruebas-por-compuerta.txt`): `ci.sh` corre **39** —todo lo no
-  listado— y `ci-con-base.sh`, en un job con Postgres de servicio (imagen
-  **PostGIS**; la oficial no la trae, y sólo lo dijo el runner), los **53** que
-  bastan con `migrate deploy` + `db:seed` **y las banderas `SEED_DEMO_*`**: sin
-  `SEED_DEMO_ADMIN` no hay Platform Admin y siete fallaban sólo por eso. Medido y
-  dos veces desde cero (53/53, 566/566): hay pruebas que pasan acompañadas y
-  fallan solas. **Quedan 6 fuera:** `roasting` y `s1` son **deliberadas** —
-  afirman hechos de la finca para ver que los datos reales siguen intactos, y son
-  las «dos aserciones» de la cabecera de `test-db.sh`: **tenía razón y yo dije
-  que no**—; tres dependen de datos que ninguna bandera produce y saldrían con
-  fixtures propios; y `open-decisions`, que lee `$HOME/.zshrc`. **El job aún no
-  es obligatorio**: la protección sólo exige «Compuerta».
+  (`scripts/pruebas-por-compuerta.txt`): `ci.sh` corre todo lo no listado y
+  `ci-con-base.sh`, en un job con Postgres de servicio (imagen **PostGIS**; la
+  oficial no la trae, y sólo lo dijo el runner), el resto — con las banderas
+  `SEED_DEMO_*`, sin las cuales no hay Platform Admin. Medido ejecutando y dos
+  veces desde cero: hay pruebas que pasan acompañadas y fallan solas. **Quedan 6
+  fuera:** `roasting` y `s1` son **deliberadas** —son las «dos aserciones» de la
+  cabecera de `test-db.sh`: **tenía razón y yo dije que no**—, tres piden datos
+  que ninguna bandera produce, y `open-decisions` lee `$HOME/.zshrc`. **El job
+  aún no es obligatorio**: la protección sólo exige «Compuerta».
 
 - **Quinta lente (2026-09-06): el doble toque.** La lente que traía —cargas que
   mienten— no tiene dónde morder: cero `loading.tsx` y cero `<Suspense>`. Lo que
@@ -270,10 +260,20 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   `recordLabourEntry` dos veces con la misma entrada crea **dos filas
   indistinguibles**, y cinco entidades no tienen índice único ni usa la web el
   `clientDraftId` de la cola. Arreglado con `<BotonDeEnvio>` (`useFormStatus`,
-  sirve en los catorce formularios de servidor) más guardia de arquitectura con
-  flip-test. **Falta idempotencia en el servidor**: esto cierra el dedo, no el
-  reintento de red. Y una medición mía salió **falsa** —«0 de 41 protegidos»,
-  por mirar sólo `app/components`; eran 32 de 51—: la cazó otra medición.
+  sirve en los catorce formularios de servidor) más guardia con flip-test. Y una
+  medición mía salió **falsa** —«0 de 41 protegidos», por mirar sólo
+  `app/components`; eran 32 de 51—: la cazó otra medición.
+
+- **Idempotencia de envíos, a medias y se dice cuánto.** `core.submission_key` +
+  `lib/envios/unaVezPorEnvio.ts`: escritura y clave en **una sola transacción**
+  —si no, una clave sin fila devolvería para siempre un resultado inventado,
+  peor que el duplicado—. **No se reutilizó `clientDraftId`**: el esquema dice
+  tres veces que significa «vino de la cola offline», y de ahí cuelgan
+  `recordedAt`/`syncedAt`; decisión de Daniel, tabla aparte. La clave la genera
+  el **servidor** por render (un `useState` con `randomUUID` daría desajuste de
+  hidratación) y se renueva con el `revalidatePath`. **Sólo `recordLabourEntry`
+  está cableado:** las otras cuatro entidades siguen duplicando ante un reintento
+  de red. Y **la tabla crece sin techo**: sólo `createdAt` indexado.
 
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura

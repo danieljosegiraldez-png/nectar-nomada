@@ -97,6 +97,18 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   // la regla aquí, que es exactamente cómo la pantalla y el servicio acaban
   // discrepando.
   const puedeRegistrar = await puedeGestionarLote(user.userAccountId, lot);
+
+  // Una clave por formulario y por render. El servidor las genera —no el
+  // cliente— porque un `crypto.randomUUID()` dentro de un `useState` daría un
+  // valor al renderizar en servidor y otro al hidratar. Cambian en cada carga y
+  // tras el `revalidatePath` de cada acción, así que un registro legítimo
+  // posterior nunca reusa la de antes.
+  const clavesDeJornal = {
+    harvestEvent: crypto.randomUUID(),
+    receivingEvent: crypto.randomUUID(),
+    fermentationRun: crypto.randomUUID(),
+    dryingRun: crypto.randomUUID(),
+  } as const;
   const puedeEditarFuentes = harvestEvent
     ? await puedeGestionarAtributosDeUbicacion(user.userAccountId, harvestEvent.locationId)
     : false;
@@ -312,6 +324,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           ) : null}
           {puedeRegistrar ? (
             <LabourEntryForm
+            claveDeEnvio={clavesDeJornal.harvestEvent}
               lotId={lot.id}
               parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }}
               observers={observers}
@@ -396,6 +409,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           ) : null}
           {puedeRegistrar ? (
             <LabourEntryForm
+            claveDeEnvio={clavesDeJornal.receivingEvent}
               lotId={lot.id}
               parent={{ kind: "receivingEvent", receivingEventId: receivingEvent.id }}
               observers={observers}
@@ -605,6 +619,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
             ) : null}
             {puedeRegistrar ? (
               <LabourEntryForm
+            claveDeEnvio={clavesDeJornal.fermentationRun}
                 lotId={lot.id}
                 parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }}
                 observers={observers}
@@ -699,6 +714,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
             ) : null}
             {puedeRegistrar ? (
               <LabourEntryForm
+            claveDeEnvio={clavesDeJornal.dryingRun}
                 lotId={lot.id}
                 parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }}
                 observers={observers}

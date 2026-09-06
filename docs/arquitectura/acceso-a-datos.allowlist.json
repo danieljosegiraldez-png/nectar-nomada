@@ -268,6 +268,10 @@
     {
       "archivo": "lib/sync/deviceTokens.ts",
       "razon": "P4 §2. Alta y refresco de tokens de aparato: verifica credenciales, guarda el hash del refresh y comprueba revocación. Es el propio flujo de autenticación."
+    },
+    {
+      "archivo": "lib/envios/unaVezPorEnvio.ts",
+      "razon": "Idempotencia de envíos web (2026-09-06). Sólo toca `core.submission_key`, su propia tabla de control, y ejecuta la escritura del llamador dentro de la misma transacción para que no pueda quedar una clave apuntando a una fila que no existe. No autoriza nada ni decide qué se escribe: el guardia lo aplicó ya el servicio de dominio antes de llamar. Recibir el cliente de transacción es el punto — separarlos volvería a abrir el hueco que cierra."
     }
   ],
   "reciben_transaccion": [
@@ -282,6 +286,10 @@
     {
       "archivo": "lib/research/amendments.ts",
       "razon": "`evaluarGate0` acepta un `Prisma.TransactionClient` para poder reevaluarse DENTRO de la transacción que crea el TreatmentBatch. Sin eso, la compuerta juzgaba un estado que podía cambiar antes del commit — el protocolo puede dejar de estar `active`. Lo pidió la revisión independiente del 2026-09-01. No amplía acceso: la autorización corre antes, fuera de la transacción."
+    },
+    {
+      "archivo": "lib/envios/unaVezPorEnvio.ts",
+      "razon": "Idempotencia de envíos web (2026-09-06). Sólo toca `core.submission_key`, su propia tabla de control, y ejecuta la escritura del llamador dentro de la misma transacción para que no pueda quedar una clave apuntando a una fila que no existe. No autoriza nada ni decide qué se escribe: el guardia lo aplicó ya el servicio de dominio antes de llamar. Recibir el cliente de transacción es el punto — separarlos volvería a abrir el hueco que cierra."
     }
   ],
   "operaciones_sin_patron": [
@@ -304,6 +312,11 @@
       "archivo": "lib/traceability/biocharBatches.ts",
       "operacion": "listBiocharBatches",
       "razon": "Recibe el principal y filtra por el conjunto de Locations visibles que devuelve getManageableContext, que es la misma visibilidad con la que /plots lista sus parcelas — pero no llama a ningún require*, así que el detector no la reconoce y hace bien en señalarla. Es el filtro de una LISTA, no la frontera: cada lectura de detalle y cada escritura pasan por requireLocationAttributeAccess. Verificado el 2026-09-01."
+    },
+    {
+      "archivo": "lib/envios/unaVezPorEnvio.ts",
+      "operacion": "unaVezPorEnvio",
+      "razon": "Idempotencia de envíos web (2026-09-06). Recibe el principal pero NO autoriza, y es correcto: el servicio de dominio ya aplicó su guardia antes de llamar — `recordLabourEntry` hace `requireLotAccess(..., \"manage\", ...)` arriba. Lo que sí comprueba es que la clave sea de quien la envía y del tipo esperado; sin eso, adivinar una clave devolvería la fila de otro. Verificado el 2026-09-06."
     }
   ],
   "dependen_del_llamador": [
