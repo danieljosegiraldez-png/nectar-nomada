@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { mostrarInstante } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
 import {
   getLotDetail,
@@ -119,9 +120,20 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
     measurements.map((m) => m.correctsId).filter((id): id is string => id != null),
   );
 
-  const formatDate = (date: Date) => date.toISOString().slice(0, 16).replace("T", " ");
+  /**
+   * Fecha y hora en la zona del SITIO, no en UTC.
+   *
+   * Antes cada uso repetía `toISOString().slice(0, 16)`, que siempre devuelve
+   * UTC: cosecha, recepción, fermentación y secado se leían cinco horas
+   * adelantadas, y las que caen de madrugada cambiaban de día. Medido el
+   * 2026-09-05 recorriendo la aplicación. Ver `lib/time/mostrarInstante.ts`.
+   *
+   * Un lote sin Location cae en el respaldo del formateador: mostrar la hora
+   * de la finca es mejor que mostrar UTC, y no hay una tercera opción honesta.
+   */
+  const cuando = (date: Date) => mostrarInstante(date, lot.location?.timezone);
   const labourEntryLine = (entry: LabourEntry) =>
-    t("labourEntryLine", { workers: entry.workerCount, hours: entry.hours.toString(), date: formatDate(entry.occurredAt) }) +
+    t("labourEntryLine", { workers: entry.workerCount, hours: entry.hours.toString(), date: cuando(entry.occurredAt) }) +
     (entry.taskNote ? ` — ${entry.taskNote}` : "");
   const consumptionEntryLine = (entry: (typeof materialConsumptionEntries)[number]) =>
     t("consumptionEntryLine", { material: entry.materialName, batch: entry.batchLabel }) +
@@ -312,7 +324,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       {harvestEvent ? (
         <section className="nn-section">
           <h2>{t("harvestInfoHeading")}</h2>
-          <p className="nn-muted">{t("harvestOccurredAtLabel", { date: harvestEvent.harvestedAt.toISOString().slice(0, 16).replace("T", " ") })}</p>
+          <p className="nn-muted">{t("harvestOccurredAtLabel", { date: cuando(harvestEvent.harvestedAt) })}</p>
           {labourEntries.filter((le) => le.harvestEventId === harvestEvent.id).length > 0 ? (
             <ul>
               {labourEntries
@@ -397,7 +409,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       {receivingEvent ? (
         <section className="nn-section">
           <h2>{t("receivingInfoHeading")}</h2>
-          <p className="nn-muted">{t("receivingOccurredAtLabel", { date: receivingEvent.receivedAt.toISOString().slice(0, 16).replace("T", " ") })}</p>
+          <p className="nn-muted">{t("receivingOccurredAtLabel", { date: cuando(receivingEvent.receivedAt) })}</p>
           {labourEntries.filter((le) => le.receivingEventId === receivingEvent.id).length > 0 ? (
             <ul>
               {labourEntries
@@ -551,12 +563,12 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
             {/* Placed directly under the run's own heading: this is the
                 run's report card, not a separate section (ADR-099). */}
             <TargetComparisonTable rows={targetRows} />
-            <p className="nn-muted">{t("startedAtLabel", { date: activeFermentation.startedAt.toISOString().slice(0, 16).replace("T", " ") })}</p>
+            <p className="nn-muted">{t("startedAtLabel", { date: cuando(activeFermentation.startedAt) })}</p>
             {activeFermentation.interventions.length > 0 ? (
               <ul>
                 {activeFermentation.interventions.map((iv) => (
                   <li key={iv.id}>
-                    {t(`interventionType_${iv.interventionType}` as "interventionType_agitation")} — {iv.occurredAt.toISOString().slice(0, 16).replace("T", " ")}
+                    {t(`interventionType_${iv.interventionType}` as "interventionType_agitation")} — {cuando(iv.occurredAt)}
                   </li>
                 ))}
               </ul>
@@ -646,12 +658,12 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         {activeDrying ? (
           <div className="nn-card" style={{ maxWidth: "none", marginBottom: "1rem" }}>
             <h3 style={{ margin: 0 }}>{t("activeDryingHeading")}</h3>
-            <p className="nn-muted">{t("startedAtLabel", { date: activeDrying.startedAt.toISOString().slice(0, 16).replace("T", " ") })}</p>
+            <p className="nn-muted">{t("startedAtLabel", { date: cuando(activeDrying.startedAt) })}</p>
             {activeDrying.turningEvents.length > 0 ? (
               <ul>
                 {activeDrying.turningEvents.map((ev) => (
                   <li key={ev.id}>
-                    {t(`turnEventType_${ev.eventType}` as "turnEventType_turned")} — {ev.occurredAt.toISOString().slice(0, 16).replace("T", " ")}
+                    {t(`turnEventType_${ev.eventType}` as "turnEventType_turned")} — {cuando(ev.occurredAt)}
                   </li>
                 ))}
               </ul>
@@ -759,7 +771,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               return (
                 <li key={m.id}>
                   <span style={reemplazada ? { textDecoration: "line-through" } : undefined}>
-                    {m.variable}: {m.value.toString()} {m.unit} — {m.occurredAt.toISOString().slice(0, 16).replace("T", " ")}
+                    {m.variable}: {m.value.toString()} {m.unit} — {cuando(m.occurredAt)}
                   </span>
                   {m.correctsId ? ` (${t("correctionLabel")})` : ""}
                   {/* La tachadura sola no basta: no se ve en un lector de
@@ -814,7 +826,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           <ul>
             {timeline.map((entry) => (
               <li key={entry.key}>
-                {entry.occurredAt.toISOString().slice(0, 16).replace("T", " ")} — {entry.label}
+                {cuando(entry.occurredAt)} — {entry.label}
               </li>
             ))}
           </ul>
@@ -902,7 +914,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           <ul>
             {auditEvents.map((ev) => (
               <li key={ev.id}>
-                {ev.operation} — {ev.occurredAt.toISOString().slice(0, 16).replace("T", " ")}
+                {ev.operation} — {cuando(ev.occurredAt)}
               </li>
             ))}
           </ul>

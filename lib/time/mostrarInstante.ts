@@ -49,6 +49,35 @@ export const ZONA_POR_DEFECTO = "America/Panama";
  * Se mantiene el mismo formato que producía `toISOString().slice(0,16)` para que
  * el cambio sea de zona y no de aspecto: lo único que se mueve son los dígitos.
  */
+/**
+ * Sólo la fecha de un INSTANTE, en la zona donde ocurrió.
+ *
+ * **Cuándo NO usar esto, que es lo que más cuesta acertar.** Hay dos clases de
+ * fecha en este esquema y se parecen en la pantalla:
+ *
+ * - **Campos de día** — `sampledAt`, `describedAt`, `plantedAt`. Vienen de un
+ *   `<input type="date">` y se guardan como **medianoche UTC** (`fechaDeDia` en
+ *   `app/actions/traceability.ts`). Su ida y vuelta cierra con
+ *   `toISOString().slice(0, 10)`, y convertirlos a la zona del sitio los movería
+ *   **un día hacia atrás**: sería introducir el fallo, no arreglarlo.
+ * - **Instantes** — `occurredAt` de una medición, `startedAt` de una jornada.
+ *   Vienen de un `datetime-local` con desfase y guardan un momento real. Su
+ *   fecha en UTC puede ser la del día siguiente: una medición de las 19:00 en
+ *   Panamá son las 00:00 UTC del día de después.
+ *
+ * Esto es para los segundos. Comprobado campo por campo el 2026-09-05: de los
+ * ocho `toISOString()` de `app/plots/[id]/page.tsx`, seis eran de día o
+ * serialización y sólo dos eran instantes.
+ */
+export function mostrarFecha(cuando: Date, zona: string | null | undefined): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: zona ?? ZONA_POR_DEFECTO,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(cuando);
+}
+
 export function mostrarInstante(cuando: Date, zona: string | null | undefined): string {
   const z = zona ?? ZONA_POR_DEFECTO;
   // `en-CA` da `AAAA-MM-DD`, que es el orden que ya tenían estas pantallas.

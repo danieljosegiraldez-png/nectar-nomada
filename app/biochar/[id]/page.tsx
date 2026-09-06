@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getBiocharBatch, computeBatchAgingDays } from "../../../lib/traceability/biocharBatches";
 import { LocationAccessError } from "../../../lib/traceability/locations";
@@ -82,7 +83,10 @@ export default async function BiocharBatchPage({ params }: { params: Promise<{ i
                   <td style={{ fontVariantNumeric: "tabular-nums", textAlign: "right" }}>
                     {m.value.toString()} {m.unit}
                   </td>
-                  <td>{m.occurredAt.toISOString().slice(0, 10)}</td>
+                  {/* `occurredAt` es un INSTANTE, no un campo de día: su fecha en UTC puede
+    ser la del día siguiente. `producedAt`, aquí al lado, SÍ es de día y por
+    eso no se toca. Ver lib/time/mostrarInstante.ts. */}
+                  <td>{mostrarFecha(m.occurredAt, null)}</td>
                   <td>{t(`provenanceClass_${m.provenanceClass}` as "provenanceClass_measured_fact")}</td>
                 </tr>
               ))}

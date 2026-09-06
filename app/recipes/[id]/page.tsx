@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getRecipeForEditor, ProcessTargetError } from "../../../lib/traceability/processTargets";
 import { listVariableDefinitions } from "../../../lib/traceability/units";
@@ -84,7 +85,10 @@ export default async function RecipeDetailPage({
               {v.id === current?.id ? ` · ${t("recipeCurrentBadge")}` : ""}
             </h3>
             <p className="nn-detail-meta">
-              <span>{v.createdAt.toISOString().slice(0, 10)}</span>
+              {/* Sello automático: un INSTANTE, no un campo de día. Una receta creada a
+    las 19:00 se fechaba el día siguiente. Sin Location a mano, cae en el
+    respaldo del formateador. */}
+              <span>{mostrarFecha(v.createdAt, null)}</span>
               {/* The fact that makes version preservation legible: a version
                   with runs attached is history, not scratch. */}
               <span>

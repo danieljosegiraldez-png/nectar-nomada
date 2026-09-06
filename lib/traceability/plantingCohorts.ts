@@ -431,6 +431,11 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
       altitudeMaxM: true,
       sunExposure: true,
       shadePercentage: true,
+      // Para MOSTRAR las horas donde ocurrieron, no en UTC. Ver
+      // lib/time/mostrarInstante.ts. Hoy en NULL en las 26 Locations, así que
+      // cae en el respaldo; se selecciona ya para que rellenarla sea una
+      // tarea de datos y no otro cambio de código.
+      timezone: true,
       slopeDescription: true,
       aspect: true,
       soilType: true,
