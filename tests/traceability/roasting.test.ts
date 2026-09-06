@@ -147,7 +147,11 @@ describe("recordRoastSession — validation and access", () => {
   it("rejects a user with no access to the source lot's project", async () => {
     await expect(
       recordRoastSession(wrongProjectUserAccountId, {
-        lotId: greenLotId,
+              // Anterior a la distinción muestra/producción (2026-09-06): se asume
+      // `production`, el mismo supuesto que hace la migración con las filas
+      // que ya existieran. Ninguna de estas pruebas afirma nada sobre él.
+      purpose: "production",
+lotId: greenLotId,
         outputLotCode: `${RUN_ID}-reject-access`,
         startedAt: new Date("2027-01-10T08:00:00Z"),
         provenanceClass: "direct_observation",
@@ -158,6 +162,7 @@ describe("recordRoastSession — validation and access", () => {
   it("rejects an end time before the start time", async () => {
     await expect(
       recordRoastSession(authorizedUserAccountId, {
+      purpose: "production",
         lotId: greenLotId,
         outputLotCode: `${RUN_ID}-reject-time`,
         startedAt: new Date("2027-01-10T08:15:00Z"),
@@ -170,6 +175,7 @@ describe("recordRoastSession — validation and access", () => {
   it("rejects a discharge weight exceeding the charge weight", async () => {
     await expect(
       recordRoastSession(authorizedUserAccountId, {
+      purpose: "production",
         lotId: greenLotId,
         outputLotCode: `${RUN_ID}-reject-weight`,
         startedAt: new Date("2027-01-10T08:00:00Z"),
@@ -186,6 +192,7 @@ describe("§4.1 — one green lot roasted three ways, queryable by profile", () 
     const profiles = ["claro filtro", "medio espresso", "oscuro"];
     for (const [i, roastLevel] of profiles.entries()) {
       const { roastSession, outputLot } = await recordRoastSession(authorizedUserAccountId, {
+      purpose: "production",
         lotId: greenLotId,
         outputLotCode: `${RUN_ID}-roast-${i}`,
         roastLevel,
@@ -216,6 +223,7 @@ describe("§4.1 — one green lot roasted three ways, queryable by profile", () 
 describe("§4.2 — same coffee, two roasters, two machines — roaster as a queryable variable", () => {
   it("records Gabriel and Maria roasting the same green lot on different equipment, each independently queryable by roaster", async () => {
     const { roastSession: gabrielSession, outputLot: gabrielLot } = await recordRoastSession(authorizedUserAccountId, {
+      purpose: "production",
       lotId: greenLotId,
       outputLotCode: `${RUN_ID}-gabriel`,
       roastLevel: "medio",
@@ -227,6 +235,7 @@ describe("§4.2 — same coffee, two roasters, two machines — roaster as a que
     outputLotIds.push(gabrielLot.id);
 
     const { roastSession: mariaSession, outputLot: mariaLot } = await recordRoastSession(authorizedUserAccountId, {
+      purpose: "production",
       lotId: greenLotId,
       outputLotCode: `${RUN_ID}-maria`,
       roastLevel: "medio",
@@ -250,6 +259,7 @@ describe("§4.2 — same coffee, two roasters, two machines — roaster as a que
 
   it("rejects a user with no access when reading roast session detail", async () => {
     const { roastSession } = await recordRoastSession(authorizedUserAccountId, {
+      purpose: "production",
       lotId: greenLotId,
       outputLotCode: `${RUN_ID}-detail-access`,
       startedAt: new Date("2027-01-12T08:00:00Z"),
@@ -266,6 +276,7 @@ describe("§4.2 — same coffee, two roasters, two machines — roaster as a que
 describe("§4.3 — pre-roast green measurement distinguished from a storage-phase one", () => {
   it("a measurement carrying roastSessionId is distinguishable from an ordinary Lot measurement with none", async () => {
     const { roastSession } = await recordRoastSession(authorizedUserAccountId, {
+      purpose: "production",
       lotId: greenLotId,
       outputLotCode: `${RUN_ID}-moisture`,
       startedAt: new Date("2027-01-13T08:00:00Z"),
@@ -338,6 +349,7 @@ describe("the row cap is spent on rows the caller can see — ADR-087", () => {
     // Three sessions the authorized caller cannot see, all NEWER than theirs.
     for (let i = 0; i < 3; i++) {
       const { outputLot } = await recordRoastSession(wrongProjectUserAccountId, {
+      purpose: "production",
         lotId: wrongProjectLotId,
         outputLotCode: `${RUN_ID}-other-roast-${i}`,
         startedAt: new Date(`2027-02-0${i + 1}T08:00:00Z`),

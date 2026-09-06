@@ -1015,3 +1015,33 @@ sin mirar con esas lentes.
 
   **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes, y los
   estados de carga que mienten.
+
+### 2026-09-05 · La Fase 5 arranca por el ticket, y su prerrequisito ya está hecho
+
+**El ticket `47_P5_CLIENTE_ANDROID.md`, y NADA de código nativo**, porque
+medirlo primero dijo que no se puede: esta máquina no tiene Android Studio, ni
+SDK, ni `adb`; quedan 6,2 GB libres (Studio con emulador son ~15) y no se conoce
+ningún teléfono Android físico, que el audit exige para validar en gama baja.
+
+**El prerrequisito sí se construyó: §2, el carril de tokens** —que pertenece al
+ticket 46, no a la Fase 5—. ADR-108 lo aplazó «hasta que exista un cliente
+nativo que lo llame»; medir la Fase 5 fue darse cuenta de que **ese día es
+éste**, porque un cliente nativo no puede usar la cookie de la PWA.
+
+`POST /api/v1/auth/device`, `POST /api/v1/auth/token`, y `resolverPrincipal`
+para que las cinco rutas de sincronización acepten cookie o Bearer sin saber
+cuál fue. Refresh **hasheado** en la base; access firmado con clave derivada y
+guardado en ninguna parte. Trece tests y cuatro flip-tests: guardar el refresh
+en claro, ignorar la revocación, distinguir correo desconocido de contraseña
+mala (un oráculo de qué correos tienen cuenta), y firmar con `AUTH_SECRET` en
+crudo.
+
+**Dos cosas que el guardia de rutas me obligó a hacer bien.** Sustituir
+`getCurrentUser` por `resolverPrincipal` rompió su contraste: le enseñé la señal
+nueva y **le hice flip-test**, para comprobar que sigue cazando una ruta que de
+verdad no identifica a nadie. Y `revocarAparato` no tenía llamador fuera de mis
+tests: la quité en vez de declararla.
+
+**Lo que la Fase 5 necesita de Daniel** está en §3 de su ticket: si hay
+teléfono, si se instala Studio o se va por Expo Go, quién lleva el aparato —13
+de 14 personas siguen sin contraseña— y si antes o después de la cosecha.

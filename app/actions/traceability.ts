@@ -20,7 +20,7 @@ import {
 } from "../../lib/traceability/measurements";
 import { UnitValidationError } from "../../lib/traceability/units";
 import { recordHarvestEvent, recordReceivingEvent } from "../../lib/traceability/harvest";
-import { recordRoastSession } from "../../lib/traceability/roasting";
+import { recordRoastSession, elegirPerfilDeTueste } from "../../lib/traceability/roasting";
 import { startFermentationRun, recordFermentationIntervention, endFermentationRun } from "../../lib/traceability/fermentation";
 import { createRecipeWithVersion, createRecipeVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
@@ -382,6 +382,33 @@ export async function endFermentationFormAction(formData: FormData): Promise<voi
  * segundo envío choca contra el índice y falla ruidosamente en vez de duplicar
  * — el mismo motivo por el que las muestras tampoco la llevan.
  */
+/**
+ * Marcar el perfil óptimo de un lote. Reemplaza al anterior si lo había: hay uno
+ * vigente por lote, y la historia queda en la auditoría.
+ */
+export async function elegirPerfilDeTuesteAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    await elegirPerfilDeTueste(user.userAccountId, {
+      lotId,
+      recipeVersionId: String(formData.get("recipeVersionId") ?? ""),
+      notes: emptyToNull(formData.get("notes")),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}`);
+  return {};
+}
+
 export async function recordRoastSessionAction(
   _prevState: TraceabilityActionState,
   formData: FormData,
@@ -395,6 +422,10 @@ export async function recordRoastSessionAction(
     await recordRoastSession(user.userAccountId, {
       lotId,
       outputLotCode: String(formData.get("outputLotCode") ?? "").trim(),
+      // Sin valor por defecto aquí tampoco: si la pantalla no lo manda, el
+      // servicio debe quejarse, no adivinar.
+      purpose: String(formData.get("purpose") ?? "") as never,
+      recipeVersionId: emptyToNull(formData.get("recipeVersionId")),
       roastLevel: emptyToNull(formData.get("roastLevel")),
       equipmentNote: emptyToNull(formData.get("equipmentNote")),
       chargeWeightKg: emptyToNullNumber(formData.get("chargeWeightKg")),
