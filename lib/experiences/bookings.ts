@@ -140,14 +140,20 @@ export async function markBookingPaid(bookingId: string, sessionId: string, paym
         data: { capacityRemaining: Math.max(0, session.capacityRemaining - booking.participantCount) },
       });
     }
-  });
-
-  await recordAuditEvent({
-    actorUserAccountId: null,
-    operation: "booking.paid",
-    entityType: "booking",
-    entityId: bookingId,
-    sourceInterface: "stripe.webhook",
+    // Dentro de la transacción y con `tx` desde el 2026-09-06: una escritura
+    // confirmada no puede quedarse sin su AuditEvent si esta llamada falla
+    // después del commit. Ver la cabecera de `lib/audit.ts`. Aquí el callback
+    // sólo usa `tx.*`, así que no hay transacción anidada.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: null,
+        operation: "booking.paid",
+        entityType: "booking",
+        entityId: bookingId,
+        sourceInterface: "stripe.webhook",
+      },
+      tx,
+    );
   });
 }
 

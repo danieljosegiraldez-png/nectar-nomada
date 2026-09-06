@@ -105,18 +105,26 @@ export async function recordApiaryHarvest(userAccountId: string, input: RecordAp
       });
     }
 
-    return { harvestEvent, lot };
-  });
+    // C1 §3: evidentiary write (carries provenanceClass).
+    //
+    // Dentro de la transacción y con `tx` desde el 2026-09-06. Antes iba fuera
+    // «same reasoning as the coffee-side harvest.ts» — y ese razonamiento era
+    // el que decía que un audit dentro de una transacción revertida
+    // tergiversaría lo ocurrido. No: si revierte, el audit revierte con ella.
+    // El fallo real es el contrario, y es el que documenta `lib/audit.ts`.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "apiary_harvest_event.create",
+        entityType: "apiary_harvest_event",
+        entityId: harvestEvent.id,
+        after: harvestEvent,
+        sourceInterface: "apiary.service",
+      },
+      tx,
+    );
 
-  // C1 §3: evidentiary write (carries provenanceClass); after the
-  // transaction commits, same reasoning as the coffee-side harvest.ts.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "apiary_harvest_event.create",
-    entityType: "apiary_harvest_event",
-    entityId: result.harvestEvent.id,
-    after: result.harvestEvent,
-    sourceInterface: "apiary.service",
+    return { harvestEvent, lot };
   });
 
   return result;

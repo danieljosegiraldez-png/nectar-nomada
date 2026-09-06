@@ -179,18 +179,26 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
       createdBy: userAccountId,
     });
 
-    return { roastSession, transformation, outputLot, reconciliation };
-  });
+    // C1 §3 pattern: an evidentiary write — the earlier gap where T6/T7's
+    // own start/end functions were never audited is not repeated here.
+    //
+    // Dentro de la transacción y con `tx` desde el 2026-09-06: una escritura
+    // confirmada no puede quedarse sin su AuditEvent. Ver la cabecera de
+    // `lib/audit.ts`. `settleMassBalance` recibe el mismo `tx`, así que no hay
+    // transacción anidada — Prisma no las admite.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "roast_session.create",
+        entityType: "roast_session",
+        entityId: roastSession.id,
+        after: roastSession,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
 
-  // C1 §3 pattern: an evidentiary write — the earlier gap where T6/T7's
-  // own start/end functions were never audited is not repeated here.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "roast_session.create",
-    entityType: "roast_session",
-    entityId: result.roastSession.id,
-    after: result.roastSession,
-    sourceInterface: "traceability.service",
+    return { roastSession, transformation, outputLot, reconciliation };
   });
 
   return result;

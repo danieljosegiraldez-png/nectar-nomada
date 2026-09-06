@@ -138,14 +138,20 @@ export async function markOrderPaid(orderId: string, sessionId: string, paymentI
         });
       }
     }
-  });
-
-  await recordAuditEvent({
-    actorUserAccountId: null,
-    operation: "order.paid",
-    entityType: "order",
-    entityId: orderId,
-    sourceInterface: "stripe.webhook",
+    // Dentro de la transacción y con `tx` desde el 2026-09-06: una escritura
+    // confirmada no puede quedarse sin su AuditEvent si esta llamada falla
+    // después del commit. Ver la cabecera de `lib/audit.ts`. Aquí el callback
+    // sólo usa `tx.*`, así que no hay transacción anidada.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: null,
+        operation: "order.paid",
+        entityType: "order",
+        entityId: orderId,
+        sourceInterface: "stripe.webhook",
+      },
+      tx,
+    );
   });
 }
 
