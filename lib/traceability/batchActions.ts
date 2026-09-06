@@ -24,7 +24,20 @@
  */
 import type { LotType } from "../../generated/prisma/client";
 
-export type BatchAction = "measurement" | "selection" | "fermentation" | "drying" | "storage" | "sample" | "report";
+// `roast` se añadió el 2026-09-06, cuando el tueste dejó de ser un servicio sin
+// pantalla. Está en el tipo para poder OFRECER el botón, y a propósito NO entra
+// en `nextActionFor`: la secuencia de arriba es del dueño y dice que el café
+// verde espera a ser CATADO. Sugerir tostar en su lugar sería revocar esa
+// decisión desde el código, y este módulo sugiere, no restringe.
+export type BatchAction =
+  | "measurement"
+  | "selection"
+  | "fermentation"
+  | "drying"
+  | "storage"
+  | "sample"
+  | "roast"
+  | "report";
 
 /**
  * The action a batch of this type is expected to need next, or `null` when

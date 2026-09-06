@@ -198,6 +198,34 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   barrido global pediría una tarea periódica y una ruta protegida, y este
   proyecto no tiene ninguna de las dos — decisión aparte.
 
+- **El tueste ya tiene pantalla, y era el único hueco de la cadena.** Medido el
+  2026-09-06: `lib/traceability/roasting.ts` estaba entero desde R1 —
+  `recordRoastSession`, `listRoastSessions`, `getRoastSessionDetail`, con
+  pruebas— y **ninguna pantalla lo llamaba**; el propio código lo decía en un
+  comentario («once the R1 UI»). Por eso la base tiene **0 tuestes**. Añadidos
+  `/lots/[id]/roast/new`, su acción y `RoastSessionForm`, con la misma forma que
+  secado: se entra desde el lote y se vuelve al lote. **Sin clave de
+  idempotencia a propósito** — crea el lote de salida con `outputLotCode`, único
+  por organización, así que un doble envío choca y falla ruidosamente. `"roast"`
+  entra en `BatchAction` para poder ofrecer el botón pero **no** en
+  `nextActionFor`: la secuencia de ADR-096 es de Daniel y dice que el verde
+  espera a ser **catado**. **No lo ha abierto nadie en un navegador**: las
+  acciones de servidor no las ejerce ninguna prueba (necesitan sesión) y un
+  worktree no tiene `.env`.
+
+- **Humedad post-secado por proceso o variedad: NO existe, y esto es lo que
+  hay.** `moisture` y `water_activity` **sí** son variables medibles, y
+  `ProcessRecipe → ProcessRecipeVersion → ProcessTarget` permite fijar `min`/`max`
+  para cualquier variable en un `moment`, con `compareRunToTargets` ya pintándolo
+  en la página del lote. Lo que falta: la receta se identifica **sólo por nombre**
+  dentro de una organización —no lleva método de proceso ni variedad—, el **lote
+  no lleva variedad** (vive como valor de catálogo en el origen de la cosecha,
+  `cultivarValueId`), **no hay campo de método de proceso** en ningún sitio, y
+  **nada condiciona el paso a almacén** a haber alcanzado una humedad:
+  `moveLotToStorage` no mira ninguna medición. Es el hueco que el audit llama
+  `OperatingStandard` y umbrales versionados (Fase 3, parcial). **Decisión de
+  modelo pendiente de Daniel**, no se construyó nada.
+
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
   separada para la serie temporal —~35.000 filas por sensor y año— y no dice

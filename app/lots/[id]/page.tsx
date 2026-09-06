@@ -202,6 +202,12 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           { action: "drying", href: `/lots/${lot.id}/drying/new`, label: t("startDryingButton") },
         ] as const)
       : []),
+    // R1 §4. Se ofrece sobre café verde: tostar cereza o pergamino no es una
+    // operación que exista. `lotType` es físico a propósito (P3 §3), así que
+    // preguntar por él aquí es preguntar por el estado real del lote.
+    ...(lot.lotType === "green"
+      ? [{ action: "roast" as const, href: `/lots/${lot.id}/roast/new`, label: t("recordRoastButton") }]
+      : []),
     { action: "storage", href: `/lots/${lot.id}/storage/new`, label: t("moveStorageButton") },
     { action: "sample", href: `/lots/${lot.id}/samples/new`, label: t("createSampleButton") },
     { action: "report", href: `/lots/${lot.id}/report`, label: t("viewReportButton") },

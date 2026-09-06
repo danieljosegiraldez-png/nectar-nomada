@@ -80,6 +80,7 @@ export const RUTAS = {
   "/lots/[id]/report": { clase: "requiere-sesion", razon: "Informe de lote." },
   "/lots/[id]/drying/new": { clase: "requiere-sesion", razon: "Operación sobre un lote." },
   "/lots/[id]/fermentation/new": { clase: "requiere-sesion", razon: "Operación sobre un lote." },
+  "/lots/[id]/roast/new": { clase: "requiere-sesion", razon: "Operación sobre un lote." },
   "/lots/[id]/samples/new": { clase: "requiere-sesion", razon: "Operación sobre un lote." },
   "/lots/[id]/storage/new": { clase: "requiere-sesion", razon: "Operación sobre un lote." },
   "/my-nectar": { clase: "requiere-sesion", razon: "Espacio del titular. Único prefijo que además gatea `proxy.ts`." },
