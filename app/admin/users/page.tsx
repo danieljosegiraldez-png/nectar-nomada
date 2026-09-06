@@ -9,6 +9,7 @@ import {
   UserAdminError,
 } from "../../../lib/rbac/admin";
 import { grantRoleFormAction, revokeRoleFormAction } from "../../actions/admin";
+import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -118,9 +119,9 @@ export default async function AdminUsersPage({
             </select>
           </div>
 
-          <button type="submit" className="nn-button">
+          <BotonDeEnvio className="nn-button">
             {t("grantButton")}
-          </button>
+          </BotonDeEnvio>
         </form>
       </section>
 
@@ -157,9 +158,9 @@ export default async function AdminUsersPage({
                     </span>
                     <form action={revokeRoleFormAction}>
                       <input type="hidden" name="assignmentId" value={a.id} />
-                      <button type="submit" className="nn-button-quiet">
+                      <BotonDeEnvio className="nn-button-quiet">
                         {t("revokeButton")}
-                      </button>
+                      </BotonDeEnvio>
                     </form>
                   </div>
                 ))

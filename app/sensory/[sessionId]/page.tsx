@@ -5,6 +5,7 @@ import { getCurrentUser } from "../../../lib/auth/session";
 import { getSessionForJudge, getSessionForHeadJudge, SensoryAccessError } from "../../../lib/sensory/service";
 import { computePanelResultFormAction } from "../../actions/sensory";
 import { AssessmentForm } from "../../components/AssessmentForm";
+import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -99,9 +100,9 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
                     <form action={computePanelResultFormAction}>
                       <input type="hidden" name="sessionId" value={sessionId} />
                       <input type="hidden" name="blindSampleId" value={blindSample.id} />
-                      <button type="submit" className="nn-button" disabled={headJudgeSample.assessments.length === 0}>
+                      <BotonDeEnvio className="nn-button" disabled={headJudgeSample.assessments.length === 0}>
                         {t("computePanelResultButton")}
-                      </button>
+                      </BotonDeEnvio>
                     </form>
 
                     {headJudgeSample.panelResults.length > 0 ? (

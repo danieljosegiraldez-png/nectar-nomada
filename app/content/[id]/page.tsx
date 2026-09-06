@@ -9,6 +9,7 @@ import {
   ContentAccessError,
 } from "../../../lib/content/stories";
 import { updateStoryFormAction, setStoryStatusFormAction } from "../../actions/content";
+import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -88,7 +89,7 @@ export default async function StoryEditorPage({
               </select>
             </div>
             <p className="nn-muted">{t("publishWarning")}</p>
-            <button type="submit" className="nn-button">{t("applyStatusButton")}</button>
+            <BotonDeEnvio className="nn-button">{t("applyStatusButton")}</BotonDeEnvio>
           </form>
         </section>
       ) : null}
@@ -135,7 +136,7 @@ export default async function StoryEditorPage({
                   {context.people.map((p) => <option key={p.id} value={p.id}>{p.displayName}</option>)}
                 </select>
               </div>
-              <button type="submit" className="nn-button">{t("saveButton")}</button>
+              <BotonDeEnvio className="nn-button">{t("saveButton")}</BotonDeEnvio>
             </form>
           </>
         ) : (

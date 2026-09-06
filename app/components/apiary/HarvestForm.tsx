@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { recordApiaryHarvestFormAction } from "../../actions/apiary";
+import { BotonDeEnvio } from "../BotonDeEnvio";
 
 /**
  * A3's Harvest/extraction -> HoneyBatch UI. Online-only, same reasoning
@@ -34,9 +35,9 @@ export function HarvestForm({ colonyId }: { colonyId: string }) {
         <label htmlFor="harvest-notes">{t("notesLabel")}</label>
         <textarea id="harvest-notes" name="notes" rows={2} />
       </div>
-      <button type="submit" className="nn-button">
+      <BotonDeEnvio className="nn-button">
         {t("recordHarvestButton")}
-      </button>
+      </BotonDeEnvio>
     </form>
   );
 }

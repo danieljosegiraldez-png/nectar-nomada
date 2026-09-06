@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import LoginForm from "./LoginForm";
 import { signInWithGoogleAction } from "../actions/auth";
+import { BotonDeEnvio } from "../components/BotonDeEnvio";
 
 /**
  * A server component so it can see whether Google is configured — ADR-076.
@@ -39,9 +40,9 @@ export default async function LoginPage() {
           </p>
 
           <form action={signInWithGoogleAction}>
-            <button type="submit" className="nn-button-quiet" style={{ width: "100%" }}>
+            <BotonDeEnvio className="nn-button-quiet" style={{ width: "100%" }}>
               {t("continueWithGoogle")}
-            </button>
+            </BotonDeEnvio>
           </form>
         </>
       ) : null}

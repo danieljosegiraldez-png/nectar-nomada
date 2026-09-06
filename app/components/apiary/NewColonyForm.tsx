@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { createColonyFormAction } from "../../actions/apiary";
+import { BotonDeEnvio } from "../BotonDeEnvio";
 
 const ORIGIN_TYPES = ["purchased", "captured", "split", "other"] as const;
 
@@ -27,9 +28,9 @@ export function NewColonyForm({ apiaryId, hiveId }: { apiaryId: string; hiveId: 
         <label htmlFor="colony-origin-note">{t("originNoteLabel")}</label>
         <input id="colony-origin-note" name="originNote" type="text" placeholder={t("originNotePlaceholder")} />
       </div>
-      <button type="submit" className="nn-button">
+      <BotonDeEnvio className="nn-button">
         {t("createColonyButton")}
-      </button>
+      </BotonDeEnvio>
     </form>
   );
 }
