@@ -127,16 +127,43 @@ export const authConfig: NextAuthConfig = {
             })
           : null;
 
+        // Las dos ramas de abajo auditan desde el 2026-09-06. Antes no
+        // escribían ningún AuditEvent: una cuenta podía nacer, o ganar una vía
+        // de autenticación nueva, sin dejar una sola fila que lo dijera —
+        // mientras que activarla sí la dejaba. El actor es la propia cuenta,
+        // igual que en la activación de más abajo y que en el alta por
+        // contraseña de `app/actions/auth.ts`: nadie administró esto, la
+        // persona entró. La cuenta existe dentro de la transacción cuando se
+        // audita, así que la clave ajena del actor resuelve.
         userAccount = await prisma.$transaction(async (tx) => {
           // 2. Known person — link, never create a second account.
           if (existingPerson?.userAccount) {
-            await tx.externalIdentity.create({
+            const identity = await tx.externalIdentity.create({
               data: { userAccountId: existingPerson.userAccount.id, provider: "google", subject, lastUsedAt: new Date() },
             });
+
+            // Una cuenta que ya existía gana una VÍA DE ENTRADA nueva. Eso es
+            // un cambio de seguridad por sí solo —quien controle ese Google
+            // entra desde ahora—, así que lleva su propia operación en vez de
+            // colgar de la cuenta.
+            await recordAuditEvent(
+              {
+                actorUserAccountId: existingPerson.userAccount.id,
+                operation: "external_identity.link",
+                entityType: "external_identity",
+                entityId: identity.id,
+                after: { provider: "google", userAccountId: existingPerson.userAccount.id },
+                reason: "google_sign_in_matched_existing_account",
+                sourceInterface: "auth.google",
+              },
+              tx,
+            );
+
             return existingPerson.userAccount;
           }
 
           // 3. Person with no account yet, or nobody at all.
+          const personaExistia = existingPerson !== null;
           const person =
             existingPerson ??
             (await tx.person.create({
@@ -157,9 +184,32 @@ export const authConfig: NextAuthConfig = {
             },
           });
 
-          await tx.externalIdentity.create({
+          const identity = await tx.externalIdentity.create({
             data: { userAccountId: created.id, provider: "google", subject, lastUsedAt: new Date() },
           });
+
+          // Mismo nombre de operación que el alta por contraseña
+          // (`app/actions/auth.ts`), para que las dos altas se lean juntas.
+          // `personCreated` distingue las dos formas que esta rama tiene:
+          // una Persona nueva, o una que ya estaba en la base sin cuenta.
+          await recordAuditEvent(
+            {
+              actorUserAccountId: created.id,
+              operation: "user_account.create",
+              entityType: "user_account",
+              entityId: created.id,
+              after: {
+                id: created.id,
+                authProvider: "google",
+                personId: person.id,
+                personCreated: !personaExistia,
+                externalIdentityId: identity.id,
+              },
+              reason: "google_sign_in_created_account",
+              sourceInterface: "auth.google",
+            },
+            tx,
+          );
 
           return created;
         });
