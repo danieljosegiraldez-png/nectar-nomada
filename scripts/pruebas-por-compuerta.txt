@@ -10,25 +10,29 @@
 # una ruta muerta la caza `tests/ci-cobertura.test.ts`.
 #
 # Nada de esto se dedujo por `grep`. «Importa lib/db» clasifica mal —da 97 de
-# 97—. Los grupos se midieron EJECUTANDO:
-#   sin base:  TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/no-se-conecta npx vitest run
-#   sembrada:  base nueva + `prisma migrate deploy` + `npm run db:seed`, dos
-#              veces desde cero: 46/46 archivos y 460/460 pruebas las dos.
+# 97—. Los grupos se midieron EJECUTANDO, y dos veces creando la base de cero,
+# porque hay pruebas que pasan acompañadas y fallan solas.
 
 # @grupo: base-sembrada
-# Necesitan una base de datos, y les basta con `migrate deploy` + `db:seed`.
-# Las corre `scripts/ci-con-base.sh` contra el servicio Postgres del workflow.
+# Necesitan base, y les basta `migrate deploy` + `db:seed` con las banderas
+# `SEED_DEMO_*`. Las corre `scripts/ci-con-base.sh` contra el Postgres de
+# servicio del workflow. Medido: 53/53 archivos y 566/566 pruebas, dos veces
+# desde cero.
 tests/apiary/ambitoVacioApiarios.test.ts
 tests/apiary/colonyEvents.test.ts
 tests/apiary/e2e.test.ts
 tests/apiary/harvest.test.ts
 tests/apiary/hives.test.ts
+tests/apiary/inspections.test.ts
 tests/apiary/media.test.ts
 tests/auth/googleLinking.test.ts
 tests/auth/setPassword.test.ts
 tests/content/stories.test.ts
 tests/discover/service.test.ts
 tests/partner/projectClassification.test.ts
+tests/rbac/admin.test.ts
+tests/research/amendments.test.ts
+tests/research/ro1.test.ts
 tests/seed/organizationGuard.test.ts
 tests/sensory/classificationGate.test.ts
 tests/sensory/descriptors.test.ts
@@ -56,7 +60,10 @@ tests/traceability/measurements.test.ts
 tests/traceability/media.test.ts
 tests/traceability/operations.test.ts
 tests/traceability/organizacionAcotada.test.ts
+tests/traceability/processTargets.test.ts
 tests/traceability/quantity.test.ts
+tests/traceability/recipeAuthoring.test.ts
+tests/traceability/recipeVersions.test.ts
 tests/traceability/reports.test.ts
 tests/traceability/samples.test.ts
 tests/traceability/selection.test.ts
@@ -66,25 +73,19 @@ tests/traceability/storage.test.ts
 tests/traceability/v1-vocabulary.test.ts
 
 # @grupo: datos-reales
-# Necesitan datos que no crean ellas: un Project, un Lot o un Assignment que ya
-# exista. Dos de ellas —`rbac/admin` y `research/amendments`— PASAN cuando corren
-# junto a las demás y fallan solas, porque se apoyan en lo que otra dejó; por eso
-# el conjunto se midió también aislado, y no sólo entero.
+# Necesitan datos que no crean ni la semilla ni ellas.
 #
-# `scripts/test-db.sh` las cubre en local restaurando el backup verificado. Su
-# cabecera decía «dos aserciones»; medido el 2026-09-05 son estos doce archivos.
-# Sacarlas de aquí pide que se construyan sus propios fixtures, que es otro
-# trabajo.
-tests/apiary/inspections.test.ts
-tests/rbac/admin.test.ts
-tests/research/amendments.test.ts
+# `roasting` y `s1` son deliberadas: afirman hechos concretos de la finca —Las
+# Nubes, Finca Rosina, Cerro Azul— para comprobar que los datos reales siguen
+# intactos. Son las «dos aserciones» que nombra la cabecera de
+# `scripts/test-db.sh`, y tenía razón: no deben salir de aquí, porque su valor
+# ES depender de datos reales.
+#
+# Las otras tres dependen de datos que ninguna bandera de semilla produce, y sí
+# podrían salir de aquí construyéndose sus fixtures. Eso es otro trabajo.
 tests/research/ro1-2.test.ts
-tests/research/ro1.test.ts
 tests/traceability/batchPageData.test.ts
 tests/traceability/plantingCohorts.test.ts
-tests/traceability/processTargets.test.ts
-tests/traceability/recipeAuthoring.test.ts
-tests/traceability/recipeVersions.test.ts
 tests/traceability/roasting.test.ts
 tests/traceability/s1.test.ts
 

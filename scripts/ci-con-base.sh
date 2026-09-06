@@ -35,7 +35,16 @@ export DATABASE_URL="$TEST_DATABASE_URL"
 
 npx prisma generate
 npx prisma migrate deploy
-npm run db:seed
+# Las banderas `SEED_DEMO_*` existen justo para esto (CLAUDE.md §54): la semilla
+# NO crea datos de demostración por defecto, para que un `migrate deploy` de
+# producción nunca los tenga. La base de este job es efímera y se tira al
+# terminar, así que aquí sí se piden.
+#
+# No es cosmético: sin `SEED_DEMO_ADMIN` no existe ninguna asignación activa de
+# Platform Admin, y siete archivos que sólo buscaban «un admin cualquiera»
+# fallaban por eso. Con las cuatro banderas el grupo pasa de 46 a 53 archivos.
+SEED_DEMO_ADMIN=true SEED_DEMO_CONTENT=true SEED_DEMO_PARTNER=true SEED_DEMO_JUDGE=true \
+  npm run db:seed
 
 # El grupo se lee del mismo archivo que usa `ci.sh`, para que no haya dos
 # fuentes que deriven. `awk` corta en la marca del grupo siguiente.

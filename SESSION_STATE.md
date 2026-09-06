@@ -260,18 +260,20 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
 
   **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes, y los
   estados de carga que mienten.
-- **CI corría 22 de 97 archivos de prueba; ahora corre 85 de 98.** `ci.sh` los
-  nombraba a mano y se desincronizó en silencio. Invertido a clasificación por
-  grupos (`scripts/pruebas-por-compuerta.txt`): `ci.sh` corre **39** —todo lo no
-  listado— y `ci-con-base.sh`, en un job con Postgres de servicio, los **46** que
-  sólo necesitan `migrate deploy` + `db:seed`. Los cuatro guardias de las lentes
-  ya corren en CI. Medido **ejecutando**, no por `grep` —«importa `lib/db`»
-  clasifica mal—, y los 46 comprobados dos veces creando la base de cero.
-  **Quedan 13 fuera:** 12 leen datos que no crean (dos pasan acompañadas y
-  fallan solas) y siguen pidiendo el backup de `test-db.sh`, cuya cabecera decía
-  «dos aserciones» cuando son doce; y `open-decisions.test.ts`, que pasa sin base
-  pero lee `$HOME/.zshrc`. **El job aún no es obligatorio**: la protección de
-  ramas sólo exige «Compuerta», y añadirlo lo decide Daniel.
+- **CI corría 22 de 97 archivos de prueba; ahora corre 92 de 98.** `ci.sh` los
+  nombraba a mano y se desincronizó en silencio. Invertido a grupos
+  (`scripts/pruebas-por-compuerta.txt`): `ci.sh` corre **39** —todo lo no
+  listado— y `ci-con-base.sh`, en un job con Postgres de servicio (imagen
+  **PostGIS**; la oficial no la trae, y sólo lo dijo el runner), los **53** que
+  bastan con `migrate deploy` + `db:seed` **y las banderas `SEED_DEMO_*`**: sin
+  `SEED_DEMO_ADMIN` no hay Platform Admin y siete fallaban sólo por eso. Medido y
+  dos veces desde cero (53/53, 566/566): hay pruebas que pasan acompañadas y
+  fallan solas. **Quedan 6 fuera:** `roasting` y `s1` son **deliberadas** —
+  afirman hechos de la finca para ver que los datos reales siguen intactos, y son
+  las «dos aserciones» de la cabecera de `test-db.sh`: **tenía razón y yo dije
+  que no**—; tres dependen de datos que ninguna bandera produce y saldrían con
+  fixtures propios; y `open-decisions`, que lee `$HOME/.zshrc`. **El job aún no
+  es obligatorio**: la protección sólo exige «Compuerta».
 
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
