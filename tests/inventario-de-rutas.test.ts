@@ -72,8 +72,10 @@ describe("el inventario del router", () => {
     const { codigo, salida } = correr([]);
     // El número está FIJADO a propósito: es el disparador que hace que una ruta
     // nueva se vea. 52 → 54 el 2026-09-01, con /biochar y /biochar/[id]
-    // declaradas en el manifiesto en el mismo cambio.
-    expect(salida).toContain("61 entradas");
+    // declaradas en el manifiesto en el mismo cambio. 61 → 62 el 2026-09-06,
+    // con /lots/[id]/roast/new — la pantalla que le faltaba al tueste, cuyo
+    // servicio existía desde R1 sin un solo consumidor.
+    expect(salida).toContain("62 entradas");
     expect(codigo, salida).toBe(0);
   });
 

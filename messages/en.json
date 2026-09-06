@@ -949,7 +949,18 @@
     "landPhotosIntro": "General photos of the block, alongside those attached to a soil pit.",
     "landPhotosNone": "No photographs.",
     "biocharPhotosIntro": "The retort and the process. Kiln design is a text field, and a photo says what no description reaches.",
-    "error_land_media": "Could not save the photograph: {detail}"
+    "error_land_media": "Could not save the photograph: {detail}",
+    "recordRoastButton": "Record roast",
+    "recordRoastIntro": "Logged once the roast is done. Only the roasted batch code and the start time are required; everything else is optional.",
+    "roastOutputLotCodeLabel": "Roasted batch code",
+    "roastStartedAtLabel": "Roast start",
+    "roastEndedAtLabel": "Roast end (optional)",
+    "roastLevelLabel": "Roast level",
+    "roastChargeWeightLabel": "Charge weight (kg)",
+    "roastDischargeWeightLabel": "Discharge weight (kg)",
+    "roastFirstCrackLabel": "First crack (optional)",
+    "roastSecondCrackLabel": "Second crack (optional)",
+    "roastEquipmentLabel": "Equipment"
   },
   "Apiary": {
     "badge": "Apiary",

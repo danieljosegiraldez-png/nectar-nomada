@@ -6,6 +6,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import {
   parseLocalDateTime,
+  parseOptionalLocalDateTime,
   LocalDateTimeError,
   TZ_OFFSET_FIELD,
 } from "../../lib/time/localDateTime";
@@ -19,6 +20,7 @@ import {
 } from "../../lib/traceability/measurements";
 import { UnitValidationError } from "../../lib/traceability/units";
 import { recordHarvestEvent, recordReceivingEvent } from "../../lib/traceability/harvest";
+import { recordRoastSession } from "../../lib/traceability/roasting";
 import { startFermentationRun, recordFermentationIntervention, endFermentationRun } from "../../lib/traceability/fermentation";
 import { createRecipeWithVersion, createRecipeVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
@@ -110,6 +112,13 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
  */
 const fechaLocal = (formData: FormData, campo: string) =>
   parseLocalDateTime(String(formData.get(campo) ?? ""), asString(formData.get(TZ_OFFSET_FIELD)));
+
+/** Igual, pero un campo vacío es legítimo y devuelve `null`: `endedAt`, los
+ *  cracks de un tueste. `fechaLocal` LANZA con la cadena vacía, así que usarlo
+ *  en un campo opcional rompe el envío en cuanto alguien lo deja en blanco —
+ *  que es el caso normal. */
+const fechaLocalOpcional = (formData: FormData, campo: string) =>
+  parseOptionalLocalDateTime(String(formData.get(campo) ?? ""), asString(formData.get(TZ_OFFSET_FIELD)));
 
 const asString = (v: FormDataEntryValue | null) => (v == null ? null : String(v));
 
@@ -361,6 +370,51 @@ export async function endFermentationFormAction(formData: FormData): Promise<voi
 }
 
 // --- Record Drying, §30 screen 7 -----------------------------------------
+
+/**
+ * R1 §4 — registrar un tueste ya terminado.
+ *
+ * Una sola llamada, no un empezar/terminar como fermentación y secado: lo
+ * decide el servicio en su cabecera y aquí sólo se respeta.
+ *
+ * Sin clave de idempotencia, y es deliberado: `recordRoastSession` crea el lote
+ * de salida con `outputLotCode`, que es único por organización, así que un
+ * segundo envío choca contra el índice y falla ruidosamente en vez de duplicar
+ * — el mismo motivo por el que las muestras tampoco la llevan.
+ */
+export async function recordRoastSessionAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    await recordRoastSession(user.userAccountId, {
+      lotId,
+      outputLotCode: String(formData.get("outputLotCode") ?? "").trim(),
+      roastLevel: emptyToNull(formData.get("roastLevel")),
+      equipmentNote: emptyToNull(formData.get("equipmentNote")),
+      chargeWeightKg: emptyToNullNumber(formData.get("chargeWeightKg")),
+      dischargeWeightKg: emptyToNullNumber(formData.get("dischargeWeightKg")),
+      startedAt: fechaLocal(formData, "startedAt"),
+      endedAt: fechaLocalOpcional(formData, "endedAt"),
+      firstCrackAt: fechaLocalOpcional(formData, "firstCrackAt"),
+      secondCrackAt: fechaLocalOpcional(formData, "secondCrackAt"),
+      notes: emptyToNull(formData.get("notes")),
+      // §3: un perfil leído de la máquina y otro recordado esa noche no valen
+      // lo mismo, así que se elige en la pantalla en vez de fijarse aquí.
+      provenanceClass: String(formData.get("provenanceClass") ?? "original_record") as never,
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}`);
+  redirect(`/lots/${lotId}`);
+}
 
 export async function startDryingAction(
   _prevState: TraceabilityActionState,

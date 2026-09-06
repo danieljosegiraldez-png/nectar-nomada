@@ -949,7 +949,18 @@
     "landPhotosIntro": "Fotos generales del bloque, además de las que cuelgan de una calicata.",
     "landPhotosNone": "Sin fotografías.",
     "biocharPhotosIntro": "El retorte y el proceso. El diseño del horno es un campo de texto, y una foto dice de él lo que ninguna descripción alcanza.",
-    "error_land_media": "No se pudo guardar la fotografía: {detail}"
+    "error_land_media": "No se pudo guardar la fotografía: {detail}",
+    "recordRoastButton": "Registrar tueste",
+    "recordRoastIntro": "Se anota cuando el tueste ya ha terminado. Sólo hacen falta el código del lote tostado y la hora de inicio; lo demás es opcional.",
+    "roastOutputLotCodeLabel": "Código del lote tostado",
+    "roastStartedAtLabel": "Inicio del tueste",
+    "roastEndedAtLabel": "Fin del tueste (opcional)",
+    "roastLevelLabel": "Nivel de tueste",
+    "roastChargeWeightLabel": "Peso de carga (kg)",
+    "roastDischargeWeightLabel": "Peso de descarga (kg)",
+    "roastFirstCrackLabel": "Primer crack (opcional)",
+    "roastSecondCrackLabel": "Segundo crack (opcional)",
+    "roastEquipmentLabel": "Equipo"
   },
   "Apiary": {
     "badge": "Apiario",
