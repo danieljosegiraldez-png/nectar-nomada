@@ -115,6 +115,58 @@ describe("nobody matches", () => {
     const identity = await prisma.externalIdentity.findFirst({ where: { userAccountId: account!.id } });
     expect(identity).not.toBeNull();
   });
+
+  it("writes an audit row for the account it created", async () => {
+    // CLAUDE.md §35. Hasta el 2026-09-06 esta rama no escribía ninguno:
+    // una cuenta podía nacer sin dejar una sola fila que lo dijera, mientras
+    // que activar una sí la dejaba.
+    const email = nextEmail();
+    expect(await signInWithGoogle(`sub-${RUN}-new-audit`, email)).toBe(true);
+    const account = await trackAccountFor(email);
+
+    const event = await prisma.auditEvent.findFirst({
+      where: { entityId: account!.id, operation: "user_account.create" },
+      orderBy: { occurredAt: "desc" },
+    });
+    expect(event).not.toBeNull();
+    expect(event!.actorUserAccountId).toBe(account!.id);
+    expect(event!.reason).toBe("google_sign_in_created_account");
+    expect(event!.sourceInterface).toBe("auth.google");
+    // Distingue las dos formas de esta rama: aquí no había Persona previa.
+    expect((event!.after as { personCreated?: boolean }).personCreated).toBe(true);
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ id: event!.id }) });
+  });
+});
+
+describe("enlazar Google a una cuenta que ya existía deja rastro", () => {
+  it("writes an audit row for the new way into an existing account", async () => {
+    // Una vía de entrada nueva a una cuenta viva es un cambio de seguridad por
+    // sí solo: quien controle ese Google entra desde ahora. Antes del
+    // 2026-09-06 no se registraba en ningún sitio.
+    const email = nextEmail();
+    const person = await prisma.person.create({
+      data: { givenName: "GLINK", familyName: "AuditLink", displayName: `GLINK AuditLink ${email}`, email },
+    });
+    const original = await prisma.userAccount.create({
+      data: { personId: person.id, authProvider: "credentials", status: "active", passwordHash: "x" },
+    });
+    created.personIds.push(person.id);
+    created.accountIds.push(original.id);
+
+    expect(await signInWithGoogle(`sub-${RUN}-link-audit`, email)).toBe(true);
+
+    const identity = await prisma.externalIdentity.findFirstOrThrow({ where: { userAccountId: original.id } });
+    const event = await prisma.auditEvent.findFirst({
+      where: { entityId: identity.id, operation: "external_identity.link" },
+      orderBy: { occurredAt: "desc" },
+    });
+    expect(event).not.toBeNull();
+    expect(event!.actorUserAccountId).toBe(original.id);
+    expect(event!.entityType).toBe("external_identity");
+    expect(event!.reason).toBe("google_sign_in_matched_existing_account");
+    expect(event!.sourceInterface).toBe("auth.google");
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ id: event!.id }) });
+  });
 });
 
 describe("an unverified Google address never claims an existing Person", () => {
