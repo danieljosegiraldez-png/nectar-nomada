@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -18,102 +18,168 @@ import { describe, expect, it } from "vitest";
  * —violando la FK del actor a mano— y eso basta una vez. Lo que faltaba era
  * comprobar que cada servicio lo USA, y eso se lee.
  *
+ * **Qué cambió el 2026-09-06, y por qué era necesario.** Antes esto recorría una
+ * LISTA DE ARCHIVOS y exigía que *todas* las llamadas de cada uno llevaran `tx`.
+ * Esa granularidad dejaba fuera a `research/analysis.ts` y `research/protocols.ts`,
+ * que mezclan legítimamente las dos clases: 3 llamadas dentro de una transacción
+ * y 10 que acompañan una escritura suelta (`prisma.X.create` sin transacción).
+ * Meterlos en la lista habría puesto el guardia en rojo sobre código correcto;
+ * dejarlos fuera dejaba sus 3 conversiones sin proteger.
+ *
+ * Ahora la regla es POR LLAMADA y se aplica a todo `lib/`, así que no hay lista
+ * que mantener y un servicio nuevo queda cubierto sin que nadie se acuerde de
+ * añadirlo — que es como `scripts/ci.sh` dejaba fuera tests nuevos en silencio.
+ *
  * Hermético: sólo lee archivos.
  */
 
 const RAIZ = new URL("../..", import.meta.url).pathname;
 
-/**
- * Los servicios que abren transacción y auditan dentro. No es «todos los que
- * auditan»: 28 archivos auditan sin abrir transacción y no tienen nada que
- * hacer atómico (ver `SESSION_STATE.md` §3).
- */
-const SERVICIOS_ATOMICOS = [
-  "lib/traceability/plantingCohorts.ts",
-  "lib/traceability/biocharBatches.ts",
-  "lib/traceability/soilProfiles.ts",
-  "lib/traceability/soilSamples.ts",
-  "lib/traceability/landMedia.ts",
-  "lib/traceability/measurements.ts",
-  "lib/research/amendments.ts",
-  // 2026-09-06. Su audit iba FUERA de la transacción, y su comentario lo
-  // justificaba con una razón que no se sostiene: «an audit row for a
-  // transaction that later rolled back would misrepresent what actually
-  // happened». Si el audit va dentro y la transacción revierte, el audit
-  // revierte con ella. El fallo real era el contrario, y es el que
-  // `lib/audit.ts` documenta: una escritura confirmada sin su AuditEvent.
-  "lib/traceability/lots.ts",
-  // 2026-09-06, los cuatro de una sola llamada que SÍ eran de este patrón: su
-  // audit iba justo después del `});` de la transacción. Los otros dos de la
-  // lista de §3 —`sensory/service.ts` y `auth/config.ts`— resultaron NO serlo:
-  // auditan una escritura suelta (`prisma.assessment.create`,
-  // `prisma.userAccount.update`), no una transacción. Tienen el mismo hueco,
-  // pero su arreglo es introducir una transacción, no pasar `tx`, y eso es otro
-  // cambio.
-  "lib/traceability/roasting.ts",
-  "lib/apiary/harvest.ts",
-  "lib/commerce/orders.ts",
-  "lib/experiences/bookings.ts",
-  // 2026-09-06, los de dos llamadas. Cada uno tiene DOS pares
-  // transacción+audit, y en `drying`/`fermentation` el segundo devuelve
-  // `{ run: endedRun, … }`: el audit tenía que pasar de `result.run` a
-  // `endedRun`, no a `run`. Un reemplazo mecánico habría auditado la fila
-  // equivocada sin que nada fallara.
-  "lib/traceability/harvest.ts",
-  "lib/traceability/drying.ts",
-  "lib/traceability/fermentation.ts",
-];
+/** Todos los `.ts` de `lib/`, que es donde viven los servicios. */
+function fuentes(dir: string): string[] {
+  const salida: string[] = [];
+  for (const entrada of readdirSync(dir)) {
+    const ruta = join(dir, entrada);
+    if (statSync(ruta).isDirectory()) salida.push(...fuentes(ruta));
+    else if (entrada.endsWith(".ts")) salida.push(ruta);
+  }
+  return salida;
+}
+
+interface Llamada {
+  /** Línea 1-indexada, para que el mensaje se pueda abrir. */
+  linea: number;
+  texto: string;
+  dentroDeTransaccion: boolean;
+  /** Inmediatamente después del `});` de una transacción: el patrón viejo. */
+  trasElCierre: boolean;
+}
 
 /**
- * Los argumentos de cada `recordAuditEvent(...)`, contando paréntesis.
+ * Dónde empieza y acaba cada callback de `$transaction`, **contando paréntesis**.
  *
- * Un regex no vale: el objeto del evento lleva paréntesis y llaves anidados, y
- * un `.*?` se detiene en el primero que encuentra. Contar es aburrido y
- * correcto.
+ * **La primera versión cerraba por indentación** — el `});` al mismo nivel que
+ * la línea que abría — y daba tres falsos positivos. No por un formato exótico:
+ * `lib/traceability/plantingCohorts.ts` tiene el cuerpo de su transacción al
+ * MISMO nivel que su apertura, así que el `});` de un `create` interno pasaba
+ * por el cierre de la transacción y todo lo que venía después quedaba
+ * «fuera». La indentación no es estructura, y un guardia que la use para
+ * decidir estructura señala código correcto.
+ *
+ * Contar paréntesis desde el `(` de `$transaction(` no depende del formato.
  */
-function llamadasARecordAuditEvent(src: string): string[] {
-  const llamadas: string[] = [];
-  const marca = "recordAuditEvent(";
-  let desde = 0;
-  for (;;) {
-    const i = src.indexOf(marca, desde);
-    if (i === -1) break;
+function rangosDeTransaccion(src: string): Array<[number, number]> {
+  const rangos: Array<[number, number]> = [];
+  const marca = "$transaction(";
+  for (let i = src.indexOf(marca); i !== -1; i = src.indexOf(marca, i + 1)) {
     let profundidad = 0;
-    let j = i + marca.length - 1;
-    for (; j < src.length; j++) {
+    for (let j = i + marca.length - 1; j < src.length; j++) {
       if (src[j] === "(") profundidad++;
       else if (src[j] === ")") {
         profundidad--;
-        if (profundidad === 0) break;
+        if (profundidad === 0) {
+          rangos.push([i, j]);
+          break;
+        }
       }
     }
-    llamadas.push(src.slice(i, j + 1));
-    desde = j + 1;
   }
-  return llamadas;
+  return rangos;
 }
 
+/** Número de línea 1-indexado de un desplazamiento absoluto. */
+function lineaDe(src: string, offset: number): number {
+  let n = 1;
+  for (let i = 0; i < offset && i < src.length; i++) if (src[i] === "\n") n++;
+  return n;
+}
+
+/** Los argumentos de un `recordAuditEvent(...)`, contando paréntesis. */
+function textoDeLaLlamada(src: string, desde: number): string {
+  let profundidad = 0;
+  for (let j = desde; j < src.length; j++) {
+    if (src[j] === "(") profundidad++;
+    else if (src[j] === ")") {
+      profundidad--;
+      if (profundidad === 0) return src.slice(desde, j + 1);
+    }
+  }
+  return src.slice(desde);
+}
+
+function llamadas(src: string): Llamada[] {
+  const rangos = rangosDeTransaccion(src);
+  const marca = "recordAuditEvent(";
+  const salida: Llamada[] = [];
+  for (let i = src.indexOf(marca); i !== -1; i = src.indexOf(marca, i + 1)) {
+    const cierreAnterior = rangos.filter(([, b]) => b < i).map(([, b]) => b);
+    const ultimo = cierreAnterior.length ? Math.max(...cierreAnterior) : -1;
+    salida.push({
+      linea: lineaDe(src, i),
+      texto: textoDeLaLlamada(src, i + "recordAuditEvent".length),
+      dentroDeTransaccion: rangos.some(([a, b]) => a < i && i < b),
+      // «Justo después» se mide en LÍNEAS, no en caracteres: el `});`, una en
+      // blanco y un comentario corto caben en cuatro.
+      trasElCierre: ultimo >= 0 && lineaDe(src, i) - lineaDe(src, ultimo) <= 4,
+    });
+  }
+  return salida;
+}
+
+const ARCHIVOS = fuentes(join(RAIZ, "lib"))
+  .map((r) => relative(RAIZ, r))
+  .filter((r) => readFileSync(join(RAIZ, r), "utf8").includes("recordAuditEvent("))
+  .sort();
+
 describe("el audit viaja con la transacción que lo produjo", () => {
-  for (const archivo of SERVICIOS_ATOMICOS) {
-    it(`${archivo}: cada recordAuditEvent recibe el cliente de transacción`, () => {
+  /**
+   * Control positivo del análisis, no del código. Si `rangosDeTransaccion`
+   * dejara de reconocer la forma de un `$transaction` —un cambio de formato, un
+   * `prettier` distinto— todas las llamadas saldrían «fuera de transacción» y
+   * el guardia pasaría sin comprobar nada. Esto lo convierte en rojo.
+   */
+  it("el análisis encuentra transacciones y llamadas de verdad", () => {
+    expect(ARCHIVOS.length, "ningún archivo de lib/ llama a recordAuditEvent").toBeGreaterThan(10);
+    const dentro = ARCHIVOS.flatMap((a) =>
+      llamadas(readFileSync(join(RAIZ, a), "utf8")).filter((l) => l.dentroDeTransaccion),
+    );
+    expect(
+      dentro.length,
+      "ninguna llamada aparece dentro de una transacción: el detector de rangos no está reconociendo nada",
+    ).toBeGreaterThan(10);
+  });
+
+  for (const archivo of ARCHIVOS) {
+    it(`${archivo}: cada recordAuditEvent en transacción recibe su cliente`, () => {
       const src = readFileSync(join(RAIZ, archivo), "utf8");
 
-      // Control de que estamos mirando donde hay algo que mirar: si el archivo
-      // dejara de abrir transacción o de auditar, este test dejaría de
-      // significar nada en silencio.
-      expect(src, `${archivo} ya no abre transacción`).toContain("$transaction");
-
-      const llamadas = llamadasARecordAuditEvent(src);
-      expect(llamadas.length, `${archivo} ya no llama a recordAuditEvent`).toBeGreaterThan(0);
-
-      for (const llamada of llamadas) {
+      for (const llamada of llamadas(src)) {
+        if (!llamada.dentroDeTransaccion) continue;
         // El segundo argumento es el cliente. Se busca `, tx,` o `, tx)` — la
         // coma de cierre la pone el formateador del proyecto.
         expect(
-          /,\s*tx\s*,?\s*\)$/.test(llamada.trim()),
-          `en ${archivo} hay un recordAuditEvent sin cliente de transacción:\n${llamada.slice(0, 160)}…`,
+          /,\s*tx\s*,?\s*\)$/.test(llamada.texto.trim()),
+          `${archivo}:${llamada.linea} audita DENTRO de una transacción sin pasarle el cliente. ` +
+            `Usaría la conexión global, así que su fila se confirmaría aunque la transacción revierta.`,
         ).toBe(true);
       }
+    });
+
+    /**
+     * El patrón viejo, que es el que se arregló los días 5 y 6: auditar justo
+     * después del `});`. La escritura ya confirmó, así que si el audit falla
+     * queda un hecho sin rastro — el fallo que `lib/audit.ts` documenta.
+     *
+     * Se comprueba aparte del anterior para que el mensaje diga cuál de los dos
+     * problemas es: uno se arregla pasando `tx`, el otro moviendo la llamada.
+     */
+    it(`${archivo}: ningún recordAuditEvent justo después de cerrar una transacción`, () => {
+      const src = readFileSync(join(RAIZ, archivo), "utf8");
+      const sospechosas = llamadas(src).filter((l) => l.trasElCierre && !l.dentroDeTransaccion);
+      expect(
+        sospechosas.map((l) => `${archivo}:${l.linea}`),
+        "auditar tras el `});` deja la escritura confirmada y el audit fuera: si falla, hay hecho sin rastro. Muévelo dentro y pásale `tx`.",
+      ).toEqual([]);
     });
   }
 });

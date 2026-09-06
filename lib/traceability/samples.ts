@@ -254,16 +254,22 @@ export async function recordExternalCoffeeSample(userAccountId: string, input: R
       },
     });
 
-    return { sample, origin };
-  });
+    // Dentro de la transacción y con `tx` desde el 2026-09-06: la muestra, su
+    // origen y el AuditEvent de los dos se confirman juntos o no se confirma
+    // ninguno. Ver la cabecera de `lib/audit.ts`.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "sample.create_external",
+        entityType: "sample",
+        entityId: sample.id,
+        after: { sample, origin },
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "sample.create_external",
-    entityType: "sample",
-    entityId: sample.id,
-    after: { sample, origin },
-    sourceInterface: "traceability.service",
+    return { sample, origin };
   });
 
   return { sample, origin };
@@ -348,8 +354,13 @@ export async function completeExternalCoffeeOrigin(userAccountId: string, input:
 
   const before = existing;
 
-  const [origin] = await prisma.$transaction([
-    prisma.externalCoffeeOrigin.update({
+  // Antes esto era `$transaction([...])`, la forma de ARRAY, que no da cliente
+  // de transacción: no había `tx` que pasarle al audit, así que el audit
+  // quedaba fuera por construcción. Convertido a la forma de callback el
+  // 2026-09-06 para que la actualización, el enlace opcional al lote y el
+  // AuditEvent se confirmen juntos. Ver la cabecera de `lib/audit.ts`.
+  const origin = await prisma.$transaction(async (tx) => {
+    const actualizado = await tx.externalCoffeeOrigin.update({
       where: { sampleId: input.sampleId },
       data: {
         ...(input.producerOrganizationId !== undefined ? { producerOrganizationId: input.producerOrganizationId } : {}),
@@ -370,18 +381,29 @@ export async function completeExternalCoffeeOrigin(userAccountId: string, input:
         ...(input.harvestWindowDataQuality !== undefined ? { harvestWindowDataQuality: input.harvestWindowDataQuality } : {}),
         ...(harvestWindowChanged ? { harvestWindowKnownAt: now } : {}),
       },
-    }),
-    ...(input.linkToLotId ? [prisma.sample.update({ where: { id: input.sampleId }, data: { sourceLotId: input.linkToLotId } })] : []),
-  ]);
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "external_coffee_origin.complete",
-    entityType: "external_coffee_origin",
-    entityId: origin.id,
-    before,
-    after: origin,
-    sourceInterface: "traceability.service",
+    if (input.linkToLotId) {
+      await tx.sample.update({
+        where: { id: input.sampleId },
+        data: { sourceLotId: input.linkToLotId },
+      });
+    }
+
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "external_coffee_origin.complete",
+        entityType: "external_coffee_origin",
+        entityId: actualizado.id,
+        before,
+        after: actualizado,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return actualizado;
   });
 
   return origin;
