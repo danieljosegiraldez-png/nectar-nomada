@@ -10,7 +10,9 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import { recordLabourEntry } from "../../lib/traceability/operations";
+import { recordLabourEntry, recordMaterialConsumptionEntry } from "../../lib/traceability/operations";
+import { recordMeasurement } from "../../lib/traceability/measurements";
+import { moveLotToStorage } from "../../lib/traceability/storage";
 import { unaVezPorEnvio, ClaveDeEnvioAjena } from "../../lib/envios/unaVezPorEnvio";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
@@ -48,6 +50,10 @@ beforeAll(async () => {
 afterAll(async () => {
   const ids = [cuenta, otra];
   await prisma.submissionKey.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: ids } }) });
+  await prisma.materialConsumptionEntry.deleteMany({ where: assertDefinedWhere({ createdBy: { in: ids } }) });
+  await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ createdBy: { in: ids } }) });
+  await prisma.measurement.deleteMany({ where: assertDefinedWhere({ createdBy: { in: ids } }) });
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ createdBy: { in: ids } }) });
   await prisma.labourEntry.deleteMany({ where: assertDefinedWhere({ createdBy: { in: ids } }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: ids } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: scopeId }) });
@@ -113,5 +119,60 @@ describe("un envío se atiende una sola vez", () => {
     ).rejects.toThrow("la escritura falla a propósito");
 
     expect(await prisma.submissionKey.findUnique({ where: { key: clave } })).toBeNull();
+  });
+});
+
+/**
+ * Las otras tres entidades que duplicaban en silencio. `Sample` NO está aquí a
+ * propósito: tiene `@@unique([organizationId, sampleCode])`, así que un segundo
+ * envío choca contra el índice y falla ruidosamente en vez de duplicar —
+ * medido, después de haber afirmado lo contrario.
+ */
+describe("las otras tres entidades sin índice único", () => {
+  let loteId: string;
+
+  beforeAll(async () => {
+    loteId = (await prisma.lot.create({
+      data: { lotCode: `TEST-${RUN}`, lotType: "cherry", organizationId: orgId, locationId: plotId, createdBy: cuenta },
+    })).id;
+  });
+
+  it("consumo de material: misma clave, UNA fila; distintas, dos", async () => {
+    const base = { parent: { kind: "location" as const, locationId: plotId }, materialName: "Cal", batchLabel: "L-1", provenanceClass: "measured_fact" as const };
+    const cuantos = () => prisma.materialConsumptionEntry.count({ where: assertDefinedWhere({ createdBy: cuenta }) });
+    const antes = await cuantos();
+    const a1 = await recordMaterialConsumptionEntry(cuenta, { ...base, claveDeEnvio: `mc-${RUN}` });
+    const a2 = await recordMaterialConsumptionEntry(cuenta, { ...base, claveDeEnvio: `mc-${RUN}` });
+    expect(a2.id).toBe(a1.id);
+    expect((await cuantos()) - antes).toBe(1);
+
+    await recordMaterialConsumptionEntry(cuenta, { ...base, claveDeEnvio: `mc-${RUN}-otra` });
+    expect((await cuantos()) - antes, "control positivo: con otra clave sí escribe").toBe(2);
+  });
+
+  it("medición: misma clave, UNA fila; distintas, dos", async () => {
+    const base = { lotId: loteId, variable: "temperature" as never, value: 21, unit: "C", occurredAt: new Date("2026-09-01T09:00:00Z"), provenanceClass: "measured_fact" as const };
+    const cuantos = () => prisma.measurement.count({ where: assertDefinedWhere({ createdBy: cuenta }) });
+    const antes = await cuantos();
+    const m1 = await recordMeasurement(cuenta, { ...base, claveDeEnvio: `me-${RUN}` });
+    const m2 = await recordMeasurement(cuenta, { ...base, claveDeEnvio: `me-${RUN}` });
+    expect(m2.id).toBe(m1.id);
+    expect((await cuantos()) - antes).toBe(1);
+
+    await recordMeasurement(cuenta, { ...base, claveDeEnvio: `me-${RUN}-otra` });
+    expect((await cuantos()) - antes, "control positivo: con otra clave sí escribe").toBe(2);
+  });
+
+  it("movimiento de almacén: misma clave, UNA fila; distintas, dos", async () => {
+    const base = { lotId: loteId, locationId: plotId, startedAt: new Date("2026-09-01T10:00:00Z") };
+    const cuantos = () => prisma.storageAssignment.count({ where: assertDefinedWhere({ createdBy: cuenta }) });
+    const antes = await cuantos();
+    const s1 = await moveLotToStorage(cuenta, { ...base, claveDeEnvio: `st-${RUN}` });
+    const s2 = await moveLotToStorage(cuenta, { ...base, claveDeEnvio: `st-${RUN}` });
+    expect(s2.id).toBe(s1.id);
+    expect((await cuantos()) - antes).toBe(1);
+
+    await moveLotToStorage(cuenta, { ...base, claveDeEnvio: `st-${RUN}-otra` });
+    expect((await cuantos()) - antes, "control positivo: con otra clave sí escribe").toBe(2);
   });
 });

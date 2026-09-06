@@ -167,6 +167,8 @@ export interface RecordMaterialConsumptionEntryInput {
   // Required for every parent kind except "location" — same convention as
   // RecordLabourEntryInput.lotId above.
   lotId?: string | null;
+  // Clave de idempotencia del formulario web, igual que en jornales.
+  claveDeEnvio?: string | null;
   parent: MaterialConsumptionParent;
   materialName: string;
   // The one irrecoverable identity fact (source report §3) — required,
@@ -213,20 +215,25 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
     await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
   }
 
-  const materialConsumptionEntry = await prisma.materialConsumptionEntry.create({
-    data: {
-      materialName: input.materialName.trim(),
-      batchLabel: input.batchLabel.trim(),
-      quantity: input.quantity ?? null,
-      unit: input.unit ?? null,
-      occurredAt: input.occurredAt ?? new Date(),
-      operatorPersonId: input.operatorPersonId ?? null,
-      provenanceClass: input.provenanceClass,
-      dataQuality: input.dataQuality ?? null,
-      notes: input.notes ?? null,
-      createdBy: userAccountId,
-      ...consumptionParentData(input.parent),
-    },
+  const materialConsumptionEntry = await unaVezPorEnvio(userAccountId, input.claveDeEnvio, {
+    tipo: "MaterialConsumptionEntry",
+    recuperar: (id) => prisma.materialConsumptionEntry.findUniqueOrThrow({ where: { id } }),
+    crear: (tx) =>
+      tx.materialConsumptionEntry.create({
+        data: {
+          materialName: input.materialName.trim(),
+          batchLabel: input.batchLabel.trim(),
+          quantity: input.quantity ?? null,
+          unit: input.unit ?? null,
+          occurredAt: input.occurredAt ?? new Date(),
+          operatorPersonId: input.operatorPersonId ?? null,
+          provenanceClass: input.provenanceClass,
+          dataQuality: input.dataQuality ?? null,
+          notes: input.notes ?? null,
+          createdBy: userAccountId,
+          ...consumptionParentData(input.parent),
+        },
+      }),
   });
 
   // C1 §3: evidentiary write (carries provenanceClass).

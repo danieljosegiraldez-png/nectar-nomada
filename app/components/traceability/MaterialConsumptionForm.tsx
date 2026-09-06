@@ -13,11 +13,23 @@ import { BotonDeEnvio } from "../BotonDeEnvio";
  * at the action layer, matching every call site here except Measurement's
  * genuinely ambiguous one.
  */
-export function MaterialConsumptionForm({ lotId, parent }: { lotId: string; parent: MaterialConsumptionParent }) {
+export function MaterialConsumptionForm({
+  lotId,
+  parent,
+  claveDeEnvio,
+}: {
+  lotId: string;
+  parent: MaterialConsumptionParent;
+  // La genera el servidor al pintar la página, no el cliente: un `useState` con
+  // `crypto.randomUUID()` daría un valor al renderizar en servidor y otro al
+  // hidratar, que es un desajuste de hidratación.
+  claveDeEnvio: string;
+}) {
   const t = useTranslations("Traceability");
 
   return (
     <form action={recordMaterialConsumptionEntryFormAction} className="nn-form" style={{ maxWidth: 420, marginTop: "0.5rem" }}>
+      <input type="hidden" name="claveDeEnvio" value={claveDeEnvio} />
       {/*
         ADR-097. This form recorded zero entries in production, and the reason
         was one label: the package's lot number was called "Lote/batch",

@@ -40,7 +40,12 @@ export function LabMeasurementForm({
   sujeto,
   sujetoId,
   variables,
+  claveDeEnvio,
 }: {
+  // La genera el servidor al pintar la página, no el cliente: un `useState` con
+  // `crypto.randomUUID()` daría un valor al renderizar en servidor y otro al
+  // hidratar, que es un desajuste de hidratación.
+  claveDeEnvio: string;
   sujeto: SujetoDeLaboratorio;
   sujetoId: string;
   variables: VariableChoice[];
@@ -53,6 +58,7 @@ export function LabMeasurementForm({
 
   return (
     <form action={formAction} className="nn-form">
+      <input type="hidden" name="claveDeEnvio" value={claveDeEnvio} />
       {/* El nombre del campo ES la clase de sujeto. La acción no adivina: lee
           exactamente el que llegó, y el servicio rechaza que llegue más de uno. */}
       <input type="hidden" name="sujeto" value={sujeto} />

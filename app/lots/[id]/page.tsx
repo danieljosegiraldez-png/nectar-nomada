@@ -110,6 +110,11 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
     fermentationRun: crypto.randomUUID(),
     dryingRun: crypto.randomUUID(),
   } as const;
+  const clavesDeConsumo = {
+    fermentationRun: crypto.randomUUID(),
+    dryingRun: crypto.randomUUID(),
+  } as const;
+  const claveDeMedicion = crypto.randomUUID();
   const puedeEditarFuentes = harvestEvent
     ? await puedeGestionarAtributosDeUbicacion(user.userAccountId, harvestEvent.locationId)
     : false;
@@ -650,7 +655,11 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               </ul>
             ) : null}
             {puedeRegistrar ? (
-              <MaterialConsumptionForm lotId={lot.id} parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }} />
+              <MaterialConsumptionForm
+                claveDeEnvio={clavesDeConsumo.fermentationRun}
+                lotId={lot.id}
+                parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }}
+              />
             ) : null}
           </div>
         ) : null}
@@ -745,7 +754,11 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               </ul>
             ) : null}
             {puedeRegistrar ? (
-              <MaterialConsumptionForm lotId={lot.id} parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }} />
+              <MaterialConsumptionForm
+                claveDeEnvio={clavesDeConsumo.dryingRun}
+                lotId={lot.id}
+                parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }}
+              />
             ) : null}
           </div>
         ) : null}
@@ -808,6 +821,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         )}
         {puedeRegistrar ? (
           <MeasurementForm
+            claveDeEnvio={claveDeMedicion}
             lotId={lot.id}
             observers={observers}
             selfPersonId={selfPersonId}

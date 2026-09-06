@@ -323,6 +323,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
               <details>
                 <summary>{t("samplesAddResult")}</summary>
                 <LabMeasurementForm
+                  claveDeEnvio={crypto.randomUUID()}
                   sujeto="soilSampleId"
                   sujetoId={m.id}
                   variables={listVariableDefinitions("analisis_de_suelo")}
@@ -364,6 +365,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
                 <details>
                   <summary>{t("samplesAddResult")}</summary>
                   <LabMeasurementForm
+                  claveDeEnvio={crypto.randomUUID()}
                     sujeto="foliarSampleId"
                     sujetoId={m.id}
                     variables={listVariableDefinitions("analisis_foliar")}
