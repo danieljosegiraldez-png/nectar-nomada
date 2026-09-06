@@ -18,6 +18,7 @@
 # `SEED_DEMO_*`. Las corre `scripts/ci-con-base.sh` contra el Postgres de
 # servicio del workflow. Medido: 53/53 archivos y 566/566 pruebas, dos veces
 # desde cero.
+
 tests/apiary/ambitoVacioApiarios.test.ts
 tests/apiary/colonyEvents.test.ts
 tests/apiary/e2e.test.ts
@@ -29,6 +30,7 @@ tests/auth/googleLinking.test.ts
 tests/auth/setPassword.test.ts
 tests/content/stories.test.ts
 tests/discover/service.test.ts
+tests/envios/unaVezPorEnvio.test.ts
 tests/partner/projectClassification.test.ts
 tests/rbac/admin.test.ts
 tests/research/amendments.test.ts
@@ -71,7 +73,6 @@ tests/traceability/soilProfiles.test.ts
 tests/traceability/soilSamples.test.ts
 tests/traceability/storage.test.ts
 tests/traceability/v1-vocabulary.test.ts
-
 # @grupo: datos-reales
 # Necesitan datos que no crean ni la semilla ni ellas.
 #

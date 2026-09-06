@@ -161,6 +161,7 @@ model UserAccount {
   personsCreated                    Person[]                     @relation("PersonCreatedBy")
   roleProfilesCreated               RoleProfile[]                @relation("RoleProfileCreatedBy")
   scopesCreated                     Scope[]                      @relation("ScopeCreatedBy")
+  submissionKeys                    SubmissionKey[]
   assignments                       Assignment[]                 @relation("AssignmentToUserAccount")
   assignmentsGranted                Assignment[]                 @relation("AssignmentGrantedBy")
   auditEvents                       AuditEvent[]
@@ -290,6 +291,49 @@ model Scope {
 
   @@unique([scopeType, scopeRefId])
   @@map("scope")
+  @@schema("core")
+}
+
+/**
+ * La clave de un envío ya atendido, para que pulsar «guardar» dos veces no
+ * escriba dos filas.
+ *
+ * **El defecto (2026-09-06).** Medido contra la base, no razonado:
+ * `recordLabourEntry` llamado dos veces con la misma entrada crea DOS filas
+ * indistinguibles. `LabourEntry`, `MaterialConsumptionEntry`, `Measurement`,
+ * `Sample` y `StorageAssignment` no tienen ningún índice único que lo rechace.
+ * `<BotonDeEnvio>` cerró el caso del dedo; esto cierra el reintento de red y la
+ * pestaña duplicada, que el botón no puede ver.
+ *
+ * **Por qué una tabla y no `clientDraftId`.** Esa columna significa, dicho tres
+ * veces en este archivo y en `DECISIONS.md`, «este registro vino de la cola
+ * offline» — y de esa distinción cuelgan `recordedAt` y `syncedAt`. Rellenarla
+ * desde la web la vaciaría de significado. Un token de envío es otra cosa, y
+ * vive aparte. Decisión de Daniel, 2026-09-06.
+ *
+ * `resultType` + `resultId` sin FK: apunta a filas de cinco tablas distintas en
+ * tres esquemas. Es el mismo compromiso, y por la misma razón, que `Scope.scopeRefId`.
+ *
+ * **Crece sin techo y todavía nadie la limpia.** No se inventa aquí una política
+ * de caducidad: se deja `createdAt` indexado para que borrar por antigüedad sea
+ * un `DELETE` cuando se decida cuánto.
+ */
+model SubmissionKey {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // La clave la genera el servidor al pintar el formulario y viaja en un campo
+  // oculto. Nueva en cada render, así que un envío legítimo posterior —tras el
+  // `revalidatePath` de la acción— lleva otra.
+  key           String      @unique
+  // Quién la envió. Una clave ajena no vale: sin esto, adivinar una clave
+  // devolvería la fila de otro.
+  userAccountId String      @map("user_account_id") @db.Uuid
+  userAccount   UserAccount @relation(fields: [userAccountId], references: [id])
+  resultType    String      @map("result_type")
+  resultId      String      @map("result_id") @db.Uuid
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("submission_key")
   @@schema("core")
 }
 

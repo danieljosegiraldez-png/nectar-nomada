@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05
 
-**235 operaciones** que tocan la base, en **64 archivos**:
+**236 operaciones** que tocan la base, en **65 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -27,7 +27,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | **22** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
+| **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, `registrarAparato()`, `refrescarAcceso()` y, desde 2026-09-06, `unaVezPorEnvio()` — las cinco miradas a mano y explicadas en el allowlist |
 
 > Estas cifras son de la segunda medición. La primera decía 195 y 51, y estaba
 > mal por un defecto del propio detector — la historia está abajo, en «El

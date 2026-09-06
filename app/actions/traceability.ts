@@ -684,6 +684,10 @@ export async function recordLabourEntryFormAction(formData: FormData): Promise<v
   const lotId = String(formData.get("lotId") ?? "");
   await recordLabourEntry(user.userAccountId, {
     lotId,
+    // La clave la pinta el servidor en un campo oculto y se renueva con el
+    // `revalidatePath` de abajo: dos toques del mismo formulario la repiten,
+    // un registro posterior legítimo lleva otra.
+    claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
     parent: labourParentFromFormData(formData),
     workerCount: Number(formData.get("workerCount") ?? 0),
     hours: Number(formData.get("hours") ?? 0),

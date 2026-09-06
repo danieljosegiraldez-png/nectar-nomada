@@ -15,6 +15,7 @@
  * new permission.
  */
 import { prisma } from "../db";
+import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 import { recordAuditEvent } from "../audit";
 import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
@@ -49,6 +50,10 @@ export interface RecordLabourEntryInput {
   // keep using it purely for RBAC scoping exactly as before.
   lotId?: string | null;
   parent: LabourEntryParent;
+  // Clave de idempotencia del formulario web. Opcional: sin ella el servicio se
+  // comporta como antes — la cola offline tiene la suya por `clientDraftId`, y
+  // las llamadas internas no deben necesitar un token para escribir.
+  claveDeEnvio?: string | null;
   workerCount: number;
   hours: number;
   taskNote?: string | null;
@@ -113,19 +118,24 @@ export async function recordLabourEntry(userAccountId: string, input: RecordLabo
     await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
   }
 
-  const labourEntry = await prisma.labourEntry.create({
-    data: {
-      workerCount: input.workerCount,
-      hours: input.hours,
-      taskNote: input.taskNote ?? null,
-      providedByOrganizationId: input.providedByOrganizationId ?? null,
-      occurredAt: input.occurredAt ?? new Date(),
-      operatorPersonId: input.operatorPersonId ?? null,
-      provenanceClass: input.provenanceClass,
-      dataQuality: input.dataQuality ?? null,
-      createdBy: userAccountId,
-      ...labourParentData(input.parent),
-    },
+  const labourEntry = await unaVezPorEnvio(userAccountId, input.claveDeEnvio, {
+    tipo: "LabourEntry",
+    recuperar: (id) => prisma.labourEntry.findUniqueOrThrow({ where: { id } }),
+    crear: (tx) =>
+      tx.labourEntry.create({
+        data: {
+          workerCount: input.workerCount,
+          hours: input.hours,
+          taskNote: input.taskNote ?? null,
+          providedByOrganizationId: input.providedByOrganizationId ?? null,
+          occurredAt: input.occurredAt ?? new Date(),
+          operatorPersonId: input.operatorPersonId ?? null,
+          provenanceClass: input.provenanceClass,
+          dataQuality: input.dataQuality ?? null,
+          createdBy: userAccountId,
+          ...labourParentData(input.parent),
+        },
+      }),
   });
 
   // C1 §3: evidentiary write (carries provenanceClass).
