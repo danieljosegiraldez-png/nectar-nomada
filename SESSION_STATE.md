@@ -260,15 +260,18 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
 
   **Lo que sigue sin mirar:** las otras ~50 páginas y ~50 componentes, y los
   estados de carga que mienten.
-- **CI corría 22 de 97 archivos de prueba**, nombrados a mano sin nada que
-  vigilara la lista; **17 de los ausentes no necesitaban base**. Invertida a
-  exclusión (`scripts/tests-fuera-de-ci.txt`, con su motivo por sección): CI
-  corre todo lo demás — **39 archivos, 414 pruebas** — y `ci-cobertura.test.ts`
-  caza la ruta muerta. El criterio se midió **ejecutando** contra la URL
-  inconectable: «importa `lib/db`» clasifica mal, y `open-decisions.test.ts`
-  pasa sin base pero lee `$HOME/.zshrc`. **Siguen fuera los 59 que necesitan
-  base, incluidos los cuatro guardias de las lentes**: pide un Postgres de
-  servicio, y antes medir si `db:seed` basta o dependen del backup.
+- **CI corría 22 de 97 archivos de prueba; ahora corre 85 de 98.** `ci.sh` los
+  nombraba a mano y se desincronizó en silencio. Invertido a clasificación por
+  grupos (`scripts/pruebas-por-compuerta.txt`): `ci.sh` corre **39** —todo lo no
+  listado— y `ci-con-base.sh`, en un job con Postgres de servicio, los **46** que
+  sólo necesitan `migrate deploy` + `db:seed`. Los cuatro guardias de las lentes
+  ya corren en CI. Medido **ejecutando**, no por `grep` —«importa `lib/db`»
+  clasifica mal—, y los 46 comprobados dos veces creando la base de cero.
+  **Quedan 13 fuera:** 12 leen datos que no crean (dos pasan acompañadas y
+  fallan solas) y siguen pidiendo el backup de `test-db.sh`, cuya cabecera decía
+  «dos aserciones» cuando son doce; y `open-decisions.test.ts`, que pasa sin base
+  pero lee `$HOME/.zshrc`. **El job aún no es obligatorio**: la protección de
+  ramas sólo exige «Compuerta», y añadirlo lo decide Daniel.
 
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura

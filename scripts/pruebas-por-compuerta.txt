@@ -1,0 +1,95 @@
+# Qué compuerta corre cada prueba. `scripts/ci.sh` corre TODO lo que NO esté
+# aquí; `scripts/ci-con-base.sh` corre el grupo `base-sembrada`; el resto no
+# corre en CI, y cada grupo dice por qué.
+#
+# Es una lista de EXCLUSIÓN a propósito. Antes `ci.sh` nombraba a mano lo que SÍ
+# corría y se desincronizó en silencio: el 2026-09-05 corrían 22 de 97 archivos
+# y 17 de los ausentes no necesitaban base para nada. Una lista de inclusión
+# pierde cobertura callándose; ésta se queja: una prueba nueva que necesite base
+# la corre `ci.sh` y pone CI en rojo al no poder conectar, diciendo cuál es, y
+# una ruta muerta la caza `tests/ci-cobertura.test.ts`.
+#
+# Nada de esto se dedujo por `grep`. «Importa lib/db» clasifica mal —da 97 de
+# 97—. Los grupos se midieron EJECUTANDO:
+#   sin base:  TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/no-se-conecta npx vitest run
+#   sembrada:  base nueva + `prisma migrate deploy` + `npm run db:seed`, dos
+#              veces desde cero: 46/46 archivos y 460/460 pruebas las dos.
+
+# @grupo: base-sembrada
+# Necesitan una base de datos, y les basta con `migrate deploy` + `db:seed`.
+# Las corre `scripts/ci-con-base.sh` contra el servicio Postgres del workflow.
+tests/apiary/ambitoVacioApiarios.test.ts
+tests/apiary/colonyEvents.test.ts
+tests/apiary/e2e.test.ts
+tests/apiary/harvest.test.ts
+tests/apiary/hives.test.ts
+tests/apiary/media.test.ts
+tests/auth/googleLinking.test.ts
+tests/auth/setPassword.test.ts
+tests/content/stories.test.ts
+tests/discover/service.test.ts
+tests/partner/projectClassification.test.ts
+tests/seed/organizationGuard.test.ts
+tests/sensory/classificationGate.test.ts
+tests/sensory/descriptors.test.ts
+tests/sync/authorizationSnapshot.test.ts
+tests/sync/deviceOperator.test.ts
+tests/sync/deviceTokens.test.ts
+tests/sync/fieldMedia.test.ts
+tests/sync/pullFieldWork.test.ts
+tests/sync/pushFieldEvents.test.ts
+tests/traceability/ambitoVacio.test.ts
+tests/traceability/biocharBatches.test.ts
+tests/traceability/classificationGate.test.ts
+tests/traceability/drying.test.ts
+tests/traceability/e2e.test.ts
+tests/traceability/export.test.ts
+tests/traceability/f1.test.ts
+tests/traceability/fermentation.test.ts
+tests/traceability/fieldSessions.test.ts
+tests/traceability/formularioSinAmbito.test.ts
+tests/traceability/harvest.test.ts
+tests/traceability/landMedia.test.ts
+tests/traceability/lots.test.ts
+tests/traceability/massBalance.test.ts
+tests/traceability/measurements.test.ts
+tests/traceability/media.test.ts
+tests/traceability/operations.test.ts
+tests/traceability/organizacionAcotada.test.ts
+tests/traceability/quantity.test.ts
+tests/traceability/reports.test.ts
+tests/traceability/samples.test.ts
+tests/traceability/selection.test.ts
+tests/traceability/soilProfiles.test.ts
+tests/traceability/soilSamples.test.ts
+tests/traceability/storage.test.ts
+tests/traceability/v1-vocabulary.test.ts
+
+# @grupo: datos-reales
+# Necesitan datos que no crean ellas: un Project, un Lot o un Assignment que ya
+# exista. Dos de ellas —`rbac/admin` y `research/amendments`— PASAN cuando corren
+# junto a las demás y fallan solas, porque se apoyan en lo que otra dejó; por eso
+# el conjunto se midió también aislado, y no sólo entero.
+#
+# `scripts/test-db.sh` las cubre en local restaurando el backup verificado. Su
+# cabecera decía «dos aserciones»; medido el 2026-09-05 son estos doce archivos.
+# Sacarlas de aquí pide que se construyan sus propios fixtures, que es otro
+# trabajo.
+tests/apiary/inspections.test.ts
+tests/rbac/admin.test.ts
+tests/research/amendments.test.ts
+tests/research/ro1-2.test.ts
+tests/research/ro1.test.ts
+tests/traceability/batchPageData.test.ts
+tests/traceability/plantingCohorts.test.ts
+tests/traceability/processTargets.test.ts
+tests/traceability/recipeAuthoring.test.ts
+tests/traceability/recipeVersions.test.ts
+tests/traceability/roasting.test.ts
+tests/traceability/s1.test.ts
+
+# @grupo: maquina
+# `open-decisions.test.ts` PASA sin base y aun así no debe correr en CI: lee
+# `$HOME/.zshrc` a través de su script. La regla sola lo metería, y pasaría en
+# verde por los dotfiles de quien lo corriera. Por eso hay grupos y no una lista.
+tests/open-decisions.test.ts

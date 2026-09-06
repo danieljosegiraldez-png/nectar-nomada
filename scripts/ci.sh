@@ -35,7 +35,9 @@ echo "── Tests herméticos ────────────────�
 #   `$HOME/.zshrc`, que es estado personal de una máquina. Un veredicto de CI no
 #   debe depender de los dotfiles de nadie. Ese test se corre en local.
 # - Las que no pueden correr aquí van nombradas UNA A UNA, con su motivo, en
-#   `scripts/tests-fuera-de-ci.txt`. Aquí se corre **todo lo demás**.
+#   `scripts/pruebas-por-compuerta.txt`. Aquí se corre **todo lo demás**. Las
+#   del grupo `base-sembrada` las corre `scripts/ci-con-base.sh`, en otro job
+#   con un Postgres de servicio.
 #
 #   Era al revés —una lista de inclusión escrita a mano en este archivo— y se
 #   desincronizó en silencio: el 2026-09-05 corrían 22 de 97 archivos, y 17 de
@@ -43,12 +45,12 @@ echo "── Tests herméticos ────────────────�
 #   cobertura callándose. Con la exclusión, las dos formas de equivocarse hacen
 #   ruido: una prueba nueva que necesite base y no se apunte pone CI en rojo al
 #   no poder conectar, y una ruta que sobre la caza `tests/ci-cobertura.test.ts`.
-EXCLUIDAS="$(cd "$(dirname "$0")/.." && grep -vE '^\s*(#|$)' scripts/tests-fuera-de-ci.txt)"
+EXCLUIDAS="$(cd "$(dirname "$0")/.." && grep -vE '^\s*(#|$)' scripts/pruebas-por-compuerta.txt)"
 A_CORRER="$(cd "$(dirname "$0")/.." && find tests -name '*.test.ts' | sort | grep -vxF "$EXCLUIDAS")"
 
 # Fila patrón, leída antes que nada: si la selección sale vacía o absurda, el
 # verde de abajo no significaría nada. Es el control positivo de este bloque.
-echo "── CI correrá $(echo "$A_CORRER" | wc -l | tr -d ' ') archivos de prueba; $(echo "$EXCLUIDAS" | wc -l | tr -d ' ') quedan fuera por scripts/tests-fuera-de-ci.txt"
+echo "── CI correrá $(echo "$A_CORRER" | wc -l | tr -d ' ') archivos de prueba; $(echo "$EXCLUIDAS" | wc -l | tr -d ' ') los corre otra compuerta o ninguna"
 test "$(echo "$A_CORRER" | wc -l | tr -d ' ')" -ge 30 || { echo "ABORTA: la selección de pruebas salió demasiado corta"; exit 1; }
 
 TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:55432/no-se-conecta" \
