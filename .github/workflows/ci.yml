@@ -87,3 +87,62 @@ jobs:
       # compuertas en el otro repositorio.
       - name: Compuerta (scripts/ci.sh)
         run: bash scripts/ci.sh
+
+  # Hasta el 2026-09-05 NINGUNA prueba con base de datos corría en CI: 59
+  # archivos que sólo se ejercían en el portátil de quien se acordara de
+  # `npm run test:db -- up`. Entre ellos, los cuatro guardias de las revisiones
+  # de páginas de ese día — escritos para proteger algo, y protegiéndolo sólo
+  # en local.
+  #
+  # Medido antes de construir esto: de los 58 con base, 46 pasan con una base
+  # sembrada desde vacío (dos corridas desde cero, 46/46 y 460/460 las dos).
+  # Los otros 12 leen datos que no crean y siguen necesitando el backup
+  # restaurado; están en el grupo `datos-reales`.
+  #
+  # Job aparte y no un paso más de `compuerta`: así un fallo dice si cayó la
+  # parte hermética o la que toca base, y la hermética sigue dando veredicto en
+  # dos minutos sin esperar a que arranque Postgres.
+  compuerta-con-base:
+    name: Compuerta · pruebas que necesitan base de datos
+    needs: cambios
+    if: needs.cambios.outputs.solo_docs != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        # PostGIS, no `postgres:18` a secas. La migración
+        # `20260810010606_enable_postgis_location_geopoint` hace
+        # `CREATE EXTENSION postgis`, y la imagen oficial de Postgres no la
+        # trae: el primer intento murió ahí con «extension "postgis" is not
+        # available». En local no se ve, porque Postgres.app la incluye — el
+        # clásico «funciona en mi máquina», y sólo lo dijo el runner.
+        #
+        # Comprobado que `postgis` es la ÚNICA extensión que piden las 60
+        # migraciones, para no arreglar ésta y tropezar con la siguiente.
+        # Mayor fijada a 18, la misma del cluster local de `scripts/test-db.sh`.
+        image: postgis/postgis:18-3.6
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nectar_ci
+        ports:
+          - 5432:5432
+        # Sin esto el job arranca antes que la base y falla al conectar, que se
+        # lee como una prueba rota en vez de como una carrera perdida.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Un solo paso, igual que arriba: el contrato vive en el script, que corre
+      # igual en local contra cualquier base vacía.
+      - name: Compuerta con base (scripts/ci-con-base.sh)
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/nectar_ci
+        run: bash scripts/ci-con-base.sh
