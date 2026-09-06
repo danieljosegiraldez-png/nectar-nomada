@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { mostrarInstante } from "../../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../../lib/auth/session";
 import { getLotReport } from "../../../../lib/traceability/reports";
 import { getSignedUrlForAsset } from "../../../../lib/traceability/media";
@@ -49,7 +50,13 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
 
   const { lot, origins, ancestorLots, descendantLots, measurements, samples, sensoryLinkage, fermentationRuns, dryingRuns, storageAssignments } = report;
 
-  const formatDate = (date: Date) => date.toISOString().slice(0, 16).replace("T", " ");
+  /**
+   * En la zona del SITIO del lote, no en UTC. Un informe que dice que la
+   * cosecha fue a las 12:30 cuando fue a las 07:30 es el mismo dato mal
+   * contado, y un informe se imprime y se comparte. Ver
+   * `lib/time/mostrarInstante.ts`.
+   */
+  const formatDate = (date: Date) => mostrarInstante(date, lot.location?.timezone ?? null);
 
   return (
     <div>

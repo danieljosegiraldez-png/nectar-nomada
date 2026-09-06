@@ -9,6 +9,7 @@ import {
   type TraceabilityActionState,
 } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
+import { paraCampoLocal } from "../../../lib/time/localDateTime";
 import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
 import { construirEventoEncolado } from "../../../lib/sync/fieldEventPayload";
 
@@ -24,11 +25,15 @@ export interface EventKindOption {
   value: string;
 }
 
-/** El instante actual en el formato que espera `datetime-local`, en hora local. */
+/**
+ * El instante actual en el formato que espera `datetime-local`, en hora local.
+ *
+ * Era una segunda copia de la misma aritmética que `paraCampoLocal`. Dos
+ * definiciones de una conversión de husos son dos sitios donde arreglar el
+ * mismo fallo, y este repositorio ya sabe cómo acaba eso.
+ */
 function ahoraLocal(): string {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 16);
+  return paraCampoLocal(new Date());
 }
 
 /**

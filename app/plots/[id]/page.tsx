@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getPlotDetail } from "../../../lib/traceability/plantingCohorts";
 import { LocationAccessError } from "../../../lib/traceability/locations";
@@ -218,7 +219,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             {jornadas.map((j) => (
               <li key={j.id}>
                 <Link href={`/field-sessions/${j.id}`}>
-                  {j.startedAt.toISOString().slice(0, 16).replace("T", " ")}
+                  {mostrarInstante(j.startedAt, location.timezone)}
                 </Link>
                 {" · "}
                 {j.operator.displayName}
@@ -318,7 +319,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
                 {t("sampleExtractionLabel")}:{" "}
                 {m.extractionMethod ?? <span className="nn-muted">{t("notRecorded")}</span>}
               </p>
-              <ResultadosDeLaboratorio filas={m.measurements} vacio={t("samplesNoResults")} etiqueta={t} />
+              <ResultadosDeLaboratorio filas={m.measurements} vacio={t("samplesNoResults")} etiqueta={t} zona={location.timezone} />
               <details>
                 <summary>{t("samplesAddResult")}</summary>
                 <LabMeasurementForm
@@ -359,7 +360,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
                 ) : (
                   <p className="nn-detail-meta">{t("sampleProtocolComplete")}</p>
                 )}
-                <ResultadosDeLaboratorio filas={m.measurements} vacio={t("samplesNoResults")} etiqueta={t} />
+                <ResultadosDeLaboratorio filas={m.measurements} vacio={t("samplesNoResults")} etiqueta={t} zona={location.timezone} />
                 <details>
                   <summary>{t("samplesAddResult")}</summary>
                   <LabMeasurementForm
@@ -587,6 +588,7 @@ function ResultadosDeLaboratorio({
   filas,
   vacio,
   etiqueta,
+  zona,
 }: {
   filas: {
     id: string;
@@ -599,6 +601,8 @@ function ResultadosDeLaboratorio({
   }[];
   vacio: string;
   etiqueta: (clave: string) => string;
+  /** La zona del sitio, para que `occurredAt` se lea donde ocurrió y no en UTC. */
+  zona: string | null;
 }) {
   if (filas.length === 0) return <p className="nn-muted">{vacio}</p>;
 
@@ -617,7 +621,7 @@ function ResultadosDeLaboratorio({
         <li key={m.id} className={supersedidas.has(m.id) ? "nn-muted" : undefined}>
           {etiqueta(`variable_${m.variable}`)}: <strong>{String(m.value)}</strong> {m.unit}
           {" · "}
-          <span className="nn-muted">{m.occurredAt.toISOString().slice(0, 10)}</span>
+          <span className="nn-muted">{mostrarFecha(m.occurredAt, zona)}</span>
           {" · "}
           <span className="nn-muted">{etiqueta(`provenanceClass_${m.provenanceClass}`)}</span>
           {supersedidas.has(m.id) ? (
