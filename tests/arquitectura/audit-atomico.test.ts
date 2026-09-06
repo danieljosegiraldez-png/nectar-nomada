@@ -54,6 +54,14 @@ const SERVICIOS_ATOMICOS = [
   "lib/apiary/harvest.ts",
   "lib/commerce/orders.ts",
   "lib/experiences/bookings.ts",
+  // 2026-09-06, los de dos llamadas. Cada uno tiene DOS pares
+  // transacción+audit, y en `drying`/`fermentation` el segundo devuelve
+  // `{ run: endedRun, … }`: el audit tenía que pasar de `result.run` a
+  // `endedRun`, no a `run`. Un reemplazo mecánico habría auditado la fila
+  // equivocada sin que nada fallara.
+  "lib/traceability/harvest.ts",
+  "lib/traceability/drying.ts",
+  "lib/traceability/fermentation.ts",
 ];
 
 /**
