@@ -91,6 +91,7 @@ export default async function BiocharBatchPage({ params }: { params: Promise<{ i
         )}
 
         <LabMeasurementForm
+                  claveDeEnvio={crypto.randomUUID()}
           sujeto="biocharBatchId"
           sujetoId={batch.id}
           variables={listVariableDefinitions("analisis_de_enmienda")}

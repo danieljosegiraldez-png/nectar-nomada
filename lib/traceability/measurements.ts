@@ -28,6 +28,7 @@
  * rama**, y el sujeto es exclusivo: o café, o biochar, nunca los dos.
  */
 import { prisma } from "../db";
+import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { requireLocationAttributeAccess } from "./locations";
 import type { ClassificationLevel } from "../rbac/types";
@@ -162,6 +163,8 @@ async function scopeCandidatesForSubject(lotId?: string | null, sampleId?: strin
 }
 
 export interface RecordMeasurementInput {
+  // Clave de idempotencia del formulario web, igual que en jornales.
+  claveDeEnvio?: string | null;
   variable: MeasurementVariable;
   value: number;
   unit: string; // as entered by the operator — may differ from canonical (e.g. °F)
@@ -249,7 +252,12 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
   // desde S1 estas filas **abren Gate 0**, así que una medición que persiste
   // sin su audit no sólo pierde trazabilidad — puede habilitar una aplicación
   // de enmienda irreversible. `correctMeasurement` ya lo hacía; esto lo iguala.
-  const measurement = await prisma.$transaction(async (tx) => {
+  // El ayudante abre la transacción: la medición y su audit ya iban juntas, y
+  // ahora la clave del envío entra en la misma.
+  const measurement = await unaVezPorEnvio(userAccountId, input.claveDeEnvio, {
+    tipo: "Measurement",
+    recuperar: (id) => prisma.measurement.findUniqueOrThrow({ where: { id } }),
+    crear: async (tx) => {
   const creada = await tx.measurement.create({
     data: {
       variable: input.variable,
@@ -289,6 +297,7 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
     tx,
   );
   return creada;
+    },
   });
 
   return measurement;

@@ -10,6 +10,7 @@
  * *new* StorageAssignment row, rather than mutating locationId in place.
  */
 import { prisma } from "../db";
+import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 
 export interface MoveLotToStorageInput {
@@ -17,14 +18,23 @@ export interface MoveLotToStorageInput {
   locationId: string;
   containerNote?: string | null;
   startedAt: Date;
-}
+
+  // Clave de idempotencia del formulario web. Opcional: sin ella el servicio se
+  // comporta como antes — la cola offline tiene la suya por `clientDraftId`, y
+  // las llamadas internas no deben necesitar un token para escribir.
+  claveDeEnvio?: string | null;}
 
 export async function moveLotToStorage(userAccountId: string, input: MoveLotToStorageInput) {
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
-  return prisma.$transaction(async (tx) => {
+  // El ayudante abre la transacción: cerrar la asignación anterior, abrir la
+  // nueva y anotar la clave tienen que ir juntas o no ir.
+  return unaVezPorEnvio(userAccountId, input.claveDeEnvio, {
+    tipo: "StorageAssignment",
+    recuperar: (id) => prisma.storageAssignment.findUniqueOrThrow({ where: { id } }),
+    crear: async (tx) => {
     const openAssignment = await tx.storageAssignment.findFirst({
       where: { lotId: input.lotId, endedAt: null },
     });
@@ -44,6 +54,7 @@ export async function moveLotToStorage(userAccountId: string, input: MoveLotToSt
         createdBy: userAccountId,
       },
     });
+    },
   });
 }
 

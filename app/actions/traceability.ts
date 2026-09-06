@@ -263,6 +263,7 @@ export async function recordMeasurementAction(
   const lotId = String(formData.get("lotId") ?? "");
   try {
     await recordMeasurement(user.userAccountId, {
+      claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
       lotId,
       variable: String(formData.get("variable") ?? "") as never,
       // `?? 0` convertía un valor ausente en una medición de CERO. El
@@ -434,6 +435,7 @@ export async function recordStorageMoveAction(
   const lotId = String(formData.get("lotId") ?? "");
   try {
     await moveLotToStorage(user.userAccountId, {
+      claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
       lotId,
       locationId: String(formData.get("locationId") ?? ""),
       containerNote: emptyToNull(formData.get("containerNote")),
@@ -709,6 +711,7 @@ export async function recordMaterialConsumptionEntryFormAction(formData: FormDat
 
   const lotId = String(formData.get("lotId") ?? "");
   await recordMaterialConsumptionEntry(user.userAccountId, {
+    claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
     lotId,
     parent: consumptionParentFromFormData(formData),
     materialName: String(formData.get("materialName") ?? ""),
@@ -1193,6 +1196,7 @@ export async function recordLabMeasurementAction(
 
   try {
     await recordMeasurement(user.userAccountId, {
+      claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
       [sujeto]: sujetoId,
       variable: String(formData.get("variable") ?? "") as never,
       // Nunca `?? 0`: una casilla vacía no es una lectura de cero (ADR-080).

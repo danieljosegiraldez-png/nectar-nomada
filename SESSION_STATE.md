@@ -264,16 +264,16 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   medición mía salió **falsa** —«0 de 41 protegidos», por mirar sólo
   `app/components`; eran 32 de 51—: la cazó otra medición.
 
-- **Idempotencia de envíos, a medias y se dice cuánto.** `core.submission_key` +
+- **Idempotencia de envíos, cerrada.** `core.submission_key` +
   `lib/envios/unaVezPorEnvio.ts`: escritura y clave en **una sola transacción**
-  —si no, una clave sin fila devolvería para siempre un resultado inventado,
-  peor que el duplicado—. **No se reutilizó `clientDraftId`**: el esquema dice
-  tres veces que significa «vino de la cola offline», y de ahí cuelgan
-  `recordedAt`/`syncedAt`; decisión de Daniel, tabla aparte. La clave la genera
-  el **servidor** por render (un `useState` con `randomUUID` daría desajuste de
-  hidratación) y se renueva con el `revalidatePath`. **Sólo `recordLabourEntry`
-  está cableado:** las otras cuatro entidades siguen duplicando ante un reintento
-  de red. Y **la tabla crece sin techo**: sólo `createdAt` indexado.
+  —si no, una clave sin fila devolvería para siempre un resultado inventado—.
+  **No se reutilizó `clientDraftId`**: significa «vino de la cola offline» y de
+  ahí cuelgan `recordedAt`/`syncedAt` (decisión de Daniel). La clave la genera el
+  **servidor** por render (un `useState` con `randomUUID` daría desajuste de
+  hidratación). Cableados los **cuatro** que duplicaban en silencio: jornal,
+  consumo, medición y almacén. **`Sample` NO lo necesitaba**
+  —`@@unique([organizationId, sampleCode])`, igual que suelo y foliar—, y yo
+  afirmé lo contrario. **La tabla crece sin techo**: falta decidir la caducidad.
 
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura

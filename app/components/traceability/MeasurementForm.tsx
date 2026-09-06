@@ -33,7 +33,12 @@ export function MeasurementForm({
   fermentationRunId,
   dryingRunId,
   storageAssignmentId,
+  claveDeEnvio,
 }: {
+  // La genera el servidor al pintar la página, no el cliente: un `useState` con
+  // `crypto.randomUUID()` daría un valor al renderizar en servidor y otro al
+  // hidratar, que es un desajuste de hidratación.
+  claveDeEnvio: string;
   lotId: string;
   observers: ObserverOption[];
   selfPersonId: string | null;
@@ -50,6 +55,7 @@ export function MeasurementForm({
 
   return (
     <form action={formAction} className="nn-form" style={{ maxWidth: 480, marginTop: "1rem" }}>
+      <input type="hidden" name="claveDeEnvio" value={claveDeEnvio} />
       <input type="hidden" name="lotId" value={lotId} />
       {fermentationRunId ? <input type="hidden" name="fermentationRunId" value={fermentationRunId} /> : null}
       {dryingRunId ? <input type="hidden" name="dryingRunId" value={dryingRunId} /> : null}

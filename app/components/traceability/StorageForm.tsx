@@ -14,13 +14,25 @@ interface LocationOption extends Option {
   organization: Option | null;
 }
 
-export function StorageForm({ lotId, locations }: { lotId: string; locations: LocationOption[] }) {
+export function StorageForm({
+  lotId,
+  locations,
+  claveDeEnvio,
+}: {
+  lotId: string;
+  locations: LocationOption[];
+  // La genera el servidor al pintar la página, no el cliente: un `useState` con
+  // `crypto.randomUUID()` daría un valor al renderizar en servidor y otro al
+  // hidratar, que es un desajuste de hidratación.
+  claveDeEnvio: string;
+}) {
   const [state, formAction, pending] = useActionState(recordStorageMoveAction, initialState);
   const t = useTranslations("Traceability");
 
   return (
     <form action={formAction} className="nn-form" style={{ maxWidth: 480 }}>
       <input type="hidden" name="lotId" value={lotId} />
+      <input type="hidden" name="claveDeEnvio" value={claveDeEnvio} />
       <div className="nn-field">
         <label htmlFor="s-locationId">{t("storageLocationLabel")}</label>
         <select id="s-locationId" name="locationId" required>

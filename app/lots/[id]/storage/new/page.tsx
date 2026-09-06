@@ -41,7 +41,7 @@ export default async function NewStorageMovePage({ params }: { params: Promise<{
           <p className="nn-muted">{t("sinAmbitoGestionBody")}</p>
         </>
       ) : (
-        <StorageForm lotId={id} locations={context.locations} />
+        <StorageForm lotId={id} locations={context.locations} claveDeEnvio={crypto.randomUUID()} />
       )}
     </div>
   );
