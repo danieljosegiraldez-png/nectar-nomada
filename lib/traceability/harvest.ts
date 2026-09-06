@@ -92,18 +92,26 @@ export async function recordHarvestEvent(userAccountId: string, input: RecordHar
       });
     }
 
-    return { harvestEvent, lot };
-  });
+    // C1 §3: evidentiary write (carries provenanceClass).
+    //
+    // Dentro de la transacción y con `tx` desde el 2026-09-06. Iba fuera «same
+    // reasoning as recordTransformation», y ese razonamiento decía que un audit
+    // dentro de una transacción revertida tergiversaría lo ocurrido — falso: si
+    // revierte, el audit revierte con ella. El fallo real es el contrario y lo
+    // documenta `lib/audit.ts`.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "harvest_event.create",
+        entityType: "harvest_event",
+        entityId: harvestEvent.id,
+        after: harvestEvent,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
 
-  // C1 §3: evidentiary write (carries provenanceClass); after the
-  // transaction commits, same reasoning as recordTransformation.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "harvest_event.create",
-    entityType: "harvest_event",
-    entityId: result.harvestEvent.id,
-    after: result.harvestEvent,
-    sourceInterface: "traceability.service",
+    return { harvestEvent, lot };
   });
 
   return result;
@@ -181,17 +189,21 @@ export async function recordReceivingEvent(userAccountId: string, input: RecordR
       });
     }
 
-    return { receivingEvent, lot };
-  });
+    // C1 §3: evidentiary write (carries provenanceClass). Dentro de la
+    // transacción y con `tx`; ver el mismo cambio arriba.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "receiving_event.create",
+        entityType: "receiving_event",
+        entityId: receivingEvent.id,
+        after: receivingEvent,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
 
-  // C1 §3: evidentiary write (carries provenanceClass).
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "receiving_event.create",
-    entityType: "receiving_event",
-    entityId: result.receivingEvent.id,
-    after: result.receivingEvent,
-    sourceInterface: "traceability.service",
+    return { receivingEvent, lot };
   });
 
   return result;

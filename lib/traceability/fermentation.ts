@@ -96,17 +96,22 @@ export async function startFermentationRun(userAccountId: string, input: StartFe
       },
     });
 
-    return { run, transformation };
-  });
+    // C1 §3 pattern: an evidentiary write. Dentro de la transacción y con
+    // `tx` desde el 2026-09-06: una escritura confirmada no puede quedarse
+    // sin su AuditEvent. Ver la cabecera de `lib/audit.ts`.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "fermentation_run.start",
+        entityType: "fermentation_run",
+        entityId: run.id,
+        after: run,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
 
-  // C1 §3 pattern: an evidentiary write.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "fermentation_run.start",
-    entityType: "fermentation_run",
-    entityId: result.run.id,
-    after: result.run,
-    sourceInterface: "traceability.service",
+    return { run, transformation };
   });
 
   return result;
@@ -233,17 +238,22 @@ export async function endFermentationRun(userAccountId: string, input: EndFermen
       createdBy: userAccountId,
     });
 
-    return { run: endedRun, transformation, outputLot, reconciliation };
-  });
+    // C1 §3 pattern: an evidentiary write. Dentro de la transacción y con
+    // `tx` desde el 2026-09-06: una escritura confirmada no puede quedarse
+    // sin su AuditEvent. Ver la cabecera de `lib/audit.ts`.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "fermentation_run.end",
+        entityType: "fermentation_run",
+        entityId: endedRun.id,
+        after: endedRun,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
 
-  // C1 §3 pattern: an evidentiary write.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "fermentation_run.end",
-    entityType: "fermentation_run",
-    entityId: result.run.id,
-    after: result.run,
-    sourceInterface: "traceability.service",
+    return { run: endedRun, transformation, outputLot, reconciliation };
   });
 
   return result;
