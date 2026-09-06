@@ -163,16 +163,22 @@ export async function createProtocolVersion(userAccountId: string, input: Create
       },
       include: { variables: true, requiredMeasurements: true },
     });
-    return created;
-  });
+    // Dentro de la transacción y con `tx` desde el 2026-09-06: una versión de
+    // protocolo confirmada no puede quedarse sin su AuditEvent. Ver la
+    // cabecera de `lib/audit.ts`.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "protocol_version.create",
+        entityType: "protocol_version",
+        entityId: created.id,
+        after: created,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "protocol_version.create",
-    entityType: "protocol_version",
-    entityId: version.id,
-    after: version,
-    sourceInterface: "research.service",
+    return created;
   });
 
   return version;
@@ -204,16 +210,30 @@ export async function activateProtocolVersion(userAccountId: string, protocolVer
         data: { status: "superseded", supersededByVersionId: version.id },
       });
     }
-    return tx.protocolVersion.update({ where: { id: version.id }, data: { status: "active" } });
-  });
+    // Se nombra para poder auditarla dentro: antes se devolvía directamente y
+    // el audit la leía como `result`, ya fuera de la transacción.
+    const activated = await tx.protocolVersion.update({
+      where: { id: version.id },
+      data: { status: "active" },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "protocol_version.activate",
-    entityType: "protocol_version",
-    entityId: result.id,
-    after: result,
-    sourceInterface: "research.service",
+    // Dentro de la transacción y con `tx` desde el 2026-09-06. Aquí importa
+    // especialmente: activar una versión SUPERSEDE a la anterior en la misma
+    // transacción, así que el audit de la activación y el cambio de estado de
+    // las dos filas se confirman juntos o no se confirma ninguno.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "protocol_version.activate",
+        entityType: "protocol_version",
+        entityId: activated.id,
+        after: activated,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return activated;
   });
 
   return result;

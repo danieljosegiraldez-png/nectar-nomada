@@ -66,16 +66,23 @@ export async function recordAnalysisResult(
       },
     });
     await tx.analysisRun.update({ where: { id: input.analysisRunId }, data: { status: "completed", endedAt: new Date() } });
-    return created;
-  });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "analysis_result.create",
-    entityType: "analysis_result",
-    entityId: result.id,
-    after: result,
-    sourceInterface: "research.service",
+    // Dentro de la transacción y con `tx` desde el 2026-09-06: el resultado y
+    // el cierre de la corrida se confirman juntos, y su AuditEvent con ellos.
+    // Ver la cabecera de `lib/audit.ts`.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "analysis_result.create",
+        entityType: "analysis_result",
+        entityId: created.id,
+        after: created,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return created;
   });
 
   return result;
