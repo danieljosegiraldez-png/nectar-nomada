@@ -14,16 +14,26 @@ export async function createAnalysisPlan(userAccountId: string, experimentId: st
   if (!experiment) throw new ResearchAccessError("experiment_not_found");
   await requireResearchAccess(userAccountId, "approve_protocol", [{ projectId: experiment.projectId }]);
 
-  const plan = await prisma.analysisPlan.create({ data: { experimentId, planText, createdBy: userAccountId } });
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "analysis_plan.create",
-    entityType: "analysis_plan",
-    entityId: plan.id,
-    after: plan,
-    sourceInterface: "research.service",
+  // La escritura y su AuditEvent en la misma transacción desde el 2026-09-06.
+  // Antes eran dos llamadas sueltas: el plan confirmaba y, si el audit fallaba
+  // después, quedaba un hecho sin rastro. Ver la cabecera de `lib/audit.ts`.
+  return prisma.$transaction(async (tx) => {
+    const plan = await tx.analysisPlan.create({
+      data: { experimentId, planText, createdBy: userAccountId },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "analysis_plan.create",
+        entityType: "analysis_plan",
+        entityId: plan.id,
+        after: plan,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+    return plan;
   });
-  return plan;
 }
 
 export async function createAnalysisRun(userAccountId: string, analysisPlanId: string) {
@@ -31,18 +41,23 @@ export async function createAnalysisRun(userAccountId: string, analysisPlanId: s
   if (!plan) throw new ResearchAccessError("analysis_plan_not_found");
   await requireResearchAccess(userAccountId, "create_evidence", [{ projectId: plan.experiment.projectId }]);
 
-  const run = await prisma.analysisRun.create({
-    data: { analysisPlanId, status: "pending", createdBy: userAccountId },
+  return prisma.$transaction(async (tx) => {
+    const run = await tx.analysisRun.create({
+      data: { analysisPlanId, status: "pending", createdBy: userAccountId },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "analysis_run.create",
+        entityType: "analysis_run",
+        entityId: run.id,
+        after: run,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+    return run;
   });
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "analysis_run.create",
-    entityType: "analysis_run",
-    entityId: run.id,
-    after: run,
-    sourceInterface: "research.service",
-  });
-  return run;
 }
 
 export async function recordAnalysisResult(
@@ -97,18 +112,23 @@ export async function createPublication(userAccountId: string, input: { experime
   }
   await requireResearchAccess(userAccountId, "approve_protocol", [{ projectId }]);
 
-  const publication = await prisma.publication.create({
-    data: { experimentId: input.experimentId ?? null, title: input.title, status: "draft", createdBy: userAccountId },
+  return prisma.$transaction(async (tx) => {
+    const publication = await tx.publication.create({
+      data: { experimentId: input.experimentId ?? null, title: input.title, status: "draft", createdBy: userAccountId },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "publication.create",
+        entityType: "publication",
+        entityId: publication.id,
+        after: publication,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+    return publication;
   });
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "publication.create",
-    entityType: "publication",
-    entityId: publication.id,
-    after: publication,
-    sourceInterface: "research.service",
-  });
-  return publication;
 }
 
 export interface RecordDeviationInput {
@@ -135,27 +155,32 @@ export async function recordDeviation(userAccountId: string, input: RecordDeviat
   }
   await requireResearchAccess(userAccountId, "create_evidence", [{ projectId }]);
 
-  const deviation = await prisma.deviation.create({
-    data: {
-      treatmentBatchId: input.treatmentBatchId ?? null,
-      processingStageId: input.processingStageId ?? null,
-      description: input.description,
-      occurredAt: input.occurredAt,
-      severity: input.severity ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  return prisma.$transaction(async (tx) => {
+    const deviation = await tx.deviation.create({
+      data: {
+        treatmentBatchId: input.treatmentBatchId ?? null,
+        processingStageId: input.processingStageId ?? null,
+        description: input.description,
+        occurredAt: input.occurredAt,
+        severity: input.severity ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "deviation.create",
-    entityType: "deviation",
-    entityId: deviation.id,
-    after: deviation,
-    sourceInterface: "research.service",
-  });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "deviation.create",
+        entityType: "deviation",
+        entityId: deviation.id,
+        after: deviation,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
 
-  return deviation;
+    return deviation;
+  });
 }
 
 export async function recordCorrectiveAction(userAccountId: string, deviationId: string, actionText: string, takenAt?: Date | null) {
@@ -167,20 +192,25 @@ export async function recordCorrectiveAction(userAccountId: string, deviationId:
   const projectId = deviation.treatmentBatch?.projectId ?? deviation.processingStage?.treatmentBatch.projectId ?? null;
   await requireResearchAccess(userAccountId, "create_evidence", [{ projectId }]);
 
-  const action = await prisma.correctiveAction.create({
-    data: { deviationId, actionText, takenAt: takenAt ?? null, createdBy: userAccountId },
-  });
+  return prisma.$transaction(async (tx) => {
+    const action = await tx.correctiveAction.create({
+      data: { deviationId, actionText, takenAt: takenAt ?? null, createdBy: userAccountId },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "corrective_action.create",
-    entityType: "corrective_action",
-    entityId: action.id,
-    after: action,
-    sourceInterface: "research.service",
-  });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "corrective_action.create",
+        entityType: "corrective_action",
+        entityId: action.id,
+        after: action,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
 
-  return action;
+    return action;
+  });
 }
 
 /**
@@ -197,25 +227,30 @@ export async function recordApproval(
 ) {
   await requireResearchAccess(userAccountId, "approve_protocol", [{}]);
 
-  const approval = await prisma.approval.create({
-    data: {
-      entityType: input.entityType,
-      entityId: input.entityId,
-      approverUserAccountId: userAccountId,
-      decision: input.decision,
-      decidedAt: new Date(),
-      notes: input.notes ?? null,
-    },
-  });
+  return prisma.$transaction(async (tx) => {
+    const approval = await tx.approval.create({
+      data: {
+        entityType: input.entityType,
+        entityId: input.entityId,
+        approverUserAccountId: userAccountId,
+        decision: input.decision,
+        decidedAt: new Date(),
+        notes: input.notes ?? null,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "approval.create",
-    entityType: "approval",
-    entityId: approval.id,
-    after: approval,
-    sourceInterface: "research.service",
-  });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "approval.create",
+        entityType: "approval",
+        entityId: approval.id,
+        after: approval,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
 
-  return approval;
+    return approval;
+  });
 }

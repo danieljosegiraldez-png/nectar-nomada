@@ -35,27 +35,35 @@ export async function createProtocol(userAccountId: string, input: CreateProtoco
   }
   await requireResearchAccess(userAccountId, "approve_protocol", [{ projectId }]);
 
-  const protocol = await prisma.protocol.create({
-    data: {
-      experimentId: input.experimentId ?? null,
-      name: input.name,
-      externalIdentifier: input.externalIdentifier ?? null,
-      identifierConvention: input.identifierConvention ?? null,
-      description: input.description ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  // La escritura y su AuditEvent en la misma transacción desde el 2026-09-06:
+  // antes eran dos llamadas sueltas y un fallo del audit dejaba el protocolo
+  // sin rastro. Ver la cabecera de `lib/audit.ts`.
+  return prisma.$transaction(async (tx) => {
+    const protocol = await tx.protocol.create({
+      data: {
+        experimentId: input.experimentId ?? null,
+        name: input.name,
+        externalIdentifier: input.externalIdentifier ?? null,
+        identifierConvention: input.identifierConvention ?? null,
+        description: input.description ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "protocol.create",
-    entityType: "protocol",
-    entityId: protocol.id,
-    after: protocol,
-    sourceInterface: "research.service",
-  });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "protocol.create",
+        entityType: "protocol",
+        entityId: protocol.id,
+        after: protocol,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
 
-  return protocol;
+    return protocol;
+  });
 }
 
 export interface ProtocolVariableInput {
@@ -316,27 +324,32 @@ export async function addVariableCatalogValue(
     }
   }
 
-  const created = await prisma.variableCatalogValue.create({
-    data: {
-      catalogId: catalog.id,
-      value: input.value,
-      definition: input.definition ?? null,
-      aliasOfId: input.aliasOfId ?? null,
-      impliesUnknownIdentity: input.impliesUnknownIdentity ?? false,
-      displayOrder: input.displayOrder ?? 0,
-    },
-  });
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.variableCatalogValue.create({
+      data: {
+        catalogId: catalog.id,
+        value: input.value,
+        definition: input.definition ?? null,
+        aliasOfId: input.aliasOfId ?? null,
+        impliesUnknownIdentity: input.impliesUnknownIdentity ?? false,
+        displayOrder: input.displayOrder ?? 0,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "variable_catalog_value.create",
-    entityType: "variable_catalog_value",
-    entityId: created.id,
-    after: created,
-    sourceInterface: "research.service",
-  });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "variable_catalog_value.create",
+        entityType: "variable_catalog_value",
+        entityId: created.id,
+        after: created,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
 
-  return created;
+    return created;
+  });
 }
 
 /**
@@ -353,19 +366,27 @@ export async function updateVariableCatalogValueDefinition(userAccountId: string
   const existing = await prisma.variableCatalogValue.findUnique({ where: { id: catalogValueId } });
   if (!existing) throw new ResearchAccessError("variable_catalog_value_not_found");
 
-  const updated = await prisma.variableCatalogValue.update({ where: { id: catalogValueId }, data: { definition } });
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.variableCatalogValue.update({
+      where: { id: catalogValueId },
+      data: { definition },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "variable_catalog_value.update_definition",
-    entityType: "variable_catalog_value",
-    entityId: updated.id,
-    before: { definition: existing.definition },
-    after: { definition: updated.definition },
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "variable_catalog_value.update_definition",
+        entityType: "variable_catalog_value",
+        entityId: updated.id,
+        before: { definition: existing.definition },
+        after: { definition: updated.definition },
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return updated;
   });
-
-  return updated;
 }
 
 /**
@@ -395,18 +416,26 @@ export async function setVariableCatalogValueAlias(userAccountId: string, aliasI
     throw new ProtocolValidationError("alias_target_is_itself_an_alias");
   }
 
-  const updated = await prisma.variableCatalogValue.update({ where: { id: aliasId }, data: { aliasOfId: canonicalId } });
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.variableCatalogValue.update({
+      where: { id: aliasId },
+      data: { aliasOfId: canonicalId },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "variable_catalog_value.set_alias",
-    entityType: "variable_catalog_value",
-    entityId: aliasId,
-    after: { aliasOfId: canonicalId },
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "variable_catalog_value.set_alias",
+        entityType: "variable_catalog_value",
+        entityId: aliasId,
+        after: { aliasOfId: canonicalId },
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return updated;
   });
-
-  return updated;
 }
 
 export async function listVariableCatalogs(userAccountId: string) {
