@@ -36,6 +36,13 @@ const SERVICIOS_ATOMICOS = [
   "lib/traceability/landMedia.ts",
   "lib/traceability/measurements.ts",
   "lib/research/amendments.ts",
+  // 2026-09-06. Su audit iba FUERA de la transacción, y su comentario lo
+  // justificaba con una razón que no se sostiene: «an audit row for a
+  // transaction that later rolled back would misrepresent what actually
+  // happened». Si el audit va dentro y la transacción revierte, el audit
+  // revierte con ella. El fallo real era el contrario, y es el que
+  // `lib/audit.ts` documenta: una escritura confirmada sin su AuditEvent.
+  "lib/traceability/lots.ts",
 ];
 
 /**

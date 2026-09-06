@@ -315,20 +315,30 @@ export async function recordTransformation(userAccountId: string, input: RecordT
       acceptUnexplained: input.acceptUnexplained ?? null,
     });
 
-    return { transformation, outputLots, reconciliation };
-  });
+    // C1 §3: evidentiary write (LotTransformation carries provenanceClass).
+    //
+    // Va DENTRO de la transacción y con `tx`. Antes iba fuera, y su comentario
+    // lo justificaba así: «an audit row for a transaction that later rolled
+    // back would misrepresent what actually happened». Esa razón no se
+    // sostiene — si el audit va dentro y la transacción revierte, el audit
+    // revierte con ella, que es exactamente lo que da la atomicidad. Lo que sí
+    // ocurría era el fallo contrario: una escritura confirmada podía quedarse
+    // SIN su AuditEvent si esta llamada fallaba después del commit. Lo señaló
+    // una revisión independiente el 2026-08-31 y es la razón de que
+    // `recordAuditEvent` acepte `tx` (ver la cabecera de `lib/audit.ts`).
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "lot_transformation.create",
+        entityType: "lot_transformation",
+        entityId: transformation.id,
+        after: transformation,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
 
-  // C1 §3: evidentiary write (LotTransformation carries provenanceClass) —
-  // recorded after the transaction commits, not inside it, since an audit
-  // row for a transaction that later rolled back would misrepresent what
-  // actually happened.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "lot_transformation.create",
-    entityType: "lot_transformation",
-    entityId: result.transformation.id,
-    after: result.transformation,
-    sourceInterface: "traceability.service",
+    return { transformation, outputLots, reconciliation };
   });
 
   return result;
