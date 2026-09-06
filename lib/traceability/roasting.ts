@@ -30,12 +30,21 @@ import { LIST_LIMIT, truncate } from "../listLimit";
 import { requireLotAccess, resolveLotVisibility, lotWhereFromVisibility, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
-import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
+import type { Prisma, ProvenanceClass, RoastPurpose } from "../../generated/prisma/client";
 
 export class RoastSessionValidationError extends Error {}
 
 export interface RecordRoastSessionInput {
   lotId: string;
+  // Para qué se tostó. Obligatorio y sin valor por defecto, como
+  // `provenanceClass`: suponer `production` convertiría cada muestra en
+  // producción en silencio, y es justo la distinción que este campo existe para
+  // conservar — se tuestan muestras para encontrar un perfil, se cata, se elige,
+  // y sólo entonces se tuesta producción con él.
+  purpose: RoastPurpose;
+  // El perfil seguido, si se siguió alguno. Anulable a propósito: los primeros
+  // tuestes de muestra se hacen SIN perfil, que es como se encuentra uno.
+  recipeVersionId?: string | null;
   outputLotCode: string;
   roastLevel?: string | null;
   equipmentNote?: string | null;
@@ -73,6 +82,21 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
     throw new RoastSessionValidationError("discharge_weight_exceeds_charge_weight");
   }
 
+  // Un perfil que no existe, o que pertenece a otra organización, produciría un
+  // tueste que dice seguir algo que nadie puede leer. Se comprueba aquí y no se
+  // deja a la clave foránea: un error de restricción no dice cuál era el
+  // problema, y esto lo elige una persona en un desplegable.
+  if (input.recipeVersionId) {
+    const version = await prisma.processRecipeVersion.findUnique({
+      where: { id: input.recipeVersionId },
+      include: { recipe: true },
+    });
+    if (!version) throw new RoastSessionValidationError("recipe_version_not_found");
+    if (version.recipe.organizationId != null && version.recipe.organizationId !== sourceLot.organizationId) {
+      throw new RoastSessionValidationError("recipe_belongs_to_another_organization");
+    }
+  }
+
   const provenanceClass = input.provenanceClass;
   const occurredAt = input.endedAt ?? input.startedAt;
 
@@ -89,6 +113,8 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
         firstCrackAt: input.firstCrackAt ?? null,
         secondCrackAt: input.secondCrackAt ?? null,
         notes: input.notes ?? null,
+        purpose: input.purpose,
+        recipeVersionId: input.recipeVersionId ?? null,
         createdBy: userAccountId,
       },
     });
@@ -289,4 +315,85 @@ export async function getRoastSessionDetail(userAccountId: string, roastSessionI
   await requireLotAccess(userAccountId, "view", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
 
   return session;
+}
+
+/**
+ * Marcar un perfil como **el óptimo para este lote**.
+ *
+ * Decisión de Daniel (2026-09-06): «óptimo» vive en la relación perfil↔lote y no
+ * en el perfil. Un perfil puede ser el bueno para un café y no para otro; una
+ * bandera en el perfil sólo admitiría un óptimo global, y el día que un café
+ * pidiera otro no habría dónde ponerlo.
+ *
+ * Reemplaza el anterior en vez de acumular: hay UN óptimo vigente por lote, y la
+ * historia de quién eligió qué y cuándo queda en el registro de auditoría, que
+ * es donde ya vive el resto del «quién cambió qué» en este proyecto.
+ */
+export async function elegirPerfilDeTueste(
+  userAccountId: string,
+  input: { lotId: string; recipeVersionId: string; notes?: string | null },
+) {
+  const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
+  if (!lot) throw new TraceabilityAccessError("lot_not_found");
+  await requireLotAccess(userAccountId, "manage", [
+    { projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification },
+  ]);
+
+  const version = await prisma.processRecipeVersion.findUnique({
+    where: { id: input.recipeVersionId },
+    include: { recipe: true },
+  });
+  if (!version) throw new RoastSessionValidationError("recipe_version_not_found");
+  // Misma regla que al registrar un tueste: una receta de otra organización no
+  // es de este lote. Sin esto, elegir un perfil sería una forma de nombrar algo
+  // ajeno desde el propio lote.
+  if (version.recipe.organizationId != null && version.recipe.organizationId !== lot.organizationId) {
+    throw new RoastSessionValidationError("recipe_belongs_to_another_organization");
+  }
+
+  const anterior = await prisma.lotRoastProfile.findUnique({ where: { lotId: input.lotId } });
+
+  const elegido = await prisma.lotRoastProfile.upsert({
+    where: { lotId: input.lotId },
+    create: {
+      lotId: input.lotId,
+      recipeVersionId: input.recipeVersionId,
+      notes: input.notes ?? null,
+      chosenBy: userAccountId,
+    },
+    update: {
+      recipeVersionId: input.recipeVersionId,
+      notes: input.notes ?? null,
+      chosenBy: userAccountId,
+      chosenAt: new Date(),
+    },
+  });
+
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: anterior ? "lot_roast_profile.replace" : "lot_roast_profile.choose",
+    entityType: "lot_roast_profile",
+    entityId: elegido.id,
+    // El `before` es lo que hace legible el cambio: sin él, reemplazar un perfil
+    // por otro se lee igual que elegir el primero.
+    before: anterior ?? undefined,
+    after: elegido,
+    sourceInterface: "traceability.service",
+  });
+
+  return elegido;
+}
+
+/** El perfil vigente de un lote, o `null` si nadie ha elegido todavía. */
+export async function getPerfilDeTuesteElegido(userAccountId: string, lotId: string) {
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) throw new TraceabilityAccessError("lot_not_found");
+  await requireLotAccess(userAccountId, "view", [
+    { projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification },
+  ]);
+
+  return prisma.lotRoastProfile.findUnique({
+    where: { lotId },
+    include: { recipeVersion: { include: { recipe: true, targets: { orderBy: { displayOrder: "asc" } } } } },
+  });
 }

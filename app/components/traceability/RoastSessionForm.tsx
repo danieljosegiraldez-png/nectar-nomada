@@ -28,7 +28,12 @@ const initialState: TraceabilityActionState = {};
  */
 const PROVENANCES = ["original_record", "direct_observation"] as const;
 
-export function RoastSessionForm({ lotId }: { lotId: string }) {
+interface PerfilOption {
+  id: string;
+  label: string;
+}
+
+export function RoastSessionForm({ lotId, perfiles }: { lotId: string; perfiles: PerfilOption[] }) {
   const [state, formAction, pending] = useActionState(recordRoastSessionAction, initialState);
   const t = useTranslations("Traceability");
 
@@ -39,6 +44,34 @@ export function RoastSessionForm({ lotId }: { lotId: string }) {
           equivocado con aspecto de correcto. */}
       <TimezoneOffsetField />
       <input type="hidden" name="lotId" value={lotId} />
+
+      {/* Lo primero, y obligatorio: un tueste de muestra y uno de producción se
+          registran igual y después son indistinguibles si no se dice. */}
+      <div className="nn-field">
+        <label htmlFor="r-purpose">{t("roastPurposeLabel")}</label>
+        <select id="r-purpose" name="purpose" defaultValue="sample" required>
+          <option value="sample">{t("roastPurpose_sample")}</option>
+          <option value="production">{t("roastPurpose_production")}</option>
+        </select>
+      </div>
+
+      {/* Sólo si hay perfiles aprobados para este lote. Sin ellos no se pinta un
+          desplegable vacío: los primeros tuestes de muestra se hacen SIN perfil,
+          que es como se encuentra uno, y ofrecer una lista vacía sugeriría que
+          falta algo. */}
+      {perfiles.length > 0 ? (
+        <div className="nn-field">
+          <label htmlFor="r-recipeVersionId">{t("roastProfileLabel")}</label>
+          <select id="r-recipeVersionId" name="recipeVersionId" defaultValue="">
+            <option value="">{t("roastProfileNoneOption")}</option>
+            {perfiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       <div className="nn-field">
         <label htmlFor="r-outputLotCode">{t("roastOutputLotCodeLabel")}</label>

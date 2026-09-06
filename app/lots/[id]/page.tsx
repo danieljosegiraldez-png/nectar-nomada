@@ -29,6 +29,9 @@ import { LabourEntryForm } from "../../components/traceability/LabourEntryForm";
 import { MaterialConsumptionForm } from "../../components/traceability/MaterialConsumptionForm";
 import { SelectionForm } from "../../components/traceability/SelectionForm";
 import { getSelectionCatalogs, getSelectionOutturn } from "../../../lib/traceability/selection";
+import { getPerfilDeTuesteElegido } from "../../../lib/traceability/roasting";
+import { listRecipeVersionsForLot } from "../../../lib/traceability/processTargets";
+import { PerfilOptimoForm } from "../../components/traceability/PerfilOptimoForm";
 import { getHarvestSourceContext } from "../../../lib/traceability/plantingCohorts";
 import { HarvestSourcesForm } from "../../components/traceability/HarvestSourcesForm";
 import type { LabourEntry } from "../../../generated/prisma/client";
@@ -115,6 +118,19 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
     dryingRun: crypto.randomUUID(),
   } as const;
   const claveDeMedicion = crypto.randomUUID();
+
+  // R1 §4 — el perfil óptimo, sólo para café verde: es el que se tuesta. Se
+  // consulta aquí y no dentro del componente para que la página siga siendo la
+  // que decide qué se ofrece, como el resto de esta pantalla.
+  const esVerde = lot.lotType === "green";
+  const perfilElegido = esVerde ? await getPerfilDeTuesteElegido(user.userAccountId, lot.id) : null;
+  const perfilesDisponibles =
+    esVerde && puedeRegistrar
+      ? (await listRecipeVersionsForLot(user.userAccountId, lot.id)).map((v) => ({
+          id: v.id,
+          label: `${v.recipe.name} · v${v.version} · ${v.targets.length} ${t("targetsCountSuffix")}`,
+        }))
+      : [];
   const puedeEditarFuentes = harvestEvent
     ? await puedeGestionarAtributosDeUbicacion(user.userAccountId, harvestEvent.locationId)
     : false;
@@ -286,6 +302,32 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         <p className="nn-muted" role="status">
           {t("soloLecturaEnEsteLote")} {t("sinAmbitoGestionBody")}
         </p>
+      ) : null}
+
+      {/* Sólo para verde, y sólo si hay perfiles aprobados. Sin perfiles no se
+          pinta un desplegable vacío: los primeros tuestes se hacen sin perfil, y
+          una lista vacía sugeriría que falta algo cuando no falta nada. */}
+      {esVerde && (perfilElegido || perfilesDisponibles.length > 0) ? (
+        <section className="nn-section">
+          <h2>{t("roastProfileOptimalHeading")}</h2>
+          {perfilElegido ? (
+            <p className="nn-detail-meta">
+              <span>
+                {perfilElegido.recipeVersion.recipe.name} · v{perfilElegido.recipeVersion.version}
+              </span>
+              {perfilElegido.notes ? <span>{perfilElegido.notes}</span> : null}
+            </p>
+          ) : (
+            <p className="nn-muted">{t("roastProfileNoneChosen")}</p>
+          )}
+          {perfilesDisponibles.length > 0 ? (
+            <PerfilOptimoForm
+              lotId={lot.id}
+              perfiles={perfilesDisponibles}
+              actual={perfilElegido?.recipeVersionId ?? null}
+            />
+          ) : null}
+        </section>
       ) : null}
 
       <section className="nn-section">

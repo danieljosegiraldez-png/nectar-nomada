@@ -960,7 +960,20 @@
     "roastDischargeWeightLabel": "Peso de descarga (kg)",
     "roastFirstCrackLabel": "Primer crack (opcional)",
     "roastSecondCrackLabel": "Segundo crack (opcional)",
-    "roastEquipmentLabel": "Equipo"
+    "roastEquipmentLabel": "Equipo",
+    "roastPurposeLabel": "¿Para qué es este tueste?",
+    "roastPurpose_sample": "Muestra — para probar y catar",
+    "roastPurpose_production": "Producción — café para vender",
+    "roastProfileLabel": "Perfil seguido (opcional)",
+    "roastProfileNoneOption": "— Ninguno —",
+    "roastProfileOptimalHeading": "Perfil de tueste elegido",
+    "roastProfileOptimalLabel": "Perfil óptimo para este lote",
+    "roastProfileChoosePlaceholder": "— Elige un perfil —",
+    "roastProfileNoneChosen": "Todavía no se ha elegido un perfil para este lote.",
+    "roastProfileWhyLabel": "Por qué (opcional)",
+    "roastProfileWhyPlaceholder": "el que mejor cató",
+    "roastProfileChooseButton": "Elegir como óptimo",
+    "roastProfileReplaceButton": "Reemplazar el elegido"
   },
   "Apiary": {
     "badge": "Apiario",

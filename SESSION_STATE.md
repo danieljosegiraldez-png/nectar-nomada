@@ -78,36 +78,6 @@ histórico 94 líneas de registro de entrega que vivían en «Bloqueado».
 `auth/config.ts`, en el camino de autenticación— y el guardia de navegación, que
 afirma ≤8 entradas cuando un admin real ve 10 (§3).
 
-### 2026-09-05 · La Fase 5 arranca por el ticket, y su prerrequisito ya está hecho
-
-**El ticket `47_P5_CLIENTE_ANDROID.md`, y NADA de código nativo**, porque
-medirlo primero dijo que no se puede: esta máquina no tiene Android Studio, ni
-SDK, ni `adb`; quedan 6,2 GB libres (Studio con emulador son ~15) y no se conoce
-ningún teléfono Android físico, que el audit exige para validar en gama baja.
-
-**El prerrequisito sí se construyó: §2, el carril de tokens** —que pertenece al
-ticket 46, no a la Fase 5—. ADR-108 lo aplazó «hasta que exista un cliente
-nativo que lo llame»; medir la Fase 5 fue darse cuenta de que **ese día es
-éste**, porque un cliente nativo no puede usar la cookie de la PWA.
-
-`POST /api/v1/auth/device`, `POST /api/v1/auth/token`, y `resolverPrincipal`
-para que las cinco rutas de sincronización acepten cookie o Bearer sin saber
-cuál fue. Refresh **hasheado** en la base; access firmado con clave derivada y
-guardado en ninguna parte. Trece tests y cuatro flip-tests: guardar el refresh
-en claro, ignorar la revocación, distinguir correo desconocido de contraseña
-mala (un oráculo de qué correos tienen cuenta), y firmar con `AUTH_SECRET` en
-crudo.
-
-**Dos cosas que el guardia de rutas me obligó a hacer bien.** Sustituir
-`getCurrentUser` por `resolverPrincipal` rompió su contraste: le enseñé la señal
-nueva y **le hice flip-test**, para comprobar que sigue cazando una ruta que de
-verdad no identifica a nadie. Y `revocarAparato` no tenía llamador fuera de mis
-tests: la quité en vez de declararla.
-
-**Lo que la Fase 5 necesita de Daniel** está en §3 de su ticket: si hay
-teléfono, si se instala Studio o se va por Expo Go, quién lleva el aparato —13
-de 14 personas siguen sin contraseña— y si antes o después de la cosecha.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
@@ -268,23 +238,31 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   modelo pendiente de Daniel**, no se construyó nada.
 
 - **Ya se puede crear un protocolo de cata** — era el bloqueo de «sin protocolo
-  no hay puntajes». La única forma era `prisma/seed.ts` con `SEED_DEMO_CONTENT`,
-  así que producción no tenía ninguno: de ahí cata entera y **cero
-  valoraciones**. Añadidos `npm run sensory:create-protocol`
+  no hay puntajes»: la única forma era `prisma/seed.ts` con `SEED_DEMO_CONTENT`,
+  así que producción no tenía ninguno. Añadidos `npm run sensory:create-protocol`
   y `protocolos/cafe-cva-adaptado.json`, con la validación en
   `lib/sensory/definicionDeProtocolo.ts` para poder probarla. La definición vive
-  en un archivo versionado a propósito: su contenido es decisión del dueño y así
-  se lee en el diff. Daniel eligió **licencia en trámite** y los siete atributos
-  a 0–10. **Falta correrlo:** escribe en producción y no se ha ejecutado.
+  en un archivo versionado: su contenido es decisión del dueño y así se lee en el
+  diff. Daniel eligió licencia **en trámite** y los siete atributos a 0–10.
+  **Falta correrlo:** escribe en producción y no se ha ejecutado.
 
-- **Dónde se rompe «tarea de finca → puntaje de taza», medido.** Tres tramos que
-  no se tocan: fumigar y sembrar se registran como *hechos* (`LabourEntry`,
-  `MaterialConsumptionEntry`, `PlantingCohort`) y sólo son *comparables* como
-  `TreatmentBatch`, que **exige** protocolo de investigación; lote→muestra→cata
-  está entero; y **el tueste no existe como variable** — `RoastSession` no se
-  enlaza con receta ni distingue muestra de producción, así que un puntaje no
-  puede decir con qué perfil se tostó. `VariableComparison` compara tratamientos,
-  **no puntajes entre lotes**. Decidido: reusar `ProcessRecipe`, óptimo por lote.
+- **Dónde se rompe «tarea de finca → puntaje de taza», medido.** Fumigar y
+  sembrar se registran como *hechos* (`LabourEntry`, `MaterialConsumptionEntry`,
+  `PlantingCohort`) y sólo son *comparables* como `TreatmentBatch`, que **exige**
+  protocolo de investigación. Lote→muestra→cata está entero, y el tueste ya es
+  variable desde la entrada de abajo. **Falta el reporte:** `VariableComparison`
+  compara tratamientos, no puntajes entre lotes, y la Fase 6 sigue sin empezar.
+
+- **El tueste ya es una variable: propósito y perfil.** `RoastSession` gana
+  `purpose` (`sample`/`production`, **obligatorio y sin defecto**: suponer
+  producción convertiría cada muestra en venta en silencio) y `recipeVersionId`
+  anulable — los primeros tuestes de muestra se hacen sin perfil, que es como se
+  encuentra uno. Reusa `ProcessRecipe`, y `LotRoastProfile` guarda el **óptimo
+  por lote** con `lotId` único: elegir otro reemplaza y la historia queda en
+  auditoría. Decisiones de Daniel. **La migración se hizo defensiva** —Prisma la
+  generó de forma que falla si hay una fila— y se probó en aislamiento. Y mi
+  archivo de prueba **compilaba mal** con las pruebas en verde: lo cazó
+  `typecheck`, no la suite.
 
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura

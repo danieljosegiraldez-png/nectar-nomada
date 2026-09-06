@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getLotSummary, TraceabilityAccessError } from "../../../../../lib/traceability/lots";
+import { listRecipeVersionsForLot } from "../../../../../lib/traceability/processTargets";
 import { RoastSessionForm } from "../../../../components/traceability/RoastSessionForm";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,14 @@ export default async function NewRoastPage({ params }: { params: Promise<{ id: s
     throw error;
   }
 
+  // Mismas versiones que ofrece la fermentación: aprobadas, y de esta
+  // organización o compartidas. `listRecipeVersionsForLot` no es de fermentación
+  // — filtra por eso y nada más—, así que sirve tal cual.
+  const perfiles = (await listRecipeVersionsForLot(user.userAccountId, id)).map((v) => ({
+    id: v.id,
+    label: `${v.recipe.name} · v${v.version} · ${v.targets.length} ${t("targetsCountSuffix")}`,
+  }));
+
   return (
     <div>
       <Link href={`/lots/${id}`} className="nn-back-link">
@@ -40,7 +49,7 @@ export default async function NewRoastPage({ params }: { params: Promise<{ id: s
       </Link>
       <h1>{t("recordRoastButton")}</h1>
       <p className="nn-muted">{t("recordRoastIntro")}</p>
-      <RoastSessionForm lotId={id} />
+      <RoastSessionForm lotId={id} perfiles={perfiles} />
     </div>
   );
 }

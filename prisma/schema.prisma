@@ -161,6 +161,7 @@ model UserAccount {
   personsCreated                    Person[]                     @relation("PersonCreatedBy")
   roleProfilesCreated               RoleProfile[]                @relation("RoleProfileCreatedBy")
   scopesCreated                     Scope[]                      @relation("ScopeCreatedBy")
+  lotRoastProfilesChosen            LotRoastProfile[]            @relation("LotRoastProfileChosenBy")
   submissionKeys                    SubmissionKey[]
   assignments                       Assignment[]                 @relation("AssignmentToUserAccount")
   assignmentsGranted                Assignment[]                 @relation("AssignmentGrantedBy")
@@ -2684,6 +2685,7 @@ model Lot {
   measurements              Measurement[]
   samples                   Sample[]
   storageAssignments        StorageAssignment[]
+  roastProfile              LotRoastProfile?
   // 1:1 — a Lot originates from at most one of these (or from a
   // LotTransformation output, which carries no back-relation of its own
   // kind here since that Lot is one of possibly several outputs).
@@ -3271,6 +3273,8 @@ model ProcessRecipeVersion {
 
   targets          ProcessTarget[]
   fermentationRuns FermentationRun[]
+  roastSessions    RoastSession[]
+  lotRoastProfiles LotRoastProfile[]
 
   @@unique([recipeId, version])
   @@index([recipeId])
@@ -3437,6 +3441,51 @@ model DryingTurnEvent {
 // new Measurement.roastSessionId FK below, reusing the exact generalized
 // mechanism T3 already built and T7 already proved works for a run-scoped
 // series, rather than a new time-series table or an opaque file reference.
+/**
+ * Para qué se tostó. R1 §4 no lo distinguía y el flujo real sí: se tuestan
+ * muestras pequeñas para encontrar el perfil, se cata, se elige uno, y sólo
+ * entonces se tuesta producción con él. Sin esta distinción los dos quedan
+ * indistinguibles después, y un puntaje de taza no puede decir si viene de una
+ * prueba o de la venta.
+ *
+ * Obligatorio y sin valor por defecto, como `provenanceClass` (T9.5/ADR-038):
+ * suponer `production` convertiría cada muestra en producción en silencio.
+ */
+/**
+ * El perfil de tueste elegido como el óptimo **para este lote**.
+ *
+ * Decisión de Daniel (2026-09-06): «óptimo» vive en la relación perfil↔lote, no
+ * en el perfil. Un perfil puede ser el bueno para un café y no para otro, y una
+ * bandera en el perfil sólo admitiría un óptimo global — el día que un café
+ * pidiera otro no habría dónde ponerlo.
+ *
+ * `lotId` único: hay UN óptimo vigente por lote. Volver a elegir lo reemplaza, y
+ * la historia queda en el registro de auditoría, que es donde ya vive el resto
+ * del «quién cambió qué» en este proyecto.
+ */
+model LotRoastProfile {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lotId           String               @unique @map("lot_id") @db.Uuid
+  lot             Lot                  @relation(fields: [lotId], references: [id])
+  recipeVersionId String               @map("recipe_version_id") @db.Uuid
+  recipeVersion   ProcessRecipeVersion @relation(fields: [recipeVersionId], references: [id])
+  notes           String?
+  chosenAt        DateTime             @default(now()) @map("chosen_at")
+  chosenBy        String?              @map("chosen_by") @db.Uuid
+  chooser         UserAccount?         @relation("LotRoastProfileChosenBy", fields: [chosenBy], references: [id])
+
+  @@index([recipeVersionId])
+  @@map("lot_roast_profile")
+  @@schema("traceability")
+}
+
+enum RoastPurpose {
+  sample
+  production
+
+  @@schema("traceability")
+}
+
 model RoastSession {
   id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   roastLevel        String?      @map("roast_level") // free text ("claro filtro", "medio espresso") — vocabulary varies by market/style, not a closed enum
@@ -3450,6 +3499,14 @@ model RoastSession {
   firstCrackAt      DateTime?    @map("first_crack_at")
   secondCrackAt     DateTime?    @map("second_crack_at")
   notes             String?
+  purpose           RoastPurpose @map("purpose")
+  // El perfil que se siguió. Anulable: un tueste puede hacerse sin perfil —de
+  // hecho los primeros de muestra se hacen así, que es como se encuentra uno—.
+  // Reusa `ProcessRecipeVersion` en vez de una entidad propia (decisión de
+  // Daniel, 2026-09-06): sus `ProcessTarget` ya expresan variable/mín/máx/momento,
+  // que es lo que es un perfil, y `compareRunToTargets` ya los compara.
+  recipeVersionId   String?      @map("recipe_version_id") @db.Uuid
+  recipeVersion     ProcessRecipeVersion? @relation(fields: [recipeVersionId], references: [id])
   createdAt         DateTime     @default(now()) @map("created_at")
   createdBy         String?      @map("created_by") @db.Uuid
   creator           UserAccount? @relation("RoastSessionCreatedBy", fields: [createdBy], references: [id])

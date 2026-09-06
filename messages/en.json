@@ -960,7 +960,20 @@
     "roastDischargeWeightLabel": "Discharge weight (kg)",
     "roastFirstCrackLabel": "First crack (optional)",
     "roastSecondCrackLabel": "Second crack (optional)",
-    "roastEquipmentLabel": "Equipment"
+    "roastEquipmentLabel": "Equipment",
+    "roastPurposeLabel": "What is this roast for?",
+    "roastPurpose_sample": "Sample — to test and cup",
+    "roastPurpose_production": "Production — coffee to sell",
+    "roastProfileLabel": "Profile followed (optional)",
+    "roastProfileNoneOption": "— None —",
+    "roastProfileOptimalHeading": "Chosen roast profile",
+    "roastProfileOptimalLabel": "Optimal profile for this batch",
+    "roastProfileChoosePlaceholder": "— Choose a profile —",
+    "roastProfileNoneChosen": "No profile has been chosen for this batch yet.",
+    "roastProfileWhyLabel": "Why (optional)",
+    "roastProfileWhyPlaceholder": "the one that cupped best",
+    "roastProfileChooseButton": "Choose as optimal",
+    "roastProfileReplaceButton": "Replace the chosen one"
   },
   "Apiary": {
     "badge": "Apiary",
