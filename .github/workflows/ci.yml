@@ -110,10 +110,17 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        # Fijada a la misma mayor que usa el cluster local de
-        # `scripts/test-db.sh` (Postgres.app 18). Dejarla al azar haría que la
-        # compuerta dijera algo distinto cada vez que el runner se actualice.
-        image: postgres:18
+        # PostGIS, no `postgres:18` a secas. La migración
+        # `20260810010606_enable_postgis_location_geopoint` hace
+        # `CREATE EXTENSION postgis`, y la imagen oficial de Postgres no la
+        # trae: el primer intento murió ahí con «extension "postgis" is not
+        # available». En local no se ve, porque Postgres.app la incluye — el
+        # clásico «funciona en mi máquina», y sólo lo dijo el runner.
+        #
+        # Comprobado que `postgis` es la ÚNICA extensión que piden las 60
+        # migraciones, para no arreglar ésta y tropezar con la siguiente.
+        # Mayor fijada a 18, la misma del cluster local de `scripts/test-db.sh`.
+        image: postgis/postgis:18-3.6
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: nectar_ci
