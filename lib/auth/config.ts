@@ -180,28 +180,49 @@ export const authConfig: NextAuthConfig = {
       // that state holding real Assignments they could not reach — an
       // invitation that could never be accepted.
       if (userAccount.status === "invited") {
-        const activated = await prisma.userAccount.update({
-          where: { id: userAccount.id },
-          data: {
-            status: "active",
-            emailVerifiedAt: userAccount.emailVerifiedAt ?? new Date(),
-            lastLoginAt: new Date(),
-          },
+        // Capturadas fuera del cierre: dentro de la retrollamada de la
+        // transacción TypeScript pierde el estrechamiento de `userAccount`.
+        const cuenta = userAccount;
+        const estadoAnterior = userAccount.status;
+
+        // La activación y su AuditEvent en la misma transacción desde el
+        // 2026-09-06. Antes eran dos llamadas sueltas: la cuenta quedaba
+        // activa y, si el audit fallaba después, el único cambio de estado
+        // que CLAUDE.md §35 exige registrar se perdía en silencio. Aquí eso
+        // pesa más que en un servicio: es la fila que dice quién aceptó una
+        // invitación y cuándo. Ver la cabecera de `lib/audit.ts`.
+        //
+        // El precio es que un fallo del audit tumba el inicio de sesión en
+        // vez de dejar el hueco. Es el intercambio correcto: falla ruidoso y
+        // el siguiente intento lo reintenta, mientras que el hueco no se ve
+        // nunca.
+        userAccount = await prisma.$transaction(async (tx) => {
+          const activated = await tx.userAccount.update({
+            where: { id: cuenta.id },
+            data: {
+              status: "active",
+              emailVerifiedAt: cuenta.emailVerifiedAt ?? new Date(),
+              lastLoginAt: new Date(),
+            },
+          });
+          // A status change is exactly what CLAUDE.md §35 requires an audit row
+          // for. The actor is the account itself: nobody administered this, the
+          // invited person accepted it.
+          await recordAuditEvent(
+            {
+              actorUserAccountId: activated.id,
+              operation: "user_account.activate",
+              entityType: "user_account",
+              entityId: activated.id,
+              before: { status: estadoAnterior },
+              after: { status: activated.status, authProvider: activated.authProvider },
+              reason: "invitation_accepted_via_google",
+              sourceInterface: "auth.google",
+            },
+            tx,
+          );
+          return activated;
         });
-        // A status change is exactly what CLAUDE.md §35 requires an audit row
-        // for. The actor is the account itself: nobody administered this, the
-        // invited person accepted it.
-        await recordAuditEvent({
-          actorUserAccountId: activated.id,
-          operation: "user_account.activate",
-          entityType: "user_account",
-          entityId: activated.id,
-          before: { status: userAccount.status },
-          after: { status: activated.status, authProvider: activated.authProvider },
-          reason: "invitation_accepted_via_google",
-          sourceInterface: "auth.google",
-        });
-        userAccount = activated;
       }
 
       // An account someone has disabled must not be revived by signing in

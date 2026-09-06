@@ -2444,6 +2444,48 @@ npm run test:db -- reset
 **Antes de creer nada, imprimir una fila patrón conocida** y leerla. Aquí fue
 `select count(*) from traceability.planting_cohort` — debía dar 4 y dio 0.
 
+### La base de pruebas es compartida: un fallo tuyo puede ser de otra sesión
+
+**2026-09-06.** Corriendo la suite sobre un worktree recién sacado de
+`origin/main`, `tests/traceability/roasting.test.ts` falló **7 de 11** con
+`Null constraint violation` al crear un tueste. El árbol estaba limpio —el
+mismo fallo salía con y sin mi cambio— así que no era mío; parecía deriva del
+esquema en `main`.
+
+No lo era. La base de pruebas del puerto 55433 **la comparten todas las
+sesiones a propósito** (el objetivo era separar los *archivos*, no los datos),
+y otra sesión había aplicado ahí su migración en curso:
+
+```bash
+# migraciones aplicadas en la base, contra las que hay en el repositorio
+psql "$TEST_DATABASE_URL" -At -c "select migration_name from _prisma_migrations;" | sort > /tmp/aplicadas.txt
+ls prisma/migrations | grep '^[0-9]' | sort > /tmp/en-disco.txt
+comm -13 /tmp/en-disco.txt /tmp/aplicadas.txt   # en la BASE y no en el repositorio
+```
+
+Salió `20260906183946_perfil_de_tueste`, con `finished_at` de esa misma tarde y
+el nombre de la rama de un PR abierto — y **no estaba ni en la rama publicada**,
+o sea trabajo sin commitear de otra sesión. Su columna `purpose NOT NULL` no
+existe en el `schema.prisma` de `main`, así que Prisma no la manda y el insert
+revienta.
+
+**Dos consecuencias, y la segunda importa más:**
+
+- Un fallo local que el control demuestra ajeno a tu cambio **todavía puede no
+  ser de `main`**. El control de dos mitades —con y sin tu cambio— distingue
+  «mío» de «no mío», no «de `main`» de «de otra sesión». Para eso hace falta
+  la comparación de migraciones de arriba.
+- **No restaurar la base para «arreglarlo».** `test:db -- reset` habría borrado
+  la migración que otra sesión estaba usando en ese momento.
+- **Y aquí no hay a quién preguntarle el veredicto.** Esta nota decía primero
+  que «lo dice CI, que levanta su propio Postgres»: **falso**, y comprobarlo
+  costó una línea. `roasting` está en el grupo `datos-reales` de
+  `scripts/pruebas-por-compuerta.txt`, **excluido de CI a propósito** porque su
+  valor es afirmar hechos de la finca real. Así que esos 7 se quedan **sin
+  verificar** hasta que la base compartida vuelva a casar con `main` —cuando la
+  otra rama se fusione, o cuando nadie la esté usando y se pueda restaurar—.
+  Decirlo es la respuesta correcta; inventarle un árbitro que no existe, no.
+
 ### La suite completa ve regresiones que CI no puede ver
 
 **Síntoma.** `main` en verde en CI, y `npm test` en local con **2 fallos**:
