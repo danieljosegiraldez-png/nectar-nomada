@@ -26,6 +26,22 @@ import { prisma } from "../db";
  * tres esquemas, y resolverlas por nombre en tiempo de ejecución cambiaría un
  * error de tipos por uno de datos. Cada servicio sabe leer lo suyo.
  */
+/**
+ * Cuánto vive una clave de envío. Treinta días, decidido por Daniel el
+ * 2026-09-06.
+ *
+ * Qué significa el número: pasado ese plazo, reenviar el MISMO formulario
+ * —una pestaña abierta un mes, un reintento muy tardío— cuenta como intención
+ * nueva y escribe otra fila. Por debajo del plazo se devuelve la de siempre.
+ * Treinta días es holgadísimo para el caso real, que se mide en segundos; el
+ * plazo existe para que la tabla no crezca sin fin, no para acotar el reintento.
+ */
+export const DIAS_DE_VIDA_DE_UNA_CLAVE = 30;
+
+function limiteDeCaducidad(): Date {
+  return new Date(Date.now() - DIAS_DE_VIDA_DE_UNA_CLAVE * 24 * 60 * 60 * 1000);
+}
+
 export async function unaVezPorEnvio<T extends { id: string }>(
   userAccountId: string,
   clave: string | null | undefined,
@@ -37,8 +53,16 @@ export async function unaVezPorEnvio<T extends { id: string }>(
 ): Promise<T> {
   if (!clave) return prisma.$transaction((tx) => opciones.crear(tx));
 
+  const limite = limiteDeCaducidad();
   const yaAtendido = await prisma.submissionKey.findUnique({ where: { key: clave } });
-  if (yaAtendido) return recuperarDeOtroEnvio(yaAtendido, userAccountId, opciones);
+  if (yaAtendido) {
+    if (yaAtendido.createdAt >= limite) return recuperarDeOtroEnvio(yaAtendido, userAccountId, opciones);
+    // Caducada. Se borra ANTES de seguir, o el `create` de abajo chocaría contra
+    // la clave única y este envío acabaría devolviendo justo la fila vieja que
+    // acabamos de decidir no honrar. `deleteMany` y no `delete` porque otra
+    // corrida concurrente puede habérsela llevado ya, y eso no es un error.
+    await prisma.submissionKey.deleteMany({ where: { key: clave } });
+  }
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -46,6 +70,15 @@ export async function unaVezPorEnvio<T extends { id: string }>(
       await tx.submissionKey.create({
         data: { key: clave, userAccountId, resultType: opciones.tipo, resultId: fila.id },
       });
+      // Barrido acotado a esta cuenta: mantiene la tabla en su sitio sin
+      // inventar un cron que este proyecto no tiene. Deja fuera las claves de
+      // cuentas que dejaron de escribir; son pocas, y un barrido global pediría
+      // una tarea periódica y una ruta protegida — decisión aparte, no ésta.
+      //
+      // Dentro de la transacción a propósito: si el barrido falla, falla el
+      // envío y se ve. Fuera, fallaría en silencio y la tabla crecería igual
+      // mientras todo parecía correcto.
+      await tx.submissionKey.deleteMany({ where: { userAccountId, createdAt: { lt: limite } } });
       return fila;
     });
   } catch (error) {

@@ -186,7 +186,17 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   hidratación). Cableados los **cuatro** que duplicaban en silencio: jornal,
   consumo, medición y almacén. **`Sample` NO lo necesitaba**
   —`@@unique([organizationId, sampleCode])`, igual que suelo y foliar—, y yo
-  afirmé lo contrario. **La tabla crece sin techo**: falta decidir la caducidad.
+  afirmé lo contrario.
+
+  **Caducidad: 30 días** (Daniel, 2026-09-06). Pasado el plazo, reenviar el mismo
+  formulario cuenta como intención nueva. El plazo acota la tabla, no el
+  reintento — el caso real se mide en segundos. Se aplica al **leer** —una clave
+  vieja no se honra, y se borra antes de seguir o el `create` chocaría contra
+  ella— y se barre al **escribir**, acotado a la cuenta que escribe y dentro de
+  la transacción: si el barrido falla, falla el envío y se ve. **Lo que NO
+  cubre:** las claves de cuentas que dejan de escribir no las barre nadie. Un
+  barrido global pediría una tarea periódica y una ruta protegida, y este
+  proyecto no tiene ninguna de las dos — decisión aparte.
 
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
