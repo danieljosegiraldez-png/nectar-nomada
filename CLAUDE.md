@@ -2476,8 +2476,15 @@ revienta.
   «mío» de «no mío», no «de `main`» de «de otra sesión». Para eso hace falta
   la comparación de migraciones de arriba.
 - **No restaurar la base para «arreglarlo».** `test:db -- reset` habría borrado
-  la migración que otra sesión estaba usando en ese momento. El veredicto
-  honesto de esos 7 lo da CI, que levanta su propio Postgres de servicio.
+  la migración que otra sesión estaba usando en ese momento.
+- **Y aquí no hay a quién preguntarle el veredicto.** Esta nota decía primero
+  que «lo dice CI, que levanta su propio Postgres»: **falso**, y comprobarlo
+  costó una línea. `roasting` está en el grupo `datos-reales` de
+  `scripts/pruebas-por-compuerta.txt`, **excluido de CI a propósito** porque su
+  valor es afirmar hechos de la finca real. Así que esos 7 se quedan **sin
+  verificar** hasta que la base compartida vuelva a casar con `main` —cuando la
+  otra rama se fusione, o cuando nadie la esté usando y se pueda restaurar—.
+  Decirlo es la respuesta correcta; inventarle un árbitro que no existe, no.
 
 ### La suite completa ve regresiones que CI no puede ver
 
