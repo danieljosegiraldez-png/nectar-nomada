@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { listProtocols } from "../../lib/research/protocols";
+import { BotonDeEnvio } from "../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +30,9 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
         <h2>{t("protocolListHeading")}</h2>
         <form style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
           <input type="text" name="variable" defaultValue={variable ?? ""} placeholder={t("filterByVariablePlaceholder")} />
-          <button type="submit" className="nn-button">
+          <BotonDeEnvio className="nn-button">
             {t("filterButton")}
-          </button>
+          </BotonDeEnvio>
           {variable ? <Link href="/research">{t("filterAllButton")}</Link> : null}
         </form>
 

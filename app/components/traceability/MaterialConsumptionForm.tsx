@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { recordMaterialConsumptionEntryFormAction } from "../../actions/traceability";
 import type { MaterialConsumptionParent } from "../../../lib/traceability/operations";
+import { BotonDeEnvio } from "../BotonDeEnvio";
 
 /**
  * T12.6 (§3). Golden path: Material, Batch label (the one irrecoverable
@@ -60,9 +61,9 @@ export function MaterialConsumptionForm({ lotId, parent }: { lotId: string; pare
           <input id={`consumption-unit-${parent.kind}`} name="unit" type="text" defaultValue="kg" />
         </div>
       </div>
-      <button type="submit" className="nn-button">
+      <BotonDeEnvio className="nn-button">
         {t("recordConsumptionButton")}
-      </button>
+      </BotonDeEnvio>
     </form>
   );
 }

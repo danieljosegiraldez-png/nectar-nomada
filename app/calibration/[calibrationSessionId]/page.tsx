@@ -8,6 +8,7 @@ import {
   CalibrationAccessError,
 } from "../../../lib/sensory/calibration";
 import { recordCalibrationResultFormAction } from "../../actions/calibration";
+import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -104,9 +105,9 @@ export default async function CalibrationSessionPage({
           <input type="number" inputMode="decimal" step="any" name="perceivedIntensityRating" placeholder={t("perceivedIntensityPlaceholder")} />
           <input type="number" inputMode="decimal" step="any" name="actualConcentrationPresented" placeholder={t("actualConcentrationPlaceholder")} />
           <textarea name="notes" placeholder={t("notesPlaceholder")} />
-          <button type="submit" className="nn-button">
+          <BotonDeEnvio className="nn-button">
             {t("recordResultButton")}
-          </button>
+          </BotonDeEnvio>
         </form>
       </section>
     </div>

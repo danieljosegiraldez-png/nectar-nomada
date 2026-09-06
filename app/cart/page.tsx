@@ -6,6 +6,7 @@ import { getCart } from "../../lib/commerce/cart";
 import { formatPrice } from "../../lib/discover/format";
 import { updateCartItemAction } from "../actions/cart";
 import { CheckoutButton } from "../components/CheckoutButton";
+import { BotonDeEnvio } from "../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -53,9 +54,9 @@ export default async function CartPage() {
                   <span className="nn-muted">{t("quantityLabel")}</span>
                   <input name="quantity" type="number" inputMode="numeric" min={0} defaultValue={item.quantity} style={{ width: "4rem" }} />
                 </label>
-                <button type="submit" className="nn-button">
+                <BotonDeEnvio className="nn-button">
                   {t("updateButton")}
-                </button>
+                </BotonDeEnvio>
               </form>
             </div>
           ))}

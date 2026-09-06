@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { getPendingSuggestions, getReviewedSuggestions, AiAccessError } from "../../lib/ai/service";
 import { generateSuggestionsFormAction, decideSuggestionFormAction } from "../actions/ai";
+import { BotonDeEnvio } from "../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -40,9 +41,9 @@ export default async function AiSuggestionsPage() {
       <h1>{t("title")}</h1>
 
       <form action={generateSuggestionsFormAction} style={{ marginTop: "1rem" }}>
-        <button type="submit" className="nn-button">
+        <BotonDeEnvio className="nn-button">
           {t("generateButton")}
-        </button>
+        </BotonDeEnvio>
       </form>
 
       <section className="nn-section">
@@ -62,12 +63,12 @@ export default async function AiSuggestionsPage() {
                   style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}
                 >
                   <input type="hidden" name="recommendationId" value={suggestion.id} />
-                  <button type="submit" name="decision" value="accepted" className="nn-button">
+                  <BotonDeEnvio name="decision" value="accepted" className="nn-button">
                     {t("acceptButton")}
-                  </button>
-                  <button type="submit" name="decision" value="rejected" className="nn-button">
+                  </BotonDeEnvio>
+                  <BotonDeEnvio name="decision" value="rejected" className="nn-button">
                     {t("rejectButton")}
-                  </button>
+                  </BotonDeEnvio>
                 </form>
               </li>
             ))}

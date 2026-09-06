@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { getReferenceStandards, getCalibrationSessions, CalibrationAccessError } from "../../lib/sensory/calibration";
 import { createReferenceStandardFormAction, createCalibrationSessionFormAction } from "../actions/calibration";
+import { BotonDeEnvio } from "../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -79,9 +80,9 @@ export default async function CalibrationPage() {
             <input type="text" name="supplierProductReference" placeholder={t("supplierProductReferencePlaceholder")} />
             <input type="text" name="dataSheetReference" placeholder={t("dataSheetReferencePlaceholder")} />
             <textarea name="notes" placeholder={t("notesPlaceholder")} />
-            <button type="submit" className="nn-button">
+            <BotonDeEnvio className="nn-button">
               {t("addReferenceStandardButton")}
-            </button>
+            </BotonDeEnvio>
           </form>
         </details>
       </section>
@@ -109,9 +110,9 @@ export default async function CalibrationPage() {
             <input type="date" name="sessionDate" required />
             <input type="text" name="category" placeholder={t("categoryPlaceholder")} required />
             <textarea name="notes" placeholder={t("notesPlaceholder")} />
-            <button type="submit" className="nn-button">
+            <BotonDeEnvio className="nn-button">
               {t("addCalibrationSessionButton")}
-            </button>
+            </BotonDeEnvio>
           </form>
         </details>
       </section>

@@ -161,10 +161,9 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   cuadrar con menos aportes de los que hay, **no lo pintaba ninguna página**:
   `grep` en `app/` daba cero.
 
-  Decisión del dueño: la diferencia **se muestra, con advertencia**. Verla es el
-  punto del diseño; presentarla como completa era el defecto. La regla salió a
-  `lib/traceability/reconciliacionDeCosecha.ts` para poder probarla — dentro del
-  componente no se puede, y ahí fue donde se coló.
+  Decisión del dueño: la diferencia **se muestra, con advertencia**. La regla
+  salió a `lib/traceability/reconciliacionDeCosecha.ts` para poder probarla —
+  dentro del componente no se puede, y ahí fue donde se coló.
 
   **Segunda lente (misma fecha): «no hay» contra «no puedes ver».** Un hallazgo
   más, y sistémico: `getLotList` y `getActiveOperations` devolvían el mismo array
@@ -175,32 +174,21 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   (P-C).
 
   Arreglado en esas dos y en `/lots`, con la forma que `Partner.noProjects` ya
-  usaba: se nombra la causa y se dice a quién pedir el acceso. **Quedan seis
-  sitios con el mismo colapso** —`apiary/hives.ts` (dos), `roasting.ts`,
-  `export.ts` y dos ramas más de `lots.ts`— y ninguna de sus pantallas puede
-  distinguir todavía.
+  usaba: se nombra la causa y se dice a quién pedir el acceso.
 
   **Tercera lente (misma fecha): fugas de clasificación al renderizar.** De
-  cuatro sitios mirados, tres salieron limpios **y así consta**: el inventario
-  `CLASSIFICATION_GATE_DEFERRED` está vacío; `discover` aplica su `PUBLIC_WHERE`
-  a cada relación —y se comprobó contra la base que Prisma respeta un `where`
-  en un `include` a-uno: una organización `confidential` vuelve `null`—; y ni
-  `DomainTag` ni `ProductVariant` llevan clasificación.
+  cuatro sitios, tres limpios **y consta cuáles** (`CLASSIFICATION_GATE_DEFERRED`
+  vacío; `PUBLIC_WHERE` de discover aplicado a cada relación —comprobado: una
+  organización `confidential` vuelve `null`—; `DomainTag` y `ProductVariant` sin
+  clasificación). El cuarto, real pero **latente**: `getLotDetail`/`getLotList`
+  gatean por la clasificación del **lote** y traían la organización entera, con
+  su `contactEmail`. No salía por los datos y el hábito, no por el código —nadie
+  usa más que `name`, y 0 de 43 lotes están menos restringidos que su
+  organización—. Acotado a `{ id, name }`, con flip-test.
 
-  El cuarto es real pero **latente, no una fuga viva**:
-  `getLotDetail`/`getLotList` gatean por la clasificación del **lote** y traían
-  `organization: true` —`contactEmail`, `contactPhone`, `websiteUrl`,
-  `attributes`— de una organización con clasificación propia que ahí no se
-  comprueba; una sonda confirmó que el correo vuelve. Lo que impide que salga
-  son los datos y el hábito, no el código: nadie usa más que `name` y hay
-  **0 de 43** lotes menos restringidos que su organización. Acotado a
-  `{ id, name }`; el flip-test tumba las dos pruebas nuevas por nombre.
-
-  Trampa del instrumento: el nombre de un guardia seguido de paréntesis
-  **dentro de un comentario** asciende a guardia la declaración
-  que lo contenga en `scripts/inventario-de-acceso.mjs`. Movió
-  `getActiveOperations` de clase sin que nadie la tocara, y el guardia de cifras
-  lo cazó. Queda anotado en el propio comentario.
+  Trampa del instrumento: un nombre de guardia seguido de paréntesis **dentro de
+  un comentario** asciende a guardia la declaración que lo contenga en
+  `inventario-de-acceso.mjs`. Movió `getActiveOperations` de clase sin tocarla.
 
   **Cuarta lente (misma fecha): formularios que ofrecen lo que el servicio
   niega.** De 15 `<select required>` alimentados por una lista, 11 tienen
@@ -246,8 +234,8 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   desbloquee. Excluir los fixtures `TEST %` baja el total de 20 a 14; sin ese
   filtro el recuento cuenta la propia suite.
 
-  **Del método:** prettier **no** es el formateador de este proyecto —ni en
-  `package.json` ni en `ci.sh`—; pasarlo reescribió 92 líneas por un cambio de 11.
+  **Del método:** prettier no es el formateador aquí; pasarlo reescribió 92
+  líneas por un cambio de 11.
 
   **Los «seis sitios» de la segunda lente eran uno.** Medidos de uno en uno:
   dos son ayudantes que devuelven un `where`, uno es un predicado donde `false`
@@ -274,6 +262,18 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   que no**—; tres dependen de datos que ninguna bandera produce y saldrían con
   fixtures propios; y `open-decisions`, que lee `$HOME/.zshrc`. **El job aún no
   es obligatorio**: la protección sólo exige «Compuerta».
+
+- **Quinta lente (2026-09-06): el doble toque.** La lente que traía —cargas que
+  mienten— no tiene dónde morder: cero `loading.tsx` y cero `<Suspense>`. Lo que
+  sí: **19 archivos con botones de envío sin apagar** (los otros 32 ya usaban el
+  `pending` de `useActionState`). Probado contra la base, no razonado:
+  `recordLabourEntry` dos veces con la misma entrada crea **dos filas
+  indistinguibles**, y cinco entidades no tienen índice único ni usa la web el
+  `clientDraftId` de la cola. Arreglado con `<BotonDeEnvio>` (`useFormStatus`,
+  sirve en los catorce formularios de servidor) más guardia de arquitectura con
+  flip-test. **Falta idempotencia en el servidor**: esto cierra el dedo, no el
+  reintento de red. Y una medición mía salió **falsa** —«0 de 41 protegidos»,
+  por mirar sólo `app/components`; eran 32 de 51—: la cazó otra medición.
 
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura

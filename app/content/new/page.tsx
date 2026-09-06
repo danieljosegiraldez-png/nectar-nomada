@@ -5,6 +5,7 @@ import { getCurrentUser } from "../../../lib/auth/session";
 import { getAuthoringContext } from "../../../lib/content/stories";
 import { permissionKeysAnywhere } from "../../../lib/rbac/service";
 import { createStoryFormAction } from "../../actions/content";
+import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +74,7 @@ export default async function NewStoryPage({
             {context.people.map((p) => <option key={p.id} value={p.id}>{p.displayName}</option>)}
           </select>
         </div>
-        <button type="submit" className="nn-button">{t("createButton")}</button>
+        <BotonDeEnvio className="nn-button">{t("createButton")}</BotonDeEnvio>
       </form>
     </div>
   );

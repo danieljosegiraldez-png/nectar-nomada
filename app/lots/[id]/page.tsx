@@ -31,6 +31,7 @@ import { getSelectionCatalogs, getSelectionOutturn } from "../../../lib/traceabi
 import { getHarvestSourceContext } from "../../../lib/traceability/plantingCohorts";
 import { HarvestSourcesForm } from "../../components/traceability/HarvestSourcesForm";
 import type { LabourEntry } from "../../../generated/prisma/client";
+import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -556,9 +557,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                   </option>
                 ))}
               </select>
-              <button type="submit" className="nn-button">
+              <BotonDeEnvio className="nn-button">
                 {t("recordInterventionButton")}
-              </button>
+              </BotonDeEnvio>
             </form>
             <form action={endFermentationFormAction} className="nn-form" style={{ maxWidth: 420, marginTop: "1rem" }}>
               <input type="hidden" name="lotId" value={lot.id} />
@@ -585,9 +586,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                 <label htmlFor="ferm-output-unit">{t("unitLabel")}</label>
                 <input id="ferm-output-unit" name="unit" type="text" placeholder="kg" />
               </div>
-              <button type="submit" className="nn-button">
+              <BotonDeEnvio className="nn-button">
                 {t("endFermentationButton")}
-              </button>
+              </BotonDeEnvio>
             </form>
             {puedeRegistrar ? (
               <PhotoUploadForm lotId={lot.id} parent={{ kind: "fermentationRun", fermentationRunId: activeFermentation.id }} observers={observers} selfPersonId={selfPersonId} />
@@ -650,9 +651,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                   </option>
                 ))}
               </select>
-              <button type="submit" className="nn-button">
+              <BotonDeEnvio className="nn-button">
                 {t("recordTurnButton")}
-              </button>
+              </BotonDeEnvio>
             </form>
             <form action={endDryingFormAction} className="nn-form" style={{ maxWidth: 420, marginTop: "1rem" }}>
               <input type="hidden" name="lotId" value={lot.id} />
@@ -679,9 +680,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                 <label htmlFor="dry-output-unit">{t("unitLabel")}</label>
                 <input id="dry-output-unit" name="unit" type="text" placeholder="kg" />
               </div>
-              <button type="submit" className="nn-button">
+              <BotonDeEnvio className="nn-button">
                 {t("endDryingButton")}
-              </button>
+              </BotonDeEnvio>
             </form>
             {puedeRegistrar ? (
               <PhotoUploadForm lotId={lot.id} parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }} observers={observers} selfPersonId={selfPersonId} />

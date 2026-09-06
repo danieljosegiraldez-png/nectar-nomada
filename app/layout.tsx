@@ -10,6 +10,7 @@ import { buildNavigation } from "../lib/navigation";
 import { logoutAction } from "./actions/auth";
 import { LocaleSwitcher } from "./components/LocaleSwitcher";
 import { ServiceWorkerRegistration } from "./components/ServiceWorkerRegistration";
+import { BotonDeEnvio } from "./components/BotonDeEnvio";
 
 /**
  * Las dos familias de la marca, las mismas que sirve el sitio público
@@ -78,9 +79,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <LocaleSwitcher />
                 {user ? (
                   <form action={logoutAction}>
-                    <button type="submit" className="nn-link-button">
+                    <BotonDeEnvio className="nn-link-button">
                       {t("signOut")}
-                    </button>
+                    </BotonDeEnvio>
                   </form>
                 ) : null}
               </div>

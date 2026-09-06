@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordLabourEntryFormAction } from "../../actions/traceability";
 import type { LabourEntryParent } from "../../../lib/traceability/operations";
+import { BotonDeEnvio } from "../BotonDeEnvio";
 
 interface ObserverOption {
   id: string;
@@ -110,9 +111,9 @@ export function LabourEntryForm({
           </select>
         </div>
       ) : null}
-      <button type="submit" className="nn-button">
+      <BotonDeEnvio className="nn-button">
         {t("recordLabourButton")}
-      </button>
+      </BotonDeEnvio>
     </form>
   );
 }

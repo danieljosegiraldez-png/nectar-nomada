@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { createHiveFormAction } from "../../actions/apiary";
+import { BotonDeEnvio } from "../BotonDeEnvio";
 
 interface ProjectOption {
   id: string;
@@ -40,9 +41,9 @@ export function NewHiveForm({ locationId, projects }: { locationId: string; proj
         <label htmlFor="hive-installed">{t("installedAtLabel")}</label>
         <input id="hive-installed" name="installedAt" type="date" />
       </div>
-      <button type="submit" className="nn-button">
+      <BotonDeEnvio className="nn-button">
         {t("createHiveButton")}
-      </button>
+      </BotonDeEnvio>
     </form>
   );
 }

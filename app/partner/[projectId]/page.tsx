@@ -6,6 +6,7 @@ import { getProjectWorkspace, PartnerAccessError } from "../../../lib/partner/wo
 import { updateTaskStatusFormAction } from "../../actions/partner";
 import { AssetUploadForm } from "../../components/AssetUploadForm";
 import { FieldSubmissionForm } from "../../components/FieldSubmissionForm";
+import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -66,9 +67,9 @@ export default async function PartnerProjectPage({ params }: { params: Promise<{
                         </option>
                       ))}
                     </select>
-                    <button type="submit" className="nn-button">
+                    <BotonDeEnvio className="nn-button">
                       {t("updateStatusButton")}
-                    </button>
+                    </BotonDeEnvio>
                   </form>
                 ) : null}
               </li>

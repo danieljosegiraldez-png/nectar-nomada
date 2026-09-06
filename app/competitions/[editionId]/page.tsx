@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getEditionDetail, CompetitionAccessError } from "../../../lib/competitions/service";
 import { finalizeResultFormAction, declareAwardFormAction } from "../../actions/competitions";
+import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -74,9 +75,9 @@ export default async function CompetitionEditionPage({ params }: { params: Promi
                           <input type="hidden" name="resultId" value={entry.result.id} />
                           <input type="hidden" name="editionId" value={editionId} />
                           <input type="text" name="awardName" placeholder={t("awardNamePlaceholder")} required />
-                          <button type="submit" className="nn-button">
+                          <BotonDeEnvio className="nn-button">
                             {t("declareAwardButton")}
-                          </button>
+                          </BotonDeEnvio>
                         </form>
                       )}
                     </>
@@ -84,9 +85,9 @@ export default async function CompetitionEditionPage({ params }: { params: Promi
                     <form action={finalizeResultFormAction}>
                       <input type="hidden" name="entryId" value={entry.id} />
                       <input type="hidden" name="editionId" value={editionId} />
-                      <button type="submit" className="nn-button">
+                      <BotonDeEnvio className="nn-button">
                         {t("finalizeResultButton")}
-                      </button>
+                      </BotonDeEnvio>
                     </form>
                   )}
                 </li>
