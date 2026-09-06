@@ -1,0 +1,28 @@
+{
+  "_lee_esto_antes": [
+    "Esta es la definición que acaba en la base de PRODUCCIÓN cuando alguien corre",
+    "`npm run sensory:create-protocol -- protocolos/cafe-cva-adaptado.json`.",
+    "Vive en un archivo versionado a propósito: el contenido de un protocolo es una",
+    "decisión del dueño, y así se lee en el diff antes de tocar nada.",
+    "Decidido por Daniel el 2026-09-06: licencia en trámite, y los siete atributos",
+    "de la plantilla a escala 0-10. Cambiar esto después NO es editar aquí: es crear",
+    "una versión 2, para que los puntajes ya dados sigan significando lo mismo."
+  ],
+  "domain": "coffee",
+  "name": "Cata de café Néctar Nómada (estructura CVA adaptada) v1",
+  "description": "Protocolo de cata de café de Néctar Nómada. Separa lo descriptivo —a qué sabe— de lo afectivo —cuánto lo valora quien cata—, que es la distinción que introduce el Coffee Value Assessment de la SCA. NO es el formulario oficial de la SCA ni reproduce su redacción ni sus escalas: la licencia está en trámite, y hasta que exista estos puntajes no deben publicarse como CVA oficial.",
+  "standardSourceReference": "Estructura general inspirada en el SCA Coffee Value Assessment (CVA-103 descriptivo / CVA-104 afectivo). No reproduce la redacción de sus escalas de intensidad ni su formulario oficial. Licencia SCA en trámite a 2026-09-06. Ver BEVERAGE_SENSORY_PROTOCOLS.md §1/§3 y DECISIONS.md ADR-035.",
+  "standardLicenseStatus": "pending_license",
+  "version": 1,
+  "scoreMin": 0,
+  "scoreMax": 10,
+  "attributes": [
+    { "name": "Aroma",              "section": "descriptive", "scaleMin": 0, "scaleMax": 10 },
+    { "name": "Flavor",             "section": "descriptive", "scaleMin": 0, "scaleMax": 10 },
+    { "name": "Acidity",            "section": "descriptive", "scaleMin": 0, "scaleMax": 10 },
+    { "name": "Body",               "section": "descriptive", "scaleMin": 0, "scaleMax": 10 },
+    { "name": "Sweetness",          "section": "descriptive", "scaleMin": 0, "scaleMax": 10 },
+    { "name": "Aftertaste",         "section": "descriptive", "scaleMin": 0, "scaleMax": 10 },
+    { "name": "Overall Impression", "section": "affective",   "scaleMin": 0, "scaleMax": 10 }
+  ]
+}

@@ -267,6 +267,25 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   `OperatingStandard` y umbrales versionados (Fase 3, parcial). **Decisión de
   modelo pendiente de Daniel**, no se construyó nada.
 
+- **Ya se puede crear un protocolo de cata** — era el bloqueo de «sin protocolo
+  no hay puntajes». La única forma era `prisma/seed.ts` con `SEED_DEMO_CONTENT`,
+  así que producción no tenía ninguno: de ahí cata entera y **cero
+  valoraciones**. Añadidos `npm run sensory:create-protocol`
+  y `protocolos/cafe-cva-adaptado.json`, con la validación en
+  `lib/sensory/definicionDeProtocolo.ts` para poder probarla. La definición vive
+  en un archivo versionado a propósito: su contenido es decisión del dueño y así
+  se lee en el diff. Daniel eligió **licencia en trámite** y los siete atributos
+  a 0–10. **Falta correrlo:** escribe en producción y no se ha ejecutado.
+
+- **Dónde se rompe «tarea de finca → puntaje de taza», medido.** Tres tramos que
+  no se tocan: fumigar y sembrar se registran como *hechos* (`LabourEntry`,
+  `MaterialConsumptionEntry`, `PlantingCohort`) y sólo son *comparables* como
+  `TreatmentBatch`, que **exige** protocolo de investigación; lote→muestra→cata
+  está entero; y **el tueste no existe como variable** — `RoastSession` no se
+  enlaza con receta ni distingue muestra de producción, así que un puntaje no
+  puede decir con qué perfil se tostó. `VariableComparison` compara tratamientos,
+  **no puntajes entre lotes**. Decidido: reusar `ProcessRecipe`, óptimo por lote.
+
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
   separada para la serie temporal —~35.000 filas por sensor y año— y no dice
