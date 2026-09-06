@@ -2482,9 +2482,23 @@ revienta.
   costó una línea. `roasting` está en el grupo `datos-reales` de
   `scripts/pruebas-por-compuerta.txt`, **excluido de CI a propósito** porque su
   valor es afirmar hechos de la finca real. Así que esos 7 se quedan **sin
-  verificar** hasta que la base compartida vuelva a casar con `main` —cuando la
-  otra rama se fusione, o cuando nadie la esté usando y se pueda restaurar—.
-  Decirlo es la respuesta correcta; inventarle un árbitro que no existe, no.
+  verificar** hasta que la base compartida vuelva a casar con `main` —cuando se
+  fusione la rama que trae la migración, o cuando nadie esté usando la base y se
+  pueda restaurar—. Decirlo es la respuesta correcta; inventarle un árbitro que
+  no existe, no.
+- **Averiguar de qué rama es, sin adivinar por el nombre.** Aquí la migración se
+  llamaba como una rama que se fusionó ese mismo día **sin traerla**: la traía
+  otra, de nombre casi idéntico. Un nombre parecido no es evidencia; el que lo
+  dice es el árbol:
+
+  ```bash
+  for b in $(git branch -r --format='%(refname:short)' | grep -v HEAD); do
+    git ls-tree -r "$b" --name-only | grep -q "<marca de tiempo>" && echo "$b"
+  done
+  ```
+
+  Y con un control positivo al lado: la misma búsqueda sobre una migración que
+  sí está en `main`, para probar que el bucle mira donde debe.
 
 ### La suite completa ve regresiones que CI no puede ver
 
