@@ -57,6 +57,7 @@ tests/traceability/export.test.ts
 tests/traceability/f1.test.ts
 tests/traceability/fermentation.test.ts
 tests/traceability/fieldSessions.test.ts
+tests/traceability/jornadaEnApiario.test.ts
 tests/traceability/formularioSinAmbito.test.ts
 tests/traceability/harvest.test.ts
 tests/traceability/landMedia.test.ts

@@ -2500,6 +2500,31 @@ revienta.
   Y con un control positivo al lado: la misma búsqueda sobre una migración que
   sí está en `main`, para probar que el bucle mira donde debe.
 
+### Una prueba nueva que necesita base corre en el carril que no la tiene
+
+**2026-09-07.** `npx vitest run` pasó 1291/1291 en local y CI falló el carril
+hermético con `Invalid value for argument in[0]: Can not use undefined value
+within array` — un error de Prisma en una compuerta que no toca Prisma. La causa
+no era el código: `scripts/ci.sh` corre **todo lo que NO está** en
+`scripts/pruebas-por-compuerta.txt`, así que una prueba nueva que necesita base
+cae ahí por omisión y se ejecuta **sin base**.
+
+Correr la suite entera en local **no lo detecta nunca**, porque en local siempre
+hay base. Es la forma inversa de `PENDING_IMPLEMENTATIONS/008`, donde un test
+hermético nuevo no corría en CI: la misma lista, el mismo silencio, el otro lado.
+
+**Antes de empujar una prueba nueva que toque la base, correr el carril
+hermético tal cual lo corre CI:**
+
+```bash
+bash scripts/ci.sh          # 0 = el carril sin base está bien
+```
+
+y comprobar que la prueba nueva **no** aparece en su salida. Si aparece, va al
+grupo `base-sembrada` de `scripts/pruebas-por-compuerta.txt`, que es de donde
+`ci-con-base.sh` saca las suyas — el mismo archivo a propósito, para que no haya
+dos fuentes que deriven.
+
 ### La suite completa ve regresiones que CI no puede ver
 
 **Síntoma.** `main` en verde en CI, y `npm test` en local con **2 fallos**:
