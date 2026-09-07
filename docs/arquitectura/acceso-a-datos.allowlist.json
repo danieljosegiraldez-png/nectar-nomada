@@ -298,6 +298,10 @@
     {
       "archivo": "lib/envios/unaVezPorEnvio.ts",
       "razon": "Idempotencia de envíos web (2026-09-06). Sólo toca `core.submission_key`, su propia tabla de control, y ejecuta la escritura del llamador dentro de la misma transacción para que no pueda quedar una clave apuntando a una fila que no existe. No autoriza nada ni decide qué se escribe: el guardia lo aplicó ya el servicio de dominio antes de llamar. Recibir el cliente de transacción es el punto — separarlos volvería a abrir el hueco que cierra."
+    },
+    {
+      "archivo": "lib/sensory/crearProtocolo.ts",
+      "razon": "`crearProtocolo` recibe el `tx` del llamador en vez de abrir el suyo porque el protocolo, su versión, sus atributos, su vocabulario y el `AuditEvent` que dice quién lo creó tienen que confirmarse juntos — una versión sin atributos acepta valoraciones vacías, y una sin su vocabulario ofrece menos descriptores de los que su estándar define, que en pantalla se ve igual que un catador que no marcó nada. Salió de `scripts/create-sensory-protocol.ts` el 2026-09-07 para poder probarse: dentro de un `main()` nada verificaba que un archivo de protocolo se convirtiera en las filas que declara. No consulta nada fuera de las cuatro tablas que escribe."
     }
   ],
   "operaciones_sin_patron": [
@@ -454,6 +458,12 @@
       "operacion": "resolveOrganizationForLocation",
       "razon": "Resuelve a qué organización pertenece una Location subiendo por la jerarquía. No recibe principal a propósito: no expone datos gobernados —devuelve un UUID de organización— y su papel es sustituir un `organizationId` que antes llegaba del llamador sin comprobar, que es el hallazgo que la motivó. Sus llamadores autorizan contra la Location antes. Verificado el 2026-09-01.",
       "verificado": "2026-09-01"
+    },
+    {
+      "archivo": "lib/sensory/crearProtocolo.ts",
+      "operacion": "crearProtocolo",
+      "razon": "No recibe principal porque no hay ninguno: su único llamador es `scripts/create-sensory-protocol.ts`, una herramienta de terminal que corre con `DATABASE_URL` del `.env` y sin sesión — por eso su `AuditEvent` lleva `actorUserAccountId: null`. La autorización es tener acceso al servidor y al archivo del protocolo, que es una decisión del dueño y se lee en el diff. Si algún día se llama desde una pantalla, deja de depender del llamador y necesita guardia propia.",
+      "verificado": "2026-09-07"
     }
   ]
 }

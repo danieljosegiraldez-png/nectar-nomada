@@ -66,7 +66,21 @@ descriptores** en tres niveles y los 15 defectos nombrando su causa. Va
 `adapted_original` porque ese documento la marca como material propio. Fórmula
 `attribute_sum_v1`, con el techo comprobado criterio a criterio.
 
-**Nada tocó producción**, y para café falta lo mismo: un informe real, o licencia.
+**Y al aplicarlo en producción reventó, que es donde se supo.** `P2028`: 51
+inserciones de una en una —6 atributos y 45 descriptores— excedieron el techo de
+**5 s** de la transacción interactiva de Prisma contra Neon, a los 5.174 ms.
+**Revirtió entera**, comprobado leyendo el listado después: 0 protocolos nuevos,
+14 vivos como antes. Arreglado con `createMany` —dos viajes en vez de 51— y no
+subiéndole el techo al reloj. **Ninguna prueba local lo habría cazado**: contra
+la base local esas 51 caben de sobra; lo cazó correrlo contra producción.
+
+Lo que sí faltaba y ahora existe: la escritura salió del `main()` del script a
+`lib/sensory/crearProtocolo.ts`, así que por fin hay una prueba de que **un
+archivo de protocolo se convierte en las filas que declara** —los 45
+descriptores de miel, con sus 15 defectos y su causa— corriendo dentro de una
+transacción que se revierte, con su propio control positivo de que revirtió.
+
+**Para café falta lo mismo:** un informe real de los que le entregan, o licencia.
 
 ## 3. Bloqueado, y en qué
 
