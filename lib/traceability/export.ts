@@ -192,6 +192,12 @@ export async function buildProducerExport(userAccountId: string): Promise<Produc
   // CLAUDE.md §35 — taking a copy of the research record out of the platform
   // is exactly the kind of act the audit trail exists for. Recorded with what
   // left and how much, never the contents.
+  //
+  // audit-sin-escritura: una exportación no escribe nada, así que no hay
+  // ninguna fila con la que este AuditEvent pueda confirmarse a la vez. Es la
+  // única llamada del repositorio que audita un acto de LECTURA, y por eso
+  // `tests/arquitectura/audit-atomico.test.ts` la deja fuera de su tercera
+  // regla — pero sólo porque esta línea está aquí, no por una lista.
   await recordAuditEvent({
     actorUserAccountId: userAccountId,
     operation: "export",

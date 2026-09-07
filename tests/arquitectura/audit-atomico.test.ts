@@ -63,6 +63,13 @@ interface Llamada {
   dentroDeTransaccion: boolean;
   /** Inmediatamente después del `});` de una transacción: el patrón viejo. */
   trasElCierre: boolean;
+  /**
+   * La llamada declara, encima de sí misma, que no acompaña ninguna escritura.
+   * La exención vive en el SITIO DE LA LLAMADA y no en una lista aquí: si el
+   * audit desaparece, su excepción se va con él, que es lo que una lista de
+   * rutas no puede prometer.
+   */
+  sinEscritura: boolean;
 }
 
 /**
@@ -213,11 +220,28 @@ function textoDeLaLlamada(src: string, desde: number): string {
   return src.slice(desde);
 }
 
-function llamadas(src: string): Llamada[] {
+/**
+ * La marca que exime a una llamada de la tercera regla. Exige una razón en la
+ * misma línea —al menos veinte caracteres— para que no se pueda pegar en
+ * blanco: una exención sin motivo escrito es la lista que esto evita, sólo que
+ * repartida.
+ */
+const MARCA_SIN_ESCRITURA = /\/\/\s*audit-sin-escritura:\s*\S[^\n]{19,}/;
+
+function llamadas(fuente: string): Llamada[] {
+  const src = fuente;
   const rangos = rangosDeTransaccion(src);
   const marca = "recordAuditEvent(";
   const salida: Llamada[] = [];
   for (let i = src.indexOf(marca); i !== -1; i = src.indexOf(marca, i + 1)) {
+    // La DEFINICIÓN no es una llamada. `lib/audit.ts` declara
+    // `export async function recordAuditEvent(…)`, y hasta la tercera regla eso
+    // daba igual: una definición nunca está dentro de una transacción ni justo
+    // tras un cierre, así que las dos primeras reglas no la miraban. La tercera
+    // sí, y la señaló al primer intento — un guardia nuevo encuentra primero los
+    // límites del análisis que los del código.
+    if (/\bfunction\s+$/.test(src.slice(Math.max(0, i - 30), i))) continue;
+
     const cierreAnterior = rangos.filter(([, b]) => b < i).map(([, b]) => b);
     const ultimo = cierreAnterior.length ? Math.max(...cierreAnterior) : -1;
     salida.push({
@@ -227,6 +251,11 @@ function llamadas(src: string): Llamada[] {
       // «Justo después» se mide en LÍNEAS, no en caracteres: el `});`, una en
       // blanco y un comentario corto caben en cuatro.
       trasElCierre: ultimo >= 0 && lineaDe(src, i) - lineaDe(src, ultimo) <= 4,
+      // Se busca en el texto SIN blanquear: la marca vive en un comentario, que
+      // es justo lo que `sinRuido` borra.
+      sinEscritura: MARCA_SIN_ESCRITURA.test(
+        fuente.split("\n").slice(Math.max(0, lineaDe(src, i) - 9), lineaDe(src, i) - 1).join("\n"),
+      ),
     });
   }
   return salida;
@@ -313,6 +342,30 @@ describe("el audit viaja con la transacción que lo produjo", () => {
    * regla del `tx` no se les aplicaba. Si alguien vuelve a atar el análisis a
    * la llamada en vez de al cierre, esto lo dice.
    */
+  /**
+   * Control POSITIVO de la exención. Sin esto, un cambio que rompiera la
+   * detección de la marca —un regexp mal puesto, un renombrado— haría que la
+   * tercera regla no eximiera a nadie… o, peor, que eximiera a todos y se
+   * quedara verde sin comprobar nada. Que exista al menos una exención real y
+   * que no sean muchas es lo que distingue «la regla se aplica» de «la regla
+   * no encuentra a quién aplicarse».
+   */
+  it("la exención existe, se detecta, y sigue siendo excepcional", () => {
+    const eximidas = ARCHIVOS.flatMap((a) =>
+      llamadas(readFileSync(join(RAIZ, a), "utf8"))
+        .filter((l) => l.sinEscritura)
+        .map((l) => `${a}:${l.linea}`),
+    );
+    expect(
+      eximidas.length,
+      "ninguna llamada lleva `audit-sin-escritura:`: o se borró la única que la tenía, o la marca dejó de detectarse y la tercera regla no exime a nadie",
+    ).toBeGreaterThan(0);
+    expect(
+      eximidas.length,
+      `demasiadas exenciones (${eximidas.join(", ")}): la tercera regla se convierte en un formulario que se rellena`,
+    ).toBeLessThan(5);
+  });
+
   it("un ayudante que reparte `tx` cuenta como transacción", () => {
     const fuente = [
       "const creada = await unaVezPorEnvio(actor, clave, {",
@@ -379,6 +432,34 @@ describe("el audit viaja con la transacción que lo produjo", () => {
      * Se comprueba aparte del anterior para que el mensaje diga cuál de los dos
      * problemas es: uno se arregla pasando `tx`, el otro moviendo la llamada.
      */
+    /**
+     * **Tercera regla, 2026-09-06.** Todo audit va DENTRO de una transacción, o
+     * declara encima de sí mismo por qué no puede.
+     *
+     * Las otras dos cazan que se quite el `tx` y que la llamada vuelva tras el
+     * `});`. Ninguna caza que alguien quite la transacción ENTERA: una llamada
+     * sin transacción cerca les es indistinguible de una legítima. Esta lo
+     * cierra, y hoy puede escribirse porque de las 104 llamadas del repositorio
+     * queda **una** que no acompaña ninguna escritura.
+     *
+     * **La exención se declara en el sitio de la llamada, no aquí.** Una lista
+     * de rutas en este archivo sería la lista de archivos que este guardia se
+     * quitó de encima: envejece sin avisar, y nada la borra cuando el código
+     * que la justificaba desaparece. Un comentario `audit-sin-escritura:` con
+     * su razón viaja con la llamada y muere con ella. Y exige razón escrita, de
+     * al menos veinte caracteres, para que no se pueda pegar en blanco.
+     */
+    it(`${archivo}: todo recordAuditEvent va en una transacción, o dice por qué no`, () => {
+      const src = readFileSync(join(RAIZ, archivo), "utf8");
+      const huerfanas = llamadas(src).filter((l) => !l.dentroDeTransaccion && !l.sinEscritura);
+      expect(
+        huerfanas.map((l) => `${archivo}:${l.linea}`),
+        "audita sin transacción y sin declarar por qué. Si acompaña una escritura, mételas en la misma " +
+          "`$transaction` y pásale `tx`. Si de verdad no acompaña ninguna —auditar una lectura, una " +
+          "exportación—, escríbelo encima de la llamada: `// audit-sin-escritura: <razón>`.",
+      ).toEqual([]);
+    });
+
     it(`${archivo}: ningún recordAuditEvent justo después de cerrar una transacción`, () => {
       const src = readFileSync(join(RAIZ, archivo), "utf8");
       const sospechosas = llamadas(src).filter((l) => l.trasElCierre && !l.dentroDeTransaccion);
