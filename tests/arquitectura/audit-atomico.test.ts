@@ -66,7 +66,28 @@ interface Llamada {
 }
 
 /**
- * Dónde empieza y acaba cada callback de `$transaction`, **contando paréntesis**.
+ * Dónde empieza y acaba cada cuerpo que corre DENTRO de una transacción.
+ *
+ * **Ya no se busca `$transaction(`, sino el cierre cuyo parámetro es `tx`**
+ * (2026-09-06). Buscar la llamada dejaba fuera a los ayudantes que abren la
+ * transacción y reparten el mismo cliente: `unaVezPorEnvio` recibe un
+ * `crear: async (tx) => …` y confirma la escritura, su clave de envío y su
+ * audit juntos. Para el guardia viejo esas llamadas estaban «sueltas», así que
+ * la regla del `tx` **no se les aplicaba** — tres quedaban sin proteger, y a
+ * dos de ellas se llegó a mano precisamente por eso.
+ *
+ * En esta casa un parámetro llamado `tx` ES un cliente de transacción, así que
+ * la forma cubre `$transaction(async (tx) => …)` y cualquier ayudante, presente
+ * o futuro, sin una lista que mantener — que es la misma razón por la que este
+ * guardia dejó de tener lista de archivos. Medido al cambiarlo: 110 cierres con
+ * parámetro `tx` en `lib/`, `app/` y `scripts/`, tres llamadas más protegidas,
+ * y CERO que pasaran a estar «dentro sin `tx`»: la regla nueva no señala nada
+ * que estuviera bien.
+ *
+ * Lo que NO casa, comprobado: el `tx` de IndexedDB de
+ * `lib/apiary/offlineQueue.ts` (`tx.onerror = () => …`) no es un parámetro de
+ * cierre, y la firma de `recordAuditEvent(input, tx?)` no es una función
+ * flecha.
  *
  * **La primera versión cerraba por indentación** — el `});` al mismo nivel que
  * la línea que abría — y daba tres falsos positivos. No por un formato exótico:
@@ -76,7 +97,9 @@ interface Llamada {
  * «fuera». La indentación no es estructura, y un guardia que la use para
  * decidir estructura señala código correcto.
  *
- * Contar paréntesis desde el `(` de `$transaction(` no depende del formato.
+ * Del `=>` en adelante: si el cuerpo es un bloque se casan llaves, y si es una
+ * expresión se corta en la primera coma o paréntesis de cierre a profundidad
+ * cero. Ninguna de las dos depende del formato.
  */
 /**
  * El mismo texto con comentarios y cadenas **en blanco**, conservando cada
@@ -134,22 +157,38 @@ function sinRuido(src: string): string {
   return salida.join("");
 }
 
+const CIERRE_CON_TX = /(?:async\s*)?\(\s*tx\s*(?::\s*[A-Za-z_$][\w.$<>\[\], ]*)?\)\s*=>/g;
+
 function rangosDeTransaccion(fuente: string): Array<[number, number]> {
   const src = sinRuido(fuente);
   const rangos: Array<[number, number]> = [];
-  const marca = "$transaction(";
-  for (let i = src.indexOf(marca); i !== -1; i = src.indexOf(marca, i + 1)) {
-    let profundidad = 0;
-    for (let j = i + marca.length - 1; j < src.length; j++) {
-      if (src[j] === "(") profundidad++;
-      else if (src[j] === ")") {
-        profundidad--;
-        if (profundidad === 0) {
-          rangos.push([i, j]);
-          break;
+  const re = new RegExp(CIERRE_CON_TX.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src)) !== null) {
+    let j = m.index + m[0].length;
+    while (j < src.length && /\s/.test(src[j]!)) j++;
+    let fin = -1;
+    if (src[j] === "{") {
+      let profundidad = 0;
+      for (let k = j; k < src.length; k++) {
+        if (src[k] === "{") profundidad++;
+        else if (src[k] === "}") {
+          profundidad--;
+          if (profundidad === 0) { fin = k; break; }
         }
       }
+    } else {
+      let profundidad = 0;
+      for (let k = j; k < src.length; k++) {
+        const c = src[k];
+        if (c === "(" || c === "[" || c === "{") profundidad++;
+        else if (c === ")" || c === "]" || c === "}") {
+          if (profundidad === 0) { fin = k - 1; break; }
+          profundidad--;
+        } else if (c === "," && profundidad === 0) { fin = k - 1; break; }
+      }
     }
+    if (fin !== -1) rangos.push([m.index, fin]);
   }
   return rangos;
 }
@@ -214,11 +253,16 @@ function llamadas(src: string): Llamada[] {
  * una llamada vuelva justo detrás del `});`. NO cazan que alguien quite la
  * transacción entera y deje escritura y audit sueltas otra vez: para esas dos
  * reglas, una llamada sin ninguna transacción cerca es indistinguible de una
- * legítima. Una tercera regla —«en `scripts/`, todo audit va dentro de una
- * transacción»— sería cierta hoy y cerraría el hueco, pero sólo puede escribirse
- * acotada a `scripts/`: en `lib/` hay 49 llamadas sueltas —`app/` no tiene
- * ninguna—, así que una regla global nacería en rojo. Acotarla es una decisión, no un
- * descuido, y queda pendiente aquí.
+ * legítima.
+ *
+ * **Ese hueco ya casi no tiene dónde esconderse.** Este párrafo decía que en
+ * `lib/` había 49 llamadas sueltas; quedan **1**, y es legítima:
+ * `lib/traceability/export.ts` audita una EXPORTACIÓN y no escribe nada, así
+ * que no hay con qué ser atómica. Una tercera regla —«todo audit va dentro de
+ * una transacción»— sería hoy cierta con esa única excepción. No se escribe
+ * porque una excepción nombrada es una lista, y una lista a mano es lo que este
+ * guardia lleva todo el día quitándose de encima: envejece sin avisar. Queda
+ * como decisión, no como descuido.
  *
  * En los dos guiones que recorren filas —`rename-finca-rosina` y
  * `p0-flag-overstated-lots`— la transacción es POR FILA, no una para toda la
@@ -259,6 +303,33 @@ describe("el audit viaja con la transacción que lo produjo", () => {
     expect(
       dentro.length,
       "un paréntesis dentro de un comentario o una cadena volvió a cortar el rango de la transacción",
+    ).toBe(1);
+  });
+
+  /**
+   * Control del ALCANCE del análisis, sobre un caso sintético. Tres de las
+   * llamadas del repositorio viven en el `crear` de `unaVezPorEnvio`, no en un
+   * `$transaction(` literal, y hasta el 2026-09-06 se leían como sueltas: la
+   * regla del `tx` no se les aplicaba. Si alguien vuelve a atar el análisis a
+   * la llamada en vez de al cierre, esto lo dice.
+   */
+  it("un ayudante que reparte `tx` cuenta como transacción", () => {
+    const fuente = [
+      "const creada = await unaVezPorEnvio(actor, clave, {",
+      '  tipo: "Cosa",',
+      "  recuperar: (id) => prisma.cosa.findUniqueOrThrow({ where: { id } }),",
+      "  crear: async (tx) => {",
+      "    const fila = await tx.cosa.create({ data: {} });",
+      "    await recordAuditEvent({ operation: 'x' }, tx);",
+      "    return fila;",
+      "  },",
+      "});",
+    ].join("\n");
+
+    const dentro = llamadas(fuente).filter((l) => l.dentroDeTransaccion);
+    expect(
+      dentro.length,
+      "el audit del `crear` de un ayudante volvió a leerse como suelto: el análisis está atado a `$transaction(` otra vez",
     ).toBe(1);
   });
 
