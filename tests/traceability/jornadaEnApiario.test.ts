@@ -9,7 +9,8 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import { startFieldSession, LocationAccessError } from "../../lib/traceability/fieldSessions";
+import { startFieldSession, endFieldSession, LocationAccessError } from "../../lib/traceability/fieldSessions";
+import { recordInspection } from "../../lib/apiary/inspections";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a90-${Date.now()}`;
@@ -22,6 +23,9 @@ let operatorPersonId: string;
 let registradorPorSitio: string;
 let registradorPorProyecto: string;
 let operarioDeFinca: string;
+let colonyId: string;
+let apicultorConManejo: string;
+let hiveId: string;
 
 async function crearPersona(label: string) {
   const p = await prisma.person.create({
@@ -40,7 +44,11 @@ async function crearCuenta(label: string) {
 
 async function asignar(userAccountId: string, perfil: string, scopeType: "location" | "project", scopeRefId: string) {
   const profile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: perfil } });
-  const scope = await prisma.scope.create({ data: { scopeType, scopeRefId } });
+  // `Scope` es único por (scopeType, scopeRefId): dos personas asignadas al
+  // mismo sitio comparten fila, no crean una segunda.
+  const scope =
+    (await prisma.scope.findFirst({ where: { scopeType, scopeRefId } })) ??
+    (await prisma.scope.create({ data: { scopeType, scopeRefId } }));
   await prisma.assignment.create({ data: { userAccountId, roleProfileId: profile.id, scopeId: scope.id } });
 }
 
@@ -67,9 +75,14 @@ beforeAll(async () => {
 
   // La colmena es lo que ata el apiario a un proyecto: `FieldSession` no lleva
   // proyecto, así que los candidatos de proyecto salen de aquí.
-  await prisma.hive.create({
+  const hive = await prisma.hive.create({
     data: { identifier: `${RUN_ID}-H1`, locationId: apiarioId, projectId, status: "active" },
   });
+  hiveId = hive.id;
+  const colony = await prisma.colony.create({
+    data: { hiveId, status: "active", startedAt: new Date("2026-09-02T13:00:00Z"), originType: "purchased", provenanceClass: "original_record" },
+  });
+  colonyId = colony.id;
 
   operatorPersonId = await crearPersona("Apicultor");
 
@@ -81,6 +94,14 @@ beforeAll(async () => {
 
   operarioDeFinca = await crearCuenta("OperarioFinca");
   await asignar(operarioDeFinca, "Farm Operator", "location", parcelaId);
+
+  // `recordInspection` exige `apiary:manage` A PROPÓSITO: §7 del informe de
+  // agosto pide que el acceso a eventos de colonia nunca implique acceso a
+  // inspección, y `lib/apiary/hives.ts` lo dice en su comentario. El
+  // registrador entrenado abre la visita y registra eventos; para inspeccionar
+  // hace falta esta otra autoridad.
+  apicultorConManejo = await crearCuenta("ApicultorManejo");
+  await asignar(apicultorConManejo, "Farm Operator", "location", apiarioId);
 });
 
 afterAll(async () => {
@@ -88,9 +109,11 @@ afterAll(async () => {
   const sesiones = await prisma.fieldSession.findMany({ where: { locationId: { in: locationIds } }, select: { id: true } });
   await prisma.fieldEvent.deleteMany({ where: assertDefinedWhere({ fieldSessionId: { in: sesiones.map((s) => s.id) } }) });
   await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: sesiones.map((s) => s.id) } }) });
+  await prisma.inspection.deleteMany({ where: assertDefinedWhere({ colonyId }) });
+  await prisma.colony.deleteMany({ where: assertDefinedWhere({ hiveId }) });
   await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId: apiarioId }) });
 
-  const cuentas = [registradorPorSitio, registradorPorProyecto, operarioDeFinca];
+  const cuentas = [registradorPorSitio, registradorPorProyecto, operarioDeFinca, apicultorConManejo];
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: [...locationIds, projectId] } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
@@ -100,7 +123,7 @@ afterAll(async () => {
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
 });
 
-const visita = (locationId: string) => ({
+const visita_ = (locationId: string) => ({
   locationId,
   operatorPersonId,
   startedAt: new Date("2026-09-02T13:00:00Z"),
@@ -112,14 +135,14 @@ describe("A9.0 — quién abre una jornada, según dónde", () => {
     // El caso que motiva el alcance. Antes de A9.0 esto lanzaba
     // `no_location_attribute_access`: el perfil no tiene ese permiso y no debe
     // tenerlo — es la autoridad para reescribir el terruño del sitio.
-    const sesion = await startFieldSession(registradorPorSitio, visita(apiarioId));
+    const sesion = await startFieldSession(registradorPorSitio, visita_(apiarioId));
     expect(sesion.locationId).toBe(apiarioId);
   });
 
   it("también si su asignación es por PROYECTO y no por sitio", async () => {
     // `FieldSession` no lleva proyecto, así que sin resolver los proyectos de
     // las colmenas del apiario esta persona quedaría fuera en silencio.
-    const sesion = await startFieldSession(registradorPorProyecto, visita(apiarioId));
+    const sesion = await startFieldSession(registradorPorProyecto, visita_(apiarioId));
     expect(sesion.locationId).toBe(apiarioId);
   });
 
@@ -127,17 +150,65 @@ describe("A9.0 — quién abre una jornada, según dónde", () => {
     // La mitad que no se ve. La compuerta se ensancha para el apiario, no para
     // todo: en un sitio que no es `apiary_site` sigue mandando
     // `location:manage_attributes`.
-    await expect(startFieldSession(registradorPorSitio, visita(parcelaId))).rejects.toThrow(LocationAccessError);
+    await expect(startFieldSession(registradorPorSitio, visita_(parcelaId))).rejects.toThrow(LocationAccessError);
   });
 
   it("y el operario de finca sigue abriendo la suya, como antes", async () => {
-    const sesion = await startFieldSession(operarioDeFinca, visita(parcelaId));
+    const sesion = await startFieldSession(operarioDeFinca, visita_(parcelaId));
     expect(sesion.locationId).toBe(parcelaId);
   });
 
   it("un sitio que no existe se rechaza, no se trata como público", async () => {
     await expect(
-      startFieldSession(operarioDeFinca, visita("00000000-0000-0000-0000-000000000000")),
+      startFieldSession(operarioDeFinca, visita_("00000000-0000-0000-0000-000000000000")),
     ).rejects.toThrow(LocationAccessError);
+  });
+});
+
+describe("A9.2 — una visita agrupa lo que se registra durante ella", () => {
+  async function inspeccionar(quien: string, nota: string) {
+    return recordInspection(quien, { colonyId, outcome: "nothing_unusual", note: nota });
+  }
+
+  const eventoDe = (inspectionId: string) =>
+    prisma.fieldEvent.findFirst({ where: { inspectionId }, select: { id: true, fieldSessionId: true } });
+
+  it("una inspección hecha con la visita abierta queda dentro de ella", async () => {
+    // El hecho que motiva el alcance: hoy una ida donde se revisan tres
+    // colonias son tres `Inspection` y ningún registro del viaje.
+    const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
+    const inspeccion = await inspeccionar(apicultorConManejo, `TEST dentro (${RUN_ID})`);
+
+    const evento = await eventoDe(inspeccion.id);
+    expect(evento, "la inspección no quedó ligada a la visita abierta").not.toBeNull();
+    expect(evento!.fieldSessionId).toBe(visita.id);
+
+    await endFieldSession(apicultorConManejo, { fieldSessionId: visita.id, endedAt: new Date() });
+  });
+
+  it("sin visita abierta, la inspección se registra igual y queda suelta", async () => {
+    // La mitad que importa: el enganche no puede ser un requisito. Quien
+    // registra sin haber abierto visita sigue registrando, como hoy.
+    const inspeccion = await inspeccionar(apicultorConManejo, `TEST suelta (${RUN_ID})`);
+    expect(inspeccion.id).toBeTruthy();
+    expect(await eventoDe(inspeccion.id)).toBeNull();
+  });
+
+  it("no engancha a la visita de OTRA persona", async () => {
+    // Enganchar el trabajo de alguien a la jornada ajena falsea quién fue, que
+    // es justo lo que la visita existe para registrar.
+    const visitaAjena = await startFieldSession(registradorPorProyecto, visita_(apiarioId));
+    const inspeccion = await inspeccionar(apicultorConManejo, `TEST ajena (${RUN_ID})`);
+
+    expect(await eventoDe(inspeccion.id)).toBeNull();
+    await endFieldSession(registradorPorProyecto, { fieldSessionId: visitaAjena.id, endedAt: new Date() });
+  });
+
+  it("no engancha a una visita ya cerrada", async () => {
+    const cerrada = await startFieldSession(apicultorConManejo, visita_(apiarioId));
+    await endFieldSession(apicultorConManejo, { fieldSessionId: cerrada.id, endedAt: new Date() });
+
+    const inspeccion = await inspeccionar(apicultorConManejo, `TEST cerrada (${RUN_ID})`);
+    expect(await eventoDe(inspeccion.id)).toBeNull();
   });
 });
