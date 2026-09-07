@@ -11,7 +11,6 @@ import {
   getStorageEstimate,
   type DraftKind,
 } from "../../../lib/apiary/offlineQueue";
-import { recordColonyEventSyncAction, recordInspectionSyncAction } from "../../actions/apiary";
 import type { RecordInspectionInput } from "../../../lib/apiary/inspections";
 import type { RecordColonyEventInput } from "../../../lib/apiary/colonyEvents";
 
@@ -20,11 +19,6 @@ import type { RecordColonyEventInput } from "../../../lib/apiary/colonyEvents";
 // without prop-drilling or a context provider — a small window event is
 // the whole mechanism, matching how little state actually needs to move.
 export const APIARY_DRAFTS_CHANGED_EVENT = "nn-apiary-drafts-changed";
-
-async function syncer(kind: DraftKind, payload: unknown) {
-  if (kind === "inspection") return recordInspectionSyncAction(payload as RecordInspectionInput);
-  return recordColonyEventSyncAction(payload as RecordColonyEventInput);
-}
 
 /**
  * A0's own spec (25_OFFLINE_OPTIONS_ANALYSIS.md §4): "a persistent offline
@@ -75,7 +69,7 @@ export function OfflineSyncIndicator() {
     if (isSyncing) return;
     setIsSyncing(true);
     try {
-      const result = await syncAll(syncer);
+      const result = await syncAll();
       await refresh();
       if (result.synced > 0 || result.errored > 0) {
         setLastMessage(t("syncResult", { synced: result.synced, errored: result.errored }));

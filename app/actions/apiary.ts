@@ -87,48 +87,16 @@ export async function recordApiaryHarvestFormAction(formData: FormData): Promise
   redirect(`/lots/${lot.id}`);
 }
 
-// --- Inspection / ColonyEvent, called directly from client code (the
-// offline sync queue, lib/apiary/offlineQueue.ts) rather than bound to a
-// <form action>, since every submission is queued locally first and only
-// reaches here when a sync pass actually runs (§7, A0's Option B shape:
-// no service worker, explicit/opportunistic "sync now"). Auth/RBAC still
-// runs on every call, exactly as it would for a form-bound action —
-// nothing about calling this from a queue relaxes that. ---
-
-export interface ApiarySyncResult {
-  ok: boolean;
-  errorKind?: "validation" | "access" | "unknown";
-  message?: string;
-}
-
-export async function recordInspectionSyncAction(input: RecordInspectionInput): Promise<ApiarySyncResult> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, errorKind: "access", message: "not_authenticated" };
-
-  try {
-    const inspection = await recordInspection(user.userAccountId, input);
-    revalidatePath(`/apiaries`);
-    return { ok: true, message: inspection.id };
-  } catch (error) {
-    if (error instanceof ApiaryAccessError) return { ok: false, errorKind: "access", message: error.message };
-    return { ok: false, errorKind: "unknown", message: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-export async function recordColonyEventSyncAction(input: RecordColonyEventInput): Promise<ApiarySyncResult> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, errorKind: "access", message: "not_authenticated" };
-
-  try {
-    const event = await recordColonyEvent(user.userAccountId, input);
-    revalidatePath(`/apiaries`);
-    return { ok: true, message: event.id };
-  } catch (error) {
-    if (error instanceof ColonyEventValidationError) return { ok: false, errorKind: "validation", message: error.message };
-    if (error instanceof ApiaryAccessError) return { ok: false, errorKind: "access", message: error.message };
-    return { ok: false, errorKind: "unknown", message: error instanceof Error ? error.message : String(error) };
-  }
-}
+// --- Inspección y evento de colonia YA NO se sincronizan desde aquí. Hasta
+// A9.5 estas dos acciones eran el transporte de `lib/apiary/offlineQueue.ts`,
+// una petición por borrador. Ahora la cola empuja POR LOTES contra
+// `/api/v1/sync/field-events`, que es lo que la deuda escrita en
+// `lib/sync/offlineQueue.ts` anunciaba, y las acciones quedaron sin llamador.
+//
+// Se quitan en vez de dejarlas: la autorización y el manejo de errores que
+// hacían viven ahora en `pushFieldEvents`, y dos caminos de escritura para lo
+// mismo envejecen por separado — que es exactamente el problema del que este
+// ticket viene saliendo. ---
 
 // --- A6: Photo attachment on Hive/Colony/Inspection/ColonyEvent — same
 // two-step round trip as app/actions/traceability.ts's Lot-side pair

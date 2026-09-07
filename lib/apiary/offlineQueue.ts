@@ -113,7 +113,58 @@ export interface SyncOutcome {
   message?: string;
 }
 
-type Syncer = (kind: DraftKind, payload: unknown) => Promise<SyncOutcome>;
+/**
+ * A9.5 — la cola del apiario pasa a empujar POR LOTES contra
+ * `/api/v1/sync/field-events`, que es lo que su propia deuda anunciaba:
+ * *«el momento es cuando apiario pase a push por lotes; entonces las dos
+ * colapsan en ésta y `lib/apiary/` pasa a ser un envoltorio»*
+ * (`lib/sync/offlineQueue.ts`).
+ *
+ * **Qué cambia y qué no.** El almacén local, los borradores y la disciplina de
+ * §0 —un fallo de transporte deja el borrador en cola, un rechazo del servidor
+ * lo marca— siguen exactamente igual. Lo que cambia es el transporte: una
+ * petición por tanda en vez de una por borrador. Doce cajas inspeccionadas sin
+ * señal eran doce viajes al servidor al recuperarla; ahora son uno.
+ *
+ * **La autenticación no cambia:** `resolverPrincipal` acepta cookie de sesión o
+ * token de aparato, así que el navegador sigue mandando su cookie y no hace
+ * falta registrar nada nuevo.
+ */
+const RUTA_DE_LOTE = "/api/v1/sync/field-events";
+
+/**
+ * El identificador del aparato lo administra la cola de P4 —`ensureDeviceId`—,
+ * y se reutiliza en vez de registrar un segundo. Dos identificadores para el
+ * mismo teléfono harían que `lastSeenAt` mintiera y que revocar uno no revocara
+ * el otro, que es justo la clase de cosa que este colapso viene a quitar.
+ */
+async function idDeAparato(): Promise<string> {
+  const { ensureDeviceId } = await import("../sync/offlineQueue");
+  return ensureDeviceId();
+}
+
+/**
+ * Un borrador local, traducido a la mutación que el lote entiende.
+ *
+ * **Exportada a propósito, y pura a propósito.** Todo lo que toca IndexedDB en
+ * este archivo sigue sin poder probarse en Node —lo dice ya
+ * `tests/apiary/offlineQueue.test.ts`, y sigue siendo cierto—, así que la
+ * traducción se saca fuera de `syncAll` para que sí tenga red. Es el mismo
+ * movimiento que se hizo con `classifyDraftAge`, y por la misma razón: si esto
+ * se equivoca, se equivoca en TODOS los registros a la vez y en silencio.
+ */
+export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
+  const payload = (draft.payload ?? {}) as Record<string, unknown>;
+  return {
+    ...payload,
+    kind: draft.kind === "inspection" ? "inspection" : "colony_event",
+    clientDraftId: draft.id,
+    // Si el borrador no trajo hora propia, vale la de su creación: es cuando el
+    // operador lo anotó, que es el hecho que interesa. Inventar `Date.now()` al
+    // sincronizar fecharía la inspección el día que hubo señal.
+    occurredAt: payload.occurredAt ?? new Date(draft.createdAt).toISOString(),
+  };
+}
 
 /**
  * Attempts every pending/error draft once, in creation order. The
@@ -126,22 +177,39 @@ type Syncer = (kind: DraftKind, payload: unknown) => Promise<SyncOutcome>;
  * marked "error" and left for the operator to see and discard, not
  * silently retried forever against a request that can never succeed.
  */
-export async function syncAll(syncer: Syncer): Promise<{ synced: number; errored: number; stillPending: number }> {
+export async function syncAll(): Promise<{ synced: number; errored: number; stillPending: number }> {
   const drafts = await listDrafts();
   const toSync = drafts.filter((d) => d.status === "pending" || d.status === "error");
 
   let synced = 0;
   let errored = 0;
-  for (const draft of toSync) {
+
+  if (toSync.length > 0) {
     try {
-      const payload = draft.payload as Record<string, unknown>;
-      const result = await syncer(draft.kind, { ...payload, clientDraftId: draft.id });
-      if (result.ok) {
-        await discardDraft(draft.id);
-        synced++;
-      } else {
-        await putDraft({ ...draft, status: "error", errorMessage: result.message });
-        errored++;
+      const res = await fetch(RUTA_DE_LOTE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deviceId: await idDeAparato(), mutations: toSync.map(mutacionDe) }),
+      });
+
+      // Un 4xx del lote ENTERO —aparato revocado, cuerpo mal formado— no es un
+      // rechazo de cada borrador: es que la petición no se pudo evaluar. Se
+      // dejan en cola, como un fallo de transporte, porque marcarlos con error
+      // haría que el operador descartara trabajo bueno.
+      if (res.ok) {
+        const { results } = (await res.json()) as { results: Array<{ clientDraftId: string; status: string; reason?: string }> };
+        const porBorrador = new Map(results.map((r) => [r.clientDraftId, r]));
+        for (const draft of toSync) {
+          const r = porBorrador.get(draft.id);
+          if (!r) continue; // el servidor no lo mencionó: se reintenta
+          if (r.status === "applied" || r.status === "duplicate") {
+            await discardDraft(draft.id);
+            synced++;
+          } else {
+            await putDraft({ ...draft, status: "error", errorMessage: r.reason });
+            errored++;
+          }
+        }
       }
     } catch {
       // Network/transport failure — leave pending as-is, retried on the
