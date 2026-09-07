@@ -4,6 +4,10 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getApiaryDetail, getManageableApiaryProjects } from "../../../lib/apiary/hives";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
+import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
+import { getObserverCandidates } from "../../../lib/traceability/lots";
+import { FieldSessionStartForm } from "../../components/traceability/FieldSessionForms";
+import { mostrarInstante } from "../../../lib/time/mostrarInstante";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +17,12 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
 
   const { id } = await params;
   const t = await getTranslations("Apiary");
-  const [apiary, projects] = await Promise.all([
+  const tt = await getTranslations("Traceability");
+  const [apiary, projects, jornadas, { people, selfPersonId }] = await Promise.all([
     getApiaryDetail(user.userAccountId, id),
     getManageableApiaryProjects(user.userAccountId),
+    listFieldSessions(user.userAccountId, id),
+    getObserverCandidates(user.userAccountId),
   ]);
 
   return (
@@ -43,6 +50,41 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
             ))}
           </div>
         )}
+      </section>
+
+      {/* A9.2 — la visita, antes que las colmenas: es lo que agrupa el trabajo
+          del día. Una ida donde se revisan tres colonias eran tres
+          `Inspection` y ningún registro del viaje; con una visita abierta, lo
+          que se registre entra en ella sin un toque más
+          (`lib/traceability/visitaAbierta.ts`). */}
+      <section className="nn-section">
+        <h2>{tt("fieldSessionsHeading")}</h2>
+        {jornadas.length === 0 ? (
+          <p className="nn-muted">{tt("fieldSessionsNone")}</p>
+        ) : (
+          <ul className="nn-detail-meta">
+            {jornadas.map((j) => (
+              <li key={j.id}>
+                <Link href={`/field-sessions/${j.id}`}>
+                  {mostrarInstante(j.startedAt, apiary.timezone)}
+                </Link>
+                {" · "}
+                {j.operator.displayName}
+                {" · "}
+                {tt("fieldSessionEventCount", { count: j._count.events })}
+                {j.endedAt == null ? <> · <strong>{tt("fieldSessionOpen")}</strong></> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        <details>
+          <summary>{tt("fieldSessionStartSummary")}</summary>
+          <FieldSessionStartForm
+            locationId={apiary.id}
+            people={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
+            selfPersonId={selfPersonId}
+          />
+        </details>
       </section>
 
       <section className="nn-section">
