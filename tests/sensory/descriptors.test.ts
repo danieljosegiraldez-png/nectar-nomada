@@ -21,6 +21,7 @@ let sessionId: string;
 let flightId: string;
 let blindSampleId: string;
 let otherBlindSampleId: string;
+let duplicadoBlindSampleId: string;
 let evaluatorUserAccountId: string;
 let unauthorizedUserAccountId: string;
 
@@ -79,6 +80,9 @@ beforeAll(async () => {
   blindSampleId = blindSample.id;
   const otherBlindSample = await prisma.sensoryBlindSample.create({ data: { flightId, blindCode: `${RUN_ID}-BC2` } });
   otherBlindSampleId = otherBlindSample.id;
+  // Propia, para que el envío duplicado no choque con las de otras pruebas.
+  const duplicadoBlindSample = await prisma.sensoryBlindSample.create({ data: { flightId, blindCode: `${RUN_ID}-BC3` } });
+  duplicadoBlindSampleId = duplicadoBlindSample.id;
 
   evaluatorUserAccountId = await createTestUserAccount("R1Evaluator");
   const judgeProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Sensory Judge" } });
@@ -91,8 +95,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await prisma.sensoryDescriptorResponse.deleteMany({ where: assertDefinedWhere({ descriptorId: { in: [floralDescriptorId, defectDescriptorId] } }) });
   await prisma.attributeResponse.deleteMany({ where: assertDefinedWhere({ attributeId } ) });
-  await prisma.assessment.deleteMany({ where: assertDefinedWhere({ blindSampleId: { in: [blindSampleId, otherBlindSampleId] } }) });
-  await prisma.sensoryBlindSample.deleteMany({ where: assertDefinedWhere({ id: { in: [blindSampleId, otherBlindSampleId] } }) });
+  await prisma.assessment.deleteMany({ where: assertDefinedWhere({ blindSampleId: { in: [blindSampleId, otherBlindSampleId, duplicadoBlindSampleId] } }) });
+  await prisma.sensoryBlindSample.deleteMany({ where: assertDefinedWhere({ id: { in: [blindSampleId, otherBlindSampleId, duplicadoBlindSampleId] } }) });
   await prisma.sensoryFlight.deleteMany({ where: assertDefinedWhere({ id: flightId }) });
   await prisma.sensorySession.deleteMany({ where: assertDefinedWhere({ id: sessionId }) });
   await prisma.sensoryDescriptor.deleteMany({ where: assertDefinedWhere({ id: { in: [floralDescriptorId, defectDescriptorId] } }) });
@@ -156,5 +160,37 @@ describe("§4.4 — structured descriptor + defect with technical cause + confid
 
     expect(assessment.comment).toContain("plain free-text note");
     expect(assessment.descriptorResponses).toHaveLength(0);
+  });
+});
+
+describe("un segundo envío de la misma muestra por el mismo juez", () => {
+  it("sigue diciendo `already_submitted`, y no deja una segunda evaluación", async () => {
+    // Nadie cubría esto. Importa desde el 2026-09-06, cuando la escritura y su
+    // AuditEvent pasaron a una transacción: el manejo del P2002 quedó atado al
+    // `create` y sólo a él, en vez de al bloque entero. Esta prueba fija el
+    // lado que NO debía cambiar — el juez que reenvía sigue viendo lo mismo.
+    const primera = await submitAssessment(evaluatorUserAccountId, {
+      blindSampleId: duplicadoBlindSampleId,
+      comment: "TEST primera entrega",
+      attributeResponses: [{ attributeId, value: 13 }],
+    });
+
+    await expect(
+      submitAssessment(evaluatorUserAccountId, {
+        blindSampleId: duplicadoBlindSampleId,
+        comment: "TEST segunda entrega, no debe entrar",
+        attributeResponses: [{ attributeId, value: 17 }],
+      }),
+    ).rejects.toThrow(/already_submitted/);
+
+    // Y el rechazo no deja rastro: sigue habiendo UNA sola evaluación, la
+    // primera. Sin esto, «lanzó el error» no distingue rechazar de escribir
+    // igual y quejarse después.
+    const todas = await prisma.assessment.findMany({
+      where: { blindSampleId: duplicadoBlindSampleId, evaluatorUserAccountId },
+    });
+    expect(todas).toHaveLength(1);
+    expect(todas[0]!.id).toBe(primera.id);
+    expect(todas[0]!.comment).toContain("primera entrega");
   });
 });

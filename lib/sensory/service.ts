@@ -206,50 +206,69 @@ export async function submitAssessment(userAccountId: string, input: SubmitAsses
   // query here would still leave a race between two concurrent requests
   // (e.g. a double-click). Catch the constraint violation instead of
   // relying on check-then-create.
-  let assessment;
-  try {
-    assessment = await prisma.assessment.create({
-      data: {
-        blindSampleId: input.blindSampleId,
-        evaluatorUserAccountId: userAccountId,
-        overallScore: input.overallScore ?? null,
-        comment: input.comment ?? null,
-        attributeResponses: {
-          create: input.attributeResponses.map((r) => ({
-            attributeId: r.attributeId,
-            value: r.value,
-            comment: r.comment ?? null,
-          })),
-        },
-        descriptorResponses: {
-          create: (input.descriptorResponses ?? []).map((r) => ({
-            descriptorId: r.descriptorId,
-            confidence: r.confidence ?? null,
-            comment: r.comment ?? null,
-          })),
-        },
-      },
-      include: { attributeResponses: true, descriptorResponses: true },
-    });
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      throw new SensoryAccessError("already_submitted");
-    }
-    throw error;
-  }
 
-  // C1 §3: a judge's original, immutable submission is evidentiary even
-  // though Assessment doesn't carry the generic provenanceClass column
-  // (Part C's own drift finding) — it uses immutability + supersession
-  // instead. One audit row for the whole submission, not one per
-  // AttributeResponse child row.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "assessment.create",
-    entityType: "assessment",
-    entityId: assessment.id,
-    after: assessment,
-    sourceInterface: "sensory.service",
+  // La escritura y su AuditEvent en la misma transacción desde el 2026-09-06.
+  // Esta fue la última de todo el repositorio, y la que se aplazó dos veces por
+  // su manejo de errores: el `try/catch` envolvía el bloque ENTERO, así que
+  // meter el audit dentro habría hecho que un P2002 del audit —improbable, pero
+  // posible— se reportara como `already_submitted`. Un error distinto
+  // disfrazado de otro, y disfrazado del que el juez ve en pantalla.
+  //
+  // Por eso el manejo del P2002 va atado al `create` y sólo a él. Cualquier
+  // fallo del audit sale tal cual, revierte la evaluación y se ve.
+  const assessment = await prisma.$transaction(async (tx) => {
+    const creada = await tx.assessment
+      .create({
+        data: {
+          blindSampleId: input.blindSampleId,
+          evaluatorUserAccountId: userAccountId,
+          overallScore: input.overallScore ?? null,
+          comment: input.comment ?? null,
+          attributeResponses: {
+            create: input.attributeResponses.map((r) => ({
+              attributeId: r.attributeId,
+              value: r.value,
+              comment: r.comment ?? null,
+            })),
+          },
+          descriptorResponses: {
+            create: (input.descriptorResponses ?? []).map((r) => ({
+              descriptorId: r.descriptorId,
+              confidence: r.confidence ?? null,
+              comment: r.comment ?? null,
+            })),
+          },
+        },
+        include: { attributeResponses: true, descriptorResponses: true },
+      })
+      .catch((error: unknown) => {
+        // Atado al `create`: aquí un P2002 sólo puede ser la unicidad
+        // (blindSampleId, evaluatorUserAccountId), que es exactamente «ya
+        // enviaste esta muestra».
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          throw new SensoryAccessError("already_submitted");
+        }
+        throw error;
+      });
+
+    // C1 §3: a judge's original, immutable submission is evidentiary even
+    // though Assessment doesn't carry the generic provenanceClass column
+    // (Part C's own drift finding) — it uses immutability + supersession
+    // instead. One audit row for the whole submission, not one per
+    // AttributeResponse child row.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "assessment.create",
+        entityType: "assessment",
+        entityId: creada.id,
+        after: creada,
+        sourceInterface: "sensory.service",
+      },
+      tx,
+    );
+
+    return creada;
   });
 
   return assessment;
