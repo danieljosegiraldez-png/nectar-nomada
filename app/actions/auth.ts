@@ -50,6 +50,11 @@ export async function signUpAction(_prevState: FormActionState, formData: FormDa
 
   const passwordHash = await hashPassword(password);
 
+  // El alta y su AuditEvent en la misma transacción desde el 2026-09-06. Antes
+  // el `recordAuditEvent` vivía DESPUÉS de cerrar esta transacción: si fallaba,
+  // la cuenta quedaba creada y la única fila que dice que nació se perdía en
+  // silencio. Es el mismo hueco que se cerró en el camino de Google
+  // (`lib/auth/config.ts`), en la puerta de al lado. Ver `lib/audit.ts`.
   const userAccount = await prisma.$transaction(async (tx) => {
     const person = await tx.person.create({
       data: {
@@ -60,7 +65,7 @@ export async function signUpAction(_prevState: FormActionState, formData: FormDa
       },
     });
 
-    return tx.userAccount.create({
+    const created = await tx.userAccount.create({
       data: {
         personId: person.id,
         authProvider: "credentials",
@@ -68,15 +73,20 @@ export async function signUpAction(_prevState: FormActionState, formData: FormDa
         status: "active",
       },
     });
-  });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccount.id,
-    operation: "user_account.create",
-    entityType: "user_account",
-    entityId: userAccount.id,
-    after: { id: userAccount.id, authProvider: "credentials" },
-    sourceInterface: "app.signup",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: created.id,
+        operation: "user_account.create",
+        entityType: "user_account",
+        entityId: created.id,
+        after: { id: created.id, authProvider: "credentials" },
+        sourceInterface: "app.signup",
+      },
+      tx,
+    );
+
+    return created;
   });
 
   await signIn("credentials", { email, password, redirectTo: "/start" });
