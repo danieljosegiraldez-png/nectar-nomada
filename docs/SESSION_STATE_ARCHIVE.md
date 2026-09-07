@@ -1329,3 +1329,147 @@ cadena vacía. `leerCertificaciones` **no repara**: falla nombrando la fila rota
 Comprobado corriendo el comando contra la base local —crear, duplicado,
 renovación, un 31 de febrero, una bandera inventada— y leyendo la columna: la
 segunda credencial **no trae** `level_or_rank`, que es lo correcto.
+**Archivados: 2026-09-07**, con el estado en 399/400 líneas — al 100 % del
+presupuesto. Se movieron las **13 entradas de §3 «Bloqueado» que eran registro
+de entrega ya cerrado**, 132 líneas, la mitad de esa sección. Dos estaban
+tachadas y una decía «cerrada» en su primera línea. Es la tercera vez que se
+saca entrega de dentro de «Bloqueado»; esta vez entera en vez de por partes.
+
+Donde algo seguía abierto, la frase abierta **se quedó en §3** y aquí está el
+detalle: la protección de `main`, el job de CI que no es obligatorio, el barrido
+de claves de idempotencia, la pantalla de tueste sin abrir y el protocolo de
+cata sin correr.
+
+- ~~**Que la compuerta sea *obligatoria* para fusionar**~~ — **cerrado el
+  2026-09-05, y la premisa era falsa.** Esta entrada decía durante semanas que
+  la protección de ramas «no está disponible en un repositorio privado de este
+  plan («Upgrade to GitHub Pro»)». **Sí estaba**: se activó por API sin cambiar
+  de plan, al primer intento. Nadie lo había vuelto a probar desde que se
+  escribió.
+
+  Puesto en `main`: exige los dos checks de compuerta —el pesado y el ligero—,
+  prohíbe force-push y borrar la rama. **Sin revisiones exigidas a propósito**:
+  hay una sola cuenta humana y GitHub no deja aprobar el propio PR, así que
+  exigirlas dejaría el repositorio sin poder fusionar nada.
+
+  `enforce_admins` queda en **false**, también a propósito: si CI se cae por
+  cuota —ya pasó el 2026-09-03— hay que poder fusionar un arreglo sin
+  desactivar la protección primero.
+
+- **CI corría 22 de 97 archivos de prueba; ahora 94 de 100.** `ci.sh` los
+  nombraba a mano y se desincronizó en silencio. Invertido a grupos
+  (`scripts/pruebas-por-compuerta.txt`): `ci.sh` corre todo lo no listado y
+  `ci-con-base.sh`, en un job con Postgres de servicio (imagen **PostGIS**; la
+  oficial no la trae, y sólo lo dijo el runner), el resto — con las banderas
+  `SEED_DEMO_*`, sin las cuales no hay Platform Admin. Medido ejecutando y dos
+  veces desde cero: hay pruebas que pasan acompañadas y fallan solas. **Quedan 6
+  fuera:** `roasting` y `s1` son **deliberadas** —son las «dos aserciones» de la
+  cabecera de `test-db.sh`: **tenía razón y yo dije que no**—, tres piden datos
+  que ninguna bandera produce, y `open-decisions` lee `$HOME/.zshrc`. **El job
+  aún no es obligatorio**: la protección sólo exige «Compuerta».
+
+- **Quinta lente (2026-09-06): el doble toque.** La lente que traía —cargas que
+  mienten— no tiene dónde morder: cero `loading.tsx` y cero `<Suspense>`. Lo que
+  sí: **19 archivos con botones de envío sin apagar** (los otros 32 ya usaban el
+  `pending` de `useActionState`). Probado contra la base, no razonado:
+  `recordLabourEntry` dos veces con la misma entrada crea **dos filas
+  indistinguibles**, y cinco entidades no tienen índice único ni usa la web el
+  `clientDraftId` de la cola. Arreglado con `<BotonDeEnvio>` (`useFormStatus`,
+  sirve en los catorce formularios de servidor) más guardia con flip-test. Y una
+  medición mía salió **falsa** —«0 de 41 protegidos», por mirar sólo
+  `app/components`; eran 32 de 51—: la cazó otra medición.
+
+- **Idempotencia de envíos, cerrada.** `core.submission_key` +
+  `lib/envios/unaVezPorEnvio.ts`: escritura y clave en **una sola transacción**
+  —si no, una clave sin fila devolvería para siempre un resultado inventado—.
+  **No se reutilizó `clientDraftId`**: significa «vino de la cola offline» y de
+  ahí cuelgan `recordedAt`/`syncedAt` (decisión de Daniel). La clave la genera el
+  **servidor** por render (un `useState` con `randomUUID` daría desajuste de
+  hidratación). Cableados los **cuatro** que duplicaban en silencio: jornal,
+  consumo, medición y almacén. **`Sample` NO lo necesitaba**
+  —`@@unique([organizationId, sampleCode])`, igual que suelo y foliar—, y yo
+  afirmé lo contrario.
+
+  **Caducidad: 30 días** (Daniel, 2026-09-06). Pasado el plazo, reenviar el mismo
+  formulario cuenta como intención nueva. El plazo acota la tabla, no el
+  reintento — el caso real se mide en segundos. Se aplica al **leer** —una clave
+  vieja no se honra, y se borra antes de seguir o el `create` chocaría contra
+  ella— y se barre al **escribir**, acotado a la cuenta que escribe y dentro de
+  la transacción: si el barrido falla, falla el envío y se ve. **Lo que NO
+  cubre:** las claves de cuentas que dejan de escribir no las barre nadie. Un
+  barrido global pediría una tarea periódica y una ruta protegida, y este
+  proyecto no tiene ninguna de las dos — decisión aparte.
+
+- **El tueste ya tiene pantalla, y era el único hueco de la cadena.** Medido el
+  2026-09-06: `lib/traceability/roasting.ts` estaba entero desde R1 —
+  `recordRoastSession`, `listRoastSessions`, `getRoastSessionDetail`, con
+  pruebas— y **ninguna pantalla lo llamaba**; el propio código lo decía en un
+  comentario («once the R1 UI»). Por eso la base tiene **0 tuestes**. Añadidos
+  `/lots/[id]/roast/new`, su acción y `RoastSessionForm`, con la misma forma que
+  secado: se entra desde el lote y se vuelve al lote. **Sin clave de
+  idempotencia a propósito** — crea el lote de salida con `outputLotCode`, único
+  por organización, así que un doble envío choca y falla ruidosamente. `"roast"`
+  entra en `BatchAction` para poder ofrecer el botón pero **no** en
+  `nextActionFor`: la secuencia de ADR-096 es de Daniel y dice que el verde
+  espera a ser **catado**. **No lo ha abierto nadie en un navegador**: las
+  acciones de servidor no las ejerce ninguna prueba (necesitan sesión) y un
+  worktree no tiene `.env`.
+
+- **Ya se puede crear un protocolo de cata** — era el bloqueo de «sin protocolo
+  no hay puntajes»: la única forma era `prisma/seed.ts` con `SEED_DEMO_CONTENT`,
+  así que producción no tenía ninguno. Añadidos `npm run sensory:create-protocol`
+  y `protocolos/cafe-cva-adaptado.json`, con la validación en
+  `lib/sensory/definicionDeProtocolo.ts` para poder probarla. La definición vive
+  en un archivo versionado: su contenido es decisión del dueño y así se lee en el
+  diff. Daniel eligió licencia **en trámite** y los siete atributos a 0–10.
+  **Falta correrlo:** escribe en producción y no se ha ejecutado.
+
+- **El tueste ya es una variable: propósito y perfil.** `RoastSession` gana
+  `purpose` (`sample`/`production`, obligatorio y sin defecto) y `recipeVersionId`
+  anulable; `LotRoastProfile` guarda el **óptimo por lote**, y elegir otro
+  reemplaza. Decisiones de Daniel. La migración se hizo defensiva y se probó en
+  aislamiento. Mi archivo de prueba **compilaba mal** con las pruebas en verde: lo
+  cazó `typecheck`, no la suite.
+
+- **`npm run sensory:archive-protocol` retira un protocolo sin borrarlo**; hay
+  cinco `TEST` activos en producción esperando. Hoy su efecto es sólo que el
+  listado deja de mezclar retirados con vivos.
+
+- **Nadie podía crear una sesión de cata** —sólo la semilla—, y **ésa era la
+  razón de las cero valoraciones, no el protocolo**. Corrige además algo que dije:
+  en producción SÍ había protocolo de café, el marcador `Coffee Cupping
+  (Illustrative)`, que di por inexistente sin medirlo.
+
+- **Ya se puede crear una sesión de cata** — la puerta que le faltaba al módulo.
+  `crearSesionDeCata` monta sesión + vuelo + muestras ciegas + mapeo en **una
+  transacción**, con pantalla en `/sensory/new`. Rechaza protocolo retirado y
+  protocolo **sin atributos** — hay cinco así en producción. **Del método:** violé
+  el guardia de audit atómico y lo cazó su prueba; y «muestra ajena» no se puede
+  probar mientras sólo el admin cree sesiones — queda escrito como explicación,
+  no como prueba que no puede fallar.
+
+- **Una cata ya es de varios, y existe el rol que la dirige.** Perfil
+  **`Cupping Host`** y permiso nuevo **`sample:view`** —`requireSampleAccess` lo
+  aceptaba y no existía: nadie podía mirar una muestra sin poder cambiarla—.
+  Corrige mi encuadre: no faltaba acceso al head judge, faltaba el rol; head
+  judge y judges quedan para **competencia** (Daniel). Añadido **invitar
+  participantes** (asignación de ámbito `session`, sin tabla nueva) y expuestos
+  **propósito y tipo**. Lo enseñó la prueba: un ámbito estrecho no implica uno
+  amplio, y `manage` no implica `view`.
+
+- ~~Dos carreras en jornadas de campo~~ — **cerradas el 2026-08-31**. Estaban
+  agrupadas aquí con la deuda de auditoría bajo «las tres tocan diseño de
+  plataforma», y eso era falso de estas dos: el arreglo era local. Cierre con
+  `updateMany` condicionado a `endedAt: null`, y `occurredAt > endedAt`
+  distinguido de «llegó tarde», porque `FieldEvent` lleva `recordedAt`,
+  `syncedAt` y `deviceId` — está pensado para llegar tarde, así que un evento
+  sincronizado tras el cierre es el camino previsto y no un borde.
+
+- ~~**Escritura y auditoría no son atómicas en 13 archivos**~~ — **cerrado el
+  2026-09-06/07.** Ya no queda ninguna llamada que audite dentro de una
+  transacción sin recibirla, ni ninguna que audite tras cerrarla, en `lib/`,
+  `app/` ni `scripts/`. El guardia
+  `tests/arquitectura/audit-atomico.test.ts` lo sostiene con 154 comprobaciones
+  y sin lista que mantener. El detalle se archivó en
+  `docs/SESSION_STATE_ARCHIVE.md` porque era registro de entrega dentro de una
+  sección llamada «Bloqueado».
