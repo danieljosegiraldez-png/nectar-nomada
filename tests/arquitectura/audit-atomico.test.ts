@@ -78,7 +78,64 @@ interface Llamada {
  *
  * Contar paréntesis desde el `(` de `$transaction(` no depende del formato.
  */
-function rangosDeTransaccion(src: string): Array<[number, number]> {
+/**
+ * El mismo texto con comentarios y cadenas **en blanco**, conservando cada
+ * posición y cada salto de línea para que los desplazamientos sigan valiendo.
+ *
+ * **Por qué, y cómo se descubrió (2026-09-06).** Contar paréntesis a pelo
+ * cuenta también los que viven dentro de un comentario. Un comentario que
+ * mencionaba el cierre de una transacción —literalmente las tres letras de un
+ * `});`— cerró el rango tres líneas antes de tiempo, y la llamada que venía
+ * después, que estaba DENTRO, se clasificó fuera.
+ *
+ * Aquí salió como falso positivo, que es ruidoso y se ve. La dirección
+ * peligrosa es la contraria: un rango cortado antes deja llamadas de dentro
+ * clasificadas como «fuera», y a ésas la regla del `tx` **no se les aplica**.
+ * El guardia se habría quedado verde comprobando menos.
+ *
+ * Regex sin escapar sigue siendo un punto ciego: no se trata aquí porque no
+ * aparece en el código que este guardia recorre, y el control de abajo se
+ * pondría rojo si algún día rompiera el análisis entero.
+ */
+function sinRuido(src: string): string {
+  const salida = src.split("");
+  type Estado = "codigo" | "linea" | "bloque" | "comilla" | "doble" | "plantilla";
+  let estado: Estado = "codigo";
+  const blanquear = (i: number) => {
+    if (salida[i] !== "\n") salida[i] = " ";
+  };
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    const sig = src[i + 1];
+    if (estado === "codigo") {
+      if (c === "/" && sig === "/") { estado = "linea"; blanquear(i); blanquear(i + 1); i++; }
+      else if (c === "/" && sig === "*") { estado = "bloque"; blanquear(i); blanquear(i + 1); i++; }
+      else if (c === "'") { estado = "comilla"; }
+      else if (c === '"') { estado = "doble"; }
+      else if (c === "`") { estado = "plantilla"; }
+      continue;
+    }
+    if (estado === "linea") {
+      if (c === "\n") estado = "codigo";
+      else blanquear(i);
+      continue;
+    }
+    if (estado === "bloque") {
+      blanquear(i);
+      if (c === "*" && sig === "/") { blanquear(i + 1); i++; estado = "codigo"; }
+      continue;
+    }
+    // Dentro de una cadena: `\` se salta el siguiente carácter.
+    if (c === "\\") { blanquear(i); blanquear(i + 1); i++; continue; }
+    const cierra = (estado === "comilla" && c === "'") || (estado === "doble" && c === '"') || (estado === "plantilla" && c === "`");
+    if (cierra) { estado = "codigo"; continue; }
+    blanquear(i);
+  }
+  return salida.join("");
+}
+
+function rangosDeTransaccion(fuente: string): Array<[number, number]> {
+  const src = sinRuido(fuente);
   const rangos: Array<[number, number]> = [];
   const marca = "$transaction(";
   for (let i = src.indexOf(marca); i !== -1; i = src.indexOf(marca, i + 1)) {
@@ -137,12 +194,18 @@ function llamadas(src: string): Llamada[] {
 }
 
 /**
- * `scripts/` queda fuera a propósito: son herramientas de administración que se
- * corren a mano contra una base concreta, no caminos que ejerza un usuario.
- * Si alguna vez auditan dentro de una transacción, entrarán aquí — pero
- * meterlas hoy sería ampliar el guardia sin haber medido sus 9 llamadas.
+ * `scripts/` entró el 2026-09-06, **después de medirlo**. Este comentario decía
+ * que quedaba fuera «sin haber medido sus 9 llamadas»; medidas, eran **10** en
+ * 7 archivos —otra sesión añadió una entre la cuenta y la medida— y de ellas
+ * **2** auditaban justo tras cerrar una transacción. Las dos se arreglaron en
+ * el mismo cambio que trajo esta línea, porque ampliar antes de arreglar habría
+ * hecho nacer el guardia en rojo.
+ *
+ * Las otras 8 son llamadas sueltas, sin transacción ninguna cerca: estas dos
+ * reglas no las miran. Cerrarlas sería CREAR transacciones donde no las hay,
+ * que es otro trabajo y otra decisión.
  */
-const ARCHIVOS = [...fuentes(join(RAIZ, "lib")), ...fuentes(join(RAIZ, "app"))]
+const ARCHIVOS = [...fuentes(join(RAIZ, "lib")), ...fuentes(join(RAIZ, "app")), ...fuentes(join(RAIZ, "scripts"))]
   .map((r) => relative(RAIZ, r))
   .filter((r) => readFileSync(join(RAIZ, r), "utf8").includes("recordAuditEvent("))
   .sort();
@@ -154,6 +217,30 @@ describe("el audit viaja con la transacción que lo produjo", () => {
    * `prettier` distinto— todas las llamadas saldrían «fuera de transacción» y
    * el guardia pasaría sin comprobar nada. Esto lo convierte en rojo.
    */
+  /**
+   * Control del ANÁLISIS sobre un caso sintético, porque el real acaba de
+   * morder: un comentario que menciona un cierre de transacción no debe cerrar
+   * el rango. Sin esto, la llamada de dentro se lee como de fuera y la regla
+   * del `tx` deja de aplicársele — el guardia sigue verde comprobando menos.
+   */
+  it("un `});` dentro de un comentario o una cadena no cierra la transacción", () => {
+    const fuente = [
+      "await prisma.$transaction(async (tx) => {",
+      "  await tx.cosa.create({ data: {} });",
+      "  // antes esto vivía tras el `});` y dejaba un hecho sin rastro",
+      '  const nota = "cierra con });";',
+      "  await recordAuditEvent({ operation: 'x' }, tx);",
+      "  return 1;",
+      "});",
+    ].join("\n");
+
+    const dentro = llamadas(fuente).filter((l) => l.dentroDeTransaccion);
+    expect(
+      dentro.length,
+      "un paréntesis dentro de un comentario o una cadena volvió a cortar el rango de la transacción",
+    ).toBe(1);
+  });
+
   it("el análisis encuentra transacciones y llamadas de verdad", () => {
     expect(ARCHIVOS.length, "ningún archivo llama a recordAuditEvent").toBeGreaterThan(10);
 
@@ -161,10 +248,12 @@ describe("el audit viaja con la transacción que lo produjo", () => {
     // `app/` fuera —un refactor de `fuentes`, un filtro de más— haría que el
     // guardia siguiera verde comprobando la mitad del mundo, que es
     // exactamente como llegó `app/actions/auth.ts` hasta aquí.
-    expect(
-      ARCHIVOS.filter((a) => a.startsWith("app/")),
-      "ningún archivo de app/ entró en el análisis: el guardia volvió a mirar sólo lib/",
-    ).not.toHaveLength(0);
+    for (const raiz of ["app/", "scripts/"]) {
+      expect(
+        ARCHIVOS.filter((a) => a.startsWith(raiz)),
+        `ningún archivo de ${raiz} entró en el análisis: el guardia volvió a mirar menos código del que audita`,
+      ).not.toHaveLength(0);
+    }
     const dentro = ARCHIVOS.flatMap((a) =>
       llamadas(readFileSync(join(RAIZ, a), "utf8")).filter((l) => l.dentroDeTransaccion),
     );

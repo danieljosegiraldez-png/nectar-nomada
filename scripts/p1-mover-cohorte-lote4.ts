@@ -137,11 +137,17 @@ async function main() {
   // Lote 4 cuyo propio evento sigue diciendo Lote 3 es peor que el error que
   // se está corrigiendo.
   //
-  // El audit se escribe *después* del commit, no dentro: `recordAuditEvent` es
-  // el único escritor de `AuditEvent` en todo el código (`lib/audit.ts`) y usa
-  // el cliente global, sin aceptar un handle de transacción. Es el mismo orden
-  // que ya siguen los servicios (`updateLocationAttributes`), y la ventana que
-  // deja —commit hecho, audit no— es preexistente y no la abre este script.
+  // El audit va DENTRO, desde el 2026-09-06. Este comentario decía lo contrario
+  // y su premisa era falsa: afirmaba que `recordAuditEvent` «usa el cliente
+  // global, sin aceptar un handle de transacción». Lo acepta desde el
+  // 2026-08-31 —un segundo argumento opcional— así que la ventana que el
+  // comentario daba por inevitable llevaba semanas siendo evitable. La
+  // justificación caducó y el código se quedó con ella.
+  //
+  // Las filas y sus AuditEvent se mueven juntos o no se mueve nada: una cohorte
+  // en el Lote 4 cuyo propio evento sigue diciendo Lote 3 es peor que el error
+  // que se está corrigiendo, y una corrección sin su fila de auditoría es
+  // exactamente lo que un registro de auditoría existe para impedir.
   const { despuesCohorte, despuesEventos } = await prisma.$transaction(async (tx) => {
     const dc = await tx.plantingCohort.update({
       where: { id: cohort.id },
@@ -151,33 +157,40 @@ async function main() {
     for (const e of eventosAMover) {
       de.push(await tx.plantingEvent.update({ where: { id: e.id }, data: { locationId: destino.id } }));
     }
+
+    await recordAuditEvent(
+      {
+        actorUserAccountId: actor.id,
+        operation: "planting_cohort.correct_location",
+        entityType: "planting_cohort",
+        entityId: cohort.id,
+        before: antesCohorte,
+        after: dc,
+        reason: REASON,
+        sourceInterface: "scripts/p1-mover-cohorte-lote4.ts",
+      },
+      tx,
+    );
+
+    for (const despues of de) {
+      const antes = antesEventos.find((a) => a.id === despues.id);
+      await recordAuditEvent(
+        {
+          actorUserAccountId: actor.id,
+          operation: "planting_event.correct_location",
+          entityType: "planting_event",
+          entityId: despues.id,
+          before: antes,
+          after: despues,
+          reason: REASON,
+          sourceInterface: "scripts/p1-mover-cohorte-lote4.ts",
+        },
+        tx,
+      );
+    }
+
     return { despuesCohorte: dc, despuesEventos: de };
   });
-
-  await recordAuditEvent({
-    actorUserAccountId: actor.id,
-    operation: "planting_cohort.correct_location",
-    entityType: "planting_cohort",
-    entityId: cohort.id,
-    before: antesCohorte,
-    after: despuesCohorte,
-    reason: REASON,
-    sourceInterface: "scripts/p1-mover-cohorte-lote4.ts",
-  });
-
-  for (const despues of despuesEventos) {
-    const antes = antesEventos.find((a) => a.id === despues.id);
-    await recordAuditEvent({
-      actorUserAccountId: actor.id,
-      operation: "planting_event.correct_location",
-      entityType: "planting_event",
-      entityId: despues.id,
-      before: antes,
-      after: despues,
-      reason: REASON,
-      sourceInterface: "scripts/p1-mover-cohorte-lote4.ts",
-    });
-  }
 
   console.log("\nAplicado. Releyendo desde la base:");
   const releido = await prisma.plantingCohort.findUniqueOrThrow({
