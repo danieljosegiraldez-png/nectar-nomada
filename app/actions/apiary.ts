@@ -53,6 +53,9 @@ export async function createColonyFormAction(formData: FormData): Promise<void> 
     // §1: origin is a required, capture-or-lose-it fact — no default.
     originType: String(formData.get("originType") ?? "other") as never,
     originNote: emptyToNull(formData.get("originNote")),
+    // A9.10 (D6) — el origen agrupable. `emptyToNull` porque la opción vacía
+    // del desplegable es «sin registro», que es un dato y no un hueco.
+    originSourceValueId: emptyToNull(formData.get("originSourceValueId")),
     // §1a: a beekeeper directly observed/established this colony.
     provenanceClass: "direct_observation",
   });

@@ -1212,7 +1212,9 @@
     "vitalAlimentoHasta": "Feed until",
     "haceDias": "{count} days ago",
     "coloniasDeCajas": "{colonias} of {cajas}",
-    "vitalesPendientes": "Two dashboard vitals are still missing: pollination density (needs committed hectares) and 7-day weather (needs a connected provider). Neither is estimated."
+    "vitalesPendientes": "Two dashboard vitals are still missing: pollination density (needs committed hectares) and 7-day weather (needs a connected provider). Neither is estimated.",
+    "originSourceLabel": "Stock origin",
+    "originSourceUnset": "Not recorded"
   },
   "Research": {
     "badge": "Research OS",

@@ -1212,7 +1212,9 @@
     "vitalAlimentoHasta": "Alimento hasta",
     "haceDias": "hace {count} días",
     "coloniasDeCajas": "{colonias} de {cajas}",
-    "vitalesPendientes": "Faltan dos vitales del tablero: densidad de polinización (necesita las hectáreas comprometidas) y clima de 7 días (necesita un proveedor conectado). No se estiman."
+    "vitalesPendientes": "Faltan dos vitales del tablero: densidad de polinización (necesita las hectáreas comprometidas) y clima de 7 días (necesita un proveedor conectado). No se estiman.",
+    "originSourceLabel": "Origen del pie",
+    "originSourceUnset": "Sin registro"
   },
   "Research": {
     "badge": "Research OS",

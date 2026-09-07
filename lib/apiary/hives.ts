@@ -109,6 +109,12 @@ export interface CreateColonyInput {
   // from anything else the platform records.
   originType: ColonyOriginType;
   originNote?: string | null;
+  // A9.10 (D6) — el origen AGRUPABLE, que es lo que `originNote` no podía ser
+  // siendo texto libre. Opcional a propósito: una colonia de un origen que
+  // todavía no está en el catálogo se registra igual, con su `originNote` de
+  // siempre, en vez de bloquear la captura de campo. El catálogo crece por
+  // semilla (precedente P1), no por migración.
+  originSourceValueId?: string | null;
   // No default here either, matching every other provenance-carrying
   // write's convention (ADR-038) — the action layer must state a real
   // class.
@@ -129,6 +135,7 @@ export async function createColony(userAccountId: string, input: CreateColonyInp
         status: input.status ?? "active",
         originType: input.originType,
         originNote: input.originNote ?? null,
+        originSourceValueId: input.originSourceValueId ?? null,
         provenanceClass: input.provenanceClass,
         dataQuality: input.dataQuality ?? null,
         createdBy: userAccountId,
@@ -158,7 +165,7 @@ export async function createColony(userAccountId: string, input: CreateColonyInp
 export async function getHive(userAccountId: string, hiveId: string) {
   const hive = await prisma.hive.findUnique({
     where: { id: hiveId },
-    include: { colonies: { include: { assets: true } }, assets: true },
+    include: { colonies: { include: { assets: true, originSource: { select: { value: true } } } }, assets: true },
   });
   if (!hive) throw new ApiaryAccessError("hive_not_found");
   await requireApiaryAccess(userAccountId, "view", [{ projectId: hive.projectId, locationId: hive.locationId }]);

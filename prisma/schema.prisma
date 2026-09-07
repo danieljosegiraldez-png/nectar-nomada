@@ -5010,6 +5010,13 @@ model Colony {
   // with existing rows).
   originType      ColonyOriginType @map("origin_type")
   originNote      String?          @map("origin_note") // e.g. supplier name, capture location — free text, no structured Supplier/parent-Colony FK
+  // A9.10 (D6) — el origen AGRUPABLE. `originNote` se queda para lo que no
+  // cabe en el catálogo, pero deja de ser el único sitio donde vive el dato:
+  // «compará Parita contra Santa Fe» pasa de leer prosa a ser una consulta.
+  // Anulable porque las colonias ya guardadas no lo tienen, y porque el
+  // catálogo crece por semilla y no por migración (precedente P1).
+  originSourceValueId String?               @map("origin_source_value_id") @db.Uuid
+  originSource        VariableCatalogValue? @relation("ColonyOriginSource", fields: [originSourceValueId], references: [id])
   // ADR-038 pattern, applied here per 22_APIARY_V1_SCOPING_REPORT.md §1's
   // explicit instruction — no default, the action layer must state a real
   // class.
@@ -5025,6 +5032,7 @@ model Colony {
   assets              Asset[]
 
   @@index([hiveId])
+  @@index([originSourceValueId])
   @@map("colony")
   @@schema("apiary")
 }
@@ -5442,6 +5450,7 @@ model VariableCatalogValue {
   rejectionCategoryOf Lot[]                        @relation("LotRejectionCategory")
   washMediumOfStages ProcessingStage[]             @relation("ProcessingStageWashMedium")
   lotProcessInterventions LotProcessIntervention[]     @relation("LotProcessInterventionKind")
+  colonyOrigins           Colony[]                     @relation("ColonyOriginSource")
 
   @@unique([catalogId, value])
   @@index([aliasOfId])

@@ -471,6 +471,41 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       },
     ],
   },
+  {
+    // A9.10 (D6) — de dónde vino el pie de una colonia, agrupable.
+    //
+    // `Colony.originType` YA era un enum y YA agrupaba: comprada, capturada,
+    // división, otro. Lo que NO agrupa es `originNote`, que es texto libre, y
+    // por eso «compará Parita contra Santa Fe» no era una consulta sino leer
+    // prosa. Eso es lo que D6 pide; la fila del ticket nombraba la columna
+    // equivocada y queda corregida en el informe.
+    //
+    // Los dos valores son del dueño, no inventados: el pie original de Toabré
+    // viene de Santa Fe, Veraguas, y los tres núcleos instalados en septiembre
+    // de Parita, Chitré (`48_A9_CAPTURA_DE_CAMPO_PROMPT.md:199`,
+    // `protocolos/apiario-campo-v1.json:109`). Los otros tres apiarios NO se
+    // rellenan aquí: el prompt lo prohíbe en su línea 395.
+    //
+    // Crece por semilla, no por migración (precedente P1): el día que entre un
+    // cuarto origen es una línea aquí y un `db:seed`.
+    key: "origen_de_colonia",
+    name: "Origen de la colonia",
+    description:
+      "Procedencia del pie de una colonia. Es el HECHO del origen, no la mecánica de la división: la genealogía sigue [DEFERRED] (DOMAIN_MODEL.md:205) y esto no la reabre — es una FK, no un grafo.",
+    values: [
+      { value: "Santa Fe, Veraguas", definition: "El pie original de Toabré." },
+      {
+        value: "Parita, Chitré",
+        definition: "Los tres núcleos instalados en septiembre de 2026, que abrieron la comparación.",
+      },
+      {
+        value: "desconocido",
+        impliesUnknownIdentity: true,
+        definition:
+          "No se sabe de dónde vino. Valor legítimo y no un hueco a rellenar: una colonia instalada antes de que alguien llevara registro no tiene respuesta, y adivinarla la convertiría en un hecho (CLAUDE.md §3). Misma disciplina que «desconocido» en cultivar.",
+      },
+    ],
+  },
 ] as const;
 
 // §3a — "Enums cerrados": small, product-owner-fixed vocabularies that
