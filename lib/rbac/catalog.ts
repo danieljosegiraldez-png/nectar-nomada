@@ -70,6 +70,12 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // authority boundary, not a tier of the same permission.
   { resourceType: "lot", action: "override_balance", description: "Accept a lot transformation whose mass balance is outside the organization's tolerance." },
   { resourceType: "sample", action: "manage", description: "Create samples, including from a traceable lot." },
+  // 2026-09-06. `requireSampleAccess` aceptaba `"view"` desde su primera versión
+  // y el permiso no existía: nadie podía MIRAR una muestra sin poder cambiarla.
+  // Lo pidió el anfitrión de cata, que elige qué se cata y no debe poder editar
+  // lo que eligió. `manage` NO implica `view` — `can()` exige la clave exacta—,
+  // así que quien lea muestras acepta cualquiera de las dos.
+  { resourceType: "sample", action: "view", description: "See samples without being able to change them — choosing what to cup." },
 
   // A1 (docs/implementation/22_APIARY_V1_SCOPING_REPORT.md §3) — a new
   // subject, not folded into `lot`: Hive/Colony are not Lots (§2), and the
@@ -262,6 +268,28 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
     permissions: [
       ["sensory", "manage_session"],
       ["sensory", "submit_assessment"],
+      ["blind_mapping", "view"],
+      ["classification", "clear_internal"],
+    ],
+  },
+  {
+    // 2026-09-06, decisión de Daniel. Dirigir una cata y juzgar una competencia
+    // son dos usos distintos del mismo módulo, y hasta hoy compartían rol: el
+    // resultado era que SÓLO un Platform Admin podía montar una cata, porque
+    // `sensory:manage_session` y el acceso a muestras no coincidían en ningún
+    // perfil. `Sensory Head Judge` queda para competencia formal —junto a
+    // Sensory Judge y, cuando exista, un director de jueces—; esto es el
+    // anfitrión de una cata interna, de panel o con invitados.
+    name: "Cupping Host",
+    description:
+      "Monta y dirige una cata: elige propósito y muestras, invita participantes, revela los " +
+      "códigos ciegos y lee los resultados. Ve muestras sin poder cambiarlas (`sample:view`) — " +
+      "elegir qué se cata no es editar el café. No incluye `submit_assessment` a propósito: un " +
+      "anfitrión que además cata lleva también el perfil de Sensory Judge, y así se distingue en " +
+      "el registro quién dirigió de quién puntuó.",
+    permissions: [
+      ["sensory", "manage_session"],
+      ["sample", "view"],
       ["blind_mapping", "view"],
       ["classification", "clear_internal"],
     ],

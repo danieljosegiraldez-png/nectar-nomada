@@ -6,6 +6,8 @@ import { getSessionForJudge, getSessionForHeadJudge, SensoryAccessError } from "
 import { computePanelResultFormAction } from "../../actions/sensory";
 import { AssessmentForm } from "../../components/AssessmentForm";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
+import { listarParticipantes, listarInvitables } from "../../../lib/sensory/sessions";
+import { InvitarParticipanteForm } from "../../components/sensory/InvitarParticipanteForm";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +43,12 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
   const scoreMin = session.protocolVersion.scoreMin.toNumber();
   const scoreMax = session.protocolVersion.scoreMax.toNumber();
 
+  // Los participantes sólo los ve y los mueve quien dirige la cata. Hasta hoy
+  // sólo se podían meter a mano en la base, así que una cata la puntuaba quien
+  // alguien hubiera metido — o nadie.
+  const participantes = canManageSession ? await listarParticipantes(user.userAccountId, sessionId) : [];
+  const invitables = canManageSession ? await listarInvitables(user.userAccountId, sessionId) : [];
+
   const headJudgeSamplesByFlight = new Map(
     headJudgeView?.flights.map((f) => [f.id, f.blindSamples]) ?? [],
   );
@@ -55,6 +63,24 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
       <p className="nn-muted">
         {session.protocolVersion.protocol.name} v{session.protocolVersion.version}
       </p>
+
+      {canManageSession ? (
+        <section className="nn-section">
+          <h2>{t("participantsHeading")}</h2>
+          {participantes.length === 0 ? (
+            <p className="nn-muted">{t("noParticipantsYet")}</p>
+          ) : (
+            <ul>
+              {participantes.map((p) => (
+                <li key={p.assignmentId}>
+                  {p.displayName} <span className="nn-muted">· {p.perfil}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <InvitarParticipanteForm sessionId={sessionId} invitables={invitables} />
+        </section>
+      ) : null}
 
       {session.flights.map((flight) => (
         <section key={flight.id} style={{ marginTop: "2rem" }}>
