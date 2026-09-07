@@ -3678,6 +3678,25 @@ model MaterialConsumptionEntry {
 // Person rows in this database have no email and therefore no account, and a
 // session recorded by someone who cannot log in is the normal case, not the
 // exception.
+/**
+ * A9.1 (D4). El ciclo de una jornada: se captura en el campo (`draft`), se
+ * termina fuera (`completed`) y pasado el plazo deja de editarse (`locked`).
+ * Copiado de `GUIDED_FIELD_STUDY_TOOL.md:48-49,65-72`, que es la única versión
+ * escrita y razonada de esto; no es una cuarta invención.
+ *
+ * Deliberadamente NO hay estado por registro: una `Inspection` o un
+ * `ColonyEvent` está escrito o no lo está, y su completitud la juzga el
+ * protocolo de la visita. Eso deja intactas las tablas de captura, que es lo
+ * que exige §7 del prompt de A9.
+ */
+enum FieldSessionStatus {
+  draft
+  completed
+  locked
+
+  @@schema("traceability")
+}
+
 model FieldSession {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   locationId String   @map("location_id") @db.Uuid
@@ -3694,6 +3713,15 @@ model FieldSession {
 
   startedAt DateTime  @map("started_at")
   endedAt   DateTime? @map("ended_at")
+
+  /// A9.1 (D4). `endedAt` dice cuándo se salió del sitio; esto, cuándo se
+  /// terminó de escribir. No son lo mismo: el trabajo se cierra en el carro o
+  /// en la casa, sobre el mismo registro.
+  status             FieldSessionStatus @default(draft)
+  completedAt        DateTime?          @map("completed_at")
+  /// Pasada esta fecha, corregir es enmendar y no editar (D3). Es una columna
+  /// y no una constante porque los umbrales son por sitio, no del código.
+  editWindowExpiresAt DateTime?         @map("edit_window_expires_at")
 
   // Where the session began. Nullable — a device without a fix, or a session
   // recorded at a desk afterwards, both genuinely have no coordinates, and a
@@ -3871,6 +3899,18 @@ model FieldEvent {
   lotTransformationId   String?              @map("lot_transformation_id") @db.Uuid
   lotTransformation     LotTransformation?   @relation(fields: [lotTransformationId], references: [id])
 
+  /// A9.1 (D1). Las tres que faltaban para que una jornada agrupe también el
+  /// trabajo de apiario. El audit del café ya las había nombrado
+  /// (`COFFEE_FIELD_OS_AUDIT.md:347-348`) y nunca se añadieron; sin ellas
+  /// `FieldEvent` sólo puede apuntar a hechos de café, que es por lo que la
+  /// visita al apiario no existía como hecho propio.
+  inspectionId          String?              @map("inspection_id") @db.Uuid
+  inspection            Inspection?          @relation(fields: [inspectionId], references: [id])
+  colonyEventId         String?              @map("colony_event_id") @db.Uuid
+  colonyEvent           ColonyEvent?         @relation(fields: [colonyEventId], references: [id])
+  apiaryHarvestEventId  String?              @map("apiary_harvest_event_id") @db.Uuid
+  apiaryHarvestEvent    ApiaryHarvestEvent?  @relation(fields: [apiaryHarvestEventId], references: [id])
+
   provenanceClass ProvenanceClass @map("provenance_class")
 
   recordedAt DateTime? @map("recorded_at")
@@ -3905,6 +3945,9 @@ model FieldEvent {
   @@index([eventKindValueId])
   @@index([measurementId])
   @@index([assetId])
+  @@index([inspectionId])
+  @@index([colonyEventId])
+  @@index([apiaryHarvestEventId])
   @@map("field_event")
   @@schema("traceability")
 }
@@ -4851,6 +4894,10 @@ model Inspection {
 
   assets Asset[]
 
+  /// A9.1 — el otro lado de la FK que `FieldEvent` gana para agrupar
+  /// el trabajo de apiario dentro de una jornada.
+  fieldEvents FieldEvent[]
+
   @@index([colonyId])
   @@map("inspection")
   @@schema("apiary")
@@ -4916,6 +4963,10 @@ model ColonyEvent {
 
   assets Asset[]
 
+  /// A9.1 — el otro lado de la FK que `FieldEvent` gana para agrupar
+  /// el trabajo de apiario dentro de una jornada.
+  fieldEvents FieldEvent[]
+
   @@index([colonyId])
   @@map("colony_event")
   @@schema("apiary")
@@ -4947,6 +4998,10 @@ model ApiaryHarvestEvent {
   createdAt         DateTime        @default(now()) @map("created_at")
   createdBy         String?         @map("created_by") @db.Uuid
   creator           UserAccount?    @relation("ApiaryHarvestEventCreatedBy", fields: [createdBy], references: [id])
+
+  /// A9.1 — el otro lado de la FK que `FieldEvent` gana para agrupar
+  /// el trabajo de apiario dentro de una jornada.
+  fieldEvents FieldEvent[]
 
   @@index([colonyId])
   @@map("apiary_harvest_event")

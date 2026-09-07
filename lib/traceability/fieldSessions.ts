@@ -3,11 +3,13 @@
  * field-event spine, and the capture timestamps that make a device-recorded
  * row honest about when it happened.
  *
- * RBAC reuses `location:manage_attributes` through
- * `requireLocationAttributeAccess`, the same choice ADR-095 made for planting
- * cohorts and for the same reason: a session is a record *about* a Location,
- * gated by authority over that Location, and ADR-091 makes a permission with
- * nowhere to be used a build failure.
+ * RBAC va por `requireFieldSessionAccess` (`./jornadaDeCampo.ts`) desde A9.0.
+ * Sigue siendo autoridad sobre la `Location` —una sesión es un registro *sobre*
+ * un sitio—, pero **cuál** autoridad la decide el `locationType` de esa fila:
+ * `location:manage_attributes` en un sitio de café, y lo que el apiario ya
+ * autoriza en un `apiary_site`. Este párrafo decía que la compuerta era
+ * `requireLocationAttributeAccess` a secas, y dejó de ser cierto al abrir la
+ * jornada al apiario; la razón de ADR-095 se conserva, el permiso único no.
  *
  * **`operatorPersonId` is a `Person`, never a `UserAccount`.** Most Person
  * rows in this database have no email and therefore no account. A session
@@ -17,7 +19,9 @@
  */
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
+import { LocationAccessError } from "./locations";
+// A9.0 — la compuerta resuelve por el tipo de la `Location`. Ver su cabecera.
+import { requireFieldSessionAccess } from "./jornadaDeCampo";
 import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
 
 export class FieldSessionValidationError extends Error {}
@@ -86,7 +90,7 @@ export interface StartFieldSessionInput {
 }
 
 export async function startFieldSession(userAccountId: string, input: StartFieldSessionInput) {
-  await requireLocationAttributeAccess(userAccountId, input.locationId);
+  await requireFieldSessionAccess(userAccountId, input.locationId);
 
   const operator = await prisma.person.findUnique({ where: { id: input.operatorPersonId } });
   if (!operator) throw new FieldSessionValidationError("operator_not_found");
@@ -142,7 +146,7 @@ export async function endFieldSession(userAccountId: string, input: { fieldSessi
   if (existing.endedAt) throw new FieldSessionValidationError("session_already_ended");
   if (input.endedAt < existing.startedAt) throw new FieldSessionValidationError("ended_before_started");
 
-  await requireLocationAttributeAccess(userAccountId, existing.locationId);
+  await requireFieldSessionAccess(userAccountId, existing.locationId);
 
   // Escritura CONDICIONADA a que siga abierta. La comprobación de arriba lee y
   // la escritura de abajo escribe, y entre las dos cabe otra petición: sin la
@@ -245,7 +249,7 @@ export async function recordFieldEvent(userAccountId: string, input: RecordField
     );
   }
 
-  await requireLocationAttributeAccess(userAccountId, session.locationId);
+  await requireFieldSessionAccess(userAccountId, session.locationId);
 
   // At most one subject. Two would make the timeline ambiguous about which row
   // this moment refers to, and the spine's whole value is that it is not.
@@ -373,7 +377,7 @@ export async function getFieldSessionTimeline(userAccountId: string, fieldSessio
   });
   if (!session) throw new FieldSessionValidationError("session_not_found");
 
-  await requireLocationAttributeAccess(userAccountId, session.locationId);
+  await requireFieldSessionAccess(userAccountId, session.locationId);
 
   const events = await prisma.fieldEvent.findMany({
     where: { fieldSessionId },
@@ -389,7 +393,7 @@ export async function getFieldSessionTimeline(userAccountId: string, fieldSessio
 
 /** Sessions at a location, most recent first. */
 export async function listFieldSessions(userAccountId: string, locationId: string) {
-  await requireLocationAttributeAccess(userAccountId, locationId);
+  await requireFieldSessionAccess(userAccountId, locationId);
   return prisma.fieldSession.findMany({
     where: { locationId },
     include: {
