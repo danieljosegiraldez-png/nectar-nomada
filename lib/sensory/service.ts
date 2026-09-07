@@ -168,16 +168,22 @@ export async function getSessionForJudge(userAccountId: string, sessionId: strin
   };
 }
 
-export interface SubmitAssessmentInput {
-  blindSampleId: string;
+/**
+ * Lo único que `resolverPuntajeTotal` necesita — que NO incluye la muestra
+ * ciega. Un informe externo no tiene una cuando se calcula su total, y pasarle
+ * una cadena vacía para satisfacer el tipo es cómo se cuela un identificador
+ * inventado en una fila.
+ */
+export interface EntradasDelPuntaje {
   overallScore?: number | null;
-  // Sólo bajo un protocolo con `scoreFormula`; ignorados en cualquier otro,
-  // porque una cuenta de tazas guardada bajo un protocolo que no la usa es un
-  // dato que nadie sabría leer después.
   nonUniformCups?: number | null;
   defectiveCups?: number | null;
-  comment?: string | null;
   attributeResponses: ReadonlyArray<{ attributeId: string; value: number; comment?: string | null }>;
+}
+
+export interface SubmitAssessmentInput extends EntradasDelPuntaje {
+  blindSampleId: string;
+  comment?: string | null;
   // R1 (docs/implementation/33_R1_ROASTSESSION_TAXONOMIA_SENSORIAL.md §2) —
   // additive alongside attributeResponses and comment, never a replacement
   // for either: a structured descriptor/defect pick, with its own optional
@@ -194,6 +200,11 @@ export interface SubmitAssessmentInput {
 /**
  * De dónde sale el puntaje total de una valoración, y qué se guarda con él.
  *
+ * **Exportada desde el 2026-09-07** para que el registro de un informe externo
+ * (`lib/sensory/informeExterno.ts`) decida el total por el mismo camino. Tener
+ * dos implementaciones de «cómo se obtiene el puntaje» es cómo se acaba con una
+ * equivocada ganando en silencio.
+ *
  * **Dos regímenes, y el viejo no cambia.** Un protocolo sin `scoreFormula` es
  * todo lo que existía antes del 2026-09-06: el total lo teclea quien cata y se
  * guarda tal cual. Uno con fórmula deja de aceptar el tecleado —lo ignora en
@@ -206,12 +217,12 @@ export interface SubmitAssessmentInput {
  * cada uno convierte «falta Sweetness» en un error con nombre, en vez de en un
  * puntaje calculado sobre siete números que parecería correcto.
  */
-function resolverPuntajeTotal(
+export function resolverPuntajeTotal(
   protocolVersion: {
     scoreFormula: string | null;
     attributes: ReadonlyArray<{ id: string; name: string; scaleMin: Prisma.Decimal; scaleMax: Prisma.Decimal }>;
   },
-  input: SubmitAssessmentInput,
+  input: EntradasDelPuntaje,
 ): { overallScore: number | null; nonUniformCups: number | null; defectiveCups: number | null } {
   if (protocolVersion.scoreFormula === null) {
     return { overallScore: input.overallScore ?? null, nonUniformCups: null, defectiveCups: null };

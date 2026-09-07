@@ -96,6 +96,7 @@ model Person {
   creator               UserAccount? @relation("PersonCreatedBy", fields: [createdBy], references: [id])
 
   userAccount                        UserAccount?
+  assessmentsAsExternalEvaluator     Assessment[] @relation("AssessmentByExternalEvaluator")
   projectsAsClient                   Project[]
   storiesAuthored                    Story[]
   assetsCaptured                     Asset[]                       @relation("AssetCreatorPerson")
@@ -2021,8 +2022,27 @@ model Assessment {
   id                     String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   blindSampleId          String             @map("blind_sample_id") @db.Uuid
   blindSample            SensoryBlindSample @relation(fields: [blindSampleId], references: [id], onDelete: Cascade)
-  evaluatorUserAccountId String             @map("evaluator_user_account_id") @db.Uuid
-  evaluator              UserAccount        @relation("AssessmentByEvaluator", fields: [evaluatorUserAccountId], references: [id])
+  // Anulable desde el 2026-09-07, y sólo por esto: un Q-grader o un tostador al
+  // que se le paga un análisis NO tiene cuenta en la plataforma. Hasta hoy su
+  // informe no se podía registrar en absoluto, así que el trabajo pagado vivía
+  // fuera del sistema. Exactamente UNA de las dos columnas de evaluador está
+  // puesta, y eso lo impone un CHECK en la base — no este comentario.
+  evaluatorUserAccountId String?            @map("evaluator_user_account_id") @db.Uuid
+  evaluator              UserAccount?       @relation("AssessmentByEvaluator", fields: [evaluatorUserAccountId], references: [id])
+
+  // La persona externa que firmó el informe. `Person` existe sin `UserAccount`
+  // a propósito, y ya lleva `sensoryCertifications` —el Q de CQI, el nivel, la
+  // fecha— que hasta hoy nadie escribía ni leía.
+  externalEvaluatorPersonId String? @map("external_evaluator_person_id") @db.Uuid
+  externalEvaluator         Person? @relation("AssessmentByExternalEvaluator", fields: [externalEvaluatorPersonId], references: [id])
+
+  // De dónde salió el informe: el PDF en Drive, el correo, la hoja escaneada.
+  // OBLIGATORIO cuando el evaluador es externo, y también por CHECK. Un puntaje
+  // externo sin puntero a su original es justo el registro sin procedencia que
+  // CLAUDE.md §3 prohíbe: dentro de un año nadie sabrá si alguien lo tecleó de
+  // memoria. Es texto y no una FK a `Asset` porque `Asset` exige un archivo ya
+  // subido, y la subida no existe todavía; cuando exista, esto se estrecha.
+  sourceReference String? @map("source_reference")
   overallScore           Decimal?           @map("overall_score") @db.Decimal(5, 2)
   // Las dos entradas que el puntaje afectivo del CVA necesita además de los
   // atributos (lib/sensory/puntajeCva.ts). Nulas en todo lo anterior al
@@ -2051,8 +2071,13 @@ model Assessment {
   // workflow is eventually built, this constraint needs revisiting —
   // likely a partial unique index scoped to status = 'submitted' instead.
   @@unique([blindSampleId, evaluatorUserAccountId])
+  // El de arriba deja de bastar en cuanto la columna es anulable: Postgres trata
+  // los NULL como distintos, así que sin éste el mismo informe externo entraría
+  // dos veces sin una queja.
+  @@unique([blindSampleId, externalEvaluatorPersonId])
   @@index([blindSampleId])
   @@index([evaluatorUserAccountId])
+  @@index([externalEvaluatorPersonId])
   @@map("assessment")
   @@schema("sensory")
 }
