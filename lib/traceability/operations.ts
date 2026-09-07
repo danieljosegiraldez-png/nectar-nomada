@@ -121,8 +121,12 @@ export async function recordLabourEntry(userAccountId: string, input: RecordLabo
   const labourEntry = await unaVezPorEnvio(userAccountId, input.claveDeEnvio, {
     tipo: "LabourEntry",
     recuperar: (id) => prisma.labourEntry.findUniqueOrThrow({ where: { id } }),
-    crear: (tx) =>
-      tx.labourEntry.create({
+    // El audit entra en la transacción DEL AYUDANTE, no en una nueva: la
+    // escritura ya vive dentro de `unaVezPorEnvio`, así que envolverla por
+    // fuera no la haría atómica — sólo añadiría una transacción alrededor de
+    // algo ya confirmado. Es la misma forma que `measurements.ts` ya usaba.
+    crear: async (tx) => {
+      const creada = await tx.labourEntry.create({
         data: {
           workerCount: input.workerCount,
           hours: input.hours,
@@ -135,17 +139,23 @@ export async function recordLabourEntry(userAccountId: string, input: RecordLabo
           createdBy: userAccountId,
           ...labourParentData(input.parent),
         },
-      }),
-  });
+      });
 
-  // C1 §3: evidentiary write (carries provenanceClass).
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "labour_entry.create",
-    entityType: "labour_entry",
-    entityId: labourEntry.id,
-    after: labourEntry,
-    sourceInterface: "traceability.service",
+      // C1 §3: evidentiary write (carries provenanceClass).
+      await recordAuditEvent(
+        {
+          actorUserAccountId: userAccountId,
+          operation: "labour_entry.create",
+          entityType: "labour_entry",
+          entityId: creada.id,
+          after: creada,
+          sourceInterface: "traceability.service",
+        },
+        tx,
+      );
+
+      return creada;
+    },
   });
 
   return labourEntry;
@@ -218,8 +228,12 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
   const materialConsumptionEntry = await unaVezPorEnvio(userAccountId, input.claveDeEnvio, {
     tipo: "MaterialConsumptionEntry",
     recuperar: (id) => prisma.materialConsumptionEntry.findUniqueOrThrow({ where: { id } }),
-    crear: (tx) =>
-      tx.materialConsumptionEntry.create({
+    // El audit entra en la transacción DEL AYUDANTE, no en una nueva: la
+    // escritura ya vive dentro de `unaVezPorEnvio`, así que envolverla por
+    // fuera no la haría atómica — sólo añadiría una transacción alrededor de
+    // algo ya confirmado. Es la misma forma que `measurements.ts` ya usaba.
+    crear: async (tx) => {
+      const creada = await tx.materialConsumptionEntry.create({
         data: {
           materialName: input.materialName.trim(),
           batchLabel: input.batchLabel.trim(),
@@ -233,17 +247,23 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
           createdBy: userAccountId,
           ...consumptionParentData(input.parent),
         },
-      }),
-  });
+      });
 
-  // C1 §3: evidentiary write (carries provenanceClass).
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "material_consumption_entry.create",
-    entityType: "material_consumption_entry",
-    entityId: materialConsumptionEntry.id,
-    after: materialConsumptionEntry,
-    sourceInterface: "traceability.service",
+      // C1 §3: evidentiary write (carries provenanceClass).
+      await recordAuditEvent(
+        {
+          actorUserAccountId: userAccountId,
+          operation: "material_consumption_entry.create",
+          entityType: "material_consumption_entry",
+          entityId: creada.id,
+          after: creada,
+          sourceInterface: "traceability.service",
+        },
+        tx,
+      );
+
+      return creada;
+    },
   });
 
   return materialConsumptionEntry;

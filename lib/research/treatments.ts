@@ -114,49 +114,56 @@ export async function createTreatmentBatch(userAccountId: string, input: CreateT
     await validateTreatmentBatchVariableValue(variable, value);
   }
 
-  const batch = await prisma.treatmentBatch.create({
-    data: {
-      protocolVersionId: input.protocolVersionId,
-      lotId: input.lotId ?? null,
-      // **Explícito, no por ausencia.** Este camino no crea tratamientos de
-      // TERRENO: ésos pasan por `applyAmendment`, que comprueba Gate 0 —la
-      // química base, la física base, el biochar caracterizado y el protocolo
-      // escrito— antes de escribir nada. Sin esta línea la garantía dependía de
-      // que nadie añadiera `locationId` a `CreateTreatmentBatchInput`, que es
-      // una ausencia y no una regla. Lo preguntó la revisión independiente del
-      // 2026-09-01: «no puedo verificar que todas las rutas capaces de crear un
-      // TreatmentBatch experimental pasen por applyAmendment». Ahora sí se
-      // puede, y hay un test que lo fija.
-      locationId: null,
-      projectId,
-      batchLabel: input.batchLabel,
-      operatorPersonId: input.operatorPersonId ?? null,
-      startedAt: input.startedAt,
-      notes: input.notes ?? null,
-      provenanceClass: input.provenanceClass,
-      sourceReference: input.sourceReference ?? null,
-      createdBy: userAccountId,
-      variableValues: {
-        create: input.variableValues.map((v) => ({
-          protocolVariableId: v.protocolVariableId,
-          textValue: v.textValue ?? null,
-          numericValue: v.numericValue ?? null,
-          booleanValue: v.booleanValue ?? null,
-          catalogValueId: v.catalogValueId ?? null,
-          dataQuality: v.dataQuality ?? null,
-        })),
+  const batch = await prisma.$transaction(async (tx) => {
+    const batch = await tx.treatmentBatch.create({
+      data: {
+        protocolVersionId: input.protocolVersionId,
+        lotId: input.lotId ?? null,
+        // **Explícito, no por ausencia.** Este camino no crea tratamientos de
+        // TERRENO: ésos pasan por `applyAmendment`, que comprueba Gate 0 —la
+        // química base, la física base, el biochar caracterizado y el protocolo
+        // escrito— antes de escribir nada. Sin esta línea la garantía dependía de
+        // que nadie añadiera `locationId` a `CreateTreatmentBatchInput`, que es
+        // una ausencia y no una regla. Lo preguntó la revisión independiente del
+        // 2026-09-01: «no puedo verificar que todas las rutas capaces de crear un
+        // TreatmentBatch experimental pasen por applyAmendment». Ahora sí se
+        // puede, y hay un test que lo fija.
+        locationId: null,
+        projectId,
+        batchLabel: input.batchLabel,
+        operatorPersonId: input.operatorPersonId ?? null,
+        startedAt: input.startedAt,
+        notes: input.notes ?? null,
+        provenanceClass: input.provenanceClass,
+        sourceReference: input.sourceReference ?? null,
+        createdBy: userAccountId,
+        variableValues: {
+          create: input.variableValues.map((v) => ({
+            protocolVariableId: v.protocolVariableId,
+            textValue: v.textValue ?? null,
+            numericValue: v.numericValue ?? null,
+            booleanValue: v.booleanValue ?? null,
+            catalogValueId: v.catalogValueId ?? null,
+            dataQuality: v.dataQuality ?? null,
+          })),
+        },
       },
-    },
-    include: { variableValues: { include: { protocolVariable: true } } },
-  });
+      include: { variableValues: { include: { protocolVariable: true } } },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "treatment_batch.create",
-    entityType: "treatment_batch",
-    entityId: batch.id,
-    after: batch,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "treatment_batch.create",
+        entityType: "treatment_batch",
+        entityId: batch.id,
+        after: batch,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return batch;
   });
 
   return batch;
@@ -167,15 +174,22 @@ export async function endTreatmentBatch(userAccountId: string, treatmentBatchId:
   if (!batch) throw new ResearchAccessError("treatment_batch_not_found");
   await requireResearchAccess(userAccountId, "execute_protocol", [{ projectId: batch.projectId }]);
 
-  const updated = await prisma.treatmentBatch.update({ where: { id: treatmentBatchId }, data: { endedAt } });
+  const updated = await prisma.$transaction(async (tx) => {
+    const updated = await tx.treatmentBatch.update({ where: { id: treatmentBatchId }, data: { endedAt } });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "treatment_batch.end",
-    entityType: "treatment_batch",
-    entityId: updated.id,
-    after: updated,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "treatment_batch.end",
+        entityType: "treatment_batch",
+        entityId: updated.id,
+        after: updated,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return updated;
   });
 
   return updated;
@@ -202,25 +216,32 @@ export async function addProcessingStage(userAccountId: string, input: AddProces
   if (!batch) throw new ResearchAccessError("treatment_batch_not_found");
   await requireResearchAccess(userAccountId, "execute_protocol", [{ projectId: batch.projectId }]);
 
-  const stage = await prisma.processingStage.create({
-    data: {
-      treatmentBatchId: input.treatmentBatchId,
-      name: input.name,
-      sequenceOrder: input.sequenceOrder,
-      startedAt: input.startedAt,
-      locationId: input.locationId ?? null,
-      notes: input.notes ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  const stage = await prisma.$transaction(async (tx) => {
+    const stage = await tx.processingStage.create({
+      data: {
+        treatmentBatchId: input.treatmentBatchId,
+        name: input.name,
+        sequenceOrder: input.sequenceOrder,
+        startedAt: input.startedAt,
+        locationId: input.locationId ?? null,
+        notes: input.notes ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "processing_stage.create",
-    entityType: "processing_stage",
-    entityId: stage.id,
-    after: stage,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "processing_stage.create",
+        entityType: "processing_stage",
+        entityId: stage.id,
+        after: stage,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return stage;
   });
 
   return stage;
@@ -270,15 +291,22 @@ export async function completeProcessingStage(userAccountId: string, processingS
     );
   }
 
-  const updated = await prisma.processingStage.update({ where: { id: processingStageId }, data: { completedAt } });
+  const updated = await prisma.$transaction(async (tx) => {
+    const updated = await tx.processingStage.update({ where: { id: processingStageId }, data: { completedAt } });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "processing_stage.complete",
-    entityType: "processing_stage",
-    entityId: updated.id,
-    after: updated,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "processing_stage.complete",
+        entityType: "processing_stage",
+        entityId: updated.id,
+        after: updated,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return updated;
   });
 
   return updated;
@@ -311,25 +339,32 @@ export async function recordProcessingStageObservation(userAccountId: string, in
   const catalogValue = await prisma.variableCatalogValue.findUnique({ where: { id: input.catalogValueId } });
   if (!catalogValue) throw new ResearchAccessError("variable_catalog_value_not_found");
 
-  const observation = await prisma.processingStageObservation.create({
-    data: {
-      processingStageId: input.processingStageId,
-      catalogValueId: input.catalogValueId,
-      occurredAt: input.occurredAt,
-      notes: input.notes ?? null,
-      provenanceClass: input.provenanceClass,
-      sourceReference: input.sourceReference ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  const observation = await prisma.$transaction(async (tx) => {
+    const observation = await tx.processingStageObservation.create({
+      data: {
+        processingStageId: input.processingStageId,
+        catalogValueId: input.catalogValueId,
+        occurredAt: input.occurredAt,
+        notes: input.notes ?? null,
+        provenanceClass: input.provenanceClass,
+        sourceReference: input.sourceReference ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "processing_stage_observation.create",
-    entityType: "processing_stage_observation",
-    entityId: observation.id,
-    after: observation,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "processing_stage_observation.create",
+        entityType: "processing_stage_observation",
+        entityId: observation.id,
+        after: observation,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return observation;
   });
 
   return observation;
@@ -386,21 +421,28 @@ export async function recordWashMedium(userAccountId: string, input: RecordWashM
     if (!sourceLot) throw new ResearchAccessError("wash_medium_source_lot_not_found");
   }
 
-  const updated = await prisma.processingStage.update({
-    where: { id: input.processingStageId },
-    data: {
-      washMediumCatalogValueId: input.washMediumCatalogValueId,
-      washMediumSourceLotId: input.washMediumSourceLotId ?? null,
-    },
-  });
+  const updated = await prisma.$transaction(async (tx) => {
+    const updated = await tx.processingStage.update({
+      where: { id: input.processingStageId },
+      data: {
+        washMediumCatalogValueId: input.washMediumCatalogValueId,
+        washMediumSourceLotId: input.washMediumSourceLotId ?? null,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "processing_stage.record_wash_medium",
-    entityType: "processing_stage",
-    entityId: updated.id,
-    after: updated,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "processing_stage.record_wash_medium",
+        entityType: "processing_stage",
+        entityId: updated.id,
+        after: updated,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return updated;
   });
 
   return updated;
@@ -462,29 +504,36 @@ export async function recordProcessSensoryObservation(
     if (!observer) throw new ResearchAccessError("observer_person_not_found");
   }
 
-  const observation = await prisma.processSensoryObservation.create({
-    data: {
-      processingStageId: input.processingStageId,
-      observedAt: input.observedAt,
-      observerPersonId: input.observerPersonId ?? null,
-      medium: input.medium,
-      freeTextDescriptor: input.freeTextDescriptor,
-      structuredDescriptorId: input.structuredDescriptorId ?? null,
-      intensity: input.intensity ?? null,
-      triggeredIntervention: input.triggeredIntervention ?? false,
-      provenanceClass: input.provenanceClass,
-      sourceReference: input.sourceReference ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  const observation = await prisma.$transaction(async (tx) => {
+    const observation = await tx.processSensoryObservation.create({
+      data: {
+        processingStageId: input.processingStageId,
+        observedAt: input.observedAt,
+        observerPersonId: input.observerPersonId ?? null,
+        medium: input.medium,
+        freeTextDescriptor: input.freeTextDescriptor,
+        structuredDescriptorId: input.structuredDescriptorId ?? null,
+        intensity: input.intensity ?? null,
+        triggeredIntervention: input.triggeredIntervention ?? false,
+        provenanceClass: input.provenanceClass,
+        sourceReference: input.sourceReference ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "process_sensory_observation.create",
-    entityType: "process_sensory_observation",
-    entityId: observation.id,
-    after: observation,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "process_sensory_observation.create",
+        entityType: "process_sensory_observation",
+        entityId: observation.id,
+        after: observation,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return observation;
   });
 
   return observation;

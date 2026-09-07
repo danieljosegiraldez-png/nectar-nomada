@@ -202,28 +202,35 @@ export async function createStory(userAccountId: string, input: CreateStoryInput
   const scope = { projectId: input.projectId ?? null, locationId: input.locationId ?? null };
   await requireContent(userAccountId, "create", scope, classification);
 
-  const story = await prisma.story.create({
-    data: {
-      title,
-      slug: await uniqueSlug(slugify(title)),
-      summary: input.summary?.trim() || null,
-      bodyMarkdown: input.bodyMarkdown ?? null,
-      projectId: scope.projectId,
-      locationId: scope.locationId,
-      authorPersonId: input.authorPersonId ?? null,
-      classification,
-      status: "draft",
-      createdBy: userAccountId,
-    },
-  });
+  const story = await prisma.$transaction(async (tx) => {
+    const story = await tx.story.create({
+      data: {
+        title,
+        slug: await uniqueSlug(slugify(title)),
+        summary: input.summary?.trim() || null,
+        bodyMarkdown: input.bodyMarkdown ?? null,
+        projectId: scope.projectId,
+        locationId: scope.locationId,
+        authorPersonId: input.authorPersonId ?? null,
+        classification,
+        status: "draft",
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "story.create",
-    entityType: "story",
-    entityId: story.id,
-    after: story,
-    sourceInterface: "content.stories",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "story.create",
+        entityType: "story",
+        entityId: story.id,
+        after: story,
+        sourceInterface: "content.stories",
+      },
+      tx,
+    );
+
+    return story;
   });
   return story;
 }
@@ -254,30 +261,37 @@ export async function updateStory(userAccountId: string, storyId: string, input:
   const title = input.title?.trim();
   if (input.title !== undefined && !title) throw new ContentValidationError("title_required");
 
-  const after = await prisma.story.update({
-    where: { id: storyId },
-    data: {
-      ...(title ? { title } : {}),
-      ...(input.summary !== undefined ? { summary: input.summary?.trim() || null } : {}),
-      ...(input.bodyMarkdown !== undefined ? { bodyMarkdown: input.bodyMarkdown } : {}),
-      ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
-      ...(input.locationId !== undefined ? { locationId: input.locationId } : {}),
-      ...(input.authorPersonId !== undefined ? { authorPersonId: input.authorPersonId } : {}),
-    },
-  });
+  const after = await prisma.$transaction(async (tx) => {
+    const after = await tx.story.update({
+      where: { id: storyId },
+      data: {
+        ...(title ? { title } : {}),
+        ...(input.summary !== undefined ? { summary: input.summary?.trim() || null } : {}),
+        ...(input.bodyMarkdown !== undefined ? { bodyMarkdown: input.bodyMarkdown } : {}),
+        ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
+        ...(input.locationId !== undefined ? { locationId: input.locationId } : {}),
+        ...(input.authorPersonId !== undefined ? { authorPersonId: input.authorPersonId } : {}),
+      },
+    });
 
-  // The whole record either side, not a diff: this is where §3's "historical
-  // versions remain accessible" actually lives under ADR-092's decision, so a
-  // partial record would make the promise false.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "story.update",
-    entityType: "story",
-    entityId: storyId,
-    before,
-    after,
-    reason: before.status === "approved" ? "edit_to_published_story" : undefined,
-    sourceInterface: "content.stories",
+    // The whole record either side, not a diff: this is where §3's "historical
+    // versions remain accessible" actually lives under ADR-092's decision, so a
+    // partial record would make the promise false.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "story.update",
+        entityType: "story",
+        entityId: storyId,
+        before,
+        after,
+        reason: before.status === "approved" ? "edit_to_published_story" : undefined,
+        sourceInterface: "content.stories",
+      },
+      tx,
+    );
+
+    return after;
   });
   return after;
 }
@@ -310,24 +324,31 @@ export async function setStoryStatus(
     await requireContent(userAccountId, "publish", before, target);
   }
 
-  const after = await prisma.story.update({
-    where: { id: storyId },
-    data: { status, classification: target },
-  });
+  const after = await prisma.$transaction(async (tx) => {
+    const after = await tx.story.update({
+      where: { id: storyId },
+      data: { status, classification: target },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "story.status_change",
-    entityType: "story",
-    entityId: storyId,
-    before: { status: before.status, classification: before.classification },
-    after: { status: after.status, classification: after.classification },
-    // The fact worth being able to search the audit log for later.
-    reason:
-      after.status === PUBLICLY_VISIBLE.status && after.classification === PUBLICLY_VISIBLE.classification
-        ? "published_publicly"
-        : undefined,
-    sourceInterface: "content.stories",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "story.status_change",
+        entityType: "story",
+        entityId: storyId,
+        before: { status: before.status, classification: before.classification },
+        after: { status: after.status, classification: after.classification },
+        // The fact worth being able to search the audit log for later.
+        reason:
+          after.status === PUBLICLY_VISIBLE.status && after.classification === PUBLICLY_VISIBLE.classification
+            ? "published_publicly"
+            : undefined,
+        sourceInterface: "content.stories",
+      },
+      tx,
+    );
+
+    return after;
   });
   return after;
 }

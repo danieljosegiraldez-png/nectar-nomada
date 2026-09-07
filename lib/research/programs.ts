@@ -27,22 +27,29 @@ export interface CreateResearchProgramInput {
 export async function createResearchProgram(userAccountId: string, input: CreateResearchProgramInput) {
   await requireResearchAccess(userAccountId, "approve_protocol", [{}]);
 
-  const program = await prisma.researchProgram.create({
-    data: {
-      name: input.name,
-      description: input.description ?? null,
-      status: input.status ?? "draft",
-      createdBy: userAccountId,
-    },
-  });
+  const program = await prisma.$transaction(async (tx) => {
+    const program = await tx.researchProgram.create({
+      data: {
+        name: input.name,
+        description: input.description ?? null,
+        status: input.status ?? "draft",
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "research_program.create",
-    entityType: "research_program",
-    entityId: program.id,
-    after: program,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "research_program.create",
+        entityType: "research_program",
+        entityId: program.id,
+        after: program,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return program;
   });
 
   return program;
@@ -53,17 +60,24 @@ export async function createResearchQuestion(userAccountId: string, researchProg
   if (!program) throw new ResearchAccessError("research_program_not_found");
   await requireResearchAccess(userAccountId, "approve_protocol", [{}]);
 
-  const question = await prisma.researchQuestion.create({
-    data: { researchProgramId, questionText, createdBy: userAccountId },
-  });
+  const question = await prisma.$transaction(async (tx) => {
+    const question = await tx.researchQuestion.create({
+      data: { researchProgramId, questionText, createdBy: userAccountId },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "research_question.create",
-    entityType: "research_question",
-    entityId: question.id,
-    after: question,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "research_question.create",
+        entityType: "research_question",
+        entityId: question.id,
+        after: question,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return question;
   });
 
   return question;
@@ -74,17 +88,24 @@ export async function createHypothesis(userAccountId: string, researchQuestionId
   if (!question) throw new ResearchAccessError("research_question_not_found");
   await requireResearchAccess(userAccountId, "approve_protocol", [{}]);
 
-  const hypothesis = await prisma.hypothesis.create({
-    data: { researchQuestionId, statement, createdBy: userAccountId },
-  });
+  const hypothesis = await prisma.$transaction(async (tx) => {
+    const hypothesis = await tx.hypothesis.create({
+      data: { researchQuestionId, statement, createdBy: userAccountId },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "hypothesis.create",
-    entityType: "hypothesis",
-    entityId: hypothesis.id,
-    after: hypothesis,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "hypothesis.create",
+        entityType: "hypothesis",
+        entityId: hypothesis.id,
+        after: hypothesis,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return hypothesis;
   });
 
   return hypothesis;
@@ -104,25 +125,32 @@ export async function createExperiment(userAccountId: string, input: CreateExper
   if (!program) throw new ResearchAccessError("research_program_not_found");
   await requireResearchAccess(userAccountId, "approve_protocol", [{ projectId: input.projectId }]);
 
-  const experiment = await prisma.experiment.create({
-    data: {
-      researchProgramId: input.researchProgramId,
-      hypothesisId: input.hypothesisId ?? null,
-      projectId: input.projectId ?? null,
-      name: input.name,
-      description: input.description ?? null,
-      status: input.status ?? "draft",
-      createdBy: userAccountId,
-    },
-  });
+  const experiment = await prisma.$transaction(async (tx) => {
+    const experiment = await tx.experiment.create({
+      data: {
+        researchProgramId: input.researchProgramId,
+        hypothesisId: input.hypothesisId ?? null,
+        projectId: input.projectId ?? null,
+        name: input.name,
+        description: input.description ?? null,
+        status: input.status ?? "draft",
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "experiment.create",
-    entityType: "experiment",
-    entityId: experiment.id,
-    after: experiment,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "experiment.create",
+        entityType: "experiment",
+        entityId: experiment.id,
+        after: experiment,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return experiment;
   });
 
   return experiment;
@@ -174,18 +202,25 @@ export async function declareControlTreatmentBatch(userAccountId: string, experi
   }
   await requireResearchAccess(userAccountId, "approve_protocol", [{ projectId: experiment.projectId }]);
 
-  const updated = await prisma.experiment.update({
-    where: { id: experimentId },
-    data: { controlTreatmentBatchId: treatmentBatchId },
-  });
+  const updated = await prisma.$transaction(async (tx) => {
+    const updated = await tx.experiment.update({
+      where: { id: experimentId },
+      data: { controlTreatmentBatchId: treatmentBatchId },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "experiment.declare_control_treatment_batch",
-    entityType: "experiment",
-    entityId: experimentId,
-    after: { controlTreatmentBatchId: treatmentBatchId },
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "experiment.declare_control_treatment_batch",
+        entityType: "experiment",
+        entityId: experimentId,
+        after: { controlTreatmentBatchId: treatmentBatchId },
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return updated;
   });
 
   return updated;
@@ -213,18 +248,25 @@ export async function declareExperimentLineage(
   }
   await requireResearchAccess(userAccountId, "approve_protocol", [{ projectId: experiment.projectId }]);
 
-  const updated = await prisma.experiment.update({
-    where: { id: experimentId },
-    data: { derivedFromExperimentId, derivationNote },
-  });
+  const updated = await prisma.$transaction(async (tx) => {
+    const updated = await tx.experiment.update({
+      where: { id: experimentId },
+      data: { derivedFromExperimentId, derivationNote },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "experiment.declare_lineage",
-    entityType: "experiment",
-    entityId: experimentId,
-    after: { derivedFromExperimentId, derivationNote },
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "experiment.declare_lineage",
+        entityType: "experiment",
+        entityId: experimentId,
+        after: { derivedFromExperimentId, derivationNote },
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return updated;
   });
 
   return updated;
@@ -242,18 +284,25 @@ export async function updateDeclaredLimitations(userAccountId: string, experimen
   if (!experiment) throw new ResearchAccessError("experiment_not_found");
   await requireResearchAccess(userAccountId, "approve_protocol", [{ projectId: experiment.projectId }]);
 
-  const updated = await prisma.experiment.update({
-    where: { id: experimentId },
-    data: { declaredLimitations },
-  });
+  const updated = await prisma.$transaction(async (tx) => {
+    const updated = await tx.experiment.update({
+      where: { id: experimentId },
+      data: { declaredLimitations },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "experiment.update_declared_limitations",
-    entityType: "experiment",
-    entityId: experimentId,
-    after: { declaredLimitations },
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "experiment.update_declared_limitations",
+        entityType: "experiment",
+        entityId: experimentId,
+        after: { declaredLimitations },
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return updated;
   });
 
   return updated;

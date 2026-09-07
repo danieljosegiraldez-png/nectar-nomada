@@ -353,32 +353,39 @@ export async function elegirPerfilDeTueste(
 
   const anterior = await prisma.lotRoastProfile.findUnique({ where: { lotId: input.lotId } });
 
-  const elegido = await prisma.lotRoastProfile.upsert({
-    where: { lotId: input.lotId },
-    create: {
-      lotId: input.lotId,
-      recipeVersionId: input.recipeVersionId,
-      notes: input.notes ?? null,
-      chosenBy: userAccountId,
-    },
-    update: {
-      recipeVersionId: input.recipeVersionId,
-      notes: input.notes ?? null,
-      chosenBy: userAccountId,
-      chosenAt: new Date(),
-    },
-  });
+  const elegido = await prisma.$transaction(async (tx) => {
+    const elegido = await tx.lotRoastProfile.upsert({
+      where: { lotId: input.lotId },
+      create: {
+        lotId: input.lotId,
+        recipeVersionId: input.recipeVersionId,
+        notes: input.notes ?? null,
+        chosenBy: userAccountId,
+      },
+      update: {
+        recipeVersionId: input.recipeVersionId,
+        notes: input.notes ?? null,
+        chosenBy: userAccountId,
+        chosenAt: new Date(),
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: anterior ? "lot_roast_profile.replace" : "lot_roast_profile.choose",
-    entityType: "lot_roast_profile",
-    entityId: elegido.id,
-    // El `before` es lo que hace legible el cambio: sin él, reemplazar un perfil
-    // por otro se lee igual que elegir el primero.
-    before: anterior ?? undefined,
-    after: elegido,
-    sourceInterface: "traceability.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: anterior ? "lot_roast_profile.replace" : "lot_roast_profile.choose",
+        entityType: "lot_roast_profile",
+        entityId: elegido.id,
+        // El `before` es lo que hace legible el cambio: sin él, reemplazar un perfil
+        // por otro se lee igual que elegir el primero.
+        before: anterior ?? undefined,
+        after: elegido,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return elegido;
   });
 
   return elegido;

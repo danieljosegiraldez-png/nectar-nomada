@@ -56,29 +56,36 @@ export async function recordQuantityEvent(userAccountId: string, input: RecordQu
 
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
-  const quantityEvent = await prisma.quantityEvent.create({
-    data: {
-      lotId: input.lotId,
-      eventType: input.eventType,
-      quantity: input.quantity,
-      unit: input.unit,
-      occurredAt: input.occurredAt,
-      transformationId: input.transformationId ?? null,
-      notes: input.notes ?? null,
-      createdBy: userAccountId,
-      provenanceClass: input.provenanceClass,
-      sourceReference: input.sourceReference ?? null,
-    },
-  });
+  const quantityEvent = await prisma.$transaction(async (tx) => {
+    const quantityEvent = await tx.quantityEvent.create({
+      data: {
+        lotId: input.lotId,
+        eventType: input.eventType,
+        quantity: input.quantity,
+        unit: input.unit,
+        occurredAt: input.occurredAt,
+        transformationId: input.transformationId ?? null,
+        notes: input.notes ?? null,
+        createdBy: userAccountId,
+        provenanceClass: input.provenanceClass,
+        sourceReference: input.sourceReference ?? null,
+      },
+    });
 
-  // C1 §3: evidentiary write (carries provenanceClass).
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "quantity_event.create",
-    entityType: "quantity_event",
-    entityId: quantityEvent.id,
-    after: quantityEvent,
-    sourceInterface: "traceability.service",
+    // C1 §3: evidentiary write (carries provenanceClass).
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "quantity_event.create",
+        entityType: "quantity_event",
+        entityId: quantityEvent.id,
+        after: quantityEvent,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return quantityEvent;
   });
 
   return quantityEvent;

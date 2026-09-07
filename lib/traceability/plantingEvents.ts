@@ -42,32 +42,39 @@ export async function recordPlantingEvent(userAccountId: string, input: RecordPl
 
   await requireLotAccess(userAccountId, "manage", [{ locationId: input.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
 
-  const plantingEvent = await prisma.plantingEvent.create({
-    data: {
-      locationId: input.locationId,
-      eventType: input.eventType,
-      varietal: input.varietal ?? null,
-      quantity: input.quantity ?? null,
-      unit: input.unit ?? undefined,
-      sourceOrganizationId: input.sourceOrganizationId ?? null,
-      occurredAt: input.occurredAt ?? new Date(),
-      operatorPersonId: input.operatorPersonId ?? null,
-      notes: input.notes ?? null,
-      provenanceClass: input.provenanceClass,
-      sourceReference: input.sourceReference ?? null,
-      dataQuality: input.dataQuality ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  const plantingEvent = await prisma.$transaction(async (tx) => {
+    const plantingEvent = await tx.plantingEvent.create({
+      data: {
+        locationId: input.locationId,
+        eventType: input.eventType,
+        varietal: input.varietal ?? null,
+        quantity: input.quantity ?? null,
+        unit: input.unit ?? undefined,
+        sourceOrganizationId: input.sourceOrganizationId ?? null,
+        occurredAt: input.occurredAt ?? new Date(),
+        operatorPersonId: input.operatorPersonId ?? null,
+        notes: input.notes ?? null,
+        provenanceClass: input.provenanceClass,
+        sourceReference: input.sourceReference ?? null,
+        dataQuality: input.dataQuality ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  // C1 §3: evidentiary write (carries provenanceClass).
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "planting_event.create",
-    entityType: "planting_event",
-    entityId: plantingEvent.id,
-    after: plantingEvent,
-    sourceInterface: "traceability.service",
+    // C1 §3: evidentiary write (carries provenanceClass).
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "planting_event.create",
+        entityType: "planting_event",
+        entityId: plantingEvent.id,
+        after: plantingEvent,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return plantingEvent;
   });
 
   return plantingEvent;

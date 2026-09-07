@@ -144,34 +144,41 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
   }
 
   const before = existing;
-  const after = await prisma.location.update({
-    where: { id: input.locationId },
-    data: {
-      ...(input.sunExposure !== undefined ? { sunExposure: input.sunExposure } : {}),
-      ...(input.shadePercentage !== undefined ? { shadePercentage: input.shadePercentage } : {}),
-      ...(input.altitudeMinM !== undefined ? { altitudeMinM: input.altitudeMinM } : {}),
-      ...(input.altitudeMaxM !== undefined ? { altitudeMaxM: input.altitudeMaxM } : {}),
-      ...(input.slopeDescription !== undefined ? { slopeDescription: input.slopeDescription } : {}),
-      ...(input.aspect !== undefined ? { aspect: input.aspect } : {}),
-      ...(input.soilType !== undefined ? { soilType: input.soilType } : {}),
-      ...(input.plantSpacingMeters !== undefined ? { plantSpacingMeters: input.plantSpacingMeters } : {}),
-      ...(input.areaHectares !== undefined ? { areaHectares: input.areaHectares } : {}),
-      ...(input.description !== undefined ? { description: input.description } : {}),
-    },
-  });
+  const after = await prisma.$transaction(async (tx) => {
+    const after = await tx.location.update({
+      where: { id: input.locationId },
+      data: {
+        ...(input.sunExposure !== undefined ? { sunExposure: input.sunExposure } : {}),
+        ...(input.shadePercentage !== undefined ? { shadePercentage: input.shadePercentage } : {}),
+        ...(input.altitudeMinM !== undefined ? { altitudeMinM: input.altitudeMinM } : {}),
+        ...(input.altitudeMaxM !== undefined ? { altitudeMaxM: input.altitudeMaxM } : {}),
+        ...(input.slopeDescription !== undefined ? { slopeDescription: input.slopeDescription } : {}),
+        ...(input.aspect !== undefined ? { aspect: input.aspect } : {}),
+        ...(input.soilType !== undefined ? { soilType: input.soilType } : {}),
+        ...(input.plantSpacingMeters !== undefined ? { plantSpacingMeters: input.plantSpacingMeters } : {}),
+        ...(input.areaHectares !== undefined ? { areaHectares: input.areaHectares } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+      },
+    });
 
-  // C1 §3 pattern: editing a Location's own attribute record is an
-  // evidentiary write in spirit (it's the basis for future terroir
-  // analysis), even though Location itself doesn't carry the generic
-  // provenanceClass column — same reasoning already applied to Assessment.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "location.update_attributes",
-    entityType: "location",
-    entityId: after.id,
-    before,
-    after,
-    sourceInterface: "traceability.service",
+    // C1 §3 pattern: editing a Location's own attribute record is an
+    // evidentiary write in spirit (it's the basis for future terroir
+    // analysis), even though Location itself doesn't carry the generic
+    // provenanceClass column — same reasoning already applied to Assessment.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "location.update_attributes",
+        entityType: "location",
+        entityId: after.id,
+        before,
+        after,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return after;
   });
 
   return after;
@@ -202,26 +209,33 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
 
   await requireLocationAttributeAccess(userAccountId, input.parentLocationId);
 
-  const microlot = await prisma.location.create({
-    data: {
-      name: input.name.trim(),
-      slug: input.slug ?? null,
-      locationType: parent.locationType,
-      parentLocationId: parent.id,
-      organizationId: parent.organizationId,
-      subdivisionReason: input.subdivisionReason,
-      subdivisionReasonNote: input.subdivisionReasonNote ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  const microlot = await prisma.$transaction(async (tx) => {
+    const microlot = await tx.location.create({
+      data: {
+        name: input.name.trim(),
+        slug: input.slug ?? null,
+        locationType: parent.locationType,
+        parentLocationId: parent.id,
+        organizationId: parent.organizationId,
+        subdivisionReason: input.subdivisionReason,
+        subdivisionReasonNote: input.subdivisionReasonNote ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "location.create_microlot",
-    entityType: "location",
-    entityId: microlot.id,
-    after: microlot,
-    sourceInterface: "traceability.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "location.create_microlot",
+        entityType: "location",
+        entityId: microlot.id,
+        after: microlot,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return microlot;
   });
 
   return microlot;
