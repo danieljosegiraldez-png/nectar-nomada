@@ -82,32 +82,39 @@ export async function createSpecimen(userAccountId: string, input: CreateSpecime
   await resolveLocationScope(input.locationId);
   await requireSpecimenAccess(userAccountId, "manage", input.locationId);
 
-  const specimen = await prisma.specimen.create({
-    data: {
-      locationId: input.locationId,
-      specimenType: input.specimenType,
-      commonName: input.commonName.trim(),
-      varietalNote: input.varietalNote ?? null,
-      plantedDate: input.plantedDate ?? null,
-      sectorSimple: input.sectorSimple ?? null,
-      gridRow: input.gridRow ?? null,
-      gridPosition: input.gridPosition ?? null,
-      densityNote: input.densityNote ?? null,
-      notes: input.notes ?? null,
-      provenanceClass: input.provenanceClass,
-      dataQuality: input.dataQuality ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  const specimen = await prisma.$transaction(async (tx) => {
+    const specimen = await tx.specimen.create({
+      data: {
+        locationId: input.locationId,
+        specimenType: input.specimenType,
+        commonName: input.commonName.trim(),
+        varietalNote: input.varietalNote ?? null,
+        plantedDate: input.plantedDate ?? null,
+        sectorSimple: input.sectorSimple ?? null,
+        gridRow: input.gridRow ?? null,
+        gridPosition: input.gridPosition ?? null,
+        densityNote: input.densityNote ?? null,
+        notes: input.notes ?? null,
+        provenanceClass: input.provenanceClass,
+        dataQuality: input.dataQuality ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  // C1 §3: an origin/existence fact, same precedent as Colony (A2).
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "specimen.create",
-    entityType: "specimen",
-    entityId: specimen.id,
-    after: specimen,
-    sourceInterface: "traceability.service",
+    // C1 §3: an origin/existence fact, same precedent as Colony (A2).
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "specimen.create",
+        entityType: "specimen",
+        entityId: specimen.id,
+        after: specimen,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return specimen;
   });
 
   return specimen;
@@ -138,37 +145,49 @@ export async function recordSpecimenObservation(userAccountId: string, input: Re
 
   await requireSpecimenAccess(userAccountId, "manage", specimen.locationId);
 
-  const observation = await prisma.specimenObservation.create({
-    data: {
-      specimenId: input.specimenId,
-      observationType: input.observationType,
-      observedAt: input.observedAt,
-      observerPersonId: input.observerPersonId ?? null,
-      captureCount: input.captureCount ?? null,
-      notes: input.notes ?? null,
-      provenanceClass: input.provenanceClass,
-      dataQuality: input.dataQuality ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  // Las TRES escrituras en una sola transacción desde el 2026-09-06.
+  const observation = await prisma.$transaction(async (tx) => {
+    const creada = await tx.specimenObservation.create({
+      data: {
+        specimenId: input.specimenId,
+        observationType: input.observationType,
+        observedAt: input.observedAt,
+        observerPersonId: input.observerPersonId ?? null,
+        captureCount: input.captureCount ?? null,
+        notes: input.notes ?? null,
+        provenanceClass: input.provenanceClass,
+        dataQuality: input.dataQuality ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  // §5's cycle: `removed` sets the Specimen to removed; `installed`/
-  // `reinstalled` return it to active. `trap_check`/other observation
-  // types never change Specimen.status — a capture-count reading isn't a
-  // lifecycle transition.
-  if (input.observationType === "removed") {
-    await prisma.specimen.update({ where: { id: input.specimenId }, data: { status: "removed" } });
-  } else if (input.observationType === "installed" || input.observationType === "reinstalled") {
-    await prisma.specimen.update({ where: { id: input.specimenId }, data: { status: "active" } });
-  }
+    // §5's cycle: `removed` sets the Specimen to removed; `installed`/
+    // `reinstalled` return it to active. `trap_check`/other observation
+    // types never change Specimen.status — a capture-count reading isn't a
+    // lifecycle transition.
+    //
+    // Antes eran tres escrituras sueltas: podía quedar una observación
+    // `removed` con el Specimen todavía `active`, o las dos sin una fila que
+    // dijera quién lo observó.
+    if (input.observationType === "removed") {
+      await tx.specimen.update({ where: { id: input.specimenId }, data: { status: "removed" } });
+    } else if (input.observationType === "installed" || input.observationType === "reinstalled") {
+      await tx.specimen.update({ where: { id: input.specimenId }, data: { status: "active" } });
+    }
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "specimen_observation.create",
-    entityType: "specimen_observation",
-    entityId: observation.id,
-    after: observation,
-    sourceInterface: "traceability.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "specimen_observation.create",
+        entityType: "specimen_observation",
+        entityId: creada.id,
+        after: creada,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return creada;
   });
 
   return observation;

@@ -74,35 +74,42 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
     if (existing) return existing;
   }
 
-  const colonyEvent = await prisma.colonyEvent.create({
-    data: {
-      colonyId: input.colonyId,
-      eventType: input.eventType,
-      occurredAt: input.occurredAt ?? new Date(),
-      operatorPersonId: input.operatorPersonId ?? null,
-      feedingMaterial: input.feedingMaterial ?? null,
-      feedingQuantity: input.feedingQuantity ?? null,
-      feedingUnit: input.feedingUnit ?? null,
-      treatmentProduct: input.treatmentProduct ?? null,
-      treatmentBatchLabel: input.treatmentBatchLabel?.trim() ?? null,
-      treatmentDose: input.treatmentDose ?? null,
-      treatmentDoseUnit: input.treatmentDoseUnit ?? null,
-      note: input.note ?? null,
-      provenanceClass: provenanceClassFor(input.eventType),
-      clientDraftId: input.clientDraftId ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  const colonyEvent = await prisma.$transaction(async (tx) => {
+    const colonyEvent = await tx.colonyEvent.create({
+      data: {
+        colonyId: input.colonyId,
+        eventType: input.eventType,
+        occurredAt: input.occurredAt ?? new Date(),
+        operatorPersonId: input.operatorPersonId ?? null,
+        feedingMaterial: input.feedingMaterial ?? null,
+        feedingQuantity: input.feedingQuantity ?? null,
+        feedingUnit: input.feedingUnit ?? null,
+        treatmentProduct: input.treatmentProduct ?? null,
+        treatmentBatchLabel: input.treatmentBatchLabel?.trim() ?? null,
+        treatmentDose: input.treatmentDose ?? null,
+        treatmentDoseUnit: input.treatmentDoseUnit ?? null,
+        note: input.note ?? null,
+        provenanceClass: provenanceClassFor(input.eventType),
+        clientDraftId: input.clientDraftId ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  // C1 §3: evidentiary write. Not reached on the clientDraftId idempotent
-  // no-op path above, same reasoning as recordInspection.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "colony_event.create",
-    entityType: "colony_event",
-    entityId: colonyEvent.id,
-    after: colonyEvent,
-    sourceInterface: "apiary.service",
+    // C1 §3: evidentiary write. Not reached on the clientDraftId idempotent
+    // no-op path above, same reasoning as recordInspection.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "colony_event.create",
+        entityType: "colony_event",
+        entityId: colonyEvent.id,
+        after: colonyEvent,
+        sourceInterface: "apiary.service",
+      },
+      tx,
+    );
+
+    return colonyEvent;
   });
 
   return colonyEvent;

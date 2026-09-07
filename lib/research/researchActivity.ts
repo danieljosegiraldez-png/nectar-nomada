@@ -28,28 +28,35 @@ export interface ProposeResearchActivityInput {
 }
 
 export async function proposeResearchActivity(userAccountId: string, input: ProposeResearchActivityInput) {
-  const activity = await prisma.researchActivity.create({
-    data: {
-      name: input.name,
-      description: input.description ?? null,
-      researchProgramId: input.researchProgramId ?? null,
-      isPaid: input.isPaid,
-      researchQuestionStructured: input.researchQuestionStructured === undefined ? undefined : (input.researchQuestionStructured as object),
-      publicListingCopy: input.publicListingCopy ?? null,
-      consentFormCopy: input.consentFormCopy ?? null,
-      complianceStatus: "pending_review",
-      proposedByUserAccountId: userAccountId,
-      createdBy: userAccountId,
-    },
-  });
+  const activity = await prisma.$transaction(async (tx) => {
+    const activity = await tx.researchActivity.create({
+      data: {
+        name: input.name,
+        description: input.description ?? null,
+        researchProgramId: input.researchProgramId ?? null,
+        isPaid: input.isPaid,
+        researchQuestionStructured: input.researchQuestionStructured === undefined ? undefined : (input.researchQuestionStructured as object),
+        publicListingCopy: input.publicListingCopy ?? null,
+        consentFormCopy: input.consentFormCopy ?? null,
+        complianceStatus: "pending_review",
+        proposedByUserAccountId: userAccountId,
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "research_activity.propose",
-    entityType: "research_activity",
-    entityId: activity.id,
-    after: activity,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "research_activity.propose",
+        entityType: "research_activity",
+        entityId: activity.id,
+        after: activity,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return activity;
   });
 
   return activity;
@@ -77,24 +84,31 @@ export async function reviewResearchActivity(
   const allowed = await canReviewResearchActivity(userAccountId, input.researchActivityId);
   if (!allowed) throw new ResearchAccessError("cannot_review_own_proposal_or_not_authorized");
 
-  const updated = await prisma.researchActivity.update({
-    where: { id: input.researchActivityId },
-    data: {
-      complianceStatus: input.decision,
-      reviewedByUserAccountId: userAccountId,
-      reviewedAt: new Date(),
-      reviewNotes: input.reviewNotes ?? null,
-    },
-  });
+  const updated = await prisma.$transaction(async (tx) => {
+    const updated = await tx.researchActivity.update({
+      where: { id: input.researchActivityId },
+      data: {
+        complianceStatus: input.decision,
+        reviewedByUserAccountId: userAccountId,
+        reviewedAt: new Date(),
+        reviewNotes: input.reviewNotes ?? null,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "research_activity.review",
-    entityType: "research_activity",
-    entityId: updated.id,
-    after: updated,
-    reason: input.reviewNotes ?? undefined,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "research_activity.review",
+        entityType: "research_activity",
+        entityId: updated.id,
+        after: updated,
+        reason: input.reviewNotes ?? undefined,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return updated;
   });
 
   return updated;

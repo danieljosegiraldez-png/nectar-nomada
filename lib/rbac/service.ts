@@ -115,24 +115,31 @@ export interface CreateAssignmentInput {
 
 /** RBAC.md §8 — Assignment creation is always audited. */
 export async function createAssignment(input: CreateAssignmentInput, actorUserAccountId: string | null) {
-  const assignment = await prisma.assignment.create({
-    data: {
-      userAccountId: input.userAccountId,
-      roleProfileId: input.roleProfileId,
-      scopeId: input.scopeId,
-      grantedBy: actorUserAccountId,
-      validFrom: input.validFrom ?? new Date(),
-      validTo: input.validTo ?? null,
-    },
-  });
+  const assignment = await prisma.$transaction(async (tx) => {
+    const assignment = await tx.assignment.create({
+      data: {
+        userAccountId: input.userAccountId,
+        roleProfileId: input.roleProfileId,
+        scopeId: input.scopeId,
+        grantedBy: actorUserAccountId,
+        validFrom: input.validFrom ?? new Date(),
+        validTo: input.validTo ?? null,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId,
-    operation: "assignment.create",
-    entityType: "assignment",
-    entityId: assignment.id,
-    after: assignment,
-    sourceInterface: "rbac.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId,
+        operation: "assignment.create",
+        entityType: "assignment",
+        entityId: assignment.id,
+        after: assignment,
+        sourceInterface: "rbac.service",
+      },
+      tx,
+    );
+
+    return assignment;
   });
 
   return assignment;
@@ -142,20 +149,27 @@ export async function createAssignment(input: CreateAssignmentInput, actorUserAc
 export async function revokeAssignment(assignmentId: string, actorUserAccountId: string | null, reason?: string) {
   const before = await prisma.assignment.findUniqueOrThrow({ where: { id: assignmentId } });
 
-  const after = await prisma.assignment.update({
-    where: { id: assignmentId },
-    data: { status: "revoked", validTo: new Date() },
-  });
+  const after = await prisma.$transaction(async (tx) => {
+    const after = await tx.assignment.update({
+      where: { id: assignmentId },
+      data: { status: "revoked", validTo: new Date() },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId,
-    operation: "assignment.revoke",
-    entityType: "assignment",
-    entityId: assignmentId,
-    before,
-    after,
-    reason,
-    sourceInterface: "rbac.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId,
+        operation: "assignment.revoke",
+        entityType: "assignment",
+        entityId: assignmentId,
+        before,
+        after,
+        reason,
+        sourceInterface: "rbac.service",
+      },
+      tx,
+    );
+
+    return after;
   });
 
   return after;

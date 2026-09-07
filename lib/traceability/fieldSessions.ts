@@ -94,31 +94,38 @@ export async function startFieldSession(userAccountId: string, input: StartField
   validateCoordinates(input.start, "start");
   validateCaptureTimes(input.startedAt, input.capture);
 
-  const session = await prisma.fieldSession.create({
-    data: {
-      locationId: input.locationId,
-      operatorPersonId: input.operatorPersonId,
-      taskId: input.taskId ?? null,
-      startedAt: input.startedAt,
-      startLatitude: input.start?.latitude ?? null,
-      startLongitude: input.start?.longitude ?? null,
-      startAccuracyM: input.start?.accuracyM ?? null,
-      notes: input.notes ?? null,
-      provenanceClass: input.provenanceClass,
-      dataQuality: input.dataQuality ?? null,
-      recordedAt: input.capture?.recordedAt ?? null,
-      deviceId: input.capture?.captureDeviceId ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  const session = await prisma.$transaction(async (tx) => {
+    const session = await tx.fieldSession.create({
+      data: {
+        locationId: input.locationId,
+        operatorPersonId: input.operatorPersonId,
+        taskId: input.taskId ?? null,
+        startedAt: input.startedAt,
+        startLatitude: input.start?.latitude ?? null,
+        startLongitude: input.start?.longitude ?? null,
+        startAccuracyM: input.start?.accuracyM ?? null,
+        notes: input.notes ?? null,
+        provenanceClass: input.provenanceClass,
+        dataQuality: input.dataQuality ?? null,
+        recordedAt: input.capture?.recordedAt ?? null,
+        deviceId: input.capture?.captureDeviceId ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "field_session.start",
-    entityType: "field_session",
-    entityId: session.id,
-    after: session,
-    sourceInterface: "traceability.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "field_session.start",
+        entityType: "field_session",
+        entityId: session.id,
+        after: session,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return session;
   });
 
   return session;
@@ -151,16 +158,23 @@ export async function endFieldSession(userAccountId: string, input: { fieldSessi
   });
   if (count === 0) throw new FieldSessionValidationError("session_already_ended");
 
-  const ended = await prisma.fieldSession.findUniqueOrThrow({ where: { id: input.fieldSessionId } });
+  const ended = await prisma.$transaction(async (tx) => {
+    const ended = await tx.fieldSession.findUniqueOrThrow({ where: { id: input.fieldSessionId } });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "field_session.end",
-    entityType: "field_session",
-    entityId: ended.id,
-    before: existing,
-    after: ended,
-    sourceInterface: "traceability.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "field_session.end",
+        entityType: "field_session",
+        entityId: ended.id,
+        before: existing,
+        after: ended,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return ended;
   });
 
   return ended;
@@ -292,39 +306,46 @@ export async function recordFieldEvent(userAccountId: string, input: RecordField
     throw new FieldSessionValidationError("session_already_ended");
   }
 
-  const event = await prisma.fieldEvent.create({
-    data: {
-      fieldSessionId: input.fieldSessionId,
-      // Follow an alias to its canonical row, same rule as cultivars (ADR-095):
-      // otherwise a timeline groups the same kind of moment under two labels.
-      eventKindValueId: kind.aliasOfId ?? kind.id,
-      occurredAt: input.occurredAt,
-      latitude: input.position?.latitude ?? null,
-      longitude: input.position?.longitude ?? null,
-      accuracyM: input.position?.accuracyM ?? null,
-      operatorPersonId: input.operatorPersonId ?? session.operatorPersonId,
-      notes: input.notes ?? null,
-      measurementId: input.measurementId ?? null,
-      quantityEventId: input.quantityEventId ?? null,
-      specimenObservationId: input.specimenObservationId ?? null,
-      assetId: input.assetId ?? null,
-      harvestEventId: input.harvestEventId ?? null,
-      lotTransformationId: input.lotTransformationId ?? null,
-      provenanceClass: input.provenanceClass,
-      recordedAt: input.capture?.recordedAt ?? null,
-      deviceId: input.capture?.captureDeviceId ?? null,
-      clientDraftId: input.clientDraftId ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  const event = await prisma.$transaction(async (tx) => {
+    const event = await tx.fieldEvent.create({
+      data: {
+        fieldSessionId: input.fieldSessionId,
+        // Follow an alias to its canonical row, same rule as cultivars (ADR-095):
+        // otherwise a timeline groups the same kind of moment under two labels.
+        eventKindValueId: kind.aliasOfId ?? kind.id,
+        occurredAt: input.occurredAt,
+        latitude: input.position?.latitude ?? null,
+        longitude: input.position?.longitude ?? null,
+        accuracyM: input.position?.accuracyM ?? null,
+        operatorPersonId: input.operatorPersonId ?? session.operatorPersonId,
+        notes: input.notes ?? null,
+        measurementId: input.measurementId ?? null,
+        quantityEventId: input.quantityEventId ?? null,
+        specimenObservationId: input.specimenObservationId ?? null,
+        assetId: input.assetId ?? null,
+        harvestEventId: input.harvestEventId ?? null,
+        lotTransformationId: input.lotTransformationId ?? null,
+        provenanceClass: input.provenanceClass,
+        recordedAt: input.capture?.recordedAt ?? null,
+        deviceId: input.capture?.captureDeviceId ?? null,
+        clientDraftId: input.clientDraftId ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "field_event.record",
-    entityType: "field_event",
-    entityId: event.id,
-    after: event,
-    sourceInterface: "traceability.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "field_event.record",
+        entityType: "field_event",
+        entityId: event.id,
+        after: event,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return event;
   });
 
   return event;

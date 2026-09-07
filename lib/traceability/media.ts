@@ -146,33 +146,40 @@ export async function finalizeLotAssetUpload(userAccountId: string, input: Final
     select: { personId: true },
   });
 
-  const asset = await prisma.asset.create({
-    data: {
-      assetType: input.mimeType.startsWith("image/") ? "photo" : input.mimeType.startsWith("video/") ? "video" : "document",
-      storageKey: input.storageKey,
-      storageBucket: BUCKET,
-      mimeType: input.mimeType,
-      sizeBytes: input.sizeBytes,
-      originalFilename: input.originalFilename,
-      creatorPersonId: input.creatorPersonId ?? userAccount.personId,
-      status: "approved",
-      classification: DEFAULT_CLASSIFICATION,
-      createdBy: userAccountId,
-      provenanceClass: input.provenanceClass,
-      sourceReference: input.sourceReference ?? null,
-      ...parentData(input.parent, input.lotId),
-    },
-  });
+  const asset = await prisma.$transaction(async (tx) => {
+    const asset = await tx.asset.create({
+      data: {
+        assetType: input.mimeType.startsWith("image/") ? "photo" : input.mimeType.startsWith("video/") ? "video" : "document",
+        storageKey: input.storageKey,
+        storageBucket: BUCKET,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        originalFilename: input.originalFilename,
+        creatorPersonId: input.creatorPersonId ?? userAccount.personId,
+        status: "approved",
+        classification: DEFAULT_CLASSIFICATION,
+        createdBy: userAccountId,
+        provenanceClass: input.provenanceClass,
+        sourceReference: input.sourceReference ?? null,
+        ...parentData(input.parent, input.lotId),
+      },
+    });
 
-  // C1 §3: evidentiary write (carries provenanceClass) — a field photo is
-  // original evidence the same way a measurement reading is.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "asset.create",
-    entityType: "asset",
-    entityId: asset.id,
-    after: asset,
-    sourceInterface: "traceability.service",
+    // C1 §3: evidentiary write (carries provenanceClass) — a field photo is
+    // original evidence the same way a measurement reading is.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "asset.create",
+        entityType: "asset",
+        entityId: asset.id,
+        after: asset,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return asset;
   });
 
   return asset;

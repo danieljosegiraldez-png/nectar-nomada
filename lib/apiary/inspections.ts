@@ -57,33 +57,40 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
 
   const provenanceClass: ProvenanceClass = "direct_observation";
 
-  const inspection = await prisma.inspection.create({
-    data: {
-      colonyId: input.colonyId,
-      occurredAt: input.occurredAt ?? new Date(),
-      operatorPersonId: input.operatorPersonId ?? null,
-      outcome: input.outcome,
-      broodPatternNote: input.broodPatternNote ?? null,
-      queenSighted: input.queenSighted ?? null,
-      storesLevel: input.storesLevel ?? null,
-      temperamentNote: input.temperamentNote ?? null,
-      pestDiseaseFlags: input.pestDiseaseFlags ?? null,
-      note: input.note ?? null,
-      provenanceClass,
-      clientDraftId: input.clientDraftId ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  const inspection = await prisma.$transaction(async (tx) => {
+    const inspection = await tx.inspection.create({
+      data: {
+        colonyId: input.colonyId,
+        occurredAt: input.occurredAt ?? new Date(),
+        operatorPersonId: input.operatorPersonId ?? null,
+        outcome: input.outcome,
+        broodPatternNote: input.broodPatternNote ?? null,
+        queenSighted: input.queenSighted ?? null,
+        storesLevel: input.storesLevel ?? null,
+        temperamentNote: input.temperamentNote ?? null,
+        pestDiseaseFlags: input.pestDiseaseFlags ?? null,
+        note: input.note ?? null,
+        provenanceClass,
+        clientDraftId: input.clientDraftId ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  // C1 §3: evidentiary write. Not reached on the clientDraftId idempotent
-  // no-op path above, so a retried sync never double-audits the same fact.
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "inspection.create",
-    entityType: "inspection",
-    entityId: inspection.id,
-    after: inspection,
-    sourceInterface: "apiary.service",
+    // C1 §3: evidentiary write. Not reached on the clientDraftId idempotent
+    // no-op path above, so a retried sync never double-audits the same fact.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "inspection.create",
+        entityType: "inspection",
+        entityId: inspection.id,
+        after: inspection,
+        sourceInterface: "apiary.service",
+      },
+      tx,
+    );
+
+    return inspection;
   });
 
   return inspection;

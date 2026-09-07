@@ -146,24 +146,31 @@ export async function decideSuggestion(userAccountId: string, input: DecideSugge
   if (!before) throw new AiAccessError("not_found");
   if (before.status !== "pending") throw new AiAccessError("already_decided");
 
-  const after = await prisma.recommendation.update({
-    where: { id: input.recommendationId },
-    data: {
-      status: input.decision,
-      reviewerUserAccountId: userAccountId,
-      decisionAt: new Date(),
-      actionTaken: input.actionTaken ?? null,
-    },
-  });
+  const after = await prisma.$transaction(async (tx) => {
+    const after = await tx.recommendation.update({
+      where: { id: input.recommendationId },
+      data: {
+        status: input.decision,
+        reviewerUserAccountId: userAccountId,
+        decisionAt: new Date(),
+        actionTaken: input.actionTaken ?? null,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: `recommendation.${input.decision}`,
-    entityType: "recommendation",
-    entityId: after.id,
-    before,
-    after,
-    sourceInterface: "ai.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: `recommendation.${input.decision}`,
+        entityType: "recommendation",
+        entityId: after.id,
+        before,
+        after,
+        sourceInterface: "ai.service",
+      },
+      tx,
+    );
+
+    return after;
   });
 
   return after;

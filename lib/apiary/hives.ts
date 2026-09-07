@@ -121,28 +121,35 @@ export async function createColony(userAccountId: string, input: CreateColonyInp
   if (!hive) throw new ApiaryAccessError("hive_not_found");
   await requireApiaryAccess(userAccountId, "manage", [{ projectId: hive.projectId, locationId: hive.locationId }]);
 
-  const colony = await prisma.colony.create({
-    data: {
-      hiveId: input.hiveId,
-      startedAt: input.startedAt,
-      status: input.status ?? "active",
-      originType: input.originType,
-      originNote: input.originNote ?? null,
-      provenanceClass: input.provenanceClass,
-      dataQuality: input.dataQuality ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  const colony = await prisma.$transaction(async (tx) => {
+    const colony = await tx.colony.create({
+      data: {
+        hiveId: input.hiveId,
+        startedAt: input.startedAt,
+        status: input.status ?? "active",
+        originType: input.originType,
+        originNote: input.originNote ?? null,
+        provenanceClass: input.provenanceClass,
+        dataQuality: input.dataQuality ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  // C1 §3: evidentiary write — a colony's origin, once forgotten, is not
-  // reconstructable (§1's own "capture-or-lose-it" framing for this field).
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "colony.create",
-    entityType: "colony",
-    entityId: colony.id,
-    after: colony,
-    sourceInterface: "apiary.service",
+    // C1 §3: evidentiary write — a colony's origin, once forgotten, is not
+    // reconstructable (§1's own "capture-or-lose-it" framing for this field).
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "colony.create",
+        entityType: "colony",
+        entityId: colony.id,
+        after: colony,
+        sourceInterface: "apiary.service",
+      },
+      tx,
+    );
+
+    return colony;
   });
 
   return colony;

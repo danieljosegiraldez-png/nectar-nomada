@@ -59,27 +59,34 @@ export async function createEvidence(userAccountId: string, input: CreateEvidenc
   }
   await requireResearchAccess(userAccountId, "create_evidence", [{ projectId }]);
 
-  const evidence = await prisma.evidence.create({
-    data: {
-      treatmentBatchId: input.treatmentBatchId ?? null,
-      sampleId: input.sampleId ?? null,
-      assetId: input.assetId ?? null,
-      measurementId: input.measurementId ?? null,
-      processSensoryObservationId: input.processSensoryObservationId ?? null,
-      description: input.description ?? null,
-      provenanceClass: input.provenanceClass,
-      sourceReference: input.sourceReference ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  const evidence = await prisma.$transaction(async (tx) => {
+    const evidence = await tx.evidence.create({
+      data: {
+        treatmentBatchId: input.treatmentBatchId ?? null,
+        sampleId: input.sampleId ?? null,
+        assetId: input.assetId ?? null,
+        measurementId: input.measurementId ?? null,
+        processSensoryObservationId: input.processSensoryObservationId ?? null,
+        description: input.description ?? null,
+        provenanceClass: input.provenanceClass,
+        sourceReference: input.sourceReference ?? null,
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "evidence.create",
-    entityType: "evidence",
-    entityId: evidence.id,
-    after: evidence,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "evidence.create",
+        entityType: "evidence",
+        entityId: evidence.id,
+        after: evidence,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return evidence;
   });
 
   return evidence;
@@ -90,17 +97,24 @@ export async function createEvidenceClaim(userAccountId: string, evidenceId: str
   if (!evidence) throw new ResearchAccessError("evidence_not_found");
   await requireResearchAccess(userAccountId, "create_evidence", [{ projectId: evidence.treatmentBatch?.projectId ?? null }]);
 
-  const claim = await prisma.evidenceClaim.create({
-    data: { evidenceId, claimText, createdBy: userAccountId },
-  });
+  const claim = await prisma.$transaction(async (tx) => {
+    const claim = await tx.evidenceClaim.create({
+      data: { evidenceId, claimText, createdBy: userAccountId },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "evidence_claim.create",
-    entityType: "evidence_claim",
-    entityId: claim.id,
-    after: claim,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "evidence_claim.create",
+        entityType: "evidence_claim",
+        entityId: claim.id,
+        after: claim,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return claim;
   });
 
   return claim;
@@ -114,22 +128,29 @@ export async function createInterpretation(
   if (!experiment) throw new ResearchAccessError("experiment_not_found");
   await requireResearchAccess(userAccountId, "create_evidence", [{ projectId: experiment.projectId }]);
 
-  const interpretation = await prisma.interpretation.create({
-    data: {
-      experimentId: input.experimentId,
-      evidenceClaimId: input.evidenceClaimId ?? null,
-      interpretationText: input.interpretationText,
-      createdBy: userAccountId,
-    },
-  });
+  const interpretation = await prisma.$transaction(async (tx) => {
+    const interpretation = await tx.interpretation.create({
+      data: {
+        experimentId: input.experimentId,
+        evidenceClaimId: input.evidenceClaimId ?? null,
+        interpretationText: input.interpretationText,
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "interpretation.create",
-    entityType: "interpretation",
-    entityId: interpretation.id,
-    after: interpretation,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "interpretation.create",
+        entityType: "interpretation",
+        entityId: interpretation.id,
+        after: interpretation,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return interpretation;
   });
 
   return interpretation;
@@ -156,23 +177,30 @@ export async function createConclusion(userAccountId: string, input: CreateConcl
     throw new EvidenceValidationError("comparative_conclusion_cannot_be_measured_fact");
   }
 
-  const conclusion = await prisma.conclusion.create({
-    data: {
-      interpretationId: input.interpretationId,
-      conclusionText: input.conclusionText,
-      provenanceClass: input.provenanceClass,
-      isComparative: input.isComparative ?? false,
-      createdBy: userAccountId,
-    },
-  });
+  const conclusion = await prisma.$transaction(async (tx) => {
+    const conclusion = await tx.conclusion.create({
+      data: {
+        interpretationId: input.interpretationId,
+        conclusionText: input.conclusionText,
+        provenanceClass: input.provenanceClass,
+        isComparative: input.isComparative ?? false,
+        createdBy: userAccountId,
+      },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "conclusion.create",
-    entityType: "conclusion",
-    entityId: conclusion.id,
-    after: conclusion,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "conclusion.create",
+        entityType: "conclusion",
+        entityId: conclusion.id,
+        after: conclusion,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return conclusion;
   });
 
   return conclusion;
@@ -191,17 +219,24 @@ export async function createResearchRecommendation(userAccountId: string, conclu
   if (!conclusion) throw new ResearchAccessError("conclusion_not_found");
   await requireResearchAccess(userAccountId, "approve_protocol", [{ projectId: conclusion.interpretation.experiment.projectId }]);
 
-  const recommendation = await prisma.researchRecommendation.create({
-    data: { conclusionId, recommendationText, createdBy: userAccountId },
-  });
+  const recommendation = await prisma.$transaction(async (tx) => {
+    const recommendation = await tx.researchRecommendation.create({
+      data: { conclusionId, recommendationText, createdBy: userAccountId },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "research_recommendation.create",
-    entityType: "research_recommendation",
-    entityId: recommendation.id,
-    after: recommendation,
-    sourceInterface: "research.service",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "research_recommendation.create",
+        entityType: "research_recommendation",
+        entityId: recommendation.id,
+        after: recommendation,
+        sourceInterface: "research.service",
+      },
+      tx,
+    );
+
+    return recommendation;
   });
 
   return recommendation;

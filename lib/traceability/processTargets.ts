@@ -306,43 +306,50 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
   if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
   await requireLotAccess(userAccountId, "manage", [anyLot]);
 
-  const recipe = await prisma.processRecipe.create({
-    data: {
-      name,
-      description: input.description?.trim() || null,
-      organizationId: input.organizationId,
-      status: "approved",
-      createdBy: userAccountId,
-      versions: {
-        create: {
-          version: 1,
-          status: "approved",
-          createdBy: userAccountId,
-          targets: {
-            create: input.targets.map((t, i) => ({
-              variable: t.variable,
-              moment: t.moment,
-              unit: t.unit,
-              targetValue: t.targetValue ?? null,
-              minValue: t.minValue ?? null,
-              maxValue: t.maxValue ?? null,
-              note: t.note?.trim() || null,
-              displayOrder: i,
-            })),
+  const recipe = await prisma.$transaction(async (tx) => {
+    const recipe = await tx.processRecipe.create({
+      data: {
+        name,
+        description: input.description?.trim() || null,
+        organizationId: input.organizationId,
+        status: "approved",
+        createdBy: userAccountId,
+        versions: {
+          create: {
+            version: 1,
+            status: "approved",
+            createdBy: userAccountId,
+            targets: {
+              create: input.targets.map((t, i) => ({
+                variable: t.variable,
+                moment: t.moment,
+                unit: t.unit,
+                targetValue: t.targetValue ?? null,
+                minValue: t.minValue ?? null,
+                maxValue: t.maxValue ?? null,
+                note: t.note?.trim() || null,
+                displayOrder: i,
+              })),
+            },
           },
         },
       },
-    },
-    include: { versions: { include: { targets: true } } },
-  });
+      include: { versions: { include: { targets: true } } },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "process_recipe.create",
-    entityType: "process_recipe",
-    entityId: recipe.id,
-    after: recipe,
-    sourceInterface: "traceability.processTargets",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "process_recipe.create",
+        entityType: "process_recipe",
+        entityId: recipe.id,
+        after: recipe,
+        sourceInterface: "traceability.processTargets",
+      },
+      tx,
+    );
+
+    return recipe;
   });
   return recipe;
 }
@@ -451,19 +458,26 @@ export async function updateRecipeMetadata(
   const name = input.name.trim();
   if (!name) throw new ProcessTargetError("name_required");
 
-  const after = await prisma.processRecipe.update({
-    where: { id: recipeId },
-    data: { name, description: input.description?.trim() || null },
-  });
+  const after = await prisma.$transaction(async (tx) => {
+    const after = await tx.processRecipe.update({
+      where: { id: recipeId },
+      data: { name, description: input.description?.trim() || null },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "process_recipe.update",
-    entityType: "process_recipe",
-    entityId: recipeId,
-    before,
-    after,
-    sourceInterface: "traceability.processTargets",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "process_recipe.update",
+        entityType: "process_recipe",
+        entityId: recipeId,
+        before,
+        after,
+        sourceInterface: "traceability.processTargets",
+      },
+      tx,
+    );
+
+    return after;
   });
   return after;
 }
@@ -495,39 +509,46 @@ export async function createRecipeVersion(
 
   const nextVersion = (recipe.versions[0]?.version ?? 0) + 1;
 
-  const version = await prisma.processRecipeVersion.create({
-    data: {
-      recipeId,
-      version: nextVersion,
-      notes: notes?.trim() || null,
-      status: "approved",
-      createdBy: userAccountId,
-      targets: {
-        create: targets.map((t, i) => ({
-          variable: t.variable,
-          moment: t.moment,
-          unit: t.unit,
-          targetValue: t.targetValue ?? null,
-          minValue: t.minValue ?? null,
-          maxValue: t.maxValue ?? null,
-          note: t.note?.trim() || null,
-          displayOrder: i,
-        })),
+  const version = await prisma.$transaction(async (tx) => {
+    const version = await tx.processRecipeVersion.create({
+      data: {
+        recipeId,
+        version: nextVersion,
+        notes: notes?.trim() || null,
+        status: "approved",
+        createdBy: userAccountId,
+        targets: {
+          create: targets.map((t, i) => ({
+            variable: t.variable,
+            moment: t.moment,
+            unit: t.unit,
+            targetValue: t.targetValue ?? null,
+            minValue: t.minValue ?? null,
+            maxValue: t.maxValue ?? null,
+            note: t.note?.trim() || null,
+            displayOrder: i,
+          })),
+        },
       },
-    },
-    include: { targets: true },
-  });
+      include: { targets: true },
+    });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "process_recipe_version.create",
-    entityType: "process_recipe_version",
-    entityId: version.id,
-    after: version,
-    // The fact worth searching the audit log for later: which version
-    // superseded which, and when.
-    reason: `supersedes_version_${recipe.versions[0]?.version ?? "none"}`,
-    sourceInterface: "traceability.processTargets",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "process_recipe_version.create",
+        entityType: "process_recipe_version",
+        entityId: version.id,
+        after: version,
+        // The fact worth searching the audit log for later: which version
+        // superseded which, and when.
+        reason: `supersedes_version_${recipe.versions[0]?.version ?? "none"}`,
+        sourceInterface: "traceability.processTargets",
+      },
+      tx,
+    );
+
+    return version;
   });
   return version;
 }
