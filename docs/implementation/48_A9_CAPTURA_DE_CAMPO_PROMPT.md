@@ -26,11 +26,25 @@ línea** — eso es lo que se está pidiendo, no cortesía.
 7. `CLAUDE.md` §19, §34, §35, §40, §41, §46, §47.
 8. Anexos B, C y D de este prompt — **material de entrada, no especificación**.
 
-Referencia visual, no normativa:
-<https://claude.ai/code/artifact/83de3da0-794c-43bd-a715-0816b4f53407>.
-Los registros de Kiva Estate · Toabré que muestra son reales (visitas de junio,
-julio y septiembre de 2026); los otros tres sitios llevan valores de muestra
-marcados como tales.
+**Referencia visual de las pantallas, no normativa sobre el código.** El
+prototipo «Apiario Néctar Nómada» —mapa de sitios, vitales, línea de vida de
+colonia, captura en dos etapas y catálogo de qué medir— está en el repositorio
+como **`docs/implementation/48_A9_PROTOTIPO_apiario.html`**: un solo archivo
+autónomo, sin dependencias de red salvo la fuente, que se lee como texto y se
+abre con doble clic. Léelo si necesitas ver qué forma tienen las pantallas de
+las que hablan los anexos — los estados, las etiquetas y las microcopias están
+en el marcado.
+
+Hay además una copia publicada en
+<https://claude.ai/code/artifact/83de3da0-794c-43bd-a715-0816b4f53407>, que
+requiere la sesión del dueño y **no es accesible desde una sesión de agente**.
+Usa el archivo del repositorio, no el enlace.
+
+Advertencia sobre sus datos: los registros de Kiva Estate · Toabré son reales
+—visitas de junio, julio y septiembre de 2026—. Los otros tres sitios llevan
+**valores de muestra marcados como tales en la propia pantalla**: identidad,
+región y número de colmenas son reales; todo lo demás no. No cites esas cifras
+como hechos.
 
 ---
 
