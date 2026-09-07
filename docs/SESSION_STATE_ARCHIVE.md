@@ -1054,6 +1054,40 @@ sigue dirigiendo trabajo de ella —la distinción entre campos de día e instan
 y la regla por llamada de atomicidad de auditoría— ya vive en `CLAUDE.md` y en
 `tests/arquitectura/audit-atomico.test.ts`, que sí se cargan.
 
+### 2026-09-07 · La deuda de atomicidad de auditoría, tal como estaba escrita
+
+Archivado el 2026-09-07 con el estado en 400/400 líneas. Se movió esta entrada
+porque **quedó cerrada entera** —era la única de §3 que el trabajo del 2026-09-06
+y 07 dejó sin objeto— y porque describía trabajo pendiente en una sección de
+bloqueos. Lo que la sustituye en §3 es un puntero de ocho líneas.
+
+Texto tal como estaba:
+
+- **Escritura y auditoría no son atómicas en 13 archivos.**
+  Desde el 2026-08-31 `recordAuditEvent` acepta un `tx` **opcional** que confirma
+  el audit junto a la escritura; por defecto usa el cliente global, así que las
+  89 llamadas existentes no cambian. Lo adoptan ya `plantingCohorts.ts` (con un
+  test que fuerza el fallo del audit y comprueba que la cohorte tampoco queda) y
+  **todos los módulos de S1**: `biocharBatches.ts`, `soilProfiles.ts`,
+  `soilSamples.ts`, `landMedia.ts`, `research/amendments.ts` y **`measurements.ts`
+  entero** —la corrección desde el 2026-08-31, y la creación desde que la
+  revisión señaló que esas filas abren Gate 0—. Módulo
+  nuevo, `tx` desde el principio; el coste sólo existe al convertir lo viejo.
+  **Quedan 13 archivos que abren transacción y auditan fuera:**
+  `research/analysis.ts` (7 llamadas), `research/protocols.ts` (6),
+  `traceability/harvest.ts`, `samples.ts`, `drying.ts`, `fermentation.ts`,
+  `lots.ts`, `roasting.ts`, `apiary/harvest.ts`, `commerce/orders.ts`,
+  `experiences/bookings.ts`, `sensory/service.ts`, `auth/config.ts`. Los otros
+  28 que auditan **no** abren transacción, así que no tienen nada que hacer
+  atómico.
+  **Restricción al adoptarlo:** pasar `tx` obliga a que el llamador no abra otra
+  transacción dentro — Prisma no las anida, y por eso `renovatePlantingCohort`
+  crea su cohorte de reemplazo fuera de la suya.
+  Lo que queda es decisión, no trabajo mecánico: si los 13 se convierten de una
+  o al tocarlos.
+
+---
+
 ### 2026-09-06 · Husos horarios, atomicidad de auditoría, y tres inventarios que mentían
 
 **Nada de esto estaba en una lista al empezar.** Salió de mirar: recorrer las
@@ -1085,3 +1119,53 @@ solo.
 ~19 GB; `vercel.json` con `ignoreCommand` y un carril ligero de CI para los
 cambios de sólo documentación —**el 57 % de las PR**— que corre en 7 s y no
 despliega.
+
+---
+
+**Archivado el 2026-09-07** con el estado en 418/400 líneas tras entrar la de A9.
+Se mueve la entrada del puntaje del CVA, que es la más vieja de §2 y la que el
+propio `check:state` nombró. No es una valoración de su contenido: es la
+rotación que este archivo ya venía aplicando —entra una entrega, sale la de
+abajo— y su detalle queda íntegro aquí.
+
+### 2026-09-06 · El puntaje de cata deja de ser una opinión tecleada
+
+**Antes, en el mismo día, entró el #206:** perfil `Cupping Host`, permiso
+`sample:view` —que `requireSampleAccess` aceptaba desde su primera versión sin
+existir en el catálogo— e invitar participantes por asignación de ámbito
+`session`. Dirigir una cata y juzgar una competencia son dos usos distintos; sólo
+existía el segundo. Su entrada se archivó al entrar ésta.
+
+**Lo que había:** siete atributos inventados por nosotros y un total que
+**escribía a mano** quien cataba. Dos personas con los mismos atributos podían
+teclear totales distintos: comparar dos lotes no comparaba nada.
+
+**De dónde salió lo nuevo, y esto importa más que el código.** Los siete PDF del
+estándar SCA no sirvieron: **cinco vienen cifrados** (`/Encrypt`, `/P -1324`) y
+el del Fine Robusta es un **escaneo sin texto** —7 objetos `/Image`, cero
+operadores de texto— sin `pdftoppm` ni `tesseract` en la máquina para leerlo.
+Lo que sí sirvió fue **medir la calculadora pública que la propia SCA publica**
+en `sca.coffee/cuppingscore`, cambiando una entrada a la vez: ocho atributos en
+escala 1–9, coeficiente 0,65625, constante 52,75, −2 por taza no uniforme y −4
+por defectuosa. Seis lecturas, reproducidas una a una como pruebas.
+
+**Sigue faltando la sección DESCRIPTIVA del CVA** —descriptores CATA e
+intensidades—: vive en el SCA-103, que es uno de los cifrados. No se inventa.
+
+**Lo que cambia.** `scoreFormula` en la versión de protocolo: ausente —las seis
+que ya existen— el total se teclea como siempre; presente, lo calcula el
+servidor. Y los rangos se validan **en el servidor**, que hasta hoy sólo los
+defendía el `min`/`max` del `<input>`: un POST a mano metía un 90 donde iba un 9
+y salía un 111,19 que nadie mira dos veces.
+
+**La prueba que costó dos intentos, y es la lección.** La primera versión del
+test de emparejamiento mandaba los ocho valores **del revés** y esperaba el
+mismo total. No probaba nada: el puntaje es una SUMA, y una permutación de los
+mismos ocho números da idéntico resultado. **Su flip-test salió verde y lo
+dijo** — sin él habría quedado como guardia. La que sí distingue manda ocho
+respuestas donde una repite atributo y otra falta.
+
+Tres flip-tests, cada uno con sha antes/después, compilando, y su test caído por
+nombre: el coeficiente (caen las seis lecturas), emparejar por posición, y
+romper el régimen viejo.
+
