@@ -36,6 +36,7 @@ tests/rbac/admin.test.ts
 tests/research/amendments.test.ts
 tests/research/ro1.test.ts
 tests/seed/organizationGuard.test.ts
+tests/sensory/anfitrionDeCata.test.ts
 tests/sensory/archivarProtocolo.test.ts
 tests/sensory/classificationGate.test.ts
 tests/sensory/crearSesion.test.ts

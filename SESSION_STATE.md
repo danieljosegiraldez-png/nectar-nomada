@@ -254,37 +254,37 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   compara tratamientos, no puntajes entre lotes, y la Fase 6 sigue sin empezar.
 
 - **El tueste ya es una variable: propósito y perfil.** `RoastSession` gana
-  `purpose` (`sample`/`production`, **obligatorio y sin defecto**: suponer
-  producción convertiría cada muestra en venta en silencio) y `recipeVersionId`
-  anulable — los primeros tuestes de muestra se hacen sin perfil, que es como se
-  encuentra uno. Reusa `ProcessRecipe`, y `LotRoastProfile` guarda el **óptimo
-  por lote** con `lotId` único: elegir otro reemplaza y la historia queda en
-  auditoría. Decisiones de Daniel. **La migración se hizo defensiva** —Prisma la
-  generó de forma que falla si hay una fila— y se probó en aislamiento. Y mi
-  archivo de prueba **compilaba mal** con las pruebas en verde: lo cazó
-  `typecheck`, no la suite.
+  `purpose` (`sample`/`production`, obligatorio y sin defecto) y `recipeVersionId`
+  anulable; `LotRoastProfile` guarda el **óptimo por lote**, y elegir otro
+  reemplaza. Decisiones de Daniel. La migración se hizo defensiva y se probó en
+  aislamiento. Mi archivo de prueba **compilaba mal** con las pruebas en verde: lo
+  cazó `typecheck`, no la suite.
 
-- **`npm run sensory:archive-protocol` retira un protocolo sin borrarlo**, y hay
-  cinco `TEST` activos en producción esperando. **Hoy hace poco:** nada filtra por
-  el estado, así que su efecto es que el listado deja de mezclar retirados con
-  vivos — y que un selector futuro no ofrezca basura de pruebas.
+- **`npm run sensory:archive-protocol` retira un protocolo sin borrarlo**; hay
+  cinco `TEST` activos en producción esperando. Hoy su efecto es sólo que el
+  listado deja de mezclar retirados con vivos.
 
-- **Nadie podía crear una sesión de cata** —`sensorySession.create` sólo existía
-  en la semilla y en pruebas—, y **ésa era la razón de las cero valoraciones, no
-  el protocolo**. Arreglado en la entrada de abajo. Corrige además algo que dije:
-  en producción SÍ había protocolo de café, el marcador
-  `Coffee Cupping (Illustrative)`, que di por inexistente sin medirlo.
+- **Nadie podía crear una sesión de cata** —sólo la semilla—, y **ésa era la
+  razón de las cero valoraciones, no el protocolo**. Corrige además algo que dije:
+  en producción SÍ había protocolo de café, el marcador `Coffee Cupping
+  (Illustrative)`, que di por inexistente sin medirlo.
 
 - **Ya se puede crear una sesión de cata** — la puerta que le faltaba al módulo.
   `crearSesionDeCata` monta sesión + vuelo + muestras ciegas + mapeo en **una
   transacción**, con pantalla en `/sensory/new`. Rechaza protocolo retirado y
-  protocolo **sin atributos** — hay cinco así en producción. **Hallazgo de
-  permisos, decisión de Daniel:** `sensory:manage_session` lo tienen admin y head
-  judge; `sample:manage`, admin y Farm Operator. **Sólo el admin tiene los dos**,
-  así que el head judge ve la pantalla y no alcanza ninguna muestra. **Del
-  método:** violé el guardia de audit atómico y lo cazó su prueba; y «muestra
-  ajena» no se puede probar mientras sólo el admin cree sesiones — queda escrito
-  como explicación, no como prueba que no puede fallar.
+  protocolo **sin atributos** — hay cinco así en producción. **Del método:** violé
+  el guardia de audit atómico y lo cazó su prueba; y «muestra ajena» no se puede
+  probar mientras sólo el admin cree sesiones — queda escrito como explicación,
+  no como prueba que no puede fallar.
+
+- **Una cata ya es de varios, y existe el rol que la dirige.** Perfil
+  **`Cupping Host`** y permiso nuevo **`sample:view`** —`requireSampleAccess` lo
+  aceptaba y no existía: nadie podía mirar una muestra sin poder cambiarla—.
+  Corrige mi encuadre: no faltaba acceso al head judge, faltaba el rol; head
+  judge y judges quedan para **competencia** (Daniel). Añadido **invitar
+  participantes** (asignación de ámbito `session`, sin tabla nueva) y expuestos
+  **propósito y tipo**. Lo enseñó la prueba: un ámbito estrecho no implica uno
+  amplio, y `manage` no implica `view`.
 
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura

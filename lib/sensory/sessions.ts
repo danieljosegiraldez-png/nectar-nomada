@@ -18,8 +18,8 @@
 import { prisma } from "../db";
 import { can, CLASSIFICATION_NOT_APPLICABLE } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
-import { resolveLotVisibility, sampleWhereFromVisibility } from "../traceability/lots";
-import type { ClassificationLevel } from "../../generated/prisma/client";
+import { scopeTargetsFor } from "../traceability/lots";
+import type { ClassificationLevel, SensoryPurpose, SensorySubject } from "../../generated/prisma/client";
 
 export class SesionDeCataError extends Error {}
 
@@ -46,18 +46,52 @@ async function requireManageSession(userAccountId: string) {
 export async function listarMuestrasParaCata(userAccountId: string) {
   await requireManageSession(userAccountId);
 
-  const visibility = await resolveLotVisibility(userAccountId, "view");
-  const where = sampleWhereFromVisibility(visibility);
-  // `null` significa «no alcanza a ninguna», no «todas». Devolver [] es la
-  // respuesta correcta; omitir el `where` las devolvería todas.
-  if (where === null) return [];
-
-  return prisma.sample.findMany({
-    where,
-    select: { id: true, sampleCode: true, sampleType: true, description: true },
+  // Se acota por el eje de MUESTRAS, no por el de lotes. El primer intento usó
+  // visibilidad de lotes y dejaba al anfitrión de cata sin ninguna muestra: no
+  // tiene `lot:view` ni tiene por qué tenerlo. Elegir qué se cata es una
+  // pregunta sobre muestras.
+  //
+  // Se acepta `view` O `manage` porque `can()` exige la clave exacta —`manage`
+  // no implica `view`— y quien ya tenía `sample:manage` (Farm Operator, admin)
+  // debe seguir pudiendo elegir sin tocarle el perfil.
+  const candidatas = await prisma.sample.findMany({
+    select: {
+      id: true,
+      sampleCode: true,
+      sampleType: true,
+      description: true,
+      projectId: true,
+      locationId: true,
+      classification: true,
+    },
     orderBy: { sampleCode: "asc" },
-    take: 200,
+    take: 500,
   });
+
+  const visibles = [];
+  for (const m of candidatas) {
+    if (await puedeVerMuestra(userAccountId, m)) visibles.push(m);
+    if (visibles.length >= 200) break;
+  }
+  return visibles.map(({ id, sampleCode, sampleType, description }) => ({
+    id,
+    sampleCode,
+    sampleType,
+    description,
+  }));
+}
+
+/** `view` o `manage`, sobre cualquiera de los ámbitos concretos de la muestra. */
+async function puedeVerMuestra(
+  userAccountId: string,
+  muestra: { projectId: string | null; locationId: string | null; classification: ClassificationLevel },
+): Promise<boolean> {
+  for (const target of scopeTargetsFor(muestra)) {
+    for (const accion of ["view", "manage"] as const) {
+      if (await can(userAccountId, accion, "sample", target, muestra.classification)) return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -87,6 +121,12 @@ export interface CrearSesionInput {
   protocolVersionId: string;
   /** Los ids de las muestras, en el orden en que se van a servir. */
   muestras: string[];
+  /** Para qué se cata. Ya estaba modelado y el primer formulario no lo pedía:
+   *  sin él, una cata de competencia y una de control de calidad se guardan
+   *  iguales y después no se pueden distinguir para reportar. */
+  purpose?: SensoryPurpose | null;
+  /** Qué se cata: materia prima en proceso, producto intermedio, bebida. */
+  subject?: SensorySubject | null;
   classification?: ClassificationLevel;
   scheduledAt?: Date | null;
   preparationMethod?: string | null;
@@ -144,6 +184,8 @@ export async function crearSesionDeCata(userAccountId: string, input: CrearSesio
         name: nombre,
         protocolVersionId: input.protocolVersionId,
         status: "draft",
+        purpose: input.purpose ?? null,
+        subject: input.subject ?? null,
         classification: input.classification ?? "internal",
         scheduledAt: input.scheduledAt ?? null,
         preparationMethod: input.preparationMethod ?? null,
@@ -182,4 +224,117 @@ export async function crearSesionDeCata(userAccountId: string, input: CrearSesio
   });
 
   return creada;
+}
+
+/**
+ * Los participantes de una cata.
+ *
+ * **Cómo se ata un catador a una sesión, y por qué así.** Con una `Assignment`
+ * de ámbito `session` — el mismo mecanismo que ya usa `getJudgeSessions` para
+ * decidir qué sesiones ve alguien. No se inventa una tabla de participantes:
+ * duplicaría la autorización en dos sitios, y el día que discreparan ganaría la
+ * equivocada.
+ *
+ * **Por qué faltaba.** Hasta hoy sólo se podían crear esas asignaciones a mano
+ * en la base, así que una cata la puntuaba quien alguien hubiera metido — o
+ * nadie. Sin esto no hay cata de grupo, y sin cata de grupo no hay panel que
+ * calcular ni nada que reportar.
+ */
+export async function listarParticipantes(userAccountId: string, sessionId: string) {
+  await requireManageSession(userAccountId);
+
+  const asignaciones = await prisma.assignment.findMany({
+    where: { status: "active", scope: { scopeType: "session", scopeRefId: sessionId } },
+    include: { userAccount: { include: { person: true } }, roleProfile: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return asignaciones.map((a) => ({
+    assignmentId: a.id,
+    userAccountId: a.userAccountId,
+    displayName: a.userAccount.person.displayName,
+    perfil: a.roleProfile.name,
+  }));
+}
+
+/**
+ * A quién se puede invitar: cuentas activas que aún no están en esta sesión.
+ *
+ * No se filtra por «sabe catar»: quién es competente para una mesa lo decide
+ * quien la monta, no el sistema. Lo que sí se hace es no ofrecer a quien ya
+ * está — invitar dos veces al mismo no es un error que deba llegar a la base.
+ */
+export async function listarInvitables(userAccountId: string, sessionId: string) {
+  await requireManageSession(userAccountId);
+
+  const yaEstan = new Set(
+    (
+      await prisma.assignment.findMany({
+        where: { status: "active", scope: { scopeType: "session", scopeRefId: sessionId } },
+        select: { userAccountId: true },
+      })
+    ).map((a) => a.userAccountId),
+  );
+
+  const cuentas = await prisma.userAccount.findMany({
+    where: { status: { in: ["active", "invited"] } },
+    include: { person: true },
+    orderBy: { person: { displayName: "asc" } },
+    take: 200,
+  });
+  return cuentas
+    .filter((c) => !yaEstan.has(c.id))
+    .map((c) => ({ id: c.id, displayName: c.person.displayName, estado: c.status }));
+}
+
+/**
+ * Invitar a alguien a puntuar en esta cata.
+ *
+ * Recibe el perfil `Sensory Judge`, acotado a ESTA sesión: puede puntuar aquí y
+ * en ningún otro sitio, y no alcanza el mapeo ciego —eso es del anfitrión—.
+ */
+export async function invitarParticipante(
+  userAccountId: string,
+  input: { sessionId: string; invitadoUserAccountId: string },
+) {
+  await requireManageSession(userAccountId);
+
+  const sesion = await prisma.sensorySession.findUnique({ where: { id: input.sessionId } });
+  if (!sesion) throw new SesionDeCataError("session_not_found");
+
+  const invitado = await prisma.userAccount.findUnique({ where: { id: input.invitadoUserAccountId } });
+  if (!invitado) throw new SesionDeCataError("account_not_found");
+
+  const perfil = await prisma.roleProfile.findUnique({ where: { name: "Sensory Judge" } });
+  if (!perfil) throw new SesionDeCataError("judge_profile_missing");
+
+  // El ámbito es único por (tipo, referencia): se comparte entre todos los
+  // participantes de la sesión, y lo que los distingue es su asignación.
+  const scope =
+    (await prisma.scope.findFirst({ where: { scopeType: "session", scopeRefId: input.sessionId } })) ??
+    (await prisma.scope.create({ data: { scopeType: "session", scopeRefId: input.sessionId } }));
+
+  const yaEsta = await prisma.assignment.findFirst({
+    where: { userAccountId: input.invitadoUserAccountId, scopeId: scope.id, status: "active" },
+  });
+  if (yaEsta) return yaEsta;
+
+  return prisma.$transaction(async (tx) => {
+    const asignacion = await tx.assignment.create({
+      data: { userAccountId: input.invitadoUserAccountId, roleProfileId: perfil.id, scopeId: scope.id },
+    });
+    // Dentro de la transacción: una asignación sin su audit es alguien que
+    // puede puntuar y de quien no consta quién lo dejó entrar.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "sensory_session.invite",
+        entityType: "assignment",
+        entityId: asignacion.id,
+        after: { sessionId: input.sessionId, invitado: input.invitadoUserAccountId, perfil: perfil.name },
+        sourceInterface: "sensory.service",
+      },
+      tx,
+    );
+    return asignacion;
+  });
 }

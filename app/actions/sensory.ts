@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { submitAssessment, computePanelResult, SensoryAccessError } from "../../lib/sensory/service";
-import { crearSesionDeCata, SesionDeCataError } from "../../lib/sensory/sessions";
+import { crearSesionDeCata, invitarParticipante, SesionDeCataError } from "../../lib/sensory/sessions";
 
 export interface SensoryActionState {
   error?: string;
@@ -85,6 +85,8 @@ export async function crearSesionDeCataAction(
       name: String(formData.get("name") ?? ""),
       protocolVersionId: String(formData.get("protocolVersionId") ?? ""),
       muestras,
+      purpose: (String(formData.get("purpose") ?? "").trim() || null) as never,
+      subject: (String(formData.get("subject") ?? "").trim() || null) as never,
       preparationMethod: (String(formData.get("preparationMethod") ?? "").trim() || null),
     });
     sesionId = sesion.id;
@@ -96,4 +98,28 @@ export async function crearSesionDeCataAction(
 
   revalidatePath("/sensory");
   redirect(`/sensory/${sesionId}`);
+}
+
+/** Invitar a alguien a puntuar en una cata. */
+export async function invitarParticipanteAction(
+  _prevState: SensoryActionState,
+  formData: FormData,
+): Promise<SensoryActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Sensory");
+
+  const sessionId = String(formData.get("sessionId") ?? "");
+  try {
+    await invitarParticipante(user.userAccountId, {
+      sessionId,
+      invitadoUserAccountId: String(formData.get("invitadoUserAccountId") ?? ""),
+    });
+  } catch (error) {
+    if (error instanceof SesionDeCataError) return { error: t(`error_${error.message}` as "error_name_required") };
+    throw error;
+  }
+
+  revalidatePath(`/sensory/${sessionId}`);
+  return {};
 }
