@@ -35,13 +35,23 @@ import { describe, expect, it } from "vitest";
 
 const RAIZ = new URL("../..", import.meta.url).pathname;
 
-/** Todos los `.ts` de `lib/`, que es donde viven los servicios. */
+/**
+ * Todo el `.ts`/`.tsx` de un directorio.
+ *
+ * **`app/` entró el 2026-09-06, y la omisión había costado algo.** Esto sólo
+ * recorría `lib/` —«que es donde viven los servicios»—, y era verdad a medias:
+ * las acciones de servidor escriben igual. `app/actions/auth.ts` auditaba
+ * fuera de su transacción desde siempre y el guardia no podía verlo; se
+ * descubrió leyéndolo a mano, buscando un precedente de nombre de operación.
+ * Un guardia que elige su universo por una regla de dedo deja fuera justo lo
+ * que nadie mira.
+ */
 function fuentes(dir: string): string[] {
   const salida: string[] = [];
   for (const entrada of readdirSync(dir)) {
     const ruta = join(dir, entrada);
     if (statSync(ruta).isDirectory()) salida.push(...fuentes(ruta));
-    else if (entrada.endsWith(".ts")) salida.push(ruta);
+    else if (entrada.endsWith(".ts") || entrada.endsWith(".tsx")) salida.push(ruta);
   }
   return salida;
 }
@@ -126,7 +136,13 @@ function llamadas(src: string): Llamada[] {
   return salida;
 }
 
-const ARCHIVOS = fuentes(join(RAIZ, "lib"))
+/**
+ * `scripts/` queda fuera a propósito: son herramientas de administración que se
+ * corren a mano contra una base concreta, no caminos que ejerza un usuario.
+ * Si alguna vez auditan dentro de una transacción, entrarán aquí — pero
+ * meterlas hoy sería ampliar el guardia sin haber medido sus 9 llamadas.
+ */
+const ARCHIVOS = [...fuentes(join(RAIZ, "lib")), ...fuentes(join(RAIZ, "app"))]
   .map((r) => relative(RAIZ, r))
   .filter((r) => readFileSync(join(RAIZ, r), "utf8").includes("recordAuditEvent("))
   .sort();
@@ -139,7 +155,16 @@ describe("el audit viaja con la transacción que lo produjo", () => {
    * el guardia pasaría sin comprobar nada. Esto lo convierte en rojo.
    */
   it("el análisis encuentra transacciones y llamadas de verdad", () => {
-    expect(ARCHIVOS.length, "ningún archivo de lib/ llama a recordAuditEvent").toBeGreaterThan(10);
+    expect(ARCHIVOS.length, "ningún archivo llama a recordAuditEvent").toBeGreaterThan(10);
+
+    // Control positivo del ALCANCE, no del análisis. Sin esto, volver a dejar
+    // `app/` fuera —un refactor de `fuentes`, un filtro de más— haría que el
+    // guardia siguiera verde comprobando la mitad del mundo, que es
+    // exactamente como llegó `app/actions/auth.ts` hasta aquí.
+    expect(
+      ARCHIVOS.filter((a) => a.startsWith("app/")),
+      "ningún archivo de app/ entró en el análisis: el guardia volvió a mirar sólo lib/",
+    ).not.toHaveLength(0);
     const dentro = ARCHIVOS.flatMap((a) =>
       llamadas(readFileSync(join(RAIZ, a), "utf8")).filter((l) => l.dentroDeTransaccion),
     );
