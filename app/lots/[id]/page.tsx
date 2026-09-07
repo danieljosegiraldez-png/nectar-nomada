@@ -224,6 +224,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
     ...(lot.lotType === "green"
       ? [{ action: "roast" as const, href: `/lots/${lot.id}/roast/new`, label: t("recordRoastButton") }]
       : []),
+    // El proceso va ANTES de bodega a propósito: es lo que hay que haber hecho
+    // para que bodega deje pasar el lote (`exigeSecadoTerminado`).
+    { action: "process", href: `/lots/${lot.id}/process`, label: t("viewProcessButton") },
     { action: "storage", href: `/lots/${lot.id}/storage/new`, label: t("moveStorageButton") },
     { action: "sample", href: `/lots/${lot.id}/samples/new`, label: t("createSampleButton") },
     { action: "report", href: `/lots/${lot.id}/report`, label: t("viewReportButton") },

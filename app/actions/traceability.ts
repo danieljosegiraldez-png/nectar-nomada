@@ -26,6 +26,15 @@ import { createRecipeWithVersion, createRecipeVersion, updateRecipeMetadata } fr
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import {
+  abrirProceso,
+  cambiarIntencion,
+  cambiarObjetivoDeHumedad,
+  cerrarProceso,
+  devolverASecado,
+  registrarIntervencion,
+  LotProcessError,
+} from "../../lib/traceability/lotProcess";
+import {
   startFieldSession,
   endFieldSession,
   recordFieldEvent,
@@ -85,6 +94,7 @@ export interface TraceabilityActionState {
 // every possible internal error code.
 function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: unknown): string {
   if (error instanceof TraceabilityAccessError) return t("error_access", { detail: error.message });
+  if (error instanceof LotProcessError) return t("error_lot_process", { detail: error.message });
   if (error instanceof QuantityValidationError) return t("error_quantity", { detail: error.message });
   if (error instanceof MeasurementValidationError) return t("error_measurement", { detail: error.message });
   if (error instanceof UnitValidationError) return t("error_unit", { detail: error.message });
@@ -1684,4 +1694,157 @@ export async function finalizeLandAssetUploadAction(
 
   revalidatePath(`/plots/${locationId}`);
   return { ok: true };
+}
+
+// ── El proceso de un lote ───────────────────────────────────────────────────
+//
+// Seis acciones y no una: abrir, cambiar el objetivo, cambiar la intención,
+// registrar un manejo, cerrar y devolver a secado son operaciones distintas con
+// autorizaciones y errores distintos. Meterlas en un `switch` sobre un campo
+// oculto haría que un fallo de una se leyera como el de otra.
+//
+// Todas devuelven a `/lots/[id]/process`, que es donde el operador está: en el
+// campo, con el teléfono, sin ganas de volver a navegar.
+
+export async function abrirProcesoAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    await abrirProceso(user.userAccountId, {
+      lotId,
+      intent: String(formData.get("intent") ?? ""),
+      targetMoisturePct: Number(formData.get("targetMoisturePct")),
+      processRecipeVersionId: emptyToNull(formData.get("processRecipeVersionId")),
+      notes: emptyToNull(formData.get("notes")),
+      startedAt: new Date(),
+      // Abrir un proceso es una acción tomada, no una medición — el mismo
+      // criterio que `startDryingAction` (T9.5 §3b).
+      provenanceClass: "original_record",
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}/process`);
+  redirect(`/lots/${lotId}/process`);
+}
+
+export async function cambiarObjetivoAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    await cambiarObjetivoDeHumedad(
+      user.userAccountId,
+      String(formData.get("lotProcessId") ?? ""),
+      Number(formData.get("targetMoisturePct")),
+      emptyToNull(formData.get("razon")),
+    );
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}/process`);
+  redirect(`/lots/${lotId}/process`);
+}
+
+export async function cambiarIntencionAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    await cambiarIntencion(
+      user.userAccountId,
+      String(formData.get("lotProcessId") ?? ""),
+      String(formData.get("intent") ?? ""),
+      emptyToNull(formData.get("razon")),
+    );
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}/process`);
+  redirect(`/lots/${lotId}/process`);
+}
+
+export async function registrarIntervencionAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    await registrarIntervencion(user.userAccountId, {
+      lotProcessId: String(formData.get("lotProcessId") ?? ""),
+      catalogValueId: String(formData.get("catalogValueId") ?? ""),
+      occurredAt: new Date(),
+      notes: emptyToNull(formData.get("notes")),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}/process`);
+  redirect(`/lots/${lotId}/process`);
+}
+
+export async function cerrarProcesoAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    await cerrarProceso(user.userAccountId, {
+      lotProcessId: String(formData.get("lotProcessId") ?? ""),
+      endedAt: new Date(),
+      closingMoistureMeasurementId: String(formData.get("closingMoistureMeasurementId") ?? ""),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}/process`);
+  redirect(`/lots/${lotId}/process`);
+}
+
+export async function devolverASecadoAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    await devolverASecado(user.userAccountId, { lotId, motivo: String(formData.get("motivo") ?? "") });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}/process`);
+  redirect(`/lots/${lotId}/process`);
 }

@@ -29,11 +29,16 @@ import type { LotType } from "../../generated/prisma/client";
 // en `nextActionFor`: la secuencia de arriba es del dueño y dice que el café
 // verde espera a ser CATADO. Sugerir tostar en su lugar sería revocar esa
 // decisión desde el código, y este módulo sugiere, no restringe.
+// `process` se añadió el 2026-09-07, con la pantalla del proceso del lote. Está
+// en el tipo para poder OFRECER el botón, y a propósito NO entra en
+// `nextActionFor`, por el mismo motivo que `roast`: la secuencia de arriba es
+// del dueño, y cambiarla desde aquí sería revocar su decisión desde el código.
 export type BatchAction =
   | "measurement"
   | "selection"
   | "fermentation"
   | "drying"
+  | "process"
   | "storage"
   | "sample"
   | "roast"
