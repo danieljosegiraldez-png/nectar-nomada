@@ -46,6 +46,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/apiary/protocoloDeCampo.ts",
+      "razon": "A9.4 — carga la lista de chequeo de campo del dueño como `ProtocolVersion`. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. No expone lectura a un usuario: crea el protocolo una vez, es idempotente por `externalIdentifier`, y su escritura confirma su AuditEvent en la misma transacción."
+    },
+    {
       "archivo": "lib/apiary/harvest.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
@@ -287,6 +291,10 @@
     }
   ],
   "reciben_transaccion": [
+    {
+      "archivo": "lib/apiary/protocoloDeCampo.ts",
+      "razon": "A9.4 — abre su propia transacción y su retrollamada recibe el `tx`, que es como la carga del protocolo y su AuditEvent se confirman juntos. No lo recibe de fuera: lo crea, dentro del mismo módulo de dominio que ya está inventariado como importador del cliente."
+    },
     {
       "archivo": "lib/traceability/visitaAbierta.ts",
       "razon": "A9.2 — engancha un registro de apiario a la visita abierta. No abre conexión: opera dentro de la transacción que ya abrió un servicio autorizado (`inspections.ts`, `colonyEvents.ts`), y por eso recibe el `tx` en vez de importar el cliente. El vínculo tiene que confirmarse con la escritura o no confirmarse: uno que se guarde aparte puede perderse y dejar la visita incompleta sin que nada lo diga."
