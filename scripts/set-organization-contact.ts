@@ -127,17 +127,31 @@ async function main() {
     return;
   }
 
-  const after = await prisma.organization.update({ where: { id: org.id }, data });
+  // La escritura y su AuditEvent en la misma transacción desde el 2026-09-06.
+  // Antes eran dos llamadas sueltas: los datos quedaban puestos y, si el audit
+  // fallaba, no quedaba rastro de quién los cambió ni desde dónde.
+  const after = await prisma.$transaction(async (tx) => {
+    const actualizada = await tx.organization.update({ where: { id: org.id }, data });
 
-  await recordAuditEvent({
-    actorUserAccountId: null,
-    operation: "update",
-    entityType: "organization",
-    entityId: org.id,
-    before,
-    after: { contactEmail: after.contactEmail, contactPhone: after.contactPhone, websiteUrl: after.websiteUrl },
-    reason: "contact details set via scripts/set-organization-contact.ts",
-    sourceInterface: "cli",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: null,
+        operation: "update",
+        entityType: "organization",
+        entityId: org.id,
+        before,
+        after: {
+          contactEmail: actualizada.contactEmail,
+          contactPhone: actualizada.contactPhone,
+          websiteUrl: actualizada.websiteUrl,
+        },
+        reason: "contact details set via scripts/set-organization-contact.ts",
+        sourceInterface: "cli",
+      },
+      tx,
+    );
+
+    return actualizada;
   });
 
   console.log(`\n  ${org.name}`);

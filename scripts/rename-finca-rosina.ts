@@ -82,16 +82,25 @@ async function main() {
     planned++;
     if (!apply) continue;
 
-    const after = await prisma.location.update({ where: { id: row.id }, data: { name: to } });
-    await recordAuditEvent({
-      actorUserAccountId: null,
-      operation: "location.rename",
-      entityType: "location",
-      entityId: row.id,
-      before: row,
-      after,
-      reason: REASON,
-      sourceInterface: "scripts/rename-finca-rosina.ts",
+    // Una transacción POR FILA desde el 2026-09-06, no una para toda la tanda:
+    // esto hace atómicos el renombrado y su audit. Que las 13 filas se renombren
+    // todas o ninguna sería otra decisión, y cambiaría el comportamiento de un
+    // guion que ya se ejecutó.
+    await prisma.$transaction(async (tx) => {
+      const after = await tx.location.update({ where: { id: row.id }, data: { name: to } });
+      await recordAuditEvent(
+        {
+          actorUserAccountId: null,
+          operation: "location.rename",
+          entityType: "location",
+          entityId: row.id,
+          before: row,
+          after,
+          reason: REASON,
+          sourceInterface: "scripts/rename-finca-rosina.ts",
+        },
+        tx,
+      );
     });
   }
 
@@ -113,16 +122,21 @@ async function main() {
     planned++;
     if (!apply) continue;
 
-    const after = await prisma.project.update({ where: { id: row.id }, data: { name: to } });
-    await recordAuditEvent({
-      actorUserAccountId: null,
-      operation: "project.rename",
-      entityType: "project",
-      entityId: row.id,
-      before: row,
-      after,
-      reason: REASON,
-      sourceInterface: "scripts/rename-finca-rosina.ts",
+    await prisma.$transaction(async (tx) => {
+      const after = await tx.project.update({ where: { id: row.id }, data: { name: to } });
+      await recordAuditEvent(
+        {
+          actorUserAccountId: null,
+          operation: "project.rename",
+          entityType: "project",
+          entityId: row.id,
+          before: row,
+          after,
+          reason: REASON,
+          sourceInterface: "scripts/rename-finca-rosina.ts",
+        },
+        tx,
+      );
     });
   }
 
