@@ -158,6 +158,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/jornadaDeCampo.ts",
+      "razon": "A9.0 — la compuerta de una jornada lee `Location.locationType` y los proyectos de las colmenas de ese sitio para DECIDIR qué autoridad exigir. Es una lectura previa a cualquier compuerta: pasarla por un servicio de dominio la haría depender del permiso que todavía no se ha comprobado. Sólo lee, y sólo esas dos cosas."
+    },
+    {
       "archivo": "lib/traceability/fieldSessions.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },

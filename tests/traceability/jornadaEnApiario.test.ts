@@ -1,0 +1,143 @@
+/**
+ * A9.0 — la compuerta de una jornada de campo resuelve por el tipo del sitio.
+ *
+ * La propiedad que motiva todo el alcance: el **Apiary Colony Event Recorder**
+ * —el residente entrenado que registra sin viajar— tiene `colony_event:manage`
+ * pero **no** `location:manage_attributes`, así que con la compuerta anterior
+ * no podía abrir una visita a su propio apiario. Y la mitad que no se ve: no
+ * por eso puede abrir una jornada en una parcela de café.
+ */
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { prisma } from "../../lib/db";
+import { startFieldSession, LocationAccessError } from "../../lib/traceability/fieldSessions";
+import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+
+const RUN_ID = `a90-${Date.now()}`;
+
+let organizationId: string;
+let projectId: string;
+let apiarioId: string;
+let parcelaId: string;
+let operatorPersonId: string;
+let registradorPorSitio: string;
+let registradorPorProyecto: string;
+let operarioDeFinca: string;
+
+async function crearPersona(label: string) {
+  const p = await prisma.person.create({
+    data: { givenName: "TEST", familyName: label, displayName: `TEST ${label} (${RUN_ID})`, locale: "es" },
+  });
+  return p.id;
+}
+
+async function crearCuenta(label: string) {
+  const personId = await crearPersona(label);
+  const cuenta = await prisma.userAccount.create({
+    data: { personId, authProvider: "credentials", status: "active" },
+  });
+  return cuenta.id;
+}
+
+async function asignar(userAccountId: string, perfil: string, scopeType: "location" | "project", scopeRefId: string) {
+  const profile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: perfil } });
+  const scope = await prisma.scope.create({ data: { scopeType, scopeRefId } });
+  await prisma.assignment.create({ data: { userAccountId, roleProfileId: profile.id, scopeId: scope.id } });
+}
+
+beforeAll(async () => {
+  const organization = await prisma.organization.create({
+    data: { organizationType: "farm", name: `TEST Finca (${RUN_ID})`, status: "approved", classification: "internal" },
+  });
+  organizationId = organization.id;
+
+  const project = await prisma.project.create({
+    data: { name: `TEST Proyecto (${RUN_ID})`, status: "approved", classification: "internal" },
+  });
+  projectId = project.id;
+
+  const apiario = await prisma.location.create({
+    data: { locationType: "apiary_site", name: `TEST Apiario (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
+  });
+  apiarioId = apiario.id;
+
+  const parcela = await prisma.location.create({
+    data: { locationType: "plot", name: `TEST Parcela (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
+  });
+  parcelaId = parcela.id;
+
+  // La colmena es lo que ata el apiario a un proyecto: `FieldSession` no lleva
+  // proyecto, así que los candidatos de proyecto salen de aquí.
+  await prisma.hive.create({
+    data: { identifier: `${RUN_ID}-H1`, locationId: apiarioId, projectId, status: "active" },
+  });
+
+  operatorPersonId = await crearPersona("Apicultor");
+
+  registradorPorSitio = await crearCuenta("RegistradorSitio");
+  await asignar(registradorPorSitio, "Apiary Colony Event Recorder", "location", apiarioId);
+
+  registradorPorProyecto = await crearCuenta("RegistradorProyecto");
+  await asignar(registradorPorProyecto, "Apiary Colony Event Recorder", "project", projectId);
+
+  operarioDeFinca = await crearCuenta("OperarioFinca");
+  await asignar(operarioDeFinca, "Farm Operator", "location", parcelaId);
+});
+
+afterAll(async () => {
+  const locationIds = [apiarioId, parcelaId];
+  const sesiones = await prisma.fieldSession.findMany({ where: { locationId: { in: locationIds } }, select: { id: true } });
+  await prisma.fieldEvent.deleteMany({ where: assertDefinedWhere({ fieldSessionId: { in: sesiones.map((s) => s.id) } }) });
+  await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: sesiones.map((s) => s.id) } }) });
+  await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId: apiarioId }) });
+
+  const cuentas = [registradorPorSitio, registradorPorProyecto, operarioDeFinca];
+  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: [...locationIds, projectId] } }) });
+  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
+  await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
+  await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
+  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
+});
+
+const visita = (locationId: string) => ({
+  locationId,
+  operatorPersonId,
+  startedAt: new Date("2026-09-02T13:00:00Z"),
+  provenanceClass: "direct_observation" as const,
+});
+
+describe("A9.0 — quién abre una jornada, según dónde", () => {
+  it("el registrador de eventos de colonia SÍ abre una visita en su apiario", async () => {
+    // El caso que motiva el alcance. Antes de A9.0 esto lanzaba
+    // `no_location_attribute_access`: el perfil no tiene ese permiso y no debe
+    // tenerlo — es la autoridad para reescribir el terruño del sitio.
+    const sesion = await startFieldSession(registradorPorSitio, visita(apiarioId));
+    expect(sesion.locationId).toBe(apiarioId);
+  });
+
+  it("también si su asignación es por PROYECTO y no por sitio", async () => {
+    // `FieldSession` no lleva proyecto, así que sin resolver los proyectos de
+    // las colmenas del apiario esta persona quedaría fuera en silencio.
+    const sesion = await startFieldSession(registradorPorProyecto, visita(apiarioId));
+    expect(sesion.locationId).toBe(apiarioId);
+  });
+
+  it("pero NO abre una jornada en una parcela de café", async () => {
+    // La mitad que no se ve. La compuerta se ensancha para el apiario, no para
+    // todo: en un sitio que no es `apiary_site` sigue mandando
+    // `location:manage_attributes`.
+    await expect(startFieldSession(registradorPorSitio, visita(parcelaId))).rejects.toThrow(LocationAccessError);
+  });
+
+  it("y el operario de finca sigue abriendo la suya, como antes", async () => {
+    const sesion = await startFieldSession(operarioDeFinca, visita(parcelaId));
+    expect(sesion.locationId).toBe(parcelaId);
+  });
+
+  it("un sitio que no existe se rechaza, no se trata como público", async () => {
+    await expect(
+      startFieldSession(operarioDeFinca, visita("00000000-0000-0000-0000-000000000000")),
+    ).rejects.toThrow(LocationAccessError);
+  });
+});
