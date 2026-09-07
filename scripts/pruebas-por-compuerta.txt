@@ -39,6 +39,7 @@ tests/seed/organizationGuard.test.ts
 tests/sensory/anfitrionDeCata.test.ts
 tests/sensory/archivarProtocolo.test.ts
 tests/sensory/classificationGate.test.ts
+tests/sensory/crearProtocolo.test.ts
 tests/sensory/crearSesion.test.ts
 tests/sensory/descriptors.test.ts
 tests/sensory/puntajeCalculado.test.ts

@@ -35,6 +35,7 @@ import { readFileSync } from "node:fs";
 import { prisma } from "../lib/db";
 import { recordAuditEvent } from "../lib/audit";
 import { validarDefinicion, DefinicionInvalida } from "../lib/sensory/definicionDeProtocolo";
+import { crearProtocolo } from "../lib/sensory/crearProtocolo";
 
 function fail(message: string, ...detail: string[]): never {
   console.error(`\n  ${message}`);
@@ -188,53 +189,7 @@ async function main() {
   // atributos es un protocolo que acepta valoraciones vacías, y ese estado no
   // debe existir ni un instante.
   await prisma.$transaction(async (tx) => {
-    const protocol = await tx.sensoryProtocol.create({
-      data: {
-        domain: definicion.domain,
-        name: definicion.name,
-        description: definicion.description,
-        standardSourceReference: definicion.standardSourceReference,
-        standardLicenseStatus: definicion.standardLicenseStatus,
-      },
-    });
-    const version = await tx.sensoryProtocolVersion.create({
-      data: {
-        protocolId: protocol.id,
-        version: definicion.version,
-        scoreMin: definicion.scoreMin,
-        scoreMax: definicion.scoreMax,
-        scoreFormula: definicion.scoreFormula ?? null,
-        status: "active",
-      },
-    });
-    for (const [i, a] of definicion.attributes.entries()) {
-      await tx.sensoryAttribute.create({
-        data: {
-          protocolVersionId: version.id,
-          name: a.name,
-          displayOrder: i,
-          scaleMin: a.scaleMin,
-          scaleMax: a.scaleMax,
-          section: a.section,
-        },
-      });
-    }
-    // El vocabulario entra con el resto, no después: un protocolo a medio
-    // vocabulario ofrecería menos descriptores de los que su estándar define, y
-    // eso no se ve — se ve como que el catador no marcó nada.
-    for (const [i, c] of (definicion.descriptors ?? []).entries()) {
-      await tx.sensoryDescriptor.create({
-        data: {
-          protocolVersionId: version.id,
-          family: c.family,
-          specificDescriptor: c.specificDescriptor,
-          expectedPerception: c.expectedPerception ?? null,
-          classification: c.classification,
-          technicalCause: c.technicalCause ?? null,
-          displayOrder: i,
-        },
-      });
-    }
+    const creado = await crearProtocolo(tx, definicion);
 
     // Dentro de la transacción y con `tx` desde el 2026-09-06: el protocolo, sus
     // atributos y la fila que dice que se creó se confirman juntos. Antes el
@@ -244,19 +199,14 @@ async function main() {
         actorUserAccountId: null,
         operation: "sensory_protocol.create",
         entityType: "sensory_protocol",
-        entityId: protocol.id,
-        after: {
-          ...protocol,
-          version: definicion.version,
-          attributes: definicion.attributes.length,
-          descriptors: definicion.descriptors?.length ?? 0,
-        },
+        entityId: creado.protocolId,
+        after: { ...creado, name: definicion.name, version: definicion.version },
         sourceInterface: "scripts/create-sensory-protocol",
       },
       tx,
     );
 
-    return { protocol, version };
+    return creado;
   });
 
   console.log(`\n  Creado: ${definicion.name}`);
