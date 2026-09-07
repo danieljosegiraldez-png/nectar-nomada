@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Prototipo A9 - vista de apicultor del OS Nectar Nomada.
+     Copia autonoma del artifact publicado el 2026-09-07. Se abre con doble clic.
+     Es referencia visual, NO normativa sobre el codigo. Ver
+     docs/implementation/48_A9_CAPTURA_DE_CAMPO_PROMPT.md -->
+<title>Apiario Néctar Nómada</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+:root {
+  --bg: #faf7f0;
+  --surface: #ffffff;
+  --surface-2: #f4efe3;
+  --ink: #141210;
+  --ink-muted: #574a3b;
+  --ink-faint: #8a7d6c;
+  --border: #e6ddcc;
+  --border-strong: #948976;
+  --brand: #7a3b1e;
+  --brand-soft: #f0e2d8;
+  --accent: #3f5c3f;
+  --accent-bg: #eef1e8;
+  --miel: #e8b93c;
+  --miel-bg: #fbf1d4;
+  --ok: #3f5c3f;
+  --warn: #9a6410;
+  --warn-bg: #f8eeda;
+  --crit: #a3311a;
+  --crit-bg: #f8e5e0;
+  --ext: #3a5a76;
+  --ext-bg: #e6edf3;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(36,28,20,.06), 0 1px 1px rgba(36,28,20,.04);
+  --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Palatino, Georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+:root:not([data-theme="light"]) {
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16130f;
+    --surface: #201b15;
+    --surface-2: #2a241c;
+    --ink: #f3ede2;
+    --ink-muted: #c0b19b;
+    --ink-faint: #8e8070;
+    --border: #383026;
+    --border-strong: #6b6053;
+    --brand: #d08553;
+    --brand-soft: #3a2418;
+    --accent: #92b087;
+    --accent-bg: #23301f;
+    --miel: #e8c65a;
+    --miel-bg: #322813;
+    --ok: #92b087;
+    --warn: #d8a34e;
+    --warn-bg: #322613;
+    --crit: #e08268;
+    --crit-bg: #35190f;
+    --ext: #8fb4d0;
+    --ext-bg: #1b2732;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #16130f;
+  --surface: #201b15;
+  --surface-2: #2a241c;
+  --ink: #f3ede2;
+  --ink-muted: #c0b19b;
+  --ink-faint: #8e8070;
+  --border: #383026;
+  --border-strong: #6b6053;
+  --brand: #d08553;
+  --brand-soft: #3a2418;
+  --accent: #92b087;
+  --accent-bg: #23301f;
+  --miel: #e8c65a;
+  --miel-bg: #322813;
+  --ok: #92b087;
+  --warn: #d8a34e;
+  --warn-bg: #322613;
+  --crit: #e08268;
+  --crit-bg: #35190f;
+  --ext: #8fb4d0;
+  --ext-bg: #1b2732;
+  --shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -.01em; }
+h1 { font-size: 1.75rem; line-height: 1.15; }
+h2 { font-size: 1.2rem; }
+h3 { font-size: 1rem; }
+p { margin: 0; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
+
+.eyebrow {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .11em;
+  font-weight: 600; color: var(--ink-faint); font-family: var(--sans);
+}
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- shell ---------- */
+.shell { display: grid; grid-template-columns: 208px minmax(0,1fr); min-height: 100vh; }
+.rail {
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  padding: 20px 14px;
+  display: flex; flex-direction: column; gap: 22px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+.brandmark { display: flex; align-items: baseline; gap: 8px; padding: 0 6px; }
+.brandmark .bm-1 { font-family: var(--serif); font-size: 1.05rem; font-weight: 700; }
+.brandmark .bm-2 { font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: var(--brand); font-weight: 600; }
+nav { display: flex; flex-direction: column; gap: 2px; }
+.navbtn {
+  display: flex; align-items: center; gap: 9px;
+  background: none; border: 0; text-align: left;
+  padding: 8px 10px; border-radius: 7px; cursor: pointer;
+  color: var(--ink-muted); font-size: .9rem; min-height: 38px; width: 100%;
+}
+.navbtn:hover { background: var(--surface-2); color: var(--ink); }
+.navbtn[aria-current="true"] { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.navbtn svg { flex: none; }
+.rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding: 0 6px; }
+.whoami { border-top: 1px solid var(--border); padding-top: 12px; }
+.whoami .n { font-weight: 600; font-size: .88rem; }
+.whoami .r { font-size: .76rem; color: var(--ink-faint); }
+.themebtn { border: 1px solid var(--border); background: var(--surface); border-radius: 7px; padding: 6px 9px; font-size: .78rem; cursor: pointer; color: var(--ink-muted); }
+
+main { padding: 26px 30px 70px; max-width: 1120px; }
+.screen { display: none; }
+.screen.on { display: block; animation: rise .22s ease-out; }
+@keyframes rise { from { opacity: .5; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .screen.on { animation: none; } }
+
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 6px; }
+.page-sub { color: var(--ink-muted); font-size: .92rem; max-width: 62ch; margin-top: 8px; }
+
+/* ---------- chips ---------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: .68rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 4px; border: 1px solid transparent; white-space: nowrap;
+}
+.chip::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.chip-real { color: var(--accent); background: var(--accent-bg); border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
+.chip-sample { color: var(--warn); background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 25%, transparent); }
+.chip-prop { color: var(--brand); background: var(--brand-soft); border-color: color-mix(in srgb, var(--brand) 25%, transparent); }
+.chip-ext { color: var(--ext); background: var(--ext-bg); border-color: color-mix(in srgb, var(--ext) 25%, transparent); }
+.chip-plain { color: var(--ink-muted); background: var(--surface-2); border-color: var(--border); }
+.chip.act::before { display: none; }
+.chip.act { border-color: var(--border-strong); }
+.chip.act.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+.legend {
+  display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 14px; margin: 18px 0 24px; font-size: .8rem; color: var(--ink-muted);
+}
+.legend .li { display: flex; align-items: center; gap: 7px; }
+
+/* ---------- map plate + list ---------- */
+.plate-row { display: grid; grid-template-columns: minmax(0, 430px) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 900px) { .plate-row { grid-template-columns: 1fr; } .shell { grid-template-columns: 1fr; } .rail { position: static; height: auto; flex-direction: row; align-items: center; overflow-x: auto; } nav { flex-direction: row; } .rail-foot { margin-top: 0; } .whoami { border-top: 0; padding-top: 0; } }
+
+.plate { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
+.plate figcaption { font-size: .74rem; color: var(--ink-faint); margin-top: 8px; display: flex; justify-content: space-between; gap: 10px; }
+.pin { cursor: pointer; }
+.pin circle.halo { fill: transparent; }
+.pin:hover circle.halo, .pin.sel circle.halo { fill: color-mix(in srgb, var(--brand) 14%, transparent); }
+
+.sitelist { display: flex; flex-direction: column; gap: 10px; }
+.site {
+  display: grid; grid-template-columns: 4px minmax(0,1fr); gap: 0;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; cursor: pointer; text-align: left; padding: 0; width: 100%;
+  box-shadow: var(--shadow);
+}
+.site:hover { border-color: var(--border-strong); }
+.site.sel { border-color: var(--brand); }
+.site .stripe { background: var(--ok); }
+.site.s-warn .stripe { background: var(--warn); }
+.site.s-crit .stripe { background: var(--crit); }
+.site .body { padding: 12px 14px; display: flex; flex-direction: column; gap: 9px; }
+.site .toprow { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.site .place { font-size: .78rem; color: var(--ink-faint); }
+.vitals { display: flex; gap: 18px; flex-wrap: wrap; }
+.vital { display: flex; flex-direction: column; gap: 1px; min-width: 74px; }
+.vital .k { font-size: .66rem; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-faint); font-weight: 600; }
+.vital .v { font-family: var(--mono); font-size: .92rem; font-variant-numeric: tabular-nums; }
+.vital .v.warn { color: var(--warn); }
+.vital .v.crit { color: var(--crit); }
+.vital .v.none { color: var(--ink-faint); font-family: var(--sans); font-size: .84rem; font-style: italic; }
+.site .alert { font-size: .82rem; color: var(--crit); display: flex; gap: 6px; align-items: flex-start; }
+.site .alert.warn { color: var(--warn); }
+
+/* ---------- detail ---------- */
+.crumb { background: none; border: 0; padding: 0; cursor: pointer; color: var(--brand); font-size: .85rem; margin-bottom: 12px; }
+.crumb:hover { text-decoration: underline; }
+
+.band { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin: 18px 0; }
+.tile { background: var(--surface); padding: 13px 15px; display: flex; flex-direction: column; gap: 3px; }
+.tile .k { font-size: .66rem; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-faint); font-weight: 600; }
+.tile .v { font-family: var(--mono); font-size: 1.28rem; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.tile .s { font-size: .74rem; color: var(--ink-muted); }
+.tile.crit { background: var(--crit-bg); } .tile.crit .v { color: var(--crit); }
+.tile.warn { background: var(--warn-bg); } .tile.warn .v { color: var(--warn); }
+.tile.ext { background: var(--ext-bg); } .tile.ext .v { color: var(--ext); font-size: 1.05rem; }
+
+section.blk { margin: 30px 0; }
+section.blk > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 14px; flex-wrap: wrap; }
+section.blk > header p { font-size: .82rem; color: var(--ink-faint); }
+
+.hivegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.hive { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 11px 12px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 5px; }
+.hive:hover { border-color: var(--brand); }
+.hive .id { font-family: var(--mono); font-weight: 500; font-size: .95rem; }
+.hive .st { font-size: .74rem; color: var(--ink-muted); }
+.hive .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+.hive.empty { background: repeating-linear-gradient(135deg, var(--surface), var(--surface) 6px, var(--surface-2) 6px, var(--surface-2) 12px); }
+
+/* timeline */
+.tl { display: flex; flex-direction: column; }
+.tl .row { display: grid; grid-template-columns: 96px 22px minmax(0,1fr); gap: 12px; }
+.tl .date { font-family: var(--mono); font-size: .78rem; color: var(--ink-faint); padding-top: 12px; text-align: right; }
+.tl .spine { display: flex; flex-direction: column; align-items: center; }
+.tl .spine .line { width: 1px; background: var(--border); flex: 1; }
+.tl .spine .node { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--surface); margin-top: 14px; flex: none; }
+.tl .row:first-child .spine .line:first-child { background: transparent; }
+.tl .row:last-child .spine .line:last-child { background: transparent; }
+.tl .card { padding: 10px 0 16px; }
+.tl .card .t { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tl .card .t strong { font-weight: 600; font-size: .93rem; }
+.tl .card .d { font-size: .85rem; color: var(--ink-muted); margin-top: 3px; max-width: 68ch; }
+.tl .card .who { font-size: .76rem; color: var(--ink-faint); margin-top: 4px; }
+
+/* media */
+.media { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; }
+.slot { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.slot .ph { aspect-ratio: 4/3; background: repeating-linear-gradient(45deg, var(--miel-bg), var(--miel-bg) 8px, var(--surface-2) 8px, var(--surface-2) 16px); display: grid; place-items: center; color: var(--ink-faint); font-size: .7rem; }
+.slot .cap { padding: 7px 9px; font-size: .74rem; color: var(--ink-muted); }
+.slot .cap .num { font-size: .72rem; display: block; color: var(--ink-faint); }
+
+/* forms */
+.formwrap { display: grid; grid-template-columns: minmax(0, 400px) minmax(0,1fr); gap: 28px; align-items: start; }
+@media (max-width: 860px) { .formwrap { grid-template-columns: 1fr; } }
+.phone { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); }
+.ctx { background: var(--surface-2); border-radius: 8px; padding: 9px 11px; font-size: .8rem; color: var(--ink-muted); margin-bottom: 14px; }
+.ctx b { color: var(--ink); font-family: var(--mono); font-weight: 500; }
+.bigbtn {
+  width: 100%; min-height: 76px; border-radius: 10px; border: 0; cursor: pointer;
+  background: var(--accent); color: #fff; font-size: 1.05rem; font-weight: 600;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+}
+:root[data-theme="dark"] .bigbtn, :root:not([data-theme="light"]) .bigbtn { }
+.bigbtn small { font-weight: 400; font-size: .74rem; opacity: .85; }
+.bigbtn:hover { filter: brightness(1.07); }
+.expander { width: 100%; margin-top: 10px; background: none; border: 1px dashed var(--border-strong); color: var(--ink-muted); border-radius: 8px; padding: 9px; cursor: pointer; font-size: .86rem; min-height: 44px; }
+.expander:hover { color: var(--ink); border-color: var(--brand); }
+.fields { margin-top: 12px; display: none; flex-direction: column; gap: 11px; }
+.fields.on { display: flex; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: .76rem; font-weight: 600; color: var(--ink-muted); }
+.field input, .field select, .field textarea {
+  font: inherit; font-size: .9rem; padding: 9px 10px; min-height: 44px;
+  border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: var(--ink);
+}
+.field textarea { min-height: 66px; resize: vertical; }
+.quickrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 16px; }
+.quick { min-height: 62px; border: 1px solid var(--border-strong); background: var(--surface); border-radius: 9px; cursor: pointer; font-size: .8rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 6px; }
+.quick:hover { border-color: var(--brand); color: var(--brand); }
+.quick.prop { border-style: dashed; }
+.quick .qc { font-size: .58rem; letter-spacing: .06em; text-transform: uppercase; color: var(--brand); font-weight: 600; }
+.toast { margin-top: 12px; padding: 9px 11px; border-radius: 7px; background: var(--accent-bg); color: var(--accent); font-size: .83rem; display: none; }
+.toast.on { display: block; }
+
+.notes { display: flex; flex-direction: column; gap: 16px; }
+.note { border-left: 3px solid var(--border-strong); padding-left: 14px; }
+.note h3 { margin-bottom: 4px; }
+.note p { font-size: .88rem; color: var(--ink-muted); max-width: 62ch; }
+
+/* spec tables */
+.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; min-width: 640px; }
+th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-faint); font-weight: 600; background: var(--surface-2); position: sticky; top: 0; }
+tbody tr:last-child td { border-bottom: 0; }
+td code, .mono-i { font-family: var(--mono); font-size: .8rem; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
+td .why { color: var(--ink-muted); display: block; margin-top: 3px; font-size: .8rem; }
+
+.gap { display: grid; grid-template-columns: 26px minmax(0,1fr); gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+.gap:last-child { border-bottom: 0; }
+.gap .n { font-family: var(--mono); font-size: .82rem; color: var(--brand); font-weight: 500; padding-top: 2px; }
+.gap h3 { margin-bottom: 5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.gap p { font-size: .88rem; color: var(--ink-muted); max-width: 74ch; }
+.gap p + p { margin-top: 6px; }
+.gap .prisma { font-family: var(--mono); font-size: .78rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-top: 8px; white-space: pre; overflow-x: auto; color: var(--ink-muted); }
+
+.footnote { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border); font-size: .8rem; color: var(--ink-faint); max-width: 72ch; }
+</style>
+
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brandmark">
+      <span class="bm-1">Néctar&nbsp;Nómada</span>
+      <span class="bm-2">Apiario</span>
+    </div>
+    <nav id="nav">
+      <button class="navbtn" data-go="sitios" aria-current="true">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 14.5s5-4.2 5-8a5 5 0 1 0-10 0c0 3.8 5 8 5 8Z" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="6.4" r="1.8" stroke="currentColor" stroke-width="1.4"/></svg>
+        Sitios
+      </button>
+      <button class="navbtn" data-go="sitio">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2.5" y="3" width="11" height="3" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2.5" y="7" width="11" height="3" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M4 11v2M12 11v2" stroke="currentColor" stroke-width="1.4"/></svg>
+        Kiva · Toabré
+      </button>
+      <button class="navbtn" data-go="colmena">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 8h12M2 5.5h12M2 10.5h12" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/></svg>
+        Colmena N-01
+      </button>
+      <button class="navbtn" data-go="registrar">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        Registrar
+      </button>
+      <button class="navbtn" data-go="datos">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 12.5V7M6.5 12.5V4M10 12.5V9M13.5 12.5V5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Qué medir
+      </button>
+    </nav>
+    <div class="rail-foot">
+      <button class="themebtn" id="themebtn">Tema: sistema</button>
+      <div class="whoami">
+        <div class="n">Danny Giráldez</div>
+        <div class="r">Apicultor · ámbito apiario</div>
+      </div>
+    </div>
+  </aside>
+
+  <main>
+
+  <!-- ============ SITIOS ============ -->
+  <div class="screen on" id="s-sitios">
+    <div class="page-head">
+      <div>
+        <p class="eyebrow">Apiario · vista de operador</p>
+        <h1>Cuatro sitios, cincuenta colmenas</h1>
+      </div>
+    </div>
+    <p class="page-sub">Con más de un apiario la entrada es el mapa. Con uno solo, esta pantalla se salta y se entra directo al sitio. Los sitios de un mismo predio —Finca&nbsp;1 y Finca&nbsp;2 en Toabré— comparten pin y se separan dentro.</p>
+
+    <div class="legend">
+      <span class="li"><span class="chip chip-real">registro real</span> está en la base hoy</span>
+      <span class="li"><span class="chip chip-sample">muestra</span> valor de ejemplo, no es tu dato</span>
+      <span class="li"><span class="chip chip-prop">propuesto</span> requiere esquema nuevo</span>
+      <span class="li"><span class="chip chip-ext">capa externa</span> clima / satélite, sin integrar</span>
+    </div>
+
+    <div class="plate-row">
+      <figure class="plate" style="margin:0">
+        <svg viewBox="0 0 520 400" width="100%" role="img" aria-label="Plano esquemático de los cuatro apiarios por latitud y longitud">
+          <defs>
+            <linearGradient id="isth" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-opacity=".13" style="stop-color:var(--accent)"/>
+              <stop offset="1" stop-opacity=".2" style="stop-color:var(--accent)"/>
+            </linearGradient>
+          </defs>
+          <!-- grid -->
+          <g stroke-width="1" style="stroke:var(--border)">
+            <line x1="56" y1="24" x2="500" y2="24"/><line x1="56" y1="108" x2="500" y2="108"/>
+            <line x1="56" y1="192" x2="500" y2="192"/><line x1="56" y1="276" x2="500" y2="276"/>
+            <line x1="56" y1="360" x2="500" y2="360"/>
+            <line x1="56" y1="24" x2="56" y2="360"/><line x1="204" y1="24" x2="204" y2="360"/>
+            <line x1="352" y1="24" x2="352" y2="360"/><line x1="500" y1="24" x2="500" y2="360"/>
+          </g>
+          <!-- schematic isthmus -->
+          <path d="M70 250 C 170 175 240 140 305 138 C 370 136 430 90 505 62" stroke="url(#isth)" stroke-width="66" fill="none" stroke-linecap="round"/>
+          <ellipse cx="300" cy="300" rx="62" ry="48" opacity=".1" style="fill:var(--accent)"/>
+          <!-- axis labels -->
+          <g font-size="10" style="font-family:var(--mono);fill:var(--ink-faint)">
+            <text x="52" y="20" text-anchor="end">9.4N</text>
+            <text x="52" y="196" text-anchor="end">8.4N</text>
+            <text x="52" y="364" text-anchor="end">7.3N</text>
+            <text x="56" y="378" text-anchor="middle">81.5W</text>
+            <text x="278" y="378" text-anchor="middle">80.2W</text>
+            <text x="500" y="378" text-anchor="middle">79.0W</text>
+          </g>
+          <!-- pins -->
+          <g class="pin" data-site="santafe" tabindex="0" role="button" aria-label="Santa Fe, Veraguas">
+            <circle class="halo" cx="131" cy="166" r="19"/>
+            <circle cx="131" cy="166" r="7" style="fill:var(--ok)"/>
+            <text x="131" y="150" text-anchor="middle" font-size="11" font-weight="600" style="fill:var(--ink);font-family:var(--sans)">Santa Fe</text>
+          </g>
+          <g class="pin" data-site="pedasi" tabindex="0" role="button" aria-label="Los Asientos, Pedasí">
+            <circle class="halo" cx="312" cy="320" r="19"/>
+            <circle cx="312" cy="320" r="7" style="fill:var(--ok)"/>
+            <text x="312" y="343" text-anchor="middle" font-size="11" font-weight="600" style="fill:var(--ink);font-family:var(--sans)">Los Asientos</text>
+          </g>
+          <g class="pin sel" data-site="toabre" tabindex="0" role="button" aria-label="Kiva Estate, Toabré">
+            <circle class="halo" cx="269" cy="144" r="21"/>
+            <circle cx="269" cy="144" r="9" style="fill:var(--crit)"/>
+            <circle cx="269" cy="144" r="14" fill="none" stroke-width="1.5" opacity=".5" style="stroke:var(--crit)"/>
+            <text x="269" y="126" text-anchor="middle" font-size="11" font-weight="700" style="fill:var(--crit);font-family:var(--sans)">Kiva · Toabré</text>
+          </g>
+          <g class="pin" data-site="rosina" tabindex="0" role="button" aria-label="Finca Rosina, Cerro Azul">
+            <circle class="halo" cx="429" cy="62" r="19"/>
+            <circle cx="429" cy="62" r="7" style="fill:var(--warn)"/>
+            <text x="429" y="46" text-anchor="middle" font-size="11" font-weight="600" style="fill:var(--ink);font-family:var(--sans)">Finca Rosina</text>
+          </g>
+        </svg>
+        <figcaption>
+          <span>Plano esquemático por coordenadas · no cartográfico</span>
+          <span class="chip chip-prop">Mapbox pendiente</span>
+        </figcaption>
+      </figure>
+
+      <div class="sitelist" id="sitelist">
+        <button class="site s-crit sel" data-site="toabre" data-go="sitio">
+          <span class="stripe"></span>
+          <span class="body">
+            <span class="toprow">
+              <span><h3 style="display:inline">Kiva Estate · Toabré</h3> <span class="chip chip-real">registro real</span></span>
+              <span class="place">Penonomé, Coclé · 2 sitios</span>
+            </span>
+            <span class="vitals">
+              <span class="vital"><span class="k">Últ. visita</span><span class="v">2 sep 2026</span></span>
+              <span class="vital"><span class="k">Hace</span><span class="v crit">5 d</span></span>
+              <span class="vital"><span class="k">Próxima</span><span class="v warn">9 sep · alim.</span></span>
+              <span class="vital"><span class="k">Colonias</span><span class="v">3 / 15 cajas</span></span>
+              <span class="vital"><span class="k">Alimento</span><span class="v warn">~9 sep</span></span>
+              <span class="vital"><span class="k">Polinización</span><span class="v crit">3 / 68–102</span></span>
+            </span>
+            <span class="alert">▲ Ausentamiento total el 2 sep en ambos sitios. Tres núcleos de Parita instalados en Finca&nbsp;2. Finca&nbsp;1 en pausa hasta corregir sombra.</span>
+          </span>
+        </button>
+
+        <button class="site" data-site="santafe">
+          <span class="stripe"></span>
+          <span class="body">
+            <span class="toprow">
+              <span><h3 style="display:inline">Santa Fe</h3> <span class="chip chip-sample">muestra</span></span>
+              <span class="place">Santa Fe, Veraguas</span>
+            </span>
+            <span class="vitals">
+              <span class="vital"><span class="k">Últ. visita</span><span class="v">18 ago 2026</span></span>
+              <span class="vital"><span class="k">Hace</span><span class="v">20 d</span></span>
+              <span class="vital"><span class="k">Próxima</span><span class="v">22 sep</span></span>
+              <span class="vital"><span class="k">Colonias</span><span class="v">12 / 12 cajas</span></span>
+              <span class="vital"><span class="k">Alimento</span><span class="v none">flujo natural</span></span>
+              <span class="vital"><span class="k">Últ. cosecha</span><span class="v">— </span></span>
+            </span>
+            <span class="alert warn">◆ Sitio de origen del pie de cría de Toabré (nov–dic 2025). Sin inspecciones cargadas al sistema todavía.</span>
+          </span>
+        </button>
+
+        <button class="site" data-site="pedasi">
+          <span class="stripe"></span>
+          <span class="body">
+            <span class="toprow">
+              <span><h3 style="display:inline">Los Asientos</h3> <span class="chip chip-sample">muestra</span></span>
+              <span class="place">Pedasí, Los Santos</span>
+            </span>
+            <span class="vitals">
+              <span class="vital"><span class="k">Últ. visita</span><span class="v">30 ago 2026</span></span>
+              <span class="vital"><span class="k">Hace</span><span class="v">8 d</span></span>
+              <span class="vital"><span class="k">Próxima</span><span class="v">27 sep</span></span>
+              <span class="vital"><span class="k">Colonias</span><span class="v">14 / 15 cajas</span></span>
+              <span class="vital"><span class="k">Alimento</span><span class="v none">flujo natural</span></span>
+              <span class="vital"><span class="k">Últ. cosecha</span><span class="v">may 2026</span></span>
+            </span>
+          </span>
+        </button>
+
+        <button class="site s-warn" data-site="rosina">
+          <span class="stripe"></span>
+          <span class="body">
+            <span class="toprow">
+              <span><h3 style="display:inline">Finca Rosina</h3> <span class="chip chip-sample">muestra</span></span>
+              <span class="place">Cerro Azul, Tocumen · Panamá</span>
+            </span>
+            <span class="vitals">
+              <span class="vital"><span class="k">Últ. visita</span><span class="v warn">14 jul 2026</span></span>
+              <span class="vital"><span class="k">Hace</span><span class="v warn">55 d</span></span>
+              <span class="vital"><span class="k">Próxima</span><span class="v crit">vencida</span></span>
+              <span class="vital"><span class="k">Colonias</span><span class="v">10 / 10 cajas</span></span>
+              <span class="vital"><span class="k">Alimento</span><span class="v none">sin registro</span></span>
+              <span class="vital"><span class="k">Últ. cosecha</span><span class="v">—</span></span>
+            </span>
+            <span class="alert warn">◆ Sin visita registrada en 8 semanas. Regla propuesta: alerta a los 45 días sin inspección en temporada.</span>
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <div class="footnote">
+      Qué decide el color del borde izquierdo: días desde la última inspección contra el umbral del sitio, colonias perdidas sin reposición, y visita programada vencida. Ninguna de las tres existe hoy en el esquema —la tercera necesita un campo de próxima visita, la segunda un conteo de colonias por sitio, y la primera una fecha de visita <em>a nivel de sitio</em> que hoy sólo existe por colonia. Ver <strong>Qué medir</strong>.
+    </div>
+  </div>
+
+  <!-- ============ SITIO ============ -->
+  <div class="screen" id="s-sitio">
+    <button class="crumb" data-go="sitios">← Sitios</button>
+    <div class="page-head">
+      <div>
+        <p class="eyebrow">Apiario · Penonomé, Coclé</p>
+        <h1>Kiva Estate · Toabré</h1>
+        <p class="page-sub">Café robusta bajo contrato de polinización dirigida. Dos sitios dentro del mismo predio: Finca&nbsp;1 (dosel cerrado, húmedo) y Finca&nbsp;2 (abierto, sol). El apiario lo montó Néctar Nómada desde cero a fines de noviembre de 2025.</p>
+      </div>
+      <span class="chip chip-real">registro real</span>
+    </div>
+
+    <div class="band">
+      <div class="tile crit"><span class="k">Colonias vivas</span><span class="v">3</span><span class="s">de 15 cajas instaladas</span></div>
+      <div class="tile crit"><span class="k">Déficit polinización</span><span class="v">65–99</span><span class="s">17 ha × 4–6 col/ha</span></div>
+      <div class="tile"><span class="k">Última visita</span><span class="v">2 sep</span><span class="s">Chayanne + cuadrilla</span></div>
+      <div class="tile warn"><span class="k">Alimentación</span><span class="v">9 sep</span><span class="s">semanal · vence en 2 d</span></div>
+      <div class="tile"><span class="k">Origen del pie</span><span class="v">Parita</span><span class="s">Chitré · 2 sep 2026</span></div>
+      <div class="tile ext"><span class="k">Clima 7 d <span class="chip chip-ext" style="font-size:.55rem">ext</span></span><span class="v">26.8° · 84%</span><span class="s">lluvia 61 mm · muestra</span></div>
+    </div>
+
+    <section class="blk">
+      <header>
+        <h2>Sitios dentro del predio</h2>
+        <p>Cuando dos apiarios comparten predio, se agrupan aquí en vez de duplicar pines en el mapa.</p>
+      </header>
+      <div class="plate-row" style="grid-template-columns:1fr 1fr">
+        <div class="site s-crit" style="cursor:default">
+          <span class="stripe"></span>
+          <span class="body">
+            <span class="toprow"><span><h3 style="display:inline">Finca 1</h3></span><span class="place">dosel cerrado · Lote 1, 10 ha</span></span>
+            <span class="vitals">
+              <span class="vital"><span class="k">Colonias</span><span class="v crit">0</span></span>
+              <span class="vital"><span class="k">Cajas</span><span class="v">7</span></span>
+              <span class="vital"><span class="k">Estado</span><span class="v none">en pausa</span></span>
+            </span>
+            <span class="alert">▲ Humedad y moho. Decisión de campo: no reponer hasta podar el flanco este para sol de mañana, o reubicar el apiario.</span>
+          </span>
+        </div>
+        <div class="site s-warn" style="cursor:default">
+          <span class="stripe"></span>
+          <span class="body">
+            <span class="toprow"><span><h3 style="display:inline">Finca 2</h3></span><span class="place">abierto, sol · Lote 2, 7 ha</span></span>
+            <span class="vitals">
+              <span class="vital"><span class="k">Colonias</span><span class="v">3</span></span>
+              <span class="vital"><span class="k">Cajas</span><span class="v">8</span></span>
+              <span class="vital"><span class="k">Instaladas</span><span class="v">2 sep</span></span>
+            </span>
+            <span class="alert warn">◆ Tres núcleos con reina fecundada y ponedora. Alimentación: bolsa de jarabe sobre los cabezales.</span>
+          </span>
+        </div>
+      </div>
+      <p style="font-size:.8rem;color:var(--ink-faint);margin-top:10px">Reparto 7 / 8 cajas por sitio pendiente de confirmación tuya — el sistema lo muestra como dato sin verificar, no como hecho.</p>
+    </section>
+
+    <section class="blk">
+      <header>
+        <h2>Colonias vivas en el año</h2>
+        <p>Una serie · conteo por visita, no interpolado</p>
+      </header>
+      <div class="tablewrap" style="padding:14px 8px 6px">
+        <svg viewBox="0 0 680 232" width="100%" role="img" aria-label="Conteo de colonias vivas en Toabré: 15 en diciembre 2025, 3 en junio 2026, 3 en julio, 0 el 2 de septiembre, 3 tras reposición">
+          <g stroke-width="1" style="stroke:var(--border)">
+            <line x1="46" y1="30" x2="640" y2="30"/><line x1="46" y1="62.5" x2="640" y2="62.5"/>
+            <line x1="46" y1="95" x2="640" y2="95"/><line x1="46" y1="127.5" x2="640" y2="127.5"/>
+            <line x1="46" y1="160" x2="640" y2="160"/>
+          </g>
+          <g font-size="10" text-anchor="end" style="font-family:var(--mono);fill:var(--ink-faint)">
+            <text x="40" y="34">16</text><text x="40" y="66.5">12</text><text x="40" y="99">8</text><text x="40" y="131.5">4</text><text x="40" y="164">0</text>
+          </g>
+          <!-- unrecorded gap -->
+          <path d="M46 38.1 L440 135.6" stroke-width="2" stroke-dasharray="3 5" fill="none" opacity=".65" style="stroke:var(--ink-faint)"/>
+          <text x="180" y="120" font-size="10.5" style="fill:var(--ink-faint);font-family:var(--sans)">seis meses sin conteo registrado</text>
+          <!-- known segment -->
+          <path d="M440 135.6 L505 135.6 L612 160" stroke-width="2.5" fill="none" stroke-linejoin="round" style="stroke:var(--brand)"/>
+          <path d="M612 160 L636 135.6" stroke-width="2.5" fill="none" stroke-dasharray="4 3" style="stroke:var(--accent)"/>
+          <!-- markers -->
+          <circle cx="46" cy="38.1" r="5" stroke-width="2" style="fill:var(--brand);stroke:var(--surface)"/>
+          <circle cx="440" cy="135.6" r="5" stroke-width="2" style="fill:var(--brand);stroke:var(--surface)"/>
+          <circle cx="505" cy="135.6" r="5" stroke-width="2" style="fill:var(--brand);stroke:var(--surface)"/>
+          <circle cx="612" cy="160" r="5.5" stroke-width="2" style="fill:var(--crit);stroke:var(--surface)"/>
+          <circle cx="636" cy="135.6" r="5" stroke-width="2" style="fill:var(--accent);stroke:var(--surface)"/>
+          <!-- value labels -->
+          <g font-size="11" style="font-family:var(--mono);fill:var(--ink)">
+            <text x="54" y="30">15</text>
+            <text x="440" y="126" text-anchor="middle">3</text>
+            <text x="600" y="176" text-anchor="middle" style="fill:var(--crit)">0</text>
+            <text x="640" y="128">3</text>
+          </g>
+          <g font-size="10" style="font-family:var(--sans);fill:var(--ink-faint)">
+            <text x="46" y="196">dic 2025</text>
+            <text x="440" y="196" text-anchor="middle">29 jun</text>
+            <text x="505" y="196" text-anchor="middle">22 jul</text>
+            <text x="612" y="196" text-anchor="middle">2 sep</text>
+          </g>
+          <g font-size="10" style="font-family:var(--sans);fill:var(--ink-muted)">
+            <text x="46" y="214">15 cajas pobladas</text>
+            <text x="440" y="214" text-anchor="middle">2 sobrevivientes + 1 enjambre silvestre</text>
+            <text x="618" y="214" text-anchor="middle">ausentamiento → 3 núcleos</text>
+          </g>
+        </svg>
+      </div>
+      <p style="font-size:.8rem;color:var(--ink-faint);margin-top:10px">La línea punteada no es una estimación: es la ausencia de dato. Un conteo por visita —una sola cifra— convierte esa recta en la curva que explicaría la pérdida.</p>
+    </section>
+
+    <section class="blk">
+      <header><h2>Historial del sitio</h2><p>Visitas, no sólo inspecciones por colonia</p></header>
+      <div class="tl">
+        <div class="row">
+          <div class="date">2 sep 2026</div>
+          <div class="spine"><div class="line"></div><div class="node" style="background:var(--crit)"></div><div class="line"></div></div>
+          <div class="card">
+            <div class="t"><strong>Ausentamiento total en ambos sitios</strong> <span class="chip chip-real">real</span></div>
+            <div class="d">Las colonias no murieron ni fueron atacadas: se fueron. El alimento dejado el 22 jul estaba calculado para seis semanas. Las hormigas entraron a las cajas vacías unas dos semanas después, no antes — el orden importa, descarta la hormiga como causa.</div>
+            <div class="who">Chayanne + cuadrilla · set fotográfico de campo</div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="date">2 sep 2026</div>
+          <div class="spine"><div class="line"></div><div class="node" style="background:var(--accent)"></div><div class="line"></div></div>
+          <div class="card">
+            <div class="t"><strong>Tres núcleos instalados en Finca 2</strong> <span class="chip chip-real">real</span></div>
+            <div class="d">Reinas fecundadas y ponedoras. Origen Parita, Chitré — genética distinta al pie original de Santa Fe, Veraguas. Alimentación con bolsa de jarabe directamente sobre los cabezales.</div>
+            <div class="who">Chayanne</div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="date">22 jul 2026</div>
+          <div class="spine"><div class="line"></div><div class="node" style="background:var(--miel)"></div><div class="line"></div></div>
+          <div class="card">
+            <div class="t"><strong>Alimentación · seis semanas de cobertura</strong> <span class="chip chip-real">real</span></div>
+            <div class="d">Agotó el quintal comprado en diciembre de 2025. Cobertura calculada hasta ~2 sep — exactamente la fecha en que se encontró todo vacío.</div>
+            <div class="who">Chayanne</div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="date">29 jun 2026</div>
+          <div class="spine"><div class="line"></div><div class="node" style="background:var(--accent)"></div><div class="line"></div></div>
+          <div class="card">
+            <div class="t"><strong>Tres colonias sanas</strong> <span class="chip chip-real">real</span></div>
+            <div class="d">Dos sobrevivientes de las siete originales de Finca 1, más un enjambre silvestre establecido por su cuenta en Lote 2 — el sitio se había vaciado meses antes.</div>
+            <div class="who">Daniel + Chayanne</div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="date">abr–may 2026</div>
+          <div class="spine"><div class="line"></div><div class="node" style="background:var(--warn)"></div><div class="line"></div></div>
+          <div class="card">
+            <div class="t"><strong>Se pierde el apoyo en finca</strong> <span class="chip chip-prop">sin lugar en el esquema</span></div>
+            <div class="d">Vidal renuncia. Con él se va la única persona del lado de la finca que alimentaba e inspeccionaba. Un hecho de personal que explica una curva de colonias y que hoy no tiene dónde registrarse.</div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="date">nov–dic 2025</div>
+          <div class="spine"><div class="line"></div><div class="node" style="background:var(--brand)"></div><div class="line"></div></div>
+          <div class="card">
+            <div class="t"><strong>Montaje del apiario · 15 colmenas</strong> <span class="chip chip-real">real</span></div>
+            <div class="d">Pobladas trasladando abejas desde fincas de Santa Fe, Veraguas, con apoyo de Marcelino Guevara. Emplazamiento elegido por Daniel para cubrir la polinización de todos los lotes con pocas colonias fuertes.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="blk">
+      <header>
+        <h2>Colmenas</h2>
+        <p>Finca 2 · 8 cajas</p>
+      </header>
+      <div class="hivegrid">
+        <button class="hive" data-go="colmena"><span class="id"><span class="dot" style="background:var(--accent)"></span>N-01</span><span class="st">núcleo · reina ponedora</span><span class="st num" style="color:var(--ink-faint)">2 sep · 5 d</span></button>
+        <button class="hive" data-go="colmena"><span class="id"><span class="dot" style="background:var(--accent)"></span>N-02</span><span class="st">núcleo · reina ponedora</span><span class="st num" style="color:var(--ink-faint)">2 sep · 5 d</span></button>
+        <button class="hive" data-go="colmena"><span class="id"><span class="dot" style="background:var(--accent)"></span>N-03</span><span class="st">núcleo · reina ponedora</span><span class="st num" style="color:var(--ink-faint)">2 sep · 5 d</span></button>
+        <div class="hive empty"><span class="id"><span class="dot" style="background:var(--ink-faint)"></span>H-04</span><span class="st">caja vacía</span><span class="st" style="color:var(--ink-faint)">desde 2 sep</span></div>
+        <div class="hive empty"><span class="id"><span class="dot" style="background:var(--ink-faint)"></span>H-05</span><span class="st">caja vacía</span><span class="st" style="color:var(--ink-faint)">desde 2 sep</span></div>
+        <div class="hive empty"><span class="id"><span class="dot" style="background:var(--ink-faint)"></span>H-06</span><span class="st">caja vacía</span><span class="st" style="color:var(--ink-faint)">desde 2 sep</span></div>
+        <div class="hive empty"><span class="id"><span class="dot" style="background:var(--ink-faint)"></span>H-07</span><span class="st">caja vacía</span><span class="st" style="color:var(--ink-faint)">desde 2 sep</span></div>
+        <div class="hive empty"><span class="id"><span class="dot" style="background:var(--ink-faint)"></span>H-08</span><span class="st">caja vacía</span><span class="st" style="color:var(--ink-faint)">desde 2 sep</span></div>
+      </div>
+    </section>
+
+    <section class="blk">
+      <header>
+        <h2>Medios del sitio</h2>
+        <p>Agregado de colmena, colonia, inspección y evento — el patrón que ya usa <code class="mono-i">/lots/[id]</code></p>
+      </header>
+      <div class="media">
+        <figure class="slot" style="margin:0"><div class="ph">set de campo</div><figcaption class="cap">Ausentamiento · cajas vacías<span class="num">2 sep 2026</span></figcaption></figure>
+        <figure class="slot" style="margin:0"><div class="ph">set de campo</div><figcaption class="cap">Instalación de núcleos<span class="num">2 sep 2026</span></figcaption></figure>
+        <figure class="slot" style="margin:0"><div class="ph">set de campo</div><figcaption class="cap">Alimentación · bolsa sobre cabezales<span class="num">22 jul 2026</span></figcaption></figure>
+        <figure class="slot" style="margin:0"><div class="ph">set de campo</div><figcaption class="cap">Enjambre silvestre en Lote 2<span class="num">29 jun 2026</span></figcaption></figure>
+      </div>
+      <p style="font-size:.8rem;color:var(--ink-faint);margin-top:10px">Las fotos reales viven en R2 con URL firmada; aquí se muestran las ranuras. Falta lo que las vuelve buscables dentro de dos años: a qué colonia pertenecen, quién aparece —Chayanne es el de manga larga celeste y sombrero de ala ancha en los sets de julio y septiembre— y qué afirma la foto.</p>
+    </section>
+  </div>
+
+  <!-- ============ COLMENA ============ -->
+  <div class="screen" id="s-colmena">
+    <button class="crumb" data-go="sitio">← Kiva Estate · Toabré</button>
+    <div class="page-head">
+      <div>
+        <p class="eyebrow">Finca 2 · Lote 2</p>
+        <h1>N-01</h1>
+        <p class="page-sub">Una colmena es la caja; una colonia es lo que vive dentro. La distinción ya está en el esquema y es la que permite decir «esta caja lleva tres colonias en un año» en vez de perder la historia con cada reposición.</p>
+      </div>
+      <span class="chip chip-real">registro real</span>
+    </div>
+
+    <div class="band">
+      <div class="tile"><span class="k">Colonia</span><span class="v">activa</span><span class="s">desde 2 sep 2026</span></div>
+      <div class="tile"><span class="k">Origen</span><span class="v">comprada</span><span class="s">Parita, Chitré</span></div>
+      <div class="tile"><span class="k">Reina</span><span class="v">ponedora</span><span class="s">fecundada · sin marcar <span class="chip chip-prop" style="font-size:.55rem">prop</span></span></div>
+      <div class="tile"><span class="k">Últ. inspección</span><span class="v">2 sep</span><span class="s">hace 5 días</span></div>
+      <div class="tile warn"><span class="k">Alimentación</span><span class="v">9 sep</span><span class="s">jarabe · semanal</span></div>
+      <div class="tile"><span class="k">Cosechas</span><span class="v">0</span><span class="s">colonia nueva</span></div>
+    </div>
+
+    <section class="blk">
+      <header><h2>Línea de vida de la colonia</h2><p>Inspección, evento y cosecha en un solo hilo</p></header>
+      <div class="tl">
+        <div class="row">
+          <div class="date">2 sep 2026</div>
+          <div class="spine"><div class="line"></div><div class="node" style="background:var(--miel)"></div><div class="line"></div></div>
+          <div class="card">
+            <div class="t"><strong>Alimentación</strong> <span class="chip chip-plain">ColonyEvent</span></div>
+            <div class="d">Jarabe de azúcar en bolsa plástica sobre los cabezales. Cantidad y unidad quedan en el registro; la cobertura estimada —de cuántos días alcanza— es lo que hoy no se calcula y es exactamente lo que hizo falta en julio.</div>
+            <div class="who">Chayanne</div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="date">2 sep 2026</div>
+          <div class="spine"><div class="line"></div><div class="node" style="background:var(--accent)"></div><div class="line"></div></div>
+          <div class="card">
+            <div class="t"><strong>Colonia iniciada</strong> <span class="chip chip-plain">Colony</span></div>
+            <div class="d">Origen <span class="mono-i">purchased</span> · nota de origen: núcleo de Parita, Chitré, con reina fecundada y ponedora.</div>
+            <div class="who">Registrado por Chayanne</div>
+          </div>
+        </div>
+      </div>
+      <p style="font-size:.8rem;color:var(--ink-faint);margin-top:6px">Dos registros en cinco días. Esa escasez no es del sitio: es lo que cabe en el modelo actual.</p>
+    </section>
+
+    <section class="blk">
+      <header><h2>Vistas por eje</h2><p>La misma colonia leída de cuatro maneras</p></header>
+      <div class="notes">
+        <div class="note"><h3>Salud <span class="chip chip-prop">propuesto</span></h3><p>Patrón de cría, reina vista, nivel de reservas y banderas de plaga en el tiempo, como una franja por inspección. Los campos ya existen en <code class="mono-i">Inspection</code>; falta que se puedan leer en serie y no de a uno.</p></div>
+        <div class="note"><h3>Manejo</h3><p>Alimentaciones y tratamientos con producto, lote y dosis. Ya existe en <code class="mono-i">ColonyEvent</code> — el pendiente es el reporte «todos los tratamientos de la temporada», hoy un filtro y no una tabla propia.</p></div>
+        <div class="note"><h3>Reina y reproducción <span class="chip chip-prop">propuesto</span></h3><p>Introducción, marcaje por color/año, reemplazo, división y captura de enjambre, con vínculo madre–hija. Hoy el origen es un hecho plano: <span class="mono-i">split</span> no apunta a la colonia madre. Lo pediste explícitamente y es la brecha más grande del módulo.</p></div>
+        <div class="note"><h3>Producción</h3><p>Cosechas con peso y cuadros, cada una generando su Lote con el mismo mecanismo que el café. Esta parte está completa.</p></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ REGISTRAR ============ -->
+  <div class="screen" id="s-registrar">
+    <button class="crumb" data-go="colmena">← N-01</button>
+    <div class="page-head">
+      <div>
+        <p class="eyebrow">Dos etapas · una sola verdad</p>
+        <h1>En campo se captura. Fuera de campo se cierra.</h1>
+        <p class="page-sub">En campo, con guantes y sin señal, sólo entra lo que se pierde si no se anota ahí: la lista de chequeo, lo que el protocolo exige, y lo que se observó o se hizo. Todo lo que se puede escribir después —interpretación, causa probable, costo, recomendación al cliente, redacción del reporte— se hace en el teléfono en el carro o en la laptop en la casa, sobre el mismo registro, sin volver a teclear nada.</p>
+      </div>
+    </div>
+
+    <div class="formwrap">
+      <div class="phone">
+        <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+          <button class="chip chip-plain act on" data-act="insp" style="cursor:pointer;padding:5px 9px">Inspección</button>
+          <button class="chip chip-plain act" data-act="alim" style="cursor:pointer;padding:5px 9px">Alimentar</button>
+          <button class="chip chip-plain act" data-act="fito" style="cursor:pointer;padding:5px 9px">Fitosanitario</button>
+          <button class="chip chip-plain act" data-act="cos" style="cursor:pointer;padding:5px 9px">Cosecha</button>
+        </div>
+        <div class="ctx"><span class="chip chip-real" style="float:right">en campo</span>Finca 2 · colmena <b>N-01</b> · colonia activa<br>2 sep 2026 → hoy · operador: <b>tú</b> · <span class="num">sin señal</span></div>
+        <button class="bigbtn" id="btn-nada">Nada fuera de lo común<small>un toque · registra y cierra</small></button>
+        <button class="expander" id="btn-detalles">Registrar detalles ▾</button>
+        <div class="fields" id="fields">
+          <div class="field"><label for="f1">Patrón de cría</label><input id="f1" placeholder="compacto, salteado…"></div>
+          <div class="field"><label for="f2">Reina</label><select id="f2"><option>vista</option><option>no vista</option><option>no se buscó</option></select></div>
+          <div class="field"><label for="f3">Reservas</label><select id="f3"><option>abundantes</option><option>suficientes</option><option>escasas</option><option>nulas</option></select></div>
+          <div class="field"><label for="f4">Temperamento</label><input id="f4" placeholder="mansa, defensiva…"></div>
+          <div class="field"><label for="f5">Plagas / enfermedad</label><input id="f5" placeholder="varroa, polilla, hormiga…"></div>
+          <div class="field"><label for="f6">Nota</label><textarea id="f6" placeholder="lo que no cabe arriba"></textarea></div>
+          <div class="field"><label for="f7">Foto</label><input id="f7" type="file"></div>
+        </div>
+        <div class="quickrow">
+          <button class="quick" data-q="Alimentación registrada · jarabe">🜃<span>Alimentar</span></button>
+          <button class="quick" data-q="Tratamiento registrado · producto y lote requeridos">⚕<span>Tratar</span></button>
+          <button class="quick" data-q="Observación al paso registrada">✎<span>Observar</span></button>
+        </div>
+        <div class="quickrow" style="grid-template-columns:1fr 1fr">
+          <button class="quick prop" data-q="Manejo de reina — requiere esquema nuevo"><span class="qc">propuesto</span><span>Reina</span></button>
+          <button class="quick prop" data-q="División de colmena — requiere vínculo madre-hija"><span class="qc">propuesto</span><span>Dividir</span></button>
+        </div>
+        <div class="toast" id="toast"></div>
+      </div>
+
+      <div>
+        <div class="band" style="margin-top:0">
+          <div class="tile"><span class="k">Etapa 1 · campo</span><span class="v" style="font-size:1.05rem">1–3 toques</span><span class="s">sin señal · sin interpretar</span></div>
+          <div class="tile"><span class="k">Etapa 2 · cierre</span><span class="v" style="font-size:1.05rem">mismo registro</span><span class="s">teléfono o laptop</span></div>
+          <div class="tile"><span class="k">Etapa 3 · reporte</span><span class="v" style="font-size:1.05rem">generado</span><span class="s">no se vuelve a teclear</span></div>
+        </div>
+
+        <section class="blk" style="margin-top:22px">
+          <header><h2>Por cerrar</h2><p>Bandeja de la visita del 2 sep · fuera de campo</p></header>
+          <div class="sitelist">
+            <div class="site s-warn" style="cursor:default">
+              <span class="stripe"></span>
+              <span class="body">
+                <span class="toprow"><span><h3 style="display:inline">Visita Toabré · 2 sep</h3> <span class="chip chip-sample">borrador</span></span><span class="place">11 registros sincronizados</span></span>
+                <span class="vitals">
+                  <span class="vital"><span class="k">Capturado</span><span class="v">11</span></span>
+                  <span class="vital"><span class="k">Sin cerrar</span><span class="v warn">4</span></span>
+                  <span class="vital"><span class="k">Fotos sin ligar</span><span class="v warn">18</span></span>
+                  <span class="vital"><span class="k">Reporte</span><span class="v none">no emitido</span></span>
+                </span>
+                <span class="alert warn">◆ Falta: causa probable del ausentamiento, conteo de colonias vivas del sitio, viáticos del viaje y la recomendación al cliente. Ninguna de las cuatro se podía escribir con guantes puestos.</span>
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <div class="notes">
+          <div class="note"><h3>Qué entra en campo, y nada más</h3><p>Hechos que se pierden si no se anotan ahí: lo que exige el protocolo de la actividad, la lista de chequeo, lo observado y lo hecho. Nunca una causa, nunca una conclusión, nunca un texto largo. Si se puede escribir en el carro, no va en el campo.</p></div>
+          <div class="note"><h3>Por qué un solo toque</h3><p>Si «nada raro» cuesta lo mismo que una entrada detallada, se salta — y saltarlo se parece demasiado a no haber inspeccionado. El botón grande envía con fecha ahora, operador tú y resultado <span class="mono-i">nothing_unusual</span>. Lo demás queda nulo, que es la verdad.</p></div>
+          <div class="note"><h3>Alimentar no es inspeccionar</h3><p>Son hechos distintos y viven en tablas distintas. Quien alimenta doce colmenas seguidas toca «Alimentar» doce veces y nunca abre el formulario de inspección. Esa separación ya está protegida a nivel de base de datos.</p></div>
+          <div class="note"><h3>El cierre no reescribe el campo</h3><p>Lo capturado en campo es evidencia y no se edita: se corrige con una enmienda que deja rastro. Lo que se agrega al cerrar —causa probable, costo, recomendación— entra con su propia clase de procedencia, porque es interpretación y no observación.</p></div>
+          <div class="note"><h3>Sin señal</h3><p>Cada entrada es un solo envío sin ida y vuelta al servidor a mitad del flujo, con identificador de borrador generado en el teléfono. Reintentar la sincronización nunca duplica el registro.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DATOS ============ -->
+  <div class="screen" id="s-datos">
+    <div class="page-head">
+      <div>
+        <p class="eyebrow">Revisión del modelo</p>
+        <h1>Qué medir, y qué decisión cambia</h1>
+        <p class="page-sub">El módulo apícola ya tiene lo difícil: colmena, colonia, inspección, evento, cosecha con lote, provenance, offline idempotente y control de acceso. Lo que falta no es más campos: es lo que convierte registros sueltos en las cinco preguntas que un apiario contesta mal cuando no las mide.</p>
+      </div>
+    </div>
+
+    <section class="blk">
+      <header><h2>Siete brechas, en orden de lo que te habría servido este año</h2></header>
+
+      <div class="gap">
+        <div class="n">01</div>
+        <div>
+          <h3>La visita no existe como hecho <span class="chip chip-prop">propuesto</span></h3>
+          <p>Hoy una ida a Toabré donde se revisan tres colonias son tres <span class="mono-i">Inspection</span> y ningún registro del viaje. No hay dónde poner quién fue, cuánto costaron los viáticos, qué clima había, ni lo que se observó del <em>sitio</em> —hormigas en cajas vacías, moho, dosel cerrado. Esa es literalmente la pregunta con la que abriste: «la última fecha de inspección de mis sitios». Hoy sólo se puede responder con un máximo sobre las inspecciones de las colonias que aún existen; si todas se ausentaron, el sitio deja de tener fecha.</p>
+          <div class="prisma">model ApiaryVisit {
+  locationId       String   // sitio apiario
+  occurredAt       DateTime
+  operators        Person[]
+  purpose          VisitPurpose   // inspection | feeding | harvest | assembly | diagnostic
+  coloniesAliveCount Int?         // el conteo que falta en la gráfica
+  travelCostUsd    Decimal?       // ~$62 por viaje desde Parita
+  siteConditionNote String?
+  nextVisitDueAt   DateTime?      // alimenta «próxima visita» en la lista
+}</div>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="n">02</div>
+        <div>
+          <h3>Reina y reproducción <span class="chip chip-prop">propuesto</span></h3>
+          <p>Lo pediste directo y es la brecha declarada del alcance v1: el origen de una colonia es un hecho plano, y <span class="mono-i">split</span> no apunta a la colonia madre. Sin eso no se puede decir «este pie viene de aquella reina» ni comparar el desempeño de la genética de Parita contra la de Santa Fe — que es justo la comparación que Toabré abrió sola este septiembre.</p>
+          <p>Mínimo útil: entidad <span class="mono-i">Queen</span> con origen, color de marca y año, fecha de introducción y de reemplazo; tipos de evento <span class="mono-i">queen_introduced</span>, <span class="mono-i">queen_replaced</span>, <span class="mono-i">supersedure</span>, <span class="mono-i">split_made</span>, <span class="mono-i">swarm_captured</span>; y un FK opcional de colonia madre a colonia hija.</p>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="n">03</div>
+        <div>
+          <h3>El alimento se registra, pero no la cobertura <span class="chip chip-prop">propuesto</span></h3>
+          <p>El 22 de julio se dejó alimento calculado para seis semanas. Esas seis semanas vencían más o menos el 2 de septiembre — el día que se encontró todo vacío. El sistema tiene la alimentación registrada y no puede decirte que vencía, porque cantidad y unidad existen pero la cobertura estimada no.</p>
+          <p>Es un campo, no un módulo: <span class="mono-i">coverageUntil</span> en el evento de alimentación, calculado o declarado por quien alimenta. Con él, la lista de sitios muestra «alimento hasta ~2 sep» y el aviso llega antes y no después.</p>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="n">04</div>
+        <div>
+          <h3>El compromiso de polinización no tiene dónde vivir <span class="chip chip-prop">propuesto</span></h3>
+          <p>Kiva está contratado como polinización dirigida sobre Lote 1 (10 ha) y Lote 2 (7 ha), con densidad de trabajo de 4–6 colmenas por hectárea. Ese objetivo —68 a 102 colonias— no está en ninguna tabla, así que el sistema no puede mostrar que hay 3. Es la única métrica del sitio que traduce biología en cumplimiento de contrato, y la que hace la conversación con el cliente sobre un número y no sobre una impresión.</p>
+          <div class="prisma">model PollinationCommitment {
+  projectId      String
+  plotLocationId String    // Lote 1 / Lote 2
+  hectares       Decimal
+  targetPerHa    Decimal   // 4–6
+  bloomWindowStart DateTime?
+  bloomWindowEnd   DateTime?
+}</div>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="n">05</div>
+        <div>
+          <h3>Los vecinos y sus aplicaciones <span class="chip chip-prop">propuesto</span></h3>
+          <p>Tu propio protocolo fijo, después de la hipótesis de deriva de agroquímicos: identificar los cultivos activos vecinos y sus tratamientos, y consultar mensualmente a trabajadores y dueños para <em>anticipar</em> las aplicaciones en vez de documentarlas después. Eso es una consulta mensual con fecha, persona y producto — un registro, no una nota suelta. Sin él la hipótesis nunca pasa de hipótesis, temporada tras temporada.</p>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="n">06</div>
+        <div>
+          <h3>Atributos del emplazamiento <span class="chip chip-prop">propuesto</span></h3>
+          <p>Finca 1 y Finca 2 están a metros una de otra y se comportan al revés: dosel cerrado, húmedo y con moho contra abierto y soleado. La diferencia que explica la decisión —dejar Finca 1 en pausa hasta podar el flanco este— es exposición solar, sombra y drenaje. <span class="mono-i">Location</span> ya tiene exposición al sol, franja de sombra, altitud y pendiente por el trabajo de finca cafetalera. Falta usarlos en el apiario y añadir lo específico: radio de pecoreo, distancia a agua, orientación de las piqueras, accesibilidad en lluvia.</p>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="n">07</div>
+        <div>
+          <h3>La persona que sostiene el sitio <span class="chip chip-prop">propuesto</span></h3>
+          <p>Vidal renunció entre abril y mayo y con él se fue el apoyo de finca. Es el hecho que mejor explica la curva de colonias de 2026 y no tiene dónde registrarse. Una cobertura por sitio —quién puede alimentar sin que vaya Néctar Nómada, desde cuándo, con qué entrenamiento— convierte «hay que entrenar a alguien residente» de propuesta recurrente en estado visible del sitio.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="blk">
+      <header><h2>Catálogo de captura</h2><p>Ordenado por decisión, no por pantalla</p></header>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Dato</th><th>Cadencia</th><th>Dónde se captura</th><th>Decisión que cambia</th><th>Estado</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Resultado de inspección</td><td>cada visita a la caja</td><td>un toque</td><td>si hay que volver antes de lo previsto<span class="why">y, acumulado, si el sitio es viable</span></td><td><span class="chip chip-real">existe</span></td></tr>
+            <tr><td>Colonias vivas por sitio</td><td>al cerrar la visita</td><td>una cifra</td><td>reposición, y déficit de polinización<span class="why">es el conteo que falta en la gráfica del sitio</span></td><td><span class="chip chip-prop">falta</span></td></tr>
+            <tr><td>Alimento: material, cantidad y <em>hasta cuándo</em></td><td>cada alimentación</td><td>dos toques</td><td>fecha real del próximo viaje<span class="why">lo que falló entre julio y septiembre</span></td><td><span class="chip chip-sample">parcial</span></td></tr>
+            <tr><td>Reina: origen, marca, introducción, reemplazo</td><td>por evento</td><td>evento de reina</td><td>comparar genética entre orígenes<span class="why">Parita vs. Santa Fe, la comparación que este año abrió</span></td><td><span class="chip chip-prop">falta</span></td></tr>
+            <tr><td>División con colonia madre</td><td>por evento</td><td>evento de división</td><td>trazar el pie de cría propio<span class="why">y dejar de comprar núcleos</span></td><td><span class="chip chip-prop">falta</span></td></tr>
+            <tr><td>Tratamiento: producto, lote, dosis</td><td>por aplicación</td><td>tres toques</td><td>residuos en miel y período de carencia</td><td><span class="chip chip-real">existe</span></td></tr>
+            <tr><td>Cosecha: peso y cuadros</td><td>por cosecha</td><td>formulario</td><td>rendimiento por sitio y por temporada<span class="why">genera Lote, igual que el café</span></td><td><span class="chip chip-real">existe</span></td></tr>
+            <tr><td>Costo del viaje y quién fue</td><td>cada visita</td><td>cierre de visita</td><td>si el sitio se sostiene solo<span class="why">~$62 de viáticos por viaje desde Parita</span></td><td><span class="chip chip-prop">falta</span></td></tr>
+            <tr><td>Aplicaciones de cultivos vecinos</td><td>mensual</td><td>consulta al vecino</td><td>anticipar la deriva en vez de documentarla</td><td><span class="chip chip-prop">falta</span></td></tr>
+            <tr><td>Exposición solar, sombra, drenaje del emplazamiento</td><td>al abrir el sitio, y al cambiar</td><td>ficha de sitio</td><td>reubicar o corregir antes de reponer<span class="why">Finca 1</span></td><td><span class="chip chip-sample">parcial</span></td></tr>
+            <tr><td>Temperatura, humedad y lluvia del sitio</td><td>diaria, automática</td><td>API externa</td><td>ventana de vuelo, sequía de néctar, correlato de ausentamiento</td><td><span class="chip chip-ext">capa externa</span></td></tr>
+            <tr><td>Floración del cultivo y del entorno</td><td>semanal en ventana</td><td>observación + satélite</td><td>cuándo tienen que estar las colonias en el lote</td><td><span class="chip chip-ext">capa externa</span></td></tr>
+            <tr><td>Peso de colmena</td><td>continua</td><td>sensor</td><td>entrada de flujo y momento de cosecha<span class="why">no lo pediste todavía; el camino Device/Measurement ya existe</span></td><td><span class="chip chip-plain">futuro</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="blk">
+      <header><h2>La capa externa</h2><p>Clima y satélite, sin hardware</p></header>
+      <div class="notes">
+        <div class="note"><h3>Qué traer</h3><p>Temperatura máxima y mínima, humedad relativa, lluvia acumulada y viento por sitio, diario, por coordenada. <span class="mono-i">Location</span> ya guarda latitud y longitud y hay punto PostGIS. Entra por el mismo camino que ya existe para medidas con fuente externa, no como tabla nueva.</p></div>
+        <div class="note"><h3>Para qué sirve de verdad</h3><p>Tres usos concretos, no un widget de clima: marcar los días en que la inspección era inviable, para no leer un vacío de registro como negligencia; detectar el período de escasez de néctar que obliga a alimentar; y poner la lluvia y la temperatura al lado de la curva de colonias cuando se investigue un ausentamiento como el de septiembre.</p></div>
+        <div class="note"><h3>Satélite</h3><p>Índice de vegetación por lote para seguir la floración del robusta y del entorno. Es la señal que dice cuándo las colonias tienen que estar puestas en el lote, que es lo que se vende en un contrato de polinización dirigida. Vale la pena después de cerrar la brecha 04, no antes: sin el compromiso registrado, la floración no tiene contra qué compararse.</p></div>
+        <div class="note"><h3>Honestidad de la fuente</h3><p>Un dato de modelo climático no es una observación de campo. Este proyecto ya distingue clase de procedencia y calidad del dato en cada registro; el clima externo entra con su propia clase y no se mezcla con lo que alguien vio parado frente a la caja.</p></div>
+      </div>
+    </section>
+
+    <div class="footnote">
+      Prototipo de pantallas sobre el módulo apícola ya construido en la plataforma. Los registros de Kiva Estate · Toabré vienen de tus reportes de campo de junio, julio y septiembre de 2026; los otros tres sitios llevan valores de muestra marcados como tales, salvo su identidad, región y número de colmenas, que son reales. Nada de lo marcado «propuesto» existe hoy en el esquema.
+    </div>
+  </div>
+
+  </main>
+</div>
+
+<script>
+(function () {
+  var screens = {
+    sitios: document.getElementById('s-sitios'),
+    sitio: document.getElementById('s-sitio'),
+    colmena: document.getElementById('s-colmena'),
+    registrar: document.getElementById('s-registrar'),
+    datos: document.getElementById('s-datos')
+  };
+  var navbtns = Array.prototype.slice.call(document.querySelectorAll('#nav .navbtn'));
+
+  function go(name) {
+    if (!screens[name]) return;
+    Object.keys(screens).forEach(function (k) { screens[k].classList.toggle('on', k === name); });
+    navbtns.forEach(function (b) { b.setAttribute('aria-current', b.dataset.go === name ? 'true' : 'false'); });
+    window.scrollTo({ top: 0, behavior: 'instant' in window ? 'auto' : 'auto' });
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-go]');
+    if (t) { go(t.dataset.go); return; }
+
+    var pin = e.target.closest('.pin');
+    if (pin) { select(pin.dataset.site); if (pin.dataset.site === 'toabre') go('sitio'); return; }
+
+    var q = e.target.closest('.quick');
+    if (q) { toast(q.dataset.q); return; }
+  });
+
+  document.querySelectorAll('.pin').forEach(function (p) {
+    p.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.click(); }
+    });
+  });
+
+  function select(site) {
+    document.querySelectorAll('.pin').forEach(function (p) { p.classList.toggle('sel', p.dataset.site === site); });
+    document.querySelectorAll('#sitelist .site').forEach(function (s) { s.classList.toggle('sel', s.dataset.site === site); });
+  }
+  document.querySelectorAll('#sitelist .site').forEach(function (s) {
+    s.addEventListener('mouseenter', function () { select(s.dataset.site); });
+  });
+
+  var fields = document.getElementById('fields');
+  var expander = document.getElementById('btn-detalles');
+  expander.addEventListener('click', function () {
+    var on = fields.classList.toggle('on');
+    expander.textContent = on ? 'Ocultar detalles ▴' : 'Registrar detalles ▾';
+  });
+
+  var toastEl = document.getElementById('toast');
+  var toastTimer;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('on'); }, 3200);
+  }
+  var nada = document.getElementById('btn-nada');
+  var acts = {
+    insp: { label: 'Nada fuera de lo común', sub: 'un toque · registra y cierra', msg: 'Inspección registrada · 7 sep 2026, 09:14 · sin novedad · en cola, sin señal' },
+    alim: { label: 'Alimentada, igual que la última', sub: 'repite material y cantidad · un toque', msg: 'Alimentación registrada · jarabe 1:1 · falta declarar cobertura al cerrar' },
+    fito: { label: 'Registrar aplicación', sub: 'producto, lote y dosis son obligatorios', msg: 'Aplicación fitosanitaria · producto, lote y dosis requeridos antes de cerrar' },
+    cos: { label: 'Registrar cosecha', sub: 'cuadros y peso · genera lote', msg: 'Cosecha registrada · genera Lote al sincronizar' }
+  };
+  var cur = 'insp';
+  document.querySelectorAll('.chip.act').forEach(function (a) {
+    a.addEventListener('click', function () {
+      document.querySelectorAll('.chip.act').forEach(function (x) { x.classList.toggle('on', x === a); });
+      cur = a.dataset.act;
+      nada.innerHTML = acts[cur].label + '<small>' + acts[cur].sub + '</small>';
+      fields.classList.remove('on');
+      expander.textContent = 'Registrar detalles ▾';
+    });
+  });
+  nada.addEventListener('click', function () { toast(acts[cur].msg); });
+
+  var modes = ['sistema', 'claro', 'oscuro'];
+  var mi = 0;
+  var tb = document.getElementById('themebtn');
+  tb.addEventListener('click', function () {
+    mi = (mi + 1) % 3;
+    var m = modes[mi];
+    if (m === 'sistema') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', m === 'claro' ? 'light' : 'dark');
+    tb.textContent = 'Tema: ' + m;
+  });
+})();
+</script>
+
+</body>
+</html>
