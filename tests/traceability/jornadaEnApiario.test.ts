@@ -19,7 +19,7 @@ import {
 } from "../../lib/traceability/fieldSessions";
 import { recordInspection } from "../../lib/apiary/inspections";
 import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
-import { emitirReporteDeVisita, ReporteError } from "../../lib/traceability/reporteDeVisita";
+import { emitirReporteDeVisita, leerReporteDeVisita, ReporteError } from "../../lib/traceability/reporteDeVisita";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a90-${Date.now()}`;
@@ -440,5 +440,60 @@ describe("A9.6 — el reporte se congela, no se re-consulta", () => {
     await expect(emitirReporteDeVisita(operarioDeFinca, { fieldSessionId: visita.id })).rejects.toThrow(
       LocationAccessError,
     );
+  });
+});
+
+describe("A9.6 — la página del reporte lee el snapshot, no la visita", () => {
+  it("devuelve lo congelado aunque la visita haya cambiado después", async () => {
+    // Si esto leyera la visita, el documento cambiaría bajo los pies del
+    // cliente y el número de reporte dejaría de significar nada.
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-04T13:00:00Z"),
+    });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id, notes: "lo que se entregó" });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    await prisma.fieldSession.update({ where: { id: visita.id }, data: { notes: "cambiado despues" } });
+
+    const leido = await leerReporteDeVisita(apicultorConManejo, visita.id);
+    expect(leido, "no devolvió el reporte emitido").not.toBeNull();
+    expect(leido!.snapshot.visita.notas).toBe("lo que se entregó");
+    expect(leido!.version).toBe(1);
+  });
+
+  it("una visita sin reporte devuelve null, que no es lo mismo que uno vacío", async () => {
+    // La página lo dice en vez de enseñar un documento en blanco que
+    // parecería un reporte real.
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-05T13:00:00Z"),
+    });
+    expect(await leerReporteDeVisita(apicultorConManejo, visita.id)).toBeNull();
+  });
+
+  it("devuelve siempre la ÚLTIMA versión emitida", async () => {
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-06T13:00:00Z"),
+    });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id, notes: "primera" });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await prisma.fieldSession.update({ where: { id: visita.id }, data: { notes: "segunda" } });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    const leido = await leerReporteDeVisita(apicultorConManejo, visita.id);
+    expect(leido!.version).toBe(2);
+    expect(leido!.snapshot.visita.notas).toBe("segunda");
+  });
+
+  it("quien no puede ver la visita tampoco lee su reporte", async () => {
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-07T13:00:00Z"),
+    });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await expect(leerReporteDeVisita(operarioDeFinca, visita.id)).rejects.toThrow(LocationAccessError);
   });
 });

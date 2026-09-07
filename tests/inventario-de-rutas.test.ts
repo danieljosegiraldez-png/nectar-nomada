@@ -76,8 +76,10 @@ describe("el inventario del router", () => {
     // con /lots/[id]/roast/new — la pantalla que le faltaba al tueste, cuyo
     // servicio existía desde R1 sin un solo consumidor. 62 → 63 el mismo día,
     // con /sensory/new: hasta entonces `sensorySession.create` sólo existía en
-    // la semilla, así que nadie podía empezar una cata.
-    expect(salida).toContain("63 entradas");
+    // la semilla, así que nadie podía empezar una cata. 63 → 64 el 2026-09-07,
+    // con /field-sessions/[id]/report — el reporte de visita de A9.6, que se
+    // renderiza desde el snapshot congelado y no desde la visita.
+    expect(salida).toContain("64 entradas");
     expect(codigo, salida).toBe(0);
   });
 

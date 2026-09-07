@@ -158,3 +158,47 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
     return { reporte, version, snapshot };
   });
 }
+
+/**
+ * Lee el reporte emitido de una visita, **desde el snapshot**.
+ *
+ * Ésta es la mitad que hace que D7 signifique algo. Renderizar desde los datos
+ * vivos daría un documento distinto cada vez que alguien corrige una fila, con
+ * el mismo número de reporte. Esta función no consulta la visita: consulta lo
+ * que se congeló.
+ *
+ * Devuelve `null` cuando la visita no tiene reporte emitido, que es distinto de
+ * «tiene uno vacío» — la página lo dice en vez de enseñar un documento en
+ * blanco que parecería un reporte real.
+ */
+export async function leerReporteDeVisita(userAccountId: string, fieldSessionId: string) {
+  const visita = await prisma.fieldSession.findUnique({
+    where: { id: fieldSessionId },
+    select: { locationId: true },
+  });
+  if (!visita) throw new FieldSessionValidationError("session_not_found");
+  await requireFieldSessionAccess(userAccountId, visita.locationId);
+
+  const reporte = await prisma.report.findFirst({
+    where: { subjectEntityType: "field_session", subjectEntityId: fieldSessionId },
+    select: { id: true, status: true },
+  });
+  if (!reporte) return null;
+
+  const version = await prisma.reportVersion.findFirst({
+    where: { reportId: reporte.id },
+    orderBy: { version: "desc" },
+    select: { id: true, version: true, generatedAt: true, renderedSnapshot: true },
+  });
+  if (!version) return null;
+
+  return {
+    reporteId: reporte.id,
+    version: version.version,
+    generatedAt: version.generatedAt,
+    // El contenido tal como se congeló. No se mezcla con nada vivo a
+    // propósito: en cuanto se mezclara, dejaría de ser el documento que se
+    // entregó.
+    snapshot: version.renderedSnapshot as unknown as SnapshotDeVisita,
+  };
+}
