@@ -26,6 +26,7 @@ import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { settleMassBalance } from "./balance";
+import { leerEnmiendas } from "./enmiendas";
 
 export class TraceabilityAccessError extends Error {}
 
@@ -681,11 +682,21 @@ export async function getActiveOperations(userAccountId: string) {
  * Full Lot Detail aggregation (§23) — everything the page needs in one
  * call except current quantity (lib/traceability/quantity.ts's
  * computeCurrentQuantity, called separately by the page to avoid a
- * lots.ts → quantity.ts → lots.ts import cycle). `auditEvents` is
- * intentionally queried even though no Phase 1 write path has ever
- * populated `core.AuditEvent` for a traceability entity yet — the section
- * renders correctly empty, which is an honest reflection of unbuilt
- * instrumentation, not a bug in this query.
+ * lots.ts → quantity.ts → lots.ts import cycle).
+ *
+ * **`auditEvents` estuvo roto meses, y este párrafo lo certificaba.** Decía que
+ * la sección renderizaba vacía «honestamente» porque ninguna ruta de la Fase 1
+ * escribía para una entidad de trazabilidad. Era cierto cuando se escribió y
+ * dejó de serlo: hoy se auditan las transformaciones, los perfiles de tueste,
+ * las mediciones, las cosechas y los eventos de cantidad. La consulta se quedó
+ * atrás preguntando por un tipo que **nadie escribe nunca**, así que el panel
+ * afirmaba «sin historial» con una pregunta que no podía acertar
+ * (`PENDING_IMPLEMENTATIONS/009`).
+ *
+ * Ahora lee por `leerEnmiendas` sobre los CINCO tipos bajo los que se auditan
+ * los hechos de un lote. Preguntar por uno solo enseñaría un quinto de su
+ * historia pareciendo completo, que es peor que enseñar cero.
+ * `tests/arquitectura/vocabulario-de-audit.test.ts` impide que vuelva a pasar.
  */
 export async function getLotDetail(userAccountId: string, lotId: string) {
   const lot = await prisma.lot.findUnique({
@@ -725,7 +736,13 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     lot.projectId
       ? prisma.task.findMany({ where: { projectId: lot.projectId }, orderBy: { createdAt: "desc" }, take: 20 })
       : Promise.resolve([]),
-    prisma.auditEvent.findMany({ where: { entityType: "Lot", entityId: lotId }, orderBy: { occurredAt: "desc" } }),
+    leerEnmiendas([
+      { entityType: "lot_transformation", entityId: lotId },
+      { entityType: "lot_roast_profile", entityId: lotId },
+      { entityType: "quantity_event", entityId: lotId },
+      { entityType: "measurement", entityId: lotId },
+      { entityType: "harvest_event", entityId: lotId },
+    ]),
     // T12.5: the originating HarvestEvent, if this lot came from one.
     prisma.harvestEvent.findUnique({ where: { resultingLotId: lotId } }),
     // T12.6: the originating ReceivingEvent, if this lot came from one

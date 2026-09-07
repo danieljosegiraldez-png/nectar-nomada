@@ -12,6 +12,7 @@ import { prisma } from "../db";
 import { objectStorageProvider } from "../integrations/storage";
 import { requireApiaryAccess, ApiaryAccessError } from "./hives";
 import type { ClassificationLevel, ProvenanceClass } from "../../generated/prisma/client";
+import { recordAuditEvent } from "../audit";
 
 const BUCKET = "nectar-originals";
 const DEFAULT_CLASSIFICATION: ClassificationLevel = "internal";
@@ -116,21 +117,41 @@ export async function finalizeApiaryAssetUpload(userAccountId: string, input: Fi
     select: { personId: true },
   });
 
-  return prisma.asset.create({
-    data: {
-      assetType: input.mimeType.startsWith("image/") ? "photo" : input.mimeType.startsWith("video/") ? "video" : "document",
-      storageKey: input.storageKey,
-      storageBucket: BUCKET,
-      mimeType: input.mimeType,
-      sizeBytes: input.sizeBytes,
-      originalFilename: input.originalFilename,
-      creatorPersonId: input.creatorPersonId ?? userAccount.personId,
-      status: "approved",
-      classification: DEFAULT_CLASSIFICATION,
-      createdBy: userAccountId,
-      provenanceClass: input.provenanceClass,
-      sourceReference: input.sourceReference ?? null,
-      ...parentData(input.parent),
-    },
+  // A9.3 — hasta el 2026-09-07 este archivo no auditaba NADA: era el único
+  // camino de escritura del apiario sin rastro, y las fotos de una visita son
+  // justo lo que después se discute. Va con `tx` desde el principio, como todo
+  // lo demás del repositorio desde la misma fecha.
+  return prisma.$transaction(async (tx) => {
+    const asset = await tx.asset.create({
+      data: {
+        assetType: input.mimeType.startsWith("image/") ? "photo" : input.mimeType.startsWith("video/") ? "video" : "document",
+        storageKey: input.storageKey,
+        storageBucket: BUCKET,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        originalFilename: input.originalFilename,
+        creatorPersonId: input.creatorPersonId ?? userAccount.personId,
+        status: "approved",
+        classification: DEFAULT_CLASSIFICATION,
+        createdBy: userAccountId,
+        provenanceClass: input.provenanceClass,
+        sourceReference: input.sourceReference ?? null,
+        ...parentData(input.parent),
+      },
+    });
+
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "asset.create",
+        entityType: "asset",
+        entityId: asset.id,
+        after: { id: asset.id, assetType: asset.assetType, parent: input.parent },
+        sourceInterface: "apiary.media",
+      },
+      tx,
+    );
+
+    return asset;
   });
 }
