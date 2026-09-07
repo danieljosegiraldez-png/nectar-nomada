@@ -1169,3 +1169,42 @@ Tres flip-tests, cada uno con sha antes/después, compilando, y su test caído p
 nombre: el coeficiente (caen las seis lecturas), emparejar por posición, y
 romper el régimen viejo.
 
+---
+
+**Archivado el 2026-09-07**, con el estado en 408/400 tras entrar la del
+vocabulario de protocolo. Sale la de A9 por la misma rotación que su propia nota
+de archivado invoca —entra una entrega, sale la de abajo—; no es una valoración
+de su contenido, y su detalle queda íntegro aquí. Lo suyo que **sigue abierto**
+—`PENDING_IMPLEMENTATIONS/009`, ADR-DRAFT-111, los tickets A9.11 y A9.12— vive
+en sus propios archivos, que es donde se busca.
+
+### 2026-09-07 · A9: el informe de alcance de captura de campo queda completo
+
+Los siete archivos de A9 —prompt, cuatro anexos, informe y
+`protocolos/apiario-campo-v1.json`— estaban **sin versionar** en el checkout
+compartido. Entran aquí. El informe se **continuó**, no se rehízo.
+
+**Lo que faltaba de verdad era una cosa, no cinco.** El encargo listaba D7–D10,
+la corrección del aviso del Anexo D en §0, los tickets, el borrador de ADR y la
+crítica de la prueba de aceptación. Medido contra el archivo en disco: D7, D8 y
+D9 ya estaban como secciones propias, §0 ya estaba corregido, y §4, §5 y §6 ya
+existían. **Sólo faltaba D10**, y lo que arrastra.
+
+**D10, y su hallazgo.** Dos decisiones, y caen de lados distintos: la entrega
+por canal se aplaza sin coste —ADR-044 tiene razón para ella—, pero la bitácora
+no, porque un registro «desde ahora» sí pierde lo que no espejó. Es la primera
+vez que un elemento de la lista de aplazamientos de ADR-039 **falla su propio
+criterio** (`DECISIONS.md:2616-2620`). La salida es que lo que no podía esperar
+ya existe: `AuditEvent`. Condición a escribir hoy: el emisor lee de ahí, no de
+una cola propia, o el espejo retroactivo se vuelve imposible.
+
+Añadidos: **ADR-DRAFT-111** (borrador, no en `DECISIONS.md`), tickets A9.11 y
+A9.12, y la fila de D10 en el resumen. Volumen medido: la lectura literal de
+«toda acción» son **264 mensajes** por visita de quince cajas, no «decenas».
+
+**Y un hallazgo que salió de aquí y no es de este alcance:**
+`PENDING_IMPLEMENTATIONS/009` — el único lector de `AuditEvent` en pantalla
+consulta `entityType: "Lot"` y **nada lo escribe nunca**, así que el panel
+«Historial» de un lote afirma «sin historial» con una consulta que no puede
+acertar. El comentario que lo certificaba como correcto era cierto cuando se
+escribió y lleva meses sin serlo.

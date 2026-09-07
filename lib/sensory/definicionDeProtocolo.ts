@@ -22,12 +22,30 @@ import {
   ESCALA_ATRIBUTO_MIN,
   FORMULA_CVA_AFECTIVO,
 } from "./puntajeCva";
+import { FORMULA_SUMA_DE_ATRIBUTOS } from "./puntajeSuma";
 
 export interface DefinicionDeAtributo {
   name: string;
   section: "descriptive" | "affective";
   scaleMin: number;
   scaleMax: number;
+}
+
+/**
+ * Una entrada del vocabulario del protocolo: un descriptor, o un defecto.
+ *
+ * La forma sale del esquema, que a su vez sale de la taxonomía de miel de
+ * `BEVERAGE_SENSORY_PROTOCOLS.md` §3: familia, descriptor concreto, qué se
+ * espera percibir, y si eso es bueno, neutro o un defecto. `technicalCause`
+ * sólo tiene sentido en un defecto — un defecto que nombra su causa es
+ * diagnóstico; uno que no, es una etiqueta.
+ */
+export interface DefinicionDeDescriptor {
+  family: string;
+  specificDescriptor: string;
+  expectedPerception?: string | null;
+  classification: "positive" | "neutral" | "defect";
+  technicalCause?: string | null;
 }
 
 export interface DefinicionDeProtocolo {
@@ -46,13 +64,18 @@ export interface DefinicionDeProtocolo {
    *  deja de pedirlo. Ver `lib/sensory/puntajeCva.ts`. */
   scoreFormula?: string | null;
   attributes: DefinicionDeAtributo[];
+  /** El vocabulario del protocolo. Opcional: los seis protocolos que ya
+   *  existen no tienen ninguno, y un protocolo sin vocabulario sigue siendo
+   *  válido — sólo no ofrece descriptores que marcar. */
+  descriptors?: DefinicionDeDescriptor[];
 }
 
 export class DefinicionInvalida extends Error {}
 
 const SECCIONES = ["descriptive", "affective"] as const;
 const LICENCIAS = ["adapted_original", "licensed", "pending_license"] as const;
-const FORMULAS = [FORMULA_CVA_AFECTIVO] as const;
+const FORMULAS = [FORMULA_CVA_AFECTIVO, FORMULA_SUMA_DE_ATRIBUTOS] as const;
+const CLASIFICACIONES = ["positive", "neutral", "defect"] as const;
 
 function exige(condicion: unknown, mensaje: string): asserts condicion {
   if (!condicion) throw new DefinicionInvalida(mensaje);
@@ -106,6 +129,8 @@ export function validarDefinicion(crudo: unknown): DefinicionDeProtocolo {
     vistos.add(clave);
   }
 
+  if (d.descriptors !== undefined) validarDescriptores(d.descriptors);
+
   if (d.scoreFormula !== undefined && d.scoreFormula !== null) {
     exige(
       typeof d.scoreFormula === "string" && (FORMULAS as readonly string[]).includes(d.scoreFormula),
@@ -145,5 +170,50 @@ function validarCvaAfectivo(d: DefinicionDeProtocolo): void {
       a.scaleMin === ESCALA_ATRIBUTO_MIN && a.scaleMax === ESCALA_ATRIBUTO_MAX,
       `"${a.name}" va de ${a.scaleMin} a ${a.scaleMax}; el CVA afectivo puntúa de ${ESCALA_ATRIBUTO_MIN} a ${ESCALA_ATRIBUTO_MAX}.`,
     );
+  }
+}
+
+/**
+ * El vocabulario, comprobado con la misma severidad que los atributos.
+ *
+ * **Por qué la unicidad es (familia, descriptor) y no sólo el descriptor.** Dos
+ * familias pueden nombrar lo mismo con sentido distinto —«miel» es un descriptor
+ * floral en café y el producto entero en miel—, así que el par es lo que
+ * identifica. Repetir el par sí es un error: una respuesta marcada no sabría a
+ * cuál de los dos pertenece, exactamente igual que con dos atributos homónimos.
+ *
+ * **Y la causa técnica sólo en un defecto.** El esquema la deja nula en todos, y
+ * una causa colgada de un descriptor positivo —«rosa, causado por…»— es la clase
+ * de dato que se lee mal una vez y se propaga.
+ */
+function validarDescriptores(descriptores: unknown): void {
+  exige(Array.isArray(descriptores), '"descriptors" debe ser una lista.');
+  exige(
+    descriptores.length > 0,
+    'Un "descriptors" vacío no es lo mismo que no tenerlo: quítalo del archivo si el protocolo no trae vocabulario.',
+  );
+
+  const vistos = new Set<string>();
+  for (const [i, c] of (descriptores as DefinicionDeDescriptor[]).entries()) {
+    const donde = `descriptor ${i + 1}`;
+    exige(c && typeof c === "object", `${donde}: no es un objeto.`);
+    for (const campo of ["family", "specificDescriptor"] as const) {
+      exige(typeof c[campo] === "string" && c[campo].trim().length > 0, `${donde}: falta "${campo}", o está vacío.`);
+    }
+    exige(
+      (CLASIFICACIONES as readonly string[]).includes(c.classification),
+      `${donde} ("${c.specificDescriptor}"): "classification" debe ser ${CLASIFICACIONES.join(", ")}.`,
+    );
+    exige(
+      c.technicalCause === undefined || c.technicalCause === null || c.classification === "defect",
+      `${donde} ("${c.specificDescriptor}"): sólo un defecto lleva "technicalCause". Un descriptor positivo con causa se lee como si algo hubiera salido mal.`,
+    );
+
+    const clave = `${c.family.trim().toLowerCase()}\u0000${c.specificDescriptor.trim().toLowerCase()}`;
+    exige(
+      !vistos.has(clave),
+      `Dos descriptores son "${c.family} / ${c.specificDescriptor}". Una respuesta marcada no sabría a cuál pertenece.`,
+    );
+    vistos.add(clave);
   }
 }

@@ -45,7 +45,7 @@ function fail(message: string, ...detail: string[]): never {
 
 async function list() {
   const protocolos = await prisma.sensoryProtocol.findMany({
-    include: { versions: { include: { attributes: true }, orderBy: { version: "asc" } } },
+    include: { versions: { include: { attributes: true, descriptors: true }, orderBy: { version: "asc" } } },
     orderBy: [{ domain: "asc" }, { name: "asc" }],
   });
 
@@ -62,7 +62,8 @@ async function list() {
       console.log(`           ${p.status} · licencia: ${p.standardLicenseStatus ?? "sin declarar"}`);
       for (const v of p.versions) {
         const formula = v.scoreFormula ? ` · puntaje ${v.scoreFormula}` : "";
-        console.log(`           v${v.version} (${v.status}) · ${v.scoreMin}–${v.scoreMax} · ${v.attributes.length} atributos${formula}`);
+        const vocab = v.descriptors.length > 0 ? ` · ${v.descriptors.length} descriptores` : "";
+        console.log(`           v${v.version} (${v.status}) · ${v.scoreMin}–${v.scoreMax} · ${v.attributes.length} atributos${formula}${vocab}`);
       }
     };
     vivos.forEach(pinta);
@@ -218,6 +219,23 @@ async function main() {
         },
       });
     }
+    // El vocabulario entra con el resto, no después: un protocolo a medio
+    // vocabulario ofrecería menos descriptores de los que su estándar define, y
+    // eso no se ve — se ve como que el catador no marcó nada.
+    for (const [i, c] of (definicion.descriptors ?? []).entries()) {
+      await tx.sensoryDescriptor.create({
+        data: {
+          protocolVersionId: version.id,
+          family: c.family,
+          specificDescriptor: c.specificDescriptor,
+          expectedPerception: c.expectedPerception ?? null,
+          classification: c.classification,
+          technicalCause: c.technicalCause ?? null,
+          displayOrder: i,
+        },
+      });
+    }
+
     // Dentro de la transacción y con `tx` desde el 2026-09-06: el protocolo, sus
     // atributos y la fila que dice que se creó se confirman juntos. Antes el
     // audit vivía tras el `});` y un fallo suyo dejaba un protocolo sin rastro.
@@ -227,7 +245,12 @@ async function main() {
         operation: "sensory_protocol.create",
         entityType: "sensory_protocol",
         entityId: protocol.id,
-        after: { ...protocol, version: definicion.version, attributes: definicion.attributes.length },
+        after: {
+          ...protocol,
+          version: definicion.version,
+          attributes: definicion.attributes.length,
+          descriptors: definicion.descriptors?.length ?? 0,
+        },
         sourceInterface: "scripts/create-sensory-protocol",
       },
       tx,
@@ -239,6 +262,7 @@ async function main() {
   console.log(`\n  Creado: ${definicion.name}`);
   console.log(`  v${definicion.version} · ${definicion.scoreMin}–${definicion.scoreMax} · ${definicion.attributes.length} atributos`);
   console.log(`  Puntaje total: ${definicion.scoreFormula ? `calculado (${definicion.scoreFormula})` : "lo teclea quien cata"}`);
+  console.log(`  Vocabulario: ${definicion.descriptors?.length ?? 0} descriptores`);
   console.log(`  Licencia declarada: ${definicion.standardLicenseStatus}`);
   if (definicion.standardLicenseStatus !== "licensed") {
     console.log("\n  AVISO: la licencia no es `licensed`. Estos puntajes no deben publicarse");

@@ -164,4 +164,87 @@ describe("la definición de un protocolo se comprueba antes de tocar producción
   it("sin scoreFormula, un protocolo cualquiera sigue pasando", () => {
     expect(() => validarDefinicion(base())).not.toThrow();
   });
+  /**
+   * **El tercer control positivo:** el archivo de miel, que es el único que hoy
+   * trae vocabulario. Las siete pruebas de `descriptors` de debajo son todas
+   * negativas y sin ésta un validador que rechazara cualquier vocabulario
+   * pasaría las siete.
+   */
+  it("el archivo de miel pasa, y trae sus 45 descriptores en tres niveles", () => {
+    const crudo = JSON.parse(readFileSync(`${RAIZ}protocolos/miel-competencia-100.json`, "utf8"));
+    const d = validarDefinicion(crudo);
+    expect(d.scoreFormula).toBe("attribute_sum_v1");
+    expect(d.attributes).toHaveLength(6);
+    expect(d.attributes.reduce((n, x) => n + x.scaleMax, 0), "los seis criterios deben sumar 100").toBe(100);
+    const v = d.descriptors ?? [];
+    expect(v).toHaveLength(45);
+    expect(v.filter((x) => x.classification === "positive")).toHaveLength(27);
+    expect(v.filter((x) => x.classification === "neutral")).toHaveLength(3);
+    const defectos = v.filter((x) => x.classification === "defect");
+    expect(defectos).toHaveLength(15);
+    // Un defecto sin causa es una etiqueta: BEVERAGE_SENSORY_PROTOCOLS.md §3
+    // dice que "every family here carries a real, specific cause".
+    expect(defectos.every((x) => (x.technicalCause ?? "").trim().length > 0)).toBe(true);
+  });
+
+  /** Un vocabulario mínimo bien formado, que cada prueba estropea. */
+  function conVocabulario() {
+    return {
+      ...base(),
+      descriptors: [
+        { family: "floral", specificDescriptor: "rosa", classification: "positive" as const },
+        {
+          family: "oxidación",
+          specificDescriptor: "rancio",
+          classification: "defect" as const,
+          technicalCause: "exposición prolongada al oxígeno",
+        },
+      ],
+    };
+  }
+
+  it("acepta un protocolo con vocabulario", () => {
+    expect(() => validarDefinicion(conVocabulario())).not.toThrow();
+  });
+
+  it("sin descriptors, un protocolo sigue siendo válido", () => {
+    expect(() => validarDefinicion(base())).not.toThrow();
+  });
+
+  it("rechaza un descriptors vacío en vez de tratarlo como ausente", () => {
+    const d = { ...base(), descriptors: [] };
+    expect(() => validarDefinicion(d)).toThrow(/quítalo del archivo/);
+  });
+
+  it("rechaza una clasificación que no existe", () => {
+    const d = conVocabulario();
+    d.descriptors[0] = { ...d.descriptors[0]!, classification: "bueno" as never };
+    expect(() => validarDefinicion(d)).toThrow(/classification/);
+  });
+
+  it("rechaza una causa técnica colgada de un descriptor positivo", () => {
+    const d = conVocabulario();
+    d.descriptors[0] = { ...d.descriptors[0]!, technicalCause: "algo" } as never;
+    expect(() => validarDefinicion(d)).toThrow(/sólo un defecto lleva/);
+  });
+
+  it("rechaza el mismo par familia + descriptor dos veces", () => {
+    const d = conVocabulario();
+    d.descriptors.push({ family: "Floral", specificDescriptor: "ROSA", classification: "positive" as const });
+    expect(() => validarDefinicion(d)).toThrow(/no sabría a cuál pertenece/);
+  });
+
+  it("acepta el mismo descriptor en dos familias distintas", () => {
+    // «miel» es una nota floral en café y el producto entero en miel: el par es
+    // lo que identifica, no el descriptor suelto.
+    const d = conVocabulario();
+    d.descriptors.push({ family: "dulce", specificDescriptor: "rosa", classification: "positive" as const });
+    expect(() => validarDefinicion(d)).not.toThrow();
+  });
+
+  it("rechaza un descriptor sin familia", () => {
+    const d = conVocabulario();
+    d.descriptors[0] = { ...d.descriptors[0]!, family: "  " };
+    expect(() => validarDefinicion(d)).toThrow(/falta "family"/);
+  });
 });
