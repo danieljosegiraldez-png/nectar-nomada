@@ -1045,3 +1045,43 @@ tests: la quité en vez de declararla.
 **Lo que la Fase 5 necesita de Daniel** está en §3 de su ticket: si hay
 teléfono, si se instala Studio o se va por Expo Go, quién lleva el aparato —13
 de 14 personas siguen sin contraseña— y si antes o después de la cosecha.
+
+---
+
+**Archivado el 2026-09-06 (tarde)**, con el estado en 427/400 líneas tras entrar
+la del puntaje del CVA. Se mueve la entrada de la mañana del mismo día: lo que
+sigue dirigiendo trabajo de ella —la distinción entre campos de día e instantes,
+y la regla por llamada de atomicidad de auditoría— ya vive en `CLAUDE.md` y en
+`tests/arquitectura/audit-atomico.test.ts`, que sí se cargan.
+
+### 2026-09-06 · Husos horarios, atomicidad de auditoría, y tres inventarios que mentían
+
+**Nada de esto estaba en una lista al empezar.** Salió de mirar: recorrer las
+pantallas en un móvil, leer un comentario que decía lo contrario de lo que
+pasaba, y medir en vez de creer una cifra escrita a mano.
+
+**El fallo con más consecuencia fue de datos, no de pantalla.**
+`MeasurementCorrectionForm` precargaba su `datetime-local` con el reloj de pared
+en **UTC**, y el servidor lo re-interpretaba con el desfase del dispositivo:
+abrir una corrección y guardar **sin tocar la hora movía la medición cinco
+horas**, en silencio. Demostrado con la ida y vuelta completa antes de
+afirmarlo. Arreglado con `paraCampoLocal`, el inverso exacto de
+`parseLocalDateTime`, y con flip-test que demuestra que la forma vieja sí
+desplazaba.
+
+**Y su mitad de pantalla:** 26 sitios usaban `toISOString()`, que siempre da UTC.
+Se arreglaron 15. **Los otros 11 NO se tocan**: son campos de DÍA guardados como
+medianoche UTC —`sampledAt`, `describedAt`, `plantedAt`, `producedAt`— cuya ida
+y vuelta ya cierra; convertirlos los movería un día atrás. La distinción vive en
+la cabecera de `lib/time/mostrarInstante.ts`.
+
+**Atomicidad de auditoría: 24 llamadas, en tres formas.** §3 decía «13 archivos,
+28 llamadas» contando *audits en archivos con transacción*, no *audits que
+puedan viajar con una*. El guardia pasó de una lista de 15 archivos a una
+**regla por llamada** sobre los 41 de `lib/`, así que un servicio nuevo entra
+solo.
+
+**Infraestructura, porque el día empezó con 42 MB de disco.** Se recuperaron
+~19 GB; `vercel.json` con `ignoreCommand` y un carril ligero de CI para los
+cambios de sólo documentación —**el 57 % de las PR**— que corre en 7 s y no
+despliega.

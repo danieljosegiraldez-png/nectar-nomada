@@ -42,6 +42,7 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
   }));
   const scoreMin = session.protocolVersion.scoreMin.toNumber();
   const scoreMax = session.protocolVersion.scoreMax.toNumber();
+  const scoreFormula = session.protocolVersion.scoreFormula;
 
   // Los participantes sólo los ve y los mueve quien dirige la cata. Hasta hoy
   // sólo se podían meter a mano en la base, así que una cata la puntuaba quien
@@ -113,6 +114,7 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
                       blindSampleId={blindSample.id}
                       scoreMin={scoreMin}
                       scoreMax={scoreMax}
+                      scoreFormula={scoreFormula}
                       attributes={attributeOptions}
                     />
                   )

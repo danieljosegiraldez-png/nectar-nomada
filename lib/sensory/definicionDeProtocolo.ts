@@ -16,6 +16,13 @@
  * y por eso la definición vive en un archivo versionado que se lee en el diff.
  */
 
+import {
+  ATRIBUTOS_CVA_AFECTIVO,
+  ESCALA_ATRIBUTO_MAX,
+  ESCALA_ATRIBUTO_MIN,
+  FORMULA_CVA_AFECTIVO,
+} from "./puntajeCva";
+
 export interface DefinicionDeAtributo {
   name: string;
   section: "descriptive" | "affective";
@@ -34,6 +41,10 @@ export interface DefinicionDeProtocolo {
   version: number;
   scoreMin: number;
   scoreMax: number;
+  /** Cómo se obtiene el puntaje total. Ausente = lo teclea quien cata, que es
+   *  como funcionó siempre. Presente = lo calcula el servidor y el formulario
+   *  deja de pedirlo. Ver `lib/sensory/puntajeCva.ts`. */
+  scoreFormula?: string | null;
   attributes: DefinicionDeAtributo[];
 }
 
@@ -41,6 +52,7 @@ export class DefinicionInvalida extends Error {}
 
 const SECCIONES = ["descriptive", "affective"] as const;
 const LICENCIAS = ["adapted_original", "licensed", "pending_license"] as const;
+const FORMULAS = [FORMULA_CVA_AFECTIVO] as const;
 
 function exige(condicion: unknown, mensaje: string): asserts condicion {
   if (!condicion) throw new DefinicionInvalida(mensaje);
@@ -94,5 +106,44 @@ export function validarDefinicion(crudo: unknown): DefinicionDeProtocolo {
     vistos.add(clave);
   }
 
+  if (d.scoreFormula !== undefined && d.scoreFormula !== null) {
+    exige(
+      typeof d.scoreFormula === "string" && (FORMULAS as readonly string[]).includes(d.scoreFormula),
+      `"scoreFormula" debe ser una de: ${FORMULAS.join(", ")}. Una desconocida se guardaría y nadie la calcularía.`,
+    );
+    if (d.scoreFormula === FORMULA_CVA_AFECTIVO) validarCvaAfectivo(d as DefinicionDeProtocolo);
+  }
+
   return d as DefinicionDeProtocolo;
+}
+
+/**
+ * Un protocolo que pide el cálculo del CVA tiene que traer exactamente lo que
+ * ese cálculo necesita.
+ *
+ * Sin esto, un archivo con seis atributos y `scoreFormula` puesto se crearía sin
+ * una queja y reventaría meses después, en la primera valoración que alguien
+ * intentara enviar: el error saldría lejísimos de su causa. La forma se
+ * comprueba donde se escribe, no donde se usa.
+ */
+function validarCvaAfectivo(d: DefinicionDeProtocolo): void {
+  const afectivos = d.attributes.filter((a) => a.section === "affective");
+  exige(
+    afectivos.length === d.attributes.length,
+    `Con "${FORMULA_CVA_AFECTIVO}" los ${ATRIBUTOS_CVA_AFECTIVO.length} atributos son afectivos; ${d.attributes.length - afectivos.length} está(n) marcado(s) como descriptivo.`,
+  );
+
+  const nombres = d.attributes.map((a) => a.name);
+  exige(
+    nombres.length === ATRIBUTOS_CVA_AFECTIVO.length &&
+      nombres.every((n, i) => n === ATRIBUTOS_CVA_AFECTIVO[i]),
+    `Con "${FORMULA_CVA_AFECTIVO}" los atributos deben ser exactamente, y en este orden: ${ATRIBUTOS_CVA_AFECTIVO.join(", ")}. Llegaron: ${nombres.join(", ")}.`,
+  );
+
+  for (const a of d.attributes) {
+    exige(
+      a.scaleMin === ESCALA_ATRIBUTO_MIN && a.scaleMax === ESCALA_ATRIBUTO_MAX,
+      `"${a.name}" va de ${a.scaleMin} a ${a.scaleMax}; el CVA afectivo puntúa de ${ESCALA_ATRIBUTO_MIN} a ${ESCALA_ATRIBUTO_MAX}.`,
+    );
+  }
 }

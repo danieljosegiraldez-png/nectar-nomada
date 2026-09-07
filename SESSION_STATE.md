@@ -37,46 +37,46 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-06 · Husos horarios, atomicidad de auditoría, y tres inventarios que mentían
+### 2026-09-06 · El puntaje de cata deja de ser una opinión tecleada
 
-**Nada de esto estaba en una lista al empezar.** Salió de mirar: recorrer las
-pantallas en un móvil, leer un comentario que decía lo contrario de lo que
-pasaba, y medir en vez de creer una cifra escrita a mano.
+**Antes, en el mismo día, entró el #206:** perfil `Cupping Host`, permiso
+`sample:view` —que `requireSampleAccess` aceptaba desde su primera versión sin
+existir en el catálogo— e invitar participantes por asignación de ámbito
+`session`. Dirigir una cata y juzgar una competencia son dos usos distintos; sólo
+existía el segundo. Su entrada se archivó al entrar ésta.
 
-**El fallo con más consecuencia fue de datos, no de pantalla.**
-`MeasurementCorrectionForm` precargaba su `datetime-local` con el reloj de pared
-en **UTC**, y el servidor lo re-interpretaba con el desfase del dispositivo:
-abrir una corrección y guardar **sin tocar la hora movía la medición cinco
-horas**, en silencio. Demostrado con la ida y vuelta completa antes de
-afirmarlo. Arreglado con `paraCampoLocal`, el inverso exacto de
-`parseLocalDateTime`, y con flip-test que demuestra que la forma vieja sí
-desplazaba.
+**Lo que había:** siete atributos inventados por nosotros y un total que
+**escribía a mano** quien cataba. Dos personas con los mismos atributos podían
+teclear totales distintos: comparar dos lotes no comparaba nada.
 
-**Y su mitad de pantalla**, que `localDateTime.ts` daba por resuelta: 26 sitios
-usaban `toISOString()`, que siempre devuelve UTC. Se arreglaron 15. **Los otros
-11 NO se tocan y eso es lo importante**: son campos de DÍA guardados como
-medianoche UTC —`sampledAt`, `describedAt`, `plantedAt`, `producedAt`— cuya ida
-y vuelta ya cierra. Convertirlos los movería un día atrás. La distinción vive en
-la cabecera de `lib/time/mostrarInstante.ts`.
+**De dónde salió lo nuevo, y esto importa más que el código.** Los siete PDF del
+estándar SCA no sirvieron: **cinco vienen cifrados** (`/Encrypt`, `/P -1324`) y
+el del Fine Robusta es un **escaneo sin texto** —7 objetos `/Image`, cero
+operadores de texto— sin `pdftoppm` ni `tesseract` en la máquina para leerlo.
+Lo que sí sirvió fue **medir la calculadora pública que la propia SCA publica**
+en `sca.coffee/cuppingscore`, cambiando una entrada a la vez: ocho atributos en
+escala 1–9, coeficiente 0,65625, constante 52,75, −2 por taza no uniforme y −4
+por defectuosa. Seis lecturas, reproducidas una a una como pruebas.
 
-**Atomicidad de auditoría: 24 llamadas, en tres formas distintas.** §3 decía
-«13 archivos, 28 llamadas» contando *audits en archivos con transacción*, no
-*audits que puedan viajar con una*. Las formas eran: audit tras el `});` (pasar
-`tx`), audit sin transacción ninguna (introducirla), y `$transaction([array])`,
-que no da cliente y dejaba el audit fuera **por construcción**. El guardia pasó
-de una lista de 15 archivos a una **regla por llamada** sobre los 41 de `lib/`,
-así que un servicio nuevo entra solo.
+**Sigue faltando la sección DESCRIPTIVA del CVA** —descriptores CATA e
+intensidades—: vive en el SCA-103, que es uno de los cifrados. No se inventa.
 
-**Infraestructura, porque el día empezó con 42 MB de disco.** Se recuperaron
-~19 GB; `vercel.json` con `ignoreCommand` y un carril ligero de CI para los
-cambios de sólo documentación —**el 57 % de las PR**, medido— que corre en 7 s y
-no despliega; y el estado, de 400/400 al techo exacto, bajado a 302 moviendo al
-histórico 94 líneas de registro de entrega que vivían en «Bloqueado».
+**Lo que cambia.** `scoreFormula` en la versión de protocolo: ausente —las seis
+que ya existen— el total se teclea como siempre; presente, lo calcula el
+servidor. Y los rangos se validan **en el servidor**, que hasta hoy sólo los
+defendía el `min`/`max` del `<input>`: un POST a mano metía un 90 donde iba un 9
+y salía un 111,19 que nadie mira dos veces.
 
-**Lo que quedó sin hacer, con su razón:** dos conversiones de auditoría —
-`sensory/service.ts`, cuyo `try/catch` convertiría un error en otro, y
-`auth/config.ts`, en el camino de autenticación— y el guardia de navegación, que
-afirma ≤8 entradas cuando un admin real ve 10 (§3).
+**La prueba que costó dos intentos, y es la lección.** La primera versión del
+test de emparejamiento mandaba los ocho valores **del revés** y esperaba el
+mismo total. No probaba nada: el puntaje es una SUMA, y una permutación de los
+mismos ocho números da idéntico resultado. **Su flip-test salió verde y lo
+dijo** — sin él habría quedado como guardia. La que sí distingue manda ocho
+respuestas donde una repite atributo y otra falta.
+
+Tres flip-tests, cada uno con sha antes/después, compilando, y su test caído por
+nombre: el coeficiente (caen las seis lecturas), emparejar por posición, y
+romper el régimen viejo.
 
 ## 3. Bloqueado, y en qué
 

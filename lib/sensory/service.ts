@@ -19,6 +19,7 @@ import { clearsClassification } from "../rbac/scopeClassification";
 import { permissionKey } from "../rbac/types";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
+import { ATRIBUTOS_CVA_AFECTIVO, FORMULA_CVA_AFECTIVO, puntajeAfectivoCva } from "./puntajeCva";
 
 export class SensoryAccessError extends Error {}
 
@@ -169,6 +170,11 @@ export async function getSessionForJudge(userAccountId: string, sessionId: strin
 export interface SubmitAssessmentInput {
   blindSampleId: string;
   overallScore?: number | null;
+  // Sólo bajo un protocolo con `scoreFormula`; ignorados en cualquier otro,
+  // porque una cuenta de tazas guardada bajo un protocolo que no la usa es un
+  // dato que nadie sabría leer después.
+  nonUniformCups?: number | null;
+  defectiveCups?: number | null;
   comment?: string | null;
   attributeResponses: ReadonlyArray<{ attributeId: string; value: number; comment?: string | null }>;
   // R1 (docs/implementation/33_R1_ROASTSESSION_TAXONOMIA_SENSORIAL.md §2) —
@@ -184,10 +190,74 @@ export interface SubmitAssessmentInput {
   }>;
 }
 
+/**
+ * De dónde sale el puntaje total de una valoración, y qué se guarda con él.
+ *
+ * **Dos regímenes, y el viejo no cambia.** Un protocolo sin `scoreFormula` es
+ * todo lo que existía antes del 2026-09-06: el total lo teclea quien cata y se
+ * guarda tal cual. Uno con fórmula deja de aceptar el tecleado —lo ignora en
+ * vez de rechazarlo, porque el formulario ya no lo pide y un cliente viejo no
+ * debe quedarse sin poder enviar— y lo calcula a partir de los atributos.
+ *
+ * **Por qué los atributos se leen del protocolo y no del envío.** Un envío
+ * puede traer siete respuestas, o dos veces la misma, o una de otro protocolo.
+ * Recorrer los ocho atributos que el protocolo declara y buscar el valor de
+ * cada uno convierte «falta Sweetness» en un error con nombre, en vez de en un
+ * puntaje calculado sobre siete números que parecería correcto.
+ */
+function resolverPuntajeTotal(
+  protocolVersion: { scoreFormula: string | null; attributes: ReadonlyArray<{ id: string; name: string }> },
+  input: SubmitAssessmentInput,
+): { overallScore: number | null; nonUniformCups: number | null; defectiveCups: number | null } {
+  if (protocolVersion.scoreFormula === null) {
+    return { overallScore: input.overallScore ?? null, nonUniformCups: null, defectiveCups: null };
+  }
+  if (protocolVersion.scoreFormula !== FORMULA_CVA_AFECTIVO) {
+    // Una fórmula que la base tiene y este código no conoce. Calcular algo
+    // sería inventar; guardar un total tecleado bajo un protocolo que dice
+    // calcularlo, también.
+    throw new SensoryAccessError("unknown_score_formula");
+  }
+
+  const porNombre = new Map(protocolVersion.attributes.map((a) => [a.name, a.id]));
+  const valorPorAtributo = new Map(input.attributeResponses.map((r) => [r.attributeId, r.value]));
+
+  const valores: number[] = [];
+  for (const nombre of ATRIBUTOS_CVA_AFECTIVO) {
+    const attributeId = porNombre.get(nombre);
+    if (attributeId === undefined) throw new SensoryAccessError("protocol_missing_attribute");
+    const valor = valorPorAtributo.get(attributeId);
+    if (valor === undefined) throw new SensoryAccessError("responses_incomplete");
+    valores.push(valor);
+  }
+
+  const nonUniformCups = input.nonUniformCups ?? 0;
+  const defectiveCups = input.defectiveCups ?? 0;
+
+  let overallScore: number;
+  try {
+    overallScore = puntajeAfectivoCva({ valores, tazasNoUniformes: nonUniformCups, tazasDefectuosas: defectiveCups });
+  } catch {
+    // El mensaje de `PuntajeCvaInvalido` nombra el atributo y su valor, pero
+    // esto viaja a un navegador: se traduce por clave, como el resto.
+    throw new SensoryAccessError("score_out_of_range");
+  }
+
+  return { overallScore, nonUniformCups, defectiveCups };
+}
+
 export async function submitAssessment(userAccountId: string, input: SubmitAssessmentInput) {
   const blindSample = await prisma.sensoryBlindSample.findUnique({
     where: { id: input.blindSampleId },
-    include: { flight: true },
+    include: {
+      flight: {
+        include: {
+          session: {
+            include: { protocolVersion: { include: { attributes: { orderBy: { displayOrder: "asc" } } } } },
+          },
+        },
+      },
+    },
   });
   if (!blindSample) throw new SensoryAccessError("blind_sample_not_found");
 
@@ -200,6 +270,8 @@ export async function submitAssessment(userAccountId: string, input: SubmitAsses
   if (input.attributeResponses.length === 0) {
     throw new SensoryAccessError("responses_required");
   }
+
+  const total = resolverPuntajeTotal(blindSample.flight.session.protocolVersion, input);
 
   // The real guarantee against a double submission is the DB-level unique
   // constraint on (blindSampleId, evaluatorUserAccountId) — a pre-check
@@ -222,7 +294,9 @@ export async function submitAssessment(userAccountId: string, input: SubmitAsses
         data: {
           blindSampleId: input.blindSampleId,
           evaluatorUserAccountId: userAccountId,
-          overallScore: input.overallScore ?? null,
+          overallScore: total.overallScore,
+          nonUniformCups: total.nonUniformCups,
+          defectiveCups: total.defectiveCups,
           comment: input.comment ?? null,
           attributeResponses: {
             create: input.attributeResponses.map((r) => ({

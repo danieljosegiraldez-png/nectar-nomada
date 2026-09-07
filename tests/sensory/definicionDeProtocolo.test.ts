@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { validarDefinicion, DefinicionInvalida } from "../../lib/sensory/definicionDeProtocolo";
+import { ATRIBUTOS_CVA_AFECTIVO } from "../../lib/sensory/puntajeCva";
 
 const RAIZ = new URL("../..", import.meta.url).pathname;
 
@@ -87,5 +88,80 @@ describe("la definición de un protocolo se comprueba antes de tocar producción
     // La licencia está en trámite (Daniel, 2026-09-06). Si algún día pasa a
     // `licensed`, esta línea es el sitio donde alguien lo verá.
     expect(d.standardLicenseStatus).toBe("pending_license");
+  });
+  /**
+   * **El segundo control positivo**, y el que importa desde el 2026-09-06: el
+   * archivo del CVA afectivo, que es el que se va a aplicar en producción.
+   * Las cuatro pruebas de `scoreFormula` de debajo son todas negativas.
+   */
+  it("el archivo del CVA afectivo pasa, y trae los ocho atributos en 1–9", () => {
+    const crudo = JSON.parse(readFileSync(`${RAIZ}protocolos/cafe-cva-afectivo-v2.json`, "utf8"));
+    const d = validarDefinicion(crudo);
+    expect(d.scoreFormula).toBe("cva_affective_v1");
+    expect(d.attributes.map((a) => a.name)).toEqual([...ATRIBUTOS_CVA_AFECTIVO]);
+    expect(d.attributes.every((a) => a.section === "affective")).toBe(true);
+    expect(d.attributes.every((a) => a.scaleMin === 1 && a.scaleMax === 9)).toBe(true);
+    expect(d.scoreMin).toBe(0);
+    expect(d.scoreMax).toBe(100);
+    expect(d.standardLicenseStatus).toBe("pending_license");
+  });
+
+  /** Una definición del CVA afectivo bien formada, que cada prueba estropea. */
+  function cva() {
+    return {
+      ...base(),
+      scoreMin: 0,
+      scoreMax: 100,
+      scoreFormula: "cva_affective_v1",
+      attributes: ATRIBUTOS_CVA_AFECTIVO.map((name) => ({
+        name,
+        section: "affective" as const,
+        scaleMin: 1,
+        scaleMax: 9,
+      })),
+    };
+  }
+
+  it("acepta la definición del CVA afectivo bien formada", () => {
+    expect(() => validarDefinicion(cva())).not.toThrow();
+  });
+
+  it("rechaza una fórmula que nadie calcula", () => {
+    const d = { ...cva(), scoreFormula: "cva_afectivo_v9" };
+    expect(() => validarDefinicion(d)).toThrow(/scoreFormula/);
+  });
+
+  it("rechaza el CVA afectivo al que le falta un atributo", () => {
+    const d = cva();
+    d.attributes = d.attributes.slice(0, 7);
+    expect(() => validarDefinicion(d)).toThrow(/exactamente, y en este orden/);
+  });
+
+  it("rechaza el CVA afectivo con los atributos en otro orden", () => {
+    const d = cva();
+    [d.attributes[0], d.attributes[1]] = [d.attributes[1]!, d.attributes[0]!];
+    expect(() => validarDefinicion(d)).toThrow(/exactamente, y en este orden/);
+  });
+
+  it("rechaza el CVA afectivo en escala 0–10", () => {
+    const d = cva();
+    d.attributes = d.attributes.map((a) => ({ ...a, scaleMin: 0, scaleMax: 10 }));
+    expect(() => validarDefinicion(d)).toThrow(/puntúa de 1 a 9/);
+  });
+
+  it("rechaza el CVA afectivo con un atributo marcado como descriptivo", () => {
+    const d = cva();
+    d.attributes = d.attributes.map((a, i) =>
+      i === 0 ? { ...a, section: "descriptive" as unknown as "affective" } : a,
+    );
+    expect(() => validarDefinicion(d)).toThrow(/marcado\(s\) como descriptivo/);
+  });
+
+  /**
+   * Sin `scoreFormula` nada de lo anterior aplica: los protocolos que ya
+   * existen no tienen que parecerse al CVA para seguir siendo válidos.
+   */
+  it("sin scoreFormula, un protocolo cualquiera sigue pasando", () => {
+    expect(() => validarDefinicion(base())).not.toThrow();
   });
 });
