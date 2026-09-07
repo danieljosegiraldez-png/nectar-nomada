@@ -11,7 +11,7 @@
  * cuerpo mal formado.
  */
 import { resolverPrincipal } from "../../../../../lib/sync/requestPrincipal";
-import { pushFieldEvents, DeviceError, type PushMutation } from "../../../../../lib/sync/pushFieldEvents";
+import { pushFieldEvents, DeviceError, type PushMutation, type MutacionDeEvento } from "../../../../../lib/sync/pushFieldEvents";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +46,21 @@ export async function POST(request: Request) {
   for (const raw of mutations) {
     const m = (raw ?? {}) as Record<string, unknown>;
     const occurredAt = toDate(m.occurredAt);
+
+    // A9.5 — las mutaciones de apiario no llevan `fieldSessionId`: la visita la
+    // resuelve el servidor a partir de la que esté abierta en ese sitio
+    // (`lib/traceability/visitaAbierta.ts`). El aparato no la conoce, y
+    // pedírsela lo obligaría a adivinar cuál era la visita del día.
+    if (m.kind === "inspection" || m.kind === "colony_event") {
+      if (typeof m.clientDraftId !== "string" || typeof m.colonyId !== "string" || !occurredAt) {
+        return Response.json({ error: "mutation_malformed" }, { status: 400 });
+      }
+      // Los campos propios de cada tipo los valida su servicio de dominio: aquí
+      // sólo se comprueba lo que hace falta para poder llamarlo.
+      parsed.push({ ...(m as object), occurredAt } as PushMutation);
+      continue;
+    }
+
     if (typeof m.clientDraftId !== "string" || typeof m.fieldSessionId !== "string") {
       return Response.json({ error: "mutation_missing_ids" }, { status: 400 });
     }
@@ -58,7 +73,7 @@ export async function POST(request: Request) {
       eventKindValueId: m.eventKindValueId,
       occurredAt,
       recordedAt: toDate(m.recordedAt),
-      position: (m.position ?? undefined) as PushMutation["position"],
+      position: (m.position ?? undefined) as MutacionDeEvento["position"],
       operatorPersonId: typeof m.operatorPersonId === "string" ? m.operatorPersonId : null,
       notes: typeof m.notes === "string" ? m.notes : null,
     });

@@ -11,7 +11,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { startFieldSession, endFieldSession, recordFieldEvent } from "../../lib/traceability/fieldSessions";
-import { pushFieldEvents, DeviceError, type PushMutation } from "../../lib/sync/pushFieldEvents";
+import { pushFieldEvents, DeviceError, type MutacionDeEvento } from "../../lib/sync/pushFieldEvents";
 import { registerDevice, DeviceValidationError } from "../../lib/sync/devices";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
@@ -94,7 +94,10 @@ async function abrirJornada(startedAt = new Date("2026-08-28T07:00:00Z")) {
   });
 }
 
-function mutacion(sessionId: string, draftId: string, extra: Partial<PushMutation> = {}): PushMutation {
+// A9.5 — `PushMutation` pasó a ser una unión etiquetada, así que este ayudante
+// nombra la variante que construye: `Partial<union>` es una unión de parciales
+// y no se puede esparcir sobre una variante concreta.
+function mutacion(sessionId: string, draftId: string, extra: Partial<MutacionDeEvento> = {}): MutacionDeEvento {
   return {
     clientDraftId: draftId,
     fieldSessionId: sessionId,
