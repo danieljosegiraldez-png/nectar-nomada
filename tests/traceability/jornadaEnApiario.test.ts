@@ -19,6 +19,7 @@ import {
 } from "../../lib/traceability/fieldSessions";
 import { recordInspection } from "../../lib/apiary/inspections";
 import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
+import { emitirReporteDeVisita, ReporteError } from "../../lib/traceability/reporteDeVisita";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a90-${Date.now()}`;
@@ -127,6 +128,10 @@ afterAll(async () => {
   await prisma.inspection.deleteMany({ where: assertDefinedWhere({ colonyId }) });
   await prisma.colony.deleteMany({ where: assertDefinedWhere({ hiveId }) });
   await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId: apiarioId }) });
+
+  const reportes = await prisma.report.findMany({ where: { subjectEntityType: "field_session" }, select: { id: true } });
+  await prisma.reportVersion.deleteMany({ where: assertDefinedWhere({ reportId: { in: reportes.map((r) => r.id) } }) });
+  await prisma.report.deleteMany({ where: assertDefinedWhere({ id: { in: reportes.map((r) => r.id) } }) });
 
   const cuentas = [registradorPorSitio, registradorPorProyecto, operarioDeFinca, apicultorConManejo];
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
@@ -369,5 +374,71 @@ describe("A9.3 — el cierre deja rastro, y se distingue del campo", () => {
   it("quien no puede abrir la visita tampoco puede cerrarla", async () => {
     const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
     await expect(completarVisita(operarioDeFinca, { fieldSessionId: visita.id })).rejects.toThrow(LocationAccessError);
+  });
+});
+
+describe("A9.6 — el reporte se congela, no se re-consulta", () => {
+  it("una visita sin completar no se puede reportar", async () => {
+    // Un reporte de algo que aún puede cambiar quedaría congelado igual, y con
+    // el mismo número. El cierre de A9.3 es su precondición.
+    const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
+    await expect(emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id })).rejects.toThrow(ReporteError);
+  });
+
+  it("emitido, el contenido queda congelado y no cambia al cambiar los datos", async () => {
+    // Es la propiedad entera de D7: el documento que el cliente descargue en
+    // marzo y el que descargue en septiembre son el mismo.
+    // Hora propia: las demás pruebas dejan visitas abiertas con la misma hora
+    // declarada, y sin esto «la visita abierta» dependía del desempate.
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-03T13:00:00Z"),
+    });
+    await recordInspection(apicultorConManejo, { colonyId, outcome: "nothing_unusual", note: `TEST rep (${RUN_ID})` });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id, notes: "notas originales" });
+
+    const { version, snapshot } = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    expect(version.version).toBe(1);
+    expect(snapshot.registros.length).toBe(1);
+    expect(snapshot.visita.notas).toBe("notas originales");
+
+    // Se cambian los datos vivos DESPUÉS de emitir.
+    await prisma.fieldSession.update({ where: { id: visita.id }, data: { notes: "corregido despues" } });
+
+    const guardado = await prisma.reportVersion.findUniqueOrThrow({ where: { id: version.id } });
+    const congelado = guardado.renderedSnapshot as unknown as { visita: { notas: string } };
+    expect(congelado.visita.notas, "el snapshot siguió a los datos vivos: no está congelado").toBe("notas originales");
+  });
+
+  it("emitir otra vez crea una VERSIÓN nueva, no pisa la anterior", async () => {
+    const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    const primera = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    const segunda = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    expect(segunda.version.version).toBe(primera.version.version + 1);
+    expect(segunda.reporte.id).toBe(primera.reporte.id);
+    const cuantas = await prisma.reportVersion.count({ where: { reportId: primera.reporte.id } });
+    expect(cuantas).toBe(2);
+  });
+
+  it("los costos NO entran al snapshot salvo que el contrato lo pida", async () => {
+    // Lo que no se congela no se puede filtrar mal después. Es más seguro que
+    // esconderlos al renderizar.
+    const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    const porDefecto = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    const q = porDefecto.version.generationQuery as unknown as { incluyeCostos: boolean };
+    expect(q.incluyeCostos).toBe(false);
+  });
+
+  it("quien no puede ver la visita no puede emitir su reporte", async () => {
+    const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await expect(emitirReporteDeVisita(operarioDeFinca, { fieldSessionId: visita.id })).rejects.toThrow(
+      LocationAccessError,
+    );
   });
 });

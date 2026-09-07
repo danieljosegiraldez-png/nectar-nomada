@@ -18,6 +18,10 @@
   ],
   "importan_cliente_total": [
     {
+      "archivo": "lib/traceability/reporteDeVisita.ts",
+      "razon": "A9.6 — emite el reporte de una visita congelando su contenido. Modulo de dominio: es el sitio donde el acceso a datos vive por diseno. Comprueba `requireFieldSessionAccess` antes de leer nada, y su escritura confirma su AuditEvent en la misma transaccion."
+    },
+    {
       "archivo": "lib/traceability/enmiendas.ts",
       "razon": "A9.3 — el lector generico del rastro de una entidad. Modulo de dominio: es el sitio donde el acceso a datos vive por diseno. Solo lee `AuditEvent`, y sobre pares (entityType, entityId) que le pasa quien ya resolvio el acceso a esa entidad."
     },

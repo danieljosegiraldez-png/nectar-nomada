@@ -36,7 +36,12 @@ export async function visitaAbiertaEn(
 ): Promise<string | null> {
   const visita = await tx.fieldSession.findFirst({
     where: { locationId, createdBy: userAccountId, endedAt: null, status: "draft" },
-    orderBy: { startedAt: "desc" },
+    // Desempate por `createdAt`, y hace falta: `startedAt` lo DECLARA quien abre
+    // la visita, así que dos visitas del mismo sitio pueden traer la misma hora
+    // —lo produjo una prueba, y en campo lo produciría alguien reabriendo tras
+    // un cierre en falso—. Sin desempate, «la visita abierta» era la que la base
+    // devolviera primero, que no es una respuesta.
+    orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
     select: { id: true },
   });
   return visita?.id ?? null;
