@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { startFieldSession, endFieldSession, LocationAccessError } from "../../lib/traceability/fieldSessions";
 import { recordInspection } from "../../lib/apiary/inspections";
+import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a90-${Date.now()}`;
@@ -25,6 +26,7 @@ let registradorPorProyecto: string;
 let operarioDeFinca: string;
 let colonyId: string;
 let apicultorConManejo: string;
+let deviceId: string;
 let hiveId: string;
 
 async function crearPersona(label: string) {
@@ -102,6 +104,11 @@ beforeAll(async () => {
   // hace falta esta otra autoridad.
   apicultorConManejo = await crearCuenta("ApicultorManejo");
   await asignar(apicultorConManejo, "Farm Operator", "location", apiarioId);
+
+  const device = await prisma.device.create({
+    data: { label: `TEST tel (${RUN_ID})`, platform: "pwa" },
+  });
+  deviceId = device.id;
 });
 
 afterAll(async () => {
@@ -109,6 +116,7 @@ afterAll(async () => {
   const sesiones = await prisma.fieldSession.findMany({ where: { locationId: { in: locationIds } }, select: { id: true } });
   await prisma.fieldEvent.deleteMany({ where: assertDefinedWhere({ fieldSessionId: { in: sesiones.map((s) => s.id) } }) });
   await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: sesiones.map((s) => s.id) } }) });
+  await prisma.device.deleteMany({ where: assertDefinedWhere({ id: deviceId }) });
   await prisma.inspection.deleteMany({ where: assertDefinedWhere({ colonyId }) });
   await prisma.colony.deleteMany({ where: assertDefinedWhere({ hiveId }) });
   await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId: apiarioId }) });
@@ -210,5 +218,82 @@ describe("A9.2 — una visita agrupa lo que se registra durante ella", () => {
 
     const inspeccion = await inspeccionar(apicultorConManejo, `TEST cerrada (${RUN_ID})`);
     expect(await eventoDe(inspeccion.id)).toBeNull();
+  });
+});
+
+describe("A9.5 — el lote acepta lo que se captura en el apiario", () => {
+  it("una inspección empujada por lotes entra, y cae dentro de la visita abierta", async () => {
+    // Es la mitad del servidor del colapso de las dos colas: hasta ahora el
+    // lote sólo aceptaba `FieldEvent`, y una inspección no lo es.
+    const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
+    const borrador = `${RUN_ID}-lote-1`;
+
+    const [resultado] = await pushFieldEvents(apicultorConManejo, deviceId, [
+      {
+        kind: "inspection",
+        clientDraftId: borrador,
+        colonyId,
+        occurredAt: new Date("2026-09-02T14:00:00Z"),
+        outcome: "nothing_unusual",
+        note: `TEST por lotes (${RUN_ID})`,
+      },
+    ]);
+
+    expect(resultado!.status).toBe("applied");
+    const inspeccion = await prisma.inspection.findUniqueOrThrow({ where: { clientDraftId: borrador } });
+
+    // Y lo que hace que valga la pena: el enganche de A9.2 funciona igual
+    // viniendo del lote. No hubo que repetir la regla en el camino nuevo.
+    const evento = await prisma.fieldEvent.findFirst({ where: { inspectionId: inspeccion.id } });
+    expect(evento, "la inspección del lote no quedó ligada a la visita").not.toBeNull();
+    expect(evento!.fieldSessionId).toBe(visita.id);
+
+    await endFieldSession(apicultorConManejo, { fieldSessionId: visita.id, endedAt: new Date() });
+  });
+
+  it("reenviar el mismo borrador dice `duplicate`, no crea una segunda", async () => {
+    // Un reintento tras una respuesta perdida es lo normal sin señal: tiene que
+    // ser inocuo Y decirlo, que es lo que el protocolo por lotes promete.
+    const borrador = `${RUN_ID}-lote-2`;
+    const mutacion = {
+      kind: "inspection" as const,
+      clientDraftId: borrador,
+      colonyId,
+      occurredAt: new Date("2026-09-02T15:00:00Z"),
+      outcome: "nothing_unusual",
+    };
+
+    const [primera] = await pushFieldEvents(apicultorConManejo, deviceId, [mutacion]);
+    const [segunda] = await pushFieldEvents(apicultorConManejo, deviceId, [mutacion]);
+
+    expect(primera).toBeDefined();
+    expect(segunda).toBeDefined();
+    expect(primera!.status).toBe("applied");
+    expect(segunda!.status).toBe("duplicate");
+    // La misma fila, no una segunda con otro id: es lo que hace inocuo el
+    // reintento.
+    const idPrimera = primera!.status === "applied" ? primera!.id : null;
+    const idSegunda = segunda!.status === "duplicate" ? segunda!.id : null;
+    expect(idSegunda).toBe(idPrimera);
+
+    const cuantas = await prisma.inspection.count({ where: { clientDraftId: borrador } });
+    expect(cuantas).toBe(1);
+  });
+
+  it("sin permiso, el lote lo RECHAZA en vez de tragárselo", async () => {
+    // Un rechazo del servidor se informa y el borrador se descarta; un error
+    // inesperado se relanza. Confundirlos borraría trabajo de campo
+    // presentándolo como dato inválido.
+    const [resultado] = await pushFieldEvents(registradorPorSitio, deviceId, [
+      {
+        kind: "inspection",
+        clientDraftId: `${RUN_ID}-lote-3`,
+        colonyId,
+        occurredAt: new Date("2026-09-02T16:00:00Z"),
+        outcome: "nothing_unusual",
+      },
+    ]);
+    expect(resultado!.status).toBe("rejected");
+    expect(await prisma.inspection.count({ where: { clientDraftId: `${RUN_ID}-lote-3` } })).toBe(0);
   });
 });

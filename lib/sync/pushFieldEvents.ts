@@ -5,6 +5,9 @@ import {
   LocationAccessError,
   type Coordinates,
 } from "../traceability/fieldSessions";
+import { recordInspection } from "../apiary/inspections";
+import { recordColonyEvent, ColonyEventValidationError } from "../apiary/colonyEvents";
+import { ApiaryAccessError } from "../apiary/hives";
 
 /**
  * P4 §4 (46_P4_API_Y_SINCRONIZACION.md) — push por lotes con resultado **por
@@ -30,7 +33,28 @@ import {
  * corte de base borrara trabajo de campo presentándolo como dato inválido.
  */
 
-export type PushMutation = {
+/**
+ * A9.5 — el lote acepta también lo que se captura en el apiario.
+ *
+ * **Por qué aquí y no en una tercera cola.** `lib/sync/offlineQueue.ts` ya lo
+ * dejó escrito con su disparador: *«el momento es cuando apiario pase a push
+ * por lotes; entonces las dos colapsan en ésta y `lib/apiary/` pasa a ser un
+ * envoltorio»*. Esto es la mitad del servidor de ese colapso; el cliente sigue
+ * usando su cola de una en una y no se toca, para que la única superficie de
+ * captura que hoy funciona en producción no dependa de este cambio.
+ *
+ * **No se reimplementa ninguna regla.** Una mutación de apiario llama a
+ * `recordInspection` / `recordColonyEvent`, que ya traen lo suyo: la compuerta
+ * correcta —`apiary:manage` para inspección, la más estrecha para evento—, la
+ * idempotencia por `clientDraftId`, el `AuditEvent` en la misma transacción, y
+ * desde A9.2 el enganche a la visita abierta. Copiar esas reglas aquí sería
+ * crear un segundo sitio donde envejecen por separado.
+ */
+export type PushMutation = MutacionDeEvento | MutacionDeInspeccion | MutacionDeEventoDeColonia;
+
+export type MutacionDeEvento = {
+  /** Ausente es `field_event`: el protocolo viejo sigue valiendo tal cual. */
+  kind?: "field_event";
   clientDraftId: string;
   fieldSessionId: string;
   eventKindValueId: string;
@@ -47,6 +71,43 @@ export type PushMutation = {
   lotTransformationId?: string | null;
 };
 
+/**
+ * Los campos son los que `RecordInspectionInput` ya define. No se valida aquí
+ * lo que el servicio valida: se traduce y se delega.
+ */
+export type MutacionDeInspeccion = {
+  kind: "inspection";
+  clientDraftId: string;
+  colonyId: string;
+  occurredAt: Date;
+  outcome: string;
+  operatorPersonId?: string | null;
+  broodPatternNote?: string | null;
+  queenSighted?: boolean | null;
+  storesLevel?: string | null;
+  temperamentNote?: string | null;
+  pestDiseaseFlags?: string | null;
+  note?: string | null;
+};
+
+export type MutacionDeEventoDeColonia = {
+  kind: "colony_event";
+  clientDraftId: string;
+  colonyId: string;
+  occurredAt: Date;
+  eventType: string;
+  operatorPersonId?: string | null;
+  note?: string | null;
+  feedingMaterial?: string | null;
+  feedingQuantity?: number | null;
+  feedingUnit?: string | null;
+  treatmentProduct?: string | null;
+  /** Número, como en `RecordColonyEventInput`: una dosis se compara. */
+  treatmentDose?: number | null;
+  treatmentDoseUnit?: string | null;
+  treatmentBatchLabel?: string | null;
+};
+
 export type PushResult =
   | { clientDraftId: string; status: "applied"; id: string }
   | { clientDraftId: string; status: "duplicate"; id: string }
@@ -54,6 +115,67 @@ export type PushResult =
 
 /** El lote entero se niega: el aparato no existe o está revocado. */
 export class DeviceError extends Error {}
+
+/**
+ * Aplica una mutación de apiario delegando en su servicio de dominio.
+ *
+ * El servicio devuelve la fila sin decir si la acaba de crear, así que la
+ * comprobación previa por `clientDraftId` es lo que separa `applied` de
+ * `duplicate`. Es la misma forma que el camino de `FieldEvent` usa, y por la
+ * misma razón.
+ */
+async function aplicarMutacionDeApiario(
+  userAccountId: string,
+  m: MutacionDeInspeccion | MutacionDeEventoDeColonia,
+): Promise<PushResult> {
+  const yaEstaba =
+    m.kind === "inspection"
+      ? await prisma.inspection.findUnique({ where: { clientDraftId: m.clientDraftId }, select: { id: true } })
+      : await prisma.colonyEvent.findUnique({ where: { clientDraftId: m.clientDraftId }, select: { id: true } });
+  if (yaEstaba) return { clientDraftId: m.clientDraftId, status: "duplicate", id: yaEstaba.id };
+
+  try {
+    const fila =
+      m.kind === "inspection"
+        ? await recordInspection(userAccountId, {
+            colonyId: m.colonyId,
+            occurredAt: m.occurredAt,
+            operatorPersonId: m.operatorPersonId ?? null,
+            outcome: m.outcome as never,
+            broodPatternNote: m.broodPatternNote ?? null,
+            queenSighted: m.queenSighted ?? null,
+            storesLevel: m.storesLevel ?? null,
+            temperamentNote: m.temperamentNote ?? null,
+            pestDiseaseFlags: m.pestDiseaseFlags ?? null,
+            note: m.note ?? null,
+            clientDraftId: m.clientDraftId,
+          })
+        : await recordColonyEvent(userAccountId, {
+            colonyId: m.colonyId,
+            occurredAt: m.occurredAt,
+            operatorPersonId: m.operatorPersonId ?? null,
+            eventType: m.eventType as never,
+            note: m.note ?? null,
+            feedingMaterial: m.feedingMaterial ?? null,
+            feedingQuantity: m.feedingQuantity ?? null,
+            feedingUnit: m.feedingUnit ?? null,
+            treatmentProduct: m.treatmentProduct ?? null,
+            treatmentDose: m.treatmentDose ?? null,
+            treatmentDoseUnit: m.treatmentDoseUnit ?? null,
+            treatmentBatchLabel: m.treatmentBatchLabel ?? null,
+            clientDraftId: m.clientDraftId,
+          });
+    return { clientDraftId: m.clientDraftId, status: "applied", id: fila.id };
+  } catch (error) {
+    // Un fallo de PERMISO o de VALIDACIÓN es un rechazo del servidor: se
+    // informa y el borrador se descarta. Cualquier otra cosa se relanza, para
+    // que un corte de base no borre trabajo de campo disfrazado de dato malo.
+    if (error instanceof ApiaryAccessError || error instanceof ColonyEventValidationError) {
+      return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
+    }
+    throw error;
+  }
+}
 
 export async function pushFieldEvents(
   userAccountId: string,
@@ -76,6 +198,16 @@ export async function pushFieldEvents(
   // Importa aunque hoy ningún evento dependa de otro: un rechazo se lee junto
   // a lo que el operador recuerda haber hecho, y reordenarlos lo haría ilegible.
   for (const m of mutations) {
+    // A9.5 — una mutación de apiario se delega a su servicio, que ya trae la
+    // compuerta, la idempotencia y el audit. Lo único que se hace aquí es
+    // distinguir `applied` de `duplicate`, que es lo que el protocolo promete
+    // informar y el servicio no dice.
+    if (m.kind === "inspection" || m.kind === "colony_event") {
+      const resultado = await aplicarMutacionDeApiario(userAccountId, m);
+      results.push(resultado);
+      continue;
+    }
+
     // La comprobación previa es lo que distingue `applied` de `duplicate`.
     // `recordFieldEvent` también la hace —tiene que ser seguro por su cuenta,
     // porque el formulario web lo llama directo— pero devuelve la fila sin
