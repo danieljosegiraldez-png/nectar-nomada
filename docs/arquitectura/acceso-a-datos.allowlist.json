@@ -304,6 +304,10 @@
   ],
   "reciben_transaccion": [
     {
+      "archivo": "lib/traceability/reporteDeVisita.ts",
+      "razon": "A9.6 — abre su propia transaccion al emitir y al publicar, para que la escritura y su AuditEvent se confirmen juntos. El ayudante `versionIdDe` recibe ese `tx` en vez de importar el cliente: opera dentro de la transaccion que este mismo modulo abrio."
+    },
+    {
       "archivo": "lib/apiary/protocoloDeCampo.ts",
       "razon": "A9.4 — abre su propia transacción y su retrollamada recibe el `tx`, que es como la carga del protocolo y su AuditEvent se confirman juntos. No lo recibe de fuera: lo crea, dentro del mismo módulo de dominio que ya está inventariado como importador del cliente."
     },
@@ -355,6 +359,12 @@
     }
   ],
   "dependen_del_llamador": [
+    {
+      "archivo": "lib/traceability/reporteDeVisita.ts",
+      "operacion": "abrirReportePorEnlace",
+      "razon": "No recibe principal A PROPOSITO: es la superficie que abre un cliente SIN cuenta, y el token es la autorizacion. Por eso no da acceso a nada mas que al snapshot de esa version: no consulta la visita, ni el sitio, ni el proyecto. Sus tres cierres —inexistente, caducado, revocado— devuelven lo mismo sin decir cual, para no confirmarle el formato a quien prueba tokens. Si alguna vez devuelve algo que no sea ese snapshot, esta linea es la que hay que releer.",
+      "verificado": "2026-09-07"
+    },
     {
       "archivo": "lib/traceability/enmiendas.ts",
       "operacion": "leerEnmiendas",
