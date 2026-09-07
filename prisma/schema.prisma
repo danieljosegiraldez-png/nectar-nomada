@@ -14,7 +14,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  schemas    = ["core", "commerce", "experiences", "partner", "sensory", "ai", "competitions", "traceability", "apiary", "research"]
+  schemas    = ["core", "commerce", "experiences", "partner", "sensory", "ai", "competitions", "traceability", "apiary", "research", "reporting"]
   // DECISIONS.md ADR-021/ADR-022 — deferred against the local PGlite sandbox
   // (no extension support), enabled now that Neon is the primary database.
   extensions = [postgis]
@@ -254,6 +254,10 @@ model UserAccount {
   researchActivitiesReviewed         ResearchActivity[]           @relation("ResearchActivityReviewedBy")
   researchActivitiesCreated          ResearchActivity[]           @relation("ResearchActivityCreatedBy")
   devicesCreated                     Device[]                     @relation("DeviceCreatedBy")
+
+  /// A9.6 — el otro lado de las FK de `reporting`.
+  reportsCreated  Report[]        @relation("ReportCreatedBy")
+  reportVersionsGenerated ReportVersion[] @relation("ReportVersionGeneratedBy")
 
   @@map("user_account")
   @@schema("core")
@@ -5976,4 +5980,106 @@ model ResearchActivity {
   @@index([proposedByUserAccountId])
   @@map("research_activity")
   @@schema("research")
+}
+
+/// A9.6 (D7) — el reporte de visita que se entrega al cliente.
+///
+/// **No es un mecanismo de versionado nuevo.** Es el que
+/// `COMMERCE_OPERATIONS_TOOLS_ARCHITECTURE.md:501-507` ya especificó y ADR-020
+/// aprobó como arquitectura, con `report_type` incluyendo ya `consulting` y
+/// `farm`. Estrenar tabla propia lo habría convertido en el CUARTO mecanismo
+/// de versionado del repositorio, después de `ProtocolVersion`,
+/// `SensoryProtocolVersion` y `ProcessRecipeVersion`.
+enum ReportType {
+  lot
+  experiment
+  farm
+  consulting
+  sensory
+
+  @@schema("reporting")
+}
+
+enum ReportStatus {
+  draft
+  issued
+  withdrawn
+
+  @@schema("reporting")
+}
+
+enum ReportSurface {
+  web
+  pdf
+  client_portal
+  download
+
+  @@schema("reporting")
+}
+
+model Report {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  reportType ReportType @map("report_type")
+  /// El sujeto no lleva FK a propósito: un reporte puede ser de una visita, de
+  /// un lote o de un proyecto, y una FK por tipo daría cinco columnas nulas.
+  /// Es la misma excepción declarada que `Approval` (ADR-020 decisión 8).
+  subjectEntityType String @map("subject_entity_type")
+  subjectEntityId   String @map("subject_entity_id") @db.Uuid
+
+  status ReportStatus @default(draft)
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ReportCreatedBy", fields: [createdBy], references: [id])
+
+  versions ReportVersion[]
+
+  @@index([subjectEntityType, subjectEntityId])
+  @@map("report")
+  @@schema("reporting")
+}
+
+model ReportVersion {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId String @map("report_id") @db.Uuid
+  report   Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  version     Int
+  generatedAt DateTime @default(now()) @map("generated_at")
+
+  /// Qué consulta produjo esta versión. Sin esto un reporte congelado es un
+  /// documento suelto; con esto se puede regenerar y comparar con lo que dicen
+  /// los datos hoy, que es la pregunta que un cliente hace de verdad.
+  generationQuery Json @map("generation_query")
+
+  /// El contenido CONGELADO. Es lo único de este alcance que no se puede
+  /// añadir después: un reporte emitido sin snapshot no se reconstruye.
+  /// Renderizar desde datos vivos haría que el documento que el cliente
+  /// descargue en marzo y el que descargue en septiembre fueran distintos con
+  /// el mismo número.
+  renderedSnapshot Json @map("rendered_snapshot")
+
+  generatedBy String?      @map("generated_by") @db.Uuid
+  generator   UserAccount? @relation("ReportVersionGeneratedBy", fields: [generatedBy], references: [id])
+
+  publications ReportPublication[]
+
+  @@unique([reportId, version])
+  @@index([reportId])
+  @@map("report_version")
+  @@schema("reporting")
+}
+
+model ReportPublication {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportVersionId String        @map("report_version_id") @db.Uuid
+  reportVersion   ReportVersion @relation(fields: [reportVersionId], references: [id], onDelete: Cascade)
+
+  surface     ReportSurface
+  publishedAt DateTime      @default(now()) @map("published_at")
+
+  @@index([reportVersionId])
+  @@map("report_publication")
+  @@schema("reporting")
 }
