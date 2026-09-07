@@ -30,6 +30,12 @@ export interface RecordColonyEventInput {
   feedingMaterial?: string | null;
   feedingQuantity?: number | null;
   feedingUnit?: string | null;
+  // Sólo tiene sentido en `feeding`: hasta cuándo alcanza lo dejado, estimado
+  // por quien alimenta. No se valida como obligatoria aquí porque las
+  // alimentaciones de urgencia se registran sin saberlo; la obligatoriedad vive
+  // en el protocolo A9.4 (`coverage_until`, `"required": true`), que es donde el
+  // dueño la puede cambiar sin tocar código.
+  coverageUntil?: Date | null;
   treatmentProduct?: string | null;
   // Required whenever eventType = treatment (§1a) — enforced below, not by
   // the DB column, same shape as recordMaterialConsumptionEntry's own
@@ -85,6 +91,7 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
         feedingMaterial: input.feedingMaterial ?? null,
         feedingQuantity: input.feedingQuantity ?? null,
         feedingUnit: input.feedingUnit ?? null,
+        coverageUntil: input.eventType === "feeding" ? (input.coverageUntil ?? null) : null,
         treatmentProduct: input.treatmentProduct ?? null,
         treatmentBatchLabel: input.treatmentBatchLabel?.trim() ?? null,
         treatmentDose: input.treatmentDose ?? null,

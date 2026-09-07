@@ -146,6 +146,15 @@ export const HORAS_DE_VENTANA_DE_CIERRE = 48;
 export interface CerrarVisitaInput {
   fieldSessionId: string;
   notes?: string | null;
+  /**
+   * A9.8 — cuándo toca volver. La declara quien cierra, y es lo que hace que
+   * la cadencia sea un parámetro por sitio sin serlo en el código: quien pone
+   * la fecha sabe en qué mes está y bajo qué contrato (D9). El tablero de
+   * sitios alerta contra ella, no contra un calendario que no existe.
+   */
+  nextVisitDueAt?: Date | null;
+  /** Colonias contadas al salir del sitio. Sin esto no hay «pérdida sin reposición». */
+  coloniesAliveCount?: number | null;
   /** Por qué se completó así. Va al `reason` del AuditEvent. */
   reason?: string | null;
 }
@@ -196,6 +205,8 @@ export async function completarVisita(userAccountId: string, input: CerrarVisita
         completedAt,
         editWindowExpiresAt,
         ...(input.notes === undefined ? {} : { notes: input.notes }),
+        ...(input.nextVisitDueAt === undefined ? {} : { nextVisitDueAt: input.nextVisitDueAt }),
+        ...(input.coloniesAliveCount === undefined ? {} : { coloniesAliveCount: input.coloniesAliveCount }),
       },
     });
 

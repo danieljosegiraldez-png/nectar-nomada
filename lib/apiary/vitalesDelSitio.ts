@@ -1,0 +1,216 @@
+import { prisma } from "../db";
+
+/**
+ * A9.8 — los vitales de cada sitio de apiario y el color de su borde.
+ *
+ * **Esta función no autoriza, y por eso no recibe `userAccountId`.** Recibe los
+ * ids que quien la llama ya obtuvo de `getApiaryList`, que sí autoriza. Misma
+ * disciplina que `leerEnmiendas` (A9.3): un lector que pide un principal parece
+ * una compuerta y termina usándose como tal.
+ *
+ * ## De dónde sale cada cifra, y cuáles faltan
+ *
+ * Regla del Anexo C que gobierna todo esto: **ninguna cifra sin fila detrás.**
+ * Lo que no se ha medido se dice «sin registro», que es un dato distinto de
+ * cero y más útil que un cero falso. Por eso cada vital es `null`-able y ningún
+ * cálculo rellena huecos.
+ *
+ * De los ocho vitales del Anexo C §1.1, aquí salen seis. Los dos que faltan y
+ * por qué:
+ *
+ *   * **Densidad de polinización** — necesita hectáreas comprometidas, que es
+ *     A9.9. No se estima.
+ *   * **Clima 7 días** — capa externa, sin proveedor conectado.
+ *
+ * ## Los umbrales, y por qué son constantes aquí sin contradecir al Anexo
+ *
+ * El Anexo C §1.2 exige que los umbrales sean parámetros por sitio y no
+ * constantes. **La cadencia lo es**, y no por una columna de configuración:
+ * vive en `nextVisitDueAt`, que declara una persona al cerrar cada visita
+ * sabiendo en qué mes está y bajo qué contrato (D9). Un apiario de producción
+ * en Los Asientos y uno de polinización en Toabré alertan distinto porque quien
+ * cierra pone fechas distintas.
+ *
+ * Lo que queda como constante son los dos plazos de gracia de abajo, que no son
+ * propiedades de un sitio sino decisiones sobre cómo se comporta el aviso. Si
+ * algún día un sitio necesita los suyos, son dos columnas anulables sobre
+ * `Location`, del mismo idioma que `sunExposure` o `dryingRoomBedLevelCount`.
+ *
+ * ## Las dos reglas del Anexo que deliberadamente NO se implementan
+ *
+ *   * **«Sin visita en 45 días en temporada»** — D9. Es la misma pregunta que
+ *     «visita programada vencida» con una fuente peor: intenta adivinar desde
+ *     un calendario de floración que no existe en ningún sitio del esquema. La
+ *     otra usa una fecha que alguien declaró.
+ *   * **«Densidad bajo el objetivo»** — A9.9.
+ */
+
+/** Pasado este plazo desde la fecha declarada, la próxima visita ya no es la programada (Anexo C §1.2). */
+export const DIAS_DE_GRACIA_DE_VISITA = 14;
+/** Ventana para coordinar una alimentación antes de que se acabe. Kiva exige avisar con 3 días. */
+export const DIAS_DE_AVISO_DE_ALIMENTO = 7;
+/** Un borrador más viejo que esto se cierra de memoria, no de recuerdo. */
+export const HORAS_DE_BORRADOR_VIEJO = 72;
+
+const MS_POR_DIA = 86_400_000;
+
+export type NivelDeAlerta = "critico" | "aviso";
+
+export type MotivoDeAlerta =
+  | "perdida_sin_reposicion"
+  | "visita_vencida"
+  | "alimento_vencido"
+  | "alimento_por_vencer"
+  | "visita_sin_cerrar";
+
+export interface Alerta {
+  nivel: NivelDeAlerta;
+  motivo: MotivoDeAlerta;
+}
+
+export interface VitalesDeSitio {
+  locationId: string;
+  /** `null` = nunca se registró una visita en este sitio. No es «hace mucho». */
+  ultimaVisita: Date | null;
+  diasDesdeUltimaVisita: number | null;
+  proximaVisita: Date | null;
+  /** Lo que alguien contó al salir del sitio. Distinto de `coloniasActivas`. */
+  coloniasVivasDeclaradas: number | null;
+  /** Filas `Colony` en estado activo ahora mismo. Distinto de lo declarado, y a propósito. */
+  coloniasActivas: number;
+  cajas: number;
+  alimentoHasta: Date | null;
+  ultimaCosecha: Date | null;
+  ultimaCosechaKg: number | null;
+  /** La visita en borrador más vieja sin cerrar, si la hay. */
+  borradorAbiertoDesde: Date | null;
+  /** En el orden del Anexo C §1.2: la primera es la que pinta el borde. */
+  alertas: Alerta[];
+}
+
+/**
+ * El orden importa: el borde toma su color de `alertas[0]`, y el Anexo lo fija
+ * como «la primera regla que se cumpla, en este orden».
+ */
+export function alertasDe(v: Omit<VitalesDeSitio, "alertas">, hubieron: { perdidaSinReposicion: boolean; alimentoRepuesto: boolean }, ahora: Date): Alerta[] {
+  const alertas: Alerta[] = [];
+
+  if (hubieron.perdidaSinReposicion) alertas.push({ nivel: "critico", motivo: "perdida_sin_reposicion" });
+
+  if (v.proximaVisita && ahora.getTime() - v.proximaVisita.getTime() > DIAS_DE_GRACIA_DE_VISITA * MS_POR_DIA) {
+    alertas.push({ nivel: "critico", motivo: "visita_vencida" });
+  }
+
+  if (v.alimentoHasta && v.alimentoHasta < ahora && !hubieron.alimentoRepuesto) {
+    alertas.push({ nivel: "critico", motivo: "alimento_vencido" });
+  } else if (v.alimentoHasta && v.alimentoHasta >= ahora && v.alimentoHasta.getTime() - ahora.getTime() < DIAS_DE_AVISO_DE_ALIMENTO * MS_POR_DIA) {
+    alertas.push({ nivel: "aviso", motivo: "alimento_por_vencer" });
+  }
+
+  if (v.borradorAbiertoDesde && ahora.getTime() - v.borradorAbiertoDesde.getTime() > HORAS_DE_BORRADOR_VIEJO * 3_600_000) {
+    alertas.push({ nivel: "aviso", motivo: "visita_sin_cerrar" });
+  }
+
+  return alertas;
+}
+
+/**
+ * Un sitio sin ninguna fila devuelve todo en `null` y `alertas: []`. Eso es
+ * «no se ha medido», no «está bien»: la pantalla lo rotula distinto de un sitio
+ * medido y sano, porque son cosas distintas.
+ */
+export async function vitalesDeSitios(locationIds: string[], ahora = new Date()): Promise<Map<string, VitalesDeSitio>> {
+  const salida = new Map<string, VitalesDeSitio>();
+  if (locationIds.length === 0) return salida;
+
+  const [sesiones, colmenas, alimentaciones, cosechas] = await Promise.all([
+    prisma.fieldSession.findMany({
+      where: { locationId: { in: locationIds } },
+      select: {
+        locationId: true,
+        startedAt: true,
+        status: true,
+        nextVisitDueAt: true,
+        coloniesAliveCount: true,
+        completedAt: true,
+      },
+      orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+    }),
+    prisma.hive.findMany({
+      where: { locationId: { in: locationIds } },
+      select: { id: true, locationId: true, colonies: { select: { status: true, startedAt: true } } },
+    }),
+    prisma.colonyEvent.findMany({
+      where: { eventType: "feeding", coverageUntil: { not: null }, colony: { hive: { locationId: { in: locationIds } } } },
+      select: { occurredAt: true, coverageUntil: true, colony: { select: { hive: { select: { locationId: true } } } } },
+    }),
+    prisma.apiaryHarvestEvent.findMany({
+      where: { colony: { hive: { locationId: { in: locationIds } } } },
+      select: { occurredAt: true, extractedWeightKg: true, colony: { select: { hive: { select: { locationId: true } } } } },
+      orderBy: { occurredAt: "desc" },
+    }),
+  ]);
+
+  for (const locationId of locationIds) {
+    const misSesiones = sesiones.filter((s) => s.locationId === locationId);
+    const misColmenas = colmenas.filter((h) => h.locationId === locationId);
+    const misAlimentos = alimentaciones.filter((f) => f.colony.hive.locationId === locationId);
+    const miCosecha = cosechas.find((h) => h.colony.hive.locationId === locationId) ?? null;
+
+    const ultimaVisita = misSesiones[0]?.startedAt ?? null;
+
+    // Sólo una visita CERRADA declara la próxima: un borrador todavía no llegó
+    // a la etapa de cierre, donde vive `next_visit_due_at`.
+    const ultimaCerrada = misSesiones.find((s) => s.status === "completed" || s.status === "locked") ?? null;
+    const proximaVisita = ultimaCerrada?.nextVisitDueAt ?? null;
+
+    const conConteo = misSesiones.filter((s) => s.coloniesAliveCount != null);
+    const coloniasVivasDeclaradas = conConteo[0]?.coloniesAliveCount ?? null;
+
+    // «Pérdida sin reposición»: hicieron falta DOS conteos declarados para que
+    // la pregunta tenga respuesta. Con uno solo no se sabe si bajó — y eso se
+    // dice como «sin registro», no como «no pasó nada».
+    const conteoAnterior = conConteo[1]?.coloniesAliveCount ?? null;
+    const visitaAnterior = conConteo[1]?.startedAt ?? null;
+    const bajoElConteo = coloniasVivasDeclaradas != null && conteoAnterior != null && coloniasVivasDeclaradas < conteoAnterior;
+    const huboReposicion =
+      visitaAnterior != null && misColmenas.some((h) => h.colonies.some((c) => c.startedAt > visitaAnterior));
+
+    const alimentoHasta = misAlimentos.reduce<Date | null>(
+      (max, f) => (f.coverageUntil && (!max || f.coverageUntil > max) ? f.coverageUntil : max),
+      null,
+    );
+    // «Vencido y SIN nueva alimentación»: la segunda mitad es la que evita
+    // gritar sobre un sitio que ya se atendió y todavía no declaró hasta cuándo.
+    const alimentoRepuesto = alimentoHasta != null && misAlimentos.some((f) => f.occurredAt > alimentoHasta);
+
+    const borrador = misSesiones.filter((s) => s.status === "draft").at(-1) ?? null;
+
+    const base: Omit<VitalesDeSitio, "alertas"> = {
+      locationId,
+      ultimaVisita,
+      diasDesdeUltimaVisita: ultimaVisita ? Math.floor((ahora.getTime() - ultimaVisita.getTime()) / MS_POR_DIA) : null,
+      proximaVisita,
+      coloniasVivasDeclaradas,
+      coloniasActivas: misColmenas.reduce((n, h) => n + h.colonies.filter((c) => c.status === "active").length, 0),
+      cajas: misColmenas.length,
+      alimentoHasta,
+      ultimaCosecha: miCosecha?.occurredAt ?? null,
+      ultimaCosechaKg: miCosecha?.extractedWeightKg == null ? null : Number(miCosecha.extractedWeightKg),
+      borradorAbiertoDesde: borrador?.startedAt ?? null,
+    };
+
+    salida.set(locationId, {
+      ...base,
+      alertas: alertasDe(base, { perdidaSinReposicion: bajoElConteo && !huboReposicion, alimentoRepuesto }, ahora),
+    });
+  }
+
+  return salida;
+}
+
+/** El sitio más urgente primero: crítico, luego aviso, luego el resto por nombre. */
+export function pesoDeAlerta(vitales: VitalesDeSitio | undefined): number {
+  if (!vitales || vitales.alertas.length === 0) return 2;
+  return vitales.alertas[0]?.nivel === "critico" ? 0 : 1;
+}

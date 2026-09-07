@@ -304,6 +304,10 @@
     {
       "archivo": "lib/traceability/reporteDeProceso.ts",
       "razon": "El reporte transversal proceso → tueste → taza (2026-09-07). Sólo LEE, y su visibilidad es la MISMA del listado de lotes, no una propia: `resolveLotVisibility` + `lotWhereFromVisibility`, resueltas antes de la consulta, y devuelve vacío cuando el `where` es null. Un reporte con criterio de visibilidad propio es cómo se acaba enseñando en un agregado lo que la lista oculta. No escribe nada: un derivado persistido se queda viejo en silencio."
+    },
+    {
+      "archivo": "lib/apiary/vitalesDelSitio.ts",
+      "razon": "A9.8 — los vitales y las alertas de cada sitio de apiario. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Sólo lee, y sobre ids que su llamador ya obtuvo de getApiaryList."
     }
   ],
   "reciben_transaccion": [
@@ -517,6 +521,12 @@
       "archivo": "lib/traceability/lotProcess.ts",
       "operacion": "exigeSecadoTerminado",
       "razon": "No recibe principal porque no expone nada: lee el proceso más reciente de un lote y LANZA o no lanza. Su único llamador es `moveLotToStorage`, que ya resolvió `requireLotAccess(userAccountId, \"manage\", [lot])` sobre ese mismo lote antes de invocarla — darle un principal propio sería resolver dos veces la misma autorización, que es como se acaba con dos respuestas distintas. Si algún día se llama desde una pantalla para pintar «este lote todavía no puede almacenarse», deja de depender del llamador y necesita guardia propia.",
+      "verificado": "2026-09-07"
+    },
+    {
+      "archivo": "lib/apiary/vitalesDelSitio.ts",
+      "operacion": "vitalesDeSitios",
+      "razon": "A9.8 — recibe locationIds que su ÚNICO llamador, app/apiaries/page.tsx, acaba de obtener de getApiaryList, que sí autoriza. No pide userAccountId a propósito: un lector que exige principal parece una compuerta y termina usándose como tal, que es la disciplina de leerEnmiendas (A9.3). Lee hechos de ids ya concedidos y no escribe nada.",
       "verificado": "2026-09-07"
     }
   ]
