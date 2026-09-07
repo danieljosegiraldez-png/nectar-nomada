@@ -312,6 +312,10 @@
     {
       "archivo": "lib/apiary/origenDeColonia.ts",
       "razon": "A9.10 — el vocabulario de orígenes de colonia, leído del catálogo. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Sólo lee `VariableCatalogValue`, que es vocabulario y no dato de nadie."
+    },
+    {
+      "archivo": "lib/apiary/polinizacion.ts",
+      "razon": "A9.9 — el compromiso de polinización y su cociente. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Su escritura pasa por requireApiaryAccess(\"manage\") y confirma su AuditEvent en la misma transacción."
     }
   ],
   "reciben_transaccion": [
@@ -537,6 +541,12 @@
       "archivo": "lib/apiary/origenDeColonia.ts",
       "operacion": "origenesDeColonia",
       "razon": "A9.10 — lectura SIN SUJETO, misma forma que getFieldEventKinds en lib/traceability/fieldSessionCatalog.ts: no hay colonia ni ubicación contra la que comprobar permisos, porque lo que devuelve es el vocabulario de un catálogo, no filas de nadie. Su llamador, app/apiaries/[id]/hives/[hiveId]/page.tsx, ya redirige a /login sin sesión y llama a getHive, que sí autoriza.",
+      "verificado": "2026-09-07"
+    },
+    {
+      "archivo": "lib/apiary/polinizacion.ts",
+      "operacion": "densidadDePolinizacion",
+      "razon": "A9.9 — lectura sobre un locationId que su ÚNICO llamador, app/apiaries/[id]/page.tsx, acaba de pasar por getApiaryDetail, que sí autoriza y lanza ApiaryAccessError si no. No pide userAccountId a propósito: es la misma disciplina de vitalesDeSitios y leerEnmiendas — un lector que exige principal parece una compuerta y termina usándose como tal. La ESCRITURA hermana, crearCompromisoDePolinizacion, sí guarda.",
       "verificado": "2026-09-07"
     }
   ]

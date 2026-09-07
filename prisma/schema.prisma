@@ -257,6 +257,7 @@ model UserAccount {
   researchActivitiesReviewed         ResearchActivity[]           @relation("ResearchActivityReviewedBy")
   researchActivitiesCreated          ResearchActivity[]           @relation("ResearchActivityCreatedBy")
   devicesCreated                     Device[]                     @relation("DeviceCreatedBy")
+  pollinationCommitmentsCreated      PollinationCommitment[]      @relation("PollinationCommitmentCreatedBy")
 
   /// A9.6 — el otro lado de las FK de `reporting`.
   reportsCreated  Report[]        @relation("ReportCreatedBy")
@@ -677,6 +678,7 @@ model Location {
   receivingEvents             ReceivingEvent[]
   dryingRuns                  DryingRun[]
   storageAssignments          StorageAssignment[]
+  pollinationCommitments      PollinationCommitment[]
   hives                       Hive[]
   specimens                   Specimen[]
   plantingEvents              PlantingEvent[]
@@ -788,6 +790,7 @@ model Organization {
   plantingEventsSourced            PlantingEvent[]
   externalCoffeeOriginsAsProducer  ExternalCoffeeOrigin[]   @relation("ExternalCoffeeProducer")
   externalCoffeeOriginsAsProcessor ExternalCoffeeOrigin[]   @relation("ExternalCoffeeProcessor")
+  pollinationCommitmentsAsClient   PollinationCommitment[]  @relation("PollinationCommitmentClient")
   externalCoffeeOriginsAsBrand     ExternalCoffeeOrigin[]   @relation("ExternalCoffeeBrand")
 
   @@map("organization")
@@ -5186,6 +5189,61 @@ model ColonyEvent {
 // given. This is the "existing Lot machinery" reuse §2 argues for — no
 // new Sample/Measurement/QuantityEvent/Asset code, only this one small
 // event table plus the LotType addition above.
+/// A9.9 (D6) — el compromiso de polinización con un cliente.
+///
+/// La razón de existir es un número: 17 ha comprometidas a 4-6 colmenas/ha son
+/// 68-102 colonias contra las 3 que hay. Sin esta tabla esa conversación con el
+/// cliente es una impresión; con ella es una resta.
+///
+/// **Las hectáreas comprometidas NO son `Location.areaHectares`.** Esa es el
+/// área del predio; ésta es lo que se pactó polinizar, y confundirlas produce
+/// un déficit falso. Por eso es columna propia y no un derivado.
+///
+/// **El objetivo es un rango, no un número.** El dueño dijo «4-6 colmenas/ha»,
+/// y colapsarlo a un valor obligaría a inventar cuál. Dos columnas dicen la
+/// verdad; una diría una precisión que nadie declaró.
+///
+/// **Y lleva ventana.** Sin `endsAt` un compromiso cumplido y terminado seguiría
+/// gritando déficit cada temporada. Anulable porque un contrato abierto existe.
+model PollinationCommitment {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// El sitio cuyas colonias cuentan para este compromiso.
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id])
+
+  /// A quién se le prometió. `Organization` canónica, no un nombre repetido.
+  clientOrganizationId String       @map("client_organization_id") @db.Uuid
+  clientOrganization   Organization @relation("PollinationCommitmentClient", fields: [clientOrganizationId], references: [id])
+
+  committedHectares        Decimal  @map("committed_hectares") @db.Decimal(10, 4)
+  targetHivesPerHectareMin Decimal  @map("target_hives_per_hectare_min") @db.Decimal(6, 2)
+  targetHivesPerHectareMax Decimal  @map("target_hives_per_hectare_max") @db.Decimal(6, 2)
+
+  /// Cómo se llama el contrato fuera del sistema. Texto libre a propósito: no
+  /// hay módulo de contratos y fabricar uno aquí sería construir de más.
+  contractReference String? @map("contract_reference")
+
+  startsAt DateTime  @map("starts_at")
+  endsAt   DateTime? @map("ends_at")
+
+  notes String?
+
+  /// Un compromiso es lo que alguien pactó y transcribió, no algo medido.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  dataQuality     DataQuality?    @map("data_quality")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("PollinationCommitmentCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([locationId])
+  @@index([clientOrganizationId])
+  @@map("pollination_commitment")
+  @@schema("apiary")
+}
+
 model ApiaryHarvestEvent {
   id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   colonyId          String          @map("colony_id") @db.Uuid

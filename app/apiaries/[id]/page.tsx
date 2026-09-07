@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getApiaryDetail, getManageableApiaryProjects } from "../../../lib/apiary/hives";
+import { densidadDePolinizacion } from "../../../lib/apiary/polinizacion";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
 import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
@@ -25,6 +26,9 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
     getObserverCandidates(user.userAccountId),
   ]);
 
+  // `getApiaryDetail` ya autorizó este sitio; esto lee hechos del id concedido.
+  const polinizacion = await densidadDePolinizacion(id);
+
   return (
     <div>
       <p>
@@ -32,6 +36,45 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
       </p>
       <span className="nn-badge">{t("badge")}</span>
       <h1>{apiary.name}</h1>
+
+      {/* A9.9 (D6) — el compromiso de polinización, que es el único número que
+          convierte la conversación con el cliente en algo que no sea una
+          impresión. Sólo aparece si hay compromiso vigente: un sitio de
+          producción no tiene por qué enseñar una fila vacía.
+
+          Usa `nn-detail-meta`, que ya existe, en vez de estrenar clases: la
+          banda de vitales de A9.8 sigue en revisión y dos hojas compitiendo por
+          el mismo sitio envejecen por separado.
+
+          El déficit sale como RANGO porque el objetivo lo es —«4-6 colmenas/ha»
+          es lo que declaró el dueño—, y colapsarlo inventaría una precisión que
+          nadie dio. */}
+      {polinizacion.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("pollinationHeading")}</h2>
+          {polinizacion.map((p) => (
+            <div key={p.compromisoId}>
+              <p className="nn-detail-meta">
+                <span>{t("pollinationHectares", { hectares: p.hectareasComprometidas })}</span>
+                <span>{t("pollinationTarget", { min: p.objetivoMin, max: p.objetivoMax })}</span>
+                <span>{t("pollinationColonies", { count: p.colonias })}</span>
+                <span>
+                  {p.deficitParaMin === 0 && p.deficitParaMax === 0
+                    ? t("pollinationNoDeficit")
+                    : t("pollinationDeficit", { min: p.deficitParaMin, max: p.deficitParaMax })}
+                </span>
+              </p>
+              {/* De dónde salió el numerador. Se dice porque D6 avisa de que el
+                  conteo del sistema y el declarado en la visita llevan
+                  divergiendo desde diciembre, y un número sin fuente invita a
+                  creer que son el mismo. */}
+              <p className="nn-muted">{t(`pollinationCountSource_${p.fuenteDelConteo}`)}</p>
+              {p.contractReference ? <p className="nn-muted">{p.contractReference}</p> : null}
+            </div>
+          ))}
+        </section>
+      ) : null}
+
 
       <section className="nn-section">
         <h2>{t("hivesHeading")}</h2>
