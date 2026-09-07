@@ -37,6 +37,26 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-07 · Dar de alta a un evaluador con su credencial
+
+`sensory:record-external` exige que el firmante exista como `Person`, y crearlo
+quedaba a mano en la base: donde se cuela un JSON mal formado en `Json?`.
+
+`npm run people:add-evaluator -- "Nombre" --cuerpo CQI --certificacion "Q Arabica
+Grader" --desde 2024-05-01`. **No crea cuenta** —eso es `people:set-email`— y es
+**aditivo**: una renovación trae otra fecha y las dos conviven, porque el
+historial de credenciales es parte de la procedencia de cada informe firmado.
+
+**Una desviación de §7.3, a propósito:** ahí sólo `expiry_date` es anulable;
+aquí obligan tres —cuerpo, nombre y fecha— porque quien transcribe puede saber
+que alguien es Q Grader desde 2024 y **no tener el número de certificado**, y
+exigirlo obligaría a inventarlo. Lo ausente se guarda **ausente**, no como
+cadena vacía. `leerCertificaciones` **no repara**: falla nombrando la fila rota.
+
+Comprobado corriendo el comando contra la base local —crear, duplicado,
+renovación, un 31 de febrero, una bandera inventada— y leyendo la columna: la
+segunda credencial **no trae** `level_or_rank`, que es lo correcto.
+
 ### 2026-09-07 · El informe que se paga ya se puede registrar
 
 **El hueco, medido:** `assessment.evaluator_user_account_id` era **NOT NULL** con
