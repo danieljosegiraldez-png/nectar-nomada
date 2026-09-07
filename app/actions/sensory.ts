@@ -28,6 +28,14 @@ export async function submitAssessmentAction(
   const overallScore = overallScoreRaw ? Number(overallScoreRaw) : null;
   const comment = String(formData.get("comment") ?? "") || null;
 
+  // Sólo los pinta el formulario de un protocolo que calcula el total; en
+  // cualquier otro llegan ausentes y el servicio los guarda nulos. No se
+  // ponen a 0 aquí: un 0 afirma «se contaron y no había ninguna».
+  const tazas = (campo: string): number | null => {
+    const crudo = formData.get(campo);
+    return crudo === null || crudo === "" ? null : Number(crudo);
+  };
+
   const attributeIds = formData.getAll("attributeId").map(String);
   const attributeResponses = attributeIds
     .map((attributeId) => {
@@ -38,7 +46,14 @@ export async function submitAssessmentAction(
     .filter((r): r is { attributeId: string; value: number } => r !== null);
 
   try {
-    await submitAssessment(user.userAccountId, { blindSampleId, overallScore, comment, attributeResponses });
+    await submitAssessment(user.userAccountId, {
+      blindSampleId,
+      overallScore,
+      nonUniformCups: tazas("nonUniformCups"),
+      defectiveCups: tazas("defectiveCups"),
+      comment,
+      attributeResponses,
+    });
   } catch (error) {
     if (error instanceof SensoryAccessError) {
       return { error: t(`error_${error.message}` as "error_already_submitted") };

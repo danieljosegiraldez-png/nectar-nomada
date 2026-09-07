@@ -61,7 +61,8 @@ async function list() {
       console.log(`  ${p.domain.padEnd(8)} ${p.name}`);
       console.log(`           ${p.status} · licencia: ${p.standardLicenseStatus ?? "sin declarar"}`);
       for (const v of p.versions) {
-        console.log(`           v${v.version} (${v.status}) · ${v.scoreMin}–${v.scoreMax} · ${v.attributes.length} atributos`);
+        const formula = v.scoreFormula ? ` · puntaje ${v.scoreFormula}` : "";
+        console.log(`           v${v.version} (${v.status}) · ${v.scoreMin}–${v.scoreMax} · ${v.attributes.length} atributos${formula}`);
       }
     };
     vivos.forEach(pinta);
@@ -201,6 +202,7 @@ async function main() {
         version: definicion.version,
         scoreMin: definicion.scoreMin,
         scoreMax: definicion.scoreMax,
+        scoreFormula: definicion.scoreFormula ?? null,
         status: "active",
       },
     });
@@ -236,6 +238,7 @@ async function main() {
 
   console.log(`\n  Creado: ${definicion.name}`);
   console.log(`  v${definicion.version} · ${definicion.scoreMin}–${definicion.scoreMax} · ${definicion.attributes.length} atributos`);
+  console.log(`  Puntaje total: ${definicion.scoreFormula ? `calculado (${definicion.scoreFormula})` : "lo teclea quien cata"}`);
   console.log(`  Licencia declarada: ${definicion.standardLicenseStatus}`);
   if (definicion.standardLicenseStatus !== "licensed") {
     console.log("\n  AVISO: la licencia no es `licensed`. Estos puntajes no deben publicarse");
