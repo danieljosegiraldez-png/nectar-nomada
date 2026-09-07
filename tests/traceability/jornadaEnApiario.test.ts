@@ -19,7 +19,14 @@ import {
 } from "../../lib/traceability/fieldSessions";
 import { recordInspection } from "../../lib/apiary/inspections";
 import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
-import { emitirReporteDeVisita, leerReporteDeVisita, ReporteError } from "../../lib/traceability/reporteDeVisita";
+import {
+  emitirReporteDeVisita,
+  leerReporteDeVisita,
+  publicarReporteConEnlace,
+  abrirReportePorEnlace,
+  revocarEnlace,
+  ReporteError,
+} from "../../lib/traceability/reporteDeVisita";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a90-${Date.now()}`;
@@ -130,6 +137,8 @@ afterAll(async () => {
   await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId: apiarioId }) });
 
   const reportes = await prisma.report.findMany({ where: { subjectEntityType: "field_session" }, select: { id: true } });
+  const versiones = await prisma.reportVersion.findMany({ where: { reportId: { in: reportes.map((r) => r.id) } }, select: { id: true } });
+  await prisma.reportPublication.deleteMany({ where: assertDefinedWhere({ reportVersionId: { in: versiones.map((v) => v.id) } }) });
   await prisma.reportVersion.deleteMany({ where: assertDefinedWhere({ reportId: { in: reportes.map((r) => r.id) } }) });
   await prisma.report.deleteMany({ where: assertDefinedWhere({ id: { in: reportes.map((r) => r.id) } }) });
 
@@ -495,5 +504,89 @@ describe("A9.6 — la página del reporte lee el snapshot, no la visita", () => 
     await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
     await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
     await expect(leerReporteDeVisita(operarioDeFinca, visita.id)).rejects.toThrow(LocationAccessError);
+  });
+});
+
+describe("A9.6 — el enlace que abre el cliente sin cuenta", () => {
+  async function visitaConReporte(dia: string) {
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date(`2026-09-${dia}T13:00:00Z`),
+    });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id, notes: `entregado ${dia}` });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    return visita;
+  }
+
+  it("con el enlace se abre el reporte, SIN sesión y sin RBAC", async () => {
+    const visita = await visitaConReporte("10");
+    const { token } = await publicarReporteConEnlace(apicultorConManejo, { fieldSessionId: visita.id });
+
+    const abierto = await abrirReportePorEnlace(token);
+    expect(abierto, "el enlace no abrió el reporte").not.toBeNull();
+    expect(abierto!.snapshot.visita.notas).toBe("entregado 10");
+  });
+
+  it("el token NO queda en claro en la base", async () => {
+    // Lo que queda es su hash. Quien lea la base no puede usar el enlace, que
+    // es la misma razon escrita en `lib/sync/deviceTokens.ts`.
+    const visita = await visitaConReporte("11");
+    const { token, publicacionId } = await publicarReporteConEnlace(apicultorConManejo, { fieldSessionId: visita.id });
+
+    const fila = await prisma.reportPublication.findUniqueOrThrow({ where: { id: publicacionId } });
+    expect(fila.linkTokenHash).not.toBe(token);
+    expect(fila.linkTokenHash).toMatch(/^[0-9a-f]{64}$/);
+
+    // Y tampoco en el rastro: un audit que guarde la llave es una segunda copia
+    // de la llave.
+    const audit = await prisma.auditEvent.findFirst({
+      where: { entityId: publicacionId, operation: "report_publication.create" },
+    });
+    expect(JSON.stringify(audit)).not.toContain(token);
+  });
+
+  it("un token inventado no abre nada, y no dice por qué", async () => {
+    expect(await abrirReportePorEnlace("no-es-un-token")).toBeNull();
+    expect(await abrirReportePorEnlace("x".repeat(43))).toBeNull();
+  });
+
+  it("caducado deja de abrir", async () => {
+    const visita = await visitaConReporte("12");
+    const { token, publicacionId } = await publicarReporteConEnlace(apicultorConManejo, { fieldSessionId: visita.id });
+    await prisma.reportPublication.update({
+      where: { id: publicacionId },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    expect(await abrirReportePorEnlace(token)).toBeNull();
+  });
+
+  it("revocado deja de abrir, y por eso el token se guarda", async () => {
+    // Es la razón entera de guardarlo en vez de firmarlo: poder cortarlo.
+    const visita = await visitaConReporte("13");
+    const { token, publicacionId } = await publicarReporteConEnlace(apicultorConManejo, { fieldSessionId: visita.id });
+    expect(await abrirReportePorEnlace(token)).not.toBeNull();
+
+    await revocarEnlace(apicultorConManejo, publicacionId);
+    expect(await abrirReportePorEnlace(token)).toBeNull();
+  });
+
+  it("no se publica un reporte que no se ha emitido", async () => {
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-14T13:00:00Z"),
+    });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await expect(publicarReporteConEnlace(apicultorConManejo, { fieldSessionId: visita.id })).rejects.toThrow(
+      ReporteError,
+    );
+  });
+
+  it("quien no puede ver la visita no puede publicarla ni revocarla", async () => {
+    const visita = await visitaConReporte("15");
+    await expect(publicarReporteConEnlace(operarioDeFinca, { fieldSessionId: visita.id })).rejects.toThrow(
+      LocationAccessError,
+    );
+    const { publicacionId } = await publicarReporteConEnlace(apicultorConManejo, { fieldSessionId: visita.id });
+    await expect(revocarEnlace(operarioDeFinca, publicacionId)).rejects.toThrow(LocationAccessError);
   });
 });

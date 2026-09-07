@@ -6229,6 +6229,20 @@ model ReportPublication {
   surface     ReportSurface
   publishedAt DateTime      @default(now()) @map("published_at")
 
+  /// A9.6 (D7) — el enlace con el que un cliente sin cuenta abre su reporte.
+  ///
+  /// **Se guarda HASHEADO**, igual que el refresh de `lib/sync/deviceTokens.ts`
+  /// y por su misma razón escrita: quien lea la base no puede usarlo. El valor
+  /// en claro existe una sola vez, cuando se emite.
+  ///
+  /// **Guardado y no firmado, a propósito.** Un token firmado se verifica sin
+  /// consultar la base, pero no se puede revocar sin una lista de bloqueo. Éste
+  /// va a un cliente externo por WhatsApp o correo: poder cortarlo pesa más que
+  /// ahorrar una consulta, y `revokedAt` es una columna.
+  linkTokenHash String?   @unique @map("link_token_hash")
+  expiresAt     DateTime? @map("expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+
   @@index([reportVersionId])
   @@map("report_publication")
   @@schema("reporting")

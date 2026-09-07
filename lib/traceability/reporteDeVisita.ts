@@ -1,3 +1,5 @@
+import { createHash, randomBytes } from "node:crypto";
+import type { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireFieldSessionAccess } from "./jornadaDeCampo";
@@ -201,4 +203,142 @@ export async function leerReporteDeVisita(userAccountId: string, fieldSessionId:
     // entregó.
     snapshot: version.renderedSnapshot as unknown as SnapshotDeVisita,
   };
+}
+
+/** El token se guarda hasheado. SHA-256 basta: son 32 bytes aleatorios. */
+const hashDeEnlace = (token: string) => createHash("sha256").update(token).digest("hex");
+
+/** Vigencia por defecto del enlace. Un reporte se lee en días, no en meses. */
+export const DIAS_DE_VIGENCIA_POR_DEFECTO = 30;
+
+/**
+ * Publica la última versión de un reporte tras un enlace con caducidad.
+ *
+ * **Devuelve el token EN CLARO una sola vez.** No se puede volver a leer: lo que
+ * queda en la base es su hash, igual que el refresh de `lib/sync/deviceTokens.ts`
+ * y por su misma razón escrita — quien lea la base no puede usarlo. Si se
+ * pierde, se emite otro y se revoca el anterior.
+ *
+ * **Por qué enlace y no cuenta.** Dar cuenta y asignación a un cliente externo
+ * lo mete en el modelo de permisos con una clasificación que hay que decidir, y
+ * ADR-029 se cuidó de mantener a los partners externos por debajo de
+ * `internal`. Un reporte de visita lleva costos y recomendaciones. La
+ * consecuencia que hay que aceptar en voz alta: **con enlace, el cliente no
+ * tiene histórico.** Si algún día debe verlo, es membresía de organización, y
+ * eso es otro ticket.
+ */
+export async function publicarReporteConEnlace(
+  userAccountId: string,
+  input: { fieldSessionId: string; diasDeVigencia?: number },
+) {
+  const emitido = await leerReporteDeVisita(userAccountId, input.fieldSessionId);
+  if (!emitido) throw new ReporteError("reporte_no_emitido");
+
+  const token = randomBytes(32).toString("base64url");
+  const dias = input.diasDeVigencia ?? DIAS_DE_VIGENCIA_POR_DEFECTO;
+  const expiresAt = new Date(Date.now() + dias * 24 * 3600_000);
+
+  return prisma.$transaction(async (tx) => {
+    const publicacion = await tx.reportPublication.create({
+      data: {
+        reportVersionId: await versionIdDe(tx, emitido.reporteId),
+        surface: "client_portal",
+        linkTokenHash: hashDeEnlace(token),
+        expiresAt,
+      },
+    });
+
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "report_publication.create",
+        entityType: "report_publication",
+        entityId: publicacion.id,
+        // El token NO va al audit. Un rastro que guarde la llave deja de ser un
+        // rastro y pasa a ser una segunda copia de la llave.
+        after: { surface: "client_portal", expiresAt: expiresAt.toISOString(), version: emitido.version },
+        reason: "enlace de reporte emitido para el cliente",
+        sourceInterface: "traceability.close",
+      },
+      tx,
+    );
+
+    return { publicacionId: publicacion.id, token, expiresAt, version: emitido.version };
+  });
+}
+
+async function versionIdDe(tx: Prisma.TransactionClient, reporteId: string) {
+  const v = await tx.reportVersion.findFirstOrThrow({
+    where: { reportId: reporteId },
+    orderBy: { version: "desc" },
+    select: { id: true },
+  });
+  return v.id;
+}
+
+/**
+ * Abre un reporte por su enlace. **Sin sesión y sin RBAC**, a propósito: el
+ * token ES la autorización, y por eso no da acceso a nada más que al snapshot
+ * de esa versión.
+ *
+ * Devuelve `null` en los tres casos —no existe, caducó, revocado— sin decir
+ * cuál. Distinguirlos le diría a quien prueba tokens si acertó el formato.
+ */
+export async function abrirReportePorEnlace(token: string) {
+  if (!token || token.length < 32) return null;
+
+  const publicacion = await prisma.reportPublication.findUnique({
+    where: { linkTokenHash: hashDeEnlace(token) },
+    select: {
+      expiresAt: true,
+      revokedAt: true,
+      reportVersion: { select: { version: true, generatedAt: true, renderedSnapshot: true } },
+    },
+  });
+  if (!publicacion) return null;
+  if (publicacion.revokedAt) return null;
+  if (publicacion.expiresAt && publicacion.expiresAt < new Date()) return null;
+
+  return {
+    version: publicacion.reportVersion.version,
+    generatedAt: publicacion.reportVersion.generatedAt,
+    snapshot: publicacion.reportVersion.renderedSnapshot as unknown as SnapshotDeVisita,
+  };
+}
+
+/** Corta un enlace ya entregado. Es la razón por la que el token se guarda. */
+export async function revocarEnlace(userAccountId: string, publicacionId: string) {
+  const publicacion = await prisma.reportPublication.findUnique({
+    where: { id: publicacionId },
+    select: { reportVersion: { select: { report: { select: { subjectEntityId: true } } } } },
+  });
+  if (!publicacion) throw new ReporteError("publicacion_no_encontrada");
+
+  const visita = await prisma.fieldSession.findUnique({
+    where: { id: publicacion.reportVersion.report.subjectEntityId },
+    select: { locationId: true },
+  });
+  if (!visita) throw new FieldSessionValidationError("session_not_found");
+  await requireFieldSessionAccess(userAccountId, visita.locationId);
+
+  return prisma.$transaction(async (tx) => {
+    const revocada = await tx.reportPublication.update({
+      where: { id: publicacionId },
+      data: { revokedAt: new Date() },
+    });
+
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "report_publication.revoke",
+        entityType: "report_publication",
+        entityId: revocada.id,
+        after: { revokedAt: revocada.revokedAt?.toISOString() ?? null },
+        sourceInterface: "traceability.close",
+      },
+      tx,
+    );
+
+    return revocada;
+  });
 }
