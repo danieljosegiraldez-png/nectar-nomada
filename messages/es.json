@@ -17,7 +17,8 @@
     "primaryNavLabel": "Principal",
     "admin": "Admin",
     "content": "Contenido",
-    "recipes": "Recetas"
+    "recipes": "Recetas",
+    "newSession": "Crear sesión de cata"
   },
   "Home": {
     "badge": "Slices 1–2 — Identidad y Descubrimiento",
@@ -253,7 +254,26 @@
     "error_no_session_access": "No tienes acceso a esta sesión.",
     "error_responses_required": "Ingresa al menos una respuesta de atributo.",
     "error_blind_sample_not_found": "Esta muestra ya no está disponible.",
-    "toolsLabel": "Herramientas sensoriales"
+    "toolsLabel": "Herramientas sensoriales",
+    "backToSensory": "Volver a cata",
+    "createSessionButton": "Crear sesión de cata",
+    "sessionNameLabel": "Nombre de la sesión",
+    "sessionProtocolLabel": "Protocolo",
+    "sessionProtocolPlaceholder": "— Elige un protocolo —",
+    "sessionPreparationLabel": "Preparación (opcional)",
+    "sessionSamplesLabel": "Muestras que entran",
+    "sessionSamplesHelp": "El orden en que las marques decide su código ciego: A, B, C…",
+    "noProtocolsAvailable": "No hay ningún protocolo con atributos disponible. Sin uno no hay dónde puntuar.",
+    "noSamplesAvailable": "No alcanzas ninguna muestra. Sin muestras no hay qué catar.",
+    "error_name_required": "Ponle un nombre a la sesión.",
+    "error_samples_required": "Elige al menos una muestra.",
+    "error_duplicate_samples": "Has marcado la misma muestra dos veces.",
+    "error_protocol_version_not_found": "Ese protocolo ya no existe.",
+    "error_protocol_archived": "Ese protocolo está retirado; elige otro.",
+    "error_protocol_has_no_attributes": "Ese protocolo no tiene atributos: el juez no tendría nada que puntuar.",
+    "error_sample_not_accessible": "Alguna de esas muestras no está a tu alcance.",
+    "error_no_manage_access": "No tienes permiso para montar catas.",
+    "error_no_access": "No tienes acceso."
   },
   "Partner": {
     "badge": "Espacio de Socios",

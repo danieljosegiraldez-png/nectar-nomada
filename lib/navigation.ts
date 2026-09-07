@@ -91,6 +91,11 @@ const NAV: readonly NavDefinition[] = [
 const SENSORY_TOOLS: readonly NavDefinition[] = [
   { labelKey: "competitions", href: "/competitions", requiresAnyOf: ["competition:manage"] },
   { labelKey: "calibration", href: "/calibration", requiresAnyOf: ["sensory:manage_session"] },
+  // 2026-09-06. Hasta hoy no había forma de crear una sesión: `sensorySession.create`
+  // sólo existía en la semilla y en pruebas, así que el módulo entero no tenía
+  // puerta de entrada. Mismo permiso que la calibración, que es el que el
+  // servicio exige.
+  { labelKey: "newSession", href: "/sensory/new", requiresAnyOf: ["sensory:manage_session"] },
 ];
 
 /**
