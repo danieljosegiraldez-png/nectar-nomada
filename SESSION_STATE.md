@@ -264,6 +264,22 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   archivo de prueba **compilaba mal** con las pruebas en verde: lo cazó
   `typecheck`, no la suite.
 
+- **`npm run sensory:archive-protocol` retira un protocolo sin borrarlo**, y hay
+  cinco `TEST` activos en producción esperando. **Dicho con honestidad: hoy hace
+  poco.** Medido el 2026-09-06 — nada en el código filtra por el estado del
+  protocolo, así que su efecto real es que el listado de la herramienta deja de
+  mezclar retirados con vivos. Se construye igual porque marcar lo retirado es lo
+  que permite que el día que exista un selector no ofrezca basura de pruebas.
+
+- **Y el hallazgo grande: NADIE puede crear una sesión de cata.**
+  `sensorySession.create` sólo aparece en `prisma/seed.ts` y en pruebas — nunca
+  en `lib/` ni en `app/`, comprobado con control positivo. El servicio sensorial
+  sólo exporta lecturas, `submitAssessment` y el cálculo de panel: no hay crear
+  sesión, ni vuelo, ni muestra ciega. **Ésa es la razón de las cero valoraciones,
+  no el protocolo** — y también corrige lo que yo había dicho: en producción SÍ
+  había un protocolo de café, el marcador `Coffee Cupping (Illustrative)`, que yo
+  di por inexistente deduciéndolo de que la semilla es opt-in en vez de medirlo.
+
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
   separada para la serie temporal —~35.000 filas por sensor y año— y no dice

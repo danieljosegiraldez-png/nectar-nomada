@@ -17,6 +17,15 @@
  *
  *   npm run sensory:create-protocol                                  # lista
  *   npm run sensory:create-protocol -- protocolos/cafe-cva-adaptado.json
+ *   npm run sensory:archive-protocol -- "Nombre exacto"               # retira
+ *
+ * **Qué hace y qué NO hace archivar.** Pone el protocolo en `archived`, que el
+ * esquema define como «estuvo activo y se retiró» —distinto de `planned`, que
+ * nunca lo estuvo—. Medido el 2026-09-06: **hoy nada más en el código filtra por
+ * ese estado**, porque no hay ningún sitio donde alguien elija un protocolo. Su
+ * efecto real es que este listado deja de mezclarlo con los vivos. Se construye
+ * así a propósito: marcar lo retirado es lo que permite que el día que exista un
+ * selector no ofrezca los cinco protocolos TEST que hay en producción.
  */
 
 // Debe ir primero: lib/db lee DATABASE_URL al importarse.
@@ -44,12 +53,21 @@ async function list() {
     console.log("\n  No hay ningún protocolo sensorial. Sin uno no se puede registrar ni un puntaje.\n");
   } else {
     console.log("");
-    for (const p of protocolos) {
+    // Los retirados van al final y separados: mezclarlos con los vivos es lo
+    // que hace que nadie note que hay cinco protocolos TEST en producción.
+    const vivos = protocolos.filter((p) => p.status !== "archived");
+    const retirados = protocolos.filter((p) => p.status === "archived");
+    const pinta = (p: (typeof protocolos)[number]) => {
       console.log(`  ${p.domain.padEnd(8)} ${p.name}`);
       console.log(`           ${p.status} · licencia: ${p.standardLicenseStatus ?? "sin declarar"}`);
       for (const v of p.versions) {
         console.log(`           v${v.version} (${v.status}) · ${v.scoreMin}–${v.scoreMax} · ${v.attributes.length} atributos`);
       }
+    };
+    vivos.forEach(pinta);
+    if (retirados.length > 0) {
+      console.log(`\n  ── retirados (${retirados.length}) ──`);
+      retirados.forEach(pinta);
     }
     console.log("");
   }
@@ -57,13 +75,79 @@ async function list() {
   console.log("  Los definidos viven en protocolos/.\n");
 }
 
+/**
+ * Retirar un protocolo. No borra: `archived` conserva la fila y todo lo que
+ * cuelga de ella —sesiones, valoraciones, resultados— porque un puntaje dado
+ * bajo un protocolo retirado sigue significando lo que significaba.
+ *
+ * Nombre EXACTO, como `people:set-email`: una coincidencia parcial retiraría el
+ * protocolo equivocado, y el error saldría como una sesión que ya no encuentra
+ * el suyo.
+ */
+async function archivar(nombre: string) {
+  const coincidencias = await prisma.sensoryProtocol.findMany({
+    where: { name: nombre },
+    include: { versions: { include: { _count: { select: { sessions: true } } } } },
+  });
+
+  if (coincidencias.length === 0) {
+    const todos = await prisma.sensoryProtocol.findMany({ orderBy: { name: "asc" }, select: { name: true } });
+    fail(`No hay ningún protocolo llamado exactamente "${nombre}".`, "", "Los que hay:", ...todos.map((p) => `  ${p.name}`));
+  }
+  if (coincidencias.length > 1) {
+    fail(`"${nombre}" coincide con ${coincidencias.length} protocolos. Esto no debería pasar; míralo a mano.`);
+  }
+
+  const protocolo = coincidencias[0]!;
+  if (protocolo.status === "archived") {
+    console.log(`\n  "${nombre}" ya estaba retirado. No se cambió nada.\n`);
+    return;
+  }
+
+  // Se avisa, no se impide: retirar un protocolo con sesiones es legítimo —es
+  // justo lo que se hace cuando se reemplaza por uno nuevo— pero quien lo hace
+  // debe saber que hay trabajo colgando de él.
+  const sesiones = protocolo.versions.reduce((n, v) => n + v._count.sessions, 0);
+
+  const antes = { status: protocolo.status };
+  const despues = await prisma.sensoryProtocol.update({
+    where: { id: protocolo.id },
+    data: { status: "archived" },
+  });
+
+  await recordAuditEvent({
+    actorUserAccountId: null,
+    operation: "sensory_protocol.archive",
+    entityType: "sensory_protocol",
+    entityId: protocolo.id,
+    before: antes,
+    after: { status: despues.status },
+    sourceInterface: "scripts/create-sensory-protocol",
+  });
+
+  console.log(`\n  Retirado: ${nombre}`);
+  if (sesiones > 0) {
+    console.log(`  AVISO: tiene ${sesiones} sesión(es) colgando. No se borró nada — los`);
+    console.log("  puntajes ya dados siguen significando lo que significaban.");
+  }
+  console.log("");
+}
+
 async function main() {
   if (!process.env.DATABASE_URL?.trim()) {
     fail("DATABASE_URL no está definida, y .env tampoco la trae.", "", "Corre esto desde la raíz del proyecto.");
   }
 
-  const [, , ruta, ...resto] = process.argv;
-  if (!ruta) return list();
+  const [, , primero, ...resto] = process.argv;
+  if (!primero) return list();
+
+  if (primero === "--archivar") {
+    const nombre = resto.join(" ").trim();
+    if (!nombre) fail('Usage: npm run sensory:archive-protocol -- "Nombre exacto del protocolo"');
+    return archivar(nombre);
+  }
+
+  const ruta = primero;
   if (resto.length) fail("Usage: npm run sensory:create-protocol -- <archivo.json>");
 
   let definicion;
