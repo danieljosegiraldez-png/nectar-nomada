@@ -300,6 +300,10 @@
     {
       "archivo": "lib/traceability/lotProcess.ts",
       "razon": "El proceso por el que pasa un lote (2026-09-07): la cabecera que agrupa la secuencia de intervenciones antes de almacenar. Módulo de dominio de trazabilidad, donde el acceso a datos vive por diseño. Guardia propia en cada operación: `requireLotAccess(userAccountId, \"manage\"|\"view\", [lot])` sobre el lote del proceso, resuelto antes de tocar nada — abrir, cambiar el objetivo de humedad, registrar una intervención, cerrar y colgar corridas pasan todas por ahí. Lee `ProcessRecipeVersion`, `Measurement` y `VariableCatalogValue` sólo para comprobar que lo que se referencia existe y es del tipo correcto."
+    },
+    {
+      "archivo": "lib/traceability/reporteDeProceso.ts",
+      "razon": "El reporte transversal proceso → tueste → taza (2026-09-07). Sólo LEE, y su visibilidad es la MISMA del listado de lotes, no una propia: `resolveLotVisibility` + `lotWhereFromVisibility`, resueltas antes de la consulta, y devuelve vacío cuando el `where` es null. Un reporte con criterio de visibilidad propio es cómo se acaba enseñando en un agregado lo que la lista oculta. No escribe nada: un derivado persistido se queda viejo en silencio."
     }
   ],
   "reciben_transaccion": [

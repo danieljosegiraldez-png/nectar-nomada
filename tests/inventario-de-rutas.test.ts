@@ -83,7 +83,9 @@ describe("el inventario del router", () => {
     // es lo que hace que abrir la caja N-01 sea apuntar la cámara.
     // 65 → 66 el mismo día, con /lots/[id]/process — el proceso del lote, la
     // única pantalla desde la que se declara el % H al que se va a almacenar.
-    expect(salida).toContain("66 entradas");
+    // 66 → 67 el mismo día, con /reports/proceso — el reporte transversal que
+    // ata la intervención en el lote con el puntaje de taza.
+    expect(salida).toContain("67 entradas");
     expect(codigo, salida).toBe(0);
   });
 
