@@ -37,46 +37,36 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-06 · El puntaje de cata deja de ser una opinión tecleada
+### 2026-09-07 · A9: el informe de alcance de captura de campo queda completo
 
-**Antes, en el mismo día, entró el #206:** perfil `Cupping Host`, permiso
-`sample:view` —que `requireSampleAccess` aceptaba desde su primera versión sin
-existir en el catálogo— e invitar participantes por asignación de ámbito
-`session`. Dirigir una cata y juzgar una competencia son dos usos distintos; sólo
-existía el segundo. Su entrada se archivó al entrar ésta.
+Los siete archivos de A9 —prompt, cuatro anexos, informe y
+`protocolos/apiario-campo-v1.json`— estaban **sin versionar** en el checkout
+compartido. Entran aquí. El informe se **continuó**, no se rehízo.
 
-**Lo que había:** siete atributos inventados por nosotros y un total que
-**escribía a mano** quien cataba. Dos personas con los mismos atributos podían
-teclear totales distintos: comparar dos lotes no comparaba nada.
+**Lo que faltaba de verdad era una cosa, no cinco.** El encargo listaba D7–D10,
+la corrección del aviso del Anexo D en §0, los tickets, el borrador de ADR y la
+crítica de la prueba de aceptación. Medido contra el archivo en disco: D7, D8 y
+D9 ya estaban como secciones propias, §0 ya estaba corregido, y §4, §5 y §6 ya
+existían. **Sólo faltaba D10**, y lo que arrastra.
 
-**De dónde salió lo nuevo, y esto importa más que el código.** Los siete PDF del
-estándar SCA no sirvieron: **cinco vienen cifrados** (`/Encrypt`, `/P -1324`) y
-el del Fine Robusta es un **escaneo sin texto** —7 objetos `/Image`, cero
-operadores de texto— sin `pdftoppm` ni `tesseract` en la máquina para leerlo.
-Lo que sí sirvió fue **medir la calculadora pública que la propia SCA publica**
-en `sca.coffee/cuppingscore`, cambiando una entrada a la vez: ocho atributos en
-escala 1–9, coeficiente 0,65625, constante 52,75, −2 por taza no uniforme y −4
-por defectuosa. Seis lecturas, reproducidas una a una como pruebas.
+**D10, y su hallazgo.** Dos decisiones, y caen de lados distintos: la entrega
+por canal se aplaza sin coste —ADR-044 tiene razón para ella—, pero la bitácora
+no, porque un registro «desde ahora» sí pierde lo que no espejó. Es la primera
+vez que un elemento de la lista de aplazamientos de ADR-039 **falla su propio
+criterio** (`DECISIONS.md:2616-2620`). La salida es que lo que no podía esperar
+ya existe: `AuditEvent`. Condición a escribir hoy: el emisor lee de ahí, no de
+una cola propia, o el espejo retroactivo se vuelve imposible.
 
-**Sigue faltando la sección DESCRIPTIVA del CVA** —descriptores CATA e
-intensidades—: vive en el SCA-103, que es uno de los cifrados. No se inventa.
+Añadidos: **ADR-DRAFT-111** (borrador, no en `DECISIONS.md`), tickets A9.11 y
+A9.12, y la fila de D10 en el resumen. Volumen medido: la lectura literal de
+«toda acción» son **264 mensajes** por visita de quince cajas, no «decenas».
 
-**Lo que cambia.** `scoreFormula` en la versión de protocolo: ausente —las seis
-que ya existen— el total se teclea como siempre; presente, lo calcula el
-servidor. Y los rangos se validan **en el servidor**, que hasta hoy sólo los
-defendía el `min`/`max` del `<input>`: un POST a mano metía un 90 donde iba un 9
-y salía un 111,19 que nadie mira dos veces.
-
-**La prueba que costó dos intentos, y es la lección.** La primera versión del
-test de emparejamiento mandaba los ocho valores **del revés** y esperaba el
-mismo total. No probaba nada: el puntaje es una SUMA, y una permutación de los
-mismos ocho números da idéntico resultado. **Su flip-test salió verde y lo
-dijo** — sin él habría quedado como guardia. La que sí distingue manda ocho
-respuestas donde una repite atributo y otra falta.
-
-Tres flip-tests, cada uno con sha antes/después, compilando, y su test caído por
-nombre: el coeficiente (caen las seis lecturas), emparejar por posición, y
-romper el régimen viejo.
+**Y un hallazgo que salió de aquí y no es de este alcance:**
+`PENDING_IMPLEMENTATIONS/009` — el único lector de `AuditEvent` en pantalla
+consulta `entityType: "Lot"` y **nada lo escribe nunca**, así que el panel
+«Historial» de un lote afirma «sin historial» con una consulta que no puede
+acertar. El comentario que lo certificaba como correcto era cierto cuando se
+escribió y lleva meses sin serlo.
 
 ## 3. Bloqueado, y en qué
 
@@ -299,28 +289,15 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   distinguido de «llegó tarde», porque `FieldEvent` lleva `recordedAt`,
   `syncedAt` y `deviceId` — está pensado para llegar tarde, así que un evento
   sincronizado tras el cierre es el camino previsto y no un borde.
-- **Escritura y auditoría no son atómicas en 13 archivos.**
-  Desde el 2026-08-31 `recordAuditEvent` acepta un `tx` **opcional** que confirma
-  el audit junto a la escritura; por defecto usa el cliente global, así que las
-  89 llamadas existentes no cambian. Lo adoptan ya `plantingCohorts.ts` (con un
-  test que fuerza el fallo del audit y comprueba que la cohorte tampoco queda) y
-  **todos los módulos de S1**: `biocharBatches.ts`, `soilProfiles.ts`,
-  `soilSamples.ts`, `landMedia.ts`, `research/amendments.ts` y **`measurements.ts`
-  entero** —la corrección desde el 2026-08-31, y la creación desde que la
-  revisión señaló que esas filas abren Gate 0—. Módulo
-  nuevo, `tx` desde el principio; el coste sólo existe al convertir lo viejo.
-  **Quedan 13 archivos que abren transacción y auditan fuera:**
-  `research/analysis.ts` (7 llamadas), `research/protocols.ts` (6),
-  `traceability/harvest.ts`, `samples.ts`, `drying.ts`, `fermentation.ts`,
-  `lots.ts`, `roasting.ts`, `apiary/harvest.ts`, `commerce/orders.ts`,
-  `experiences/bookings.ts`, `sensory/service.ts`, `auth/config.ts`. Los otros
-  28 que auditan **no** abren transacción, así que no tienen nada que hacer
-  atómico.
-  **Restricción al adoptarlo:** pasar `tx` obliga a que el llamador no abra otra
-  transacción dentro — Prisma no las anida, y por eso `renovatePlantingCohort`
-  crea su cohorte de reemplazo fuera de la suya.
-  Lo que queda es decisión, no trabajo mecánico: si los 13 se convierten de una
-  o al tocarlos.
+- ~~**Escritura y auditoría no son atómicas en 13 archivos**~~ — **cerrado el
+  2026-09-06/07.** Ya no queda ninguna llamada que audite dentro de una
+  transacción sin recibirla, ni ninguna que audite tras cerrarla, en `lib/`,
+  `app/` ni `scripts/`. El guardia
+  `tests/arquitectura/audit-atomico.test.ts` lo sostiene con 154 comprobaciones
+  y sin lista que mantener. El detalle se archivó en
+  `docs/SESSION_STATE_ARCHIVE.md` porque era registro de entrega dentro de una
+  sección llamada «Bloqueado».
+
 - **Un reporte de visita a apiario, tal como está escrito** — pedido dos veces
   al dueño, sin llegar. De su contenido dependen tres decisiones distintas: si
   traen qué estaba floreciendo, el puente flora↔miel deja de ser teórico; si
