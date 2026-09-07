@@ -175,7 +175,7 @@ async function main() {
   // Protocolo, versión y atributos en una sola transacción: una versión sin sus
   // atributos es un protocolo que acepta valoraciones vacías, y ese estado no
   // debe existir ni un instante.
-  const creado = await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
     const protocol = await tx.sensoryProtocol.create({
       data: {
         domain: definicion.domain,
@@ -206,16 +206,22 @@ async function main() {
         },
       });
     }
-    return { protocol, version };
-  });
+    // Dentro de la transacción y con `tx` desde el 2026-09-06: el protocolo, sus
+    // atributos y la fila que dice que se creó se confirman juntos. Antes el
+    // audit vivía tras el `});` y un fallo suyo dejaba un protocolo sin rastro.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: null,
+        operation: "sensory_protocol.create",
+        entityType: "sensory_protocol",
+        entityId: protocol.id,
+        after: { ...protocol, version: definicion.version, attributes: definicion.attributes.length },
+        sourceInterface: "scripts/create-sensory-protocol",
+      },
+      tx,
+    );
 
-  await recordAuditEvent({
-    actorUserAccountId: null,
-    operation: "sensory_protocol.create",
-    entityType: "sensory_protocol",
-    entityId: creado.protocol.id,
-    after: { ...creado.protocol, version: definicion.version, attributes: definicion.attributes.length },
-    sourceInterface: "scripts/create-sensory-protocol",
+    return { protocol, version };
   });
 
   console.log(`\n  Creado: ${definicion.name}`);
