@@ -1132,7 +1132,9 @@
     "neverSyncedLabel": "Never synced yet",
     "storageWarning": "Device storage running low",
     "draftsPurgedNotice": "{count, plural, one {# old unsynced draft was removed} other {# old unsynced drafts were removed}} to protect field data if this device is lost.",
-    "listTruncated": "Showing the {limit} most recent. There are more records than this list can hold."
+    "listTruncated": "Showing the {limit} most recent. There are more records than this list can hold.",
+    "labelsHeading": "Labels · {sitio}",
+    "labelsIntro": "One per box ({count}). Stick it where it shows with the lid on."
   },
   "Research": {
     "badge": "Research OS",

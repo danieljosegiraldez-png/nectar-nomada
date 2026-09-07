@@ -1132,7 +1132,9 @@
     "neverSyncedLabel": "Todavía no sincronizó",
     "storageWarning": "El almacenamiento del dispositivo se está agotando",
     "draftsPurgedNotice": "{count, plural, one {Se eliminó # borrador antiguo sin sincronizar} other {Se eliminaron # borradores antiguos sin sincronizar}} para proteger los datos de campo si se pierde este dispositivo.",
-    "listTruncated": "Mostrando los {limit} más recientes. Hay más registros de los que caben en esta lista."
+    "listTruncated": "Mostrando los {limit} más recientes. Hay más registros de los que caben en esta lista.",
+    "labelsHeading": "Calcomanías · {sitio}",
+    "labelsIntro": "Una por caja ({count}). Pégala donde se vea con la tapa puesta."
   },
   "Research": {
     "badge": "Research OS",

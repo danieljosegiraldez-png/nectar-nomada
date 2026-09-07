@@ -78,8 +78,10 @@ describe("el inventario del router", () => {
     // con /sensory/new: hasta entonces `sensorySession.create` sólo existía en
     // la semilla, así que nadie podía empezar una cata. 63 → 64 el 2026-09-07,
     // con /field-sessions/[id]/report — el reporte de visita de A9.6, que se
-    // renderiza desde el snapshot congelado y no desde la visita.
-    expect(salida).toContain("64 entradas");
+    // renderiza desde el snapshot congelado y no desde la visita. 64 → 65 el
+    // mismo día, con /apiaries/[id]/etiquetas — la hoja de calcomanías QR, que
+    // es lo que hace que abrir la caja N-01 sea apuntar la cámara.
+    expect(salida).toContain("65 entradas");
     expect(codigo, salida).toBe(0);
   });
 
