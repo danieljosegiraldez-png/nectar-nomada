@@ -76,20 +76,29 @@ async function main() {
     const before = await prisma.lot.findUniqueOrThrow({ where: { id: candidate.id } });
     if (before.dataQuality === "conflicting") continue; // idempotent
 
-    const after = await prisma.lot.update({
-      where: { id: candidate.id },
-      data: { dataQuality: "conflicting" },
-    });
+    // Una transacción POR LOTE desde el 2026-09-06, no una para toda la tanda:
+    // esto sólo hace atómicos la marca y su audit, que es lo que faltaba. Que
+    // los N lotes se marquen todos o ninguno sería otra decisión, y cambiaría
+    // el comportamiento de un guion que ya se ejecutó.
+    await prisma.$transaction(async (tx) => {
+      const after = await tx.lot.update({
+        where: { id: candidate.id },
+        data: { dataQuality: "conflicting" },
+      });
 
-    await recordAuditEvent({
-      actorUserAccountId: null,
-      operation: "lot.flag_conflicting_quantity",
-      entityType: "lot",
-      entityId: candidate.id,
-      before,
-      after,
-      reason: REASON,
-      sourceInterface: "scripts/p0-flag-overstated-lots.ts",
+      await recordAuditEvent(
+        {
+          actorUserAccountId: null,
+          operation: "lot.flag_conflicting_quantity",
+          entityType: "lot",
+          entityId: candidate.id,
+          before,
+          after,
+          reason: REASON,
+          sourceInterface: "scripts/p0-flag-overstated-lots.ts",
+        },
+        tx,
+      );
     });
     flagged++;
   }

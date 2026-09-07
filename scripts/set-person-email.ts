@@ -171,29 +171,40 @@ async function main() {
   }
 
   const previous = person.email;
-  await prisma.person.update({ where: { id: person.id }, data: { email } });
+  // Las TRES escrituras en una sola transacción desde el 2026-09-06. Éste era
+  // el caso más suelto de todos: el correo, la cuenta y el audit iban por
+  // separado, así que un fallo a mitad podía dejar a alguien con correo puesto
+  // y sin cuenta, o con las dos cosas y sin ninguna fila que lo dijera.
+  const createdAccount = await prisma.$transaction(async (tx) => {
+    await tx.person.update({ where: { id: person.id }, data: { email } });
 
-  // Someone with no account cannot be given a password at all, so create the
-  // credentials account here — `invited`, with no password, which is exactly
-  // the state every other person is in until auth:set-password runs.
-  // Person↔UserAccount is one-to-one, so there is at most one to check.
-  let createdAccount = false;
-  if (!person.userAccount) {
-    await prisma.userAccount.create({
-      data: { personId: person.id, authProvider: "credentials", status: "invited" },
-    });
-    createdAccount = true;
-  }
+    // Someone with no account cannot be given a password at all, so create the
+    // credentials account here — `invited`, with no password, which is exactly
+    // the state every other person is in until auth:set-password runs.
+    // Person↔UserAccount is one-to-one, so there is at most one to check.
+    let creada = false;
+    if (!person.userAccount) {
+      await tx.userAccount.create({
+        data: { personId: person.id, authProvider: "credentials", status: "invited" },
+      });
+      creada = true;
+    }
 
-  await recordAuditEvent({
-    actorUserAccountId: null,
-    operation: "update",
-    entityType: "person",
-    entityId: person.id,
-    before: { email: previous },
-    after: { email, accountCreated: createdAccount },
-    reason: "email set via scripts/set-person-email.ts",
-    sourceInterface: "cli",
+    await recordAuditEvent(
+      {
+        actorUserAccountId: null,
+        operation: "update",
+        entityType: "person",
+        entityId: person.id,
+        before: { email: previous },
+        after: { email, accountCreated: creada },
+        reason: "email set via scripts/set-person-email.ts",
+        sourceInterface: "cli",
+      },
+      tx,
+    );
+
+    return creada;
   });
 
   console.log(`\n  ${person.displayName}: ${previous ?? "(none)"} → ${email}`);

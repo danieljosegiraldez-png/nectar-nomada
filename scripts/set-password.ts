@@ -148,26 +148,34 @@ async function main() {
 
   const passwordHash = await hashPassword(password);
 
-  await prisma.userAccount.update({
-    where: { id: account.id },
-    data: {
-      passwordHash,
-      status: "active",
-      emailVerifiedAt: account.emailVerifiedAt ?? new Date(),
-    },
-  });
+  // La escritura y su AuditEvent en la misma transacción desde el 2026-09-06.
+  // Antes eran dos llamadas sueltas: la clave quedaba puesta y la cuenta activa
+  // y, si el audit fallaba, nada decía que alguien había recibido credenciales.
+  await prisma.$transaction(async (tx) => {
+    await tx.userAccount.update({
+      where: { id: account.id },
+      data: {
+        passwordHash,
+        status: "active",
+        emailVerifiedAt: account.emailVerifiedAt ?? new Date(),
+      },
+    });
 
-  // The audit trail records that credentials were set and by what route —
-  // never the password, and never the hash.
-  await recordAuditEvent({
-    actorUserAccountId: account.id,
-    operation: "update",
-    entityType: "user_account",
-    entityId: account.id,
-    before: { status: account.status, hadPassword: account.passwordHash !== null },
-    after: { status: "active", hadPassword: true },
-    reason: "credentials set via scripts/set-password.ts",
-    sourceInterface: "cli",
+    // The audit trail records that credentials were set and by what route —
+    // never the password, and never the hash.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: account.id,
+        operation: "update",
+        entityType: "user_account",
+        entityId: account.id,
+        before: { status: account.status, hadPassword: account.passwordHash !== null },
+        after: { status: "active", hadPassword: true },
+        reason: "credentials set via scripts/set-password.ts",
+        sourceInterface: "cli",
+      },
+      tx,
+    );
   });
 
   console.log(`\n  Done. ${email} can now sign in.\n`);

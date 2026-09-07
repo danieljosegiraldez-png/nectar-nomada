@@ -201,9 +201,30 @@ function llamadas(src: string): Llamada[] {
  * el mismo cambio que trajo esta línea, porque ampliar antes de arreglar habría
  * hecho nacer el guardia en rojo.
  *
- * Las otras 8 son llamadas sueltas, sin transacción ninguna cerca: estas dos
- * reglas no las miran. Cerrarlas sería CREAR transacciones donde no las hay,
- * que es otro trabajo y otra decisión.
+ * Las demás eran llamadas sueltas —una escritura y su audit, sin transacción
+ * ninguna—, y se cerraron el 2026-09-06 creando la transacción que faltaba en
+ * cada una. **Este párrafo decía que eran 8 y eran 7:** el arreglo del mismo
+ * cambio que lo escribió convirtió una en atómica y nadie recontó. Un número a
+ * mano dentro de un guardia envejece igual que la lista de archivos que este
+ * guardia dejó de tener; ahora no hay ninguno que mantener, porque las 10
+ * llamadas de `scripts/` van dentro de su transacción.
+ *
+ * **Punto ciego, dicho aquí para que no haga falta descubrirlo.** Las dos
+ * reglas de abajo cazan que a una llamada de dentro se le quite el `tx`, y que
+ * una llamada vuelva justo detrás del `});`. NO cazan que alguien quite la
+ * transacción entera y deje escritura y audit sueltas otra vez: para esas dos
+ * reglas, una llamada sin ninguna transacción cerca es indistinguible de una
+ * legítima. Una tercera regla —«en `scripts/`, todo audit va dentro de una
+ * transacción»— sería cierta hoy y cerraría el hueco, pero sólo puede escribirse
+ * acotada a `scripts/`: en `lib/` hay 49 llamadas sueltas —`app/` no tiene
+ * ninguna—, así que una regla global nacería en rojo. Acotarla es una decisión, no un
+ * descuido, y queda pendiente aquí.
+ *
+ * En los dos guiones que recorren filas —`rename-finca-rosina` y
+ * `p0-flag-overstated-lots`— la transacción es POR FILA, no una para toda la
+ * tanda: lo que faltaba era que la escritura y su audit fueran juntas. Que las
+ * N filas se apliquen todas o ninguna es otra decisión, y cambiaría el
+ * comportamiento de dos guiones que ya se ejecutaron.
  */
 const ARCHIVOS = [...fuentes(join(RAIZ, "lib")), ...fuentes(join(RAIZ, "app")), ...fuentes(join(RAIZ, "scripts"))]
   .map((r) => relative(RAIZ, r))

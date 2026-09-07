@@ -110,19 +110,29 @@ async function archivar(nombre: string) {
   const sesiones = protocolo.versions.reduce((n, v) => n + v._count.sessions, 0);
 
   const antes = { status: protocolo.status };
-  const despues = await prisma.sensoryProtocol.update({
-    where: { id: protocolo.id },
-    data: { status: "archived" },
-  });
 
-  await recordAuditEvent({
-    actorUserAccountId: null,
-    operation: "sensory_protocol.archive",
-    entityType: "sensory_protocol",
-    entityId: protocolo.id,
-    before: antes,
-    after: { status: despues.status },
-    sourceInterface: "scripts/create-sensory-protocol",
+  // El retiro y su AuditEvent en la misma transacción desde el 2026-09-06.
+  // Antes eran dos llamadas sueltas: el protocolo quedaba retirado y, si el
+  // audit fallaba, nada decía quién lo retiró ni cuándo — con sesiones de cata
+  // colgando de él, que es justo cuando importa saberlo.
+  await prisma.$transaction(async (tx) => {
+    const despues = await tx.sensoryProtocol.update({
+      where: { id: protocolo.id },
+      data: { status: "archived" },
+    });
+
+    await recordAuditEvent(
+      {
+        actorUserAccountId: null,
+        operation: "sensory_protocol.archive",
+        entityType: "sensory_protocol",
+        entityId: protocolo.id,
+        before: antes,
+        after: { status: despues.status },
+        sourceInterface: "scripts/create-sensory-protocol",
+      },
+      tx,
+    );
   });
 
   console.log(`\n  Retirado: ${nombre}`);
