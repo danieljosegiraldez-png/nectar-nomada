@@ -5211,6 +5211,15 @@ enum ProtocolVariableValueType {
   catalog
   closed_enum
 
+  /// A9.4 (D2). Los dos que la lista de campo del apiario usa y no existían.
+  /// `multi_enum`: 3 de los 44 ítems de `protocolos/apiario-campo-v1.json`
+  /// aceptan varias respuestas —plagas vistas, propósito de la visita— y
+  /// `closed_enum` sólo admite una. `date`: 3 ítems más, entre ellos «alcanza
+  /// hasta», que es la fecha que faltó en Toabré. El informe de alcance dijo
+  /// que faltaba **uno**; medidos contra el JSON, faltaban dos.
+  multi_enum
+  date
+
   @@schema("research")
 }
 
@@ -5294,6 +5303,39 @@ model ProtocolVariable {
   // §1 names (water source, yeast, orientation, bag position, volume).
   isControlled      Boolean                   @default(true) @map("is_controlled")
   displayOrder      Int                       @default(0) @map("display_order")
+
+  /// A9.4 (D2) — lo que la lista de chequeo de campo necesita y `ProtocolVariable`
+  /// no tenía. Todas anulables y aditivas: un protocolo científico existente no
+  /// las usa y no cambia de significado. La cuenta de al lado es sobre los 44
+  /// ítems de `protocolos/apiario-campo-v1.json`, medida, no estimada.
+  ///
+  /// El informe de alcance decía «cuatro columnas»; medidas contra el JSON son
+  /// **ocho**. Las cuatro que no nombró son `key`, `prefillLastUsed`,
+  /// `provenanceClass` y la mitad `requiredWith` de la condicionalidad.
+
+  /// Identificador estable dentro del protocolo (44/44). Sin él una respuesta
+  /// no se puede direccionar: `name` es la etiqueta que se muestra y cambia.
+  key                  String?                @map("key")
+  /// `field` o `close` (44/44). Es el corazón del ticket: separa lo que se
+  /// captura de pie, con guantes, de lo que se termina en el carro (D4).
+  stage                String?                @map("stage")
+  /// Si el ítem es obligatorio en su etapa (44/44).
+  required             Boolean?               @map("required")
+  /// Obligatorio **sólo si** otro ítem tiene respuesta (2/44).
+  requiredWith         String?                @map("required_with")
+  /// Se muestra sólo si se cumple (1/44). Se guarda como texto a propósito:
+  /// interpretarlo es trabajo de pantalla, y convertirlo en estructura antes
+  /// de saber cuántas formas tiene sería inventar un lenguaje.
+  showWhen             String?                @map("show_when")
+  /// Si la respuesta escribe una COLUMNA que ya existe —`Inspection.outcome`—
+  /// en vez de crear fila nueva (16/44). Es lo que evita duplicar el dato.
+  coversExistingColumn String?                @map("covers_existing_column")
+  /// Proponer el último valor usado al abrir el formulario (4/44).
+  prefillLastUsed      Boolean?               @map("prefill_last_used")
+  /// La clase de procedencia que la respuesta declara (3/44): un ítem que pide
+  /// una interpretación no produce un hecho observado, y el modelo ya lo
+  /// distingue.
+  provenanceClass      ProvenanceClass?       @map("provenance_class")
 
   values TreatmentBatchVariableValue[]
 
