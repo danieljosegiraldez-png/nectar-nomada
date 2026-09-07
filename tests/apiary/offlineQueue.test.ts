@@ -3,6 +3,7 @@ import {
   classifyDraftAge,
   STALE_PURGE_DAYS,
   STALE_WARNING_DAYS,
+  mutacionDe,
 } from "../../lib/apiary/offlineQueue";
 
 /**
@@ -68,5 +69,50 @@ describe("classifyDraftAge: qué se conserva, qué se avisa y qué se borra", ()
     for (let d = -30; d <= 60; d += 0.25) {
       expect(["keep", "warn", "purge"]).toContain(conEdad(d));
     }
+  });
+});
+
+/**
+ * A9.5 — la traducción de un borrador local a la mutación del lote.
+ *
+ * Se prueba ésta y no `syncAll` porque `syncAll` sigue tocando IndexedDB y este
+ * repositorio sigue sin shim; lo que se hizo fue sacar la parte pura fuera, que
+ * es donde un error se multiplica: si la traducción se equivoca, se equivoca en
+ * todos los registros de la tanda y sin decirlo.
+ */
+describe("A9.5 — un borrador se traduce a la mutación del lote", () => {
+  const borrador = (extra: Record<string, unknown> = {}) => ({
+    id: "draft-1",
+    kind: "inspection" as const,
+    payload: { colonyId: "col-1", outcome: "nothing_unusual", ...extra },
+    createdAt: Date.parse("2026-09-02T14:00:00Z"),
+    status: "pending" as const,
+  });
+
+  it("lleva la clase, el identificador del borrador y la carga", () => {
+    const m = mutacionDe(borrador());
+    expect(m.kind).toBe("inspection");
+    expect(m.clientDraftId).toBe("draft-1");
+    expect(m.colonyId).toBe("col-1");
+    expect(m.outcome).toBe("nothing_unusual");
+  });
+
+  it("un evento de colonia viaja con la clave que el servidor espera", () => {
+    // El almacén local dice `colonyEvent` y el protocolo dice `colony_event`.
+    // Son dos vocabularios y la traducción es justo esto.
+    const m = mutacionDe({ ...borrador(), kind: "colonyEvent" as const });
+    expect(m.kind).toBe("colony_event");
+  });
+
+  it("sin hora propia usa la de CREACIÓN del borrador, no la de sincronizar", () => {
+    // Es lo que impide fechar una inspección el día que hubo señal. Una visita
+    // capturada el 2 de septiembre y sincronizada el 5 sigue siendo del 2.
+    const m = mutacionDe(borrador());
+    expect(m.occurredAt).toBe(new Date(Date.parse("2026-09-02T14:00:00Z")).toISOString());
+  });
+
+  it("y si el borrador trajo su hora, esa manda", () => {
+    const m = mutacionDe(borrador({ occurredAt: "2026-09-02T09:15:00.000Z" }));
+    expect(m.occurredAt).toBe("2026-09-02T09:15:00.000Z");
   });
 });
