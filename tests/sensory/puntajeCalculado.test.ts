@@ -16,18 +16,21 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { submitAssessment, SensoryAccessError } from "../../lib/sensory/service";
 import { ATRIBUTOS_CVA_AFECTIVO, FORMULA_CVA_AFECTIVO } from "../../lib/sensory/puntajeCva";
+import { FORMULA_SUMA_DE_ATRIBUTOS } from "../../lib/sensory/puntajeSuma";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `cva-${Date.now()}`;
 
 let orgId: string, plotId: string, scopeId: string;
 let juez: string;
-let versionCva: string, versionClasica: string;
+let versionCva: string, versionClasica: string, versionSuma: string;
 /** attributeId por nombre, para cada protocolo. */
 const atributosCva = new Map<string, string>();
 const atributosClasicos = new Map<string, string>();
+const atributosSuma = new Map<string, string>();
 let cieganCva: string[] = [];
 let ciegaClasica: string;
+let ciegasSuma: string[] = [];
 
 async function cuenta(label: string) {
   const p = await prisma.person.create({
@@ -151,7 +154,20 @@ beforeAll(async () => {
     atributosClasicos,
   );
 
+  // Techos distintos a propósito: es lo que distingue sumar de promediar, y es
+  // la forma real de la rúbrica de miel (20+20+15+10+15+20).
+  versionSuma = await protocolo(
+    "suma ponderada",
+    FORMULA_SUMA_DE_ATRIBUTOS,
+    [
+      { name: "Aroma positivo", scaleMin: 0, scaleMax: 20 },
+      { name: "Apariencia", scaleMin: 0, scaleMax: 10 },
+    ],
+    atributosSuma,
+  );
+
   cieganCva = await sesionCon(versionCva, 6);
+  ciegasSuma = await sesionCon(versionSuma, 3);
   ciegaClasica = (await sesionCon(versionClasica, 1))[0]!;
 });
 
@@ -163,7 +179,7 @@ afterAll(async () => {
   await prisma.sensorySession.deleteMany({
     where: assertDefinedWhere({ id: { in: sesiones.map((s) => s.id) } }),
   });
-  for (const v of [versionCva, versionClasica]) {
+  for (const v of [versionCva, versionClasica, versionSuma]) {
     const ver = await prisma.sensoryProtocolVersion.findUnique({ where: { id: v } });
     if (!ver) continue;
     await prisma.sensoryAttribute.deleteMany({ where: assertDefinedWhere({ protocolVersionId: v }) });
@@ -274,5 +290,42 @@ describe("un protocolo con la fórmula del CVA afectivo", () => {
         defectiveCups: 0,
       }),
     ).rejects.toThrow(new SensoryAccessError("score_out_of_range"));
+  });
+});
+
+describe("un protocolo con la fórmula de suma de atributos", () => {
+  const resp = (aroma: number, apariencia: number) => [
+    { attributeId: atributosSuma.get("Aroma positivo")!, value: aroma },
+    { attributeId: atributosSuma.get("Apariencia")!, value: apariencia },
+  ];
+
+  it("suma los criterios", async () => {
+    const a = await submitAssessment(juez, { blindSampleId: ciegasSuma[0]!, attributeResponses: resp(18, 7) });
+    expect(a.overallScore?.toNumber()).toBe(25);
+    // Las tazas son del CVA, no de esta fórmula: guardarlas aquí sería inventar
+    // una bandeja de cinco tazas en una cata de miel.
+    expect(a.nonUniformCups).toBeNull();
+    expect(a.defectiveCups).toBeNull();
+  });
+
+  /**
+   * La prueba que distingue esta fórmula de un rango global: 20 es válido en
+   * «Aroma positivo» y **no** en «Apariencia», que llega hasta 10. Con un solo
+   * rango para todo el protocolo, un 20 en apariencia dobla su peso y el total
+   * sigue pareciendo un número normal.
+   */
+  it("rechaza un valor por encima del techo de SU criterio", async () => {
+    await expect(
+      submitAssessment(juez, { blindSampleId: ciegasSuma[1]!, attributeResponses: resp(20, 20) }),
+    ).rejects.toThrow(new SensoryAccessError("score_out_of_range"));
+  });
+
+  it("rechaza que falte un criterio en vez de sumar sobre los que llegaron", async () => {
+    await expect(
+      submitAssessment(juez, {
+        blindSampleId: ciegasSuma[2]!,
+        attributeResponses: [{ attributeId: atributosSuma.get("Aroma positivo")!, value: 20 }],
+      }),
+    ).rejects.toThrow(new SensoryAccessError("responses_incomplete"));
   });
 });

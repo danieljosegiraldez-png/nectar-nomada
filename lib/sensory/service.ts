@@ -20,6 +20,7 @@ import { permissionKey } from "../rbac/types";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import { ATRIBUTOS_CVA_AFECTIVO, FORMULA_CVA_AFECTIVO, puntajeAfectivoCva } from "./puntajeCva";
+import { FORMULA_SUMA_DE_ATRIBUTOS, puntajeSumaDeAtributos } from "./puntajeSuma";
 
 export class SensoryAccessError extends Error {}
 
@@ -206,12 +207,33 @@ export interface SubmitAssessmentInput {
  * puntaje calculado sobre siete números que parecería correcto.
  */
 function resolverPuntajeTotal(
-  protocolVersion: { scoreFormula: string | null; attributes: ReadonlyArray<{ id: string; name: string }> },
+  protocolVersion: {
+    scoreFormula: string | null;
+    attributes: ReadonlyArray<{ id: string; name: string; scaleMin: Prisma.Decimal; scaleMax: Prisma.Decimal }>;
+  },
   input: SubmitAssessmentInput,
 ): { overallScore: number | null; nonUniformCups: number | null; defectiveCups: number | null } {
   if (protocolVersion.scoreFormula === null) {
     return { overallScore: input.overallScore ?? null, nonUniformCups: null, defectiveCups: null };
   }
+
+  if (protocolVersion.scoreFormula === FORMULA_SUMA_DE_ATRIBUTOS) {
+    // Se recorren los atributos del PROTOCOLO, no las respuestas del envío, por
+    // lo mismo que en el CVA: así «falta uno» es un error con nombre en vez de
+    // una suma sobre cinco criterios que parecería correcta.
+    const valorPorAtributo = new Map(input.attributeResponses.map((r) => [r.attributeId, r.value]));
+    const aSumar = protocolVersion.attributes.map((a) => {
+      const value = valorPorAtributo.get(a.id);
+      if (value === undefined) throw new SensoryAccessError("responses_incomplete");
+      return { name: a.name, scaleMin: a.scaleMin.toNumber(), scaleMax: a.scaleMax.toNumber(), value };
+    });
+    try {
+      return { overallScore: puntajeSumaDeAtributos(aSumar), nonUniformCups: null, defectiveCups: null };
+    } catch {
+      throw new SensoryAccessError("score_out_of_range");
+    }
+  }
+
   if (protocolVersion.scoreFormula !== FORMULA_CVA_AFECTIVO) {
     // Una fórmula que la base tiene y este código no conoce. Calcular algo
     // sería inventar; guardar un total tecleado bajo un protocolo que dice

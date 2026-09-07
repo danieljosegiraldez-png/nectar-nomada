@@ -37,36 +37,36 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-07 · A9: el informe de alcance de captura de campo queda completo
+### 2026-09-07 · Un protocolo ya puede llevar su vocabulario
 
-Los siete archivos de A9 —prompt, cuatro anexos, informe y
-`protocolos/apiario-campo-v1.json`— estaban **sin versionar** en el checkout
-compartido. Entran aquí. El informe se **continuó**, no se rehízo.
+**Lo que pidió Daniel:** que el análisis que le entrega un Q-grader o un tostador
+entre bajo el estándar y la terminología con que se lo dan, y varias opciones.
 
-**Lo que faltaba de verdad era una cosa, no cinco.** El encargo listaba D7–D10,
-la corrección del aviso del Anexo D en §0, los tickets, el borrador de ADR y la
-crítica de la prueba de aceptación. Medido contra el archivo en disco: D7, D8 y
-D9 ya estaban como secciones propias, §0 ya estaba corregido, y §4, §5 y §6 ya
-existían. **Sólo faltaba D10**, y lo que arrastra.
+**La pared, medida antes de construir.** Para café no hay fuente: de los siete
+PDF de la SCA cinco están cifrados y el del Fine Robusta es un escaneo, y el
+póster de la rueda —sin cifrar— trae **96 términos y se corta** en `Floral ·
+Chamomile · Rose · Jasmine`, sin Vanilla, Black Tea, Tobacco ni Cereal.
+Publicarlo sería publicar una rueda truncada como si fuera la de la SCA. La SCA
+**sí** publica abierto la lista CATA («Olfactory Examples», que dice
+correlacionar con las casillas del formulario descriptivo) y un glosario de **74
+términos**, los dos en Airtable — pero **no se pudieron extraer**: con el panel
+del navegador oculto la tabla virtualizada no re-dibuja y sólo se leen dos filas.
 
-**D10, y su hallazgo.** Dos decisiones, y caen de lados distintos: la entrega
-por canal se aplaza sin coste —ADR-044 tiene razón para ella—, pero la bitácora
-no, porque un registro «desde ahora» sí pierde lo que no espejó. Es la primera
-vez que un elemento de la lista de aplazamientos de ADR-039 **falla su propio
-criterio** (`DECISIONS.md:2616-2620`). La salida es que lo que no podía esperar
-ya existe: `AuditEvent`. Condición a escribir hoy: el emisor lee de ahí, no de
-una cola propia, o el espejo retroactivo se vuelve imposible.
+**Se entregó el mecanismo, no contenido inventado.** Hasta hoy
+`SensoryDescriptor` sólo se escribía desde el seed con `SEED_DEMO_CONTENT=true`:
+**ningún protocolo de producción tenía vocabulario ni había forma de dárselo**.
+Ahora el archivo lleva `descriptors`, validados al crearlo y en la misma
+transacción que sus atributos. La unicidad es el **par** familia + descriptor
+—«miel» es nota floral en café y el producto entero en miel— y `technicalCause`
+sólo en un defecto.
 
-Añadidos: **ADR-DRAFT-111** (borrador, no en `DECISIONS.md`), tickets A9.11 y
-A9.12, y la fila de D10 en el resumen. Volumen medido: la lectura literal de
-«toda acción» son **264 mensajes** por visita de quince cajas, no «decenas».
+**Segunda opción de estándar, con fuente propia:** la rúbrica de miel de
+`BEVERAGE_SENSORY_PROTOCOLS.md` §3 —seis criterios que suman 100— con **45
+descriptores** en tres niveles y los 15 defectos nombrando su causa. Va
+`adapted_original` porque ese documento la marca como material propio. Fórmula
+`attribute_sum_v1`, con el techo comprobado criterio a criterio.
 
-**Y un hallazgo que salió de aquí y no es de este alcance:**
-`PENDING_IMPLEMENTATIONS/009` — el único lector de `AuditEvent` en pantalla
-consulta `entityType: "Lot"` y **nada lo escribe nunca**, así que el panel
-«Historial» de un lote afirma «sin historial» con una consulta que no puede
-acertar. El comentario que lo certificaba como correcto era cierto cuando se
-escribió y lleva meses sin serlo.
+**Nada tocó producción**, y para café falta lo mismo: un informe real, o licencia.
 
 ## 3. Bloqueado, y en qué
 

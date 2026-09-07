@@ -1,0 +1,320 @@
+{
+  "_lee_esto_antes": [
+    "Esta es la definición que acaba en la base de PRODUCCIÓN cuando alguien corre",
+    "`npm run sensory:create-protocol -- protocolos/miel-competencia-100.json`.",
+    "",
+    "DE DÓNDE SALE, ENTERO. De `docs/architecture/BEVERAGE_SENSORY_PROTOCOLS.md` §3:",
+    "la rúbrica de competencia de seis criterios y la taxonomía de defectos de tres",
+    "niveles. Ese documento dice que el material de competencia y entrenamiento se",
+    "recibió directamente y se trata como documento de trabajo propio, no como obra",
+    "de un tercero — por eso ésta es la única categoría que se puede publicar entera",
+    "sin licencia pendiente, y por eso `standardLicenseStatus` es `adapted_original`",
+    "y no `pending_license` como el café.",
+    "",
+    "LOS SEIS CRITERIOS SUMAN 100 y cada uno tiene su propio techo: 20+20+15+10+15+20.",
+    "El total lo calcula el servidor (`attribute_sum_v1`), no lo teclea el juez.",
+    "",
+    "LAS BANDAS DE CALIDAD leen el total, no un criterio suelto: 90-100 excelente,",
+    "80-89 muy buena, 70-79 buena, por debajo de 70 hay defecto real o el perfil es",
+    "demasiado indistinto. Las bandas NO se modelan aquí: son una lectura del",
+    "puntaje, y meterlas como dato las congelaría.",
+    "",
+    "SOBRE BRETTANOMYCES, a propósito. Aquí es señal de contaminación, y eso es",
+    "específico de evaluar miel — no una afirmación general sobre el organismo, que",
+    "otras tradiciones de fermentación usan queriendo."
+  ],
+  "domain": "honey",
+  "name": "Miel — rúbrica de competencia 100 puntos v1",
+  "description": "Rúbrica de competencia de miel: seis criterios ponderados que suman 100 puntos, con el total calculado por el servidor, y el vocabulario de tres niveles —positivo, neutral y defecto— donde cada defecto nombra su causa técnica en vez de quedarse en una etiqueta.",
+  "standardSourceReference": "docs/architecture/BEVERAGE_SENSORY_PROTOCOLS.md §3: rúbrica de competencia (100 puntos, seis criterios) y taxonomía de defectos de tres niveles, recibidas directamente y tratadas como documento de trabajo propio. Metodología general apoyada en ISO 4121/5492/8586/8589 y en literatura académica abierta; no reproduce ningún formulario de competencia de terceros.",
+  "standardLicenseStatus": "adapted_original",
+  "version": 1,
+  "scoreMin": 0,
+  "scoreMax": 100,
+  "scoreFormula": "attribute_sum_v1",
+  "attributes": [
+    {
+      "name": "Aroma positivo",
+      "section": "descriptive",
+      "scaleMin": 0,
+      "scaleMax": 20
+    },
+    {
+      "name": "Sabor y gusto",
+      "section": "descriptive",
+      "scaleMin": 0,
+      "scaleMax": 20
+    },
+    {
+      "name": "Textura en boca",
+      "section": "descriptive",
+      "scaleMin": 0,
+      "scaleMax": 15
+    },
+    {
+      "name": "Apariencia",
+      "section": "descriptive",
+      "scaleMin": 0,
+      "scaleMax": 10
+    },
+    {
+      "name": "Persistencia y equilibrio",
+      "section": "affective",
+      "scaleMin": 0,
+      "scaleMax": 15
+    },
+    {
+      "name": "Ausencia de defectos",
+      "section": "affective",
+      "scaleMin": 0,
+      "scaleMax": 20
+    }
+  ],
+  "descriptors": [
+    {
+      "family": "floral",
+      "specificDescriptor": "rosa",
+      "classification": "positive"
+    },
+    {
+      "family": "floral",
+      "specificDescriptor": "jazmín",
+      "classification": "positive"
+    },
+    {
+      "family": "floral",
+      "specificDescriptor": "azahar",
+      "classification": "positive"
+    },
+    {
+      "family": "frutal",
+      "specificDescriptor": "manzana",
+      "classification": "positive"
+    },
+    {
+      "family": "frutal",
+      "specificDescriptor": "melocotón",
+      "classification": "positive"
+    },
+    {
+      "family": "frutal",
+      "specificDescriptor": "melón",
+      "classification": "positive"
+    },
+    {
+      "family": "cítrico",
+      "specificDescriptor": "limón",
+      "classification": "positive"
+    },
+    {
+      "family": "cítrico",
+      "specificDescriptor": "toronja",
+      "classification": "positive"
+    },
+    {
+      "family": "cítrico",
+      "specificDescriptor": "naranja",
+      "classification": "positive"
+    },
+    {
+      "family": "vegetal",
+      "specificDescriptor": "hierba",
+      "classification": "positive"
+    },
+    {
+      "family": "vegetal",
+      "specificDescriptor": "tallo verde",
+      "classification": "positive"
+    },
+    {
+      "family": "vegetal",
+      "specificDescriptor": "alcachofa",
+      "classification": "positive"
+    },
+    {
+      "family": "herbal",
+      "specificDescriptor": "tomillo",
+      "classification": "positive"
+    },
+    {
+      "family": "herbal",
+      "specificDescriptor": "albahaca",
+      "classification": "positive"
+    },
+    {
+      "family": "herbal",
+      "specificDescriptor": "hinojo",
+      "classification": "positive"
+    },
+    {
+      "family": "resinoso",
+      "specificDescriptor": "pino",
+      "classification": "positive"
+    },
+    {
+      "family": "resinoso",
+      "specificDescriptor": "bálsamo",
+      "classification": "positive"
+    },
+    {
+      "family": "resinoso",
+      "specificDescriptor": "savia",
+      "classification": "positive"
+    },
+    {
+      "family": "maltoso",
+      "specificDescriptor": "pan horneado",
+      "classification": "positive"
+    },
+    {
+      "family": "maltoso",
+      "specificDescriptor": "cereal",
+      "classification": "positive"
+    },
+    {
+      "family": "carácter de colmena",
+      "specificDescriptor": "cera fresca",
+      "expectedPerception": "pasada cierta intensidad deja de ser positivo",
+      "classification": "positive"
+    },
+    {
+      "family": "carácter de colmena",
+      "specificDescriptor": "propóleo fresco",
+      "expectedPerception": "pasada cierta intensidad deja de ser positivo",
+      "classification": "positive"
+    },
+    {
+      "family": "tostado",
+      "specificDescriptor": "azúcar caramelizado",
+      "expectedPerception": "positivo si es del propio carácter de la miel; defecto si vino de sobrecalentarla",
+      "classification": "positive"
+    },
+    {
+      "family": "láctico",
+      "specificDescriptor": "ácido láctico tipo yogur",
+      "classification": "positive"
+    },
+    {
+      "family": "ésteres de fermentación controlada",
+      "specificDescriptor": "geraniol",
+      "classification": "positive"
+    },
+    {
+      "family": "ésteres de fermentación controlada",
+      "specificDescriptor": "citronelol",
+      "classification": "positive"
+    },
+    {
+      "family": "fenólicos deseables",
+      "specificDescriptor": "clavo (4-vinil guayacol)",
+      "expectedPerception": "deseable en moderación",
+      "classification": "positive"
+    },
+    {
+      "family": "fermentación",
+      "specificDescriptor": "fermentación controlada suave",
+      "expectedPerception": "para miel destinada a hidromiel no es el defecto que sería en miel de mesa",
+      "classification": "neutral"
+    },
+    {
+      "family": "fermentación",
+      "specificDescriptor": "carácter floral fermentado ligero",
+      "classification": "neutral"
+    },
+    {
+      "family": "alcohol",
+      "specificDescriptor": "notas alcohólicas tenues (vino blanco, sidra)",
+      "classification": "neutral"
+    },
+    {
+      "family": "fermentación indeseada",
+      "specificDescriptor": "ácido acético",
+      "classification": "defect",
+      "technicalCause": "cosechada por encima del 18 % de humedad, sellado deficiente, exposición al aire"
+    },
+    {
+      "family": "fermentación indeseada",
+      "specificDescriptor": "levadura descontrolada",
+      "classification": "defect",
+      "technicalCause": "cosechada por encima del 18 % de humedad, sellado deficiente, exposición al aire"
+    },
+    {
+      "family": "ácidos orgánicos indeseables",
+      "specificDescriptor": "ácido butírico (queso)",
+      "classification": "defect",
+      "technicalCause": "contaminación por Clostridium o por materia orgánica"
+    },
+    {
+      "family": "ácidos orgánicos indeseables",
+      "specificDescriptor": "ácido isovalérico (sudor)",
+      "classification": "defect",
+      "technicalCause": "contaminación por Clostridium o por materia orgánica"
+    },
+    {
+      "family": "ácidos orgánicos indeseables",
+      "specificDescriptor": "nota a vómito",
+      "classification": "defect",
+      "technicalCause": "contaminación por Clostridium o por materia orgánica"
+    },
+    {
+      "family": "contaminación química",
+      "specificDescriptor": "cloro",
+      "classification": "defect",
+      "technicalCause": "envases inadecuados, químicos de limpieza mal enjuagados"
+    },
+    {
+      "family": "contaminación química",
+      "specificDescriptor": "disolvente",
+      "classification": "defect",
+      "technicalCause": "envases inadecuados, químicos de limpieza mal enjuagados"
+    },
+    {
+      "family": "contaminación microbiológica",
+      "specificDescriptor": "establo",
+      "classification": "defect",
+      "technicalCause": "humedad ambiental, contacto con superficies húmedas"
+    },
+    {
+      "family": "contaminación microbiológica",
+      "specificDescriptor": "cuero mojado",
+      "classification": "defect",
+      "technicalCause": "humedad ambiental, contacto con superficies húmedas"
+    },
+    {
+      "family": "contaminación microbiológica",
+      "specificDescriptor": "Brettanomyces",
+      "classification": "defect",
+      "technicalCause": "humedad ambiental, contacto con superficies húmedas"
+    },
+    {
+      "family": "oxidación avanzada",
+      "specificDescriptor": "rancio",
+      "classification": "defect",
+      "technicalCause": "exposición prolongada al oxígeno, exceso de calor"
+    },
+    {
+      "family": "oxidación avanzada",
+      "specificDescriptor": "mantequilla vieja",
+      "classification": "defect",
+      "technicalCause": "exposición prolongada al oxígeno, exceso de calor"
+    },
+    {
+      "family": "contaminación térmica",
+      "specificDescriptor": "amargo",
+      "classification": "defect",
+      "technicalCause": "calor excesivo usado para descristalizar"
+    },
+    {
+      "family": "contaminación térmica",
+      "specificDescriptor": "azúcar quemado",
+      "classification": "defect",
+      "technicalCause": "calor excesivo usado para descristalizar"
+    },
+    {
+      "family": "contaminación térmica",
+      "specificDescriptor": "humo",
+      "classification": "defect",
+      "technicalCause": "calor excesivo usado para descristalizar"
+    }
+  ]
+}
