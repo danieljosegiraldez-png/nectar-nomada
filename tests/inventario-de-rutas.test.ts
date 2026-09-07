@@ -81,7 +81,9 @@ describe("el inventario del router", () => {
     // renderiza desde el snapshot congelado y no desde la visita. 64 → 65 el
     // mismo día, con /apiaries/[id]/etiquetas — la hoja de calcomanías QR, que
     // es lo que hace que abrir la caja N-01 sea apuntar la cámara.
-    expect(salida).toContain("65 entradas");
+    // 65 → 66 el mismo día, con /lots/[id]/process — el proceso del lote, la
+    // única pantalla desde la que se declara el % H al que se va a almacenar.
+    expect(salida).toContain("66 entradas");
     expect(codigo, salida).toBe(0);
   });
 

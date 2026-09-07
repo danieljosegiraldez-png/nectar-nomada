@@ -548,5 +548,46 @@ export async function listarProcesosDeLote(userAccountId: string, lotId: string)
   }));
 }
 
+/**
+ * Lo que la pantalla necesita para pintar sus desplegables: el vocabulario de
+ * manejos y las mediciones de humedad de este lote.
+ *
+ * **Las mediciones se listan, no se teclean.** Cerrar un proceso guarda el
+ * puntero a una `Measurement`, no una copia de su número; si la pantalla dejara
+ * escribir el valor a mano habría dos verdades y la de la pantalla no tendría ni
+ * fecha ni quién la tomó.
+ *
+ * **Puede devolver listas vacías, y eso es información:** sin vocabulario
+ * cargado no hay manejos que registrar, y sin ninguna medición de humedad el
+ * proceso no se puede cerrar. La pantalla lo dice en vez de enseñar un
+ * desplegable vacío.
+ */
+export async function opcionesParaProceso(userAccountId: string, lotId: string) {
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) throw new LotProcessError("lot_not_found");
+  await requireLotAccess(userAccountId, "view", [lot]);
+
+  const [valores, mediciones] = await Promise.all([
+    prisma.variableCatalogValue.findMany({
+      where: { catalog: { key: { in: [...CATALOGOS_DE_INTERVENCION] } } },
+      include: { catalog: true },
+      orderBy: [{ catalog: { key: "asc" } }, { displayOrder: "asc" }, { value: "asc" }],
+    }),
+    prisma.measurement.findMany({
+      where: { lotId, variable: "moisture" },
+      orderBy: { occurredAt: "desc" },
+      take: 20,
+    }),
+  ]);
+
+  return {
+    intervenciones: valores.map((v) => ({ id: v.id, label: `${v.catalog.name} · ${v.value}` })),
+    mediciones: mediciones.map((m) => ({
+      id: m.id,
+      label: `${m.value.toNumber()} ${m.unit} · ${m.occurredAt.toISOString().slice(0, 10)}`,
+    })),
+  };
+}
+
 /** El tipo que devuelve `listarProcesosDeLote`, para quien lo pinte. */
 export type ProcesoDeLote = Awaited<ReturnType<typeof listarProcesosDeLote>>[number];
