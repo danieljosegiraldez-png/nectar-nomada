@@ -18,6 +18,10 @@
   ],
   "importan_cliente_total": [
     {
+      "archivo": "lib/traceability/enmiendas.ts",
+      "razon": "A9.3 — el lector generico del rastro de una entidad. Modulo de dominio: es el sitio donde el acceso a datos vive por diseno. Solo lee `AuditEvent`, y sobre pares (entityType, entityId) que le pasa quien ya resolvio el acceso a esa entidad."
+    },
+    {
       "archivo": "app/actions/auth.ts",
       "razon": "Alta y acceso: corre ANTES de que exista sesión, así que no puede pasar por un servicio que exija una. Migrar significaría inventar un actor de sistema."
     },
@@ -343,6 +347,12 @@
     }
   ],
   "dependen_del_llamador": [
+    {
+      "archivo": "lib/traceability/enmiendas.ts",
+      "operacion": "leerEnmiendas",
+      "razon": "No recibe principal A PROPOSITO. Su unico llamador, getLotDetail, ya resolvio el acceso al lote antes de pedir su historia; darle compuerta propia crearia dos sitios donde decidir lo mismo y por eso ni siquiera acepta userAccountId, para que no parezca que autoriza. Si alguna vez se llama desde una ruta que no haya autorizado antes, esta linea es la que hay que releer.",
+      "verificado": "2026-09-07"
+    },
     {
       "archivo": "lib/ai/service.ts",
       "operacion": "generateDataCompletenessSuggestions",

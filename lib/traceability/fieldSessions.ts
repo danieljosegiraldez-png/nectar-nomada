@@ -140,6 +140,84 @@ export async function startFieldSession(userAccountId: string, input: StartField
  * an actual event, the same shape as `FermentationRun.endedAt` and
  * `StorageAssignment.endedAt`, not an editable field.
  */
+/** Cuánto dura la ventana de corrección tras cerrar. D4 la fija en 48 horas. */
+export const HORAS_DE_VENTANA_DE_CIERRE = 48;
+
+export interface CerrarVisitaInput {
+  fieldSessionId: string;
+  notes?: string | null;
+  /** Por qué se completó así. Va al `reason` del AuditEvent. */
+  reason?: string | null;
+}
+
+/**
+ * A9.3 (D3/D4) — completar una visita FUERA del campo, con rastro.
+ *
+ * **La exigencia del dueño no era una tabla.** Era que lo capturado frente a la
+ * caja no se sobreescriba en silencio cuando alguien lo completa en la casa. Se
+ * resuelve sin entidad nueva y sin pantalla nueva: `AuditEvent` ya guarda
+ * `before`, `after`, `reason` y `sourceInterface`, y esta última es la columna
+ * que hacía falta usar. Hasta hoy el apiario escribía siempre el mismo valor;
+ * con `"traceability.close"` frente a `"traceability.service"`, **«lo capturado
+ * en el campo» y «lo completado en la casa» se distinguen leyendo la fila**.
+ *
+ * **La ventana, y por qué es una columna y no una constante.** `completedAt`
+ * marca cuándo se terminó de escribir —que no es `endedAt`, cuándo se salió del
+ * sitio— y `editWindowExpiresAt` cuándo deja de poder editarse. Pasado eso,
+ * corregir es enmendar. Es columna porque el propio Anexo C dice que los
+ * umbrales son parámetros por sitio: Los Asientos y Toabré no se visitan igual.
+ *
+ * **Lo que NO hace:** tocar los campos capturados en el campo. Un valor de
+ * etapa `field` no se edita desde el cierre; se enmienda escribiendo el nuevo
+ * con su razón, y el original queda en `before`. Eso es política de servicio, y
+ * por eso esta función sólo acepta `notes`.
+ */
+export async function completarVisita(userAccountId: string, input: CerrarVisitaInput) {
+  const existing = await prisma.fieldSession.findUnique({ where: { id: input.fieldSessionId } });
+  if (!existing) throw new FieldSessionValidationError("session_not_found");
+  await requireFieldSessionAccess(userAccountId, existing.locationId);
+
+  if (existing.status === "locked") throw new FieldSessionValidationError("session_locked");
+  if (existing.editWindowExpiresAt && existing.editWindowExpiresAt < new Date()) {
+    // Se dice distinto de `locked` a propósito: una está cerrada por decisión y
+    // la otra por plazo, y quien lo lea necesita saber cuál de las dos.
+    throw new FieldSessionValidationError("edit_window_expired");
+  }
+
+  const completedAt = existing.completedAt ?? new Date();
+  const editWindowExpiresAt =
+    existing.editWindowExpiresAt ?? new Date(completedAt.getTime() + HORAS_DE_VENTANA_DE_CIERRE * 3600_000);
+
+  return prisma.$transaction(async (tx) => {
+    const despues = await tx.fieldSession.update({
+      where: { id: input.fieldSessionId },
+      data: {
+        status: "completed",
+        completedAt,
+        editWindowExpiresAt,
+        ...(input.notes === undefined ? {} : { notes: input.notes }),
+      },
+    });
+
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "field_session.complete",
+        entityType: "field_session",
+        entityId: despues.id,
+        before: existing,
+        after: despues,
+        reason: input.reason ?? undefined,
+        // La columna que hace innecesaria la entidad nueva.
+        sourceInterface: "traceability.close",
+      },
+      tx,
+    );
+
+    return despues;
+  });
+}
+
 export async function endFieldSession(userAccountId: string, input: { fieldSessionId: string; endedAt: Date }) {
   const existing = await prisma.fieldSession.findUnique({ where: { id: input.fieldSessionId } });
   if (!existing) throw new FieldSessionValidationError("session_not_found");

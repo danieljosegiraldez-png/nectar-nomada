@@ -9,7 +9,14 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import { startFieldSession, endFieldSession, LocationAccessError } from "../../lib/traceability/fieldSessions";
+import {
+  startFieldSession,
+  endFieldSession,
+  completarVisita,
+  HORAS_DE_VENTANA_DE_CIERRE,
+  LocationAccessError,
+  FieldSessionValidationError,
+} from "../../lib/traceability/fieldSessions";
 import { recordInspection } from "../../lib/apiary/inspections";
 import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -295,5 +302,72 @@ describe("A9.5 — el lote acepta lo que se captura en el apiario", () => {
     ]);
     expect(resultado!.status).toBe("rejected");
     expect(await prisma.inspection.count({ where: { clientDraftId: `${RUN_ID}-lote-3` } })).toBe(0);
+  });
+});
+
+describe("A9.3 — el cierre deja rastro, y se distingue del campo", () => {
+  it("completar una visita la marca, fija la ventana y audita como CIERRE", async () => {
+    // La exigencia del dueño no era una tabla: era que lo capturado frente a la
+    // caja no se sobreescriba en silencio al completarlo en la casa.
+    const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
+    const antes = Date.now();
+
+    const cerrada = await completarVisita(apicultorConManejo, {
+      fieldSessionId: visita.id,
+      notes: `TEST cerrado en el carro (${RUN_ID})`,
+      reason: "completado fuera de campo",
+    });
+
+    expect(cerrada.status).toBe("completed");
+    expect(cerrada.completedAt).not.toBeNull();
+    // La ventana son 48 h desde que se terminó de escribir, no desde que se
+    // salió del sitio.
+    const ventana = cerrada.editWindowExpiresAt!.getTime() - cerrada.completedAt!.getTime();
+    expect(Math.round(ventana / 3600_000)).toBe(HORAS_DE_VENTANA_DE_CIERRE);
+    expect(cerrada.completedAt!.getTime()).toBeGreaterThanOrEqual(antes - 1000);
+
+    // Y lo que hace innecesaria la entidad nueva: la MISMA columna distingue
+    // quién escribió qué y desde dónde.
+    const evento = await prisma.auditEvent.findFirst({
+      where: { entityId: visita.id, operation: "field_session.complete" },
+      orderBy: { occurredAt: "desc" },
+    });
+    expect(evento, "completar no dejó AuditEvent").not.toBeNull();
+    expect(evento!.sourceInterface).toBe("traceability.close");
+    expect(evento!.reason).toBe("completado fuera de campo");
+    expect(evento!.before, "sin `before` no se puede saber qué se cambió").not.toBeNull();
+
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ id: evento!.id }) });
+  });
+
+  it("pasada la ventana ya no se edita: se enmienda", async () => {
+    const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    // Se envejece la ventana a mano en vez de esperar 48 horas.
+    await prisma.fieldSession.update({
+      where: { id: visita.id },
+      data: { editWindowExpiresAt: new Date(Date.now() - 1000) },
+    });
+
+    await expect(completarVisita(apicultorConManejo, { fieldSessionId: visita.id, notes: "tarde" })).rejects.toThrow(
+      FieldSessionValidationError,
+    );
+  });
+
+  it("una visita bloqueada no se toca, y lo dice distinto de la ventana", async () => {
+    // Cerrada por decisión y cerrada por plazo son dos cosas, y quien lo lea
+    // necesita saber cuál de las dos.
+    const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
+    await prisma.fieldSession.update({ where: { id: visita.id }, data: { status: "locked" } });
+
+    await expect(completarVisita(apicultorConManejo, { fieldSessionId: visita.id })).rejects.toThrow(
+      /session_locked/,
+    );
+  });
+
+  it("quien no puede abrir la visita tampoco puede cerrarla", async () => {
+    const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
+    await expect(completarVisita(operarioDeFinca, { fieldSessionId: visita.id })).rejects.toThrow(LocationAccessError);
   });
 });
