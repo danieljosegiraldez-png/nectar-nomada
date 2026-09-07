@@ -1200,7 +1200,19 @@
     "draftsPurgedNotice": "{count, plural, one {# old unsynced draft was removed} other {# old unsynced drafts were removed}} to protect field data if this device is lost.",
     "listTruncated": "Showing the {limit} most recent. There are more records than this list can hold.",
     "labelsHeading": "Labels · {sitio}",
-    "labelsIntro": "One per box ({count}). Stick it where it shows with the lid on."
+    "labelsIntro": "One per box ({count}). Stick it where it shows with the lid on.",
+    "alerta_perdida_sin_reposicion": "Colonies were lost and have not been replaced",
+    "alerta_visita_vencida": "The scheduled visit is more than 14 days overdue",
+    "alerta_alimento_vencido": "Feed ran out and there is no newer feeding",
+    "alerta_alimento_por_vencer": "Feed runs out in less than 7 days",
+    "alerta_visita_sin_cerrar": "A visit has been left open for more than 72 hours",
+    "vitalUltimaVisita": "Last visit",
+    "vitalProximaVisita": "Next visit",
+    "vitalColonias": "Colonies / boxes",
+    "vitalAlimentoHasta": "Feed until",
+    "haceDias": "{count} days ago",
+    "coloniasDeCajas": "{colonias} of {cajas}",
+    "vitalesPendientes": "Two dashboard vitals are still missing: pollination density (needs committed hectares) and 7-day weather (needs a connected provider). Neither is estimated."
   },
   "Research": {
     "badge": "Research OS",

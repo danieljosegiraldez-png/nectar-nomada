@@ -891,3 +891,89 @@ a.nn-card-link:active {
   font-size: 0.95rem;
   line-height: 1.55;
 }
+
+/* A9.8 — el borde izquierdo del sitio y su banda de vitales.
+
+   El color NUNCA es la única señal: cada alerta se imprime también con su
+   frase, porque un borde rojo no dice qué pasa y porque quien no distingue
+   rojo de ocre necesita leerlo. El borde ordena de un vistazo; el texto
+   informa.
+
+   `--nn-aviso` medido contra las dos superficies donde aparece una tarjeta:
+   5.54 sobre --nn-bg y 5.93 sobre --nn-surface. Pasa el 4.5:1 que WCAG exige
+   al texto y con holgura el 3:1 de 1.4.11 para el borde. La miel de la marca
+   (#fcea3c) NO sirve aquí: 1.07 sobre la tarjeta, invisible como borde. */
+:root {
+  --nn-aviso: #8a5a00;
+}
+
+.nn-sitio {
+  border-left: 4px solid transparent;
+}
+
+.nn-sitio-critico {
+  border-left-color: var(--nn-error);
+}
+
+.nn-sitio-aviso {
+  border-left-color: var(--nn-aviso);
+}
+
+.nn-alertas {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.nn-alerta {
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.nn-alerta-critico {
+  color: var(--nn-error);
+}
+
+.nn-alerta-aviso {
+  color: var(--nn-aviso);
+}
+
+/* Cuatro vitales en dos columnas: en un teléfono al sol, cuatro filas de
+   etiqueta y valor se leen sin ampliar. */
+.nn-vitales {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem 1rem;
+  margin: 0.6rem 0;
+}
+
+.nn-vital {
+  display: flex;
+  flex-direction: column;
+}
+
+.nn-vital-etiqueta {
+  font-size: 0.75rem;
+  color: var(--nn-ink-muted);
+}
+
+.nn-vital-valor {
+  font-size: 0.95rem;
+}
+
+/* «Sin registro» no es cero y no debe leerse como un valor. Se marca en
+   cursiva y apagado: es la tercera cosa que la pantalla ya distinguía —«no
+   hay», «no puedes ver», «no se ha medido»—. */
+.nn-vital-sin-registro {
+  font-size: 0.95rem;
+  font-style: italic;
+  color: var(--nn-ink-muted);
+}
+
+.nn-vitales-nota {
+  margin-top: 1.5rem;
+  font-size: 0.85rem;
+}
