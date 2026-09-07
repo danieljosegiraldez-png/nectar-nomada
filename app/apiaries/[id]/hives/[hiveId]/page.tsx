@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getHive } from "../../../../../lib/apiary/hives";
+import { origenesDeColonia } from "../../../../../lib/apiary/origenDeColonia";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
 import { getSignedUrlForAsset } from "../../../../../lib/traceability/media";
 import { listInspectionsForColony } from "../../../../../lib/apiary/inspections";
@@ -22,9 +23,12 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
 
   const { id: apiaryId, hiveId } = await params;
   const t = await getTranslations("Apiary");
-  const [hive, { people: observers, selfPersonId }] = await Promise.all([
+  const [hive, { people: observers, selfPersonId }, origenes] = await Promise.all([
     getHive(user.userAccountId, hiveId),
     getObserverCandidates(user.userAccountId),
+    // Lectura sin sujeto: el vocabulario sale del catálogo, no de una lista
+    // escrita a mano en el formulario.
+    origenesDeColonia(),
   ]);
 
   // A Hive holds at most one *current* Colony in practice (A1/A2's own
@@ -74,7 +78,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
         <section className="nn-section">
           <h2>{t("newColonyHeading")}</h2>
           <p className="nn-muted">{t("noColonyYet")}</p>
-          <NewColonyForm apiaryId={apiaryId} hiveId={hiveId} />
+          <NewColonyForm apiaryId={apiaryId} hiveId={hiveId} origenes={origenes} />
         </section>
       ) : (
         <>
@@ -83,6 +87,13 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
             <p className="nn-detail-meta">
               <span>{t(`originType_${colony.originType}`)}</span>
               <span>{t(`colonyStatus_${colony.status}`)}</span>
+            </p>
+            {/* A9.10 (D6) — el origen se muestra como dato, no como prosa. Se
+                dice siempre, incluso sin valor: «sin registro» es distinto de
+                una línea que no aparece, que se lee como si nadie preguntara.
+                `originNote` sigue debajo para lo que el catálogo no cubre. */}
+            <p className="nn-muted">
+              {t("originSourceLabel")}: {colony.originSource ? colony.originSource.value : t("originSourceUnset")}
             </p>
             {colony.originNote ? <p className="nn-muted">{colony.originNote}</p> : null}
             <ApiaryPhotoUploadForm
