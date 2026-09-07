@@ -1260,3 +1260,44 @@ descriptores de miel, con sus 15 defectos y su causa— corriendo dentro de una
 transacción que se revierte, con su propio control positivo de que revirtió.
 
 **Para café falta lo mismo:** un informe real de los que le entregan, o licencia.
+
+---
+
+**Archivado el 2026-09-07.** Sale la del informe externo para dejar sitio a la
+del proceso del lote. Lo suyo que sigue dirigiendo trabajo —el `CHECK`
+`assessment_un_solo_evaluador` y que `Person.sensoryCertifications` es donde vive
+la credencial— está en el esquema y en sus pruebas, que sí se cargan.
+
+### 2026-09-07 · El informe que se paga ya se puede registrar
+
+**El hueco, medido:** `assessment.evaluator_user_account_id` era **NOT NULL** con
+FK a `user_account`. Un Q-grader o un tostador al que se le paga un análisis no
+tiene cuenta, así que **el trabajo que se paga era justo el que no se podía
+registrar** — vivía fuera del sistema.
+
+**Y una corrección de lo que dije por la mañana:** afirmé que no existía modelo de
+credenciales. **Sí existe** — `Person.sensoryCertifications`, especificado en
+`BEVERAGE_SENSORY_PROTOCOLS.md` §7.3 con `{certifying_body, certification_name,
+level_or_rank, date_earned, certificate_reference}`. Busqué `certification`,
+`qGrader` y `licenseNumber`, y el campo se llama de otra forma. **Nadie lo leía
+ni lo escribía**: la misma forma que el permiso `sample:view`, que existía en la
+intención y no en el catálogo.
+
+**La regla vive en la base, no en TypeScript.** `CHECK
+assessment_un_solo_evaluador`: exactamente una de las dos columnas de evaluador
+puesta, y un informe externo trae **siempre** el puntero a su original. La
+migración **cuenta las filas que lo incumplirían antes de crear el CHECK** y
+aborta si hay alguna, en vez de reventar a medias en producción.
+
+**Reusa la cadena que ya existe** —sesión, vuelo, muestra ciega, mapeo— en vez de
+una tabla paralela: así los resultados de panel, el historial y los reportes lo
+ven sin cambiar una línea. El «ciego» es degenerado a propósito y está dicho: no
+hubo cata a ciegas, pero el mapeo es lo único que ata el puntaje al café.
+
+**Flip-test del CHECK, que es lo que distingue medir la regla de medir el
+servicio:** quitado de la base, caen las cuatro pruebas que dicen medirlo y el
+control positivo —una valoración interna normal— sigue pasando.
+
+Entrada: `npm run sensory:record-external -- <archivo.json>`. Sin argumentos
+lista los protocolos vivos y **los nombres de atributo que espera cada uno**,
+porque el informe habla en palabras, no en identificadores.
