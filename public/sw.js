@@ -26,7 +26,15 @@ const PRECACHE_URLS = [OFFLINE_URL, "/manifest.webmanifest", "/icons/icon-192.pn
 // Operator routes this ticket covers (§1) — apiary (A5) and the coffee
 // equivalent (T10/T13). Deliberately excludes admin/report routes (§1's
 // own "no construir" list).
-const OPERATOR_ROUTE_PREFIXES = ["/apiaries", "/lots"];
+// A9.5 — toda ruta desde la que se captura en campo. La lista NO se mantiene a
+// ojo: `tests/arquitectura/rutas-de-operador.test.ts` la deriva de qué páginas
+// renderizan un formulario y falla si alguna queda fuera.
+//
+// `/field-sessions` entró con la visita de apiario: sin él, la pantalla que
+// agrupa el trabajo del día no abre sin señal, que es justo cuando se usa.
+// `/plots` llevaba fuera desde antes y es del café: esa página tiene OCHO
+// formularios de captura, y `/lots` —que sí estaba— es otra cosa.
+const OPERATOR_ROUTE_PREFIXES = ["/apiaries", "/field-sessions", "/lots", "/plots"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
