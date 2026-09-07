@@ -1031,7 +1031,15 @@
     "roastProfileWhyLabel": "Por qué (opcional)",
     "roastProfileWhyPlaceholder": "el que mejor cató",
     "roastProfileChooseButton": "Elegir como óptimo",
-    "roastProfileReplaceButton": "Reemplazar el elegido"
+    "roastProfileReplaceButton": "Reemplazar el elegido",
+    "fieldSessionBackLink": "← Volver a la visita",
+    "reportVersionLine": "Reporte v{version} · emitido {emitido}",
+    "reportVisitHeading": "La visita",
+    "reportVisitStart": "Inicio: {cuando}",
+    "reportVisitEnd": "Fin: {cuando}",
+    "reportVisitOperator": "Operador: {quien}",
+    "reportRecordsHeading": "Registros ({count})",
+    "reportNoRecords": "Esta visita se cerró sin registros."
   },
   "Apiary": {
     "badge": "Apiario",

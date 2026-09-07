@@ -91,6 +91,7 @@ export const RUTAS = {
   "/biochar": { clase: "requiere-sesion", razon: "Lotes de biochar producidos en la finca." },
   "/biochar/[id]": { clase: "requiere-sesion", razon: "Un lote de biochar y su registro de quema." },
   "/field-sessions/[id]": { clase: "requiere-sesion", razon: "Una jornada de campo y su hilo de eventos." },
+  "/field-sessions/[id]/report": { clase: "requiere-sesion", razon: "Una jornada de campo y su hilo de eventos." },
   "/recipes": { clase: "requiere-sesion", razon: "Recetas y formulación." },
   "/recipes/new": { clase: "requiere-sesion", razon: "Recetas y formulación." },
   "/recipes/[id]": { clase: "requiere-sesion", razon: "Recetas y formulación." },
