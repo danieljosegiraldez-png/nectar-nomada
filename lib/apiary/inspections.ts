@@ -12,6 +12,7 @@
 import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
+import { ligarAVisitaAbierta } from "../traceability/visitaAbierta";
 import type { InspectionOutcome, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveColonyScope(colonyId: string) {
@@ -89,6 +90,18 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
       },
       tx,
     );
+
+    // A9.2 — si hay una visita abierta en este sitio por esta persona, la
+    // inspección entra en ella. Dentro de la MISMA transacción: un vínculo que
+    // se confirma aparte puede perderse y dejar la visita incompleta sin que
+    // nada lo diga.
+    await ligarAVisitaAbierta(tx, {
+      userAccountId,
+      locationId: scope.locationId,
+      occurredAt: inspection.occurredAt,
+      provenanceClass,
+      sujeto: { inspectionId: inspection.id },
+    });
 
     return inspection;
   });

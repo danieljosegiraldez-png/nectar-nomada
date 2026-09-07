@@ -284,6 +284,10 @@
   ],
   "reciben_transaccion": [
     {
+      "archivo": "lib/traceability/visitaAbierta.ts",
+      "razon": "A9.2 — engancha un registro de apiario a la visita abierta. No abre conexión: opera dentro de la transacción que ya abrió un servicio autorizado (`inspections.ts`, `colonyEvents.ts`), y por eso recibe el `tx` en vez de importar el cliente. El vínculo tiene que confirmarse con la escritura o no confirmarse: uno que se guarde aparte puede perderse y dejar la visita incompleta sin que nada lo diga."
+    },
+    {
       "archivo": "lib/traceability/balance.ts",
       "razon": "Cálculo puro de balance de masa. No abre conexión: opera dentro de una transacción que ya abrió un llamador autorizado (lots.ts, fermentation.ts, quantity.ts, todos con requireLotAccess). Recibir el cliente por parámetro es inyección de dependencia, no un atajo — pero lo vuelve invisible a la comprobación de imports, y por eso se inventaría aquí."
     },

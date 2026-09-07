@@ -11,6 +11,7 @@
 import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess, requireColonyEventWriteAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
+import { ligarAVisitaAbierta } from "../traceability/visitaAbierta";
 import type { ColonyEventType, ProvenanceClass } from "../../generated/prisma/client";
 
 export class ColonyEventValidationError extends Error {}
@@ -108,6 +109,15 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
       },
       tx,
     );
+
+    // A9.2 — ver la cabecera de `visitaAbierta.ts`.
+    await ligarAVisitaAbierta(tx, {
+      userAccountId,
+      locationId: scope.locationId,
+      occurredAt: colonyEvent.occurredAt,
+      provenanceClass: colonyEvent.provenanceClass,
+      sujeto: { colonyEventId: colonyEvent.id },
+    });
 
     return colonyEvent;
   });
