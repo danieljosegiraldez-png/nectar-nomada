@@ -61,6 +61,13 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
             {t("createLotButton")}
           </Link>
         ) : null}
+        {/* El reporte transversal vive aquí y NO en la barra de navegación, por
+            la misma razón que las recetas (ADR-100): S2 dejó esa barra en ocho
+            entradas para que quepa en un teléfono, y un test lo vigila. Es de
+            lectura, así que no se esconde a quien no puede gestionar. */}
+        <Link href="/reports/proceso" className="nn-button nn-button-secondary" style={{ display: "inline-block", textDecoration: "none" }}>
+          {t("viewProcessReportButton")}
+        </Link>
         {/* ADR-100. Recipes live here rather than in the top navigation: they
             are process configuration used from the batch flow, and S2
             consolidated that bar from ten entries precisely so it would fit a
