@@ -17,7 +17,8 @@
     "primaryNavLabel": "Primary",
     "admin": "Admin",
     "content": "Content",
-    "recipes": "Recipes"
+    "recipes": "Recipes",
+    "newSession": "Create cupping session"
   },
   "Home": {
     "badge": "Slices 1–2 — Identity and Discovery",
@@ -253,7 +254,26 @@
     "error_no_session_access": "You don't have access to this session.",
     "error_responses_required": "Enter at least one attribute response.",
     "error_blind_sample_not_found": "This sample is no longer available.",
-    "toolsLabel": "Sensory tools"
+    "toolsLabel": "Sensory tools",
+    "backToSensory": "Back to sensory",
+    "createSessionButton": "Create cupping session",
+    "sessionNameLabel": "Session name",
+    "sessionProtocolLabel": "Protocol",
+    "sessionProtocolPlaceholder": "— Choose a protocol —",
+    "sessionPreparationLabel": "Preparation (optional)",
+    "sessionSamplesLabel": "Samples in this session",
+    "sessionSamplesHelp": "The order you tick them decides their blind code: A, B, C…",
+    "noProtocolsAvailable": "No protocol with attributes is available. Without one there is nowhere to score.",
+    "noSamplesAvailable": "You cannot reach any sample. Without samples there is nothing to cup.",
+    "error_name_required": "Give the session a name.",
+    "error_samples_required": "Choose at least one sample.",
+    "error_duplicate_samples": "You ticked the same sample twice.",
+    "error_protocol_version_not_found": "That protocol no longer exists.",
+    "error_protocol_archived": "That protocol is retired; choose another.",
+    "error_protocol_has_no_attributes": "That protocol has no attributes: the judge would have nothing to score.",
+    "error_sample_not_accessible": "One of those samples is out of your reach.",
+    "error_no_manage_access": "You do not have permission to set up cuppings.",
+    "error_no_access": "You do not have access."
   },
   "Partner": {
     "badge": "Partner Workspace",

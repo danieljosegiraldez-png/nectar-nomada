@@ -74,8 +74,10 @@ describe("el inventario del router", () => {
     // nueva se vea. 52 → 54 el 2026-09-01, con /biochar y /biochar/[id]
     // declaradas en el manifiesto en el mismo cambio. 61 → 62 el 2026-09-06,
     // con /lots/[id]/roast/new — la pantalla que le faltaba al tueste, cuyo
-    // servicio existía desde R1 sin un solo consumidor.
-    expect(salida).toContain("62 entradas");
+    // servicio existía desde R1 sin un solo consumidor. 62 → 63 el mismo día,
+    // con /sensory/new: hasta entonces `sensorySession.create` sólo existía en
+    // la semilla, así que nadie podía empezar una cata.
+    expect(salida).toContain("63 entradas");
     expect(codigo, salida).toBe(0);
   });
 

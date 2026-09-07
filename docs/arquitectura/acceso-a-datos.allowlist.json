@@ -272,6 +272,10 @@
     {
       "archivo": "lib/envios/unaVezPorEnvio.ts",
       "razon": "Idempotencia de envíos web (2026-09-06). Sólo toca `core.submission_key`, su propia tabla de control, y ejecuta la escritura del llamador dentro de la misma transacción para que no pueda quedar una clave apuntando a una fila que no existe. No autoriza nada ni decide qué se escribe: el guardia lo aplicó ya el servicio de dominio antes de llamar. Recibir el cliente de transacción es el punto — separarlos volvería a abrir el hueco que cierra."
+    },
+    {
+      "archivo": "lib/sensory/sessions.ts",
+      "razon": "Crear una sesión de cata (2026-09-06). Escribe sesión, vuelo, muestras ciegas y sus mapeos en UNA transacción —una sesión a medias es una que un juez abre y no puede catar—, y su guardia es `sensory:manage_session` a nivel plataforma, el mismo que usa la calibración. Las muestras elegibles se acotan con la visibilidad que ya existía (`sampleWhereFromVisibility`), no con una regla nueva."
     }
   ],
   "reciben_transaccion": [

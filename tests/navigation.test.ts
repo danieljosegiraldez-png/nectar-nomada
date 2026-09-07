@@ -54,7 +54,11 @@ describe("buildNavigation", () => {
   it("a plain judge gets the section but neither tool inside it", () => {
     // Submitting assessments is not managing sessions or competitions.
     expect(toolHrefs(JUDGE)).toEqual([]);
-    expect(toolHrefs(HEAD_JUDGE)).toEqual(["/competitions", "/calibration"]);
+    // 2026-09-06: se añade "/sensory/new". Hasta entonces NADIE podía crear una
+    // sesión de cata —`sensorySession.create` sólo existía en la semilla—, así
+    // que el head judge tenía herramientas para dirigir una cata y ninguna para
+    // empezarla.
+    expect(toolHrefs(HEAD_JUDGE)).toEqual(["/competitions", "/calibration", "/sensory/new"]);
   });
 
   it("AI Suggestions is hidden from everyone without ai:review_suggestion", () => {

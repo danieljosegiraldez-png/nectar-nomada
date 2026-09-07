@@ -265,20 +265,26 @@ una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo me
   `typecheck`, no la suite.
 
 - **`npm run sensory:archive-protocol` retira un protocolo sin borrarlo**, y hay
-  cinco `TEST` activos en producción esperando. **Dicho con honestidad: hoy hace
-  poco.** Medido el 2026-09-06 — nada en el código filtra por el estado del
-  protocolo, así que su efecto real es que el listado de la herramienta deja de
-  mezclar retirados con vivos. Se construye igual porque marcar lo retirado es lo
-  que permite que el día que exista un selector no ofrezca basura de pruebas.
+  cinco `TEST` activos en producción esperando. **Hoy hace poco:** nada filtra por
+  el estado, así que su efecto es que el listado deja de mezclar retirados con
+  vivos — y que un selector futuro no ofrezca basura de pruebas.
 
-- **Y el hallazgo grande: NADIE puede crear una sesión de cata.**
-  `sensorySession.create` sólo aparece en `prisma/seed.ts` y en pruebas — nunca
-  en `lib/` ni en `app/`, comprobado con control positivo. El servicio sensorial
-  sólo exporta lecturas, `submitAssessment` y el cálculo de panel: no hay crear
-  sesión, ni vuelo, ni muestra ciega. **Ésa es la razón de las cero valoraciones,
-  no el protocolo** — y también corrige lo que yo había dicho: en producción SÍ
-  había un protocolo de café, el marcador `Coffee Cupping (Illustrative)`, que yo
-  di por inexistente deduciéndolo de que la semilla es opt-in en vez de medirlo.
+- **Nadie podía crear una sesión de cata** —`sensorySession.create` sólo existía
+  en la semilla y en pruebas—, y **ésa era la razón de las cero valoraciones, no
+  el protocolo**. Arreglado en la entrada de abajo. Corrige además algo que dije:
+  en producción SÍ había protocolo de café, el marcador
+  `Coffee Cupping (Illustrative)`, que di por inexistente sin medirlo.
+
+- **Ya se puede crear una sesión de cata** — la puerta que le faltaba al módulo.
+  `crearSesionDeCata` monta sesión + vuelo + muestras ciegas + mapeo en **una
+  transacción**, con pantalla en `/sensory/new`. Rechaza protocolo retirado y
+  protocolo **sin atributos** — hay cinco así en producción. **Hallazgo de
+  permisos, decisión de Daniel:** `sensory:manage_session` lo tienen admin y head
+  judge; `sample:manage`, admin y Farm Operator. **Sólo el admin tiene los dos**,
+  así que el head judge ve la pantalla y no alcanza ninguna muestra. **Del
+  método:** violé el guardia de audit atómico y lo cazó su prueba; y «muestra
+  ajena» no se puede probar mientras sólo el admin cree sesiones — queda escrito
+  como explicación, no como prueba que no puede fallar.
 
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
