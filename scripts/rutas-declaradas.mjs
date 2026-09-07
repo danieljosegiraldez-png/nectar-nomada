@@ -63,6 +63,7 @@ export const RUTAS = {
   "/api/v1/sync/field-work": { clase: "requiere-sesion", razon: "P4 §5. Pull por cursor. El ámbito lo resuelve el servidor contra el RBAC, no lo pide el aparato." },
   "/apiaries": { clase: "requiere-sesion", razon: "Operación de apiarios." },
   "/apiaries/[id]": { clase: "requiere-sesion", razon: "Operación de apiarios." },
+  "/apiaries/[id]/etiquetas": { clase: "requiere-sesion", razon: "La hoja de calcomanias QR de un apiario. Mismo regimen que el apiario: quien no lo ve, no imprime sus codigos." },
   "/apiaries/[id]/hives/[hiveId]": { clase: "requiere-sesion", razon: "Operación de apiarios." },
   "/bookings/success": { clase: "requiere-sesion", razon: "Confirmación de una reserva del titular." },
   "/calibration": { clase: "requiere-sesion", razon: "Calibración sensorial." },

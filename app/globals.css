@@ -737,6 +737,38 @@ a.nn-card-link:active {
    the start (ADR-039) — browser print-to-PDF should produce a clean,
    client-sendable document with no app chrome, upload widgets, or
    navigation, none of which mean anything once the page is on paper. */
+/* A9.7 — la hoja de calcomanías. Cada etiqueta se corta entera: `break-inside`
+   impide que un código quede partido entre dos hojas, que lo dejaría inservible
+   justo después de imprimir cien. */
+.nn-etiquetas {
+  gap: 12mm;
+}
+
+.nn-etiqueta {
+  border: 1px dashed var(--nn-border-strong);
+  padding: 6mm;
+  text-align: center;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.nn-etiqueta h2 {
+  margin: 0 0 2mm;
+}
+
+.nn-etiqueta svg {
+  width: 40mm;
+  height: 40mm;
+}
+
+/* La URL debajo del código: cuando la cámara falla, alguien la teclea. */
+.nn-etiqueta-url {
+  font-family: var(--nn-mono, monospace);
+  font-size: 7pt;
+  word-break: break-all;
+  margin: 2mm 0 0;
+}
+
 @media print {
   .nn-nav,
   .nn-back-link,
