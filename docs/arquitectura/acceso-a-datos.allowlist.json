@@ -498,6 +498,12 @@
       "operacion": "crearProtocolo",
       "razon": "No recibe principal porque no hay ninguno: su único llamador es `scripts/create-sensory-protocol.ts`, una herramienta de terminal que corre con `DATABASE_URL` del `.env` y sin sesión — por eso su `AuditEvent` lleva `actorUserAccountId: null`. La autorización es tener acceso al servidor y al archivo del protocolo, que es una decisión del dueño y se lee en el diff. Si algún día se llama desde una pantalla, deja de depender del llamador y necesita guardia propia.",
       "verificado": "2026-09-07"
+    },
+    {
+      "archivo": "lib/traceability/lotProcess.ts",
+      "operacion": "exigeSecadoTerminado",
+      "razon": "No recibe principal porque no expone nada: lee el proceso más reciente de un lote y LANZA o no lanza. Su único llamador es `moveLotToStorage`, que ya resolvió `requireLotAccess(userAccountId, \"manage\", [lot])` sobre ese mismo lote antes de invocarla — darle un principal propio sería resolver dos veces la misma autorización, que es como se acaba con dos respuestas distintas. Si algún día se llama desde una pantalla para pintar «este lote todavía no puede almacenarse», deja de depender del llamador y necesita guardia propia.",
+      "verificado": "2026-09-07"
     }
   ]
 }

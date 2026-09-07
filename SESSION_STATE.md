@@ -68,28 +68,25 @@ se pretendía en cada momento. Lo estructurado —peso, horas, humedad— sigue 
 las filas rechazadas persisten y chocan con el índice único. Se dice porque
 «cayeron cinco» no es «el guardia mide las cinco».
 
-**Lo que NO se construyó, a propósito:** nada toca bodega y el catálogo de
-manejos arranca **vacío** — las dos preguntas siguen abiertas con Daniel.
+**Y lo que Daniel contestó después, en el mismo día:**
 
-### 2026-09-07 · Dar de alta a un evaluador con su credencial
+**Bodega BLOQUEA.** «No debe salir de secado antes bajo ninguna circunstancia».
+`moveLotToStorage` lanza si el proceso está abierto, si no hay medición de
+cierre, o si esa medición supera el objetivo. **Sólo si el lote tiene proceso**:
+medido, producción tiene **45 lotes y cero procesos**, y bloquearlos a todos los
+dejaría inalmacenables por un dato que nadie pudo declarar. Y con la acción que
+él pidió al lado: `devolverASecado` reabre el proceso, **exige un motivo** y deja
+en el rastro qué humedad de cierre se descarta. La medición no se borra: se
+suelta — es un hecho medido.
 
-`sensory:record-external` exige que el firmante exista como `Person`, y crearlo
-quedaba a mano en la base: donde se cuela un JSON mal formado en `Json?`.
-
-`npm run people:add-evaluator -- "Nombre" --cuerpo CQI --certificacion "Q Arabica
-Grader" --desde 2024-05-01`. **No crea cuenta** —eso es `people:set-email`— y es
-**aditivo**: una renovación trae otra fecha y las dos conviven, porque el
-historial de credenciales es parte de la procedencia de cada informe firmado.
-
-**Una desviación de §7.3, a propósito:** ahí sólo `expiry_date` es anulable;
-aquí obligan tres —cuerpo, nombre y fecha— porque quien transcribe puede saber
-que alguien es Q Grader desde 2024 y **no tener el número de certificado**, y
-exigirlo obligaría a inventarlo. Lo ausente se guarda **ausente**, no como
-cadena vacía. `leerCertificaciones` **no repara**: falla nombrando la fila rota.
-
-Comprobado corriendo el comando contra la base local —crear, duplicado,
-renovación, un 31 de febrero, una bandera inventada— y leyendo la columna: la
-segunda credencial **no trae** `level_or_rank`, que es lo correcto.
+**Y una corrección suya que me ahorró duplicar el vocabulario:** «la lista ya
+está de antes». Yo había inventado un catálogo `intervencion_de_proceso`; al
+medir hay **24 catálogos con valores**, entre ellos `condicion_oxigeno`
+(anaerobico, maceración carbónica), `manejo_temperatura` (choque térmico),
+`medio_lavado`, `metodo_inoculacion`, `sustrato_anadido`, `recipiente`. Ahora la
+intervención sale de **esos**, por una lista en código que se amplía en una
+línea. `grado_proceso` y `estado_cereza` quedan fuera a propósito: describen el
+batch entero, no un instante — van en `intent`, que es donde él los puso.
 
 ## 3. Bloqueado, y en qué
 
