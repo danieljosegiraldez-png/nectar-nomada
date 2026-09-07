@@ -37,6 +37,40 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-07 · «Proceso» deja de ser una palabra y pasa a ser una fila
+
+**Empieza por una corrección mía.** Dije dos veces que «proceso no existe en el
+modelo». **Falso**: existía `ProcessRecipe` —«Honey 48h», versionada, con objetivos.
+
+**El hueco real, medido:** `processRecipeVersionId` vivía en **un solo sitio**,
+`FermentationRun`. Un natural sin fermentación no se podía etiquetar, y uno con
+dos tendría dos etiquetas y ninguna respuesta a «¿qué proceso es este lote?».
+
+**La definición es del dueño, literal:** «uno o más eventos o procesos
+transformativos o de manejo, antes o durante el secado, antes de llegar al % H
+deseado a almacenar». Así que `LotProcess` es la **cabecera que agrupa** eventos
+que ya existían —`FermentationRun` y `DryingRun` cuelgan de ella— y
+`LotProcessIntervention` recoge los manejos sin sitio —flotado, reposo— con
+**vocabulario abierto** (`VariableCatalog`), no un enum cerrado.
+
+**Decisiones suyas:** uno o **varios** procesos por lote; **% H objetivo
+obligatorio y modificable**, con rastro. Y la corrección que llegó a mitad de la
+construcción, que cambió el modelo: **«Sin receta» NO es «sin nada declarado»** —
+«aunque no requiere receta definida, sí requiere proceso e intención y detalle de
+este batch: se puso tanto peso whole cherries, proceso natural anaeróbico,
+tantas horas». `intent` es **obligatorio**, texto libre, y **modificable a mitad
+de proceso** con rastro: eso es lo que hace reproducible el lote — poder leer qué
+se pretendía en cada momento. Lo estructurado —peso, horas, humedad— sigue en
+`QuantityEvent`, `FermentationRun` y `Measurement`.
+
+**Cuatro `CHECK` en la base**, no en TypeScript, y cada uno con su flip-test.
+*Al quitarlos cayó también el control positivo, por otra razón* — sin los CHECK
+las filas rechazadas persisten y chocan con el índice único. Se dice porque
+«cayeron cinco» no es «el guardia mide las cinco».
+
+**Lo que NO se construyó, a propósito:** nada toca bodega y el catálogo de
+manejos arranca **vacío** — las dos preguntas siguen abiertas con Daniel.
+
 ### 2026-09-07 · Dar de alta a un evaluador con su credencial
 
 `sensory:record-external` exige que el firmante exista como `Person`, y crearlo
@@ -56,40 +90,6 @@ cadena vacía. `leerCertificaciones` **no repara**: falla nombrando la fila rota
 Comprobado corriendo el comando contra la base local —crear, duplicado,
 renovación, un 31 de febrero, una bandera inventada— y leyendo la columna: la
 segunda credencial **no trae** `level_or_rank`, que es lo correcto.
-
-### 2026-09-07 · El informe que se paga ya se puede registrar
-
-**El hueco, medido:** `assessment.evaluator_user_account_id` era **NOT NULL** con
-FK a `user_account`. Un Q-grader o un tostador al que se le paga un análisis no
-tiene cuenta, así que **el trabajo que se paga era justo el que no se podía
-registrar** — vivía fuera del sistema.
-
-**Y una corrección de lo que dije por la mañana:** afirmé que no existía modelo de
-credenciales. **Sí existe** — `Person.sensoryCertifications`, especificado en
-`BEVERAGE_SENSORY_PROTOCOLS.md` §7.3 con `{certifying_body, certification_name,
-level_or_rank, date_earned, certificate_reference}`. Busqué `certification`,
-`qGrader` y `licenseNumber`, y el campo se llama de otra forma. **Nadie lo leía
-ni lo escribía**: la misma forma que el permiso `sample:view`, que existía en la
-intención y no en el catálogo.
-
-**La regla vive en la base, no en TypeScript.** `CHECK
-assessment_un_solo_evaluador`: exactamente una de las dos columnas de evaluador
-puesta, y un informe externo trae **siempre** el puntero a su original. La
-migración **cuenta las filas que lo incumplirían antes de crear el CHECK** y
-aborta si hay alguna, en vez de reventar a medias en producción.
-
-**Reusa la cadena que ya existe** —sesión, vuelo, muestra ciega, mapeo— en vez de
-una tabla paralela: así los resultados de panel, el historial y los reportes lo
-ven sin cambiar una línea. El «ciego» es degenerado a propósito y está dicho: no
-hubo cata a ciegas, pero el mapeo es lo único que ata el puntaje al café.
-
-**Flip-test del CHECK, que es lo que distingue medir la regla de medir el
-servicio:** quitado de la base, caen las cuatro pruebas que dicen medirlo y el
-control positivo —una valoración interna normal— sigue pasando.
-
-Entrada: `npm run sensory:record-external -- <archivo.json>`. Sin argumentos
-lista los protocolos vivos y **los nombres de atributo que espera cada uno**,
-porque el informe habla en palabras, no en identificadores.
 
 ## 3. Bloqueado, y en qué
 

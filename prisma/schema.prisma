@@ -111,6 +111,7 @@ model Person {
   receivingEventsOperated            ReceivingEvent[]              @relation("ReceivingEventOperator")
   fermentationRunsOperated           FermentationRun[]             @relation("FermentationRunOperator")
   dryingTurnEventsOperated           DryingTurnEvent[]             @relation("DryingTurnEventOperator")
+  lotProcessInterventionsOperated    LotProcessIntervention[]      @relation("LotProcessInterventionOperator")
   roastSessionsRoasted               RoastSession[]                @relation("RoastSessionRoaster")
   labourEntriesOperated              LabourEntry[]                 @relation("LabourEntryOperator")
   materialConsumptionEntriesOperated MaterialConsumptionEntry[]    @relation("MaterialConsumptionEntryOperator")
@@ -199,6 +200,8 @@ model UserAccount {
   fermentationInterventionsCreated  FermentationIntervention[]   @relation("FermentationInterventionCreatedBy")
   dryingRunsCreated                 DryingRun[]                  @relation("DryingRunCreatedBy")
   roastSessionsCreated              RoastSession[]               @relation("RoastSessionCreatedBy")
+  lotProcessesCreated               LotProcess[]                 @relation("LotProcessCreatedBy")
+  lotProcessInterventionsCreated    LotProcessIntervention[]     @relation("LotProcessInterventionCreatedBy")
   // P2 (ADR-098)
   processRecipesCreated             ProcessRecipe[]              @relation("ProcessRecipeCreatedBy")
   processRecipeVersionsCreated      ProcessRecipeVersion[]       @relation("ProcessRecipeVersionCreatedBy")
@@ -2723,6 +2726,7 @@ model Lot {
   createdBy      String?             @map("created_by") @db.Uuid
   creator        UserAccount?        @relation("LotCreatedBy", fields: [createdBy], references: [id])
 
+  lotProcesses              LotProcess[]
   transformationInputs      LotTransformationInput[]
   transformationOutputs     LotTransformationOutput[]
   quantityEvents            QuantityEvent[]
@@ -3095,6 +3099,7 @@ model Measurement {
   assets      Asset[]
   evidence    Evidence[]
   fieldEvents FieldEvent[]
+  closingMoistureOfProcesses LotProcess[] @relation("LotProcessClosingMoisture")
 
   @@index([lotId])
   @@index([sampleId])
@@ -3244,6 +3249,11 @@ model FermentationRun {
   operator         Person?      @relation("FermentationRunOperator", fields: [operatorPersonId], references: [id])
   inoculated       Boolean      @default(false)
   inoculationNote  String?      @map("inoculation_note")
+
+  /// De qué proceso del lote forma parte esta corrida. Anulable: todo lo que ya
+  /// existía es anterior a `LotProcess` y no cuelga de ninguno.
+  lotProcessId String?     @map("lot_process_id") @db.Uuid
+  lotProcess   LotProcess? @relation(fields: [lotProcessId], references: [id])
   createdAt        DateTime     @default(now()) @map("created_at")
   createdBy        String?      @map("created_by") @db.Uuid
   creator          UserAccount? @relation("FermentationRunCreatedBy", fields: [createdBy], references: [id])
@@ -3267,6 +3277,139 @@ model FermentationRun {
 
   @@index([processRecipeVersionId])
   @@map("fermentation_run")
+  @@schema("traceability")
+}
+
+/// El proceso por el que pasó un lote: la SECUENCIA, no una etiqueta.
+///
+/// **Definición del dueño (2026-09-07), literal:** «uno o más eventos o procesos
+/// transformativos o de manejo, antes o durante el secado, antes de llegar al %
+/// H deseado a almacenar». Por eso esto es una CABECERA que agrupa eventos que
+/// ya existen —`FermentationRun`, `DryingRun`, y las intervenciones de manejo de
+/// abajo— y no una tabla de eventos más.
+///
+/// **Por qué no basta lo que había.** `processRecipeVersionId` vivía en UN solo
+/// sitio, `FermentationRun`. Medido: un natural sin fermentación registrada no
+/// se podía etiquetar en absoluto, y un lote con dos fermentaciones tendría dos
+/// etiquetas y ninguna respuesta a «¿qué proceso es este lote?». Sin una sola
+/// columna por la que agrupar, el reporte por proceso no se puede escribir.
+///
+/// **Uno o varios por lote** (decisión de Daniel, 2026-09-07): un lote puede
+/// reprocesarse —volver a secar tras rehidratarse, o partirse y seguir caminos
+/// distintos—, así que `sequenceOrder` los ordena y la unicidad es por par.
+model LotProcess {
+  id            String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lotId         String @map("lot_id") @db.Uuid
+  lot           Lot    @relation(fields: [lotId], references: [id])
+  sequenceOrder Int    @map("sequence_order")
+
+  /// Anulable a propósito, y el reporte lo agrupa como «Sin receta» (decisión de
+  /// Daniel, 2026-09-07). Un lote se puede haber procesado sin receta con
+  /// nombre —o ser viejo y sólo saberse que fue lavado—, y deducir cuál fue a
+  /// partir de los eventos sería inferir un hecho y guardarlo como tal, que es
+  /// justo lo que CLAUDE.md §3 prohíbe.
+  processRecipeVersionId String?               @map("process_recipe_version_id") @db.Uuid
+  processRecipeVersion   ProcessRecipeVersion? @relation(fields: [processRecipeVersionId], references: [id])
+
+  /// **La intención de ESTE batch. Obligatoria, aunque no haya receta.**
+  ///
+  /// Corrección del dueño (2026-09-07), y es la que distingue este campo de la
+  /// receta: «aunque no requiere receta definida, SÍ requiere proceso e
+  /// intención y detalle de este batch — por ejemplo se puso tanto peso whole
+  /// cherries, proceso natural anaeróbico, tantas horas». Y sigue: «siempre hay
+  /// una intención de proceso o receta aunque no sea completa, y se puede
+  /// modificar e ir describiendo qué se aplica o qué protocolos se usaron, para
+  /// su documentación y reproducibilidad».
+  ///
+  /// Por eso «Sin receta» NUNCA significa «sin nada declarado»: significa que la
+  /// intención de este lote no está estandarizada como receta reutilizable.
+  ///
+  /// **Texto libre, y no un conjunto de columnas**, porque la intención es
+  /// descriptiva y su forma cambia por lote: peso y estado del material en uno,
+  /// horas y atmósfera en otro. Lo que sí es dato estructurado —el peso que
+  /// entró, las horas de una fermentación, la humedad final— vive en
+  /// `QuantityEvent`, `FermentationRun` y `Measurement`, que ya existen. Meterlo
+  /// aquí duplicaría la verdad.
+  ///
+  /// **Modificable, y el cambio deja rastro**, igual que el objetivo de humedad:
+  /// el dueño dice que a mitad de proceso puede cambiar. Cada cambio escribe su
+  /// `AuditEvent` con el antes y el después, en la misma transacción.
+  intent String
+
+  /// El «% H deseado a almacenar». **Obligatorio** (decisión de Daniel,
+  /// 2026-09-07): «no se abre un proceso sin decir a qué humedad se va a
+  /// almacenar». Su palabra exacta sobre por qué se puede exigir: «siempre está
+  /// clara la intención del proceso… pero puede ser que se modifique».
+  ///
+  /// Vive AQUÍ y no en la receta porque también lo dijo él: «cierta H%
+  /// seleccionada por proceso y/o varietal por lote» — depende de los dos, así
+  /// que la receta lo sugiere y el proceso del lote lo decide. Los demás
+  /// objetivos de la intención —peso, tiempos— siguen en `ProcessTarget`, que
+  /// es de la receta; sólo la humedad sube a la instancia, porque es la que
+  /// decide cuándo el lote pasa a bodega.
+  ///
+  /// **Se puede cambiar, y el cambio deja rastro.** No es versionado como la
+  /// receta: es la intención de UN lote, y corregirla es normal. Lo que no es
+  /// normal es que cambie sin que nadie lo sepa, así que cada cambio escribe su
+  /// `AuditEvent` con el antes y el después, en la misma transacción.
+  targetMoisturePct Decimal @map("target_moisture_pct") @db.Decimal(5, 2)
+
+  /// La medición de humedad con la que se dio por terminado, NO una copia de su
+  /// número: guardar el valor aquí crearía dos verdades que pueden divergir, y
+  /// CLAUDE.md §49 prohíbe mezclar medición y valor derivado.
+  closingMoistureMeasurementId String?      @map("closing_moisture_measurement_id") @db.Uuid
+  closingMoistureMeasurement   Measurement? @relation("LotProcessClosingMoisture", fields: [closingMoistureMeasurementId], references: [id])
+
+  startedAt       DateTime        @map("started_at")
+  endedAt         DateTime?       @map("ended_at")
+  notes           String?
+  provenanceClass ProvenanceClass @map("provenance_class")
+  sourceReference String?         @map("source_reference")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  createdBy       String?         @map("created_by") @db.Uuid
+  creator         UserAccount?    @relation("LotProcessCreatedBy", fields: [createdBy], references: [id])
+
+  interventions    LotProcessIntervention[]
+  fermentationRuns FermentationRun[]
+  dryingRuns       DryingRun[]
+
+  @@unique([lotId, sequenceOrder])
+  @@index([lotId])
+  @@index([processRecipeVersionId])
+  @@index([closingMoistureMeasurementId])
+  @@map("lot_process")
+  @@schema("traceability")
+}
+
+/// Un manejo del lote que no es una fermentación ni un secado: flotado,
+/// despulpado, remoción de mucílago, reposo, re-apilado, mover a sombra por
+/// lluvia.
+///
+/// **Vocabulario ABIERTO, no un enum.** La lista de manejos es genuinamente
+/// abierta y cambia por finca y por año; un enum cerrado pediría una migración
+/// cada vez que se inventa uno, y la presión sería meterlo todo en `other`.
+/// Reusa `VariableCatalog`, el mismo mecanismo que ya usan
+/// `ProcessingStage.washMediumCatalogValueId` y
+/// `LotTransformation.selectionMethodValueId` — no un tercer sistema paralelo.
+model LotProcessIntervention {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lotProcessId   String               @map("lot_process_id") @db.Uuid
+  lotProcess     LotProcess           @relation(fields: [lotProcessId], references: [id], onDelete: Cascade)
+  catalogValueId String               @map("catalog_value_id") @db.Uuid
+  catalogValue   VariableCatalogValue @relation("LotProcessInterventionKind", fields: [catalogValueId], references: [id])
+  occurredAt     DateTime             @map("occurred_at")
+
+  operatorPersonId String?      @map("operator_person_id") @db.Uuid
+  operator         Person?      @relation("LotProcessInterventionOperator", fields: [operatorPersonId], references: [id])
+  notes            String?
+  createdAt        DateTime     @default(now()) @map("created_at")
+  createdBy        String?      @map("created_by") @db.Uuid
+  creator          UserAccount? @relation("LotProcessInterventionCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([lotProcessId])
+  @@index([catalogValueId])
+  @@index([occurredAt])
+  @@map("lot_process_intervention")
   @@schema("traceability")
 }
 
@@ -3319,6 +3462,7 @@ model ProcessRecipeVersion {
   fermentationRuns FermentationRun[]
   roastSessions    RoastSession[]
   lotRoastProfiles LotRoastProfile[]
+  lotProcesses     LotProcess[]
 
   @@unique([recipeId, version])
   @@index([recipeId])
@@ -3413,6 +3557,11 @@ model DryingRun {
   locationId   String?      @map("location_id") @db.Uuid
   location     Location?    @relation(fields: [locationId], references: [id])
   layerDepthCm Decimal?     @map("layer_depth_cm") @db.Decimal(6, 2)
+
+  /// De qué proceso del lote forma parte esta corrida. Anulable: todo lo que ya
+  /// existía es anterior a `LotProcess` y no cuelga de ninguno.
+  lotProcessId String?     @map("lot_process_id") @db.Uuid
+  lotProcess   LotProcess? @relation(fields: [lotProcessId], references: [id])
   startedAt    DateTime     @map("started_at")
   endedAt      DateTime?    @map("ended_at")
   createdAt    DateTime     @default(now()) @map("created_at")
@@ -5272,6 +5421,7 @@ model VariableCatalogValue {
   selectionMethodOf  LotTransformation[]           @relation("LotTransformationSelectionMethod")
   rejectionCategoryOf Lot[]                        @relation("LotRejectionCategory")
   washMediumOfStages ProcessingStage[]             @relation("ProcessingStageWashMedium")
+  lotProcessInterventions LotProcessIntervention[]     @relation("LotProcessInterventionKind")
 
   @@unique([catalogId, value])
   @@index([aliasOfId])

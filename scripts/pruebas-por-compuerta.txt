@@ -64,6 +64,7 @@ tests/apiary/protocoloDeCampo.test.ts
 tests/traceability/formularioSinAmbito.test.ts
 tests/traceability/harvest.test.ts
 tests/traceability/landMedia.test.ts
+tests/traceability/lotProcess.test.ts
 tests/traceability/lots.test.ts
 tests/traceability/massBalance.test.ts
 tests/traceability/measurements.test.ts
