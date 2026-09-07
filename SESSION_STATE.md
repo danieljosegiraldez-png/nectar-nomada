@@ -37,50 +37,39 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-07 · Un protocolo ya puede llevar su vocabulario
+### 2026-09-07 · El informe que se paga ya se puede registrar
 
-**Lo que pidió Daniel:** que el análisis que le entrega un Q-grader o un tostador
-entre bajo el estándar y la terminología con que se lo dan, y varias opciones.
+**El hueco, medido:** `assessment.evaluator_user_account_id` era **NOT NULL** con
+FK a `user_account`. Un Q-grader o un tostador al que se le paga un análisis no
+tiene cuenta, así que **el trabajo que se paga era justo el que no se podía
+registrar** — vivía fuera del sistema.
 
-**La pared, medida antes de construir.** Para café no hay fuente: de los siete
-PDF de la SCA cinco están cifrados y el del Fine Robusta es un escaneo, y el
-póster de la rueda —sin cifrar— trae **96 términos y se corta** en `Floral ·
-Chamomile · Rose · Jasmine`, sin Vanilla, Black Tea, Tobacco ni Cereal.
-Publicarlo sería publicar una rueda truncada como si fuera la de la SCA. La SCA
-**sí** publica abierto la lista CATA («Olfactory Examples», que dice
-correlacionar con las casillas del formulario descriptivo) y un glosario de **74
-términos**, los dos en Airtable — pero **no se pudieron extraer**: con el panel
-del navegador oculto la tabla virtualizada no re-dibuja y sólo se leen dos filas.
+**Y una corrección de lo que dije por la mañana:** afirmé que no existía modelo de
+credenciales. **Sí existe** — `Person.sensoryCertifications`, especificado en
+`BEVERAGE_SENSORY_PROTOCOLS.md` §7.3 con `{certifying_body, certification_name,
+level_or_rank, date_earned, certificate_reference}`. Busqué `certification`,
+`qGrader` y `licenseNumber`, y el campo se llama de otra forma. **Nadie lo leía
+ni lo escribía**: la misma forma que el permiso `sample:view`, que existía en la
+intención y no en el catálogo.
 
-**Se entregó el mecanismo, no contenido inventado.** Hasta hoy
-`SensoryDescriptor` sólo se escribía desde el seed con `SEED_DEMO_CONTENT=true`:
-**ningún protocolo de producción tenía vocabulario ni había forma de dárselo**.
-Ahora el archivo lleva `descriptors`, validados al crearlo y en la misma
-transacción que sus atributos. La unicidad es el **par** familia + descriptor
-—«miel» es nota floral en café y el producto entero en miel— y `technicalCause`
-sólo en un defecto.
+**La regla vive en la base, no en TypeScript.** `CHECK
+assessment_un_solo_evaluador`: exactamente una de las dos columnas de evaluador
+puesta, y un informe externo trae **siempre** el puntero a su original. La
+migración **cuenta las filas que lo incumplirían antes de crear el CHECK** y
+aborta si hay alguna, en vez de reventar a medias en producción.
 
-**Segunda opción de estándar, con fuente propia:** la rúbrica de miel de
-`BEVERAGE_SENSORY_PROTOCOLS.md` §3 —seis criterios que suman 100— con **45
-descriptores** en tres niveles y los 15 defectos nombrando su causa. Va
-`adapted_original` porque ese documento la marca como material propio. Fórmula
-`attribute_sum_v1`, con el techo comprobado criterio a criterio.
+**Reusa la cadena que ya existe** —sesión, vuelo, muestra ciega, mapeo— en vez de
+una tabla paralela: así los resultados de panel, el historial y los reportes lo
+ven sin cambiar una línea. El «ciego» es degenerado a propósito y está dicho: no
+hubo cata a ciegas, pero el mapeo es lo único que ata el puntaje al café.
 
-**Y al aplicarlo en producción reventó, que es donde se supo.** `P2028`: 51
-inserciones de una en una —6 atributos y 45 descriptores— excedieron el techo de
-**5 s** de la transacción interactiva de Prisma contra Neon, a los 5.174 ms.
-**Revirtió entera**, comprobado leyendo el listado después: 0 protocolos nuevos,
-14 vivos como antes. Arreglado con `createMany` —dos viajes en vez de 51— y no
-subiéndole el techo al reloj. **Ninguna prueba local lo habría cazado**: contra
-la base local esas 51 caben de sobra; lo cazó correrlo contra producción.
+**Flip-test del CHECK, que es lo que distingue medir la regla de medir el
+servicio:** quitado de la base, caen las cuatro pruebas que dicen medirlo y el
+control positivo —una valoración interna normal— sigue pasando.
 
-Lo que sí faltaba y ahora existe: la escritura salió del `main()` del script a
-`lib/sensory/crearProtocolo.ts`, así que por fin hay una prueba de que **un
-archivo de protocolo se convierte en las filas que declara** —los 45
-descriptores de miel, con sus 15 defectos y su causa— corriendo dentro de una
-transacción que se revierte, con su propio control positivo de que revirtió.
-
-**Para café falta lo mismo:** un informe real de los que le entregan, o licencia.
+Entrada: `npm run sensory:record-external -- <archivo.json>`. Sin argumentos
+lista los protocolos vivos y **los nombres de atributo que espera cada uno**,
+porque el informe habla en palabras, no en identificadores.
 
 ## 3. Bloqueado, y en qué
 

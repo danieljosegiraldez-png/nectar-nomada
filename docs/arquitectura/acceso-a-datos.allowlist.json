@@ -280,6 +280,10 @@
     {
       "archivo": "lib/sensory/sessions.ts",
       "razon": "Crear una sesión de cata (2026-09-06). Escribe sesión, vuelo, muestras ciegas y sus mapeos en UNA transacción —una sesión a medias es una que un juez abre y no puede catar—, y su guardia es `sensory:manage_session` a nivel plataforma, el mismo que usa la calibración. Las muestras elegibles se acotan con la visibilidad que ya existía (`sampleWhereFromVisibility`), no con una regla nueva."
+    },
+    {
+      "archivo": "lib/sensory/informeExterno.ts",
+      "razon": "Registrar el informe de un evaluador sin cuenta (2026-09-07). Escribe sesión, vuelo, muestra ciega, su mapeo y la valoración en una transacción, porque un informe a medias —un puntaje sin mapeo— es un número que ya no se puede atribuir a ningún café. Lee `Sample`, `Person` y la versión del protocolo para resolver por nombre lo que el informe dice en palabras. Guardia propia al entrar: `sensory:manage_session` a nivel plataforma, porque quien mete el resultado de un tercero está montando una cata, no puntuando en una."
     }
   ],
   "reciben_transaccion": [

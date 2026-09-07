@@ -42,6 +42,7 @@ tests/sensory/classificationGate.test.ts
 tests/sensory/crearProtocolo.test.ts
 tests/sensory/crearSesion.test.ts
 tests/sensory/descriptors.test.ts
+tests/sensory/informeExterno.test.ts
 tests/sensory/puntajeCalculado.test.ts
 tests/sync/authorizationSnapshot.test.ts
 tests/sync/deviceOperator.test.ts
