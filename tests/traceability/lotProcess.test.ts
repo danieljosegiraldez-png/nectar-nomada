@@ -13,15 +13,18 @@ import { prisma } from "../../lib/db";
 import {
   abrirProceso,
   cambiarIntencion,
+  devolverASecado,
+  exigeSecadoTerminado,
   cambiarObjetivoDeHumedad,
   cerrarProceso,
   colgarCorrida,
   listarProcesosDeLote,
   registrarIntervencion,
-  CATALOGO_DE_INTERVENCIONES,
+  CATALOGOS_DE_INTERVENCION,
   LotProcessError,
   SIN_RECETA,
 } from "../../lib/traceability/lotProcess";
+import { moveLotToStorage } from "../../lib/traceability/storage";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `proc-${Date.now()}`;
@@ -113,12 +116,17 @@ beforeAll(async () => {
     })
   ).id;
 
-  const catalogo = await prisma.variableCatalog.create({
-    data: { key: CATALOGO_DE_INTERVENCIONES, name: "Intervención de proceso" },
+  // El catálogo NO se crea: se usa uno de los que ya existen, que es la
+  // corrección de Daniel («la lista ya está de antes»). `upsert` sólo por si la
+  // base de pruebas de una sesión no lo tuviera todavía.
+  const catalogo = await prisma.variableCatalog.upsert({
+    where: { key: CATALOGOS_DE_INTERVENCION[0]! },
+    update: {},
+    create: { key: CATALOGOS_DE_INTERVENCION[0]!, name: "Condición de oxígeno" },
   });
   catalogoId = catalogo.id;
   valorManejo = (
-    await prisma.variableCatalogValue.create({ data: { catalogId: catalogo.id, value: `TEST flotado ${RUN}` } })
+    await prisma.variableCatalogValue.create({ data: { catalogId: catalogo.id, value: `TEST anaerobico ${RUN}` } })
   ).id;
 
   const otro = await prisma.variableCatalog.create({ data: { key: `test_otro_${RUN}`, name: "Otro" } });
@@ -138,14 +146,15 @@ afterAll(async () => {
     where: assertDefinedWhere({ lotProcess: { lotId: { in: lotes } } }),
   });
   await prisma.lotProcess.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
+  await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
   await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
   await prisma.processRecipeVersion.deleteMany({ where: assertDefinedWhere({ recipeId: recetaId }) });
   await prisma.processRecipe.deleteMany({ where: assertDefinedWhere({ id: recetaId }) });
-  await prisma.variableCatalogValue.deleteMany({
-    where: assertDefinedWhere({ catalogId: { in: [catalogoId, otroCatalogoId] } }),
-  });
-  await prisma.variableCatalog.deleteMany({ where: assertDefinedWhere({ id: { in: [catalogoId, otroCatalogoId] } }) });
+  // Sólo los valores de ESTA corrida: `catalogoId` es un catálogo real de la
+  // base y borrar sus valores se llevaría por delante vocabulario de verdad.
+  await prisma.variableCatalogValue.deleteMany({ where: assertDefinedWhere({ value: { contains: RUN } }) });
+  await prisma.variableCatalog.deleteMany({ where: assertDefinedWhere({ id: otroCatalogoId }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: [gestor, sinPermiso] } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: scopeId }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [gestor, sinPermiso] } }) });
@@ -278,7 +287,7 @@ describe("intervenciones de manejo", () => {
    * La FK sola no basta: un valor de otro catálogo es una FK perfectamente
    * válida, y dejaría la lista de manejos contaminada con vocabulario ajeno.
    */
-  it("rechaza un valor que es de OTRO catálogo, aunque la FK sea válida", async () => {
+  it("rechaza un valor de un catálogo que no describe manejos, aunque la FK sea válida", async () => {
     const [p] = await listarProcesosDeLote(gestor, loteC);
     await expect(
       registrarIntervencion(gestor, {
@@ -366,6 +375,113 @@ describe("colgar del proceso las corridas que ya existían", () => {
     expect(leido!.dryingRuns.map((d) => d.id)).toContain(secado.id);
 
     await prisma.dryingRun.delete({ where: { id: secado.id } });
+  });
+});
+
+
+/**
+ * **La compuerta de bodega.** Regla del dueño, literal: «bloquear, alertar,
+ * acción para regresar a secado; no debe salir de secado antes bajo ninguna
+ * circunstancia».
+ *
+ * El primer caso es el control positivo de todo el bloque: **un lote sin
+ * proceso sigue pudiendo almacenarse**. Sin él, una compuerta que bloqueara
+ * absolutamente todo pasaría los demás — y bloquearía los 45 lotes que hoy
+ * tiene producción, ninguno con proceso, porque `LotProcess` nació hoy.
+ */
+describe("un lote no sale de secado antes de su objetivo", () => {
+  it("un lote SIN proceso se puede almacenar: la regla no es retroactiva", async () => {
+    const asignacion = await moveLotToStorage(gestor, {
+      lotId: loteB,
+      locationId: plotId,
+      startedAt: new Date("2026-04-10T12:00:00Z"),
+    });
+    expect(asignacion.lotId).toBe(loteB);
+  });
+
+  it("con el proceso abierto, bodega se bloquea", async () => {
+    // loteC tiene proceso abierto desde el bloque de arriba.
+    await expect(
+      moveLotToStorage(gestor, { lotId: loteC, locationId: plotId, startedAt: new Date("2026-04-10T12:00:00Z") }),
+    ).rejects.toThrow(new LotProcessError("drying_not_finished"));
+  });
+
+  it("cerrado POR ENCIMA del objetivo, bodega sigue bloqueada", async () => {
+    // El proceso 2 de loteA se cierra con 11,2 % contra un objetivo de 10,5 %.
+    const procesos = await listarProcesosDeLote(gestor, loteA);
+    const abierto = procesos.find((p) => p.endedAt === null)!;
+    const alta = await prisma.measurement.create({
+      data: {
+        variable: "moisture",
+        value: 11.2,
+        unit: "%",
+        occurredAt: new Date("2026-04-05T12:00:00Z"),
+        lotId: loteA,
+        provenanceClass: "measured_fact",
+        createdBy: gestor,
+      },
+    });
+    await cerrarProceso(gestor, {
+      lotProcessId: abierto.id,
+      endedAt: new Date("2026-04-05T12:00:00Z"),
+      closingMoistureMeasurementId: alta.id,
+    });
+
+    await expect(exigeSecadoTerminado(loteA)).rejects.toThrow(new LotProcessError("moisture_above_target"));
+  });
+
+  it("`devolverASecado` reabre el proceso y exige un motivo", async () => {
+    await expect(devolverASecado(gestor, { lotId: loteA, motivo: "  " })).rejects.toThrow(
+      new LotProcessError("motivo_required"),
+    );
+
+    const reabierto = await devolverASecado(gestor, { lotId: loteA, motivo: "11,2 % sobre 10,5 %: vuelve a cama" });
+    expect(reabierto.endedAt).toBeNull();
+    expect(reabierto.closingMoistureMeasurementId).toBeNull();
+
+    // Reabrir contradice «cerrado no se toca», así que el rastro dice qué se
+    // deshizo y por qué.
+    const evento = await prisma.auditEvent.findFirst({
+      where: assertDefinedWhere({ entityId: reabierto.id, operation: "lot_process.reopen_for_drying" }),
+      orderBy: { occurredAt: "desc" },
+    });
+    expect(JSON.stringify(evento!.before)).toContain("11.2");
+    expect(JSON.stringify(evento!.after)).toContain("vuelve a cama");
+  });
+
+  it("y la medición descartada NO se borra: es un hecho medido", async () => {
+    const sigue = await prisma.measurement.findFirst({
+      where: assertDefinedWhere({ lotId: loteA, variable: "moisture", value: 11.2 }),
+    });
+    expect(sigue, "soltar el puntero no puede borrar la medición").not.toBeNull();
+  });
+
+  it("cerrado POR DEBAJO del objetivo, bodega se abre", async () => {
+    const procesos = await listarProcesosDeLote(gestor, loteA);
+    const abierto = procesos.find((p) => p.endedAt === null)!;
+    const buena = await prisma.measurement.create({
+      data: {
+        variable: "moisture",
+        value: 10.2,
+        unit: "%",
+        occurredAt: new Date("2026-04-12T12:00:00Z"),
+        lotId: loteA,
+        provenanceClass: "measured_fact",
+        createdBy: gestor,
+      },
+    });
+    await cerrarProceso(gestor, {
+      lotProcessId: abierto.id,
+      endedAt: new Date("2026-04-12T12:00:00Z"),
+      closingMoistureMeasurementId: buena.id,
+    });
+
+    const asignacion = await moveLotToStorage(gestor, {
+      lotId: loteA,
+      locationId: plotId,
+      startedAt: new Date("2026-04-13T12:00:00Z"),
+    });
+    expect(asignacion.lotId).toBe(loteA);
   });
 });
 

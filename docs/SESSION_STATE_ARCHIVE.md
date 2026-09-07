@@ -1301,3 +1301,31 @@ control positivo —una valoración interna normal— sigue pasando.
 Entrada: `npm run sensory:record-external -- <archivo.json>`. Sin argumentos
 lista los protocolos vivos y **los nombres de atributo que espera cada uno**,
 porque el informe habla en palabras, no en identificadores.
+
+---
+
+**Archivado el 2026-09-07.** Sale la del alta de evaluadores para dejar sitio a la
+del proceso del lote, que creció con las respuestas de Daniel sobre bodega y
+vocabulario. Lo suyo que sigue dirigiendo trabajo —que la credencial vive en
+`Person.sensoryCertifications` y que el comando es `people:add-evaluator`— está
+en la cabecera de `lib/people/certificacionSensorial.ts` y en `package.json`.
+
+### 2026-09-07 · Dar de alta a un evaluador con su credencial
+
+`sensory:record-external` exige que el firmante exista como `Person`, y crearlo
+quedaba a mano en la base: donde se cuela un JSON mal formado en `Json?`.
+
+`npm run people:add-evaluator -- "Nombre" --cuerpo CQI --certificacion "Q Arabica
+Grader" --desde 2024-05-01`. **No crea cuenta** —eso es `people:set-email`— y es
+**aditivo**: una renovación trae otra fecha y las dos conviven, porque el
+historial de credenciales es parte de la procedencia de cada informe firmado.
+
+**Una desviación de §7.3, a propósito:** ahí sólo `expiry_date` es anulable;
+aquí obligan tres —cuerpo, nombre y fecha— porque quien transcribe puede saber
+que alguien es Q Grader desde 2024 y **no tener el número de certificado**, y
+exigirlo obligaría a inventarlo. Lo ausente se guarda **ausente**, no como
+cadena vacía. `leerCertificaciones` **no repara**: falla nombrando la fila rota.
+
+Comprobado corriendo el comando contra la base local —crear, duplicado,
+renovación, un 31 de febrero, una bandera inventada— y leyendo la columna: la
+segunda credencial **no trae** `level_or_rank`, que es lo correcto.

@@ -18,8 +18,38 @@ import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export class LotProcessError extends Error {}
 
-/** La clave del catálogo abierto de manejos. Sus valores los define el dueño. */
-export const CATALOGO_DE_INTERVENCIONES = "intervencion_de_proceso";
+/**
+ * Los catálogos de los que puede salir una intervención de manejo.
+ *
+ * **Corrección del 2026-09-07.** La primera versión inventaba un catálogo nuevo,
+ * `intervencion_de_proceso`. Daniel lo señaló —«la lista ya está de antes»— y al
+ * medir la base había **24 catálogos con valores**, entre ellos los que
+ * describen exactamente lo que él puso de ejemplo: `condicion_oxigeno`
+ * (anaerobico, maceracion_carbonica…), `manejo_temperatura` (choque_termico,
+ * fermentacion_fria…), `medio_lavado`, `metodo_inoculacion`, `sustrato_anadido`,
+ * `recipiente`. Crear uno paralelo habría partido el vocabulario en dos, y la
+ * mitad nueva habría empezado vacía.
+ *
+ * **Es una lista y no un catálogo único** porque una intervención puede ser de
+ * naturalezas distintas: cambiar la atmósfera, aplicar un choque térmico,
+ * trasegar a otro recipiente. Añadir un catálogo aquí es una línea —«puedo
+ * agregar luego más», dijo él— y se lee en el diff.
+ *
+ * **Qué NO está aquí, a propósito:** `grado_proceso` (Natural, Washed, Honey) y
+ * `estado_cereza` (entera, despulpada) describen el batch entero, no algo que
+ * ocurre en un instante. Eso va en `intent`, que es donde el dueño lo puso en su
+ * propio ejemplo: «tanto peso whole cherries, proceso natural anaeróbico».
+ */
+export const CATALOGOS_DE_INTERVENCION: readonly string[] = [
+  "condicion_oxigeno",
+  "manejo_temperatura",
+  "medio_lavado",
+  "metodo_inoculacion",
+  "sustrato_anadido",
+  "recipiente",
+  "cereza_flotado",
+  "cereza_seleccion",
+];
 
 /** Lo que declara la intención al abrir un proceso. */
 export interface AbrirProcesoInput {
@@ -229,7 +259,7 @@ export async function cambiarIntencion(
 
 export interface RegistrarIntervencionInput {
   lotProcessId: string;
-  /** Del catálogo abierto `intervencion_de_proceso`. */
+  /** De uno de los catálogos de `CATALOGOS_DE_INTERVENCION`. */
   catalogValueId: string;
   occurredAt: Date;
   operatorPersonId?: string | null;
@@ -256,7 +286,7 @@ export async function registrarIntervencion(userAccountId: string, input: Regist
     include: { catalog: true },
   });
   if (!valor) throw new LotProcessError("catalog_value_not_found");
-  if (valor.catalog.key !== CATALOGO_DE_INTERVENCIONES) {
+  if (!CATALOGOS_DE_INTERVENCION.includes(valor.catalog.key)) {
     throw new LotProcessError("catalog_value_wrong_catalog");
   }
 
@@ -383,6 +413,99 @@ export async function colgarCorrida(
     );
 
     return actualizada;
+  });
+}
+
+/**
+ * La compuerta de bodega: un lote **no sale de secado** antes de llegar a su
+ * objetivo de humedad.
+ *
+ * **Regla del dueño (2026-09-07), literal:** «bloquear, alertar, acción para
+ * regresar a secado; no debe salir de secado antes bajo ninguna circunstancia».
+ * Por eso esto lanza en vez de avisar, y por eso existe `devolverASecado`.
+ *
+ * **Sólo bloquea si el lote TIENE un proceso.** Medido el 2026-09-07: producción
+ * tiene 45 lotes y **cero** procesos, porque `LotProcess` nació hoy. Bloquear
+ * también los que no tienen ninguno dejaría los 45 inalmacenables de golpe por
+ * un dato que nadie pudo declarar todavía. No es una puerta trasera: en cuanto
+ * un lote abre su primer proceso, queda bajo la regla y ya no sale de ella.
+ *
+ * Se mira el proceso **más reciente**, no el abierto: un lote cuyo proceso se
+ * cerró por encima del objetivo tampoco puede almacenarse, que es justo el caso
+ * que la regla persigue.
+ */
+export async function exigeSecadoTerminado(lotId: string): Promise<void> {
+  const proceso = await prisma.lotProcess.findFirst({
+    where: { lotId },
+    orderBy: { sequenceOrder: "desc" },
+    include: { closingMoistureMeasurement: true },
+  });
+  if (!proceso) return;
+
+  if (proceso.endedAt === null) throw new LotProcessError("drying_not_finished");
+  if (proceso.closingMoistureMeasurement === null) throw new LotProcessError("no_closing_moisture");
+
+  const medida = proceso.closingMoistureMeasurement.value.toNumber();
+  const objetivo = proceso.targetMoisturePct.toNumber();
+  if (medida > objetivo) throw new LotProcessError("moisture_above_target");
+}
+
+/**
+ * Devuelve el lote a secado: reabre su proceso más reciente.
+ *
+ * **Es la acción que el dueño pidió junto al bloqueo.** Reabrir contradice la
+ * regla de «cerrado no se toca», y por eso **exige un motivo** y lo deja en el
+ * `AuditEvent` con lo que se está deshaciendo: qué humedad de cierre se
+ * descarta y contra qué objetivo. Sin el motivo, reabrir sería indistinguible de
+ * un descuido.
+ *
+ * No borra la medición: la suelta. La fila de `Measurement` sigue donde estaba,
+ * porque es un hecho medido y no deja de haber ocurrido.
+ */
+export async function devolverASecado(
+  userAccountId: string,
+  input: { lotId: string; motivo: string },
+) {
+  await loteGestionable(userAccountId, input.lotId);
+
+  const motivo = input.motivo.trim();
+  if (motivo.length === 0) throw new LotProcessError("motivo_required");
+
+  const proceso = await prisma.lotProcess.findFirst({
+    where: { lotId: input.lotId },
+    orderBy: { sequenceOrder: "desc" },
+    include: { closingMoistureMeasurement: true },
+  });
+  if (!proceso) throw new LotProcessError("process_not_found");
+  if (proceso.endedAt === null) throw new LotProcessError("process_already_open");
+
+  const antes = {
+    endedAt: proceso.endedAt,
+    closingMoistureMeasurementId: proceso.closingMoistureMeasurementId,
+    humedadDeCierre: proceso.closingMoistureMeasurement?.value.toNumber() ?? null,
+    targetMoisturePct: proceso.targetMoisturePct.toNumber(),
+  };
+
+  return prisma.$transaction(async (tx) => {
+    const reabierto = await tx.lotProcess.update({
+      where: { id: proceso.id },
+      data: { endedAt: null, closingMoistureMeasurementId: null },
+    });
+
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "lot_process.reopen_for_drying",
+        entityType: "lot_process",
+        entityId: proceso.id,
+        before: antes,
+        after: { endedAt: null, closingMoistureMeasurementId: null, motivo },
+        sourceInterface: "traceability.lotProcess",
+      },
+      tx,
+    );
+
+    return reabierto;
   });
 }
 

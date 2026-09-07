@@ -12,6 +12,7 @@
 import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { exigeSecadoTerminado } from "./lotProcess";
 
 export interface MoveLotToStorageInput {
   lotId: string;
@@ -28,6 +29,10 @@ export async function moveLotToStorage(userAccountId: string, input: MoveLotToSt
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
+
+  // «No debe salir de secado antes bajo ninguna circunstancia» (Daniel,
+  // 2026-09-07). Lanza en vez de avisar; para deshacerlo está `devolverASecado`.
+  await exigeSecadoTerminado(input.lotId);
 
   // El ayudante abre la transacción: cerrar la asignación anterior, abrir la
   // nueva y anotar la clave tienen que ir juntas o no ir.
