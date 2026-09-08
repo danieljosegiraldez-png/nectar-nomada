@@ -27,7 +27,17 @@ export interface OpcionSimple {
  * abre un proceso sin decir a qué humedad se va a almacenar»— y en un teléfono,
  * en el campo, lo que está debajo del pliegue se rellena peor.
  */
-export function AbrirProcesoForm({ lotId, recetas }: { lotId: string; recetas: OpcionSimple[] }) {
+export function AbrirProcesoForm({
+  lotId,
+  recetas,
+  grados,
+  estadosDeCereza,
+}: {
+  lotId: string;
+  recetas: OpcionSimple[];
+  grados: OpcionSimple[];
+  estadosDeCereza: OpcionSimple[];
+}) {
   const [estado, accion, pending] = useActionState(abrirProcesoAction, inicial);
   const t = useTranslations("Traceability");
 
@@ -53,6 +63,33 @@ export function AbrirProcesoForm({ lotId, recetas }: { lotId: string; recetas: O
           max="100"
           required
         />
+      </div>
+
+      {/* Grado y estado de la cereza van JUNTO a la intención y antes de la
+          receta: son lo que el reporte agrupa, y en un teléfono lo que está
+          arriba se rellena. Anulables, así que ninguno lleva `required`. */}
+      <div className="nn-field">
+        <label htmlFor="p-grade">{t("processGradeLabel")}</label>
+        <select id="p-grade" name="processGradeValueId" defaultValue="">
+          <option value="">{t("processNotDeclared")}</option>
+          {grados.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="p-cherry">{t("processCherryStateLabel")}</label>
+        <select id="p-cherry" name="cherryStateValueId" defaultValue="">
+          <option value="">{t("processNotDeclared")}</option>
+          {estadosDeCereza.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="nn-field">

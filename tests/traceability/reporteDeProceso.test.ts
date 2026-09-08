@@ -17,8 +17,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { reporteDeProceso } from "../../lib/traceability/reporteDeProceso";
-import { abrirProceso, cerrarProceso } from "../../lib/traceability/lotProcess";
+import { abrirProceso, cerrarProceso, CATALOGO_GRADO_PROCESO } from "../../lib/traceability/lotProcess";
 import { SIN_RECETA } from "../../lib/traceability/lotProcess";
+import { SIN_DECLARAR } from "../../lib/traceability/reporteDeProceso";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `rep-${Date.now()}`;
@@ -28,6 +29,7 @@ let loteCompleto: string, loteDesnudo: string;
 let recetaId: string, recetaVersionId: string;
 let recetaTuesteId: string, recetaTuesteVersionId: string;
 let cohorteId: string, cultivarCatalogoId: string, cultivarValorId: string;
+let gradoValorId: string;
 let sesionSensorialId: string, protocoloId: string, protocoloVersionId: string;
 
 beforeAll(async () => {
@@ -199,12 +201,22 @@ beforeAll(async () => {
     });
   }
 
+  const catGrado = await prisma.variableCatalog.upsert({
+    where: { key: CATALOGO_GRADO_PROCESO },
+    update: {},
+    create: { key: CATALOGO_GRADO_PROCESO, name: "Grado de proceso" },
+  });
+  gradoValorId = (
+    await prisma.variableCatalogValue.create({ data: { catalogId: catGrado.id, value: `TEST Honey ${RUN}` } })
+  ).id;
+
   // ── el proceso, cerrado con su humedad ────────────────────────────────────
   const proceso = await abrirProceso(gestor, {
     lotId: loteCompleto,
     intent: "40 kg cereza entera, honey 48 h",
     targetMoisturePct: 10.5,
     processRecipeVersionId: recetaVersionId,
+    processGradeValueId: gradoValorId,
     startedAt: new Date("2026-03-02T12:00:00Z"),
     provenanceClass: "original_record",
   });
@@ -259,7 +271,7 @@ afterAll(async () => {
   await prisma.harvestEvent.deleteMany({ where: assertDefinedWhere({ resultingLotId: { in: lotes } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
   await prisma.plantingCohort.deleteMany({ where: assertDefinedWhere({ id: cohorteId }) });
-  await prisma.variableCatalogValue.deleteMany({ where: assertDefinedWhere({ id: cultivarValorId }) });
+  await prisma.variableCatalogValue.deleteMany({ where: assertDefinedWhere({ id: { in: [cultivarValorId, gradoValorId] } }) });
   await prisma.processRecipeVersion.deleteMany({
     where: assertDefinedWhere({ recipeId: { in: [recetaId, recetaTuesteId] } }),
   });
@@ -280,14 +292,14 @@ describe("la cadena entera se puede unir", () => {
     const fila = r.filas.find((f) => f.lotCode.startsWith("COMPLETO"));
     expect(fila, "el lote con la cadena completa no salió en el reporte").toBeDefined();
 
-    expect(fila!.etiqueta).toContain("Honey 48h");
+    expect(fila!.etiqueta).toContain(RUN);
     expect(fila!.intent).toContain("cereza entera");
     expect(fila!.targetMoisturePct).toBe(10.5);
     expect(fila!.humedadDeCierre).toBe(10.2);
     expect(fila!.diferenciaContraObjetivo).toBeCloseTo(-0.3, 5);
     // Los tres saltos que nadie había atado antes:
-    expect(fila!.varietales.some((v) => v.includes("Geisha")), "varietal: cosecha → cohorte → cultivar").toBe(true);
-    expect(fila!.perfilesDeTueste.some((p) => p.includes("Perfil filtro")), "tueste: entrada de la transformación").toBe(
+    expect(fila!.varietales.some((v) => v.includes(RUN)), "varietal: cosecha → cohorte → cultivar").toBe(true);
+    expect(fila!.perfilesDeTueste.some((p) => p.includes(RUN)), "tueste: entrada de la transformación").toBe(
       true,
     );
     expect(fila!.puntajes.sort(), "puntajes: muestra → ciego → valoración").toEqual([86, 88]);
@@ -313,7 +325,10 @@ describe("la cadena entera se puede unir", () => {
 
   it("agrupa por proceso, que es por lo que se comparan dos cafés", async () => {
     const r = await reporteDeProceso(gestor);
-    const honey = r.porProceso.find((g) => g.etiqueta.includes("Honey 48h"));
+    // Por el RUN y no por «Honey 48h»: otro archivo de pruebas crea una receta
+    // homónima, y corriendo en paralelo `find` podía devolver la suya — un fallo
+    // que se lee como del producto y es del fixture.
+    const honey = r.porProceso.find((g) => g.etiqueta.includes(RUN));
     const sin = r.porProceso.find((g) => g.etiqueta === SIN_RECETA);
     expect(honey?.puntajePromedio).toBe(87);
     // «Sin receta» aparece como grupo propio, no se esconde ni se mezcla.
@@ -321,6 +336,27 @@ describe("la cadena entera se puede unir", () => {
     expect(sin!.puntajePromedio).toBeNull();
   });
 
+
+  /**
+   * Lo que el dueño quiere comparar de verdad: sus naturales contra sus honeys.
+   * La receta es cómo se llama el procedimiento; el GRADO es qué se le hizo al
+   * café, y por eso el reporte agrupa por los dos.
+   */
+  it("agrupa también por grado de proceso, y «Sin declarar» es un grupo propio", async () => {
+    const r = await reporteDeProceso(gestor);
+    const honey = r.porGrado.find((g) => g.grado.includes(RUN));
+    expect(honey, "el grado declarado debe salir como grupo").toBeDefined();
+    expect(honey!.puntajePromedio).toBe(87);
+
+    const sin = r.porGrado.find((g) => g.grado === SIN_DECLARAR);
+    expect(sin, "un proceso sin grado declarado no se esconde: es su propio grupo").toBeDefined();
+    expect(sin!.puntajePromedio).toBeNull();
+
+    // Y en la fila, el grado y el estado de cereza son columnas, no prosa.
+    const fila = r.filas.find((f) => f.lotCode.startsWith("COMPLETO"));
+    expect(fila!.gradoDeProceso).toContain(RUN);
+    expect(fila!.estadoDeCereza, "no se declaró, y eso se dice").toBe(SIN_DECLARAR);
+  });
   /**
    * El recuento que convierte «0 filas» en algo accionable. Sin él, un reporte
    * vacío se lee como «no hay nada que ver» en vez de «falta registrar».

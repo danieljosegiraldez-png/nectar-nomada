@@ -3339,6 +3339,28 @@ model LotProcess {
   /// `AuditEvent` con el antes y el después, en la misma transacción.
   intent String
 
+  /// **El grado de proceso y el estado de la cereza, estructurados.**
+  ///
+  /// Decisión de Daniel (2026-09-07): estaban dentro del texto de `intent` —«40
+  /// kg cereza entera, natural anaeróbico»— y ahí no se puede agrupar. Ahora
+  /// son columnas, y el reporte compara naturales contra honeys sin leer prosa.
+  ///
+  /// **Salen de catálogos que YA existían**, `grado_proceso` y `estado_cereza`
+  /// (`lib/research/catalogs.ts`), no de enums nuevos. `grado_proceso` trae
+  /// Natural, Washed, Semi Wash 50%, Semi Wash 75% y Honey — «Honey» a secas y
+  /// sin porcentaje horneado, porque ADR-052 prohíbe inventar la equivalencia
+  /// color→porcentaje y un «Honey NN%» sólo entra cuando un lote real lo mida.
+  ///
+  /// **Anulables, y el reporte los agrupa como «Sin declarar»**, por lo mismo
+  /// que `processRecipeVersionId`: un lote viejo puede no tenerlo, y deducir
+  /// «natural» de la ausencia de fermentación sería inferir un hecho. El texto
+  /// de `intent` sigue siendo obligatorio y sigue llevando lo que estas dos
+  /// columnas no capturan — el peso, las horas, la atmósfera.
+  processGradeValueId String?               @map("process_grade_value_id") @db.Uuid
+  processGradeValue   VariableCatalogValue? @relation("LotProcessGrade", fields: [processGradeValueId], references: [id])
+  cherryStateValueId  String?               @map("cherry_state_value_id") @db.Uuid
+  cherryStateValue    VariableCatalogValue? @relation("LotProcessCherryState", fields: [cherryStateValueId], references: [id])
+
   /// El «% H deseado a almacenar». **Obligatorio** (decisión de Daniel,
   /// 2026-09-07): «no se abre un proceso sin decir a qué humedad se va a
   /// almacenar». Su palabra exacta sobre por qué se puede exigir: «siempre está
@@ -3379,6 +3401,8 @@ model LotProcess {
   @@unique([lotId, sequenceOrder])
   @@index([lotId])
   @@index([processRecipeVersionId])
+  @@index([processGradeValueId])
+  @@index([cherryStateValueId])
   @@index([closingMoistureMeasurementId])
   @@map("lot_process")
   @@schema("traceability")
@@ -5509,6 +5533,8 @@ model VariableCatalogValue {
   washMediumOfStages ProcessingStage[]             @relation("ProcessingStageWashMedium")
   lotProcessInterventions LotProcessIntervention[]     @relation("LotProcessInterventionKind")
   colonyOrigins           Colony[]                     @relation("ColonyOriginSource")
+  gradeOfProcesses        LotProcess[]                 @relation("LotProcessGrade")
+  cherryStateOfProcesses  LotProcess[]                 @relation("LotProcessCherryState")
 
   @@unique([catalogId, value])
   @@index([aliasOfId])

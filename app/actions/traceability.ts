@@ -1721,6 +1721,8 @@ export async function abrirProcesoAction(
       intent: String(formData.get("intent") ?? ""),
       targetMoisturePct: Number(formData.get("targetMoisturePct")),
       processRecipeVersionId: emptyToNull(formData.get("processRecipeVersionId")),
+      processGradeValueId: emptyToNull(formData.get("processGradeValueId")),
+      cherryStateValueId: emptyToNull(formData.get("cherryStateValueId")),
       notes: emptyToNull(formData.get("notes")),
       startedAt: new Date(),
       // Abrir un proceso es una acción tomada, no una medición — el mismo

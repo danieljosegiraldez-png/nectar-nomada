@@ -31,6 +31,15 @@ import { prisma } from "../db";
 import { lotWhereFromVisibility, resolveLotVisibility } from "./lots";
 import { SIN_RECETA } from "./lotProcess";
 
+/**
+ * Lo que se pinta cuando un grado o un estado de cereza no se declaró.
+ *
+ * **Es un grupo propio, no un hueco**, por la misma decisión que «Sin receta»:
+ * se ve cuántos procesos van sin declarar en vez de esconderlos, y nunca se
+ * deduce «natural» de la ausencia de fermentación.
+ */
+export const SIN_DECLARAR = "Sin declarar";
+
 /** Una fila del reporte: un proceso de un lote, con todo lo que cuelga de él. */
 export interface FilaDeProceso {
   lotId: string;
@@ -44,6 +53,10 @@ export interface FilaDeProceso {
   humedadDeCierre: number | null;
   /** Positivo = cerró por encima del objetivo. Null mientras no se cierre. */
   diferenciaContraObjetivo: number | null;
+  /** Del catálogo `grado_proceso`, o «Sin declarar». Por aquí compara procesos. */
+  gradoDeProceso: string;
+  /** Del catálogo `estado_cereza`, o «Sin declarar». */
+  estadoDeCereza: string;
   intervenciones: string[];
   varietales: string[];
   perfilesDeTueste: string[];
@@ -69,8 +82,14 @@ export interface EslabonesQueFaltan {
 export interface ReporteDeProceso {
   filas: FilaDeProceso[];
   faltan: EslabonesQueFaltan;
-  /** Filas agrupadas por etiqueta de proceso, para comparar procesos. */
+  /** Filas agrupadas por etiqueta de receta. */
   porProceso: { etiqueta: string; filas: number; puntajePromedio: number | null }[];
+  /**
+   * Agrupado por GRADO —Natural, Washed, Honey— que es lo que el dueño quiere
+   * comparar de verdad: dos cafés de la misma finca procesados distinto. La
+   * receta es cómo se llama el procedimiento; el grado es qué se le hizo al café.
+   */
+  porGrado: { grado: string; filas: number; puntajePromedio: number | null }[];
 }
 
 /** Media simple, o null. Nunca 0: un 0 es un puntaje, la ausencia no. */
@@ -95,6 +114,7 @@ export async function reporteDeProceso(userAccountId: string): Promise<ReporteDe
       filas: [],
       faltan: { lotesVisibles: 0, lotesConProceso: 0, procesosCerrados: 0, procesosConTueste: 0, procesosConPuntaje: 0 },
       porProceso: [],
+      porGrado: [],
     };
   }
 
@@ -106,6 +126,8 @@ export async function reporteDeProceso(userAccountId: string): Promise<ReporteDe
         orderBy: { sequenceOrder: "asc" },
         include: {
           processRecipeVersion: { include: { recipe: true } },
+          processGradeValue: true,
+          cherryStateValue: true,
           closingMoistureMeasurement: true,
           interventions: { include: { catalogValue: true }, orderBy: { occurredAt: "asc" } },
         },
@@ -172,6 +194,8 @@ export async function reporteDeProceso(userAccountId: string): Promise<ReporteDe
         lotProcessId: p.id,
         sequenceOrder: p.sequenceOrder,
         etiqueta: p.processRecipeVersion?.recipe.name ?? SIN_RECETA,
+        gradoDeProceso: p.processGradeValue?.value ?? SIN_DECLARAR,
+        estadoDeCereza: p.cherryStateValue?.value ?? SIN_DECLARAR,
         intent: p.intent,
         targetMoisturePct: p.targetMoisturePct.toNumber(),
         humedadDeCierre: cierre,
@@ -185,12 +209,17 @@ export async function reporteDeProceso(userAccountId: string): Promise<ReporteDe
     }
   }
 
-  const porEtiqueta = new Map<string, number[]>();
-  for (const f of filas) {
-    const acc = porEtiqueta.get(f.etiqueta) ?? [];
-    acc.push(...f.puntajes);
-    porEtiqueta.set(f.etiqueta, acc);
-  }
+  const agrupar = (clave: (f: FilaDeProceso) => string) => {
+    const mapa = new Map<string, number[]>();
+    for (const f of filas) {
+      const acc = mapa.get(clave(f)) ?? [];
+      acc.push(...f.puntajes);
+      mapa.set(clave(f), acc);
+    }
+    return mapa;
+  };
+  const porEtiqueta = agrupar((f) => f.etiqueta);
+  const porGradoMapa = agrupar((f) => f.gradoDeProceso);
 
   return {
     filas,
@@ -208,5 +237,12 @@ export async function reporteDeProceso(userAccountId: string): Promise<ReporteDe
         puntajePromedio: promedio(puntajes),
       }))
       .sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, "es")),
+    porGrado: [...porGradoMapa.entries()]
+      .map(([grado, puntajes]) => ({
+        grado,
+        filas: filas.filter((f) => f.gradoDeProceso === grado).length,
+        puntajePromedio: promedio(puntajes),
+      }))
+      .sort((a, b) => a.grado.localeCompare(b.grado, "es")),
   };
 }

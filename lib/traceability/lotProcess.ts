@@ -40,6 +40,10 @@ export class LotProcessError extends Error {}
  * ocurre en un instante. Eso va en `intent`, que es donde el dueño lo puso en su
  * propio ejemplo: «tanto peso whole cherries, proceso natural anaeróbico».
  */
+/** Las claves de los dos catálogos que describen el batch, no un instante. */
+export const CATALOGO_GRADO_PROCESO = "grado_proceso";
+export const CATALOGO_ESTADO_CEREZA = "estado_cereza";
+
 export const CATALOGOS_DE_INTERVENCION: readonly string[] = [
   "condicion_oxigeno",
   "manejo_temperatura",
@@ -63,6 +67,10 @@ export interface AbrirProcesoInput {
    * declarado» — significa que esta intención no está estandarizada.
    */
   intent: string;
+  /** Del catálogo `grado_proceso`: Natural, Washed, Semi Wash 50/75%, Honey. */
+  processGradeValueId?: string | null;
+  /** Del catálogo `estado_cereza`: entera, despulpada. */
+  cherryStateValueId?: string | null;
   /** Obligatorio: «no se abre un proceso sin decir a qué humedad se va a almacenar». */
   targetMoisturePct: number;
   startedAt: Date;
@@ -82,6 +90,23 @@ function exigePorcentaje(valor: number, campo: string): void {
   if (!Number.isFinite(valor) || valor <= 0 || valor > 100) {
     throw new LotProcessError(`${campo}_out_of_range`);
   }
+}
+
+/**
+ * Comprueba que un valor de catálogo es del catálogo que le toca.
+ *
+ * **La FK sola no basta**, y es el mismo error que ya se cazó con las
+ * intervenciones: un valor de `medio_lavado` en la columna del grado de proceso
+ * es una FK perfectamente válida, y dejaría la columna contaminada con
+ * vocabulario ajeno sin que nada se queje.
+ */
+async function exigeDelCatalogo(catalogValueId: string, claveEsperada: string, campo: string): Promise<void> {
+  const valor = await prisma.variableCatalogValue.findUnique({
+    where: { id: catalogValueId },
+    include: { catalog: true },
+  });
+  if (!valor) throw new LotProcessError(`${campo}_not_found`);
+  if (valor.catalog.key !== claveEsperada) throw new LotProcessError(`${campo}_wrong_catalog`);
 }
 
 async function loteGestionable(userAccountId: string, lotId: string) {
@@ -118,6 +143,13 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
     if (version.recipe.status === "archived") throw new LotProcessError("recipe_archived");
   }
 
+  if (input.processGradeValueId) {
+    await exigeDelCatalogo(input.processGradeValueId, CATALOGO_GRADO_PROCESO, "process_grade");
+  }
+  if (input.cherryStateValueId) {
+    await exigeDelCatalogo(input.cherryStateValueId, CATALOGO_ESTADO_CEREZA, "cherry_state");
+  }
+
   const abierto = await prisma.lotProcess.findFirst({
     where: { lotId: input.lotId, endedAt: null },
     select: { id: true },
@@ -137,6 +169,8 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
         sequenceOrder: (ultimo?.sequenceOrder ?? 0) + 1,
         processRecipeVersionId: input.processRecipeVersionId ?? null,
         intent: input.intent.trim(),
+        processGradeValueId: input.processGradeValueId ?? null,
+        cherryStateValueId: input.cherryStateValueId ?? null,
         targetMoisturePct: input.targetMoisturePct,
         startedAt: input.startedAt,
         notes: input.notes?.trim() || null,
@@ -529,6 +563,8 @@ export async function listarProcesosDeLote(userAccountId: string, lotId: string)
     orderBy: { sequenceOrder: "asc" },
     include: {
       processRecipeVersion: { include: { recipe: true } },
+      processGradeValue: true,
+      cherryStateValue: true,
       closingMoistureMeasurement: true,
       interventions: { orderBy: { occurredAt: "asc" }, include: { catalogValue: true, operator: true } },
       fermentationRuns: { orderBy: { startedAt: "asc" } },
@@ -580,7 +616,20 @@ export async function opcionesParaProceso(userAccountId: string, lotId: string) 
     }),
   ]);
 
+  const [grados, estados] = await Promise.all([
+    prisma.variableCatalogValue.findMany({
+      where: { catalog: { key: CATALOGO_GRADO_PROCESO } },
+      orderBy: [{ displayOrder: "asc" }, { value: "asc" }],
+    }),
+    prisma.variableCatalogValue.findMany({
+      where: { catalog: { key: CATALOGO_ESTADO_CEREZA } },
+      orderBy: [{ displayOrder: "asc" }, { value: "asc" }],
+    }),
+  ]);
+
   return {
+    grados: grados.map((v) => ({ id: v.id, label: v.value })),
+    estadosDeCereza: estados.map((v) => ({ id: v.id, label: v.value })),
     intervenciones: valores.map((v) => ({ id: v.id, label: `${v.catalog.name} · ${v.value}` })),
     mediciones: mediciones.map((m) => ({
       id: m.id,
