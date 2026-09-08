@@ -3351,15 +3351,26 @@ model LotProcess {
   /// sin porcentaje horneado, porque ADR-052 prohíbe inventar la equivalencia
   /// color→porcentaje y un «Honey NN%» sólo entra cuando un lote real lo mida.
   ///
-  /// **Anulables, y el reporte los agrupa como «Sin declarar»**, por lo mismo
-  /// que `processRecipeVersionId`: un lote viejo puede no tenerlo, y deducir
-  /// «natural» de la ausencia de fermentación sería inferir un hecho. El texto
-  /// de `intent` sigue siendo obligatorio y sigue llevando lo que estas dos
-  /// columnas no capturan — el peso, las horas, la atmósfera.
-  processGradeValueId String?               @map("process_grade_value_id") @db.Uuid
-  processGradeValue   VariableCatalogValue? @relation("LotProcessGrade", fields: [processGradeValueId], references: [id])
-  cherryStateValueId  String?               @map("cherry_state_value_id") @db.Uuid
-  cherryStateValue    VariableCatalogValue? @relation("LotProcessCherryState", fields: [cherryStateValueId], references: [id])
+  /// **OBLIGATORIAS desde el 2026-09-08**, por decisión de Daniel. Nacieron
+  /// anulables «por si un lote viejo no lo tuviera», y él lo corrigió: no se
+  /// abre un proceso sin decir qué se le está haciendo al café y en qué estado
+  /// entra, igual que no se abre sin decir a qué humedad se almacenará.
+  ///
+  /// **La migración lo pudo exigir sin migrar un solo dato** porque contó
+  /// primero: producción tenía **cero** procesos —`LotProcess` nació el día
+  /// anterior— así que no hay fila vieja a la que inventarle un grado. Ese
+  /// recuento vive en la migración y aborta si algún día no se cumple.
+  ///
+  /// A diferencia de `processRecipeVersionId`, que **sigue anulable**: la receta
+  /// es un procedimiento estandarizado y se puede procesar sin una. El grado no
+  /// es opcional — un café es natural, lavado o honey; no es «ninguno».
+  ///
+  /// `intent` sigue obligatorio y sigue llevando lo que estas dos no capturan:
+  /// el peso, las horas, la atmósfera.
+  processGradeValueId String               @map("process_grade_value_id") @db.Uuid
+  processGradeValue   VariableCatalogValue @relation("LotProcessGrade", fields: [processGradeValueId], references: [id])
+  cherryStateValueId  String               @map("cherry_state_value_id") @db.Uuid
+  cherryStateValue    VariableCatalogValue @relation("LotProcessCherryState", fields: [cherryStateValueId], references: [id])
 
   /// El «% H deseado a almacenar». **Obligatorio** (decisión de Daniel,
   /// 2026-09-07): «no se abre un proceso sin decir a qué humedad se va a

@@ -96,8 +96,8 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
           <div className="nn-detail-meta">
             <span>{t("processStateLabel", { state: p.endedAt === null ? t("processOpen") : t("processClosed") })}</span>
             <span>{t("processTargetShown", { pct: p.targetMoisturePct.toNumber().toString() })}</span>
-            <span>{t("processGradeShown", { grade: p.processGradeValue?.value ?? t("processNotDeclaredShort") })}</span>
-            <span>{t("processCherryStateShown", { state: p.cherryStateValue?.value ?? t("processNotDeclaredShort") })}</span>
+            <span>{t("processGradeShown", { grade: p.processGradeValue.value })}</span>
+            <span>{t("processCherryStateShown", { state: p.cherryStateValue.value })}</span>
             <span>{t("processStartedShown", { date: fecha(p.startedAt) })}</span>
             {p.endedAt !== null ? <span>{t("processEndedShown", { date: fecha(p.endedAt) })}</span> : null}
           </div>

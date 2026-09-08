@@ -67,11 +67,15 @@ export function AbrirProcesoForm({
 
       {/* Grado y estado de la cereza van JUNTO a la intención y antes de la
           receta: son lo que el reporte agrupa, y en un teléfono lo que está
-          arriba se rellena. Anulables, así que ninguno lleva `required`. */}
+          arriba se rellena. Obligatorios desde el 2026-09-08.
+
+          La primera opción sigue vacía y `required` la rechaza: preseleccionar
+          «Natural» pondría un grado que nadie declaró, que es justo lo que la
+          columna obligatoria pretende impedir. */}
       <div className="nn-field">
         <label htmlFor="p-grade">{t("processGradeLabel")}</label>
-        <select id="p-grade" name="processGradeValueId" defaultValue="">
-          <option value="">{t("processNotDeclared")}</option>
+        <select id="p-grade" name="processGradeValueId" defaultValue="" required>
+          <option value="">{t("processChoose")}</option>
           {grados.map((g) => (
             <option key={g.id} value={g.id}>
               {g.label}
@@ -82,8 +86,8 @@ export function AbrirProcesoForm({
 
       <div className="nn-field">
         <label htmlFor="p-cherry">{t("processCherryStateLabel")}</label>
-        <select id="p-cherry" name="cherryStateValueId" defaultValue="">
-          <option value="">{t("processNotDeclared")}</option>
+        <select id="p-cherry" name="cherryStateValueId" defaultValue="" required>
+          <option value="">{t("processChoose")}</option>
           {estadosDeCereza.map((e) => (
             <option key={e.id} value={e.id}>
               {e.label}

@@ -17,9 +17,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { reporteDeProceso } from "../../lib/traceability/reporteDeProceso";
-import { abrirProceso, cerrarProceso, CATALOGO_GRADO_PROCESO } from "../../lib/traceability/lotProcess";
+import {
+  abrirProceso,
+  cerrarProceso,
+  CATALOGO_ESTADO_CEREZA,
+  CATALOGO_GRADO_PROCESO,
+} from "../../lib/traceability/lotProcess";
 import { SIN_RECETA } from "../../lib/traceability/lotProcess";
-import { SIN_DECLARAR } from "../../lib/traceability/reporteDeProceso";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `rep-${Date.now()}`;
@@ -29,7 +33,7 @@ let loteCompleto: string, loteDesnudo: string;
 let recetaId: string, recetaVersionId: string;
 let recetaTuesteId: string, recetaTuesteVersionId: string;
 let cohorteId: string, cultivarCatalogoId: string, cultivarValorId: string;
-let gradoValorId: string;
+let gradoValorId: string, gradoNaturalId: string, cerezaValorId: string;
 let sesionSensorialId: string, protocoloId: string, protocoloVersionId: string;
 
 beforeAll(async () => {
@@ -209,6 +213,19 @@ beforeAll(async () => {
   gradoValorId = (
     await prisma.variableCatalogValue.create({ data: { catalogId: catGrado.id, value: `TEST Honey ${RUN}` } })
   ).id;
+  // Dos grados y no uno: el reporte agrupa por grado, y con un solo valor el
+  // agrupamiento pasaría aunque metiera todo en el mismo cajón.
+  gradoNaturalId = (
+    await prisma.variableCatalogValue.create({ data: { catalogId: catGrado.id, value: `TEST Natural ${RUN}` } })
+  ).id;
+  const catCereza = await prisma.variableCatalog.upsert({
+    where: { key: CATALOGO_ESTADO_CEREZA },
+    update: {},
+    create: { key: CATALOGO_ESTADO_CEREZA, name: "Estado de la cereza" },
+  });
+  cerezaValorId = (
+    await prisma.variableCatalogValue.create({ data: { catalogId: catCereza.id, value: `TEST entera ${RUN}` } })
+  ).id;
 
   // ── el proceso, cerrado con su humedad ────────────────────────────────────
   const proceso = await abrirProceso(gestor, {
@@ -217,6 +234,7 @@ beforeAll(async () => {
     targetMoisturePct: 10.5,
     processRecipeVersionId: recetaVersionId,
     processGradeValueId: gradoValorId,
+    cherryStateValueId: cerezaValorId,
     startedAt: new Date("2026-03-02T12:00:00Z"),
     provenanceClass: "original_record",
   });
@@ -242,6 +260,10 @@ beforeAll(async () => {
     lotId: loteDesnudo,
     intent: "sin más datos por ahora",
     targetMoisturePct: 11,
+    // «Desnudo» es sin receta, sin tueste y sin puntajes. El grado y el estado
+    // de la cereza SÍ van: desde el 2026-09-08 son obligatorios.
+    processGradeValueId: gradoNaturalId,
+    cherryStateValueId: cerezaValorId,
     startedAt: new Date("2026-03-02T12:00:00Z"),
     provenanceClass: "original_record",
   });
@@ -271,7 +293,9 @@ afterAll(async () => {
   await prisma.harvestEvent.deleteMany({ where: assertDefinedWhere({ resultingLotId: { in: lotes } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
   await prisma.plantingCohort.deleteMany({ where: assertDefinedWhere({ id: cohorteId }) });
-  await prisma.variableCatalogValue.deleteMany({ where: assertDefinedWhere({ id: { in: [cultivarValorId, gradoValorId] } }) });
+  await prisma.variableCatalogValue.deleteMany({
+    where: assertDefinedWhere({ id: { in: [cultivarValorId, gradoValorId, gradoNaturalId, cerezaValorId] } }),
+  });
   await prisma.processRecipeVersion.deleteMany({
     where: assertDefinedWhere({ recipeId: { in: [recetaId, recetaTuesteId] } }),
   });
@@ -342,20 +366,22 @@ describe("la cadena entera se puede unir", () => {
    * La receta es cómo se llama el procedimiento; el GRADO es qué se le hizo al
    * café, y por eso el reporte agrupa por los dos.
    */
-  it("agrupa también por grado de proceso, y «Sin declarar» es un grupo propio", async () => {
+  it("agrupa por grado de proceso: los honeys por un lado y los naturales por otro", async () => {
     const r = await reporteDeProceso(gestor);
-    const honey = r.porGrado.find((g) => g.grado.includes(RUN));
+    const honey = r.porGrado.find((g) => g.grado === `TEST Honey ${RUN}`);
     expect(honey, "el grado declarado debe salir como grupo").toBeDefined();
     expect(honey!.puntajePromedio).toBe(87);
 
-    const sin = r.porGrado.find((g) => g.grado === SIN_DECLARAR);
-    expect(sin, "un proceso sin grado declarado no se esconde: es su propio grupo").toBeDefined();
-    expect(sin!.puntajePromedio).toBeNull();
+    // El control del agrupamiento: con un solo grado, meterlo todo en el mismo
+    // cajón pasaría igual. Son dos grupos distintos y el segundo no tiene notas.
+    const natural = r.porGrado.find((g) => g.grado === `TEST Natural ${RUN}`);
+    expect(natural, "el segundo grado debe ser su propio grupo, no fundirse con el primero").toBeDefined();
+    expect(natural!.puntajePromedio).toBeNull();
 
     // Y en la fila, el grado y el estado de cereza son columnas, no prosa.
     const fila = r.filas.find((f) => f.lotCode.startsWith("COMPLETO"));
-    expect(fila!.gradoDeProceso).toContain(RUN);
-    expect(fila!.estadoDeCereza, "no se declaró, y eso se dice").toBe(SIN_DECLARAR);
+    expect(fila!.gradoDeProceso).toBe(`TEST Honey ${RUN}`);
+    expect(fila!.estadoDeCereza).toBe(`TEST entera ${RUN}`);
   });
   /**
    * El recuento que convierte «0 filas» en algo accionable. Sin él, un reporte

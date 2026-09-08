@@ -67,10 +67,14 @@ export interface AbrirProcesoInput {
    * declarado» — significa que esta intención no está estandarizada.
    */
   intent: string;
-  /** Del catálogo `grado_proceso`: Natural, Washed, Semi Wash 50/75%, Honey. */
-  processGradeValueId?: string | null;
-  /** Del catálogo `estado_cereza`: entera, despulpada. */
-  cherryStateValueId?: string | null;
+  /**
+   * Del catálogo `grado_proceso`: Natural, Washed, Semi Wash 50/75%, Honey.
+   * **Obligatorio** (Daniel, 2026-09-08): un café es natural, lavado o honey; no
+   * es «ninguno». La columna es NOT NULL, así que el tipo lo dice igual.
+   */
+  processGradeValueId: string;
+  /** Del catálogo `estado_cereza`: entera, despulpada. **Obligatorio.** */
+  cherryStateValueId: string;
   /** Obligatorio: «no se abre un proceso sin decir a qué humedad se va a almacenar». */
   targetMoisturePct: number;
   startedAt: Date;
@@ -143,12 +147,13 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
     if (version.recipe.status === "archived") throw new LotProcessError("recipe_archived");
   }
 
-  if (input.processGradeValueId) {
-    await exigeDelCatalogo(input.processGradeValueId, CATALOGO_GRADO_PROCESO, "process_grade");
-  }
-  if (input.cherryStateValueId) {
-    await exigeDelCatalogo(input.cherryStateValueId, CATALOGO_ESTADO_CEREZA, "cherry_state");
-  }
+  // Se comprueban SIEMPRE, no «si vienen»: son obligatorios, y una cadena vacía
+  // que llegara de un formulario mal armado tiene que salir con una frase, no
+  // con una violación de clave foránea.
+  if (!input.processGradeValueId?.trim()) throw new LotProcessError("process_grade_required");
+  if (!input.cherryStateValueId?.trim()) throw new LotProcessError("cherry_state_required");
+  await exigeDelCatalogo(input.processGradeValueId, CATALOGO_GRADO_PROCESO, "process_grade");
+  await exigeDelCatalogo(input.cherryStateValueId, CATALOGO_ESTADO_CEREZA, "cherry_state");
 
   const abierto = await prisma.lotProcess.findFirst({
     where: { lotId: input.lotId, endedAt: null },
@@ -169,8 +174,8 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
         sequenceOrder: (ultimo?.sequenceOrder ?? 0) + 1,
         processRecipeVersionId: input.processRecipeVersionId ?? null,
         intent: input.intent.trim(),
-        processGradeValueId: input.processGradeValueId ?? null,
-        cherryStateValueId: input.cherryStateValueId ?? null,
+        processGradeValueId: input.processGradeValueId,
+        cherryStateValueId: input.cherryStateValueId,
         targetMoisturePct: input.targetMoisturePct,
         startedAt: input.startedAt,
         notes: input.notes?.trim() || null,
