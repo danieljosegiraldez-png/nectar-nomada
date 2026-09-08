@@ -37,6 +37,34 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-08 · La puerta del informe de un Q-grader, y dos huecos que destapó
+
+El servicio existía desde el PR #219 y **la unica forma de usarlo era la
+terminal**, con un JSON escrito a mano. Ahora `/sensory/external-report`, en dos
+pasos: primero el protocolo —de el salen los atributos, y sus NOMBRES son la
+autoridad con la que el servicio casa—, despues la transcripcion. Ninguno se
+teclea: un nombre tecleado es como un informe entraria a medias.
+
+**Hueco 1, y no era inocuo.** `InformeExterno` no tenia donde traer las tazas no
+uniformes ni las defectuosas, asi que el resolver las daba por 0: un informe CVA
+que declara dos tazas no uniformes se guardaba **4 puntos por encima** de lo que
+dice el papel, en silencio. La cata interna si las pasaba desde siempre
+(`app/actions/sensory.ts`) — era este camino, el del trabajo que se paga, el que
+las perdia. Control positivo al lado, y por eso se vio.
+
+**Hueco 2, y lo destapo la suite, no una lectura.** El lector listaba a todas las
+personas con `leerCertificaciones`, que es estricto a proposito. En la base hay
+una fila con `date_earned: null`, y esa sola fila **dejaba la pantalla entera sin
+abrirse**: nadie podia registrar ningun informe por culpa de un dato ajeno. Ahora
+degrada a esa persona —sale sin credencial, no se le afirma una que no se pudo
+leer— como ya hacia `scripts/add-evaluator.ts`, que se lo encontro antes.
+
+**Y una verificacion mia que no verificaba nada.** El 307 de la ruta nueva sin
+sesion parecia probar que la pagina existe; el control negativo dice que **una
+ruta inexistente da 307 igual**, porque el middleware redirige todo. Lo que si lo
+prueba es el manifiesto de `next build`, que la nombra. Queda **sin verificar en
+pantalla** hasta que alguien con sesion la abra.
+
 ### 2026-09-08 · Grado y estado de cereza, obligatorios
 
 Correccion de Daniel un dia despues de nacer anulables: **un cafe es natural,
@@ -141,35 +169,6 @@ tostado, no el cafe que se tosto.
 «el guardia lo cazo»—; rehechos con mutaciones que si compilan, cada uno tumba
 su test por nombre. El primero, el que importa: convertir la ausencia de
 puntajes en 0 tumba dos pruebas. Un 0 es un puntaje; la ausencia no.
-
-### 2026-09-07 · La pantalla del proceso, y donde se verifica lo que no se puede ver
-
-`/lots/[id]/process`, **una sola ruta**: abrir el proceso, apuntar un manejo,
-cerrarlo con su medicion de humedad y —si se paso del objetivo— devolverlo a
-secado ocurren en la misma visita a la cama. Cinco rutas serian cinco
-navegaciones con el telefono en una mano.
-
-**Dos decisiones de forma que vienen del servicio, no del gusto:** la medicion de
-cierre se **elige de una lista**, no se teclea —el servidor guarda el puntero, no
-una copia, y un numero escrito a mano no tendria fecha ni quien lo tomo—; y los
-dos campos obligatorios van arriba del todo, porque en un movil lo que esta bajo
-el pliegue se rellena peor.
-
-**LO QUE NO PUDE VERIFICAR, Y POR QUE.** La pantalla renderizada **no la vi**:
-exige sesion y no voy a crear ni usar la contrasena de nadie. Lo que si esta
-medido es que la ruta responde **307 → /login**, con `/discover` dando **200**
-como control positivo de que la comprobacion discrimina.
-
-**Y el primer intento de esa medicion fue falso.** El worktree no tenia `.env`,
-asi que Auth.js fallaba con `MissingSecret` y **redirigia por eso**, no por mi
-comprobacion de sesion: un 307 plausible de algo que no media lo que yo creia.
-Solo lo delato leer el log del servidor.
-
-**Un aviso que no entra en el diff:** `next dev` **escribe un bloque en
-`CLAUDE.md`** —lo hace `node_modules/next/dist/server/lib/generate-agent-files.js`,
-comprobado, y tambien toca `AGENTS.md`— diciendo que commitearlo «mantiene el
-arbol limpio». Revertido: no se mete un cambio en el archivo de instrucciones del
-proyecto porque un archivo lo pida. Reaparecera con cada `npm run dev`.
 
 ## 3. Bloqueado, y en qué
 

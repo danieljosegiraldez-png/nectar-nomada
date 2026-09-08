@@ -96,6 +96,11 @@ const SENSORY_TOOLS: readonly NavDefinition[] = [
   // puerta de entrada. Mismo permiso que la calibración, que es el que el
   // servicio exige.
   { labelKey: "newSession", href: "/sensory/new", requiresAnyOf: ["sensory:manage_session"] },
+  // 2026-09-08. El servicio para registrar el informe de un Q-grader existía
+  // desde el PR #219 y sólo se podía usar por terminal, con un JSON a mano.
+  // Mismo permiso que montar una cata: quien mete el resultado de un tercero
+  // está montando una, no puntuando en ella.
+  { labelKey: "externalReport", href: "/sensory/external-report", requiresAnyOf: ["sensory:manage_session"] },
 ];
 
 /**

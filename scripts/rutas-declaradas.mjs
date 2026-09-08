@@ -104,6 +104,10 @@ export const RUTAS = {
   "/research/execute/[protocolVersionId]": { clase: "requiere-sesion", razon: "Ejecución de un protocolo." },
   "/research/treatments/[id]": { clase: "requiere-sesion", razon: "Tratamientos de investigación." },
   "/sensory/new": { clase: "requiere-sesion", razon: "Montar una cata: exige sensory:manage_session." },
+  "/sensory/external-report": {
+    clase: "requiere-sesion",
+    razon: "Registrar el informe de un evaluador externo: exige sensory:manage_session.",
+  },
   "/sensory": { clase: "requiere-sesion", razon: "Evaluación sensorial, incluida la ciega." },
   "/sensory/[sessionId]": { clase: "requiere-sesion", razon: "Evaluación sensorial." },
   "/start": { clase: "requiere-sesion", razon: "Aterrizaje tras iniciar sesión." },

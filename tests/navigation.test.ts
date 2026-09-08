@@ -58,7 +58,17 @@ describe("buildNavigation", () => {
     // sesión de cata —`sensorySession.create` sólo existía en la semilla—, así
     // que el head judge tenía herramientas para dirigir una cata y ninguna para
     // empezarla.
-    expect(toolHrefs(HEAD_JUDGE)).toEqual(["/competitions", "/calibration", "/sensory/new"]);
+    // 2026-09-08: se añade "/sensory/external-report". El servicio para
+    // registrar el informe de un Q-grader existía desde el PR #219 y sólo se
+    // podía usar por terminal, con un JSON escrito a mano.
+    expect(toolHrefs(HEAD_JUDGE)).toEqual([
+      "/competitions",
+      "/calibration",
+      "/sensory/new",
+      "/sensory/external-report",
+    ]);
+    // El control de que la puerta nueva SÍ está cerrada para quien no monta
+    // catas: un juez a secas no la ve, y es la primera aserción de este test.
   });
 
   it("AI Suggestions is hidden from everyone without ai:review_suggestion", () => {

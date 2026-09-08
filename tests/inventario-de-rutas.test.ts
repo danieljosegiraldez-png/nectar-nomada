@@ -85,7 +85,9 @@ describe("el inventario del router", () => {
     // única pantalla desde la que se declara el % H al que se va a almacenar.
     // 66 → 67 el mismo día, con /reports/proceso — el reporte transversal que
     // ata la intervención en el lote con el puntaje de taza.
-    expect(salida).toContain("67 entradas");
+    // 67 → 68 el 2026-09-08, con /sensory/external-report — la puerta que le
+    // faltaba al informe de un Q-grader, que sólo se podía meter por terminal.
+    expect(salida).toContain("68 entradas");
     expect(codigo, salida).toBe(0);
   });
 
