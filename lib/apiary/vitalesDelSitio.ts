@@ -76,6 +76,13 @@ export interface VitalesDeSitio {
   proximaVisita: Date | null;
   /** Lo que alguien contó al salir del sitio. Distinto de `coloniasActivas`. */
   coloniasVivasDeclaradas: number | null;
+  /**
+   * Cuándo se hizo ese conteo. Va junto a la cifra a propósito: un conteo
+   * declarado en marzo y uno de ayer valen distinto, y sin la fecha los dos se
+   * leen igual. Es la misma disciplina que el resto del módulo — ningún número
+   * sin decir de dónde y de cuándo sale.
+   */
+  fechaDelConteoDeclarado: Date | null;
   /** Filas `Colony` en estado activo ahora mismo. Distinto de lo declarado, y a propósito. */
   coloniasActivas: number;
   cajas: number;
@@ -192,6 +199,7 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
       diasDesdeUltimaVisita: ultimaVisita ? Math.floor((ahora.getTime() - ultimaVisita.getTime()) / MS_POR_DIA) : null,
       proximaVisita,
       coloniasVivasDeclaradas,
+      fechaDelConteoDeclarado: conConteo[0]?.startedAt ?? null,
       coloniasActivas: misColmenas.reduce((n, h) => n + h.colonies.filter((c) => c.status === "active").length, 0),
       cajas: misColmenas.length,
       alimentoHasta,

@@ -1231,7 +1231,8 @@
     "pollinationDeficit": "{min}-{max} short",
     "pollinationNoDeficit": "target met",
     "pollinationCountSource_sistema": "The count comes from colonies active in the system, not from the one made on leaving the site. The two can differ.",
-    "pollinationCountSource_declarado_en_visita": "The count is the one made on leaving the site during the last visit."
+    "pollinationCountSource_declarado_en_visita": "The count is the one made on leaving the site during the last visit.",
+    "pollinationCountDiverges": "Note: the visit counted {declarado} colonies and the system has {sistema}. Both numbers exist and they disagree."
   },
   "Research": {
     "badge": "Research OS",

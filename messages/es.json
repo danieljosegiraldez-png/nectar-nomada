@@ -1231,7 +1231,8 @@
     "pollinationDeficit": "faltan {min}-{max}",
     "pollinationNoDeficit": "objetivo cubierto",
     "pollinationCountSource_sistema": "El conteo sale de las colonias activas en el sistema, no del que se hace al salir del sitio. Los dos pueden diferir.",
-    "pollinationCountSource_declarado_en_visita": "El conteo es el que se hizo al salir del sitio en la última visita."
+    "pollinationCountSource_declarado_en_visita": "El conteo es el que se hizo al salir del sitio en la última visita.",
+    "pollinationCountDiverges": "Ojo: en la visita se contaron {declarado} colonias y el sistema tiene {sistema}. Los dos números existen y no coinciden."
   },
   "Research": {
     "badge": "Research OS",
