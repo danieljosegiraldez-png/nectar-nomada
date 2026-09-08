@@ -1473,3 +1473,54 @@ cata sin correr.
   y sin lista que mantener. El detalle se archivó en
   `docs/SESSION_STATE_ARCHIVE.md` porque era registro de entrega dentro de una
   sección llamada «Bloqueado».
+
+### 2026-09-07 · «Proceso» deja de ser una palabra y pasa a ser una fila
+
+**Empieza por una corrección mía.** Dije dos veces que «proceso no existe en el
+modelo». **Falso**: existía `ProcessRecipe` —«Honey 48h», versionada, con objetivos.
+
+**El hueco real, medido:** `processRecipeVersionId` vivía en **un solo sitio**,
+`FermentationRun`. Un natural sin fermentación no se podía etiquetar, y uno con
+dos tendría dos etiquetas y ninguna respuesta a «¿qué proceso es este lote?».
+
+**La definición es del dueño, literal:** «uno o más eventos o procesos
+transformativos o de manejo, antes o durante el secado, antes de llegar al % H
+deseado a almacenar». Así que `LotProcess` es la **cabecera que agrupa** eventos
+que ya existían —`FermentationRun` y `DryingRun` cuelgan de ella— y
+`LotProcessIntervention` recoge los manejos sin sitio —flotado, reposo— con
+**vocabulario abierto** (`VariableCatalog`), no un enum cerrado.
+
+**Decisiones suyas:** uno o **varios** procesos por lote; **% H objetivo
+obligatorio y modificable**, con rastro. Y la corrección que llegó a mitad de la
+construcción, que cambió el modelo: **«Sin receta» NO es «sin nada declarado»** —
+«aunque no requiere receta definida, sí requiere proceso e intención y detalle de
+este batch: se puso tanto peso whole cherries, proceso natural anaeróbico,
+tantas horas». `intent` es **obligatorio**, texto libre, y **modificable a mitad
+de proceso** con rastro: eso es lo que hace reproducible el lote — poder leer qué
+se pretendía en cada momento. Lo estructurado —peso, horas, humedad— sigue en
+`QuantityEvent`, `FermentationRun` y `Measurement`.
+
+**Cuatro `CHECK` en la base**, no en TypeScript, y cada uno con su flip-test.
+*Al quitarlos cayó también el control positivo, por otra razón* — sin los CHECK
+las filas rechazadas persisten y chocan con el índice único. Se dice porque
+«cayeron cinco» no es «el guardia mide las cinco».
+
+**Y lo que Daniel contestó después, en el mismo día:**
+
+**Bodega BLOQUEA.** «No debe salir de secado antes bajo ninguna circunstancia».
+`moveLotToStorage` lanza si el proceso está abierto, si no hay medición de
+cierre, o si esa medición supera el objetivo. **Sólo si el lote tiene proceso**:
+medido, producción tiene **45 lotes y cero procesos**, y bloquearlos a todos los
+dejaría inalmacenables por un dato que nadie pudo declarar. Y con la acción que
+él pidió al lado: `devolverASecado` reabre el proceso, **exige un motivo** y deja
+en el rastro qué humedad de cierre se descarta. La medición no se borra: se
+suelta — es un hecho medido.
+
+**Y una corrección suya que me ahorró duplicar el vocabulario:** «la lista ya
+está de antes». Yo había inventado un catálogo `intervencion_de_proceso`; al
+medir hay **24 catálogos con valores**, entre ellos `condicion_oxigeno`
+(anaerobico, maceración carbónica), `manejo_temperatura` (choque térmico),
+`medio_lavado`, `metodo_inoculacion`, `sustrato_anadido`, `recipiente`. Ahora la
+intervención sale de **esos**, por una lista en código que se amplía en una
+línea. `grado_proceso` y `estado_cereza` quedan fuera a propósito: describen el
+batch entero, no un instante — van en `intent`, que es donde él los puso.
