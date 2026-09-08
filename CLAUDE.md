@@ -2444,6 +2444,43 @@ npm run test:db -- reset
 **Antes de creer nada, imprimir una fila patrón conocida** y leerla. Aquí fue
 `select count(*) from traceability.planting_cohort` — debía dar 4 y dio 0.
 
+### …y `reset` también dice «ready» con el esquema de ayer
+
+**2026-09-07.** Restaurar la base compartida salió limpio: `salida=0`,
+`Restoring from 2026-09-07T140006Z...`, `Test database ready.`, y las seis tablas
+patrón casando con el `rowcounts.tsv` del backup. Todo correcto — y el esquema
+estaba **seis migraciones por detrás de `main`**.
+
+**Causa.** El dump es una foto del momento en que se tomó. `reset` restaura esa
+foto y **no aplica lo que se haya fusionado desde entonces**. Ese día habían
+entrado seis migraciones entre las 09:00 y las 00:00.
+
+**Por qué importa más de lo que parece.** El síntoma siguiente no dice «te falta
+migrar»: dice `Null constraint violation` o `Unknown argument` en tests que no
+tocaste — exactamente la misma cara que la deriva de otra sesión descrita arriba,
+y que se lee como «`main` está roto». Es el mismo error leído del revés.
+
+**Arreglo, y va SIEMPRE después de un reset:**
+
+```bash
+npx prisma migrate deploy      # y leer los nombres que imprime
+npx prisma generate            # el cliente también quedó viejo
+npm run db:seed                # permisos, perfiles y catálogos
+```
+
+**Y la comprobación que lo dice antes de perder el tiempo** — contar las dos
+listas, no confiar en «ready»:
+
+```bash
+ls prisma/migrations | grep '^[0-9]' | sort > /tmp/en-disco.txt
+# ...contra las de _prisma_migrations; en DISCO y no aplicadas = lo que falta
+```
+
+**Ojo con la cuenta:** `_prisma_migrations` tiene una fila **duplicada** de
+`20260810150000_phase1_quantity_event`, que sí está en el repositorio. Sin
+deduplicar, la comparación inventa una migración ajena que no existe — me pasó,
+y me hizo creer que había dos sesiones con trabajo en juego cuando había una.
+
 ### La base de pruebas es compartida: un fallo tuyo puede ser de otra sesión
 
 **2026-09-06.** Corriendo la suite sobre un worktree recién sacado de
