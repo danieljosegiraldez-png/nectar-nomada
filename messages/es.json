@@ -1214,7 +1214,15 @@
     "coloniasDeCajas": "{colonias} de {cajas}",
     "vitalesPendientes": "Faltan dos vitales del tablero: densidad de polinización (necesita las hectáreas comprometidas) y clima de 7 días (necesita un proveedor conectado). No se estiman.",
     "originSourceLabel": "Origen del pie",
-    "originSourceUnset": "Sin registro"
+    "originSourceUnset": "Sin registro",
+    "pollinationHeading": "Polinización",
+    "pollinationHectares": "{hectares} ha comprometidas",
+    "pollinationTarget": "objetivo {min}-{max} colmenas/ha",
+    "pollinationColonies": "{count} colonias",
+    "pollinationDeficit": "faltan {min}-{max}",
+    "pollinationNoDeficit": "objetivo cubierto",
+    "pollinationCountSource_sistema": "El conteo sale de las colonias activas en el sistema, no del que se hace al salir del sitio. Los dos pueden diferir.",
+    "pollinationCountSource_declarado_en_visita": "El conteo es el que se hizo al salir del sitio en la última visita."
   },
   "Research": {
     "badge": "Research OS",

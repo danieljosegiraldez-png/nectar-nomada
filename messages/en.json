@@ -1214,7 +1214,15 @@
     "coloniasDeCajas": "{colonias} of {cajas}",
     "vitalesPendientes": "Two dashboard vitals are still missing: pollination density (needs committed hectares) and 7-day weather (needs a connected provider). Neither is estimated.",
     "originSourceLabel": "Stock origin",
-    "originSourceUnset": "Not recorded"
+    "originSourceUnset": "Not recorded",
+    "pollinationHeading": "Pollination",
+    "pollinationHectares": "{hectares} ha committed",
+    "pollinationTarget": "target {min}-{max} hives/ha",
+    "pollinationColonies": "{count} colonies",
+    "pollinationDeficit": "{min}-{max} short",
+    "pollinationNoDeficit": "target met",
+    "pollinationCountSource_sistema": "The count comes from colonies active in the system, not from the one made on leaving the site. The two can differ.",
+    "pollinationCountSource_declarado_en_visita": "The count is the one made on leaving the site during the last visit."
   },
   "Research": {
     "badge": "Research OS",
