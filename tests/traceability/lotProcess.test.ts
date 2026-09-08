@@ -193,6 +193,11 @@ const abrir = (lotId: string, extra: Record<string, unknown> = {}) => ({
   targetMoisturePct: 10.5,
   startedAt: new Date("2026-03-01T12:00:00Z"),
   provenanceClass: "original_record" as const,
+  // Obligatorios desde el 2026-09-08 (Daniel, «hazlos obligatorios»): un café
+  // es natural, lavado o honey; no es «ninguno». Van en el helper porque ya no
+  // hay ninguna llamada legítima que los omita.
+  processGradeValueId: valorGrado,
+  cherryStateValueId: valorCereza,
   ...extra,
 });
 
@@ -543,10 +548,16 @@ describe("grado de proceso y estado de la cereza", () => {
     ).rejects.toThrow(new LotProcessError("cherry_state_wrong_catalog"));
   });
 
-  it("los dos son opcionales: un proceso sin declararlos entra igual", async () => {
-    const procesos = await listarProcesosDeLote(gestor, loteC);
-    expect(procesos[0]!.processGradeValue).toBeNull();
-    expect(procesos[0]!.cherryStateValue).toBeNull();
+  it("rechaza abrir un proceso sin grado, con una frase y no con una FK rota", async () => {
+    await expect(abrirProceso(gestor, abrir(loteB, { processGradeValueId: "" }))).rejects.toThrow(
+      new LotProcessError("process_grade_required"),
+    );
+  });
+
+  it("rechaza abrir un proceso sin estado de cereza", async () => {
+    await expect(abrirProceso(gestor, abrir(loteB, { cherryStateValueId: "  " }))).rejects.toThrow(
+      new LotProcessError("cherry_state_required"),
+    );
   });
 });
 
@@ -565,6 +576,8 @@ describe("los CHECK de `lot_process`", () => {
         targetMoisturePct: 10.5,
         startedAt: new Date("2026-03-01T12:00:00Z"),
         provenanceClass: "original_record",
+        processGradeValueId: valorGrado,
+        cherryStateValueId: valorCereza,
         ...extra,
       } as never,
     });
@@ -591,6 +604,49 @@ describe("los CHECK de `lot_process`", () => {
 
   it("rechaza una secuencia menor que 1", async () => {
     await expect(crudo({ sequenceOrder: 0 })).rejects.toThrow(/lot_process_orden_positivo/);
+  });
+
+  /**
+   * **El grado y el estado de cereza, contra la base — y por SQL crudo.**
+   *
+   * El cliente de Prisma no sirve para medir esto: con la columna en `null`
+   * rechaza la llamada él mismo («Argument `lot` is missing») sin llegar a
+   * hablar con Postgres, así que el test habría pasado tanto con `NOT NULL`
+   * como sin él. Lo que se quiere comprobar es lo que un importador o un
+   * `psql` no se pueden saltar, y eso sólo lo dice un `INSERT` de verdad.
+   */
+  const insertaSql = (columnas: string, ...valores: string[]) =>
+    prisma.$executeRawUnsafe(
+      `insert into traceability.lot_process
+         (lot_id, sequence_order, intent, target_moisture_pct, started_at, provenance_class, ${columnas})
+       values ($1::uuid, 98, 'crudo por SQL', 10.5, now(), 'original_record'` +
+        valores.map((_, i) => `, $${i + 2}::uuid`).join("") +
+        ")",
+      loteB,
+      ...valores,
+    );
+
+  it("rechaza por `NOT NULL` un proceso sin grado, aunque el servicio no esté por medio", async () => {
+    await expect(insertaSql("cherry_state_value_id", valorCereza)).rejects.toThrow(
+      /null value in column "process_grade_value_id"/,
+    );
+  });
+
+  it("rechaza por `NOT NULL` un proceso sin estado de cereza", async () => {
+    await expect(insertaSql("process_grade_value_id", valorGrado)).rejects.toThrow(
+      /null value in column "cherry_state_value_id"/,
+    );
+  });
+
+  /**
+   * **El control positivo de las dos de arriba.** Sin él, un `INSERT` mal
+   * escrito —una columna que no existe, un tipo que no casa— fallaría por otra
+   * razón y las dos pasarían igual, midiendo la errata en vez del `NOT NULL`.
+   */
+  it("y el mismo `INSERT` con las dos columnas entra", async () => {
+    const filas = await insertaSql("process_grade_value_id, cherry_state_value_id", valorGrado, valorCereza);
+    expect(filas).toBe(1);
+    await prisma.lotProcess.deleteMany({ where: assertDefinedWhere({ lotId: loteB, sequenceOrder: 98 }) });
   });
 
   /**

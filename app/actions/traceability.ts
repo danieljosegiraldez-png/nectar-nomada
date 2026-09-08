@@ -1721,8 +1721,11 @@ export async function abrirProcesoAction(
       intent: String(formData.get("intent") ?? ""),
       targetMoisturePct: Number(formData.get("targetMoisturePct")),
       processRecipeVersionId: emptyToNull(formData.get("processRecipeVersionId")),
-      processGradeValueId: emptyToNull(formData.get("processGradeValueId")),
-      cherryStateValueId: emptyToNull(formData.get("cherryStateValueId")),
+      // Sin `emptyToNull`: son obligatorios. Un formulario que llegue vacío
+      // manda la cadena vacía y el servicio la rechaza con una frase legible,
+      // en vez de convertirla en `null` y morir contra la clave foránea.
+      processGradeValueId: String(formData.get("processGradeValueId") ?? ""),
+      cherryStateValueId: String(formData.get("cherryStateValueId") ?? ""),
       notes: emptyToNull(formData.get("notes")),
       startedAt: new Date(),
       // Abrir un proceso es una acción tomada, no una medición — el mismo

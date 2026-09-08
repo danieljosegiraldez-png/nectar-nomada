@@ -31,15 +31,6 @@ import { prisma } from "../db";
 import { lotWhereFromVisibility, resolveLotVisibility } from "./lots";
 import { SIN_RECETA } from "./lotProcess";
 
-/**
- * Lo que se pinta cuando un grado o un estado de cereza no se declaró.
- *
- * **Es un grupo propio, no un hueco**, por la misma decisión que «Sin receta»:
- * se ve cuántos procesos van sin declarar en vez de esconderlos, y nunca se
- * deduce «natural» de la ausencia de fermentación.
- */
-export const SIN_DECLARAR = "Sin declarar";
-
 /** Una fila del reporte: un proceso de un lote, con todo lo que cuelga de él. */
 export interface FilaDeProceso {
   lotId: string;
@@ -194,8 +185,11 @@ export async function reporteDeProceso(userAccountId: string): Promise<ReporteDe
         lotProcessId: p.id,
         sequenceOrder: p.sequenceOrder,
         etiqueta: p.processRecipeVersion?.recipe.name ?? SIN_RECETA,
-        gradoDeProceso: p.processGradeValue?.value ?? SIN_DECLARAR,
-        estadoDeCereza: p.cherryStateValue?.value ?? SIN_DECLARAR,
+        // Sin `?? "Sin declarar"`: las dos columnas son NOT NULL desde la
+        // migración `20260908070000`, así que la rama del hueco era código
+        // muerto que fingía cubrir un caso que la base ya no admite.
+        gradoDeProceso: p.processGradeValue.value,
+        estadoDeCereza: p.cherryStateValue.value,
         intent: p.intent,
         targetMoisturePct: p.targetMoisturePct.toNumber(),
         humedadDeCierre: cierre,

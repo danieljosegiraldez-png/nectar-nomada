@@ -37,6 +37,28 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-08 · Grado y estado de cereza, obligatorios
+
+Correccion de Daniel un dia despues de nacer anulables: **un cafe es natural,
+lavado o honey; no es «ninguno»**. Las dos columnas pasan a `NOT NULL`
+(`20260908070000`), el servicio las exige con una frase legible antes de que la
+FK reviente, y los dos desplegables llevan `required` **con la primera opcion
+vacia** — preseleccionar «Natural» pondria un grado que nadie declaro, que es
+justo lo que la columna obligatoria pretende impedir. `process_recipe_version_id`
+**sigue anulable a proposito**: la receta puede no estar definida, el grado no.
+
+**La migracion cuenta antes de exigir.** Un `DO $` con `RAISE EXCEPTION` que
+nombra cuantas filas violarian el `NOT NULL`; produccion tenia **cero** procesos,
+asi que no migra ningun dato. Medido antes de escribirla, no supuesto.
+
+**Y el primer test del `NOT NULL` no medía el `NOT NULL`.** Con la columna en
+`null`, el cliente de Prisma rechaza la llamada el mismo —«Argument `lot` is
+missing»— sin hablar con Postgres: habria pasado igual con la columna anulable.
+Reescrito con `INSERT` crudo, con su control positivo al lado (el mismo `INSERT`
+con las dos columnas entra). Flip-test del `NOT NULL` hecho contra la tabla real
+dentro de una transaccion revertida: sin mutar revienta por `NOT NULL`, con el
+`NOT NULL` quitado la fila entra, y tras el rollback `is_nullable=NO`.
+
 ### 2026-09-07 · Un borrado sin filtro en la base compartida, y su reparación
 
 **Escribí un `afterAll` sin `assertDefinedWhere`**, que es el idioma del resto de
@@ -77,10 +99,9 @@ un valor de otro catalogo es una FK valida y dejaria la columna contaminada, asi
 que el servicio comprueba a que catalogo pertenece — el mismo error que ya se
 cazo en las intervenciones.
 
-**Anulables, y «Sin declarar» es un grupo propio del reporte**, por la misma
-decision que «Sin receta»: el hueco se ve en vez de esconderse, y nunca se deduce
-«natural» de la ausencia de fermentacion. `intent` sigue siendo obligatorio y
-sigue llevando lo que estas dos no capturan: el peso, las horas, la atmosfera.
+**Nacieron anulables y duraron un dia asi**: el 2026-09-08 pasaron a
+obligatorias — ver la entrada de arriba. `intent` sigue llevando lo que estas
+dos no capturan: el peso, las horas, la atmosfera.
 
 **Y una fragilidad MIA que la fila patron destapo.** Corriendo los dos archivos
 de prueba a la vez, uno fallaba SIN mutacion: mi asercion buscaba la receta por
