@@ -1113,7 +1113,20 @@
     "processCherryStateShown": "Cereza: {state}",
     "processReportByGradeHeading": "Por grado de proceso",
     "processReportColGrade": "Grado",
-    "processReportColCherry": "Cereza"
+    "processReportColCherry": "Cereza",
+    "coordsHeading": "Dónde está este sitio",
+    "coordsDeclared": "Declarado: {lat}, {lon}",
+    "coordsNotDeclared": "Todavía sin declarar",
+    "coordsSamples": "{count} visitas con lectura de GPS",
+    "coordsSpread": "las lecturas se separan hasta {metros} m",
+    "coordsAccuracy": "mejor precisión declarada por el aparato: {metros} m",
+    "coordsLatitude": "Latitud",
+    "coordsLongitude": "Longitud",
+    "coordsReason": "Por qué",
+    "coordsReasonPlaceholder": "p. ej. confirmado con tres visitas",
+    "coordsConfirm": "Declarar dónde está",
+    "coordsNoSamples": "Ninguna visita ha traído lectura de GPS todavía. Se propondrá sola en cuanto alguien abra una visita aquí.",
+    "coordsDiffersFromDeclared": "Ojo: lo que proponen las visitas está a {metros} m de lo declarado hoy."
   },
   "Apiary": {
     "badge": "Apiario",

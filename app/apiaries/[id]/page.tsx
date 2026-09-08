@@ -4,6 +4,9 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getApiaryDetail, getManageableApiaryProjects } from "../../../lib/apiary/hives";
 import { densidadDePolinizacion } from "../../../lib/apiary/polinizacion";
+import { coordenadasPropuestas } from "../../../lib/traceability/coordenadasDelSitio";
+import { confirmarCoordenadasAction } from "../../actions/traceability";
+import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
 import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
@@ -28,6 +31,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
 
   // `getApiaryDetail` ya autorizó este sitio; esto lee hechos del id concedido.
   const polinizacion = await densidadDePolinizacion(id);
+  const coordenadas = await coordenadasPropuestas(id);
 
   return (
     <div>
@@ -36,6 +40,67 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
       </p>
       <span className="nn-badge">{t("badge")}</span>
       <h1>{apiary.name}</h1>
+
+      {/* Dónde está este sitio. Aparece cuando hay algo que decir: o ya está
+          declarado, o hay visitas que lo proponen. De las 24 ubicaciones que
+          existen, CERO tienen coordenadas — el mapa no espera a Mapbox, espera
+          a que haya algo que pintar.
+
+          El sistema PROPONE y la persona DECLARA. `CLAUDE.md` §3 prohíbe
+          guardar como hecho un valor inferido, y un GPS bajo dosel cerrado se
+          equivoca por decenas de metros. */}
+      {coordenadas.yaDeclaradas || coordenadas.muestras > 0 ? (
+        <section className="nn-section">
+          <h2>{tt("coordsHeading")}</h2>
+          <p className="nn-detail-meta">
+            <span>
+              {coordenadas.yaDeclaradas
+                ? tt("coordsDeclared", {
+                    lat: coordenadas.yaDeclaradas.latitude.toFixed(6),
+                    lon: coordenadas.yaDeclaradas.longitude.toFixed(6),
+                  })
+                : tt("coordsNotDeclared")}
+            </span>
+            <span>{tt("coordsSamples", { count: coordenadas.muestras })}</span>
+            {coordenadas.dispersionM !== null ? (
+              <span>{tt("coordsSpread", { metros: Math.round(coordenadas.dispersionM) })}</span>
+            ) : null}
+            {coordenadas.mejorPrecisionM !== null ? (
+              <span>{tt("coordsAccuracy", { metros: Math.round(coordenadas.mejorPrecisionM) })}</span>
+            ) : null}
+          </p>
+
+          {coordenadas.propuesta ? (
+            <form action={confirmarCoordenadasAction} className="nn-form" style={{ maxWidth: 420 }}>
+              <input type="hidden" name="locationId" value={id} />
+              {/* Los valores van en campos editables, no ocultos: quien declara
+                  tiene que poder corregir la propuesta, que para eso es una
+                  propuesta. */}
+              <div className="nn-field">
+                <label htmlFor="coords-lat">{tt("coordsLatitude")}</label>
+                <input id="coords-lat" name="latitude" type="text" inputMode="decimal" defaultValue={coordenadas.propuesta.latitude.toFixed(6)} required />
+              </div>
+              <div className="nn-field">
+                <label htmlFor="coords-lon">{tt("coordsLongitude")}</label>
+                <input id="coords-lon" name="longitude" type="text" inputMode="decimal" defaultValue={coordenadas.propuesta.longitude.toFixed(6)} required />
+              </div>
+              <div className="nn-field">
+                <label htmlFor="coords-reason">{tt("coordsReason")}</label>
+                <input id="coords-reason" name="reason" type="text" placeholder={tt("coordsReasonPlaceholder")} />
+              </div>
+              {coordenadas.distanciaALoDeclaradoM !== null && coordenadas.distanciaALoDeclaradoM > 50 ? (
+                <p className="nn-muted">
+                  {tt("coordsDiffersFromDeclared", { metros: Math.round(coordenadas.distanciaALoDeclaradoM) })}
+                </p>
+              ) : null}
+              <BotonDeEnvio className="nn-button">{tt("coordsConfirm")}</BotonDeEnvio>
+            </form>
+          ) : (
+            <p className="nn-muted">{tt("coordsNoSamples")}</p>
+          )}
+        </section>
+      ) : null}
+
 
       {/* A9.9 (D6) — el compromiso de polinización, que es el único número que
           convierte la conversación con el cliente en algo que no sea una

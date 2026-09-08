@@ -1113,7 +1113,20 @@
     "processCherryStateShown": "Cherry: {state}",
     "processReportByGradeHeading": "By process grade",
     "processReportColGrade": "Grade",
-    "processReportColCherry": "Cherry"
+    "processReportColCherry": "Cherry",
+    "coordsHeading": "Where this site is",
+    "coordsDeclared": "Declared: {lat}, {lon}",
+    "coordsNotDeclared": "Not declared yet",
+    "coordsSamples": "{count} visits with a GPS reading",
+    "coordsSpread": "readings spread up to {metros} m apart",
+    "coordsAccuracy": "best accuracy reported by the device: {metros} m",
+    "coordsLatitude": "Latitude",
+    "coordsLongitude": "Longitude",
+    "coordsReason": "Why",
+    "coordsReasonPlaceholder": "e.g. confirmed across three visits",
+    "coordsConfirm": "Declare where it is",
+    "coordsNoSamples": "No visit has carried a GPS reading yet. One will be proposed as soon as someone opens a visit here.",
+    "coordsDiffersFromDeclared": "Note: what the visits propose is {metros} m from what is declared today."
   },
   "Apiary": {
     "badge": "Apiary",

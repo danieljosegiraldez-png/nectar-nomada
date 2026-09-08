@@ -316,6 +316,10 @@
     {
       "archivo": "lib/apiary/polinizacion.ts",
       "razon": "A9.9 — el compromiso de polinización y su cociente. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Su escritura pasa por requireApiaryAccess(\"manage\") y confirma su AuditEvent en la misma transacción."
+    },
+    {
+      "archivo": "lib/traceability/coordenadasDelSitio.ts",
+      "razon": "Un sitio aprende dónde está de las visitas que se abrieron en él. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. La lectura sólo PROPONE; la escritura pasa por requireFieldSessionAccess y confirma su AuditEvent en la misma transacción."
     }
   ],
   "reciben_transaccion": [
@@ -548,6 +552,12 @@
       "operacion": "densidadDePolinizacion",
       "razon": "A9.9 — lectura sobre un locationId que su ÚNICO llamador, app/apiaries/[id]/page.tsx, acaba de pasar por getApiaryDetail, que sí autoriza y lanza ApiaryAccessError si no. No pide userAccountId a propósito: es la misma disciplina de vitalesDeSitios y leerEnmiendas — un lector que exige principal parece una compuerta y termina usándose como tal. La ESCRITURA hermana, crearCompromisoDePolinizacion, sí guarda.",
       "verificado": "2026-09-07"
+    },
+    {
+      "archivo": "lib/traceability/coordenadasDelSitio.ts",
+      "operacion": "coordenadasPropuestas",
+      "razon": "Lectura sobre un locationId que su llamador, app/apiaries/[id]/page.tsx, acaba de pasar por getApiaryDetail, que sí autoriza. No pide userAccountId a propósito, misma disciplina que vitalesDeSitios y leerEnmiendas. Y no escribe nada: propone, y la declaración la hace confirmarCoordenadasDelSitio, que sí guarda.",
+      "verificado": "2026-09-08"
     }
   ]
 }
