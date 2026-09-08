@@ -320,6 +320,10 @@
     {
       "archivo": "lib/traceability/coordenadasDelSitio.ts",
       "razon": "Un sitio aprende dónde está de las visitas que se abrieron en él. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. La lectura sólo PROPONE; la escritura pasa por requireFieldSessionAccess y confirma su AuditEvent en la misma transacción."
+    },
+    {
+      "archivo": "lib/apiary/bitacora.ts",
+      "razon": "A9.12 — el emisor de bitácora. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Sólo LEE, y su única consulta propia es la `FieldSession` cuyos eventos necesita para armar los sujetos del rastro; el rastro en sí lo lee `leerEnmiendas`, que no se duplica."
     }
   ],
   "reciben_transaccion": [
@@ -557,6 +561,12 @@
       "archivo": "lib/traceability/coordenadasDelSitio.ts",
       "operacion": "coordenadasPropuestas",
       "razon": "Lectura sobre un locationId que su llamador, app/apiaries/[id]/page.tsx, acaba de pasar por getApiaryDetail, que sí autoriza. No pide userAccountId a propósito, misma disciplina que vitalesDeSitios y leerEnmiendas. Y no escribe nada: propone, y la declaración la hace confirmarCoordenadasDelSitio, que sí guarda.",
+      "verificado": "2026-09-08"
+    },
+    {
+      "archivo": "lib/apiary/bitacora.ts",
+      "operacion": "resumenDeVisita",
+      "razon": "A9.12 — se llama desde `completarVisita`, que YA pasó por `requireFieldSessionAccess` antes de escribir, y se llama DESPUÉS de que esa transacción confirme. No pide userAccountId a propósito: misma disciplina que leerEnmiendas, vitalesDeSitios y densidadDePolinizacion — un lector que exige principal parece una compuerta y termina usándose como tal. Y no expone contenido: lo que devuelve son cifras y un enlace, porque el mensaje acaba en un teléfono donde RBAC no interviene.",
       "verificado": "2026-09-08"
     }
   ]
