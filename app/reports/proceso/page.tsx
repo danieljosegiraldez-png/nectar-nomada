@@ -25,7 +25,7 @@ export default async function ReporteDeProcesoPage() {
   if (!user) redirect("/login");
 
   const t = await getTranslations("Traceability");
-  const { filas, faltan, porProceso } = await reporteDeProceso(user.userAccountId);
+  const { filas, faltan, porProceso, porGrado } = await reporteDeProceso(user.userAccountId);
 
   const guion = "—";
 
@@ -48,6 +48,35 @@ export default async function ReporteDeProcesoPage() {
         </div>
         {filas.length === 0 ? <p className="nn-muted">{t("processReportNothingYet")}</p> : null}
       </section>
+
+      {/* El grado va ANTES que la receta: es lo que el dueño quiere comparar —
+          sus naturales contra sus honeys— mientras que la receta es cómo se
+          llama el procedimiento. */}
+      {porGrado.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("processReportByGradeHeading")}</h2>
+          <div style={{ overflowX: "auto" }}>
+            <table className="nn-table">
+              <thead>
+                <tr>
+                  <th>{t("processReportColGrade")}</th>
+                  <th>{t("processReportColRows")}</th>
+                  <th>{t("processReportColAvgScore")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {porGrado.map((g) => (
+                  <tr key={g.grado}>
+                    <td>{g.grado}</td>
+                    <td>{g.filas}</td>
+                    <td>{g.puntajePromedio ?? guion}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       {porProceso.length > 0 ? (
         <section className="nn-section">
@@ -85,6 +114,8 @@ export default async function ReporteDeProcesoPage() {
               <thead>
                 <tr>
                   <th>{t("processReportColLot")}</th>
+                  <th>{t("processReportColGrade")}</th>
+                  <th>{t("processReportColCherry")}</th>
                   <th>{t("processReportColProcess")}</th>
                   <th>{t("processReportColIntent")}</th>
                   <th>{t("processReportColMoisture")}</th>
@@ -102,6 +133,8 @@ export default async function ReporteDeProcesoPage() {
                       </Link>
                       {f.sequenceOrder > 1 ? ` · ${f.sequenceOrder}` : ""}
                     </td>
+                    <td>{f.gradoDeProceso}</td>
+                    <td>{f.estadoDeCereza}</td>
                     <td>{f.etiqueta}</td>
                     <td>{f.intent}</td>
                     <td className={(f.diferenciaContraObjetivo ?? 0) > 0 ? "nn-error" : undefined}>

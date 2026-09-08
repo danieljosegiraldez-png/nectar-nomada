@@ -20,6 +20,8 @@ import {
   colgarCorrida,
   listarProcesosDeLote,
   registrarIntervencion,
+  CATALOGO_ESTADO_CEREZA,
+  CATALOGO_GRADO_PROCESO,
   CATALOGOS_DE_INTERVENCION,
   LotProcessError,
   SIN_RECETA,
@@ -30,9 +32,10 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 const RUN = `proc-${Date.now()}`;
 let orgId: string, plotId: string, scopeId: string;
 let gestor: string, sinPermiso: string;
-let loteA: string, loteB: string, loteC: string, loteD: string;
+let loteA: string, loteB: string, loteC: string, loteD: string, loteE: string;
 let recetaVersionId: string, recetaId: string;
 let valorManejo: string, valorDeOtroCatalogo: string;
+let valorGrado: string, valorCereza: string;
 let catalogoId: string, otroCatalogoId: string;
 let medicionDeA: string, medicionDeB: string, medicionBrixDeA: string;
 
@@ -105,6 +108,7 @@ beforeAll(async () => {
   loteB = await lote("B");
   loteC = await lote("C");
   loteD = await lote("D");
+  loteE = await lote("E");
 
   const receta = await prisma.processRecipe.create({
     data: { name: `TEST Honey 48h ${RUN}`, organizationId: orgId, status: "approved", createdBy: gestor },
@@ -135,13 +139,32 @@ beforeAll(async () => {
     await prisma.variableCatalogValue.create({ data: { catalogId: otro.id, value: `TEST agua ${RUN}` } })
   ).id;
 
+  // Los dos catálogos que describen el batch. `upsert` porque son reales y
+  // pueden existir ya en la base compartida.
+  const catGrado = await prisma.variableCatalog.upsert({
+    where: { key: CATALOGO_GRADO_PROCESO },
+    update: {},
+    create: { key: CATALOGO_GRADO_PROCESO, name: "Grado de proceso" },
+  });
+  valorGrado = (
+    await prisma.variableCatalogValue.create({ data: { catalogId: catGrado.id, value: `TEST Natural ${RUN}` } })
+  ).id;
+  const catCereza = await prisma.variableCatalog.upsert({
+    where: { key: CATALOGO_ESTADO_CEREZA },
+    update: {},
+    create: { key: CATALOGO_ESTADO_CEREZA, name: "Estado de la cereza" },
+  });
+  valorCereza = (
+    await prisma.variableCatalogValue.create({ data: { catalogId: catCereza.id, value: `TEST entera ${RUN}` } })
+  ).id;
+
   medicionDeA = await medicion(loteA, "moisture", 10.4);
   medicionDeB = await medicion(loteB, "moisture", 11.2);
   medicionBrixDeA = await medicion(loteA, "brix", 21);
 });
 
 afterAll(async () => {
-  const lotes = [loteA, loteB, loteC, loteD];
+  const lotes = [loteA, loteB, loteC, loteD, loteE];
   await prisma.lotProcessIntervention.deleteMany({
     where: assertDefinedWhere({ lotProcess: { lotId: { in: lotes } } }),
   });
@@ -482,6 +505,48 @@ describe("un lote no sale de secado antes de su objetivo", () => {
       startedAt: new Date("2026-04-13T12:00:00Z"),
     });
     expect(asignacion.lotId).toBe(loteA);
+  });
+});
+
+
+describe("grado de proceso y estado de la cereza", () => {
+  it("se guardan como columnas, no como texto dentro de la intención", async () => {
+    // Lote propio: `loteD` ya tiene un proceso abierto de otra prueba, y dos
+    // abiertos sobre el mismo lote se rechazan a propósito.
+    const p = await abrirProceso(gestor, abrir(loteE, {
+      startedAt: new Date("2026-05-01T12:00:00Z"),
+      processGradeValueId: valorGrado,
+      cherryStateValueId: valorCereza,
+    }));
+    expect(p.processGradeValueId).toBe(valorGrado);
+    expect(p.cherryStateValueId).toBe(valorCereza);
+
+    const [leido] = (await listarProcesosDeLote(gestor, loteE)).filter((x) => x.id === p.id);
+    expect(leido!.processGradeValue?.value).toContain("Natural");
+    expect(leido!.cherryStateValue?.value).toContain("entera");
+  });
+
+  /**
+   * La FK sola no basta: un valor de otro catálogo es una FK válida y dejaría
+   * la columna contaminada con vocabulario ajeno sin que nada se queje. Es el
+   * mismo error que ya se cazó en las intervenciones.
+   */
+  it("rechaza en el grado un valor que es de otro catálogo", async () => {
+    await expect(
+      abrirProceso(gestor, abrir(loteB, { processGradeValueId: valorDeOtroCatalogo })),
+    ).rejects.toThrow(new LotProcessError("process_grade_wrong_catalog"));
+  });
+
+  it("rechaza en el estado de cereza un valor de otro catálogo", async () => {
+    await expect(
+      abrirProceso(gestor, abrir(loteB, { cherryStateValueId: valorGrado })),
+    ).rejects.toThrow(new LotProcessError("cherry_state_wrong_catalog"));
+  });
+
+  it("los dos son opcionales: un proceso sin declararlos entra igual", async () => {
+    const procesos = await listarProcesosDeLote(gestor, loteC);
+    expect(procesos[0]!.processGradeValue).toBeNull();
+    expect(procesos[0]!.cherryStateValue).toBeNull();
   });
 });
 

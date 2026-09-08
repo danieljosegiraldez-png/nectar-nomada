@@ -53,7 +53,7 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
   }
 
   const puedeGestionar = await puedeGestionarLote(user.userAccountId, lot);
-  const { intervenciones, mediciones } = await opcionesParaProceso(user.userAccountId, id);
+  const { intervenciones, mediciones, grados, estadosDeCereza } = await opcionesParaProceso(user.userAccountId, id);
   // La misma etiqueta que ya usa la página del lote, para que una receta se
   // llame igual en las dos pantallas.
   const recetas = (await listRecipeVersionsForLot(user.userAccountId, id)).map((v) => ({
@@ -83,7 +83,7 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
       {procesos.length === 0 ? (
         <section className="nn-section">
           <h2>{t("openProcessButton")}</h2>
-          {puedeGestionar ? <AbrirProcesoForm lotId={id} recetas={recetas} /> : null}
+          {puedeGestionar ? <AbrirProcesoForm lotId={id} recetas={recetas} grados={grados} estadosDeCereza={estadosDeCereza} /> : null}
         </section>
       ) : null}
 
@@ -96,6 +96,8 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
           <div className="nn-detail-meta">
             <span>{t("processStateLabel", { state: p.endedAt === null ? t("processOpen") : t("processClosed") })}</span>
             <span>{t("processTargetShown", { pct: p.targetMoisturePct.toNumber().toString() })}</span>
+            <span>{t("processGradeShown", { grade: p.processGradeValue?.value ?? t("processNotDeclaredShort") })}</span>
+            <span>{t("processCherryStateShown", { state: p.cherryStateValue?.value ?? t("processNotDeclaredShort") })}</span>
             <span>{t("processStartedShown", { date: fecha(p.startedAt) })}</span>
             {p.endedAt !== null ? <span>{t("processEndedShown", { date: fecha(p.endedAt) })}</span> : null}
           </div>
@@ -170,7 +172,7 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
         <section className="nn-section">
           <h2>{t("openProcessButton")}</h2>
           <p className="nn-muted">{t("processOpenAnotherHelp")}</p>
-          <AbrirProcesoForm lotId={id} recetas={recetas} />
+          <AbrirProcesoForm lotId={id} recetas={recetas} grados={grados} estadosDeCereza={estadosDeCereza} />
         </section>
       ) : null}
     </div>

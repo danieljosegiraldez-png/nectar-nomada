@@ -37,6 +37,33 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-07 · Grado de proceso y estado de cereza, como columnas
+
+Estaban dentro del texto de `intent` —«40 kg cereza entera, natural
+anaerobico»— y ahi no se puede agrupar: comparar los naturales contra los
+honeys exigia leer prosa. Ahora son dos columnas, y **el reporte agrupa por
+grado ANTES que por receta**: la receta es como se llama el procedimiento, el
+grado es que se le hizo al cafe, y es lo segundo lo que el dueno compara.
+
+**Salen de catalogos que ya existian** —`grado_proceso` (Natural, Washed, Semi
+Wash 50/75%, Honey) y `estado_cereza` (entera, despulpada)— definidos en
+`lib/research/catalogs.ts`. Nada de vocabulario nuevo. Y **la FK sola no basta**:
+un valor de otro catalogo es una FK valida y dejaria la columna contaminada, asi
+que el servicio comprueba a que catalogo pertenece — el mismo error que ya se
+cazo en las intervenciones.
+
+**Anulables, y «Sin declarar» es un grupo propio del reporte**, por la misma
+decision que «Sin receta»: el hueco se ve en vez de esconderse, y nunca se deduce
+«natural» de la ausencia de fermentacion. `intent` sigue siendo obligatorio y
+sigue llevando lo que estas dos no capturan: el peso, las horas, la atmosfera.
+
+**Y una fragilidad MIA que la fila patron destapo.** Corriendo los dos archivos
+de prueba a la vez, uno fallaba SIN mutacion: mi asercion buscaba la receta por
+`includes("Honey 48h")` y el otro archivo crea una receta homonima — `find`
+devolvia la suya, sin puntajes, y el fallo se leia como del producto. Atado al
+`RUN` y comprobado cinco corridas seguidas con 0 caidos. Es la forma del «control
+positivo por titulo» que ya esta escrita en `CLAUDE.md`, y cai igual.
+
 ### 2026-09-07 · El reporte transversal, y lo que su vacio significa
 
 `/reports/proceso`: una fila por proceso de lote, con su intencion, su humedad

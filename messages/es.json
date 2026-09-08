@@ -1105,7 +1105,16 @@
     "processReportMoistureCell": "{closed} % sobre objetivo {target} % ({diff})",
     "processReportScoresCell": "{avg} · {n} valoración(es)",
     "processReportMethodNote": "Media simple de los puntajes totales de las valoraciones enviadas. Un guión significa que no hay ninguna, no que valga cero.",
-    "viewProcessReportButton": "Reporte de proceso"
+    "viewProcessReportButton": "Reporte de proceso",
+    "processGradeLabel": "Grado de proceso",
+    "processCherryStateLabel": "Estado de la cereza",
+    "processNotDeclared": "— Sin declarar —",
+    "processNotDeclaredShort": "sin declarar",
+    "processGradeShown": "Grado: {grade}",
+    "processCherryStateShown": "Cereza: {state}",
+    "processReportByGradeHeading": "Por grado de proceso",
+    "processReportColGrade": "Grado",
+    "processReportColCherry": "Cereza"
   },
   "Apiary": {
     "badge": "Apiario",

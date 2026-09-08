@@ -1105,7 +1105,16 @@
     "processReportMoistureCell": "{closed}% against target {target}% ({diff})",
     "processReportScoresCell": "{avg} · {n} assessment(s)",
     "processReportMethodNote": "Simple mean of the total scores of submitted assessments. A dash means there are none, not that the value is zero.",
-    "viewProcessReportButton": "Process report"
+    "viewProcessReportButton": "Process report",
+    "processGradeLabel": "Process grade",
+    "processCherryStateLabel": "Cherry state",
+    "processNotDeclared": "— Not declared —",
+    "processNotDeclaredShort": "not declared",
+    "processGradeShown": "Grade: {grade}",
+    "processCherryStateShown": "Cherry: {state}",
+    "processReportByGradeHeading": "By process grade",
+    "processReportColGrade": "Grade",
+    "processReportColCherry": "Cherry"
   },
   "Apiary": {
     "badge": "Apiary",
