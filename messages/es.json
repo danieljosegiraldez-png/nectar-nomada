@@ -18,7 +18,8 @@
     "admin": "Admin",
     "content": "Contenido",
     "recipes": "Recetas",
-    "newSession": "Crear sesión de cata"
+    "newSession": "Crear sesión de cata",
+    "externalReport": "Informe externo"
   },
   "Home": {
     "badge": "Slices 1–2 — Identidad y Descubrimiento",
@@ -311,7 +312,32 @@
     "error_responses_incomplete": "Falta puntuar algún atributo. El puntaje total necesita los ocho.",
     "error_score_out_of_range": "Algún valor se sale de la escala del protocolo.",
     "error_unknown_score_formula": "Este protocolo pide una fórmula de puntaje que esta versión no sabe calcular.",
-    "error_protocol_missing_attribute": "El protocolo de esta sesión no trae los atributos que su fórmula de puntaje necesita."
+    "error_protocol_missing_attribute": "El protocolo de esta sesión no trae los atributos que su fórmula de puntaje necesita.",
+    "externalReportTitle": "Registrar informe externo",
+    "externalReportHelp": "El resultado que entregó un Q-grader o un tostador, bajo su firma. Esa persona no tiene cuenta aquí: el informe entra a su nombre.",
+    "externalReportProtocolHelp": "Primero el estándar: de él salen los atributos que hay que puntuar, con los nombres que el informe usa.",
+    "externalReportChangeProtocol": "cambiar",
+    "externalReportChoose": "— Elegir —",
+    "externalReportSampleLabel": "Muestra catada",
+    "externalReportEvaluatorLabel": "Quién firma el informe",
+    "externalReportEvaluatorHelp": "Si no está en la lista, créala primero como persona; su certificación aparece al lado del nombre.",
+    "externalReportSourceLabel": "Dónde vive el original",
+    "externalReportSourceHelp": "El PDF, el correo o la hoja escaneada. Sin esto el puntaje no se puede volver a comprobar.",
+    "externalReportDateLabel": "Fecha de la cata (si el informe la dice)",
+    "externalReportScoresLabel": "Puntajes del informe",
+    "externalReportScoresHelp": "Deja en blanco lo que el informe no traiga; un 0 diría que se puntuó con la nota mínima.",
+    "externalReportCupsHelp": "Como las marca el informe. En blanco significa que no lo declara, que no es lo mismo que cero.",
+    "externalReportTotalComputed": "Este protocolo calcula el total a partir de los atributos: no se teclea.",
+    "externalReportOverallLabel": "Puntaje total del informe",
+    "externalReportCommentLabel": "Comentario del informe",
+    "externalReportSubmit": "Registrar informe",
+    "externalReportNoPeople": "No hay ninguna persona registrada que pueda firmar el informe.",
+    "externalReportLink": "Registrar informe externo",
+    "error_source_reference_required": "Di dónde vive el original del informe.",
+    "error_sample_not_found": "Esa muestra ya no existe.",
+    "error_person_not_found": "Esa persona ya no existe.",
+    "error_unknown_attribute": "El protocolo no tiene el atributo «{attribute}». O el informe es de otro estándar, o falta el atributo en el protocolo.",
+    "error_duplicate_attribute": "El atributo «{attribute}» viene dos veces."
   },
   "Partner": {
     "badge": "Espacio de Socios",

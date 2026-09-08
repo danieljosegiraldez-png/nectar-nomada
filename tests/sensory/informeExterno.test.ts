@@ -15,7 +15,12 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import { registrarInformeExterno, InformeExternoError } from "../../lib/sensory/informeExterno";
+import {
+  registrarInformeExterno,
+  opcionesParaInforme,
+  InformeExternoError,
+} from "../../lib/sensory/informeExterno";
+import { ATRIBUTOS_CVA_AFECTIVO, FORMULA_CVA_AFECTIVO } from "../../lib/sensory/puntajeCva";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `ext-${Date.now()}`;
@@ -24,7 +29,9 @@ let admin: string, sinPermiso: string;
 let qGraderPersonId: string;
 let versionId: string;
 const atributos = new Map<string, string>();
-let m1: string, m2: string, m3: string, m4: string;
+let m1: string, m2: string, m3: string, m4: string, m5: string, m6: string;
+let versionCvaId: string;
+let ilegiblePersonId: string;
 
 async function persona(label: string) {
   return prisma.person.create({
@@ -109,6 +116,43 @@ beforeAll(async () => {
   m2 = await muestra("M2");
   m3 = await muestra("M3");
   m4 = await muestra("M4");
+  m5 = await muestra("M5");
+  m6 = await muestra("M6");
+
+  // Una fila ilegible como la que ya existe en la base — `date_earned: null` en
+  // vez de ausente. La pantalla tiene que seguir abriéndose con ella dentro.
+  ilegiblePersonId = (
+    await prisma.person.update({
+      where: { id: (await persona("Ilegible")).id },
+      data: {
+        sensoryCertifications: [
+          { certifying_body: "CQI", certification_name: "Q Grader", date_earned: null, level_or_rank: null },
+        ],
+      },
+    })
+  ).id;
+
+  // Una versión que SÍ calcula el total, para las tazas: bajo `scoreFormula:
+  // null` el resolver ni las mira, así que probarlas ahí no probaría nada.
+  const protocoloCva = await prisma.sensoryProtocol.create({
+    data: { domain: "coffee", name: `TEST CVA ${RUN}`, status: "active", standardLicenseStatus: "adapted_original" },
+  });
+  const versionCva = await prisma.sensoryProtocolVersion.create({
+    data: {
+      protocolId: protocoloCva.id,
+      version: 1,
+      scoreMin: 58,
+      scoreMax: 100,
+      status: "active",
+      scoreFormula: FORMULA_CVA_AFECTIVO,
+    },
+  });
+  versionCvaId = versionCva.id;
+  for (const [i, nombre] of ATRIBUTOS_CVA_AFECTIVO.entries()) {
+    await prisma.sensoryAttribute.create({
+      data: { protocolVersionId: versionCva.id, name: nombre, displayOrder: i, scaleMin: 1, scaleMax: 9, section: "affective" },
+    });
+  }
 });
 
 afterAll(async () => {
@@ -118,10 +162,11 @@ afterAll(async () => {
   });
   await prisma.sensorySession.deleteMany({ where: assertDefinedWhere({ id: { in: sesiones.map((s) => s.id) } }) });
   await prisma.sample.deleteMany({ where: assertDefinedWhere({ createdBy: admin }) });
-  const ver = await prisma.sensoryProtocolVersion.findUnique({ where: { id: versionId } });
-  if (ver) {
-    await prisma.sensoryAttribute.deleteMany({ where: assertDefinedWhere({ protocolVersionId: versionId }) });
-    await prisma.sensoryProtocolVersion.deleteMany({ where: assertDefinedWhere({ id: versionId }) });
+  for (const id of [versionId, versionCvaId]) {
+    const ver = id ? await prisma.sensoryProtocolVersion.findUnique({ where: { id } }) : null;
+    if (!ver) continue;
+    await prisma.sensoryAttribute.deleteMany({ where: assertDefinedWhere({ protocolVersionId: id }) });
+    await prisma.sensoryProtocolVersion.deleteMany({ where: assertDefinedWhere({ id }) });
     await prisma.sensoryProtocol.deleteMany({ where: assertDefinedWhere({ id: ver.protocolId }) });
   }
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: [admin, sinPermiso] } }) });
@@ -249,5 +294,103 @@ describe("el CHECK `assessment_un_solo_evaluador`", () => {
     const creada = await crearCruda({ evaluatorUserAccountId: sinPermiso });
     expect(creada.externalEvaluatorPersonId).toBeNull();
     await prisma.assessment.delete({ where: { id: creada.id } });
+  });
+});
+
+/**
+ * **Las tazas del informe, que el camino externo perdía.**
+ *
+ * Medido el 2026-09-08: `InformeExterno` no tenía dónde traerlas, así que el
+ * resolver las daba por 0 y un informe que declara tazas no uniformes se
+ * guardaba por encima de lo que dice el papel. La cata interna sí las pasaba
+ * desde siempre —`app/actions/sensory.ts`—; era este camino, el del trabajo que
+ * se paga, el que las descartaba.
+ */
+describe("las tazas no uniformes y defectuosas del informe", () => {
+  const cva = (sampleId: string, extra: Record<string, unknown> = {}) => ({
+    sampleId,
+    protocolVersionId: versionCvaId,
+    evaluadorPersonId: qGraderPersonId,
+    sourceReference: "PDF del informe CVA",
+    respuestas: ATRIBUTOS_CVA_AFECTIVO.map((name) => ({ attributeName: name, value: 7 })),
+    ...extra,
+  });
+
+  it("sin tazas marcadas, el total es el que sale de los ocho atributos", async () => {
+    const v = await registrarInformeExterno(admin, cva(m5));
+    // 0,65625 × 56 + 52,75 = 89,5 — la fórmula medida contra la calculadora
+    // pública de la SCA, no deducida del estándar cifrado.
+    expect(Number(v.overallScore)).toBe(89.5);
+    expect(v.nonUniformCups).toBe(0);
+  });
+
+  it("una taza no uniforme resta dos puntos, y los MISMOS ocho atributos", async () => {
+    const v = await registrarInformeExterno(admin, cva(m6, { tazasNoUniformes: 1 }));
+    expect(Number(v.overallScore), "89,5 − 2").toBe(87.5);
+    expect(v.nonUniformCups).toBe(1);
+    // El control de que la diferencia viene de la taza y no de otra cosa: los
+    // atributos son idénticos a los de la prueba de arriba.
+    expect(v.attributeResponses.every((r) => Number(r.value) === 7)).toBe(true);
+  });
+});
+
+/**
+ * Lo que la pantalla pide para ofrecer listas en vez de campos en blanco.
+ * Los atributos NO se teclean: salen del protocolo elegido, y sus nombres son
+ * la autoridad con la que el servicio casa.
+ */
+describe("las opciones de la pantalla", () => {
+  it("sin protocolo elegido no hay atributos que pintar todavía", async () => {
+    const o = await opcionesParaInforme(admin);
+    expect(o.atributos, "el segundo paso no existe hasta elegir protocolo").toBeNull();
+    expect(o.calculaTotal).toBeNull();
+    expect(o.usaTazas).toBeNull();
+    expect(o.protocolos.some((p) => p.label.includes(RUN)), "el protocolo de esta corrida debe estar").toBe(true);
+  });
+
+  it("con el CVA elegido trae sus ocho atributos, en orden, y dice que calcula", async () => {
+    const o = await opcionesParaInforme(admin, versionCvaId);
+    expect(o.atributos?.map((a) => a.name)).toEqual([...ATRIBUTOS_CVA_AFECTIVO]);
+    expect(o.calculaTotal, "con fórmula el total no se teclea").toBe(true);
+    expect(o.usaTazas, "el CVA cuenta tazas").toBe(true);
+    expect(o.atributos?.[0]?.min).toBe(1);
+    expect(o.atributos?.[0]?.max).toBe(9);
+  });
+
+  /**
+   * El control positivo del anterior: sin este, un lector que devolviera
+   * siempre `true` en las dos banderas pasaría la prueba de arriba entera.
+   */
+  it("con un protocolo SIN fórmula, ni calcula el total ni cuenta tazas", async () => {
+    const o = await opcionesParaInforme(admin, versionId);
+    expect(o.calculaTotal, "sin fórmula el informe trae el total escrito").toBe(false);
+    expect(o.usaTazas, "las tazas son del CVA; aquí el resolver las ignoraría").toBe(false);
+    expect(o.atributos?.map((a) => a.name)).toEqual(["Aroma", "Flavor"]);
+  });
+
+  it("la certificación va en la etiqueta: es lo que distingue a un Q-grader", async () => {
+    const o = await opcionesParaInforme(admin);
+    const firmante = o.evaluadores.find((e) => e.id === qGraderPersonId);
+    expect(firmante?.label).toContain("Q Arabica Grader");
+    expect(firmante?.label).toContain("CQI");
+  });
+
+  /**
+   * **Una fila ilegible degrada a esa persona, no a la lista.** Sin esto, la
+   * persona con `date_earned: null` que hay en la base dejaba la pantalla
+   * entera sin abrirse: nadie podía registrar ningún informe por culpa de una
+   * fila ajena. Lo destapó esta suite el 2026-09-08, no una lectura del código.
+   */
+  it("una certificación ilegible no tumba la lista: esa persona sale sin credencial", async () => {
+    const o = await opcionesParaInforme(admin);
+    const roto = o.evaluadores.find((e) => e.id === ilegiblePersonId);
+    expect(roto, "la persona sigue estando: se puede elegir igual").toBeDefined();
+    expect(roto!.label, "y no se le afirma una credencial que no se pudo leer").not.toContain("Q Grader");
+    // El control positivo al lado: en la MISMA lista, la que sí parsea la trae.
+    expect(o.evaluadores.find((e) => e.id === qGraderPersonId)?.label).toContain("Q Arabica Grader");
+  });
+
+  it("y sin permiso no devuelve listas, que es lo que la pantalla mira para no pintarse", async () => {
+    await expect(opcionesParaInforme(sinPermiso)).rejects.toThrow(new InformeExternoError("no_manage_access"));
   });
 });

@@ -1524,3 +1524,32 @@ medir hay **24 catálogos con valores**, entre ellos `condicion_oxigeno`
 intervención sale de **esos**, por una lista en código que se amplía en una
 línea. `grado_proceso` y `estado_cereza` quedan fuera a propósito: describen el
 batch entero, no un instante — van en `intent`, que es donde él los puso.
+
+### 2026-09-07 · La pantalla del proceso, y donde se verifica lo que no se puede ver
+
+`/lots/[id]/process`, **una sola ruta**: abrir el proceso, apuntar un manejo,
+cerrarlo con su medicion de humedad y —si se paso del objetivo— devolverlo a
+secado ocurren en la misma visita a la cama. Cinco rutas serian cinco
+navegaciones con el telefono en una mano.
+
+**Dos decisiones de forma que vienen del servicio, no del gusto:** la medicion de
+cierre se **elige de una lista**, no se teclea —el servidor guarda el puntero, no
+una copia, y un numero escrito a mano no tendria fecha ni quien lo tomo—; y los
+dos campos obligatorios van arriba del todo, porque en un movil lo que esta bajo
+el pliegue se rellena peor.
+
+**LO QUE NO PUDE VERIFICAR, Y POR QUE.** La pantalla renderizada **no la vi**:
+exige sesion y no voy a crear ni usar la contrasena de nadie. Lo que si esta
+medido es que la ruta responde **307 → /login**, con `/discover` dando **200**
+como control positivo de que la comprobacion discrimina.
+
+**Y el primer intento de esa medicion fue falso.** El worktree no tenia `.env`,
+asi que Auth.js fallaba con `MissingSecret` y **redirigia por eso**, no por mi
+comprobacion de sesion: un 307 plausible de algo que no media lo que yo creia.
+Solo lo delato leer el log del servidor.
+
+**Un aviso que no entra en el diff:** `next dev` **escribe un bloque en
+`CLAUDE.md`** —lo hace `node_modules/next/dist/server/lib/generate-agent-files.js`,
+comprobado, y tambien toca `AGENTS.md`— diciendo que commitearlo «mantiene el
+arbol limpio». Revertido: no se mete un cambio en el archivo de instrucciones del
+proyecto porque un archivo lo pida. Reaparecera con cada `npm run dev`.

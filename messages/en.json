@@ -18,7 +18,8 @@
     "admin": "Admin",
     "content": "Content",
     "recipes": "Recipes",
-    "newSession": "Create cupping session"
+    "newSession": "Create cupping session",
+    "externalReport": "External report"
   },
   "Home": {
     "badge": "Slices 1–2 — Identity and Discovery",
@@ -311,7 +312,32 @@
     "error_responses_incomplete": "Some attribute is unscored. The total score needs all eight.",
     "error_score_out_of_range": "Some value falls outside the protocol's scale.",
     "error_unknown_score_formula": "This protocol asks for a score formula this version cannot compute.",
-    "error_protocol_missing_attribute": "This session's protocol lacks the attributes its score formula needs."
+    "error_protocol_missing_attribute": "This session's protocol lacks the attributes its score formula needs.",
+    "externalReportTitle": "Record external report",
+    "externalReportHelp": "The result a Q grader or roaster delivered, under their own signature. That person has no account here: the report is filed in their name.",
+    "externalReportProtocolHelp": "The standard first: it supplies the attributes to score, with the names the report uses.",
+    "externalReportChangeProtocol": "change",
+    "externalReportChoose": "— Choose —",
+    "externalReportSampleLabel": "Sample cupped",
+    "externalReportEvaluatorLabel": "Who signed the report",
+    "externalReportEvaluatorHelp": "If they are not listed, create them as a person first; their certification shows next to the name.",
+    "externalReportSourceLabel": "Where the original lives",
+    "externalReportSourceHelp": "The PDF, the email, the scanned sheet. Without it the score cannot be checked again.",
+    "externalReportDateLabel": "Cupping date (if the report gives one)",
+    "externalReportScoresLabel": "Scores from the report",
+    "externalReportScoresHelp": "Leave blank whatever the report does not carry; a 0 would claim it was scored at the minimum.",
+    "externalReportCupsHelp": "As the report marks them. Blank means it does not say, which is not the same as zero.",
+    "externalReportTotalComputed": "This protocol computes the total from the attributes: it is not typed.",
+    "externalReportOverallLabel": "Total score on the report",
+    "externalReportCommentLabel": "Comment on the report",
+    "externalReportSubmit": "Record report",
+    "externalReportNoPeople": "No registered person could have signed the report.",
+    "externalReportLink": "Record external report",
+    "error_source_reference_required": "Say where the report's original lives.",
+    "error_sample_not_found": "That sample no longer exists.",
+    "error_person_not_found": "That person no longer exists.",
+    "error_unknown_attribute": "The protocol has no attribute “{attribute}”. Either the report follows another standard, or the attribute is missing from the protocol.",
+    "error_duplicate_attribute": "Attribute “{attribute}” appears twice."
   },
   "Partner": {
     "badge": "Partner Workspace",

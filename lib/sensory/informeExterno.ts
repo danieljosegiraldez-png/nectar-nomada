@@ -30,6 +30,8 @@ import { recordAuditEvent } from "../audit";
 import { permissionKey } from "../rbac/types";
 import { resolvedPermissionKeys } from "../rbac/service";
 import { SensoryAccessError, resolverPuntajeTotal } from "./service";
+import { leerCertificaciones } from "../people/certificacionSensorial";
+import { FORMULA_CVA_AFECTIVO } from "./puntajeCva";
 
 export interface RespuestaDeInforme {
   /** Tal como lo nombra el protocolo: «Flavor», «Aroma positivo». */
@@ -51,6 +53,18 @@ export interface InformeExterno {
   respuestas: ReadonlyArray<RespuestaDeInforme>;
   /** Sólo se usa si el protocolo NO calcula el total. */
   overallScore?: number | null;
+  /**
+   * Tazas no uniformes y defectuosas, tal como las marca el informe.
+   *
+   * **Faltaban, y no era inocuo (medido el 2026-09-08).** El formulario CVA de
+   * la SCA las cuenta y cada una resta —2 la no uniforme, 4 la defectuosa—, así
+   * que un informe que declara dos tazas no uniformes se guardaba **4 puntos
+   * por encima** de lo que dice el papel, en silencio, porque el resolver las
+   * daba por 0. La cata interna sí las pasaba desde siempre; era este camino,
+   * justo el del trabajo que se paga, el que las perdía.
+   */
+  tazasNoUniformes?: number | null;
+  tazasDefectuosas?: number | null;
   comentario?: string | null;
 }
 
@@ -112,7 +126,12 @@ export async function registrarInformeExterno(userAccountId: string, informe: In
 
   // Por el mismo camino que una valoración interna: una sola idea de «cómo se
   // obtiene el total», no dos.
-  const total = resolverPuntajeTotal(version, { overallScore: informe.overallScore, attributeResponses });
+  const total = resolverPuntajeTotal(version, {
+    overallScore: informe.overallScore,
+    nonUniformCups: informe.tazasNoUniformes,
+    defectiveCups: informe.tazasDefectuosas,
+    attributeResponses,
+  });
 
   const etiqueta = `Informe externo · ${persona.displayName} · ${muestra.sampleCode}`;
 
@@ -183,4 +202,102 @@ export async function registrarInformeExterno(userAccountId: string, informe: In
 
     return valoracion;
   });
+}
+
+/**
+ * Lo que la pantalla necesita para ofrecer listas en vez de campos en blanco.
+ *
+ * **Por qué en dos pasos.** Los atributos que hay que puntuar dependen del
+ * protocolo, y sus NOMBRES son la autoridad —el servicio casa por nombre—. Así
+ * que primero se elige protocolo y el servidor devuelve sus atributos; no se
+ * teclea ninguno. Un nombre tecleado sería la forma exacta de que un informe
+ * entrara a medias.
+ *
+ * **`calculaTotal` decide si se pregunta el total.** Bajo un protocolo con
+ * fórmula el total es una consecuencia, no una opinión: pedirlo invitaría a
+ * teclear uno distinto del que sale de los ocho atributos, que es justo lo que
+ * `puntajeAfectivoCva` vino a arreglar.
+ */
+export async function opcionesParaInforme(userAccountId: string, protocolVersionId?: string | null) {
+  const claves = await resolvedPermissionKeys(userAccountId, { scopeType: "platform", scopeRefId: null });
+  if (!claves.has(permissionKey("sensory", "manage_session"))) {
+    throw new InformeExternoError("no_manage_access");
+  }
+
+  const [versiones, personas] = await Promise.all([
+    prisma.sensoryProtocolVersion.findMany({
+      where: { status: "active", protocol: { status: "active" } },
+      include: {
+        protocol: true,
+        attributes: { orderBy: { displayOrder: "asc" } },
+      },
+      orderBy: [{ protocol: { name: "asc" } }, { version: "desc" }],
+    }),
+    // Quien firma un informe pagado es una `Person`, normalmente sin cuenta.
+    prisma.person.findMany({
+      where: { status: "active" },
+      select: { id: true, displayName: true, sensoryCertifications: true },
+      orderBy: { displayName: "asc" },
+    }),
+  ]);
+
+  const conAtributos = versiones.filter((v) => v.attributes.length > 0);
+  const elegida = protocolVersionId ? conAtributos.find((v) => v.id === protocolVersionId) : undefined;
+
+  return {
+    protocolos: conAtributos.map((v) => ({
+      id: v.id,
+      label: `${v.protocol.name} · v${v.version} · ${v.attributes.length} atributos`,
+    })),
+    // La certificación va en la etiqueta porque es lo que distingue a un
+    // Q-grader del resto de la agenda, y es lo que el informe invoca.
+    evaluadores: personas.map((p) => ({
+      id: p.id,
+      label: [p.displayName, resumenDeCertificaciones(p.sensoryCertifications)].filter(Boolean).join(" · "),
+    })),
+    /** Sólo cuando ya se eligió protocolo. `null` es «aún no hay segundo paso». */
+    atributos:
+      elegida?.attributes.map((a) => ({
+        id: a.id,
+        name: a.name,
+        min: a.scaleMin.toNumber(),
+        max: a.scaleMax.toNumber(),
+        section: a.section,
+      })) ?? null,
+    /** Con fórmula el total se calcula; sin ella, el informe lo trae escrito. */
+    calculaTotal: elegida ? elegida.scoreFormula !== null : null,
+    /**
+     * Sólo el CVA cuenta tazas. Bajo `attribute_sum_v1` el resolver las ignora,
+     * así que pintar los campos dejaría rellenar algo que se descarta en
+     * silencio — un formulario que ofrece lo que el servicio no usa.
+     */
+    usaTazas: elegida ? elegida.scoreFormula === FORMULA_CVA_AFECTIVO : null,
+    protocoloElegido: elegida ? { id: elegida.id, label: `${elegida.protocol.name} · v${elegida.version}` } : null,
+  };
+}
+
+/**
+ * «Q Arabica Grader (CQI)» a partir de lo que §7.3 guarda en
+ * `sensoryCertifications`.
+ *
+ * **Una fila ilegible degrada a esa persona, no a la lista.** `leerCertificaciones`
+ * es estricto a propósito —valida lo que ya estaba guardado— y en la base hay
+ * filas que no pasan: medido el 2026-09-08, una persona con `date_earned: null`.
+ * Sin este `catch`, esa sola fila dejaba la pantalla entera sin poder abrirse y
+ * nadie podía registrar ningún informe. Es lo mismo que ya hace
+ * `scripts/add-evaluator.ts`, que se encontró el caso antes.
+ *
+ * Y se devuelve **vacío**, no «certificación ilegible»: la etiqueta afirma
+ * credenciales, y afirmar una que no se puede leer es peor que no afirmar nada.
+ * El que la nombra es el CLI, que es donde se va a arreglar.
+ */
+function resumenDeCertificaciones(valor: unknown): string {
+  let cs;
+  try {
+    cs = leerCertificaciones(valor);
+  } catch {
+    return "";
+  }
+  if (cs.length === 0) return "";
+  return cs.map((c) => `${c.certification_name} (${c.certifying_body})`).join(", ");
 }

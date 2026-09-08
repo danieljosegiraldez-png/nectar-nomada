@@ -6,6 +6,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { submitAssessment, computePanelResult, SensoryAccessError } from "../../lib/sensory/service";
 import { crearSesionDeCata, invitarParticipante, SesionDeCataError } from "../../lib/sensory/sessions";
+import { registrarInformeExterno, InformeExternoError } from "../../lib/sensory/informeExterno";
 
 export interface SensoryActionState {
   error?: string;
@@ -137,4 +138,73 @@ export async function invitarParticipanteAction(
 
   revalidatePath(`/sensory/${sessionId}`);
   return {};
+}
+
+/**
+ * Registrar el informe de cata que firmó alguien de fuera.
+ *
+ * **Los atributos viajan por NOMBRE**, que es el contrato del servicio: el
+ * informe dice «Flavor 7», no un UUID, y casar por nombre convierte «este
+ * informe trae un atributo que el protocolo no tiene» en un error con nombre.
+ * El id sólo se usa como clave del campo del formulario, porque un nombre con
+ * espacios no sirve de `name=` sin escaparlo.
+ */
+export async function registrarInformeExternoAction(
+  _prevState: SensoryActionState,
+  formData: FormData,
+): Promise<SensoryActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Sensory");
+
+  const attributeIds = formData.getAll("attributeId").map(String);
+  const respuestas = attributeIds
+    .map((id) => {
+      const valor = formData.get(`attr_${id}`);
+      const nombre = String(formData.get(`nombre_${id}`) ?? "");
+      // Un atributo sin puntuar se OMITE, no se manda como 0: un 0 afirma que
+      // el catador lo puntuó con la nota mínima. Si el protocolo calcula el
+      // total, el resolver lo rechaza por incompleto y lo dice.
+      if (valor === null || String(valor).trim() === "" || nombre === "") return null;
+      return { attributeName: nombre, value: Number(valor) };
+    })
+    .filter((r): r is { attributeName: string; value: number } => r !== null);
+
+  const opcional = (campo: string): number | null => {
+    const crudo = formData.get(campo);
+    return crudo === null || String(crudo).trim() === "" ? null : Number(crudo);
+  };
+
+  const evaluadoCrudo = String(formData.get("evaluadoEl") ?? "").trim();
+
+  try {
+    await registrarInformeExterno(user.userAccountId, {
+      sampleId: String(formData.get("sampleId") ?? ""),
+      protocolVersionId: String(formData.get("protocolVersionId") ?? ""),
+      evaluadorPersonId: String(formData.get("evaluadorPersonId") ?? ""),
+      sourceReference: String(formData.get("sourceReference") ?? ""),
+      // Día, no instante: el informe dice «12 de marzo», no una hora. Se trata
+      // como los demás campos de día del sistema — medianoche UTC — y NO se
+      // convierte con el desfase del dispositivo, que movería la fecha.
+      evaluadoEl: evaluadoCrudo === "" ? null : new Date(`${evaluadoCrudo}T00:00:00Z`),
+      respuestas,
+      overallScore: opcional("overallScore"),
+      tazasNoUniformes: opcional("tazasNoUniformes"),
+      tazasDefectuosas: opcional("tazasDefectuosas"),
+      comentario: String(formData.get("comentario") ?? "") || null,
+    });
+  } catch (error) {
+    if (error instanceof InformeExternoError) {
+      // Dos códigos traen el atributo pegado con dos puntos —
+      // `unknown_attribute:Flavor`— porque el servicio nombra el culpable. La
+      // clave de traducción es la primera mitad; el nombre va de parámetro.
+      const [clave, ...resto] = error.message.split(":");
+      const attribute = resto.join(":");
+      return { error: t(`error_${clave}` as "error_no_manage_access", { attribute }) };
+    }
+    throw error;
+  }
+
+  revalidatePath("/sensory");
+  redirect("/sensory");
 }
