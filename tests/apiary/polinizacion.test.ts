@@ -17,6 +17,7 @@ import {
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a99-pol-${Date.now()}`;
+const MS_POR_DIA = 86_400_000;
 const AHORA = new Date("2026-09-07T12:00:00Z");
 
 describe("A9.9 — el compromiso y el cociente", () => {
@@ -127,9 +128,60 @@ describe("A9.9 — el compromiso y el cociente", () => {
     expect(p.deficitParaMin).toBe(65);
     expect(p.deficitParaMax).toBe(99);
     expect(p.densidad).toBeCloseTo(3 / 17, 6);
-    // La fuente viaja con la cifra: hoy es el conteo del SISTEMA, no el de la
-    // visita, y D6 avisa de que los dos divergen.
+    // Sin visita cerrada con conteo, el numerador sale del sistema — y lo dice.
     expect(p.fuenteDelConteo).toBe("sistema");
+    expect(p.coloniasDeclaradas).toBeNull();
+    expect(p.coloniasDelSistema).toBe(3);
+    expect(p.divergen).toBe(false);
+  });
+
+  it("con una visita cerrada, manda el conteo declarado — y el otro NO se tira", async () => {
+    // El caso que D6 describe: el sistema tiene 3 filas y quien fue al sitio
+    // contó 2. Esconder esa diferencia detrás de un número es perder la señal.
+    const visita = await prisma.fieldSession.create({
+      data: {
+        locationId,
+        operatorPersonId: personId,
+        startedAt: new Date(AHORA.getTime() - 4 * MS_POR_DIA),
+        status: "completed",
+        completedAt: new Date(AHORA.getTime() - 4 * MS_POR_DIA),
+        coloniesAliveCount: 2,
+        provenanceClass: "original_record",
+      },
+    });
+
+    const p = (await densidadDePolinizacion(locationId, AHORA)).find((x) => x.hectareasComprometidas === 17)!;
+    expect(p.fuenteDelConteo).toBe("declarado_en_visita");
+    expect(p.colonias).toBe(2);
+    // El del sistema sigue ahí, y la divergencia se nombra.
+    expect(p.coloniasDelSistema).toBe(3);
+    expect(p.coloniasDeclaradas).toBe(2);
+    expect(p.divergen).toBe(true);
+    expect(p.fechaDelConteoDeclarado).not.toBeNull();
+    // Y el déficit se recalcula con el número bueno: 68 − 2 y 102 − 2.
+    expect(p.deficitParaMin).toBe(66);
+    expect(p.deficitParaMax).toBe(100);
+
+    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: visita.id }) });
+  });
+
+  it("si los dos conteos coinciden, no se marca divergencia", async () => {
+    // Control: `divergen` no es «hay conteo declarado», es «son distintos».
+    const visita = await prisma.fieldSession.create({
+      data: {
+        locationId,
+        operatorPersonId: personId,
+        startedAt: new Date(AHORA.getTime() - 2 * MS_POR_DIA),
+        status: "completed",
+        completedAt: new Date(AHORA.getTime() - 2 * MS_POR_DIA),
+        coloniesAliveCount: 3,
+        provenanceClass: "original_record",
+      },
+    });
+    const p = (await densidadDePolinizacion(locationId, AHORA)).find((x) => x.hectareasComprometidas === 17)!;
+    expect(p.fuenteDelConteo).toBe("declarado_en_visita");
+    expect(p.divergen).toBe(false);
+    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: visita.id }) });
   });
 
   it("un compromiso vencido deja de gritar", async () => {

@@ -34,6 +34,7 @@ function sitioSano(): Omit<VitalesDeSitio, "alertas"> {
     diasDesdeUltimaVisita: 3,
     proximaVisita: new Date(AHORA.getTime() + 20 * MS_POR_DIA),
     coloniasVivasDeclaradas: 10,
+    fechaDelConteoDeclarado: new Date(AHORA.getTime() - 3 * MS_POR_DIA),
     coloniasActivas: 10,
     cajas: 12,
     alimentoHasta: new Date(AHORA.getTime() + 30 * MS_POR_DIA),

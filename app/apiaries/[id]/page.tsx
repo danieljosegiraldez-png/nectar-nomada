@@ -69,6 +69,14 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
                   divergiendo desde diciembre, y un número sin fuente invita a
                   creer que son el mismo. */}
               <p className="nn-muted">{t(`pollinationCountSource_${p.fuenteDelConteo}`)}</p>
+              {/* La divergencia se dice en voz alta. D6: en Toabré los dos
+                  conteos llevan separándose desde diciembre, y eso es una
+                  señal sobre el sitio, no un error que haya que esconder. */}
+              {p.divergen ? (
+                <p className="nn-muted">
+                  {t("pollinationCountDiverges", { declarado: p.coloniasDeclaradas ?? 0, sistema: p.coloniasDelSistema })}
+                </p>
+              ) : null}
               {p.contractReference ? <p className="nn-muted">{p.contractReference}</p> : null}
             </div>
           ))}

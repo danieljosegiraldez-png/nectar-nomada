@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireApiaryAccess } from "./hives";
+import { vitalesDeSitios } from "./vitalesDelSitio";
 import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
 
 /**
@@ -17,18 +18,19 @@ import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client
  * llevan divergiendo desde diciembre. El bueno es el que alguien contó al salir
  * del sitio.
  *
- * Ese conteo declarado ya existe: `FieldSession.coloniesAliveCount`, que entró
- * con A9.8 (#233). **Esta función todavía no lo usa**, y decirlo importa más
- * que arreglarlo a la carrera: el declarado sólo existe para sitios que hayan
- * cerrado una visita desde que A9.8 aterrizó, así que preferirlo sin más
- * dejaría a los demás sin cifra en vez de con una peor. La decisión de cuándo
- * se prefiere uno u otro —y qué se enseña cuando falta el bueno— es un ticket
- * propio, no una línea.
+ * **Ese conteo declarado manda cuando existe** (`FieldSession.coloniesAliveCount`,
+ * de A9.8). Cuando no —un sitio que aún no ha cerrado una visita con conteo— se
+ * usa el del sistema, porque una cifra peor es mejor que ninguna en una
+ * conversación que ya está ocurriendo.
  *
- * Mientras tanto se cuenta del sistema **y se dice que es del sistema**:
- * `fuenteDelConteo` viaja con la cifra hasta la pantalla, en vez de presentar un
- * número sin decir de dónde salió. El tipo ya tiene sitio para la otra
- * respuesta, así que conectarla no cambia ninguna firma.
+ * **Y el que no manda NO se tira.** Los dos viajan hasta la pantalla, con
+ * `fuenteDelConteo` diciendo cuál entró en el cociente y `divergen` diciendo si
+ * no coinciden. Esconder la diferencia detrás de un solo número sería perder la
+ * señal más útil que hay sobre el sitio: que llevan meses separándose.
+ *
+ * La regla de «cuál es el conteo declarado» **no se repite aquí**: se reutiliza
+ * `vitalesDeSitios`. Dos pantallas resolviéndolo por su cuenta terminan diciendo
+ * números distintos del mismo sitio, y éste se le enseña a un cliente.
  *
  * ## Por qué el déficit es un rango
  *
@@ -130,9 +132,21 @@ export interface DensidadDePolinizacion {
   hectareasComprometidas: number;
   objetivoMin: number;
   objetivoMax: number;
+  /** El número que entra en el cociente. */
   colonias: number;
   /** De dónde salió `colonias`. Viaja con la cifra a propósito. */
   fuenteDelConteo: FuenteDelConteo;
+  /** Filas `Colony` activas ahora mismo. Se devuelve SIEMPRE, aunque no sea el que manda. */
+  coloniasDelSistema: number;
+  /** Lo que alguien contó al salir del sitio, y cuándo. `null` si nunca se contó. */
+  coloniasDeclaradas: number | null;
+  fechaDelConteoDeclarado: Date | null;
+  /**
+   * Los dos números existen y no coinciden. **No es un error: es el dato.** D6
+   * dice que en Toabré llevan divergiendo desde diciembre, y esconder eso detrás
+   * de una sola cifra es perder la señal más útil que hay sobre el sitio.
+   */
+  divergen: boolean;
   /** Colonias por hectárea, ahora mismo. */
   densidad: number;
   /** Cuántas colonias faltan para el mínimo y para el máximo. Cero si sobran. */
@@ -149,7 +163,7 @@ export interface DensidadDePolinizacion {
  * prueba puede fijar el reloj y este código no tiene dos comportamientos.
  */
 export async function densidadDePolinizacion(locationId: string, ahora = new Date()): Promise<DensidadDePolinizacion[]> {
-  const [compromisos, colonias] = await Promise.all([
+  const [compromisos, coloniasDelSistema, vitales] = await Promise.all([
     prisma.pollinationCommitment.findMany({
       where: {
         locationId,
@@ -159,7 +173,19 @@ export async function densidadDePolinizacion(locationId: string, ahora = new Dat
       orderBy: { startsAt: "desc" },
     }),
     prisma.colony.count({ where: { status: "active", hive: { locationId } } }),
+    // Se REUTILIZA `vitalesDeSitios` en vez de repetir aquí la regla de «cuál es
+    // el conteo declarado». Si cada pantalla lo resolviera por su cuenta, un día
+    // dirían números distintos del mismo sitio — y éste es un número que se le
+    // enseña a un cliente. Cuesta tres consultas de más en una página de detalle.
+    vitalesDeSitios([locationId], ahora),
   ]);
+
+  const v = vitales.get(locationId) ?? null;
+  const coloniasDeclaradas = v?.coloniasVivasDeclaradas ?? null;
+  // El declarado manda cuando existe: D6 dice que el del sistema «es el conteo
+  // del sistema, no el de la visita». Pero el otro no se tira — se devuelve al
+  // lado, para que la divergencia se vea en vez de desaparecer.
+  const colonias = coloniasDeclaradas ?? coloniasDelSistema;
 
   return compromisos.map((c) => {
     const hectareas = Number(c.committedHectares);
@@ -173,7 +199,11 @@ export async function densidadDePolinizacion(locationId: string, ahora = new Dat
       objetivoMin: min,
       objetivoMax: max,
       colonias,
-      fuenteDelConteo: "sistema",
+      fuenteDelConteo: (coloniasDeclaradas === null ? "sistema" : "declarado_en_visita") as FuenteDelConteo,
+      coloniasDelSistema,
+      coloniasDeclaradas,
+      fechaDelConteoDeclarado: v?.fechaDelConteoDeclarado ?? null,
+      divergen: coloniasDeclaradas !== null && coloniasDeclaradas !== coloniasDelSistema,
       densidad: colonias / hectareas,
       // `Math.ceil` porque media colonia no existe: para llegar a 68,2 hacen
       // falta 69 cajas pobladas, no 68.
