@@ -11,6 +11,7 @@ import {
   TZ_OFFSET_FIELD,
 } from "../../lib/time/localDateTime";
 import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
+import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadasDelSitio";
 import { recordSelection, SelectionValidationError } from "../../lib/traceability/selection";
 import { recordQuantityEvent, QuantityValidationError } from "../../lib/traceability/quantity";
 import {
@@ -1849,4 +1850,27 @@ export async function devolverASecadoAction(
 
   revalidatePath(`/lots/${lotId}/process`);
   redirect(`/lots/${lotId}/process`);
+}
+
+/**
+ * Declarar dónde está un sitio, a partir de lo que dijeron las visitas.
+ *
+ * Recibe la latitud y la longitud del formulario **en vez de recogerlas del
+ * servicio**: si las leyera del propio cálculo, «confirmar» sería un botón que
+ * aprueba lo que el sistema ya decidió, y una lectura de GPS se habría
+ * convertido en un hecho declarado por la puerta de atrás (`CLAUDE.md` §3).
+ */
+export async function confirmarCoordenadasAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  await confirmarCoordenadasDelSitio(user.userAccountId, {
+    locationId,
+    latitude: Number(formData.get("latitude")),
+    longitude: Number(formData.get("longitude")),
+    reason: String(formData.get("reason") ?? "").trim() || null,
+  });
+
+  revalidatePath(`/apiaries/${locationId}`);
 }
