@@ -37,6 +37,33 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-08 · «Batches» contra «Lotes»: el menú mandaba a la pantalla ajena
+
+En español el menu ofrecia **«Lotes» para `/plots`** —parcelas de terreno— y
+**«Batches» para `/lots`** —lotes de cafe—. Quien buscara sus lotes de cafe
+pulsaba «Lotes» y veia terreno. Estaba anotado desde el 2026-09-05, del dia que
+alguien uso las pantallas en un movil de verdad.
+
+**La causa estaba en el texto que quedo.** `plotsIntro` decia «Lotes de terreno»:
+quien lo escribio uso «lote» para la parcela y, sin palabra libre para el cafe,
+tiro del ingles. Y «batch» ya estaba ocupada — `BiocharBatch` y `TreatmentBatch`
+son entidades reales del esquema.
+
+**Corregido en los dos sentidos, clave por clave y no con un regex a ciegas.**
+El cafe pasa a «Lote»/«Lot» (29 claves en es, 38 en en); el terreno pasa a
+«Parcela» (14 claves), palabra que **ya estaba** en el vocabulario —
+`sampleTreatmentPlotLabel` decia «Parcela de tratamiento»—. Se dejaron intactas
+las que son batches de verdad: biochar, tratamiento, y el n.º de lote del envase
+del fabricante. **Ingles ya era correcto para el terreno**, y eso sirvio de
+control: `densityMissingArea` y `soilNoProfiles` decian «plot» alli y «lote»
+aqui, que es como se cazaron las dos ultimas.
+
+**Y lo que esto enseña de la suite:** las 1531 pruebas pasaban con el fallo
+dentro y habrian pasado con el vuelto a poner. Nadie miraba esas cadenas. Queda
+`tests/ui/vocabularioDelMenu.test.ts`, que dice en su cabecera **lo que no
+prueba**: que las etiquetas sean las correctas. Eso lo dijo una persona usando
+la aplicacion, que es como se encontro.
+
 ### 2026-09-08 · A9 completo: la captura de campo del apiario
 
 Trece tickets del 7 y 8 de septiembre, del PR #214 al #245. El apiario pasa a funcionar como la
@@ -172,9 +199,8 @@ de abajo **queda abierto porque es decisión de producto, no arreglo mecánico**
   el menú o mover el objetivo es de Daniel; lo eligió dejar así el 2026-09-05.
   En el teléfono son **234 px de cabecera en tres filas: el 29 % de la pantalla**
   antes de ver nada.
-- **«Batches» en una interfaz en español.** El menú ofrece «Lotes» para
-  `/plots` (parcelas de terreno) y **«Batches»** para `/lots` (lotes de café).
-  Quien busque sus lotes de café pulsará «Lotes» y verá terreno.
+- ~~«Batches» en una interfaz en español.~~ **Cerrado el 2026-09-08** — ver la
+  entrada de §2. El café es «Lote»/«Lot» y el terreno es «Parcela».
 - **`/plots` no ofrece nada que pulsar.** Cero botones de acción; 2,6 pantallas
   de scroll donde las once entradas repiten «Sin registrar» y «Aún no hay
   condiciones de terreno registradas», once veces cada una. Es lo que abre un
