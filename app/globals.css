@@ -977,3 +977,17 @@ a.nn-card-link:active {
   margin-top: 1.5rem;
   font-size: 0.85rem;
 }
+
+/* A9 — el mapa de sitios (Leaflet). Sólo la caja: todo lo demás lo pinta la
+   hoja de Leaflet, que el componente importa junto a su JS.
+
+   La altura tiene que ser explícita y en px. Leaflet mide su contenedor al
+   inicializarse, y un contenedor sin altura resuelta —`height: auto` sobre un
+   hijo posicionado— le da 0: el mapa «funciona», no lanza ningún error, y no se
+   ve nada. Es el fallo silencioso clásico de esta librería. */
+.nn-mapa {
+  height: 360px;
+  width: 100%;
+  border-radius: var(--nn-radius);
+  border: 1px solid var(--nn-border);
+}

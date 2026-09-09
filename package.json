@@ -55,6 +55,7 @@
     "argon2": "^0.45.1",
     "csv-parse": "^7.0.2",
     "fflate": "^0.8.3",
+    "leaflet": "^1.9.4",
     "next": "^16.3.0",
     "next-auth": "^5.0.0-beta.32",
     "next-intl": "^4.13.5",
@@ -67,6 +68,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^26.2.0",
     "@types/pg": "^8.21.0",
     "@types/react": "^19.2.18",

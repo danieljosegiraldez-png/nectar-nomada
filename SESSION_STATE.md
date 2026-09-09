@@ -37,6 +37,38 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-09 · El mapa de sitios, y la coordenada que nadie podía teclear
+
+El mapa que `ADR-009` decidió en su día llevaba **cero código**. Se construyó,
+y lo que la medición cambió es más interesante que la librería: **no estaba
+bloqueado por Mapbox**. De las **24 ubicaciones, cero tienen coordenadas**, y el
+formulario para declararlas sólo aparecía **si alguna visita ya proponía una**
+desde su GPS. Como ninguna visita ha traído lectura, no había propuesta; sin
+propuesta, no había formulario; **no existía forma de teclear una coordenada en
+toda la plataforma**. Cualquier mapa habría salido vacío.
+
+**Las dos mitades van en el mismo cambio**, porque un mapa sin forma de darle
+algo que pintar es un adorno: el formulario se dibuja **siempre** —con la
+propuesta de valor por defecto cuando la hay, en blanco cuando no—, y
+`/apiaries` estrena el mapa encima de la lista, diciendo debajo **cuántos
+sitios no salen en él**. Un mapa con tres pines y veintiún sitios invisibles se
+lee como si la finca tuviera tres.
+
+**Leaflet, no Mapbox** (`ADR-110`, enmienda de `ADR-009`; el dueño pidió «sin
+token ni costo»). Medido antes de elegir: Leaflet **3,7 MB y cero
+dependencias**, MapLibre **20 MB y diecisiete**. Se pierde el estilo propio que
+era toda la razón de ADR-009 — las teselas de OSM se ven como OSM — y se dice
+en voz alta en el ADR en vez de descubrirlo al verlo. El adaptador
+`MapsProvider` que ADR-009 pedía **no se construye**: de un solo uso, se
+escribiría contra la única implementación que hay.
+
+**Cuatro guardias de código fuente**, cada uno con control positivo y los cuatro
+con flip-test que cae **por nombre** y **compilando**
+(`tests/arquitectura/mapa-de-sitios.test.ts`): Leaflet cargado dentro del efecto
+y nunca en el módulo —toca `window` y la página es de servidor—, la atribución
+de OSM que su política exige, el formulario fuera del condicional, y
+`.nn-mapa` con altura en px. Esa última es la que más engaña: Leaflet mide su
+contenedor, y uno sin altura resuelta da un mapa de 0 px **sin lanzar error**.
 ### 2026-09-08 · El guardia del menú medía a un visor que no era el más privilegiado
 
 Afirmaba «ni el visor mas privilegiado pasa de 8 entradas» y pasaba en verde con
@@ -155,33 +187,6 @@ compara dos conteos *declarados*.
 **Lo que queda de A9:** el mapa, que ahora sólo espera la decisión de Mapbox
 (servicio de pago, token). Los cuatro adaptadores de mensajería siguen fuera de
 alcance por D10.
-
-### 2026-09-08 · La fecha de una credencial pasa a ser opcional
-
-Kurt Ngo esta en la base como Q de CQI con `date_earned: null` porque **nadie
-supo la fecha** — la instruccion del A7 decia «registra la credencial», y quien
-la registro puso nulos donde no sabia. Exigir la fecha no produjo una fila con
-fecha: produjo una que **ni se podia leer**, y que llego a dejar la pantalla de
-informes externos sin abrirse. Decision de Daniel: opcional, como ya lo era
-`certificate_reference` y por el mismo argumento que el modulo ya tenia escrito.
-
-**No hizo falta escribir NADA en la base.** El arreglo es el validador: en
-cuanto acepta la fila, se lee sola. Comprobado contra la fila real de la copia
-restaurada — `{"date_earned":null,…}` entra y sale como
-`{certifying_body:"CQI",certification_name:"Q Grader"}`, sin fecha inventada, y
-la pantalla la ofrece como «Kurt Ngo · Q Grader (CQI)».
-
-**Una fila sin fecha es un marcador, y el dueño dijo quien lo completa:** Kurt,
-cuando entre con su cuenta, subiendo el escaneo. Por eso `agregarCertificacion`
-**completa** el marcador en vez de duplicarlo cuando llega la misma credencial
-con fecha — y nunca pisa un valor que ya estuviera. Sin eso, el dia que la
-confirmara habria dos «Q Grader (CQI)» en su ficha.
-
-**Y un guardia mio de ayer que este cambio dejo midiendo nada.** El test «una
-certificacion ilegible no tumba la lista» usaba justo la fila de Kurt: al
-volverse legible, pasaba por razones equivocadas. Recolocado sobre una que
-sigue siendo ilegible —sin `certification_name` no hay credencial que afirmar—
-y re-flipeado para verlo caer por su nombre otra vez.
 
 ## 3. Bloqueado, y en qué
 
