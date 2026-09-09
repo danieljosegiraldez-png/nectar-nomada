@@ -1585,3 +1585,54 @@ tostado, no el cafe que se tosto.
 «el guardia lo cazo»—; rehechos con mutaciones que si compilan, cada uno tumba
 su test por nombre. El primero, el que importa: convertir la ausencia de
 puntajes en 0 tumba dos pruebas. Un 0 es un puntaje; la ausencia no.
+
+### 2026-09-07 · Grado de proceso y estado de cereza, como columnas
+
+Estaban dentro del texto de `intent` —«40 kg cereza entera, natural
+anaerobico»— y ahi no se puede agrupar: comparar los naturales contra los
+honeys exigia leer prosa. Ahora son dos columnas, y **el reporte agrupa por
+grado ANTES que por receta**: la receta es como se llama el procedimiento, el
+grado es que se le hizo al cafe, y es lo segundo lo que el dueno compara.
+
+**Salen de catalogos que ya existian** —`grado_proceso` (Natural, Washed, Semi
+Wash 50/75%, Honey) y `estado_cereza` (entera, despulpada)— definidos en
+`lib/research/catalogs.ts`. Nada de vocabulario nuevo. Y **la FK sola no basta**:
+un valor de otro catalogo es una FK valida y dejaria la columna contaminada, asi
+que el servicio comprueba a que catalogo pertenece — el mismo error que ya se
+cazo en las intervenciones.
+
+**Nacieron anulables y duraron un dia asi**: el 2026-09-08 pasaron a
+obligatorias — ver la entrada de arriba. `intent` sigue llevando lo que estas
+dos no capturan: el peso, las horas, la atmosfera.
+
+**Y una fragilidad MIA que la fila patron destapo.** Corriendo los dos archivos
+de prueba a la vez, uno fallaba SIN mutacion: mi asercion buscaba la receta por
+`includes("Honey 48h")` y el otro archivo crea una receta homonima — `find`
+devolvia la suya, sin puntajes, y el fallo se leia como del producto. Atado al
+`RUN` y comprobado cinco corridas seguidas con 0 caidos. Es la forma del «control
+positivo por titulo» que ya esta escrita en `CLAUDE.md`, y cai igual.
+
+### 2026-09-07 · Un borrado sin filtro en la base compartida, y su reparación
+
+**Escribí un `afterAll` sin `assertDefinedWhere`**, que es el idioma del resto de
+la suite. Un valor de enum mal puesto rompió el `beforeAll`, las variables
+quedaron sin asignar, y **Prisma descarta en silencio las claves `undefined`**:
+cada `deleteMany({ where: { id: colonyId } })` se volvió un borrado **sin
+filtro** sobre la base del puerto 55433. Se perdieron 1 colmena, 1 colonia y 1
+evento de colonia. **Producción intacta** — la corrida sólo apuntó a
+`127.0.0.1`.
+
+**La causa ya no existe** (PR #233), y medido con control positivo que el mío era
+el **único** de los 69 archivos con `afterAll` que no usaba el ayudante.
+
+**La reparación esperó a que no hubiera trabajo ajeno en juego.** La base tenía
+aplicada una migración que no estaba en ninguna rama publicada —trabajo sin
+commitear de otra sesión— y un reset se la habría llevado. Se restauró cuando
+llegó a `main` con el PR #238. Verificado contra el `rowcounts.tsv` del propio
+backup: las seis tablas patrón casan, 1/1/1 incluidas, y la suite pasa
+**1477/1477**.
+
+**Y una trampa que costó un paso y quedó escrita en `CLAUDE.md`:** `test:db
+reset` dice «Test database ready» y deja el esquema en la foto del backup —
+seis migraciones por detrás de `main` ese día. Hay que aplicar `migrate deploy`
+después, y no fiarse del «ready».

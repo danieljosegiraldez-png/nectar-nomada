@@ -37,6 +37,44 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-08 · A9 completo: la captura de campo del apiario
+
+Trece tickets del 7 y 8 de septiembre, del PR #214 al #245. El apiario pasa a funcionar como la
+superficie de café: **la visita es un hecho**, no un adorno.
+
+`FieldSession` extendida en vez de entidad nueva (D1), y la compuerta resuelve
+por `Location.locationType` — nunca por un parámetro que elija quien llama.
+Adjuntar es implícito y estrecho: mismo sitio, sin cerrar, del mismo operador.
+Las dos colas offline se colapsaron en una que empuja **por lotes**. Cierre
+auditado con ventana de 48 h, reporte congelado que se abre con enlace que
+caduca y se revoca, etiquetas QR imprimibles sin red, pantalla de sitios con
+alertas ordenada por urgencia, origen de colonia agrupable, compromiso de
+polinización con su cociente, y bitácora que espeja `AuditEvent`.
+
+**Cuatro veces la medición cambió el diseño**, y son lo que hay que recordar:
+
+1. **El ticket A9.8 decía «esquema: no» y era falso.** Los tres alertas
+   críticos del Anexo C no tenían columna detrás de ninguno. Entraron tres.
+2. **La fila del ticket A9.10 nombraba la columna equivocada.** `originType` ya
+   era enum y ya agrupaba; lo que no agrupa es `originNote`, texto libre.
+3. **El mapa no está bloqueado por Mapbox.** De 24 ubicaciones, **0 tenían
+   coordenadas**: no había qué pintar. Por eso #242 hace que un sitio las
+   aprenda de la primera visita que se abre ahí.
+4. **WhatsApp no alcanza a nadie.** De 19 personas, **0 tienen teléfono** y 3
+   tienen correo. Por eso A9.11 distingue querer un canal de poder recibirlo.
+
+**Y un hallazgo que sigue abierto: nadie puede registrar que una colonia
+murió.** Ningún servicio cambia `Colony.status` — se crea `active` y no hay
+camino de código que la marque muerta o absconded. Consecuencias medidas: la
+bitácora no puede espejar el hecho más caro del apiario, y el conteo del
+sistema **sólo puede subir**, así que su divergencia con el conteo declarado en
+la visita es estructural y no deriva. La alerta de pérdida que A9.8 sí da
+compara dos conteos *declarados*.
+
+**Lo que queda de A9:** el mapa, que ahora sólo espera la decisión de Mapbox
+(servicio de pago, token). Los cuatro adaptadores de mensajería siguen fuera de
+alcance por D10.
+
 ### 2026-09-08 · La fecha de una credencial pasa a ser opcional
 
 Kurt Ngo esta en la base como Q de CQI con `date_earned: null` porque **nadie
@@ -113,57 +151,6 @@ Reescrito con `INSERT` crudo, con su control positivo al lado (el mismo `INSERT`
 con las dos columnas entra). Flip-test del `NOT NULL` hecho contra la tabla real
 dentro de una transaccion revertida: sin mutar revienta por `NOT NULL`, con el
 `NOT NULL` quitado la fila entra, y tras el rollback `is_nullable=NO`.
-
-### 2026-09-07 · Un borrado sin filtro en la base compartida, y su reparación
-
-**Escribí un `afterAll` sin `assertDefinedWhere`**, que es el idioma del resto de
-la suite. Un valor de enum mal puesto rompió el `beforeAll`, las variables
-quedaron sin asignar, y **Prisma descarta en silencio las claves `undefined`**:
-cada `deleteMany({ where: { id: colonyId } })` se volvió un borrado **sin
-filtro** sobre la base del puerto 55433. Se perdieron 1 colmena, 1 colonia y 1
-evento de colonia. **Producción intacta** — la corrida sólo apuntó a
-`127.0.0.1`.
-
-**La causa ya no existe** (PR #233), y medido con control positivo que el mío era
-el **único** de los 69 archivos con `afterAll` que no usaba el ayudante.
-
-**La reparación esperó a que no hubiera trabajo ajeno en juego.** La base tenía
-aplicada una migración que no estaba en ninguna rama publicada —trabajo sin
-commitear de otra sesión— y un reset se la habría llevado. Se restauró cuando
-llegó a `main` con el PR #238. Verificado contra el `rowcounts.tsv` del propio
-backup: las seis tablas patrón casan, 1/1/1 incluidas, y la suite pasa
-**1477/1477**.
-
-**Y una trampa que costó un paso y quedó escrita en `CLAUDE.md`:** `test:db
-reset` dice «Test database ready» y deja el esquema en la foto del backup —
-seis migraciones por detrás de `main` ese día. Hay que aplicar `migrate deploy`
-después, y no fiarse del «ready».
-
-### 2026-09-07 · Grado de proceso y estado de cereza, como columnas
-
-Estaban dentro del texto de `intent` —«40 kg cereza entera, natural
-anaerobico»— y ahi no se puede agrupar: comparar los naturales contra los
-honeys exigia leer prosa. Ahora son dos columnas, y **el reporte agrupa por
-grado ANTES que por receta**: la receta es como se llama el procedimiento, el
-grado es que se le hizo al cafe, y es lo segundo lo que el dueno compara.
-
-**Salen de catalogos que ya existian** —`grado_proceso` (Natural, Washed, Semi
-Wash 50/75%, Honey) y `estado_cereza` (entera, despulpada)— definidos en
-`lib/research/catalogs.ts`. Nada de vocabulario nuevo. Y **la FK sola no basta**:
-un valor de otro catalogo es una FK valida y dejaria la columna contaminada, asi
-que el servicio comprueba a que catalogo pertenece — el mismo error que ya se
-cazo en las intervenciones.
-
-**Nacieron anulables y duraron un dia asi**: el 2026-09-08 pasaron a
-obligatorias — ver la entrada de arriba. `intent` sigue llevando lo que estas
-dos no capturan: el peso, las horas, la atmosfera.
-
-**Y una fragilidad MIA que la fila patron destapo.** Corriendo los dos archivos
-de prueba a la vez, uno fallaba SIN mutacion: mi asercion buscaba la receta por
-`includes("Honey 48h")` y el otro archivo crea una receta homonima — `find`
-devolvia la suya, sin puntajes, y el fallo se leia como del producto. Atado al
-`RUN` y comprobado cinco corridas seguidas con 0 caidos. Es la forma del «control
-positivo por titulo» que ya esta escrita en `CLAUDE.md`, y cai igual.
 
 ## 3. Bloqueado, y en qué
 
