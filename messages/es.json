@@ -1284,7 +1284,17 @@
     "colonyEndReasonLabel": "Por qué (opcional)",
     "colonyEndReasonPlaceholder": "lo que se vio: varroa, sin reina, saqueo…",
     "colonyEndButton": "Registrar la pérdida",
-    "colonyEndedOn": "Se perdió el {fecha}"
+    "colonyEndedOn": "Se perdió el {fecha}",
+    "apiaryCreateHeading": "Crear apiario",
+    "apiaryCreateIntro": "El sitio donde están las colmenas. Después se le ponen colmenas, colonias y visitas.",
+    "apiaryNameLabel": "Nombre del apiario",
+    "apiaryOrganizationLabel": "Finca",
+    "apiaryOrganizationHelp": "A quién pertenece el sitio. Sin esto el apiario no tiene dueño.",
+    "apiaryChoose": "— Elegir —",
+    "apiaryLatitudeLabel": "Latitud (opcional)",
+    "apiaryLongitudeLabel": "Longitud (opcional)",
+    "apiaryCreateButton": "Crear apiario",
+    "apiaryNoOrganizations": "No hay ninguna finca a la que puedas colgar un apiario."
   },
   "Research": {
     "badge": "Research OS",

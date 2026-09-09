@@ -1,0 +1,80 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+import { crearApiarioFormAction } from "../../actions/apiary";
+import { BotonDeEnvio } from "../BotonDeEnvio";
+
+interface Opcion {
+  id: string;
+  name: string;
+}
+
+/**
+ * Dar de alta el sitio donde están las colmenas.
+ *
+ * **En línea y sin cola de sincronización**, igual que `NewHiveForm`: un
+ * apiario se crea una vez, desde donde haya señal, y no en mitad de una visita.
+ * Lo que sí va sin señal son la inspección y el evento de colonia, que es lo
+ * que se captura con las manos sucias.
+ *
+ * Las coordenadas son opcionales a propósito. Un apiario que existe y no se
+ * puede registrar porque falta el GPS es peor que uno registrado sin GPS, y
+ * `CLAUDE.md` §3 dice que lo que falta se queda faltando.
+ *
+ * **No hay altitud ni notas**: `Location` guarda un RANGO de altitud, que
+ * describe una parcela y no un punto, y no tiene columna de notas. Ver el
+ * comentario en `crearApiario`.
+ */
+export function NuevoApiarioForm({ organizaciones, proyectos }: { organizaciones: Opcion[]; proyectos: Opcion[] }) {
+  const t = useTranslations("Apiary");
+
+  return (
+    <form action={crearApiarioFormAction} className="nn-form" style={{ maxWidth: 520 }}>
+      <div className="nn-field">
+        <label htmlFor="ap-name">{t("apiaryNameLabel")}</label>
+        <input id="ap-name" name="name" type="text" required maxLength={200} placeholder="Apiario 3 — Finca Rosina" />
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="ap-org">{t("apiaryOrganizationLabel")}</label>
+        <select id="ap-org" name="organizationId" required defaultValue="">
+          <option value="" disabled>
+            {t("apiaryChoose")}
+          </option>
+          {organizaciones.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
+        </select>
+        <p className="nn-muted">{t("apiaryOrganizationHelp")}</p>
+      </div>
+
+      {proyectos.length > 0 ? (
+        <div className="nn-field">
+          <label htmlFor="ap-project">{t("projectLabel")}</label>
+          <select id="ap-project" name="projectId" defaultValue="">
+            <option value="">{t("noProjectOption")}</option>
+            {proyectos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      <div className="nn-field">
+        <label htmlFor="ap-lat">{t("apiaryLatitudeLabel")}</label>
+        <input id="ap-lat" name="latitude" type="number" inputMode="decimal" step="0.000001" min="-90" max="90" />
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="ap-lon">{t("apiaryLongitudeLabel")}</label>
+        <input id="ap-lon" name="longitude" type="number" inputMode="decimal" step="0.000001" min="-180" max="180" />
+      </div>
+
+      <BotonDeEnvio>{t("apiaryCreateButton")}</BotonDeEnvio>
+    </form>
+  );
+}

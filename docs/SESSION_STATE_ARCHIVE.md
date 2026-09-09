@@ -1713,3 +1713,41 @@ certificacion ilegible no tumba la lista» usaba justo la fila de Kurt: al
 volverse legible, pasaba por razones equivocadas. Recolocado sobre una que
 sigue siendo ilegible —sin `certification_name` no hay credencial que afirmar—
 y re-flipeado para verlo caer por su nombre otra vez.
+
+### 2026-09-08 · A9 completo: la captura de campo del apiario
+
+Trece tickets del 7 y 8 de septiembre, del PR #214 al #245. El apiario pasa a funcionar como la
+superficie de café: **la visita es un hecho**, no un adorno.
+
+`FieldSession` extendida en vez de entidad nueva (D1), y la compuerta resuelve
+por `Location.locationType` — nunca por un parámetro que elija quien llama.
+Adjuntar es implícito y estrecho: mismo sitio, sin cerrar, del mismo operador.
+Las dos colas offline se colapsaron en una que empuja **por lotes**. Cierre
+auditado con ventana de 48 h, reporte congelado que se abre con enlace que
+caduca y se revoca, etiquetas QR imprimibles sin red, pantalla de sitios con
+alertas ordenada por urgencia, origen de colonia agrupable, compromiso de
+polinización con su cociente, y bitácora que espeja `AuditEvent`.
+
+**Cuatro veces la medición cambió el diseño**, y son lo que hay que recordar:
+
+1. **El ticket A9.8 decía «esquema: no» y era falso.** Los tres alertas
+   críticos del Anexo C no tenían columna detrás de ninguno. Entraron tres.
+2. **La fila del ticket A9.10 nombraba la columna equivocada.** `originType` ya
+   era enum y ya agrupaba; lo que no agrupa es `originNote`, texto libre.
+3. **El mapa no está bloqueado por Mapbox.** De 24 ubicaciones, **0 tenían
+   coordenadas**: no había qué pintar. Por eso #242 hace que un sitio las
+   aprenda de la primera visita que se abre ahí.
+4. **WhatsApp no alcanza a nadie.** De 19 personas, **0 tienen teléfono** y 3
+   tienen correo. Por eso A9.11 distingue querer un canal de poder recibirlo.
+
+**Y un hallazgo que sigue abierto: nadie puede registrar que una colonia
+murió.** Ningún servicio cambia `Colony.status` — se crea `active` y no hay
+camino de código que la marque muerta o absconded. Consecuencias medidas: la
+bitácora no puede espejar el hecho más caro del apiario, y el conteo del
+sistema **sólo puede subir**, así que su divergencia con el conteo declarado en
+la visita es estructural y no deriva. La alerta de pérdida que A9.8 sí da
+compara dos conteos *declarados*.
+
+**Lo que queda de A9:** el mapa, que ahora sólo espera la decisión de Mapbox
+(servicio de pago, token). Los cuatro adaptadores de mensajería siguen fuera de
+alcance por D10.

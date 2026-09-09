@@ -16,6 +16,7 @@ import { LIST_LIMIT, truncate } from "../listLimit";
 import { can } from "../rbac/service";
 import { classificationForTarget, loadScopeClassifications } from "../rbac/scopeClassification";
 import { recordAuditEvent } from "../audit";
+import { DEFAULT_NEW_RECORD_CLASSIFICATION } from "../traceability/lots";
 import type { ScopeTarget } from "../rbac/types";
 import type { ColonyOriginType, ColonyStatus, DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -372,4 +373,121 @@ export async function getManageableApiaryProjects(userAccountId: string) {
   if (visibility.mode === "none") return [];
   if (visibility.mode === "all") return prisma.project.findMany({ orderBy: { name: "asc" } });
   return prisma.project.findMany({ where: { id: { in: visibility.projectIds } }, orderBy: { name: "asc" } });
+}
+
+export interface CrearApiarioInput {
+  /** Cómo lo llama el apicultor: «Apiario 3 — Finca Rosina». */
+  name: string;
+  /** La finca a la que pertenece. Sin ella el sitio no tiene dueño. */
+  organizationId: string;
+  /** El proyecto bajo el que se trabaja, si lo hay: decide quién lo ve. */
+  projectId?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+/*
+ * **Sin altitud ni notas, y a proposito.** `Location` no tiene columna para
+ * una altitud puntual: tiene `altitudeMinM`/`altitudeMaxM`, que son un RANGO y
+ * describen una parcela, no un punto. Escribir el mismo numero en las dos
+ * afirmaria «el rango es cero», que nadie declaro. Y `notes` no existe en
+ * `Location` en absoluto. Las dos se cayeron al medir el esquema, no al
+ * escribir el formulario: el compilador no las ve porque `location.create` las
+ * rechaza en tiempo de ejecucion. Si hacen falta, van por
+ * `updateLocationAttributes`, que ya existe y sabe de rangos.
+ */
+
+/**
+ * Crear un apiario.
+ *
+ * **El hueco que cierra, medido el 2026-09-09.** No había forma de crear uno
+ * desde la aplicación: los tres que existen salieron de `prisma/seed.ts` y de
+ * `scripts/import-cafelino-pe.ts`. El único `location.create` de la aplicación
+ * era `createMicrolot`, que subdivide una parcela existente y no sirve aquí.
+ * Así que un apicultor podía registrar colmenas, colonias, inspecciones y
+ * visitas — y no podía registrar **el sitio donde ocurre todo eso**.
+ *
+ * **La puerta es la del apiario, no la de las ubicaciones.** `createMicrolot`
+ * usa `requireLocationAttributeAccess` porque parte de una ubicación que ya
+ * existe y hereda su ámbito. Aquí no hay ubicación de la que heredar, así que
+ * se pregunta lo que de verdad corresponde: ¿puede esta cuenta gestionar
+ * apiarios en este proyecto? Es la misma pregunta que ya hace `createHive`.
+ *
+ * **Sin proyecto, sólo quien gestiona apiarios en toda la plataforma.** Un
+ * sitio sin proyecto no tiene ámbito del que colgar, y dejarlo crear a
+ * cualquiera con una asignación acotada abriría un sitio que su propio autor
+ * no podría volver a ver.
+ */
+export async function crearApiario(userAccountId: string, input: CrearApiarioInput) {
+  if (!input.name.trim()) throw new ApiaryAccessError("name_required");
+
+  const organizacion = await prisma.organization.findUnique({ where: { id: input.organizationId } });
+  if (!organizacion) throw new ApiaryAccessError("organization_not_found");
+
+  /**
+   * **Exige ámbito de PLATAFORMA, y esto se descubrió midiendo.**
+   *
+   * `Location` no tiene `projectId`: un apiario se asocia a un proyecto **a
+   * través de sus colmenas** (`resolveApiaryVisibility` filtra por
+   * `hives.some.projectId`). Un sitio recién creado no tiene ninguna, así que
+   * **es invisible para quien sólo tiene ámbito de proyecto** — incluido quien
+   * acaba de crearlo. La primera versión de esto usaba la puerta normal y su
+   * prueba lo cazó: el apiario se creaba y `getApiaryDetail` contestaba
+   * `no_apiary_access` a su propio autor.
+   *
+   * Dejarlo así habría creado sitios huérfanos que nadie puede abrir. La
+   * alternativa —dar `projectId` a `Location`— es un cambio de esquema que
+   * toca la visibilidad de todo, y es decisión del dueño; queda en
+   * `SESSION_STATE.md` §3.
+   */
+  const visibilidad = await resolveApiaryVisibility(userAccountId, "manage");
+  if (visibilidad.mode !== "all") throw new ApiaryAccessError("apiary_create_needs_platform_scope");
+
+  return prisma.$transaction(async (tx) => {
+    const sitio = await tx.location.create({
+      data: {
+        name: input.name.trim(),
+        locationType: "apiary_site",
+        organizationId: organizacion.id,
+        latitude: input.latitude ?? null,
+        longitude: input.longitude ?? null,
+        status: "approved",
+        classification: DEFAULT_NEW_RECORD_CLASSIFICATION,
+        createdBy: userAccountId,
+      },
+    });
+
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "location.create_apiary",
+        entityType: "location",
+        entityId: sitio.id,
+        after: sitio,
+        sourceInterface: "apiary.service",
+      },
+      tx,
+    );
+
+    return sitio;
+  });
+}
+
+/**
+ * Las fincas bajo las que esta cuenta puede colgar un apiario.
+ *
+ * **`mode === "all"`, la MISMA puerta que `crearApiario`.** La primera version
+ * pedia `mode !== "none"` y su prueba lo cazo: a un Farm Operator con ambito de
+ * proyecto se le ofrecian fincas que el servicio iba a rechazar. Un formulario
+ * que ofrece lo que el servicio niega es la lente que ya se aplico en
+ * `/sensory/new` y en `/sensory/external-report`.
+ */
+export async function organizacionesParaApiario(userAccountId: string) {
+  const visibility = await resolveApiaryVisibility(userAccountId, "manage");
+  if (visibility.mode !== "all") return [];
+  return prisma.organization.findMany({
+    where: { status: "approved" },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
 }

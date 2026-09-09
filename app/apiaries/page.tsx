@@ -74,6 +74,13 @@ export default async function ApiariesPage() {
       <h1>{t("apiariesTitle")}</h1>
       <p className="nn-muted">{t("apiariesIntro")}</p>
 
+      {/* La puerta que faltaba: hasta el 2026-09-09 no habia forma de crear un
+          apiario desde la aplicacion, solo colmenas dentro de uno que ya
+          existiera. Va arriba porque es lo primero que hace quien empieza. */}
+      <p>
+        <Link href="/apiaries/new">{t("apiaryCreateHeading")}</Link>
+      </p>
+
       {/* ADR-087 — a cut-off list says so. */}
       {truncated ? <p className="nn-muted">{t("listTruncated", { limit })}</p> : null}
 
