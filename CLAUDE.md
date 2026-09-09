@@ -2273,7 +2273,7 @@ npm run test:db -- up     # levanta el clúster; NO restaura si ya hay datos
 npm run test:db -- reset  # tira los datos y restaura de verdad
 npm run check:state    # SESSION_STATE.md cabe en una lectura
 npm run decisiones     # qué decisiones de Daniel siguen abiertas
-node tools/browser-checks/rutas-protegidas.mjs   # autorización en el artefacto vivo
+node tools/browser-checks/respuesta-anonima.mjs  # qué contesta el sitio a quien NO tiene sesión
 ```
 
 **La suite se niega a hablar con una base remota** salvo `ALLOW_REMOTE_TEST_DB=1`

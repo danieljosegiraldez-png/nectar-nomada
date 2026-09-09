@@ -10,6 +10,13 @@ solo en el código.
 Son **diagnósticos, no CI**: fallan por razones de red y entrenarían a ignorar
 una línea roja.
 
+**Se llamaba `rutas-protegidas.mjs` y el nombre era la afirmación.** «Protegida»
+más un ✓ verde se leen como una garantía de que los datos están a salvo, y esto
+no demuestra eso: la frontera de autorización es el servicio de RBAC
+(`SECURITY.md` §2). Esto observa **respuestas** a peticiones anónimas. Se
+renombró el 2026-08-28 en `49ae56f` — y este README y el `CLAUDE.md` siguieron
+**once días** mandando correr el archivo borrado.
+
 Reglas de diseño:
 
 1. **Corren tal cual, sin instalar nada.** Node 24 trae `fetch`.
@@ -19,5 +26,5 @@ Reglas de diseño:
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
-node tools/browser-checks/rutas-protegidas.mjs
+node tools/browser-checks/respuesta-anonima.mjs
 ```
