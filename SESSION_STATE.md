@@ -37,6 +37,43 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-09 · Un formulario enseñaba «measured_fact» a un apicultor
+
+`TreatmentBatchForm` pintaba el **valor crudo del enum** en dos desplegables:
+en una interfaz en español se leía «measured_fact» y «verified_with_limitation».
+No revienta, no avisa — se lee mal, que es la misma familia que «Batches» contra
+«Lotes» y se encuentra igual: mirando, no ejecutando pruebas.
+
+**Medido sobre la población entera, no sobre una sospecha:** de **25**
+desplegables cuya clave es el propio valor, **22 traducían y 3 no**, los tres en
+ese archivo. Uno de los tres resultó **correcto** y se quedó como está, con su
+razón escrita al lado: recorre `variable.enumValues`, que no es un enum de
+Prisma sino la lista que el autor del protocolo congeló en esa versión —«río»,
+«quebrada»—; son datos en el idioma de quien los declaró y no hay clave posible.
+
+**Y arrastraba un segundo fallo que no se veía justamente porque no se usaba:**
+ese formulario ofrece `manufacturer_specification` e `hypothesis`, **dos valores
+sin etiqueta en ningún idioma**. Ahora la tienen.
+
+**Tres guardias nuevos** en `tests/ui/valoresEnumerados.test.ts`, y el tercero
+es el que más falta hacía: la excepción declarada **tiene que seguir aplicando a
+algo**, o se quita. Una excepción huérfana envejece en silencio y enseña a leer
+la lista por encima. Flip-test: cinco mutaciones, cada una tira la suya por su
+nombre.
+
+**Y una cobertura que era accidental, destapada al fusionar.** Entre medias entró
+el PR #255, que sacó las listas de procedencia de los ocho formularios a
+`lib/traceability/procedencia.ts`. Predije que eso dejaría este guardia mirando a
+la nada; **era falso** y lo dijo la medición: seguía en verde porque
+`TreatmentBatchForm` conserva las suyas en casa, y sus siete valores resultan ser
+un superconjunto de los cinco del módulo. Verde por coincidencia, no por
+cobertura: un sexto valor en el módulo habría entrado sin etiqueta sin que nada
+fallara. El guardia lee ahora también ese módulo, y el flip-test lo demuestra
+metiéndole `recommendation` —un valor del enum sin etiqueta— y viéndolo caer.
+
+**Lo que se señala y NO se tocó, en ese mismo archivo:** un `" (origen
+desconocido)"` en español metido a mano en el código, y dos opciones `true` /
+`false` sin traducir. Son la misma familia y otro arreglo.
 ### 2026-09-09 · Por qué se perdió una colonia: quince causas, ninguna inventada
 
 El comentario de `Colony.endedAt` decía —con razón para su día— que el
@@ -85,35 +122,6 @@ las siete cazadas por su prueba y compilando — pero a la primera vuelta **una
 no cayó**: la prueba de «misma causa dos veces» afirmaba la CLASE del error y
 pasaba con el guardia quitado, porque el `in` de Prisma deduplica y saltaba otro
 error de la misma clase. Era un adorno. Ahora afirma el mensaje.
-### 2026-09-08 · El servidor aceptaba procedencias que la pantalla no ofrece
-
-`ProvenanceClass` tiene **diez** valores; los formularios ofrecen **cinco**. En
-`app/actions/traceability.ts` la cadena del formulario entraba en el enum con
-`as never` en **once** sitios, asi que el servidor aceptaba los diez: un envio
-con `provenanceClass=ai_suggestion` sobre un formulario que ofrece dos opciones
-**se guardaba**. Eso hace falsa justo la distincion que `CLAUDE.md` §3 pone
-primero — hecho medido contra interpretacion contra sugerencia de IA. `as never`
-no convierte nada: apaga al compilador.
-
-**Y encima estaba sin declarar.** Ocho formularios con su `const` local, seis
-conjuntos distintos, **dos nombres** para la misma idea (`PROVENANCES` y
-`PROVENANCE_CLASSES`), y dos formularios ofreciendo **el mismo conjunto en
-distinto orden** sin razon escrita.
-
-**Ahora hay cinco conjuntos con nombre en `lib/traceability/procedencia.ts`**,
-tipados `readonly ProvenanceClass[]` —el compilador rechaza un valor que no
-exista en el enum— y `exigeProcedencia` sustituye a los once `as never`: lo que
-el servidor acepta y lo que el usuario ve **son la misma lista**. Los `as never`
-de las acciones bajan de 43 a 32.
-
-**Lo que NO cambia: que ofrece cada pantalla.** Cada conjunto es el que ya tenia
-su formulario, valor por valor. Cuales son los correctos sigue siendo decision
-de producto, y sigue en §3.
-
-**Los flips.** Devolver un `as never` tumba el guardia de fuente por su nombre;
-hacer que `exigeProcedencia` deje pasar cualquier cosa tumba los dos que lo
-miden. Los dos compilan, que es lo que distingue un flip de un error de sintaxis.
-
 ### 2026-09-09 · Se podía todo del apiario menos crear el apiario
 
 Medido: la aplicacion dejaba registrar colmenas, colonias, inspecciones, eventos
@@ -174,31 +182,6 @@ y nunca en el módulo —toca `window` y la página es de servidor—, la atribu
 de OSM que su política exige, el formulario fuera del condicional, y
 `.nn-mapa` con altura en px. Esa última es la que más engaña: Leaflet mide su
 contenedor, y uno sin altura resuelta da un mapa de 0 px **sin lanzar error**.
-### 2026-09-08 · El guardia del menú medía a un visor que no era el más privilegiado
-
-Afirmaba «ni el visor mas privilegiado pasa de 8 entradas» y pasaba en verde con
-**10**. La grieta era el fixture: una lista de diez permisos **escrita a mano** a
-la que le faltaban `platform:manage_permissions` y los de contenido — justo las
-dos claves que abren las dos entradas de mas. El «mas privilegiado» del test no
-lo era.
-
-**El arreglo es estructural, no un numero.** `NAV_PERMISSIONS` se **deriva** de
-`NAV`, asi que una entrada nueva trae su permiso sola y esto no puede volver a
-medir a otro visor. Es la misma leccion que el mapa de variables que paso a
-`Record` total: un dato que el compilador mantiene es mejor guardia que una
-lista que hay que acordarse de actualizar.
-
-**Y el numero se fija, no se sube.** Poner `<= 10` habria borrado el objetivo.
-`toHaveLength(10)` hace que crecer sea deliberado y deja el hueco a la vista:
-**el objetivo de 8 sigue vivo y sin cumplir**, con lo que cuesta medido — 234 px
-de cabecera en tres filas, el 29 % de un telefono de 375 px, antes de ver nada.
-Acortar el menu o mover el objetivo sigue siendo del dueño.
-
-**El flip-test es la parte que vale.** Añadida una entrada 11 a `NAV`, en el
-**mismo mundo mutado**: el guardia viejo **pasa** —1 passed, ciego— y el nuevo
-cae por su nombre. No es «el guardia nuevo funciona»: es la prueba de que el
-viejo no medía nada.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad

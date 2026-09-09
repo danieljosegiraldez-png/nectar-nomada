@@ -415,6 +415,8 @@
     "provenanceClass_direct_observation": "Observado directamente, sin instrumento",
     "provenanceClass_interpretation": "Estimación, de memoria",
     "provenanceClass_scientific_evidence": "De un informe de laboratorio",
+    "provenanceClass_manufacturer_specification": "Especificación del fabricante",
+    "provenanceClass_hypothesis": "Hipótesis",
     "observerLabel": "Observado por",
     "observerSelfOption": "Yo ({name})",
     "notesLabel": "Notas",
