@@ -324,6 +324,10 @@
     {
       "archivo": "lib/apiary/bitacora.ts",
       "razon": "A9.12 — el emisor de bitácora. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Sólo LEE, y su única consulta propia es la `FieldSession` cuyos eventos necesita para armar los sujetos del rastro; el rastro en sí lo lee `leerEnmiendas`, que no se duplica."
+    },
+    {
+      "archivo": "lib/notificaciones/canales.ts",
+      "razon": "A9.11 — la preferencia de canal por persona. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. `declararCanal` confirma su AuditEvent en la misma transacción; `canalesDe` sólo lee."
     }
   ],
   "reciben_transaccion": [
@@ -568,6 +572,12 @@
       "operacion": "resumenDeVisita",
       "razon": "A9.12 — se llama desde `completarVisita`, que YA pasó por `requireFieldSessionAccess` antes de escribir, y se llama DESPUÉS de que esa transacción confirme. No pide userAccountId a propósito: misma disciplina que leerEnmiendas, vitalesDeSitios y densidadDePolinizacion — un lector que exige principal parece una compuerta y termina usándose como tal. Y no expone contenido: lo que devuelve son cifras y un enlace, porque el mensaje acaba en un teléfono donde RBAC no interviene.",
       "verificado": "2026-09-08"
+    },
+    {
+      "archivo": "lib/notificaciones/canales.ts",
+      "operacion": "canalesDe",
+      "razon": "A9.11 — lectura sobre un personId que resuelve quien ya decidió a quién está avisando. No pide userAccountId a propósito: misma disciplina que leerEnmiendas, vitalesDeSitios, densidadDePolinizacion y resumenDeVisita — un lector que exige principal parece una compuerta y termina usándose como tal. Devuelve preferencia y entregabilidad, no datos de contacto: la dirección concreta sigue viviendo en Person.email/phone y no se copia. La ESCRITURA hermana, declararCanal, recibe el actor y lo audita.",
+      "verificado": "2026-09-09"
     }
   ]
 }
