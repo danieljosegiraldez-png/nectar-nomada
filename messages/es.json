@@ -1155,7 +1155,9 @@
     "plotsCount": "{n} parcela(s)",
     "plotsWithArea": "· {n} con área",
     "plotsWithConditions": "· {n} con condiciones registradas",
-    "plotNothingRecorded": "Sin condiciones"
+    "plotNothingRecorded": "Sin condiciones",
+    "error_provenance_required": "Elige de dónde sale este dato.",
+    "error_provenance_not_offered": "«{value}» no es una procedencia que esta pantalla ofrezca."
   },
   "Apiary": {
     "badge": "Apiario",

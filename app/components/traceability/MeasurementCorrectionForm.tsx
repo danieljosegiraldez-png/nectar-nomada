@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { correctMeasurementFormAction, type TraceabilityActionState } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
 import { paraCampoLocal } from "../../../lib/time/localDateTime";
+import { PROCEDENCIA_DE_MEDICION } from "../../../lib/traceability/procedencia";
 
 const initialState: TraceabilityActionState = {};
 
@@ -12,7 +13,6 @@ const initialState: TraceabilityActionState = {};
  * Mismo subconjunto que `MeasurementForm`: los diez valores completos incluyen
  * hipótesis y conclusión, que no son cómo se conoce una lectura de campo.
  */
-const PROVENANCE_CLASSES = ["measured_fact", "direct_observation", "interpretation", "scientific_evidence"] as const;
 
 export interface MeasurementToCorrect {
   id: string;
@@ -119,7 +119,7 @@ export function MeasurementCorrectionForm({
       <div className="nn-field">
         <label htmlFor={id("provenanceClass")}>{t("provenanceClassLabel")}</label>
         <select id={id("provenanceClass")} name="provenanceClass" defaultValue={measurement.provenanceClass}>
-          {PROVENANCE_CLASSES.map((p) => (
+          {PROCEDENCIA_DE_MEDICION.map((p) => (
             <option key={p} value={p}>
               {t(`provenanceClass_${p}` as "provenanceClass_measured_fact")}
             </option>

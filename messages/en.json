@@ -1155,7 +1155,9 @@
     "plotsCount": "{n} plot(s)",
     "plotsWithArea": "· {n} with area",
     "plotsWithConditions": "· {n} with recorded conditions",
-    "plotNothingRecorded": "No conditions"
+    "plotNothingRecorded": "No conditions",
+    "error_provenance_required": "Choose where this datum comes from.",
+    "error_provenance_not_offered": "“{value}” is not a provenance this screen offers."
   },
   "Apiary": {
     "badge": "Apiary",

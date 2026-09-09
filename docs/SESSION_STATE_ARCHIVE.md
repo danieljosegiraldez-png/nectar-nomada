@@ -1751,3 +1751,30 @@ compara dos conteos *declarados*.
 **Lo que queda de A9:** el mapa, que ahora sólo espera la decisión de Mapbox
 (servicio de pago, token). Los cuatro adaptadores de mensajería siguen fuera de
 alcance por D10.
+
+### 2026-09-08 · «Batches» contra «Lotes»: el menú mandaba a la pantalla ajena
+
+En español el menu ofrecia **«Lotes» para `/plots`** —parcelas de terreno— y
+**«Batches» para `/lots`** —lotes de cafe—. Quien buscara sus lotes de cafe
+pulsaba «Lotes» y veia terreno. Estaba anotado desde el 2026-09-05, del dia que
+alguien uso las pantallas en un movil de verdad.
+
+**La causa estaba en el texto que quedo.** `plotsIntro` decia «Lotes de terreno»:
+quien lo escribio uso «lote» para la parcela y, sin palabra libre para el cafe,
+tiro del ingles. Y «batch» ya estaba ocupada — `BiocharBatch` y `TreatmentBatch`
+son entidades reales del esquema.
+
+**Corregido en los dos sentidos, clave por clave y no con un regex a ciegas.**
+El cafe pasa a «Lote»/«Lot» (29 claves en es, 38 en en); el terreno pasa a
+«Parcela» (14 claves), palabra que **ya estaba** en el vocabulario —
+`sampleTreatmentPlotLabel` decia «Parcela de tratamiento»—. Se dejaron intactas
+las que son batches de verdad: biochar, tratamiento, y el n.º de lote del envase
+del fabricante. **Ingles ya era correcto para el terreno**, y eso sirvio de
+control: `densityMissingArea` y `soilNoProfiles` decian «plot» alli y «lote»
+aqui, que es como se cazaron las dos ultimas.
+
+**Y lo que esto enseña de la suite:** las 1531 pruebas pasaban con el fallo
+dentro y habrian pasado con el vuelto a poner. Nadie miraba esas cadenas. Queda
+`tests/ui/vocabularioDelMenu.test.ts`, que dice en su cabecera **lo que no
+prueba**: que las etiquetas sean las correctas. Eso lo dijo una persona usando
+la aplicacion, que es como se encontro.

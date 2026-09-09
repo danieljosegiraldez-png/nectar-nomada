@@ -8,6 +8,7 @@ import {
   type TraceabilityActionState,
 } from "../../actions/traceability";
 import { TriStateField } from "./TriStateField";
+import { PROCEDENCIA_DE_BIOCHAR } from "../../../lib/traceability/procedencia";
 
 const initialState: TraceabilityActionState = {};
 
@@ -16,7 +17,6 @@ const COOLINGS = ["water_quench", "sealed_cooling", "open_cooling"] as const;
 // ADR-038: un lote transcrito del cuaderno mientras se quemaba, uno visto por
 // quien lo anota, y uno reconstruido de memoria son tres afirmaciones
 // distintas. No hay opción por defecto, por eso el `required` y el hueco vacío.
-const PROVENANCES = ["original_record", "direct_observation", "measured_fact"] as const;
 const DATA_QUALITIES = ["verified", "provisional", "unconfirmed", "not_tested"] as const;
 
 export interface BiocharBatchValues {
@@ -271,7 +271,7 @@ export function BiocharBatchForm({
         <label htmlFor="provenanceClass">{t("provenanceClassLabel")}</label>
         <select id="provenanceClass" name="provenanceClass" required defaultValue={values.provenanceClass}>
           <option value="">{t("provenanceClassChoose")}</option>
-          {PROVENANCES.map((v) => (
+          {PROCEDENCIA_DE_BIOCHAR.map((v) => (
             <option key={v} value={v}>{t(`provenanceClass_${v}` as "provenanceClass_original_record")}</option>
           ))}
         </select>

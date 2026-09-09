@@ -37,6 +37,35 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-08 · El servidor aceptaba procedencias que la pantalla no ofrece
+
+`ProvenanceClass` tiene **diez** valores; los formularios ofrecen **cinco**. En
+`app/actions/traceability.ts` la cadena del formulario entraba en el enum con
+`as never` en **once** sitios, asi que el servidor aceptaba los diez: un envio
+con `provenanceClass=ai_suggestion` sobre un formulario que ofrece dos opciones
+**se guardaba**. Eso hace falsa justo la distincion que `CLAUDE.md` §3 pone
+primero — hecho medido contra interpretacion contra sugerencia de IA. `as never`
+no convierte nada: apaga al compilador.
+
+**Y encima estaba sin declarar.** Ocho formularios con su `const` local, seis
+conjuntos distintos, **dos nombres** para la misma idea (`PROVENANCES` y
+`PROVENANCE_CLASSES`), y dos formularios ofreciendo **el mismo conjunto en
+distinto orden** sin razon escrita.
+
+**Ahora hay cinco conjuntos con nombre en `lib/traceability/procedencia.ts`**,
+tipados `readonly ProvenanceClass[]` —el compilador rechaza un valor que no
+exista en el enum— y `exigeProcedencia` sustituye a los once `as never`: lo que
+el servidor acepta y lo que el usuario ve **son la misma lista**. Los `as never`
+de las acciones bajan de 43 a 32.
+
+**Lo que NO cambia: que ofrece cada pantalla.** Cada conjunto es el que ya tenia
+su formulario, valor por valor. Cuales son los correctos sigue siendo decision
+de producto, y sigue en §3.
+
+**Los flips.** Devolver un `as never` tumba el guardia de fuente por su nombre;
+hacer que `exigeProcedencia` deje pasar cualquier cosa tumba los dos que lo
+miden. Los dos compilan, que es lo que distingue un flip de un error de sintaxis.
+
 ### 2026-09-09 · Se podía todo del apiario menos crear el apiario
 
 Medido: la aplicacion dejaba registrar colmenas, colonias, inspecciones, eventos
@@ -151,33 +180,6 @@ mejor comentario que el mio, ademas. Se descarto lo mio entero y se tomo el suyo
 **Dos sesiones tropezando con la misma linea el mismo dia** dice algo del coste
 de una instruccion vieja, y esa es la parte que vale la pena anotar.
 
-### 2026-09-08 · «Batches» contra «Lotes»: el menú mandaba a la pantalla ajena
-
-En español el menu ofrecia **«Lotes» para `/plots`** —parcelas de terreno— y
-**«Batches» para `/lots`** —lotes de cafe—. Quien buscara sus lotes de cafe
-pulsaba «Lotes» y veia terreno. Estaba anotado desde el 2026-09-05, del dia que
-alguien uso las pantallas en un movil de verdad.
-
-**La causa estaba en el texto que quedo.** `plotsIntro` decia «Lotes de terreno»:
-quien lo escribio uso «lote» para la parcela y, sin palabra libre para el cafe,
-tiro del ingles. Y «batch» ya estaba ocupada — `BiocharBatch` y `TreatmentBatch`
-son entidades reales del esquema.
-
-**Corregido en los dos sentidos, clave por clave y no con un regex a ciegas.**
-El cafe pasa a «Lote»/«Lot» (29 claves en es, 38 en en); el terreno pasa a
-«Parcela» (14 claves), palabra que **ya estaba** en el vocabulario —
-`sampleTreatmentPlotLabel` decia «Parcela de tratamiento»—. Se dejaron intactas
-las que son batches de verdad: biochar, tratamiento, y el n.º de lote del envase
-del fabricante. **Ingles ya era correcto para el terreno**, y eso sirvio de
-control: `densityMissingArea` y `soilNoProfiles` decian «plot» alli y «lote»
-aqui, que es como se cazaron las dos ultimas.
-
-**Y lo que esto enseña de la suite:** las 1531 pruebas pasaban con el fallo
-dentro y habrian pasado con el vuelto a poner. Nadie miraba esas cadenas. Queda
-`tests/ui/vocabularioDelMenu.test.ts`, que dice en su cabecera **lo que no
-prueba**: que las etiquetas sean las correctas. Eso lo dijo una persona usando
-la aplicacion, que es como se encontro.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
@@ -207,17 +209,15 @@ de abajo **queda abierto porque es decisión de producto, no arreglo mecánico**
 guantes, ni sol, ni una conexión que se cae a mitad de un formulario. Sigue
 faltando que una persona registre un dato real en el campo.
 
-#### Un vocabulario de procedencia por formulario, y nadie lo declaró
+#### Un vocabulario de procedencia por formulario — **declarado el 2026-09-08**
 
-Ocho formularios ofrecen ocho subconjuntos distintos de `ProvenanceClass` y
-cuatro de `DataQuality`, con dos nombres para la misma constante
-(`PROVENANCES` / `PROVENANCE_CLASSES`). `SoilProfileForm` y `SampleForms`
-ofrecen **el mismo conjunto en distinto orden**. Los recortes parecen
-deliberados —quien registra una muestra no elige «hipótesis»— pero **nada lo
-dice y nada impide que deriven**: sólo `CANOPY_POSITIONS` está atado al enum por
-un test, y `as never` aparece 37 veces en las acciones, así que el compilador
-tampoco mira. Lo encontró la quinta revisión (2026-09-01) y se dejó abierto: es
-una decisión de diseño —qué puede afirmar cada pantalla— no un arreglo mecánico.
+Los ocho subconjuntos viven ahora en `lib/traceability/procedencia.ts`, con
+nombre, tipados contra el enum, y el servidor ya no acepta mas de lo que la
+pantalla pinta (ver §2). **Lo que sigue abierto es cual debe ofrecer cada una**:
+que una medicion pueda declararse `interpretation` y una calicata no, que el
+enum tenga diez valores y las pantallas ofrezcan cinco, y si
+`manufacturer_specification` deberia estar en alguna. Es decision de diseño —que
+puede afirmar cada pantalla— y sigue sin tomarse.
 
 
 - **Dar acceso a alguien más que Daniel y José** — bloqueado en P-C. Medido el

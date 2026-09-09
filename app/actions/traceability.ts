@@ -58,6 +58,15 @@ import {
   BiocharBatchValidationError,
 } from "../../lib/traceability/biocharBatches";
 import {
+  exigeProcedencia,
+  ProcedenciaInvalida,
+  PROCEDENCIA_DE_MEDICION,
+  PROCEDENCIA_DE_REGISTRO_DE_CAMPO,
+  PROCEDENCIA_DE_SIEMBRA,
+  PROCEDENCIA_DE_ANALISIS,
+  PROCEDENCIA_DE_BIOCHAR,
+} from "../../lib/traceability/procedencia";
+import {
   createSoilProfile,
   updateSoilProfile,
   SoilProfileValidationError,
@@ -94,6 +103,12 @@ export interface TraceabilityActionState {
 // copy — functional and honest beats a polished translation catalog for
 // every possible internal error code.
 function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: unknown): string {
+  if (error instanceof ProcedenciaInvalida) {
+    // `provenance_not_offered:ai_suggestion` trae el valor pegado con dos
+    // puntos, como los errores de atributo del informe externo.
+    const [clave, ...resto] = error.message.split(":");
+    return t(`error_${clave}` as "error_provenance_required", { value: resto.join(":") });
+  }
   if (error instanceof TraceabilityAccessError) return t("error_access", { detail: error.message });
   if (error instanceof LotProcessError) return t("error_lot_process", { detail: error.message });
   if (error instanceof QuantityValidationError) return t("error_quantity", { detail: error.message });
@@ -304,7 +319,7 @@ export async function recordMeasurementAction(
       storageAssignmentId: emptyToNull(formData.get("storageAssignmentId")),
       // T9.5 §3(c): the one write path where the UI itself exposes both
       // fields (MeasurementForm) rather than the action choosing silently.
-      provenanceClass: String(formData.get("provenanceClass") ?? "measured_fact") as never,
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_MEDICION),
       operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
     });
   } catch (error) {
@@ -448,7 +463,7 @@ export async function recordRoastSessionAction(
       notes: emptyToNull(formData.get("notes")),
       // §3: un perfil leído de la máquina y otro recordado esa noche no valen
       // lo mismo, así que se elige en la pantalla en vez de fijarse aquí.
-      provenanceClass: String(formData.get("provenanceClass") ?? "original_record") as never,
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_REGISTRO_DE_CAMPO),
     });
   } catch (error) {
     return { error: friendlyError(t, error) };
@@ -1076,7 +1091,7 @@ export async function createPlantingCohortFormAction(
       plantedPrecision: plantedPrecision as never,
       // ADR-038: sin valor por defecto. El formulario obliga a elegirlo porque
       // «de dónde sale este dato» no lo puede decidir una acción.
-      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_SIEMBRA),
       dataQuality: emptyToNull(formData.get("dataQuality")) as never,
       notes: emptyToNull(formData.get("notes")),
     });
@@ -1248,7 +1263,7 @@ export async function correctMeasurementFormAction(
       reason: String(formData.get("reason") ?? ""),
       operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
       notes: emptyToNull(formData.get("notes")),
-      provenanceClass: String(formData.get("provenanceClass") ?? "measured_fact") as never,
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_MEDICION),
     });
   } catch (error) {
     return { error: friendlyError(t, error) };
@@ -1300,7 +1315,7 @@ export async function recordLabMeasurementAction(
       unit: String(formData.get("unit") ?? ""),
       occurredAt: fechaDeDiaRequerida(formData, "occurredAt"),
       notes: emptyToNull(formData.get("notes")),
-      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_ANALISIS),
       sourceReference: emptyToNull(formData.get("sourceReference")),
     });
   } catch (error) {
@@ -1436,7 +1451,7 @@ export async function createBiocharBatchAction(
       // La organización ya no viaja: se deriva de la Location en el servicio.
       producedAtLocationId: String(formData.get("producedAtLocationId") ?? ""),
       // ADR-038: sin valor por defecto. Lo elige el formulario, que obliga.
-      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_BIOCHAR),
       ...camposDeBiochar(formData),
     });
   } catch (error) {
@@ -1460,7 +1475,7 @@ export async function updateBiocharBatchAction(
     await updateBiocharBatch(user.userAccountId, {
       biocharBatchId,
       batchCode: String(formData.get("batchCode") ?? ""),
-      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_BIOCHAR),
       ...soloLoQueVino(formData, camposDeBiochar(formData)),
     });
   } catch (error) {
@@ -1533,7 +1548,7 @@ export async function createSoilProfileAction(
       locationId,
       describedAt: fechaDeDiaRequerida(formData, "describedAt"),
       // ADR-038: sin valor por defecto. El formulario obliga a elegirlo.
-      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_REGISTRO_DE_CAMPO),
       horizons: horizontesDelFormulario(formData),
       ...camposDeCalicata(formData),
     });
@@ -1563,7 +1578,7 @@ export async function updateSoilProfileAction(
     const perfil = await updateSoilProfile(user.userAccountId, {
       soilProfileId: String(formData.get("soilProfileId") ?? ""),
       describedAt: formData.has("describedAt") ? fechaDeDiaRequerida(formData, "describedAt") : undefined,
-      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_REGISTRO_DE_CAMPO),
       ...soloLoQueVino(formData, camposDeCalicata(formData)),
     });
     revalidatePath(`/plots/${perfil.locationId}`);
@@ -1590,7 +1605,7 @@ export async function createSoilSampleAction(
       locationId,
       sampleCode: String(formData.get("sampleCode") ?? ""),
       sampledAt: fechaDeDiaRequerida(formData, "sampledAt"),
-      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_REGISTRO_DE_CAMPO),
       treatmentPlotLabel: emptyToNull(formData.get("treatmentPlotLabel")),
       samplingPointLabel: emptyToNull(formData.get("samplingPointLabel")),
       depthTopCm: emptyToNullNumber(formData.get("depthTopCm")),
@@ -1623,7 +1638,7 @@ export async function createFoliarSampleAction(
       locationId,
       sampleCode: String(formData.get("sampleCode") ?? ""),
       sampledAt: fechaDeDiaRequerida(formData, "sampledAt"),
-      provenanceClass: String(formData.get("provenanceClass") ?? "") as never,
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_REGISTRO_DE_CAMPO),
       treatmentPlotLabel: emptyToNull(formData.get("treatmentPlotLabel")),
       leafPairPosition: emptyToNullNumber(formData.get("leafPairPosition")),
       canopyPosition: emptyToNull(formData.get("canopyPosition")) as never,

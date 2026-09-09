@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { recordMeasurementAction, type TraceabilityActionState } from "../../actions/traceability";
+import { PROCEDENCIA_DE_MEDICION } from "../../../lib/traceability/procedencia";
 
 const initialState: TraceabilityActionState = {};
 
@@ -19,7 +20,6 @@ const VARIABLES = ["temperature", "ph", "brix", "relative_humidity", "moisture",
 // refractometer, pH meter, moisture meter — which is a measured fact, not
 // an unqualified claim (T9.5 §3(b)'s "harvest weight read off a scale"
 // reasoning extends the same way here).
-const PROVENANCE_CLASSES = ["measured_fact", "direct_observation", "interpretation", "scientific_evidence"] as const;
 
 interface ObserverOption {
   id: string;
@@ -81,7 +81,7 @@ export function MeasurementForm({
       <div className="nn-field">
         <label htmlFor="provenanceClass">{t("provenanceClassLabel")}</label>
         <select id="provenanceClass" name="provenanceClass" defaultValue="measured_fact">
-          {PROVENANCE_CLASSES.map((cls) => (
+          {PROCEDENCIA_DE_MEDICION.map((cls) => (
             <option key={cls} value={cls}>
               {t(`provenanceClass_${cls}` as "provenanceClass_measured_fact")}
             </option>

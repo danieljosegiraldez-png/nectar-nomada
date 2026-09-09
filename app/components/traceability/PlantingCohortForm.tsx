@@ -8,6 +8,7 @@ import {
   updatePlantingCohortFormAction,
   type TraceabilityActionState,
 } from "../../actions/traceability";
+import { PROCEDENCIA_DE_SIEMBRA } from "../../../lib/traceability/procedencia";
 
 const initialState: TraceabilityActionState = {};
 
@@ -16,7 +17,6 @@ const initialState: TraceabilityActionState = {};
  * valores completos incluyen hipótesis, conclusión y sugerencia de IA, que
  * pertenecen a otras capas y no a «cuántas matas hay en este bloque».
  */
-const PROVENANCE_CLASSES = ["original_record", "direct_observation", "interpretation"] as const;
 const DATA_QUALITIES = ["verified", "provisional", "unconfirmed"] as const;
 const PRECISIONS = ["year", "month", "date"] as const;
 
@@ -169,7 +169,7 @@ export function PlantingCohortForm({
             <option value="" disabled>
               {t("provenanceClassChoose")}
             </option>
-            {PROVENANCE_CLASSES.map((p) => (
+            {PROCEDENCIA_DE_SIEMBRA.map((p) => (
               <option key={p} value={p}>
                 {t(`provenanceClass_${p}` as "provenanceClass_direct_observation")}
               </option>
