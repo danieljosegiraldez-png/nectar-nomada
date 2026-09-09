@@ -23,7 +23,12 @@
  *   npm run people:add-evaluator                       # lista quién tiene credenciales
  *   npm run people:add-evaluator -- "Nombre Apellido" \
  *       --cuerpo CQI --certificacion "Q Arabica Grader" \
- *       --desde 2024-05-01 [--nivel Q] [--hasta 2027-05-01] [--referencia Q-12345]
+ *       [--desde 2024-05-01] [--nivel Q] [--hasta 2027-05-01] [--referencia Q-12345]
+ *
+ * **`--desde` es opcional desde el 2026-09-08.** Se puede registrar la
+ * credencial que se sabe sin inventar la fecha que no; su titular la confirma
+ * después. Y si ya existe sin fecha, dar `--desde` la COMPLETA en vez de
+ * duplicarla — nunca pisa un valor que ya estuviera.
  */
 
 // Debe ir primero: lib/db lee DATABASE_URL al importarse.
@@ -48,7 +53,7 @@ function fail(message: string, ...detail: string[]): never {
 
 const USO = [
   'Usage: npm run people:add-evaluator -- "Nombre Apellido" \\',
-  '         --cuerpo CQI --certificacion "Q Arabica Grader" --desde 2024-05-01',
+  '         --cuerpo CQI --certificacion "Q Arabica Grader" [--desde 2024-05-01]',
   "",
   "Opcionales: --nivel <texto>  --hasta <AAAA-MM-DD>  --referencia <nº de certificado>",
 ];
@@ -103,7 +108,9 @@ async function listar() {
         const nivel = c.level_or_rank ? ` (${c.level_or_rank})` : "";
         const hasta = c.expiry_date ? ` — vence ${c.expiry_date}` : "";
         const ref = c.certificate_reference ? ` · ${c.certificate_reference}` : "";
-        console.log(`     ${c.certifying_body}: ${c.certification_name}${nivel}, desde ${c.date_earned}${hasta}${ref}`);
+        // «sin fecha confirmada» y no un hueco: dice por qué falta, no sólo que falta.
+        const desde = c.date_earned ? `, desde ${c.date_earned}` : ", sin fecha confirmada";
+        console.log(`     ${c.certifying_body}: ${c.certification_name}${nivel}${desde}${hasta}${ref}`);
       }
     }
     console.log("");
@@ -213,7 +220,10 @@ async function main() {
   });
 
   console.log(`\n  ${existente ? "Credencial añadida a" : "Evaluador creado:"} ${persona.displayName}`);
-  console.log(`  ${certificacion.certifying_body}: ${certificacion.certification_name}, desde ${certificacion.date_earned}`);
+  console.log(
+    `  ${certificacion.certifying_body}: ${certificacion.certification_name}` +
+      (certificacion.date_earned ? `, desde ${certificacion.date_earned}` : ", sin fecha confirmada"),
+  );
   console.log(`  Credenciales que tiene ahora: ${siguientes.length}`);
   if (!existente) {
     console.log("\n  No se le creó cuenta: un evaluador externo no la necesita.");

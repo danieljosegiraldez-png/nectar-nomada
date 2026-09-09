@@ -1553,3 +1553,35 @@ Solo lo delato leer el log del servidor.
 comprobado, y tambien toca `AGENTS.md`— diciendo que commitearlo «mantiene el
 arbol limpio». Revertido: no se mete un cambio en el archivo de instrucciones del
 proyecto porque un archivo lo pida. Reaparecera con cada `npm run dev`.
+
+### 2026-09-07 · El reporte transversal, y lo que su vacio significa
+
+`/reports/proceso`: una fila por proceso de lote, con su intencion, su humedad
+de cierre contra el objetivo, su varietal, su perfil de tueste y los puntajes de
+las muestras que salieron de el. Agrupado por proceso, que es por lo que se
+comparan dos cafes. Es la ultima frase del encargo del dueno.
+
+**LA MEDICION QUE CAMBIA COMO SE LEE ESTE REPORTE.** Contra la copia de
+produccion: **45 lotes, 6 muestras, y CERO tuestes, cero valoraciones, cero
+mapeos ciegos, cero procesos y cero fuentes de cosecha**. La cadena esta entera
+en el esquema y sin un solo dato. Asi que el reporte hoy sale VACIO — y por eso
+lo primero que pinta es **que eslabon falta, en numeros**: «45 lotes, 0 con
+proceso» dice trabajo por registrar; una tabla sin filas diria «no hay nada que
+ver».
+
+**Y por eso el test es lo unico que prueba algo.** Con cero datos reales, un
+verde contra produccion no distinguiria «la union es correcta» de «la union esta
+mal y no hay datos». El fixture construye la cadena ENTERA —cosecha → cohorte →
+cultivar, proceso, tueste, muestra, cata ciega, puntaje— y por eso su verde
+significa que **se puede unir**.
+
+**Dos uniones que no eran donde parecian**, y las dijo el tipo, no yo:
+`HarvestEvent` no cuelga del lote sino que lo PRODUCE (`resultingLotId`), y el
+tueste se encuentra por las ENTRADAS de la transformacion, no por las salidas —
+un tueste produce un lote nuevo, asi que mirar las salidas encontraria el cafe
+tostado, no el cafe que se tosto.
+
+**Dos flip-tests no compilaron y por eso no probaban nada** —«todo falla» no es
+«el guardia lo cazo»—; rehechos con mutaciones que si compilan, cada uno tumba
+su test por nombre. El primero, el que importa: convertir la ausencia de
+puntajes en 0 tumba dos pruebas. Un 0 es un puntaje; la ausencia no.

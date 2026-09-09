@@ -611,14 +611,26 @@ evaluate people's demonstrated perceptual ability against known standards.
 
 ```
 core.person: add sensory_certifications jsonb (array of
-  {certifying_body, certification_name, level_or_rank, date_earned,
-  expiry_date (nullable), certificate_reference})
+  {certifying_body, certification_name, level_or_rank (nullable),
+  date_earned (nullable), expiry_date (nullable),
+  certificate_reference (nullable)})
 
 sensory.evaluator_sensitivity_profile(person_id, reference_standard_id,
   demonstrated_threshold (nullable), known_anosmic (boolean, nullable),
   last_calibration_date, confidence_level [not_tested|tested_once|
   regularly_calibrated])
 ```
+
+**`date_earned` became nullable on 2026-09-08** (Daniel's decision). It was
+required, and the empirical case against that is Kurt Ngo: recorded as a CQI Q
+Grader — a real, documented credential — with no date, because nobody knew it.
+Requiring the date did not produce a dated row; it produced one that could not
+even be read, and which later kept the external-report screen from opening at
+all. Only `certifying_body` and `certification_name` are required now: without
+those two there is nothing being asserted. An undated row is a placeholder that
+states the credential it knows and stays silent about what it does not — its
+holder confirms the date when they sign in. Adding the date later **completes**
+that row rather than duplicating the credential.
 
 This extends the `Expertise`/`Certifications` fields already specified on
 `Person` (`CLAUDE.md` §9) with real structure — your own UC Davis, AROXA/
