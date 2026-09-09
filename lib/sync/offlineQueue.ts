@@ -127,7 +127,7 @@ export async function ensureDeviceId(): Promise<string> {
     body: JSON.stringify({ label: navigator.userAgent.slice(0, 120), platform: "pwa" }),
   });
   if (!res.ok) throw new Error(`device_registration_failed_${res.status}`);
-  const { id } = (await res.json()) as { id: string };
+  const { id } = await leerJson<{ id: string }>(res, "POST /api/v1/devices");
   localStorage.setItem(DEVICE_KEY, id);
   return id;
 }
@@ -211,6 +211,33 @@ export function clasificarRespuesta(status: number): DecisionDeRespuesta {
   return "rechazar";
 }
 
+/**
+ * Lee el JSON de una respuesta, o lanza diciendo QUÉ llegó en su lugar.
+ *
+ * **Por qué existe.** Medido contra el artefacto vivo el 2026-09-09: un POST a
+ * una ruta inexistente contesta **200 con la página HTML de not-found** —un GET
+ * a la misma ruta contesta 404—. `clasificarRespuesta(200)` dice «aplicar», y
+ * el `res.json()` siguiente revienta con:
+ *
+ *     SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+ *
+ * que no nombra ni la ruta, ni el estado, ni lo que llegó.
+ *
+ * **No hay pérdida de datos y esto no la arregla**: el throw ocurre antes de
+ * descartar ningún borrador, así que la cola queda intacta. Lo que arregla es
+ * el diagnóstico, que es lo que cuesta tiempo el día que pasa.
+ */
+export async function leerJson<T>(res: Response, contexto: string): Promise<T> {
+  const tipo = res.headers.get("content-type") ?? "";
+  if (!tipo.toLowerCase().includes("json")) {
+    throw new Error(
+      `${contexto}: la respuesta ${res.status} no es JSON sino ${tipo || "sin content-type"}. ` +
+        `Un POST a una ruta que no existe contesta 200 con HTML; comprueba la ruta.`,
+    );
+  }
+  return (await res.json()) as T;
+}
+
 type ServerResult = { clientDraftId: string; status: "applied" | "duplicate" | "rejected"; reason?: string };
 
 /**
@@ -257,7 +284,7 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
     return { applied: 0, duplicate: 0, rejected: drafts.length, stillPending: drafts.length, serverUnavailable: false };
   }
 
-  const { results } = (await res.json()) as { results: ServerResult[] };
+  const { results } = await leerJson<{ results: ServerResult[] }>(res, "POST /api/v1/sync/field-events");
   const resumen: SyncSummary = { applied: 0, duplicate: 0, rejected: 0, stillPending: 0, serverUnavailable: false };
 
   for (const r of results) {
