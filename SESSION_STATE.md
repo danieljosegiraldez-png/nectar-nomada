@@ -37,6 +37,31 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-08 · El guardia del menú medía a un visor que no era el más privilegiado
+
+Afirmaba «ni el visor mas privilegiado pasa de 8 entradas» y pasaba en verde con
+**10**. La grieta era el fixture: una lista de diez permisos **escrita a mano** a
+la que le faltaban `platform:manage_permissions` y los de contenido — justo las
+dos claves que abren las dos entradas de mas. El «mas privilegiado» del test no
+lo era.
+
+**El arreglo es estructural, no un numero.** `NAV_PERMISSIONS` se **deriva** de
+`NAV`, asi que una entrada nueva trae su permiso sola y esto no puede volver a
+medir a otro visor. Es la misma leccion que el mapa de variables que paso a
+`Record` total: un dato que el compilador mantiene es mejor guardia que una
+lista que hay que acordarse de actualizar.
+
+**Y el numero se fija, no se sube.** Poner `<= 10` habria borrado el objetivo.
+`toHaveLength(10)` hace que crecer sea deliberado y deja el hueco a la vista:
+**el objetivo de 8 sigue vivo y sin cumplir**, con lo que cuesta medido — 234 px
+de cabecera en tres filas, el 29 % de un telefono de 375 px, antes de ver nada.
+Acortar el menu o mover el objetivo sigue siendo del dueño.
+
+**El flip-test es la parte que vale.** Añadida una entrada 11 a `NAV`, en el
+**mismo mundo mutado**: el guardia viejo **pasa** —1 passed, ciego— y el nuevo
+cae por su nombre. No es «el guardia nuevo funciona»: es la prueba de que el
+viejo no medía nada.
+
 ### 2026-09-08 · `/plots` deja de recitar lo que falta ocho veces
 
 Medido sobre la finca real: **8 parcelas, 0 con área y 0 con una sola condición
@@ -158,34 +183,6 @@ volverse legible, pasaba por razones equivocadas. Recolocado sobre una que
 sigue siendo ilegible —sin `certification_name` no hay credencial que afirmar—
 y re-flipeado para verlo caer por su nombre otra vez.
 
-### 2026-09-08 · La puerta del informe de un Q-grader, y dos huecos que destapó
-
-El servicio existía desde el PR #219 y **la unica forma de usarlo era la
-terminal**, con un JSON escrito a mano. Ahora `/sensory/external-report`, en dos
-pasos: primero el protocolo —de el salen los atributos, y sus NOMBRES son la
-autoridad con la que el servicio casa—, despues la transcripcion. Ninguno se
-teclea: un nombre tecleado es como un informe entraria a medias.
-
-**Hueco 1, y no era inocuo.** `InformeExterno` no tenia donde traer las tazas no
-uniformes ni las defectuosas, asi que el resolver las daba por 0: un informe CVA
-que declara dos tazas no uniformes se guardaba **4 puntos por encima** de lo que
-dice el papel, en silencio. La cata interna si las pasaba desde siempre
-(`app/actions/sensory.ts`) — era este camino, el del trabajo que se paga, el que
-las perdia. Control positivo al lado, y por eso se vio.
-
-**Hueco 2, y lo destapo la suite, no una lectura.** El lector listaba a todas las
-personas con `leerCertificaciones`, que es estricto a proposito. En la base hay
-una fila con `date_earned: null`, y esa sola fila **dejaba la pantalla entera sin
-abrirse**: nadie podia registrar ningun informe por culpa de un dato ajeno. Ahora
-degrada a esa persona —sale sin credencial, no se le afirma una que no se pudo
-leer— como ya hacia `scripts/add-evaluator.ts`, que se lo encontro antes.
-
-**Y una verificacion mia que no verificaba nada.** El 307 de la ruta nueva sin
-sesion parecia probar que la pagina existe; el control negativo dice que **una
-ruta inexistente da 307 igual**, porque el middleware redirige todo. Lo que si lo
-prueba es el manifiesto de `next build`, que la nombra. Queda **sin verificar en
-pantalla** hasta que alguien con sesion la abra.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
@@ -195,17 +192,13 @@ de ellas venía de tests. Sesión con sesión iniciada, 375×812, datos de la co
 local. Se arregló lo objetivo (PR #166, la tabla que desplazaba la página); lo
 de abajo **queda abierto porque es decisión de producto, no arreglo mecánico**.
 
-- **El guardia de navegación afirma lo contrario de lo que pasa.**
-  `tests/navigation.test.ts` exige `nav.length <= 8` para «even the most
-  privileged viewer» y dice que consolidó «the fixed ten-item bar this
-  replaced». Medido: `NAV` tiene **10 entradas** y su unión real de permisos son
-  **18**; el fixture `PLATFORM_ADMIN` del test es una lista de **10 permisos
-  escrita a mano** a la que le faltan `platform:manage_permissions` y los de
-  contenido — justo los dos que abren las dos entradas de más. Por eso pasa en
-  verde. **Arreglar el fixture lo pone en rojo con 10**, y elegir entre acortar
-  el menú o mover el objetivo es de Daniel; lo eligió dejar así el 2026-09-05.
-  En el teléfono son **234 px de cabecera en tres filas: el 29 % de la pantalla**
-  antes de ver nada.
+- **El menú tiene 10 entradas y el objetivo del móvil son 8.** El guardia que
+  afirmaba lo contrario **se arregló** el 2026-09-08 —ver §2—: ahora mide al
+  visor más privilegiado de verdad y fija el 10, así que el hueco está a la
+  vista en vez de escondido tras un verde. Lo que sigue abierto es la decisión:
+  **acortar el menú o mover el objetivo**. En el teléfono son 234 px de
+  cabecera en tres filas, el 29 % de la pantalla antes de ver nada.
+
 - ~~«Batches» en una interfaz en español.~~ **Cerrado el 2026-09-08** — ver la
   entrada de §2. El café es «Lote»/«Lot» y el terreno es «Parcela».
 - **`/plots` no ofrece nada que pulsar.** Las acciones existen —ocho

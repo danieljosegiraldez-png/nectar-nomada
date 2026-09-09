@@ -185,6 +185,23 @@ export function buildNavigation(granted: ReadonlySet<string>): NavEntry[] {
   return NAV.filter((entry) => visible(entry, granted)).map(({ labelKey, href }) => ({ labelKey, href }));
 }
 
+/**
+ * Toda clave que abre una entrada del menú principal, derivada de `NAV`.
+ *
+ * **Existe porque escribirla a mano falló, y falló en silencio.** El test que
+ * afirmaba «ni el visor más privilegiado pasa de 8 entradas» usaba una lista de
+ * diez permisos escrita a mano; le faltaban `platform:manage_permissions` y los
+ * de contenido — justo los dos que abren las dos entradas de más. Así que el
+ * «visor más privilegiado» del test **no lo era**, el guardia decía lo
+ * contrario de lo que pasaba, y pasaba en verde. Medido el 2026-09-08:
+ * `NAV` tiene 10 entradas y esta unión, 18 claves.
+ *
+ * Derivada, una entrada nueva entra aquí sola. Es la misma lección que el mapa
+ * de variables que pasó a `Record` total: un dato que el compilador mantiene
+ * es mejor guardia que una lista que hay que acordarse de actualizar.
+ */
+export const NAV_PERMISSIONS: readonly string[] = [...new Set(NAV.flatMap((e) => e.requiresAnyOf))];
+
 /** The tools offered inside `/sensory`, filtered the same way. */
 export function buildSensoryTools(granted: ReadonlySet<string>): NavEntry[] {
   return SENSORY_TOOLS.filter((entry) => visible(entry, granted)).map(({ labelKey, href }) => ({
