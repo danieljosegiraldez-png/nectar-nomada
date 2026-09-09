@@ -23,7 +23,12 @@ export default async function PlotsPage() {
           llega desde aquí y no desde la barra superior: `navigation.test.ts`
           exige que el menú más privilegiado quepa en un móvil (≤8 entradas), y
           esa regla tiene razón — una sección de registro puntual no compite
-          con Batches, Lotes o Investigación por un sitio ahí arriba. */}
+          con Lotes, Parcelas o Investigación por un sitio ahí arriba.
+
+          (Ese «≤8» es hoy una afirmación falsa: `NAV` tiene 10 entradas y el
+          fixture del test es una lista de permisos escrita a mano que no llega
+          a abrirlas todas. Está anotado en `SESSION_STATE.md` §3; la decisión
+          de acortar el menú o mover el objetivo sigue siendo del dueño.) */}
       <p>
         <Link href="/biochar">{t("biocharTitle")}</Link>
       </p>
