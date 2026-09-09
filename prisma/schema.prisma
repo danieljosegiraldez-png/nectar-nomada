@@ -96,6 +96,7 @@ model Person {
   creator               UserAccount? @relation("PersonCreatedBy", fields: [createdBy], references: [id])
 
   userAccount                        UserAccount?
+  notificationPreferences            PersonNotificationPreference[]
   assessmentsAsExternalEvaluator     Assessment[] @relation("AssessmentByExternalEvaluator")
   projectsAsClient                   Project[]
   storiesAuthored                    Story[]
@@ -258,6 +259,7 @@ model UserAccount {
   researchActivitiesCreated          ResearchActivity[]           @relation("ResearchActivityCreatedBy")
   devicesCreated                     Device[]                     @relation("DeviceCreatedBy")
   pollinationCommitmentsCreated      PollinationCommitment[]      @relation("PollinationCommitmentCreatedBy")
+  notificationPreferencesCreated     PersonNotificationPreference[] @relation("PersonNotificationPreferenceCreatedBy")
 
   /// A9.6 — el otro lado de las FK de `reporting`.
   reportsCreated  Report[]        @relation("ReportCreatedBy")
@@ -436,6 +438,60 @@ model Assignment {
 // production credentials, not by Prisma). No status/updatedAt columns because
 // rows are never modified after insert.
 // ---------------------------------------------------------------------------
+
+/// A9.11 (D10a) — por dónde quiere una persona que le lleguen los avisos.
+///
+/// **Cuelga de `Person`, no de `UserAccount`, y no es un detalle.** La mayoría
+/// de las filas `Person` de esta base no tienen correo y por tanto no tienen
+/// cuenta: quien trabaja en el campo suele no poder entrar a la aplicación. Un
+/// modelo colgado de la cuenta excluiría justo a la gente a la que hay que
+/// avisar — el mismo bloqueo que `Task.assignedToUserAccountId` sigue teniendo.
+///
+/// **Es una LISTA ORDENADA, no un canal único.** `priority` la ordena: se
+/// intenta el primero que sea entregable. Un canal solo no basta porque un
+/// teléfono sin señal en Toabré no es una hipótesis.
+///
+/// **Y querer un canal no es poder recibirlo.** Medido el 2026-09-08: de 19
+/// personas, 0 tienen teléfono y 3 tienen correo. Por eso `canalesDe` distingue
+/// preferencia de entregabilidad en vez de devolver una lista que miente.
+enum NotificationChannel {
+  /// La prioridad declarada de `CLAUDE.md` §34, y hoy la única que alcanza a
+  /// alguien: 16 de 19 personas tienen cuenta.
+  in_app
+  email
+  whatsapp
+  calendar
+
+  @@schema("core")
+}
+
+model PersonNotificationPreference {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personId String @map("person_id") @db.Uuid
+  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  channel NotificationChannel
+
+  /// Menor primero. No es único a propósito: dos canales empatados son un
+  /// empate real, y romperlo aquí inventaría una preferencia que nadie declaró.
+  priority Int @default(0)
+
+  /// Apagar un canal sin perder que existió. Borrar la fila diría «nunca lo
+  /// eligió», que es un hecho distinto.
+  enabled Boolean @default(true)
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("PersonNotificationPreferenceCreatedBy", fields: [createdBy], references: [id])
+
+  /// Una persona declara una vez por canal. Dos filas del mismo canal serían
+  /// dos respuestas a la misma pregunta.
+  @@unique([personId, channel])
+  @@index([personId])
+  @@map("person_notification_preference")
+  @@schema("core")
+}
 
 model AuditEvent {
   id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
