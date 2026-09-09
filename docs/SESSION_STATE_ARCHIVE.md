@@ -1778,3 +1778,32 @@ dentro y habrian pasado con el vuelto a poner. Nadie miraba esas cadenas. Queda
 `tests/ui/vocabularioDelMenu.test.ts`, que dice en su cabecera **lo que no
 prueba**: que las etiquetas sean las correctas. Eso lo dijo una persona usando
 la aplicacion, que es como se encontro.
+
+### 2026-09-08 · `/plots` deja de recitar lo que falta ocho veces
+
+Medido sobre la finca real: **8 parcelas, 0 con área y 0 con una sola condición
+registrada**. Asi que la pagina eran ocho tarjetas identicas salvo el nombre,
+cada una repitiendo «Área: Sin registrar» y la frase entera de «aun no hay
+condiciones registradas». Eso es lo que el dueno vio como 2,6 pantallas de
+scroll el 2026-09-05.
+
+**Lo que falta se cuenta una vez, arriba, en numeros** — el mismo criterio que
+`/reports/proceso`: sin el recuento, ocho tarjetas vacias se leen como «no hay
+nada que ver» en vez de «falta registrarlo todo». En la tarjeta, el area solo se
+pinta si la hay, y el hueco de condiciones son dos palabras en vez de una frase.
+La frase larga sigue en la ficha de la parcela, que es donde se rellena.
+
+**Lo que NO cambia, y por que.** «Cero botones de accion» sigue abierto en §3:
+las acciones existen, ocho formularios, pero **un nivel abajo** — en
+`/plots/[id]`. Que subir a la lista es decision de producto y no la tomo yo.
+
+**Un hallazgo de paso, y uno que ya no lo es.** Las parcelas **se llaman «Lote 1
+— Finca Rosina»** en los datos: el menu dice «Parcelas» desde hoy y dentro
+pondra «Lote». Renombrar datos de la finca es del dueno; queda dicho, no tocado.
+
+Y el otro **lo arreglo otra sesion mientras yo trabajaba**: `CLAUDE.md` mandaba
+correr `rutas-protegidas.mjs`, que no existe desde el PR #60. Lo encontre y lo
+corregi por mi cuenta; cuando fui a fusionar, el PR #249 ya lo habia hecho — con
+mejor comentario que el mio, ademas. Se descarto lo mio entero y se tomo el suyo.
+**Dos sesiones tropezando con la misma linea el mismo dia** dice algo del coste
+de una instruccion vieja, y esa es la parte que vale la pena anotar.

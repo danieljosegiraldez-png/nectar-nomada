@@ -212,6 +212,7 @@ model UserAccount {
   materialConsumptionEntriesCreated MaterialConsumptionEntry[]   @relation("MaterialConsumptionEntryCreatedBy")
   hivesCreated                      Hive[]                       @relation("HiveCreatedBy")
   coloniesCreated                   Colony[]                     @relation("ColonyCreatedBy")
+  colonyLossCausesCreated           ColonyLossCause[]            @relation("ColonyLossCauseCreatedBy")
   inspectionsCreated                Inspection[]                 @relation("InspectionCreatedBy")
   apiaryHarvestEventsCreated        ApiaryHarvestEvent[]         @relation("ApiaryHarvestEventCreatedBy")
   colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
@@ -5070,6 +5071,18 @@ enum ColonyStatus {
   active
   dead
   absconded
+  /// Se combinó con otra colonia y dejó de existir como unidad.
+  ///
+  /// El estándar internacional de monitoreo de pérdidas —COLOSS, y su versión
+  /// latinoamericana de SOLATINA, donde Panamá participa— clasifica como
+  /// pérdida la colonia con «problema de reina irresoluble»: está viva, pero
+  /// no es recuperable y se combina o se elimina. Sin este valor esa colonia
+  /// se quedaba `active` para siempre, inflando el conteo contra el
+  /// compromiso de polinización con abejas que ya no están en esa caja.
+  ///
+  /// Decisión del dueño (2026-09-09): cuenta como fin de la colonia, con su
+  /// causa, igual que `dead` y `absconded`.
+  combined
 
   @@schema("apiary")
 }
@@ -5103,11 +5116,12 @@ model Colony {
   /// cuándo. Sin la fecha, «cuándo perdimos las tres de Toabré» no tiene
   /// respuesta y la serie del año no se puede dibujar.
   ///
-  /// La CAUSA no entra aquí. Un vocabulario de causas —varroa, orfandad,
-  /// hambre, saqueo— es conocimiento del dueño y se pregunta, no se inventa;
-  /// cuando lo dé, es un `VariableCatalog` como el origen (A9.10), no una
-  /// columna de texto libre. Mientras tanto va en el `reason` del AuditEvent,
-  /// que ya existe y no finge ser consultable.
+  /// La CAUSA no entra aquí, y ahora por una razón distinta. Este comentario
+  /// decía que el vocabulario «es conocimiento del dueño y se pregunta, no se
+  /// inventa». Se preguntó el 2026-09-09, y la respuesta fue que **una pérdida
+  /// tiene varias causas a la vez** — así que tampoco cabe en una columna ni en
+  /// una FK. Vive en `ColonyLossCause`, una fila por causa, cada una con cómo
+  /// se estableció.
   endedAt         DateTime?        @map("ended_at")
   // A2 — required, no default: verified zero Colony rows existed in Neon
   // before this migration, so this doesn't retrofit a required column onto
@@ -5131,6 +5145,9 @@ model Colony {
   createdBy       String?          @map("created_by") @db.Uuid
   creator         UserAccount?     @relation("ColonyCreatedBy", fields: [createdBy], references: [id])
 
+  /// Por qué se perdió. Vacío mientras siga activa, y puede tener varias:
+  /// ver la cabecera de `ColonyLossCause`.
+  lossCauses          ColonyLossCause[]
   inspections         Inspection[]
   colonyEvents        ColonyEvent[]
   apiaryHarvestEvents ApiaryHarvestEvent[]
@@ -5139,6 +5156,58 @@ model Colony {
   @@index([hiveId])
   @@index([originSourceValueId])
   @@map("colony")
+  @@schema("apiary")
+}
+
+/// Por qué se perdió una colonia. **Varias causas por pérdida**, no una.
+///
+/// ## Por qué una tabla y no una columna
+///
+/// El dueño lo dijo así: «cuando hay pérdida de colonia hay múltiples razones
+/// y/o causales y situaciones». Una FK sola obligaría a elegir entre varroa y
+/// hambre cuando la respuesta honesta es las dos, y la literatura coincide:
+/// en el monitoreo latinoamericano de SOLATINA —donde Panamá participa— la
+/// categoría que más creció son las cajas vacías «por enfermedades,
+/// ausentamiento e intoxicaciones» juntas, no por separado.
+///
+/// ## Por qué `provenanceClass` es obligatorio aquí
+///
+/// Porque una causa de pérdida casi nunca se ve: se deduce de una caja vacía
+/// dos semanas después. El propio estándar internacional pregunta por
+/// «hambre SOSPECHADA» y «exposición tóxica SOSPECHADA», y el caso de Toabré
+/// que hay documentado en `48_A9_ANEXO_C_TABLERO_Y_REPORTES.md` es
+/// literalmente «una hipótesis en pie». `CLAUDE.md` §3 prohíbe guardar una
+/// inferencia como hecho, así que cada causa dice **cómo se estableció**:
+/// `direct_observation` lo que se vio, `hypothesis` lo que se sospecha,
+/// `conclusion` lo que se cerró con evidencia. La capa de servicio rechaza
+/// cualquier otra clase.
+///
+/// El vocabulario vive en `VariableCatalog` y crece por semilla, no por
+/// migración — mismo mecanismo que el origen de colonia (A9.10) y mismo
+/// precedente P1.
+model ColonyLossCause {
+  id           String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  colonyId     String               @map("colony_id") @db.Uuid
+  colony       Colony               @relation(fields: [colonyId], references: [id], onDelete: Cascade)
+  causeValueId String               @map("cause_value_id") @db.Uuid
+  cause        VariableCatalogValue @relation("ColonyLossCauseValue", fields: [causeValueId], references: [id])
+  /// Cómo se estableció esta causa. Ver la cabecera: no hay valor por defecto
+  /// a propósito, porque el defecto silencioso sería convertir una sospecha en
+  /// observación.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  dataQuality     DataQuality?    @map("data_quality")
+  /// Lo que el catálogo no cubre. Una línea, no un párrafo — el mismo papel
+  /// que `originNote` junto a `originSourceValueId`.
+  note      String?
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ColonyLossCauseCreatedBy", fields: [createdBy], references: [id])
+
+  /// La misma causa no se anota dos veces para la misma colonia. Repetirla no
+  /// añade información y haría que un reporte contara doble.
+  @@unique([colonyId, causeValueId])
+  @@index([causeValueId])
+  @@map("colony_loss_cause")
   @@schema("apiary")
 }
 
@@ -5611,6 +5680,7 @@ model VariableCatalogValue {
   washMediumOfStages ProcessingStage[]             @relation("ProcessingStageWashMedium")
   lotProcessInterventions LotProcessIntervention[]     @relation("LotProcessInterventionKind")
   colonyOrigins           Colony[]                     @relation("ColonyOriginSource")
+  colonyLossCauses        ColonyLossCause[]            @relation("ColonyLossCauseValue")
   gradeOfProcesses        LotProcess[]                 @relation("LotProcessGrade")
   cherryStateOfProcesses  LotProcess[]                 @relation("LotProcessCherryState")
 

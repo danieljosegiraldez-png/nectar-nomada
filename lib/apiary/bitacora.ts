@@ -77,7 +77,16 @@ export const REGLAS_INMEDIATAS: readonly ReglaInmediata[] = [
     cuando: () => true,
     razon:
       "Es el hecho más caro del apiario y el que menos avisa. Perder una colonia cambia el conteo contra el compromiso de polinización y no se recupera esperando al cierre de la visita.",
-    texto: (a) => `Se perdió una colonia${a.status === "absconded" ? " (se fugó)" : ""}.`,
+    // Cifras y forma, nunca el contenido: el mensaje llega a un teléfono donde
+    // RBAC no interviene. Cuántas causas se declararon SÍ va —es una cifra— y
+    // cuáles no: para eso está el enlace, que sí vuelve a pasar por la puerta.
+    texto: (a) => {
+      const comoTermino =
+        a.status === "absconded" ? " (se fugó)" : a.status === "combined" ? " (se combinó con otra)" : "";
+      const cuantas = Array.isArray(a.lossCauses) ? a.lossCauses.length : 0;
+      const causas = cuantas > 0 ? ` ${cuantas} causa${cuantas === 1 ? "" : "s"} declarada${cuantas === 1 ? "" : "s"}.` : "";
+      return `Se perdió una colonia${comoTermino}.${causas}`;
+    },
   },
   {
     operation: "inspection.create",
