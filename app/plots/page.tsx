@@ -13,6 +13,29 @@ export default async function PlotsPage() {
   const t = await getTranslations("Traceability");
   const { plotLocations } = await getManageableContext(user.userAccountId);
 
+  /**
+   * Qué condiciones tiene registradas una parcela. Se calcula una vez y se usa
+   * dos: para el recuento de arriba y para la tarjeta, en vez de repetir la
+   * misma cadena de `!= null` en los dos sitios y que deriven.
+   */
+  const condiciones = (p: (typeof plotLocations)[number]) =>
+    [
+      p.sunExposure && "sun",
+      p.shadePercentage && "shade",
+      (p.altitudeMinM ?? p.altitudeMaxM) != null && "altitude",
+      p.slopeDescription && "slope",
+      p.aspect && "aspect",
+      p.soilType && "soil",
+    ].filter(Boolean).length;
+
+  // **Lo que falta, en números y antes de la lista** — el mismo criterio que
+  // `/reports/proceso`. Medido el 2026-09-08 sobre la finca real: de 8
+  // parcelas, **0 tienen area y 0 tienen una sola condicion**. Sin este
+  // recuento la pagina son ocho tarjetas identicas salvo el nombre, y quien la
+  // abre no sabe si eso es «no hay nada que ver» o «falta registrarlo todo».
+  const conArea = plotLocations.filter((p) => p.areaHectares != null).length;
+  const conCondiciones = plotLocations.filter((p) => condiciones(p) > 0).length;
+
   return (
     <div>
       <span className="nn-badge">{t("badge")}</span>
@@ -33,34 +56,36 @@ export default async function PlotsPage() {
         <Link href="/biochar">{t("biocharTitle")}</Link>
       </p>
 
+      {plotLocations.length > 0 ? (
+        <p className="nn-detail-meta">
+          <span>{t("plotsCount", { n: plotLocations.length })}</span>{" "}
+          <span>{t("plotsWithArea", { n: conArea })}</span>{" "}
+          <span>{t("plotsWithConditions", { n: conCondiciones })}</span>
+        </p>
+      ) : null}
+
       <section className="nn-section">
         {plotLocations.length === 0 ? (
           <p className="nn-muted">{t("noPlots")}</p>
         ) : (
           <div className="nn-grid">
             {plotLocations.map((plot) => {
-              const hasConditions =
-                plot.sunExposure != null ||
-                plot.shadePercentage != null ||
-                plot.altitudeMinM != null ||
-                plot.altitudeMaxM != null ||
-                plot.slopeDescription != null ||
-                plot.aspect != null ||
-                plot.soilType != null;
+              const hasConditions = condiciones(plot) > 0;
 
               return (
                 <Link key={plot.id} href={`/plots/${plot.id}`} className="nn-card-link">
                   <h3>{plot.name}</h3>
                   {plot.organization ? <p className="nn-detail-meta">{plot.organization.name}</p> : null}
 
-                  <p className="nn-detail-meta">
-                    {t("areaLabel")}:{" "}
-                    {plot.areaHectares != null ? (
-                      t("areaValue", { hectares: Number(plot.areaHectares) })
-                    ) : (
-                      <span className="nn-muted">{t("notRecorded")}</span>
-                    )}
-                  </p>
+                  {/* **El área sólo se pinta si la hay.** Con 0 de 8 parcelas
+                      con área, «Área: Sin registrar» se repetía ocho veces y no
+                      decía nada que el recuento de arriba no diga mejor. Lo que
+                      falta se cuenta una vez; no se recita por tarjeta. */}
+                  {plot.areaHectares != null ? (
+                    <p className="nn-detail-meta">
+                      {t("areaLabel")}: {t("areaValue", { hectares: Number(plot.areaHectares) })}
+                    </p>
+                  ) : null}
 
                   {hasConditions ? (
                     <dl className="nn-detail-meta">
@@ -101,7 +126,10 @@ export default async function PlotsPage() {
                       ) : null}
                     </dl>
                   ) : (
-                    <p className="nn-muted">{t("noConditionsRecorded")}</p>
+                    // Tres palabras en vez de la frase entera: en la tarjeta
+                    // basta con marcar el hueco, y la frase larga sigue estando
+                    // en la ficha de la parcela, que es donde se rellena.
+                    <p className="nn-muted">{t("plotNothingRecorded")}</p>
                   )}
                 </Link>
               );

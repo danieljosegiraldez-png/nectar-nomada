@@ -562,7 +562,6 @@
     "slopeLabel": "Pendiente",
     "aspectLabel": "Orientación",
     "soilTypeLabel": "Suelo",
-    "noConditionsRecorded": "Aún no hay condiciones de terreno registradas para esta parcela.",
     "sunExposure_full_sun": "Sol pleno",
     "sunExposure_morning": "Sol de mañana",
     "sunExposure_afternoon": "Sol de tarde",
@@ -1152,7 +1151,11 @@
     "coordsReasonPlaceholder": "p. ej. confirmado con tres visitas",
     "coordsConfirm": "Declarar dónde está",
     "coordsNoSamples": "Ninguna visita ha traído lectura de GPS todavía. Se propondrá sola en cuanto alguien abra una visita aquí.",
-    "coordsDiffersFromDeclared": "Ojo: lo que proponen las visitas está a {metros} m de lo declarado hoy."
+    "coordsDiffersFromDeclared": "Ojo: lo que proponen las visitas está a {metros} m de lo declarado hoy.",
+    "plotsCount": "{n} parcela(s)",
+    "plotsWithArea": "· {n} con área",
+    "plotsWithConditions": "· {n} con condiciones registradas",
+    "plotNothingRecorded": "Sin condiciones"
   },
   "Apiary": {
     "badge": "Apiario",

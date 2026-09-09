@@ -1636,3 +1636,25 @@ backup: las seis tablas patrón casan, 1/1/1 incluidas, y la suite pasa
 reset` dice «Test database ready» y deja el esquema en la foto del backup —
 seis migraciones por detrás de `main` ese día. Hay que aplicar `migrate deploy`
 después, y no fiarse del «ready».
+
+### 2026-09-08 · Grado y estado de cereza, obligatorios
+
+Correccion de Daniel un dia despues de nacer anulables: **un cafe es natural,
+lavado o honey; no es «ninguno»**. Las dos columnas pasan a `NOT NULL`
+(`20260908070000`), el servicio las exige con una frase legible antes de que la
+FK reviente, y los dos desplegables llevan `required` **con la primera opcion
+vacia** — preseleccionar «Natural» pondria un grado que nadie declaro, que es
+justo lo que la columna obligatoria pretende impedir. `process_recipe_version_id`
+**sigue anulable a proposito**: la receta puede no estar definida, el grado no.
+
+**La migracion cuenta antes de exigir.** Un `DO $` con `RAISE EXCEPTION` que
+nombra cuantas filas violarian el `NOT NULL`; produccion tenia **cero** procesos,
+asi que no migra ningun dato. Medido antes de escribirla, no supuesto.
+
+**Y el primer test del `NOT NULL` no medía el `NOT NULL`.** Con la columna en
+`null`, el cliente de Prisma rechaza la llamada el mismo —«Argument `lot` is
+missing»— sin hablar con Postgres: habria pasado igual con la columna anulable.
+Reescrito con `INSERT` crudo, con su control positivo al lado (el mismo `INSERT`
+con las dos columnas entra). Flip-test del `NOT NULL` hecho contra la tabla real
+dentro de una transaccion revertida: sin mutar revienta por `NOT NULL`, con el
+`NOT NULL` quitado la fila entra, y tras el rollback `is_nullable=NO`.

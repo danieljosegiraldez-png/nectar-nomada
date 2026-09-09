@@ -37,6 +37,35 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-08 · `/plots` deja de recitar lo que falta ocho veces
+
+Medido sobre la finca real: **8 parcelas, 0 con área y 0 con una sola condición
+registrada**. Asi que la pagina eran ocho tarjetas identicas salvo el nombre,
+cada una repitiendo «Área: Sin registrar» y la frase entera de «aun no hay
+condiciones registradas». Eso es lo que el dueno vio como 2,6 pantallas de
+scroll el 2026-09-05.
+
+**Lo que falta se cuenta una vez, arriba, en numeros** — el mismo criterio que
+`/reports/proceso`: sin el recuento, ocho tarjetas vacias se leen como «no hay
+nada que ver» en vez de «falta registrarlo todo». En la tarjeta, el area solo se
+pinta si la hay, y el hueco de condiciones son dos palabras en vez de una frase.
+La frase larga sigue en la ficha de la parcela, que es donde se rellena.
+
+**Lo que NO cambia, y por que.** «Cero botones de accion» sigue abierto en §3:
+las acciones existen, ocho formularios, pero **un nivel abajo** — en
+`/plots/[id]`. Que subir a la lista es decision de producto y no la tomo yo.
+
+**Un hallazgo de paso, y uno que ya no lo es.** Las parcelas **se llaman «Lote 1
+— Finca Rosina»** en los datos: el menu dice «Parcelas» desde hoy y dentro
+pondra «Lote». Renombrar datos de la finca es del dueno; queda dicho, no tocado.
+
+Y el otro **lo arreglo otra sesion mientras yo trabajaba**: `CLAUDE.md` mandaba
+correr `rutas-protegidas.mjs`, que no existe desde el PR #60. Lo encontre y lo
+corregi por mi cuenta; cuando fui a fusionar, el PR #249 ya lo habia hecho — con
+mejor comentario que el mio, ademas. Se descarto lo mio entero y se tomo el suyo.
+**Dos sesiones tropezando con la misma linea el mismo dia** dice algo del coste
+de una instruccion vieja, y esa es la parte que vale la pena anotar.
+
 ### 2026-09-08 · «Batches» contra «Lotes»: el menú mandaba a la pantalla ajena
 
 En español el menu ofrecia **«Lotes» para `/plots`** —parcelas de terreno— y
@@ -157,28 +186,6 @@ ruta inexistente da 307 igual**, porque el middleware redirige todo. Lo que si l
 prueba es el manifiesto de `next build`, que la nombra. Queda **sin verificar en
 pantalla** hasta que alguien con sesion la abra.
 
-### 2026-09-08 · Grado y estado de cereza, obligatorios
-
-Correccion de Daniel un dia despues de nacer anulables: **un cafe es natural,
-lavado o honey; no es «ninguno»**. Las dos columnas pasan a `NOT NULL`
-(`20260908070000`), el servicio las exige con una frase legible antes de que la
-FK reviente, y los dos desplegables llevan `required` **con la primera opcion
-vacia** — preseleccionar «Natural» pondria un grado que nadie declaro, que es
-justo lo que la columna obligatoria pretende impedir. `process_recipe_version_id`
-**sigue anulable a proposito**: la receta puede no estar definida, el grado no.
-
-**La migracion cuenta antes de exigir.** Un `DO $` con `RAISE EXCEPTION` que
-nombra cuantas filas violarian el `NOT NULL`; produccion tenia **cero** procesos,
-asi que no migra ningun dato. Medido antes de escribirla, no supuesto.
-
-**Y el primer test del `NOT NULL` no medía el `NOT NULL`.** Con la columna en
-`null`, el cliente de Prisma rechaza la llamada el mismo —«Argument `lot` is
-missing»— sin hablar con Postgres: habria pasado igual con la columna anulable.
-Reescrito con `INSERT` crudo, con su control positivo al lado (el mismo `INSERT`
-con las dos columnas entra). Flip-test del `NOT NULL` hecho contra la tabla real
-dentro de una transaccion revertida: sin mutar revienta por `NOT NULL`, con el
-`NOT NULL` quitado la fila entra, y tras el rollback `is_nullable=NO`.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
@@ -201,10 +208,10 @@ de abajo **queda abierto porque es decisión de producto, no arreglo mecánico**
   antes de ver nada.
 - ~~«Batches» en una interfaz en español.~~ **Cerrado el 2026-09-08** — ver la
   entrada de §2. El café es «Lote»/«Lot» y el terreno es «Parcela».
-- **`/plots` no ofrece nada que pulsar.** Cero botones de acción; 2,6 pantallas
-  de scroll donde las once entradas repiten «Sin registrar» y «Aún no hay
-  condiciones de terreno registradas», once veces cada una. Es lo que abre un
-  operario en el campo.
+- **`/plots` no ofrece nada que pulsar.** Las acciones existen —ocho
+  formularios— pero **un nivel abajo**, en `/plots/[id]`; subir alguna a la
+  lista es decisión de producto. La repetición **sí se arregló** el 2026-09-08:
+  lo que falta se cuenta una vez arriba en vez de recitarse por tarjeta.
 - **Lo que sí aguantó:** cero objetivos de toque por debajo de 44 px en un
   formulario de 134 campos.
 
