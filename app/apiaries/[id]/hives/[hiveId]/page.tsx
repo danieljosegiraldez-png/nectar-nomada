@@ -9,6 +9,7 @@ import { getSignedUrlForAsset } from "../../../../../lib/traceability/media";
 import { listInspectionsForColony } from "../../../../../lib/apiary/inspections";
 import { listColonyEventsForColony } from "../../../../../lib/apiary/colonyEvents";
 import { NewColonyForm } from "../../../../components/apiary/NewColonyForm";
+import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
 import { ColonyEventQuickEntry } from "../../../../components/apiary/ColonyEventQuickEntry";
 import { HarvestForm } from "../../../../components/apiary/HarvestForm";
@@ -96,6 +97,18 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
               {t("originSourceLabel")}: {colony.originSource ? colony.originSource.value : t("originSourceUnset")}
             </p>
             {colony.originNote ? <p className="nn-muted">{colony.originNote}</p> : null}
+
+            {/* El fin, cuando lo hay: la fecha se dice porque «cuándo la
+                perdimos» es la pregunta, y sin ella el estado solo no responde.
+                Y el formulario solo aparece mientras la colonia sigue activa —
+                es una transición de una vez. */}
+            {colony.endedAt ? (
+              <p className="nn-muted">
+                {t("colonyEndedOn", { fecha: colony.endedAt.toISOString().slice(0, 10) })}
+              </p>
+            ) : (
+              <FinDeColoniaForm colonyId={colony.id} revalidationPath={revalidationPath} />
+            )}
             <ApiaryPhotoUploadForm
               parent={{ kind: "colony", colonyId: colony.id }}
               revalidationPath={revalidationPath}

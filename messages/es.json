@@ -1270,7 +1270,16 @@
     "pollinationNoDeficit": "objetivo cubierto",
     "pollinationCountSource_sistema": "El conteo sale de las colonias activas en el sistema, no del que se hace al salir del sitio. Los dos pueden diferir.",
     "pollinationCountSource_declarado_en_visita": "El conteo es el que se hizo al salir del sitio en la última visita.",
-    "pollinationCountDiverges": "Ojo: en la visita se contaron {declarado} colonias y el sistema tiene {sistema}. Los dos números existen y no coinciden."
+    "pollinationCountDiverges": "Ojo: en la visita se contaron {declarado} colonias y el sistema tiene {sistema}. Los dos números existen y no coinciden.",
+    "colonyEndOpenButton": "Registrar que se perdió",
+    "colonyEndWarning": "Esto no se deshace. Marca la colonia como perdida y deja de contar para el sitio.",
+    "colonyEndStatusLabel": "Qué pasó",
+    "colonyEndStatusUnset": "Elegir…",
+    "colonyEndAtLabel": "Cuándo se perdió",
+    "colonyEndReasonLabel": "Por qué (opcional)",
+    "colonyEndReasonPlaceholder": "lo que se vio: varroa, sin reina, saqueo…",
+    "colonyEndButton": "Registrar la pérdida",
+    "colonyEndedOn": "Se perdió el {fecha}"
   },
   "Research": {
     "badge": "Research OS",

@@ -1,0 +1,31 @@
+-- Cuándo se perdió una colonia.
+--
+-- EL HUECO QUE CIERRA, medido el 2026-09-08: `apiary.colony.status` tiene los
+-- valores `dead` y `absconded` desde A1, y **ningún servicio los escribe
+-- jamás**. Una colonia nace `active` y no hay camino de código que la marque
+-- muerta. El hecho más caro del apiario no se podía registrar.
+--
+-- Tres consecuencias que eso tenía, y que este cambio deshace:
+--   * `coloniasActivas` (A9.8) y el numerador de polinización (A9.9) SÓLO
+--     PODÍAN SUBIR — su divergencia con el conteo declarado en la visita era
+--     estructural, no deriva.
+--   * La bitácora (A9.12) no podía espejar la pérdida, porque no llegaba al
+--     rastro.
+--   * «¿Cuándo perdimos las de Toabré?» no tenía respuesta en ninguna fila.
+--
+-- `ended_at` es ANULABLE porque una colonia viva no tiene fin, y es columna
+-- propia porque `status` dice QUÉ pasó y esto dice CUÁNDO. Deducir la fecha del
+-- `created_at` de la fila de auditoría sería confundir cuándo ocurrió con
+-- cuándo se registró — y una pérdida se suele anotar días después.
+--
+-- LA CAUSA NO ENTRA AQUÍ. Un vocabulario de causas —varroa, orfandad, hambre,
+-- saqueo— es conocimiento del dueño: se le pregunta, no se inventa. Cuando lo
+-- dé, es un `VariableCatalog` como el origen de colonia (A9.10). Mientras
+-- tanto va en el `reason` del AuditEvent, que ya existe y no finge ser
+-- consultable.
+--
+-- Aditiva: no toca ninguna fila. Las colonias existentes siguen `active` con
+-- `ended_at` nulo, que es exactamente lo que se sabe de ellas.
+
+ALTER TABLE "apiary"."colony"
+  ADD COLUMN "ended_at" TIMESTAMP(3);

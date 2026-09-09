@@ -25,17 +25,23 @@ import type { MensajeDeBitacora } from "../integrations/bitacora";
  * historial» con una consulta que no podía acertar. Un segundo lector encima
  * habría heredado el fallo.
  *
- * ## Lo que esta bitácora NO puede espejar, y conviene decirlo
+ * ## Un párrafo que este archivo tenía y dejó de ser cierto
  *
- * **La pérdida de una colonia.** Medido: ningún servicio cambia
- * `Colony.status` — se crea `active` y no hay camino de código que la marque
- * muerta o absconded. Así que el hecho más caro del apiario **no llega al
- * rastro**, y ninguna bitácora que lea de `AuditEvent` puede avisarlo.
+ * Decía que la pérdida de una colonia **no se podía espejar**, y era verdad:
+ * hasta el 2026-09-08 ningún servicio cambiaba `Colony.status`, así que el
+ * hecho más caro del apiario no llegaba al rastro. Decía además que por eso el
+ * conteo del sistema **sólo podía subir**, y que su divergencia con el
+ * declarado en la visita era estructural.
  *
- * Eso también explica, mejor que D6, por qué el conteo del sistema y el
- * declarado en la visita llevan divergiendo: **el del sistema sólo puede
- * subir**. No es deriva, es estructural. La alerta de pérdida que A9.8 sí da
- * sale de comparar dos conteos declarados, no del estado de las filas.
+ * **Las dos cosas se arreglaron a la vez.** `registrarFinDeColonia` marca la
+ * colonia y audita `colony.end`; el conteo ya puede bajar, y hay una regla
+ * inmediata para la pérdida. Queda escrito en vez de borrado porque el error
+ * era del diseño, no de la redacción: una columna con valores que nadie escribe
+ * se lee como capacidad y no lo es.
+ *
+ * Lo que sigue siendo cierto: la alerta de pérdida de A9.8 compara dos conteos
+ * **declarados**, no estados de fila. Son dos preguntas distintas — «cuántas
+ * contó quien fue» y «cuántas dice el sistema» — y conviene que sigan siéndolo.
  */
 
 /** Las claves de `entityType` tal como las ESCRIBEN los servicios, verificadas una a una. */
@@ -63,6 +69,16 @@ interface ReglaInmediata {
 }
 
 export const REGLAS_INMEDIATAS: readonly ReglaInmediata[] = [
+  {
+    // La regla que esta cabecera decía que NO se podía escribir. Ya se puede:
+    // `registrarFinDeColonia` audita `colony.end`, así que el hecho llega al
+    // rastro y el espejo lo alcanza.
+    operation: "colony.end",
+    cuando: () => true,
+    razon:
+      "Es el hecho más caro del apiario y el que menos avisa. Perder una colonia cambia el conteo contra el compromiso de polinización y no se recupera esperando al cierre de la visita.",
+    texto: (a) => `Se perdió una colonia${a.status === "absconded" ? " (se fugó)" : ""}.`,
+  },
   {
     operation: "inspection.create",
     cuando: (a) => a.outcome === "issue_observed",

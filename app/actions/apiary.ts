@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
-import { createHive, createColony, ApiaryAccessError } from "../../lib/apiary/hives";
+import { createHive, createColony, registrarFinDeColonia, ApiaryAccessError } from "../../lib/apiary/hives";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { recordInspection } from "../../lib/apiary/inspections";
 import { recordColonyEvent, ColonyEventValidationError } from "../../lib/apiary/colonyEvents";
@@ -61,6 +61,24 @@ export async function createColonyFormAction(formData: FormData): Promise<void> 
   });
 
   revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+}
+
+export async function registrarFinDeColoniaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const revalidationPath = String(formData.get("revalidationPath") ?? "");
+  await registrarFinDeColonia(user.userAccountId, {
+    colonyId: String(formData.get("colonyId") ?? ""),
+    status: String(formData.get("status") ?? "") as never,
+    // Instante, no día: `parseLocalDateTime` combina el reloj de pared con el
+    // desfase del dispositivo. Sin eso, en producción —que corre en UTC— un
+    // 07:30 de Panamá se guardaría como las 02:30.
+    endedAt: parseLocalDateTime(String(formData.get("endedAt") ?? ""), String(formData.get(TZ_OFFSET_FIELD) ?? "")),
+    reason: emptyToNull(formData.get("reason")),
+  });
+
+  revalidatePath(revalidationPath);
 }
 
 // --- Harvest/extraction -> HoneyBatch as a Lot (A3), online-only, same

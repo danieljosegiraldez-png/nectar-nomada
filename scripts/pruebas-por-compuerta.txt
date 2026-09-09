@@ -25,6 +25,7 @@ tests/apiary/bitacora.test.ts
 tests/apiary/colonyEvents.test.ts
 tests/apiary/e2e.test.ts
 tests/apiary/harvest.test.ts
+tests/apiary/finDeColonia.test.ts
 tests/apiary/hives.test.ts
 tests/apiary/inspections.test.ts
 tests/apiary/media.test.ts
