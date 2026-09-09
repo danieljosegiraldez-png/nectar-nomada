@@ -562,7 +562,6 @@
     "slopeLabel": "Slope",
     "aspectLabel": "Aspect",
     "soilTypeLabel": "Soil",
-    "noConditionsRecorded": "No terrain conditions recorded for this plot yet.",
     "sunExposure_full_sun": "Full sun",
     "sunExposure_morning": "Morning sun",
     "sunExposure_afternoon": "Afternoon sun",
@@ -1152,7 +1151,11 @@
     "coordsReasonPlaceholder": "e.g. confirmed across three visits",
     "coordsConfirm": "Declare where it is",
     "coordsNoSamples": "No visit has carried a GPS reading yet. One will be proposed as soon as someone opens a visit here.",
-    "coordsDiffersFromDeclared": "Note: what the visits propose is {metros} m from what is declared today."
+    "coordsDiffersFromDeclared": "Note: what the visits propose is {metros} m from what is declared today.",
+    "plotsCount": "{n} plot(s)",
+    "plotsWithArea": "· {n} with area",
+    "plotsWithConditions": "· {n} with recorded conditions",
+    "plotNothingRecorded": "No conditions"
   },
   "Apiary": {
     "badge": "Apiary",
