@@ -19,6 +19,8 @@
  */
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
+import { resumenDeVisita } from "../apiary/bitacora";
+import { destinoDeBitacora } from "../integrations/bitacora";
 import { LocationAccessError } from "./locations";
 // A9.0 — la compuerta resuelve por el tipo de la `Location`. Ver su cabecera.
 import { requireFieldSessionAccess } from "./jornadaDeCampo";
@@ -197,7 +199,7 @@ export async function completarVisita(userAccountId: string, input: CerrarVisita
   const editWindowExpiresAt =
     existing.editWindowExpiresAt ?? new Date(completedAt.getTime() + HORAS_DE_VENTANA_DE_CIERRE * 3600_000);
 
-  return prisma.$transaction(async (tx) => {
+  const despues = await prisma.$transaction(async (tx) => {
     const despues = await tx.fieldSession.update({
       where: { id: input.fieldSessionId },
       data: {
@@ -227,6 +229,27 @@ export async function completarVisita(userAccountId: string, input: CerrarVisita
 
     return despues;
   });
+
+  // A9.12 (D10b) — la bitácora, DESPUÉS de confirmar y FUERA de la transacción.
+  //
+  // Fuera porque lee el rastro que esa misma transacción acaba de escribir:
+  // dentro vería su propia escritura pero no necesariamente el resto, y un
+  // espejo que se mira a medio confirmar no es un espejo.
+  //
+  // Y envuelto porque **una bitácora no puede tumbar el cierre de una visita**.
+  // El cierre ya está confirmado en este punto; si el espejo falla, se pierde un
+  // mensaje, no un registro — que es toda la diferencia entre un espejo y una
+  // dependencia dura. `entregar` promete no lanzar, pero prometer no es
+  // garantizar y el coste de comprobarlo aquí es una línea.
+  try {
+    const emitido = await resumenDeVisita(despues.id);
+    if (emitido) await destinoDeBitacora.entregar(emitido.mensajes);
+  } catch {
+    // Deliberadamente en silencio: no hay a quién avisar por un canal que
+    // todavía no existe, y el hecho sí quedó escrito en `AuditEvent`.
+  }
+
+  return despues;
 }
 
 export async function endFieldSession(userAccountId: string, input: { fieldSessionId: string; endedAt: Date }) {
