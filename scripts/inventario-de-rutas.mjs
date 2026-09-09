@@ -100,9 +100,41 @@ const entradas = archivos
   .map((f) => ({ archivo: f, ruta: rutaDe(f), tipo: /\/route\./.test(f) ? "handler" : "página" }));
 
 const CLASES = ["publica-discover", "publica-sin-datos", "flujo-auth", "firma", "requiere-sesion"];
+const VERBOS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+const porRuta = new Map(entradas.map((e) => [e.ruta, e.archivo]));
+
 for (const [ruta, d] of Object.entries(RUTAS)) {
   if (!CLASES.includes(d?.clase)) fallo(`Clase desconocida para ${ruta}: ${d?.clase}`);
   if (!d?.razon || !String(d.razon).trim()) fallo(`Sin razón declarada para ${ruta}. La razón es el punto del manifiesto.`);
+
+  // `metodos` es opcional y existe para que `respuesta-anonima.mjs` no juzgue
+  // con un GET una ruta que no acepta GET. Pero una declaración que nadie
+  // comprueba es la avería un nivel más arriba: si mañana alguien añade un
+  // `export async function GET` y esto sigue diciendo ["POST"], el comprobador
+  // dejaría de mirar esa ruta EN SILENCIO. Así que se contrasta con el código.
+  if (d?.metodos !== undefined) {
+    if (!Array.isArray(d.metodos) || d.metodos.length === 0)
+      fallo(`\`metodos\` de ${ruta} debe ser un array no vacío.`);
+    else {
+      const malos = d.metodos.filter((m) => !VERBOS.includes(m));
+      if (malos.length) fallo(`Método desconocido en ${ruta}: ${malos.join(", ")}`);
+      const archivo = porRuta.get(ruta);
+      if (!archivo) fallo(`${ruta} declara \`metodos\` y no tiene archivo en el router.`);
+      else {
+        const src = readFileSync(join(RAIZ, archivo), "utf8");
+        const reales = VERBOS.filter((m) =>
+          new RegExp(`^export\\s+(?:async\\s+)?(?:function\\s+${m}\\b|const\\s+${m}\\s*=)`, "m").test(src),
+        );
+        const dec = [...d.metodos].sort().join(",");
+        const rea = [...reales].sort().join(",");
+        if (rea && dec !== rea)
+          fallo(
+            `${ruta} declara metodos [${dec}] y su handler exporta [${rea}] (${archivo}). ` +
+              `Si el código cambió, actualiza el manifiesto: si no, respuesta-anonima.mjs deja de mirarla en silencio.`,
+          );
+      }
+    }
+  }
 }
 
 const declaradas = new Set(Object.keys(RUTAS));

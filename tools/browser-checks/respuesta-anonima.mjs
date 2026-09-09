@@ -64,6 +64,12 @@ const fila = (r, v, d) =>
 
 const todas = Object.entries(RUTAS);
 const estaticas = todas.filter(([r, d]) => !r.includes("[") && ACEPTABLE[d.clase]);
+// Una ruta que declara métodos sin GET no se puede juzgar con un GET: nunca
+// se ejerce el método que tiene. Antes salían CONTRADICE —un veredicto rojo
+// sobre algo no medido, y encima en rutas de autorización—; ahora no se
+// piden y se dice por qué, junto a las dinámicas.
+const sinGet = todas.filter(([, d]) => Array.isArray(d.metodos) && !d.metodos.includes("GET"));
+const claveSinGet = new Set(sinGet.map(([r]) => r));
 const dinamicas = todas.filter(([r]) => r.includes("["));
 const fuera = todas.filter(([r, d]) => !r.includes("[") && NO_COMPROBABLES[d.clase]);
 
@@ -82,6 +88,7 @@ console.log("");
 
 let coinciden = 0, contradicen = 0, ambiguas = 0, sinLeer = 0;
 for (const [ruta, d] of estaticas) {
+  if (claveSinGet.has(ruta)) continue;
   const r = await ver(ruta);
   if (r.status === 0) { sinLeer++; fila(r, "SIN LEER", r.error); continue; }
   if (r.status === 404) { ambiguas++; fila(r, "AMBIGUA", "404: puede ser «no existe» o «no te lo doy». No cuenta como coincidencia"); continue; }
@@ -91,7 +98,13 @@ for (const [ruta, d] of estaticas) {
 
 console.log("");
 console.log(`Coinciden ${coinciden} · contradicen ${contradicen} · ambiguas ${ambiguas} · sin leer ${sinLeer}`);
-console.log(`Sin pronunciarse: ${dinamicas.length} dinámicas (no se inventan slugs) y ${fuera.length} fuera de alcance.`);
+console.log(
+  `Sin pronunciarse: ${dinamicas.length} dinámicas (no se inventan slugs), ${fuera.length} fuera de alcance` +
+    (sinGet.length ? `, y ${sinGet.length} que no aceptan GET:` : "") +
+    ".",
+);
+for (const [r, d] of sinGet)
+  console.log(`    no se pronuncia  ${r}  — sólo acepta ${d.metodos.join(", ")}; un GET no ejerce su método`);
 console.log("Esto observa respuestas, no demuestra que los datos estén protegidos:");
 console.log("la frontera es el servicio de RBAC (SECURITY.md §2), no la ruta.");
 // Una ambigua también sale distinto de cero: «el 404 nunca cuenta como éxito»
