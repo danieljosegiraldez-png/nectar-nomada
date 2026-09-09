@@ -17,7 +17,7 @@ import { can } from "../rbac/service";
 import { classificationForTarget, loadScopeClassifications } from "../rbac/scopeClassification";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
-import type { ColonyOriginType, DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
+import type { ColonyOriginType, ColonyStatus, DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
 export class ApiaryAccessError extends Error {}
 
@@ -160,6 +160,82 @@ export async function createColony(userAccountId: string, input: CreateColonyInp
   });
 
   return colony;
+}
+
+export class ColonyEndError extends Error {}
+
+export interface RegistrarFinDeColoniaInput {
+  colonyId: string;
+  /** `dead` o `absconded`. `active` no es un fin y se rechaza. */
+  status: Exclude<ColonyStatus, "active">;
+  /** Cuándo se perdió, no cuándo se anota. Se suele registrar días después. */
+  endedAt: Date;
+  /**
+   * Por qué. Va al `reason` del AuditEvent y **no a una columna**: un
+   * vocabulario de causas —varroa, orfandad, hambre, saqueo— es conocimiento
+   * del dueño, se le pregunta y no se inventa. Cuando lo dé será un
+   * `VariableCatalog` como el origen (A9.10); hasta entonces, texto con rastro
+   * es más honesto que una columna que finge ser consultable.
+   */
+  reason?: string | null;
+}
+
+/**
+ * Registra que una colonia dejó de existir.
+ *
+ * **El hueco que cierra, medido el 2026-09-08:** `ColonyStatus` tenía `dead` y
+ * `absconded` desde A1 y **ningún servicio los escribía jamás**. Una colonia
+ * nacía `active` y no había camino de código que la marcara muerta, así que el
+ * hecho más caro del apiario no se podía registrar.
+ *
+ * Y eso hacía que **`coloniasActivas` sólo pudiera subir**: su divergencia con
+ * el conteo declarado en la visita (A9.8/A9.9) era estructural, no deriva. Los
+ * tres lectores que ya filtran por `status: "active"` se vuelven correctos sin
+ * tocarlos.
+ *
+ * **Es una transición de una vez.** Una colonia que ya terminó no se vuelve a
+ * terminar: la escritura va condicionada a que siga activa, con `updateMany`,
+ * porque entre leer y escribir cabe otra petición — el mismo razonamiento que
+ * `endFieldSession` y que señaló una revisión independiente. `count === 0`
+ * significa exactamente que otra ganó.
+ */
+export async function registrarFinDeColonia(userAccountId: string, input: RegistrarFinDeColoniaInput) {
+  const colony = await prisma.colony.findUnique({ where: { id: input.colonyId }, include: { hive: true } });
+  if (!colony) throw new ApiaryAccessError("colony_not_found");
+  await requireApiaryAccess(userAccountId, "manage", [{ projectId: colony.hive.projectId, locationId: colony.hive.locationId }]);
+
+  if (colony.status !== "active") throw new ColonyEndError("colony_already_ended");
+  // Terminar antes de empezar es un problema de reloj, no un registro.
+  if (input.endedAt < colony.startedAt) throw new ColonyEndError("ended_before_started");
+
+  return prisma.$transaction(async (tx) => {
+    const { count } = await tx.colony.updateMany({
+      where: { id: input.colonyId, status: "active" },
+      data: { status: input.status, endedAt: input.endedAt },
+    });
+    if (count === 0) throw new ColonyEndError("colony_already_ended");
+
+    const despues = await tx.colony.findUniqueOrThrow({ where: { id: input.colonyId } });
+
+    // C1 §3: escritura con valor probatorio. Perder una colonia es el hecho que
+    // más caro sale y el que menos avisa; sin rastro, «¿desde cuándo?» y «¿quién
+    // lo vio?» no tienen respuesta.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "colony.end",
+        entityType: "colony",
+        entityId: colony.id,
+        before: colony,
+        after: despues,
+        reason: input.reason ?? undefined,
+        sourceInterface: "apiary.service",
+      },
+      tx,
+    );
+
+    return despues;
+  });
 }
 
 export async function getHive(userAccountId: string, hiveId: string) {

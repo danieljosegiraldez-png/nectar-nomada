@@ -1270,7 +1270,16 @@
     "pollinationNoDeficit": "target met",
     "pollinationCountSource_sistema": "The count comes from colonies active in the system, not from the one made on leaving the site. The two can differ.",
     "pollinationCountSource_declarado_en_visita": "The count is the one made on leaving the site during the last visit.",
-    "pollinationCountDiverges": "Note: the visit counted {declarado} colonies and the system has {sistema}. Both numbers exist and they disagree."
+    "pollinationCountDiverges": "Note: the visit counted {declarado} colonies and the system has {sistema}. Both numbers exist and they disagree.",
+    "colonyEndOpenButton": "Record that it was lost",
+    "colonyEndWarning": "This cannot be undone. It marks the colony as lost and it stops counting for the site.",
+    "colonyEndStatusLabel": "What happened",
+    "colonyEndStatusUnset": "Choose…",
+    "colonyEndAtLabel": "When it was lost",
+    "colonyEndReasonLabel": "Why (optional)",
+    "colonyEndReasonPlaceholder": "what was seen: varroa, queenless, robbing…",
+    "colonyEndButton": "Record the loss",
+    "colonyEndedOn": "Lost on {fecha}"
   },
   "Research": {
     "badge": "Research OS",

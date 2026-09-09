@@ -5098,6 +5098,17 @@ model Colony {
   hive            Hive             @relation(fields: [hiveId], references: [id])
   status          ColonyStatus     @default(active)
   startedAt       DateTime         @map("started_at")
+  /// Cuándo dejó de existir la colonia. Anulable porque una colonia viva no
+  /// tiene fin, y NO se deduce del estado: `status` dice qué pasó, esto dice
+  /// cuándo. Sin la fecha, «cuándo perdimos las tres de Toabré» no tiene
+  /// respuesta y la serie del año no se puede dibujar.
+  ///
+  /// La CAUSA no entra aquí. Un vocabulario de causas —varroa, orfandad,
+  /// hambre, saqueo— es conocimiento del dueño y se pregunta, no se inventa;
+  /// cuando lo dé, es un `VariableCatalog` como el origen (A9.10), no una
+  /// columna de texto libre. Mientras tanto va en el `reason` del AuditEvent,
+  /// que ya existe y no finge ser consultable.
+  endedAt         DateTime?        @map("ended_at")
   // A2 — required, no default: verified zero Colony rows existed in Neon
   // before this migration, so this doesn't retrofit a required column onto
   // live data (unlike ADR-038's own T9.5 retrofit, which had to reckon
