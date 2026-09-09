@@ -1658,3 +1658,31 @@ Reescrito con `INSERT` crudo, con su control positivo al lado (el mismo `INSERT`
 con las dos columnas entra). Flip-test del `NOT NULL` hecho contra la tabla real
 dentro de una transaccion revertida: sin mutar revienta por `NOT NULL`, con el
 `NOT NULL` quitado la fila entra, y tras el rollback `is_nullable=NO`.
+
+### 2026-09-08 · La puerta del informe de un Q-grader, y dos huecos que destapó
+
+El servicio existía desde el PR #219 y **la unica forma de usarlo era la
+terminal**, con un JSON escrito a mano. Ahora `/sensory/external-report`, en dos
+pasos: primero el protocolo —de el salen los atributos, y sus NOMBRES son la
+autoridad con la que el servicio casa—, despues la transcripcion. Ninguno se
+teclea: un nombre tecleado es como un informe entraria a medias.
+
+**Hueco 1, y no era inocuo.** `InformeExterno` no tenia donde traer las tazas no
+uniformes ni las defectuosas, asi que el resolver las daba por 0: un informe CVA
+que declara dos tazas no uniformes se guardaba **4 puntos por encima** de lo que
+dice el papel, en silencio. La cata interna si las pasaba desde siempre
+(`app/actions/sensory.ts`) — era este camino, el del trabajo que se paga, el que
+las perdia. Control positivo al lado, y por eso se vio.
+
+**Hueco 2, y lo destapo la suite, no una lectura.** El lector listaba a todas las
+personas con `leerCertificaciones`, que es estricto a proposito. En la base hay
+una fila con `date_earned: null`, y esa sola fila **dejaba la pantalla entera sin
+abrirse**: nadie podia registrar ningun informe por culpa de un dato ajeno. Ahora
+degrada a esa persona —sale sin credencial, no se le afirma una que no se pudo
+leer— como ya hacia `scripts/add-evaluator.ts`, que se lo encontro antes.
+
+**Y una verificacion mia que no verificaba nada.** El 307 de la ruta nueva sin
+sesion parecia probar que la pagina existe; el control negativo dice que **una
+ruta inexistente da 307 igual**, porque el middleware redirige todo. Lo que si lo
+prueba es el manifiesto de `next build`, que la nombra. Queda **sin verificar en
+pantalla** hasta que alguien con sesion la abra.

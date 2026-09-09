@@ -13,7 +13,13 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { buildNavigation, buildSensoryTools, landingDestination, DEFAULT_LANDING } from "../lib/navigation";
+import {
+  buildNavigation,
+  buildSensoryTools,
+  landingDestination,
+  DEFAULT_LANDING,
+  NAV_PERMISSIONS,
+} from "../lib/navigation";
 
 const hrefs = (granted: string[]) => buildNavigation(new Set(granted)).map((e) => e.href);
 const toolHrefs = (granted: string[]) => buildSensoryTools(new Set(granted)).map((e) => e.href);
@@ -27,6 +33,17 @@ const PLATFORM_ADMIN = [
   "sensory:manage_session", "sensory:submit_assessment", "competition:manage",
   "ai:review_suggestion", "partner:submit_data", "location:manage_attributes",
 ];
+
+/**
+ * El visor más privilegiado **de verdad**: todo lo que abre una entrada,
+ * derivado de `NAV`.
+ *
+ * `PLATFORM_ADMIN` de arriba se queda porque sigue siendo un perfil plausible
+ * y varias pruebas lo usan como tal. Lo que NO puede volver a hacer es
+ * suplantar al «más privilegiado»: le faltan dos claves, y esa era justo la
+ * grieta.
+ */
+const TODO_PERMISO = [...NAV_PERMISSIONS];
 
 describe("buildNavigation", () => {
   it("§8.4 — a farm operator is not offered competition or calibration tools", () => {
@@ -83,14 +100,48 @@ describe("buildNavigation", () => {
     expect(hrefs([])).toEqual(["/my-nectar"]);
   });
 
-  it("consolidates three former entries into one, and stays short on a phone", () => {
-    const nav = hrefs(PLATFORM_ADMIN);
+  it("consolidates three former entries into one", () => {
+    const nav = hrefs(TODO_PERMISO);
     // Competitions and Calibration are no longer top-level anywhere.
     expect(nav).not.toContain("/competitions");
     expect(nav).not.toContain("/calibration");
-    // Even the most privileged viewer sees fewer entries than the fixed
-    // ten-item bar this replaced.
-    expect(nav.length).toBeLessThanOrEqual(8);
+  });
+
+  /**
+   * **Cuántas entradas ve el visor más privilegiado — y por qué es un número
+   * fijado y no un techo.**
+   *
+   * Esta prueba decía `<= 8` con el comentario «ni el más privilegiado pasa de
+   * la barra de diez que esto sustituyó». Era **falso y verde a la vez**: el
+   * fixture que usaba era una lista de diez permisos escrita a mano a la que le
+   * faltaban `platform:manage_permissions` y los de contenido, o sea las dos
+   * claves que abren las dos entradas de mas. Con el visor privilegiado de
+   * verdad son **10**, no ≤8.
+   *
+   * **No se sube el techo: se fija el numero.** Poner `<= 10` habria borrado el
+   * objetivo; fijarlo hace que crecer sea deliberado y deja el hueco a la vista.
+   * El objetivo de 8 sigue vivo y **sin cumplir**, anotado en `SESSION_STATE.md`
+   * §3 con lo que cuesta: en un telefono de 375 px son **234 px de cabecera en
+   * tres filas, el 29 % de la pantalla** antes de ver nada. Acortar el menu o
+   * mover el objetivo es decision del dueño, no de este archivo.
+   *
+   * Y el numero sale de `NAV_PERMISSIONS`, derivado de `NAV`: una entrada nueva
+   * trae su permiso sola, asi que esto **no puede** volver a medir un visor que
+   * no es el mas privilegiado.
+   */
+  it("el visor más privilegiado ve 10 entradas — dos por encima de las 8 que caben en un teléfono", () => {
+    expect(hrefs(TODO_PERMISO)).toHaveLength(10);
+  });
+
+  /**
+   * El control positivo del anterior: sin esto, un `NAV_PERMISSIONS` que
+   * devolviera la lista vacia daria 1 entrada y el `toHaveLength(10)` fallaria
+   * por la razon correcta — pero un `buildNavigation` que devolviera siempre
+   * diez pasaria igual. Esto comprueba que el numero DEPENDE de los permisos.
+   */
+  it("y ese 10 depende de los permisos: sin ninguno se ve 1", () => {
+    expect(hrefs([])).toHaveLength(1);
+    expect(NAV_PERMISSIONS.length, "18 claves abren el menú; el fixture viejo traía 10").toBe(18);
   });
 
   it("offers no destination whose permissions the viewer lacks", () => {
