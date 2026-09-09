@@ -28,7 +28,18 @@
 export interface CertificacionSensorial {
   certifying_body: string;
   certification_name: string;
-  date_earned: string;
+  /**
+   * **Opcional desde el 2026-09-08 (decisión de Daniel).** Lo era ya
+   * `certificate_reference`, por el argumento de arriba —tener la credencial y
+   * no tener a mano su papel—, y el mismo argumento vale para la fecha: la
+   * empírica es Kurt Ngo, registrado como Q de CQI **sin fecha** porque nadie
+   * la sabía. Exigirla produjo una fila que ni siquiera se podía leer, y que
+   * llegó a dejar la pantalla de informes externos sin abrirse.
+   *
+   * Una fila sin fecha es un marcador: dice la credencial que se sabe y calla
+   * la que no. La confirma su titular cuando entra con su cuenta.
+   */
+  date_earned?: string;
   level_or_rank?: string;
   expiry_date?: string;
   certificate_reference?: string;
@@ -61,19 +72,24 @@ export function validarCertificacion(crudo: unknown): CertificacionSensorial {
   exige(crudo && typeof crudo === "object", "La certificación no es un objeto.");
   const c = crudo as Partial<CertificacionSensorial>;
 
-  for (const campo of ["certifying_body", "certification_name", "date_earned"] as const) {
+  // Lo único que una credencial no puede callar: quién la expide y cuál es.
+  // Sin esos dos no hay nada que afirmar.
+  for (const campo of ["certifying_body", "certification_name"] as const) {
     exige(typeof c[campo] === "string" && c[campo]!.trim().length > 0, `Falta "${campo}", o está vacío.`);
   }
-  exige(
-    fechaReal(c.date_earned!.trim()),
-    `"date_earned" es "${c.date_earned}"; se espera una fecha real en formato AAAA-MM-DD.`,
-  );
 
   const salida: CertificacionSensorial = {
     certifying_body: c.certifying_body!.trim(),
     certification_name: c.certification_name!.trim(),
-    date_earned: c.date_earned!.trim(),
   };
+
+  // La fecha, si viene, sigue teniendo que ser una fecha de verdad. Opcional no
+  // significa que valga cualquier cosa: `2026-02-31` casa el patrón y no existe.
+  if (c.date_earned !== undefined && c.date_earned !== null && String(c.date_earned).trim() !== "") {
+    const desde = String(c.date_earned).trim();
+    exige(fechaReal(desde), `"date_earned" es "${c.date_earned}"; se espera una fecha real en formato AAAA-MM-DD.`);
+    salida.date_earned = desde;
+  }
 
   for (const campo of ["level_or_rank", "certificate_reference"] as const) {
     const v = c[campo];
@@ -85,10 +101,14 @@ export function validarCertificacion(crudo: unknown): CertificacionSensorial {
   if (c.expiry_date !== undefined && c.expiry_date !== null && String(c.expiry_date).trim() !== "") {
     const hasta = String(c.expiry_date).trim();
     exige(fechaReal(hasta), `"expiry_date" es "${c.expiry_date}"; se espera AAAA-MM-DD.`);
-    exige(
-      hasta >= salida.date_earned,
-      `"expiry_date" (${hasta}) es anterior a "date_earned" (${salida.date_earned}).`,
-    );
+    // Sólo cuando hay contra qué comparar. Sin fecha de obtención, «vence
+    // antes de empezar» no es una afirmación que se pueda hacer.
+    if (salida.date_earned !== undefined) {
+      exige(
+        hasta >= salida.date_earned,
+        `"expiry_date" (${hasta}) es anterior a "date_earned" (${salida.date_earned}).`,
+      );
+    }
     salida.expiry_date = hasta;
   }
 
@@ -131,12 +151,50 @@ export function agregarCertificacion(
   existentes: readonly CertificacionSensorial[],
   nueva: CertificacionSensorial,
 ): CertificacionSensorial[] {
-  const clave = (c: CertificacionSensorial) =>
-    [c.certifying_body, c.certification_name, c.date_earned].map((x) => x.toLowerCase()).join(" ");
-  if (existentes.some((c) => clave(c) === clave(nueva))) {
+  const mismaCredencial = (c: CertificacionSensorial) =>
+    c.certifying_body.toLowerCase() === nueva.certifying_body.toLowerCase() &&
+    c.certification_name.toLowerCase() === nueva.certification_name.toLowerCase();
+
+  const idx = existentes.findIndex(mismaCredencial);
+  const previa = idx === -1 ? undefined : existentes[idx]!;
+
+  if (previa === undefined) return [...existentes, nueva];
+
+  if (previa.date_earned === nueva.date_earned) {
     throw new CertificacionInvalida(
-      `Esta persona ya tiene "${nueva.certification_name}" de ${nueva.certifying_body} con fecha ${nueva.date_earned}.`,
+      `Esta persona ya tiene "${nueva.certification_name}" de ${nueva.certifying_body}` +
+        (nueva.date_earned ? ` con fecha ${nueva.date_earned}.` : " sin fecha."),
     );
   }
+
+  /**
+   * **Completar un marcador no es añadir una credencial.** Desde que la fecha
+   * es opcional, la misma credencial puede estar registrada sin ella —el caso
+   * de Kurt Ngo—, y el día que su titular la confirma lo que corresponde es
+   * rellenar el hueco, no dejar dos «Q Grader (CQI)» en la lista. Sólo se
+   * rellenan huecos: **nunca se pisa un valor que ya estaba**, así que esto
+   * sigue siendo aditivo en el sentido que importa.
+   */
+  if (previa.date_earned === undefined) {
+    const completada: CertificacionSensorial = { ...nueva };
+    for (const campo of ["level_or_rank", "expiry_date", "certificate_reference"] as const) {
+      if (completada[campo] === undefined && previa[campo] !== undefined) completada[campo] = previa[campo];
+    }
+    const salida = [...existentes];
+    salida[idx] = completada;
+    return salida;
+  }
+
+  if (nueva.date_earned === undefined) {
+    // Al revés no: una sin fecha no aporta nada sobre una que ya la tiene, y
+    // añadirla dejaría la misma credencial dos veces, una de ellas más pobre.
+    throw new CertificacionInvalida(
+      `Esta persona ya tiene "${nueva.certification_name}" de ${nueva.certifying_body} con fecha ` +
+        `${previa.date_earned}. Una sin fecha no añade nada.`,
+    );
+  }
+
+  // Dos fechas distintas de la misma credencial son una renovación, y las dos
+  // conviven: el historial de credenciales es parte de la procedencia.
   return [...existentes, nueva];
 }

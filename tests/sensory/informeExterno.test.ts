@@ -119,16 +119,18 @@ beforeAll(async () => {
   m5 = await muestra("M5");
   m6 = await muestra("M6");
 
-  // Una fila ilegible como la que ya existe en la base — `date_earned: null` en
-  // vez de ausente. La pantalla tiene que seguir abriéndose con ella dentro.
+  // Una fila que NO se puede leer, para que la pantalla siga abriéndose con
+  // ella dentro.
+  //
+  // **Era `date_earned: null` —la fila real de Kurt Ngo— y el 2026-09-08 dejó
+  // de servir**: la fecha pasó a ser opcional, asi que esa fila ahora se lee
+  // perfectamente y el guardia se quedaba midiendo nada. Se cambia por una que
+  // sigue siendo ilegible bajo las reglas nuevas: sin `certification_name` no
+  // hay credencial que afirmar, y eso no va a dejar de ser cierto.
   ilegiblePersonId = (
     await prisma.person.update({
       where: { id: (await persona("Ilegible")).id },
-      data: {
-        sensoryCertifications: [
-          { certifying_body: "CQI", certification_name: "Q Grader", date_earned: null, level_or_rank: null },
-        ],
-      },
+      data: { sensoryCertifications: [{ certifying_body: "CQI", level_or_rank: "Q" }] },
     })
   ).id;
 
@@ -385,7 +387,7 @@ describe("las opciones de la pantalla", () => {
     const o = await opcionesParaInforme(admin);
     const roto = o.evaluadores.find((e) => e.id === ilegiblePersonId);
     expect(roto, "la persona sigue estando: se puede elegir igual").toBeDefined();
-    expect(roto!.label, "y no se le afirma una credencial que no se pudo leer").not.toContain("Q Grader");
+    expect(roto!.label, "y no se le afirma una credencial que no se pudo leer").not.toContain("CQI");
     // El control positivo al lado: en la MISMA lista, la que sí parsea la trae.
     expect(o.evaluadores.find((e) => e.id === qGraderPersonId)?.label).toContain("Q Arabica Grader");
   });

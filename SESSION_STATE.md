@@ -37,6 +37,33 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-08 · La fecha de una credencial pasa a ser opcional
+
+Kurt Ngo esta en la base como Q de CQI con `date_earned: null` porque **nadie
+supo la fecha** — la instruccion del A7 decia «registra la credencial», y quien
+la registro puso nulos donde no sabia. Exigir la fecha no produjo una fila con
+fecha: produjo una que **ni se podia leer**, y que llego a dejar la pantalla de
+informes externos sin abrirse. Decision de Daniel: opcional, como ya lo era
+`certificate_reference` y por el mismo argumento que el modulo ya tenia escrito.
+
+**No hizo falta escribir NADA en la base.** El arreglo es el validador: en
+cuanto acepta la fila, se lee sola. Comprobado contra la fila real de la copia
+restaurada — `{"date_earned":null,…}` entra y sale como
+`{certifying_body:"CQI",certification_name:"Q Grader"}`, sin fecha inventada, y
+la pantalla la ofrece como «Kurt Ngo · Q Grader (CQI)».
+
+**Una fila sin fecha es un marcador, y el dueño dijo quien lo completa:** Kurt,
+cuando entre con su cuenta, subiendo el escaneo. Por eso `agregarCertificacion`
+**completa** el marcador en vez de duplicarlo cuando llega la misma credencial
+con fecha — y nunca pisa un valor que ya estuviera. Sin eso, el dia que la
+confirmara habria dos «Q Grader (CQI)» en su ficha.
+
+**Y un guardia mio de ayer que este cambio dejo midiendo nada.** El test «una
+certificacion ilegible no tumba la lista» usaba justo la fila de Kurt: al
+volverse legible, pasaba por razones equivocadas. Recolocado sobre una que
+sigue siendo ilegible —sin `certification_name` no hay credencial que afirmar—
+y re-flipeado para verlo caer por su nombre otra vez.
+
 ### 2026-09-08 · La puerta del informe de un Q-grader, y dos huecos que destapó
 
 El servicio existía desde el PR #219 y **la unica forma de usarlo era la
@@ -137,38 +164,6 @@ de prueba a la vez, uno fallaba SIN mutacion: mi asercion buscaba la receta por
 devolvia la suya, sin puntajes, y el fallo se leia como del producto. Atado al
 `RUN` y comprobado cinco corridas seguidas con 0 caidos. Es la forma del «control
 positivo por titulo» que ya esta escrita en `CLAUDE.md`, y cai igual.
-
-### 2026-09-07 · El reporte transversal, y lo que su vacio significa
-
-`/reports/proceso`: una fila por proceso de lote, con su intencion, su humedad
-de cierre contra el objetivo, su varietal, su perfil de tueste y los puntajes de
-las muestras que salieron de el. Agrupado por proceso, que es por lo que se
-comparan dos cafes. Es la ultima frase del encargo del dueno.
-
-**LA MEDICION QUE CAMBIA COMO SE LEE ESTE REPORTE.** Contra la copia de
-produccion: **45 lotes, 6 muestras, y CERO tuestes, cero valoraciones, cero
-mapeos ciegos, cero procesos y cero fuentes de cosecha**. La cadena esta entera
-en el esquema y sin un solo dato. Asi que el reporte hoy sale VACIO — y por eso
-lo primero que pinta es **que eslabon falta, en numeros**: «45 lotes, 0 con
-proceso» dice trabajo por registrar; una tabla sin filas diria «no hay nada que
-ver».
-
-**Y por eso el test es lo unico que prueba algo.** Con cero datos reales, un
-verde contra produccion no distinguiria «la union es correcta» de «la union esta
-mal y no hay datos». El fixture construye la cadena ENTERA —cosecha → cohorte →
-cultivar, proceso, tueste, muestra, cata ciega, puntaje— y por eso su verde
-significa que **se puede unir**.
-
-**Dos uniones que no eran donde parecian**, y las dijo el tipo, no yo:
-`HarvestEvent` no cuelga del lote sino que lo PRODUCE (`resultingLotId`), y el
-tueste se encuentra por las ENTRADAS de la transformacion, no por las salidas —
-un tueste produce un lote nuevo, asi que mirar las salidas encontraria el cafe
-tostado, no el cafe que se tosto.
-
-**Dos flip-tests no compilaron y por eso no probaban nada** —«todo falla» no es
-«el guardia lo cazo»—; rehechos con mutaciones que si compilan, cada uno tumba
-su test por nombre. El primero, el que importa: convertir la ausencia de
-puntajes en 0 tumba dos pruebas. Un 0 es un puntaje; la ausencia no.
 
 ## 3. Bloqueado, y en qué
 

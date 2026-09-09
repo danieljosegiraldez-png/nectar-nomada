@@ -56,7 +56,9 @@ describe("validarCertificacion", () => {
     expect("certificate_reference" in r).toBe(false);
   });
 
-  for (const campo of ["certifying_body", "certification_name", "date_earned"] as const) {
+  // `date_earned` salió de esta lista el 2026-09-08: ver el bloque «la fecha es
+  // opcional» más abajo. Quedan las dos sin las cuales no se afirma nada.
+  for (const campo of ["certifying_body", "certification_name"] as const) {
     it(`rechaza que falte "${campo}"`, () => {
       const d: Record<string, unknown> = { ...Q };
       delete d[campo];
@@ -139,5 +141,81 @@ describe("agregarCertificacion", () => {
 
   it("rechaza la misma escrita con otras mayúsculas", () => {
     expect(() => agregarCertificacion([Q], { ...Q, certifying_body: "cqi" })).toThrow(/ya tiene/);
+  });
+});
+
+/**
+ * **La fecha es opcional desde el 2026-09-08, y el caso que lo obligó.**
+ *
+ * Kurt Ngo está en la base como Q de CQI con `date_earned: null` porque nadie
+ * supo la fecha. Exigirla no produjo una fila con fecha: produjo una que **ni
+ * se podía leer**, y que llegó a dejar la pantalla de informes externos sin
+ * abrirse. La fila de abajo es la suya, copiada tal cual de la base.
+ */
+describe("una credencial de la que no se sabe la fecha", () => {
+  const KURT = {
+    date_earned: null,
+    expiry_date: null,
+    level_or_rank: null,
+    certifying_body: "CQI",
+    certification_name: "Q Grader",
+    certificate_reference: null,
+  };
+
+  it("la fila que hay en la base se lee, y sin inventarle fecha", () => {
+    const r = validarCertificacion(KURT);
+    expect(r.certifying_body).toBe("CQI");
+    expect(r.certification_name).toBe("Q Grader");
+    expect("date_earned" in r, "ausente, no null ni cadena vacía").toBe(false);
+  });
+
+  it("y `leerCertificaciones` la devuelve en vez de tumbar la lista entera", () => {
+    expect(leerCertificaciones([KURT])).toHaveLength(1);
+  });
+
+  /**
+   * El control positivo de las dos de arriba: opcional no significa que valga
+   * cualquier cosa. Sin esto, un validador que aceptara todo las pasaría igual.
+   */
+  it("pero una fecha presente sigue teniendo que ser una fecha de verdad", () => {
+    expect(() => validarCertificacion({ ...KURT, date_earned: "2026-02-31" })).toThrow(/fecha real/);
+    expect(() => validarCertificacion({ ...KURT, date_earned: "01/05/2024" })).toThrow(/AAAA-MM-DD/);
+  });
+
+  it("un vencimiento sin fecha de obtención entra: no hay contra qué compararlo", () => {
+    expect(validarCertificacion({ ...KURT, expiry_date: "2027-05-01" }).expiry_date).toBe("2027-05-01");
+  });
+
+  /**
+   * El flujo que describió el dueño: Kurt entra con su cuenta y confirma la
+   * fecha. Lo que corresponde entonces es rellenar el hueco, no dejarle dos
+   * «Q Grader (CQI)» en la lista.
+   */
+  it("cuando su titular confirma la fecha, COMPLETA el marcador en vez de duplicarlo", () => {
+    const marcador = validarCertificacion(KURT);
+    const confirmada = validarCertificacion({ ...KURT, date_earned: "2019-11-08", level_or_rank: "Q" });
+    const salida = agregarCertificacion([marcador], confirmada);
+    expect(salida, "una credencial, no dos").toHaveLength(1);
+    expect(salida[0]!.date_earned).toBe("2019-11-08");
+    expect(salida[0]!.level_or_rank).toBe("Q");
+  });
+
+  it("completar nunca pisa un valor que ya estaba", () => {
+    const previa = validarCertificacion({ ...KURT, level_or_rank: "Q", certificate_reference: "REF-VIEJA" });
+    const confirmada = validarCertificacion({ ...KURT, date_earned: "2019-11-08" });
+    const salida = agregarCertificacion([previa], confirmada);
+    expect(salida[0]!.certificate_reference, "la referencia previa sobrevive").toBe("REF-VIEJA");
+    expect(salida[0]!.level_or_rank).toBe("Q");
+    expect(salida[0]!.date_earned).toBe("2019-11-08");
+  });
+
+  it("al revés no: una sin fecha no se añade sobre una que ya la tiene", () => {
+    const conFecha = validarCertificacion({ ...KURT, date_earned: "2019-11-08" });
+    expect(() => agregarCertificacion([conFecha], validarCertificacion(KURT))).toThrow(/no añade nada/);
+  });
+
+  it("y dos sin fecha de la misma credencial siguen siendo la misma", () => {
+    const marcador = validarCertificacion(KURT);
+    expect(() => agregarCertificacion([marcador], validarCertificacion(KURT))).toThrow(/sin fecha/);
   });
 });
