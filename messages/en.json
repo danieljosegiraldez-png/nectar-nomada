@@ -1262,6 +1262,8 @@
     "vitalAlimentoHasta": "Feed until",
     "haceDias": "{count} days ago",
     "coloniasDeCajas": "{colonias} of {cajas}",
+    "mapaHeading": "Where they are",
+    "mapaSinCoordenadas": "{count, plural, one {One site is not on the map: nobody has declared where it is.} other {# sites are not on the map: nobody has declared where they are.}} Declare it from each site's page.",
     "vitalesPendientes": "Two dashboard vitals are still missing: pollination density (needs committed hectares) and 7-day weather (needs a connected provider). Neither is estimated.",
     "originSourceLabel": "Stock origin",
     "originSourceUnset": "Not recorded",

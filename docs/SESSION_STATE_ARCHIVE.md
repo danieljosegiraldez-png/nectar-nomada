@@ -1686,3 +1686,30 @@ sesion parecia probar que la pagina existe; el control negativo dice que **una
 ruta inexistente da 307 igual**, porque el middleware redirige todo. Lo que si lo
 prueba es el manifiesto de `next build`, que la nombra. Queda **sin verificar en
 pantalla** hasta que alguien con sesion la abra.
+
+### 2026-09-08 · La fecha de una credencial pasa a ser opcional
+
+Kurt Ngo esta en la base como Q de CQI con `date_earned: null` porque **nadie
+supo la fecha** — la instruccion del A7 decia «registra la credencial», y quien
+la registro puso nulos donde no sabia. Exigir la fecha no produjo una fila con
+fecha: produjo una que **ni se podia leer**, y que llego a dejar la pantalla de
+informes externos sin abrirse. Decision de Daniel: opcional, como ya lo era
+`certificate_reference` y por el mismo argumento que el modulo ya tenia escrito.
+
+**No hizo falta escribir NADA en la base.** El arreglo es el validador: en
+cuanto acepta la fila, se lee sola. Comprobado contra la fila real de la copia
+restaurada — `{"date_earned":null,…}` entra y sale como
+`{certifying_body:"CQI",certification_name:"Q Grader"}`, sin fecha inventada, y
+la pantalla la ofrece como «Kurt Ngo · Q Grader (CQI)».
+
+**Una fila sin fecha es un marcador, y el dueño dijo quien lo completa:** Kurt,
+cuando entre con su cuenta, subiendo el escaneo. Por eso `agregarCertificacion`
+**completa** el marcador en vez de duplicarlo cuando llega la misma credencial
+con fecha — y nunca pisa un valor que ya estuviera. Sin eso, el dia que la
+confirmara habria dos «Q Grader (CQI)» en su ficha.
+
+**Y un guardia mio de ayer que este cambio dejo midiendo nada.** El test «una
+certificacion ilegible no tumba la lista» usaba justo la fila de Kurt: al
+volverse legible, pasaba por razones equivocadas. Recolocado sobre una que
+sigue siendo ilegible —sin `certification_name` no hay credencial que afirmar—
+y re-flipeado para verlo caer por su nombre otra vez.

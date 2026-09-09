@@ -7867,3 +7867,77 @@ sed -n '/^model Device {/,/^}/p' prisma/schema.prisma | grep -cE '^  operatorPer
 ```
 
 Que el aparato no autoriza: los tres casos de `tests/sync/deviceOperator.test.ts`.
+
+---
+
+## ADR-110 — Enmienda a ADR-009: el mapa se hace con Leaflet y teselas de OSM, y lo que lo bloqueaba no era el proveedor
+
+**Contexto.** ADR-009 eligió Mapbox «behind the `MapsProvider` adapter», por su
+estilo propio. Al ir a construirlo, el reporte A9 (§48) medía el estado real:
+el mapa estaba **especificado entero** —`MAP_AND_TERRITORY.md`, Mapbox +
+PostGIS, ADR-001/ADR-009— y tenía **cero código**: ni `mapbox`, ni `maplibre`,
+ni `leaflet` en `package.json`, `app/` ni `lib/`.
+
+**Lo que la medición cambió, y es la mitad que importa.** No estaba bloqueado
+por el proveedor. De las **24 `Location` que existen, cero tienen latitud y
+longitud**, y la pantalla de un sitio sólo enseñaba el formulario para
+declararlas **si ya había una propuesta** sacada del GPS de alguna visita. Como
+tampoco hay visitas con lectura de GPS, no había propuesta; sin propuesta, no
+había formulario; sin formulario, **no existía ninguna forma de teclear una
+coordenada en toda la plataforma**. Un mapa con cualquier proveedor habría
+salido vacío.
+
+**Decisión — dos partes, y van juntas en el mismo cambio:**
+
+1. **Leaflet 1.9.4 con teselas raster de OpenStreetMap**, en vez de Mapbox.
+2. **El formulario de coordenadas se dibuja siempre**, con la propuesta como
+   valor por defecto cuando la hay y en blanco cuando no.
+
+**Alternativas medidas, no estimadas.** El dueño pidió explícitamente «sin
+token ni costo», lo que deja fuera a Mapbox, que exige cuenta de pago y token.
+Quedaban dos:
+
+| | peso instalado | dependencias | licencia |
+|---|---|---|---|
+| **Leaflet 1.9.4** | **3,7 MB** | **0** | BSD-2 |
+| MapLibre GL 6.8.0 | 20 MB | 17 | BSD-3 |
+
+Se eligió Leaflet. MapLibre da teselas vectoriales y rotación 3D, capacidades
+que nadie ha pedido para 24 ubicaciones y un puñado de personas con teléfonos
+en el campo.
+
+**Lo que esto cuesta, dicho en voz alta.** Se pierde el estilo propio que era
+**toda la razón** de ADR-009 (`CLAUDE.md` §48, «no debe parecer software
+empresarial genérico»): las teselas de OSM se ven como OSM. Es un intercambio
+consciente — un mapa genérico que existe contra uno bonito que no.
+
+**Y las teselas de OSM no son «gratis» a secas.** Su política de uso pide
+**atribución visible** —está puesta y hay una prueba que la vigila— y
+desaconseja el uso intensivo. Para este volumen está dentro de lo razonable.
+
+**Qué lo reabre.** Volumen de teselas que incomode a OSM, o que el estilo
+propio pase a importar de verdad para el público. La salida del primer caso es
+**un proveedor de teselas**, no un cambio de librería: Leaflet acepta cualquier
+URL de teselas, así que ese día se cambia una cadena. El segundo sí sería
+volver a ADR-009.
+
+**El adaptador `MapsProvider` de ADR-009 no se construye.** Un adaptador de un
+solo uso es justo lo que `CLAUDE.md` prohíbe: se escribiría contra la única
+implementación que existe, y el día del cambio habría que rehacerlo igual.
+
+**Cómo se comprueba.** `tests/arquitectura/mapa-de-sitios.test.ts`, cuatro
+guardias de código fuente, cada uno con su control positivo:
+
+1. Leaflet se carga en un `import()` dentro del efecto y **nunca** en el módulo
+   —toca `window` al cargarse y `app/apiaries/page.tsx` es de servidor—;
+2. las teselas llevan la atribución de OSM;
+3. el formulario de coordenadas **no** está detrás de `coordenadas.propuesta`,
+   que es la regresión de arriba;
+4. `.nn-mapa` tiene altura explícita en px — Leaflet mide su contenedor y uno
+   sin altura resuelta da un mapa de 0 px **sin lanzar ningún error**.
+
+**Flip-test hecho.** Las cuatro mutaciones —importar Leaflet en el módulo,
+quitar la atribución, volver a envolver el formulario en `{coordenadas.propuesta
+? (`, y cambiar `height: 360px` por `height: auto`— tiran **cada una la prueba
+que le toca, por su nombre**, y las tres de TypeScript **compilan** mutadas, así
+que el rojo no es un error de carga disfrazado.

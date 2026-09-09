@@ -1262,6 +1262,8 @@
     "vitalAlimentoHasta": "Alimento hasta",
     "haceDias": "hace {count} días",
     "coloniasDeCajas": "{colonias} de {cajas}",
+    "mapaHeading": "Dónde están",
+    "mapaSinCoordenadas": "{count, plural, one {Un sitio no sale en el mapa: nadie ha declarado dónde está.} other {# sitios no salen en el mapa: nadie ha declarado dónde están.}} Se declara desde la ficha de cada sitio.",
     "vitalesPendientes": "Faltan dos vitales del tablero: densidad de polinización (necesita las hectáreas comprometidas) y clima de 7 días (necesita un proveedor conectado). No se estiman.",
     "originSourceLabel": "Origen del pie",
     "originSourceUnset": "Sin registro",
