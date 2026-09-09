@@ -87,7 +87,9 @@ describe("el inventario del router", () => {
     // ata la intervención en el lote con el puntaje de taza.
     // 67 → 68 el 2026-09-08, con /sensory/external-report — la puerta que le
     // faltaba al informe de un Q-grader, que sólo se podía meter por terminal.
-    expect(salida).toContain("68 entradas");
+    // 68 → 69 el 2026-09-09, con /apiaries/new — hasta ese día no había forma
+    // de crear un apiario desde la aplicación, sólo colmenas dentro de uno.
+    expect(salida).toContain("69 entradas");
     expect(codigo, salida).toBe(0);
   });
 

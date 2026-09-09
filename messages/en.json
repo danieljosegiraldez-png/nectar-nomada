@@ -1284,7 +1284,17 @@
     "colonyEndReasonLabel": "Why (optional)",
     "colonyEndReasonPlaceholder": "what was seen: varroa, queenless, robbing…",
     "colonyEndButton": "Record the loss",
-    "colonyEndedOn": "Lost on {fecha}"
+    "colonyEndedOn": "Lost on {fecha}",
+    "apiaryCreateHeading": "Create apiary",
+    "apiaryCreateIntro": "The site where the hives stand. Hives, colonies and visits hang off it afterwards.",
+    "apiaryNameLabel": "Apiary name",
+    "apiaryOrganizationLabel": "Farm",
+    "apiaryOrganizationHelp": "Who the site belongs to. Without it the apiary has no owner.",
+    "apiaryChoose": "— Choose —",
+    "apiaryLatitudeLabel": "Latitude (optional)",
+    "apiaryLongitudeLabel": "Longitude (optional)",
+    "apiaryCreateButton": "Create apiary",
+    "apiaryNoOrganizations": "There is no farm you can hang an apiary from."
   },
   "Research": {
     "badge": "Research OS",

@@ -62,6 +62,7 @@ export const RUTAS = {
   "/api/v1/sync/field-media": { clase: "requiere-sesion", metodos: ["POST"], razon: "P4 §7. Cola de medios en dos pasos: firma una URL y luego registra el Asset y su FieldEvent. El servidor nunca sostiene los bytes." },
   "/api/v1/sync/field-work": { clase: "requiere-sesion", razon: "P4 §5. Pull por cursor. El ámbito lo resuelve el servidor contra el RBAC, no lo pide el aparato." },
   "/apiaries": { clase: "requiere-sesion", razon: "Operación de apiarios." },
+  "/apiaries/new": { clase: "requiere-sesion", razon: "Crear un apiario: exige apiary:manage a nivel plataforma." },
   "/apiaries/[id]": { clase: "requiere-sesion", razon: "Operación de apiarios." },
   "/apiaries/[id]/etiquetas": { clase: "requiere-sesion", razon: "La hoja de calcomanias QR de un apiario. Mismo regimen que el apiario: quien no lo ve, no imprime sus codigos." },
   "/apiaries/[id]/hives/[hiveId]": { clase: "requiere-sesion", razon: "Operación de apiarios." },

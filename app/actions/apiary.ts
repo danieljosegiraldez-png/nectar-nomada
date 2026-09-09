@@ -4,7 +4,13 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
-import { createHive, createColony, registrarFinDeColonia, ApiaryAccessError } from "../../lib/apiary/hives";
+import {
+  createHive,
+  createColony,
+  registrarFinDeColonia,
+  crearApiario,
+  ApiaryAccessError,
+} from "../../lib/apiary/hives";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { recordInspection } from "../../lib/apiary/inspections";
 import { recordColonyEvent, ColonyEventValidationError } from "../../lib/apiary/colonyEvents";
@@ -25,6 +31,32 @@ const emptyToNullNumber = (value: FormDataEntryValue | null) => {
 
 // --- Hive / Colony creation, online-only (§7's A0 scope note: offline is
 // wired to the Inspection/ColonyEvent forms specifically, not to these) ---
+
+/**
+ * Crear el apiario.
+ *
+ * **Faltaba** (medido el 2026-09-09): se podían registrar colmenas, colonias,
+ * inspecciones y visitas, pero no **el sitio donde ocurre todo eso**. Los tres
+ * apiarios que hay salieron de la semilla y de un script de importación.
+ *
+ * Redirige a la ficha del apiario recién creado, que es donde toca seguir:
+ * lo siguiente que hace un apicultor es poner su primera colmena.
+ */
+export async function crearApiarioFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const sitio = await crearApiario(user.userAccountId, {
+    name: String(formData.get("name") ?? ""),
+    organizationId: String(formData.get("organizationId") ?? ""),
+    projectId: emptyToNull(formData.get("projectId")),
+    latitude: emptyToNullNumber(formData.get("latitude")),
+    longitude: emptyToNullNumber(formData.get("longitude")),
+  });
+
+  revalidatePath("/apiaries");
+  redirect(`/apiaries/${sitio.id}`);
+}
 
 export async function createHiveFormAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();

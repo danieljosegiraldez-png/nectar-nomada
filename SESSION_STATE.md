@@ -37,6 +37,34 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-09 · Se podía todo del apiario menos crear el apiario
+
+Medido: la aplicacion dejaba registrar colmenas, colonias, inspecciones, eventos
+de colonia, cosechas de miel y visitas — y **no dejaba registrar el sitio donde
+ocurre todo eso**. Los tres apiarios que existen salieron de `prisma/seed.ts` y
+de `scripts/import-cafelino-pe.ts`; el unico `location.create` de la aplicacion
+era `createMicrolot`, que subdivide una parcela que ya existe. Ahora
+`/apiaries/new`.
+
+**Y construirlo destapo un limite del modelo.** `Location` **no tiene**
+`projectId`: un apiario se asocia a un proyecto **a traves de sus colmenas**
+(`resolveApiaryVisibility` filtra por `hives.some.projectId`). Un sitio recien
+creado no tiene ninguna, asi que **es invisible para quien solo tiene ambito de
+proyecto**, incluido quien acaba de crearlo. La primera version usaba la puerta
+normal y su prueba lo cazo: el sitio se creaba y `getApiaryDetail` contestaba
+`no_apiary_access` **a su propio autor**. Ahora crear exige ambito de
+plataforma, y el lector de fincas usa la MISMA puerta — la primera version
+ofrecia fincas a quien el servicio iba a rechazar.
+
+**Lo que queda abierto y es del dueño:** si `Location` debe llevar `projectId`
+para que un jefe de finca con ambito de proyecto pueda crear sus apiarios. Es un
+cambio de esquema que toca la visibilidad de todo.
+
+**Sin altitud ni notas, a proposito.** `Location` guarda un RANGO de altitud
+—describe una parcela, no un punto— y no tiene columna de notas. Las dos se
+cayeron al medir el esquema; escribir el mismo numero en las dos afirmaria «el
+rango es cero», que nadie declaro.
+
 ### 2026-09-09 · El mapa de sitios, y la coordenada que nadie podía teclear
 
 El mapa que `ADR-009` decidió en su día llevaba **cero código**. Se construyó,
@@ -149,44 +177,6 @@ dentro y habrian pasado con el vuelto a poner. Nadie miraba esas cadenas. Queda
 `tests/ui/vocabularioDelMenu.test.ts`, que dice en su cabecera **lo que no
 prueba**: que las etiquetas sean las correctas. Eso lo dijo una persona usando
 la aplicacion, que es como se encontro.
-
-### 2026-09-08 · A9 completo: la captura de campo del apiario
-
-Trece tickets del 7 y 8 de septiembre, del PR #214 al #245. El apiario pasa a funcionar como la
-superficie de café: **la visita es un hecho**, no un adorno.
-
-`FieldSession` extendida en vez de entidad nueva (D1), y la compuerta resuelve
-por `Location.locationType` — nunca por un parámetro que elija quien llama.
-Adjuntar es implícito y estrecho: mismo sitio, sin cerrar, del mismo operador.
-Las dos colas offline se colapsaron en una que empuja **por lotes**. Cierre
-auditado con ventana de 48 h, reporte congelado que se abre con enlace que
-caduca y se revoca, etiquetas QR imprimibles sin red, pantalla de sitios con
-alertas ordenada por urgencia, origen de colonia agrupable, compromiso de
-polinización con su cociente, y bitácora que espeja `AuditEvent`.
-
-**Cuatro veces la medición cambió el diseño**, y son lo que hay que recordar:
-
-1. **El ticket A9.8 decía «esquema: no» y era falso.** Los tres alertas
-   críticos del Anexo C no tenían columna detrás de ninguno. Entraron tres.
-2. **La fila del ticket A9.10 nombraba la columna equivocada.** `originType` ya
-   era enum y ya agrupaba; lo que no agrupa es `originNote`, texto libre.
-3. **El mapa no está bloqueado por Mapbox.** De 24 ubicaciones, **0 tenían
-   coordenadas**: no había qué pintar. Por eso #242 hace que un sitio las
-   aprenda de la primera visita que se abre ahí.
-4. **WhatsApp no alcanza a nadie.** De 19 personas, **0 tienen teléfono** y 3
-   tienen correo. Por eso A9.11 distingue querer un canal de poder recibirlo.
-
-**Y un hallazgo que sigue abierto: nadie puede registrar que una colonia
-murió.** Ningún servicio cambia `Colony.status` — se crea `active` y no hay
-camino de código que la marque muerta o absconded. Consecuencias medidas: la
-bitácora no puede espejar el hecho más caro del apiario, y el conteo del
-sistema **sólo puede subir**, así que su divergencia con el conteo declarado en
-la visita es estructural y no deriva. La alerta de pérdida que A9.8 sí da
-compara dos conteos *declarados*.
-
-**Lo que queda de A9:** el mapa, que ahora sólo espera la decisión de Mapbox
-(servicio de pago, token). Los cuatro adaptadores de mensajería siguen fuera de
-alcance por D10.
 
 ## 3. Bloqueado, y en qué
 
