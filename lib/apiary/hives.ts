@@ -19,6 +19,7 @@ import { recordAuditEvent } from "../audit";
 import { DEFAULT_NEW_RECORD_CLASSIFICATION } from "../traceability/lots";
 import type { ScopeTarget } from "../rbac/types";
 import type { ColonyOriginType, ColonyStatus, DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
+import { CATALOGO_DE_CAUSA_DE_PERDIDA, esClaseDeCausa, type ClaseDeCausa } from "./causaDePerdida";
 
 export class ApiaryAccessError extends Error {}
 
@@ -165,18 +166,69 @@ export async function createColony(userAccountId: string, input: CreateColonyInp
 
 export class ColonyEndError extends Error {}
 
+/**
+ * Cómo puede terminar una colonia. **`active` no está**, y por eso esto existe
+ * en tiempo de ejecución y no sólo en el tipo.
+ *
+ * El agujero, encontrado el 2026-09-10 al arreglar lo que cazó el guardia de
+ * `procedencia-declarada.test.ts`: la acción metía la cadena del formulario con
+ * `as never` y el servicio escribía `input.status` sin mirarlo. Un envío con
+ * `status=active` pasaba el `where` —que exige `status: "active"`— y escribía
+ * **`status = active` con `ended_at` puesto**: una colonia viva con fecha de
+ * muerte. No la habría rechazado nada.
+ */
+export const ESTADOS_DE_FIN: readonly Exclude<ColonyStatus, "active">[] = ["dead", "absconded", "combined"];
+
+export function esEstadoDeFin(valor: string): valor is Exclude<ColonyStatus, "active"> {
+  return (ESTADOS_DE_FIN as readonly string[]).includes(valor);
+}
+
+/** Estrecha lo que llega de un formulario, o lanza. Misma forma que `exigeClaseDeCausa`. */
+export function exigeEstadoDeFin(valor: string): Exclude<ColonyStatus, "active"> {
+  if (!esEstadoDeFin(valor)) throw new ColonyEndError(`estado_de_fin_invalido: ${valor}`);
+  return valor;
+}
+
+/** Una causa declarada, tal como llega del formulario. */
+export interface CausaDeclarada {
+  /** Una fila de `causa_de_perdida_de_colonia`. Se valida que sea de ESE catálogo. */
+  causeValueId: string;
+  /** Cómo se estableció. Sólo las tres de `CLASES_DE_CAUSA`. */
+  provenanceClass: ClaseDeCausa;
+  dataQuality?: DataQuality | null;
+  /** Una línea para lo que el catálogo no cubre. */
+  note?: string | null;
+}
+
 export interface RegistrarFinDeColoniaInput {
   colonyId: string;
-  /** `dead` o `absconded`. `active` no es un fin y se rechaza. */
+  /**
+   * Cómo terminó. `active` no es un fin y se rechaza.
+   *
+   * `combined` entró el 2026-09-09: el estándar internacional cuenta como
+   * pérdida la colonia con problema de reina irresoluble —viva, no
+   * recuperable, se combina—, y sin ese valor se quedaba `active` para siempre
+   * inflando el conteo de polinización.
+   */
   status: Exclude<ColonyStatus, "active">;
   /** Cuándo se perdió, no cuándo se anota. Se suele registrar días después. */
   endedAt: Date;
   /**
-   * Por qué. Va al `reason` del AuditEvent y **no a una columna**: un
-   * vocabulario de causas —varroa, orfandad, hambre, saqueo— es conocimiento
-   * del dueño, se le pregunta y no se inventa. Cuando lo dé será un
-   * `VariableCatalog` como el origen (A9.10); hasta entonces, texto con rastro
-   * es más honesto que una columna que finge ser consultable.
+   * Por qué, del catálogo y **varias a la vez**. El dueño lo pidió así: «cuando
+   * hay pérdida de colonia hay múltiples razones y/o causales y situaciones».
+   * Una caja vacía puede ser varroa y hambre, y elegir una falsearía el
+   * registro.
+   *
+   * Vacío es legítimo y no se rellena solo: hay pérdidas que se anotan sin
+   * saber por qué, y para decirlo existe el valor «desconocido», que se elige
+   * — no se supone.
+   */
+  causas?: readonly CausaDeclarada[];
+  /**
+   * Texto libre, para lo que no cabe en ninguna causa. Sigue yendo al `reason`
+   * del AuditEvent. Ya **no** es el único sitio donde vive el porqué: ese
+   * párrafo, que este comentario tuvo hasta el 2026-09-09, dejó de ser cierto
+   * el día que el dueño dio el vocabulario.
    */
   reason?: string | null;
 }
@@ -205,9 +257,57 @@ export async function registrarFinDeColonia(userAccountId: string, input: Regist
   if (!colony) throw new ApiaryAccessError("colony_not_found");
   await requireApiaryAccess(userAccountId, "manage", [{ projectId: colony.hive.projectId, locationId: colony.hive.locationId }]);
 
+  // La frontera comprueba otra vez lo que la acción ya estrechó: este servicio
+  // se puede llamar desde la cola de sincronización sin pasar por un formulario.
+  if (!esEstadoDeFin(input.status)) throw new ColonyEndError(`estado_de_fin_invalido: ${String(input.status)}`);
+
   if (colony.status !== "active") throw new ColonyEndError("colony_already_ended");
   // Terminar antes de empezar es un problema de reloj, no un registro.
   if (input.endedAt < colony.startedAt) throw new ColonyEndError("ended_before_started");
+
+  const causas = input.causas ?? [];
+
+  // La misma causa dos veces no añade nada y chocaría contra el índice único
+  // como un P2002 ilegible. Se rechaza aquí, con nombre propio.
+  if (new Set(causas.map((c) => c.causeValueId)).size !== causas.length) {
+    throw new ColonyEndError("causa_repetida");
+  }
+
+  // **La FK no basta.** Apunta a `variable_catalog_value` entera, no a este
+  // catálogo, así que sin esta comprobación se podría colgar una levadura de
+  // una colonia muerta y la base lo aceptaría encantada. Se comprueba que cada
+  // id sea de `causa_de_perdida_de_colonia` y que no sea un alias.
+  const validas = causas.length
+    ? await prisma.variableCatalogValue.findMany({
+        where: {
+          id: { in: causas.map((c) => c.causeValueId) },
+          catalog: { key: CATALOGO_DE_CAUSA_DE_PERDIDA },
+          aliasOfId: null,
+        },
+        select: { id: true, impliesUnknownIdentity: true },
+      })
+    : [];
+  if (validas.length !== causas.length) throw new ColonyEndError("causa_desconocida");
+
+  const porId = new Map(validas.map((v) => [v.id, v]));
+  for (const c of causas) {
+    // Sólo las tres clases que significan algo aquí. Sin esto, `measured_fact`
+    // pasaría y convertiría una conjetura sobre una caja vacía en una medición.
+    if (!esClaseDeCausa(c.provenanceClass)) throw new ColonyEndError("clase_de_causa_invalida");
+  }
+
+  // «Desconocido» no convive con otra causa. Decir «varroa y no sabemos por
+  // qué» no es más información que decir «varroa»: es una contradicción, y en
+  // un reporte la fila se contaría en las dos columnas.
+  //
+  // Se probó primero la regla del precedente `TreatmentBatchVariableValue`
+  // —exigir `dataQuality` cuando el valor declara identidad desconocida— y se
+  // descartó: allí califica cuán firme es una cepa sin nombre, y aquí sería
+  // ceremonia sobre un «no sabemos» que ya es completo. Ésta sí impide un
+  // registro incoherente.
+  if (causas.length > 1 && causas.some((c) => porId.get(c.causeValueId)?.impliesUnknownIdentity)) {
+    throw new ColonyEndError("desconocido_no_admite_compania");
+  }
 
   return prisma.$transaction(async (tx) => {
     const { count } = await tx.colony.updateMany({
@@ -216,7 +316,26 @@ export async function registrarFinDeColonia(userAccountId: string, input: Regist
     });
     if (count === 0) throw new ColonyEndError("colony_already_ended");
 
-    const despues = await tx.colony.findUniqueOrThrow({ where: { id: input.colonyId } });
+    for (const c of causas) {
+      await tx.colonyLossCause.create({
+        data: {
+          colonyId: input.colonyId,
+          causeValueId: c.causeValueId,
+          provenanceClass: c.provenanceClass,
+          dataQuality: c.dataQuality ?? null,
+          note: c.note ?? null,
+          createdBy: userAccountId,
+        },
+      });
+    }
+
+    const despues = await tx.colony.findUniqueOrThrow({
+      where: { id: input.colonyId },
+      // Las causas van DENTRO del `after` del rastro. Si quedaran fuera, el
+      // AuditEvent diría que la colonia murió y no por qué, que es la mitad
+      // que se acaba de añadir.
+      include: { lossCauses: { include: { cause: { select: { value: true } } } } },
+    });
 
     // C1 §3: escritura con valor probatorio. Perder una colonia es el hecho que
     // más caro sale y el que menos avisa; sin rastro, «¿desde cuándo?» y «¿quién

@@ -7941,3 +7941,100 @@ quitar la atribución, volver a envolver el formulario en `{coordenadas.propuest
 ? (`, y cambiar `height: 360px` por `height: auto`— tiran **cada una la prueba
 que le toca, por su nombre**, y las tres de TypeScript **compilan** mutadas, así
 que el rojo no es un error de carga disfrazado.
+
+---
+
+## ADR-111 — Las causas de pérdida de una colonia son varias, salen de un estándar publicado, y cada una dice cómo se supo
+
+**Contexto.** `20260909010000_fin_de_colonia` cerró el hueco de que ningún
+servicio escribiera nunca `Colony.status = dead`. Su cabecera y el comentario de
+`Colony.endedAt` decían lo mismo, y tenían razón para aquel día: *«un
+vocabulario de causas es conocimiento del dueño: se le pregunta, no se
+inventa»*. Se preguntó el 2026-09-09.
+
+**Lo que el dueño contestó, y las dos cosas que cambia.** *«Cuando hay pérdida
+de colonia hay múltiples razones y/o causales y situaciones»*, y que antes de
+fijar el vocabulario había que **estudiar la documentación de soporte y lo
+disponible en línea**, dejando sitio para *«agregar después lo que falte»*.
+
+Eso descarta las dos formas que el comentario viejo daba por buenas: no cabe en
+una columna de texto **ni en una FK sola**. Obligar a elegir entre varroa y
+hambre cuando la respuesta honesta es las dos falsea el registro.
+
+**Lo que se midió antes de proponer nada.**
+
+| | |
+|---|---|
+| Vocabulario de causas en el repositorio | **no existe** (grep con control positivo) |
+| Lo que sí estaba documentado | `48_A9_ANEXO_B_CATALOGO_DE_CAMPOS.md` §2.3 — catorce «irregularidades», pero son *lo que se observa en una inspección*, no *por qué se perdió* |
+| Datos reales de apiario | **2 sitios, 2 colmenas, 2 colonias, 1 inspección, 0 pérdidas** |
+
+Esa última fila es la que manda: **no se puede deducir nada de los datos**, así
+que el vocabulario sale de fuera o se lo inventa alguien.
+
+**Decisión — cuatro partes.**
+
+1. **`ColonyLossCause`, una fila por causa.** Varias por pérdida.
+2. **`provenanceClass` obligatorio y sin valor por defecto**, acotado por el
+   servicio a `hypothesis`, `conclusion` y `direct_observation`. Una causa de
+   pérdida casi nunca se ve: se deduce de una caja vacía dos semanas después.
+   El propio cuestionario internacional pregunta por «hambre **sospechada**» y
+   «exposición tóxica **sospechada**», y el caso de Toabré que hay documentado
+   es literalmente «una hipótesis en pie». `CLAUDE.md` §3 prohíbe guardar una
+   inferencia como hecho; un defecto silencioso convertiría cada sospecha en
+   observación.
+3. **`ColonyStatus` gana `combined`.** El estándar cuenta como pérdida la
+   colonia con «problema de reina irresoluble»: viva, no recuperable, se
+   combina o se elimina. Sin ese valor se quedaba `active` para siempre e
+   inflaba el conteo contra el compromiso de polinización con abejas que ya no
+   están en esa caja. Decisión del dueño el 2026-09-09.
+4. **Quince valores, ninguno inventado**, en un `VariableCatalog` que crece por
+   semilla y no por migración (precedente P1, igual que A9.10). Cada valor
+   lleva en su `definition` de dónde salió, y sólo hay tres procedencias
+   posibles:
+   - **el estándar internacional de monitoreo de pérdidas** — COLOSS y su
+     versión latinoamericana de SOLATINA, **donde Panamá participa**: clasifica
+     toda pérdida en problema de reina irresoluble, desastre natural, y colonia
+     muerta o caja vacía, siendo esta última la que engloba ausentamiento,
+     enfermedad e intoxicación;
+   - **el Anexo B §2.3 del propio dueño**, del que entran las banderas que son
+     causa de *pérdida* y se quedan fuera las que son señal de inspección
+     —moho, alas deformadas, olor anormal, disentería, cría calva—: son dos
+     preguntas distintas y conviene que sigan siéndolo;
+   - **los casos que los documentos de la finca registran**: la hipótesis de
+     Toabré —un frente frío de enero coincidiendo con una poda que cortó la
+     floración— y el aviso de enjambrazón del Anexo B §2.2.
+
+**Dos cosas que se decidieron al revés de lo obvio, y por qué.**
+
+- **La certeza no va en el nombre del valor.** Se pensó en «intoxicación
+  sospechada», como escribe el cuestionario internacional. Sería un error:
+  dejaría sin nombre a la intoxicación confirmada y pediría dos filas para el
+  mismo hecho.
+- **«Robo de colmenas» sale de «desastre natural».** El estándar lo mete ahí.
+  No tiene nada de natural, y lo que se hace al respecto es otra cosa.
+
+**Lo que se probó y se descartó.** La regla del precedente
+`TreatmentBatchVariableValue` (RO1 §3a) —exigir `dataQuality` cuando el valor
+declara identidad desconocida— se implementó y se quitó: allí califica cuán
+firme es una cepa sin nombre, y aquí sería ceremonia sobre un «no sabemos» que
+ya es completo. En su lugar quedó una regla que sí impide un registro
+incoherente: **«desconocido» no convive con otra causa.**
+
+**Cómo se comprueba.** `tests/apiary/finDeColonia.test.ts`, quince casos.
+**Flip-test: siete mutaciones, cada una tira la prueba que le toca, por su
+nombre, y las siete compilan mutadas.**
+
+**Y una que el flip-test destapó, que es la parte que vale.** La prueba de
+«misma causa dos veces» afirmaba `toThrow(ColonyEndError)` y **pasaba con el
+guardia quitado**: el `in` de Prisma deduplica, así que la comprobación de
+longitud posterior salta con otro error que también es `ColonyEndError`. Era un
+adorno. Ahora afirma el mensaje —`causa_repetida`—, porque «la elegiste dos
+veces» y «esa causa no existe» son cosas distintas para quien rellena el
+formulario.
+
+**Qué lo reabre.** Que el dueño encuentre una causa que no está, que es lo que
+él mismo anticipó: entonces es **una línea en `lib/research/catalogs.ts` y un
+`db:seed`**, sin migración. Y si algún día se reporta a SOLATINA de verdad,
+habrá que mapear estos quince valores a sus tres categorías — el mapeo es
+posible porque cada valor dice de cuál viene.

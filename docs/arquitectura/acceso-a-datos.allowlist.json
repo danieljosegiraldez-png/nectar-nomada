@@ -314,6 +314,10 @@
       "razon": "A9.10 — el vocabulario de orígenes de colonia, leído del catálogo. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Sólo lee `VariableCatalogValue`, que es vocabulario y no dato de nadie."
     },
     {
+      "archivo": "lib/apiary/causaDePerdida.ts",
+      "razon": "El vocabulario de causas de pérdida de colonia, leído del catálogo. Mismo molde y misma razón que origenDeColonia.ts: módulo de dominio, sólo lee `VariableCatalogValue`, que es vocabulario y no dato de nadie."
+    },
+    {
       "archivo": "lib/apiary/polinizacion.ts",
       "razon": "A9.9 — el compromiso de polinización y su cociente. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Su escritura pasa por requireApiaryAccess(\"manage\") y confirma su AuditEvent en la misma transacción."
     },
@@ -548,6 +552,12 @@
       "operacion": "vitalesDeSitios",
       "razon": "A9.8 — recibe locationIds que su ÚNICO llamador, app/apiaries/page.tsx, acaba de obtener de getApiaryList, que sí autoriza. No pide userAccountId a propósito: un lector que exige principal parece una compuerta y termina usándose como tal, que es la disciplina de leerEnmiendas (A9.3). Lee hechos de ids ya concedidos y no escribe nada.",
       "verificado": "2026-09-07"
+    },
+    {
+      "archivo": "lib/apiary/causaDePerdida.ts",
+      "operacion": "causasDePerdida",
+      "razon": "Lectura SIN SUJETO, la misma forma que origenesDeColonia justo debajo: no hay colonia ni ubicación contra la que comprobar permisos, porque lo que devuelve es el vocabulario de un catálogo y no filas de nadie. Su llamador, app/apiaries/[id]/hives/[hiveId]/page.tsx, ya redirige a /login sin sesión y llama a getHive, que sí autoriza. La ESCRITURA que consume estos ids, registrarFinDeColonia, sí exige principal y pasa por requireApiaryAccess(\"manage\").",
+      "verificado": "2026-09-09"
     },
     {
       "archivo": "lib/apiary/origenDeColonia.ts",

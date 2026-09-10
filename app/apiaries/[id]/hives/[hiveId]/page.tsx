@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getHive } from "../../../../../lib/apiary/hives";
 import { origenesDeColonia } from "../../../../../lib/apiary/origenDeColonia";
+import { causasDePerdida } from "../../../../../lib/apiary/causaDePerdida";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
 import { getSignedUrlForAsset } from "../../../../../lib/traceability/media";
 import { listInspectionsForColony } from "../../../../../lib/apiary/inspections";
@@ -24,12 +25,13 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
 
   const { id: apiaryId, hiveId } = await params;
   const t = await getTranslations("Apiary");
-  const [hive, { people: observers, selfPersonId }, origenes] = await Promise.all([
+  const [hive, { people: observers, selfPersonId }, origenes, causas] = await Promise.all([
     getHive(user.userAccountId, hiveId),
     getObserverCandidates(user.userAccountId),
-    // Lectura sin sujeto: el vocabulario sale del catálogo, no de una lista
-    // escrita a mano en el formulario.
+    // Lecturas sin sujeto: los dos vocabularios salen del catálogo, no de una
+    // lista escrita a mano en el formulario.
     origenesDeColonia(),
+    causasDePerdida(),
   ]);
 
   // A Hive holds at most one *current* Colony in practice (A1/A2's own
@@ -107,7 +109,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                 {t("colonyEndedOn", { fecha: colony.endedAt.toISOString().slice(0, 10) })}
               </p>
             ) : (
-              <FinDeColoniaForm colonyId={colony.id} revalidationPath={revalidationPath} />
+              <FinDeColoniaForm colonyId={colony.id} revalidationPath={revalidationPath} causas={causas} />
             )}
             <ApiaryPhotoUploadForm
               parent={{ kind: "colony", colonyId: colony.id }}

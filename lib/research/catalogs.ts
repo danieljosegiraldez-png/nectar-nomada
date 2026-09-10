@@ -506,6 +506,118 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       },
     ],
   },
+  {
+    // Por qué se perdió una colonia. Varias por pérdida — ver la cabecera de
+    // `ColonyLossCause` en el esquema.
+    //
+    // NINGÚN VALOR ESTÁ INVENTADO. Cada uno viene de uno de tres sitios, y su
+    // `definition` lo dice:
+    //
+    //   1. El estándar internacional de monitoreo de pérdidas: COLOSS y su
+    //      versión latinoamericana de SOLATINA, **donde Panamá participa**.
+    //      Clasifica toda pérdida en tres categorías —problema de reina
+    //      irresoluble, desastre natural, colonia muerta o caja vacía— y la
+    //      tercera engloba ausentamiento, enfermedad e intoxicación.
+    //   2. `48_A9_ANEXO_B_CATALOGO_DE_CAMPOS.md` §2.3, la lista de
+    //      irregularidades que el dueño ya había documentado. De sus catorce
+    //      banderas entran aquí las que son causa de PÉRDIDA; las que son
+    //      señal de inspección y no causa —moho, alas deformadas, olor
+    //      anormal, disentería, cría calva— se quedan allí. Son dos preguntas
+    //      distintas y conviene que sigan siéndolo.
+    //   3. Los casos que los propios documentos de la finca registran: la
+    //      hipótesis de Toabré —un frente frío de enero coincidiendo con una
+    //      poda que cortó la floración, `48_A9_ANEXO_C…` §4.2— y el aviso de
+    //      enjambrazón de `…ANEXO_B` §2.2, «directamente relevante al
+    //      ausentamiento de Toabré».
+    //
+    // LA CERTEZA NO VA EN EL NOMBRE. Se pensó en llamar a un valor
+    // «intoxicación sospechada», como hace el cuestionario internacional, y
+    // sería un error: dejaría sin nombre a la intoxicación confirmada y
+    // obligaría a dos filas para el mismo hecho. La certeza vive en
+    // `ColonyLossCause.provenanceClass`, que es obligatorio y no tiene valor
+    // por defecto.
+    //
+    // Crece por semilla, no por migración: el día que aparezca una causa que
+    // no está —y el dueño dijo que las habrá— es una línea aquí y un
+    // `db:seed`.
+    key: "causa_de_perdida_de_colonia",
+    name: "Causa de pérdida de colonia",
+    description:
+      "Por qué dejó de existir una colonia. Admite varias a la vez: una caja vacía puede ser varroa y hambre, y elegir una de las dos falsearía el registro. Cada causa dice aparte cómo se estableció.",
+    values: [
+      {
+        value: "Problema de reina irresoluble",
+        definition:
+          "Orfandad o postura deficiente sin arreglo. Es una de las tres categorías del estándar internacional (COLOSS/SOLATINA), y la que motiva el estado `combined`: la colonia está viva pero no es recuperable, así que se combina o se elimina.",
+      },
+      {
+        value: "Obrera ponedora",
+        definition:
+          "Anexo B §2.3: «pérdida de reina consumada». Se distingue del problema de reina porque ya no tiene vuelta atrás y se reconoce en campo por la cría de zángano salteada.",
+      },
+      {
+        value: "Enjambrazón",
+        definition:
+          "La colonia se dividió sola y se fue la mitad con la reina. Anexo B §2.2 la nombra como el aviso que se busca en las celdas reales, «directamente relevante al ausentamiento de Toabré».",
+      },
+      {
+        value: "Hambre",
+        definition:
+          "Anexo B §2.3: «lo que el nivel de reservas anticipa». El cuestionario internacional la pregunta como sospecha, y aquí la sospecha se declara en `provenanceClass`, no en el nombre.",
+      },
+      {
+        value: "Escasez de floración",
+        definition:
+          "Falta de néctar en el entorno, distinta de no haber alimentado. Es la hipótesis en pie de Toabré (`48_A9_ANEXO_C_TABLERO_Y_REPORTES.md` §4.2): un frente frío de enero coincidiendo con una poda que cortó la floración.",
+      },
+      {
+        value: "Varroa",
+        definition: "Anexo B §2.3: «la plaga que define el calendario de tratamiento».",
+      },
+      {
+        value: "Polilla de la cera",
+        definition: "Anexo B §2.3: «segunda causa de pérdida en caja debilitada».",
+      },
+      {
+        value: "Pequeño escarabajo de la colmena",
+        definition: "Anexo B §2.3: «presente en la región».",
+      },
+      {
+        value: "Hormigas",
+        definition:
+          "Anexo B §2.3. Entraron a las cajas vacías de Toabré dos semanas después del ausentamiento, y registrarlo con fecha es lo que permitió DESCARTARLAS como causa — que es justo por qué el valor tiene que existir.",
+      },
+      {
+        value: "Loque",
+        definition: "Anexo B §2.3: «notificable». Su presencia obliga a avisar, no sólo a registrar.",
+      },
+      {
+        value: "Saqueo",
+        definition: "Anexo B §2.3: «explica una caja vacía sin ausentamiento». La distinción importa: el saqueo no es que la colonia se fuera.",
+      },
+      {
+        value: "Intoxicación por agroquímicos",
+        definition:
+          "El cuestionario internacional la pregunta como «exposición tóxica sospechada»; en Panamá la literatura la asocia a la deriva de aplicaciones vecinas. La certeza va en `provenanceClass`.",
+      },
+      {
+        value: "Desastre natural",
+        definition:
+          "Segunda categoría del estándar internacional: inundación, sequía, incendio, viento. Es la de menor tasa en todos los años medidos por SOLATINA, y aun así hace falta para que las otras no la absorban.",
+      },
+      {
+        value: "Robo de colmenas",
+        definition:
+          "El estándar internacional lo mete dentro de «desastre natural». Aquí va aparte a propósito: no tiene nada de natural y lo que se hace al respecto es otra cosa.",
+      },
+      {
+        value: "desconocido",
+        impliesUnknownIdentity: true,
+        definition:
+          "No se sabe por qué se perdió. Valor legítimo y no un hueco a rellenar: una caja encontrada vacía meses después no tiene respuesta, y adivinarla la convertiría en un hecho (`CLAUDE.md` §3). Misma disciplina que «desconocido» en origen de colonia y en cultivar.",
+      },
+    ],
+  },
 ] as const;
 
 // §3a — "Enums cerrados": small, product-owner-fixed vocabularies that

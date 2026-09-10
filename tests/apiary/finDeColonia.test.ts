@@ -12,11 +12,13 @@ import { prisma } from "../../lib/db";
 import {
   ApiaryAccessError,
   ColonyEndError,
+  ESTADOS_DE_FIN,
   createColony,
   createHive,
   registrarFinDeColonia,
 } from "../../lib/apiary/hives";
 import { vitalesDeSitios } from "../../lib/apiary/vitalesDelSitio";
+import { CATALOGO_DE_CAUSA_DE_PERDIDA } from "../../lib/apiary/causaDePerdida";
 import { inmediatosDe } from "../../lib/apiary/bitacora";
 import { leerEnmiendas } from "../../lib/traceability/enmiendas";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -33,6 +35,15 @@ describe("el fin de una colonia", () => {
   let personId: string;
   let sinAccesoPersonId: string;
   const colonyIds: string[] = [];
+  /** Los ids del catálogo de causas, por su texto. Se leen una vez en `beforeAll`. */
+  const causaPorValor = new Map<string, string>();
+  const idDe = (valor: string) => {
+    const id = causaPorValor.get(valor);
+    // Un `undefined` aquí llegaría a Prisma como una consulta sin filtro. Se
+    // rompe con nombre en vez de dejar que la prueba mida otra cosa.
+    if (!id) throw new Error(`falta la causa «${valor}» en el catálogo sembrado`);
+    return id;
+  };
 
   async function crearCuenta(etiqueta: string) {
     const person = await prisma.person.create({
@@ -78,6 +89,16 @@ describe("el fin de una colonia", () => {
       data: { locationType: "apiary_site", name: `TEST Sitio (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
     });
     locationId = location.id;
+
+    for (const v of await prisma.variableCatalogValue.findMany({
+      where: { catalog: { key: CATALOGO_DE_CAUSA_DE_PERDIDA } },
+      select: { id: true, value: true },
+    })) {
+      causaPorValor.set(v.value, v.id);
+    }
+    // Control positivo: la semilla corrió. Sin esto, un catálogo vacío haría
+    // que las pruebas de causas fallaran por la razón equivocada.
+    if (causaPorValor.size === 0) throw new Error("el catálogo de causas está vacío: falta `npm run db:seed`");
 
     const farmOperator = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
     const scope = await prisma.scope.create({ data: { scopeType: "project", scopeRefId: projectId } });
@@ -179,6 +200,180 @@ describe("el fin de una colonia", () => {
     // esto, «rechazó» no probaría que mira la fecha y no otra cosa.
     const ok = await registrarFinDeColonia(userAccountId, { colonyId: c.id, status: "dead", endedAt: AHORA });
     expect(ok.status).toBe("dead");
+  });
+
+  it("una pérdida admite VARIAS causas a la vez, cada una con cómo se supo", async () => {
+    // Lo que el dueño pidió, literalmente: «hay múltiples razones y/o causales
+    // y situaciones». Una caja vacía puede ser varroa y hambre.
+    const c = await nuevaColonia(9);
+    await registrarFinDeColonia(userAccountId, {
+      colonyId: c.id,
+      status: "dead",
+      endedAt: AHORA,
+      causas: [
+        { causeValueId: idDe("Varroa"), provenanceClass: "direct_observation" },
+        { causeValueId: idDe("Hambre"), provenanceClass: "hypothesis" },
+      ],
+    });
+    const filas = await prisma.colonyLossCause.findMany({
+      where: { colonyId: c.id },
+      include: { cause: { select: { value: true } } },
+      orderBy: { provenanceClass: "asc" },
+    });
+    expect(filas).toHaveLength(2);
+    // Y las clases NO se mezclan: se vio la varroa, se sospecha el hambre.
+    const porValor = new Map(filas.map((f) => [f.cause.value, f.provenanceClass]));
+    expect(porValor.get("Varroa")).toBe("direct_observation");
+    expect(porValor.get("Hambre")).toBe("hypothesis");
+  });
+
+  it("una causa que no es de este catálogo se rechaza — la FK sola no lo impide", async () => {
+    // La FK apunta a `variable_catalog_value` ENTERA. Sin la comprobación del
+    // servicio, colgar una levadura de una colonia muerta sería legal.
+    const levadura = await prisma.variableCatalogValue.findFirstOrThrow({
+      where: { catalog: { key: "levadura_cultivo" } },
+      select: { id: true },
+    });
+    const c = await nuevaColonia(10);
+    await expect(
+      registrarFinDeColonia(userAccountId, {
+        colonyId: c.id,
+        status: "dead",
+        endedAt: AHORA,
+        causas: [{ causeValueId: levadura.id, provenanceClass: "hypothesis" }],
+      }),
+    ).rejects.toThrow(ColonyEndError);
+    // CONTROL POSITIVO: la misma colonia, la misma llamada, con un id que SÍ es
+    // del catálogo de causas. Sin esto, «rechazó» no probaría que mira el
+    // catálogo en vez de rechazar cualquier causa.
+    const ok = await registrarFinDeColonia(userAccountId, {
+      colonyId: c.id,
+      status: "dead",
+      endedAt: AHORA,
+      causas: [{ causeValueId: idDe("Saqueo"), provenanceClass: "hypothesis" }],
+    });
+    expect(ok.status).toBe("dead");
+  });
+
+  it("la misma causa dos veces se rechaza POR REPETIDA, no por desconocida", async () => {
+    // **Se afirma el mensaje, no sólo la clase**, y el flip-test es por qué.
+    // Quitando la comprobación de repetidas, la llamada sigue fallando —el
+    // `in` de Prisma deduplica, así que `validas.length` no cuadra y salta
+    // `causa_desconocida`, que también es un `ColonyEndError`—. Con
+    // `toThrow(ColonyEndError)` la prueba pasaba con el guardia quitado: era
+    // un adorno. Los dos errores dicen cosas distintas a quien rellena el
+    // formulario —«la elegiste dos veces» contra «esa causa no existe»— y esa
+    // diferencia es lo que esta prueba defiende.
+    const c = await nuevaColonia(11);
+    await expect(
+      registrarFinDeColonia(userAccountId, {
+        colonyId: c.id,
+        status: "dead",
+        endedAt: AHORA,
+        causas: [
+          { causeValueId: idDe("Varroa"), provenanceClass: "hypothesis" },
+          { causeValueId: idDe("Varroa"), provenanceClass: "direct_observation" },
+        ],
+      }),
+    ).rejects.toThrow("causa_repetida");
+    // Y no dejó la colonia a medio terminar.
+    const sinTocar = await prisma.colony.findUniqueOrThrow({ where: { id: c.id } });
+    expect(sinTocar.status).toBe("active");
+  });
+
+  it("una clase de procedencia fuera de las tres se rechaza", async () => {
+    // `measured_fact` es válido en el enum y no significa nada aquí: convertiría
+    // una conjetura sobre una caja vacía en una medición.
+    const c = await nuevaColonia(12);
+    await expect(
+      registrarFinDeColonia(userAccountId, {
+        colonyId: c.id,
+        status: "dead",
+        endedAt: AHORA,
+        causas: [{ causeValueId: idDe("Varroa"), provenanceClass: "measured_fact" as never }],
+      }),
+    ).rejects.toThrow(ColonyEndError);
+  });
+
+  it("«desconocido» va sola: acompañada se rechaza, sola se acepta", async () => {
+    const a = await nuevaColonia(13);
+    await expect(
+      registrarFinDeColonia(userAccountId, {
+        colonyId: a.id,
+        status: "dead",
+        endedAt: AHORA,
+        causas: [
+          { causeValueId: idDe("desconocido"), provenanceClass: "conclusion" },
+          { causeValueId: idDe("Varroa"), provenanceClass: "hypothesis" },
+        ],
+      }),
+    ).rejects.toThrow(ColonyEndError);
+    // Control positivo: sola sí entra. Sin esto, la prueba pasaría igual si el
+    // servicio rechazara «desconocido» siempre.
+    const ok = await registrarFinDeColonia(userAccountId, {
+      colonyId: a.id,
+      status: "dead",
+      endedAt: AHORA,
+      causas: [{ causeValueId: idDe("desconocido"), provenanceClass: "conclusion" }],
+    });
+    expect(ok.status).toBe("dead");
+    expect(await prisma.colonyLossCause.count({ where: { colonyId: a.id } })).toBe(1);
+  });
+
+  it("una colonia COMBINADA también termina, y también baja el conteo", async () => {
+    // El estándar internacional cuenta como pérdida el problema de reina
+    // irresoluble: la colonia está viva, no es recuperable y se combina. Sin el
+    // estado `combined` se quedaba `active` para siempre inflando el conteo.
+    const c = await nuevaColonia(14);
+    const antes = (await vitalesDeSitios([locationId], AHORA)).get(locationId)!.coloniasActivas;
+    const despues = await registrarFinDeColonia(userAccountId, {
+      colonyId: c.id,
+      status: "combined",
+      endedAt: AHORA,
+      causas: [{ causeValueId: idDe("Problema de reina irresoluble"), provenanceClass: "direct_observation" }],
+    });
+    expect(despues.status).toBe("combined");
+    const ahora = (await vitalesDeSitios([locationId], AHORA)).get(locationId)!.coloniasActivas;
+    expect(ahora).toBe(antes - 1);
+  });
+
+  it("las causas entran en el AuditEvent, no sólo en su tabla", async () => {
+    // Si quedaran fuera del `after`, el rastro diría que la colonia murió y no
+    // por qué — que es la mitad que este cambio añade.
+    const c = await nuevaColonia(15);
+    await registrarFinDeColonia(userAccountId, {
+      colonyId: c.id,
+      status: "dead",
+      endedAt: AHORA,
+      causas: [{ causeValueId: idDe("Loque"), provenanceClass: "conclusion" }],
+    });
+    const evento = await prisma.auditEvent.findFirstOrThrow({
+      where: { entityType: "colony", entityId: c.id, operation: "colony.end" },
+    });
+    const after = evento.after as { lossCauses?: { cause?: { value?: string } }[] };
+    expect(after.lossCauses).toHaveLength(1);
+    expect(after.lossCauses?.[0]?.cause?.value).toBe("Loque");
+  });
+
+  it("un estado que no es un fin se rechaza — la colonia viva con fecha de muerte", async () => {
+    // El agujero, medido el 2026-09-10: la acción metía la cadena del
+    // formulario con `as never` y el servicio escribía `input.status` sin
+    // mirarlo. Un envío con `status=active` pasaba el `where` —que exige
+    // `status: "active"`— y dejaba la fila con `active` Y `ended_at` puesto.
+    const c = await nuevaColonia(16);
+    await expect(
+      registrarFinDeColonia(userAccountId, { colonyId: c.id, status: "active" as never, endedAt: AHORA }),
+    ).rejects.toThrow(/estado_de_fin_invalido/);
+    // Y sigue intacta: ni estado cambiado ni fecha puesta.
+    const sinTocar = await prisma.colony.findUniqueOrThrow({ where: { id: c.id } });
+    expect(sinTocar.status).toBe("active");
+    expect(sinTocar.endedAt).toBeNull();
+  });
+
+  it("los tres estados de fin declarados son exactamente los del enum menos `active`", () => {
+    // Si mañana entra un cuarto valor en ColonyStatus, esta lista se queda corta
+    // y el formulario dejaría de ofrecerlo sin que nada avise.
+    expect([...ESTADOS_DE_FIN].sort()).toEqual(["absconded", "combined", "dead"]);
   });
 
   it("quien no tiene acceso al sitio no puede dar por perdida una colonia", async () => {
