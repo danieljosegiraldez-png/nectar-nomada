@@ -116,6 +116,8 @@ describe("proponer y confirmar, contra Postgres", () => {
     await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: locationId }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
+    // Assignment.scopeId es RESTRICT: el Scope sólo se puede borrar después.
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: locationId }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [userAccountId, sinAccesoUserAccountId] } }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: [personId, sinAccesoPersonId] } }) });
     await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
