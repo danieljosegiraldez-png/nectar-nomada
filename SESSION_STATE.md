@@ -192,7 +192,8 @@ local. Se arregló lo objetivo (PR #166, la tabla que desplazaba la página); lo
 de abajo **queda abierto porque es decisión de producto, no arreglo mecánico**.
 
 - **El menú tiene 10 entradas y el objetivo del móvil son 8.** El guardia que
-  afirmaba lo contrario **se arregló** el 2026-09-08 —ver §2—: ahora mide al
+  afirmaba lo contrario **se arregló** el 2026-09-08 —su entrada está en
+  `docs/SESSION_STATE_ARCHIVE.md`—: ahora mide al
   visor más privilegiado de verdad y fija el 10, así que el hueco está a la
   vista en vez de escondido tras un verde. Lo que sigue abierto es la decisión:
   **acortar el menú o mover el objetivo**. En el teléfono son 234 px de
