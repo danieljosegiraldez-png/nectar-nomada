@@ -519,6 +519,57 @@ describe("A9.6 — el enlace que abre el cliente sin cuenta", () => {
     return visita;
   }
 
+  /**
+   * **El camino de la PANTALLA, que es el que estaba roto.**
+   *
+   * Hasta el 2026-09-10 el boton «Cerrar jornada» llamaba a `endFieldSession`
+   * —que pone `endedAt`, cuando se salio del sitio— y **nada** llamaba a
+   * `completarVisita`, que es lo unico que pone `status: "completed"`. Como
+   * `emitirReporteDeVisita` exige eso, el boton de emitir contestaba «cierra la
+   * visita» **justo despues de cerrarla**, sin salida posible desde la
+   * aplicacion.
+   *
+   * No lo cazo ninguna prueba porque todas construian la visita con
+   * `completarVisita` directamente — el servicio que la pantalla NO usaba. Esta
+   * recorre la secuencia tal cual la hace una persona.
+   */
+  it("cerrar la jornada NO basta para emitir: hace falta completarla", async () => {
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-14T13:00:00Z"),
+    });
+
+    // Lo que hace el botón «Cerrar jornada».
+    await endFieldSession(apicultorConManejo, {
+      fieldSessionId: visita.id,
+      endedAt: new Date("2026-09-14T17:00:00Z"),
+    });
+    const trasCerrar = await prisma.fieldSession.findUniqueOrThrow({ where: { id: visita.id } });
+    expect(trasCerrar.endedAt, "cerrar sí pone endedAt").not.toBeNull();
+    expect(trasCerrar.status, "…y deja el estado en borrador").toBe("draft");
+
+    await expect(
+      emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id }),
+      "emitir tras sólo cerrar debe seguir negándose: es la regla, no el fallo",
+    ).rejects.toThrow(/visita_sin_completar/);
+
+    // Y lo que hace el botón «Completar visita», que hasta hoy no existía.
+    await completarVisita(apicultorConManejo, {
+      fieldSessionId: visita.id,
+      coloniesAliveCount: 4,
+      nextVisitDueAt: new Date("2026-10-14T00:00:00Z"),
+      reason: "completada en la casa",
+    });
+    const trasCompletar = await prisma.fieldSession.findUniqueOrThrow({ where: { id: visita.id } });
+    expect(trasCompletar.status).toBe("completed");
+    expect(trasCompletar.coloniesAliveCount).toBe(4);
+
+    // Ahora sí. Es el control positivo: sin él, un `emitir` que fallara SIEMPRE
+    // pasaría la aserción de arriba y nadie lo diría.
+    const emitido = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    expect(emitido, "completada, el informe sí sale").toBeTruthy();
+  });
+
   it("con el enlace se abre el reporte, SIN sesión y sin RBAC", async () => {
     const visita = await visitaConReporte("10");
     const { token } = await publicarReporteConEnlace(apicultorConManejo, { fieldSessionId: visita.id });

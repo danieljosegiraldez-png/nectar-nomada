@@ -38,6 +38,7 @@ import {
 import {
   startFieldSession,
   endFieldSession,
+  completarVisita,
   recordFieldEvent,
   FieldSessionValidationError,
 } from "../../lib/traceability/fieldSessions";
@@ -2000,5 +2001,52 @@ export async function revocarEnlaceDeReporteAction(
   }
 
   revalidatePath(`/field-sessions/${fieldSessionId}/report`);
+  return {};
+}
+
+/**
+ * Completar la visita: lo que la saca de borrador.
+ *
+ * **El paso que no tenía puerta, y que rompía el informe.** A9.3 construyó
+ * `completarVisita` «sin pantalla nueva» —se refería a que la auditoría no
+ * necesitaba entidad propia— y la invocación nunca se cableó. El resultado,
+ * medido el 2026-09-10: «Cerrar jornada» pone `endedAt` y **nada** pone
+ * `status: "completed"`, que es lo único que `emitirReporteDeVisita` mira. Así
+ * que el botón de emitir contestaba «cierra la visita» **justo después de
+ * cerrarla**, y no había forma de salir de ahí desde la aplicación.
+ *
+ * Son dos hechos distintos a propósito (§A9.1 D4): `endedAt` es cuándo se salió
+ * del sitio; `completedAt`, cuándo se termino de escribir. Completar abre
+ * además la ventana de edición, y por eso pide lo que sólo sabe quien cierra:
+ * cuándo toca volver y cuántas colonias quedaron vivas.
+ */
+export async function completarVisitaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const fieldSessionId = String(formData.get("fieldSessionId") ?? "");
+  const proximaCruda = String(formData.get("nextVisitDueAt") ?? "").trim();
+  const coloniasCrudas = String(formData.get("coloniesAliveCount") ?? "").trim();
+
+  try {
+    await completarVisita(user.userAccountId, {
+      fieldSessionId,
+      // Día, no instante: «cuándo toca volver» es una fecha de calendario. Se
+      // trata como los demás campos de día — medianoche UTC — y NO se convierte
+      // con el desfase del dispositivo, que la movería un día.
+      nextVisitDueAt: proximaCruda === "" ? null : new Date(`${proximaCruda}T00:00:00Z`),
+      coloniesAliveCount: coloniasCrudas === "" ? null : Number(coloniasCrudas),
+      notes: emptyToNull(formData.get("notes")),
+      reason: emptyToNull(formData.get("reason")),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/field-sessions/${fieldSessionId}`);
   return {};
 }

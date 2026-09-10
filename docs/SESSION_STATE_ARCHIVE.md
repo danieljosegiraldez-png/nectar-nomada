@@ -1894,3 +1894,31 @@ y nunca en el módulo —toca `window` y la página es de servidor—, la atribu
 de OSM que su política exige, el formulario fuera del condicional, y
 `.nn-mapa` con altura en px. Esa última es la que más engaña: Leaflet mide su
 contenedor, y uno sin altura resuelta da un mapa de 0 px **sin lanzar error**.
+
+### 2026-09-09 · Se podía todo del apiario menos crear el apiario
+
+Medido: la aplicacion dejaba registrar colmenas, colonias, inspecciones, eventos
+de colonia, cosechas de miel y visitas — y **no dejaba registrar el sitio donde
+ocurre todo eso**. Los tres apiarios que existen salieron de `prisma/seed.ts` y
+de `scripts/import-cafelino-pe.ts`; el unico `location.create` de la aplicacion
+era `createMicrolot`, que subdivide una parcela que ya existe. Ahora
+`/apiaries/new`.
+
+**Y construirlo destapo un limite del modelo.** `Location` **no tiene**
+`projectId`: un apiario se asocia a un proyecto **a traves de sus colmenas**
+(`resolveApiaryVisibility` filtra por `hives.some.projectId`). Un sitio recien
+creado no tiene ninguna, asi que **es invisible para quien solo tiene ambito de
+proyecto**, incluido quien acaba de crearlo. La primera version usaba la puerta
+normal y su prueba lo cazo: el sitio se creaba y `getApiaryDetail` contestaba
+`no_apiary_access` **a su propio autor**. Ahora crear exige ambito de
+plataforma, y el lector de fincas usa la MISMA puerta — la primera version
+ofrecia fincas a quien el servicio iba a rechazar.
+
+**Lo que queda abierto y es del dueño:** si `Location` debe llevar `projectId`
+para que un jefe de finca con ambito de proyecto pueda crear sus apiarios. Es un
+cambio de esquema que toca la visibilidad de todo.
+
+**Sin altitud ni notas, a proposito.** `Location` guarda un RANGO de altitud
+—describe una parcela, no un punto— y no tiene columna de notas. Las dos se
+cayeron al medir el esquema; escribir el mismo numero en las dos afirmaria «el
+rango es cero», que nadie declaro.
