@@ -6,7 +6,7 @@
  * de dar 65-99 de déficit, o el cociente deja de ser 3/17, algo se rompió en el
  * único número que sostiene esa conversación con el cliente.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createColony, createHive, ApiaryAccessError } from "../../lib/apiary/hives";
 import {
@@ -87,12 +87,28 @@ describe("A9.9 — el compromiso y el cociente", () => {
     }
   });
 
+  // Una visita cerrada cambia el numerador de TODAS las pruebas siguientes, así
+  // que se retira aquí y no al final de cada `it`: un borrado escrito debajo de
+  // las aserciones no corre cuando una aserción falla. El 2026-09-08 no corrió.
+  // La visita sobrevivió, arrastró a las pruebas que contaban colonias, y
+  // —FieldSession.locationId es RESTRICT— bloqueó el borrado de la Location en
+  // `afterAll`, que abortó ahí y dejó la corrida entera en la base compartida.
+  afterEach(async () => {
+    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ locationId }) });
+  });
+
   afterAll(async () => {
+    // Antes que nada: AuditEvent.actorUserAccountId es SET NULL, así que borrar
+    // la cuenta primero deja el evento huérfano y este filtro sin nada que casar.
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: [userAccountId, sinAccesoUserAccountId] } }) });
     await prisma.pollinationCommitment.deleteMany({ where: assertDefinedWhere({ locationId }) });
+    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: { in: colonyIds } }) });
     await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: locationId }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
+    // Assignment.scopeId es RESTRICT: el Scope sólo se puede borrar después.
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: projectId }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [userAccountId, sinAccesoUserAccountId] } }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: [personId, sinAccesoPersonId] } }) });
     await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
@@ -138,7 +154,7 @@ describe("A9.9 — el compromiso y el cociente", () => {
   it("con una visita cerrada, manda el conteo declarado — y el otro NO se tira", async () => {
     // El caso que D6 describe: el sistema tiene 3 filas y quien fue al sitio
     // contó 2. Esconder esa diferencia detrás de un número es perder la señal.
-    const visita = await prisma.fieldSession.create({
+    await prisma.fieldSession.create({
       data: {
         locationId,
         operatorPersonId: personId,
@@ -161,13 +177,11 @@ describe("A9.9 — el compromiso y el cociente", () => {
     // Y el déficit se recalcula con el número bueno: 68 − 2 y 102 − 2.
     expect(p.deficitParaMin).toBe(66);
     expect(p.deficitParaMax).toBe(100);
-
-    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: visita.id }) });
   });
 
   it("si los dos conteos coinciden, no se marca divergencia", async () => {
     // Control: `divergen` no es «hay conteo declarado», es «son distintos».
-    const visita = await prisma.fieldSession.create({
+    await prisma.fieldSession.create({
       data: {
         locationId,
         operatorPersonId: personId,
@@ -181,7 +195,6 @@ describe("A9.9 — el compromiso y el cociente", () => {
     const p = (await densidadDePolinizacion(locationId, AHORA)).find((x) => x.hectareasComprometidas === 17)!;
     expect(p.fuenteDelConteo).toBe("declarado_en_visita");
     expect(p.divergen).toBe(false);
-    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: visita.id }) });
   });
 
   it("un compromiso vencido deja de gritar", async () => {

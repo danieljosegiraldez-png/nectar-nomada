@@ -2835,6 +2835,53 @@ mención. P-E exige una asignación con valor no vacío.
 **Las dos las encontró la revisión independiente de Codex** sobre la PR #60, no
 una lectura nuestra. La adjudicación está en `SESSION_STATE.md`.
 
+### Una limpieza escrita debajo de las aserciones no corre
+
+**Síntoma.** Una medición de «cuántos sitios de apiario hay» en la base local
+devolvió **3** con dos reales. El tercero era `TEST Sitio (a99-pol-…)`, del
+2026-09-08, y con él estaba la corrida entera: 2 organizaciones, 1 proyecto, 2
+personas, 2 cuentas, 1 `Assignment`, 1 `Scope`, 1 `FieldSession` y 7
+`AuditEvent`. Y la suite había pasado en verde desde entonces.
+
+**Causa, y no es la que parece.** El `afterAll` de `polinizacion.test.ts` **sí
+borraba la Location**. No llegaba. Los dos `it` que crean una `FieldSession` la
+borraban en la **última línea del cuerpo, debajo de las aserciones** — y una
+aserción que falla se salta ese borrado. `field_session.location_id` es
+`RESTRICT`, así que el `afterAll` reventó al borrar la Location y **abandonó las
+seis líneas siguientes**. Un `afterAll` es una cadena: la primera FK que se
+queja tira el resto.
+
+**`assertDefinedWhere` no puede cazar esto.** Su `where` estaba perfectamente
+definido; el problema no era un filtro vacío sino un borrado que no se ejecutó y
+otro que no pudo. Son dos fallos distintos con la misma cara —filas TEST en la
+base compartida— y el helper sólo cubre el primero.
+
+**Arreglo.** La limpieza de lo que crea un `it` va en un `afterEach`, que corre
+falle o no la prueba, nunca al final del cuerpo. Y el `afterAll` borra todo lo
+que la corrida pudo dejar, no sólo lo que el `beforeAll` creó a mano.
+
+**Y una segunda fuga que se vio de camino: el `Scope`.** Cinco pruebas de
+apiario y `coordenadasDelSitio` lo creaban en `beforeAll` y no lo borraban
+nunca. Se borra **después** del `Assignment`, que lo referencia con `RESTRICT`.
+Al escribir esto la base local llevaba **284** `Scope` huérfanos acumulados.
+
+**Lo que lo destapa es contar filas, no leer el verde.** Flip-test, con la
+quietud de la base comprobada antes —dos lecturas iguales sin correr nada en
+medio, porque otras sesiones escriben ahí y una ventana sucia no mide nada—:
+
+| versión | pruebas | `Scope` huérfanos project/location |
+|---|---|---|
+| antes del arreglo | 55/55 ✓ | 245/39 → **250/40** |
+| después | 55/55 ✓ | 245/39 → **245/39** |
+
+**Las dos filas dicen 55/55.** Una compuerta que sólo mira el color no
+distingue estas dos columnas: hay que contar la basura antes y después.
+
+Y el caso original, mutando una aserción de esa prueba a un valor falso: antes
+caían **2** —la mutada y otra, arrastrada por la visita que sobrevivió— y
+quedaban **7 filas** en la base; después cae **1** y quedan **0**. Un fallo que
+se multiplica por tres es la firma de este defecto, no de tres defectos.
+
 ## Al cerrar la sesión
 
 Los ocho pasos están en `SESSION_STATE.md` §5. El primero es actualizar

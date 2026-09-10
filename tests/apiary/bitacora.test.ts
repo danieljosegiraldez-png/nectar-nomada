@@ -149,6 +149,8 @@ describe("A9.12 — el cierre emite, leyendo el rastro real", () => {
     await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: locationId }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
+    // Assignment.scopeId es RESTRICT: el Scope sólo se puede borrar después.
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: projectId }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: userAccountId }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: personId }) });
     await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });

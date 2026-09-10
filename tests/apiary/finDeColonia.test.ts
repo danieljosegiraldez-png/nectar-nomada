@@ -91,6 +91,8 @@ describe("el fin de una colonia", () => {
     await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: locationId }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
+    // Assignment.scopeId es RESTRICT: el Scope sólo se puede borrar después.
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: projectId }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: [personId, sinAccesoPersonId] } }) });
     await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
