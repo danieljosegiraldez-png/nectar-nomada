@@ -26,6 +26,7 @@ import {
   abrirReportePorEnlace,
   revocarEnlace,
   ReporteError,
+  enlacesPublicadosDeVisita,
 } from "../../lib/traceability/reporteDeVisita";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
@@ -543,6 +544,39 @@ describe("A9.6 — el enlace que abre el cliente sin cuenta", () => {
       where: { entityId: publicacionId, operation: "report_publication.create" },
     });
     expect(JSON.stringify(audit)).not.toContain(token);
+  });
+
+  /**
+   * **El lector que faltaba para poder revocar.** `revocarEnlace` necesita el
+   * id de la publicación y nada lo devolvía a una pantalla, así que se podía
+   * entregar un enlace y no había forma de cortarlo desde la aplicación —
+   * justo lo que el comentario de `ReportPublication` dice que pesa más que
+   * ahorrar una consulta.
+   */
+  it("lista los enlaces entregados, con el revocado marcado y sin el token", async () => {
+    const visita = await visitaConReporte("12");
+    const vivo = await publicarReporteConEnlace(apicultorConManejo, { fieldSessionId: visita.id });
+    const cortado = await publicarReporteConEnlace(apicultorConManejo, { fieldSessionId: visita.id });
+    await revocarEnlace(apicultorConManejo, cortado.publicacionId);
+
+    const lista = await enlacesPublicadosDeVisita(apicultorConManejo, visita.id);
+    expect(lista.length, "los dos enlaces, el vivo y el cortado").toBe(2);
+
+    const vivoEnLista = lista.find((e) => e.id === vivo.publicacionId);
+    const cortadoEnLista = lista.find((e) => e.id === cortado.publicacionId);
+    expect(vivoEnLista?.revokedAt, "el vivo no está revocado").toBeNull();
+    expect(cortadoEnLista?.revokedAt, "el cortado sí, y no se borra de la lista").not.toBeNull();
+
+    // **El token no sale, ni hasheado.** La pantalla revoca por id; devolver la
+    // cerradura no le sirve de nada y la enseñaría sin razón.
+    expect(JSON.stringify(lista)).not.toContain(vivo.token);
+    expect(JSON.stringify(lista)).not.toContain("linkTokenHash");
+  });
+
+  it("y quien no puede ver la visita tampoco puede listar sus enlaces", async () => {
+    const visita = await visitaConReporte("13");
+    await publicarReporteConEnlace(apicultorConManejo, { fieldSessionId: visita.id });
+    await expect(enlacesPublicadosDeVisita(operarioDeFinca, visita.id)).rejects.toThrow(LocationAccessError);
   });
 
   it("un token inventado no abre nada, y no dice por qué", async () => {

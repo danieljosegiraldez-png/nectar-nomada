@@ -342,3 +342,30 @@ export async function revocarEnlace(userAccountId: string, publicacionId: string
     return revocada;
   });
 }
+
+/**
+ * Los enlaces publicados de una visita, para poder cortarlos.
+ *
+ * **Existe porque revocar era inalcanzable.** `revocarEnlace` necesita el id de
+ * la publicación y nada lo devolvía a una pantalla, así que se podía entregar
+ * un enlace y no había forma de cortarlo desde la aplicación — justo lo que el
+ * comentario de `ReportPublication` dice que pesa más que ahorrar una consulta.
+ *
+ * **No devuelve el token, ni hasheado.** El valor en claro existió una vez y la
+ * pantalla no lo necesita para revocar: le basta el id. Devolver el hash sería
+ * enseñar la cerradura sin ninguna razón.
+ */
+export async function enlacesPublicadosDeVisita(userAccountId: string, fieldSessionId: string) {
+  const visita = await prisma.fieldSession.findUnique({
+    where: { id: fieldSessionId },
+    select: { locationId: true },
+  });
+  if (!visita) return [];
+  await requireFieldSessionAccess(userAccountId, visita.locationId);
+
+  return prisma.reportPublication.findMany({
+    where: { reportVersion: { report: { subjectEntityId: fieldSessionId } } },
+    select: { id: true, publishedAt: true, expiresAt: true, revokedAt: true },
+    orderBy: { publishedAt: "desc" },
+  });
+}

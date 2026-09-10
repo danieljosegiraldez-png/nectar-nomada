@@ -95,6 +95,13 @@ export const RUTAS = {
   "/biochar": { clase: "requiere-sesion", razon: "Lotes de biochar producidos en la finca." },
   "/biochar/[id]": { clase: "requiere-sesion", razon: "Un lote de biochar y su registro de quema." },
   "/field-sessions/[id]": { clase: "requiere-sesion", razon: "Una jornada de campo y su hilo de eventos." },
+  "/informe/[token]": {
+    clase: "publica-sin-datos",
+    razon:
+      "El informe de una visita abierto por su enlace. SIN sesión a propósito: el token ES la " +
+      "autorización, va hasheado en la base, caduca y se puede revocar. No expone nada más que el " +
+      "snapshot de esa versión, y devuelve 404 igual si no existe, caducó o fue revocado.",
+  },
   "/field-sessions/[id]/report": { clase: "requiere-sesion", razon: "Una jornada de campo y su hilo de eventos." },
   "/recipes": { clase: "requiere-sesion", razon: "Recetas y formulación." },
   "/recipes/new": { clase: "requiere-sesion", razon: "Recetas y formulación." },
