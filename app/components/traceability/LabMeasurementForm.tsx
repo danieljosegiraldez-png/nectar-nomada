@@ -3,10 +3,10 @@
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordLabMeasurementAction, type TraceabilityActionState } from "../../actions/traceability";
+import { PROCEDENCIA_DE_ANALISIS } from "../../../lib/traceability/procedencia";
 
 const initialState: TraceabilityActionState = {};
 
-const PROVENANCES = ["measured_fact", "original_record"] as const;
 
 export interface VariableChoice {
   variable: string;
@@ -125,7 +125,7 @@ export function LabMeasurementForm({
         <label htmlFor={`provenanceClass-${sujetoId}`}>{t("provenanceClassLabel")}</label>
         <select id={`provenanceClass-${sujetoId}`} name="provenanceClass" required defaultValue="">
           <option value="">{t("provenanceClassChoose")}</option>
-          {PROVENANCES.map((v) => (
+          {PROCEDENCIA_DE_ANALISIS.map((v) => (
             <option key={v} value={v}>
               {t(`provenanceClass_${v}` as "provenanceClass_measured_fact")}
             </option>

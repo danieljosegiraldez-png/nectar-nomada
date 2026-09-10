@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { recordRoastSessionAction, type TraceabilityActionState } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
+import { PROCEDENCIA_DE_REGISTRO_DE_CAMPO } from "../../../lib/traceability/procedencia";
 
 const initialState: TraceabilityActionState = {};
 
@@ -26,7 +27,6 @@ const initialState: TraceabilityActionState = {};
  * En secado se fija a `original_record` porque empezar un secado es un acto, no
  * una lectura; un tueste registrado después puede ser cualquiera de las dos.
  */
-const PROVENANCES = ["original_record", "direct_observation"] as const;
 
 interface PerfilOption {
   id: string;
@@ -112,7 +112,7 @@ export function RoastSessionForm({ lotId, perfiles }: { lotId: string; perfiles:
       <div className="nn-field">
         <label htmlFor="r-provenanceClass">{t("provenanceClassLabel")}</label>
         <select id="r-provenanceClass" name="provenanceClass" defaultValue="original_record" required>
-          {PROVENANCES.map((v) => (
+          {PROCEDENCIA_DE_REGISTRO_DE_CAMPO.map((v) => (
             <option key={v} value={v}>
               {t(`provenanceClass_${v}` as "provenanceClass_original_record")}
             </option>

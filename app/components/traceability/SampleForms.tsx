@@ -8,12 +8,12 @@ import {
   type TraceabilityActionState,
 } from "../../actions/traceability";
 import { TriStateField } from "./TriStateField";
+import { PROCEDENCIA_DE_REGISTRO_DE_CAMPO } from "../../../lib/traceability/procedencia";
 
 const initialState: TraceabilityActionState = {};
 
 // §7.1 — «tercio superior, medio o inferior». La lista la da el marco.
 const CANOPY_POSITIONS = ["upper", "middle", "lower"] as const;
-const PROVENANCES = ["original_record", "direct_observation"] as const;
 const DATA_QUALITIES = ["verified", "provisional", "unconfirmed", "not_tested"] as const;
 
 /**
@@ -187,7 +187,7 @@ function ProvenanceFields({ prefijo }: { prefijo: string }) {
         <label htmlFor={`${prefijo}Provenance`}>{t("provenanceClassLabel")}</label>
         <select id={`${prefijo}Provenance`} name="provenanceClass" required defaultValue="">
           <option value="">{t("provenanceClassChoose")}</option>
-          {PROVENANCES.map((v) => (
+          {PROCEDENCIA_DE_REGISTRO_DE_CAMPO.map((v) => (
             <option key={v} value={v}>{t(`provenanceClass_${v}` as "provenanceClass_original_record")}</option>
           ))}
         </select>

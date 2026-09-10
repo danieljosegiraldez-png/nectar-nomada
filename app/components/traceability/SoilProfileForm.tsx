@@ -7,6 +7,7 @@ import {
   updateSoilProfileAction,
   type TraceabilityActionState,
 } from "../../actions/traceability";
+import { PROCEDENCIA_DE_REGISTRO_DE_CAMPO } from "../../../lib/traceability/procedencia";
 
 const initialState: TraceabilityActionState = {};
 
@@ -14,7 +15,6 @@ const initialState: TraceabilityActionState = {};
 // hechos distintos, y el desplegable los mantiene distintos en la pantalla
 // igual que el enum los mantiene distintos en la base.
 const OBSERVACIONES = ["present", "absent", "not_observed"] as const;
-const PROVENANCES = ["direct_observation", "original_record"] as const;
 const DATA_QUALITIES = ["verified", "provisional", "unconfirmed", "not_tested"] as const;
 
 // Cuatro horizontes es lo que un perfil de 80–100 cm suele mostrar. Las filas
@@ -205,7 +205,7 @@ export function SoilProfileForm({
           defaultValue={values.provenanceClass}
         >
           <option value="">{t("provenanceClassChoose")}</option>
-          {PROVENANCES.map((v) => (
+          {PROCEDENCIA_DE_REGISTRO_DE_CAMPO.map((v) => (
             <option key={v} value={v}>
               {t(`provenanceClass_${v}` as "provenanceClass_direct_observation")}
             </option>
