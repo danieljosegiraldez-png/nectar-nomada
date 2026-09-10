@@ -37,6 +37,33 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-10 · El informe de la visita existía y no había puerta
+
+Recorriendo el flujo del apicultor **pantalla por pantalla** —no por servicio—
+aparecio que `emitirReporteDeVisita` **no lo llamaba nadie**. La pagina del
+informe lee lo congelado y hace `notFound()` si no hay nada, asi que cerrar una
+visita y pulsar «informe» daba **404**. Igual `publicarReporteConEnlace`,
+`abrirReportePorEnlace` y `revocarEnlace`: los cuatro servicios existian desde
+A9.6, con sus pruebas, y **ninguna pantalla los tocaba**.
+
+Es la tercera vez esta semana con la misma forma —el apiario, el informe
+externo, esto—: **el servicio hecho y la puerta sin poner**. El sintoma no es un
+error; es que no hay por donde.
+
+**Lo que entra:** emitir el informe desde la visita cerrada; publicar el enlace
+para un supervisor, que **se enseña una sola vez** porque la base guarda el
+token hasheado; `/informe/[token]`, **publica y sin sesion** —el token ES la
+autorizacion—; y la lista de enlaces entregados con su boton de cortar.
+
+**Revocar hacia falta o el enlace era un viaje de ida.** `revocarEnlace` pedia
+el id de la publicacion y nada lo devolvia a una pantalla. Ahora
+`enlacesPublicadosDeVisita` lo da — **sin el token, ni hasheado**: la pantalla
+revoca por id, y devolver la cerradura la enseñaria sin razon.
+
+**Lo que NO hizo falta probar de nuevo:** el ciclo del enlace ya estaba cubierto
+—token inventado, caducado, revocado, sin emitir, y RBAC en publicar y revocar—.
+Lo nuevo es el lector, con su puerta y su flip.
+
 ### 2026-09-09 · Un formulario enseñaba «measured_fact» a un apicultor
 
 `TreatmentBatchForm` pintaba el **valor crudo del enum** en dos desplegables:
@@ -150,38 +177,6 @@ cambio de esquema que toca la visibilidad de todo.
 cayeron al medir el esquema; escribir el mismo numero en las dos afirmaria «el
 rango es cero», que nadie declaro.
 
-### 2026-09-09 · El mapa de sitios, y la coordenada que nadie podía teclear
-
-El mapa que `ADR-009` decidió en su día llevaba **cero código**. Se construyó,
-y lo que la medición cambió es más interesante que la librería: **no estaba
-bloqueado por Mapbox**. De las **24 ubicaciones, cero tienen coordenadas**, y el
-formulario para declararlas sólo aparecía **si alguna visita ya proponía una**
-desde su GPS. Como ninguna visita ha traído lectura, no había propuesta; sin
-propuesta, no había formulario; **no existía forma de teclear una coordenada en
-toda la plataforma**. Cualquier mapa habría salido vacío.
-
-**Las dos mitades van en el mismo cambio**, porque un mapa sin forma de darle
-algo que pintar es un adorno: el formulario se dibuja **siempre** —con la
-propuesta de valor por defecto cuando la hay, en blanco cuando no—, y
-`/apiaries` estrena el mapa encima de la lista, diciendo debajo **cuántos
-sitios no salen en él**. Un mapa con tres pines y veintiún sitios invisibles se
-lee como si la finca tuviera tres.
-
-**Leaflet, no Mapbox** (`ADR-110`, enmienda de `ADR-009`; el dueño pidió «sin
-token ni costo»). Medido antes de elegir: Leaflet **3,7 MB y cero
-dependencias**, MapLibre **20 MB y diecisiete**. Se pierde el estilo propio que
-era toda la razón de ADR-009 — las teselas de OSM se ven como OSM — y se dice
-en voz alta en el ADR en vez de descubrirlo al verlo. El adaptador
-`MapsProvider` que ADR-009 pedía **no se construye**: de un solo uso, se
-escribiría contra la única implementación que hay.
-
-**Cuatro guardias de código fuente**, cada uno con control positivo y los cuatro
-con flip-test que cae **por nombre** y **compilando**
-(`tests/arquitectura/mapa-de-sitios.test.ts`): Leaflet cargado dentro del efecto
-y nunca en el módulo —toca `window` y la página es de servidor—, la atribución
-de OSM que su política exige, el formulario fuera del condicional, y
-`.nn-mapa` con altura en px. Esa última es la que más engaña: Leaflet mide su
-contenedor, y uno sin altura resuelta da un mapa de 0 px **sin lanzar error**.
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad

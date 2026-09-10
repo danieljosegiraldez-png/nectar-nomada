@@ -58,6 +58,12 @@ import {
   BiocharBatchValidationError,
 } from "../../lib/traceability/biocharBatches";
 import {
+  emitirReporteDeVisita,
+  publicarReporteConEnlace,
+  revocarEnlace,
+  ReporteError,
+} from "../../lib/traceability/reporteDeVisita";
+import {
   exigeProcedencia,
   ProcedenciaInvalida,
   PROCEDENCIA_DE_MEDICION,
@@ -1891,4 +1897,108 @@ export async function confirmarCoordenadasAction(formData: FormData): Promise<vo
   });
 
   revalidatePath(`/apiaries/${locationId}`);
+}
+
+/**
+ * Emitir el informe de una visita.
+ *
+ * **La puerta que faltaba** (medido el 2026-09-10): `emitirReporteDeVisita`
+ * existía desde A9.6 y **no lo llamaba nadie**. La pantalla del informe lee lo
+ * congelado con `leerReporteDeVisita` y hace `notFound()` si no hay nada, así
+ * que cerrar una visita y pulsar «informe» daba **404**. El servicio estaba
+ * entero y la mitad del flujo era inalcanzable desde la aplicación.
+ *
+ * Redirige al informe recién emitido, que es lo que se quería ver.
+ */
+export async function emitirReporteDeVisitaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const fieldSessionId = String(formData.get("fieldSessionId") ?? "");
+  try {
+    await emitirReporteDeVisita(user.userAccountId, { fieldSessionId });
+  } catch (error) {
+    if (error instanceof ReporteError) {
+      return { error: t(`error_${error.message}` as "error_visita_sin_completar") };
+    }
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/field-sessions/${fieldSessionId}`);
+  redirect(`/field-sessions/${fieldSessionId}/report`);
+}
+
+/** Lo que devuelve publicar: el enlace se enseña **una sola vez**. */
+export interface EnlaceDeReporteState extends TraceabilityActionState {
+  /** La ruta pública completa, con el token en claro. Sólo existe aquí. */
+  enlace?: string;
+  expira?: string;
+}
+
+/**
+ * Publicar el enlace con el que un supervisor abre el informe sin cuenta.
+ *
+ * **El token en claro existe una sola vez**, cuando se emite: la base guarda su
+ * hash, por la misma razón que el refresh de los aparatos. Así que se devuelve
+ * en el estado del formulario y la pantalla lo enseña ahí mismo; si se pierde,
+ * se publica otro y se revoca el viejo. No se guarda en el rastro de auditoría
+ * — un rastro que guarda la llave deja de ser un rastro.
+ */
+export async function publicarEnlaceDeReporteAction(
+  _prevState: EnlaceDeReporteState,
+  formData: FormData,
+): Promise<EnlaceDeReporteState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const fieldSessionId = String(formData.get("fieldSessionId") ?? "");
+  const diasCrudo = String(formData.get("diasDeVigencia") ?? "").trim();
+
+  try {
+    const { token, expiresAt } = await publicarReporteConEnlace(user.userAccountId, {
+      fieldSessionId,
+      diasDeVigencia: diasCrudo === "" ? undefined : Number(diasCrudo),
+    });
+    return { enlace: `/informe/${token}`, expira: expiresAt.toISOString().slice(0, 10) };
+  } catch (error) {
+    if (error instanceof ReporteError) {
+      return { error: t(`error_${error.message}` as "error_visita_sin_completar") };
+    }
+    return { error: friendlyError(t, error) };
+  }
+}
+
+/**
+ * Cortar un enlace ya entregado.
+ *
+ * **Es la razón por la que el token se guarda** en vez de firmarse: uno firmado
+ * se verifica sin consultar la base y no se puede revocar sin lista de bloqueo.
+ * Hasta hoy el servicio existía y no había pantalla, así que un enlace mandado
+ * por WhatsApp no se podía cortar desde la aplicación.
+ */
+export async function revocarEnlaceDeReporteAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const fieldSessionId = String(formData.get("fieldSessionId") ?? "");
+  try {
+    await revocarEnlace(user.userAccountId, String(formData.get("publicacionId") ?? ""));
+  } catch (error) {
+    if (error instanceof ReporteError) {
+      return { error: t(`error_${error.message}` as "error_publicacion_no_encontrada") };
+    }
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/field-sessions/${fieldSessionId}/report`);
+  return {};
 }

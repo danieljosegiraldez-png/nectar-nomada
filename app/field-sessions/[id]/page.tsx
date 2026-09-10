@@ -7,6 +7,8 @@ import { FieldSessionValidationError } from "../../../lib/traceability/fieldSess
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 import { getFieldEventKinds } from "../../../lib/traceability/fieldSessionCatalog";
 import { FieldEventForm, FieldSessionEndForm } from "../../components/traceability/FieldSessionForms";
+import { EmitirReporteForm } from "../../components/traceability/ReporteDeVisitaForms";
+import { leerReporteDeVisita } from "../../../lib/traceability/reporteDeVisita";
 import { FieldSyncControls } from "../../components/traceability/FieldSyncControls";
 import { mostrarInstante } from "../../../lib/time/mostrarInstante";
 
@@ -58,6 +60,11 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
     getObserverCandidates(user.userAccountId),
     getFieldEventKinds(),
   ]);
+
+  // Si ya se emitió, se ofrece el enlace al informe además del botón: volver a
+  // emitir crea una VERSIÓN nueva —lo emitido no se reescribe— y eso está bien,
+  // pero quien sólo quiere leerlo no debería tener que emitir otra vez.
+  const reporteEmitido = await leerReporteDeVisita(user.userAccountId, id).catch(() => null);
 
   const enCurso = session.endedAt == null;
 
@@ -128,7 +135,24 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
       ) : (
         // Cerrada: no se añaden eventos ni se reabre. El servicio ya lo rechaza
         // (`session_already_ended`); la página no ofrece lo que sería rechazado.
-        <p className="nn-muted">{t("fieldSessionClosedNoMoreEvents")}</p>
+        //
+        // **Y aquí va el informe**, que hasta el 2026-09-10 no tenía puerta:
+        // `emitirReporteDeVisita` existía y no lo llamaba nadie, así que ir al
+        // informe de una visita cerrada daba 404. Va en esta rama porque el
+        // servicio exige la visita completada — ofrecerlo antes sería pintar un
+        // botón que va a fallar.
+        <>
+          <p className="nn-muted">{t("fieldSessionClosedNoMoreEvents")}</p>
+          <section className="nn-section">
+            <h2>{t("reportEmitHeading")}</h2>
+            {reporteEmitido ? (
+              <p>
+                <Link href={`/field-sessions/${session.id}/report`}>{t("reportOpenLink")}</Link>
+              </p>
+            ) : null}
+            <EmitirReporteForm fieldSessionId={session.id} />
+          </section>
+        </>
       )}
     </div>
   );

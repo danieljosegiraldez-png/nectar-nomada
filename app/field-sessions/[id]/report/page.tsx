@@ -2,9 +2,10 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../lib/auth/session";
-import { leerReporteDeVisita } from "../../../../lib/traceability/reporteDeVisita";
+import { leerReporteDeVisita, enlacesPublicadosDeVisita } from "../../../../lib/traceability/reporteDeVisita";
 import { LocationAccessError } from "../../../../lib/traceability/fieldSessions";
 import { PrintButton } from "../../../components/traceability/PrintButton";
+import { PublicarEnlaceForm, EnlacesPublicados } from "../../../components/traceability/ReporteDeVisitaForms";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,10 @@ export default async function ReporteDeVisitaPage({ params }: { params: Promise<
   }
   if (!reporte) notFound();
 
+  // Los enlaces ya entregados, para poder cortarlos. Va después del `notFound`:
+  // sin informe emitido no hay enlaces que listar.
+  const enlaces = await enlacesPublicadosDeVisita(user.userAccountId, id);
+
   const { snapshot } = reporte;
 
   return (
@@ -50,6 +55,16 @@ export default async function ReporteDeVisitaPage({ params }: { params: Promise<
       <div className="nn-report-actions">
         <PrintButton />
       </div>
+
+      {/* **El enlace para el supervisor, que no tenía puerta.**
+          `publicarReporteConEnlace` existía desde A9.6 y no lo llamaba nadie:
+          se podía emitir un token por código y no había dónde canjearlo.
+          `nn-no-print` porque esto es una acción, no parte del documento. */}
+      <section className="nn-section nn-no-print">
+        <h2>{t("reportLinkHeading")}</h2>
+        <PublicarEnlaceForm fieldSessionId={id} />
+        <EnlacesPublicados fieldSessionId={id} enlaces={enlaces} />
+      </section>
 
       <h1>{snapshot.sitio.nombre}</h1>
       <p className="nn-detail-meta">

@@ -1861,3 +1861,36 @@ de producto, y sigue en §3.
 **Los flips.** Devolver un `as never` tumba el guardia de fuente por su nombre;
 hacer que `exigeProcedencia` deje pasar cualquier cosa tumba los dos que lo
 miden. Los dos compilan, que es lo que distingue un flip de un error de sintaxis.
+
+### 2026-09-09 · El mapa de sitios, y la coordenada que nadie podía teclear
+
+El mapa que `ADR-009` decidió en su día llevaba **cero código**. Se construyó,
+y lo que la medición cambió es más interesante que la librería: **no estaba
+bloqueado por Mapbox**. De las **24 ubicaciones, cero tienen coordenadas**, y el
+formulario para declararlas sólo aparecía **si alguna visita ya proponía una**
+desde su GPS. Como ninguna visita ha traído lectura, no había propuesta; sin
+propuesta, no había formulario; **no existía forma de teclear una coordenada en
+toda la plataforma**. Cualquier mapa habría salido vacío.
+
+**Las dos mitades van en el mismo cambio**, porque un mapa sin forma de darle
+algo que pintar es un adorno: el formulario se dibuja **siempre** —con la
+propuesta de valor por defecto cuando la hay, en blanco cuando no—, y
+`/apiaries` estrena el mapa encima de la lista, diciendo debajo **cuántos
+sitios no salen en él**. Un mapa con tres pines y veintiún sitios invisibles se
+lee como si la finca tuviera tres.
+
+**Leaflet, no Mapbox** (`ADR-110`, enmienda de `ADR-009`; el dueño pidió «sin
+token ni costo»). Medido antes de elegir: Leaflet **3,7 MB y cero
+dependencias**, MapLibre **20 MB y diecisiete**. Se pierde el estilo propio que
+era toda la razón de ADR-009 — las teselas de OSM se ven como OSM — y se dice
+en voz alta en el ADR en vez de descubrirlo al verlo. El adaptador
+`MapsProvider` que ADR-009 pedía **no se construye**: de un solo uso, se
+escribiría contra la única implementación que hay.
+
+**Cuatro guardias de código fuente**, cada uno con control positivo y los cuatro
+con flip-test que cae **por nombre** y **compilando**
+(`tests/arquitectura/mapa-de-sitios.test.ts`): Leaflet cargado dentro del efecto
+y nunca en el módulo —toca `window` y la página es de servidor—, la atribución
+de OSM que su política exige, el formulario fuera del condicional, y
+`.nn-mapa` con altura en px. Esa última es la que más engaña: Leaflet mide su
+contenedor, y uno sin altura resuelta da un mapa de 0 px **sin lanzar error**.

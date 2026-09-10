@@ -89,7 +89,10 @@ describe("el inventario del router", () => {
     // faltaba al informe de un Q-grader, que sólo se podía meter por terminal.
     // 68 → 69 el 2026-09-09, con /apiaries/new — hasta ese día no había forma
     // de crear un apiario desde la aplicación, sólo colmenas dentro de uno.
-    expect(salida).toContain("69 entradas");
+    // 69 → 70 el 2026-09-10, con /informe/[token] — el informe de una visita
+    // abierto por su enlace, sin sesión. El servicio existía desde A9.6 y no
+    // había dónde canjear el token.
+    expect(salida).toContain("70 entradas");
     expect(codigo, salida).toBe(0);
   });
 
