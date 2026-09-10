@@ -55,6 +55,11 @@ export function TreatmentBatchForm({
 }) {
   const [state, formAction, pending] = useActionState(createTreatmentBatchAction, initialState);
   const t = useTranslations("Research");
+  // El vocabulario de procedencia y calidad de dato vive en `Traceability`, y
+  // se lee de ahí en vez de duplicar sus claves aquí: es UNA lista, y dos
+  // copias envejecen por separado. Mismo patrón de dos espacios de nombres que
+  // `app/apiaries/[id]/page.tsx`.
+  const tt = useTranslations("Traceability");
 
   return (
     <form action={formAction} className="nn-form" style={{ maxWidth: 640 }}>
@@ -84,7 +89,7 @@ export function TreatmentBatchForm({
         <select id="provenanceClass" name="provenanceClass" defaultValue="measured_fact">
           {PROVENANCE_CLASSES.map((pc) => (
             <option key={pc} value={pc}>
-              {pc}
+              {tt(`provenanceClass_${pc}`)}
             </option>
           ))}
         </select>
@@ -121,10 +126,10 @@ export function TreatmentBatchForm({
                 ))}
               </select>
               <select name={`vv_data_quality_${i}`} defaultValue="" style={{ flex: 1 }}>
-                <option value="">data quality —</option>
+                <option value="">{tt("dataQualityNone")}</option>
                 {DATA_QUALITY_LEVELS.map((dq) => (
                   <option key={dq} value={dq}>
-                    {dq}
+                    {tt(`dataQuality_${dq}`)}
                   </option>
                 ))}
               </select>
@@ -132,6 +137,13 @@ export function TreatmentBatchForm({
           ) : variable.valueType === "closed_enum" ? (
             <select name={`vv_value_${i}`} defaultValue="" style={{ flex: 1 }}>
               <option value="">—</option>
+              {/* Éste SÍ se pinta crudo, y es correcto: `enumValues` no es un
+                  enum de Prisma sino la lista que el autor del protocolo
+                  congeló en esa versión —«río», «quebrada», «pozo», «red»—. Son
+                  datos, ya escritos en el idioma de quien los declaró, y no hay
+                  clave de traducción posible para un vocabulario abierto.
+                  El guardia de `tests/ui/valoresEnumerados.test.ts` lo tiene
+                  exceptuado por nombre, con esta misma razón. */}
               {variable.enumValues.map((v) => (
                 <option key={v} value={v}>
                   {v}
