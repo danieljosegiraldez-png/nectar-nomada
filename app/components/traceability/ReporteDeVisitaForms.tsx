@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import {
   emitirReporteDeVisitaAction,
+  completarVisitaAction,
   publicarEnlaceDeReporteAction,
   revocarEnlaceDeReporteAction,
   type TraceabilityActionState,
@@ -156,5 +157,65 @@ export function EnlacesPublicados({
         ))}
       </ul>
     </div>
+  );
+}
+
+/**
+ * Completar la visita: el paso que la saca de borrador.
+ *
+ * **Sin esto el informe era inalcanzable.** «Cerrar jornada» pone `endedAt` —
+ * cuándo se salió del sitio— y nada ponía `status: "completed"`, que es lo
+ * único que `emitirReporteDeVisita` mira. El botón de emitir contestaba «cierra
+ * la visita» justo después de cerrarla.
+ *
+ * Pide lo que **sólo sabe quien cierra**: cuándo toca volver —de ahí sale la
+ * alerta del tablero de sitios, no de un calendario que no existe— y cuántas
+ * colonias quedaron vivas, que es lo que permite ver «pérdida sin reposición».
+ * Las dos son opcionales: una visita que no se puede completar porque falta un
+ * dato que nadie tomó es peor que una completada sin él.
+ */
+export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string }) {
+  const [estado, accion, pending] = useActionState(completarVisitaAction, inicial);
+  const t = useTranslations("Traceability");
+
+  return (
+    <form action={accion} className="nn-form" style={{ maxWidth: 520 }}>
+      <input type="hidden" name="fieldSessionId" value={fieldSessionId} />
+      <p className="nn-muted">{t("visitCompleteHelp")}</p>
+
+      <div className="nn-field">
+        <label htmlFor="cv-next">{t("visitNextDueLabel")}</label>
+        <input id="cv-next" name="nextVisitDueAt" type="date" />
+        <p className="nn-muted">{t("visitNextDueHelp")}</p>
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="cv-colonies">{t("visitColoniesAliveLabel")}</label>
+        <input id="cv-colonies" name="coloniesAliveCount" type="number" inputMode="numeric" min="0" step="1" />
+        <p className="nn-muted">{t("visitColoniesAliveHelp")}</p>
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="cv-notes">{t("visitCompleteNotesLabel")}</label>
+        <textarea id="cv-notes" name="notes" rows={3} />
+      </div>
+
+      {/* Va al `reason` del AuditEvent: por qué se completó así, no qué pasó en
+          el sitio. Es la columna que distingue lo escrito en el campo de lo
+          completado en la casa. */}
+      <div className="nn-field">
+        <label htmlFor="cv-reason">{t("visitCompleteReasonLabel")}</label>
+        <input id="cv-reason" name="reason" type="text" maxLength={300} />
+      </div>
+
+      {estado.error ? (
+        <p className="nn-error" role="alert">
+          {estado.error}
+        </p>
+      ) : null}
+      <button type="submit" className="nn-button" disabled={pending}>
+        {t("visitCompleteButton")}
+      </button>
+    </form>
   );
 }

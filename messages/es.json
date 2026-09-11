@@ -1177,7 +1177,16 @@
     "reportLinkPublishedOn": "Publicado el {fecha}",
     "reportLinkExpiresOn": "vence el {fecha}",
     "reportLinkRevokedOn": "revocado el {fecha}",
-    "reportLinkRevokeButton": "Revocar"
+    "reportLinkRevokeButton": "Revocar",
+    "visitCompleteHeading": "Completar la visita",
+    "visitCompleteHelp": "Cerrar la jornada dice cuándo saliste del sitio. Completarla dice que terminaste de escribirla, y es lo que habilita el informe.",
+    "visitNextDueLabel": "Cuándo toca volver (opcional)",
+    "visitNextDueHelp": "De aquí sale la alerta del tablero de sitios. Lo sabe quien cierra, no un calendario.",
+    "visitColoniesAliveLabel": "Colonias vivas al salir (opcional)",
+    "visitColoniesAliveHelp": "Sin este número no se puede ver «pérdida sin reposición».",
+    "visitCompleteNotesLabel": "Notas de cierre (opcional)",
+    "visitCompleteReasonLabel": "Por qué se completó así (opcional)",
+    "visitCompleteButton": "Completar visita"
   },
   "Apiary": {
     "badge": "Apiario",

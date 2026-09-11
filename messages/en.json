@@ -1177,7 +1177,16 @@
     "reportLinkPublishedOn": "Published on {fecha}",
     "reportLinkExpiresOn": "expires {fecha}",
     "reportLinkRevokedOn": "revoked on {fecha}",
-    "reportLinkRevokeButton": "Revoke"
+    "reportLinkRevokeButton": "Revoke",
+    "visitCompleteHeading": "Complete the visit",
+    "visitCompleteHelp": "Ending the session says when you left the site. Completing it says you finished writing it up, and that is what unlocks the report.",
+    "visitNextDueLabel": "When to come back (optional)",
+    "visitNextDueHelp": "This is where the site dashboard's alert comes from. Whoever closes knows it; a calendar does not.",
+    "visitColoniesAliveLabel": "Colonies alive on leaving (optional)",
+    "visitColoniesAliveHelp": "Without this number there is no way to see loss without replacement.",
+    "visitCompleteNotesLabel": "Closing notes (optional)",
+    "visitCompleteReasonLabel": "Why it was completed this way (optional)",
+    "visitCompleteButton": "Complete visit"
   },
   "Apiary": {
     "badge": "Apiary",

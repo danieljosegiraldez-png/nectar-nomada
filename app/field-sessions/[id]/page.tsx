@@ -7,7 +7,7 @@ import { FieldSessionValidationError } from "../../../lib/traceability/fieldSess
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 import { getFieldEventKinds } from "../../../lib/traceability/fieldSessionCatalog";
 import { FieldEventForm, FieldSessionEndForm } from "../../components/traceability/FieldSessionForms";
-import { EmitirReporteForm } from "../../components/traceability/ReporteDeVisitaForms";
+import { EmitirReporteForm, CompletarVisitaForm } from "../../components/traceability/ReporteDeVisitaForms";
 import { leerReporteDeVisita } from "../../../lib/traceability/reporteDeVisita";
 import { FieldSyncControls } from "../../components/traceability/FieldSyncControls";
 import { mostrarInstante } from "../../../lib/time/mostrarInstante";
@@ -143,15 +143,27 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
         // botón que va a fallar.
         <>
           <p className="nn-muted">{t("fieldSessionClosedNoMoreEvents")}</p>
-          <section className="nn-section">
-            <h2>{t("reportEmitHeading")}</h2>
-            {reporteEmitido ? (
-              <p>
-                <Link href={`/field-sessions/${session.id}/report`}>{t("reportOpenLink")}</Link>
-              </p>
-            ) : null}
-            <EmitirReporteForm fieldSessionId={session.id} />
-          </section>
+          {/* **El paso que faltaba, y el orden que importa.** `endedAt` dice
+              cuándo se salió del sitio; `completedAt`, cuándo se terminó de
+              escribir (A9.1 D4). Emitir el informe exige lo segundo, y nada lo
+              ponía: el botón de emitir contestaba «cierra la visita» justo
+              después de cerrarla. */}
+          {session.status === "draft" ? (
+            <section className="nn-section">
+              <h2>{t("visitCompleteHeading")}</h2>
+              <CompletarVisitaForm fieldSessionId={session.id} />
+            </section>
+          ) : (
+            <section className="nn-section">
+              <h2>{t("reportEmitHeading")}</h2>
+              {reporteEmitido ? (
+                <p>
+                  <Link href={`/field-sessions/${session.id}/report`}>{t("reportOpenLink")}</Link>
+                </p>
+              ) : null}
+              <EmitirReporteForm fieldSessionId={session.id} />
+            </section>
+          )}
         </>
       )}
     </div>

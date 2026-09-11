@@ -37,6 +37,35 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-10 · «Cierra la visita» justo despues de cerrarla
+
+Barriendo el repositorio por el patron que ya mordio dos veces esta semana
+—servicio hecho, puerta sin poner— salio **`completarVisita`, sin un solo
+llamador**. Es la unica funcion que pone `status: "completed"`, y
+`emitirReporteDeVisita` exige exactamente eso.
+
+**El boton «Cerrar jornada» llama a `endFieldSession`, que pone `endedAt` y
+nada mas.** Asi que el boton de emitir —fusionado hace una hora— contestaba
+«cierra la visita» **justo despues de cerrarla**, sin salida desde la
+aplicacion. Son dos hechos distintos a proposito (A9.1 D4): `endedAt` es cuando
+se salio del sitio; `completedAt`, cuando se termino de escribir. Faltaba el
+paso de en medio.
+
+**Y mi propia sonda de ayer no lo vio porque llamaba a `completarVisita`
+directamente** — el servicio que la pantalla NO usa. Recorrer el flujo por
+servicios y decir «cierra» es la misma clase de error que medir la coleccion
+equivocada: impecable sobre lo que no era.
+
+**Lo que entra:** `/field-sessions/[id]` ofrece **Completar visita** mientras
+esta en borrador —con cuando toca volver y colonias vivas, que solo sabe quien
+cierra— y el boton de emitir **solo aparece despues**, en vez de ofrecerse para
+fallar.
+
+**El barrido, en numeros:** de 404 funciones que exporta `lib/`, **50 no tienen
+ningun llamador** en `app/`, `scripts/` ni otro `lib/`, ni dentro de su propio
+archivo. La primera cuenta dio 85 y era falsa: contaba como huerfanas las que se
+usan dentro de su archivo. La lista queda en §3 para mirarla con calma.
+
 ### 2026-09-10 · El informe de la visita existía y no había puerta
 
 Recorriendo el flujo del apicultor **pantalla por pantalla** —no por servicio—
@@ -149,34 +178,6 @@ las siete cazadas por su prueba y compilando — pero a la primera vuelta **una
 no cayó**: la prueba de «misma causa dos veces» afirmaba la CLASE del error y
 pasaba con el guardia quitado, porque el `in` de Prisma deduplica y saltaba otro
 error de la misma clase. Era un adorno. Ahora afirma el mensaje.
-### 2026-09-09 · Se podía todo del apiario menos crear el apiario
-
-Medido: la aplicacion dejaba registrar colmenas, colonias, inspecciones, eventos
-de colonia, cosechas de miel y visitas — y **no dejaba registrar el sitio donde
-ocurre todo eso**. Los tres apiarios que existen salieron de `prisma/seed.ts` y
-de `scripts/import-cafelino-pe.ts`; el unico `location.create` de la aplicacion
-era `createMicrolot`, que subdivide una parcela que ya existe. Ahora
-`/apiaries/new`.
-
-**Y construirlo destapo un limite del modelo.** `Location` **no tiene**
-`projectId`: un apiario se asocia a un proyecto **a traves de sus colmenas**
-(`resolveApiaryVisibility` filtra por `hives.some.projectId`). Un sitio recien
-creado no tiene ninguna, asi que **es invisible para quien solo tiene ambito de
-proyecto**, incluido quien acaba de crearlo. La primera version usaba la puerta
-normal y su prueba lo cazo: el sitio se creaba y `getApiaryDetail` contestaba
-`no_apiary_access` **a su propio autor**. Ahora crear exige ambito de
-plataforma, y el lector de fincas usa la MISMA puerta — la primera version
-ofrecia fincas a quien el servicio iba a rechazar.
-
-**Lo que queda abierto y es del dueño:** si `Location` debe llevar `projectId`
-para que un jefe de finca con ambito de proyecto pueda crear sus apiarios. Es un
-cambio de esquema que toca la visibilidad de todo.
-
-**Sin altitud ni notas, a proposito.** `Location` guarda un RANGO de altitud
-—describe una parcela, no un punto— y no tiene columna de notas. Las dos se
-cayeron al medir el esquema; escribir el mismo numero en las dos afirmaria «el
-rango es cero», que nadie declaro.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
