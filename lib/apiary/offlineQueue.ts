@@ -17,7 +17,7 @@ const DB_NAME = "nectar-apiary-offline";
 const DB_VERSION = 1;
 const STORE_NAME = "drafts";
 
-export type DraftKind = "inspection" | "colonyEvent" | "colonyEnd";
+export type DraftKind = "inspection" | "colonyEvent" | "colonyEnd" | "varroaCount";
 export type DraftStatus = "pending" | "error";
 
 export interface DraftRecord<T = unknown> {
@@ -164,6 +164,9 @@ const KIND_DEL_SERVIDOR: Record<DraftKind, string> = {
   inspection: "inspection",
   colonyEvent: "colony_event",
   colonyEnd: "colony_end",
+  // A9.6 — un conteo de varroa se hace con la caja abierta y las manos
+  // ocupadas, que es el caso que esta cola existe para cubrir.
+  varroaCount: "varroa_count",
 };
 
 export function mutacionDe(draft: DraftRecord): Record<string, unknown> {

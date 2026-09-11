@@ -10,10 +10,12 @@ import { getObserverCandidates } from "../../../../../lib/traceability/lots";
 import { getSignedUrlForAsset } from "../../../../../lib/traceability/media";
 import { listInspectionsForColony } from "../../../../../lib/apiary/inspections";
 import { listColonyEventsForColony } from "../../../../../lib/apiary/colonyEvents";
+import { serieDeInfestacion } from "../../../../../lib/apiary/varroa";
 import { NewColonyForm } from "../../../../components/apiary/NewColonyForm";
 import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
 import { ColonyEventQuickEntry } from "../../../../components/apiary/ColonyEventQuickEntry";
+import { ConteoDeVarroaForm } from "../../../../components/apiary/ConteoDeVarroaForm";
 import { HarvestForm } from "../../../../components/apiary/HarvestForm";
 import { ApiaryPhotoUploadForm } from "../../../../components/apiary/ApiaryPhotoUploadForm";
 import type { Asset } from "../../../../../generated/prisma/client";
@@ -41,12 +43,26 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
   // active one if several rows exist.
   const colony = hive.colonies.find((c) => c.status === "active") ?? hive.colonies[0] ?? null;
 
-  const [inspections, colonyEvents] = colony
+  const [inspections, colonyEvents, serieDeVarroa] = colony
     ? await Promise.all([
         listInspectionsForColony(user.userAccountId, colony.id),
         listColonyEventsForColony(user.userAccountId, colony.id),
+        // `serieDeInfestacion` no autoriza: `getHive` de arriba ya lo hizo, y es
+        // de donde salió este `colony.id`.
+        serieDeInfestacion(colony.id),
       ])
-    : [[], []];
+    : [[], [], []];
+
+  // Los tratamientos que un conteo puede evaluar salen de los eventos que ya se
+  // leyeron — no de una consulta nueva. La fecha va en ISO corta porque es lo que
+  // distingue dos tratamientos del mismo producto.
+  const tratamientos = colonyEvents
+    .filter((evt) => evt.eventType === "treatment")
+    .map((evt) => ({
+      id: evt.id,
+      occurredAt: evt.occurredAt.toISOString().slice(0, 10),
+      product: evt.treatmentProduct,
+    }));
 
   const revalidationPath = `/apiaries/${apiaryId}/hives/${hiveId}`;
 
@@ -129,6 +145,33 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
           <section className="nn-section">
             <h2>{t("colonyEventHeading")}</h2>
             <ColonyEventQuickEntry colonyId={colony.id} selfPersonId={selfPersonId} />
+          </section>
+
+          {/* A9.6 — varroa: el conteo y su serie. La serie va junta con el
+              formulario porque la decisión que se toma al contar es comparar con
+              el conteo anterior, y tenerla en otra pantalla obliga a recordarla. */}
+          <section className="nn-section">
+            <h2>{t("varroaHeading")}</h2>
+            <ConteoDeVarroaForm colonyId={colony.id} selfPersonId={selfPersonId} tratamientos={tratamientos} />
+            {serieDeVarroa.length === 0 ? (
+              <p className="nn-muted">{t("varroaNoCounts")}</p>
+            ) : (
+              <ul>
+                {serieDeVarroa.map((punto) => (
+                  <li key={punto.id}>
+                    {punto.occurredAt.toISOString().slice(0, 10)} —{" "}
+                    {t("varroaInfestation", { valor: punto.infestacion.toFixed(1) })} (
+                    {t(`varroaMethod_${punto.method}`)}, {punto.mitesCounted}/{punto.sampleBees})
+                    {punto.evaluatesColonyEventId
+                      ? ` — ${t("varroaSeriesEvaluates", {
+                          fecha:
+                            tratamientos.find((tr) => tr.id === punto.evaluatesColonyEventId)?.occurredAt ?? "",
+                        })}`
+                      : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           <section className="nn-section">

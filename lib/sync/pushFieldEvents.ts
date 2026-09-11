@@ -9,6 +9,7 @@ import { recordInspection, InspectionValidationError } from "../apiary/inspectio
 import { recordColonyEvent, ColonyEventValidationError } from "../apiary/colonyEvents";
 import { ApiaryAccessError, ColonyEndError, registrarFinDeColonia } from "../apiary/hives";
 import { ClaseDeCausaInvalida, exigeClaseDeCausa } from "../apiary/causaDePerdida";
+import { exigeMetodoDeVarroa, registrarConteoDeVarroa, VarroaValidationError } from "../apiary/varroa";
 
 /**
  * P4 §4 (46_P4_API_Y_SINCRONIZACION.md) — push por lotes con resultado **por
@@ -55,7 +56,8 @@ export type PushMutation =
   | MutacionDeEvento
   | MutacionDeInspeccion
   | MutacionDeEventoDeColonia
-  | MutacionDeFinDeColonia;
+  | MutacionDeFinDeColonia
+  | MutacionDeConteoDeVarroa;
 
 export type MutacionDeEvento = {
   /** Ausente es `field_event`: el protocolo viejo sigue valiendo tal cual. */
@@ -142,6 +144,27 @@ export type MutacionDeFinDeColonia = {
   status: string;
   reason?: string | null;
   causas?: readonly { causeValueId: string; provenanceClass: string; dataQuality?: string | null; note?: string | null }[];
+};
+
+/**
+ * A9.6 — el conteo de varroa, anotado sin señal.
+ *
+ * `method` viaja como texto y lo valida el servicio, igual que `outcome` y
+ * `eventType` en sus hermanas. `evaluatesColonyEventId` es opcional porque
+ * contar para **decidir** si se trata es el caso normal; cuando viene, el
+ * servicio comprueba que sea un tratamiento de esta misma colonia.
+ */
+export type MutacionDeConteoDeVarroa = {
+  kind: "varroa_count";
+  clientDraftId: string;
+  colonyId: string;
+  occurredAt: Date;
+  method: string;
+  sampleBees: number;
+  mitesCounted: number;
+  evaluatesColonyEventId?: string | null;
+  operatorPersonId?: string | null;
+  notes?: string | null;
 };
 
 export type PushResult =
@@ -265,6 +288,45 @@ async function aplicarFinDeColonia(userAccountId: string, m: MutacionDeFinDeColo
   }
 }
 
+/**
+ * Aplica un conteo de varroa. Misma forma que `aplicarMutacionDeApiario`: la
+ * consulta previa por `clientDraftId` es lo que separa `applied` de `duplicate`,
+ * y el servicio trae la compuerta, la validación, el audit y el enganche a la
+ * visita abierta.
+ *
+ * `method` llega como cadena del cuerpo JSON y **se valida aquí**, con
+ * `exigeMetodoDeVarroa`, en vez de colarse en el enum con `as never` como hacen
+ * `outcome` y `eventType` más arriba. Su `VarroaValidationError` cae en el mismo
+ * corte: rechazo del servidor, no fallo de transporte.
+ */
+async function aplicarConteoDeVarroa(userAccountId: string, m: MutacionDeConteoDeVarroa): Promise<PushResult> {
+  const yaEstaba = await prisma.varroaCount.findUnique({
+    where: { clientDraftId: m.clientDraftId },
+    select: { id: true },
+  });
+  if (yaEstaba) return { clientDraftId: m.clientDraftId, status: "duplicate", id: yaEstaba.id };
+
+  try {
+    const fila = await registrarConteoDeVarroa(userAccountId, {
+      colonyId: m.colonyId,
+      occurredAt: m.occurredAt,
+      method: exigeMetodoDeVarroa(m.method),
+      sampleBees: m.sampleBees,
+      mitesCounted: m.mitesCounted,
+      evaluatesColonyEventId: m.evaluatesColonyEventId ?? null,
+      operatorPersonId: m.operatorPersonId ?? null,
+      notes: m.notes ?? null,
+      clientDraftId: m.clientDraftId,
+    });
+    return { clientDraftId: m.clientDraftId, status: "applied", id: fila.id };
+  } catch (error) {
+    if (error instanceof ApiaryAccessError || error instanceof VarroaValidationError) {
+      return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
+    }
+    throw error;
+  }
+}
+
 export async function pushFieldEvents(
   userAccountId: string,
   deviceId: string,
@@ -298,6 +360,11 @@ export async function pushFieldEvents(
 
     if (m.kind === "colony_end") {
       results.push(await aplicarFinDeColonia(userAccountId, m));
+      continue;
+    }
+
+    if (m.kind === "varroa_count") {
+      results.push(await aplicarConteoDeVarroa(userAccountId, m));
       continue;
     }
 
