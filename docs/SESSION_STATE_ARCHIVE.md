@@ -2157,3 +2157,42 @@ qué. Ocho pruebas con entrada hostil.
 
 **Sigue pendiente de Daniel** y no lo puede hacer el código: borrar la variable
 en Vercel y registrar el callback de `.vercel.app` en Google Cloud Console.
+
+### 2026-09-11 · «Todas las colonias con varroa esta temporada» ya es una consulta
+
+El Anexo B §2.3 lo pedía con nombre y apellido: *«Hoy `pestDiseaseFlags` es una
+cadena. Una cadena no se puede contar, y "todas las colonias con varroa esta
+temporada" es exactamente el reporte que hace falta.»* Medido antes de construir:
+**ninguna línea de aplicación consultaba esa columna** — sólo se escribía y se
+leía como prosa. Y 0 de 1 inspecciones tenían texto ahí, así que no hubo nada que
+convertir.
+
+**Trece casillas, ninguna inventada:** son las banderas que el dueño ya tenía
+escritas, con su razón al lado. **La catorceava de su lista no es un valor de
+catálogo**: «Otro | texto, siempre disponible» es `pestDiseaseFlags`, que se
+queda para lo que el catálogo no cubre.
+
+**No es el catálogo de causas de pérdida, y `ADR-114` dice por qué:** lo que se
+observa no es lo que mató a la colonia. Se solapan sin coincidir — moho, alas
+deformadas, olor anormal y disentería son señales de inspección y no causas;
+enjambrazón y escasez de floración son causas y no señales.
+
+**Dos decisiones del reporte que no son obvias.** Cuenta **colonias distintas**,
+no inspecciones —tres visitas a la misma caja con varroa son un problema, no
+tres— y devuelve **las trece filas, también las que valen cero**, porque «no hay
+loque» y «nadie miró loque» no son lo mismo.
+
+**Y viajan por la cola offline**, que es la mitad que importa: una inspección con
+hallazgo se anota en el campo, y dejarlas fuera habría hecho que sólo se pudieran
+marcar con cobertura.
+
+**Un límite del instrumento que esto destapó** (en
+`PENDING_IMPLEMENTATIONS/007`): el detector del inventario decide si una
+operación «recibe principal» con una coincidencia de texto **sobre los
+comentarios incluidos**. Una función sin un solo argumento quedó mal clasificada
+porque un comentario vecino decía «No recibe `userAccountId`». Reproducido
+quitando esa palabra. El arreglo a mano es indistinguible de escribir prosa para
+complacer a un regex.
+
+**Lo que NO está:** el reporte **no tiene pantalla**. Existe, está probado con
+nueve casos —tres con control positivo— y nadie lo ha visto dibujado.

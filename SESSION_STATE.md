@@ -37,6 +37,35 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-11 · Lo que la base de pruebas acumulaba, y por qué nadie lo veía
+
+Una fila `TEST` de más en «cuántos sitios de apiario hay» destapó que **nada
+comprobaba la clase**. Seis PR después quedan tres guardias donde no había
+ninguno, y la base local pasó de 40.043 `audit_event` y 335 `Scope` huérfanos a
+cero de cada.
+
+**El patrón, que se repitió tres veces y es lo que hay que reconocer:** una
+limpieza escrita **debajo de las aserciones** no corre cuando una falla; un
+`afterAll` es una cadena y la primera FK que se queja tira el resto; y un
+`deleteMany` que nombra una variable de dos olvida la otra. Las tres fugan **en
+verde**: la suite pasa entera mientras deja filas. Por eso el flip-test de cada
+arreglo compara **dos columnas** —pruebas y filas— y no sólo el color.
+
+**Lo estático no basta y quedó demostrado.** Después del primer arreglo la
+auditoría por `grep` decía que no quedaba ninguna fuga de `Scope`, y quedaba
+una. Se encontró corriendo **uno a uno los 34 archivos** que crean un `Scope` de
+proyecto y midiendo el delta: `reports.test.ts` crea dos proyectos y limpiaba
+uno. Para esta familia, la herramienta es el delta por archivo, no el grep.
+
+**Y una decisión de alcance que conviene no repensar cada vez:** el rastro de
+auditoría **no** se arregló prueba por prueba. Son 57 archivos, 98 operaciones y
+la mayor pesa el 8 % — no hay culpable. Se barre con `npm run limpiar:audit`,
+que borra sólo lo que tiene el actor nulo, comprueba esa hipótesis en cada
+corrida, y **no tiene bandera para bases remotas**: leer producción a veces se
+quiere, borrar su auditoría nunca.
+
+Lo demás está en las trampas de `CLAUDE.md`, que es donde se lee al hacerlo.
+
 ### 2026-09-11 · Una cosecha ya no puede violar la carencia sin que el sistema lo sepa
 
 El Anexo B §4 marcaba el período de carencia como **obligatorio y no
@@ -137,45 +166,6 @@ demostraría que lee el lote.
 - **Un tueste no produce muestra de cata.** Hay pantalla de tueste y pantalla de
   muestra-desde-batch, y **ningún puente**: la cadena `batch → tueste → muestra`
   de §23 se corta en medio.
-
-### 2026-09-11 · «Todas las colonias con varroa esta temporada» ya es una consulta
-
-El Anexo B §2.3 lo pedía con nombre y apellido: *«Hoy `pestDiseaseFlags` es una
-cadena. Una cadena no se puede contar, y "todas las colonias con varroa esta
-temporada" es exactamente el reporte que hace falta.»* Medido antes de construir:
-**ninguna línea de aplicación consultaba esa columna** — sólo se escribía y se
-leía como prosa. Y 0 de 1 inspecciones tenían texto ahí, así que no hubo nada que
-convertir.
-
-**Trece casillas, ninguna inventada:** son las banderas que el dueño ya tenía
-escritas, con su razón al lado. **La catorceava de su lista no es un valor de
-catálogo**: «Otro | texto, siempre disponible» es `pestDiseaseFlags`, que se
-queda para lo que el catálogo no cubre.
-
-**No es el catálogo de causas de pérdida, y `ADR-114` dice por qué:** lo que se
-observa no es lo que mató a la colonia. Se solapan sin coincidir — moho, alas
-deformadas, olor anormal y disentería son señales de inspección y no causas;
-enjambrazón y escasez de floración son causas y no señales.
-
-**Dos decisiones del reporte que no son obvias.** Cuenta **colonias distintas**,
-no inspecciones —tres visitas a la misma caja con varroa son un problema, no
-tres— y devuelve **las trece filas, también las que valen cero**, porque «no hay
-loque» y «nadie miró loque» no son lo mismo.
-
-**Y viajan por la cola offline**, que es la mitad que importa: una inspección con
-hallazgo se anota en el campo, y dejarlas fuera habría hecho que sólo se pudieran
-marcar con cobertura.
-
-**Un límite del instrumento que esto destapó** (en
-`PENDING_IMPLEMENTATIONS/007`): el detector del inventario decide si una
-operación «recibe principal» con una coincidencia de texto **sobre los
-comentarios incluidos**. Una función sin un solo argumento quedó mal clasificada
-porque un comentario vecino decía «No recibe `userAccountId`». Reproducido
-quitando esa palabra. El arreglo a mano es indistinguible de escribir prosa para
-complacer a un regex.
-
-**Lo que NO está:** el reporte **no tiene pantalla**. Existe, está probado con
-nueve casos —tres con control positivo— y nadie lo ha visto dibujado.
 
 ## 3. Bloqueado, y en qué
 
