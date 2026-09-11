@@ -8238,3 +8238,76 @@ creerá al texto.
 **Qué queda fuera.** El reporte **no tiene pantalla todavía**: existe, está
 probado, y nadie lo ha visto dibujado. Y las casillas no se han pulsado en un
 navegador — la pantalla está detrás de `/login`.
+
+---
+
+## ADR-115 — La carencia de un tratamiento se registra, y una cosecha dentro de ella se marca en vez de impedirse
+
+**Contexto.** `48_A9_ANEXO_B_CATALOGO_DE_CAMPOS.md` §4 marca «Período de
+carencia» como **obligatorio** y como **no existente**, con la consecuencia
+escrita: *«decide cuándo se puede cosechar. Sin él, una cosecha puede violar la
+carencia sin que el sistema lo sepa.»*
+
+Y `lib/apiary/bitacora.ts` ya lo afirmaba desde A9.12, en su propia regla
+inmediata: *«Se aplicó un producto. Tiene periodo de carencia y afecta a la miel
+que salga de esa colmena, así que quien coseche necesita saberlo sin
+buscarlo.»* **El aviso existía; el dato no.**
+
+**La contradicción que había que resolver, y es del propio Anexo.** §5 dice, en
+una sola celda: `| Carencia vigente | derivado | … | **bloqueo**: si hay
+tratamiento con carencia activa, la cosecha avisa |`. «Bloqueo» y «avisa» son dos
+comportamientos distintos.
+
+**Decisión del dueño, 2026-09-11: avisa y registra igual**, con los días que
+faltaban guardados en la fila. La razón: **si la miel ya se extrajo, impedir el
+registro no la devuelve al panal** — deja el hecho sin rastro, que para
+trazabilidad es peor que un registro marcado.
+
+**Qué entra.**
+
+1. **`ColonyEvent.treatmentWithdrawalDays`** — días, no fecha de fin. Lo que trae
+   la etiqueta del producto son los días; la fecha se deriva de `occurredAt +
+   días`, y guardarla además sería un segundo sitio que puede discrepar del
+   primero. Anulable en la base —la tabla sirve a tres tipos de evento y una
+   alimentación no tiene carencia— y **obligatorio en el servicio cuando
+   `eventType = treatment`**, donde ya vive la exigencia de
+   `treatmentBatchLabel`.
+2. **`ApiaryHarvestEvent.withinWithdrawalDays`** — los días que faltaban, o
+   `null` si no había carencia. **Columna y no sólo aviso**: un aviso se lee una
+   vez, y esto tiene que poder consultarse el día que aparezca un residuo en un
+   análisis. Mismo razonamiento que `ADR-114`.
+3. **`lib/apiary/carencia.ts`** — el lector derivado.
+
+**Cuatro decisiones pequeñas que no son obvias.**
+
+- **Cero es una respuesta legítima.** Hay productos sin carencia. La comprobación
+  es `== null`, no `!valor`: un `!input.treatmentWithdrawalDays` habría rechazado
+  el cero y obligado a mentir poniendo un 1.
+- **Los días que faltan se redondean hacia arriba.** Medio día de carencia sigue
+  siendo carencia, y un `Math.floor` daría cero en las últimas horas — que es
+  justo cuando alguien va a cosechar creyendo que ya puede.
+- **La marca es la carencia MÁS LARGA, no la suma.** Corren en paralelo; sumarlas
+  inventaría una espera que ningún producto exige.
+- **La carencia se pregunta en la FECHA DE LA COSECHA, no en la de hoy.** Una
+  cosecha se registra días después, y preguntar por «ahora» marcaría o dejaría
+  pasar la fila equivocada.
+
+**Lo que esto rompe a propósito.** El campo es obligatorio, así que **todo
+tratamiento registrado sin carencia se rechaza desde ahora**. Medido: rompió
+cinco llamadas en cuatro archivos de prueba, todas actualizadas; y el formulario
+de evento rápido y la cola offline llevan el campo. No hubo nada que
+retroadaptar — **0 tratamientos y 0 cosechas** existían al construirlo.
+
+**Cómo se comprueba.** `tests/apiary/carencia.test.ts`, diez casos, tres con
+control positivo.
+
+**Y lo que estas pruebas NO son, dicho para que nadie lo cuente dos veces:** son
+una **red para el día que lleguen los datos**, no un guardia sobre datos que
+existan. Sus fixtures crean el tratamiento y la cosecha, así que la
+transformación sí se ejercita — pero nadie ha tratado ni cosechado de verdad
+todavía.
+
+**Qué queda fuera.** El aviso **no se ha visto en pantalla**: el servicio
+devuelve las carencias con su producto, y quien las pinte es otro cambio. Y los
+otros tres campos que §4 pide siguen sin existir: objetivo, vía y fecha de
+retiro.

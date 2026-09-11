@@ -27,6 +27,8 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
   const [treatmentBatchLabel, setTreatmentBatchLabel] = useState("");
   const [treatmentDose, setTreatmentDose] = useState("");
   const [treatmentDoseUnit, setTreatmentDoseUnit] = useState("");
+  /** Cadena y no número: el campo vacío y el cero son distintos, y `Number("")` es 0. */
+  const [treatmentWithdrawalDays, setTreatmentWithdrawalDays] = useState("");
   const [treatmentSaved, setTreatmentSaved] = useState(false);
 
   const [observationNote, setObservationNote] = useState("");
@@ -59,8 +61,13 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
     setFeedingQuantity("");
   }
 
+  // Cero es un valor LEGÍTIMO —hay productos sin carencia—, así que la
+  // condición mira si el campo está vacío, no si el número es falsy. Un
+  // `!Number(x)` habría rechazado el 0 y obligado a mentir poniendo un 1.
+  const carenciaPuesta = treatmentWithdrawalDays.trim() !== "" && Number.isInteger(Number(treatmentWithdrawalDays)) && Number(treatmentWithdrawalDays) >= 0;
+
   async function logTreatment() {
-    if (!treatmentBatchLabel.trim()) return;
+    if (!treatmentBatchLabel.trim() || !carenciaPuesta) return;
     setSaveError(null);
     try {
       await queueDraft("colonyEvent", {
@@ -72,6 +79,7 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
         treatmentBatchLabel: treatmentBatchLabel.trim(),
         treatmentDose: treatmentDose.trim() ? Number(treatmentDose) : null,
         treatmentDoseUnit: treatmentDoseUnit.trim() || null,
+        treatmentWithdrawalDays: Number(treatmentWithdrawalDays),
       });
     } catch {
       setSaveError(t("localSaveFailedError"));
@@ -83,6 +91,7 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
     setTreatmentBatchLabel("");
     setTreatmentDose("");
     setTreatmentDoseUnit("");
+    setTreatmentWithdrawalDays("");
   }
 
   async function logObservation() {
@@ -145,6 +154,23 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
             <label htmlFor={`treat-batch-${colonyId}`}>{t("treatmentBatchLabelLabel")}</label>
             <input id={`treat-batch-${colonyId}`} value={treatmentBatchLabel} onChange={(e) => setTreatmentBatchLabel(e.target.value)} required />
           </div>
+          {/* La carencia, con la misma fuerza que el lote: el Anexo B §4 la marca
+              obligatoria porque decide cuándo se puede cosechar. `min={0}`
+              porque hay productos sin carencia y cero es una respuesta, no un
+              hueco. */}
+          <div className="nn-field">
+            <label htmlFor={`treat-withdrawal-${colonyId}`}>{t("treatmentWithdrawalDaysLabel")}</label>
+            <input
+              id={`treat-withdrawal-${colonyId}`}
+              type="number"
+              min={0}
+              step={1}
+              inputMode="numeric"
+              value={treatmentWithdrawalDays}
+              onChange={(e) => setTreatmentWithdrawalDays(e.target.value)}
+              required
+            />
+          </div>
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <div className="nn-field" style={{ flex: 1 }}>
               <label htmlFor={`treat-dose-${colonyId}`}>{t("treatmentDoseLabel")}</label>
@@ -155,7 +181,7 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
               <input id={`treat-dose-unit-${colonyId}`} value={treatmentDoseUnit} onChange={(e) => setTreatmentDoseUnit(e.target.value)} />
             </div>
           </div>
-          <button type="button" className="nn-button" onClick={() => void logTreatment()} disabled={!treatmentBatchLabel.trim()}>
+          <button type="button" className="nn-button" onClick={() => void logTreatment()} disabled={!treatmentBatchLabel.trim() || !carenciaPuesta}>
             {t("logTreatmentButton")}
           </button>
           {treatmentSaved ? <p className="nn-muted">{t("savedLocally")}</p> : null}

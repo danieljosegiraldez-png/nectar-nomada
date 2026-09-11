@@ -37,6 +37,41 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-11 · Una cosecha ya no puede violar la carencia sin que el sistema lo sepa
+
+El Anexo B §4 marcaba el período de carencia como **obligatorio y no
+existente**, con su consecuencia escrita. Y `lib/apiary/bitacora.ts` ya lo
+afirmaba desde A9.12: «tiene periodo de carencia y afecta a la miel que salga de
+esa colmena, así que quien coseche necesita saberlo sin buscarlo». **El aviso
+existía; el dato no.**
+
+**La contradicción era del propio Anexo,** y la resolvió el dueño. §5 dice
+«**bloqueo**» y «la cosecha avisa» en la misma celda. Decisión: **avisa y
+registra igual**, con los días que faltaban en la fila. Si la miel ya se
+extrajo, impedir el registro no la devuelve al panal — deja el hecho sin rastro,
+que para trazabilidad es peor que un registro marcado.
+
+**Cuatro decisiones pequeñas que no son obvias**, y cada una tiene su prueba:
+cero días es **una respuesta legítima** —hay productos sin carencia, y un
+`!valor` la habría rechazado—; los días que faltan se redondean **hacia arriba**,
+porque medio día sigue siendo carencia y un `floor` daría cero justo cuando
+alguien va a cosechar creyendo que puede; la marca es la carencia **más larga y
+no la suma**, porque corren en paralelo; y se pregunta **en la fecha de la
+cosecha**, no en la de hoy.
+
+**Lo que rompe a propósito:** el campo es obligatorio, así que todo tratamiento
+sin carencia se rechaza desde ahora. Rompió cinco llamadas en cuatro archivos de
+prueba —todas actualizadas— y el formulario y la cola offline llevan el campo.
+**No hubo nada que retroadaptar: 0 tratamientos y 0 cosechas existían.**
+
+**Y lo que las diez pruebas NO son, para que nadie lo cuente dos veces:** una red
+para el día que lleguen los datos, no un guardia sobre datos que existan. Sus
+fixtures crean el tratamiento y la cosecha, así que la transformación sí se
+ejercita — pero nadie ha tratado ni cosechado de verdad.
+
+**Lo que queda fuera:** el aviso **no se ha visto en pantalla** —el servicio
+devuelve las carencias con su producto y pintarlas es otro cambio— y los otros
+tres campos que §4 pide siguen sin existir: objetivo, vía y fecha de retiro.
 ### 2026-09-11 · Una parcela no es un lote, y existen las microparcelas
 
 Daniel, intentando crear uno: «how do I create lots». Medido, y la causa no era
@@ -137,68 +172,6 @@ qué. Ocho pruebas con entrada hostil.
 
 **Sigue pendiente de Daniel** y no lo puede hacer el código: borrar la variable
 en Vercel y registrar el callback de `.vercel.app` en Google Cloud Console.
-
-### 2026-09-10 · La pérdida de una colonia ya se puede anotar sin señal
-
-La cola offline del apiario aceptaba dos tipos de borrador: inspección y evento
-de colonia. **El fin de una colonia no estaba** — y es el hecho que más se
-descubre en el campo, una caja que aparece vacía. Había que volver con cobertura
-para poder anotarlo, y entre medias el conteo del sitio seguía contando colonias
-que ya no existen. Era el último formulario de apiario que exigía red.
-
-**La parte que no era obvia: la idempotencia de un UPDATE.** Las otras dos
-mutaciones insertan, así que su `clientDraftId` vive en la fila nueva. El fin es
-un UPDATE y no hay fila nueva, así que la clave va en `Colony.endClientDraftId`.
-Y hace falta porque sin ella **dos cosas muy distintas llegan como el mismo
-error**: que mi propio envío llegara y se perdiera la respuesta, y que otra
-persona la diera por perdida antes. La primera es un `duplicate` que se descarta
-callado; la segunda, un rechazo que el operador tiene que ver. Confundirlas haría
-descartar un aviso real, o dar una alarma por trabajo que sí se guardó.
-
-**Un defecto que el tercer tipo destapó, y no era teórico.** La traducción al
-protocolo era `kind === "inspection" ? "inspection" : "colony_event"`. Con dos
-tipos funcionaba; con el tercero, **un fin habría llegado disfrazado de evento de
-colonia** y se habría rechazado por un campo que falta, no por lo que es. Ahora
-es un `Record<DraftKind, string>` total: un cuarto tipo no compila hasta que
-alguien lo nombre.
-
-**Lo que esto cuesta, y está en `ADR-112`:** el rechazo deja de ser inmediato.
-Sin permiso, o si alguien llegó antes, eso sale al sincronizar y no al pulsar.
-Es el trato que ya aceptan las otras dos pantallas de campo, y el precio de
-poder anotar sin cobertura. La acción de servidor se **eliminó**: mi propio
-cambio la dejó huérfana.
-
-**Siete pruebas nuevas y flip-test de cinco mutaciones**, cada una cayendo por su
-nombre y compilando — incluida la de volver al ternario. La de «clase de causa
-inventada» lleva control positivo: la mutación siguiente del lote **sí** se
-aplica, así que el rechazo no se llevó por delante el trabajo bueno.
-
-**Lo que sigue sin probarse:** nadie ha anotado una pérdida real desde un
-teléfono en el campo. Los guardias miden el servidor y la traducción; la pantalla
-está detrás de `/login`.
-### 2026-09-10 · La limpieza que no corre cuando la aserción falla
-
-«Cuántos sitios de apiario hay» devolvía **3** con dos reales: el tercero era
-una `Location` de prueba del 2026-09-08, con 15 filas de su corrida detrás.
-
-**La causa no era la que parecía.** El `afterAll` de `polinizacion.test.ts` sí
-borraba la `Location`; no llegaba. Los dos `it` que crean una `FieldSession` la
-borraban **debajo de las aserciones**, y una aserción que falla se salta ese
-borrado. `field_session.location_id` es `RESTRICT`, así que el `afterAll` murió
-ahí y abandonó las seis líneas siguientes: **es una cadena, y la primera FK que
-se queja tira el resto.** `assertDefinedWhere` no lo cubre —su `where` estaba
-perfectamente definido—, y por eso la trampa quedó escrita en `CLAUDE.md`.
-
-Esa limpieza pasa a un `afterEach`; el `afterAll` se completa con `FieldSession`,
-`Scope` y `AuditEvent` —antes de borrar la cuenta, que la FK es `SET NULL`—. El
-mismo `Scope` huérfano estaba en otras cinco pruebas. Aparte, barridas 36 filas
-de la base **local**, con fila patrón y ensayo en seco; sin `test:db -- reset`,
-que hay una migración sin fusionar de otra sesión.
-
-**El flip-test es la parte que vale: las dos versiones dicen 55/55.** La vieja
-deja +6 `Scope` huérfanos por corrida y la nueva +0; mutando una aserción, la
-vieja tumba **2** y deja **7 filas**, la nueva tumba 1 y deja 0. Una compuerta
-que sólo mira el color no ve esa diferencia.
 
 ## 3. Bloqueado, y en qué
 

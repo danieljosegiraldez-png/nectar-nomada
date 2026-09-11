@@ -118,6 +118,8 @@ export type MutacionDeEventoDeColonia = {
   treatmentDose?: number | null;
   treatmentDoseUnit?: string | null;
   treatmentBatchLabel?: string | null;
+  /** Días de carencia. Obligatorio en el servicio cuando el tipo es tratamiento. */
+  treatmentWithdrawalDays?: number | null;
 };
 
 /**
@@ -198,6 +200,7 @@ async function aplicarMutacionDeApiario(
             treatmentDose: m.treatmentDose ?? null,
             treatmentDoseUnit: m.treatmentDoseUnit ?? null,
             treatmentBatchLabel: m.treatmentBatchLabel ?? null,
+            treatmentWithdrawalDays: m.treatmentWithdrawalDays ?? null,
             clientDraftId: m.clientDraftId,
           });
     return { clientDraftId: m.clientDraftId, status: "applied", id: fila.id };

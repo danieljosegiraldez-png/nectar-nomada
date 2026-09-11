@@ -1254,6 +1254,7 @@
     "logTreatmentHeading": "Registrar tratamiento",
     "treatmentProductLabel": "Producto",
     "treatmentBatchLabelLabel": "N.º de lote del envase",
+    "treatmentWithdrawalDaysLabel": "Días de carencia",
     "treatmentDoseLabel": "Dosis",
     "logTreatmentButton": "Registrar tratamiento",
     "logObservationHeading": "Registrar observación",

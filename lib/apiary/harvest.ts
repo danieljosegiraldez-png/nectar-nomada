@@ -19,6 +19,7 @@
  * lot:manage/lot:view).
  */
 import { prisma } from "../db";
+import { carenciasVigentes, diasPendientes } from "./carencia";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
 import type { ProvenanceClass } from "../../generated/prisma/client";
@@ -55,6 +56,17 @@ export async function recordApiaryHarvest(userAccountId: string, input: RecordAp
 
   const provenanceClass = input.provenanceClass;
 
+  // La carencia, EN LA FECHA DE LA COSECHA y no en la de hoy: una cosecha se
+  // registra días después, y preguntar por «ahora» marcaría o dejaría pasar la
+  // fila equivocada.
+  //
+  // **No bloquea.** Decisión del dueño el 2026-09-11, sobre una contradicción de
+  // su propio Anexo B §5 —que dice «bloqueo» y «la cosecha avisa» en la misma
+  // celda—: se registra siempre, con los días que faltaban. Si la miel ya se
+  // extrajo, impedir el registro no la devuelve al panal.
+  const carencias = await carenciasVigentes(input.colonyId, input.occurredAt);
+  const withinWithdrawalDays = diasPendientes(carencias);
+
   const result = await prisma.$transaction(async (tx) => {
     // The resulting Lot carries the same project/organization/location
     // triple every other traceable canonical entity does (T1's own note)
@@ -84,6 +96,7 @@ export async function recordApiaryHarvest(userAccountId: string, input: RecordAp
         createdBy: userAccountId,
         provenanceClass,
         sourceReference: input.sourceReference ?? null,
+        withinWithdrawalDays,
       },
     });
 
@@ -124,7 +137,7 @@ export async function recordApiaryHarvest(userAccountId: string, input: RecordAp
       tx,
     );
 
-    return { harvestEvent, lot };
+    return { harvestEvent, lot, carencias };
   });
 
   return result;

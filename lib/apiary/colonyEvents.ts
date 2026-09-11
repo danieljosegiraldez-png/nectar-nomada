@@ -41,6 +41,12 @@ export interface RecordColonyEventInput {
   // the DB column, same shape as recordMaterialConsumptionEntry's own
   // batchLabel requiredness (T12.6).
   treatmentBatchLabel?: string | null;
+  /**
+   * Días de carencia del producto. **Obligatorio cuando `eventType =
+   * treatment`**, como el lote: el Anexo B §4 lo marca así y dice por qué —sin
+   * él una cosecha puede violar la carencia sin que el sistema lo sepa—.
+   */
+  treatmentWithdrawalDays?: number | null;
   treatmentDose?: number | null;
   treatmentDoseUnit?: string | null;
   note?: string | null;
@@ -73,6 +79,17 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
     throw new ColonyEventValidationError("treatment_batch_label_required");
   }
 
+  // La carencia, con la misma fuerza que el lote. Se comprueba `== null` y no
+  // la verdad del número: **cero es un valor legítimo** —hay productos sin
+  // carencia— y un `!input.treatmentWithdrawalDays` lo habría rechazado,
+  // obligando a mentir poniendo un 1.
+  if (input.eventType === "treatment" && input.treatmentWithdrawalDays == null) {
+    throw new ColonyEventValidationError("treatment_withdrawal_days_required");
+  }
+  if (input.treatmentWithdrawalDays != null && (!Number.isInteger(input.treatmentWithdrawalDays) || input.treatmentWithdrawalDays < 0)) {
+    throw new ColonyEventValidationError("treatment_withdrawal_days_invalid");
+  }
+
   const scope = await resolveColonyScope(input.colonyId);
   await requireColonyEventWriteAccess(userAccountId, [scope]);
 
@@ -94,6 +111,7 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
         coverageUntil: input.eventType === "feeding" ? (input.coverageUntil ?? null) : null,
         treatmentProduct: input.treatmentProduct ?? null,
         treatmentBatchLabel: input.treatmentBatchLabel?.trim() ?? null,
+        treatmentWithdrawalDays: input.treatmentWithdrawalDays ?? null,
         treatmentDose: input.treatmentDose ?? null,
         treatmentDoseUnit: input.treatmentDoseUnit ?? null,
         note: input.note ?? null,

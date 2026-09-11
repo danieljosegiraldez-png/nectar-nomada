@@ -314,6 +314,10 @@
       "razon": "A9.10 — el vocabulario de orígenes de colonia, leído del catálogo. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Sólo lee `VariableCatalogValue`, que es vocabulario y no dato de nadie."
     },
     {
+      "archivo": "lib/apiary/carencia.ts",
+      "razon": "La carencia vigente de una colonia: si lo que salga del panal lleva residuo de un tratamiento sin cumplir. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Sólo lee ColonyEvent."
+    },
+    {
       "archivo": "lib/apiary/irregularidades.ts",
       "razon": "El vocabulario de irregularidades de inspección y el reporte que el Anexo B §2.3 nombra («todas las colonias con varroa esta temporada»). Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Sólo lee."
     },
@@ -556,6 +560,12 @@
       "operacion": "vitalesDeSitios",
       "razon": "A9.8 — recibe locationIds que su ÚNICO llamador, app/apiaries/page.tsx, acaba de obtener de getApiaryList, que sí autoriza. No pide userAccountId a propósito: un lector que exige principal parece una compuerta y termina usándose como tal, que es la disciplina de leerEnmiendas (A9.3). Lee hechos de ids ya concedidos y no escribe nada.",
       "verificado": "2026-09-07"
+    },
+    {
+      "archivo": "lib/apiary/carencia.ts",
+      "operacion": "carenciasVigentes",
+      "razon": "Lectura sobre un colonyId que su llamador —recordApiaryHarvest— acaba de pasar por requireApiaryAccess(\"manage\"), y que lanza ApiaryAccessError si no. No pide principal a propósito: misma disciplina que vitalesDeSitios, densidadDePolinizacion y coloniasPorIrregularidad. Sólo lee tratamientos de una colonia ya concedida y no escribe nada.",
+      "verificado": "2026-09-11"
     },
     {
       "archivo": "lib/apiary/irregularidades.ts",
