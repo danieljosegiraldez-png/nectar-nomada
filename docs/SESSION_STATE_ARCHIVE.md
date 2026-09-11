@@ -2036,3 +2036,32 @@ revoca por id, y devolver la cerradura la enseñaria sin razon.
 **Lo que NO hizo falta probar de nuevo:** el ciclo del enlace ya estaba cubierto
 —token inventado, caducado, revocado, sin emitir, y RBAC en publicar y revocar—.
 Lo nuevo es el lector, con su puerta y su flip.
+
+### 2026-09-10 · «Cierra la visita» justo despues de cerrarla
+
+Barriendo el repositorio por el patron que ya mordio dos veces esta semana
+—servicio hecho, puerta sin poner— salio **`completarVisita`, sin un solo
+llamador**. Es la unica funcion que pone `status: "completed"`, y
+`emitirReporteDeVisita` exige exactamente eso.
+
+**El boton «Cerrar jornada» llama a `endFieldSession`, que pone `endedAt` y
+nada mas.** Asi que el boton de emitir —fusionado hace una hora— contestaba
+«cierra la visita» **justo despues de cerrarla**, sin salida desde la
+aplicacion. Son dos hechos distintos a proposito (A9.1 D4): `endedAt` es cuando
+se salio del sitio; `completedAt`, cuando se termino de escribir. Faltaba el
+paso de en medio.
+
+**Y mi propia sonda de ayer no lo vio porque llamaba a `completarVisita`
+directamente** — el servicio que la pantalla NO usa. Recorrer el flujo por
+servicios y decir «cierra» es la misma clase de error que medir la coleccion
+equivocada: impecable sobre lo que no era.
+
+**Lo que entra:** `/field-sessions/[id]` ofrece **Completar visita** mientras
+esta en borrador —con cuando toca volver y colonias vivas, que solo sabe quien
+cierra— y el boton de emitir **solo aparece despues**, en vez de ofrecerse para
+fallar.
+
+**El barrido, en numeros:** de 404 funciones que exporta `lib/`, **50 no tienen
+ningun llamador** en `app/`, `scripts/` ni otro `lib/`, ni dentro de su propio
+archivo. La primera cuenta dio 85 y era falsa: contaba como huerfanas las que se
+usan dentro de su archivo. La lista queda en §3 para mirarla con calma.

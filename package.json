@@ -28,6 +28,7 @@
     "rbac:grant": "tsx scripts/grant-role.ts",
     "data:flag-overstated-lots": "tsx scripts/p0-flag-overstated-lots.ts",
     "data:rename-finca-rosina": "tsx scripts/rename-finca-rosina.ts",
+    "data:parcelas-no-son-lotes": "tsx scripts/parcelas-no-se-llaman-lotes.ts",
     "data:mover-cohorte-lote4": "tsx scripts/p1-mover-cohorte-lote4.ts",
     "data:cohortes-catuai": "tsx scripts/p1-cohortes-catuai.ts",
     "data:remove-demo-places": "bash scripts/remove-demo-places.sh",

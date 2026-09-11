@@ -37,6 +37,40 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-11 · Una parcela no es un lote, y existen las microparcelas
+
+Daniel, intentando crear uno: «how do I create lots». Medido, y la causa no era
+el código: **sus parcelas se llaman «Lote 1 — Finca Rosina»**. En los datos una
+*parcela* se llama Lote, y en la pantalla un *batch* también. Misma palabra, dos
+cosas — el trozo de tierra y la cantidad de café que salió de él.
+
+**Su modelo ya era el del sistema**, y conviene no volver a construirlo: finca =
+`Organization` de tipo `farm` **más** una ubicación `site`; las parcelas cuelgan
+de la finca; y **«sin parcela no hay cosecha» ya estaba impuesto** por
+`harvest_event.location_id NOT NULL`, cuyo comentario dice «the plot».
+
+**Lo que entra:** el tipo de ubicación **`micro_plot`** (ADR pendiente; la
+alternativa descartada era anidar parcelas, que funciona hoy pero no deja
+distinguir «toda la parcela» de «este rincón»), y
+`npm run data:parcelas-no-son-lotes` — seco por defecto, coincidencia por
+**patrón exacto** `^Lote <n> — ` y nunca `contains`, que es la lección de
+`rename-finca-rosina.ts`. Renombra a «Parcela N — finca» y, aparte, **pone la
+organización a las que no la tienen**: seis de Finca Rosina cuelgan del sitio por
+el padre sin declarar finca, y un operador acotado por organización no las
+alcanza. Las de Cafelino sí la tienen.
+
+**Una cifra mía que era falsa y su causa.** Dije «6 sin organización, 9 con». Son
+**8 parcelas: 6 sin y 2 con**. Medí mientras otra sesión corría la suite sobre la
+base compartida y conté filas TEST transitorias. Y lo que importa más: **todo lo
+medido aquí es la copia local restaurada, no producción** — por eso el guion
+imprime la fila patrón antes de escribir.
+
+**Lo que se encontró de camino y NO se tocó:** el formulario de cosecha pide
+peso, Brix y una **«condición» de texto libre** — mientras que **siete de los
+nueve catálogos de cereza no los lee ninguna línea**: `cereza_condicion_visual`,
+`_limpieza`, `_color`, `_firmeza`, `_densidad`, `_tamano_forma`, `_defectos`.
+El vocabulario para las «vital statistics» de la cereza está escrito y sin puerta.
+
 ### 2026-09-11 · «Todas las colonias con varroa esta temporada» ya es una consulta
 
 El Anexo B §2.3 lo pedía con nombre y apellido: *«Hoy `pestDiseaseFlags` es una
@@ -165,35 +199,6 @@ que hay una migración sin fusionar de otra sesión.
 deja +6 `Scope` huérfanos por corrida y la nueva +0; mutando una aserción, la
 vieja tumba **2** y deja **7 filas**, la nueva tumba 1 y deja 0. Una compuerta
 que sólo mira el color no ve esa diferencia.
-
-### 2026-09-10 · «Cierra la visita» justo despues de cerrarla
-
-Barriendo el repositorio por el patron que ya mordio dos veces esta semana
-—servicio hecho, puerta sin poner— salio **`completarVisita`, sin un solo
-llamador**. Es la unica funcion que pone `status: "completed"`, y
-`emitirReporteDeVisita` exige exactamente eso.
-
-**El boton «Cerrar jornada» llama a `endFieldSession`, que pone `endedAt` y
-nada mas.** Asi que el boton de emitir —fusionado hace una hora— contestaba
-«cierra la visita» **justo despues de cerrarla**, sin salida desde la
-aplicacion. Son dos hechos distintos a proposito (A9.1 D4): `endedAt` es cuando
-se salio del sitio; `completedAt`, cuando se termino de escribir. Faltaba el
-paso de en medio.
-
-**Y mi propia sonda de ayer no lo vio porque llamaba a `completarVisita`
-directamente** — el servicio que la pantalla NO usa. Recorrer el flujo por
-servicios y decir «cierra» es la misma clase de error que medir la coleccion
-equivocada: impecable sobre lo que no era.
-
-**Lo que entra:** `/field-sessions/[id]` ofrece **Completar visita** mientras
-esta en borrador —con cuando toca volver y colonias vivas, que solo sabe quien
-cierra— y el boton de emitir **solo aparece despues**, en vez de ofrecerse para
-fallar.
-
-**El barrido, en numeros:** de 404 funciones que exporta `lib/`, **50 no tienen
-ningun llamador** en `app/`, `scripts/` ni otro `lib/`, ni dentro de su propio
-archivo. La primera cuenta dio 85 y era falsa: contaba como huerfanas las que se
-usan dentro de su archivo. La lista queda en §3 para mirarla con calma.
 
 ## 3. Bloqueado, y en qué
 
