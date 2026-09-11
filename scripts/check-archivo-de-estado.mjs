@@ -118,6 +118,43 @@ const problemas = [];
   }
 }
 
+// 4. Ninguna sección viva localiza una entrega diciendo «§2».
+//
+// §2 es la única sección cuyo CONTENIDO rota: sus entradas se van al histórico
+// en cuanto el presupuesto aprieta, y el puntero que las citaba se queda
+// apuntando a nada. No falla, no se ve, y nadie lo comprueba — pasó TRES veces
+// en dos días (2026-09-09 y 2026-09-10), y las tres las encontró una persona
+// leyendo, no una compuerta. §1, §3, §4 y §5 son permanentes y se pueden citar.
+//
+// La forma correcta es nombrar el sitio que no se mueve: el título de la
+// entrada, o `docs/SESSION_STATE_ARCHIVE.md`.
+//
+// NO marca «`CLAUDE.md` §2» ni «`docs/SECURITY.md` §2»: citan la sección de
+// OTRO documento, que es legítimo y frecuente —hay dos en el estado ahora
+// mismo, `CLAUDE.md` §38 y §6—. Un guardia que las marcara estaría señalando
+// texto bien escrito, que es como se aprende a ignorar una línea roja.
+{
+  const lineas = readFileSync(ESTADO, "utf8").split("\n");
+  const citas = [];
+  let seccion = null;
+  for (const [i, linea] of lineas.entries()) {
+    const cabecera = /^## (\d+)\./.exec(linea);
+    if (cabecera) seccion = cabecera[1];
+    if (seccion === "2") continue;
+    // El `.md` delante desarma la cita: es otro documento, no esta sección.
+    if (/`[^`]+\.md`[^§]{0,3}§2\b/.test(linea)) continue;
+    if (/§2\b/.test(linea)) citas.push([i + 1, linea.trim()]);
+  }
+  if (citas.length > 0) {
+    problemas.push(
+      `${ESTADO} localiza una entrega diciendo «§2», y las entradas de §2 se van al\n` +
+        `  histórico: el puntero muere en silencio. Nombra el título de la entrada o\n` +
+        `  ${ARCHIVO}, que no se mueven.\n` +
+        citas.map(([n, l]) => `      línea ${n}: ${l.slice(0, 76)}`).join("\n")
+    );
+  }
+}
+
 if (problemas.length > 0) {
   for (const p of problemas) console.error(`✗ ${p}`);
   process.exit(1);
@@ -125,6 +162,6 @@ if (problemas.length > 0) {
 
 console.log(
   `✓ El archivo histórico está sano: ${delArchivo().length} secciones, ninguna repetida,\n` +
-    `  ninguna compartida con el estado, y las ${delEstado().length} del estado tienen el\n` +
-    `  formato que el archivador espera.`
+    `  ninguna compartida con el estado, las ${delEstado().length} del estado con el formato que el\n` +
+    `  archivador espera, y ninguna sección viva localiza una entrega por «§2».`
 );

@@ -150,6 +150,46 @@ describe("el guardia del archivo histórico", () => {
     expect(codigo, salida).toBe(0);
   });
 
+  /**
+   * **La cuarta propiedad, y por qué existe.** §2 es la única sección cuyo
+   * contenido rota: sus entradas se van al histórico y el puntero que las
+   * citaba muere en silencio. Pasó TRES veces en dos días —2026-09-09 y
+   * 2026-09-10— y las tres las encontró una persona leyendo, nunca una
+   * compuerta: git no ve nada raro, el enlace no existe como enlace, y
+   * `check:state` sólo cuenta líneas.
+   *
+   * Los tres negativos de abajo son la mitad que importa. Un guardia que
+   * marcara «`CLAUDE.md` §2» estaría señalando texto bien escrito —hay dos
+   * citas así en el estado real ahora mismo—, y con eso se aprende a ignorar
+   * una línea roja.
+   */
+  it("rechaza que una sección viva localice una entrega diciendo «§2»", () => {
+    const estado = "# E\n\n## 2. Entregado\n\n### 2026-09-01 · Una\n\n## 3. Bloqueado\n\n- Cerrado — ver la entrada de §2.\n";
+    const { codigo, salida } = correr(...par(estado, ARCHIVO_SANO));
+    expect(codigo, salida).toBe(1);
+    expect(salida).toMatch(/localiza una entrega/);
+    // Que nombre la línea: sin eso, «hay una cita» obliga a buscarla a mano.
+    expect(salida, "tiene que decir en qué línea").toMatch(/línea 9:/);
+  });
+
+  it("no marca un «§2» que está DENTRO de §2", () => {
+    const estado = "# E\n\n## 2. Entregado\n\n### 2026-09-01 · Una\n\nlo dicho en §2 arriba\n";
+    const { codigo, salida } = correr(...par(estado, ARCHIVO_SANO));
+    expect(codigo, salida).toBe(0);
+  });
+
+  it("no marca «`CLAUDE.md` §2», que cita otro documento", () => {
+    const estado = "# E\n\n## 2. Entregado\n\n### 2026-09-01 · Una\n\n## 3. Bloqueado\n\n- `CLAUDE.md` §2 pide arquitectura.\n";
+    const { codigo, salida } = correr(...par(estado, ARCHIVO_SANO));
+    expect(codigo, salida).toBe(0);
+  });
+
+  it("no marca §3 ni §5, que son secciones permanentes", () => {
+    const estado = "# E\n\n## 2. Entregado\n\n### 2026-09-01 · Una\n\n## 3. Bloqueado\n\n- ver §3 y §5.\n";
+    const { codigo, salida } = correr(...par(estado, ARCHIVO_SANO));
+    expect(codigo, salida).toBe(0);
+  });
+
   it("cuenta secciones repetidas, no copias sobrantes", () => {
     const tresVeces = "# Hist\n\n### 2026-08-01 · V\n\ntexto\n\n### 2026-08-01 · V\n\nmás\n\n### 2026-08-01 · V\n";
     const { codigo, salida } = correr(...par(ESTADO_SANO, tresVeces));
