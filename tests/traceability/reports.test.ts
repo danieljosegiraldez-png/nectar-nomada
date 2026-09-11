@@ -25,6 +25,11 @@ const RUN_ID = `t13-report-${Date.now()}`;
 
 let organizationId: string;
 let projectId: string;
+// El SEGUNDO proyecto también recibe un Scope en `assignFarmOperator`, y su id
+// vivía sólo dentro de `beforeAll`: la limpieza borraba el Scope del primero y
+// dejaba el del otro, uno por corrida. Medido el 2026-09-11 aislando este
+// archivo: +1 huérfano, y la prueba en verde.
+let otherProjectId: string;
 let locationId: string;
 let authorizedUserAccountId: string;
 let wrongProjectUserAccountId: string;
@@ -78,6 +83,7 @@ beforeAll(async () => {
   await assignFarmOperator(authorizedUserAccountId, projectId);
 
   const otherProject = await prisma.project.create({ data: { name: `TEST Other Project (${RUN_ID})`, status: "approved", classification: "internal" } });
+  otherProjectId = otherProject.id;
   wrongProjectUserAccountId = await createTestUserAccount("WrongProjectOperator");
   await assignFarmOperator(wrongProjectUserAccountId, otherProject.id);
 
@@ -215,7 +221,7 @@ afterAll(async () => {
 
   const userAccountIds = [authorizedUserAccountId, wrongProjectUserAccountId];
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: [projectId] } }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: [projectId, otherProjectId] } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ name: { contains: RUN_ID } }) });
