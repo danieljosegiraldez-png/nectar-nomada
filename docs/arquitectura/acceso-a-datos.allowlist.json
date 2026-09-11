@@ -614,6 +614,12 @@
       "operacion": "canalesDe",
       "razon": "A9.11 — lectura sobre un personId que resuelve quien ya decidió a quién está avisando. No pide userAccountId a propósito: misma disciplina que leerEnmiendas, vitalesDeSitios, densidadDePolinizacion y resumenDeVisita — un lector que exige principal parece una compuerta y termina usándose como tal. Devuelve preferencia y entregabilidad, no datos de contacto: la dirección concreta sigue viviendo en Person.email/phone y no se copia. La ESCRITURA hermana, declararCanal, recibe el actor y lo audita.",
       "verificado": "2026-09-09"
+    },
+    {
+      "archivo": "lib/traceability/selection.ts",
+      "operacion": "codigosYaDerivadosDe",
+      "razon": "No recibe principal A PROPOSITO. Devuelve solo CODIGOS de lote de la misma organizacion que un lote que su unico llamador —app/lots/[id]/page.tsx— ya cargo con su propio guardia, para sugerir el siguiente sufijo libre y no reclamar uno con dueno. Darle compuerta propia crearia dos sitios donde decidir lo mismo, y por eso ni siquiera acepta userAccountId: para que no parezca que autoriza. Si alguna vez se llama desde una ruta que no haya autorizado antes el lote, esta linea es la que hay que releer.",
+      "verificado": "2026-09-11"
     }
   ]
 }

@@ -28,7 +28,7 @@ import { PhotoUploadForm } from "../../components/traceability/PhotoUploadForm";
 import { LabourEntryForm } from "../../components/traceability/LabourEntryForm";
 import { MaterialConsumptionForm } from "../../components/traceability/MaterialConsumptionForm";
 import { SelectionForm } from "../../components/traceability/SelectionForm";
-import { getSelectionCatalogs, getSelectionOutturn } from "../../../lib/traceability/selection";
+import { getSelectionCatalogs, getSelectionOutturn, codigosYaDerivadosDe } from "../../../lib/traceability/selection";
 import { getPerfilDeTuesteElegido } from "../../../lib/traceability/roasting";
 import { listRecipeVersionsForLot } from "../../../lib/traceability/processTargets";
 import { PerfilOptimoForm } from "../../components/traceability/PerfilOptimoForm";
@@ -184,6 +184,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   // this does not need to ask whether sorting already happened.
   const canSelect = lot.lotType === "cherry" && !activeFermentation && !activeDrying;
   const selectionCatalogs = canSelect ? await getSelectionCatalogs() : null;
+  // Los códigos que ya cuelgan de este batch, para que la pantalla sugiera el
+  // siguiente libre y no uno que abortaría la transacción.
+  const codigosTomados = canSelect ? await codigosYaDerivadosDe(lot.id) : [];
 
   // P3 §6 follow-through — a selection recorded against this batch produced an
   // outturn, and the outturn is the number a producer actually asks for. It was
@@ -601,6 +604,8 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           {puedeRegistrar ? (
             <SelectionForm
               lotId={lot.id}
+              lotCode={lot.lotCode}
+              codigosTomados={codigosTomados}
               lotType={lot.lotType}
               currentQuantity={quantity.recorded ? Number(quantity.quantity) : null}
               unit={quantity.unit ?? "kg"}

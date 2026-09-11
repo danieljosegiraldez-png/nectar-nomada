@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordSelectionFormAction } from "../../actions/traceability";
+import { codigosDerivados } from "../../../lib/traceability/codigosDerivados";
 
 export interface CatalogOption {
   id: string;
@@ -32,6 +33,8 @@ interface RejectionRow {
  */
 export function SelectionForm({
   lotId,
+  lotCode,
+  codigosTomados,
   lotType,
   currentQuantity,
   unit,
@@ -39,6 +42,10 @@ export function SelectionForm({
   categories,
 }: {
   lotId: string;
+  /** El código del batch que entra. Los de salida se derivan de él. */
+  lotCode: string;
+  /** Los que ya cuelgan de ese código: no se reclaman dos veces. */
+  codigosTomados: readonly string[];
   lotType: string;
   /** The lot's computed balance, or null when it has never been weighed. */
   currentQuantity: number | null;
@@ -54,7 +61,18 @@ export function SelectionForm({
   const [inputQuantity, setInputQuantity] = useState(currentQuantity != null ? String(currentQuantity) : "");
   const [acceptedQuantity, setAcceptedQuantity] = useState("");
   const [declaredLoss, setDeclaredLoss] = useState("");
-  const [rows, setRows] = useState<RejectionRow[]>([{ key: 0, categoryId: "", lotCode: "", quantity: "" }]);
+  // **Los códigos se sugieren, no se imponen.** Se derivan del padre siguiendo
+  // la convención que el dueño ya usa —`PE-90` produjo `PE-90-A` y `PE-90-B`— y
+  // siguen siendo editables: el operador puede tener una razón que el sistema no
+  // conoce. Se calculan al crear cada fila y no en cada render, para que
+  // escribir uno a mano no se pise al añadir la fila siguiente.
+  const siguiente = (usados: readonly string[]) =>
+    codigosDerivados(lotCode, 1, [...codigosTomados, ...usados.filter(Boolean)])[0] ?? "";
+
+  const [acceptedLotCode, setAcceptedLotCode] = useState(() => siguiente([]));
+  const [rows, setRows] = useState<RejectionRow[]>(() => [
+    { key: 0, categoryId: "", lotCode: siguiente([codigosDerivados(lotCode, 1, [...codigosTomados])[0] ?? ""]), quantity: "" },
+  ]);
 
   const num = (v: string) => {
     const n = Number(v);
@@ -72,7 +90,18 @@ export function SelectionForm({
   const withinTolerance = Math.abs(unexplained) <= tolerance;
   const hasInput = input > 0;
 
-  const addRow = () => setRows((r) => [...r, { key: (r.at(-1)?.key ?? 0) + 1, categoryId: "", lotCode: "", quantity: "" }]);
+  // El código de la fila nueva salta los que ya están puestos —incluido el
+  // aceptado y cualquiera que el operador haya escrito a mano.
+  const addRow = () =>
+    setRows((r) => [
+      ...r,
+      {
+        key: (r.at(-1)?.key ?? 0) + 1,
+        categoryId: "",
+        lotCode: siguiente([acceptedLotCode, ...r.map((x) => x.lotCode)]),
+        quantity: "",
+      },
+    ]);
   const removeRow = (key: number) => setRows((r) => (r.length > 1 ? r.filter((x) => x.key !== key) : r));
   const updateRow = (key: number, patch: Partial<RejectionRow>) =>
     setRows((r) => r.map((x) => (x.key === key ? { ...x, ...patch } : x)));
@@ -124,7 +153,14 @@ export function SelectionForm({
         <legend style={{ fontWeight: 600 }}>{t("selectionAcceptedHeading")}</legend>
         <div className="nn-field">
           <label htmlFor="sel-acc-code">{t("selectionAcceptedLotCodeLabel")}</label>
-          <input id="sel-acc-code" name="acceptedLotCode" type="text" required />
+          <input
+            id="sel-acc-code"
+            name="acceptedLotCode"
+            type="text"
+            required
+            value={acceptedLotCode}
+            onChange={(e) => setAcceptedLotCode(e.target.value)}
+          />
         </div>
         <div className="nn-field">
           <label htmlFor="sel-acc-qty">{t("selectionAcceptedQuantityLabel", { unit })}</label>
