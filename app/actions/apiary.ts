@@ -20,7 +20,7 @@ import { requestApiaryAssetUpload, finalizeApiaryAssetUpload } from "../../lib/a
 import type { RecordInspectionInput } from "../../lib/apiary/inspections";
 import type { RecordColonyEventInput } from "../../lib/apiary/colonyEvents";
 import type { ApiaryAssetParent } from "../../lib/apiary/media";
-import { parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
+import { fechaDeDia, parseLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
 
 const emptyToNull = (value: FormDataEntryValue | null) => {
   const str = String(value ?? "").trim();
@@ -69,7 +69,12 @@ export async function createHiveFormAction(formData: FormData): Promise<void> {
     identifier: String(formData.get("identifier") ?? ""),
     locationId,
     projectId: emptyToNull(formData.get("projectId")),
-    installedAt: parseOptionalLocalDateTime(String(formData.get("installedAt") ?? ""), String(formData.get(TZ_OFFSET_FIELD) ?? "")),
+    // DÍA, no instante. Hasta el 2026-09-11 esto usaba el parser de instantes,
+    // que exige el desfase de zona y **lanza si falta** — y `NewHiveForm` no lo
+    // manda. Crear una colmena CON fecha de instalación reventaba la página con
+    // un `digest`; sin fecha funcionaba, que es por qué pasó desapercibido.
+    // Nadie instala una colmena «a las 10:30»: es un día.
+    installedAt: fechaDeDia(formData.get("installedAt") as string | null, "installedAt"),
   });
 
   revalidatePath(`/apiaries/${locationId}`);

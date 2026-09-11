@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
-import {
+import { fechaDeDia as fechaDeDiaCompartida, FechaDeDiaInvalida,
   parseLocalDateTime,
   parseOptionalLocalDateTime,
   LocalDateTimeError,
@@ -1344,20 +1344,21 @@ export async function recordLabMeasurementAction(
  * del dispositivo que sí necesita `datetime-local` (ver `fechaLocal`). Un lote
  * de biochar se anota por día; nadie registra a qué hora se apagó el horno.
  */
+// La lógica subió a `lib/time/localDateTime.ts` el 2026-09-11 para que haya UNA
+// fuente: de un archivo `"use server"` no se puede exportar, así que
+// `app/actions/apiary.ts` no podía reutilizarla y acabó parseando su campo de día
+// con el parser de instantes — un fallo real, con `digest`, al crear una colmena
+// con fecha. Aquí queda el envoltorio que lee el `FormData`; la regla del día y
+// la comprobación del 31 de febrero viven en un solo sitio.
 const fechaDeDia = (formData: FormData, campo: string) => {
-  const raw = String(formData.get(campo) ?? "").trim();
-  if (!raw) return null;
-  const dia = raw.slice(0, 10);
-  const fecha = new Date(`${dia}T00:00:00Z`);
-  // `new Date("2026-02-31T00:00:00Z")` **no falla**: normaliza al 3 de marzo.
-  // Un día que no existe se convertía en silencio en otro hecho histórico. El
-  // `type="date"` del navegador lo evita, pero una llamada directa no pasa por
-  // ahí — y el formulario no es la frontera (SECURITY.md §2). Lo encontró la
-  // cuarta revisión independiente.
-  if (Number.isNaN(fecha.getTime()) || fecha.toISOString().slice(0, 10) !== dia) {
-    throw new FechaInvalidaError(`fecha_invalida:${campo}:${dia}`);
+  try {
+    return fechaDeDiaCompartida(formData.get(campo) as string | null, campo);
+  } catch (error) {
+    // Se re-envuelve en el error LOCAL porque los `catch` de este archivo lo
+    // nombran, y cambiarlos sería un cambio mucho mayor que el arreglo.
+    if (error instanceof FechaDeDiaInvalida) throw new FechaInvalidaError(error.message);
+    throw error;
   }
-  return fecha;
 };
 
 /**

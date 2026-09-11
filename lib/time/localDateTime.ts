@@ -90,3 +90,45 @@ export function paraCampoLocal(instante: Date): string {
   const comoSiFueraUtc = new Date(instante.getTime() - desfase * 60_000);
   return comoSiFueraUtc.toISOString().slice(0, 16);
 }
+
+/** Un día que el POST trae y no existe en el calendario. */
+export class FechaDeDiaInvalida extends Error {}
+
+/**
+ * Un campo de DÍA, no un instante: `<input type="date">` → medianoche UTC.
+ *
+ * **Por qué no lleva desfase de zona, y por qué eso NO es el fallo que
+ * `parseLocalDateTime` arregla.** Una cadena ISO de sólo fecha se interpreta en
+ * UTC por especificación, así que la ida y vuelta cierra con
+ * `toISOString().slice(0, 10)`. Convertir un día a la zona del dispositivo lo
+ * movería **un día hacia atrás**: sería introducir el fallo, no arreglarlo. La
+ * distinción entera está en la cabecera de `lib/time/mostrarInstante.ts`, y se
+ * decide mirando cómo se PARSEA el campo, no cómo se muestra.
+ *
+ * **Por qué vive aquí y no en una acción.** Esta lógica existía —correcta— dentro
+ * de `app/actions/traceability.ts`, y de un archivo `"use server"` sólo se pueden
+ * exportar funciones `async`: una clase de error rompe el build entero (69
+ * errores desde una línea; está escrito en `CLAUDE.md`). Así que no se podía
+ * compartir, y el 2026-09-11 eso costó un fallo real: `createHiveFormAction`
+ * parseaba su `installedAt` —un `type="date"`— con el parser de INSTANTES, que
+ * exige desfase y **lanza si falta**. El formulario no lo manda, así que crear
+ * una colmena con fecha de instalación reventaba la página con un `digest`. De
+ * los siete campos `type="date"` del proyecto, era el único parseado así.
+ *
+ * Ausente devuelve `null`. Que una fecha ausente sea un error o no lo decide
+ * quien llama, no esto.
+ */
+export function fechaDeDia(raw: string | null | undefined, campo: string): Date | null {
+  const limpio = String(raw ?? "").trim();
+  if (!limpio) return null;
+  const dia = limpio.slice(0, 10);
+  const fecha = new Date(`${dia}T00:00:00Z`);
+  // `new Date("2026-02-31T00:00:00Z")` **no falla**: normaliza al 3 de marzo. Un
+  // día que no existe se convertiría en silencio en otro hecho histórico. El
+  // `type="date"` del navegador lo evita, pero una llamada directa no pasa por
+  // ahí — y el formulario no es la frontera (`SECURITY.md` §2).
+  if (Number.isNaN(fecha.getTime()) || fecha.toISOString().slice(0, 10) !== dia) {
+    throw new FechaDeDiaInvalida(`fecha_invalida:${campo}:${dia}`);
+  }
+  return fecha;
+}
