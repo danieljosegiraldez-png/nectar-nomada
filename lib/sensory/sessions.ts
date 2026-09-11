@@ -54,6 +54,19 @@ export async function listarMuestrasParaCata(userAccountId: string) {
   // Se acepta `view` O `manage` porque `can()` exige la clave exacta —`manage`
   // no implica `view`— y quien ya tenía `sample:manage` (Farm Operator, admin)
   // debe seguir pudiendo elegir sin tocarle el perfil.
+  // **De qué café es cada muestra, no sólo su código.** Daniel, 2026-09-11,
+  // probando la pantalla: «samples in session just give me one bulk option for
+  // all, says 111 - green coffee» y «i think there is a mistake trying to select
+  // which coffee». No era un fallo del selector —en la base hay UNA muestra— y
+  // tampoco de los códigos ciegos: era que «111 · green_coffee» no dice de qué
+  // café se trata. `Sample.sourceLotId` lo sabe desde que existe
+  // `createSampleFromLot`; la lista sencillamente no lo leía.
+  //
+  // Se traen el código del batch, la finca y el grado del proceso, porque son
+  // los tres que un catador usa para reconocer un café. El grado viene del
+  // proceso ABIERTO más reciente de ese batch: un batch puede llevar varios
+  // procesos en secuencia, y el que describe la muestra es el último, no el
+  // primero.
   const candidatas = await prisma.sample.findMany({
     select: {
       id: true,
@@ -63,6 +76,17 @@ export async function listarMuestrasParaCata(userAccountId: string) {
       projectId: true,
       locationId: true,
       classification: true,
+      sourceLot: {
+        select: {
+          lotCode: true,
+          organization: { select: { name: true } },
+          lotProcesses: {
+            select: { processGradeValue: { select: { value: true } } },
+            orderBy: { sequenceOrder: "desc" },
+            take: 1,
+          },
+        },
+      },
     },
     orderBy: { sampleCode: "asc" },
     take: 500,
@@ -73,11 +97,17 @@ export async function listarMuestrasParaCata(userAccountId: string) {
     if (await puedeVerMuestra(userAccountId, m)) visibles.push(m);
     if (visibles.length >= 200) break;
   }
-  return visibles.map(({ id, sampleCode, sampleType, description }) => ({
+  return visibles.map(({ id, sampleCode, sampleType, description, sourceLot }) => ({
     id,
     sampleCode,
     sampleType,
     description,
+    // Null, no cadena vacía: una muestra externa no tiene batch de origen
+    // (`recordExternalCoffeeSample` deja `sourceLotId` sin poner a propósito), y
+    // eso es un hecho distinto de «no lo sé».
+    lotCode: sourceLot?.lotCode ?? null,
+    organizationName: sourceLot?.organization?.name ?? null,
+    processGrade: sourceLot?.lotProcesses[0]?.processGradeValue?.value ?? null,
   }));
 }
 

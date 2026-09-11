@@ -105,6 +105,38 @@ peso, Brix y una **«condición» de texto libre** — mientras que **siete de l
 nueve catálogos de cereza no los lee ninguna línea**: `cereza_condicion_visual`,
 `_limpieza`, `_color`, `_firmeza`, `_densidad`, `_tamano_forma`, `_defectos`.
 El vocabulario para las «vital statistics» de la cereza está escrito y sin puerta.
+### 2026-09-11 · «111 · green_coffee» no dice qué café vas a catar
+
+Daniel, probando: «samples in session just give me one bulk option for all, says
+111 - green coffee» y «i think there is a mistake trying to select which
+coffee». **Ni el selector ni los códigos ciegos estaban mal.** En toda la base
+hay **una** muestra —código `111`, tipo `green_coffee`, sin descripción—, así
+que ofrecía lo único que existe, y «Muestra A = 111» era el código ciego
+funcionando. Lo que fallaba: la etiqueta no dice **de qué café** es.
+
+`Sample.sourceLotId` lo sabe desde que existe `createSampleFromLot`. La consulta
+no lo leía. Ahora la lista trae **código · batch · finca · grado del proceso**,
+con el grado del proceso más reciente del batch —no el primero—. Dos pruebas, y
+la segunda es la que hace valer a la primera: una muestra **sin** batch tiene que
+salir en `null`, porque si `lotCode` saliera siempre relleno la primera no
+demostraría que lee el lote.
+
+**Lo que se midió de camino y NO se tocó**, porque son decisiones del dueño:
+
+- **El SCA-103 contradice «no cateamos verde».** Su §2: «diseñado para la
+  evaluación descriptiva de **café verde arábica**, preparado y catado según el
+  **SCA-102**». El verde no va a la taza, pero es el sujeto al que el CVA le
+  cuelga la evaluación. Lo que falta es el 102 en medio — y ese PDF **no está**
+  entre los siete que hay.
+- **Ya se pueden leer los PDF cifrados** (autorización de Daniel): `qlmanage` y
+  `pdfjs-dist` en carpeta temporal, sin forzar nada. El 103 leído entero: siete
+  escalas 0-15 y CATA con topes (5 olfativos, 2 sabores, 2 de cuerpo).
+- **El protocolo no guarda la preparación.** Los 12-13 g / 200 ml / 93-94 °C
+  caben hoy sólo en `preparationMethod`, texto libre. Dos catas del mismo
+  protocolo pueden no ser comparables y nada lo sabe.
+- **Un tueste no produce muestra de cata.** Hay pantalla de tueste y pantalla de
+  muestra-desde-batch, y **ningún puente**: la cadena `batch → tueste → muestra`
+  de §23 se corta en medio.
 
 ### 2026-09-11 · «Todas las colonias con varroa esta temporada» ya es una consulta
 
@@ -144,34 +176,6 @@ complacer a un regex.
 
 **Lo que NO está:** el reporte **no tiene pantalla**. Existe, está probado con
 nueve casos —tres con control positivo— y nadie lo ha visto dibujado.
-### 2026-09-11 · El 404 de Google era una dirección clavada en el sitio vecino
-
-Daniel probó «Continuar con Google» y recibió un **404**. No era Google:
-producción anunciaba de sí misma
-`"callbackUrl": "https://www.nectarnomada.com/api/auth/callback/google"` — el
-dominio de marca, que **desde el 2026-08-28 sirve el sitio editorial**. Con
-control positivo: esa dirección da **404** y la misma ruta en `.vercel.app` da
-**302**. Google autenticaba bien y devolvía al usuario al vecino, así que **el
-404 llegaba después de Google** y parecía culpa del proveedor.
-
-**Por qué tardó semanas en verse:** el usuario y contraseña nunca se rompieron.
-Ese formulario se manda a la página donde ya estás, sin dirección absoluta.
-**Sólo OAuth necesita que la aplicación sepa nombrarse**, y ahí muerde. Nathy
-llevaba sin poder entrar desde entonces.
-
-**Lo que entra, y lo que NO puede entrar.** Daniel pidió que la aplicación
-deduzca su dirección sola. Leyendo la librería resultó que eso no se programa:
-`next-auth/lib/env.js` reescribe el origen de **cada** petición al de
-`AUTH_URL ?? NEXTAUTH_URL` en cuanto una existe, antes de leer nuestra
-configuración. La variable se **borra** o gana la variable. Borrarla es seguro
-porque `@auth/core` ya enciende `trustHost` con la variable `VERCEL`. Queda en
-**ADR-113**, fuera de `.env.example`, y con un guardia
-(`lib/auth/direccionFijada.ts`) que **avisa, no corrige**: si la dirección
-clavada discrepa del anfitrión que sirve, `/login` no pinta el botón y dice por
-qué. Ocho pruebas con entrada hostil.
-
-**Sigue pendiente de Daniel** y no lo puede hacer el código: borrar la variable
-en Vercel y registrar el callback de `.vercel.app` en Google Cloud Console.
 
 ## 3. Bloqueado, y en qué
 
