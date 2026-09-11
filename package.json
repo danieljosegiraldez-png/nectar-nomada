@@ -17,6 +17,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "limpiar:audit": "tsx scripts/limpiar-audit-de-pruebas.ts",
     "backup:db": "bash scripts/backup/backup-db.sh",
     "backup:verify": "bash scripts/backup/verify-restore.sh",
     "secrets:seal": "bash scripts/backup/secrets-seal.sh",
