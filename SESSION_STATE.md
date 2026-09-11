@@ -37,6 +37,30 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-10 · La limpieza que no corre cuando la aserción falla
+
+«Cuántos sitios de apiario hay» devolvía **3** con dos reales: el tercero era
+una `Location` de prueba del 2026-09-08, con 15 filas de su corrida detrás.
+
+**La causa no era la que parecía.** El `afterAll` de `polinizacion.test.ts` sí
+borraba la `Location`; no llegaba. Los dos `it` que crean una `FieldSession` la
+borraban **debajo de las aserciones**, y una aserción que falla se salta ese
+borrado. `field_session.location_id` es `RESTRICT`, así que el `afterAll` murió
+ahí y abandonó las seis líneas siguientes: **es una cadena, y la primera FK que
+se queja tira el resto.** `assertDefinedWhere` no lo cubre —su `where` estaba
+perfectamente definido—, y por eso la trampa quedó escrita en `CLAUDE.md`.
+
+Esa limpieza pasa a un `afterEach`; el `afterAll` se completa con `FieldSession`,
+`Scope` y `AuditEvent` —antes de borrar la cuenta, que la FK es `SET NULL`—. El
+mismo `Scope` huérfano estaba en otras cinco pruebas. Aparte, barridas 36 filas
+de la base **local**, con fila patrón y ensayo en seco; sin `test:db -- reset`,
+que hay una migración sin fusionar de otra sesión.
+
+**El flip-test es la parte que vale: las dos versiones dicen 55/55.** La vieja
+deja +6 `Scope` huérfanos por corrida y la nueva +0; mutando una aserción, la
+vieja tumba **2** y deja **7 filas**, la nueva tumba 1 y deja 0. Una compuerta
+que sólo mira el color no ve esa diferencia.
+
 ### 2026-09-10 · «Cierra la visita» justo despues de cerrarla
 
 Barriendo el repositorio por el patron que ya mordio dos veces esta semana
@@ -130,54 +154,7 @@ metiéndole `recommendation` —un valor del enum sin etiqueta— y viéndolo ca
 **Lo que se señala y NO se tocó, en ese mismo archivo:** un `" (origen
 desconocido)"` en español metido a mano en el código, y dos opciones `true` /
 `false` sin traducir. Son la misma familia y otro arreglo.
-### 2026-09-09 · Por qué se perdió una colonia: quince causas, ninguna inventada
 
-El comentario de `Colony.endedAt` decía —con razón para su día— que el
-vocabulario de causas «es conocimiento del dueño: se le pregunta, no se
-inventa». Se preguntó. La respuesta cambió el diseño dos veces: **hay varias
-causas por pérdida**, así que no cabe en una columna **ni en una FK**; y el
-vocabulario había que sacarlo de la documentación existente, no de mi cabeza.
-
-**Lo que se midió antes de proponer nada.** En el repositorio **no había**
-ningún vocabulario de causas (grep con control positivo). Lo que sí había es el
-Anexo B §2.3 con catorce «irregularidades», que son otra pregunta: lo que se ve
-en una inspección, no por qué se perdió. Y los datos reales del apiario son **2
-sitios, 2 colmenas, 2 colonias, 1 inspección y CERO pérdidas** — de ahí no se
-deduce nada, así que o venía de fuera o me lo inventaba yo.
-
-**Vino de fuera, y de tres sitios que se nombran valor por valor:** el estándar
-internacional de monitoreo de pérdidas —COLOSS y su versión latinoamericana de
-SOLATINA, **donde Panamá participa**, con sus tres categorías—; el Anexo B del
-propio dueño, del que entran las banderas que son causa de *pérdida*; y los
-casos que los documentos de la finca ya registran, como la hipótesis de Toabré
-—un frente frío de enero con una poda que cortó la floración—.
-
-**Cada causa dice cómo se supo**, y eso no es adorno: una causa de pérdida casi
-nunca se ve, se deduce de una caja vacía dos semanas después. El propio
-cuestionario internacional pregunta por «hambre sospechada». `provenanceClass`
-es obligatorio, **sin valor por defecto** —el defecto convertiría cada sospecha
-en observación— y acotado a tres: lo sospecho, lo concluí, lo vi.
-
-**`ColonyStatus` gana `combined`** (decisión del dueño). El estándar cuenta como
-pérdida la colonia con problema de reina irresoluble: viva, no recuperable, se
-combina. Sin ese estado se quedaba `active` para siempre inflando el conteo de
-polinización con abejas que ya no están en esa caja.
-
-**Y un agujero que destapó el guardia de OTRA sesión.** El PR #255 añadió
-`procedencia-declarada.test.ts`, que prohíbe meter la cadena de un formulario en
-un enum con `as never` — y cazó mi propia acción. Al arreglarlo apareció el
-segundo, peor: el servicio escribía `input.status` **sin mirarlo**, así que un
-envío con `status=active` pasaba el `where` y dejaba la fila con **`active` y
-`ended_at` puesto** — una colonia viva con fecha de muerte. Ahora hay
-`ESTADOS_DE_FIN` declarado, `exigeEstadoDeFin` en la acción y la misma
-comprobación en la frontera, porque el servicio también se llama desde la cola de
-sincronización, sin formulario.
-
-**Y lo que el flip-test destapó, que es la parte que vale.** Siete mutaciones,
-las siete cazadas por su prueba y compilando — pero a la primera vuelta **una
-no cayó**: la prueba de «misma causa dos veces» afirmaba la CLASE del error y
-pasaba con el guardia quitado, porque el `in` de Prisma deduplica y saltaba otro
-error de la misma clase. Era un adorno. Ahora afirma el mensaje.
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
