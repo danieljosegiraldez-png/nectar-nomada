@@ -2009,3 +2009,30 @@ metiéndole `recommendation` —un valor del enum sin etiqueta— y viéndolo ca
 **Lo que se señala y NO se tocó, en ese mismo archivo:** un `" (origen
 desconocido)"` en español metido a mano en el código, y dos opciones `true` /
 `false` sin traducir. Son la misma familia y otro arreglo.
+
+### 2026-09-10 · El informe de la visita existía y no había puerta
+
+Recorriendo el flujo del apicultor **pantalla por pantalla** —no por servicio—
+aparecio que `emitirReporteDeVisita` **no lo llamaba nadie**. La pagina del
+informe lee lo congelado y hace `notFound()` si no hay nada, asi que cerrar una
+visita y pulsar «informe» daba **404**. Igual `publicarReporteConEnlace`,
+`abrirReportePorEnlace` y `revocarEnlace`: los cuatro servicios existian desde
+A9.6, con sus pruebas, y **ninguna pantalla los tocaba**.
+
+Es la tercera vez esta semana con la misma forma —el apiario, el informe
+externo, esto—: **el servicio hecho y la puerta sin poner**. El sintoma no es un
+error; es que no hay por donde.
+
+**Lo que entra:** emitir el informe desde la visita cerrada; publicar el enlace
+para un supervisor, que **se enseña una sola vez** porque la base guarda el
+token hasheado; `/informe/[token]`, **publica y sin sesion** —el token ES la
+autorizacion—; y la lista de enlaces entregados con su boton de cortar.
+
+**Revocar hacia falta o el enlace era un viaje de ida.** `revocarEnlace` pedia
+el id de la publicacion y nada lo devolvia a una pantalla. Ahora
+`enlacesPublicadosDeVisita` lo da — **sin el token, ni hasheado**: la pantalla
+revoca por id, y devolver la cerradura la enseñaria sin razon.
+
+**Lo que NO hizo falta probar de nuevo:** el ciclo del enlace ya estaba cubierto
+—token inventado, caducado, revocado, sin emitir, y RBAC en publicar y revocar—.
+Lo nuevo es el lector, con su puerta y su flip.

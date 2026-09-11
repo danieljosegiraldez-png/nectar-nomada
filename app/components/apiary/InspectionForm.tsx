@@ -15,7 +15,21 @@ import { APIARY_DRAFTS_CHANGED_EVENT } from "./OfflineSyncIndicator";
  * case feel instant regardless of signal, and is what makes submission
  * itself never fail — only the later sync can.
  */
-export function InspectionForm({ colonyId, selfPersonId }: { colonyId: string; selfPersonId: string | null }) {
+export interface IrregularidadOfrecida {
+  id: string;
+  value: string;
+  definition: string | null;
+}
+
+export function InspectionForm({
+  colonyId,
+  selfPersonId,
+  irregularidades,
+}: {
+  colonyId: string;
+  selfPersonId: string | null;
+  irregularidades: readonly IrregularidadOfrecida[];
+}) {
   const t = useTranslations("Apiary");
   const [showDetails, setShowDetails] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
@@ -25,6 +39,8 @@ export function InspectionForm({ colonyId, selfPersonId }: { colonyId: string; s
   const [stores, setStores] = useState("");
   const [temperament, setTemperament] = useState("");
   const [pest, setPest] = useState("");
+  /** Los ids marcados. Un Set porque la pregunta es «¿está marcada?», no «¿en qué orden?». */
+  const [marcadas, setMarcadas] = useState<ReadonlySet<string>>(new Set());
   const [note, setNote] = useState("");
 
   async function submitRoutine() {
@@ -59,6 +75,7 @@ export function InspectionForm({ colonyId, selfPersonId }: { colonyId: string; s
         storesLevel: stores.trim() || null,
         temperamentNote: temperament.trim() || null,
         pestDiseaseFlags: pest.trim() || null,
+        irregularidades: [...marcadas],
         note: note.trim() || null,
       });
     } catch {
@@ -73,6 +90,7 @@ export function InspectionForm({ colonyId, selfPersonId }: { colonyId: string; s
     setStores("");
     setTemperament("");
     setPest("");
+    setMarcadas(new Set());
     setNote("");
   }
 
@@ -122,6 +140,34 @@ export function InspectionForm({ colonyId, selfPersonId }: { colonyId: string; s
             <label htmlFor={`insp-temperament-${colonyId}`}>{t("temperamentLabel")}</label>
             <input id={`insp-temperament-${colonyId}`} value={temperament} onChange={(e) => setTemperament(e.target.value)} />
           </div>
+          {/* Las irregularidades, como CASILLAS y no como texto.
+
+              El Anexo B §2.3 lo pide así —«lista de casillas, no texto libre»—
+              y dice por qué: una cadena no se puede contar, y «todas las
+              colonias con varroa esta temporada» es el reporte que hace falta.
+              El campo de texto sigue debajo para el «Otro» con que esa misma
+              lista termina. */}
+          <fieldset className="nn-field">
+            <legend>{t("irregularidadesLegend")}</legend>
+            {irregularidades.map((irr) => (
+              <label key={irr.id} htmlFor={`insp-irr-${irr.id}`} title={irr.definition ?? undefined}>
+                <input
+                  id={`insp-irr-${irr.id}`}
+                  type="checkbox"
+                  checked={marcadas.has(irr.id)}
+                  onChange={(e) =>
+                    setMarcadas((prev) => {
+                      const siguiente = new Set(prev);
+                      if (e.target.checked) siguiente.add(irr.id);
+                      else siguiente.delete(irr.id);
+                      return siguiente;
+                    })
+                  }
+                />{" "}
+                {irr.value}
+              </label>
+            ))}
+          </fieldset>
           <div className="nn-field">
             <label htmlFor={`insp-pest-${colonyId}`}>{t("pestDiseaseFlagsLabel")}</label>
             <input id={`insp-pest-${colonyId}`} value={pest} onChange={(e) => setPest(e.target.value)} />

@@ -5252,6 +5252,9 @@ model Inspection {
   queenSighted     Boolean?          @map("queen_sighted")
   storesLevel      String?           @map("stores_level")
   temperamentNote  String?           @map("temperament_note")
+  /// El «Otro» de la lista del Anexo B §2.3: lo que el catálogo de
+  /// irregularidades no cubre. Desde el 2026-09-11 ya **no** es el único sitio
+  /// donde vive el dato — ver `InspectionIrregularity`.
   pestDiseaseFlags String?           @map("pest_disease_flags")
   note             String?
   // Fixed to direct_observation at the action layer for every call site —
@@ -5282,12 +5285,58 @@ model Inspection {
 
   assets Asset[]
 
+  /// Las irregularidades vistas, del catálogo. Vacío es legítimo y frecuente:
+  /// una inspección «sin novedad» no tiene ninguna.
+  irregularities InspectionIrregularity[]
+
   /// A9.1 — el otro lado de la FK que `FieldEvent` gana para agrupar
   /// el trabajo de apiario dentro de una jornada.
   fieldEvents FieldEvent[]
 
   @@index([colonyId])
   @@map("inspection")
+  @@schema("apiary")
+}
+
+/// Una irregularidad vista en una inspección. **Varias por inspección.**
+///
+/// ## Qué cierra
+///
+/// `Inspection.pestDiseaseFlags` es una cadena, y el Anexo B §2.3 dice por qué
+/// eso no basta: *«Una cadena no se puede contar, y "todas las colonias con
+/// varroa esta temporada" es exactamente el reporte que hace falta.»* Medido el
+/// 2026-09-11: **ninguna línea de aplicación consulta esa columna** — sólo se
+/// escribe y se lee como prosa.
+///
+/// ## Por qué NO es el catálogo de causas de pérdida
+///
+/// Porque son dos preguntas distintas, y `ADR-111` ya lo dejó escrito al
+/// construir aquél: **lo que se OBSERVA en una inspección no es lo que MATÓ a
+/// la colonia.** Varroa vista en marzo en una colonia que sigue viva en
+/// diciembre es un dato de manejo, no una causa de muerte. Los vocabularios se
+/// solapan y aun así no son el mismo: moho, alas deformadas, olor anormal y
+/// disentería son señales de inspección y **no** están entre las causas de
+/// pérdida.
+///
+/// ## `pestDiseaseFlags` se queda, con su papel recortado
+///
+/// No se borra: es el «Otro | texto, siempre disponible» con que la propia
+/// lista del Anexo B termina. Deja de ser el único sitio donde vive el dato y
+/// pasa a ser el hueco para lo que el catálogo no cubre — mismo papel que
+/// `Colony.originNote` junto a `originSourceValueId`.
+model InspectionIrregularity {
+  id           String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  inspectionId String               @map("inspection_id") @db.Uuid
+  inspection   Inspection           @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  valueId      String               @map("value_id") @db.Uuid
+  value        VariableCatalogValue @relation("InspectionIrregularity", fields: [valueId], references: [id])
+  createdAt    DateTime             @default(now()) @map("created_at")
+
+  /// La misma bandera no se marca dos veces en la misma inspección: repetirla
+  /// no añade información y haría que el reporte contara doble.
+  @@unique([inspectionId, valueId])
+  @@index([valueId])
+  @@map("inspection_irregularity")
   @@schema("apiary")
 }
 
@@ -5695,6 +5744,7 @@ model VariableCatalogValue {
   lotProcessInterventions LotProcessIntervention[]     @relation("LotProcessInterventionKind")
   colonyOrigins           Colony[]                     @relation("ColonyOriginSource")
   colonyLossCauses        ColonyLossCause[]            @relation("ColonyLossCauseValue")
+  inspectionIrregularities InspectionIrregularity[]    @relation("InspectionIrregularity")
   gradeOfProcesses        LotProcess[]                 @relation("LotProcessGrade")
   cherryStateOfProcesses  LotProcess[]                 @relation("LotProcessCherryState")
 

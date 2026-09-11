@@ -5,7 +5,7 @@ import {
   LocationAccessError,
   type Coordinates,
 } from "../traceability/fieldSessions";
-import { recordInspection } from "../apiary/inspections";
+import { recordInspection, InspectionValidationError } from "../apiary/inspections";
 import { recordColonyEvent, ColonyEventValidationError } from "../apiary/colonyEvents";
 import { ApiaryAccessError, ColonyEndError, registrarFinDeColonia } from "../apiary/hives";
 import { ClaseDeCausaInvalida, exigeClaseDeCausa } from "../apiary/causaDePerdida";
@@ -92,6 +92,13 @@ export type MutacionDeInspeccion = {
   storesLevel?: string | null;
   temperamentNote?: string | null;
   pestDiseaseFlags?: string | null;
+  /**
+   * Las banderas del catálogo, por id. Viajan en la mutación porque una
+   * inspección con hallazgo se anota en el campo, sin señal: dejarlas fuera
+   * habría hecho que sólo se pudieran marcar con cobertura, que es exactamente
+   * el hueco que esta cola existe para cerrar.
+   */
+  irregularidades?: readonly string[];
   note?: string | null;
 };
 
@@ -174,6 +181,7 @@ async function aplicarMutacionDeApiario(
             storesLevel: m.storesLevel ?? null,
             temperamentNote: m.temperamentNote ?? null,
             pestDiseaseFlags: m.pestDiseaseFlags ?? null,
+            irregularidades: m.irregularidades ?? [],
             note: m.note ?? null,
             clientDraftId: m.clientDraftId,
           })
@@ -197,7 +205,11 @@ async function aplicarMutacionDeApiario(
     // Un fallo de PERMISO o de VALIDACIÓN es un rechazo del servidor: se
     // informa y el borrador se descarta. Cualquier otra cosa se relanza, para
     // que un corte de base no borre trabajo de campo disfrazado de dato malo.
-    if (error instanceof ApiaryAccessError || error instanceof ColonyEventValidationError) {
+    if (
+      error instanceof ApiaryAccessError ||
+      error instanceof ColonyEventValidationError ||
+      error instanceof InspectionValidationError
+    ) {
       return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
     }
     throw error;
