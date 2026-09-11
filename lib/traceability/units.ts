@@ -566,3 +566,31 @@ export function boundsFor(variable: string): { canonicalUnit: string; min: numbe
   const d = REGISTRY[variable];
   return { canonicalUnit: d.canonicalUnit, min: d.min, max: d.max };
 }
+
+/**
+ * Las unidades que una variable admite, en orden, con la canónica primero.
+ *
+ * **Por qué existe (2026-09-11).** El formulario de medición pedía la unidad en
+ * una **caja de texto libre**, obligatoria, con la pista «C, pH, Bx, %, aw». De
+ * las seis variables que ofrece, **cinco admiten una sola unidad**: escribirla
+ * era teclear a mano una respuesta que el registro ya conoce, y equivocarse al
+ * teclearla era un rechazo. Daniel, probándolo: «its like you are trying to make
+ * me work more».
+ *
+ * Con esto la pantalla puede decidir: una sola → no se pregunta; varias → un
+ * desplegable con esas y sólo esas. El registro sigue siendo la única fuente,
+ * así que añadir una unidad a una variable cambia la pantalla sin tocarla.
+ *
+ * Devuelve `[]` si la variable no existe — y no lanza, porque quien pinta un
+ * formulario no debe reventar por un nombre desconocido; `normalizeToCanonical`
+ * ya rechaza en el envío, que es donde importa.
+ */
+export function unidadesAceptadas(variable: string): string[] {
+  if (!isKnownVariable(variable)) return [];
+  const def = REGISTRY[variable];
+  const canonica = def.canonicalUnit;
+  const resto = Object.keys(def.acceptedUnits).filter((u) => u !== canonica);
+  // La canónica primero: es la que el sistema guarda, y encabezar con ella hace
+  // que el valor por defecto de un desplegable sea el que no convierte nada.
+  return [canonica, ...resto];
+}

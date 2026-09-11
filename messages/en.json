@@ -1187,7 +1187,9 @@
     "visitColoniesAliveHelp": "Without this number there is no way to see loss without replacement.",
     "visitCompleteNotesLabel": "Closing notes (optional)",
     "visitCompleteReasonLabel": "Why it was completed this way (optional)",
-    "visitCompleteButton": "Complete visit"
+    "visitCompleteButton": "Complete visit",
+    "valueLabelWithUnit": "Value ({unit})",
+    "measuredAtLabel": "When it was measured"
   },
   "Apiary": {
     "badge": "Apiary",

@@ -189,6 +189,8 @@ const OPCION = /\{\(?([\w.?\s[\]]+?)\)?(?:\s*\?\?\s*\[\])?\)?\.map\(\((\w+)(?:,\
 const CRUDO_CON_RAZON: Record<string, string> = {
   "variable.enumValues":
     "No es un enum de Prisma: es la lista que el autor del protocolo congeló en esa versión —«río», «quebrada», «pozo», «red»—. Son datos, ya escritos en el idioma de quien los declaró, y un vocabulario abierto no tiene clave de traducción posible.",
+  unidades:
+    "Tampoco es un enum: son símbolos de unidad —C, F, pH, Bx, %, aw, mg/kg, ppm— que salen de `unidadesAceptadas` y son los MISMOS en los dos idiomas. Una clave `unidad_%` o `unidad_mg/kg` no traduciría nada y añadiría un sitio donde desincronizarse con el registro, que es la única fuente de qué unidades admite cada variable. Declarada el 2026-09-11, cuando el formulario de medición dejó de pedir la unidad escrita a mano.",
 };
 
 function opcionesDeDesplegable() {

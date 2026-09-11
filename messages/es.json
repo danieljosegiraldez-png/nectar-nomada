@@ -1187,7 +1187,9 @@
     "visitColoniesAliveHelp": "Sin este número no se puede ver «pérdida sin reposición».",
     "visitCompleteNotesLabel": "Notas de cierre (opcional)",
     "visitCompleteReasonLabel": "Por qué se completó así (opcional)",
-    "visitCompleteButton": "Completar visita"
+    "visitCompleteButton": "Completar visita",
+    "valueLabelWithUnit": "Valor ({unit})",
+    "measuredAtLabel": "Cuándo se midió"
   },
   "Apiary": {
     "badge": "Apiario",

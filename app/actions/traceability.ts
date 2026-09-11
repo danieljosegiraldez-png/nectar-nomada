@@ -314,7 +314,14 @@ export async function recordMeasurementAction(
       // exige, y el servicio ya distingue el 0 legítimo del ausente (ADR-080).
       value: requiredNumber(formData, "value"),
       unit: String(formData.get("unit") ?? ""),
-      occurredAt: new Date(),
+      // **Cuándo se MIDIÓ, no cuándo se guardó** (Daniel, 2026-09-11). Antes
+      // era `new Date()`: medir a las 7 y escribirlo a las 9 quedaba fechado a
+      // las 9, y en una fermentación la curva es el dato. Va por
+      // `parseLocalDateTime`, que combina el reloj de pared con el desfase del
+      // dispositivo — un `new Date(cadena)` lo interpretaría en la zona del
+      // SERVIDOR, que en producción es UTC, y guardaría un instante corrido
+      // cinco horas con aspecto de correcto.
+      occurredAt: fechaLocal(formData, "occurredAt"),
       notes: emptyToNull(formData.get("notes")),
       // Pre-existing gap fix: MeasurementForm now carries these as hidden
       // fields when rendered against an active FermentationRun/DryingRun/
