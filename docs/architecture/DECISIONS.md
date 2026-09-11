@@ -8038,3 +8038,68 @@ formulario.
 `db:seed`**, sin migración. Y si algún día se reporta a SOLATINA de verdad,
 habrá que mapear estos quince valores a sus tres categorías — el mapeo es
 posible porque cada valor dice de cuál viene.
+
+---
+
+## ADR-112 — La idempotencia de un UPDATE vive en la fila que actualiza, y el fin de colonia deja de tener camino en línea
+
+**Contexto.** La cola offline del apiario (A5/A0) aceptaba dos tipos de
+borrador: `inspection` y `colony_event`. El **fin de una colonia** no estaba, y
+es el hecho que más se descubre en el campo — una caja que aparece vacía.
+Mientras no hubiera cobertura no se podía anotar, y entre medias el conteo del
+sitio seguía contando colonias que ya no existen.
+
+**Decisión 1 — la clave de idempotencia va en `Colony.endClientDraftId`.**
+
+Las otras dos mutaciones son inserciones: su `clientDraftId` vive en la fila
+nueva, y el servidor pregunta por él antes de insertar. El fin de una colonia es
+un **UPDATE**: no hay fila nueva donde colgar la clave. Se pone en `Colony`,
+anulable y única.
+
+**Por qué hace falta, y es la mitad que importa.** Sin la clave, dos situaciones
+llegan al servicio como el mismo error, `colony_already_ended`:
+
+| Lo que pasó | Qué debe informar |
+|---|---|
+| Mi propio envío llegó y su respuesta se perdió | `duplicate` — se descarta en silencio |
+| Otra persona la dio por perdida antes | `rejected` — el operador tiene que verlo |
+
+Confundirlas haría que alguien descartara un aviso real, o que saltara una
+alarma por trabajo que sí se guardó. Con la clave, `aplicarFinDeColonia`
+distingue: misma clave ⇒ duplicado; terminada con otra clave o sin ninguna ⇒
+rechazo.
+
+**Decisión 2 — el formulario deja de tener acción de servidor.**
+
+`FinDeColoniaForm` era el único formulario de apiario que exigía red. Ahora
+escribe en IndexedDB como sus hermanos, y la acción `registrarFinDeColoniaFormAction`
+**se elimina**: mi propio cambio la dejó huérfana.
+
+**Lo que eso cuesta, dicho en voz alta.** El rechazo deja de ser inmediato. Sin
+permiso sobre el sitio, o si alguien llegó antes, eso ya no sale al pulsar: sale
+al sincronizar, marcado en la cola. Es el mismo trato que aceptan las otras dos
+pantallas de campo —la razón está escrita en `InspectionForm` desde A5: ninguna
+toca la red, así que **guardar no puede fallar**— y el precio de poder anotar sin
+cobertura. Para una transición de una vez el rechazo es más probable que en una
+inserción, y por eso se dice aquí en vez de descubrirse en el campo.
+
+**Un defecto que esto destapó, y que no era teórico.** La traducción del
+borrador al protocolo era `kind === "inspection" ? "inspection" : "colony_event"`.
+Con dos tipos funcionaba; con el tercero, **un fin de colonia habría llegado al
+servidor disfrazado de evento de colonia** y se habría rechazado por un campo
+que falta, no por lo que era. Ahora es un `Record<DraftKind, string>` total: un
+cuarto tipo no compila hasta que alguien lo nombre.
+
+**Cómo se comprueba.** `tests/sync/finDeColoniaSinSenal.test.ts`, cinco casos —
+aplicado con su causa y la fecha declarada, mismo borrador dos veces, otro
+borrador sobre una ya terminada, sin acceso, y una clase de causa inventada que
+se rechaza **sin abortar el lote** (con control positivo: la mutación siguiente
+sí se aplica). Más dos en `tests/apiary/offlineQueue.test.ts` sobre la
+traducción.
+
+**Flip-test: cinco mutaciones**, cada una tira la prueba que le toca por su
+nombre y las cinco compilan mutadas — incluida la de volver al ternario.
+
+**Qué queda fuera.** La pantalla no se abrió en un navegador: está detrás de
+`/login`. Y nadie ha anotado todavía una pérdida real desde un teléfono en el
+campo, que es la única prueba que cuenta.

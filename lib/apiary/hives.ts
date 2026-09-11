@@ -225,6 +225,12 @@ export interface RegistrarFinDeColoniaInput {
    */
   causas?: readonly CausaDeclarada[];
   /**
+   * La clave del borrador que declaró este fin, cuando viene de la cola
+   * offline. La web no la trae: un formulario con señal no necesita
+   * idempotencia porque no reintenta.
+   */
+  clientDraftId?: string | null;
+  /**
    * Texto libre, para lo que no cabe en ninguna causa. Sigue yendo al `reason`
    * del AuditEvent. Ya **no** es el único sitio donde vive el porqué: ese
    * párrafo, que este comentario tuvo hasta el 2026-09-09, dejó de ser cierto
@@ -312,7 +318,7 @@ export async function registrarFinDeColonia(userAccountId: string, input: Regist
   return prisma.$transaction(async (tx) => {
     const { count } = await tx.colony.updateMany({
       where: { id: input.colonyId, status: "active" },
-      data: { status: input.status, endedAt: input.endedAt },
+      data: { status: input.status, endedAt: input.endedAt, endClientDraftId: input.clientDraftId ?? null },
     });
     if (count === 0) throw new ColonyEndError("colony_already_ended");
 

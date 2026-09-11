@@ -109,7 +109,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                 {t("colonyEndedOn", { fecha: colony.endedAt.toISOString().slice(0, 10) })}
               </p>
             ) : (
-              <FinDeColoniaForm colonyId={colony.id} revalidationPath={revalidationPath} causas={causas} />
+              <FinDeColoniaForm colonyId={colony.id} causas={causas} />
             )}
             <ApiaryPhotoUploadForm
               parent={{ kind: "colony", colonyId: colony.id }}

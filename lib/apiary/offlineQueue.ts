@@ -17,7 +17,7 @@ const DB_NAME = "nectar-apiary-offline";
 const DB_VERSION = 1;
 const STORE_NAME = "drafts";
 
-export type DraftKind = "inspection" | "colonyEvent";
+export type DraftKind = "inspection" | "colonyEvent" | "colonyEnd";
 export type DraftStatus = "pending" | "error";
 
 export interface DraftRecord<T = unknown> {
@@ -153,11 +153,29 @@ async function idDeAparato(): Promise<string> {
  * movimiento que se hizo con `classifyDraftAge`, y por la misma razón: si esto
  * se equivoca, se equivoca en TODOS los registros a la vez y en silencio.
  */
+/**
+ * Cómo se llama cada tipo de borrador en el protocolo del servidor.
+ *
+ * Declarado como mapa total sobre `DraftKind`: si mañana entra un cuarto tipo,
+ * **TypeScript obliga a nombrarlo aquí** en vez de dejar que caiga en la rama
+ * por defecto de un ternario.
+ */
+const KIND_DEL_SERVIDOR: Record<DraftKind, string> = {
+  inspection: "inspection",
+  colonyEvent: "colony_event",
+  colonyEnd: "colony_end",
+};
+
 export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
   const payload = (draft.payload ?? {}) as Record<string, unknown>;
   return {
     ...payload,
-    kind: draft.kind === "inspection" ? "inspection" : "colony_event",
+    // Un mapa, no un ternario. El ternario que había aquí mandaba al servidor
+    // `colony_event` para CUALQUIER borrador que no fuera inspección: el día que
+    // entró un tercer tipo, un fin de colonia habría llegado disfrazado de
+    // evento de colonia y el servidor lo habría rechazado por un campo que
+    // falta, no por lo que es.
+    kind: KIND_DEL_SERVIDOR[draft.kind],
     clientDraftId: draft.id,
     // Si el borrador no trajo hora propia, vale la de su creación: es cuando el
     // operador lo anotó, que es el hecho que interesa. Inventar `Date.now()` al

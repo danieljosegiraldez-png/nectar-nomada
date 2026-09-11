@@ -5123,6 +5123,20 @@ model Colony {
   /// una FK. Vive en `ColonyLossCause`, una fila por causa, cada una con cómo
   /// se estableció.
   endedAt         DateTime?        @map("ended_at")
+  /// La clave de idempotencia del FIN, no de la colonia.
+  ///
+  /// Va en `Colony` y no en una tabla aparte porque el fin es un UPDATE sobre
+  /// esta fila, no una inserción: no hay fila nueva donde poner la clave. Y
+  /// hace falta porque sin ella el reintento de un borrador tras una respuesta
+  /// perdida es indistinguible de «otra persona la dio por perdida primero»:
+  /// las dos cosas llegan como `colony_already_ended`, y la primera es un
+  /// `duplicate` que se descarta callado mientras la segunda es un rechazo que
+  /// el operador tiene que ver.
+  ///
+  /// Anulable porque una colonia viva no tiene fin, y porque el fin declarado
+  /// desde la web no trae borrador. Única para que la base lo garantice, igual
+  /// que `Inspection.clientDraftId`.
+  endClientDraftId String?         @unique @map("end_client_draft_id")
   // A2 — required, no default: verified zero Colony rows existed in Neon
   // before this migration, so this doesn't retrofit a required column onto
   // live data (unlike ADR-038's own T9.5 retrofit, which had to reckon

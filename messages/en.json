@@ -1322,6 +1322,7 @@
     "colonyEndCause_conclusion": "I concluded it",
     "colonyEndCause_direct_observation": "I saw it",
     "colonyEndButton": "Record the loss",
+    "colonyEndSavedLocally": "The loss was recorded on this device. It will be sent as soon as there is signal.",
     "colonyEndedOn": "Lost on {fecha}",
     "apiaryCreateHeading": "Create apiary",
     "apiaryCreateIntro": "The site where the hives stand. Hives, colonies and visits hang off it afterwards.",

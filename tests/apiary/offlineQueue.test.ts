@@ -104,6 +104,25 @@ describe("A9.5 — un borrador se traduce a la mutación del lote", () => {
     expect(m.kind).toBe("colony_event");
   });
 
+  it("un FIN de colonia viaja como `colony_end`, no disfrazado de evento", () => {
+    // **La prueba que el ternario anterior habría suspendido.** Hasta el
+    // 2026-09-10 esta traducción era `kind === "inspection" ? … : "colony_event"`,
+    // así que cualquier tipo nuevo llegaba al servidor como evento de colonia y
+    // se rechazaba por un campo que falta, no por lo que era.
+    const m = mutacionDe({ ...borrador(), kind: "colonyEnd" as const });
+    expect(m.kind).toBe("colony_end");
+  });
+
+  it("los tres tipos de borrador tienen nombre propio en el protocolo", () => {
+    // Sin esto, un cuarto tipo podría compartir el nombre de otro y el fallo
+    // sería silencioso: el servidor aplicaría la mutación equivocada.
+    const nombres = (["inspection", "colonyEvent", "colonyEnd"] as const).map(
+      (kind) => mutacionDe({ ...borrador(), kind }).kind,
+    );
+    expect(new Set(nombres).size).toBe(3);
+    expect(nombres).toEqual(["inspection", "colony_event", "colony_end"]);
+  });
+
   it("sin hora propia usa la de CREACIÓN del borrador, no la de sincronizar", () => {
     // Es lo que impide fechar una inspección el día que hubo señal. Una visita
     // capturada el 2 de septiembre y sincronizada el 5 sigue siendo del 2.
