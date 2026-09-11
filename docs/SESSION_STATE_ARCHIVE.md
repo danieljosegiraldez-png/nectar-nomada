@@ -2128,3 +2128,32 @@ aplica, así que el rechazo no se llevó por delante el trabajo bueno.
 **Lo que sigue sin probarse:** nadie ha anotado una pérdida real desde un
 teléfono en el campo. Los guardias miden el servidor y la traducción; la pantalla
 está detrás de `/login`.
+
+### 2026-09-11 · El 404 de Google era una dirección clavada en el sitio vecino
+
+Daniel probó «Continuar con Google» y recibió un **404**. No era Google:
+producción anunciaba de sí misma
+`"callbackUrl": "https://www.nectarnomada.com/api/auth/callback/google"` — el
+dominio de marca, que **desde el 2026-08-28 sirve el sitio editorial**. Con
+control positivo: esa dirección da **404** y la misma ruta en `.vercel.app` da
+**302**. Google autenticaba bien y devolvía al usuario al vecino, así que **el
+404 llegaba después de Google** y parecía culpa del proveedor.
+
+**Por qué tardó semanas en verse:** el usuario y contraseña nunca se rompieron.
+Ese formulario se manda a la página donde ya estás, sin dirección absoluta.
+**Sólo OAuth necesita que la aplicación sepa nombrarse**, y ahí muerde. Nathy
+llevaba sin poder entrar desde entonces.
+
+**Lo que entra, y lo que NO puede entrar.** Daniel pidió que la aplicación
+deduzca su dirección sola. Leyendo la librería resultó que eso no se programa:
+`next-auth/lib/env.js` reescribe el origen de **cada** petición al de
+`AUTH_URL ?? NEXTAUTH_URL` en cuanto una existe, antes de leer nuestra
+configuración. La variable se **borra** o gana la variable. Borrarla es seguro
+porque `@auth/core` ya enciende `trustHost` con la variable `VERCEL`. Queda en
+**ADR-113**, fuera de `.env.example`, y con un guardia
+(`lib/auth/direccionFijada.ts`) que **avisa, no corrige**: si la dirección
+clavada discrepa del anfitrión que sirve, `/login` no pinta el botón y dice por
+qué. Ocho pruebas con entrada hostil.
+
+**Sigue pendiente de Daniel** y no lo puede hacer el código: borrar la variable
+en Vercel y registrar el callback de `.vercel.app` en Google Cloud Console.

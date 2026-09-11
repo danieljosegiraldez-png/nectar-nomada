@@ -31,11 +31,15 @@ export default async function NuevaSesionPage() {
       listarMuestrasParaCata(user.userAccountId),
     ]);
     protocolos = ps;
-    // El código de la muestra es lo que el catador reconoce; el tipo y la
-    // descripción son lo que le dice si es la que busca.
+    // **Qué café es, no sólo qué código tiene.** Antes decía «111 · green_coffee»
+    // y con eso nadie sabe cuál de sus cafés está a punto de catar. El orden va
+    // de lo que identifica a lo que matiza: batch, finca, grado del proceso, y
+    // al final el tipo y la descripción.
     muestras = ms.map((m) => ({
       id: m.id,
-      label: [m.sampleCode, m.sampleType, m.description].filter(Boolean).join(" · "),
+      label: [m.sampleCode, m.lotCode, m.organizationName, m.processGrade, m.sampleType, m.description]
+        .filter(Boolean)
+        .join(" · "),
     }));
   } catch (error) {
     if (error instanceof SesionDeCataError) redirect("/sensory");

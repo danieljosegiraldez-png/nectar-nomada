@@ -191,3 +191,73 @@ describe("crear una sesión de cata", () => {
    * `sample:manage` y entonces el permiso que la gobierna debería ser otro.
    */
 });
+
+/**
+ * **De qué café es cada muestra.** Daniel, probando la pantalla el 2026-09-11:
+ * «says 111 - green coffee» y «i think there is a mistake trying to select which
+ * coffee». La lista devolvía código y tipo, y con eso nadie sabe cuál de sus
+ * cafés va a catar. `Sample.sourceLotId` lo sabía; la consulta no lo leía.
+ *
+ * La limpieza va en el `afterAll` de ESTE describe y borra en orden hijo→padre.
+ * Escribirla debajo de las aserciones es lo que dejó 15 filas TEST en la base
+ * compartida el 2026-09-08: una aserción que falla se salta ese borrado.
+ */
+describe("listarMuestrasParaCata — el batch de origen", () => {
+  let loteId: string, muestraConLote: string;
+
+  beforeAll(async () => {
+    const lote = await prisma.lot.create({
+      data: {
+        lotCode: `PE-TEST-${RUN}`,
+        lotType: "cherry",
+        organizationId: orgId,
+        locationId: plotId,
+        status: "approved",
+        classification: "internal",
+        createdBy: gestor,
+      },
+    });
+    loteId = lote.id;
+    const m = await prisma.sample.create({
+      data: {
+        sampleCode: `CON-LOTE-${RUN}`,
+        sampleType: "green",
+        organizationId: orgId,
+        locationId: plotId,
+        sourceLotId: lote.id,
+        status: "approved",
+        classification: "internal",
+        createdBy: gestor,
+      },
+    });
+    muestraConLote = m.id;
+  });
+
+  afterAll(async () => {
+    await prisma.sample.deleteMany({ where: assertDefinedWhere({ id: muestraConLote }) });
+    await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: loteId }) });
+  });
+
+  it("trae el código del batch y la finca de la muestra que sí viene de un lote", async () => {
+    const todas = await listarMuestrasParaCata(gestor);
+    const mia = todas.find((m) => m.id === muestraConLote);
+    expect(mia, "control positivo: la muestra está en la lista").toBeDefined();
+    expect(mia!.lotCode).toBe(`PE-TEST-${RUN}`);
+    expect(mia!.organizationName).toBeTruthy();
+  });
+
+  /**
+   * El control que hace que el de arriba signifique algo: si `lotCode` saliera
+   * siempre relleno, la primera aserción pasaría sin demostrar que lee el lote.
+   * `m1` se crea sin `sourceLotId` —como una muestra externa— y tiene que salir
+   * en null, no en cadena vacía: «no viene de un batch» es un hecho, no un hueco.
+   */
+  it("deja el batch en null cuando la muestra no viene de ninguno", async () => {
+    const todas = await listarMuestrasParaCata(gestor);
+    const sinLote = todas.find((m) => m.id === m1);
+    expect(sinLote, "control positivo: la muestra sin lote también se lista").toBeDefined();
+    expect(sinLote!.lotCode).toBeNull();
+    expect(sinLote!.organizationName).toBeNull();
+    expect(sinLote!.processGrade).toBeNull();
+  });
+});
