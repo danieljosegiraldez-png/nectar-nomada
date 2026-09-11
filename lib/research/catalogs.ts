@@ -618,6 +618,45 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       },
     ],
   },
+  {
+    // Lo que se VE en una inspección. Trece valores, y ninguno inventado: son
+    // las banderas que el dueño ya tenía escritas en
+    // `48_A9_ANEXO_B_CATALOGO_DE_CAMPOS.md` §2.3, con su razón al lado.
+    //
+    // LA CATORCEAVA DE ESA LISTA NO ESTÁ AQUÍ, y es deliberado: «Otro | texto,
+    // siempre disponible» no es un valor de catálogo, es
+    // `Inspection.pestDiseaseFlags`, que se queda exactamente para eso.
+    //
+    // POR QUÉ NO ES EL CATÁLOGO DE CAUSAS DE PÉRDIDA. Lo que se observa no es
+    // lo que mató a la colonia — `ADR-111` lo dejó escrito al construir aquél.
+    // Cuatro de estos trece —moho, alas deformadas, olor anormal, disentería—
+    // no son causa de pérdida y por eso no están allí; y «Enjambrazón»,
+    // «Escasez de floración» o «Problema de reina irresoluble» son causas y no
+    // están aquí. Se solapan, no coinciden.
+    key: "irregularidad_de_inspeccion",
+    name: "Irregularidad de inspección",
+    description:
+      "Lo que se vio al abrir la caja. Admite varias por inspección. Es el vocabulario que hace contable «todas las colonias con varroa esta temporada», que el Anexo B §2.3 nombra como el reporte que hace falta.",
+    values: [
+      { value: "Varroa", definition: "Anexo B §2.3: «la plaga que define el calendario de tratamiento»." },
+      { value: "Polilla de la cera", definition: "Anexo B §2.3: «segunda causa de pérdida en caja debilitada»." },
+      { value: "Pequeño escarabajo de la colmena", definition: "Anexo B §2.3: «presente en la región»." },
+      {
+        value: "Hormigas",
+        definition:
+          "Anexo B §2.3. Entraron a las cajas vacías de Toabré dos semanas después del ausentamiento, y registrarlo CON FECHA es lo que permitió descartarlas como causa — que es justo por qué el valor tiene que existir.",
+      },
+      { value: "Moho", definition: "Anexo B §2.3: «la condición que define Finca 1 frente a Finca 2»." },
+      { value: "Cría calva", definition: "Anexo B §2.3, «cría calva / cría en perdigón»: patología de cría." },
+      { value: "Loque", definition: "Anexo B §2.3: «notificable». Su presencia obliga a avisar, no sólo a registrar." },
+      { value: "Alas deformadas", definition: "Anexo B §2.3: «virus asociado a varroa»." },
+      { value: "Olor anormal", definition: "Anexo B §2.3: «primer indicio de loque»." },
+      { value: "Disentería", definition: "Anexo B §2.3: «invernada o alimento fermentado»." },
+      { value: "Obrera ponedora", definition: "Anexo B §2.3: «pérdida de reina consumada»." },
+      { value: "Saqueo", definition: "Anexo B §2.3: «explica una caja vacía sin ausentamiento»." },
+      { value: "Hambre", definition: "Anexo B §2.3: «lo que el nivel de reservas anticipa»." },
+    ],
+  },
 ] as const;
 
 // §3a — "Enums cerrados": small, product-owner-fixed vocabularies that

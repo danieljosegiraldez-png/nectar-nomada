@@ -13,7 +13,16 @@ import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
 import { ligarAVisitaAbierta } from "../traceability/visitaAbierta";
+import { CATALOGO_DE_IRREGULARIDAD } from "./irregularidades";
 import type { InspectionOutcome, ProvenanceClass } from "../../generated/prisma/client";
+
+/**
+ * Una entrada que el servicio rechaza. Se distingue de `ApiaryAccessError` a
+ * propósito: el camino de sincronización informa los dos como `rejected`, pero
+ * «no tienes permiso» y «esa bandera no existe» piden cosas distintas a quien
+ * lo lee. Mismo reparto que `ColonyEventValidationError`.
+ */
+export class InspectionValidationError extends Error {}
 
 async function resolveColonyScope(colonyId: string) {
   const colony = await prisma.colony.findUnique({ where: { id: colonyId }, include: { hive: true } });
@@ -30,7 +39,18 @@ export interface RecordInspectionInput {
   queenSighted?: boolean | null;
   storesLevel?: string | null;
   temperamentNote?: string | null;
+  /**
+   * El «Otro» del Anexo B §2.3: lo que el catálogo no cubre. Ya no es el único
+   * sitio donde vive el dato — ver `irregularidades`.
+   */
   pestDiseaseFlags?: string | null;
+  /**
+   * Las banderas del catálogo `irregularidad_de_inspeccion`, por id. Varias.
+   *
+   * Vacío es legítimo y frecuente: una inspección «sin novedad» no tiene
+   * ninguna, y **no se rellena sola**.
+   */
+  irregularidades?: readonly string[];
   note?: string | null;
   // A5/A0 (25_OFFLINE_OPTIONS_ANALYSIS.md §0) — a client-generated id from
   // the offline draft queue. When present, a retried "Sync now" pass (the
@@ -58,6 +78,23 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
 
   const provenanceClass: ProvenanceClass = "direct_observation";
 
+  const irregularidades = [...new Set(input.irregularidades ?? [])];
+
+  // **La FK no basta.** Apunta a `variable_catalog_value` entera, no a este
+  // catálogo, así que sin esta comprobación se podría colgar una levadura de una
+  // inspección y la base lo aceptaría encantada. Mismo guardia que
+  // `registrarFinDeColonia` con las causas, y por la misma razón.
+  if (irregularidades.length > 0) {
+    const validas = await prisma.variableCatalogValue.count({
+      where: {
+        id: { in: irregularidades },
+        catalog: { key: CATALOGO_DE_IRREGULARIDAD },
+        aliasOfId: null,
+      },
+    });
+    if (validas !== irregularidades.length) throw new InspectionValidationError("irregularidad_desconocida");
+  }
+
   const inspection = await prisma.$transaction(async (tx) => {
     const inspection = await tx.inspection.create({
       data: {
@@ -74,7 +111,12 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
         provenanceClass,
         clientDraftId: input.clientDraftId ?? null,
         createdBy: userAccountId,
+        // Dentro de la MISMA transacción y del mismo `create`: una inspección
+        // con hallazgo cuyas banderas se escribieran aparte podría quedarse a
+        // medias —el hecho sin lo que se vio— y nada lo diría.
+        irregularities: { create: irregularidades.map((valueId) => ({ valueId })) },
       },
+      include: { irregularities: { include: { value: { select: { value: true } } } } },
     });
 
     // C1 §3: evidentiary write. Not reached on the clientDraftId idempotent

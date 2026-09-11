@@ -8170,3 +8170,71 @@ porque Vercel la fija y no la deja falsificar desde fuera, y porque es lo que
 `trustHost` ya hacía en este despliegue. El arreglo en producción es de Daniel:
 borrar la variable en Vercel y registrar el callback de `.vercel.app` en Google
 Cloud Console.
+---
+
+## ADR-114 — Las irregularidades de una inspección son casillas contables, y no son el catálogo de causas de pérdida
+
+**Contexto, y lo pide el dueño por escrito.**
+`48_A9_ANEXO_B_CATALOGO_DE_CAMPOS.md` §2.3 dice: *«Hoy `pestDiseaseFlags` es una
+cadena. Una cadena no se puede contar, y "todas las colonias con varroa esta
+temporada" es exactamente el reporte que hace falta.»* Y da el vocabulario:
+catorce banderas, cada una con su razón.
+
+**Medido el 2026-09-11, antes de construir nada:** **ninguna línea de aplicación
+consulta esa columna.** Sólo se escribe y se lee como prosa, así que el reporte
+no se podía ni intentar. Y **0 de 1 inspecciones** tienen texto ahí, así que no
+hay nada que convertir.
+
+**Decisión — cuatro partes.**
+
+1. **`InspectionIrregularity`, una fila por bandera.** Varias por inspección,
+   par único para que la base impida contar doble.
+2. **Trece valores en un `VariableCatalog`**, que crece por semilla y no por
+   migración (precedente P1). **La catorceava de la lista del Anexo no es un
+   valor**: «Otro | texto, siempre disponible» es `pestDiseaseFlags`, que se
+   queda exactamente para eso, con su papel recortado a lo que el catálogo no
+   cubre — mismo reparto que `Colony.originNote` junto a
+   `originSourceValueId`.
+3. **Viajan por la cola offline**, en la mutación `inspection`. Una inspección
+   con hallazgo se anota en el campo; dejarlas fuera habría hecho que sólo se
+   pudieran marcar con cobertura, que es el hueco que esa cola existe para
+   cerrar.
+4. **`coloniasPorIrregularidad`**, que es el motivo del cambio y no un extra: un
+   catálogo sin nadie que lo consulte es la misma cadena con más pasos.
+
+**Por qué NO reutiliza el catálogo de causas de pérdida (`ADR-111`).** Porque son
+dos preguntas distintas, y aquél ya lo dejó escrito: **lo que se observa en una
+inspección no es lo que mató a la colonia.** Varroa vista en marzo en una colonia
+viva en diciembre es un dato de manejo. Los vocabularios se solapan y no
+coinciden: moho, alas deformadas, olor anormal y disentería son señales de
+inspección y **no** son causas de pérdida; enjambrazón, escasez de floración y
+problema de reina irresoluble son causas y **no** son banderas de inspección.
+
+**Dos decisiones del reporte que no son obvias.**
+
+- **Cuenta colonias distintas, no inspecciones.** Tres visitas a la misma caja
+  con varroa son un problema, no tres. Se devuelven las dos cifras porque las dos
+  sirven, pero la que el Anexo pide es la primera.
+- **Devuelve las trece filas, también las que valen cero.** Un reporte que sólo
+  enseña lo encontrado no distingue «no hay loque» de «nadie miró loque», y ésa
+  es justo la diferencia que hay que poder ver.
+
+**Cómo se comprueba.** `tests/apiary/irregularidades.test.ts`, nueve casos, tres
+de ellos con control positivo: la bandera ajena al catálogo se rechaza **y** la
+del catálogo entra; la ventana de temporada recorta **y** la ventana que sí la
+contiene la encuentra; el sitio ajeno da cero **y** el propio da uno. Más el
+viaje por la cola, que es la mitad que importa en el campo.
+
+**Un límite del instrumento que esto destapó, y queda escrito en
+`PENDING_IMPLEMENTATIONS/007`:** el detector del inventario de acceso decide si
+una operación «recibe principal» con una coincidencia de texto sobre el cuerpo
+troceado, **comentarios incluidos**. Una función sin un solo argumento quedó
+clasificada como «recibe principal» porque un comentario vecino decía *«No recibe
+`userAccountId`»*. Reproducido quitando esa palabra: la clase cambia. El arreglo
+a mano es indistinguible de escribir prosa para complacer a un regex — aquí dio
+la clasificación correcta, y el día que texto y código discrepen el detector
+creerá al texto.
+
+**Qué queda fuera.** El reporte **no tiene pantalla todavía**: existe, está
+probado, y nadie lo ha visto dibujado. Y las casillas no se han pulsado en un
+navegador — la pantalla está detrás de `/login`.

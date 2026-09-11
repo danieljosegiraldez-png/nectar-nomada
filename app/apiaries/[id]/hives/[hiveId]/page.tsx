@@ -5,6 +5,7 @@ import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getHive } from "../../../../../lib/apiary/hives";
 import { origenesDeColonia } from "../../../../../lib/apiary/origenDeColonia";
 import { causasDePerdida } from "../../../../../lib/apiary/causaDePerdida";
+import { irregularidadesOfrecidas } from "../../../../../lib/apiary/irregularidades";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
 import { getSignedUrlForAsset } from "../../../../../lib/traceability/media";
 import { listInspectionsForColony } from "../../../../../lib/apiary/inspections";
@@ -25,13 +26,14 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
 
   const { id: apiaryId, hiveId } = await params;
   const t = await getTranslations("Apiary");
-  const [hive, { people: observers, selfPersonId }, origenes, causas] = await Promise.all([
+  const [hive, { people: observers, selfPersonId }, origenes, causas, irregularidades] = await Promise.all([
     getHive(user.userAccountId, hiveId),
     getObserverCandidates(user.userAccountId),
     // Lecturas sin sujeto: los dos vocabularios salen del catálogo, no de una
     // lista escrita a mano en el formulario.
     origenesDeColonia(),
     causasDePerdida(),
+    irregularidadesOfrecidas(),
   ]);
 
   // A Hive holds at most one *current* Colony in practice (A1/A2's own
@@ -121,7 +123,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
 
           <section className="nn-section">
             <h2>{t("inspectionHeading")}</h2>
-            <InspectionForm colonyId={colony.id} selfPersonId={selfPersonId} />
+            <InspectionForm colonyId={colony.id} selfPersonId={selfPersonId} irregularidades={irregularidades} />
           </section>
 
           <section className="nn-section">

@@ -37,6 +37,44 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-11 · «Todas las colonias con varroa esta temporada» ya es una consulta
+
+El Anexo B §2.3 lo pedía con nombre y apellido: *«Hoy `pestDiseaseFlags` es una
+cadena. Una cadena no se puede contar, y "todas las colonias con varroa esta
+temporada" es exactamente el reporte que hace falta.»* Medido antes de construir:
+**ninguna línea de aplicación consultaba esa columna** — sólo se escribía y se
+leía como prosa. Y 0 de 1 inspecciones tenían texto ahí, así que no hubo nada que
+convertir.
+
+**Trece casillas, ninguna inventada:** son las banderas que el dueño ya tenía
+escritas, con su razón al lado. **La catorceava de su lista no es un valor de
+catálogo**: «Otro | texto, siempre disponible» es `pestDiseaseFlags`, que se
+queda para lo que el catálogo no cubre.
+
+**No es el catálogo de causas de pérdida, y `ADR-114` dice por qué:** lo que se
+observa no es lo que mató a la colonia. Se solapan sin coincidir — moho, alas
+deformadas, olor anormal y disentería son señales de inspección y no causas;
+enjambrazón y escasez de floración son causas y no señales.
+
+**Dos decisiones del reporte que no son obvias.** Cuenta **colonias distintas**,
+no inspecciones —tres visitas a la misma caja con varroa son un problema, no
+tres— y devuelve **las trece filas, también las que valen cero**, porque «no hay
+loque» y «nadie miró loque» no son lo mismo.
+
+**Y viajan por la cola offline**, que es la mitad que importa: una inspección con
+hallazgo se anota en el campo, y dejarlas fuera habría hecho que sólo se pudieran
+marcar con cobertura.
+
+**Un límite del instrumento que esto destapó** (en
+`PENDING_IMPLEMENTATIONS/007`): el detector del inventario decide si una
+operación «recibe principal» con una coincidencia de texto **sobre los
+comentarios incluidos**. Una función sin un solo argumento quedó mal clasificada
+porque un comentario vecino decía «No recibe `userAccountId`». Reproducido
+quitando esa palabra. El arreglo a mano es indistinguible de escribir prosa para
+complacer a un regex.
+
+**Lo que NO está:** el reporte **no tiene pantalla**. Existe, está probado con
+nueve casos —tres con control positivo— y nadie lo ha visto dibujado.
 ### 2026-09-11 · El 404 de Google era una dirección clavada en el sitio vecino
 
 Daniel probó «Continuar con Google» y recibió un **404**. No era Google:
@@ -156,33 +194,6 @@ fallar.
 ningun llamador** en `app/`, `scripts/` ni otro `lib/`, ni dentro de su propio
 archivo. La primera cuenta dio 85 y era falsa: contaba como huerfanas las que se
 usan dentro de su archivo. La lista queda en §3 para mirarla con calma.
-
-### 2026-09-10 · El informe de la visita existía y no había puerta
-
-Recorriendo el flujo del apicultor **pantalla por pantalla** —no por servicio—
-aparecio que `emitirReporteDeVisita` **no lo llamaba nadie**. La pagina del
-informe lee lo congelado y hace `notFound()` si no hay nada, asi que cerrar una
-visita y pulsar «informe» daba **404**. Igual `publicarReporteConEnlace`,
-`abrirReportePorEnlace` y `revocarEnlace`: los cuatro servicios existian desde
-A9.6, con sus pruebas, y **ninguna pantalla los tocaba**.
-
-Es la tercera vez esta semana con la misma forma —el apiario, el informe
-externo, esto—: **el servicio hecho y la puerta sin poner**. El sintoma no es un
-error; es que no hay por donde.
-
-**Lo que entra:** emitir el informe desde la visita cerrada; publicar el enlace
-para un supervisor, que **se enseña una sola vez** porque la base guarda el
-token hasheado; `/informe/[token]`, **publica y sin sesion** —el token ES la
-autorizacion—; y la lista de enlaces entregados con su boton de cortar.
-
-**Revocar hacia falta o el enlace era un viaje de ida.** `revocarEnlace` pedia
-el id de la publicacion y nada lo devolvia a una pantalla. Ahora
-`enlacesPublicadosDeVisita` lo da — **sin el token, ni hasheado**: la pantalla
-revoca por id, y devolver la cerradura la enseñaria sin razon.
-
-**Lo que NO hizo falta probar de nuevo:** el ciclo del enlace ya estaba cubierto
-—token inventado, caducado, revocado, sin emitir, y RBAC en publicar y revocar—.
-Lo nuevo es el lector, con su puerta y su flip.
 
 ## 3. Bloqueado, y en qué
 

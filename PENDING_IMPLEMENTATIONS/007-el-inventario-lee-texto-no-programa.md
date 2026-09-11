@@ -29,6 +29,33 @@ Cada arreglo fue enumerar un caso más. **La enumeración no converge**: el
 siguiente método de Prisma, la siguiente forma de declarar, el siguiente alias
 del cliente vuelven a fallar del mismo modo.
 
+### Un quinto caso, del 2026-09-11: un COMENTARIO decide la clasificación
+
+`const principal = /\buserAccountId\b/.test(o.cuerpo)` (línea 247) es una
+coincidencia de texto sobre el cuerpo troceado, y el troceo arrastra los
+comentarios. `lib/apiary/irregularidades.ts` tiene una función **sin un solo
+argumento**:
+
+```ts
+export async function irregularidadesOfrecidas() {
+```
+
+y se clasificó como **«recibe principal, sin guardia visible»**, porque el
+comentario de la función de abajo decía *«No recibe `userAccountId` y no
+autoriza»*. Reproducido en una línea: quitando esa palabra del comentario,
+`principal` pasa de `true` a `false` y la clase a «depende del llamador», que es
+la correcta.
+
+**Por qué este caso es distinto de los cuatro de arriba, y peor en un sentido:**
+los otros fallan por cómo está escrito el *código*. Éste falla por cómo está
+escrita la *prosa*, así que documentar bien una función la mueve de clase. Y el
+arreglo a mano —reescribir el comentario— es indistinguible de escribir prosa
+para complacer a un regex: aquí dio la clasificación correcta, pero el día que el
+texto y el código discrepen de verdad, el detector creerá al texto.
+
+Un AST lo cierra sin enumerar nada: los parámetros de una función son un nodo,
+no una palabra.
+
 ## Qué arreglaría un AST, y qué no
 
 TypeScript ya es dependencia del repositorio (`typescript ^6.0.3`), así que esto
