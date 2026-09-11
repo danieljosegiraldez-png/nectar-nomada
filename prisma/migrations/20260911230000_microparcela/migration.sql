@@ -1,0 +1,25 @@
+-- El tipo de ubicación «microparcela».
+--
+-- DECISIÓN DEL DUEÑO (2026-09-11), con su definición textual: «then there would
+-- be plots and micro plots optional, but without plot there isnt an identifier
+-- for farm to harvest» y «a micro lot usually comes from a single micro plot,
+-- but it can also refer to a specific day's harvest».
+--
+-- POR QUÉ UN TIPO Y NO UNA PARCELA ANIDADA. La jerarquía de `core.location` ya
+-- es autorreferente, así que colgar una parcela de otra parcela FUNCIONA hoy sin
+-- migración — y era la alternativa que se le presentó. Se descartó porque nada
+-- distinguiría entonces una microparcela de una parcela: un reporte no podría
+-- agrupar «toda la parcela» frente a «este rincón», que es justo la distinción
+-- que hace que un microlote signifique algo. Un tipo que el enum nombra es una
+-- restricción que la base conoce; una convención de anidamiento no lo es.
+--
+-- QUÉ NO CAMBIA. `harvest_event.location_id` sigue siendo obligatorio y sigue
+-- aceptando cualquier ubicación: «sin parcela no hay cosecha» ya estaba impuesto
+-- por esa columna NOT NULL, y una cosecha de microparcela entra por la misma
+-- puerta. Que la ubicación elegida DEBA ser parcela o microparcela es una regla
+-- de la capa de servicio, no de esta migración, y no se finge lo contrario.
+--
+-- ADITIVO Y SIN DATOS QUE MOVER: ninguna fila usa todavía este valor. El
+-- recuento está en el guion de datos que acompaña a este cambio, no aquí.
+
+ALTER TYPE "core"."LocationType" ADD VALUE 'micro_plot';

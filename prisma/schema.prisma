@@ -561,6 +561,7 @@ enum LocationType {
   // locationType = plot and parentLocationId pointing at the farm's own
   // site-typed row, not a new entity family.
   plot
+  micro_plot
   // A1 (22_APIARY_V1_SCOPING_REPORT.md §2) — an Apiary is not a new table,
   // it's a place holding hives, the same relationship a farm has to its
   // plots. parentLocationId points at the property/farm site-typed row,
