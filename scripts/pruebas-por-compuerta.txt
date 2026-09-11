@@ -19,6 +19,7 @@
 # servicio del workflow. Medido: 53/53 archivos y 566/566 pruebas, dos veces
 # desde cero.
 
+tests/limpiarAuditDePruebas.test.ts
 tests/apiary/ambitoVacioApiarios.test.ts
 tests/notificaciones/canales.test.ts
 tests/apiary/bitacora.test.ts
