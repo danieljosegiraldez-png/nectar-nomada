@@ -5,6 +5,7 @@ import { getCurrentUser } from "../../../lib/auth/session";
 import { getApiaryDetail, getManageableApiaryProjects } from "../../../lib/apiary/hives";
 import { densidadDePolinizacion } from "../../../lib/apiary/polinizacion";
 import { coordenadasPropuestas } from "../../../lib/traceability/coordenadasDelSitio";
+import { coloniasPorIrregularidad } from "../../../lib/apiary/irregularidades";
 import { confirmarCoordenadasAction } from "../../actions/traceability";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
@@ -32,6 +33,13 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   // `getApiaryDetail` ya autorizó este sitio; esto lee hechos del id concedido.
   const polinizacion = await densidadDePolinizacion(id);
   const coordenadas = await coordenadasPropuestas(id);
+
+  // Ventana MÓVIL de doce meses, no año natural: el dueño la eligió así el
+  // 2026-09-11 porque el repositorio no define ninguna temporada, y un año
+  // natural deja el reporte casi vacío cada enero.
+  const ahora = new Date();
+  const haceUnAno = new Date(ahora.getFullYear() - 1, ahora.getMonth(), ahora.getDate());
+  const irregularidades = await coloniasPorIrregularidad(id, haceUnAno, ahora);
 
   return (
     <div>
@@ -153,6 +161,53 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
         </section>
       ) : null}
 
+
+      {/* Lo que se vio en las inspecciones, contado. Es el reporte que el Anexo
+          B §2.3 nombra —«todas las colonias con varroa esta temporada»— y hasta
+          hoy existía sin pantalla.
+
+          ## Por qué aquí, y no en el tablero de series
+
+          El Anexo C §2 fija el orden del tablero del sitio y este reporte no es
+          ninguno de sus seis puntos: es de los de §3.3, «otros reportes que
+          salen casi gratis», que no tienen sitio asignado. Va **después** de los
+          vitales y la polinización —que son lo que exige acción— y **antes** del
+          historial de visitas, porque es una lente sobre el pasado reciente y no
+          una alarma.
+
+          ## Por qué una tabla y no un gráfico
+
+          El Anexo C §2.1 pide «una serie por gráfico», y esto **no es una
+          serie**: es un corte de doce meses. Dibujarlo como curva inventaría una
+          evolución que estos datos no tienen.
+
+          ## Por qué dice «últimos 12 meses» y no «temporada»
+
+          Porque el repositorio **no define** ninguna temporada — comprobado: las
+          únicas menciones en el esquema son comentarios. Decisión del dueño el
+          2026-09-11: ventana móvil de doce meses. El día que defina el ciclo
+          real, esto recibe el rango como parámetro y sólo cambia el rótulo. */}
+      {/* La sección entera se oculta si NADA se vio: trece ceros en un sitio sin
+          hallazgos son ruido, no información, y el resto de esta pantalla ya
+          esconde lo vacío igual. Los ceros que sí se enseñan son los de dentro
+          del reporte, cuando hay al menos un hallazgo — ahí la distinción entre
+          «no hay» y «nadie miró» sí importa. */}
+      {irregularidades.some((i) => i.colonias > 0) ? (
+        <section className="nn-section">
+          <h2>{t("irregularidadesHeading")}</h2>
+          <p className="nn-muted">{t("irregularidadesVentana")}</p>
+          {/* El cero se enseña apagado, no se esconde: «no hay loque» y «nadie
+              miró loque» no son lo mismo, y una fila ausente los confunde. Misma
+              distinción que los vitales de A9.8, y reusa su misma clase. */}
+          <p className="nn-detail-meta">
+            {irregularidades.map((i) => (
+              <span key={i.valueId} className={i.colonias === 0 ? "nn-vital-sin-registro" : undefined}>
+                {i.value}: {t("irregularidadColonias", { colonias: i.colonias, inspecciones: i.inspecciones })}
+              </span>
+            ))}
+          </p>
+        </section>
+      ) : null}
 
       <section className="nn-section">
         <h2>{t("hivesHeading")}</h2>
