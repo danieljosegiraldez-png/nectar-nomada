@@ -210,8 +210,9 @@ de abajo **queda abierto porque es decisión de producto, no arreglo mecánico**
   **acortar el menú o mover el objetivo**. En el teléfono son 234 px de
   cabecera en tres filas, el 29 % de la pantalla antes de ver nada.
 
-- ~~«Batches» en una interfaz en español.~~ **Cerrado el 2026-09-08** — ver la
-  entrada de §2. El café es «Lote»/«Lot» y el terreno es «Parcela».
+- ~~«Batches» en una interfaz en español.~~ **Cerrado el 2026-09-08** — su
+  entrada está en `docs/SESSION_STATE_ARCHIVE.md`. El café es «Lote»/«Lot» y
+  el terreno es «Parcela».
 - **`/plots` no ofrece nada que pulsar.** Las acciones existen —ocho
   formularios— pero **un nivel abajo**, en `/plots/[id]`; subir alguna a la
   lista es decisión de producto. La repetición **sí se arregló** el 2026-09-08:
@@ -227,7 +228,8 @@ faltando que una persona registre un dato real en el campo.
 
 Los ocho subconjuntos viven ahora en `lib/traceability/procedencia.ts`, con
 nombre, tipados contra el enum, y el servidor ya no acepta mas de lo que la
-pantalla pinta (ver §2). **Lo que sigue abierto es cual debe ofrecer cada una**:
+pantalla pinta —su entrada está en `docs/SESSION_STATE_ARCHIVE.md`—. **Lo que
+sigue abierto es cual debe ofrecer cada una**:
 que una medicion pueda declararse `interpretation` y una calicata no, que el
 enum tenga diez valores y las pantallas ofrezcan cinco, y si
 `manufacturer_specification` deberia estar en alguna. Es decision de diseño —que
