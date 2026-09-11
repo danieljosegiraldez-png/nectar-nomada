@@ -1971,3 +1971,41 @@ las siete cazadas por su prueba y compilando — pero a la primera vuelta **una
 no cayó**: la prueba de «misma causa dos veces» afirmaba la CLASE del error y
 pasaba con el guardia quitado, porque el `in` de Prisma deduplica y saltaba otro
 error de la misma clase. Era un adorno. Ahora afirma el mensaje.
+
+### 2026-09-09 · Un formulario enseñaba «measured_fact» a un apicultor
+
+`TreatmentBatchForm` pintaba el **valor crudo del enum** en dos desplegables:
+en una interfaz en español se leía «measured_fact» y «verified_with_limitation».
+No revienta, no avisa — se lee mal, que es la misma familia que «Batches» contra
+«Lotes» y se encuentra igual: mirando, no ejecutando pruebas.
+
+**Medido sobre la población entera, no sobre una sospecha:** de **25**
+desplegables cuya clave es el propio valor, **22 traducían y 3 no**, los tres en
+ese archivo. Uno de los tres resultó **correcto** y se quedó como está, con su
+razón escrita al lado: recorre `variable.enumValues`, que no es un enum de
+Prisma sino la lista que el autor del protocolo congeló en esa versión —«río»,
+«quebrada»—; son datos en el idioma de quien los declaró y no hay clave posible.
+
+**Y arrastraba un segundo fallo que no se veía justamente porque no se usaba:**
+ese formulario ofrece `manufacturer_specification` e `hypothesis`, **dos valores
+sin etiqueta en ningún idioma**. Ahora la tienen.
+
+**Tres guardias nuevos** en `tests/ui/valoresEnumerados.test.ts`, y el tercero
+es el que más falta hacía: la excepción declarada **tiene que seguir aplicando a
+algo**, o se quita. Una excepción huérfana envejece en silencio y enseña a leer
+la lista por encima. Flip-test: cinco mutaciones, cada una tira la suya por su
+nombre.
+
+**Y una cobertura que era accidental, destapada al fusionar.** Entre medias entró
+el PR #255, que sacó las listas de procedencia de los ocho formularios a
+`lib/traceability/procedencia.ts`. Predije que eso dejaría este guardia mirando a
+la nada; **era falso** y lo dijo la medición: seguía en verde porque
+`TreatmentBatchForm` conserva las suyas en casa, y sus siete valores resultan ser
+un superconjunto de los cinco del módulo. Verde por coincidencia, no por
+cobertura: un sexto valor en el módulo habría entrado sin etiqueta sin que nada
+fallara. El guardia lee ahora también ese módulo, y el flip-test lo demuestra
+metiéndole `recommendation` —un valor del enum sin etiqueta— y viéndolo caer.
+
+**Lo que se señala y NO se tocó, en ese mismo archivo:** un `" (origen
+desconocido)"` en español metido a mano en el código, y dos opciones `true` /
+`false` sin traducir. Son la misma familia y otro arreglo.
