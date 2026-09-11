@@ -2307,7 +2307,12 @@ me equivoqué: la PR estaba verde y el merge no construía. Lo que sí lo dice e
 el estado del commit fusionado, y después el log, que nombra cada migración:
 
 ```bash
+# Vercel y los demás «statuses» del commit. NO trae las compuertas de Actions.
 gh api repos/danieljosegiraldez-png/nectar-nomada/commits/<sha>/status
+# Las compuertas viven en otro endpoint, y se leen conclusión POR CONCLUSIÓN:
+# `cancelled` no es `failure` y se cuela en un vistazo. Ver la trampa del final.
+gh api repos/danieljosegiraldez-png/nectar-nomada/commits/<sha>/check-runs \
+  --jq '.check_runs[] | "\(.name): \(.conclusion)"'
 vercel inspect --logs <url-de-produccion> --scope <scope>
 ```
 
@@ -2881,6 +2886,44 @@ Y el caso original, mutando una aserción de esa prueba a un valor falso: antes
 caían **2** —la mutada y otra, arrastrada por la visita que sobrevivió— y
 quedaban **7 filas** en la base; después cae **1** y quedan **0**. Un fallo que
 se multiplica por tres es la firma de este defecto, no de tres defectos.
+
+### `cancelled` no es `failure`, pero tampoco es verde
+
+**Síntoma.** 2026-09-11. Fusionado un PR, miré el estado del commit en `main`
+—que es lo que manda «Cómo se despliega», más arriba— y leí la lista de
+comprobaciones por encima: ninguna decía `failure`, así que di el merge por
+bueno. No lo era. Dos de ellas decían **`cancelled`**, y una cancelada no ha
+comprobado nada.
+
+**Causa.** El grupo de concurrencia del workflow **cancela la corrida del
+commit anterior en cuanto entra otra fusión**. Con varias sesiones fusionando
+el mismo día, eso pasa solo. Le ocurrió a dos commits seguidos —el mío y el que
+lo pisó— dentro de la misma media hora de tráfico.
+
+**No es una avería, es tráfico.** Medido sobre los 20 commits más recientes de
+`main`: **15 `success`, 2 `cancelled`, 0 `failure`**, y 3 sin corrida o todavía
+en marcha. Un 10 %, concentrado en las rachas.
+
+**Lo que engaña es la forma de leerlo.** `cancelled` se parece a «terminó» y no
+se parece a «rojo», así que un vistazo a la columna de estados lo cuenta como
+hecho. Sólo lo delata imprimir **la conclusión de cada comprobación**, una por
+línea, en vez de un resumen o un «¿hay algún fallo?».
+
+**Arreglo.** Después de fusionar, la pregunta correcta no es «¿está verde mi
+commit?» sino **«¿qué commit de `main` contiene mi cambio, y está verde ése?»**.
+Son dos preguntas distintas en cuanto alguien fusiona detrás de ti, y la
+segunda es la que tiene respuesta:
+
+```bash
+# 1. el commit que de verdad lleva el cambio — por CONTENIDO, no por el SHA
+gh api "repos/<owner>/<repo>/contents/<ruta>?ref=main" --jq .content | base64 -d | grep -c '<marca del cambio>'
+# 2. y cómo acabó ESE commit, conclusión por conclusión
+gh api repos/<owner>/<repo>/commits/<sha>/check-runs --jq '.check_runs[] | "\(.name): \(.conclusion)"'
+```
+
+El verde que sí juzga el cambio es **el del PR**, donde la corrida no compite
+con nadie. El de `main` es la red de después, y a veces esa red no llega a
+tenderse. Decirlo es la respuesta correcta; buscar un verde en otro sitio, no.
 
 ## Al cerrar la sesión
 
