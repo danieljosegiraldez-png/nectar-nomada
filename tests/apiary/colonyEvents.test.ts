@@ -134,6 +134,7 @@ describe("recordColonyEvent — treatment", () => {
         eventType: "treatment",
         treatmentProduct: "Apivar",
         treatmentBatchLabel: "   ",
+        treatmentWithdrawalDays: 14,
       }),
     ).rejects.toThrow(ColonyEventValidationError);
   });
@@ -144,6 +145,7 @@ describe("recordColonyEvent — treatment", () => {
       eventType: "treatment",
       treatmentProduct: "Apivar",
       treatmentBatchLabel: "APV-2026-014",
+      treatmentWithdrawalDays: 14,
       treatmentDose: 2,
       treatmentDoseUnit: "strips",
     });

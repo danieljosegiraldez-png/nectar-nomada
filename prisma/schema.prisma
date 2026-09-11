@@ -5381,6 +5381,20 @@ model ColonyEvent {
   treatmentBatchLabel String?         @map("treatment_batch_label")
   treatmentDose       Decimal?        @map("treatment_dose") @db.Decimal(10, 3)
   treatmentDoseUnit   String?         @map("treatment_dose_unit")
+  /// Días de carencia del producto aplicado. **El campo que el Anexo B §4 marca
+  /// obligatorio y que no existía**, con su consecuencia escrita: *«decide
+  /// cuándo se puede cosechar. Sin él, una cosecha puede violar la carencia sin
+  /// que el sistema lo sepa.»*
+  ///
+  /// Anulable en la base porque esta tabla sirve a tres tipos de evento y una
+  /// alimentación no tiene carencia; **obligatorio en la capa de servicio cuando
+  /// `eventType = treatment`**, igual que `treatmentBatchLabel`.
+  ///
+  /// Es un número de DÍAS y no una fecha de fin. La fecha se deriva de
+  /// `occurredAt + días`, y guardarla además sería un segundo sitio que puede
+  /// discrepar del primero; el dato que trae la etiqueta del producto son los
+  /// días.
+  treatmentWithdrawalDays Int?        @map("treatment_withdrawal_days")
   note                String? // passing_observation's payload; free text on any type
   // Fixed at the action layer, never operator-selectable: feeding/treatment
   // -> original_record (a record of an action taken); passing_observation
@@ -5494,6 +5508,21 @@ model ApiaryHarvestEvent {
   // ADR-038 pattern — no default, the action layer must state a real class.
   provenanceClass   ProvenanceClass @map("provenance_class")
   sourceReference   String?         @map("source_reference")
+  /// Días de carencia que quedaban pendientes cuando se cosechó. `null` es el
+  /// caso normal: no había ninguna carencia activa.
+  ///
+  /// **Por qué se registra en vez de impedirlo.** Decisión del dueño el
+  /// 2026-09-11, sobre una contradicción de su propio Anexo B §5 —que dice
+  /// «bloqueo» y «la cosecha avisa» en la misma celda—: la cosecha se guarda
+  /// siempre. Si la miel ya se extrajo, impedir el registro no la devuelve al
+  /// panal; deja el hecho sin rastro, que para trazabilidad es peor que un
+  /// registro marcado.
+  ///
+  /// **Y por qué es una columna y no sólo un aviso en pantalla.** Un aviso se
+  /// lee una vez; esto tiene que poder consultarse el día que aparezca un
+  /// residuo en un análisis. Mismo razonamiento que las irregularidades
+  /// (`ADR-114`): lo que no es consultable no existe para un reporte.
+  withinWithdrawalDays Int?         @map("within_withdrawal_days")
   createdAt         DateTime        @default(now()) @map("created_at")
   createdBy         String?         @map("created_by") @db.Uuid
   creator           UserAccount?    @relation("ApiaryHarvestEventCreatedBy", fields: [createdBy], references: [id])

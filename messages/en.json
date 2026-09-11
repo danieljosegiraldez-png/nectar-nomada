@@ -1254,6 +1254,7 @@
     "logTreatmentHeading": "Log treatment",
     "treatmentProductLabel": "Product",
     "treatmentBatchLabelLabel": "Lot no. on the package",
+    "treatmentWithdrawalDaysLabel": "Withdrawal period (days)",
     "treatmentDoseLabel": "Dose",
     "logTreatmentButton": "Log treatment",
     "logObservationHeading": "Log observation",

@@ -24,6 +24,7 @@ tests/apiary/ambitoVacioApiarios.test.ts
 tests/notificaciones/canales.test.ts
 tests/apiary/bitacora.test.ts
 tests/apiary/colonyEvents.test.ts
+tests/apiary/carencia.test.ts
 tests/apiary/crearApiario.test.ts
 tests/apiary/e2e.test.ts
 tests/apiary/harvest.test.ts

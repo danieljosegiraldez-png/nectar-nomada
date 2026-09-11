@@ -232,6 +232,7 @@ describe("A9.8 — la lectura contra Postgres", () => {
       eventType: "treatment",
       treatmentProduct: "Apivar",
       treatmentBatchLabel: `L-${RUN_ID.slice(-4)}`,
+      treatmentWithdrawalDays: 14,
       coverageUntil: new Date(AHORA.getTime() + 90 * MS_POR_DIA),
     });
     expect(tratamiento.coverageUntil).toBeNull();

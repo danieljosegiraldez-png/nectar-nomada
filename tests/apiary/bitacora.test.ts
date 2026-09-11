@@ -200,6 +200,7 @@ describe("A9.12 — el cierre emite, leyendo el rastro real", () => {
       eventType: "treatment",
       treatmentProduct: "Apivar",
       treatmentBatchLabel: `L-${RUN_ID.slice(-4)}`,
+      treatmentWithdrawalDays: 14,
     });
 
     const emitido = await resumenDeVisita(visita.id);

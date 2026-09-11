@@ -140,6 +140,7 @@ beforeAll(async () => {
     occurredAt: new Date("2026-12-03"),
     treatmentProduct: "Oxalic acid",
     treatmentBatchLabel: `${RUN_ID}-BATCH-01`,
+    treatmentWithdrawalDays: 14,
     treatmentDose: 5,
     treatmentDoseUnit: "mL",
   });
