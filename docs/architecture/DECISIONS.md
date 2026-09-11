@@ -8103,3 +8103,70 @@ nombre y las cinco compilan mutadas — incluida la de volver al ternario.
 **Qué queda fuera.** La pantalla no se abrió en un navegador: está detrás de
 `/login`. Y nadie ha anotado todavía una pérdida real desde un teléfono en el
 campo, que es la única prueba que cuenta.
+
+## ADR-113 — La aplicación deduce su propia dirección; no se le clava
+
+**Context.** El 2026-09-11 Daniel probó «Continuar con Google» en producción y
+recibió un **404**. No era Google: producción anunciaba de sí misma
+
+```
+"callbackUrl": "https://www.nectarnomada.com/api/auth/callback/google"
+```
+
+o sea el dominio de marca, que **desde el 2026-08-28 sirve el sitio editorial**
+y no tiene esa ruta (ver la trampa homónima en `CLAUDE.md`). Medido con control
+positivo: esa dirección responde **404** y la misma ruta en
+`nectar-nomada-package.vercel.app` responde **302**. Google autenticaba bien y
+devolvía al usuario al sitio equivocado, así que **el 404 llegaba después de
+Google** — la forma más ilegible posible, porque parece un fallo del proveedor.
+
+El usuario y contraseña seguían funcionando, y eso escondió el problema durante
+semanas: el formulario de credenciales se manda a la página donde uno ya está,
+sin dirección absoluta. **Sólo el viaje de ida y vuelta de OAuth necesita que la
+aplicación sepa nombrarse a sí misma**, y ahí es donde la dirección clavada
+muerde. Nathy llevaba sin poder entrar con Google desde entonces.
+
+**Decision 1 — no se define `AUTH_URL` ni `NEXTAUTH_URL`.** Sin ellas, Auth.js
+deduce el origen de la petición. No es una preferencia de estilo: es la única
+opción que existe. `next-auth/lib/env.js` dice
+
+```js
+/** If `NEXTAUTH_URL` or `AUTH_URL` is defined, override the request's URL. */
+const url = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL;
+if (!url) return req;
+return new NextRequest(href.replace(origin, envOrigin), req);
+```
+
+Reescribe el origen de **cada** petición antes de que se lea nuestra
+configuración. Ningún ajuste del código lo revierte — la variable se borra o
+gana la variable. Y borrarla es seguro porque `@auth/core` ya enciende
+`trustHost` solo:
+
+```js
+config.trustHost ??= !!(AUTH_URL ?? AUTH_TRUST_HOST ?? VERCEL ?? CF_PAGES ?? NODE_ENV !== "production")
+```
+
+En Vercel la variable `VERCEL` siempre está puesta; en local basta el
+`NODE_ENV`. El `basePath` tampoco cambia: sin la variable, `next-auth` usa su
+propio `/api/auth`, que es el que ya tienen los callbacks registrados.
+
+**Alternatives considered.** *Apuntar la variable a la dirección buena* fue lo
+primero que se propuso, y es lo que se descartó al leer la librería: deja el
+mismo cepo armado para el próximo cambio de dominio, que es exactamente cómo
+nació éste. *Un `trustHost: true` explícito en la configuración* no sirve —
+`reqWithEnvURL` actúa antes y no consulta `trustHost`.
+
+**Decision 2 — el guardia avisa, no corrige.** `lib/auth/direccionFijada.ts`
+compara la dirección clavada con el anfitrión que sirve la petición; si
+discrepan, `/login` **no pinta el botón de Google** y dice por qué. No puede
+arreglar el enrutado —eso ya lo decidió la librería— pero convierte un 404
+después de Google en una frase antes de salir hacia él. Calla cuando no hay
+nada clavado y cuando no hay anfitrión con qué comparar: un aviso que no puede
+saber si acierta enseña a ignorar avisos.
+
+**Consequences.** Cambiar de dominio deja de requerir acordarse de una variable.
+A cambio, la aplicación confía en la cabecera `x-forwarded-host` — aceptable
+porque Vercel la fija y no la deja falsificar desde fuera, y porque es lo que
+`trustHost` ya hacía en este despliegue. El arreglo en producción es de Daniel:
+borrar la variable en Vercel y registrar el callback de `.vercel.app` en Google
+Cloud Console.

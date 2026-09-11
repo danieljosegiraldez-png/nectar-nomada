@@ -1,7 +1,9 @@
+import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import LoginForm from "./LoginForm";
 import { signInWithGoogleAction } from "../actions/auth";
 import { BotonDeEnvio } from "../components/BotonDeEnvio";
+import { direccionFijadaEnOtroSitio } from "../../lib/auth/direccionFijada";
 
 /**
  * A server component so it can see whether Google is configured — ADR-076.
@@ -20,7 +22,19 @@ export default async function LoginPage() {
   // Mirrors the condition lib/auth/config.ts uses to register the provider at
   // all. Showing a button that leads to "provider not found" would be worse
   // than showing none.
-  const googleEnabled = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  const googleConfigurado = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+
+  // 2026-09-11: con la dirección clavada en otro dominio, Google autentica bien
+  // y devuelve al usuario a un sitio que no es éste — un 404 que parece culpa
+  // de Google. Se dice antes de salir, que es donde se entiende.
+  // `x-forwarded-host` primero: en Vercel es el anfitrión público, y `host` el
+  // interno.
+  const cabeceras = await headers();
+  const fijadaEnOtroSitio = direccionFijadaEnOtroSitio(
+    process.env.AUTH_URL ?? process.env.NEXTAUTH_URL,
+    cabeceras.get("x-forwarded-host") ?? cabeceras.get("host"),
+  );
+  const googleEnabled = googleConfigurado && !fijadaEnOtroSitio;
 
   return (
     <div className="nn-card">
@@ -45,6 +59,12 @@ export default async function LoginPage() {
             </BotonDeEnvio>
           </form>
         </>
+      ) : null}
+
+      {googleConfigurado && fijadaEnOtroSitio ? (
+        <p className="nn-muted" style={{ marginTop: "1.25rem" }}>
+          {t("googleFijadoEnOtraDireccion", { anfitrion: fijadaEnOtroSitio })}
+        </p>
       ) : null}
     </div>
   );

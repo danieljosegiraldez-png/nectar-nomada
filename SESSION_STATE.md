@@ -37,6 +37,35 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-11 · El 404 de Google era una dirección clavada en el sitio vecino
+
+Daniel probó «Continuar con Google» y recibió un **404**. No era Google:
+producción anunciaba de sí misma
+`"callbackUrl": "https://www.nectarnomada.com/api/auth/callback/google"` — el
+dominio de marca, que **desde el 2026-08-28 sirve el sitio editorial**. Con
+control positivo: esa dirección da **404** y la misma ruta en `.vercel.app` da
+**302**. Google autenticaba bien y devolvía al usuario al vecino, así que **el
+404 llegaba después de Google** y parecía culpa del proveedor.
+
+**Por qué tardó semanas en verse:** el usuario y contraseña nunca se rompieron.
+Ese formulario se manda a la página donde ya estás, sin dirección absoluta.
+**Sólo OAuth necesita que la aplicación sepa nombrarse**, y ahí muerde. Nathy
+llevaba sin poder entrar desde entonces.
+
+**Lo que entra, y lo que NO puede entrar.** Daniel pidió que la aplicación
+deduzca su dirección sola. Leyendo la librería resultó que eso no se programa:
+`next-auth/lib/env.js` reescribe el origen de **cada** petición al de
+`AUTH_URL ?? NEXTAUTH_URL` en cuanto una existe, antes de leer nuestra
+configuración. La variable se **borra** o gana la variable. Borrarla es seguro
+porque `@auth/core` ya enciende `trustHost` con la variable `VERCEL`. Queda en
+**ADR-113**, fuera de `.env.example`, y con un guardia
+(`lib/auth/direccionFijada.ts`) que **avisa, no corrige**: si la dirección
+clavada discrepa del anfitrión que sirve, `/login` no pinta el botón y dice por
+qué. Ocho pruebas con entrada hostil.
+
+**Sigue pendiente de Daniel** y no lo puede hacer el código: borrar la variable
+en Vercel y registrar el callback de `.vercel.app` en Google Cloud Console.
+
 ### 2026-09-10 · La pérdida de una colonia ya se puede anotar sin señal
 
 La cola offline del apiario aceptaba dos tipos de borrador: inspección y evento
@@ -154,44 +183,6 @@ revoca por id, y devolver la cerradura la enseñaria sin razon.
 **Lo que NO hizo falta probar de nuevo:** el ciclo del enlace ya estaba cubierto
 —token inventado, caducado, revocado, sin emitir, y RBAC en publicar y revocar—.
 Lo nuevo es el lector, con su puerta y su flip.
-
-### 2026-09-09 · Un formulario enseñaba «measured_fact» a un apicultor
-
-`TreatmentBatchForm` pintaba el **valor crudo del enum** en dos desplegables:
-en una interfaz en español se leía «measured_fact» y «verified_with_limitation».
-No revienta, no avisa — se lee mal, que es la misma familia que «Batches» contra
-«Lotes» y se encuentra igual: mirando, no ejecutando pruebas.
-
-**Medido sobre la población entera, no sobre una sospecha:** de **25**
-desplegables cuya clave es el propio valor, **22 traducían y 3 no**, los tres en
-ese archivo. Uno de los tres resultó **correcto** y se quedó como está, con su
-razón escrita al lado: recorre `variable.enumValues`, que no es un enum de
-Prisma sino la lista que el autor del protocolo congeló en esa versión —«río»,
-«quebrada»—; son datos en el idioma de quien los declaró y no hay clave posible.
-
-**Y arrastraba un segundo fallo que no se veía justamente porque no se usaba:**
-ese formulario ofrece `manufacturer_specification` e `hypothesis`, **dos valores
-sin etiqueta en ningún idioma**. Ahora la tienen.
-
-**Tres guardias nuevos** en `tests/ui/valoresEnumerados.test.ts`, y el tercero
-es el que más falta hacía: la excepción declarada **tiene que seguir aplicando a
-algo**, o se quita. Una excepción huérfana envejece en silencio y enseña a leer
-la lista por encima. Flip-test: cinco mutaciones, cada una tira la suya por su
-nombre.
-
-**Y una cobertura que era accidental, destapada al fusionar.** Entre medias entró
-el PR #255, que sacó las listas de procedencia de los ocho formularios a
-`lib/traceability/procedencia.ts`. Predije que eso dejaría este guardia mirando a
-la nada; **era falso** y lo dijo la medición: seguía en verde porque
-`TreatmentBatchForm` conserva las suyas en casa, y sus siete valores resultan ser
-un superconjunto de los cinco del módulo. Verde por coincidencia, no por
-cobertura: un sexto valor en el módulo habría entrado sin etiqueta sin que nada
-fallara. El guardia lee ahora también ese módulo, y el flip-test lo demuestra
-metiéndole `recommendation` —un valor del enum sin etiqueta— y viéndolo caer.
-
-**Lo que se señala y NO se tocó, en ese mismo archivo:** un `" (origen
-desconocido)"` en español metido a mano en el código, y dos opciones `true` /
-`false` sin traducir. Son la misma familia y otro arreglo.
 
 ## 3. Bloqueado, y en qué
 

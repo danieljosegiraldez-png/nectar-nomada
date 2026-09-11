@@ -127,7 +127,8 @@
     "errorEmailTaken": "Ya existe una cuenta con este correo.",
     "errorInvalidEmailOrPassword": "Ingresa un correo y contraseña válidos.",
     "orDivider": "o",
-    "continueWithGoogle": "Continuar con Google"
+    "continueWithGoogle": "Continuar con Google",
+    "googleFijadoEnOtraDireccion": "Entrar con Google está apagado aquí: la dirección de la aplicación está fijada en {anfitrion}, así que Google te devolvería a ese sitio y no a éste. Entra con correo y contraseña mientras tanto."
   },
   "MyNectar": {
     "badge": "Mi Néctar",
