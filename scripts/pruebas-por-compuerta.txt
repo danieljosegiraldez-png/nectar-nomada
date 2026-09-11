@@ -57,6 +57,7 @@ tests/sync/deviceTokens.test.ts
 tests/sync/fieldMedia.test.ts
 tests/sync/pullFieldWork.test.ts
 tests/sync/pushFieldEvents.test.ts
+tests/sync/finDeColoniaSinSenal.test.ts
 tests/traceability/ambitoVacio.test.ts
 tests/traceability/biocharBatches.test.ts
 tests/traceability/classificationGate.test.ts

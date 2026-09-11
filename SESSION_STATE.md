@@ -37,6 +37,44 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-10 · La pérdida de una colonia ya se puede anotar sin señal
+
+La cola offline del apiario aceptaba dos tipos de borrador: inspección y evento
+de colonia. **El fin de una colonia no estaba** — y es el hecho que más se
+descubre en el campo, una caja que aparece vacía. Había que volver con cobertura
+para poder anotarlo, y entre medias el conteo del sitio seguía contando colonias
+que ya no existen. Era el último formulario de apiario que exigía red.
+
+**La parte que no era obvia: la idempotencia de un UPDATE.** Las otras dos
+mutaciones insertan, así que su `clientDraftId` vive en la fila nueva. El fin es
+un UPDATE y no hay fila nueva, así que la clave va en `Colony.endClientDraftId`.
+Y hace falta porque sin ella **dos cosas muy distintas llegan como el mismo
+error**: que mi propio envío llegara y se perdiera la respuesta, y que otra
+persona la diera por perdida antes. La primera es un `duplicate` que se descarta
+callado; la segunda, un rechazo que el operador tiene que ver. Confundirlas haría
+descartar un aviso real, o dar una alarma por trabajo que sí se guardó.
+
+**Un defecto que el tercer tipo destapó, y no era teórico.** La traducción al
+protocolo era `kind === "inspection" ? "inspection" : "colony_event"`. Con dos
+tipos funcionaba; con el tercero, **un fin habría llegado disfrazado de evento de
+colonia** y se habría rechazado por un campo que falta, no por lo que es. Ahora
+es un `Record<DraftKind, string>` total: un cuarto tipo no compila hasta que
+alguien lo nombre.
+
+**Lo que esto cuesta, y está en `ADR-112`:** el rechazo deja de ser inmediato.
+Sin permiso, o si alguien llegó antes, eso sale al sincronizar y no al pulsar.
+Es el trato que ya aceptan las otras dos pantallas de campo, y el precio de
+poder anotar sin cobertura. La acción de servidor se **eliminó**: mi propio
+cambio la dejó huérfana.
+
+**Siete pruebas nuevas y flip-test de cinco mutaciones**, cada una cayendo por su
+nombre y compilando — incluida la de volver al ternario. La de «clase de causa
+inventada» lleva control positivo: la mutación siguiente del lote **sí** se
+aplica, así que el rechazo no se llevó por delante el trabajo bueno.
+
+**Lo que sigue sin probarse:** nadie ha anotado una pérdida real desde un
+teléfono en el campo. Los guardias miden el servidor y la traducción; la pantalla
+está detrás de `/login`.
 ### 2026-09-10 · La limpieza que no corre cuando la aserción falla
 
 «Cuántos sitios de apiario hay» devolvía **3** con dos reales: el tercero era

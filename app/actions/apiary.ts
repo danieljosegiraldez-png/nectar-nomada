@@ -97,39 +97,6 @@ export async function createColonyFormAction(formData: FormData): Promise<void> 
   revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
 }
 
-export async function registrarFinDeColoniaFormAction(formData: FormData): Promise<void> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-
-  const revalidationPath = String(formData.get("revalidationPath") ?? "");
-  await registrarFinDeColonia(user.userAccountId, {
-    colonyId: String(formData.get("colonyId") ?? ""),
-    status: exigeEstadoDeFin(String(formData.get("status") ?? "")),
-    // Instante, no día: `parseLocalDateTime` combina el reloj de pared con el
-    // desfase del dispositivo. Sin eso, en producción —que corre en UTC— un
-    // 07:30 de Panamá se guardaría como las 02:30.
-    endedAt: parseLocalDateTime(String(formData.get("endedAt") ?? ""), String(formData.get(TZ_OFFSET_FIELD) ?? "")),
-    // Las causas llegan como un campo por causa —`causa:<id>`— cuyo valor es
-    // la clase de procedencia, o vacío si no se eligió. Se recogen recorriendo
-    // el `FormData`, no pidiendo una lista aparte de ids: así el formulario no
-    // puede mandar un id sin clase ni una clase sin id.
-    //
-    // La clase se ESTRECHA aquí, no se castea. `as never` no convierte nada:
-    // apaga al compilador, y es justo lo que caza el guardia de
-    // `tests/arquitectura/procedencia-declarada.test.ts`. El servicio la vuelve
-    // a comprobar porque él es la frontera y se puede llamar sin formulario.
-    causas: [...formData.entries()].flatMap(([campo, valor]) => {
-      if (!campo.startsWith("causa:")) return [];
-      const clase = String(valor);
-      if (clase === "") return [];
-      return [{ causeValueId: campo.slice("causa:".length), provenanceClass: exigeClaseDeCausa(clase) }];
-    }),
-    reason: emptyToNull(formData.get("reason")),
-  });
-
-  revalidatePath(revalidationPath);
-}
-
 // --- Harvest/extraction -> HoneyBatch as a Lot (A3), online-only, same
 // reasoning as the two actions above ---
 

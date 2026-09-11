@@ -7,7 +7,8 @@ import {
 } from "../traceability/fieldSessions";
 import { recordInspection } from "../apiary/inspections";
 import { recordColonyEvent, ColonyEventValidationError } from "../apiary/colonyEvents";
-import { ApiaryAccessError } from "../apiary/hives";
+import { ApiaryAccessError, ColonyEndError, registrarFinDeColonia } from "../apiary/hives";
+import { ClaseDeCausaInvalida, exigeClaseDeCausa } from "../apiary/causaDePerdida";
 
 /**
  * P4 §4 (46_P4_API_Y_SINCRONIZACION.md) — push por lotes con resultado **por
@@ -50,7 +51,11 @@ import { ApiaryAccessError } from "../apiary/hives";
  * desde A9.2 el enganche a la visita abierta. Copiar esas reglas aquí sería
  * crear un segundo sitio donde envejecen por separado.
  */
-export type PushMutation = MutacionDeEvento | MutacionDeInspeccion | MutacionDeEventoDeColonia;
+export type PushMutation =
+  | MutacionDeEvento
+  | MutacionDeInspeccion
+  | MutacionDeEventoDeColonia
+  | MutacionDeFinDeColonia;
 
 export type MutacionDeEvento = {
   /** Ausente es `field_event`: el protocolo viejo sigue valiendo tal cual. */
@@ -106,6 +111,28 @@ export type MutacionDeEventoDeColonia = {
   treatmentDose?: number | null;
   treatmentDoseUnit?: string | null;
   treatmentBatchLabel?: string | null;
+};
+
+/**
+ * El fin de una colonia, anotado sin señal.
+ *
+ * **Es la única mutación de apiario que no inserta: actualiza.** De ahí que su
+ * idempotencia viva en `Colony.endClientDraftId` y no en una fila nueva, y de
+ * ahí que el `duplicate` haya que distinguirlo a mano — ver
+ * `aplicarFinDeColonia`.
+ *
+ * `causas` viaja como la declara el formulario. No se valida aquí lo que el
+ * servicio valida: se traduce y se delega, igual que las otras dos.
+ */
+export type MutacionDeFinDeColonia = {
+  kind: "colony_end";
+  clientDraftId: string;
+  colonyId: string;
+  /** Cuándo se perdió, no cuándo se sincroniza. */
+  endedAt: Date;
+  status: string;
+  reason?: string | null;
+  causas?: readonly { causeValueId: string; provenanceClass: string; dataQuality?: string | null; note?: string | null }[];
 };
 
 export type PushResult =
@@ -177,6 +204,52 @@ async function aplicarMutacionDeApiario(
   }
 }
 
+/**
+ * Aplica un fin de colonia. **El `duplicate` aquí se gana, no se hereda.**
+ *
+ * Las otras dos mutaciones preguntan por `clientDraftId` en la tabla que van a
+ * insertar. Ésta actualiza, así que la pregunta es otra: ¿esta MISMA clave ya
+ * terminó una colonia? Si sí, el borrador ya se aplicó y se descarta en
+ * silencio. Si la colonia está terminada pero con otra clave —o sin ninguna,
+ * porque se declaró desde la web—, **no es un duplicado**: es que alguien llegó
+ * antes, y eso el operador tiene que verlo.
+ *
+ * Confundir las dos haría que se descartara un aviso real, o que saltara una
+ * alarma por trabajo que sí se guardó.
+ */
+async function aplicarFinDeColonia(userAccountId: string, m: MutacionDeFinDeColonia): Promise<PushResult> {
+  const mismoBorrador = await prisma.colony.findUnique({
+    where: { endClientDraftId: m.clientDraftId },
+    select: { id: true },
+  });
+  if (mismoBorrador) return { clientDraftId: m.clientDraftId, status: "duplicate", id: mismoBorrador.id };
+
+  try {
+    const fila = await registrarFinDeColonia(userAccountId, {
+      colonyId: m.colonyId,
+      status: m.status as never,
+      endedAt: m.endedAt,
+      reason: m.reason ?? null,
+      causas: (m.causas ?? []).map((c) => ({
+        causeValueId: c.causeValueId,
+        provenanceClass: exigeClaseDeCausa(c.provenanceClass),
+        dataQuality: (c.dataQuality ?? null) as never,
+        note: c.note ?? null,
+      })),
+      clientDraftId: m.clientDraftId,
+    });
+    return { clientDraftId: m.clientDraftId, status: "applied", id: fila.id };
+  } catch (error) {
+    // Mismo corte que `aplicarMutacionDeApiario`: permiso y validación son
+    // rechazos del servidor y se informan; cualquier otra cosa se relanza para
+    // que un corte de base no borre trabajo de campo disfrazado de dato malo.
+    if (error instanceof ApiaryAccessError || error instanceof ColonyEndError || error instanceof ClaseDeCausaInvalida) {
+      return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
+    }
+    throw error;
+  }
+}
+
 export async function pushFieldEvents(
   userAccountId: string,
   deviceId: string,
@@ -205,6 +278,11 @@ export async function pushFieldEvents(
     if (m.kind === "inspection" || m.kind === "colony_event") {
       const resultado = await aplicarMutacionDeApiario(userAccountId, m);
       results.push(resultado);
+      continue;
+    }
+
+    if (m.kind === "colony_end") {
+      results.push(await aplicarFinDeColonia(userAccountId, m));
       continue;
     }
 

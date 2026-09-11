@@ -1322,6 +1322,7 @@
     "colonyEndCause_conclusion": "Lo concluí",
     "colonyEndCause_direct_observation": "Lo vi",
     "colonyEndButton": "Registrar la pérdida",
+    "colonyEndSavedLocally": "Se anotó la pérdida en este aparato. Se enviará en cuanto haya señal.",
     "colonyEndedOn": "Se perdió el {fecha}",
     "apiaryCreateHeading": "Crear apiario",
     "apiaryCreateIntro": "El sitio donde están las colmenas. Después se le ponen colmenas, colonias y visitas.",
