@@ -182,41 +182,6 @@ guardia ofrece — y que tiene su prueba: una excepción que deja de aplicar fal
 elección `ppm`/`%` **sí vale** —un laboratorio reporta en una y otro en otra— así
 que quitarla ahí sería el error contrario.
 
-### 2026-09-11 · Una cosecha ya no puede violar la carencia sin que el sistema lo sepa
-
-El Anexo B §4 marcaba el período de carencia como **obligatorio y no
-existente**, con su consecuencia escrita. Y `lib/apiary/bitacora.ts` ya lo
-afirmaba desde A9.12: «tiene periodo de carencia y afecta a la miel que salga de
-esa colmena, así que quien coseche necesita saberlo sin buscarlo». **El aviso
-existía; el dato no.**
-
-**La contradicción era del propio Anexo,** y la resolvió el dueño. §5 dice
-«**bloqueo**» y «la cosecha avisa» en la misma celda. Decisión: **avisa y
-registra igual**, con los días que faltaban en la fila. Si la miel ya se
-extrajo, impedir el registro no la devuelve al panal — deja el hecho sin rastro,
-que para trazabilidad es peor que un registro marcado.
-
-**Cuatro decisiones pequeñas que no son obvias**, y cada una tiene su prueba:
-cero días es **una respuesta legítima** —hay productos sin carencia, y un
-`!valor` la habría rechazado—; los días que faltan se redondean **hacia arriba**,
-porque medio día sigue siendo carencia y un `floor` daría cero justo cuando
-alguien va a cosechar creyendo que puede; la marca es la carencia **más larga y
-no la suma**, porque corren en paralelo; y se pregunta **en la fecha de la
-cosecha**, no en la de hoy.
-
-**Lo que rompe a propósito:** el campo es obligatorio, así que todo tratamiento
-sin carencia se rechaza desde ahora. Rompió cinco llamadas en cuatro archivos de
-prueba —todas actualizadas— y el formulario y la cola offline llevan el campo.
-**No hubo nada que retroadaptar: 0 tratamientos y 0 cosechas existían.**
-
-**Y lo que las diez pruebas NO son, para que nadie lo cuente dos veces:** una red
-para el día que lleguen los datos, no un guardia sobre datos que existan. Sus
-fixtures crean el tratamiento y la cosecha, así que la transformación sí se
-ejercita — pero nadie ha tratado ni cosechado de verdad.
-
-**Lo que queda fuera:** el aviso **no se ha visto en pantalla** —el servicio
-devuelve las carencias con su producto y pintarlas es otro cambio— y los otros
-tres campos que §4 pide siguen sin existir: objetivo, vía y fecha de retiro.
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
