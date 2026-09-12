@@ -113,14 +113,24 @@ describe("A9.5 — un borrador se traduce a la mutación del lote", () => {
     expect(m.kind).toBe("colony_end");
   });
 
-  it("los tres tipos de borrador tienen nombre propio en el protocolo", () => {
-    // Sin esto, un cuarto tipo podría compartir el nombre de otro y el fallo
+  it("un conteo de varroa viaja como `varroa_count`", () => {
+    const m = mutacionDe({ ...borrador(), kind: "varroaCount" as const });
+    expect(m.kind).toBe("varroa_count");
+  });
+
+  it("los CUATRO tipos de borrador tienen nombre propio en el protocolo", () => {
+    // Sin esto, un tipo nuevo podría compartir el nombre de otro y el fallo
     // sería silencioso: el servidor aplicaría la mutación equivocada.
-    const nombres = (["inspection", "colonyEvent", "colonyEnd"] as const).map(
+    //
+    // Y que el nombre exista no basta: que el servidor lo RECONOZCA lo comprueba
+    // `tests/sync/parseoDelLote.test.ts`, porque `colony_end` tuvo nombre propio
+    // aquí durante un día entero mientras el parseo de la ruta lo mandaba al
+    // camino equivocado y tumbaba el lote completo.
+    const nombres = (["inspection", "colonyEvent", "colonyEnd", "varroaCount"] as const).map(
       (kind) => mutacionDe({ ...borrador(), kind }).kind,
     );
-    expect(new Set(nombres).size).toBe(3);
-    expect(nombres).toEqual(["inspection", "colony_event", "colony_end"]);
+    expect(new Set(nombres).size).toBe(4);
+    expect(nombres).toEqual(["inspection", "colony_event", "colony_end", "varroa_count"]);
   });
 
   it("sin hora propia usa la de CREACIÓN del borrador, no la de sincronizar", () => {

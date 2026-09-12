@@ -119,6 +119,7 @@ model Person {
   inspectionsOperated                Inspection[]                  @relation("InspectionOperator")
   colonyEventsOperated               ColonyEvent[]                 @relation("ColonyEventOperator")
   apiaryHarvestEventsOperated        ApiaryHarvestEvent[]          @relation("ApiaryHarvestEventOperator")
+  varroaCountsOperated               VarroaCount[]                 @relation("VarroaCountOperator")
   organizationMemberships            OrganizationMembership[]
   plantingEventsOperated             PlantingEvent[]               @relation("PlantingEventOperator")
   specimenObservationsObserved       SpecimenObservation[]         @relation("SpecimenObservationObserver")
@@ -216,6 +217,7 @@ model UserAccount {
   inspectionsCreated                Inspection[]                 @relation("InspectionCreatedBy")
   apiaryHarvestEventsCreated        ApiaryHarvestEvent[]         @relation("ApiaryHarvestEventCreatedBy")
   colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
+  varroaCountsCreated               VarroaCount[]                @relation("VarroaCountCreatedBy")
   organizationMembershipsCreated    OrganizationMembership[]     @relation("OrganizationMembershipCreatedBy")
   plantingEventsCreated             PlantingEvent[]              @relation("PlantingEventCreatedBy")
   plantingCohortsCreated            PlantingCohort[]             @relation("PlantingCohortCreatedBy")
@@ -4198,6 +4200,11 @@ model FieldEvent {
   colonyEvent           ColonyEvent?         @relation(fields: [colonyEventId], references: [id])
   apiaryHarvestEventId  String?              @map("apiary_harvest_event_id") @db.Uuid
   apiaryHarvestEvent    ApiaryHarvestEvent?  @relation(fields: [apiaryHarvestEventId], references: [id])
+  /// A9.1, mismo molde: un conteo de varroa hecho durante una visita entra en
+  /// ella. Sin esta FK sería el único registro de apiario que no se agrupa, y
+  /// «la visita es el hecho» dejaría de ser cierto para él.
+  varroaCountId         String?              @map("varroa_count_id") @db.Uuid
+  varroaCount           VarroaCount?         @relation(fields: [varroaCountId], references: [id])
 
   provenanceClass ProvenanceClass @map("provenance_class")
 
@@ -4236,6 +4243,7 @@ model FieldEvent {
   @@index([inspectionId])
   @@index([colonyEventId])
   @@index([apiaryHarvestEventId])
+  @@index([varroaCountId])
   @@map("field_event")
   @@schema("traceability")
 }
@@ -5163,6 +5171,8 @@ model Colony {
   /// Por qué se perdió. Vacío mientras siga activa, y puede tener varias:
   /// ver la cabecera de `ColonyLossCause`.
   lossCauses          ColonyLossCause[]
+  /// Los conteos de varroa de esta colonia. La serie que el Anexo C §2.1 pide.
+  varroaCounts        VarroaCount[]
   inspections         Inspection[]
   colonyEvents        ColonyEvent[]
   apiaryHarvestEvents ApiaryHarvestEvent[]
@@ -5356,6 +5366,88 @@ enum ColonyEventType {
   @@schema("apiary")
 }
 
+/// Cómo se contó la varroa. **El resultado sólo es comparable dentro del mismo
+/// método**, y por eso el método es obligatorio en cuanto hay conteo: un 3 % por
+/// alcohol y un 3 % por bandeja no son el mismo hecho.
+///
+/// Enum y no catálogo: son los cuatro valores que el Anexo B §2.5 fija, con su
+/// `otro` como salida, igual que `ColonyEventType`. No se espera que crezcan — y
+/// el día que crezcan, crecer un enum es una migración de una línea.
+enum VarroaMethod {
+  alcohol
+  azucar
+  bandeja
+  otro
+
+  @@schema("apiary")
+}
+
+/// Un conteo de varroa. **Una medición, no una observación** — así lo encuadra
+/// el Anexo B §2.5, y de ahí que tenga tabla propia.
+///
+/// ## Por qué NO es un `Measurement`
+///
+/// `Measurement` guarda **una variable por fila**. Un conteo de varroa son tres
+/// datos que sólo significan algo juntos: método, abejas de muestra y ácaros
+/// contados. Repartirlos en dos filas —más un método sin sitio— perdería
+/// exactamente el vínculo que los hace interpretables, y nada garantizaría que
+/// las tres piezas se refieren al mismo conteo.
+///
+/// ## Por qué NO es un campo del tratamiento
+///
+/// Porque el informe A9 ya lo razonó, sobre la «eficacia observada» que el Anexo
+/// B §4 pide: *«Se escribe semanas después, no al cerrar la visita. Si se pide en
+/// el cierre, se contestará vacío siempre. Es un conteo de varroa posterior
+/// ligado al tratamiento anterior — o sea, una relación entre dos visitas, no un
+/// campo.»* De ahí `evaluatesColonyEventId`.
+///
+/// ## El porcentaje de infestación NO se guarda
+///
+/// Es `mitesCounted / sampleBees`, y el Anexo lo marca «derivado». Guardarlo
+/// sería un segundo sitio que puede discrepar del primero — la misma razón por
+/// la que la carencia se guarda en días y no como fecha de fin (`ADR-115`).
+model VarroaCount {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  colonyId     String       @map("colony_id") @db.Uuid
+  colony       Colony       @relation(fields: [colonyId], references: [id])
+  occurredAt   DateTime     @map("occurred_at")
+  method       VarroaMethod
+  /// El denominador. Obligatorio: un conteo sin muestra no tiene porcentaje.
+  sampleBees   Int          @map("sample_bees")
+  /// El numerador. Cero es un resultado legítimo y el mejor posible.
+  mitesCounted Int          @map("mites_counted")
+  /// El tratamiento que este conteo evalúa, cuando lo hay.
+  ///
+  /// **Anulable, y es el caso normal.** Se cuenta para decidir si hay que tratar
+  /// —eso es el umbral— así que la mayoría de conteos no evalúan nada. Sólo el
+  /// conteo posterior a una aplicación la señala, y ése es el que cierra el
+  /// ciclo: tratar, volver a contar, comparar.
+  evaluatesColonyEventId String?      @map("evaluates_colony_event_id") @db.Uuid
+  evaluates              ColonyEvent? @relation("VarroaCountEvaluates", fields: [evaluatesColonyEventId], references: [id])
+
+  operatorPersonId String?  @map("operator_person_id") @db.Uuid
+  operator         Person?  @relation("VarroaCountOperator", fields: [operatorPersonId], references: [id])
+  notes            String?
+  /// Fijada a `measured_fact` en la capa de acción: alguien contó ácaros en una
+  /// muestra. No es seleccionable por el operador, misma disciplina que el resto
+  /// del módulo.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  dataQuality     DataQuality?    @map("data_quality")
+  /// A5/A0 — la clave del borrador de la cola offline. Un conteo se hace en el
+  /// campo, delante de la caja abierta.
+  clientDraftId String?  @unique @map("client_draft_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  createdBy     String?  @map("created_by") @db.Uuid
+  creator       UserAccount? @relation("VarroaCountCreatedBy", fields: [createdBy], references: [id])
+
+  fieldEvents FieldEvent[]
+
+  @@index([colonyId])
+  @@index([evaluatesColonyEventId])
+  @@map("varroa_count")
+  @@schema("apiary")
+}
+
 model ColonyEvent {
   id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   colonyId            String          @map("colony_id") @db.Uuid
@@ -5426,6 +5518,11 @@ model ColonyEvent {
   fieldEvents FieldEvent[]
 
   @@index([colonyId])
+  /// Los conteos de varroa que evalúan ESTE tratamiento. Es la «eficacia
+  /// observada» del Anexo B §4, que el informe A9 dijo que era una relación
+  /// entre dos visitas y no un campo.
+  varroaCounts VarroaCount[] @relation("VarroaCountEvaluates")
+
   @@map("colony_event")
   @@schema("apiary")
 }

@@ -8311,3 +8311,62 @@ todavía.
 devuelve las carencias con su producto, y quien las pinte es otro cambio. Y los
 otros tres campos que §4 pide siguen sin existir: objetivo, vía y fecha de
 retiro.
+
+---
+
+## ADR-116 — El conteo de varroa es una fila propia que puede apuntar a un tratamiento, y el porcentaje no se guarda
+
+**Contexto.** `48_A9_ANEXO_B_CATALOGO_DE_CAMPOS.md` §2.5 pide cuatro campos
+—método, abejas de muestra, ácaros contados, infestación derivada— y marca los
+cuatro como **no existentes**. El Anexo C §2.1 nombra la serie que sin ellos no
+se puede dibujar: *«Infestación de varroa | por conteo | umbral de tratamiento y
+si el tratamiento sirvió»*.
+
+**Tres decisiones, y ninguna es de gusto.**
+
+**1. Fila propia, no `Measurement`.** El propio A9 dice *«`Measurement` guarda
+una variable por fila»*, y un conteo son dos números que sólo significan algo
+juntos: 9 ácaros no dice nada sin las 300 abejas. Repartirlos en dos filas haría
+posible tener el numerador sin el denominador, que es el estado que
+`infestacionPorCiento` rechaza.
+
+**2. El tratamiento que se evalúa es una relación OPCIONAL.** El informe del A9
+lo plantea así: *«Es un conteo de varroa posterior ligado al tratamiento anterior
+— o sea, una relación entre dos visitas, no un campo.»* Opcional porque contar
+**para decidir** si se trata es el caso normal; cuando viene, el servicio exige
+que sea un evento de tipo `treatment` **y de la misma colonia**. Sin esa segunda
+comprobación se podría atribuir la eficacia de una caja a otra, que es peor que
+no medirla.
+
+**3. El porcentaje no se guarda en ninguna columna.** El Anexo lo marca
+«derivado». Guardarlo sería un segundo sitio para el mismo número, y el día que
+alguien corrigiera el conteo sin recalcularlo, los dos discreparían en silencio.
+Se calcula al leer, en `lib/apiary/infestacion.ts`, y **con muestra cero lanza en
+vez de devolver cero**: devolver cero afirmaría «no hay infestación», que es lo
+contrario de «no se sabe».
+
+**Lo que esto NO prueba todavía.** Medido el 2026-09-11: **nadie ha contado
+varroa en esta plataforma**. Las pruebas construyen los conteos, así que la
+aritmética y las reglas sí se ejercitan, pero ningún dato real las ha pasado —
+está escrito en la cabecera de `tests/apiary/varroa.test.ts` para que nadie lo
+cuente dos veces.
+
+**Y un defecto propio que este trabajo destapó, porque tocaba el mismo sitio.**
+A9.5 (ADR-112) dio camino sin señal al fin de colonia: la cola lo encola, el
+servicio lo aplica, y `tests/sync/finDeColoniaSinSenal.test.ts` lo comprueba. El
+**parseo de la ruta HTTP no reconocía ese `kind`**: caía al camino de
+`FieldEvent`, que exige `fieldSessionId`, y devolvía **400 del lote entero**. El
+cliente trata un 4xx de lote como fallo de transporte —y hace bien, porque no
+puede distinguirlo de «no llegué»— así que dejaba todo en cola: **un solo
+borrador de fin de colonia bloqueaba la cola del apiario indefinidamente**, él y
+todo lo que tuviera detrás.
+
+Ninguna prueba podía verlo, y no por descuido: importar
+`app/api/v1/sync/field-events/route.ts` arrastra `next-auth`, que vitest no
+resuelve. La pieza que decide qué tipos existen **no se podía llamar**. Es la
+regla de `CLAUDE.md` al pie de la letra —*«el guardia es el que llama a la
+función con la entrada hostil, lo que suele obligar a exportarla; si eso
+incomoda, la incomodidad es el aviso»*—, así que el parseo salió a
+`lib/sync/parsearMutaciones.ts` y `tests/sync/parseoDelLote.test.ts` lo vigila
+con la lista de tipos **tomada del cliente**, no escrita a mano: un quinto tipo
+sin rama en el parseo hace caer esa prueba por su nombre.

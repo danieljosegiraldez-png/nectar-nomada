@@ -9,18 +9,18 @@
  *
  * Lo que sí es 4xx: el lote entero negado (aparato desconocido o revocado) y el
  * cuerpo mal formado.
+ *
+ * **El parseo vive en `lib/sync/parsearMutaciones.ts`, no aquí.** Importar esta
+ * ruta arrastra `next-auth`, que vitest no resuelve, así que mientras el parseo
+ * estuvo dentro no tuvo ni una prueba — y se quedó sin la rama de `colony_end`
+ * toda la A9.5, bloqueando la cola del apiario de quien anotara una pérdida sin
+ * señal. Ese módulo lo explica y `tests/sync/parseoDelLote.test.ts` lo vigila.
  */
 import { resolverPrincipal } from "../../../../../lib/sync/requestPrincipal";
-import { pushFieldEvents, DeviceError, type PushMutation, type MutacionDeEvento } from "../../../../../lib/sync/pushFieldEvents";
+import { pushFieldEvents, DeviceError } from "../../../../../lib/sync/pushFieldEvents";
+import { parsearMutaciones } from "../../../../../lib/sync/parsearMutaciones";
 
 export const dynamic = "force-dynamic";
-
-/** Las fechas viajan como texto ISO por JSON y vuelven a ser fechas aquí. */
-function toDate(v: unknown): Date | null {
-  if (typeof v !== "string") return null;
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
 
 export async function POST(request: Request) {
   // P4 §2 — cookie o token de aparato, indistinto para esta ruta.
@@ -42,45 +42,11 @@ export async function POST(request: Request) {
   // 200 es holgado para una jornada de campo y acotado para el servidor.
   if (mutations.length > 200) return Response.json({ error: "batch_too_large" }, { status: 413 });
 
-  const parsed: PushMutation[] = [];
-  for (const raw of mutations) {
-    const m = (raw ?? {}) as Record<string, unknown>;
-    const occurredAt = toDate(m.occurredAt);
-
-    // A9.5 — las mutaciones de apiario no llevan `fieldSessionId`: la visita la
-    // resuelve el servidor a partir de la que esté abierta en ese sitio
-    // (`lib/traceability/visitaAbierta.ts`). El aparato no la conoce, y
-    // pedírsela lo obligaría a adivinar cuál era la visita del día.
-    if (m.kind === "inspection" || m.kind === "colony_event") {
-      if (typeof m.clientDraftId !== "string" || typeof m.colonyId !== "string" || !occurredAt) {
-        return Response.json({ error: "mutation_malformed" }, { status: 400 });
-      }
-      // Los campos propios de cada tipo los valida su servicio de dominio: aquí
-      // sólo se comprueba lo que hace falta para poder llamarlo.
-      parsed.push({ ...(m as object), occurredAt } as PushMutation);
-      continue;
-    }
-
-    if (typeof m.clientDraftId !== "string" || typeof m.fieldSessionId !== "string") {
-      return Response.json({ error: "mutation_missing_ids" }, { status: 400 });
-    }
-    if (typeof m.eventKindValueId !== "string" || !occurredAt) {
-      return Response.json({ error: "mutation_malformed" }, { status: 400 });
-    }
-    parsed.push({
-      clientDraftId: m.clientDraftId,
-      fieldSessionId: m.fieldSessionId,
-      eventKindValueId: m.eventKindValueId,
-      occurredAt,
-      recordedAt: toDate(m.recordedAt),
-      position: (m.position ?? undefined) as MutacionDeEvento["position"],
-      operatorPersonId: typeof m.operatorPersonId === "string" ? m.operatorPersonId : null,
-      notes: typeof m.notes === "string" ? m.notes : null,
-    });
-  }
+  const parseo = parsearMutaciones(mutations);
+  if (!parseo.ok) return Response.json({ error: parseo.error }, { status: 400 });
 
   try {
-    const results = await pushFieldEvents(user.userAccountId, deviceId, parsed);
+    const results = await pushFieldEvents(user.userAccountId, deviceId, parseo.mutations);
     return Response.json({ results }, { status: 200 });
   } catch (error) {
     if (error instanceof DeviceError) {

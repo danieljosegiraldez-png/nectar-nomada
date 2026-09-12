@@ -36,6 +36,7 @@ tests/apiary/irregularidades.test.ts
 tests/apiary/media.test.ts
 tests/apiary/polinizacion.test.ts
 tests/apiary/origenDeColonia.test.ts
+tests/apiary/varroa.test.ts
 tests/apiary/vitalesDelSitio.test.ts
 tests/auth/googleLinking.test.ts
 tests/auth/setPassword.test.ts
@@ -61,6 +62,7 @@ tests/sync/deviceTokens.test.ts
 tests/sync/fieldMedia.test.ts
 tests/sync/pullFieldWork.test.ts
 tests/sync/pushFieldEvents.test.ts
+tests/sync/parseoDelLote.test.ts
 tests/sync/finDeColoniaSinSenal.test.ts
 tests/traceability/ambitoVacio.test.ts
 tests/traceability/biocharBatches.test.ts

@@ -62,7 +62,11 @@ export async function ligarAVisitaAbierta(
     locationId: string;
     occurredAt: Date;
     provenanceClass: ProvenanceClass;
-    sujeto: { inspectionId: string } | { colonyEventId: string } | { apiaryHarvestEventId: string };
+    sujeto:
+      | { inspectionId: string }
+      | { colonyEventId: string }
+      | { apiaryHarvestEventId: string }
+      | { varroaCountId: string };
   },
 ): Promise<string | null> {
   const fieldSessionId = await visitaAbiertaEn(tx, input.userAccountId, input.locationId);

@@ -37,6 +37,31 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-11 · Contar varroa existe, se anota sin señal, y la serie dice si el tratamiento sirvió
+
+El Anexo B §2.5 pedía cuatro campos y marcaba los cuatro como **no existentes**.
+Las tres decisiones están en **ADR-116** y salen del material del dueño, no del
+gusto: fila propia porque *«`Measurement` guarda una variable por fila»* y 9
+ácaros no dicen nada sin las 300 abejas; el tratamiento que un conteo evalúa es
+una **relación opcional** —*«entre dos visitas, no un campo»*— y tiene que ser de
+la **misma colonia**; y el porcentaje **no se guarda**, con muestra cero **lanza**
+en vez de devolver cero, porque cero afirmaría «no hay infestación» cuando lo que
+hay es «no se sabe».
+
+**UN DEFECTO PROPIO QUE ESTO DESTAPÓ.** El parseo de
+`/api/v1/sync/field-events` **no reconocía `colony_end`**, cerrado el día antes:
+caía al camino de `FieldEvent`, devolvía **400 del lote entero**, y como el
+cliente trata eso como fallo de transporte, **un solo borrador de fin de colonia
+dejaba la cola del apiario bloqueada**, él y todo lo que tuviera detrás. Dos
+pruebas en verde no podían verlo: importar la ruta arrastra `next-auth`, que
+vitest no resuelve, **así que la pieza que decide qué tipos existen no se podía
+llamar**. Salió a `lib/sync/parsearMutaciones.ts`, y su prueba toma la lista de
+tipos **del cliente**: un quinto tipo sin rama cae por su nombre.
+
+**Lo que NO prueba:** nadie ha contado varroa todavía, y la pantalla no se ha
+visto en un teléfono. Escrito en la cabecera de la prueba para que nadie lo cuente
+dos veces.
+
 ### 2026-09-11 · La lista de chequeo del apicultor nunca salió del disco
 
 `protocolos/apiario-campo-v1.json` son 11 KB de preguntas de campo ya escritas
@@ -156,42 +181,6 @@ guardia ofrece — y que tiene su prueba: una excepción que deja de aplicar fal
 **laboratorio** llevan el mismo campo de unidad. En el de laboratorio la
 elección `ppm`/`%` **sí vale** —un laboratorio reporta en una y otro en otra— así
 que quitarla ahí sería el error contrario.
-
-### 2026-09-11 · Una cosecha ya no puede violar la carencia sin que el sistema lo sepa
-
-El Anexo B §4 marcaba el período de carencia como **obligatorio y no
-existente**, con su consecuencia escrita. Y `lib/apiary/bitacora.ts` ya lo
-afirmaba desde A9.12: «tiene periodo de carencia y afecta a la miel que salga de
-esa colmena, así que quien coseche necesita saberlo sin buscarlo». **El aviso
-existía; el dato no.**
-
-**La contradicción era del propio Anexo,** y la resolvió el dueño. §5 dice
-«**bloqueo**» y «la cosecha avisa» en la misma celda. Decisión: **avisa y
-registra igual**, con los días que faltaban en la fila. Si la miel ya se
-extrajo, impedir el registro no la devuelve al panal — deja el hecho sin rastro,
-que para trazabilidad es peor que un registro marcado.
-
-**Cuatro decisiones pequeñas que no son obvias**, y cada una tiene su prueba:
-cero días es **una respuesta legítima** —hay productos sin carencia, y un
-`!valor` la habría rechazado—; los días que faltan se redondean **hacia arriba**,
-porque medio día sigue siendo carencia y un `floor` daría cero justo cuando
-alguien va a cosechar creyendo que puede; la marca es la carencia **más larga y
-no la suma**, porque corren en paralelo; y se pregunta **en la fecha de la
-cosecha**, no en la de hoy.
-
-**Lo que rompe a propósito:** el campo es obligatorio, así que todo tratamiento
-sin carencia se rechaza desde ahora. Rompió cinco llamadas en cuatro archivos de
-prueba —todas actualizadas— y el formulario y la cola offline llevan el campo.
-**No hubo nada que retroadaptar: 0 tratamientos y 0 cosechas existían.**
-
-**Y lo que las diez pruebas NO son, para que nadie lo cuente dos veces:** una red
-para el día que lleguen los datos, no un guardia sobre datos que existan. Sus
-fixtures crean el tratamiento y la cosecha, así que la transformación sí se
-ejercita — pero nadie ha tratado ni cosechado de verdad.
-
-**Lo que queda fuera:** el aviso **no se ha visto en pantalla** —el servicio
-devuelve las carencias con su producto y pintarlas es otro cambio— y los otros
-tres campos que §4 pide siguen sin existir: objetivo, vía y fecha de retiro.
 
 ## 3. Bloqueado, y en qué
 
