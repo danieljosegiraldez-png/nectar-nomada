@@ -1,9 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordMeasurementAction, type TraceabilityActionState } from "../../actions/traceability";
-import { PROCEDENCIA_DE_MEDICION } from "../../../lib/traceability/procedencia";
+import { unidadesAceptadas } from "../../../lib/traceability/units";
+import { TimezoneOffsetField } from "../TimezoneOffsetField";
+import { paraCampoLocal } from "../../../lib/time/localDateTime";
 
 const initialState: TraceabilityActionState = {};
 
@@ -11,21 +13,41 @@ const initialState: TraceabilityActionState = {};
 // (routed through QuantityEvent, not here, per T3's own design).
 const VARIABLES = ["temperature", "ph", "brix", "relative_humidity", "moisture", "water_activity"] as const;
 
-// T9.5 §3(c)/§4: the subset of ProvenanceClass that's actually plausible for
-// a raw field measurement — not the full ten-value vocabulary (hypothesis,
-// conclusion, recommendation, ai_suggestion, original_record belong to
-// other layers of the system, not a moisture reading at the drying beds).
-// measured_fact first/default: Phase 1's only source type is "manual"
-// (§10.2), i.e. an operator reading an instrument — a thermometer,
-// refractometer, pH meter, moisture meter — which is a measured fact, not
-// an unqualified claim (T9.5 §3(b)'s "harvest weight read off a scale"
-// reasoning extends the same way here).
-
 interface ObserverOption {
   id: string;
   displayName: string;
 }
 
+/**
+ * **Tres campos menos de trabajo (2026-09-11).** Daniel, usándolo: «there is a
+ * field for unit and also for variable and it could be redundant… its like you
+ * are trying to make me work more».
+ *
+ * Tenía razón y medía peor de lo que sonaba. La unidad era una **caja de texto
+ * libre obligatoria**, y de las seis variables que este formulario ofrece
+ * **cinco admiten una sola unidad** —`ph` sólo pH, `brix` sólo Bx, `%` las dos
+ * humedades, `aw` la actividad de agua—. Sólo la temperatura elige entre C y F.
+ * Escribirla era teclear una respuesta que el registro ya conoce, y teclearla
+ * mal era un rechazo: los dos únicos desenlaces eran «acertaste y sobraba» o
+ * «fallaste y te bloquea».
+ *
+ * Ahora la unidad **se deriva de la variable**: una sola → campo oculto, no se
+ * pregunta; varias → un desplegable con ésas y sólo ésas. La fuente sigue
+ * siendo `lib/traceability/units.ts`, así que añadir una unidad a una variable
+ * cambia esta pantalla sin tocarla.
+ *
+ * **La procedencia también sale del camino**, por decisión de Daniel el mismo
+ * día. Era un desplegable de cinco para una respuesta que en esta fase es
+ * siempre la misma: una lectura de instrumento es un hecho medido. Va como
+ * campo oculto; el día que entre un sensor o una importación, ese camino pondrá
+ * su propia procedencia, que es donde corresponde decidirlo — no tecleándolo.
+ *
+ * **Y entra «cuándo se midió», que antes no existía.** La acción ponía
+ * `new Date()`, la hora de GUARDAR. Medir a las 7 en el patio y escribirlo a
+ * las 9 en la oficina quedaba fechado a las 9, y en una fermentación la curva
+ * es el dato. Llega relleno con la hora actual: si mides y anotas a la vez, no
+ * se toca.
+ */
 export function MeasurementForm({
   lotId,
   observers,
@@ -53,41 +75,70 @@ export function MeasurementForm({
   const [state, formAction, pending] = useActionState(recordMeasurementAction, initialState);
   const t = useTranslations("Traceability");
 
+  const [variable, setVariable] = useState<string>("temperature");
+  const unidades = unidadesAceptadas(variable);
+  const unicaUnidad = unidades.length === 1 ? unidades[0] : null;
+
+  // El «ahora» se escribe en el DOM al montar, por la misma razón que el
+  // desfase horario: en el servidor este componente también se renderiza, y
+  // allí el reloj de pared es el del servidor —UTC en producción—, que es el
+  // valor equivocado. Sale vacío del servidor y lo rellena el navegador.
+  const cuandoRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (cuandoRef.current && !cuandoRef.current.value) {
+      cuandoRef.current.value = paraCampoLocal(new Date());
+    }
+  }, []);
+
   return (
     <form action={formAction} className="nn-form" style={{ maxWidth: 480, marginTop: "1rem" }}>
       <input type="hidden" name="claveDeEnvio" value={claveDeEnvio} />
       <input type="hidden" name="lotId" value={lotId} />
+      <TimezoneOffsetField />
+      {/* Una lectura de instrumento es un hecho medido. Ver la cabecera. */}
+      <input type="hidden" name="provenanceClass" value="measured_fact" />
       {fermentationRunId ? <input type="hidden" name="fermentationRunId" value={fermentationRunId} /> : null}
       {dryingRunId ? <input type="hidden" name="dryingRunId" value={dryingRunId} /> : null}
       {storageAssignmentId ? <input type="hidden" name="storageAssignmentId" value={storageAssignmentId} /> : null}
+
       <div className="nn-field">
         <label htmlFor="variable">{t("variableLabel")}</label>
-        <select id="variable" name="variable" defaultValue="temperature">
-          {VARIABLES.map((variable) => (
-            <option key={variable} value={variable}>
-              {t(`variable_${variable}` as "variable_temperature")}
+        <select id="variable" name="variable" value={variable} onChange={(e) => setVariable(e.target.value)}>
+          {VARIABLES.map((v) => (
+            <option key={v} value={v}>
+              {t(`variable_${v}` as "variable_temperature")}
             </option>
           ))}
         </select>
       </div>
+
       <div className="nn-field">
-        <label htmlFor="value">{t("valueLabel")}</label>
+        <label htmlFor="value">
+          {unicaUnidad ? t("valueLabelWithUnit", { unit: unicaUnidad }) : t("valueLabel")}
+        </label>
         <input id="value" name="value" type="number" inputMode="decimal" step="0.01" required />
       </div>
+
+      {unicaUnidad ? (
+        <input type="hidden" name="unit" value={unicaUnidad} />
+      ) : (
+        <div className="nn-field">
+          <label htmlFor="unit">{t("unitLabel")}</label>
+          <select id="unit" name="unit" defaultValue={unidades[0]} key={variable}>
+            {unidades.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="nn-field">
-        <label htmlFor="unit">{t("unitLabel")}</label>
-        <input id="unit" name="unit" type="text" required placeholder="C, pH, Bx, %, aw" />
+        <label htmlFor="occurredAt">{t("measuredAtLabel")}</label>
+        <input ref={cuandoRef} id="occurredAt" name="occurredAt" type="datetime-local" defaultValue="" required />
       </div>
-      <div className="nn-field">
-        <label htmlFor="provenanceClass">{t("provenanceClassLabel")}</label>
-        <select id="provenanceClass" name="provenanceClass" defaultValue="measured_fact">
-          {PROCEDENCIA_DE_MEDICION.map((cls) => (
-            <option key={cls} value={cls}>
-              {t(`provenanceClass_${cls}` as "provenanceClass_measured_fact")}
-            </option>
-          ))}
-        </select>
-      </div>
+
       <div className="nn-field">
         <label htmlFor="operatorPersonId">{t("observerLabel")}</label>
         <select id="operatorPersonId" name="operatorPersonId" defaultValue={selfPersonId ?? ""}>
@@ -98,10 +149,12 @@ export function MeasurementForm({
           ))}
         </select>
       </div>
+
       <div className="nn-field">
         <label htmlFor="notes">{t("notesLabel")}</label>
         <textarea id="notes" name="notes" rows={2} />
       </div>
+
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("recordMeasurementButton")}

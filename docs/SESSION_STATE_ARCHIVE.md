@@ -2229,3 +2229,37 @@ demostraría que lee el lote.
 - **Un tueste no produce muestra de cata.** Hay pantalla de tueste y pantalla de
   muestra-desde-batch, y **ningún puente**: la cadena `batch → tueste → muestra`
   de §23 se corta en medio.
+
+### 2026-09-11 · Una parcela no es un lote, y existen las microparcelas
+
+Daniel, intentando crear uno: «how do I create lots». Medido, y la causa no era
+el código: **sus parcelas se llaman «Lote 1 — Finca Rosina»**. En los datos una
+*parcela* se llama Lote, y en la pantalla un *batch* también. Misma palabra, dos
+cosas — el trozo de tierra y la cantidad de café que salió de él.
+
+**Su modelo ya era el del sistema**, y conviene no volver a construirlo: finca =
+`Organization` de tipo `farm` **más** una ubicación `site`; las parcelas cuelgan
+de la finca; y **«sin parcela no hay cosecha» ya estaba impuesto** por
+`harvest_event.location_id NOT NULL`, cuyo comentario dice «the plot».
+
+**Lo que entra:** el tipo de ubicación **`micro_plot`** (ADR pendiente; la
+alternativa descartada era anidar parcelas, que funciona hoy pero no deja
+distinguir «toda la parcela» de «este rincón»), y
+`npm run data:parcelas-no-son-lotes` — seco por defecto, coincidencia por
+**patrón exacto** `^Lote <n> — ` y nunca `contains`, que es la lección de
+`rename-finca-rosina.ts`. Renombra a «Parcela N — finca» y, aparte, **pone la
+organización a las que no la tienen**: seis de Finca Rosina cuelgan del sitio por
+el padre sin declarar finca, y un operador acotado por organización no las
+alcanza. Las de Cafelino sí la tienen.
+
+**Una cifra mía que era falsa y su causa.** Dije «6 sin organización, 9 con». Son
+**8 parcelas: 6 sin y 2 con**. Medí mientras otra sesión corría la suite sobre la
+base compartida y conté filas TEST transitorias. Y lo que importa más: **todo lo
+medido aquí es la copia local restaurada, no producción** — por eso el guion
+imprime la fila patrón antes de escribir.
+
+**Lo que se encontró de camino y NO se tocó:** el formulario de cosecha pide
+peso, Brix y una **«condición» de texto libre** — mientras que **siete de los
+nueve catálogos de cereza no los lee ninguna línea**: `cereza_condicion_visual`,
+`_limpieza`, `_color`, `_firmeza`, `_densidad`, `_tamano_forma`, `_defectos`.
+El vocabulario para las «vital statistics» de la cereza está escrito y sin puerta.

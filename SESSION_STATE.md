@@ -122,6 +122,40 @@ se rechaza por el rango 0-14, no por la unidad. Lo destapó mi propio control �
 acepta su propia canónica»—. Medido bien: de **60** variables, **34** admiten una
 sola unidad, **23** ofrecen elección real (temperaturas C/F y nutrientes de
 laboratorio) y **3** no las pude medir por no tener sus unidades en la lista.
+### 2026-09-11 · La medición pedía escribir a mano lo que ya sabía
+
+Daniel, usándolo: «there is a field for unit and also for variable and it could
+be redundant… **its like you are trying to make me work more**». Tenía razón, y
+medía peor de lo que sonaba: la unidad era una **caja de TEXTO LIBRE
+obligatoria**, y de las seis variables del formulario **cinco admiten una sola
+unidad**. Los dos únicos desenlaces eran «acertaste y sobraba» o «fallaste y te
+bloquea».
+
+**Lo que entra, tres decisiones suyas en fila:** la unidad se **deriva** de la
+variable —una sola, campo oculto; varias, desplegable con ésas y sólo ésas, que
+en la práctica es sólo temperatura C/F—; la **procedencia** sale del camino con
+`measured_fact` fijo, porque una lectura de instrumento es eso y el día que
+entre un sensor lo pondrá ese camino, no un dedo; y entra **«cuándo se midió»**,
+que no existía — la acción ponía `new Date()`, la hora de GUARDAR, así que medir
+a las 7 y escribirlo a las 9 quedaba fechado a las 9.
+
+**La hora va por `fechaLocal`, el ayudante que ya existía.** Escribí un
+`parseLocalDateTime` a mano y lo sustituí al ver que el archivo ya lo envolvía:
+dos formas de hacer lo mismo es cómo se desincronizan.
+
+**Tres guardias del repositorio me pararon antes que Daniel**, y los tres
+tenían razón: el inventario de acceso con sus cifras viejas, la declaración de
+`dependen_del_llamador`, y **el de valores crudos que escribí yo hace dos días**
+— cazó el desplegable de unidades. La respuesta correcta no era traducirlas:
+`C`, `pH`, `mg/kg` son símbolos internacionales, iguales en los dos idiomas, y
+una clave `unidad_mg/kg` crearía un sitio donde desincronizarse con el registro.
+Va como **excepción declarada con su razón**, que es el mecanismo que ese mismo
+guardia ofrece — y que tiene su prueba: una excepción que deja de aplicar falla.
+
+**Lo que NO se tocó, a propósito:** el formulario de **corrección** y el de
+**laboratorio** llevan el mismo campo de unidad. En el de laboratorio la
+elección `ppm`/`%` **sí vale** —un laboratorio reporta en una y otro en otra— así
+que quitarla ahí sería el error contrario.
 
 ### 2026-09-11 · Una cosecha ya no puede violar la carencia sin que el sistema lo sepa
 
@@ -158,39 +192,7 @@ ejercita — pero nadie ha tratado ni cosechado de verdad.
 **Lo que queda fuera:** el aviso **no se ha visto en pantalla** —el servicio
 devuelve las carencias con su producto y pintarlas es otro cambio— y los otros
 tres campos que §4 pide siguen sin existir: objetivo, vía y fecha de retiro.
-### 2026-09-11 · Una parcela no es un lote, y existen las microparcelas
 
-Daniel, intentando crear uno: «how do I create lots». Medido, y la causa no era
-el código: **sus parcelas se llaman «Lote 1 — Finca Rosina»**. En los datos una
-*parcela* se llama Lote, y en la pantalla un *batch* también. Misma palabra, dos
-cosas — el trozo de tierra y la cantidad de café que salió de él.
-
-**Su modelo ya era el del sistema**, y conviene no volver a construirlo: finca =
-`Organization` de tipo `farm` **más** una ubicación `site`; las parcelas cuelgan
-de la finca; y **«sin parcela no hay cosecha» ya estaba impuesto** por
-`harvest_event.location_id NOT NULL`, cuyo comentario dice «the plot».
-
-**Lo que entra:** el tipo de ubicación **`micro_plot`** (ADR pendiente; la
-alternativa descartada era anidar parcelas, que funciona hoy pero no deja
-distinguir «toda la parcela» de «este rincón»), y
-`npm run data:parcelas-no-son-lotes` — seco por defecto, coincidencia por
-**patrón exacto** `^Lote <n> — ` y nunca `contains`, que es la lección de
-`rename-finca-rosina.ts`. Renombra a «Parcela N — finca» y, aparte, **pone la
-organización a las que no la tienen**: seis de Finca Rosina cuelgan del sitio por
-el padre sin declarar finca, y un operador acotado por organización no las
-alcanza. Las de Cafelino sí la tienen.
-
-**Una cifra mía que era falsa y su causa.** Dije «6 sin organización, 9 con». Son
-**8 parcelas: 6 sin y 2 con**. Medí mientras otra sesión corría la suite sobre la
-base compartida y conté filas TEST transitorias. Y lo que importa más: **todo lo
-medido aquí es la copia local restaurada, no producción** — por eso el guion
-imprime la fila patrón antes de escribir.
-
-**Lo que se encontró de camino y NO se tocó:** el formulario de cosecha pide
-peso, Brix y una **«condición» de texto libre** — mientras que **siete de los
-nueve catálogos de cereza no los lee ninguna línea**: `cereza_condicion_visual`,
-`_limpieza`, `_color`, `_firmeza`, `_densidad`, `_tamano_forma`, `_defectos`.
-El vocabulario para las «vital statistics» de la cereza está escrito y sin puerta.
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
