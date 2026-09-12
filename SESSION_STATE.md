@@ -90,6 +90,38 @@ corrida, y **no tiene bandera para bases remotas**: leer producción a veces se
 quiere, borrar su auditoría nunca.
 
 Lo demás está en las trampas de `CLAUDE.md`, que es donde se lee al hacerlo.
+### 2026-09-11 · Los códigos de las corrientes se derivan, y un bloque es una parcela
+
+Daniel, en selección: «for the rejects we should have an automatically generated
+code… we need to have very good trazabilidad and coding system». Y aparte:
+«lets not use BLOCKS anymore, it is confusing».
+
+**La convención ya era suya y sólo faltaba automatizarla.** Sus lotes reales la
+traen: `PE-90` produjo `PE-90-A` y `PE-90-B`; `PE-95` produjo `-A`, `-B`, `-C`.
+Padre más letra. Así que `codigosDerivados` **continúa su sistema**, no le impone
+uno con abreviaturas de categoría. Se sugieren y siguen siendo editables.
+
+**Por qué derivar y no contar.** `schema.prisma` ya explicaba por qué el código
+no es único global: «dos aparatos desconectados acuñando PE-79». Hoy la selección
+exige red, pero `/lots` ya está en las rutas que el service worker guarda. Una
+función del código del padre no puede chocar; un contador sí.
+
+**«Bloque» era la tercera palabra para lo mismo** —Lote, Parcela, Bloque— y de
+ahí media confusión del día. Renombrado en los dos idiomas, con el género
+cuidado: «un bloque» → «una parcela», no «un parcela».
+
+**Dos guardias del repositorio me cazaron, y tenían razón.** La suite salió en
+**rojo**: `codigosYaDerivadosDe` no recibe principal —se apoya en el guardia de
+la pantalla que la llama— y eso hay que **declararlo** en
+`dependen_del_llamador`, no dejarlo en un comentario; y las cifras del inventario
+quedaron viejas (286→287, 36→37). Ambas corregidas.
+
+**Y una medición mía que estaba mal, para la revisión que sigue.** Conté
+«variables con una sola unidad» probando valores **fuera de rango**: `pH` con 20
+se rechaza por el rango 0-14, no por la unidad. Lo destapó mi propio control —«no
+acepta su propia canónica»—. Medido bien: de **60** variables, **34** admiten una
+sola unidad, **23** ofrecen elección real (temperaturas C/F y nutrientes de
+laboratorio) y **3** no las pude medir por no tener sus unidades en la lista.
 
 ### 2026-09-11 · Una cosecha ya no puede violar la carencia sin que el sistema lo sepa
 
@@ -159,39 +191,6 @@ peso, Brix y una **«condición» de texto libre** — mientras que **siete de l
 nueve catálogos de cereza no los lee ninguna línea**: `cereza_condicion_visual`,
 `_limpieza`, `_color`, `_firmeza`, `_densidad`, `_tamano_forma`, `_defectos`.
 El vocabulario para las «vital statistics» de la cereza está escrito y sin puerta.
-### 2026-09-11 · «111 · green_coffee» no dice qué café vas a catar
-
-Daniel, probando: «samples in session just give me one bulk option for all, says
-111 - green coffee» y «i think there is a mistake trying to select which
-coffee». **Ni el selector ni los códigos ciegos estaban mal.** En toda la base
-hay **una** muestra —código `111`, tipo `green_coffee`, sin descripción—, así
-que ofrecía lo único que existe, y «Muestra A = 111» era el código ciego
-funcionando. Lo que fallaba: la etiqueta no dice **de qué café** es.
-
-`Sample.sourceLotId` lo sabe desde que existe `createSampleFromLot`. La consulta
-no lo leía. Ahora la lista trae **código · batch · finca · grado del proceso**,
-con el grado del proceso más reciente del batch —no el primero—. Dos pruebas, y
-la segunda es la que hace valer a la primera: una muestra **sin** batch tiene que
-salir en `null`, porque si `lotCode` saliera siempre relleno la primera no
-demostraría que lee el lote.
-
-**Lo que se midió de camino y NO se tocó**, porque son decisiones del dueño:
-
-- **El SCA-103 contradice «no cateamos verde».** Su §2: «diseñado para la
-  evaluación descriptiva de **café verde arábica**, preparado y catado según el
-  **SCA-102**». El verde no va a la taza, pero es el sujeto al que el CVA le
-  cuelga la evaluación. Lo que falta es el 102 en medio — y ese PDF **no está**
-  entre los siete que hay.
-- **Ya se pueden leer los PDF cifrados** (autorización de Daniel): `qlmanage` y
-  `pdfjs-dist` en carpeta temporal, sin forzar nada. El 103 leído entero: siete
-  escalas 0-15 y CATA con topes (5 olfativos, 2 sabores, 2 de cuerpo).
-- **El protocolo no guarda la preparación.** Los 12-13 g / 200 ml / 93-94 °C
-  caben hoy sólo en `preparationMethod`, texto libre. Dos catas del mismo
-  protocolo pueden no ser comparables y nada lo sabe.
-- **Un tueste no produce muestra de cata.** Hay pantalla de tueste y pantalla de
-  muestra-desde-batch, y **ningún puente**: la cadena `batch → tueste → muestra`
-  de §23 se corta en medio.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad

@@ -214,3 +214,36 @@ export async function getSelectionCatalogs() {
   ]);
   return { methods, categories };
 }
+
+/**
+ * Los códigos que ya cuelgan de este lote, para no reclamar uno con dueño.
+ *
+ * **Por qué existe.** `lot_code` es único por organización, así que derivar
+ * `PE-90-A` cuando ya hay un `PE-90-A` no da un aviso: aborta la transacción
+ * entera de la selección. Esto le da a `codigosDerivados` la lista que tiene que
+ * saltar.
+ *
+ * **Sin guardia propio, y se dice en vez de fingirlo.** Devuelve *códigos de
+ * lote* de la misma organización que un lote que quien llama ya está viendo —la
+ * pantalla de detalle lo cargó con su propio guardia—, así que no añade
+ * superficie. Si algún día se llamara desde otro sitio, ese sitio tiene que
+ * traer su propia comprobación.
+ *
+ * **`insensitive` a propósito:** `PE-90-a` y `PE-90-A` se leen como el mismo
+ * código aunque la base los admita como dos.
+ */
+export async function codigosYaDerivadosDe(lotId: string): Promise<string[]> {
+  const lote = await prisma.lot.findUnique({
+    where: { id: lotId },
+    select: { lotCode: true, organizationId: true },
+  });
+  if (!lote) return [];
+  const hermanos = await prisma.lot.findMany({
+    where: {
+      organizationId: lote.organizationId,
+      lotCode: { startsWith: `${lote.lotCode}-`, mode: "insensitive" },
+    },
+    select: { lotCode: true },
+  });
+  return hermanos.map((h) => h.lotCode);
+}

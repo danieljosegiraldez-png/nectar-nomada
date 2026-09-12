@@ -2196,3 +2196,36 @@ complacer a un regex.
 
 **Lo que NO está:** el reporte **no tiene pantalla**. Existe, está probado con
 nueve casos —tres con control positivo— y nadie lo ha visto dibujado.
+
+### 2026-09-11 · «111 · green_coffee» no dice qué café vas a catar
+
+Daniel, probando: «samples in session just give me one bulk option for all, says
+111 - green coffee» y «i think there is a mistake trying to select which
+coffee». **Ni el selector ni los códigos ciegos estaban mal.** En toda la base
+hay **una** muestra —código `111`, tipo `green_coffee`, sin descripción—, así
+que ofrecía lo único que existe, y «Muestra A = 111» era el código ciego
+funcionando. Lo que fallaba: la etiqueta no dice **de qué café** es.
+
+`Sample.sourceLotId` lo sabe desde que existe `createSampleFromLot`. La consulta
+no lo leía. Ahora la lista trae **código · batch · finca · grado del proceso**,
+con el grado del proceso más reciente del batch —no el primero—. Dos pruebas, y
+la segunda es la que hace valer a la primera: una muestra **sin** batch tiene que
+salir en `null`, porque si `lotCode` saliera siempre relleno la primera no
+demostraría que lee el lote.
+
+**Lo que se midió de camino y NO se tocó**, porque son decisiones del dueño:
+
+- **El SCA-103 contradice «no cateamos verde».** Su §2: «diseñado para la
+  evaluación descriptiva de **café verde arábica**, preparado y catado según el
+  **SCA-102**». El verde no va a la taza, pero es el sujeto al que el CVA le
+  cuelga la evaluación. Lo que falta es el 102 en medio — y ese PDF **no está**
+  entre los siete que hay.
+- **Ya se pueden leer los PDF cifrados** (autorización de Daniel): `qlmanage` y
+  `pdfjs-dist` en carpeta temporal, sin forzar nada. El 103 leído entero: siete
+  escalas 0-15 y CATA con topes (5 olfativos, 2 sabores, 2 de cuerpo).
+- **El protocolo no guarda la preparación.** Los 12-13 g / 200 ml / 93-94 °C
+  caben hoy sólo en `preparationMethod`, texto libre. Dos catas del mismo
+  protocolo pueden no ser comparables y nada lo sabe.
+- **Un tueste no produce muestra de cata.** Hay pantalla de tueste y pantalla de
+  muestra-desde-batch, y **ningún puente**: la cadena `batch → tueste → muestra`
+  de §23 se corta en medio.
