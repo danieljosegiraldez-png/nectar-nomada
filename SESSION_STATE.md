@@ -86,6 +86,45 @@ código, así que **editar el JSON hoy no cambia ni una pregunta en pantalla**. 
 que sí hace es que el protocolo aparezca en `/research`, se pueda aprobar con el
 botón que ya existe y se pueda **ejecutar** en `/research/execute/<versión>`, que
 pinta los 44 ítems. Entra como `draft` a propósito: aprobar es un acto humano.
+### 2026-09-11 · La cereza cosechada deja de ser una caja de texto
+
+Daniel: «condition field should be fixed options that can be selected», y antes
+«register details and **vital statistics** of harvested cherries».
+
+**La medición previa es la que justifica el cambio:** `condition` tenía **29 de
+33** filas rellenas y **las 29 decían exactamente «Ripe Cherry»**. Una caja de
+texto libre acaba siendo un valor que nadie varía y del que después no se puede
+contar nada — nadie podía preguntar cuántas cosechas entraron pintonas.
+
+**El vocabulario ya estaba escrito y sin puerta:** siete catálogos de cereza, 35
+valores, **cero líneas de código leyéndolos**. Daniel eligió tres —color
+(la escala de madurez), defectos y limpieza— por ser los que deciden qué se
+puede hacer con esa cereza. Los otros cuatro entran sin migración el día que los
+use: son filas de catálogo.
+
+**Columnas y no tabla de atributos**, al revés que las causas de pérdida de
+colonia: allí el dueño dijo «múltiples razones»; aquí cada eje tiene UN valor —
+una cereza no es roja y verde a la vez.
+
+**Lo viejo NO se traduce y `condition` NO se borra.** Mapear «Ripe Cherry» a
+`rojo` sería inferir un hecho y guardarlo como tal. Las 29 conservan su prosa.
+`ripenessNotes` **sí** se borró: contada antes, **0 filas**, y la migración
+aborta si algún día esa cuenta no da cero.
+
+**El cultivar no se pregunta, y esto cambió una decisión de Daniel.** Él pidió
+preguntarlo; midiendo salió que **las cuatro siembras ya lo tienen** y que el
+formulario de parcelas ya enlaza la siembra. Preguntarlo crearía una segunda
+fuente que puede contradecir a la primera. Decidió enseñarlo — queda pendiente
+de construir, junto con la sugerencia del código de lote.
+
+**Recepción sigue con texto libre**: es OTRA tabla con su propia columna y
+necesita su propia migración. Declarado en el código, no arreglado a medias.
+
+**Dos tropiezos míos, los dos cazados por herramientas y no por mí:** el
+compilador paró una sustitución que alcanzó también a la acción de recepción; y
+`assertDefinedWhere` paró un `afterAll` cuyo fixture había reventado porque usé
+`perl` sobre una plantilla de JavaScript y **se comió el `${RUN}`** —perl lo leyó
+como variable suya—. Para editar código con interpolación, no perl.
 
 ### 2026-09-11 · Lo que la base de pruebas acumulaba, y por qué nadie lo veía
 
@@ -147,40 +186,6 @@ se rechaza por el rango 0-14, no por la unidad. Lo destapó mi propio control �
 acepta su propia canónica»—. Medido bien: de **60** variables, **34** admiten una
 sola unidad, **23** ofrecen elección real (temperaturas C/F y nutrientes de
 laboratorio) y **3** no las pude medir por no tener sus unidades en la lista.
-### 2026-09-11 · La medición pedía escribir a mano lo que ya sabía
-
-Daniel, usándolo: «there is a field for unit and also for variable and it could
-be redundant… **its like you are trying to make me work more**». Tenía razón, y
-medía peor de lo que sonaba: la unidad era una **caja de TEXTO LIBRE
-obligatoria**, y de las seis variables del formulario **cinco admiten una sola
-unidad**. Los dos únicos desenlaces eran «acertaste y sobraba» o «fallaste y te
-bloquea».
-
-**Lo que entra, tres decisiones suyas en fila:** la unidad se **deriva** de la
-variable —una sola, campo oculto; varias, desplegable con ésas y sólo ésas, que
-en la práctica es sólo temperatura C/F—; la **procedencia** sale del camino con
-`measured_fact` fijo, porque una lectura de instrumento es eso y el día que
-entre un sensor lo pondrá ese camino, no un dedo; y entra **«cuándo se midió»**,
-que no existía — la acción ponía `new Date()`, la hora de GUARDAR, así que medir
-a las 7 y escribirlo a las 9 quedaba fechado a las 9.
-
-**La hora va por `fechaLocal`, el ayudante que ya existía.** Escribí un
-`parseLocalDateTime` a mano y lo sustituí al ver que el archivo ya lo envolvía:
-dos formas de hacer lo mismo es cómo se desincronizan.
-
-**Tres guardias del repositorio me pararon antes que Daniel**, y los tres
-tenían razón: el inventario de acceso con sus cifras viejas, la declaración de
-`dependen_del_llamador`, y **el de valores crudos que escribí yo hace dos días**
-— cazó el desplegable de unidades. La respuesta correcta no era traducirlas:
-`C`, `pH`, `mg/kg` son símbolos internacionales, iguales en los dos idiomas, y
-una clave `unidad_mg/kg` crearía un sitio donde desincronizarse con el registro.
-Va como **excepción declarada con su razón**, que es el mecanismo que ese mismo
-guardia ofrece — y que tiene su prueba: una excepción que deja de aplicar falla.
-
-**Lo que NO se tocó, a propósito:** el formulario de **corrección** y el de
-**laboratorio** llevan el mismo campo de unidad. En el de laboratorio la
-elección `ppm`/`%` **sí vale** —un laboratorio reporta en una y otro en otra— así
-que quitarla ahí sería el error contrario.
 
 ## 3. Bloqueado, y en qué
 

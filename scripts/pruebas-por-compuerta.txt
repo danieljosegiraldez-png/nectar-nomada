@@ -94,6 +94,7 @@ tests/traceability/recipeAuthoring.test.ts
 tests/traceability/recipeVersions.test.ts
 tests/traceability/reports.test.ts
 tests/traceability/samples.test.ts
+tests/traceability/cerezaComoDato.test.ts
 tests/traceability/selection.test.ts
 tests/traceability/soilProfiles.test.ts
 tests/traceability/soilSamples.test.ts

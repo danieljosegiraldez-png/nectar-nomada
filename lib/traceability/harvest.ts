@@ -17,6 +17,41 @@ import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 import { recordAuditEvent } from "../audit";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
+export class CerezaError extends Error {}
+
+/**
+ * Los tres catálogos de los que puede venir cada eje de la cereza.
+ *
+ * **Sin esto, un id de catálogo cualquiera entra donde no debe**: nada impediría
+ * guardar «flotadores» en la columna de color, y la columna dejaría de
+ * significar lo que su nombre dice. Es el mismo guardia que `lotProcess` pone
+ * sobre el grado de proceso y el estado de la cereza, con el mismo idioma.
+ *
+ * **Vive en TypeScript y no en la base**, igual que allí, y se dice en vez de
+ * llamarlo estructural: un importador o un SQL directo se lo salta. Lo que la
+ * base sí garantiza es que el id exista y sea un valor de catálogo.
+ */
+const CATALOGO_DE_CEREZA = {
+  cherryColorValueId: "cereza_color",
+  cherryDefectsValueId: "cereza_defectos",
+  cherryCleanlinessValueId: "cereza_limpieza",
+} as const;
+
+/** Comprueba que cada valor dado venga del catálogo que le toca. */
+async function exigeCatalogosDeCereza(input: {
+  cherryColorValueId?: string | null;
+  cherryDefectsValueId?: string | null;
+  cherryCleanlinessValueId?: string | null;
+}): Promise<void> {
+  for (const [campo, clave] of Object.entries(CATALOGO_DE_CEREZA) as [keyof typeof CATALOGO_DE_CEREZA, string][]) {
+    const id = input[campo];
+    if (!id) continue; // opcional: ausencia es «no se registró», no un error
+    const valor = await prisma.variableCatalogValue.findUnique({ where: { id }, include: { catalog: true } });
+    if (!valor) throw new CerezaError(`${campo}_not_found`);
+    if (valor.catalog.key !== clave) throw new CerezaError(`${campo}_wrong_catalog`);
+  }
+}
+
 export interface RecordHarvestEventInput {
   lotCode: string;
   locationId: string; // the plot
@@ -27,8 +62,17 @@ export interface RecordHarvestEventInput {
   cherryWeightKg?: number | null;
   brix?: number | null;
   temperatureC?: number | null;
+  /** Prosa heredada. Ya no se pide en pantalla; ver el esquema. */
   condition?: string | null;
-  ripenessNotes?: string | null;
+  /**
+   * La cereza como dato (Daniel, 2026-09-11). Tres valores de catálogo cerrado
+   * —`cereza_color`, `cereza_defectos`, `cereza_limpieza`— que el vocabulario
+   * ya tenía escritos y que no leía nadie. Opcionales: ausencia significa «no
+   * se registró», nunca «sano y limpio».
+   */
+  cherryColorValueId?: string | null;
+  cherryDefectsValueId?: string | null;
+  cherryCleanlinessValueId?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
   // T9.5: required, no fallback. app/actions/traceability.ts passes
@@ -41,6 +85,7 @@ export interface RecordHarvestEventInput {
 
 export async function recordHarvestEvent(userAccountId: string, input: RecordHarvestEventInput) {
   await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+  await exigeCatalogosDeCereza(input);
 
   const provenanceClass = input.provenanceClass;
 
@@ -67,7 +112,9 @@ export async function recordHarvestEvent(userAccountId: string, input: RecordHar
         brix: input.brix ?? null,
         temperatureC: input.temperatureC ?? null,
         condition: input.condition ?? null,
-        ripenessNotes: input.ripenessNotes ?? null,
+        cherryColorValueId: input.cherryColorValueId ?? null,
+        cherryDefectsValueId: input.cherryDefectsValueId ?? null,
+        cherryCleanlinessValueId: input.cherryCleanlinessValueId ?? null,
         operatorPersonId: input.operatorPersonId ?? null,
         notes: input.notes ?? null,
         resultingLotId: lot.id,
@@ -207,4 +254,28 @@ export async function recordReceivingEvent(userAccountId: string, input: RecordR
   });
 
   return result;
+}
+
+/**
+ * Los tres catálogos que la pantalla de cosecha ofrece, con sus valores.
+ *
+ * **Vocabulario, no datos de nadie**: son las listas de `research.variable_catalog`
+ * que describen la cereza, las mismas que el guardia de arriba exige. Por eso no
+ * lleva principal — igual que `getSelectionCatalogs`, que tampoco lo lleva.
+ *
+ * `aliasOfId: null` porque un alias es el mismo valor escrito de otra forma y
+ * ofrecer los dos en un desplegable invita a que dos cosechas iguales se
+ * registren distinto.
+ */
+export async function catalogosDeCereza() {
+  const [color, defectos, limpieza] = await Promise.all(
+    (["cereza_color", "cereza_defectos", "cereza_limpieza"] as const).map((key) =>
+      prisma.variableCatalogValue.findMany({
+        where: { catalog: { key }, aliasOfId: null },
+        select: { id: true, value: true },
+        orderBy: { displayOrder: "asc" },
+      }),
+    ),
+  );
+  return { color: color ?? [], defectos: defectos ?? [], limpieza: limpieza ?? [] };
 }

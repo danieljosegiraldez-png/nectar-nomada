@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { recordHarvestAction, type TraceabilityActionState } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
+import { paraCampoLocal } from "../../../lib/time/localDateTime";
 
 const initialState: TraceabilityActionState = {};
 
@@ -14,18 +15,48 @@ interface Option {
 interface LocationOption extends Option {
   organization: Option | null;
 }
+interface CatalogOption {
+  id: string;
+  value: string;
+}
 
+/**
+ * **La cereza deja de ser prosa** (Daniel, 2026-09-11: «condition field should
+ * be fixed options that can be selected»).
+ *
+ * La condición era una caja de texto. Medido antes de tocarla: **29 de 33**
+ * cosechas la tenían rellena y las 29 decían exactamente «Ripe Cherry» — que es
+ * la prueba de por qué no sirve para un hecho que se quiere contar. Entran tres
+ * desplegables de catálogo cerrado, los tres que Daniel eligió entre los siete
+ * que ya existían sin que nadie los leyera: **color** (la escala de madurez),
+ * **defectos** y **limpieza**.
+ *
+ * Los tres son **opcionales**: no registrar no es lo mismo que «sano y limpio».
+ *
+ * Y la fecha llega con la hora actual, como en medición. Se escribe en el DOM al
+ * montar: en el servidor el reloj de pared es el del servidor —UTC en
+ * producción— que es el valor equivocado.
+ */
 export function HarvestForm({
   organizations,
   locations,
   projects,
+  cerezas,
 }: {
   organizations: Option[];
   locations: LocationOption[];
   projects: Option[];
+  cerezas: { color: CatalogOption[]; defectos: CatalogOption[]; limpieza: CatalogOption[] };
 }) {
   const [state, formAction, pending] = useActionState(recordHarvestAction, initialState);
   const t = useTranslations("Traceability");
+
+  const cuandoRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (cuandoRef.current && !cuandoRef.current.value) {
+      cuandoRef.current.value = paraCampoLocal(new Date());
+    }
+  }, []);
 
   return (
     <form action={formAction} className="nn-form" style={{ maxWidth: 480 }}>
@@ -67,7 +98,7 @@ export function HarvestForm({
       </div>
       <div className="nn-field">
         <label htmlFor="h-harvestedAt">{t("harvestedAtLabel")}</label>
-        <input id="h-harvestedAt" name="harvestedAt" type="datetime-local" required />
+        <input ref={cuandoRef} id="h-harvestedAt" name="harvestedAt" type="datetime-local" defaultValue="" required />
       </div>
       <div className="nn-field">
         <label htmlFor="h-cherryWeightKg">{t("cherryWeightLabel")}</label>
@@ -78,8 +109,31 @@ export function HarvestForm({
         <input id="h-brix" name="brix" type="number" inputMode="decimal" step="0.01" />
       </div>
       <div className="nn-field">
-        <label htmlFor="h-condition">{t("conditionLabel")}</label>
-        <input id="h-condition" name="condition" type="text" />
+        <label htmlFor="h-cherryColor">{t("cherryColorLabel")}</label>
+        <select id="h-cherryColor" name="cherryColorValueId" defaultValue="">
+          <option value="">{t("noneOption")}</option>
+          {cerezas.color.map((c) => (
+            <option key={c.id} value={c.id}>{t(`cereza_color_${c.value}` as "cereza_color_rojo")}</option>
+          ))}
+        </select>
+      </div>
+      <div className="nn-field">
+        <label htmlFor="h-cherryDefects">{t("cherryDefectsLabel")}</label>
+        <select id="h-cherryDefects" name="cherryDefectsValueId" defaultValue="">
+          <option value="">{t("noneOption")}</option>
+          {cerezas.defectos.map((c) => (
+            <option key={c.id} value={c.id}>{t(`cereza_defectos_${c.value}` as "cereza_defectos_sano")}</option>
+          ))}
+        </select>
+      </div>
+      <div className="nn-field">
+        <label htmlFor="h-cherryCleanliness">{t("cherryCleanlinessLabel")}</label>
+        <select id="h-cherryCleanliness" name="cherryCleanlinessValueId" defaultValue="">
+          <option value="">{t("noneOption")}</option>
+          {cerezas.limpieza.map((c) => (
+            <option key={c.id} value={c.id}>{t(`cereza_limpieza_${c.value}` as "cereza_limpieza_limpio")}</option>
+          ))}
+        </select>
       </div>
       <div className="nn-field">
         <label htmlFor="h-notes">{t("notesLabel")}</label>
