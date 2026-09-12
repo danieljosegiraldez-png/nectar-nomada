@@ -217,7 +217,6 @@ ejercita — pero nadie ha tratado ni cosechado de verdad.
 **Lo que queda fuera:** el aviso **no se ha visto en pantalla** —el servicio
 devuelve las carencias con su producto y pintarlas es otro cambio— y los otros
 tres campos que §4 pide siguen sin existir: objetivo, vía y fecha de retiro.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
