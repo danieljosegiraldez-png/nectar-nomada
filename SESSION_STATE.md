@@ -37,6 +37,31 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-11 · La lista de chequeo del apicultor nunca salió del disco
+
+`protocolos/apiario-campo-v1.json` son 11 KB de preguntas de campo ya escritas
+—5 actividades, 44 ítems— y `lib/apiary/protocoloDeCampo.ts` sabe darlas de alta
+como `ProtocolVersion` de Research OS. Medido: **sólo lo llamaban las pruebas**.
+Ni un guion, ni una pantalla. Aquí la puerta no es una pantalla: cargar un
+protocolo se decide una vez y se lee en el diff.
+
+**Lo que entra:** `npm run apiary:load-protocol`. Seco por defecto —enseña las 5
+actividades con sus obligatorias y una **fila patrón** de qué hay ya en la base—
+y escribe sólo con `--cargar`. Idempotente por `externalIdentifier`, y se niega a
+escribir si no hay ninguna cuenta con Platform Admin, porque un `AuditEvent` sin
+actor no dice quién lo decidió.
+
+**Comprobado cargándolo de verdad** contra la copia local, no leyendo el ensayo:
+crea el protocolo, la versión 1 y **44 variables**; la segunda corrida dice «Ya
+estaba» sin tocar nada. Las filas se barrieron después.
+
+**Y lo que cargarlo NO hace, porque la frase fácil sería falsa.** Ninguna
+pantalla de apiario lee esas variables: los formularios llevan sus campos en el
+código, así que **editar el JSON hoy no cambia ni una pregunta en pantalla**. Lo
+que sí hace es que el protocolo aparezca en `/research`, se pueda aprobar con el
+botón que ya existe y se pueda **ejecutar** en `/research/execute/<versión>`, que
+pinta los 44 ítems. Entra como `draft` a propósito: aprobar es un acto humano.
+
 ### 2026-09-11 · Lo que la base de pruebas acumulaba, y por qué nadie lo veía
 
 Una fila `TEST` de más en «cuántos sitios de apiario hay» destapó que **nada
