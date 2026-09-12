@@ -37,6 +37,7 @@
     "people:add-evaluator": "tsx scripts/add-evaluator.ts",
     "sensory:create-protocol": "tsx scripts/create-sensory-protocol.ts",
     "sensory:archive-protocol": "tsx scripts/create-sensory-protocol.ts --archivar",
+    "apiary:load-protocol": "tsx scripts/cargar-protocolo-de-campo.ts",
     "sensory:record-external": "tsx scripts/record-external-report.ts",
     "org:set-contact": "tsx scripts/set-organization-contact.ts",
     "check:state": "node scripts/check-state-budget.mjs",
