@@ -244,7 +244,12 @@ export async function recordHarvestAction(
       harvestedAt: fechaLocal(formData, "harvestedAt"),
       cherryWeightKg: emptyToNullNumber(formData.get("cherryWeightKg")),
       brix: emptyToNullNumber(formData.get("brix")),
-      condition: emptyToNull(formData.get("condition")),
+      // La cereza como dato (2026-09-11). `condition` ya no se pide en pantalla
+      // —era texto libre con 29 filas diciendo «Ripe Cherry»— y se queda en el
+      // modelo sólo para que esas 29 conserven su prosa.
+      cherryColorValueId: emptyToNull(formData.get("cherryColorValueId")),
+      cherryDefectsValueId: emptyToNull(formData.get("cherryDefectsValueId")),
+      cherryCleanlinessValueId: emptyToNull(formData.get("cherryCleanlinessValueId")),
       notes: emptyToNull(formData.get("notes")),
       // T9.5 §3(b): a harvest weight/brix reading is an instrument value
       // read at receiving — measured_fact, not an unqualified claim.
@@ -277,6 +282,8 @@ export async function recordReceivingAction(
       receivedAt: fechaLocal(formData, "receivedAt"),
       deliveryNote: emptyToNull(formData.get("deliveryNote")),
       cherryWeightKg: emptyToNullNumber(formData.get("cherryWeightKg")),
+      // Recepción sigue con `condition` de texto libre: su tabla es OTRA y
+      // necesita su propia migración. Declarado como lo siguiente, 2026-09-11.
       condition: emptyToNull(formData.get("condition")),
       notes: emptyToNull(formData.get("notes")),
       // T9.5 §3(b): same reasoning as recordHarvestAction — a delivery

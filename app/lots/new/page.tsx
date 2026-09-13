@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getManageableContext } from "../../../lib/traceability/lots";
+import { catalogosDeCereza } from "../../../lib/traceability/harvest";
 import { HarvestForm } from "../../components/traceability/HarvestForm";
 import { ReceivingForm } from "../../components/traceability/ReceivingForm";
 
@@ -14,6 +15,9 @@ export default async function NewLotPage() {
 
   const t = await getTranslations("Traceability");
   const context = await getManageableContext(user.userAccountId);
+  // Vocabulario de la cereza: los tres catálogos cerrados que sustituyen a la
+  // caja de texto «condición».
+  const cerezas = await catalogosDeCereza();
 
   return (
     <div>
@@ -41,7 +45,7 @@ export default async function NewLotPage() {
 
           <section className="nn-section">
             <h2>{t("harvestHeading")}</h2>
-            <HarvestForm organizations={context.organizations} locations={context.plotLocations} projects={context.projects} />
+            <HarvestForm organizations={context.organizations} locations={context.plotLocations} projects={context.projects} cerezas={cerezas} />
           </section>
 
           <section className="nn-section">

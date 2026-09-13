@@ -630,6 +630,12 @@
       "operacion": "codigosYaDerivadosDe",
       "razon": "No recibe principal A PROPOSITO. Devuelve solo CODIGOS de lote de la misma organizacion que un lote que su unico llamador —app/lots/[id]/page.tsx— ya cargo con su propio guardia, para sugerir el siguiente sufijo libre y no reclamar uno con dueno. Darle compuerta propia crearia dos sitios donde decidir lo mismo, y por eso ni siquiera acepta userAccountId: para que no parezca que autoriza. Si alguna vez se llama desde una ruta que no haya autorizado antes el lote, esta linea es la que hay que releer.",
       "verificado": "2026-09-11"
+    },
+    {
+      "archivo": "lib/traceability/harvest.ts",
+      "operacion": "catalogosDeCereza",
+      "razon": "No recibe principal, como su gemela `getSelectionCatalogs`: devuelve VOCABULARIO —los valores de research.variable_catalog que describen la cereza— y no datos de ninguna organizacion. La llama app/lots/new/page.tsx, que gatea antes con getManageableContext. Si algun dia un catalogo pasara a llevar datos de alguien, esta linea es la que hay que releer.",
+      "verificado": "2026-09-11"
     }
   ]
 }

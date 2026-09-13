@@ -2301,3 +2301,38 @@ ejercita — pero nadie ha tratado ni cosechado de verdad.
 **Lo que queda fuera:** el aviso **no se ha visto en pantalla** —el servicio
 devuelve las carencias con su producto y pintarlas es otro cambio— y los otros
 tres campos que §4 pide siguen sin existir: objetivo, vía y fecha de retiro.
+
+### 2026-09-11 · La medición pedía escribir a mano lo que ya sabía
+
+Daniel, usándolo: «there is a field for unit and also for variable and it could
+be redundant… **its like you are trying to make me work more**». Tenía razón, y
+medía peor de lo que sonaba: la unidad era una **caja de TEXTO LIBRE
+obligatoria**, y de las seis variables del formulario **cinco admiten una sola
+unidad**. Los dos únicos desenlaces eran «acertaste y sobraba» o «fallaste y te
+bloquea».
+
+**Lo que entra, tres decisiones suyas en fila:** la unidad se **deriva** de la
+variable —una sola, campo oculto; varias, desplegable con ésas y sólo ésas, que
+en la práctica es sólo temperatura C/F—; la **procedencia** sale del camino con
+`measured_fact` fijo, porque una lectura de instrumento es eso y el día que
+entre un sensor lo pondrá ese camino, no un dedo; y entra **«cuándo se midió»**,
+que no existía — la acción ponía `new Date()`, la hora de GUARDAR, así que medir
+a las 7 y escribirlo a las 9 quedaba fechado a las 9.
+
+**La hora va por `fechaLocal`, el ayudante que ya existía.** Escribí un
+`parseLocalDateTime` a mano y lo sustituí al ver que el archivo ya lo envolvía:
+dos formas de hacer lo mismo es cómo se desincronizan.
+
+**Tres guardias del repositorio me pararon antes que Daniel**, y los tres
+tenían razón: el inventario de acceso con sus cifras viejas, la declaración de
+`dependen_del_llamador`, y **el de valores crudos que escribí yo hace dos días**
+— cazó el desplegable de unidades. La respuesta correcta no era traducirlas:
+`C`, `pH`, `mg/kg` son símbolos internacionales, iguales en los dos idiomas, y
+una clave `unidad_mg/kg` crearía un sitio donde desincronizarse con el registro.
+Va como **excepción declarada con su razón**, que es el mecanismo que ese mismo
+guardia ofrece — y que tiene su prueba: una excepción que deja de aplicar falla.
+
+**Lo que NO se tocó, a propósito:** el formulario de **corrección** y el de
+**laboratorio** llevan el mismo campo de unidad. En el de laboratorio la
+elección `ppm`/`%` **sí vale** —un laboratorio reporta en una y otro en otra— así
+que quitarla ahí sería el error contrario.

@@ -3208,8 +3208,38 @@ model HarvestEvent {
   cherryWeightKg   Decimal?        @map("cherry_weight_kg") @db.Decimal(10, 3)
   brix             Decimal?        @db.Decimal(5, 2)
   temperatureC     Decimal?        @map("temperature_c") @db.Decimal(5, 2)
+  /// **Prosa heredada, ya no se pregunta** (2026-09-11). Tenía 29 de 33 filas
+  /// con el mismo literal —«Ripe Cherry»—, que es la prueba de por qué una caja
+  /// de texto libre no sirve: acaba siendo un valor que nadie varía y del que
+  /// después no se puede contar nada. Lo que se declara ahora son las tres
+  /// columnas de abajo. **No se traduce lo viejo**: mapear «Ripe Cherry» a
+  /// `rojo` sería inferir un hecho y guardarlo como tal, que `CLAUDE.md` §3
+  /// prohíbe. Las 29 conservan su prosa y se leen como lo que son.
   condition        String?
-  ripenessNotes    String?         @map("ripeness_notes")
+
+  /// **La cereza como dato, no como prosa** (decisión de Daniel, 2026-09-11:
+  /// «condition field should be fixed options that can be selected»).
+  ///
+  /// Tres de los siete catálogos de cereza que ya existían en
+  /// `lib/research/catalogs.ts` **y que no leía ninguna línea de código**.
+  /// Daniel eligió estos tres por ser los que deciden qué se puede hacer con
+  /// esa cereza: el color es la escala de madurez —verde … sobremaduro
+  /// fermentado—, los defectos separan sano de brocado o vano, y la limpieza
+  /// dice si entró contaminada.
+  ///
+  /// **Columnas y no tabla de atributos**, a diferencia de las causas de
+  /// pérdida de colonia: ahí el dueño dijo «múltiples razones» y aquí cada eje
+  /// tiene UN valor por cosecha — una cereza no es roja y verde a la vez. Es el
+  /// mismo idioma que `LotProcess.processGradeValueId`.
+  ///
+  /// **Anulables**: las 33 cosechas que ya existen no los tienen y no se les
+  /// inventan. Ausencia significa «no se registró», nunca «sano y limpio».
+  cherryColorValueId       String?              @map("cherry_color_value_id") @db.Uuid
+  cherryColorValue         VariableCatalogValue? @relation("HarvestCherryColor", fields: [cherryColorValueId], references: [id])
+  cherryDefectsValueId     String?              @map("cherry_defects_value_id") @db.Uuid
+  cherryDefectsValue       VariableCatalogValue? @relation("HarvestCherryDefects", fields: [cherryDefectsValueId], references: [id])
+  cherryCleanlinessValueId String?              @map("cherry_cleanliness_value_id") @db.Uuid
+  cherryCleanlinessValue   VariableCatalogValue? @relation("HarvestCherryCleanliness", fields: [cherryCleanlinessValueId], references: [id])
   operatorPersonId String?         @map("operator_person_id") @db.Uuid
   operator         Person?         @relation("HarvestEventOperator", fields: [operatorPersonId], references: [id])
   notes            String?
@@ -5874,6 +5904,9 @@ model VariableCatalogValue {
   inspectionIrregularities InspectionIrregularity[]    @relation("InspectionIrregularity")
   gradeOfProcesses        LotProcess[]                 @relation("LotProcessGrade")
   cherryStateOfProcesses  LotProcess[]                 @relation("LotProcessCherryState")
+  cherryColorOfHarvests       HarvestEvent[]           @relation("HarvestCherryColor")
+  cherryDefectsOfHarvests     HarvestEvent[]           @relation("HarvestCherryDefects")
+  cherryCleanlinessOfHarvests HarvestEvent[]           @relation("HarvestCherryCleanliness")
 
   @@unique([catalogId, value])
   @@index([aliasOfId])
