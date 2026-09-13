@@ -7,6 +7,7 @@ import { densidadDePolinizacion } from "../../../lib/apiary/polinizacion";
 import { coordenadasPropuestas } from "../../../lib/traceability/coordenadasDelSitio";
 import { coloniasPorIrregularidad } from "../../../lib/apiary/irregularidades";
 import { avisosDeEnjambrazon } from "../../../lib/apiary/avisoDeEnjambrazon";
+import { alcanceDelAlimento } from "../../../lib/apiary/alcanceDelAlimento";
 import { confirmarCoordenadasAction } from "../../actions/traceability";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
@@ -47,6 +48,10 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   // a un par de semanas.
   const haceSesentaDias = new Date(ahora.getTime() - 60 * 24 * 60 * 60 * 1000);
   const avisos = await avisosDeEnjambrazon(id, haceSesentaDias, ahora);
+  // A9 · Anexo B §3 — «alcanza hasta». Catorce días de antelación: el aviso tiene
+  // que llegar con tiempo de volver al sitio, y en Toabré el hueco entre el
+  // vencimiento y el hallazgo fue de días, no de horas.
+  const alcance = await alcanceDelAlimento(id, ahora, 14);
 
   return (
     <div>
@@ -199,6 +204,32 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           esconde lo vacío igual. Los ceros que sí se enseñan son los de dentro
           del reporte, cuando hay al menos un hallazgo — ahí la distinción entre
           «no hay» y «nadie miró» sí importa. */}
+      {/* El alimento que se acaba, arriba del todo: es lo que el Anexo C §1.2
+          llama el modo de fallo de Toabré. Las filas `sin_fecha` SE ENSEÑAN —una
+          alimentación sin «alcanza hasta» es una colonia de la que no se puede
+          avisar, y esconderla la contaría como tranquila—. */}
+      {alcance.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("alcanceHeading")}</h2>
+          <ul>
+            {alcance.map((a) => (
+              <li key={a.colonyId} className={a.estado === "sin_fecha" ? "nn-vital-sin-registro" : undefined}>
+                {t("alcanceRow", {
+                  colmena: a.hiveIdentifier,
+                  estado:
+                    a.estado === "sin_fecha"
+                      ? t("alcance_sin_fecha")
+                      : a.estado === "vencido"
+                        ? t("alcance_vencido", { dias: Math.abs(a.diasRestantes ?? 0) })
+                        : t("alcance_por_vencer", { dias: a.diasRestantes ?? 0 }),
+                  fecha: a.alimentadaEl.toISOString().slice(0, 10),
+                })}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {/* El aviso de enjambrazón, ARRIBA de las irregularidades: es lo único de
           esta pantalla que pide ir a una caja hoy. Se oculta cuando no hay
           ninguno —un aviso vacío enseña a no mirar la sección— y lo que apaga un

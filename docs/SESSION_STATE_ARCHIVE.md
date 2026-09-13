@@ -2371,3 +2371,34 @@ se rechaza por el rango 0-14, no por la unidad. Lo destapó mi propio control �
 acepta su propia canónica»—. Medido bien: de **60** variables, **34** admiten una
 sola unidad, **23** ofrecen elección real (temperaturas C/F y nutrientes de
 laboratorio) y **3** no las pude medir por no tener sus unidades en la lista.
+
+---
+
+### 2026-09-11 · Lo que la base de pruebas acumulaba, y por qué nadie lo veía
+
+Una fila `TEST` de más en «cuántos sitios de apiario hay» destapó que **nada
+comprobaba la clase**. Seis PR después quedan tres guardias donde no había
+ninguno, y la base local pasó de 40.043 `audit_event` y 335 `Scope` huérfanos a
+cero de cada.
+
+**El patrón, que se repitió tres veces y es lo que hay que reconocer:** una
+limpieza escrita **debajo de las aserciones** no corre cuando una falla; un
+`afterAll` es una cadena y la primera FK que se queja tira el resto; y un
+`deleteMany` que nombra una variable de dos olvida la otra. Las tres fugan **en
+verde**: la suite pasa entera mientras deja filas. Por eso el flip-test de cada
+arreglo compara **dos columnas** —pruebas y filas— y no sólo el color.
+
+**Lo estático no basta y quedó demostrado.** Después del primer arreglo la
+auditoría por `grep` decía que no quedaba ninguna fuga de `Scope`, y quedaba
+una. Se encontró corriendo **uno a uno los 34 archivos** que crean un `Scope` de
+proyecto y midiendo el delta: `reports.test.ts` crea dos proyectos y limpiaba
+uno. Para esta familia, la herramienta es el delta por archivo, no el grep.
+
+**Y una decisión de alcance que conviene no repensar cada vez:** el rastro de
+auditoría **no** se arregló prueba por prueba. Son 57 archivos, 98 operaciones y
+la mayor pesa el 8 % — no hay culpable. Se barre con `npm run limpiar:audit`,
+que borra sólo lo que tiene el actor nulo, comprueba esa hipótesis en cada
+corrida, y **no tiene bandera para bases remotas**: leer producción a veces se
+quiere, borrar su auditoría nunca.
+
+Lo demás está en las trampas de `CLAUDE.md`, que es donde se lee al hacerlo.

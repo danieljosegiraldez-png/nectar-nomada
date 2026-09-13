@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { queueDraft } from "../../../lib/apiary/offlineQueue";
+import { METODOS_DE_ALIMENTACION } from "../../../lib/apiary/alimentacion";
+import { fechaDeDia } from "../../../lib/time/localDateTime";
 import { APIARY_DRAFTS_CHANGED_EVENT } from "./OfflineSyncIndicator";
 
 /**
@@ -21,6 +23,20 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
   const [feedingMaterial, setFeedingMaterial] = useState("");
   const [feedingQuantity, setFeedingQuantity] = useState("");
   const [feedingUnit, setFeedingUnit] = useState("kg");
+  /**
+   * A9 · Anexo B §3 — «Alcanza hasta», **el campo que faltó en Toabré**. La
+   * columna existía desde el 2026-09-07 y los vitales del sitio ya la leían, pero
+   * **ninguna pantalla podía escribirla**: medido el 2026-09-13, una alimentación
+   * en la copia local y ninguna con este valor.
+   *
+   * Se exige para guardar —el protocolo dice `"required": true`— y el servicio NO
+   * la exige, a propósito: una alimentación de urgencia se registra sin saberlo, y
+   * perder el registro es peor que no poder avisar. Cuando falta,
+   * `alcanceDelAlimento` la devuelve como `sin_fecha` en vez de contarla entre las
+   * tranquilas.
+   */
+  const [coverageUntil, setCoverageUntil] = useState("");
+  const [feedingMethod, setFeedingMethod] = useState("");
   const [feedingSaved, setFeedingSaved] = useState(false);
 
   const [treatmentProduct, setTreatmentProduct] = useState("");
@@ -50,6 +66,11 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
         feedingMaterial: feedingMaterial.trim() || null,
         feedingQuantity: feedingQuantity.trim() ? Number(feedingQuantity) : null,
         feedingUnit: feedingUnit.trim() || null,
+        // Campo de DÍA: se fija a medianoche UTC con el MISMO parser que usa el
+        // servidor. Mandarlo como reloj de pared lo movería un día según la zona,
+        // que es el fallo que tumbó la creación de colmenas el 2026-09-11.
+        coverageUntil: coverageUntil ? fechaDeDia(coverageUntil, "coverageUntil")!.toISOString() : null,
+        feedingMethod: feedingMethod || null,
       });
     } catch {
       setSaveError(t("localSaveFailedError"));
@@ -59,6 +80,8 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
     setFeedingSaved(true);
     setFeedingMaterial("");
     setFeedingQuantity("");
+    setCoverageUntil("");
+    setFeedingMethod("");
   }
 
   // Cero es un valor LEGÍTIMO —hay productos sin carencia—, así que la
@@ -138,7 +161,41 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
               <input id={`feed-unit-${colonyId}`} value={feedingUnit} onChange={(e) => setFeedingUnit(e.target.value)} />
             </div>
           </div>
-          <button type="button" className="nn-button" onClick={() => void logFeeding()}>
+          {/* «Alcanza hasta»: `type="date"` porque es un día estimado, no un
+              instante. Es lo que dispara el aviso ANTES de que las reservas lo
+              digan — sin él el sistema sólo puede reaccionar a lo ya observado, que
+              es lo que pasó en Toabré entre julio y septiembre. */}
+          <div className="nn-field">
+            <label htmlFor={`feed-coverage-${colonyId}`}>{t("coverageUntilLabel")}</label>
+            <input
+              id={`feed-coverage-${colonyId}`}
+              type="date"
+              value={coverageUntil}
+              onChange={(e) => setCoverageUntil(e.target.value)}
+              required
+            />
+            <p className="nn-muted">{t("coverageUntilHelp")}</p>
+          </div>
+          <div className="nn-field">
+            <label htmlFor={`feed-method-${colonyId}`}>{t("feedingMethodLabel")}</label>
+            <select id={`feed-method-${colonyId}`} value={feedingMethod} onChange={(e) => setFeedingMethod(e.target.value)}>
+              <option value="">{t("triNoRegistrado")}</option>
+              {METODOS_DE_ALIMENTACION.map((m) => (
+                <option key={m} value={m}>
+                  {t(`feedingMethod_${m}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Deshabilitado sin la fecha, como el tratamiento sin su lote: el
+              protocolo la marca obligatoria y aquí exigirla no cuesta un dato
+              perdido, porque quien está delante puede ponerla. */}
+          <button
+            type="button"
+            className="nn-button"
+            onClick={() => void logFeeding()}
+            disabled={coverageUntil === ""}
+          >
             {t("logFeedingButton")}
           </button>
           {feedingSaved ? <p className="nn-muted">{t("savedLocally")}</p> : null}

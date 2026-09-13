@@ -11,6 +11,7 @@ import { ApiaryAccessError, ColonyEndError, registrarFinDeColonia } from "../api
 import { ClaseDeCausaInvalida, exigeClaseDeCausa } from "../apiary/causaDePerdida";
 import { exigeMetodoDeVarroa, registrarConteoDeVarroa, VarroaValidationError } from "../apiary/varroa";
 import { EstadoDeColoniaInvalido } from "../apiary/estadoDeColonia";
+import { AlimentacionInvalida } from "../apiary/alimentacion";
 
 /**
  * P4 §4 (46_P4_API_Y_SINCRONIZACION.md) — push por lotes con resultado **por
@@ -137,6 +138,15 @@ export type MutacionDeEventoDeColonia = {
   treatmentBatchLabel?: string | null;
   /** Días de carencia. Obligatorio en el servicio cuando el tipo es tratamiento. */
   treatmentWithdrawalDays?: number | null;
+  /**
+   * A9 · Anexo B §3 — «alcanza hasta». **Fecha ya parseada**, no cadena: el
+   * parseo la convierte con `fechaDeDia` porque es un campo de DÍA. Pasarla como
+   * texto haría que Prisma la interpretara por su cuenta, que es el fallo que
+   * tumbó la creación de colmenas el 2026-09-11.
+   */
+  coverageUntil?: Date | null;
+  /** Cómo se dejó el alimento. Cadena; la valida el servicio. */
+  feedingMethod?: string | null;
 };
 
 /**
@@ -250,6 +260,8 @@ async function aplicarMutacionDeApiario(
             treatmentDoseUnit: m.treatmentDoseUnit ?? null,
             treatmentBatchLabel: m.treatmentBatchLabel ?? null,
             treatmentWithdrawalDays: m.treatmentWithdrawalDays ?? null,
+            coverageUntil: m.coverageUntil ?? null,
+            feedingMethod: m.feedingMethod ?? null,
             clientDraftId: m.clientDraftId,
           });
     return { clientDraftId: m.clientDraftId, status: "applied", id: fila.id };
@@ -264,7 +276,8 @@ async function aplicarMutacionDeApiario(
       // Anexo B §2.2: «población = telepatía» es un rechazo del servidor, no un
       // fallo de transporte. Sin esta línea, un valor malo tumbaría el lote
       // entero y dejaría la cola bloqueada — el defecto de ADR-116, otra vez.
-      error instanceof EstadoDeColoniaInvalido
+      error instanceof EstadoDeColoniaInvalido ||
+      error instanceof AlimentacionInvalida
     ) {
       return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
     }

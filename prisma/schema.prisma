@@ -5480,6 +5480,19 @@ enum ColonyEventType {
   @@schema("apiary")
 }
 
+/// Cómo se dejó el alimento. Vocabulario del dueño, tal cual lo escribió en
+/// `protocolos/apiario-campo-v1.json`: *«bolsa sobre cabezales»* es literalmente
+/// lo que se usó en Toabré. Sirve para comparar consumo entre métodos, que es
+/// para lo que el Anexo B §3 lo pide.
+enum FeedingMethod {
+  bolsa_sobre_cabezales
+  alimentador_entrada
+  alimentador_division
+  otro
+
+  @@schema("apiary")
+}
+
 /// Cómo se contó la varroa. **El resultado sólo es comparable dentro del mismo
 /// método**, y por eso el método es obligatorio en cuanto hay conteo: un 3 % por
 /// alcohol y un 3 % por bandeja no son el mismo hecho.
@@ -5573,12 +5586,27 @@ model ColonyEvent {
   feedingMaterial     String?         @map("feeding_material") // e.g. "sugar syrup 1:1" — feeding only
   feedingQuantity     Decimal?        @map("feeding_quantity") @db.Decimal(10, 3)
   feedingUnit         String?         @map("feeding_unit")
-  // Sólo para `feeding`: hasta cuándo alcanza lo que se dejó, estimado por quien
-  // alimenta. Es la fecha que dispara el aviso ANTES de que las reservas lo
-  // digan; sin ella el sistema sólo puede reaccionar a `storesLevel`, que es
-  // reaccionar a lo ya observado. Es el modo de fallo de Toabré entre julio y
-  // septiembre (Anexo C §1.2).
+  /// Sólo para `feeding`: hasta cuándo alcanza lo que se dejó, estimado por quien
+  /// alimenta. Es la fecha que dispara el aviso ANTES de que las reservas lo
+  /// digan; sin ella el sistema sólo puede reaccionar a `storesLevel`, que es
+  /// reaccionar a lo ya observado. Es el modo de fallo de Toabré entre julio y
+  /// septiembre (Anexo C §1.2).
+  ///
+  /// **Es un campo de DÍA**, no un instante: «fecha estimada» en el Anexo, `date`
+  /// en el protocolo. Se guarda a medianoche UTC y se parsea con `fechaDeDia`.
+  /// Tratarlo como instante es exactamente el fallo que tumbó la creación de
+  /// colmenas el 2026-09-11 (ADR-112 y `lib/time/localDateTime.ts`).
+  ///
+  /// Anulable en la base porque esta tabla sirve a tres tipos de evento;
+  /// **obligatorio en la capa de servicio cuando `eventType = feeding`** desde
+  /// 2026-09-13, igual que `treatmentBatchLabel` y `treatmentWithdrawalDays` lo
+  /// son para un tratamiento. El Anexo lo marca obligatorio y el protocolo dice
+  /// `"required": true`; hasta esa fecha **ningún formulario podía escribirlo**,
+  /// así que el aviso que existe para evitar otro Toabré no tenía de dónde salir.
   coverageUntil       DateTime?       @map("coverage_until")
+  /// Cómo se dejó el alimento. Opcional: el Anexo B §3 no lo marca obligatorio, y
+  /// el dato que decide el aviso es `coverageUntil`, no éste.
+  feedingMethod       FeedingMethod?  @map("feeding_method")
   treatmentProduct    String?         @map("treatment_product") // e.g. "Apivar" — treatment only
   // Nullable at the DB level (meaningless for the other three event
   // types) but required at the service layer whenever eventType =
