@@ -135,6 +135,7 @@ beforeAll(async () => {
     await recordColonyEvent(userAccountId, {
       colonyId: coloniaId,
       eventType: "treatment",
+      treatmentTarget: "varroa",
       occurredAt: new Date("2026-05-01T08:00:00Z"),
       treatmentProduct: "Apivar",
       treatmentBatchLabel: `L-${RUN_ID.slice(-4)}`,

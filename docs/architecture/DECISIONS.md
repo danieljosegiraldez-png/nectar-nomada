@@ -8492,3 +8492,49 @@ se aprende a no mirar una sección.
 **Lo que esto NO prueba.** Nadie ha registrado un «alcanza hasta» todavía. Las
 pruebas crean las alimentaciones, así que las reglas se ejercitan; ningún dato real
 ha pasado por aquí.
+
+---
+
+## ADR-119 — «Objetivo» es obligatorio y tiene enum propio; «Fecha de retiro» se queda fuera porque no hay dónde escribirla
+
+**Contexto.** `48_A9_ANEXO_B_CATALOGO_DE_CAMPOS.md` §4 marca «Objetivo» como
+**obligatorio** —el último campo de esa columna que seguía sin existir en todo el
+Anexo B— con su consecuencia escrita: *«eficacia por objetivo; hoy no se puede
+agrupar»*. Sin él, «qué se trató contra varroa esta temporada» no es una consulta,
+igual que antes de ADR-114 no lo era «todas las colonias con varroa».
+
+**Decisión 1 — obligatorio en el servicio, como el lote y la carencia.** Un
+tratamiento sin objetivo se rechaza. La razón es que **nadie va a volver a
+preguntarle al que aplicó**: una fila sin objetivo deja la pregunta sin responder
+para siempre, y a diferencia de «alcanza hasta» (ADR-118) aquí no hay un caso de
+urgencia en que el dato sea desconocido — quien aplica un producto sabe contra qué
+lo aplica. Medido antes de exigirlo: **0 tratamientos en la copia local**, así que
+ninguna fila existente queda en falso; y **14 pruebas en 8 archivos cayeron** al
+exigirlo, que es la prueba de que la exigencia muerde en vez de adornar.
+
+**Decisión 2 — enum propio, no el catálogo de irregularidades**, aunque cuatro
+valores se llamen igual (varroa, polilla, escarabajo, hormigas). Es la misma
+distinción que ADR-114 hizo entre lo observado y las causas de pérdida: **lo que se
+observa no es lo que se trata**. De los trece valores de irregularidad, nueve —moho,
+loque, alas deformadas, obrera ponedora, disentería…— no son algo contra lo que se
+aplique un producto. El conjunto de cinco lo cerró el dueño en su protocolo.
+
+**Decisión 3 — «Fecha de retiro» y «Eficacia observada» NO entran, y se dice por
+qué.** Las dos son de etapa **cierre**: se anotan semanas después, cuando se vuelve
+al sitio. Medido el 2026-09-13: **no existe ningún camino para completar o corregir
+un `ColonyEvent`** —`lib/apiary/` no tiene una sola función de actualización—. Añadir
+la columna igual sería repetir exactamente lo que costó una semana con
+`coverage_until`: una columna con comentario, con lectura, y **sin ninguna pantalla
+que pudiera escribirla**, que se ve igual que no existir y además se cuenta como
+hecha. Queda en `PENDING_IMPLEMENTATIONS/011` con el hueco medido.
+
+De «Eficacia observada» conviene decir que **ya está casi cerrada por otro sitio**:
+ADR-116 le dio el mecanismo con `VarroaCount.evaluatesColonyEventId` —*«tratar,
+volver a contar, comparar»*— y lo que falta es la nota en prosa, que es lo de menos.
+
+**Una pregunta que queda para el dueño, sin resolverla por deducción.**
+`VIAS_QUE_DEJAN_MATERIAL` contiene hoy **sólo `tira`**, porque es lo único que el
+Anexo nombra: *«las tiras que no se retiran generan resistencia»*. `cebo` también
+deja material en el sitio, pero añadirlo sería deducir una regla sanitaria que él no
+escribió. La lista existe ya para que el aviso de «no retirado» salga de un solo
+lugar cuando exista el camino de cierre.

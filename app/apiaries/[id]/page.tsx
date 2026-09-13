@@ -8,6 +8,7 @@ import { coordenadasPropuestas } from "../../../lib/traceability/coordenadasDelS
 import { coloniasPorIrregularidad } from "../../../lib/apiary/irregularidades";
 import { avisosDeEnjambrazon } from "../../../lib/apiary/avisoDeEnjambrazon";
 import { alcanceDelAlimento } from "../../../lib/apiary/alcanceDelAlimento";
+import { tratamientosPorObjetivo } from "../../../lib/apiary/objetivoDelTratamiento";
 import { confirmarCoordenadasAction } from "../../actions/traceability";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
@@ -52,6 +53,9 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   // que llegar con tiempo de volver al sitio, y en Toabré el hueco entre el
   // vencimiento y el hallazgo fue de días, no de horas.
   const alcance = await alcanceDelAlimento(id, ahora, 14);
+  // A9 · Anexo B §4 — «eficacia por objetivo; hoy no se puede agrupar». Misma
+  // ventana móvil de doce meses que las irregularidades, por la misma razón.
+  const tratamientos = await tratamientosPorObjetivo(id, haceUnAno, ahora);
 
   return (
     <div>
@@ -250,6 +254,28 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+
+      {/* Tratamientos por objetivo. Se esconde la sección entera si no se trató
+          nada —cinco ceros son ruido— y dentro se enseñan los ceros, que es donde
+          la distinción entre «no se trató» y «nadie registró» importa. Misma
+          disciplina que el reporte de irregularidades de abajo. */}
+      {tratamientos.some((x) => x.tratamientos > 0) ? (
+        <section className="nn-section">
+          <h2>{t("tratamientosHeading")}</h2>
+          <p className="nn-muted">{t("tratamientosVentana")}</p>
+          <p className="nn-detail-meta">
+            {tratamientos.map((x) => (
+              <span key={x.target} className={x.tratamientos === 0 ? "nn-vital-sin-registro" : undefined}>
+                {t("tratamientosFila", {
+                  objetivo: t(`treatmentTarget_${x.target}`),
+                  colonias: x.colonias,
+                  tratamientos: x.tratamientos,
+                })}
+              </span>
+            ))}
+          </p>
         </section>
       ) : null}
 

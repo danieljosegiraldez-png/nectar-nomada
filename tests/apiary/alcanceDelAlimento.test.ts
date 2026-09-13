@@ -223,6 +223,7 @@ describe("el aviso de alimento por colonia", () => {
       recordColonyEvent(userAccountId, {
         colonyId: c,
         eventType: "treatment",
+        treatmentTarget: "varroa",
         treatmentProduct: "Apivar",
         treatmentBatchLabel: "L-1",
         treatmentWithdrawalDays: 14,

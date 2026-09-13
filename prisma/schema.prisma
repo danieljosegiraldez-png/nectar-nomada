@@ -5493,6 +5493,39 @@ enum FeedingMethod {
   @@schema("apiary")
 }
 
+/// Contra qué se aplicó el producto. **El único campo que el Anexo B §4 marca
+/// obligatorio y que seguía sin existir**, con su consecuencia escrita: *«eficacia
+/// por objetivo; hoy no se puede agrupar»*.
+///
+/// **Enum propio y no el catálogo de irregularidades**, aunque cuatro valores se
+/// llamen igual. Es la misma distinción que ADR-114 hizo entre lo observado y las
+/// causas de pérdida: **lo que se observa no es lo que se trata**. La lista de
+/// irregularidades tiene trece valores —moho, loque, alas deformadas, obrera
+/// ponedora— y ninguno de ésos es algo contra lo que se aplique un producto. Este
+/// conjunto lo cerró el dueño en `protocolos/apiario-campo-v1.json`, con cinco.
+enum TreatmentTarget {
+  varroa
+  polilla_cera
+  escarabajo_colmena
+  hormigas
+  otro
+
+  @@schema("apiary")
+}
+
+/// Cómo se aplicó. Opcional: el Anexo lo pide para *«comparar eficacia entre
+/// vías»*, que es análisis, no registro mínimo.
+enum TreatmentRoute {
+  tira
+  goteo
+  espolvoreo
+  vaporizacion
+  cebo
+  otro
+
+  @@schema("apiary")
+}
+
 /// Cómo se contó la varroa. **El resultado sólo es comparable dentro del mismo
 /// método**, y por eso el método es obligatorio en cuanto hay conteo: un 3 % por
 /// alcohol y un 3 % por bandeja no son el mismo hecho.
@@ -5615,6 +5648,13 @@ model ColonyEvent {
   treatmentBatchLabel String?         @map("treatment_batch_label")
   treatmentDose       Decimal?        @map("treatment_dose") @db.Decimal(10, 3)
   treatmentDoseUnit   String?         @map("treatment_dose_unit")
+  /// Contra qué. **Obligatorio en la capa de servicio cuando `eventType =
+  /// treatment`**, como el lote y la carencia: el Anexo B §4 lo marca así y dice
+  /// por qué —sin él no se puede agrupar la eficacia por objetivo—. Anulable en la
+  /// base porque esta tabla sirve a tres tipos de evento.
+  treatmentTarget     TreatmentTarget? @map("treatment_target")
+  /// Cómo se aplicó. Opcional.
+  treatmentRoute      TreatmentRoute?  @map("treatment_route")
   /// Días de carencia del producto aplicado. **El campo que el Anexo B §4 marca
   /// obligatorio y que no existía**, con su consecuencia escrita: *«decide
   /// cuándo se puede cosechar. Sin él, una cosecha puede violar la carencia sin

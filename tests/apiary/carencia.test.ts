@@ -52,6 +52,7 @@ describe("la carencia de un tratamiento", () => {
     return recordColonyEvent(userAccountId, {
       colonyId,
       eventType: "treatment",
+      treatmentTarget: "varroa",
       occurredAt: cuando,
       treatmentProduct: producto,
       treatmentBatchLabel: `L-${RUN_ID.slice(-4)}`,
@@ -140,6 +141,7 @@ describe("la carencia de un tratamiento", () => {
       recordColonyEvent(userAccountId, {
         colonyId: c.id,
         eventType: "treatment",
+        treatmentTarget: "varroa",
         treatmentProduct: "Apivar",
         treatmentBatchLabel: "L-1",
       }),
