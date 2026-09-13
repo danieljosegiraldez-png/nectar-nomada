@@ -37,6 +37,35 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-13 · Vercel saltaba el build de cada PR, y por eso producción se rompió
+
+**La #288 llegó a `main` sin que nada hubiera construido su código.** Rompió el
+build —`ColonyEventQuickEntry` es `"use client"` e importaba un valor de un módulo
+que llega a `prisma`, así que `pg` acabó en el paquete del navegador— y el sitio
+sirvió **un build viejo durante una hora**.
+
+**Por qué nadie lo vio, y es lo que hay que recordar.**
+`scripts/solo-documentacion.sh` deducía la base como `HEAD^`. Eso es verdad en
+GitHub Actions —que saca el commit de **fusión** de la PR— y **falso en Vercel, que
+saca el commit de la rama**. Como cada PR de aquí termina con un commit de estado
+(sólo documentación), el rango decía «sólo docs» y Vercel **saltaba el build**,
+reportando `success — Canceled by Ignored Build Step`. Medido: **#283, #284, #286 y
+#288 dijeron eso**, ninguna construyó su preview, y yo reporté «Vercel: success»
+cuatro veces. **Un `success` que significa «no miré» es peor que un rojo**, y es la
+misma familia que el `cancelled` de las compuertas.
+
+**Tres arreglos, cada uno con su guardia:**
+
+- El reparto puro/consulta que ya existía en `infestacion.ts` y `alimentacion.ts` y
+  a la tercera olvidé: ahora `vocabularioDeTratamiento.ts`. Lo caza
+  `tests/arquitectura/cliente-sin-prisma.test.ts`, con cierre **transitivo** y
+  distinguiendo **valor de tipo** — de ocho pares cliente→prisma, siete son
+  `import type` y están bien.
+- La base se deduce distinguiendo el caso y **se imprime**; ante la duda, construye.
+  Con pruebas, que no tenía: `tests/soloDocumentacion.test.ts`.
+- `npm run verify` **no construye**. Desde hoy, `npm run build` antes de empujar:
+  es lo único que ve esta clase de defecto, como el `"use server"` de septiembre.
+
 ### 2026-09-13 · La deriva de migraciones se cierra al revés de como parecía
 
 `migrate diff` proponía sentencias que no eran de ningún cambio en curso: **seis** el
@@ -146,31 +175,6 @@ Cinco flip-tests; el del guardia cae por su **aserción**, no sólo por su nombr
 
 **Lo que NO prueba:** nadie ha registrado un estado de colonia. Una inspección en
 la copia local, con las diez columnas vacías.
-
-### 2026-09-11 · Contar varroa existe, se anota sin señal, y la serie dice si el tratamiento sirvió
-
-El Anexo B §2.5 pedía cuatro campos y marcaba los cuatro como **no existentes**.
-Las tres decisiones están en **ADR-116** y salen del material del dueño, no del
-gusto: fila propia porque *«`Measurement` guarda una variable por fila»* y 9
-ácaros no dicen nada sin las 300 abejas; el tratamiento que un conteo evalúa es
-una **relación opcional** —*«entre dos visitas, no un campo»*— y tiene que ser de
-la **misma colonia**; y el porcentaje **no se guarda**, con muestra cero **lanza**
-en vez de devolver cero, porque cero afirmaría «no hay infestación» cuando lo que
-hay es «no se sabe».
-
-**UN DEFECTO PROPIO QUE ESTO DESTAPÓ.** El parseo de
-`/api/v1/sync/field-events` **no reconocía `colony_end`**, cerrado el día antes:
-caía al camino de `FieldEvent`, devolvía **400 del lote entero**, y como el
-cliente trata eso como fallo de transporte, **un solo borrador de fin de colonia
-dejaba la cola del apiario bloqueada**, él y todo lo que tuviera detrás. Dos
-pruebas en verde no podían verlo: importar la ruta arrastra `next-auth`, que
-vitest no resuelve, **así que la pieza que decide qué tipos existen no se podía
-llamar**. Salió a `lib/sync/parsearMutaciones.ts`, y su prueba toma la lista de
-tipos **del cliente**: un quinto tipo sin rama cae por su nombre.
-
-**Lo que NO prueba:** nadie ha contado varroa todavía, y la pantalla no se ha
-visto en un teléfono. Escrito en la cabecera de la prueba para que nadie lo cuente
-dos veces.
 
 ## 3. Bloqueado, y en qué
 
