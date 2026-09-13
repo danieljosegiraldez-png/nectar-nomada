@@ -18,8 +18,8 @@ import {
   OBJETIVOS_DE_TRATAMIENTO,
   TratamientoInvalido,
   VIAS_QUE_DEJAN_MATERIAL,
-  tratamientosPorObjetivo,
 } from "../../lib/apiary/objetivoDelTratamiento";
+import { tratamientosPorObjetivo } from "../../lib/apiary/tratamientosPorObjetivo";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `objetivo-${Date.now()}`;

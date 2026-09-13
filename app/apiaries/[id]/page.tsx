@@ -8,7 +8,7 @@ import { coordenadasPropuestas } from "../../../lib/traceability/coordenadasDelS
 import { coloniasPorIrregularidad } from "../../../lib/apiary/irregularidades";
 import { avisosDeEnjambrazon } from "../../../lib/apiary/avisoDeEnjambrazon";
 import { alcanceDelAlimento } from "../../../lib/apiary/alcanceDelAlimento";
-import { tratamientosPorObjetivo } from "../../../lib/apiary/objetivoDelTratamiento";
+import { tratamientosPorObjetivo } from "../../../lib/apiary/tratamientosPorObjetivo";
 import { confirmarCoordenadasAction } from "../../actions/traceability";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";

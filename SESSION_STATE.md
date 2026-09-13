@@ -37,6 +37,32 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-13 · El navegador pedía `pg`, y por eso producción no desplegaba
+
+`ColonyEventQuickEntry.tsx` es `"use client"` e importaba dos constantes de
+catálogo de `lib/apiary/objetivoDelTratamiento.ts`. Ese archivo tenía el catálogo
+arriba y un reporte que lee la base abajo, y su cabecera decía «pura y sin base de
+datos en su mitad de arriba». **Esa frontera no existe para el empaquetador:** un
+`import { prisma }` a nivel de módulo se traza aunque el navegador sólo use una
+constante, así que el bundle acabó pidiendo `pg`, `dns`, `fs`, `net` y `tls`.
+
+`main` dejó de construir en el #288. **Producción sirvió el build anterior y
+ninguna PR podía ponerse verde**, porque el rojo se hereda de la base.
+
+**El arreglo es el reparto que el módulo ya tenía al lado:** el reporte sale a
+`lib/apiary/tratamientosPorObjetivo.ts`, como `alcanceDelAlimento.ts` está al lado
+de `alimentacion.ts`. El catálogo queda puro y sólo `import type`, que se borra al
+compilar.
+
+**Segundo error de esta familia** —el primero fue la clase exportada de un
+`"use server"`, ADR de `use-server-solo-async`— y los dos comparten la causa de
+fondo: `npm run verify` corre tipos, lint y tests, **no `next build`**. Así que la
+familia tiene guardia: `tests/arquitectura/cliente-sin-base.test.ts` recorre los
+imports **transitivos** de cada `"use client"` y exige que ninguno alcance
+`lib/db.ts`. Para en los `"use server"`, que sí son frontera real — sin esa regla
+señalaba 27 componentes correctos, y un guardia que nunca puede pasar enseña a
+ignorar una línea roja.
+
 ### 2026-09-13 · Un tratamiento dice contra qué, y se acabó el Anexo B obligatorio
 
 «Objetivo» era **el último campo que el Anexo B marcaba obligatorio y que no

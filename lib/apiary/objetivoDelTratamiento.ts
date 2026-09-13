@@ -13,10 +13,15 @@
  * otros nueve —moho, loque, alas deformadas, obrera ponedora— es algo contra lo
  * que se aplique un producto.
  *
- * Pura y sin base de datos en su mitad de arriba, porque el formulario de campo es
- * `"use client"`; el reporte, abajo, sí lee.
+ * **Este archivo es puro y NO lee la base**, porque el formulario de campo es
+ * `"use client"` y lo importa. Estaba escrito en dos mitades —catálogo arriba,
+ * reporte abajo— y esa frontera no existe para el empaquetador: un
+ * `import { prisma }` a nivel de módulo se traza **da igual qué export uses**, así
+ * que el navegador acababa pidiendo `pg`, y con él `dns`, `fs`, `net` y `tls`.
+ * Rompió el build de `main` el 2026-09-13. El reporte vive ahora en
+ * `tratamientosPorObjetivo.ts`, que es el reparto que este módulo ya tenía con
+ * `alimentacion.ts` / `alcanceDelAlimento.ts`.
  */
-import { prisma } from "../db";
 import type { TreatmentRoute, TreatmentTarget } from "../../generated/prisma/client";
 
 /** Una entrada que el servicio rechaza. */
@@ -64,51 +69,4 @@ export function exigeVia(valor: unknown): TreatmentRoute {
     throw new TratamientoInvalido("via_desconocida");
   }
   return valor as TreatmentRoute;
-}
-
-export interface ConteoPorObjetivo {
-  target: TreatmentTarget;
-  /** Aplicaciones dentro de la ventana. */
-  tratamientos: number;
-  /**
-   * Colonias DISTINTAS tratadas. Es el número que interesa: tres aplicaciones a
-   * la misma caja son un problema de esa caja, no tres cajas con problema. Misma
-   * decisión que `coloniasPorIrregularidad`.
-   */
-  colonias: number;
-}
-
-/**
- * Qué se trató, contra qué, en un sitio y una ventana.
- *
- * **Devuelve los cinco objetivos, también los que valen cero**, por la misma razón
- * que el reporte de irregularidades: «no se trató contra polilla» y «nadie
- * registró tratamientos contra polilla» no son lo mismo, y una fila ausente los
- * confunde.
- *
- * **No autoriza y no pide principal**, misma disciplina que sus hermanas del
- * módulo: quien llama ya obtuvo el `locationId` de una lectura que sí autoriza.
- */
-export async function tratamientosPorObjetivo(
-  locationId: string,
-  desde: Date,
-  hasta: Date,
-): Promise<ConteoPorObjetivo[]> {
-  const aplicaciones = await prisma.colonyEvent.findMany({
-    where: {
-      eventType: "treatment",
-      occurredAt: { gte: desde, lt: hasta },
-      colony: { hive: { locationId } },
-    },
-    select: { colonyId: true, treatmentTarget: true },
-  });
-
-  return OBJETIVOS_DE_TRATAMIENTO.map((target) => {
-    const suyas = aplicaciones.filter((a) => a.treatmentTarget === target);
-    return {
-      target,
-      tratamientos: suyas.length,
-      colonias: new Set(suyas.map((a) => a.colonyId)).size,
-    };
-  });
 }
