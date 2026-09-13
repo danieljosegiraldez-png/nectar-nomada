@@ -2444,3 +2444,57 @@ compilador paró una sustitución que alcanzó también a la acción de recepci�
 `assertDefinedWhere` paró un `afterAll` cuyo fixture había reventado porque usé
 `perl` sobre una plantilla de JavaScript y **se comió el `${RUN}`** —perl lo leyó
 como variable suya—. Para editar código con interpolación, no perl.
+
+---
+
+### 2026-09-11 · La lista de chequeo del apicultor nunca salió del disco
+
+`protocolos/apiario-campo-v1.json` son 11 KB de preguntas de campo ya escritas
+—5 actividades, 44 ítems— y `lib/apiary/protocoloDeCampo.ts` sabe darlas de alta
+como `ProtocolVersion` de Research OS. Medido: **sólo lo llamaban las pruebas**.
+Ni un guion, ni una pantalla. Aquí la puerta no es una pantalla: cargar un
+protocolo se decide una vez y se lee en el diff.
+
+**Lo que entra:** `npm run apiary:load-protocol`. Seco por defecto —enseña las 5
+actividades con sus obligatorias y una **fila patrón** de qué hay ya en la base—
+y escribe sólo con `--cargar`. Idempotente por `externalIdentifier`, y se niega a
+escribir si no hay ninguna cuenta con Platform Admin, porque un `AuditEvent` sin
+actor no dice quién lo decidió.
+
+**Comprobado cargándolo de verdad** contra la copia local, no leyendo el ensayo:
+crea el protocolo, la versión 1 y **44 variables**; la segunda corrida dice «Ya
+estaba» sin tocar nada. Las filas se barrieron después.
+
+**Y lo que cargarlo NO hace, porque la frase fácil sería falsa.** Ninguna
+pantalla de apiario lee esas variables: los formularios llevan sus campos en el
+código, así que **editar el JSON hoy no cambia ni una pregunta en pantalla**. Lo
+que sí hace es que el protocolo aparezca en `/research`, se pueda aprobar con el
+botón que ya existe y se pueda **ejecutar** en `/research/execute/<versión>`, que
+pinta los 44 ítems. Entra como `draft` a propósito: aprobar es un acto humano.
+
+---
+
+### 2026-09-11 · Contar varroa existe, se anota sin señal, y la serie dice si el tratamiento sirvió
+
+El Anexo B §2.5 pedía cuatro campos y marcaba los cuatro como **no existentes**.
+Las tres decisiones están en **ADR-116** y salen del material del dueño, no del
+gusto: fila propia porque *«`Measurement` guarda una variable por fila»* y 9
+ácaros no dicen nada sin las 300 abejas; el tratamiento que un conteo evalúa es
+una **relación opcional** —*«entre dos visitas, no un campo»*— y tiene que ser de
+la **misma colonia**; y el porcentaje **no se guarda**, con muestra cero **lanza**
+en vez de devolver cero, porque cero afirmaría «no hay infestación» cuando lo que
+hay es «no se sabe».
+
+**UN DEFECTO PROPIO QUE ESTO DESTAPÓ.** El parseo de
+`/api/v1/sync/field-events` **no reconocía `colony_end`**, cerrado el día antes:
+caía al camino de `FieldEvent`, devolvía **400 del lote entero**, y como el
+cliente trata eso como fallo de transporte, **un solo borrador de fin de colonia
+dejaba la cola del apiario bloqueada**, él y todo lo que tuviera detrás. Dos
+pruebas en verde no podían verlo: importar la ruta arrastra `next-auth`, que
+vitest no resuelve, **así que la pieza que decide qué tipos existen no se podía
+llamar**. Salió a `lib/sync/parsearMutaciones.ts`, y su prueba toma la lista de
+tipos **del cliente**: un quinto tipo sin rama cae por su nombre.
+
+**Lo que NO prueba:** nadie ha contado varroa todavía, y la pantalla no se ha
+visto en un teléfono. Escrito en la cabecera de la prueba para que nadie lo cuente
+dos veces.

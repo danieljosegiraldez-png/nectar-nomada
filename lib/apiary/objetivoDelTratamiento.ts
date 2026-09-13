@@ -17,54 +17,23 @@
  * `"use client"`; el reporte, abajo, sí lee.
  */
 import { prisma } from "../db";
-import type { TreatmentRoute, TreatmentTarget } from "../../generated/prisma/client";
-
-/** Una entrada que el servicio rechaza. */
-export class TratamientoInvalido extends Error {}
-
-/** Los cinco objetivos que el dueño cerró en su protocolo. */
-export const OBJETIVOS_DE_TRATAMIENTO = [
-  "varroa",
-  "polilla_cera",
-  "escarabajo_colmena",
-  "hormigas",
-  "otro",
-] as const satisfies readonly TreatmentTarget[];
-
-/** Las seis vías. */
-export const VIAS_DE_TRATAMIENTO = [
-  "tira",
-  "goteo",
-  "espolvoreo",
-  "vaporizacion",
-  "cebo",
-  "otro",
-] as const satisfies readonly TreatmentRoute[];
+import { OBJETIVOS_DE_TRATAMIENTO } from "./vocabularioDeTratamiento";
+import type { TreatmentTarget } from "../../generated/prisma/client";
 
 /**
- * Las vías que **dejan algo dentro de la colmena** y por lo tanto hay que retirar.
- *
- * El Anexo lo dice de una sola: *«las tiras que no se retiran generan
- * resistencia»*. `cebo` también deja material, pero fuera del alcance de lo que él
- * escribió, así que **no se añade por deducción** — queda como pregunta suya en
- * ADR-119. Esta lista existe para que, cuando haya camino de cierre, el aviso de
- * «no retirado» tenga de dónde salir sin volver a decidirlo.
+ * El vocabulario vive en `./vocabularioDeTratamiento`, sin `prisma` detrás, porque
+ * el formulario de campo es `"use client"`. Se re-exporta para que nadie más tenga
+ * que saberlo — pero **un componente de cliente debe importarlo de allí**, no de
+ * aquí: importarlo de aquí arrastra `lib/db` al navegador y rompe el build.
  */
-export const VIAS_QUE_DEJAN_MATERIAL = ["tira"] as const satisfies readonly TreatmentRoute[];
-
-export function exigeObjetivo(valor: unknown): TreatmentTarget {
-  if (typeof valor !== "string" || !(OBJETIVOS_DE_TRATAMIENTO as readonly string[]).includes(valor)) {
-    throw new TratamientoInvalido("objetivo_desconocido");
-  }
-  return valor as TreatmentTarget;
-}
-
-export function exigeVia(valor: unknown): TreatmentRoute {
-  if (typeof valor !== "string" || !(VIAS_DE_TRATAMIENTO as readonly string[]).includes(valor)) {
-    throw new TratamientoInvalido("via_desconocida");
-  }
-  return valor as TreatmentRoute;
-}
+export {
+  TratamientoInvalido,
+  OBJETIVOS_DE_TRATAMIENTO,
+  VIAS_DE_TRATAMIENTO,
+  VIAS_QUE_DEJAN_MATERIAL,
+  exigeObjetivo,
+  exigeVia,
+} from "./vocabularioDeTratamiento";
 
 export interface ConteoPorObjetivo {
   target: TreatmentTarget;
