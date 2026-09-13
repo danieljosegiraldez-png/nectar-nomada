@@ -235,7 +235,11 @@ export interface CreateRecipeInput {
     minValue?: number | null;
     maxValue?: number | null;
     note?: string | null;
+    /** Cada cuántas horas toca medir. Sólo con `moment: "during"`. */
+    everyHours?: number | null;
   }>;
+  /** Cuánto debe durar la fase que esta receta describe, en horas. */
+  expectedHours?: number | null;
 }
 
 /**
@@ -252,6 +256,13 @@ export interface CreateRecipeInput {
  * declare targets. Two copies of these checks would eventually disagree, and
  * the one that drifted would be the one nobody was reading.
  */
+export function validateExpectedHours(expectedHours: number | null | undefined) {
+  if (expectedHours == null) return; // no declararlo es legitimo
+  if (!Number.isInteger(expectedHours) || expectedHours <= 0) {
+    throw new ProcessTargetError("expected_hours_must_be_positive");
+  }
+}
+
 export function validateTargets(targets: CreateRecipeInput["targets"]) {
   if (targets.length === 0) throw new ProcessTargetError("at_least_one_target_required");
 
@@ -277,6 +288,20 @@ export function validateTargets(targets: CreateRecipeInput["targets"]) {
         throw new ProcessTargetError("target_out_of_physical_range");
       }
     }
+
+    // **El ritmo sólo tiene sentido mientras algo dura.** Un objetivo inicial o
+    // final ocurre UNA vez —«el pH empieza en 5,2», «termina en 3,9»— y pedirle
+    // «cada 6 horas» es una contradicción, no una preferencia. Se rechaza en
+    // vez de guardarla: una fila así haría que la pantalla prometiera lecturas
+    // periódicas de un momento que no se repite.
+    if (t.everyHours != null && t.moment !== "during") {
+      throw new ProcessTargetError("cadence_only_while_running");
+    }
+    // Cero no es «sin ritmo» —para eso está el nulo— y un negativo no es nada.
+    // Sin esto, un 0 dividiría por cero al calcular cuántas lecturas se deben.
+    if (t.everyHours != null && (!Number.isInteger(t.everyHours) || t.everyHours <= 0)) {
+      throw new ProcessTargetError("cadence_must_be_positive_hours");
+    }
   }
 
   // The unique index on (recipeVersionId, variable, moment) would catch this
@@ -294,6 +319,7 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
   const name = input.name.trim();
   if (!name) throw new ProcessTargetError("name_required");
   validateTargets(input.targets);
+  validateExpectedHours(input.expectedHours);
 
   // Gated on the organization the recipe belongs to, through a lot of that
   // organization — the same authority that operates the batches it will be
@@ -318,6 +344,7 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
           create: {
             version: 1,
             status: "approved",
+            expectedHours: input.expectedHours ?? null,
             createdBy: userAccountId,
             targets: {
               create: input.targets.map((t, i) => ({
@@ -328,6 +355,7 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
                 minValue: t.minValue ?? null,
                 maxValue: t.maxValue ?? null,
                 note: t.note?.trim() || null,
+                everyHours: t.everyHours ?? null,
                 displayOrder: i,
               })),
             },
@@ -494,6 +522,14 @@ export async function createRecipeVersion(
   recipeId: string,
   targets: CreateRecipeInput["targets"],
   notes?: string | null,
+  /**
+   * **Sin esto, publicar una v2 le borraba el ritmo a la receta en silencio.**
+   * Lo cazó la revisión independiente de Codex el 2026-09-13: hay DOS caminos
+   * que escriben objetivos —crear receta y crear versión— y el primer intento
+   * sólo cerró uno. La versión vigente quedaba sin duración esperada aunque la
+   * v1 la tuviera, y nada lo decía.
+   */
+  expectedHours?: number | null,
 ) {
   const recipe = await prisma.processRecipe.findUnique({
     where: { id: recipeId },
@@ -506,6 +542,7 @@ export async function createRecipeVersion(
   await requireLotAccess(userAccountId, "manage", [anyLot]);
 
   validateTargets(targets);
+  validateExpectedHours(expectedHours);
 
   const nextVersion = (recipe.versions[0]?.version ?? 0) + 1;
 
@@ -516,6 +553,7 @@ export async function createRecipeVersion(
         version: nextVersion,
         notes: notes?.trim() || null,
         status: "approved",
+        expectedHours: expectedHours ?? null,
         createdBy: userAccountId,
         targets: {
           create: targets.map((t, i) => ({
@@ -525,6 +563,7 @@ export async function createRecipeVersion(
             targetValue: t.targetValue ?? null,
             minValue: t.minValue ?? null,
             maxValue: t.maxValue ?? null,
+            everyHours: t.everyHours ?? null,
             note: t.note?.trim() || null,
             displayOrder: i,
           })),

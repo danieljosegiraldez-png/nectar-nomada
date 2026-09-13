@@ -1206,7 +1206,12 @@
     "cereza_defectos_defectuoso": "Defective",
     "cereza_limpieza_limpio": "Clean",
     "cereza_limpieza_leve_impureza": "Slight impurity",
-    "cereza_limpieza_contaminado": "Contaminated"
+    "cereza_limpieza_contaminado": "Contaminated",
+    "recipeEveryHoursLabel": "Measure every (hours)",
+    "recipeEveryHoursPlaceholder": "12",
+    "recipeEveryHoursHint": "Optional. If the recipe does not declare it, the list cannot say whether the batch owes you a reading.",
+    "recipeExpectedHoursLabel": "Expected duration (hours)",
+    "recipeExpectedHoursHint": "Optional. Tells whether a batch is running late in this phase."
   },
   "Apiary": {
     "badge": "Apiary",

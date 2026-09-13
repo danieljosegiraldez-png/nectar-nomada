@@ -41,6 +41,7 @@ export default async function RecipeDetailPage({
     targetValue: tg.targetValue?.toString() ?? "",
     minValue: tg.minValue?.toString() ?? "",
     maxValue: tg.maxValue?.toString() ?? "",
+    everyHours: tg.everyHours?.toString() ?? "",
     note: tg.note ?? "",
   }));
 
@@ -72,7 +73,12 @@ export default async function RecipeDetailPage({
       <section className="nn-section">
         <h2>{t("recipeNewVersionHeading")}</h2>
         <p className="nn-muted">{t("recipeNewVersionIntro")}</p>
-        <RecipeVersionForm recipeId={recipe.id} variables={variables} initialTargets={initialTargets} />
+        <RecipeVersionForm
+          recipeId={recipe.id}
+          variables={variables}
+          initialTargets={initialTargets}
+          expectedHours={current?.expectedHours ?? null}
+        />
       </section>
 
       <section className="nn-section">

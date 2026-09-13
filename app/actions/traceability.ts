@@ -880,6 +880,7 @@ export async function createRecipeAction(
       name: String(formData.get("name") ?? ""),
       description: emptyToNull(formData.get("description")),
       organizationId: emptyToNull(formData.get("organizationId")),
+      expectedHours: emptyToNullNumber(formData.get("expectedHours")),
       targets,
     });
   } catch (error) {
@@ -899,6 +900,7 @@ function parseTargetRows(formData: FormData) {
     targetValue: number | null;
     minValue: number | null;
     maxValue: number | null;
+    everyHours: number | null;
     note: string | null;
   }[] = [];
   for (let i = 0; i < 50; i++) {
@@ -911,6 +913,10 @@ function parseTargetRows(formData: FormData) {
       targetValue: emptyToNullNumber(formData.get(`targets[${i}][targetValue]`)),
       minValue: emptyToNullNumber(formData.get(`targets[${i}][minValue]`)),
       maxValue: emptyToNullNumber(formData.get(`targets[${i}][maxValue]`)),
+      // El formulario sólo pinta este campo con `moment: during` y lo limpia al
+      // cambiar de momento, pero la acción no se fía de eso: se puede invocar
+      // sin pasar por la pantalla, y `validateTargets` rechaza el caso.
+      everyHours: emptyToNullNumber(formData.get(`targets[${i}][everyHours]`)),
       note: emptyToNull(formData.get(`targets[${i}][note]`)),
     });
   }
@@ -957,6 +963,9 @@ export async function createRecipeVersionAction(
       recipeId,
       parseTargetRows(formData),
       emptyToNull(formData.get("notes")),
+      // Sin esto, publicar una v2 dejaba la version vigente sin duracion
+      // esperada aunque la v1 la tuviera. Lo cazo la revision de Codex.
+      emptyToNullNumber(formData.get("expectedHours")),
     );
   } catch (error) {
     return { error: friendlyError(t, error) };

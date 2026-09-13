@@ -1,0 +1,41 @@
+-- El ritmo de una receta: cada cuánto medir, y cuánto debe durar la fase.
+--
+-- ENCARGO DEL DUEÑO (2026-09-13). Auditando la pantalla de lotes decidió que la
+-- urgencia —«a cuál le toca algo ahora»— sale de la receta. Y al describirla
+-- dijo: «una receta requiere un ritmo de medición y tiene un indicador target de
+-- dónde comenzar y terminar, y un +/- rango».
+--
+-- TRES DE ESAS CUATRO COSAS YA EXISTÍAN, y por eso esta migración es pequeña:
+-- `process_target.target_value` es el objetivo, `min_value`/`max_value` son el
+-- rango, y `moment` (initial|during|final) distingue el inicio del final, con
+-- una fila por cada uno. Faltaba SÓLO el ritmo.
+--
+-- SON DOS NÚMEROS DISTINTOS Y NO UNO:
+--   every_hours     dice si el lote te DEBE UNA LECTURA
+--   expected_hours  dice si el lote VA TARDE
+-- Un batch puede ir en hora y deberte una medición, y al revés. Meterlos en una
+-- sola columna obligaría a elegir cuál de las dos preguntas se puede contestar.
+--
+-- POR QUÉ COLUMNAS Y NO UNA TABLA DE RITMOS. `every_hours` es un atributo de la
+-- meta, no una entidad: «pH cada 6 h» no existe sin «pH». Una tabla aparte
+-- obligaría a mantener dos sitios sincronizados para decir una sola cosa. La
+-- alternativa se le presentó al dueño y la descartó.
+--
+-- ANULABLES A PROPÓSITO, y esto importa para la pantalla. Las recetas que ya
+-- existen no tienen ritmo declarado, y su ausencia significa «no se declaró» —
+-- nunca «no hay que medir». La lista de lotes distingue los dos casos: sin
+-- ritmo ordena por tiempo en fase; con ritmo puede decir «14 h, y la receta
+-- dice 12». Poner un valor por defecto convertiría el silencio en una
+-- afirmación, que es lo que CLAUDE.md §3 prohíbe en su primera línea.
+--
+-- LO QUE ESTA MIGRACIÓN NO IMPONE. Que `every_hours` sólo tenga sentido con
+-- `moment = 'during'` es una regla de la capa de servicio y NO existe para la
+-- base: un importador o un SQL directo la salta. Se dice aquí en vez de
+-- llamarla estructural, que es el error que `CLAUDE.md` documenta haber
+-- cometido tres veces en un día.
+--
+-- ADITIVO Y SIN DATOS QUE MOVER: las dos columnas nacen nulas.
+
+ALTER TABLE "traceability"."process_target" ADD COLUMN "every_hours" INTEGER;
+
+ALTER TABLE "traceability"."process_recipe_version" ADD COLUMN "expected_hours" INTEGER;

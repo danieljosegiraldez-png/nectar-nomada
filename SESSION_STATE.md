@@ -146,35 +146,55 @@ lo convierte con `fechaDeDia`, que **falla** en vez de dejar que `new Date()`
 adivine. Cuatro flip-tests, los cuatro compilando y cada uno con su prueba.
 
 **Lo que NO prueba:** nadie ha registrado un «alcanza hasta» todavía.
+### 2026-09-13 · Una receta ya puede decir cada cuánto medir y cuánto debe durar
 
-### 2026-09-12 · El estado de la colonia existe, y un aviso no se apaga porque nadie mirase
+Auditando la pantalla de lotes, Daniel decidió que la urgencia —«a cuál le toca
+algo ahora»— **sale de la receta**. No se podía calcular: `ProcessTarget` decía a
+qué valores llegar y **ningún ritmo**.
 
-El Anexo B §2.2 pedía siete campos con su motivo al lado y **ninguno existía**. El
-vocabulario sale de `protocolos/apiario-campo-v1.json`, que el dueño escribió y que
-**no se edita**: su cabecera lo prohíbe, así que la v2 que hace falta —con los tres
-ítems que le faltan— queda en `PENDING_IMPLEMENTATIONS/010`.
+**Tres de las cuatro cosas que describió ya existían**, y por eso el cambio es
+pequeño. Su frase: «una receta requiere un ritmo de medición y tiene un indicador
+target de dónde comenzar y terminar, y un +/- rango». `targetValue` es el
+objetivo, `minValue`/`maxValue` el rango, y `moment` (initial|during|final)
+distingue el inicio del final con una fila cada uno. **Faltaba sólo el ritmo.**
 
-**Decisión del dueño (2026-09-12):** el **nivel** de una reserva y el **sitio**
-donde está son dos columnas. El Anexo los ponía en una lista de cuatro —«alta,
-media, baja, junto a la cría»— pero así no se puede decir «alta Y junto a la cría»
-y el reporte de reservas bajas tendría que decidir si cuenta esa cuarta. ADR-117.
+**Dos números y no uno:** `every_hours` dice si el batch te **debe una lectura**;
+`expected_hours` dice si **va tarde**. Un batch puede ir en hora y deberte una
+medición, y al revés. Meterlos en una columna obligaría a elegir qué pregunta se
+puede contestar.
 
-**La regla que decide si el aviso de enjambrazón sirve:** se toma la última
-inspección **que miró**, no la última inspección. Una visita que pasó rápido y no
-abrió la caja deja `null`, y leer eso como «ya no hay» apagaría el aviso **justo en
-el caso que pierde la colonia**. Para apagarlo hay que mirar y decir «no hay» — que
-por eso es un valor del enum y no la ausencia de valor.
+**`null` no es `false`, y ahí está el diseño.** `estadoDeRitmo` devuelve
+`demora: true | false | null` — «no se sabe» y «va bien» son hechos distintos, y
+confundirlos haría que un lote sin receta pareciera puntual. Un batch sin ritmo
+declarado puntúa **0** en urgencia: no se le inventa la que la receta no declara.
 
-**Un defecto propio, invisible para su propio guardia.**
-`booleanos-de-tres-estados` prohíbe preguntar un `Boolean?` con una casilla, pero
-buscaba `name="<campo>"` — la forma de un formulario de servidor. **Los de campo
-guardan en IndexedDB y se atan con `checked={campo}`**, así que no los veía, y
-`queenSighted` tenía el defecto exacto que ese archivo describe: sin marcar guardaba
-«miré y no estaba» cuando lo cierto era «nadie buscó». Medido: era el único caso.
-Cinco flip-tests; el del guardia cae por su **aserción**, no sólo por su nombre.
+**Una regla que se rechaza en vez de guardarse:** `every_hours` sólo tiene
+sentido con `moment: during`. Un objetivo inicial ocurre una vez, y pedirle «cada
+6 h» es una contradicción. Vive en `validateTargets` —donde ADR-102 puso todas
+las reglas juntas— y **no en la base**: se dice en vez de llamarlo estructural.
 
-**Lo que NO prueba:** nadie ha registrado un estado de colonia. Una inspección en
-la copia local, con las diez columnas vacías.
+**Doce pruebas con entrada hostil**, incluidas fase y lectura en el futuro, que
+se rechazan porque devolver horas negativas colaría el lote al principio de la
+cola como «lo más reciente».
+
+**Lo que NO hace:** ninguna pantalla lo usa todavía. El ritmo se puede declarar y
+la urgencia se puede calcular; ordenar la lista es el paso siguiente.
+
+**Y el fallo de verdad lo encontró Codex, no nosotros.** Hay **dos** caminos que
+escriben objetivos —crear receta y publicar una **versión**— y sólo se cerró uno:
+`createRecipeVersion` no persistía `everyHours` ni aceptaba `expectedHours`, así
+que **publicar la v2 le borraba el ritmo a la receta en silencio**. Pérdida de
+dato sin aviso, en trazabilidad. El patrón —añadir un campo y cerrar una sola de
+sus puertas— se cometió tres veces el mismo día.
+
+Por eso queda `tests/arquitectura/campos-con-dos-puertas.test.ts`: lee los campos
+que `CreateRecipeInput` declara y exige que cada uno aparezca en el parseo, en
+**los dos** servicios y en **los dos** formularios. Lleva control positivo de su
+propio parseo —afirma cuántos campos encontró— porque un guardia que lee la
+fuente con regex se queda ciego en silencio cuando el archivo cambia de forma.
+Flip-test de las tres: reintroducir el fallo de Codex, quitar el campo del
+formulario de versión y romper el contrato hacen caer **cada uno a su prueba por
+nombre**, las tres mutaciones compilando.
 
 ## 3. Bloqueado, y en qué
 
