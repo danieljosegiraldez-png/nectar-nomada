@@ -40,6 +40,13 @@ export DATABASE_URL="$TEST_DATABASE_URL"
 # en vez de pasar en verde sobre nada.
 export SHADOW_DATABASE_URL="${DATABASE_URL%%\?*}_shadow"
 
+# **Y hay que CREARLA.** Prisma no la crea cuando se le da una URL: corta con
+# `P1003 Database … does not exist`. Eso tumbó esta compuerta el 2026-09-13, y la
+# tumbó bien: el guardia dijo «no pude medir» en vez de pasar en verde. Se crea con
+# `pg` —dependencia del proyecto— y no con `psql`, que no aparece ni una vez en el
+# log del runner.
+node scripts/crear-base-de-sombra.mjs
+
 npx prisma generate
 npx prisma migrate deploy
 # Las banderas `SEED_DEMO_*` existen justo para esto (CLAUDE.md §54): la semilla
