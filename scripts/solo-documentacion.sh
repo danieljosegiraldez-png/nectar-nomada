@@ -44,16 +44,48 @@ veredicto() {
 base="${1:-}"
 head="${2:-HEAD}"
 
-# Sin base explícita, el commit anterior. En un merge commit, HEAD^ es el primer
-# padre —`main` antes de la fusión— así que el rango es justo lo que entra.
+# Sin base explícita hay que DEDUCIR el rango, y aquí es donde este script estuvo
+# mal desde que existe.
+#
+# **El defecto, medido el 2026-09-13.** Decía «en un merge commit, HEAD^ es el
+# primer padre, así que el rango es justo lo que entra». Eso es verdad en GitHub
+# Actions, que saca el commit de FUSIÓN de la PR (`refs/pull/N/merge`). **Vercel no:
+# saca el commit de la rama.** Ahí `HEAD^` es el commit anterior MÍO, y como todas
+# estas PR terminan con un commit de estado —`SESSION_STATE.md`, sólo
+# documentación— el rango decía «sólo docs» y Vercel **saltaba el build de un
+# cambio de código entero**, reportando `success — Canceled by Ignored Build Step`.
+#
+# Le pasó a las PR **#283, #284, #286 y #288**: ninguna construyó su preview, y la
+# #288 llegó a `main` sin que nada hubiera construido su código. Rompió producción
+# —`pg` en el paquete del navegador— y el sitio sirvió un build viejo una hora.
+#
+# Un `success` que significa «no miré» es peor que un rojo, y es la misma familia
+# que el `cancelled` de las compuertas de Actions.
 if [ -z "$base" ]; then
-  if git rev-parse --verify --quiet "HEAD^" >/dev/null 2>&1; then
-    base="HEAD^"
+  por_defecto="${VERCEL_GIT_REPO_DEFAULT_BRANCH:-main}"
+  rama="${VERCEL_GIT_COMMIT_REF:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)}"
+  padres="$(git rev-list --parents -n 1 "$head" 2>/dev/null | wc -w | tr -d ' ')"
+
+  if [ "${padres:-0}" -ge 3 ]; then
+    # Commit de fusión (1 sha + 2 padres = 3 palabras): su primer padre ES la base.
+    # Es el caso de GitHub Actions en un `pull_request`.
+    base="$head^"
+  elif [ "$rama" = "$por_defecto" ] && git rev-parse --verify --quiet "$head^" >/dev/null 2>&1; then
+    # Despliegue de producción: un squash sobre la rama por defecto tiene un solo
+    # padre, y ése es `main` antes de la fusión.
+    base="$head^"
+  elif git rev-parse --verify --quiet "origin/$por_defecto" >/dev/null 2>&1 &&
+       mb="$(git merge-base "origin/$por_defecto" "$head" 2>/dev/null)" && [ -n "$mb" ]; then
+    # Preview de una rama: la base es donde se separó de la rama por defecto, no el
+    # commit anterior. Esto es lo que faltaba.
+    base="$mb"
   else
-    # Clon superficial sin padre, o primer commit: no se puede saber.
-    echo "solo-documentacion: sin HEAD^, no se puede determinar el rango" >&2
+    # Clon superficial sin la rama por defecto, primer commit, o algo que no se
+    # reconoce. No se puede medir, así que se construye.
+    echo "solo-documentacion: no se pudo deducir la base (rama=$rama, padres=$padres); construyo por si acaso" >&2
     veredicto false
   fi
+  echo "solo-documentacion: base deducida $base (rama=$rama, padres=$padres)" >&2
 fi
 
 archivos="$(git diff --name-only "$base" "$head" 2>/dev/null)"
