@@ -2447,6 +2447,12 @@ como variable suya—. Para editar código con interpolación, no perl.
 
 ---
 
+**Sexto archivado, 2026-09-13**, con el estado en 392/400 líneas (98 %). Las dos
+entradas más viejas que quedaban, del 2026-09-11. **Lo hicieron dos sesiones a la
+vez** —el #289 y el #287— y de ahí que salgan juntas: la ronda se descubrió al
+rebasar, no al planearla. El guion `apiary:load-protocol` y el conteo de varroa
+existen y sus pruebas los vigilan; esto es su registro, no su control.
+
 ### 2026-09-11 · La lista de chequeo del apicultor nunca salió del disco
 
 `protocolos/apiario-campo-v1.json` son 11 KB de preguntas de campo ya escritas

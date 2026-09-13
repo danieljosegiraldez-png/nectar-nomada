@@ -180,6 +180,22 @@ cola como «lo más reciente».
 **Lo que NO hace:** ninguna pantalla lo usa todavía. El ritmo se puede declarar y
 la urgencia se puede calcular; ordenar la lista es el paso siguiente.
 
+**Y el fallo de verdad lo encontró Codex, no nosotros.** Hay **dos** caminos que
+escriben objetivos —crear receta y publicar una **versión**— y sólo se cerró uno:
+`createRecipeVersion` no persistía `everyHours` ni aceptaba `expectedHours`, así
+que **publicar la v2 le borraba el ritmo a la receta en silencio**. Pérdida de
+dato sin aviso, en trazabilidad. El patrón —añadir un campo y cerrar una sola de
+sus puertas— se cometió tres veces el mismo día.
+
+Por eso queda `tests/arquitectura/campos-con-dos-puertas.test.ts`: lee los campos
+que `CreateRecipeInput` declara y exige que cada uno aparezca en el parseo, en
+**los dos** servicios y en **los dos** formularios. Lleva control positivo de su
+propio parseo —afirma cuántos campos encontró— porque un guardia que lee la
+fuente con regex se queda ciego en silencio cuando el archivo cambia de forma.
+Flip-test de las tres: reintroducir el fallo de Codex, quitar el campo del
+formulario de versión y romper el contrato hacen caer **cada uno a su prueba por
+nombre**, las tres mutaciones compilando.
+
 ### 2026-09-12 · El estado de la colonia existe, y un aviso no se apaga porque nadie mirase
 
 El Anexo B §2.2 pedía siete campos con su motivo al lado y **ninguno existía**. El
