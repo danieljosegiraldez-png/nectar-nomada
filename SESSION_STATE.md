@@ -196,35 +196,6 @@ Flip-test de las tres: reintroducir el fallo de Codex, quitar el campo del
 formulario de versión y romper el contrato hacen caer **cada uno a su prueba por
 nombre**, las tres mutaciones compilando.
 
-### 2026-09-12 · El estado de la colonia existe, y un aviso no se apaga porque nadie mirase
-
-El Anexo B §2.2 pedía siete campos con su motivo al lado y **ninguno existía**. El
-vocabulario sale de `protocolos/apiario-campo-v1.json`, que el dueño escribió y que
-**no se edita**: su cabecera lo prohíbe, así que la v2 que hace falta —con los tres
-ítems que le faltan— queda en `PENDING_IMPLEMENTATIONS/010`.
-
-**Decisión del dueño (2026-09-12):** el **nivel** de una reserva y el **sitio**
-donde está son dos columnas. El Anexo los ponía en una lista de cuatro —«alta,
-media, baja, junto a la cría»— pero así no se puede decir «alta Y junto a la cría»
-y el reporte de reservas bajas tendría que decidir si cuenta esa cuarta. ADR-117.
-
-**La regla que decide si el aviso de enjambrazón sirve:** se toma la última
-inspección **que miró**, no la última inspección. Una visita que pasó rápido y no
-abrió la caja deja `null`, y leer eso como «ya no hay» apagaría el aviso **justo en
-el caso que pierde la colonia**. Para apagarlo hay que mirar y decir «no hay» — que
-por eso es un valor del enum y no la ausencia de valor.
-
-**Un defecto propio, invisible para su propio guardia.**
-`booleanos-de-tres-estados` prohíbe preguntar un `Boolean?` con una casilla, pero
-buscaba `name="<campo>"` — la forma de un formulario de servidor. **Los de campo
-guardan en IndexedDB y se atan con `checked={campo}`**, así que no los veía, y
-`queenSighted` tenía el defecto exacto que ese archivo describe: sin marcar guardaba
-«miré y no estaba» cuando lo cierto era «nadie buscó». Medido: era el único caso.
-Cinco flip-tests; el del guardia cae por su **aserción**, no sólo por su nombre.
-
-**Lo que NO prueba:** nadie ha registrado un estado de colonia. Una inspección en
-la copia local, con las diez columnas vacías.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad

@@ -2447,8 +2447,9 @@ como variable suya—. Para editar código con interpolación, no perl.
 
 ---
 
-**Sexto archivado, 2026-09-13**, con el estado en 392/400 líneas (98 %). Las dos
-entradas más viejas que quedaban, del 2026-09-11. **Lo hicieron dos sesiones a la
+**Sexto archivado, 2026-09-13**, con el estado en 392/400 líneas (98 %) y luego
+en 425, por encima del techo. **Tres** entradas: las dos del 2026-09-11 y la del
+2026-09-12. **Lo hicieron dos sesiones a la
 vez** —el #289 y el #287— y de ahí que salgan juntas: la ronda se descubrió al
 rebasar, no al planearla. El guion `apiary:load-protocol` y el conteo de varroa
 existen y sus pruebas los vigilan; esto es su registro, no su control.
@@ -2504,3 +2505,34 @@ tipos **del cliente**: un quinto tipo sin rama cae por su nombre.
 **Lo que NO prueba:** nadie ha contado varroa todavía, y la pantalla no se ha
 visto en un teléfono. Escrito en la cabecera de la prueba para que nadie lo cuente
 dos veces.
+
+---
+
+### 2026-09-12 · El estado de la colonia existe, y un aviso no se apaga porque nadie mirase
+
+El Anexo B §2.2 pedía siete campos con su motivo al lado y **ninguno existía**. El
+vocabulario sale de `protocolos/apiario-campo-v1.json`, que el dueño escribió y que
+**no se edita**: su cabecera lo prohíbe, así que la v2 que hace falta —con los tres
+ítems que le faltan— queda en `PENDING_IMPLEMENTATIONS/010`.
+
+**Decisión del dueño (2026-09-12):** el **nivel** de una reserva y el **sitio**
+donde está son dos columnas. El Anexo los ponía en una lista de cuatro —«alta,
+media, baja, junto a la cría»— pero así no se puede decir «alta Y junto a la cría»
+y el reporte de reservas bajas tendría que decidir si cuenta esa cuarta. ADR-117.
+
+**La regla que decide si el aviso de enjambrazón sirve:** se toma la última
+inspección **que miró**, no la última inspección. Una visita que pasó rápido y no
+abrió la caja deja `null`, y leer eso como «ya no hay» apagaría el aviso **justo en
+el caso que pierde la colonia**. Para apagarlo hay que mirar y decir «no hay» — que
+por eso es un valor del enum y no la ausencia de valor.
+
+**Un defecto propio, invisible para su propio guardia.**
+`booleanos-de-tres-estados` prohíbe preguntar un `Boolean?` con una casilla, pero
+buscaba `name="<campo>"` — la forma de un formulario de servidor. **Los de campo
+guardan en IndexedDB y se atan con `checked={campo}`**, así que no los veía, y
+`queenSighted` tenía el defecto exacto que ese archivo describe: sin marcar guardaba
+«miré y no estaba» cuando lo cierto era «nadie buscó». Medido: era el único caso.
+Cinco flip-tests; el del guardia cae por su **aserción**, no sólo por su nombre.
+
+**Lo que NO prueba:** nadie ha registrado un estado de colonia. Una inspección en
+la copia local, con las diez columnas vacías.
