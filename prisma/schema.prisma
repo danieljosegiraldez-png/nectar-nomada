@@ -3586,6 +3586,16 @@ model ProcessRecipeVersion {
   version   Int
   notes     String?
   status    RecordStatus @default(draft)
+
+  /// **Cuánto debe durar la fase que esta receta describe.**
+  ///
+  /// Es el otro número del ritmo, y es distinto del de arriba: `everyHours` dice
+  /// si el lote te debe una lectura; éste dice si el lote va tarde. Un batch
+  /// puede ir en hora y deberte una medición, y al revés.
+  ///
+  /// Anulable por la misma razón: ausencia es «no se declaró».
+  expectedHours Int?      @map("expected_hours")
+
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
   creator   UserAccount? @relation("ProcessRecipeVersionCreatedBy", fields: [createdBy], references: [id])
@@ -3628,6 +3638,30 @@ model ProcessTarget {
   unit             String
   note             String?
   displayOrder     Int                  @default(0) @map("display_order")
+
+  /// **Cada cuántas horas toca medir esta variable.**
+  ///
+  /// Encargo de Daniel (2026-09-13): «una receta requiere un ritmo de medición y
+  /// tiene un indicador target de dónde comenzar y terminar, y un +/- rango».
+  /// Las otras tres partes ya estaban —`targetValue` es el objetivo,
+  /// `minValue`/`maxValue` son el rango, y `moment` distingue el inicio del
+  /// final—. Faltaba **sólo** el ritmo.
+  ///
+  /// **Por qué aquí y no en una tabla nueva.** Es un atributo de la meta, no una
+  /// entidad: «pH cada 6 h» no existe sin «pH». Una tabla aparte obligaría a
+  /// mantener dos sitios sincronizados para decir una sola cosa.
+  ///
+  /// **Sólo tiene sentido con `moment: during`.** Un objetivo inicial o final
+  /// ocurre una vez; pedirle un ritmo es una contradicción, y el servicio la
+  /// rechaza en vez de guardarla. Esa regla vive en TypeScript y **no en la
+  /// base**: un importador o un SQL directo se la salta, y se dice en vez de
+  /// llamarlo estructural.
+  ///
+  /// **Anulable a propósito.** Una receta sin ritmo declarado es legítima —las
+  /// que existen hoy no lo tienen— y su ausencia significa «no se declaró», no
+  /// «no hay que medir». La lista de lotes lo distingue: sin ritmo ordena por
+  /// tiempo en fase; con ritmo puede decir «14 h, y la receta dice 12».
+  everyHours       Int?                 @map("every_hours")
 
   @@unique([recipeVersionId, variable, moment])
   @@index([recipeVersionId])
