@@ -20,6 +20,8 @@ interface TargetRow {
   targetValue: string;
   minValue: string;
   maxValue: string;
+  /** Cada cuántas horas medir. Sólo aplica a `moment: "during"`. */
+  everyHours: string;
   note: string;
 }
 
@@ -47,7 +49,7 @@ export function RecipeForm({
   const [state, formAction, pending] = useActionState(createRecipeAction, initialState);
 
   const [rows, setRows] = useState<TargetRow[]>([
-    { key: 1, variable: "ph", moment: "final", targetValue: "", minValue: "", maxValue: "", note: "" },
+    { key: 1, variable: "ph", moment: "final", targetValue: "", minValue: "", maxValue: "", everyHours: "", note: "" },
   ]);
   const [nextKey, setNextKey] = useState(2);
 
@@ -77,6 +79,17 @@ export function RecipeForm({
             <option key={o.id} value={o.id}>{o.name}</option>
           ))}
         </select>
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="recipe-expected">{t("recipeExpectedHoursLabel")}</label>
+        <input
+          id="recipe-expected" name="expectedHours" type="number" min={1} step={1}
+          inputMode="numeric" placeholder="36"
+        />
+        <p className="nn-muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85em" }}>
+          {t("recipeExpectedHoursHint")}
+        </p>
       </div>
 
       <h3 style={{ marginTop: "1.5rem", marginBottom: "0.25rem" }}>{t("recipeTargetsHeading")}</h3>
@@ -122,7 +135,10 @@ export function RecipeForm({
                 <select
                   id={`m-${row.key}`}
                   value={row.moment}
-                  onChange={(e) => update(row.key, { moment: e.target.value as TargetRow["moment"] })}
+                  onChange={(e) => {
+                    const m = e.target.value as TargetRow["moment"];
+                    update(row.key, m === "during" ? { moment: m } : { moment: m, everyHours: "" });
+                  }}
                 >
                   <option value="initial">{t("moment_initial")}</option>
                   <option value="during">{t("moment_during")}</option>
@@ -158,6 +174,25 @@ export function RecipeForm({
               </div>
             </div>
 
+            {/* **Sólo con `during`.** El servicio rechaza un ritmo en un
+                objetivo inicial o final —ocurren una vez— así que ofrecerlo ahí
+                sería un campo que no se puede enviar. Se oculta y se limpia, en
+                vez de dejar escrito un valor que abortaría el guardado. */}
+            {row.moment === "during" ? (
+              <div className="nn-field">
+                <label htmlFor={`cada-${row.key}`}>{t("recipeEveryHoursLabel")}</label>
+                <input
+                  id={`cada-${row.key}`} name={`targets[${i}][everyHours]`} type="number"
+                  min={1} step={1} inputMode="numeric" placeholder={t("recipeEveryHoursPlaceholder")}
+                  value={row.everyHours}
+                  onChange={(e) => update(row.key, { everyHours: e.target.value })}
+                />
+                <p className="nn-muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85em" }}>
+                  {t("recipeEveryHoursHint")}
+                </p>
+              </div>
+            ) : null}
+
             <div className="nn-field">
               <label htmlFor={`n-${row.key}`}>{t("recipeNoteLabel")}</label>
               <input
@@ -191,7 +226,7 @@ export function RecipeForm({
         onClick={() => {
           setRows((rs) => [
             ...rs,
-            { key: nextKey, variable: "ph", moment: "during", targetValue: "", minValue: "", maxValue: "", note: "" },
+            { key: nextKey, variable: "ph", moment: "during", targetValue: "", minValue: "", maxValue: "", everyHours: "", note: "" },
           ]);
           setNextKey((k) => k + 1);
         }}

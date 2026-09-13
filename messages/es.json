@@ -1206,7 +1206,12 @@
     "cereza_defectos_defectuoso": "Defectuoso",
     "cereza_limpieza_limpio": "Limpio",
     "cereza_limpieza_leve_impureza": "Impureza leve",
-    "cereza_limpieza_contaminado": "Contaminado"
+    "cereza_limpieza_contaminado": "Contaminado",
+    "recipeEveryHoursLabel": "Cada cuántas horas medir",
+    "recipeEveryHoursPlaceholder": "12",
+    "recipeEveryHoursHint": "Opcional. Si la receta no lo declara, la lista no puede decir si el batch te debe una lectura.",
+    "recipeExpectedHoursLabel": "Cuánto debe durar (horas)",
+    "recipeExpectedHoursHint": "Opcional. Sirve para saber si un batch va tarde en esta fase."
   },
   "Apiary": {
     "badge": "Apiario",
