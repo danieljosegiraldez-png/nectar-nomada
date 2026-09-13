@@ -3,6 +3,12 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { queueDraft } from "../../../lib/apiary/offlineQueue";
+import {
+  CELDAS_REALES,
+  ETAPAS_DE_CRIA,
+  NIVELES_DE_RESERVA,
+  POBLACIONES,
+} from "../../../lib/apiary/estadoDeColonia";
 import { APIARY_DRAFTS_CHANGED_EVENT } from "./OfflineSyncIndicator";
 
 /**
@@ -21,6 +27,18 @@ export interface IrregularidadOfrecida {
   definition: string | null;
 }
 
+/**
+ * Un desplegable de tres estados a `boolean | null`. Vacío es **sin registrar**,
+ * y por eso vuelve `null` y no `false`: «nadie miró» no es «no». Es la misma
+ * conversión que hace `TriStateField` en el lado de los formularios de servidor;
+ * aquí hace falta otra porque esta pantalla guarda en IndexedDB, no en `FormData`.
+ */
+function triEstado(valor: string): boolean | null {
+  if (valor === "si") return true;
+  if (valor === "no") return false;
+  return null;
+}
+
 export function InspectionForm({
   colonyId,
   selfPersonId,
@@ -35,9 +53,31 @@ export function InspectionForm({
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [brood, setBrood] = useState("");
-  const [queenSighted, setQueenSighted] = useState(false);
-  const [stores, setStores] = useState("");
+  /**
+   * **Tres estados, no dos.** Era una casilla, y una casilla no puede decir «no
+   * se buscó»: sin marcar guardaba `false` —«miré y no estaba»—, que es una
+   * afirmación que nadie hizo. Es el defecto que `TriStateField` y
+   * `tests/arquitectura/booleanos-de-tres-estados.test.ts` existen para impedir,
+   * y aquí el guardia no lo veía porque su regla buscaba `name="…"` y este
+   * formulario ata por estado de React. Medido el 2026-09-12: era el único caso.
+   *
+   * El protocolo del dueño ya pedía los tres: `queen_sighted` con `vista`,
+   * `no_vista`, `no_se_busco`.
+   */
+  const [queenSighted, setQueenSighted] = useState("");
   const [temperament, setTemperament] = useState("");
+  // Anexo B §2.2, el estado de la colonia. Cadenas vacías = sin registrar, y el
+  // servicio las recibe como `null`: ninguna se rellena sola.
+  const [poblacion, setPoblacion] = useState("");
+  const [cuadros, setCuadros] = useState("");
+  const [etapas, setEtapas] = useState<ReadonlySet<string>>(new Set());
+  const [celdas, setCeldas] = useState("");
+  const [celdasCuantas, setCeldasCuantas] = useState("");
+  const [mielNivel, setMielNivel] = useState("");
+  const [mielJuntoACria, setMielJuntoACria] = useState("");
+  const [polenNivel, setPolenNivel] = useState("");
+  const [polenJuntoACria, setPolenJuntoACria] = useState("");
+  const [zangano, setZangano] = useState("");
   const [pest, setPest] = useState("");
   /** Los ids marcados. Un Set porque la pregunta es «¿está marcada?», no «¿en qué orden?». */
   const [marcadas, setMarcadas] = useState<ReadonlySet<string>>(new Set());
@@ -71,12 +111,25 @@ export function InspectionForm({
         operatorPersonId: selfPersonId,
         outcome: "issue_observed",
         broodPatternNote: brood.trim() || null,
-        queenSighted,
-        storesLevel: stores.trim() || null,
+        queenSighted: triEstado(queenSighted),
+        // `storesLevel` ya NO se manda: la reemplazan las dos reservas de abajo.
+        // La columna sigue en la base con lo que tuviera (ADR-117).
         temperamentNote: temperament.trim() || null,
         pestDiseaseFlags: pest.trim() || null,
         irregularidades: [...marcadas],
         note: note.trim() || null,
+        // Anexo B §2.2. Van como CADENAS y las valida el servicio: el aparato no
+        // es la frontera, y un desplegable manipulado no debe poder escribir.
+        population: poblacion || null,
+        beeCoveredFrames: cuadros === "" ? null : cuadros,
+        broodStages: [...etapas],
+        queenCellKind: celdas || null,
+        queenCellCount: celdasCuantas === "" ? null : celdasCuantas,
+        honeyStoresLevel: mielNivel || null,
+        honeyNextToBrood: triEstado(mielJuntoACria),
+        pollenStoresLevel: polenNivel || null,
+        pollenNextToBrood: triEstado(polenJuntoACria),
+        droneBroodPresent: triEstado(zangano),
       });
     } catch {
       setSaveError(t("localSaveFailedError"));
@@ -86,9 +139,18 @@ export function InspectionForm({
     setSavedMessage(t("inspectionSavedLocally"));
     setShowDetails(false);
     setBrood("");
-    setQueenSighted(false);
-    setStores("");
+    setQueenSighted("");
     setTemperament("");
+    setPoblacion("");
+    setCuadros("");
+    setEtapas(new Set());
+    setCeldas("");
+    setCeldasCuantas("");
+    setMielNivel("");
+    setMielJuntoACria("");
+    setPolenNivel("");
+    setPolenJuntoACria("");
+    setZangano("");
     setPest("");
     setMarcadas(new Set());
     setNote("");
@@ -120,21 +182,150 @@ export function InspectionForm({
             <label htmlFor={`insp-brood-${colonyId}`}>{t("broodPatternLabel")}</label>
             <input id={`insp-brood-${colonyId}`} value={brood} onChange={(e) => setBrood(e.target.value)} />
           </div>
-          <div className="nn-field" style={{ flexDirection: "row", alignItems: "center", gap: "0.5rem" }}>
-            <input
-              id={`insp-queen-${colonyId}`}
-              type="checkbox"
-              style={{ width: "auto" }}
-              checked={queenSighted}
-              onChange={(e) => setQueenSighted(e.target.checked)}
-            />
-            <label htmlFor={`insp-queen-${colonyId}`} style={{ margin: 0 }}>
-              {t("queenSightedLabel")}
-            </label>
+          {/* Tres opciones y no una casilla: «no se buscó» tiene que poder decirse. */}
+          <div className="nn-field">
+            <label htmlFor={`insp-queen-${colonyId}`}>{t("queenSightedLabel")}</label>
+            <select id={`insp-queen-${colonyId}`} value={queenSighted} onChange={(e) => setQueenSighted(e.target.value)}>
+              <option value="">{t("triNoRegistrado")}</option>
+              <option value="si">{t("triSi")}</option>
+              <option value="no">{t("triNo")}</option>
+            </select>
+          </div>
+
+          {/* --- Anexo B §2.2, el estado de la colonia.
+
+              Ninguno preseleccionado: un valor por defecto afirmaría algo que
+              nadie observó. Y ninguno obligatorio: una inspección rápida que sólo
+              comprueba que la caja sigue viva es legítima. */}
+          <div className="nn-field">
+            <label htmlFor={`insp-pob-${colonyId}`}>{t("populationLabel")}</label>
+            <select id={`insp-pob-${colonyId}`} value={poblacion} onChange={(e) => setPoblacion(e.target.value)}>
+              <option value="">{t("triNoRegistrado")}</option>
+              {POBLACIONES.map((v) => (
+                <option key={v} value={v}>
+                  {t(`population_${v}`)}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="nn-field">
-            <label htmlFor={`insp-stores-${colonyId}`}>{t("storesLevelLabel")}</label>
-            <input id={`insp-stores-${colonyId}`} value={stores} onChange={(e) => setStores(e.target.value)} />
+            <label htmlFor={`insp-cuadros-${colonyId}`}>{t("beeCoveredFramesLabel")}</label>
+            <input
+              id={`insp-cuadros-${colonyId}`}
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1}
+              value={cuadros}
+              onChange={(e) => setCuadros(e.target.value)}
+            />
+          </div>
+          {/* Varias a la vez: es un conjunto, no una elección. */}
+          <fieldset className="nn-field">
+            <legend>{t("broodStagesLegend")}</legend>
+            {ETAPAS_DE_CRIA.map((v) => (
+              <label key={v} htmlFor={`insp-etapa-${colonyId}-${v}`}>
+                <input
+                  id={`insp-etapa-${colonyId}-${v}`}
+                  type="checkbox"
+                  checked={etapas.has(v)}
+                  onChange={(e) =>
+                    setEtapas((prev) => {
+                      const siguiente = new Set(prev);
+                      if (e.target.checked) siguiente.add(v);
+                      else siguiente.delete(v);
+                      return siguiente;
+                    })
+                  }
+                />{" "}
+                {t(`broodStage_${v}`)}
+              </label>
+            ))}
+          </fieldset>
+          <div className="nn-field">
+            <label htmlFor={`insp-celdas-${colonyId}`}>{t("queenCellsLabel")}</label>
+            <select id={`insp-celdas-${colonyId}`} value={celdas} onChange={(e) => setCeldas(e.target.value)}>
+              <option value="">{t("triNoRegistrado")}</option>
+              {CELDAS_REALES.map((v) => (
+                <option key={v} value={v}>
+                  {t(`queenCell_${v}`)}
+                </option>
+              ))}
+            </select>
+            <p className="nn-muted">{t("queenCellsHelp")}</p>
+          </div>
+          {/* Cuántas, sólo si se vio algo: un número sin tipo no dice de qué hay tres. */}
+          {celdas !== "" && celdas !== "no_hay" ? (
+            <div className="nn-field">
+              <label htmlFor={`insp-celdas-n-${colonyId}`}>{t("queenCellsCountLabel")}</label>
+              <input
+                id={`insp-celdas-n-${colonyId}`}
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={celdasCuantas}
+                onChange={(e) => setCeldasCuantas(e.target.value)}
+              />
+            </div>
+          ) : null}
+          {/* Las dos reservas: NIVEL y SITIO separados. El Anexo los ponía en una
+              sola lista de cuatro; decisión del dueño del 2026-09-12, ADR-117. */}
+          <div className="nn-field">
+            <label htmlFor={`insp-miel-${colonyId}`}>{t("honeyStoresLabel")}</label>
+            <select id={`insp-miel-${colonyId}`} value={mielNivel} onChange={(e) => setMielNivel(e.target.value)}>
+              <option value="">{t("triNoRegistrado")}</option>
+              {NIVELES_DE_RESERVA.map((v) => (
+                <option key={v} value={v}>
+                  {t(`storesLevel_${v}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="nn-field">
+            <label htmlFor={`insp-miel-cria-${colonyId}`}>{t("nextToBroodLabel")}</label>
+            <select
+              id={`insp-miel-cria-${colonyId}`}
+              value={mielJuntoACria}
+              onChange={(e) => setMielJuntoACria(e.target.value)}
+            >
+              <option value="">{t("triNoRegistrado")}</option>
+              <option value="si">{t("triSi")}</option>
+              <option value="no">{t("triNo")}</option>
+            </select>
+          </div>
+          <div className="nn-field">
+            <label htmlFor={`insp-polen-${colonyId}`}>{t("pollenStoresLabel")}</label>
+            <select id={`insp-polen-${colonyId}`} value={polenNivel} onChange={(e) => setPolenNivel(e.target.value)}>
+              <option value="">{t("triNoRegistrado")}</option>
+              {NIVELES_DE_RESERVA.map((v) => (
+                <option key={v} value={v}>
+                  {t(`storesLevel_${v}`)}
+                </option>
+              ))}
+            </select>
+            <p className="nn-muted">{t("pollenStoresHelp")}</p>
+          </div>
+          <div className="nn-field">
+            <label htmlFor={`insp-polen-cria-${colonyId}`}>{t("nextToBroodLabel")}</label>
+            <select
+              id={`insp-polen-cria-${colonyId}`}
+              value={polenJuntoACria}
+              onChange={(e) => setPolenJuntoACria(e.target.value)}
+            >
+              <option value="">{t("triNoRegistrado")}</option>
+              <option value="si">{t("triSi")}</option>
+              <option value="no">{t("triNo")}</option>
+            </select>
+          </div>
+          <div className="nn-field">
+            <label htmlFor={`insp-zangano-${colonyId}`}>{t("droneBroodLabel")}</label>
+            <select id={`insp-zangano-${colonyId}`} value={zangano} onChange={(e) => setZangano(e.target.value)}>
+              <option value="">{t("triNoRegistrado")}</option>
+              <option value="si">{t("triSi")}</option>
+              <option value="no">{t("triNo")}</option>
+            </select>
+            <p className="nn-muted">{t("droneBroodHelp")}</p>
           </div>
           <div className="nn-field">
             <label htmlFor={`insp-temperament-${colonyId}`}>{t("temperamentLabel")}</label>

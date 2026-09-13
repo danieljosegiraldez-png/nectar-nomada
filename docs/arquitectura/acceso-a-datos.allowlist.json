@@ -344,6 +344,10 @@
     {
       "archivo": "lib/notificaciones/canales.ts",
       "razon": "A9.11 — la preferencia de canal por persona. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. `declararCanal` confirma su AuditEvent en la misma transacción; `canalesDe` sólo lee."
+    },
+    {
+      "archivo": "lib/apiary/avisoDeEnjambrazon.ts",
+      "razon": "A9 · Anexo B §2.2 — el aviso de enjambrazon. Modulo de dominio: es el sitio donde el acceso a datos vive por diseno. Una sola lectura, sin escrituras."
     }
   ],
   "reciben_transaccion": [
@@ -636,6 +640,12 @@
       "operacion": "catalogosDeCereza",
       "razon": "No recibe principal, como su gemela `getSelectionCatalogs`: devuelve VOCABULARIO —los valores de research.variable_catalog que describen la cereza— y no datos de ninguna organizacion. La llama app/lots/new/page.tsx, que gatea antes con getManageableContext. Si algun dia un catalogo pasara a llevar datos de alguien, esta linea es la que hay que releer.",
       "verificado": "2026-09-11"
+    },
+    {
+      "archivo": "lib/apiary/avisoDeEnjambrazon.ts",
+      "operacion": "avisosDeEnjambrazon",
+      "razon": "No recibe principal A PROPOSITO, misma disciplina que vitalesDeSitios, coloniasPorIrregularidad, carenciasVigentes y serieDeInfestacion: recibe un locationId que su llamador -app/apiaries/[id]/page.tsx- ya obtuvo de getApiaryDetail, que SI autoriza con requireApiaryAccess. Anadir un segundo guardia aqui duplicaria la comprobacion sin estrecharla.",
+      "verificado": "2026-09-12"
     }
   ]
 }

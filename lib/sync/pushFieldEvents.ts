@@ -10,6 +10,7 @@ import { recordColonyEvent, ColonyEventValidationError } from "../apiary/colonyE
 import { ApiaryAccessError, ColonyEndError, registrarFinDeColonia } from "../apiary/hives";
 import { ClaseDeCausaInvalida, exigeClaseDeCausa } from "../apiary/causaDePerdida";
 import { exigeMetodoDeVarroa, registrarConteoDeVarroa, VarroaValidationError } from "../apiary/varroa";
+import { EstadoDeColoniaInvalido } from "../apiary/estadoDeColonia";
 
 /**
  * P4 §4 (46_P4_API_Y_SINCRONIZACION.md) — push por lotes con resultado **por
@@ -102,6 +103,20 @@ export type MutacionDeInspeccion = {
    */
   irregularidades?: readonly string[];
   note?: string | null;
+
+  // --- Anexo B §2.2, estado de la colonia. Viajan como CADENAS porque así salen
+  // del formulario y del cuerpo JSON, y los valida `./estadoDeColonia` dentro del
+  // servicio — no se cuelan en el enum con `as never`.
+  population?: string | null;
+  beeCoveredFrames?: number | string | null;
+  broodStages?: readonly string[] | null;
+  queenCellKind?: string | null;
+  queenCellCount?: number | string | null;
+  honeyStoresLevel?: string | null;
+  honeyNextToBrood?: boolean | null;
+  pollenStoresLevel?: string | null;
+  pollenNextToBrood?: boolean | null;
+  droneBroodPresent?: boolean | null;
 };
 
 export type MutacionDeEventoDeColonia = {
@@ -208,6 +223,17 @@ async function aplicarMutacionDeApiario(
             pestDiseaseFlags: m.pestDiseaseFlags ?? null,
             irregularidades: m.irregularidades ?? [],
             note: m.note ?? null,
+            // Anexo B §2.2 — se pasan tal cual llegan; el servicio los valida.
+            population: m.population ?? null,
+            beeCoveredFrames: m.beeCoveredFrames ?? null,
+            broodStages: m.broodStages ?? null,
+            queenCellKind: m.queenCellKind ?? null,
+            queenCellCount: m.queenCellCount ?? null,
+            honeyStoresLevel: m.honeyStoresLevel ?? null,
+            honeyNextToBrood: m.honeyNextToBrood ?? null,
+            pollenStoresLevel: m.pollenStoresLevel ?? null,
+            pollenNextToBrood: m.pollenNextToBrood ?? null,
+            droneBroodPresent: m.droneBroodPresent ?? null,
             clientDraftId: m.clientDraftId,
           })
         : await recordColonyEvent(userAccountId, {
@@ -234,7 +260,11 @@ async function aplicarMutacionDeApiario(
     if (
       error instanceof ApiaryAccessError ||
       error instanceof ColonyEventValidationError ||
-      error instanceof InspectionValidationError
+      error instanceof InspectionValidationError ||
+      // Anexo B §2.2: «población = telepatía» es un rechazo del servidor, no un
+      // fallo de transporte. Sin esta línea, un valor malo tumbaría el lote
+      // entero y dejaría la cola bloqueada — el defecto de ADR-116, otra vez.
+      error instanceof EstadoDeColoniaInvalido
     ) {
       return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
     }
