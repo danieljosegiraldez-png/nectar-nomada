@@ -963,6 +963,9 @@ export async function createRecipeVersionAction(
       recipeId,
       parseTargetRows(formData),
       emptyToNull(formData.get("notes")),
+      // Sin esto, publicar una v2 dejaba la version vigente sin duracion
+      // esperada aunque la v1 la tuviera. Lo cazo la revision de Codex.
+      emptyToNullNumber(formData.get("expectedHours")),
     );
   } catch (error) {
     return { error: friendlyError(t, error) };

@@ -123,3 +123,55 @@ describe("puntajeDeUrgencia", () => {
     expect(puntajeDeUrgencia(e)).toBe(0);
   });
 });
+
+/**
+ * Los casos que trajo la revisión independiente de Codex (2026-09-13). Ninguno
+ * estaba cubierto, y dos de ellos habrían pasado en silencio.
+ */
+describe("estadoDeRitmo — lo que destapó la revisión de Codex", () => {
+  it("un ritmo de cero en la base se rechaza en vez de dividir por cero", () => {
+    // `validateTargets` lo impide al escribir, pero esa regla vive en
+    // TypeScript y no en la base: un importador puede dejarlo.
+    expect(() =>
+      estadoDeRitmo({
+        ahora: AHORA, faseIniciada: T("2026-09-13T00:00:00Z"), expectedHours: null,
+        metas: [{ variable: "ph", everyHours: 0, ultimaLectura: null }],
+      }),
+    ).toThrow(/ritmo_invalido/);
+  });
+
+  it("una duración esperada de cero también, en vez de marcar todo como tarde", () => {
+    expect(() =>
+      estadoDeRitmo({ ahora: AHORA, faseIniciada: T("2026-09-13T17:00:00Z"), expectedHours: 0, metas: [] }),
+    ).toThrow(/duracion_esperada_invalida/);
+  });
+
+  it("una fecha inválida se rechaza: NaN compara false y se colaría como «no va tarde»", () => {
+    expect(() =>
+      estadoDeRitmo({ ahora: AHORA, faseIniciada: new Date("no es una fecha"), expectedHours: 12, metas: [] }),
+    ).toThrow(/no_es_una_fecha/);
+  });
+
+  it("una lectura anterior al inicio de la fase no genera deuda desde antes de existir", () => {
+    // Se usa el inicio como suelo: la lectura vieja es de otra fase.
+    const e = estadoDeRitmo({
+      ahora: AHORA, faseIniciada: T("2026-09-13T12:00:00Z"), expectedHours: null,
+      metas: [{ variable: "ph", everyHours: 6, ultimaLectura: T("2026-09-01T00:00:00Z") }],
+    });
+    // 6 h desde el INICIO -> 1 intervalo. Si hubiera usado la lectura vieja
+    // serían 12 días -> 48. El número es la prueba de qué suelo aplicó.
+    expect(e.debidas).toHaveLength(1);
+    expect(e.debidas[0]!.debidas).toBe(1);
+    expect(e.debidas[0]!.horasSinMedir).toBe(6);
+  });
+
+  it("el contrato es «intervalos desde la última lectura», y se fija aquí", () => {
+    // Fase de 14 h, ritmo 6 h, una lectura en la hora 13: devuelve 0 porque el
+    // operador NO debe una medición ahora. La deuda histórica es otra pregunta.
+    const e = estadoDeRitmo({
+      ahora: AHORA, faseIniciada: T("2026-09-13T04:00:00Z"), expectedHours: null,
+      metas: [{ variable: "ph", everyHours: 6, ultimaLectura: T("2026-09-13T17:00:00Z") }],
+    });
+    expect(e.debidas).toEqual([]);
+  });
+});
