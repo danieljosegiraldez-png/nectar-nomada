@@ -37,6 +37,34 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-13 · La deriva de migraciones se cierra al revés de como parecía
+
+`migrate diff` proponía sentencias que no eran de ningún cambio en curso: **seis** el
+2026-09-12 y **quince** el 2026-09-13. Cada migración las excluía a mano y lo decía en
+su prosa — lo cual funciona **hasta el día en que alguien no se dé cuenta**.
+
+**La dirección era la decisión, y no era la obvia.** Medido tabla por tabla, en la
+migración **y** en la base: las migraciones crearon esas FK con `ON DELETE RESTRICT`, y
+el esquema pedía `SET NULL` **no porque nadie lo eligiera, sino porque al no decir nada
+heredaba el defecto de Prisma** para relaciones opcionales. Ejecutar el diff habría
+cambiado producción a «se borra el valor de catálogo y te vacío en silencio el color de
+cereza que alguien observó». Así que se declaró en el esquema lo que la base ya hace:
+**cero SQL, cero migraciones, cero filas**. 15 → 8 → 0. ADR-120.
+
+Dos de las siete las tuve mal al primer intento —`drying_run` y `fermentation_run` sí
+son `SET NULL`— y lo dijo **medir cada una en los dos sitios** en vez de suponer
+simetría.
+
+**Y un guardia, `tests/derivaDeMigraciones.test.ts`,** con control positivo dentro y
+distinguiendo los tres valores de `--exit-code`: 0 vacío, 2 diferencia, **1 error**.
+Eso último no es cosmético: mientras se escribía, **dos veces** un comando que
+reventaba se leyó como «no hay deriva», las dos por esconder `stderr` —`--from-url` ya
+no existe en Prisma 7, y en otra corrida faltaba exportar `SHADOW_DATABASE_URL`—.
+`ci-con-base.sh` deriva ahora la base de sombra para que el guardia pueda medir en CI.
+
+**Y el guardia de temporales me cazó a mí** al escribirlo: mi prueba creaba un
+directorio y no lo borraba.
+
 ### 2026-09-13 · Un tratamiento dice contra qué, y se acabó el Anexo B obligatorio
 
 «Objetivo» era **el último campo que el Anexo B marcaba obligatorio y que no
@@ -144,30 +172,6 @@ tipos **del cliente**: un quinto tipo sin rama cae por su nombre.
 visto en un teléfono. Escrito en la cabecera de la prueba para que nadie lo cuente
 dos veces.
 
-### 2026-09-11 · La lista de chequeo del apicultor nunca salió del disco
-
-`protocolos/apiario-campo-v1.json` son 11 KB de preguntas de campo ya escritas
-—5 actividades, 44 ítems— y `lib/apiary/protocoloDeCampo.ts` sabe darlas de alta
-como `ProtocolVersion` de Research OS. Medido: **sólo lo llamaban las pruebas**.
-Ni un guion, ni una pantalla. Aquí la puerta no es una pantalla: cargar un
-protocolo se decide una vez y se lee en el diff.
-
-**Lo que entra:** `npm run apiary:load-protocol`. Seco por defecto —enseña las 5
-actividades con sus obligatorias y una **fila patrón** de qué hay ya en la base—
-y escribe sólo con `--cargar`. Idempotente por `externalIdentifier`, y se niega a
-escribir si no hay ninguna cuenta con Platform Admin, porque un `AuditEvent` sin
-actor no dice quién lo decidió.
-
-**Comprobado cargándolo de verdad** contra la copia local, no leyendo el ensayo:
-crea el protocolo, la versión 1 y **44 variables**; la segunda corrida dice «Ya
-estaba» sin tocar nada. Las filas se barrieron después.
-
-**Y lo que cargarlo NO hace, porque la frase fácil sería falsa.** Ninguna
-pantalla de apiario lee esas variables: los formularios llevan sus campos en el
-código, así que **editar el JSON hoy no cambia ni una pregunta en pantalla**. Lo
-que sí hace es que el protocolo aparezca en `/research`, se pueda aprobar con el
-botón que ya existe y se pueda **ejecutar** en `/research/execute/<versión>`, que
-pinta los 44 ítems. Entra como `draft` a propósito: aprobar es un acto humano.
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
