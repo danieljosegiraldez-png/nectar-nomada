@@ -37,6 +37,34 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-13 · «Alcanza hasta» pasa a tener manija, y el aviso deja de taparse
+
+El Anexo B §3 marca ese campo obligatorio y lo subraya: *«el campo que faltó en
+Toabré»*. **Lo primero que hubo que medir es que la columna ya existía** desde el
+2026-09-07, y que los vitales del sitio ya la leían. Lo que faltaba no era esquema:
+**1 alimentación en la copia local y ninguna con ese valor**, porque ninguna
+pantalla podía escribirlo. Una columna que nada rellena se ve igual que si no
+existiera — por eso el Anexo decía «Hoy: no».
+
+**El servicio sigue sin exigirla**, y la razón previa se mantiene tal cual la dejó
+escrita quien añadió la columna: una alimentación de urgencia se registra sin saber
+hasta cuándo alcanza, y exigirla ahí convierte un dato incompleto en ninguno — el
+error que ADR-115 ya rechazó para la carencia. **Y por eso la ausencia se VE:**
+`sin_fecha` es un estado propio del aviso, porque una alimentación sin plazo no es
+una colonia tranquila, es una **de la que no se puede avisar**. ADR-118.
+
+**El aviso es por colonia, no por sitio.** El resumen por sitio toma el plazo más
+largo, así que una colmena alimentada en julio y olvidada queda **tapada** por otra
+alimentada en agosto — la forma exacta del fallo de Toabré. Y manda la **última**
+alimentación, no la más larga: volver a alimentar corrige el plazo anterior.
+
+**El día del vencimiento todavía cubre.** Un `<` a secas lo daría por vencido a las
+00:01 de ese día, un día antes de lo que dijo quien alimentó; y el parseo del lote
+lo convierte con `fechaDeDia`, que **falla** en vez de dejar que `new Date()`
+adivine. Cuatro flip-tests, los cuatro compilando y cada uno con su prueba.
+
+**Lo que NO prueba:** nadie ha registrado un «alcanza hasta» todavía.
+
 ### 2026-09-12 · El estado de la colonia existe, y un aviso no se apaga porque nadie mirase
 
 El Anexo B §2.2 pedía siete campos con su motivo al lado y **ninguno existía**. El
@@ -155,34 +183,6 @@ compilador paró una sustitución que alcanzó también a la acción de recepci�
 `perl` sobre una plantilla de JavaScript y **se comió el `${RUN}`** —perl lo leyó
 como variable suya—. Para editar código con interpolación, no perl.
 
-### 2026-09-11 · Lo que la base de pruebas acumulaba, y por qué nadie lo veía
-
-Una fila `TEST` de más en «cuántos sitios de apiario hay» destapó que **nada
-comprobaba la clase**. Seis PR después quedan tres guardias donde no había
-ninguno, y la base local pasó de 40.043 `audit_event` y 335 `Scope` huérfanos a
-cero de cada.
-
-**El patrón, que se repitió tres veces y es lo que hay que reconocer:** una
-limpieza escrita **debajo de las aserciones** no corre cuando una falla; un
-`afterAll` es una cadena y la primera FK que se queja tira el resto; y un
-`deleteMany` que nombra una variable de dos olvida la otra. Las tres fugan **en
-verde**: la suite pasa entera mientras deja filas. Por eso el flip-test de cada
-arreglo compara **dos columnas** —pruebas y filas— y no sólo el color.
-
-**Lo estático no basta y quedó demostrado.** Después del primer arreglo la
-auditoría por `grep` decía que no quedaba ninguna fuga de `Scope`, y quedaba
-una. Se encontró corriendo **uno a uno los 34 archivos** que crean un `Scope` de
-proyecto y midiendo el delta: `reports.test.ts` crea dos proyectos y limpiaba
-uno. Para esta familia, la herramienta es el delta por archivo, no el grep.
-
-**Y una decisión de alcance que conviene no repensar cada vez:** el rastro de
-auditoría **no** se arregló prueba por prueba. Son 57 archivos, 98 operaciones y
-la mayor pesa el 8 % — no hay culpable. Se barre con `npm run limpiar:audit`,
-que borra sólo lo que tiene el actor nulo, comprueba esa hipótesis en cada
-corrida, y **no tiene bandera para bases remotas**: leer producción a veces se
-quiere, borrar su auditoría nunca.
-
-Lo demás está en las trampas de `CLAUDE.md`, que es donde se lee al hacerlo.
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
