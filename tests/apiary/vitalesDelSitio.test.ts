@@ -230,6 +230,7 @@ describe("A9.8 — la lectura contra Postgres", () => {
     const tratamiento = await recordColonyEvent(userAccountId, {
       colonyId,
       eventType: "treatment",
+      treatmentTarget: "varroa",
       treatmentProduct: "Apivar",
       treatmentBatchLabel: `L-${RUN_ID.slice(-4)}`,
       treatmentWithdrawalDays: 14,

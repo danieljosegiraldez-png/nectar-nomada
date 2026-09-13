@@ -2402,3 +2402,45 @@ corrida, y **no tiene bandera para bases remotas**: leer producción a veces se
 quiere, borrar su auditoría nunca.
 
 Lo demás está en las trampas de `CLAUDE.md`, que es donde se lee al hacerlo.
+
+---
+
+### 2026-09-11 · La cereza cosechada deja de ser una caja de texto
+
+Daniel: «condition field should be fixed options that can be selected», y antes
+«register details and **vital statistics** of harvested cherries».
+
+**La medición previa es la que justifica el cambio:** `condition` tenía **29 de
+33** filas rellenas y **las 29 decían exactamente «Ripe Cherry»**. Una caja de
+texto libre acaba siendo un valor que nadie varía y del que después no se puede
+contar nada — nadie podía preguntar cuántas cosechas entraron pintonas.
+
+**El vocabulario ya estaba escrito y sin puerta:** siete catálogos de cereza, 35
+valores, **cero líneas de código leyéndolos**. Daniel eligió tres —color
+(la escala de madurez), defectos y limpieza— por ser los que deciden qué se
+puede hacer con esa cereza. Los otros cuatro entran sin migración el día que los
+use: son filas de catálogo.
+
+**Columnas y no tabla de atributos**, al revés que las causas de pérdida de
+colonia: allí el dueño dijo «múltiples razones»; aquí cada eje tiene UN valor —
+una cereza no es roja y verde a la vez.
+
+**Lo viejo NO se traduce y `condition` NO se borra.** Mapear «Ripe Cherry» a
+`rojo` sería inferir un hecho y guardarlo como tal. Las 29 conservan su prosa.
+`ripenessNotes` **sí** se borró: contada antes, **0 filas**, y la migración
+aborta si algún día esa cuenta no da cero.
+
+**El cultivar no se pregunta, y esto cambió una decisión de Daniel.** Él pidió
+preguntarlo; midiendo salió que **las cuatro siembras ya lo tienen** y que el
+formulario de parcelas ya enlaza la siembra. Preguntarlo crearía una segunda
+fuente que puede contradecir a la primera. Decidió enseñarlo — queda pendiente
+de construir, junto con la sugerencia del código de lote.
+
+**Recepción sigue con texto libre**: es OTRA tabla con su propia columna y
+necesita su propia migración. Declarado en el código, no arreglado a medias.
+
+**Dos tropiezos míos, los dos cazados por herramientas y no por mí:** el
+compilador paró una sustitución que alcanzó también a la acción de recepción; y
+`assertDefinedWhere` paró un `afterAll` cuyo fixture había reventado porque usé
+`perl` sobre una plantilla de JavaScript y **se comió el `${RUN}`** —perl lo leyó
+como variable suya—. Para editar código con interpolación, no perl.

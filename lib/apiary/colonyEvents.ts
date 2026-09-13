@@ -12,6 +12,7 @@ import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess, requireColonyEventWriteAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
 import { exigeMetodoDeAlimentacion } from "./alimentacion";
+import { exigeObjetivo, exigeVia } from "./objetivoDelTratamiento";
 import { ligarAVisitaAbierta } from "../traceability/visitaAbierta";
 import type { ColonyEventType, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -67,6 +68,14 @@ export interface RecordColonyEventInput {
   treatmentWithdrawalDays?: number | null;
   treatmentDose?: number | null;
   treatmentDoseUnit?: string | null;
+  /**
+   * Contra qué. **Obligatorio cuando `eventType = treatment`**, como el lote y la
+   * carencia: el Anexo B §4 lo marca así y dice por qué —*«eficacia por objetivo;
+   * hoy no se puede agrupar»*—. Llega como CADENA y se valida abajo.
+   */
+  treatmentTarget?: string | null;
+  /** Cómo se aplicó. Opcional. Cadena, validada abajo. */
+  treatmentRoute?: string | null;
   note?: string | null;
   // A5/A0 (25_OFFLINE_OPTIONS_ANALYSIS.md §0) — same idempotent-sync
   // purpose as RecordInspectionInput.clientDraftId.
@@ -108,6 +117,23 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
     throw new ColonyEventValidationError("treatment_withdrawal_days_invalid");
   }
 
+  // El objetivo, con la misma fuerza que el lote y la carencia. Sin él, la
+  // pregunta que el Anexo pide contestar —qué se trató contra varroa esta
+  // temporada— no tiene respuesta, y una fila sin objetivo la deja sin responder
+  // para siempre: nadie va a volver a preguntarle al que aplicó.
+  if (input.eventType === "treatment" && (input.treatmentTarget == null || input.treatmentTarget === "")) {
+    throw new ColonyEventValidationError("treatment_target_required");
+  }
+  const treatmentTarget =
+    input.treatmentTarget == null || input.treatmentTarget === "" ? null : exigeObjetivo(input.treatmentTarget);
+  const treatmentRoute =
+    input.treatmentRoute == null || input.treatmentRoute === "" ? null : exigeVia(input.treatmentRoute);
+  // Y ninguno de los dos tiene sentido fuera de un tratamiento: una alimentación
+  // «contra varroa» sería un dato que nadie podría leer.
+  if ((treatmentTarget !== null || treatmentRoute !== null) && input.eventType !== "treatment") {
+    throw new ColonyEventValidationError("objetivo_o_via_solo_en_tratamiento");
+  }
+
   // El método, validado en la frontera. Y sólo tiene sentido alimentando: un
   // tratamiento con «bolsa sobre cabezales» es un dato que nadie podría leer.
   const feedingMethod =
@@ -138,6 +164,8 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
         feedingUnit: input.feedingUnit ?? null,
         coverageUntil: input.eventType === "feeding" ? (input.coverageUntil ?? null) : null,
         feedingMethod,
+        treatmentTarget,
+        treatmentRoute,
         treatmentProduct: input.treatmentProduct ?? null,
         treatmentBatchLabel: input.treatmentBatchLabel?.trim() ?? null,
         treatmentWithdrawalDays: input.treatmentWithdrawalDays ?? null,

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { queueDraft } from "../../../lib/apiary/offlineQueue";
 import { METODOS_DE_ALIMENTACION } from "../../../lib/apiary/alimentacion";
+import { OBJETIVOS_DE_TRATAMIENTO, VIAS_DE_TRATAMIENTO } from "../../../lib/apiary/objetivoDelTratamiento";
 import { fechaDeDia } from "../../../lib/time/localDateTime";
 import { APIARY_DRAFTS_CHANGED_EVENT } from "./OfflineSyncIndicator";
 
@@ -45,6 +46,13 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
   const [treatmentDoseUnit, setTreatmentDoseUnit] = useState("");
   /** Cadena y no número: el campo vacío y el cero son distintos, y `Number("")` es 0. */
   const [treatmentWithdrawalDays, setTreatmentWithdrawalDays] = useState("");
+  /**
+   * A9 · Anexo B §4 — contra qué. El último campo que ese Anexo marcaba
+   * obligatorio y que no existía: sin él, «qué se trató contra varroa esta
+   * temporada» no es una consulta.
+   */
+  const [treatmentTarget, setTreatmentTarget] = useState("");
+  const [treatmentRoute, setTreatmentRoute] = useState("");
   const [treatmentSaved, setTreatmentSaved] = useState(false);
 
   const [observationNote, setObservationNote] = useState("");
@@ -102,6 +110,8 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
         treatmentBatchLabel: treatmentBatchLabel.trim(),
         treatmentDose: treatmentDose.trim() ? Number(treatmentDose) : null,
         treatmentDoseUnit: treatmentDoseUnit.trim() || null,
+        treatmentTarget: treatmentTarget || null,
+        treatmentRoute: treatmentRoute || null,
         treatmentWithdrawalDays: Number(treatmentWithdrawalDays),
       });
     } catch {
@@ -115,6 +125,8 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
     setTreatmentDose("");
     setTreatmentDoseUnit("");
     setTreatmentWithdrawalDays("");
+    setTreatmentTarget("");
+    setTreatmentRoute("");
   }
 
   async function logObservation() {
@@ -228,6 +240,36 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
               required
             />
           </div>
+          {/* Contra qué: obligatorio, y por eso deshabilita el botón. Sin
+              preseleccionar —«varroa» sería el valor cómodo y nadie lo habría
+              declarado— porque de esto depende que la eficacia se pueda agrupar. */}
+          <div className="nn-field">
+            <label htmlFor={`treat-target-${colonyId}`}>{t("treatmentTargetLabel")}</label>
+            <select
+              id={`treat-target-${colonyId}`}
+              value={treatmentTarget}
+              onChange={(e) => setTreatmentTarget(e.target.value)}
+              required
+            >
+              <option value="">{t("treatmentTargetUnset")}</option>
+              {OBJETIVOS_DE_TRATAMIENTO.map((o) => (
+                <option key={o} value={o}>
+                  {t(`treatmentTarget_${o}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="nn-field">
+            <label htmlFor={`treat-route-${colonyId}`}>{t("treatmentRouteLabel")}</label>
+            <select id={`treat-route-${colonyId}`} value={treatmentRoute} onChange={(e) => setTreatmentRoute(e.target.value)}>
+              <option value="">{t("triNoRegistrado")}</option>
+              {VIAS_DE_TRATAMIENTO.map((v) => (
+                <option key={v} value={v}>
+                  {t(`treatmentRoute_${v}`)}
+                </option>
+              ))}
+            </select>
+          </div>
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <div className="nn-field" style={{ flex: 1 }}>
               <label htmlFor={`treat-dose-${colonyId}`}>{t("treatmentDoseLabel")}</label>
@@ -238,7 +280,7 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
               <input id={`treat-dose-unit-${colonyId}`} value={treatmentDoseUnit} onChange={(e) => setTreatmentDoseUnit(e.target.value)} />
             </div>
           </div>
-          <button type="button" className="nn-button" onClick={() => void logTreatment()} disabled={!treatmentBatchLabel.trim() || !carenciaPuesta}>
+          <button type="button" className="nn-button" onClick={() => void logTreatment()} disabled={!treatmentBatchLabel.trim() || !carenciaPuesta || treatmentTarget === ""}>
             {t("logTreatmentButton")}
           </button>
           {treatmentSaved ? <p className="nn-muted">{t("savedLocally")}</p> : null}

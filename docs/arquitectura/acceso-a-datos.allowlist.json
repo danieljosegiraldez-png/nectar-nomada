@@ -352,6 +352,10 @@
     {
       "archivo": "lib/apiary/alcanceDelAlimento.ts",
       "razon": "A9 · Anexo B §3 — el aviso de alimento por colonia. Modulo de dominio: es el sitio donde el acceso a datos vive por diseno. Una sola lectura, sin escrituras."
+    },
+    {
+      "archivo": "lib/apiary/objetivoDelTratamiento.ts",
+      "razon": "A9 · Anexo B §4 — el vocabulario del objetivo y el reporte por objetivo. Modulo de dominio: es el sitio donde el acceso a datos vive por diseno. Una sola lectura, sin escrituras."
     }
   ],
   "reciben_transaccion": [
@@ -655,6 +659,12 @@
       "archivo": "lib/apiary/alcanceDelAlimento.ts",
       "operacion": "alcanceDelAlimento",
       "razon": "No recibe principal A PROPOSITO, misma disciplina que vitalesDeSitios, coloniasPorIrregularidad, carenciasVigentes, serieDeInfestacion y avisosDeEnjambrazon: recibe un locationId que su llamador -app/apiaries/[id]/page.tsx- ya obtuvo de getApiaryDetail, que SI autoriza con requireApiaryAccess.",
+      "verificado": "2026-09-13"
+    },
+    {
+      "archivo": "lib/apiary/objetivoDelTratamiento.ts",
+      "operacion": "tratamientosPorObjetivo",
+      "razon": "No recibe principal A PROPOSITO, misma disciplina que coloniasPorIrregularidad -su gemela exacta- y que vitalesDeSitios, carenciasVigentes, serieDeInfestacion, avisosDeEnjambrazon y alcanceDelAlimento: recibe un locationId que su llamador -app/apiaries/[id]/page.tsx- ya obtuvo de getApiaryDetail, que SI autoriza con requireApiaryAccess.",
       "verificado": "2026-09-13"
     }
   ]

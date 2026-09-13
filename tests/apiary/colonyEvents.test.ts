@@ -122,6 +122,7 @@ describe("recordColonyEvent — treatment", () => {
       recordColonyEvent(authorizedUserAccountId, {
         colonyId,
         eventType: "treatment",
+        treatmentTarget: "varroa",
         treatmentProduct: "Apivar",
       }),
     ).rejects.toThrow(ColonyEventValidationError);
@@ -132,6 +133,7 @@ describe("recordColonyEvent — treatment", () => {
       recordColonyEvent(authorizedUserAccountId, {
         colonyId,
         eventType: "treatment",
+        treatmentTarget: "varroa",
         treatmentProduct: "Apivar",
         treatmentBatchLabel: "   ",
         treatmentWithdrawalDays: 14,
@@ -143,6 +145,7 @@ describe("recordColonyEvent — treatment", () => {
     const event = await recordColonyEvent(authorizedUserAccountId, {
       colonyId,
       eventType: "treatment",
+      treatmentTarget: "varroa",
       treatmentProduct: "Apivar",
       treatmentBatchLabel: "APV-2026-014",
       treatmentWithdrawalDays: 14,
@@ -249,6 +252,7 @@ describe("recordColonyEvent — clientDraftId idempotency", () => {
       recordColonyEvent(authorizedUserAccountId, {
         colonyId,
         eventType: "treatment",
+        treatmentTarget: "varroa",
         clientDraftId: `${RUN_ID}-draft-invalid`,
       }),
     ).rejects.toThrow(ColonyEventValidationError);

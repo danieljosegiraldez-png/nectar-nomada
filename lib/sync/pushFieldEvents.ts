@@ -12,6 +12,7 @@ import { ClaseDeCausaInvalida, exigeClaseDeCausa } from "../apiary/causaDePerdid
 import { exigeMetodoDeVarroa, registrarConteoDeVarroa, VarroaValidationError } from "../apiary/varroa";
 import { EstadoDeColoniaInvalido } from "../apiary/estadoDeColonia";
 import { AlimentacionInvalida } from "../apiary/alimentacion";
+import { TratamientoInvalido } from "../apiary/objetivoDelTratamiento";
 
 /**
  * P4 §4 (46_P4_API_Y_SINCRONIZACION.md) — push por lotes con resultado **por
@@ -147,6 +148,14 @@ export type MutacionDeEventoDeColonia = {
   coverageUntil?: Date | null;
   /** Cómo se dejó el alimento. Cadena; la valida el servicio. */
   feedingMethod?: string | null;
+  /**
+   * A9 · Anexo B §4 — contra qué se trató. **Obligatorio en el servicio cuando el
+   * tipo es tratamiento**, así que una mutación sin él vuelve como `rejected` con
+   * su razón, no como un lote tumbado.
+   */
+  treatmentTarget?: string | null;
+  /** Cómo se aplicó. Opcional. */
+  treatmentRoute?: string | null;
 };
 
 /**
@@ -262,6 +271,8 @@ async function aplicarMutacionDeApiario(
             treatmentWithdrawalDays: m.treatmentWithdrawalDays ?? null,
             coverageUntil: m.coverageUntil ?? null,
             feedingMethod: m.feedingMethod ?? null,
+            treatmentTarget: m.treatmentTarget ?? null,
+            treatmentRoute: m.treatmentRoute ?? null,
             clientDraftId: m.clientDraftId,
           });
     return { clientDraftId: m.clientDraftId, status: "applied", id: fila.id };
@@ -277,7 +288,8 @@ async function aplicarMutacionDeApiario(
       // fallo de transporte. Sin esta línea, un valor malo tumbaría el lote
       // entero y dejaría la cola bloqueada — el defecto de ADR-116, otra vez.
       error instanceof EstadoDeColoniaInvalido ||
-      error instanceof AlimentacionInvalida
+      error instanceof AlimentacionInvalida ||
+      error instanceof TratamientoInvalido
     ) {
       return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
     }

@@ -37,6 +37,31 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-13 · Un tratamiento dice contra qué, y se acabó el Anexo B obligatorio
+
+«Objetivo» era **el último campo que el Anexo B marcaba obligatorio y que no
+existía**, con su consecuencia escrita: *«eficacia por objetivo; hoy no se puede
+agrupar»*. Ya es obligatorio en el servicio, como el lote y la carencia — y a
+diferencia de «alcanza hasta» aquí **no hay caso de urgencia**: quien aplica un
+producto sabe contra qué. Medido: 0 tratamientos en la copia local, y **14 pruebas
+en 8 archivos cayeron** al exigirlo, que es la prueba de que muerde. ADR-119.
+
+**Enum propio, no el catálogo de irregularidades**, aunque cuatro valores coincidan:
+nueve de los trece —moho, loque, alas deformadas, obrera ponedora— no son algo contra
+lo que se aplique un producto. Misma distinción que ADR-114.
+
+**Dos campos del §4 se quedaron fuera A PROPÓSITO**, y el motivo es medido:
+`lib/apiary/` **no tiene una sola función de actualización**, y «fecha de retiro» y
+«eficacia observada» son de etapa cierre —se anotan semanas después—. Añadir la
+columna igual repetiría lo que costó una semana con `coverage_until`: comentario,
+lectura, y **ninguna pantalla capaz de escribirla**. `PENDING_IMPLEMENTATIONS/011`.
+
+**Una pregunta abierta para Daniel, sin resolverla por deducción:**
+`VIAS_QUE_DEJAN_MATERIAL` contiene sólo `tira`, porque es lo único que el Anexo
+nombra. `cebo` también deja material, pero añadirlo sería inventarle una regla.
+
+**Lo que NO prueba:** nadie ha registrado un tratamiento con objetivo todavía.
+
 ### 2026-09-13 · «Alcanza hasta» pasa a tener manija, y el aviso deja de taparse
 
 El Anexo B §3 marca ese campo obligatorio y lo subraya: *«el campo que faltó en
@@ -143,46 +168,6 @@ código, así que **editar el JSON hoy no cambia ni una pregunta en pantalla**. 
 que sí hace es que el protocolo aparezca en `/research`, se pueda aprobar con el
 botón que ya existe y se pueda **ejecutar** en `/research/execute/<versión>`, que
 pinta los 44 ítems. Entra como `draft` a propósito: aprobar es un acto humano.
-### 2026-09-11 · La cereza cosechada deja de ser una caja de texto
-
-Daniel: «condition field should be fixed options that can be selected», y antes
-«register details and **vital statistics** of harvested cherries».
-
-**La medición previa es la que justifica el cambio:** `condition` tenía **29 de
-33** filas rellenas y **las 29 decían exactamente «Ripe Cherry»**. Una caja de
-texto libre acaba siendo un valor que nadie varía y del que después no se puede
-contar nada — nadie podía preguntar cuántas cosechas entraron pintonas.
-
-**El vocabulario ya estaba escrito y sin puerta:** siete catálogos de cereza, 35
-valores, **cero líneas de código leyéndolos**. Daniel eligió tres —color
-(la escala de madurez), defectos y limpieza— por ser los que deciden qué se
-puede hacer con esa cereza. Los otros cuatro entran sin migración el día que los
-use: son filas de catálogo.
-
-**Columnas y no tabla de atributos**, al revés que las causas de pérdida de
-colonia: allí el dueño dijo «múltiples razones»; aquí cada eje tiene UN valor —
-una cereza no es roja y verde a la vez.
-
-**Lo viejo NO se traduce y `condition` NO se borra.** Mapear «Ripe Cherry» a
-`rojo` sería inferir un hecho y guardarlo como tal. Las 29 conservan su prosa.
-`ripenessNotes` **sí** se borró: contada antes, **0 filas**, y la migración
-aborta si algún día esa cuenta no da cero.
-
-**El cultivar no se pregunta, y esto cambió una decisión de Daniel.** Él pidió
-preguntarlo; midiendo salió que **las cuatro siembras ya lo tienen** y que el
-formulario de parcelas ya enlaza la siembra. Preguntarlo crearía una segunda
-fuente que puede contradecir a la primera. Decidió enseñarlo — queda pendiente
-de construir, junto con la sugerencia del código de lote.
-
-**Recepción sigue con texto libre**: es OTRA tabla con su propia columna y
-necesita su propia migración. Declarado en el código, no arreglado a medias.
-
-**Dos tropiezos míos, los dos cazados por herramientas y no por mí:** el
-compilador paró una sustitución que alcanzó también a la acción de recepción; y
-`assertDefinedWhere` paró un `afterAll` cuyo fixture había reventado porque usé
-`perl` sobre una plantilla de JavaScript y **se comió el `${RUN}`** —perl lo leyó
-como variable suya—. Para editar código con interpolación, no perl.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad

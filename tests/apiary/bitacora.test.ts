@@ -198,6 +198,7 @@ describe("A9.12 — el cierre emite, leyendo el rastro real", () => {
     await recordColonyEvent(userAccountId, {
       colonyId,
       eventType: "treatment",
+      treatmentTarget: "varroa",
       treatmentProduct: "Apivar",
       treatmentBatchLabel: `L-${RUN_ID.slice(-4)}`,
       treatmentWithdrawalDays: 14,

@@ -37,6 +37,7 @@ tests/apiary/inspections.test.ts
 tests/apiary/irregularidades.test.ts
 tests/apiary/media.test.ts
 tests/apiary/polinizacion.test.ts
+tests/apiary/objetivoDelTratamiento.test.ts
 tests/apiary/origenDeColonia.test.ts
 tests/apiary/varroa.test.ts
 tests/apiary/vitalesDelSitio.test.ts
