@@ -33,6 +33,13 @@ echo "── Compuerta con base ────────────────
 # la misma base a propósito: lo que se migra y siembra es lo que se prueba.
 export DATABASE_URL="$TEST_DATABASE_URL"
 
+# Una base de sombra, derivada de la misma URL cambiándole el nombre. La necesita
+# `prisma migrate diff --from-migrations`, que es lo que el guardia de deriva usa
+# para comparar las migraciones con el esquema (`tests/derivaDeMigraciones.test.ts`).
+# Sin ella ese guardia no puede medir — y un guardia que no puede medir **falla**,
+# en vez de pasar en verde sobre nada.
+export SHADOW_DATABASE_URL="${DATABASE_URL%%\?*}_shadow"
+
 npx prisma generate
 npx prisma migrate deploy
 # Las banderas `SEED_DEMO_*` existen justo para esto (CLAUDE.md §54): la semilla

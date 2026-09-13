@@ -3235,11 +3235,11 @@ model HarvestEvent {
   /// **Anulables**: las 33 cosechas que ya existen no los tienen y no se les
   /// inventan. Ausencia significa «no se registró», nunca «sano y limpio».
   cherryColorValueId       String?              @map("cherry_color_value_id") @db.Uuid
-  cherryColorValue         VariableCatalogValue? @relation("HarvestCherryColor", fields: [cherryColorValueId], references: [id])
+  cherryColorValue         VariableCatalogValue? @relation("HarvestCherryColor", fields: [cherryColorValueId], references: [id], onDelete: Restrict)
   cherryDefectsValueId     String?              @map("cherry_defects_value_id") @db.Uuid
-  cherryDefectsValue       VariableCatalogValue? @relation("HarvestCherryDefects", fields: [cherryDefectsValueId], references: [id])
+  cherryDefectsValue       VariableCatalogValue? @relation("HarvestCherryDefects", fields: [cherryDefectsValueId], references: [id], onDelete: Restrict)
   cherryCleanlinessValueId String?              @map("cherry_cleanliness_value_id") @db.Uuid
-  cherryCleanlinessValue   VariableCatalogValue? @relation("HarvestCherryCleanliness", fields: [cherryCleanlinessValueId], references: [id])
+  cherryCleanlinessValue   VariableCatalogValue? @relation("HarvestCherryCleanliness", fields: [cherryCleanlinessValueId], references: [id], onDelete: Restrict)
   operatorPersonId String?         @map("operator_person_id") @db.Uuid
   operator         Person?         @relation("HarvestEventOperator", fields: [operatorPersonId], references: [id])
   notes            String?
@@ -3260,6 +3260,9 @@ model HarvestEvent {
   @@index([locationId])
   @@index([organizationId])
   @@index([projectId])
+  @@index([cherryColorValueId])
+  @@index([cherryDefectsValueId])
+  @@index([cherryCleanlinessValueId])
   @@map("harvest_event")
   @@schema("traceability")
 }
@@ -3369,6 +3372,7 @@ model FermentationRun {
   materialConsumptionEntries MaterialConsumptionEntry[]
 
   @@index([processRecipeVersionId])
+  @@index([lotProcessId])
   @@map("fermentation_run")
   @@schema("traceability")
 }
@@ -3402,7 +3406,7 @@ model LotProcess {
   /// partir de los eventos sería inferir un hecho y guardarlo como tal, que es
   /// justo lo que CLAUDE.md §3 prohíbe.
   processRecipeVersionId String?               @map("process_recipe_version_id") @db.Uuid
-  processRecipeVersion   ProcessRecipeVersion? @relation(fields: [processRecipeVersionId], references: [id])
+  processRecipeVersion   ProcessRecipeVersion? @relation(fields: [processRecipeVersionId], references: [id], onDelete: Restrict)
 
   /// **La intención de ESTE batch. Obligatoria, aunque no haya receta.**
   ///
@@ -3484,7 +3488,7 @@ model LotProcess {
   /// número: guardar el valor aquí crearía dos verdades que pueden divergir, y
   /// CLAUDE.md §49 prohíbe mezclar medición y valor derivado.
   closingMoistureMeasurementId String?      @map("closing_moisture_measurement_id") @db.Uuid
-  closingMoistureMeasurement   Measurement? @relation("LotProcessClosingMoisture", fields: [closingMoistureMeasurementId], references: [id])
+  closingMoistureMeasurement   Measurement? @relation("LotProcessClosingMoisture", fields: [closingMoistureMeasurementId], references: [id], onDelete: Restrict)
 
   startedAt       DateTime        @map("started_at")
   endedAt         DateTime?       @map("ended_at")
@@ -3704,6 +3708,7 @@ model DryingRun {
   materialConsumptionEntries MaterialConsumptionEntry[]
 
   @@index([locationId])
+  @@index([lotProcessId])
   @@map("drying_run")
   @@schema("traceability")
 }

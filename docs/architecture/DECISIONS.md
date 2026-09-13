@@ -8538,3 +8538,48 @@ Anexo nombra: *«las tiras que no se retiran generan resistencia»*. `cebo` tamb
 deja material en el sitio, pero añadirlo sería deducir una regla sanitaria que él no
 escribió. La lista existe ya para que el aviso de «no retirado» salga de un solo
 lugar cuando exista el camino de cierre.
+
+---
+
+## ADR-120 — La deriva entre esquema y migraciones se cierra declarando lo que la base ya hace, no ejecutando el diff
+
+**Contexto.** `prisma migrate diff --from-migrations --to-schema` proponía sentencias
+que **no eran de ningún cambio en curso**: cinco claves ajenas con otra acción de
+borrado y cinco índices que el esquema no declaraba. Eran **seis líneas** el
+2026-09-12 y **quince** el 2026-09-13, porque cada tabla nueva sumaba las suyas.
+Cada migración escrita a mano las excluía y lo decía en su prosa, lo cual funciona
+**exactamente hasta el día en que alguien no se dé cuenta**.
+
+**La dirección es la decisión, y es lo único que importa aquí.** Medido, tabla por
+tabla, en la migración **y** en la base:
+
+| Clave ajena | La migración creó | El esquema pedía |
+|---|---|---|
+| `harvest_event` × 3 (color, defectos, limpieza de cereza) | `RESTRICT` | `SET NULL` (defecto de Prisma) |
+| `lot_process.process_recipe_version_id` | `RESTRICT` | `SET NULL` |
+| `lot_process.closing_moisture_measurement_id` | `RESTRICT` | `SET NULL` |
+| `drying_run.lot_process_id` | `SET NULL` | `SET NULL` ✔ |
+| `fermentation_run.lot_process_id` | `SET NULL` | `SET NULL` ✔ |
+
+El esquema no pedía `SET NULL` porque nadie lo eligiera: **lo heredaba del defecto de
+Prisma para relaciones opcionales al no decir nada**. Ejecutar el diff habría cambiado
+producción de «no puedes borrar este valor de catálogo» a «se borra y te vacío en
+silencio el color de cereza que alguien observó» — que es lo que
+`CLAUDE.md` §3 prohíbe con nombre: *no silenciar mutaciones de registros
+científicos*, y *la evidencia original sigue siendo la autoridad*.
+
+**Decisión: se declara en el esquema lo que la base ya hace.** Cinco relaciones
+ganan `onDelete: Restrict` donde la base lo tiene, dos se dejan como estaban porque
+ya coincidían, y los cinco índices se declaran con `@@index`. **Cero sentencias SQL,
+cero migraciones, cero filas tocadas.** La medición: 15 → 8 → **0**, y
+`--from-migrations --to-schema --exit-code` devuelve 0 con «No difference detected».
+
+**Y un guardia, porque si no vuelve.** `tests/derivaDeMigraciones.test.ts` corre ese
+mismo `migrate diff` y falla si propone algo, con **control positivo dentro**: un
+esquema al que se le quita un índice tiene que dar código 2. Distingue los tres
+valores de `--exit-code` —0 vacío, 2 diferencia, **1 error**— porque sin esa
+distinción un comando que revienta se lee igual que «no hay deriva». Pasó dos veces
+mientras se escribía esto: `--from-url` ya no existe en Prisma 7, y en otra corrida
+faltaba exportar `SHADOW_DATABASE_URL`; las dos veces el error estaba escondido en un
+`2>/dev/null` y el cero era mentira. `scripts/ci-con-base.sh` deriva ahora la base de
+sombra de `DATABASE_URL` para que el guardia pueda medir en CI.
