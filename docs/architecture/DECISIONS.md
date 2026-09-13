@@ -8370,3 +8370,68 @@ incomoda, la incomodidad es el aviso»*—, así que el parseo salió a
 `lib/sync/parsearMutaciones.ts` y `tests/sync/parseoDelLote.test.ts` lo vigila
 con la lista de tipos **tomada del cliente**, no escrita a mano: un quinto tipo
 sin rama en el parseo hace caer esa prueba por su nombre.
+
+---
+
+## ADR-117 — El nivel de una reserva y el sitio donde está son dos columnas, y una inspección que no miró no apaga un aviso
+
+**Contexto.** `48_A9_ANEXO_B_CATALOGO_DE_CAMPOS.md` §2.2 —«Estado de la colonia,
+nuevo, por protocolo»— son **siete campos con su motivo al lado y ninguno
+existía**. El que el dueño subraya trae el caso real: *«Celdas reales → **aviso de
+enjambrazón antes de perder la colonia.** Directamente relevante al ausentamiento
+de Toabré»*.
+
+**El vocabulario no se inventó.** Sale de `protocolos/apiario-campo-v1.json`, que
+el dueño escribió: `population` (baja/normal/apiñada), `brood_stages`
+(huevo/larva/operculada/pupa), `queen_cells`
+(no_hay/emergencia/enjambrazon/reemplazo), `frames_covered`, `queen_cells_count`.
+Ese archivo **no se editó**: su propia cabecera lo prohíbe —*«cambiar esto después
+no es editar aquí: es crear una versión 2»*— y la v2 que hace falta queda anotada
+en `PENDING_IMPLEMENTATIONS/010`.
+
+**Decisión 1 — el nivel y el sitio se separan, y la decidió el dueño.** El Anexo
+escribe las reservas como «alta, media, baja, junto a la cría». Las tres primeras
+son una cantidad; la cuarta es un **sitio**. En una sola lista: no se puede decir
+«alta y junto a la cría», y el reporte «colonias con reservas bajas» tiene que
+decidir si esa cuarta opción cuenta. Se le preguntó el 2026-09-12 y eligió **nivel
+de tres valores más casilla de sitio**, pagando el coste que él mismo ve: dos
+controles por reserva en el teléfono en vez de uno.
+
+**Decisión 2 — `brood_stages` es una lista escalar, no una tabla puente.** Las
+irregularidades (ADR-114) sí llevan tabla y catálogo, porque su lista **crece por
+semilla** (precedente P1). Las etapas de cría no crecen: las cierra la biología.
+Un `BroodStage[]` evita una tabla y una FK que nunca cambiarían, y se consulta con
+`has`. Es el segundo array escalar del esquema; el primero es
+`VariableCatalog.enumValues`.
+
+**Decisión 3 — `storesLevel` no se borra.** Lo reemplazan cuatro columnas, y
+medido el 2026-09-12 la copia local tiene **1 inspección y ni un valor ahí**. Pero
+esa copia viene de un respaldo semanal y **producción no se mide sin tocarla**, así
+que se deja: borrar una columna es el único movimiento que una migración no puede
+deshacer. El formulario deja de escribirla y su comentario dice qué la reemplazó.
+
+**Decisión 4 — la que decide si el aviso sirve: una inspección que NO miró no lo
+apaga.** `avisosDeEnjambrazon` toma, por colonia, **la última inspección que
+registró celdas** —`queen_cell_kind` no nulo—, no la última inspección. Una visita
+posterior que pasó rápido y no abrió la caja deja `null`, y tratar eso como «ya no
+hay» convertiría una ausencia en una afirmación (ADR-080) **apagando el aviso justo
+en el caso que pierde la colonia**. Para apagarlo hay que mirar y decir `no_hay`,
+que por eso es un valor del enum y no la ausencia de valor. Y `reemplazo` **no
+avisa**: una colonia que cambia de reina por su cuenta no se está yendo, y meterla
+ahí enseñaría a ignorar la sección.
+
+**Un defecto propio que esto destapó, y era invisible para su propio guardia.**
+`tests/arquitectura/booleanos-de-tres-estados.test.ts` prohíbe preguntar un
+`Boolean?` con una casilla, porque sin marcar guarda `false` —«miré y no estaba»—
+cuando lo cierto es «nadie miró». Buscaba `name="<campo>"`, que es como se ata un
+formulario de servidor. **Los formularios de campo guardan en IndexedDB y se atan
+con `checked={campo}`**, así que el guardia no los veía — y `queenSighted` en
+`InspectionForm.tsx` tenía el defecto exacto que ese archivo describe. Medido: era
+el **único** caso. Hoy es un desplegable de tres opciones y el guardia mira las dos
+formas, con control positivo de que reconoce la mala y no marca la buena.
+
+**Lo que esto NO prueba.** Nadie ha registrado un estado de colonia todavía: 1
+inspección en la copia local, con las diez columnas vacías. Las pruebas crean los
+datos, así que las reglas se ejercitan, pero ningún dato real ha pasado por aquí —
+escrito en la cabecera de `tests/apiary/estadoDeColonia.test.ts` para que nadie lo
+cuente dos veces.

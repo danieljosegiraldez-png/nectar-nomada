@@ -14,7 +14,15 @@ import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
 import { ligarAVisitaAbierta } from "../traceability/visitaAbierta";
 import { CATALOGO_DE_IRREGULARIDAD } from "./irregularidades";
-import type { InspectionOutcome, ProvenanceClass } from "../../generated/prisma/client";
+import { exigeCeldasReales, exigeEnteroContado, exigeEtapasDeCria, exigeNivelDeReserva, exigePoblacion } from "./estadoDeColonia";
+import type {
+  BroodStage,
+  ColonyPopulation,
+  InspectionOutcome,
+  ProvenanceClass,
+  QueenCellKind,
+  StoresLevel,
+} from "../../generated/prisma/client";
 
 /**
  * Una entrada que el servicio rechaza. Se distingue de `ApiaryAccessError` a
@@ -37,8 +45,23 @@ export interface RecordInspectionInput {
   outcome: InspectionOutcome;
   broodPatternNote?: string | null;
   queenSighted?: boolean | null;
+  /** @deprecated Anexo B §2.2 — lo reemplazan `honeyStoresLevel` y `honeyNextToBrood`. */
   storesLevel?: string | null;
   temperamentNote?: string | null;
+
+  // --- Anexo B §2.2, estado de la colonia. Los siete campos llegan como los
+  // escribe el protocolo del dueño, y los valida `./estadoDeColonia` en la
+  // frontera: el formulario y la cola offline mandan CADENAS.
+  population?: ColonyPopulation | string | null;
+  beeCoveredFrames?: number | string | null;
+  broodStages?: readonly (BroodStage | string)[] | null;
+  queenCellKind?: QueenCellKind | string | null;
+  queenCellCount?: number | string | null;
+  honeyStoresLevel?: StoresLevel | string | null;
+  honeyNextToBrood?: boolean | null;
+  pollenStoresLevel?: StoresLevel | string | null;
+  pollenNextToBrood?: boolean | null;
+  droneBroodPresent?: boolean | null;
   /**
    * El «Otro» del Anexo B §2.3: lo que el catálogo no cubre. Ya no es el único
    * sitio donde vive el dato — ver `irregularidades`.
@@ -95,6 +118,19 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
     if (validas !== irregularidades.length) throw new InspectionValidationError("irregularidad_desconocida");
   }
 
+  // Anexo B §2.2. **Se valida aquí, en el servicio, y no sólo en quien llama**:
+  // es la lección de ADR-112 —el servicio escribía `input.status` sin mirarlo, y
+  // un formulario manipulado producía una fila contradictoria—. Un tipo de
+  // TypeScript no sobrevive a un cuerpo JSON.
+  const population = input.population == null || input.population === "" ? null : exigePoblacion(input.population);
+  const beeCoveredFrames = exigeEnteroContado(input.beeCoveredFrames, "cuadros_cubiertos");
+  const broodStages = exigeEtapasDeCria(input.broodStages);
+  const celdas = exigeCeldasReales(input.queenCellKind, input.queenCellCount);
+  const honeyStoresLevel =
+    input.honeyStoresLevel == null || input.honeyStoresLevel === "" ? null : exigeNivelDeReserva(input.honeyStoresLevel);
+  const pollenStoresLevel =
+    input.pollenStoresLevel == null || input.pollenStoresLevel === "" ? null : exigeNivelDeReserva(input.pollenStoresLevel);
+
   const inspection = await prisma.$transaction(async (tx) => {
     const inspection = await tx.inspection.create({
       data: {
@@ -106,6 +142,16 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
         queenSighted: input.queenSighted ?? null,
         storesLevel: input.storesLevel ?? null,
         temperamentNote: input.temperamentNote ?? null,
+        population,
+        beeCoveredFrames,
+        broodStages,
+        queenCellKind: celdas.kind,
+        queenCellCount: celdas.count,
+        honeyStoresLevel,
+        honeyNextToBrood: input.honeyNextToBrood ?? null,
+        pollenStoresLevel,
+        pollenNextToBrood: input.pollenNextToBrood ?? null,
+        droneBroodPresent: input.droneBroodPresent ?? null,
         pestDiseaseFlags: input.pestDiseaseFlags ?? null,
         note: input.note ?? null,
         provenanceClass,

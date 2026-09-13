@@ -6,6 +6,7 @@ import { getApiaryDetail, getManageableApiaryProjects } from "../../../lib/apiar
 import { densidadDePolinizacion } from "../../../lib/apiary/polinizacion";
 import { coordenadasPropuestas } from "../../../lib/traceability/coordenadasDelSitio";
 import { coloniasPorIrregularidad } from "../../../lib/apiary/irregularidades";
+import { avisosDeEnjambrazon } from "../../../lib/apiary/avisoDeEnjambrazon";
 import { confirmarCoordenadasAction } from "../../actions/traceability";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
@@ -40,6 +41,12 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   const ahora = new Date();
   const haceUnAno = new Date(ahora.getFullYear() - 1, ahora.getMonth(), ahora.getDate());
   const irregularidades = await coloniasPorIrregularidad(id, haceUnAno, ahora);
+  // A9 · Anexo B §2.2 — el aviso de enjambrazón. Ventana más corta que la de las
+  // irregularidades a propósito: un aviso de hace ocho meses es historia, no
+  // aviso. Sesenta días cubre de sobra el ciclo de una celda real, que va de días
+  // a un par de semanas.
+  const haceSesentaDias = new Date(ahora.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const avisos = await avisosDeEnjambrazon(id, haceSesentaDias, ahora);
 
   return (
     <div>
@@ -192,6 +199,29 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           esconde lo vacío igual. Los ceros que sí se enseñan son los de dentro
           del reporte, cuando hay al menos un hallazgo — ahí la distinción entre
           «no hay» y «nadie miró» sí importa. */}
+      {/* El aviso de enjambrazón, ARRIBA de las irregularidades: es lo único de
+          esta pantalla que pide ir a una caja hoy. Se oculta cuando no hay
+          ninguno —un aviso vacío enseña a no mirar la sección— y lo que apaga un
+          aviso es una inspección que MIRE y diga «no hay», no el paso del tiempo
+          dentro de la ventana. */}
+      {avisos.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("swarmWarningHeading")}</h2>
+          <ul>
+            {avisos.map((a) => (
+              <li key={a.colonyId}>
+                {t("swarmWarningRow", {
+                  colmena: a.hiveIdentifier,
+                  tipo: t(`queenCell_${a.kind}`),
+                  dias: a.diasDesde,
+                })}
+                {a.count !== null ? ` — ${t("swarmWarningCount", { cuantas: a.count })}` : ""}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {irregularidades.some((i) => i.colonias > 0) ? (
         <section className="nn-section">
           <h2>{t("irregularidadesHeading")}</h2>

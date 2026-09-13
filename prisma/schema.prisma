@@ -5281,6 +5281,54 @@ enum InspectionOutcome {
   @@schema("apiary")
 }
 
+/// El Anexo B §2.2 —«estado de la colonia, nuevo, por protocolo»— con el
+/// vocabulario que el dueño ya escribió en `protocolos/apiario-campo-v1.json`.
+/// No se traduce a inglés a propósito: es su lista, y `VarroaMethod` ya sentó el
+/// precedente. `apinada` sin eñe porque un identificador de enum no la admite.
+enum ColonyPopulation {
+  baja
+  normal
+  apinada
+
+  @@schema("apiary")
+}
+
+/// Las etapas de cría presentes. **Varias a la vez**: ver `Inspection.broodStages`.
+/// Huevo presente = reina ponedora hace menos de tres días, sin buscarla — que es
+/// la razón por la que el dueño lo pide.
+enum BroodStage {
+  huevo
+  larva
+  operculada
+  pupa
+
+  @@schema("apiary")
+}
+
+/// Celdas reales. `no_hay` **no es lo mismo que ausencia de dato**: significa que
+/// alguien miró y no había, que es evidencia. Sin registrar es `null`.
+enum QueenCellKind {
+  no_hay
+  emergencia
+  enjambrazon
+  reemplazo
+
+  @@schema("apiary")
+}
+
+/// Cuánto hay de una reserva. **Tres valores, no cuatro.** El Anexo B escribe
+/// «alta, media, baja, junto a la cría», pero «junto a la cría» es un SITIO y no
+/// una cantidad: en la misma lista impide decir «alta y junto a la cría» y obliga
+/// al reporte de reservas bajas a decidir si la cuenta. Decisión del dueño
+/// (2026-09-12): nivel aquí, sitio en su propia columna. ADR-117.
+enum StoresLevel {
+  alta
+  media
+  baja
+
+  @@schema("apiary")
+}
+
 model Inspection {
   id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   colonyId         String            @map("colony_id") @db.Uuid
@@ -5291,7 +5339,43 @@ model Inspection {
   outcome          InspectionOutcome
   broodPatternNote String?           @map("brood_pattern_note")
   queenSighted     Boolean?          @map("queen_sighted")
+  /// **Reemplazada por `honeyStoresLevel`/`honeyNextToBrood` (A9, Anexo B §2.2).**
+  /// No se elimina: medido el 2026-09-12, las inspecciones de la copia local no
+  /// tienen ni un valor aquí, pero esa copia es de un respaldo y **no se mide
+  /// producción sin tocarla**, así que borrar la columna es el único movimiento
+  /// que una migración no puede deshacer. El formulario ya no la escribe.
   storesLevel      String?           @map("stores_level")
+
+  // --- Anexo B §2.2, estado de la colonia. Todos opcionales: una inspección
+  // rápida que sólo mira si la caja sigue viva es legítima, y un valor por
+  // defecto afirmaría algo que nadie observó (ADR-080).
+
+  /// Fuerza de la colonia en palabras. Es lo que se vende en polinización.
+  population       ColonyPopulation? @map("population")
+  /// Cuadros cubiertos de abeja: la medida **cuantitativa** de fuerza, y la
+  /// única comparable entre visitas y entre sitios.
+  beeCoveredFrames Int?              @map("bee_covered_frames")
+  /// Las etapas de cría presentes, como conjunto. Lista escalar y no tabla
+  /// puente —a diferencia de `InspectionIrregularity`— porque el conjunto lo
+  /// cierra la biología: no crece por semilla, así que el precedente P1 no
+  /// aplica. Vacía y `null` significan lo mismo aquí: no se registró.
+  broodStages      BroodStage[]      @map("brood_stages")
+  /// Celdas reales, y cuántas. **El aviso de enjambrazón antes de perder la
+  /// colonia**, que el dueño ata al ausentamiento de Toabré.
+  queenCellKind    QueenCellKind?    @map("queen_cell_kind")
+  queenCellCount   Int?              @map("queen_cell_count")
+  honeyStoresLevel StoresLevel?      @map("honey_stores_level")
+  /// El sitio, separado del nivel: ver el comentario de `StoresLevel`.
+  honeyNextToBrood Boolean?          @map("honey_next_to_brood")
+  /// La escasez de polen frena la cría antes que la de néctar, así que es una
+  /// reserva distinta y no un matiz de la misma.
+  pollenStoresLevel StoresLevel?     @map("pollen_stores_level")
+  pollenNextToBrood Boolean?         @map("pollen_next_to_brood")
+  /// Cría de zángano. Señal de obrera ponedora si aparece sin reina. **Está en
+  /// el Anexo B §2.2 y NO en `protocolos/apiario-campo-v1.json`**, que tiene los
+  /// otros seis: los dos documentos del dueño no coinciden, y se sigue el Anexo
+  /// porque trae el motivo escrito. Anotado para la v2 del protocolo.
+  droneBroodPresent Boolean?         @map("drone_brood_present")
   temperamentNote  String?           @map("temperament_note")
   /// El «Otro» de la lista del Anexo B §2.3: lo que el catálogo de
   /// irregularidades no cubre. Desde el 2026-09-11 ya **no** es el único sitio

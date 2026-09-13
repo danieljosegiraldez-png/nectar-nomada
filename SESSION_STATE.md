@@ -37,6 +37,35 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-12 · El estado de la colonia existe, y un aviso no se apaga porque nadie mirase
+
+El Anexo B §2.2 pedía siete campos con su motivo al lado y **ninguno existía**. El
+vocabulario sale de `protocolos/apiario-campo-v1.json`, que el dueño escribió y que
+**no se edita**: su cabecera lo prohíbe, así que la v2 que hace falta —con los tres
+ítems que le faltan— queda en `PENDING_IMPLEMENTATIONS/010`.
+
+**Decisión del dueño (2026-09-12):** el **nivel** de una reserva y el **sitio**
+donde está son dos columnas. El Anexo los ponía en una lista de cuatro —«alta,
+media, baja, junto a la cría»— pero así no se puede decir «alta Y junto a la cría»
+y el reporte de reservas bajas tendría que decidir si cuenta esa cuarta. ADR-117.
+
+**La regla que decide si el aviso de enjambrazón sirve:** se toma la última
+inspección **que miró**, no la última inspección. Una visita que pasó rápido y no
+abrió la caja deja `null`, y leer eso como «ya no hay» apagaría el aviso **justo en
+el caso que pierde la colonia**. Para apagarlo hay que mirar y decir «no hay» — que
+por eso es un valor del enum y no la ausencia de valor.
+
+**Un defecto propio, invisible para su propio guardia.**
+`booleanos-de-tres-estados` prohíbe preguntar un `Boolean?` con una casilla, pero
+buscaba `name="<campo>"` — la forma de un formulario de servidor. **Los de campo
+guardan en IndexedDB y se atan con `checked={campo}`**, así que no los veía, y
+`queenSighted` tenía el defecto exacto que ese archivo describe: sin marcar guardaba
+«miré y no estaba» cuando lo cierto era «nadie buscó». Medido: era el único caso.
+Cinco flip-tests; el del guardia cae por su **aserción**, no sólo por su nombre.
+
+**Lo que NO prueba:** nadie ha registrado un estado de colonia. Una inspección en
+la copia local, con las diez columnas vacías.
+
 ### 2026-09-11 · Contar varroa existe, se anota sin señal, y la serie dice si el tratamiento sirvió
 
 El Anexo B §2.5 pedía cuatro campos y marcaba los cuatro como **no existentes**.
@@ -154,39 +183,6 @@ corrida, y **no tiene bandera para bases remotas**: leer producción a veces se
 quiere, borrar su auditoría nunca.
 
 Lo demás está en las trampas de `CLAUDE.md`, que es donde se lee al hacerlo.
-### 2026-09-11 · Los códigos de las corrientes se derivan, y un bloque es una parcela
-
-Daniel, en selección: «for the rejects we should have an automatically generated
-code… we need to have very good trazabilidad and coding system». Y aparte:
-«lets not use BLOCKS anymore, it is confusing».
-
-**La convención ya era suya y sólo faltaba automatizarla.** Sus lotes reales la
-traen: `PE-90` produjo `PE-90-A` y `PE-90-B`; `PE-95` produjo `-A`, `-B`, `-C`.
-Padre más letra. Así que `codigosDerivados` **continúa su sistema**, no le impone
-uno con abreviaturas de categoría. Se sugieren y siguen siendo editables.
-
-**Por qué derivar y no contar.** `schema.prisma` ya explicaba por qué el código
-no es único global: «dos aparatos desconectados acuñando PE-79». Hoy la selección
-exige red, pero `/lots` ya está en las rutas que el service worker guarda. Una
-función del código del padre no puede chocar; un contador sí.
-
-**«Bloque» era la tercera palabra para lo mismo** —Lote, Parcela, Bloque— y de
-ahí media confusión del día. Renombrado en los dos idiomas, con el género
-cuidado: «un bloque» → «una parcela», no «un parcela».
-
-**Dos guardias del repositorio me cazaron, y tenían razón.** La suite salió en
-**rojo**: `codigosYaDerivadosDe` no recibe principal —se apoya en el guardia de
-la pantalla que la llama— y eso hay que **declararlo** en
-`dependen_del_llamador`, no dejarlo en un comentario; y las cifras del inventario
-quedaron viejas (286→287, 36→37). Ambas corregidas.
-
-**Y una medición mía que estaba mal, para la revisión que sigue.** Conté
-«variables con una sola unidad» probando valores **fuera de rango**: `pH` con 20
-se rechaza por el rango 0-14, no por la unidad. Lo destapó mi propio control —«no
-acepta su propia canónica»—. Medido bien: de **60** variables, **34** admiten una
-sola unidad, **23** ofrecen elección real (temperaturas C/F y nutrientes de
-laboratorio) y **3** no las pude medir por no tener sus unidades en la lista.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
