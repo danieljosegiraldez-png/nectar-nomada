@@ -1411,7 +1411,19 @@
     "swarmWarningHeading": "Swarming warning",
     "swarmWarningNone": "No colony reported swarm cells in the window looked at.",
     "swarmWarningRow": "{colmena}: {tipo} cells, {dias} day(s) ago",
-    "swarmWarningCount": "{cuantas} cell(s)"
+    "swarmWarningCount": "{cuantas} cell(s)",
+    "coverageUntilLabel": "Covers until",
+    "coverageUntilHelp": "Estimated by whoever feeds. It is what raises the warning before it runs out.",
+    "feedingMethodLabel": "Method",
+    "feedingMethod_bolsa_sobre_cabezales": "Bag over the top bars",
+    "feedingMethod_alimentador_entrada": "Entrance feeder",
+    "feedingMethod_alimentador_division": "Division feeder",
+    "feedingMethod_otro": "Other",
+    "alcanceHeading": "Feed running out",
+    "alcance_vencido": "ran out {dias} day(s) ago",
+    "alcance_por_vencer": "{dias} day(s) left",
+    "alcance_sin_fecha": "no coverage date — cannot warn",
+    "alcanceRow": "{colmena}: {estado} (fed on {fecha})"
   },
   "Research": {
     "badge": "Research OS",

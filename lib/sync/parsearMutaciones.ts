@@ -22,6 +22,7 @@
  * compara con los que el cliente sabe encolar.
  */
 import type { PushMutation, MutacionDeEvento } from "./pushFieldEvents";
+import { fechaDeDia } from "../time/localDateTime";
 
 /** Las fechas viajan como texto ISO por JSON y vuelven a ser fechas aquí. */
 export function toDate(v: unknown): Date | null {
@@ -77,7 +78,27 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
       // sólo se comprueba lo que hace falta para poder llamarlo. Un conteo de
       // varroa con el método mal escrito vuelve como `rejected` con su razón, no
       // como un 400 que tumbaría el lote de los demás.
-      parsed.push({ ...(m as object), occurredAt } as PushMutation);
+      //
+      // **`coverageUntil` es la excepción, y no es un adorno.** Es un campo de DÍA
+      // (Anexo B §3, `date` en el protocolo) y tiene que llegar al servicio como
+      // `Date`, no como texto. `fechaDeDia` lo fija a medianoche UTC y **falla** si
+      // la cadena no es un día válido, en vez de dejar que `new Date()` adivine —
+      // que es exactamente lo que tumbó la creación de colmenas el 2026-09-11.
+      let coverageUntil: Date | null = null;
+      if (m.coverageUntil != null && m.coverageUntil !== "") {
+        try {
+          coverageUntil = fechaDeDia(String(m.coverageUntil), "coverageUntil");
+        } catch {
+          return { ok: false, error: "mutation_malformed" };
+        }
+      }
+      // Sólo se añade donde significa algo: un conteo de varroa con
+      // `coverageUntil` sería un campo que nadie puede leer.
+      parsed.push(
+        (m.kind === "colony_event"
+          ? { ...(m as object), occurredAt, coverageUntil }
+          : { ...(m as object), occurredAt }) as PushMutation,
+      );
       continue;
     }
 

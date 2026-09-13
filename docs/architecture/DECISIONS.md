@@ -8435,3 +8435,60 @@ inspección en la copia local, con las diez columnas vacías. Las pruebas crean 
 datos, así que las reglas se ejercitan, pero ningún dato real ha pasado por aquí —
 escrito en la cabecera de `tests/apiary/estadoDeColonia.test.ts` para que nadie lo
 cuente dos veces.
+
+---
+
+## ADR-118 — «Alcanza hasta» no se exige en el servicio; su ausencia se enseña, y el aviso es por colonia
+
+**Contexto.** `48_A9_ANEXO_B_CATALOGO_DE_CAMPOS.md` §3 marca «Alcanza hasta» como
+**obligatorio** y lo subraya con el caso real: *«**el campo que faltó en Toabré.**
+El alimento del 22 de julio cubría seis semanas: vencía cerca del 2 de septiembre,
+el día en que se encontró todo vacío. Con este campo, el aviso llega antes y no
+después»*.
+
+**Lo primero que hubo que medir es que el campo ya existía.** `coverage_until`
+entró con `20260907214500_a9_vitales_del_sitio` y `vitalesDeSitios` ya lo leía. Lo
+que faltaba no era esquema: medido el 2026-09-13, **1 alimentación en la copia
+local y ninguna con ese valor**, porque **ninguna pantalla podía escribirlo**. Una
+columna que nada rellena es una puerta sin manija, y el Anexo decía «Hoy: no»
+porque desde fuera se ve igual que si no existiera.
+
+**Decisión 1 — el servicio sigue sin exigirla, y la razón previa se mantiene.**
+`recordColonyEvent` lo dejó escrito cuando se añadió la columna: las alimentaciones
+de urgencia se registran sin saber hasta cuándo alcanzan, y la obligatoriedad vive
+en el protocolo A9.4, donde el dueño la cambia sin tocar código. Exigirla en el
+servicio convertiría un dato incompleto en **ningún dato**, que es el mismo error
+que ADR-115 rechazó para la carencia: *«impedir el registro no devuelve la miel al
+panal»*.
+
+**Decisión 2 — y por eso la ausencia tiene que VERSE.** `alcanceDelAlimento`
+devuelve cuatro estados y `sin_fecha` es uno de ellos: una alimentación sin plazo
+no es una colonia tranquila, es una **de la que no se puede avisar**. Contarla entre
+las cubiertas la volvería invisible, que es literalmente lo que pasó en Toabré —
+nadie sabía que el alimento vencía el 2 de septiembre—. El formulario sí la exige
+para guardar, porque ahí exigirla no cuesta un dato: quien está delante puede
+ponerla.
+
+**Decisión 3 — el aviso es por COLONIA, no por sitio.** `vitalesDeSitios` ya
+resumía por sitio tomando el `coverage_until` más largo. Eso responde «¿hay algo
+cubierto en Toabré?» y no responde «¿a qué caja hay que ir?»: una colmena
+alimentada en julio y olvidada queda **tapada** por otra alimentada en agosto, que
+es la forma exacta del fallo. Y manda la **última** alimentación de cada colonia, no
+la de plazo más largo: volver a alimentar corrige el plazo anterior.
+
+**Decisión 4 — el día del vencimiento todavía cubre.** `coverage_until` es un campo
+de **día** a medianoche UTC, así que «alcanza hasta el 2 de septiembre» significa
+que el 2 hay alimento. Compararlo con `<` lo daría por vencido a las 00:01 de ese
+día, un día antes de lo que dijo quien alimentó — y un aviso que se adelanta
+mintiendo enseña a ignorarlo. Por lo mismo, el parseo del lote lo convierte con
+`fechaDeDia` y **falla** si no es un día válido, en vez de dejar que `new Date()`
+adivine: es el fallo que tumbó la creación de colmenas el 2026-09-11.
+
+**Lo que queda fuera, con su nombre.** Una colonia que **nunca** se alimentó no
+sale en el aviso —no todas necesitan alimento— y una **terminada** tampoco: avisar
+de que hay que alimentar una caja que se dio por muerta es ruido, y el ruido es cómo
+se aprende a no mirar una sección.
+
+**Lo que esto NO prueba.** Nadie ha registrado un «alcanza hasta» todavía. Las
+pruebas crean las alimentaciones, así que las reglas se ejercitan; ningún dato real
+ha pasado por aquí.

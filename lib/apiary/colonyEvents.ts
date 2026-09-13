@@ -11,6 +11,7 @@
 import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess, requireColonyEventWriteAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
+import { exigeMetodoDeAlimentacion } from "./alimentacion";
 import { ligarAVisitaAbierta } from "../traceability/visitaAbierta";
 import type { ColonyEventType, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -30,12 +31,29 @@ export interface RecordColonyEventInput {
   feedingMaterial?: string | null;
   feedingQuantity?: number | null;
   feedingUnit?: string | null;
-  // Sólo tiene sentido en `feeding`: hasta cuándo alcanza lo dejado, estimado
-  // por quien alimenta. No se valida como obligatoria aquí porque las
-  // alimentaciones de urgencia se registran sin saberlo; la obligatoriedad vive
-  // en el protocolo A9.4 (`coverage_until`, `"required": true`), que es donde el
-  // dueño la puede cambiar sin tocar código.
+  /**
+   * Sólo tiene sentido en `feeding`: hasta cuándo alcanza lo dejado, estimado por
+   * quien alimenta. **Campo de DÍA**, medianoche UTC.
+   *
+   * **Sigue sin ser obligatoria aquí, y la razón original se mantiene:** las
+   * alimentaciones de urgencia se registran sin saberlo, y la obligatoriedad vive
+   * en el protocolo A9.4 (`coverage_until`, `"required": true`), donde el dueño la
+   * cambia sin tocar código. El formulario la exige para guardar, que es donde esa
+   * exigencia no cuesta un dato perdido.
+   *
+   * **Lo que se añadió el 2026-09-13 es la otra mitad:** que su ausencia se VEA.
+   * `alcanceDelAlimento` devuelve esa colonia como `sin_fecha` en vez de contarla
+   * entre las tranquilas. Es el mismo trato que el dueño eligió para la carencia
+   * en ADR-115 —«avisa y registra igual»—: impedir el registro no devuelve la miel
+   * al panal, y esconder el hueco es cómo se repite Toabré.
+   */
   coverageUntil?: Date | null;
+  /**
+   * Cómo se dejó el alimento. Anexo B §3, opcional. Llega como CADENA del
+   * formulario y de la cola, y se valida abajo: un `as never` dejaría entrar
+   * cualquier valor del enum (ADR-112).
+   */
+  feedingMethod?: string | null;
   treatmentProduct?: string | null;
   // Required whenever eventType = treatment (§1a) — enforced below, not by
   // the DB column, same shape as recordMaterialConsumptionEntry's own
@@ -90,6 +108,16 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
     throw new ColonyEventValidationError("treatment_withdrawal_days_invalid");
   }
 
+  // El método, validado en la frontera. Y sólo tiene sentido alimentando: un
+  // tratamiento con «bolsa sobre cabezales» es un dato que nadie podría leer.
+  const feedingMethod =
+    input.feedingMethod == null || input.feedingMethod === ""
+      ? null
+      : exigeMetodoDeAlimentacion(input.feedingMethod);
+  if (feedingMethod !== null && input.eventType !== "feeding") {
+    throw new ColonyEventValidationError("feeding_method_solo_en_alimentacion");
+  }
+
   const scope = await resolveColonyScope(input.colonyId);
   await requireColonyEventWriteAccess(userAccountId, [scope]);
 
@@ -109,6 +137,7 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
         feedingQuantity: input.feedingQuantity ?? null,
         feedingUnit: input.feedingUnit ?? null,
         coverageUntil: input.eventType === "feeding" ? (input.coverageUntil ?? null) : null,
+        feedingMethod,
         treatmentProduct: input.treatmentProduct ?? null,
         treatmentBatchLabel: input.treatmentBatchLabel?.trim() ?? null,
         treatmentWithdrawalDays: input.treatmentWithdrawalDays ?? null,

@@ -241,6 +241,46 @@ describe("el parseo del lote de campo", () => {
     expect(await prisma.varroaCount.count({ where: { colonyId: coloniaId } })).toBe(1);
   });
 
+  it("«ALCANZA HASTA» LLEGA COMO DÍA, no como texto ni como instante", () => {
+    // Anexo B §3. Es un `type="date"`, así que tiene que quedar a medianoche UTC.
+    // Dejarlo pasar como cadena haría que Prisma lo interpretara por su cuenta, y
+    // parsearlo como instante lo movería un día según la zona — que es exactamente
+    // el fallo que tumbó la creación de colmenas el 2026-09-11.
+    const parseo = parsearMutaciones([
+      {
+        kind: "colony_event",
+        clientDraftId: `${RUN_ID}-alimento`,
+        colonyId: coloniaId,
+        occurredAt: "2026-09-13T09:00:00.000Z",
+        eventType: "feeding",
+        feedingMaterial: "jarabe 1:1",
+        coverageUntil: "2026-09-30T00:00:00.000Z",
+      },
+    ]);
+    expect(parseo.ok).toBe(true);
+    if (!parseo.ok) return;
+    const m = parseo.mutations[0] as { coverageUntil: Date | null };
+    expect(m.coverageUntil).toBeInstanceOf(Date);
+    expect(m.coverageUntil!.toISOString()).toBe("2026-09-30T00:00:00.000Z");
+  });
+
+  it("y un «alcanza hasta» que no es un día rechaza el lote en vez de inventarlo", () => {
+    // `fechaDeDia` falla en vez de suponer. Un `new Date("hace dos semanas")` da
+    // `Invalid Date`, y escribirlo sería guardar basura con cara de fecha.
+    expect(
+      parsearMutaciones([
+        {
+          kind: "colony_event",
+          clientDraftId: `${RUN_ID}-malo`,
+          colonyId: coloniaId,
+          occurredAt: "2026-09-13T09:00:00.000Z",
+          eventType: "feeding",
+          coverageUntil: "hace dos semanas",
+        },
+      ]),
+    ).toMatchObject({ ok: false, error: "mutation_malformed" });
+  });
+
   it("un conteo con el método mal escrito se rechaza SOLO, sin tumbar el lote", async () => {
     // La propiedad que importa del protocolo: un dato malo no puede bloquear al
     // resto de la cola. Un `kind` no reconocido hacía exactamente eso.

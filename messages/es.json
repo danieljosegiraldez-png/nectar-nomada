@@ -1411,7 +1411,19 @@
     "swarmWarningHeading": "Aviso de enjambrazón",
     "swarmWarningNone": "Ninguna colonia avisó de enjambrazón en la ventana mirada.",
     "swarmWarningRow": "{colmena}: celdas {tipo}, hace {dias} día(s)",
-    "swarmWarningCount": "{cuantas} celda(s)"
+    "swarmWarningCount": "{cuantas} celda(s)",
+    "coverageUntilLabel": "Alcanza hasta",
+    "coverageUntilHelp": "Estimado por quien alimenta. Es lo que dispara el aviso antes de que se acabe.",
+    "feedingMethodLabel": "Método",
+    "feedingMethod_bolsa_sobre_cabezales": "Bolsa sobre cabezales",
+    "feedingMethod_alimentador_entrada": "Alimentador de entrada",
+    "feedingMethod_alimentador_division": "Alimentador de división",
+    "feedingMethod_otro": "Otro",
+    "alcanceHeading": "Alimento por acabarse",
+    "alcance_vencido": "vencido hace {dias} día(s)",
+    "alcance_por_vencer": "quedan {dias} día(s)",
+    "alcance_sin_fecha": "sin fecha de alcance — no se puede avisar",
+    "alcanceRow": "{colmena}: {estado} (alimentada el {fecha})"
   },
   "Research": {
     "badge": "Research OS",
