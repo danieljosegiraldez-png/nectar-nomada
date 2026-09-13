@@ -2336,3 +2336,38 @@ guardia ofrece — y que tiene su prueba: una excepción que deja de aplicar fal
 **laboratorio** llevan el mismo campo de unidad. En el de laboratorio la
 elección `ppm`/`%` **sí vale** —un laboratorio reporta en una y otro en otra— así
 que quitarla ahí sería el error contrario.
+
+---
+
+### 2026-09-11 · Los códigos de las corrientes se derivan, y un bloque es una parcela
+
+Daniel, en selección: «for the rejects we should have an automatically generated
+code… we need to have very good trazabilidad and coding system». Y aparte:
+«lets not use BLOCKS anymore, it is confusing».
+
+**La convención ya era suya y sólo faltaba automatizarla.** Sus lotes reales la
+traen: `PE-90` produjo `PE-90-A` y `PE-90-B`; `PE-95` produjo `-A`, `-B`, `-C`.
+Padre más letra. Así que `codigosDerivados` **continúa su sistema**, no le impone
+uno con abreviaturas de categoría. Se sugieren y siguen siendo editables.
+
+**Por qué derivar y no contar.** `schema.prisma` ya explicaba por qué el código
+no es único global: «dos aparatos desconectados acuñando PE-79». Hoy la selección
+exige red, pero `/lots` ya está en las rutas que el service worker guarda. Una
+función del código del padre no puede chocar; un contador sí.
+
+**«Bloque» era la tercera palabra para lo mismo** —Lote, Parcela, Bloque— y de
+ahí media confusión del día. Renombrado en los dos idiomas, con el género
+cuidado: «un bloque» → «una parcela», no «un parcela».
+
+**Dos guardias del repositorio me cazaron, y tenían razón.** La suite salió en
+**rojo**: `codigosYaDerivadosDe` no recibe principal —se apoya en el guardia de
+la pantalla que la llama— y eso hay que **declararlo** en
+`dependen_del_llamador`, no dejarlo en un comentario; y las cifras del inventario
+quedaron viejas (286→287, 36→37). Ambas corregidas.
+
+**Y una medición mía que estaba mal, para la revisión que sigue.** Conté
+«variables con una sola unidad» probando valores **fuera de rango**: `pH` con 20
+se rechaza por el rango 0-14, no por la unidad. Lo destapó mi propio control —«no
+acepta su propia canónica»—. Medido bien: de **60** variables, **34** admiten una
+sola unidad, **23** ofrecen elección real (temperaturas C/F y nutrientes de
+laboratorio) y **3** no las pude medir por no tener sus unidades en la lista.
