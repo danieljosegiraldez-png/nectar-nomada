@@ -67,6 +67,33 @@ guardia comparaba posiciones con `indexOf` y midió **un comentario**; se retir�
 
 **Pendiente nombrado:** `createHive` no abre la colocación inicial de una colmena nueva.
 
+### 2026-09-14 · Los motores de beneficio llegan a la pantalla, y dicen qué no pueden ver
+
+`lib/beneficio/desdeElLote.ts` traduce nuestros registros al lenguaje de los
+motores. Su trabajo de verdad es **declarar lo intraducible** en vez de
+rellenarlo.
+
+**Tres cosas no existen aquí y ninguna se inventa.** El **perfil de protocolo**:
+el catálogo `grado_proceso` de Daniel y los cinco perfiles del paquete **no son
+los mismos cinco** — casan `Washed` y `Natural`; se quedan sin perfil los dos
+semi-lavados y el honey, y sin grado `ANAEROBIC_SHORT`, `CARBONIC_MACERATION` y
+**`COLD_HOLD_PREFERMENT`, que es CryoBloom**. Un lote sin perfil **no recibe los
+del lavado**. La **confianza** se deriva de la corrección y de
+`provenanceClass`. Y el **punto de muestreo** no existe: el guardia de series
+mezcladas de Brix **no puede disparar aquí**, y eso viaja hasta la pantalla.
+
+**La pantalla pregunta, no ordena** —hay un guardia que lo comprueba sobre el
+español— y **dice por qué no hay veredicto cuando no lo hay**: el tipo es
+`VeredictoDeFase | SinVeredicto`, no un opcional.
+
+**Lo que esto NO prueba.** Medido sobre la copia de producción: **0 recetas, 0
+objetivos, 0 procesos de lote, 0 fermentaciones**, y los 3 secados abiertos no
+cuelgan de ningún proceso. **Hoy ningún lote pintaría el bloque.** El camino lo
+ejercen 20 pruebas nuevas, no datos reales — el cuello de botella es la captura.
+
+**Pendiente de Daniel:** decir que un lote corre CryoBloom **es un cambio de
+esquema** y se propone aparte.
+
 ### 2026-09-14 · Secado, y con él los 47 criterios del beneficio en verde
 
 `lib/beneficio/secado.ts`. **El tablero cierra: 50 pasando, 0 pendientes.** La
