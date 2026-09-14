@@ -2588,3 +2588,33 @@ fuente con regex se queda ciego en silencio cuando el archivo cambia de forma.
 Flip-test de las tres: reintroducir el fallo de Codex, quitar el campo del
 formulario de versión y romper el contrato hacen caer **cada uno a su prueba por
 nombre**, las tres mutaciones compilando.
+
+---
+
+### 2026-09-13 · «Alcanza hasta» pasa a tener manija, y el aviso deja de taparse
+
+El Anexo B §3 marca ese campo obligatorio y lo subraya: *«el campo que faltó en
+Toabré»*. **Lo primero que hubo que medir es que la columna ya existía** desde el
+2026-09-07, y que los vitales del sitio ya la leían. Lo que faltaba no era esquema:
+**1 alimentación en la copia local y ninguna con ese valor**, porque ninguna
+pantalla podía escribirlo. Una columna que nada rellena se ve igual que si no
+existiera — por eso el Anexo decía «Hoy: no».
+
+**El servicio sigue sin exigirla**, y la razón previa se mantiene tal cual la dejó
+escrita quien añadió la columna: una alimentación de urgencia se registra sin saber
+hasta cuándo alcanza, y exigirla ahí convierte un dato incompleto en ninguno — el
+error que ADR-115 ya rechazó para la carencia. **Y por eso la ausencia se VE:**
+`sin_fecha` es un estado propio del aviso, porque una alimentación sin plazo no es
+una colonia tranquila, es una **de la que no se puede avisar**. ADR-118.
+
+**El aviso es por colonia, no por sitio.** El resumen por sitio toma el plazo más
+largo, así que una colmena alimentada en julio y olvidada queda **tapada** por otra
+alimentada en agosto — la forma exacta del fallo de Toabré. Y manda la **última**
+alimentación, no la más larga: volver a alimentar corrige el plazo anterior.
+
+**El día del vencimiento todavía cubre.** Un `<` a secas lo daría por vencido a las
+00:01 de ese día, un día antes de lo que dijo quien alimentó; y el parseo del lote
+lo convierte con `fechaDeDia`, que **falla** en vez de dejar que `new Date()`
+adivine. Cuatro flip-tests, los cuatro compilando y cada uno con su prueba.
+
+**Lo que NO prueba:** nadie ha registrado un «alcanza hasta» todavía.
