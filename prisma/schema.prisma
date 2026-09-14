@@ -6027,7 +6027,39 @@ model PollinationCommitment {
   /// hay módulo de contratos y fabricar uno aquí sería construir de más.
   contractReference String? @map("contract_reference")
 
+  /// Qué se está polinizando. **Texto libre, por la misma razón que el cultivo de una finca
+  /// vecina (ADR-127):** no hay catálogo de cultivos en este repositorio y el dueño no ha
+  /// dado vocabulario; inventarlo sería fabricar un hecho de negocio. Y es un hecho de la
+  /// finca del CLIENTE, no nuestro.
+  crop String?
+
+  /// Qué parcela del cliente. Texto libre y no una `Location`: **el sistema no modela las
+  /// parcelas de otros**, y crear una ubicación por cada parcela ajena llenaría la jerarquía
+  /// de sitios que nadie visita ni mantiene.
+  parcelReference String? @map("parcel_reference")
+
+  /// Cuántas colmenas se comprometieron, si se comprometió un número.
+  ///
+  /// **No es lo mismo que `hectáreas × densidad objetivo`**, y por eso es su propio campo:
+  /// el cociente es la regla agronómica y esto es lo que dice el contrato. Cuando los dos
+  /// existen y no coinciden, la diferencia es el dato — igual que `divergen` en el conteo de
+  /// colonias. Anulable: se puede contratar por densidad sin fijar un número.
+  committedHives Int? @map("committed_hives")
+
+  /// Cuándo se espera que abra la floración. **Campo de DÍA**, se parsea con `fechaDeDia`.
+  ///
+  /// **Es distinto de `startsAt`**, y la diferencia es la que hace útil la alerta del Anexo E
+  /// §9: el servicio empieza cuando llegan las colmenas, y la floración abre cuando la abre
+  /// la planta. La alerta que el Anexo pide —«que se acerque la floración con la meta
+  /// incompleta»— sólo se puede dar si las dos fechas son campos distintos.
+  bloomStartsAt DateTime? @map("bloom_starts_at")
+  /// Cuándo se espera que cierre la floración. Campo de día.
+  bloomEndsAt   DateTime? @map("bloom_ends_at")
+
   startsAt DateTime  @map("starts_at")
+  /// `null` = emplazamiento **sin fecha de cierre**. El Anexo E §9 lo dice con nombre: «El
+  /// mismo mecanismo sirve para Toabré: allí el emplazamiento simplemente no tiene fecha de
+  /// cierre.» `densidadDePolinizacion` ya lo trataba así desde A9.9.
   endsAt   DateTime? @map("ends_at")
 
   notes String?

@@ -376,6 +376,10 @@
     {
       "archivo": "lib/apiary/consultaAVecinos.ts",
       "razon": "Anexo E §4, §3 y §8 — la consulta mensual a las fincas vecinas. Modulo de dominio: el acceso a datos vive aqui por diseno. `registrarConsultaAVecinos` y `vecinosOfrecidos` comprueban `requireApiaryAccess(\"manage\")` sobre el apiario, con su projectId y su locationId, antes de escribir u ofrecer nada."
+    },
+    {
+      "archivo": "lib/apiary/emplazamiento.ts",
+      "razon": "Anexo E §9 — el emplazamiento temporal. Modulo de dominio: el acceso a datos vive aqui por diseno. Solo LEE: cruza `hive_placement` con la ventana del compromiso para decir que colmenas estuvieron y cuantos dias efectivos. No escribe nada. Su aritmetica —`diasEfectivosDe`— y su alerta de floracion son puras y no tocan la base."
     }
   ],
   "reciben_transaccion": [
@@ -757,6 +761,12 @@
       "archivo": "lib/apiary/consultaAVecinos.ts",
       "operacion": "vecinosConsultados",
       "razon": "A quien se le ha preguntado en un sitio, para que el formulario los ofrezca primero. Mismo llamador y misma procedencia del id que consultasDeSitio. **No es una lista de vecinos del apiario**: el sistema no modela colindancia. No escribe nada.",
+      "verificado": "2026-09-14"
+    },
+    {
+      "archivo": "lib/apiary/emplazamiento.ts",
+      "operacion": "colmenasDeLaVentana",
+      "razon": "Recibe un compromisoId que su llamador —la ficha del apiario, via getApiaryDetail, que autoriza con requireApiaryAccess(\"view\")— ya obtuvo de densidadDePolinizacion. No pide principal a proposito: misma disciplina que densidadDePolinizacion, vitalesDeSitios y carenciasVigentes. Lee colocaciones de un sitio ya concedido y no escribe nada.",
       "verificado": "2026-09-14"
     }
   ]

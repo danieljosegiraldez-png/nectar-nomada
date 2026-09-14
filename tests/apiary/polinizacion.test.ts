@@ -14,6 +14,7 @@ import {
   crearCompromisoDePolinizacion,
   densidadDePolinizacion,
 } from "../../lib/apiary/polinizacion";
+import { colmenasDeLaVentana } from "../../lib/apiary/emplazamiento";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a99-pol-${Date.now()}`;
@@ -101,6 +102,7 @@ describe("A9.9 — el compromiso y el cociente", () => {
     // Antes que nada: AuditEvent.actorUserAccountId es SET NULL, así que borrar
     // la cuenta primero deja el evento huérfano y este filtro sin nada que casar.
     await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: [userAccountId, sinAccesoUserAccountId] } }) });
+    await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.pollinationCommitment.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: { in: colonyIds } }) });
@@ -286,5 +288,48 @@ describe("A9.9 — el compromiso y el cociente", () => {
     expect(evento?.actorUserAccountId).toBe(userAccountId);
     await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: c.id }) });
     await prisma.pollinationCommitment.deleteMany({ where: assertDefinedWhere({ id: c.id }) });
+  });
+
+  /**
+   * Anexo E §9 — «el reporte se genera con el alcance de la VENTANA, no de la vida del
+   * apiario, con las colmenas que estuvieron y los días efectivos».
+   *
+   * **Esto no se podía contestar antes de ADR-126.** El único camino de una colmena a su
+   * apiario era `hive.locationId`, que dice dónde está AHORA. Aquí una colmena se va a
+   * mitad de la ventana y aun así sus días cuentan — y otra que nunca estuvo dentro de la
+   * ventana no aparece, que es la otra mitad del control.
+   */
+  it("las colmenas de la ventana: la que se fue cuenta sus días, la de fuera no aparece", async () => {
+    const compromiso = await crearCompromisoDePolinizacion(userAccountId, {
+      locationId,
+      clientOrganizationId: clienteId,
+      committedHectares: 17,
+      targetHivesPerHectareMin: 4,
+      targetHivesPerHectareMax: 6,
+      startsAt: new Date("2026-10-01T00:00:00Z"),
+      endsAt: new Date("2026-10-31T00:00:00Z"),
+    });
+
+    const hives = await prisma.hive.findMany({ where: { locationId }, orderBy: { identifier: "asc" }, take: 3 });
+    expect(hives.length, "control: hacen falta tres colmenas del beforeAll").toBe(3);
+
+    // Una estuvo toda la ventana; otra se fue el 16; la tercera sólo estuvo ANTES.
+    await prisma.hivePlacement.createMany({
+      data: [
+        { hiveId: hives[0]!.id, locationId, startedAt: new Date("2026-08-01T00:00:00Z") },
+        { hiveId: hives[1]!.id, locationId, startedAt: new Date("2026-09-20T00:00:00Z"), endedAt: new Date("2026-10-16T00:00:00Z") },
+        { hiveId: hives[2]!.id, locationId, startedAt: new Date("2026-05-01T00:00:00Z"), endedAt: new Date("2026-06-01T00:00:00Z") },
+      ],
+    });
+
+    const presentes = await colmenasDeLaVentana(compromiso.id, new Date("2026-11-15T00:00:00Z"));
+    expect(presentes.map((p) => p.identifier)).toEqual([hives[0]!.identifier, hives[1]!.identifier]);
+    expect(presentes[0]!.diasEfectivos).toBe(30);
+    expect(presentes[0]!.hasta, "seguía dentro al cerrar la ventana").toBeNull();
+    expect(presentes[1]!.diasEfectivos).toBe(15);
+    expect(presentes[1]!.hasta).toEqual(new Date("2026-10-16T00:00:00Z"));
+
+    await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ locationId }) });
+    await prisma.pollinationCommitment.deleteMany({ where: assertDefinedWhere({ id: compromiso.id }) });
   });
 });
