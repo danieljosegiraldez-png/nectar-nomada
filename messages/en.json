@@ -1466,7 +1466,19 @@
     "cajaHistorial": "Configuration changes",
     "cajaSinHistorial": "This box's configuration has never been changed.",
     "ocupacionLabel": "{cubiertos} of {capacidad} frames ({porciento}%)",
-    "ocupacionSinDenominador": "{cubiertos} frames covered — not comparable without frames per box"
+    "ocupacionSinDenominador": "{cubiertos} frames covered — not comparable without frames per box",
+    "cierreCosechaHeading": "Harvest close",
+    "cierreCosechaAyuda": "Weighed at extraction, not at the apiary.",
+    "honeyTypeLabel": "Honey type",
+    "honeyType_multifloral": "Multifloral",
+    "honeyType_monofloral_declarada": "Monofloral (declared)",
+    "honeyType_mielato": "Honeydew",
+    "extractedWeightLabel": "Extracted weight (kg)",
+    "cierreCosechaRazon": "Reason (only if you change something already recorded)",
+    "cierreCosechaGuardar": "Save the close",
+    "humedadHeading": "Measured moisture",
+    "humedadFila": "{valor} {unidad} — measured on {fecha}",
+    "humedadSinMedir": "Not measured. Recorded as a lot measurement, not here: moisture is a refractometer reading with its instrument and provenance."
   },
   "Research": {
     "badge": "Research OS",

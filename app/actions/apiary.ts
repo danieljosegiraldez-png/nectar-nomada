@@ -14,6 +14,7 @@ import {
 } from "../../lib/apiary/hives";
 import { completarCierreDeTratamiento } from "../../lib/apiary/cierreDeEvento";
 import { actualizarConfiguracionDeCaja } from "../../lib/apiary/configuracionDeCaja";
+import { completarCierreDeCosecha } from "../../lib/apiary/cierreDeCosecha";
 import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { recordInspection } from "../../lib/apiary/inspections";
@@ -264,6 +265,30 @@ export async function actualizarConfiguracionDeCajaFormAction(formData: FormData
     feederType: emptyToNull(formData.get("feederType")),
     entranceReducer: triEstado("entranceReducer"),
     screenedBottomBoard: triEstado("screenedBottomBoard"),
+    reason: emptyToNull(formData.get("reason")),
+  });
+
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+}
+
+/**
+ * A9 · Anexo B §5 — el cierre de una cosecha: qué miel era y cuánto pesó.
+ *
+ * Acción de servidor y no cola offline, por la misma razón que el cierre de un
+ * tratamiento: se pesa en la extracción, con balanza y señal. **La humedad no está
+ * aquí**: vive como `Measurement` sobre el lote que esta cosecha produjo, y se registra
+ * por el camino del lote — ver `lib/apiary/cierreDeCosecha.ts`.
+ */
+export async function completarCierreDeCosechaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const hiveId = String(formData.get("hiveId") ?? "");
+  await completarCierreDeCosecha(user.userAccountId, {
+    apiaryHarvestEventId: String(formData.get("apiaryHarvestEventId") ?? ""),
+    honeyType: emptyToNull(formData.get("honeyType")),
+    extractedWeightKg: emptyToNull(formData.get("extractedWeightKg")),
     reason: emptyToNull(formData.get("reason")),
   });
 

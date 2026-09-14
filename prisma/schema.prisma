@@ -5111,6 +5111,22 @@ enum HiveStatus {
   @@schema("apiary")
 }
 
+/// De qué es la miel. Anexo B §5: *«terruño por sitio y por temporada; base del
+/// producto»*.
+///
+/// **`monofloral_declarada` dice «declarada» a propósito, y es del dueño.** Es una
+/// afirmación de quien cosechó, no un resultado de laboratorio: verificarla es un
+/// análisis de polen, y eso sería una `Sample` con su `Measurement` — no un cambio en
+/// esta columna. Guardar la declaración y la verificación en el mismo campo las haría
+/// indistinguibles, que es justo lo que `CLAUDE.md` §3 separa.
+enum HoneyType {
+  multifloral
+  monofloral_declarada
+  mielato
+
+  @@schema("apiary")
+}
+
 // Same project/location dual-carry every other RBAC-checked canonical
 // entity uses (Lot, Sample, Story, Product, Experience) — T1's own note
 // on Lot.locationId applies identically here: a Farm Operator Assignment
@@ -5869,6 +5885,16 @@ model ApiaryHarvestEvent {
   operatorPersonId  String?         @map("operator_person_id") @db.Uuid
   operator          Person?         @relation("ApiaryHarvestEventOperator", fields: [operatorPersonId], references: [id])
   notes             String?
+  /// Anexo B §5, etapa **cierre**: se sabe al extraer, no en el apiario. Lo escribe
+  /// `completarCierreDeCosecha`, con `sourceInterface = "apiary.close"`.
+  ///
+  /// **La humedad NO está aquí a propósito.** Es una lectura de refractómetro, y el
+  /// mecanismo ya existe: `Measurement` sobre el `Lot` que esta cosecha produce.
+  /// Medido el 2026-09-14 — `PANEL_DEL_SUJETO` no restringe `lotId`, y `LotType` ya
+  /// tiene `honey` porque A3 decidió que la miel reusa la maquinaria del lote **sin
+  /// modificarla**. Una columna aquí sería un segundo sitio para el mismo número, sin
+  /// instrumento, sin método y sin quién lo midió.
+  honeyType         HoneyType?      @map("honey_type")
   resultingLotId    String          @unique @map("resulting_lot_id") @db.Uuid
   resultingLot      Lot             @relation(fields: [resultingLotId], references: [id])
   // ADR-038 pattern — no default, the action layer must state a real class.
