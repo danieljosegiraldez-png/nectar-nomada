@@ -28,6 +28,7 @@ tests/apiary/bitacora.test.ts
 tests/apiary/cierreDeEvento.test.ts
 tests/apiary/colonyEvents.test.ts
 tests/apiary/carencia.test.ts
+tests/apiary/configuracionDeCaja.test.ts
 tests/apiary/crearApiario.test.ts
 tests/apiary/estadoDeColonia.test.ts
 tests/apiary/e2e.test.ts

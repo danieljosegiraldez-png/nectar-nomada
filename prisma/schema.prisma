@@ -5131,6 +5131,41 @@ model Hive {
   project     Project?     @relation(fields: [projectId], references: [id])
   installedAt DateTime?    @map("installed_at")
   status      HiveStatus   @default(active)
+
+  // --- Anexo B §2.4, configuración de la caja.
+  //
+  // **Viven en la COLMENA y no en la inspección**, y lo decide el dueño con sus
+  // palabras: *«Cambia poco entre visitas, así que se guarda en la colmena y en la
+  // inspección sólo se registra la diferencia. Preguntarlo cada vez es coste sin
+  // información.»*
+  //
+  // La fila guarda la configuración ACTUAL; el historial de cambios vive en
+  // `AuditEvent` con su `before`/`after`, que es lo que `leerEnmiendas` ya lee.
+  // Todos anulables: una colmena registrada antes de que esto existiera no declara
+  // nada, y un valor por defecto afirmaría una caja que nadie miró (ADR-080).
+
+  /// Cámaras de cría. Junto con `supers`, la capacidad de la caja.
+  broodBoxes   Int?        @map("brood_boxes")
+  /// Alzas.
+  supers       Int?
+  /// Cuadros por caja. **Es el denominador de «cuadros cubiertos de abeja»**, que
+  /// existe desde ADR-117: sin él, «8 cuadros cubiertos» no se puede comparar entre
+  /// una caja de 8 y una de 10. El Anexo lo marca de etapa «cierre» — se mide una
+  /// vez, con la caja en la mano, no en cada visita.
+  framesPerBox Int?        @map("frames_per_box")
+  /// Excluidor de reina. Afecta a la calidad de la miel cosechada.
+  queenExcluder Boolean?   @map("queen_excluder")
+  /// Qué alimentador tiene puesto. **Reusa el vocabulario de `FeedingMethod`** a
+  /// propósito: son las mismas cosas físicas —en Toabré, «bolsa sobre los
+  /// cabezales»— y dos enums idénticos serían dos sitios donde añadir el siguiente.
+  /// Lo que cambia es el sujeto: aquí es lo que la caja LLEVA, allí cómo se dejó
+  /// una alimentación concreta.
+  feederType   FeedingMethod? @map("feeder_type")
+  /// Reductor de piquera. Defensa de colonia débil o recién instalada.
+  entranceReducer Boolean? @map("entrance_reducer")
+  /// Piso sanitario o bandeja. **Requisito del conteo de varroa por bandeja**, así
+  /// que su ausencia explica por qué una colmena no tiene conteos de ese método.
+  screenedBottomBoard Boolean? @map("screened_bottom_board")
   createdAt   DateTime     @default(now()) @map("created_at")
   createdBy   String?      @map("created_by") @db.Uuid
   creator     UserAccount? @relation("HiveCreatedBy", fields: [createdBy], references: [id])

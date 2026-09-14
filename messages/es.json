@@ -1451,7 +1451,22 @@
     "retirosFila": "{colmena}: {producto}, aplicado hace {dias} día(s)",
     "retiroFechaLabel": "Retirada el",
     "retiroGuardar": "Anotar el retiro",
-    "retiroSinProducto": "sin producto registrado"
+    "retiroSinProducto": "sin producto registrado",
+    "cajaHeading": "Configuración de la caja",
+    "cajaAyuda": "Cambia poco: se anota cuando cambia, no en cada visita.",
+    "broodBoxesLabel": "Cámaras de cría",
+    "supersLabel": "Alzas",
+    "framesPerBoxLabel": "Cuadros por caja",
+    "queenExcluderLabel": "Excluidor de reina",
+    "feederTypeLabel": "Alimentador",
+    "entranceReducerLabel": "Reductor de piquera",
+    "screenedBottomBoardLabel": "Piso sanitario o bandeja",
+    "cajaRazonLabel": "Por qué cambió (opcional)",
+    "cajaGuardar": "Guardar la configuración",
+    "cajaHistorial": "Cambios de configuración",
+    "cajaSinHistorial": "Nunca se ha cambiado la configuración de esta caja.",
+    "ocupacionLabel": "{cubiertos} de {capacidad} cuadros ({porciento} %)",
+    "ocupacionSinDenominador": "{cubiertos} cuadros cubiertos — sin cuadros por caja no es comparable"
   },
   "Research": {
     "badge": "Research OS",

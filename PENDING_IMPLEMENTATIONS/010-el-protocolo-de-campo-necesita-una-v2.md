@@ -35,7 +35,11 @@ Así que la v1 **no se toca**. Lo que hace falta es una v2 que:
    documentos del dueño no coinciden, y se siguió el Anexo porque trae el motivo
    escrito —«señal de obrera ponedora si aparece sin reina»—. La columna existe:
    `drone_brood_present`;
-3. pase `queen_sighted`, `brood_pattern` y `temperament` de las columnas de texto
+3. **añada los ítems de §2.4, que el protocolo no tiene ninguno.** Medido el
+   2026-09-14: sus cinco actividades no llevan un solo campo de configuración de caja,
+   y desde hoy las siete columnas existen en `Hive` (ADR-122). Su etapa la dice el
+   Anexo: «campo, sólo si cambió» para cinco, y **cierre** para «cuadros por caja»;
+4. pase `queen_sighted`, `brood_pattern` y `temperament` de las columnas de texto
    que tienen hoy a los enums que el propio JSON ya declara (`vista/no_vista/
    no_se_busco`, `compacto/salteado/apretado/promedio/nulo`,
    `mansa/normal/defensiva`). **De los tres, sólo `queen_sighted` está resuelto a

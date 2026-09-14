@@ -11,6 +11,11 @@ import { getSignedUrlForAsset } from "../../../../../lib/traceability/media";
 import { listInspectionsForColony } from "../../../../../lib/apiary/inspections";
 import { listColonyEventsForColony } from "../../../../../lib/apiary/colonyEvents";
 import { serieDeInfestacion } from "../../../../../lib/apiary/varroa";
+import { fuerzaDeColonia } from "../../../../../lib/apiary/configuracionDeCaja";
+import { METODOS_DE_ALIMENTACION } from "../../../../../lib/apiary/alimentacion";
+import { leerEnmiendas } from "../../../../../lib/traceability/enmiendas";
+import { actualizarConfiguracionDeCajaFormAction } from "../../../../actions/apiary";
+import { BotonDeEnvio } from "../../../../components/BotonDeEnvio";
 import { NewColonyForm } from "../../../../components/apiary/NewColonyForm";
 import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
@@ -63,6 +68,11 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
       occurredAt: evt.occurredAt.toISOString().slice(0, 10),
       product: evt.treatmentProduct,
     }));
+
+  // A9 · Anexo B §2.4 — el historial de la caja no hubo que construirlo:
+  // `actualizarConfiguracionDeCaja` escribe su `AuditEvent` con `before`/`after`, y
+  // `leerEnmiendas` ya sabía leer cualquier entidad por su tipo.
+  const cambiosDeCaja = await leerEnmiendas([{ entityType: "hive", entityId: hive.id }], { limite: 10 });
 
   const revalidationPath = `/apiaries/${apiaryId}/hives/${hiveId}`;
 
@@ -138,6 +148,80 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
           </section>
 
           <section className="nn-section">
+            <h2>{t("cajaHeading")}</h2>
+            <p className="nn-muted">{t("cajaAyuda")}</p>
+            {/* El formulario manda la configuración COMPLETA, con lo actual
+                precargado: representa «cómo está la caja hoy». Los tres sí/no son
+                desplegables de TRES opciones y no casillas — un `Boolean?` tiene tres
+                estados, y «sin registrar» tiene que poder decirse. */}
+            <form action={actualizarConfiguracionDeCajaFormAction} className="nn-form" style={{ maxWidth: 420 }}>
+              <input type="hidden" name="hiveId" value={hive.id} />
+              <input type="hidden" name="apiaryId" value={apiaryId} />
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <div className="nn-field" style={{ flex: 1 }}>
+                  <label htmlFor="caja-camaras">{t("broodBoxesLabel")}</label>
+                  <input id="caja-camaras" name="broodBoxes" type="number" min={0} step={1} inputMode="numeric" defaultValue={hive.broodBoxes ?? ""} />
+                </div>
+                <div className="nn-field" style={{ flex: 1 }}>
+                  <label htmlFor="caja-alzas">{t("supersLabel")}</label>
+                  <input id="caja-alzas" name="supers" type="number" min={0} step={1} inputMode="numeric" defaultValue={hive.supers ?? ""} />
+                </div>
+                <div className="nn-field" style={{ flex: 1 }}>
+                  <label htmlFor="caja-cuadros">{t("framesPerBoxLabel")}</label>
+                  <input id="caja-cuadros" name="framesPerBox" type="number" min={1} step={1} inputMode="numeric" defaultValue={hive.framesPerBox ?? ""} />
+                </div>
+              </div>
+              <div className="nn-field">
+                <label htmlFor="caja-alimentador">{t("feederTypeLabel")}</label>
+                <select id="caja-alimentador" name="feederType" defaultValue={hive.feederType ?? ""}>
+                  <option value="">{t("triNoRegistrado")}</option>
+                  {METODOS_DE_ALIMENTACION.map((m) => (
+                    <option key={m} value={m}>
+                      {t(`feedingMethod_${m}`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {(
+                [
+                  ["queenExcluder", "queenExcluderLabel", hive.queenExcluder],
+                  ["entranceReducer", "entranceReducerLabel", hive.entranceReducer],
+                  ["screenedBottomBoard", "screenedBottomBoardLabel", hive.screenedBottomBoard],
+                ] as const
+              ).map(([nombre, rotulo, valor]) => (
+                <div className="nn-field" key={nombre}>
+                  <label htmlFor={`caja-${nombre}`}>{t(rotulo)}</label>
+                  <select id={`caja-${nombre}`} name={nombre} defaultValue={valor === true ? "si" : valor === false ? "no" : ""}>
+                    <option value="">{t("triNoRegistrado")}</option>
+                    <option value="si">{t("triSi")}</option>
+                    <option value="no">{t("triNo")}</option>
+                  </select>
+                </div>
+              ))}
+              <div className="nn-field">
+                <label htmlFor="caja-razon">{t("cajaRazonLabel")}</label>
+                <input id="caja-razon" name="reason" type="text" />
+              </div>
+              <BotonDeEnvio>{t("cajaGuardar")}</BotonDeEnvio>
+            </form>
+
+            {/* El historial: lo que `before`/`after` compran. */}
+            <h3>{t("cajaHistorial")}</h3>
+            {cambiosDeCaja.length === 0 ? (
+              <p className="nn-muted">{t("cajaSinHistorial")}</p>
+            ) : (
+              <ul>
+                {cambiosDeCaja.map((c) => (
+                  <li key={c.id}>
+                    {c.occurredAt.toISOString().slice(0, 10)}
+                    {c.reason ? ` — ${c.reason}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="nn-section">
             <h2>{t("inspectionHeading")}</h2>
             <InspectionForm colonyId={colony.id} selfPersonId={selfPersonId} irregularidades={irregularidades} />
           </section>
@@ -188,6 +272,28 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                 {inspections.map((insp) => (
                   <li key={insp.id}>
                     {insp.occurredAt.toLocaleDateString()} — {t(`inspectionOutcome_${insp.outcome}`)}
+                    {/* La fuerza, CON su denominador. Cuando la caja no declara
+                        cuadros por caja se dice que el número no es comparable, en vez
+                        de pintar un porcentaje inventado: es lo que el Anexo pide de
+                        este campo —«comparable entre visitas y entre sitios»— y lo que
+                        no era hasta que existió §2.4. */}
+                    {insp.beeCoveredFrames !== null
+                      ? (() => {
+                          const f = fuerzaDeColonia(insp.beeCoveredFrames!, hive);
+                          return (
+                            <span className={f.ocupacion === null ? "nn-vital-sin-registro" : undefined}>
+                              {" · "}
+                              {f.ocupacion === null
+                                ? t("ocupacionSinDenominador", { cubiertos: f.cuadrosCubiertos })
+                                : t("ocupacionLabel", {
+                                    cubiertos: f.cuadrosCubiertos,
+                                    capacidad: f.capacidad ?? 0,
+                                    porciento: f.ocupacion.toFixed(0),
+                                  })}
+                            </span>
+                          );
+                        })()
+                      : null}
                     <ApiaryPhotoUploadForm
                       parent={{ kind: "inspection", inspectionId: insp.id }}
                       revalidationPath={revalidationPath}

@@ -1451,7 +1451,22 @@
     "retirosFila": "{colmena}: {producto}, applied {dias} day(s) ago",
     "retiroFechaLabel": "Removed on",
     "retiroGuardar": "Record the removal",
-    "retiroSinProducto": "no product recorded"
+    "retiroSinProducto": "no product recorded",
+    "cajaHeading": "Box configuration",
+    "cajaAyuda": "It changes rarely: recorded when it changes, not on every visit.",
+    "broodBoxesLabel": "Brood boxes",
+    "supersLabel": "Supers",
+    "framesPerBoxLabel": "Frames per box",
+    "queenExcluderLabel": "Queen excluder",
+    "feederTypeLabel": "Feeder",
+    "entranceReducerLabel": "Entrance reducer",
+    "screenedBottomBoardLabel": "Screened bottom board",
+    "cajaRazonLabel": "Why it changed (optional)",
+    "cajaGuardar": "Save the configuration",
+    "cajaHistorial": "Configuration changes",
+    "cajaSinHistorial": "This box's configuration has never been changed.",
+    "ocupacionLabel": "{cubiertos} of {capacidad} frames ({porciento}%)",
+    "ocupacionSinDenominador": "{cubiertos} frames covered — not comparable without frames per box"
   },
   "Research": {
     "badge": "Research OS",

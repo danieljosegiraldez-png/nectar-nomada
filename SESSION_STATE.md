@@ -38,6 +38,33 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-14 · La caja se declara, y con eso «cuadros cubiertos» ya se puede comparar
+
+El Anexo B §2.4 son seis filas y ninguna existía. **La elegí antes que las otras dos
+por una razón medible:** `framesPerBox` es el **denominador** de `beeCoveredFrames`,
+que se construyó anteayer. El Anexo pide ese campo porque es «comparable entre visitas
+y entre sitios» — y **no lo era**. Terminar lo que quedó a medias vale más que añadir
+campos al lado. ADR-122.
+
+**Cambiar la caja NO es corregir, así que no pide razón.** Es ADR-121 al revés: añadir
+un alza es un hecho del mundo y el cambio **es** el evento. Con su límite dicho: el
+rastro no puede distinguir «le puse un alza» de «me equivoqué al teclear», y la razón
+opcional es cómo se dice cuál fue.
+
+**Sin denominador la ocupación es `null` y se dice.** Devolver 0 sería falso; **suponer
+diez cuadros por caja sería peor**, porque haría comparables cosas que no lo son sin que
+nadie viera la suposición — el flip-test lo deja en una línea: `expected 30 to be null`.
+Y no se recorta al 100 %: doce de diez pasa de verdad.
+
+**`feederType` reusa `FeedingMethod`** porque son las mismas cosas físicas. Caso
+**opuesto** a ADR-114 y ADR-119, donde las listas se separaron porque los significados
+diferían; aquí coinciden y dos enums serían dos sitios donde añadir el siguiente.
+
+**Y el hueco que cerró de paso:** no existía ninguna función para actualizar una
+colmena. Aquí no era un accidente — la configuración cambia por definición. El
+historial, otra vez, no hubo que construirlo: `leerEnmiendas` lee cualquier entidad por
+su tipo.
+
 ### 2026-09-13 · Completar no es corregir, y con eso el apiario ya puede cerrar
 
 `lib/apiary/` **no tenía una sola función de actualización**, y por eso los dos campos
@@ -146,33 +173,6 @@ nombra. `cebo` también deja material, pero añadirlo sería inventarle una regl
 
 **Lo que NO prueba:** nadie ha registrado un tratamiento con objetivo todavía.
 
-### 2026-09-13 · «Alcanza hasta» pasa a tener manija, y el aviso deja de taparse
-
-El Anexo B §3 marca ese campo obligatorio y lo subraya: *«el campo que faltó en
-Toabré»*. **Lo primero que hubo que medir es que la columna ya existía** desde el
-2026-09-07, y que los vitales del sitio ya la leían. Lo que faltaba no era esquema:
-**1 alimentación en la copia local y ninguna con ese valor**, porque ninguna
-pantalla podía escribirlo. Una columna que nada rellena se ve igual que si no
-existiera — por eso el Anexo decía «Hoy: no».
-
-**El servicio sigue sin exigirla**, y la razón previa se mantiene tal cual la dejó
-escrita quien añadió la columna: una alimentación de urgencia se registra sin saber
-hasta cuándo alcanza, y exigirla ahí convierte un dato incompleto en ninguno — el
-error que ADR-115 ya rechazó para la carencia. **Y por eso la ausencia se VE:**
-`sin_fecha` es un estado propio del aviso, porque una alimentación sin plazo no es
-una colonia tranquila, es una **de la que no se puede avisar**. ADR-118.
-
-**El aviso es por colonia, no por sitio.** El resumen por sitio toma el plazo más
-largo, así que una colmena alimentada en julio y olvidada queda **tapada** por otra
-alimentada en agosto — la forma exacta del fallo de Toabré. Y manda la **última**
-alimentación, no la más larga: volver a alimentar corrige el plazo anterior.
-
-**El día del vencimiento todavía cubre.** Un `<` a secas lo daría por vencido a las
-00:01 de ese día, un día antes de lo que dijo quien alimentó; y el parseo del lote
-lo convierte con `fechaDeDia`, que **falla** en vez de dejar que `new Date()`
-adivine. Cuatro flip-tests, los cuatro compilando y cada uno con su prueba.
-
-**Lo que NO prueba:** nadie ha registrado un «alcanza hasta» todavía.
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad

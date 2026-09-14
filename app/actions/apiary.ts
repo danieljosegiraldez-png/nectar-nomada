@@ -13,6 +13,7 @@ import {
   exigeEstadoDeFin,
 } from "../../lib/apiary/hives";
 import { completarCierreDeTratamiento } from "../../lib/apiary/cierreDeEvento";
+import { actualizarConfiguracionDeCaja } from "../../lib/apiary/configuracionDeCaja";
 import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { recordInspection } from "../../lib/apiary/inspections";
@@ -229,4 +230,42 @@ export async function completarCierreDeTratamientoFormAction(formData: FormData)
   });
 
   revalidatePath(`/apiaries/${locationId}`);
+}
+
+/**
+ * A9 · Anexo B §2.4 — la configuración de la caja.
+ *
+ * **El formulario manda la configuración COMPLETA**, no un parche: representa «cómo
+ * está la caja hoy», con los valores actuales precargados. Por eso un desplegable
+ * vacío significa «sin registrar» —`null`— y no «no lo toques». El servicio sí
+ * admite cambios parciales, que es lo que usan las pruebas y usaría una API.
+ *
+ * Los tres booleanos viajan como `si`/`no`/vacío y NO como casilla: un `Boolean?`
+ * tiene tres estados y una casilla dos, que es lo que
+ * `tests/arquitectura/booleanos-de-tres-estados.test.ts` existe para impedir.
+ */
+export async function actualizarConfiguracionDeCajaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const triEstado = (nombre: string): boolean | null => {
+    const v = String(formData.get(nombre) ?? "");
+    return v === "si" ? true : v === "no" ? false : null;
+  };
+
+  const hiveId = String(formData.get("hiveId") ?? "");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  await actualizarConfiguracionDeCaja(user.userAccountId, {
+    hiveId,
+    broodBoxes: emptyToNull(formData.get("broodBoxes")),
+    supers: emptyToNull(formData.get("supers")),
+    framesPerBox: emptyToNull(formData.get("framesPerBox")),
+    queenExcluder: triEstado("queenExcluder"),
+    feederType: emptyToNull(formData.get("feederType")),
+    entranceReducer: triEstado("entranceReducer"),
+    screenedBottomBoard: triEstado("screenedBottomBoard"),
+    reason: emptyToNull(formData.get("reason")),
+  });
+
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
 }
