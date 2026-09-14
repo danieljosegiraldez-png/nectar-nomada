@@ -61,6 +61,25 @@ export type DataConfidence =
   | "TEMP_UNCOMPENSATED"
   | "TEMP_DRIFT_RISK"
   | "RETROSPECTIVE"
+  /**
+   * **Añadido el 2026-09-14 por decisión de Daniel, y extiende la §5 de
+   * `docs/beneficio/02_calibration.md`.**
+   *
+   * El instrumento pasó su contraste contra patrón, pero hace más tiempo del que
+   * su propio plazo de aviso admite. Su regla: *«un instrumento se vence y se
+   * puede seguir usando como indica su protocolo o decisión personal pero sí se
+   * alerta y queda explícito que no está revisado»*.
+   *
+   * **Ninguno de los cuatro valores anteriores podía decir eso.** `UNCALIBRATED`
+   * lo excluiría del cálculo —y él dijo que se sigue usando—; los tres del medio
+   * hablan de temperatura y de retraso de captura, no de revisión. Colgar este
+   * estado de una etiqueta que significa otra cosa habría vuelto ilegible la que
+   * ya existía.
+   *
+   * Cae del lado usable: alimenta curvas y puede generar `WARNING`, y **no puede
+   * confirmar una `CRITICAL`**, que es lo que la histéresis reserva a `VALIDATED`.
+   */
+  | "REVISION_VENCIDA"
   | "UNCALIBRATED";
 
 export type PHStatus =
