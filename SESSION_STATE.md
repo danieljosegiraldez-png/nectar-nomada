@@ -38,6 +38,53 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-14 · Equipos e instrumentos, y dos veces la lista equivocada
+
+**El módulo entero de beneficio que faltaba** (PR #306, #308, #310). Antes: el equipo era
+texto libre en cuatro campos —`vessel_note`, dos `equipment_note`, `container_note`— y
+`measurement.device_id` una columna heredada que **ningún código ha escrito nunca**. El
+único modelo de aparato, `device`, son los teléfonos de campo. Control positivo de esa
+medición: la misma búsqueda sí encontraba `calibration_session`, que es calibración de
+**panel sensorial** — personas, no aparatos. De ahí el prefijo `instrument_`.
+
+**La decisión de Daniel cambia el diseño escrito.** `docs/beneficio/02_calibration.md` §3 y
+`EQUIPMENT_AND_READINESS.md` §7 daban vigencias de **calendario** —«24 h», «7 días»— con la
+columna marcada `[PROVISIONAL]`, que era donde faltaba el dueño. Él la cerró al revés: la
+verificación es un **contraste contra patrón declarado** —agua a 0 °Bx, tampones 4.01 y
+7.00— y **el tiempo sólo avisa**. Un instrumento vencido se sigue usando; lo que cambia es
+que la lectura queda marcada. Es la §7.1 —degradar, nunca bloquear— aplicada al reloj:
+bloquear se esquiva en el patio y entonces el sistema sabe **menos**.
+
+**Y de ahí un valor nuevo en `DataConfidence`**, `REVISION_VENCIDA`: ninguno de los cuatro
+podía decirlo. `UNCALIBRATED` **excluye** del cálculo y los tres del medio hablan de
+temperatura y de retraso de captura.
+
+**El veredicto de una verificación se DERIVA en la base, no se guarda a mano.** Un `CHECK`
+no puede mirar otra tabla —lo escribí como si pudiera y era falso—, así que `outcome` nace
+en `fail` y un trigger lo sube a `pass` sólo si hay **al menos un** contraste y ninguno
+fuera. Sin esa primera mitad, `NOT EXISTS` sobre cero filas es verdadero y una verificación
+**vacía** saldría aprobada.
+
+**`equipment:report_condition` está separado de `manage` a propósito:** quien trabaja con la
+máquina tiene que poder decir que está rota, y poner el refractómetro contra el agua, sin
+poder retirarla del inventario.
+
+**Dos veces medí la lista equivocada sobre el mismo tema, y las dos las cazó un control
+positivo, no una relectura.** Dije que CryoBloom no se podía expresar: `cold_hold_prefermentativo`
+ya estaba en `manejo_temperatura`. Dije que la cepa era texto libre: `levadura_cultivo`
+existe desde RO1 **con MP72 dentro**, y lo que faltaba era una línea de cableado — el
+catálogo sólo lo alcanzaba Research OS, y en el beneficio de un lote `registrarIntervencion`
+lo rechazaba. Las dos veces miré una **columna** de texto libre y no el vocabulario.
+
+**Tres guardias de la casa encontraron errores míos:** una operación escrita sin principal
+(`acceso-a-datos`), dos botones sin protección de doble toque, y tres rutas sin declarar.
+
+**Pendiente y es de Daniel:** no existe un perfil «Jefe de beneficio» —`equipment:manage`
+hoy sólo lo tiene Platform Admin—; el resolvedor de permisos **sólo sabe sumar**, así que
+personalizar por usuario no es una pantalla que falte sino un concepto que no tiene; y las
+vistas 2 y 3 de disponibilidad necesitan capacidad en `equipment` y un concepto de cosecha
+**planificada**, que `HarvestEvent` no tiene.
+
 ### 2026-09-14 · El emplazamiento temporal, y la primera pregunta histórica del módulo
 
 Cierra el §9 del Anexo E (ADR-130). **Va después del traslado y no antes por una razón:**
@@ -103,70 +150,9 @@ en dic-2025, 12 perdidas en marzo, «las últimas 2» a final de agosto —12+2=
 enjambre que ocupó Finca 2 de abril a julio y 3 nuevas de Chayanne. Falta la colmena que no
 cuadra, el reparto entre Finca 1 y Finca 2, y las causas.
 
-### 2026-09-14 · La consulta a vecinos: sabíamos registrar la colonia muerta, no el aviso
-
-Cierra el hueco que el traslado destapó, y que aparece **tres veces** en el Anexo E: el §4
-lo pide como formulario mensual que «el sistema reclama solo», el §3 como alerta del sitio,
-y el §8 lo necesitaba para la mitad de su aviso que decía que nadie ha preguntado. ADR-127.
-
-**La medición que da el título.** Cero coincidencias de `vecin|aspersi|spray|agroquim` en el
-esquema y en `lib/apiary/`, con `carencia|Withdrawal` dando diez como control. Lo único que
-existía era la **consecuencia**: «Intoxicación por agroquímicos» como causa de pérdida, con
-una nota que la asocia a la deriva de aplicaciones vecinas.
-
-**Un enum de resultado y no una fecha anulable.** «No hay aplicación prevista» es la
-respuesta más valiosa del protocolo y, guardada como «sin fecha», sería indistinguible de
-«nadie preguntó». `no_se_pudo_consultar` tampoco es no haber ido.
-
-**Las dos invariantes están en la BASE, con `CHECK`, y se probó que disparan** —tres
-rechazos nombrando la restricción, dos aceptaciones, y sin crear deriva—. **El primer
-intento de esa prueba no medía nada:** el control positivo falló por `updated_at` sin valor
-por defecto, y los tres «rechazos» siguientes eran «transaction is aborted».
-
-**Una trampa evitada, la del docblock al revés.** Reusar `organizacionesParaApiario` —que
-devuelve `[]` salvo con visibilidad `"all"`— habría dado un desplegable **vacío justo al
-Farm Operator con ámbito de proyecto**, que es quien hace el trabajo de campo.
-
-**Guardia nuevo:** `alertas-con-su-texto`. La lista de apiarios construye
-`t(`alerta_${motivo}`)` en ejecución, así que un motivo sin texto no rompe el build: rompe
-la primera pantalla del módulo.
-
-**Decisión pendiente del dueño, señalada en el código:** si una aspersión anunciada debe
-pintar el borde **antes** que una pérdida ya ocurrida. El Anexo C §1.2 fija el orden de las
-cinco alertas viejas y no se reordenó.
-
-### 2026-09-14 · El traslado de colmenas, y el primer hueco de A9 que era de esquema
-
-Cierra el §8 del Anexo E (ADR-126, PR pendiente). **Invierte el hallazgo de la semana:**
-ADR-118, 122 y 123 encontraron tres veces un mecanismo completo sin pantalla; aquí no había
-dónde escribir el hecho. Ningún evento de apiario tiene `location_id` propio —cero en
-`Inspection`, `ColonyEvent`, `ApiaryHarvestEvent` y `VarroaCount`, contra dos en `Lot`—, así
-que el único camino de un evento a su apiario era `hive.location_id` y moverlo habría movido
-la historia. `HivePlacement` copia el patrón de `StorageAssignment`, con relleno en la
-migración; `hive.locationId` **se queda** porque es el ancla de autorización en ocho sitios.
-
-**Tres restricciones que no eran lo que parecían**, y las tres las dijo medir:
-
-- `@@unique([hiveId, endedAt])` **no habría guardado nada**: en Postgres dos `NULL` no
-  chocan. Medido contra 18.6 con control positivo —rechazó la fila duplicada con valor,
-  admitió las dos con `NULL`—. La invariante la sostiene el servicio.
-- **Mi compuerta del destino negaba el caso normal**: pasaba sólo el `locationId`, y con eso
-  un Farm Operator asignado por proyecto habría sido rechazado al trasladar dentro de su
-  propio proyecto. Lo dijo leer `requireApiaryAccess`, no una corrida.
-- **La aritmética de la carencia la había duplicado** para evitar un N+1. Extraída a
-  `libreDesdeDe`/`diasQueFaltanDe`, puras, y usada por los dos lectores.
-
-**Y un defecto ajeno que sólo salió porque un guardia rechazó código nuevo:**
-`BotonDeEnvio` hacía `disabled={pending} {...resto}`, así que un llamador que pasara su
-propio `disabled` **borraba la protección del doble toque en silencio** — le pasaba a
-`app/sensory/[sessionId]/page.tsx`. Arreglado y con guardia. La primera versión de ese
-guardia comparaba posiciones con `indexOf` y midió **un comentario**; se retiró.
-
-**Pendiente nombrado:** `createHive` no abre la colocación inicial de una colmena nueva.
-
 ## 3. Bloqueado, y en qué
 
-#### El presupuesto de Actions se agotó, y `main` ya no tiene compuerta propia
+#### El presupuesto de Actions se agotó y volvió — y `main` ya no tiene compuerta propia
 
 **2026-09-14.** Actions dejó de correr sobre las 17:00 con la anotación *«The job was
 not started because an Actions budget is preventing further use»*. Se lee como el rojo
@@ -175,11 +161,16 @@ de una compuerta propia —«¿Hay código en este cambio?: failure» y las otra
 PR de sesiones distintas y dos pushes a `main`. La trampa y su discriminante de dos
 comandos están en `CLAUDE.md`.
 
-**Lo que bloquea de verdad:** la protección de `main` exige tres checks y se evalúan
-sobre el PR, así que **nada se puede fusionar hasta que el dueño suba el límite de
-gasto** en `github.com/settings/billing`. No hay reintento que lo salte. Verificado
-que Vercel es independiente: llega como `status`, no como check-run, y sigue
-desplegando.
+**Lo que bloqueaba:** la protección de `main` exige tres checks evaluados sobre el PR,
+así que nada se podía fusionar. No hay reintento que lo salte. Verificado que Vercel es
+independiente: llega como `status`, no como check-run, y siguió desplegando.
+
+**Restablecido la misma tarde**, medido y no supuesto: el PR #310 llevó las tres
+compuertas en `SUCCESS` con runner y pasos de verdad, contra el `runner_name` vacío y
+`steps: []` de las corridas muertas. **Ése es el discriminante**, no la conclusión: una
+corrida sin runner sale `failure` y se lee como un fallo del cambio. Mientras duró se
+fusionó con los dos carriles corridos en local sobre el árbol rebasado y con base creada
+desde cero — es peor evidencia que CI y hay que decirlo, no equipararla.
 
 **Y por decisión del dueño se quitó el disparador `push` del workflow**, que era la
 mitad del gasto: 576 corridas desde el 1 de septiembre, **293 de `push`** y 15

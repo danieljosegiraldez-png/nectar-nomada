@@ -2929,6 +2929,39 @@ caían **2** —la mutada y otra, arrastrada por la visita que sobrevivió— y
 quedaban **7 filas** en la base; después cae **1** y quedan **0**. Un fallo que
 se multiplica por tres es la firma de este defecto, no de tres defectos.
 
+### Un `failure` de Actions puede ser el presupuesto, y el job nunca arrancó
+
+**2026-09-14.** Un PR salió con `¿Hay código en este cambio?: FAILURE` y las otras tres
+compuertas `SKIPPED`. Se lee exactamente como un cambio que rompe la primera compuerta y
+deja sin correr a las demás. **No lo era: el job nunca recibió un runner.** Es la hermana
+de la cuota de Vercel de más arriba, con la misma forma —un tope de cuenta disfrazado de
+fallo del cambio— y en otro proveedor.
+
+**El discriminante no es la conclusión: es que el job no tiene runner ni pasos.**
+
+```bash
+gh api repos/<owner>/<repo>/actions/jobs/<job-id> \
+  --jq '"runner=\(.runner_name) pasos=\(.steps|length) dur=\(.started_at)→\(.completed_at)"'
+# muerto por presupuesto:  runner=""                      pasos=0   3 segundos
+# corrida real:            runner="GitHub Actions 10000…" pasos=5
+```
+
+Y **lo dice con todas sus letras en las anotaciones**, que es donde no miré primero:
+
+```bash
+gh api repos/<owner>/<repo>/check-runs/<job-id>/annotations --jq '.[].message'
+# → The job was not started because an Actions budget is preventing further use.
+```
+
+`gh run view --log-failed` **no sirve aquí**: devuelve `log not found`, porque no hay log
+que devolver. Eso también es señal, y se lee como una avería de la herramienta.
+
+**Dos consecuencias prácticas.** Relanzar no lo arregla —lo probé, el intento 2 salió
+idéntico— y hay que mirar si le pasa a **otras ramas**: si la corrida de `main` de un
+minuto antes tiene la misma firma, no es el PR. Con la protección de rama exigiendo esos
+checks, **nada se puede fusionar** hasta que el dueño suba el límite en
+`github.com/settings/billing`; Vercel es independiente y sigue desplegando.
+
 ### `cancelled` no es `failure`, pero tampoco es verde
 
 **Síntoma.** 2026-09-11. Fusionado un PR, miré el estado del commit en `main`
