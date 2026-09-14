@@ -16,6 +16,8 @@ import { METODOS_DE_ALIMENTACION } from "../../../../../lib/apiary/alimentacion"
 import { leerEnmiendas } from "../../../../../lib/traceability/enmiendas";
 import { actualizarConfiguracionDeCajaFormAction } from "../../../../actions/apiary";
 import { BotonDeEnvio } from "../../../../components/BotonDeEnvio";
+import { cosechasDeColonia, TIPOS_DE_MIEL } from "../../../../../lib/apiary/cierreDeCosecha";
+import { completarCierreDeCosechaFormAction } from "../../../../actions/apiary";
 import { NewColonyForm } from "../../../../components/apiary/NewColonyForm";
 import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
@@ -73,6 +75,9 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
   // `actualizarConfiguracionDeCaja` escribe su `AuditEvent` con `before`/`after`, y
   // `leerEnmiendas` ya sabía leer cualquier entidad por su tipo.
   const cambiosDeCaja = await leerEnmiendas([{ entityType: "hive", entityId: hive.id }], { limite: 10 });
+  // A9 · Anexo B §5 — las cosechas no se listaban en ninguna parte, así que ni el tipo
+  // de miel ni el peso ni la humedad tenían dónde verse.
+  const cosechas = colony ? await cosechasDeColonia(colony.id) : [];
 
   const revalidationPath = `/apiaries/${apiaryId}/hives/${hiveId}`;
 
@@ -261,6 +266,75 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
           <section className="nn-section">
             <h2>{t("harvestHeading")}</h2>
             <HarvestForm colonyId={colony.id} />
+
+            {/* Las cosechas, con su cierre. Cada una lleva su formulario porque el tipo
+                de miel y el peso se saben al extraer, semanas después de cosechar. */}
+            {cosechas.length > 0 ? (
+              <>
+                <h3>{t("cierreCosechaHeading")}</h3>
+                <p className="nn-muted">{t("cierreCosechaAyuda")}</p>
+                <ul>
+                  {cosechas.map((c) => (
+                    <li key={c.id} style={{ marginBottom: "1rem" }}>
+                      {c.occurredAt.toISOString().slice(0, 10)}
+                      {c.framesHarvested !== null ? ` · ${c.framesHarvested} ${t("framesPerBoxLabel")}` : ""}
+                      {c.honeyType ? ` · ${t(`honeyType_${c.honeyType}`)}` : ""}
+                      {c.extractedWeightKg !== null ? ` · ${c.extractedWeightKg} kg` : ""}
+
+                      {/* La humedad: se LEE aquí y se REGISTRA como medición del lote.
+                          El mecanismo ya existía y nadie lo encontraba. */}
+                      <p className={c.humedad.length === 0 ? "nn-vital-sin-registro" : undefined}>
+                        {c.humedad.length === 0
+                          ? t("humedadSinMedir")
+                          : c.humedad
+                              .map((m) =>
+                                t("humedadFila", {
+                                  valor: m.valor,
+                                  unidad: m.unidad,
+                                  fecha: m.measuredAt.toISOString().slice(0, 10),
+                                }),
+                              )
+                              .join(" · ")}
+                      </p>
+
+                      <form action={completarCierreDeCosechaFormAction} className="nn-form" style={{ margin: 0 }}>
+                        <input type="hidden" name="apiaryHarvestEventId" value={c.id} />
+                        <input type="hidden" name="apiaryId" value={apiaryId} />
+                        <input type="hidden" name="hiveId" value={hiveId} />
+                        <div className="nn-field">
+                          <label htmlFor={`miel-${c.id}`}>{t("honeyTypeLabel")}</label>
+                          <select id={`miel-${c.id}`} name="honeyType" defaultValue={c.honeyType ?? ""}>
+                            <option value="">{t("triNoRegistrado")}</option>
+                            {TIPOS_DE_MIEL.map((tm) => (
+                              <option key={tm} value={tm}>
+                                {t(`honeyType_${tm}`)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="nn-field">
+                          <label htmlFor={`peso-${c.id}`}>{t("extractedWeightLabel")}</label>
+                          <input
+                            id={`peso-${c.id}`}
+                            name="extractedWeightKg"
+                            type="number"
+                            min={0}
+                            step="0.001"
+                            inputMode="decimal"
+                            defaultValue={c.extractedWeightKg ?? ""}
+                          />
+                        </div>
+                        <div className="nn-field">
+                          <label htmlFor={`razon-${c.id}`}>{t("cierreCosechaRazon")}</label>
+                          <input id={`razon-${c.id}`} name="reason" type="text" />
+                        </div>
+                        <BotonDeEnvio>{t("cierreCosechaGuardar")}</BotonDeEnvio>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
           </section>
 
           <section className="nn-section">

@@ -8689,3 +8689,52 @@ camino de actualización es parte del campo y no un añadido.
 
 **Y el historial no hubo que construirlo**, por segunda vez en dos días:
 `leerEnmiendas` lee cualquier entidad por `entityType`, y basta escribir `"hive"`.
+
+---
+
+## ADR-123 — La humedad de la miel no era «parcial»: ya funcionaba y nadie la encontraba
+
+**Contexto.** §5 del Anexo B era la última fila sin construir. Pedía dos cosas: «Tipo de
+miel», marcada **no existe**, y «Humedad», marcada **parcial**.
+
+**La medición que cambió la rebanada.** «Parcial» no describía un mecanismo a medias.
+Medido el 2026-09-14:
+
+- `Measurement` ya admite `lotId`, y una cosecha de apiario **crea** un `Lot`;
+- `PANEL_DEL_SUJETO` en `lib/traceability/measurements.ts` **no restringe `lotId`**, así
+  que una lectura de `moisture` sobre un lote de miel se acepta;
+- `LotType` ya tiene `honey`, y su comentario dice que **A3 decidió que la miel reusa la
+  maquinaria del lote sin modificarla**.
+
+O sea: **la humedad se podía registrar desde antes de esta rebanada**, y lo prueba
+`tests/apiary/cierreDeCosecha.test.ts` llamando a `recordMeasurement` sin que nada de
+este cambio participe. Lo que faltaba era **encontrarla**: no había forma de verla junto
+a la cosecha, y un número que nadie ve no decide nada — la humedad decide si la miel
+fermenta.
+
+**Es la tercera vez esta semana con la misma forma.** `coverage_until` existía y ninguna
+pantalla lo escribía (ADR-118); `frames_covered` existía y no era comparable (ADR-122);
+la humedad existe y no se ve. **Un mecanismo al que nadie llega se ve igual que uno que
+no existe** — y peor: en el Anexo se marca «parcial» y se lee como trabajo pendiente de
+esquema, que es la conclusión equivocada.
+
+**Decisión 1 — NO se añade columna de humedad.** Sería un segundo sitio para el mismo
+dato, sin instrumento, sin método y sin quién lo midió. Lo que se añade es un lector,
+`humedadDeLaMiel`, y una lista de cosechas que lo enseña.
+
+**Decisión 2 — `honeyType` sí es columna, porque es una clasificación y no una lectura.**
+Y `monofloral_declarada` dice **«declarada»** porque así lo escribió el dueño: es una
+afirmación de quien cosechó, no un resultado de laboratorio. Verificarla es un análisis
+de polen —una `Sample` con su `Measurement`— y **no un cambio en esta columna**: guardar
+la declaración y la verificación en el mismo campo las haría indistinguibles, que es lo
+que `CLAUDE.md` §3 separa con nombre.
+
+**Decisión 3 — el cierre sigue la regla de ADR-121.** Completar el tipo o el peso no
+lleva razón; cambiarlos sí, con el valor anterior en `before` y la operación
+`apiary_harvest.correct` frente a `.close`. Y cero kilos extraídos **es un dato**: se
+abrió la caja y no había miel.
+
+**Y un hueco que había que cerrar para que nada de esto se viera:** `lib/apiary/harvest.ts`
+sólo sabía **escribir**. La pantalla de la colmena tenía formulario de cosecha y **no
+listaba ninguna cosecha**, así que ni el tipo, ni el peso, ni la humedad tenían dónde
+mostrarse — ni dónde cerrarse. `cosechasDeColonia` es esa lista.

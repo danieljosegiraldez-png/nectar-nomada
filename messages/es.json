@@ -1466,7 +1466,19 @@
     "cajaHistorial": "Cambios de configuración",
     "cajaSinHistorial": "Nunca se ha cambiado la configuración de esta caja.",
     "ocupacionLabel": "{cubiertos} de {capacidad} cuadros ({porciento} %)",
-    "ocupacionSinDenominador": "{cubiertos} cuadros cubiertos — sin cuadros por caja no es comparable"
+    "ocupacionSinDenominador": "{cubiertos} cuadros cubiertos — sin cuadros por caja no es comparable",
+    "cierreCosechaHeading": "Cierre de la cosecha",
+    "cierreCosechaAyuda": "Se pesa en la extracción, no en el apiario.",
+    "honeyTypeLabel": "Tipo de miel",
+    "honeyType_multifloral": "Multifloral",
+    "honeyType_monofloral_declarada": "Monofloral (declarada)",
+    "honeyType_mielato": "Mielato",
+    "extractedWeightLabel": "Peso extraído (kg)",
+    "cierreCosechaRazon": "Razón (sólo si corriges algo ya escrito)",
+    "cierreCosechaGuardar": "Guardar el cierre",
+    "humedadHeading": "Humedad medida",
+    "humedadFila": "{valor} {unidad} — medida el {fecha}",
+    "humedadSinMedir": "Sin medir. Se registra como medición del lote, no aquí: la humedad es una lectura de refractómetro con su instrumento y su procedencia."
   },
   "Research": {
     "badge": "Research OS",

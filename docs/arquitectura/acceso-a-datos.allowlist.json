@@ -364,6 +364,10 @@
     {
       "archivo": "lib/apiary/configuracionDeCaja.ts",
       "razon": "A9 · Anexo B §2.4 — la configuracion de la caja. Modulo de dominio: es el sitio donde el acceso a datos vive por diseno. `actualizarConfiguracionDeCaja` recibe principal, autoriza con requireApiaryAccess y confirma su AuditEvent en la MISMA transaccion que el update; `fuerzaDeColonia` es pura y no toca la base."
+    },
+    {
+      "archivo": "lib/apiary/cierreDeCosecha.ts",
+      "razon": "A9 · Anexo B §5 — el cierre de una cosecha de miel y la lectura de su humedad. Modulo de dominio. `completarCierreDeCosecha` recibe principal, autoriza con requireApiaryAccess y confirma su AuditEvent en la MISMA transaccion que el update."
     }
   ],
   "reciben_transaccion": [
@@ -680,6 +684,18 @@
       "operacion": "retirosPendientes",
       "razon": "No recibe principal A PROPOSITO, misma disciplina que vitalesDeSitios, coloniasPorIrregularidad, carenciasVigentes, serieDeInfestacion, avisosDeEnjambrazon, alcanceDelAlimento y tratamientosPorObjetivo: recibe un locationId que su llamador -app/apiaries/[id]/page.tsx- ya obtuvo de getApiaryDetail, que SI autoriza. `completarCierreDeTratamiento`, en el mismo archivo, SI recibe principal y SI autoriza con requireApiaryAccess.",
       "verificado": "2026-09-13"
+    },
+    {
+      "archivo": "lib/apiary/cierreDeCosecha.ts",
+      "operacion": "humedadDeLaMiel",
+      "razon": "Lee mediciones de `moisture` del Lot que la cosecha produjo. No recibe principal A PROPOSITO: recibe un lotId que su llamador -cosechasDeColonia, y la pantalla de la colmena- ya obtuvo de getHive, que SI autoriza.",
+      "verificado": "2026-09-14"
+    },
+    {
+      "archivo": "lib/apiary/cierreDeCosecha.ts",
+      "operacion": "cosechasDeColonia",
+      "razon": "Lista las cosechas de una colonia con su cierre y su humedad. No recibe principal A PROPOSITO, misma disciplina que el resto del modulo: recibe un colonyId que app/apiaries/[id]/hives/[hiveId]/page.tsx ya obtuvo de getHive, que SI autoriza con requireApiaryAccess.",
+      "verificado": "2026-09-14"
     }
   ]
 }

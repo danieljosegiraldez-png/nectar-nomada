@@ -26,6 +26,7 @@ tests/notificaciones/canales.test.ts
 tests/apiary/alcanceDelAlimento.test.ts
 tests/apiary/bitacora.test.ts
 tests/apiary/cierreDeEvento.test.ts
+tests/apiary/cierreDeCosecha.test.ts
 tests/apiary/colonyEvents.test.ts
 tests/apiary/carencia.test.ts
 tests/apiary/configuracionDeCaja.test.ts
