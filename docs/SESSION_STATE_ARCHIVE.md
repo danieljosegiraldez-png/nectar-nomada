@@ -2865,3 +2865,28 @@ agotada** — y por eso no ordena el §8 ni el §9: **no están en ella**. Son a
 la pregunta deja de ser «¿en qué orden?» para ser «¿entran o no?». Del paquete sigue sin
 aparecer sólo el «brief del módulo». Y la serie de anexos **salta de E a G**: no hay
 Anexo F en `main`.
+
+
+### 2026-09-13 · Brix: la alerta que estaba documentada y no existía
+
+`lib/beneficio/brix.ts`. El tablero pasa de **16 + 34 a 28 + 22**.
+
+**Aquí vivía el defecto más grave de toda la v2.x**: la alerta de estancamiento
+estaba especificada en el documento **y** en su `CLAUDE.md`, y el código **no
+tenía ninguna rama que la emitiera**. Una protección documentada que no existe
+es peor que no tenerla — quien lee el documento da por hecho que el sistema
+avisa.
+
+**Y la que más fácil se implementa mal**, dicho por el propio documento: una
+ventana de estancamiento sin lectura comparable **no es evaluable y la
+evaluación debe continuar**. Convertirla en estado terminal deja al motor
+incapaz de emitir `TERMINATION_READY` en casi cualquier cadencia real.
+
+Las otras cuatro: velocidad en ventana móvil y no promedio de vida —que
+enmascara justo la parada que se busca—, mediana de tres **por conteo** contra
+el atípico que mandaba el lote a lavado antes de tiempo, guarda de división por
+cero, y que la solubilización del mucílago **sube el °Bx legítimamente** en las
+primeras horas.
+
+**Seis flip-tests**, todos compilando y cada uno por su vector. Uno hubo que
+rehacerlo: no compilaba **y no cayó nada** — una no-mutación.

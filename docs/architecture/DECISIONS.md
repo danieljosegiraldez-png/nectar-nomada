@@ -8999,3 +8999,133 @@ lectores sin inventariar, y después una entrada **muerta** cuando quité un exp
 especulativo— y `cifras-del-inventario`: 299→305 operaciones y 91→92 archivos, un delta que
 cuadra exactamente con lo añadido, que es la comprobación de que nada más entró sin pasar
 por el inventario.
+
+## ADR-127 — La consulta a vecinos: el sistema sabía registrar la colonia muerta y no el aviso que la habría salvado
+
+**Contexto.** El hueco lo destapó ADR-126 al construir el traslado: el Anexo E §8 pide
+avisar *«si el destino tiene aplicaciones previstas o un periodo de carencia corriendo»*, y
+sólo se pudo construir la mitad de la carencia. La otra mitad aparece **tres veces** en el
+Anexo: el §4 la pide como formulario —*«Finca, cultivo, aplicación prevista y fecha, quién
+informó. Es protocolo mensual, no una nota, y el sistema lo reclama solo»*—, el §3 la enseña
+como alerta del sitio —«Consulta a vecinos vence en 3 días»— y el §8 la necesita para que su
+aviso deje de decir que nadie ha preguntado.
+
+**La medición, hecha antes de escribir nada.** Cero coincidencias de
+`vecin|neighbour|aspersi|spray|pesticid|agroquim` en el esquema y en `lib/apiary/`, con
+`carencia|Withdrawal` dando diez como control positivo. Lo único que existía era la
+**consecuencia**: `lib/research/catalogs.ts` tiene «Intoxicación por agroquímicos» como
+causa de pérdida de colonia, y su propia nota dice que *«en Panamá la literatura la asocia a
+la deriva de aplicaciones vecinas»*. El sistema sabía registrar la colonia muerta y no el
+aviso que la habría salvado. **Este ADR se titula con eso porque es el hallazgo, no la
+prosa.**
+
+**Decisión 1 — un enum de resultado, no una fecha anulable.** Los tres valores son
+**respuestas**:
+
+| valor | qué afirma |
+|---|---|
+| `sin_aplicacion_prevista` | se preguntó y la finca dijo que no hay nada previsto |
+| `aplicacion_prevista` | se preguntó y hay una; exige fecha |
+| `no_se_pudo_consultar` | se fue y no se pudo preguntar: nadie, o se negaron |
+
+«Fuimos y no hay aplicación prevista» es la respuesta más valiosa del protocolo y la más
+fácil de perder: guardada como «sin fecha de aplicación» sería **indistinguible de «nadie
+preguntó»**. Y `no_se_pudo_consultar` no es lo mismo que no haber ido — el protocolo se
+cumplió y la información no llegó, así que ocupa el mes igual que las otras dos. Es ADR-080
+aplicado a un protocolo, y la misma disciplina que ADR-125 aplicó al vocabulario del vacío.
+
+**Decisión 2 — la finca vecina es una `Organization` obligatoria**, por el precedente de
+`PollinationCommitment.clientOrganizationId`. Cuesta un alta la primera vez por vecino; a
+cambio, la consulta del mes que viene habla de la misma finca que la de este mes. Con texto
+libre, «la finca de al lado» y «Finca Los Robles» serían dos vecinos distintos y ninguna
+consulta podría comparar un mes con el siguiente.
+
+**Decisión 3 — el cultivo es texto libre, y se dice por qué.** No hay catálogo de cultivos
+en este repositorio —los «cultivo» que aparecen son de levaduras— y el dueño no ha dado
+vocabulario; inventarlo sería fabricar un hecho de negocio. A diferencia de
+`harvest_event.condition`, que era texto libre sobre algo **nuestro** y acabó con 29 filas
+diciendo lo mismo, éste es un hecho de la finca de otro y se recoge como lo dijeron. El día
+que haya vocabulario es un catálogo y una migración de valores, no un rediseño.
+
+**Decisión 4 — la cadencia se mide por SITIO, no por vecino.** El Anexo pide «protocolo
+mensual» del apiario. Exigir un mes por cada vecino multiplicaría el aviso por el número de
+fincas colindantes y dejaría un sitio con cuatro vecinos permanentemente en rojo. Cuál
+vecino toca es decisión de quien va; la lista por vecino la da `vecinosConsultados`.
+
+**Decisión 5 — `sin_consultar` NO levanta alerta.** Un apiario recién creado no ha
+incumplido nada. Gritar el primer día enseñaría a ignorar este aviso, que es exactamente lo
+que el Anexo quiere evitar cuando dice «el sistema lo reclama solo». La pantalla del sitio sí
+enseña «nunca se ha consultado» **como estado**. El flip-test de esto tumba la prueba
+llamada «nunca consultado NO es vencido — es la distinción que hace útil el aviso».
+
+### Las dos invariantes viven en la BASE, y se probó que disparan
+
+`CLAUDE.md` lo dice con nombre: *«Una restricción que vive en TypeScript o en un comentario
+no existe para la base: un importador, una reparación operativa o SQL directo se la
+saltan.»* Así que `neighbour_consultation` lleva dos `CHECK`:
+
+1. la fecha de aplicación existe **exactamente** cuando el resultado es
+   `aplicacion_prevista` —una fecha junto a «no hay aplicación» es una contradicción que
+   después nadie sabe leer—;
+2. una consulta que **ocurrió** dice quién informó; la que no se pudo hacer no está
+   obligada, y el nombre no se prohíbe ahí porque se puede haber hablado con alguien que no
+   supiera, y eso es información.
+
+**Medido con `SAVEPOINT`, con control positivo:** la fila válida entra, las tres
+contradicciones se rechazan **nombrando la restricción**, y `no_se_pudo_consultar` sin
+informante entra — o sea que la restricción no es demasiado estricta. Y **no crean deriva**:
+`migrate diff` no modela `CHECK`, comprobado con `--exit-code` 0.
+
+**El primer intento de esa medición no medía nada.** El control positivo falló —`updated_at`
+no tiene valor por defecto en la base, porque el `@updatedAt` de Prisma es de aplicación— y
+con la transacción abortada los tres «rechazos» siguientes eran `current transaction is
+aborted` disfrazado de `ERROR`. Tres rojos que parecían el guardia funcionando.
+
+El servicio repite las dos reglas, y no es redundancia inútil: el `CHECK` protege a la tabla
+de un importador, y la comprobación del servicio devuelve un error con nombre de dominio en
+vez de uno de Postgres que ninguna pantalla sabe traducir.
+
+### Una trampa evitada, que es la del docblock al revés
+
+`organizacionesParaApiario` devuelve `[]` salvo cuando la visibilidad es `"all"`, y su
+comentario explica por qué: *«un formulario que ofrece lo que el servicio niega»* —
+`crearApiario` rechaza lo demás. **Aquí la asimetría va en el otro sentido:**
+`registrarConsultaAVecinos` autoriza sobre el **apiario**, no sobre la organización vecina
+—no hay nada que autorizar en «a quién le pregunté»—, así que reusar aquella función habría
+dado un desplegable **vacío precisamente al Farm Operator con ámbito de proyecto**, que es
+quien hace el trabajo de campo. Un formulario que niega lo que el servicio permite es el
+mismo defecto por el otro lado. De ahí `vecinosOfrecidos`, que autoriza sobre el sitio y no
+filtra por `organizationType`: un vecino puede estar registrado como `farm`, `estate` o
+`producer`, y decidir por él cuál cuenta como «finca» sería inventar una regla que nadie
+pidió.
+
+### Lo que NO se decide aquí, y es del dueño
+
+Los tres motivos de alerta nuevos —`aspersion_anunciada`, `consulta_a_vecinos_vencida`,
+`consulta_a_vecinos_por_vencer`— entran **después** de los cinco que ya existían, porque el
+Anexo C §1.2 fija su orden («la primera regla que se cumpla, en este orden») y reordenarlas
+cambiaría una decisión documentada sin pedirlo. **Pero una aspersión anunciada en tres días
+es la única fecha de ese tablero que la impone alguien de fuera y que no se puede atender
+después**, así que podría merecer ir antes que una pérdida que ya ocurrió. Eso mueve el borde
+de color de la tarjeta: es decisión de producto y queda señalada en el código, no resuelta.
+
+### Guardia nuevo, por un agujero que el compilador no puede ver
+
+`tests/arquitectura/alertas-con-su-texto.test.ts`. `app/apiaries/page.tsx` pinta las alertas
+con `t(\`alerta_${a.motivo}\`)`: la clave se construye **en ejecución**, así que un motivo
+nuevo sin texto **no rompe el build** — rompe la lista de apiarios cuando alguien la abre,
+que es la primera pantalla del módulo. Se escribió al añadir tres motivos de golpe, después
+de comprobarlo a mano: una comprobación a mano es una que la próxima vez no se hace. Lleva
+su control positivo (el detector tiene que encontrar ≥5 motivos), su control del detector
+sobre una unión sintética, y un `it` que dice que **si la pantalla deja de construir la clave
+en ejecución, este guardia debe borrarse** en vez de quedarse vigilando algo que ya no pasa.
+
+### Y una nota sobre mi propio arnés de flip-test
+
+Con **dos** archivos de prueba en la misma corrida, el `grep -E '^\s+×'` del arnés salió
+vacío y eso se lee igual que «no cayó nada» — el veredicto que halaga. Con un solo archivo
+lo dijo entero, por su nombre. El arnés necesita un archivo de prueba por mutación, y queda
+escrito aquí porque es la cuarta forma distinta que el instrumento ha tomado esta semana.
+
+**Inventario de acceso:** 305→311 operaciones y 92→93 archivos. Dos operaciones con guardia
+directo más cuatro lectores que dependen del llamador = 6, que es exactamente el salto.
