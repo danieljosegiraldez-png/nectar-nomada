@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { queueDraft } from "../../../lib/apiary/offlineQueue";
 import { METODOS_DE_VARROA, infestacionPorCiento } from "../../../lib/apiary/infestacion";
 import { APIARY_DRAFTS_CHANGED_EVENT } from "./OfflineSyncIndicator";
+import { Ayuda } from "./Ayuda";
 
 /**
  * Contar varroa, **sin señal**, con la caja abierta.
@@ -112,7 +113,7 @@ export function ConteoDeVarroaForm({
         {/* Sin preseleccionar: el método cambia lo que el número significa, y un
             valor por defecto sería uno que nadie declaró. */}
         <select id="varroa-method" value={metodo} onChange={(e) => setMetodo(e.target.value)} required>
-          <option value="">{t("varroaMethodUnset")}</option>
+          <option value="" disabled />
           {METODOS_DE_VARROA.map((m) => (
             <option key={m} value={m}>
               {t(`varroaMethod_${m}`)}
@@ -176,7 +177,7 @@ export function ConteoDeVarroaForm({
               </option>
             ))}
           </select>
-          <p className="nn-muted">{t("varroaEvaluatesHelp")}</p>
+          <Ayuda resumen={t("ayudaResumen")}>{t("varroaEvaluatesHelp")}</Ayuda>
         </div>
       ) : null}
 

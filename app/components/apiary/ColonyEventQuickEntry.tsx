@@ -7,6 +7,7 @@ import { METODOS_DE_ALIMENTACION } from "../../../lib/apiary/alimentacion";
 import { OBJETIVOS_DE_TRATAMIENTO, VIAS_DE_TRATAMIENTO } from "../../../lib/apiary/vocabularioDeTratamiento";
 import { fechaDeDia } from "../../../lib/time/localDateTime";
 import { APIARY_DRAFTS_CHANGED_EVENT } from "./OfflineSyncIndicator";
+import { Ayuda } from "./Ayuda";
 
 /**
  * §1a/§4: three siblings of the Inspection form, not nested inside it —
@@ -186,12 +187,12 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
               onChange={(e) => setCoverageUntil(e.target.value)}
               required
             />
-            <p className="nn-muted">{t("coverageUntilHelp")}</p>
+            <Ayuda resumen={t("ayudaResumen")}>{t("coverageUntilHelp")}</Ayuda>
           </div>
           <div className="nn-field">
             <label htmlFor={`feed-method-${colonyId}`}>{t("feedingMethodLabel")}</label>
             <select id={`feed-method-${colonyId}`} value={feedingMethod} onChange={(e) => setFeedingMethod(e.target.value)}>
-              <option value="">{t("triNoRegistrado")}</option>
+              <option value="" />
               {METODOS_DE_ALIMENTACION.map((m) => (
                 <option key={m} value={m}>
                   {t(`feedingMethod_${m}`)}
@@ -251,7 +252,7 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
               onChange={(e) => setTreatmentTarget(e.target.value)}
               required
             >
-              <option value="">{t("treatmentTargetUnset")}</option>
+              <option value="" disabled />
               {OBJETIVOS_DE_TRATAMIENTO.map((o) => (
                 <option key={o} value={o}>
                   {t(`treatmentTarget_${o}`)}
@@ -262,7 +263,7 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
           <div className="nn-field">
             <label htmlFor={`treat-route-${colonyId}`}>{t("treatmentRouteLabel")}</label>
             <select id={`treat-route-${colonyId}`} value={treatmentRoute} onChange={(e) => setTreatmentRoute(e.target.value)}>
-              <option value="">{t("triNoRegistrado")}</option>
+              <option value="" />
               {VIAS_DE_TRATAMIENTO.map((v) => (
                 <option key={v} value={v}>
                   {t(`treatmentRoute_${v}`)}

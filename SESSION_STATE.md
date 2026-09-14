@@ -62,6 +62,47 @@ primeras horas.
 **Seis flip-tests**, todos compilando y cada uno por su vector. Uno hubo que
 rehacerlo: no compilaba **y no cayó nada** — una no-mutación.
 
+### 2026-09-13 · El Anexo E entra, y dos de los nueve «vacíos» eran respuestas
+
+El dueño entregó `pantallas-captura-apicola.md`. Queda como
+`48_A9_ANEXO_E_PANTALLAS_Y_FORMULARIOS.md` y **se cruzó contra el código antes de
+construir nada** (ADR-124, PR #296). Once afirmaciones medidas: tres salen a favor del
+código —el orden por urgencia ya existe, la jornada sin cerrar **sí** se persigue a las
+72 h, y las ayudas de apiario no hablan de suelo— y cuatro a favor del dueño.
+
+**Y una que invierte el hallazgo de la semana:** §8, traslado de colmenas, es el primer
+hueco que es de **esquema** y no de pantalla. `Hive.locationId` es un FK escalar sin
+modelo de vigencia, así que mover una colmena hoy reescribiría su pasado y
+`@@unique([locationId, identifier])` chocaría en destino. Tres ADR seguidos —118, 122,
+123— encontraron mecanismos completos sin pantalla; aquí buscar lo mismo sería aplicar
+el hallazgo anterior donde no aplica.
+
+**El §6 ya está construido** (ADR-125): el vacío deja de ofrecerse como opción. Nueve
+grafías en 22 opciones vacías, y **dos de las nueve no eran vacío** — «No — cuento para
+decidir» y el «—» de las causas de pérdida son afirmaciones que guardan `null`.
+Colapsarlas a un término las habría borrado, así que `lib/apiary/vacio.ts` declara tres
+familias y una lista explícita. Y la mitad que no existía: «Sin registrar» ahora **se
+lee**, porque los campos de cierre se enseñaban omitiéndose y «sin cerrar» se leía igual
+que «no aplica».
+
+**El guardia se acota a apiario a propósito:** la app entera tiene 89 opciones vacías
+con 34 grafías, y uno sobre las 89 no podría pasar hoy. El resto queda inventariado en
+ADR-125, no vigilado.
+
+**Su detector tenía un fallo de la clase conocida:** el patrón con cierre se tragaba la
+forma autocerrada y reportó **18 violaciones inexistentes**. Falló en rojo, que es la
+única razón por la que se vio.
+
+**Y un error propio, corregido el mismo día.** Escribí que sin el «plan de renumeración»
+el orden de trabajo no tenía fuente autoritativa, y **le pedí a Daniel un documento que ya
+tenía**. La secuencia está en el repositorio: la tabla «Camino crítico» del
+`48_A9_CAPTURA_DE_CAMPO_REPORTE.md`, **A9.0 … A9.12** con dependencias, y el Anexo H §5 lo
+confirma. Los **trece** tienen ya módulo que los declara, así que la secuencia **está
+agotada** — y por eso no ordena el §8 ni el §9: **no están en ella**. Son alcance nuevo, y
+la pregunta deja de ser «¿en qué orden?» para ser «¿entran o no?». Del paquete sigue sin
+aparecer sólo el «brief del módulo». Y la serie de anexos **salta de E a G**: no hay
+Anexo F en `main`.
+
 ### 2026-09-14 · La humedad de la miel no estaba «parcial»: estaba escondida
 
 §5 era la última fila del Anexo B sin construir, y **medirla cambió la rebanada**.
@@ -105,32 +146,6 @@ la banda 3,5–3,8 muda (PH-003), la frontera que ponía 4,50 en dos bandas
 que rehacerlo**: la primera versión no compilaba, y una mutación que no compila
 se lee igual que un guardia que funciona.
 
-### 2026-09-13 · La especificación v3.0 del beneficio entra, y su contrato empieza a contar
-
-Daniel encargó fuera una revisión del material de proceso y llegó `nn-spec` v3.0:
-nueve documentos normativos y **47 criterios ejecutables**, diez de ellos de
-regresión. Encontró por su cuenta los mismos defectos que se habían señalado aquí
-horas antes —la banda de pH 3,5–3,8 muda, el `raise` que se niega a registrar una
-lectura real, la tolerancia de 50 g— y va mucho más lejos: calibración, máquina
-de estados, secado, histéresis y perfiles por protocolo.
-
-**Tres cosas del paquete NO se hicieron, y están dichas en `docs/beneficio/README.md`:**
-su `CLAUDE.md` **no** reemplaza al de la raíz —el nuestro gobierna toda la
-plataforma, el suyo un módulo—; no se implementa en **Python** —0 archivos `.py`
-contra 467 `.ts`, y su propio §1 ya contempla TypeScript—; y su `LOT_ID`
-inventado no sustituye al convenio real de Daniel, `PE-90` → `PE-90-A`.
-
-**El tablero empieza vacío y a la vista.** `tests/beneficio/vectores.test.ts` lee
-los 47 y los saca como `todo` hasta que exista el motor que los conteste: **3
-pasando, 47 pendientes**. Verde mentiría y rojo permanente enseña a ignorar la
-compuerta; `todo` sale contado y aparte, que es lo que es. El inventario de
-motores se declara a mano para que añadir uno se lea en el diff.
-
-**Media especificación ya estaba construida aquí** —`occurredAt`, correcciones
-que superseden, calibración, UTC con Panamá sin DST, procedencia, balance de
-masas, umbrales en la receta—. Lo que falta de verdad son tres piezas:
-`sample_point`, la histéresis de confirmación, y la derivada de estancamiento.
-
 ### 2026-09-14 · La caja se declara, y con eso «cuadros cubiertos» ya se puede comparar
 
 El Anexo B §2.4 son seis filas y ninguna existía. **La elegí antes que las otras dos
@@ -157,32 +172,6 @@ diferían; aquí coinciden y dos enums serían dos sitios donde añadir el sigui
 colmena. Aquí no era un accidente — la configuración cambia por definición. El
 historial, otra vez, no hubo que construirlo: `leerEnmiendas` lee cualquier entidad por
 su tipo.
-
-### 2026-09-13 · Completar no es corregir, y con eso el apiario ya puede cerrar
-
-`lib/apiary/` **no tenía una sola función de actualización**, y por eso los dos campos
-de etapa cierre del Anexo B §4 no podían existir sin ser columnas que nadie pudiera
-rellenar — lo que ya costó una semana con `coverage_until`.
-`PENDING_IMPLEMENTATIONS/011` queda cerrado. ADR-121.
-
-**La decisión es toda ésta:** **completar** un hecho que siempre iba a llegar después
-—el retiro de una tira, semanas más tarde— **no lleva razón ni plazo**; **corregir**
-algo ya escrito **sí**, con el valor anterior en `before` y una operación de audit
-distinta. Pedir razón para el curso normal del trabajo enseñaría a escribir «.».
-
-**`sourceInterface = "apiary.close"`**, el vocabulario que trazabilidad ya tenía: «se
-anotó en el campo» y «se completó en la casa» se distinguen leyendo la fila. De ahí
-que ésta sea **la única escritura del apiario que no pasa por la cola offline**.
-
-**Lo que NO deja tocar:** producto, lote, dosis, carencia y objetivo. Si estuvieran
-mal, corresponde un evento nuevo, no reescribir la evidencia de aquel día.
-
-Y dos cosas que salieron gratis por decisiones viejas: **`leerEnmiendas` no hubo que
-tocarlo** —el audit del apiario ya escribía `entityType: "colony_event"`— y **esta
-migración no tuvo deriva que excluir**, que es lo que compró ADR-120 ayer.
-
-**Desde hoy la compuerta incluye `npm run build`:** `verify` no construye, y eso es
-lo único que ve la clase de defecto que rompió producción esta tarde.
 
 ## 3. Bloqueado, y en qué
 

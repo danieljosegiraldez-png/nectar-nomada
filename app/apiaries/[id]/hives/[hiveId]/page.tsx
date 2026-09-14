@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getHive } from "../../../../../lib/apiary/hives";
 import { origenesDeColonia } from "../../../../../lib/apiary/origenDeColonia";
+import { sinRegistrar } from "../../../../../lib/apiary/vacio";
 import { causasDePerdida } from "../../../../../lib/apiary/causaDePerdida";
 import { irregularidadesOfrecidas } from "../../../../../lib/apiary/irregularidades";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
@@ -19,6 +20,7 @@ import { BotonDeEnvio } from "../../../../components/BotonDeEnvio";
 import { cosechasDeColonia, TIPOS_DE_MIEL } from "../../../../../lib/apiary/cierreDeCosecha";
 import { completarCierreDeCosechaFormAction } from "../../../../actions/apiary";
 import { NewColonyForm } from "../../../../components/apiary/NewColonyForm";
+import { Ayuda } from "../../../../components/apiary/Ayuda";
 import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
 import { ColonyEventQuickEntry } from "../../../../components/apiary/ColonyEventQuickEntry";
@@ -129,7 +131,12 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                 una línea que no aparece, que se lee como si nadie preguntara.
                 `originNote` sigue debajo para lo que el catálogo no cubre. */}
             <p className="nn-muted">
-              {t("originSourceLabel")}: {colony.originSource ? colony.originSource.value : t("originSourceUnset")}
+              {t("originSourceLabel")}:{" "}
+              {colony.originSource ? (
+                colony.originSource.value
+              ) : (
+                <span className="nn-vital-sin-registro">{t("sinRegistrar")}</span>
+              )}
             </p>
             {colony.originNote ? <p className="nn-muted">{colony.originNote}</p> : null}
 
@@ -154,7 +161,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
 
           <section className="nn-section">
             <h2>{t("cajaHeading")}</h2>
-            <p className="nn-muted">{t("cajaAyuda")}</p>
+            <Ayuda resumen={t("ayudaResumen")}>{t("cajaAyuda")}</Ayuda>
             {/* El formulario manda la configuración COMPLETA, con lo actual
                 precargado: representa «cómo está la caja hoy». Los tres sí/no son
                 desplegables de TRES opciones y no casillas — un `Boolean?` tiene tres
@@ -179,7 +186,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
               <div className="nn-field">
                 <label htmlFor="caja-alimentador">{t("feederTypeLabel")}</label>
                 <select id="caja-alimentador" name="feederType" defaultValue={hive.feederType ?? ""}>
-                  <option value="">{t("triNoRegistrado")}</option>
+                  <option value="" />
                   {METODOS_DE_ALIMENTACION.map((m) => (
                     <option key={m} value={m}>
                       {t(`feedingMethod_${m}`)}
@@ -197,7 +204,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                 <div className="nn-field" key={nombre}>
                   <label htmlFor={`caja-${nombre}`}>{t(rotulo)}</label>
                   <select id={`caja-${nombre}`} name={nombre} defaultValue={valor === true ? "si" : valor === false ? "no" : ""}>
-                    <option value="">{t("triNoRegistrado")}</option>
+                    <option value="" />
                     <option value="si">{t("triSi")}</option>
                     <option value="no">{t("triNo")}</option>
                   </select>
@@ -272,14 +279,24 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
             {cosechas.length > 0 ? (
               <>
                 <h3>{t("cierreCosechaHeading")}</h3>
-                <p className="nn-muted">{t("cierreCosechaAyuda")}</p>
+                <Ayuda resumen={t("ayudaResumen")}>{t("cierreCosechaAyuda")}</Ayuda>
                 <ul>
                   {cosechas.map((c) => (
                     <li key={c.id} style={{ marginBottom: "1rem" }}>
                       {c.occurredAt.toISOString().slice(0, 10)}
                       {c.framesHarvested !== null ? ` · ${c.framesHarvested} ${t("framesPerBoxLabel")}` : ""}
-                      {c.honeyType ? ` · ${t(`honeyType_${c.honeyType}`)}` : ""}
-                      {c.extractedWeightKg !== null ? ` · ${c.extractedWeightKg} kg` : ""}
+                      {/* Los dos campos de cierre se enseñan SIEMPRE, con su rótulo.
+                          Antes desaparecían al faltar, así que «sin cerrar» y «no
+                          aplica» se leían igual — el §6 del Anexo E pide que el vacío
+                          sea un estado visible, no una línea que no aparece. */}
+                      {` · ${t("honeyTypeLabel")}: `}
+                      <span className={sinRegistrar(c.honeyType) ? "nn-vital-sin-registro" : undefined}>
+                        {c.honeyType ? t(`honeyType_${c.honeyType}`) : t("sinRegistrar")}
+                      </span>
+                      {` · ${t("extractedWeightLabel")}: `}
+                      <span className={sinRegistrar(c.extractedWeightKg) ? "nn-vital-sin-registro" : undefined}>
+                        {c.extractedWeightKg !== null ? `${c.extractedWeightKg} kg` : t("sinRegistrar")}
+                      </span>
 
                       {/* La humedad: se LEE aquí y se REGISTRA como medición del lote.
                           El mecanismo ya existía y nadie lo encontraba. */}
@@ -304,7 +321,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                         <div className="nn-field">
                           <label htmlFor={`miel-${c.id}`}>{t("honeyTypeLabel")}</label>
                           <select id={`miel-${c.id}`} name="honeyType" defaultValue={c.honeyType ?? ""}>
-                            <option value="">{t("triNoRegistrado")}</option>
+                            <option value="" />
                             {TIPOS_DE_MIEL.map((tm) => (
                               <option key={tm} value={tm}>
                                 {t(`honeyType_${tm}`)}

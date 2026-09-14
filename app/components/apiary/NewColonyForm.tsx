@@ -49,7 +49,7 @@ export function NewColonyForm({
         <div className="nn-field">
           <label htmlFor="colony-origin-source">{t("originSourceLabel")}</label>
           <select id="colony-origin-source" name="originSourceValueId" defaultValue="">
-            <option value="">{t("originSourceUnset")}</option>
+            <option value="" />
             {origenes.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.value}

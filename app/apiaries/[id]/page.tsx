@@ -14,6 +14,7 @@ import { completarCierreDeTratamientoFormAction } from "../../actions/apiary";
 import { confirmarCoordenadasAction } from "../../actions/traceability";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
+import { Ayuda } from "../../components/apiary/Ayuda";
 import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 import { FieldSessionStartForm } from "../../components/traceability/FieldSessionForms";
@@ -220,7 +221,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
       {retiros.length > 0 ? (
         <section className="nn-section">
           <h2>{t("retirosHeading")}</h2>
-          <p className="nn-muted">{t("retirosAyuda")}</p>
+          <Ayuda resumen={t("ayudaResumen")}>{t("retirosAyuda")}</Ayuda>
           <ul>
             {retiros.map((r) => (
               <li key={r.colonyEventId} style={{ marginBottom: "0.75rem" }}>

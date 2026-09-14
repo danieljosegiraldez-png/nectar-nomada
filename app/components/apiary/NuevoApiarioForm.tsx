@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { crearApiarioFormAction } from "../../actions/apiary";
 import { BotonDeEnvio } from "../BotonDeEnvio";
+import { Ayuda } from "./Ayuda";
 
 interface Opcion {
   id: string;
@@ -38,16 +39,14 @@ export function NuevoApiarioForm({ organizaciones, proyectos }: { organizaciones
       <div className="nn-field">
         <label htmlFor="ap-org">{t("apiaryOrganizationLabel")}</label>
         <select id="ap-org" name="organizationId" required defaultValue="">
-          <option value="" disabled>
-            {t("apiaryChoose")}
-          </option>
+          <option value="" disabled />
           {organizaciones.map((o) => (
             <option key={o.id} value={o.id}>
               {o.name}
             </option>
           ))}
         </select>
-        <p className="nn-muted">{t("apiaryOrganizationHelp")}</p>
+        <Ayuda resumen={t("ayudaResumen")}>{t("apiaryOrganizationHelp")}</Ayuda>
       </div>
 
       {proyectos.length > 0 ? (
