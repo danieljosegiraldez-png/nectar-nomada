@@ -9222,3 +9222,66 @@ copia desde un backup anterior perderá esto, y quien quiera llevarlo a producci
 mismo guion con `--apply`. Verificado contra la base y no contra el informe del propio guion,
 con controles negativos: cero colmenas `PRUEBA`, cero colonias en Rosina, la finca de Boquete
 intacta, 21 filas de auditoría, y las 28 pruebas que tocan datos reales en verde (258).
+
+## ADR-129 — Un valor de catálogo se declara en la semilla, no se inserta: lo dijo el guardia, no yo
+
+**Contexto.** El dueño declaró el 2026-09-14 las procedencias de sus apiarios: **todas las
+colmenas anteriores son origen San Francisco, Veraguas, del apicultor Marcelino Guevara**, y
+sus sitios son Toabré, Río Gatú, Lagartero y «Los Palacios, Los Asientos, Pedasí, Los
+Santos». Confirmó además **10 colmenas en Apiario Las Nubes**, cinco de ellas llegadas el **2
+de septiembre** (no el 4).
+
+**Decisión 1 — el cuarto origen va en `lib/research/catalogs.ts`, no en un `INSERT`.** La
+primera versión del guion insertaba «San Francisco, Veraguas» directamente en
+`variable_catalog_value`. **`tests/apiary/origenDeColonia.test.ts` lo cazó**: su `it` llamado
+«está sembrado, no sólo declarado» compara lo que hay en la base con lo que la semilla
+declara, y la base tenía un valor que la semilla no conocía.
+
+El propio catálogo ya lo decía, y no lo leí: *«Crece por semilla, no por migración (precedente
+P1): el día que entre un cuarto origen es una línea aquí y un `db:seed`.»* **Y la forma
+correcta es mejor por una razón que no había visto:** `db:seed` corre en cada despliegue de
+producción —se lee en el log del build, «seeding permissions, role profiles and catalogs»—
+así que el valor llega a producción **sin que nadie toque Neon a mano**.
+
+**Decisión 2 — la fecha sin hora se ancla a medianoche LOCAL, no UTC.** De las cinco del 2 de
+septiembre el dueño no dio hora. Se guardan a `2026-09-02T05:00:00Z`, que es medianoche de
+Panamá. Con medianoche UTC se leerían como **el 1 de septiembre a las 19:00**: el día
+equivocado. Es el artefacto que `NN-0041` ya arrastra —su instalación se lee como el 23 de
+agosto a las 19:00— y se evitó a propósito. Verificado con `at time zone`: las cinco dicen
+**2026-09-02 00:00**.
+
+**Decisión 3 — `original_record` y no `direct_observation` para esas cinco.** El dueño dijo
+que estuvo en el trasiego del 4 de septiembre; del 2 no dijo nada. La clase de procedencia
+distingue lo que vio de lo que reporta, y suponer que estuvo presente sería inventar una
+observación. **Tampoco se les crea evento de trasiego**: el del 4 está descrito por él, el del
+2 no existe como declaración.
+
+**Decisión 4 — `locality` y no `district`.** San Francisco, Parita y Pedasí son distritos, y
+el enum tiene `district`. Pero **ninguna fila del repositorio usa ese tipo** —medido: cero— y
+`Boquete`, que también es distrito, está guardado como `locality`. Se sigue el precedente
+(`CLAUDE.md` §61) y queda anotado como elección, no descuido.
+
+**Lo que NO se creó, y es la mitad del trabajo:** **Toabré, Río Gatú y Lagartero**. El dueño
+tiene apiarios ahí y **no dijo en qué provincia están**. Una jerarquía inventada es peor que
+ninguna: después nadie sabe si el dato salió de él o de una suposición. Control negativo en la
+verificación: cero ubicaciones con esos nombres.
+
+### Dos conflictos del catálogo, señalados y sin resolver
+
+1. **`Santa Fe, Veraguas` está definido como «El pie original de Toabré»**, y el dueño dice
+   que el origen de Toabré es Marcelino, de **San Francisco**. Los dos son distritos de
+   Veraguas: **uno de los dos está mal**, y decidirlo cambia la procedencia de 15 colmenas.
+2. **`Parita, Chitré` está definido como «Los tres núcleos instalados en septiembre de
+   2026»** — o sea que se creó para las 3 que Chayanne llevó a **Toabré**, y las diez de Cerro
+   Azul usan ese mismo valor porque el lugar es el mismo. Su definición ya no las describe. Y
+   su nombre sigue pareciendo equivocado: Parita es distrito de **Herrera**.
+
+### Y la historia de Toabré, que no se registró porque su aritmética no cierra
+
+El dueño la contó: 15 colmenas de Marcelino instaladas en **diciembre de 2025**; **12 de 15
+perdidas en marzo**; un **enjambre** llegó a Finca 2 —abandonada— en **abril** y **se fue a
+final de julio**; **«las últimas 2»** de Finca 1 se perdieron a **final de agosto**; Chayanne
+instaló **3 nuevas**. **12 + 2 = 14, de 15: falta una.** No se registró ninguna de esas
+pérdidas, porque una muerte de colonia inventada es un hecho falso en la trazabilidad, y el
+sistema guarda causas precisamente para poder preguntar de qué se murieron. Falta también el
+reparto de las 15 entre Finca 1 y Finca 2, que la propia historia distingue.

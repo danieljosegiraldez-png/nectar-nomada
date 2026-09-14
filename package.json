@@ -44,7 +44,8 @@
     "decisiones": "bash scripts/open-decisions.sh",
     "verify": "npm run typecheck && npm run check:state && npm run check:rutas && npm run lint",
     "check:rutas": "node scripts/inventario-de-rutas.mjs",
-    "data:apiario-las-nubes": "tsx scripts/apiario-las-nubes.ts"
+    "data:apiario-las-nubes": "tsx scripts/apiario-las-nubes.ts",
+    "data:procedencias-y-sitios": "tsx scripts/procedencias-y-sitios.ts"
   },
   "keywords": [],
   "author": "",

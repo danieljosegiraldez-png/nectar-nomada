@@ -1,20 +1,35 @@
 name: CI
 
 on:
-  # `push` sólo en `main`. Con `["**"]`, un empuje a una rama con PR abierto
-  # disparaba DOS corridas —una por `push` y otra por `pull_request`— y no se
-  # cancelaban entre sí porque el grupo de concurrencia usa `github.ref`, que
-  # vale `refs/heads/<rama>` en una y `refs/pull/<n>/merge` en la otra.
+  # **Sólo `pull_request`, por decisión del dueño el 2026-09-14.**
   #
-  # Medido sobre las últimas 100 corridas de este repositorio: 34 eran `push` a
-  # ramas distintas de `main`, y 33 de los 67 commits dispararon los dos
-  # eventos. El mismo cambio se hizo en `nectarnomada-web`, donde pesaba 42 %.
+  # La historia en dos pasos, porque el primero explica por qué no está `["**"]`:
   #
-  # Lo que se pierde: una rama sin PR abierto no tiene CI hasta que se abre.
-  # La compuerta local (`npm run verify`) sigue siendo la primera línea, y el
-  # PR vuelve a cubrirla antes de que nada pueda fusionarse.
-  push:
-    branches: [main]
+  # 1. Antes había `push: ["**"]`, y un empuje a una rama con PR abierto disparaba
+  #    DOS corridas —una por `push` y otra por `pull_request`— que no se cancelaban
+  #    entre sí, porque el grupo de concurrencia usa `github.ref` y vale
+  #    `refs/heads/<rama>` en una y `refs/pull/<n>/merge` en la otra. Se acotó a
+  #    `main`. Medido entonces: de las últimas 100 corridas, 34 eran `push` a ramas
+  #    distintas de `main`.
+  # 2. **El 2026-09-14 se agotó el presupuesto de Actions de la cuenta** y nada
+  #    volvió a correr: ni los PR ni los pushes a `main`. Medido ese día: **576
+  #    corridas desde el 1 de septiembre —283 de `pull_request` y 293 de `push`—**,
+  #    o sea que cada fusión pagaba **dos veces**, y **15 se cancelaron solas** por
+  #    el grupo de concurrencia: minutos gastados y tirados. El dueño decidió
+  #    quitar el `push`.
+  #
+  # **Lo que se pierde, dicho sin adornos: `main` deja de tener compuerta propia.**
+  # Después de fusionar no hay corrida que juzgar. Eso no deja pasar nada sin
+  # revisar —la protección de rama exige los tres checks y se evalúan sobre el PR,
+  # que sí corre— pero sí quita la red de después: el caso que cubría era el de dos
+  # PR verdes por separado que juntos rompen `main`.
+  #
+  # **Y por eso cambia una instrucción de `CLAUDE.md`:** la de leer el estado del
+  # commit fusionado para distinguir `cancelled` de `success` ya no aplica, porque
+  # no habrá corrida. El veredicto es el del PR. Está corregido allí, no aquí.
+  #
+  # Lo que ya se perdía antes y sigue igual: una rama sin PR abierto no tiene CI
+  # hasta que se abre. `npm run verify` sigue siendo la primera línea.
   pull_request:
 
 # Sólo lectura: esta compuerta no publica, no comenta y no despliega.
