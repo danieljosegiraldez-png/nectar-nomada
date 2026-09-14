@@ -1629,6 +1629,10 @@
         "mixed_sample_points": "La serie mezcla puntos de muestreo y no son comparables. Sepáralas: no hay conversión entre licor de tanque y mucílago.",
         "termination_ready": "Los azúcares bajaron lo previsto ({drop}%). La receta sugiere cerrar — lo decides tú.",
         "data_integrity_violation": "El °Brix subió {rise} puntos sin causa registrada. Revisa el prisma o anota el enriquecimiento."
+      },
+      "balance": {
+        "discrepancy_flagged": "El balance no cuadra por {kg} kg ({pct}%). Se guardó igual — revisa el pesaje cuando puedas.",
+        "gross_imbalance": "El balance se sale por {kg} kg ({pct}%). Queda guardado como borrador y el lote no avanza de etapa hasta que lo revises."
       }
     }
   }
