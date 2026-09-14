@@ -23,7 +23,13 @@ const PANTALLA = "app/apiaries/page.tsx";
  * hermético.
  */
 export function motivosDeclarados(fuente: string): string[] {
-  const m = /export type MotivoDeAlerta =([\s\S]*?);/.exec(fuente);
+  // **Los comentarios se quitan ANTES de buscar, y no es cosmética.** La primera versión
+  // cortaba la unión en el primer `;`, y el 2026-09-14 un comentario que se añadió dentro
+  // de la declaración —«no la resolvió; el dueño la subió»— traía un punto y coma: el
+  // detector cortó ahí, midió **cero motivos** y el control positivo de abajo anuló la
+  // corrida. Es el instrumento leyendo prosa, la tercera vez en el mismo día.
+  const sinComentarios = fuente.replace(/\/\/[^\n]*/g, "");
+  const m = /export type MotivoDeAlerta =([\s\S]*?);/.exec(sinComentarios);
   if (!m) return [];
   return [...m[1]!.matchAll(/"(\w+)"/g)].map((x) => x[1]!);
 }
@@ -65,5 +71,14 @@ describe("cada alerta del sitio tiene su texto", () => {
     // Y sin la unión, devuelve vacío en vez de inventar — lo que hace fallar el control
     // positivo de arriba en vez de pasar en silencio.
     expect(motivosDeclarados("nada que ver")).toEqual([]);
+
+    // EL CASO QUE ME CAZÓ: un comentario dentro de la declaración con un `;` dentro. La
+    // primera versión del detector cortaba ahí y devolvía cero.
+    const conComentario =
+      'export type MotivoDeAlerta =\n' +
+      '  // ADR-127 la planteó; el dueño la subió.\n' +
+      '  | "aspersion_anunciada"\n' +
+      '  | "perdida_sin_reposicion";\n';
+    expect(motivosDeclarados(conComentario)).toEqual(["aspersion_anunciada", "perdida_sin_reposicion"]);
   });
 });

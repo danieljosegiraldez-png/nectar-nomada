@@ -97,9 +97,11 @@ describe("A9.8 — las reglas de alerta", () => {
     expect(alertasDe(reciente, SIN_NADA, AHORA)).toEqual([]);
   });
 
-  it("el borde toma su color de la PRIMERA regla, en el orden del Anexo", () => {
-    // Un sitio con todo mal a la vez: el Anexo fija que manda la pérdida de
-    // colonias, no la que se calculó de último.
+  it("el borde toma su color de la PRIMERA regla — sin aspersión, manda la pérdida", () => {
+    // **El comentario que había aquí decía «el Anexo fija que manda la pérdida de
+    // colonias», y desde el 2026-09-14 eso sólo es cierto CUANDO NO HAY ASPERSIÓN
+    // ANUNCIADA.** Se corrige en vez de dejarlo: un comentario viejo desorienta más que
+    // ninguno. El caso con aspersión está en el `it` siguiente.
     const v = sitioSano();
     v.proximaVisita = new Date(AHORA.getTime() - 40 * MS_POR_DIA);
     v.alimentoHasta = new Date(AHORA.getTime() - 5 * MS_POR_DIA);
@@ -112,6 +114,32 @@ describe("A9.8 — las reglas de alerta", () => {
       "alimento_vencido",
       "visita_sin_cerrar",
     ]);
+  });
+
+  it("una aspersión anunciada manda sobre TODO lo demás — decisión del dueño, 2026-09-14", () => {
+    // ADR-127 planteó la pregunta y no la resolvió; el dueño la subió al primer puesto.
+    // La razón: es la única fecha del tablero que impone alguien de fuera y que **no se
+    // puede atender después**. Una pérdida sin reposición ya ocurrió.
+    //
+    // Este `it` es el sitio nombrado donde aterriza ese veredicto: sin él, «subir la
+    // aspersión» sería un cambio que ninguna búsqueda distingue de «no hacerlo».
+    const v = sitioSano();
+    v.proximaVisita = new Date(AHORA.getTime() - 40 * MS_POR_DIA);
+    v.alimentoHasta = new Date(AHORA.getTime() - 5 * MS_POR_DIA);
+    v.aspersionAnunciadaEn = new Date(AHORA.getTime() + 3 * MS_POR_DIA);
+    const alertas = alertasDe(v, { perdidaSinReposicion: true, alimentoRepuesto: false }, AHORA);
+    expect(alertas[0]).toEqual({ nivel: "critico", motivo: "aspersion_anunciada" });
+    expect(alertas.map((a) => a.motivo)).toEqual([
+      "aspersion_anunciada",
+      "perdida_sin_reposicion",
+      "visita_vencida",
+      "alimento_vencido",
+    ]);
+
+    // Y una aspersión que YA PASÓ no adelanta a nada: vuelve a mandar la pérdida.
+    v.aspersionAnunciadaEn = new Date(AHORA.getTime() - MS_POR_DIA);
+    const pasada = alertasDe(v, { perdidaSinReposicion: true, alimentoRepuesto: false }, AHORA);
+    expect(pasada[0]!.motivo).toBe("perdida_sin_reposicion");
   });
 
   it("un sitio sin medir pesa MENOS urgente que uno con aviso, y no se confunde con sano", () => {

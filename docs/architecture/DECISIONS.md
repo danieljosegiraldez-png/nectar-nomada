@@ -9099,15 +9099,33 @@ filtra por `organizationType`: un vecino puede estar registrado como `farm`, `es
 `producer`, y decidir por él cuál cuenta como «finca» sería inventar una regla que nadie
 pidió.
 
-### Lo que NO se decide aquí, y es del dueño
+### La decisión de orden, llevada al dueño y RESUELTA el mismo día
 
-Los tres motivos de alerta nuevos —`aspersion_anunciada`, `consulta_a_vecinos_vencida`,
-`consulta_a_vecinos_por_vencer`— entran **después** de los cinco que ya existían, porque el
+Los tres motivos nuevos entraron primero **después** de los cinco que ya existían, porque el
 Anexo C §1.2 fija su orden («la primera regla que se cumpla, en este orden») y reordenarlas
-cambiaría una decisión documentada sin pedirlo. **Pero una aspersión anunciada en tres días
-es la única fecha de ese tablero que la impone alguien de fuera y que no se puede atender
-después**, así que podría merecer ir antes que una pérdida que ya ocurrió. Eso mueve el borde
-de color de la tarjeta: es decisión de producto y queda señalada en el código, no resuelta.
+cambiaría una decisión documentada sin pedirlo. Se dejó señalado que **una aspersión anunciada
+en tres días es la única fecha de ese tablero que la impone alguien de fuera y que no se puede
+atender después**, y que por tanto podría merecer ir antes que una pérdida que ya ocurrió.
+
+**Daniel dijo que sí, el 2026-09-14: `aspersion_anunciada` pasa a ser la primera.** Cambia el
+orden del Anexo C §1.2 a propósito y con su palabra. `alertas[0]` pinta el borde de la
+tarjeta, así que esto cambia qué grita primero la lista de apiarios.
+
+**El veredicto tiene su sitio nombrado**, que es lo que distingue «hecho» de «sin hacer»:
+el `it` llamado *«una aspersión anunciada manda sobre TODO lo demás — decisión del dueño,
+2026-09-14»*, que además comprueba lo contrario —una aspersión ya pasada **no** adelanta a
+nada y vuelve a mandar la pérdida—. Y el `it` que había, cuyo comentario decía «el Anexo fija
+que manda la pérdida de colonias», se corrigió: eso ahora sólo es cierto cuando no hay
+aspersión.
+
+**Y el guardia de los textos de alerta se rompió con este cambio, por su propio instrumento.**
+El comentario que se añadió dentro de la declaración de `MotivoDeAlerta` contiene un punto y
+coma —«ADR-127 la planteó y no la resolvió; el dueño la subió»— y el detector cortaba la unión
+en el primer `;`: midió **cero motivos** y su control positivo anuló la corrida, que es
+exactamente para lo que estaba. Ahora quita los comentarios antes de buscar, y el caso quedó
+como control. **Tercera vez en el mismo día que el instrumento mide prosa** — las otras dos
+fueron un `grep` que encontró el texto de un comentario del esquema y un `indexOf` que
+encontró la mención de `{...resto}` en otro.
 
 ### Guardia nuevo, por un agujero que el compilador no puede ver
 

@@ -58,18 +58,15 @@ const MS_POR_DIA = 86_400_000;
 export type NivelDeAlerta = "critico" | "aviso";
 
 export type MotivoDeAlerta =
+  // **`aspersion_anunciada` va PRIMERA, por decisión del dueño del 2026-09-14.** ADR-127 la
+  // planteó y no la resolvió; el dueño la subió. Es la única fecha del tablero que impone
+  // alguien de fuera y que no se puede atender después, a diferencia de una pérdida que ya
+  // ocurrió. Cambia el orden del Anexo C §1.2, y eso es exactamente por lo que se preguntó
+  // en vez de decidirlo en el código.
+  | "aspersion_anunciada"
   | "perdida_sin_reposicion"
   | "visita_vencida"
   | "alimento_vencido"
-  // Anexo E §4 y §3. Los tres entran DESPUÉS de los que ya estaban, y a propósito: el
-  // Anexo C §1.2 fija el orden de las cinco originales —«la primera regla que se cumpla,
-  // en este orden»— y reordenarlas cambiaría una decisión documentada sin pedirlo.
-  //
-  // **Queda una pregunta para el dueño, señalada y no resuelta aquí:** una aspersión
-  // anunciada en tres días es una fecha que impone otro y que no se puede atender
-  // después, así que podría merecer ir **antes** que una pérdida que ya ocurrió. Cambiar
-  // eso es mover el borde de color de la tarjeta, o sea una decisión de producto.
-  | "aspersion_anunciada"
   | "alimento_por_vencer"
   | "visita_sin_cerrar"
   | "consulta_a_vecinos_vencida"
@@ -123,6 +120,22 @@ export interface VitalesDeSitio {
 export function alertasDe(v: Omit<VitalesDeSitio, "alertas">, hubieron: { perdidaSinReposicion: boolean; alimentoRepuesto: boolean }, ahora: Date): Alerta[] {
   const alertas: Alerta[] = [];
 
+  // **PRIMERA de todas, por decisión del dueño (2026-09-14).** ADR-127 la dejó planteada y
+  // sin resolver: una aspersión anunciada es la única fecha de este tablero que **la impone
+  // alguien de fuera y que no se puede atender después**. Una pérdida sin reposición ya
+  // ocurrió y se repone cuando se pueda; una aspersión en tres días se atiende antes de que
+  // llegue o no se atiende nunca.
+  //
+  // Esto **cambia el orden que fija el Anexo C §1.2**, y por eso llevó la pregunta al dueño
+  // en vez de decidirse aquí: `alertas[0]` pinta el borde de la tarjeta, así que el orden es
+  // lo que decide qué grita primero la lista de apiarios.
+  //
+  // Crítica sólo mientras no haya pasado: una aspersión de la semana pasada no es un aviso,
+  // es historia — y avisar de algo terminado enseña a ignorar el aviso.
+  if (v.aspersionAnunciadaEn && v.aspersionAnunciadaEn >= ahora) {
+    alertas.push({ nivel: "critico", motivo: "aspersion_anunciada" });
+  }
+
   if (hubieron.perdidaSinReposicion) alertas.push({ nivel: "critico", motivo: "perdida_sin_reposicion" });
 
   if (v.proximaVisita && ahora.getTime() - v.proximaVisita.getTime() > DIAS_DE_GRACIA_DE_VISITA * MS_POR_DIA) {
@@ -133,13 +146,6 @@ export function alertasDe(v: Omit<VitalesDeSitio, "alertas">, hubieron: { perdid
     alertas.push({ nivel: "critico", motivo: "alimento_vencido" });
   } else if (v.alimentoHasta && v.alimentoHasta >= ahora && v.alimentoHasta.getTime() - ahora.getTime() < DIAS_DE_AVISO_DE_ALIMENTO * MS_POR_DIA) {
     alertas.push({ nivel: "aviso", motivo: "alimento_por_vencer" });
-  }
-
-  // Anexo E §4: una aspersión ANUNCIADA es la única fecha de este tablero que la impone
-  // alguien de fuera. Crítica mientras no haya pasado, y sólo mientras no haya pasado: una
-  // aspersión de la semana pasada no es un aviso, es historia.
-  if (v.aspersionAnunciadaEn && v.aspersionAnunciadaEn >= ahora) {
-    alertas.push({ nivel: "critico", motivo: "aspersion_anunciada" });
   }
 
   if (v.borradorAbiertoDesde && ahora.getTime() - v.borradorAbiertoDesde.getTime() > HORAS_DE_BORRADOR_VIEJO * 3_600_000) {
