@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { evaluarPh, type DataConfidence } from "../../lib/beneficio/ph";
 import { PERFILES, type ClaveDePerfil } from "../../lib/beneficio/perfiles";
+import { evaluarBrix, type SamplePoint } from "../../lib/beneficio/brix";
 
 /**
  * Los 47 criterios de aceptación del módulo de beneficio, ejecutados de verdad.
@@ -48,7 +49,7 @@ const FAMILIAS = [
  * Los motores que YA se pueden ejercer. Se declara a mano, a propósito: es la
  * línea que hay que tocar para decir «esto ya está», y se lee en el diff.
  */
-const MOTORES: ReadonlySet<string> = new Set<string>(["lib/beneficio/ph.ts"]);
+const MOTORES: ReadonlySet<string> = new Set<string>(["lib/beneficio/ph.ts", "lib/beneficio/brix.ts"]);
 
 /**
  * El instante base de los vectores. Cualquiera sirve: los vectores hablan en
@@ -90,6 +91,52 @@ const EJECUTORES: Record<string, (v: Vector) => Record<string, unknown>> = {
       current_ph: r.currentPh,
     };
   },
+
+  brix: (v) => {
+    const lecturas = (v.readings ?? []).map((r) => ({
+      brix: r.brix as number,
+      measuredAt: enHoras(r.offset_hours as number),
+      confidence: (r.confidence as DataConfidence | undefined) ?? "VALIDATED",
+      // El punto puede venir por lectura —para el vector que los MEZCLA— o una
+      // vez para toda la serie, que es como se captura de verdad.
+      samplePoint: ((r.sample_point as SamplePoint | undefined) ??
+        (v.sample_point as SamplePoint | undefined) ??
+        "TANK_LIQUID_MID") as SamplePoint,
+    }));
+    const perfil = PERFILES[(v.profile ?? "WASHED_STANDARD") as ClaveDePerfil];
+    const r = evaluarBrix({
+      readings: lecturas,
+      fermentationStartedAt: INICIO,
+      now: enHoras(v.now_hours ?? 0),
+      profile: perfil,
+    });
+
+    // **«Casi cero» y «saludable» no son números inventados**: salen de los
+    // propios parámetros del perfil. Moverse menos que el ruido del
+    // refractómetro a lo largo de su ventana de estancamiento ES estar parado.
+    const umbral = perfil.brixNoiseFloor / perfil.brixStallWindowHours;
+    return {
+      status: r.status,
+      severity: r.severity,
+      alert_key: r.alertKey,
+      awaiting_confirmation: r.awaitingConfirmation,
+      readings_used: r.readingsUsed,
+      initial_brix: r.initialBrix,
+      current_brix: r.currentBrix,
+      warnings: r.warnings,
+      velocity_recent_near_zero: r.velocityRecentBxH !== null && Math.abs(r.velocityRecentBxH) < umbral,
+      velocity_cumulative_healthy:
+        r.velocityCumulativeBxH !== null && Math.abs(r.velocityCumulativeBxH) >= umbral,
+      // El contrato congelado: ninguna clave puede faltar en ninguna rama.
+      all_contract_fields_present: (
+        [
+          "status", "severity", "alertKey", "currentBrix", "initialBrix", "totalDropPct",
+          "velocityRecentBxH", "velocityCumulativeBxH", "hoursElapsed", "samplePoint",
+          "confidence", "readingsUsed", "awaitingConfirmation", "warnings",
+        ] as const
+      ).every((k) => k in r),
+    };
+  },
 };
 
 /**
@@ -104,6 +151,7 @@ interface Vector {
   profile?: string;
   now_hours?: number;
   readings?: Record<string, unknown>[];
+  sample_point?: string;
   expect: Record<string, unknown>;
 }
 
@@ -181,6 +229,23 @@ describe("los criterios de aceptación del beneficio", () => {
           for (const [campo, esperado] of Object.entries(v.expect)) {
             if (campo === "raises") {
               expect(esperado, `${v.id}: este contrato no admite que el motor lance`).toBe(false);
+              continue;
+            }
+            // «lo que NO debe pasar» es tan contrato como lo que sí.
+            if (campo === "status_not") {
+              expect(obtenido["status"], `${v.id} · no debía salir ${String(esperado)}`).not.toBe(esperado);
+              continue;
+            }
+            if (campo === "warnings_include") {
+              for (const aviso of esperado as string[])
+                expect(obtenido["warnings"], `${v.id} · falta el aviso ${aviso}`).toContain(aviso);
+              continue;
+            }
+            // `affects_lot_state` es una propiedad del estado, no un campo del
+            // motor: los estados dirigidos al DATO no cambian el del lote.
+            if (campo === "affects_lot_state") {
+              const soloDato = ["DATA_INTEGRITY_VIOLATION", "SENSOR_FAULT", "MIXED_SAMPLE_POINTS", "SUSPECT_DILUTION"];
+              expect(soloDato.includes(String(obtenido["status"])), `${v.id} · ${obtenido["status"]} debería afectar al lote`).toBe(!esperado);
               continue;
             }
             expect(obtenido[campo], `${v.id} · ${campo} — ${v.why ?? v.id}`).toEqual(esperado);
