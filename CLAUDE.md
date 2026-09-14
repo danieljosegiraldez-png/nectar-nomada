@@ -2768,6 +2768,48 @@ sólo toca documentación no construye. Ver `scripts/solo-documentacion.sh`.
 Cuando sí haya fila, el botón *Redeploy* del panel sobre el commit fallido usa
 la integración de git, queda atado al commit, y no necesita CLI.
 
+### Y GitHub Actions tiene su propia cuota, que se lee como un fallo del cambio
+
+**2026-09-14.** El PR #309 salió con `¿Hay código en este cambio?: failure` y las otras tres
+compuertas en `skipped`. Eso se lee exactamente como «tu cambio rompió la primera compuerta y
+las demás no se molestaron en correr». No era eso. La anotación del job lo decía:
+
+```
+The job was not started because an Actions budget is preventing further use.
+```
+
+**El job nunca arrancó.** `failure` ahí significa «no pudo empezar», y los `skipped` de las
+otras tres son su consecuencia mecánica, no un juicio sobre el código. Es la misma forma que
+la cuota de Vercel de la sección anterior, en el otro proveedor — y **más engañosa**, porque
+Vercel al menos apunta a una página de venta mientras que esto llega como el rojo de una
+compuerta propia.
+
+**Lo que lo distingue en dos comandos**, y hay que correrlos antes de tocar el código:
+
+```bash
+gh run view <run-id> -R <owner/repo> | grep -i 'Actions budget'
+gh run list -R <owner/repo> --limit 8 --json createdAt,headBranch,conclusion,event
+```
+
+La anotación es el discriminante directo. La lista es el control: si fallan **ramas
+distintas y también los `push` a `main`**, no es el cambio. Medido ese día: cuatro corridas
+seguidas con la anotación —dos PR de sesiones distintas y dos pushes a `main`—, la última
+verde a las 16:53 y la primera fallida a las 17:03. Y el control negativo que cierra la
+lectura: la última corrida buena tiene la anotación **cero** veces, así que el `grep`
+discrimina de verdad.
+
+**Dos consecuencias que importan más que el diagnóstico:**
+
+- **No se fusiona.** Cuando el dueño dice «fusiónala cuando pase el CI», un CI que **no puede
+  correr** no cumple la condición. Lo verificado en local —`verify`, `build`, el carril
+  hermético— sigue valiendo y hay que decirlo, pero no sustituye a la compuerta.
+- **`main` se queda sin red sin que nada avise.** Los pushes a `main` fallan igual, así que
+  cualquier cosa fusionada mientras dura la cuota entra **sin compuerta encima**. Eso se anota
+  en `SESSION_STATE.md` §3 o la siguiente sesión no lo sabrá.
+
+**Y lo arregla el dueño, no la sesión**: es un límite de gasto de su cuenta. No hay reintento
+que lo salte.
+
 ### …y el reverso: no todo rojo de Vercel es la cuota
 
 **El mismo día, la sección de arriba me hizo el daño.** Vi
