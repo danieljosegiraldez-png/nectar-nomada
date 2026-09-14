@@ -2621,6 +2621,10 @@ adivine. Cuatro flip-tests, los cuatro compilando y cada uno con su prueba.
 
 ---
 
+**Séptimo archivado, 2026-09-13**, con el estado por encima de 400. La entrada
+más vieja que quedaba — y **otra vez dos sesiones la archivaron a la vez**, el
+#295 y ésta. Su trabajo vive en el árbol y sus pruebas lo vigilan.
+
 ### 2026-09-13 · Un tratamiento dice contra qué, y se acabó el Anexo B obligatorio
 
 «Objetivo» era **el último campo que el Anexo B marcaba obligatorio y que no

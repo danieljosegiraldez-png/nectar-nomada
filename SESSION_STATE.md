@@ -63,6 +63,24 @@ escribir. La pantalla tenía formulario de cosecha y **no listaba ninguna cosech
 **Con esto el Anexo B queda completo.** Lo que sigue son decisiones del dueño —si `cebo`
 cuenta como vía que deja material— y el protocolo v2, que ya acumula cinco cosas.
 
+### 2026-09-13 · El motor de pH: 13 de los 47 criterios ya se comprueban
+
+`lib/beneficio/ph.ts` porta el `PHMonitor` de `docs/beneficio/10`, y
+`perfiles.ts` trae los cinco protocolos de §8. El tablero pasa de **3 + 47
+pendientes a 16 + 34**.
+
+**Ningún umbral vive en la lógica**: todos salen de `ProtocolProfile`, y
+`PERFILES` es un `Record` total, así que el compilador obliga a declarar cada
+perfil nuevo entero. Siguen `[PROVISIONAL]` hasta que Daniel los revise — P-F.
+
+**Siete flip-tests, uno por defecto real de la v2.5**, todos compilando y cada
+uno cayendo por su propio vector: el `raise` que derribaba la ingesta (PH-007),
+la banda 3,5–3,8 muda (PH-003), la frontera que ponía 4,50 en dos bandas
+(PH-001), la meseta cinética (PH-009), la supresión del reposo frío de CryoBloom
+(PH-010), la guarda de cero (PH-012) y la histéresis (PH-004). **El cuarto hubo
+que rehacerlo**: la primera versión no compilaba, y una mutación que no compila
+se lee igual que un guardia que funciona.
+
 ### 2026-09-13 · La especificación v3.0 del beneficio entra, y su contrato empieza a contar
 
 Daniel encargó fuera una revisión del material de proceso y llegó `nn-spec` v3.0:
