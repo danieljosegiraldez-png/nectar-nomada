@@ -5,6 +5,12 @@ import { describe, expect, it } from "vitest";
 import { evaluarPh, type DataConfidence } from "../../lib/beneficio/ph";
 import { PERFILES, type ClaveDePerfil } from "../../lib/beneficio/perfiles";
 import { evaluarBrix, type SamplePoint } from "../../lib/beneficio/brix";
+import {
+  SchemaError,
+  validarDespulpado,
+  validarLavado,
+  validarSeleccion,
+} from "../../lib/beneficio/balanceDeMasas";
 
 /**
  * Los 47 criterios de aceptación del módulo de beneficio, ejecutados de verdad.
@@ -49,7 +55,7 @@ const FAMILIAS = [
  * Los motores que YA se pueden ejercer. Se declara a mano, a propósito: es la
  * línea que hay que tocar para decir «esto ya está», y se lee en el diff.
  */
-const MOTORES: ReadonlySet<string> = new Set<string>(["lib/beneficio/ph.ts", "lib/beneficio/brix.ts"]);
+const MOTORES: ReadonlySet<string> = new Set<string>(["lib/beneficio/ph.ts", "lib/beneficio/brix.ts", "lib/beneficio/balanceDeMasas.ts"]);
 
 /**
  * El instante base de los vectores. Cualquiera sirve: los vectores hablan en
@@ -137,6 +143,73 @@ const EJECUTORES: Record<string, (v: Vector) => Record<string, unknown>> = {
       ).every((k) => k in r),
     };
   },
+
+  /**
+   * **Las tres etapas en una sola llamada**, porque un vector puede declarar A,
+   * A+B o A+C. Se evalúa lo que el vector trae y nada más: inventar una etapa
+   * que no declaró daría un veredicto sobre datos que no existen.
+   */
+  mass_balance: (v) => {
+    const salida: Record<string, unknown> = {};
+
+    // `raises` aquí no es un booleano sino el NOMBRE del error esperado: estos
+    // vectores sí exigen excepción, porque una violación de esquema es un error
+    // de programación y no una condición de campo.
+    const a = validarSeleccion({
+      totalCherryKg: v.total_cherry_kg ?? 0,
+      distribucion: v.stage_a ?? {},
+    });
+    salida["stage_a_status"] = a.status;
+    salida["discrepancy_kg"] = a.discrepancyKg;
+    salida["purity_index"] = a.purityIndex;
+    salida["lot_tier"] = a.lotTier;
+    salida["persisted"] = a.persistable;
+    salida["blocks_state_transition"] = a.blocksTransition;
+    salida["routing_manifest_values_are_enums"] = Object.values(a.routingManifest).every(
+      (x) => typeof x === "string" && /^[A-Z_]+$/.test(x),
+    );
+    // Ningún literal en español dentro del motor: sólo claves i18n y enums.
+    salida["no_spanish_literals"] = !Object.values(a.routingManifest).some((x) =>
+      /[áéíóúñ¿¡]/i.test(String(x)),
+    );
+
+    const avisos = [...a.warnings];
+
+    if (v.stage_b) {
+      const b = v.stage_b;
+      const r = validarDespulpado({
+        depulpedInputKg: b["depulped_input_kg"] as number,
+        depulpedInMucilageKg: b["depulped_in_mucilage"] as number,
+        pulpKg: b["pulp"] as number,
+        processLossKg: b["process_loss"] as number,
+        lotId: b["lot_id"] as string,
+        weighingCondition: b["weighing_condition"] as never,
+        upstreamWeighingCondition: b["upstream_weighing_condition"] as never,
+      });
+      salida["stage_b_status"] = r.status;
+      salida["spawns_entity"] = r.cascaraBatchPropuesto ? "CascaraBatch" : null;
+      salida["parent_lot_id_set"] = r.cascaraBatchPropuesto?.parentLotId === b["lot_id"];
+      salida["flags"] = r.flags;
+      avisos.push(...r.warnings);
+    }
+
+    if (v.stage_c) {
+      const c = v.stage_c;
+      const r = validarLavado({
+        depulpedInMucilageKg: c["depulped_in_mucilage_kg"] as number,
+        wetParchmentKg: c["wet_parchment"] as number,
+        mucilageWashoutKg: c["mucilage_washout"] as number,
+        washLossKg: c["wash_loss"] as number,
+        totalCherryKg: v.total_cherry_kg ?? 0,
+      });
+      salida["stage_c_status"] = r.status;
+      salida["parchment_yield_pct"] = r.parchmentYieldPct;
+      avisos.push(...r.warnings);
+    }
+
+    salida["warnings"] = avisos;
+    return salida;
+  },
 };
 
 /**
@@ -152,6 +225,12 @@ interface Vector {
   now_hours?: number;
   readings?: Record<string, unknown>[];
   sample_point?: string;
+  total_cherry_kg?: number;
+  stage_a?: Record<string, number>;
+  stage_b?: Record<string, unknown>;
+  stage_c?: Record<string, unknown>;
+  lot_id?: string;
+  weighing_condition?: string;
   expect: Record<string, unknown>;
 }
 
@@ -223,11 +302,23 @@ describe("los criterios de aceptación del beneficio", () => {
           const ejecutar = EJECUTORES[familia.clave];
           if (!ejecutar) throw new Error(`${familia.motor} se declara implementado y no tiene ejecutor`);
 
+          // Un vector que EXIGE excepción se comprueba al revés: llamar y no ver
+          // el error es el fallo. Se hace antes de nada, porque después no hay
+          // salida que comparar.
+          const exigido = v.expect["raises"];
+          if (typeof exigido === "string") {
+            expect(() => ejecutar(v), `${v.id} · debía lanzar ${exigido}`).toThrowError(SchemaError);
+            return;
+          }
+
           // `raises: false` se comprueba llamando: si lanzara, la prueba cae aquí.
           const obtenido = ejecutar(v);
 
           for (const [campo, esperado] of Object.entries(v.expect)) {
             if (campo === "raises") {
+              // `false` = no debe lanzar, y ya se comprobó llamando. Una cadena
+              // es el NOMBRE del error exigido, y se verifica aparte: ahí el
+              // contrato SÍ pide excepción.
               expect(esperado, `${v.id}: este contrato no admite que el motor lance`).toBe(false);
               continue;
             }
@@ -236,9 +327,14 @@ describe("los criterios de aceptación del beneficio", () => {
               expect(obtenido["status"], `${v.id} · no debía salir ${String(esperado)}`).not.toBe(esperado);
               continue;
             }
-            if (campo === "warnings_include") {
+            // Dos listas distintas a propósito: `warnings` es lo que el motor
+            // observó del dato, `flags` es lo que arrastra el LOTE aguas abajo.
+            // Mezclarlas haría que un aviso de báscula pareciera una condición
+            // permanente del producto.
+            if (campo === "warnings_include" || campo === "flags_include") {
+              const lista = campo === "flags_include" ? "flags" : "warnings";
               for (const aviso of esperado as string[])
-                expect(obtenido["warnings"], `${v.id} · falta el aviso ${aviso}`).toContain(aviso);
+                expect(obtenido[lista], `${v.id} · falta ${aviso} en ${lista}`).toContain(aviso);
               continue;
             }
             // `affects_lot_state` es una propiedad del estado, no un campo del

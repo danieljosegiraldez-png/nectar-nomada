@@ -1629,6 +1629,10 @@
         "mixed_sample_points": "The series mixes sample points and they are not comparable. Split them: there is no conversion between tank liquor and pressed mucilage.",
         "termination_ready": "Sugars dropped as expected ({drop}%). The recipe suggests closing — the call is yours.",
         "data_integrity_violation": "°Brix rose {rise} points with no recorded cause. Check the prism or log the enrichment."
+      },
+      "balance": {
+        "discrepancy_flagged": "The balance is off by {kg} kg ({pct}%). Saved anyway — check the weighing when you can.",
+        "gross_imbalance": "The balance is off by {kg} kg ({pct}%). Saved as a draft; the lot will not advance until you review it."
       }
     }
   }
