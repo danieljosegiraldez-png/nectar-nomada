@@ -2939,3 +2939,25 @@ y que su autor cometió al redactar— **pasa los 47 vectores sin que caiga uno*
 MB-013 comprueba el estado y el rendimiento, no la **ausencia** del aviso falso.
 Queda cubierto desde fuera en `tests/beneficio/etapas-no-se-confunden.test.ts`,
 sin tocar el fichero de vectores.
+
+
+### 2026-09-14 · Secado, y con él los 47 criterios del beneficio en verde
+
+`lib/beneficio/secado.ts`. **El tablero cierra: 50 pasando, 0 pendientes.** La
+v2.x no tenía especificación de secado en absoluto, pese a que su propio
+`CLAUDE.md` la exigía — vacío estructural C1.
+
+**El secado no es lineal y un solo umbral de tasa lo arruina en las dos
+direcciones.** Bajar diez puntos por encima del 25 % es normal —agua libre— y
+alertar ahí da un falso aviso por lote; los mismos diez puntos por debajo del
+25 % **sellan la superficie**, el núcleo queda húmedo, el medidor lee bajo y
+falso, y el moho sale en bodega semanas después. La fase se decide **antes** de
+mirar la tasa.
+
+**Y una medición que corrigió lo que yo creía.** En el flip del solape de
+ventanas supuse que caería DR-003 —la rehidratación nocturna—. Cayó **DR-004**.
+Medido: DR-003 da −0,95 semiabierta y −1,05 solapada, y **no dispara en ninguno
+de los dos**; el que vigila la regla es el del estancamiento, porque exige tasa
+≥ 0 y el solape la vuelve negativa. Mirar **cuál** cae es lo único que lo dice.
+
+Seis flip-tests, todos compilando y cada uno por su vector.

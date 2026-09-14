@@ -165,28 +165,30 @@ ejercen 20 pruebas nuevas, no datos reales — el cuello de botella es la captur
 **Pendiente de Daniel:** decir que un lote corre CryoBloom **es un cambio de
 esquema** y se propone aparte.
 
-### 2026-09-14 · Secado, y con él los 47 criterios del beneficio en verde
-
-`lib/beneficio/secado.ts`. **El tablero cierra: 50 pasando, 0 pendientes.** La
-v2.x no tenía especificación de secado en absoluto, pese a que su propio
-`CLAUDE.md` la exigía — vacío estructural C1.
-
-**El secado no es lineal y un solo umbral de tasa lo arruina en las dos
-direcciones.** Bajar diez puntos por encima del 25 % es normal —agua libre— y
-alertar ahí da un falso aviso por lote; los mismos diez puntos por debajo del
-25 % **sellan la superficie**, el núcleo queda húmedo, el medidor lee bajo y
-falso, y el moho sale en bodega semanas después. La fase se decide **antes** de
-mirar la tasa.
-
-**Y una medición que corrigió lo que yo creía.** En el flip del solape de
-ventanas supuse que caería DR-003 —la rehidratación nocturna—. Cayó **DR-004**.
-Medido: DR-003 da −0,95 semiabierta y −1,05 solapada, y **no dispara en ninguno
-de los dos**; el que vigila la regla es el del estancamiento, porque exige tasa
-≥ 0 y el solape la vuelve negativa. Mirar **cuál** cae es lo único que lo dice.
-
-Seis flip-tests, todos compilando y cada uno por su vector.
-
 ## 3. Bloqueado, y en qué
+
+#### El presupuesto de Actions se agotó, y `main` ya no tiene compuerta propia
+
+**2026-09-14.** Actions dejó de correr sobre las 17:00 con la anotación *«The job was
+not started because an Actions budget is preventing further use»*. Se lee como el rojo
+de una compuerta propia —«¿Hay código en este cambio?: failure» y las otras tres
+`skipped`— y **no es el cambio**: el job nunca arrancó. Cuatro corridas seguidas, dos
+PR de sesiones distintas y dos pushes a `main`. La trampa y su discriminante de dos
+comandos están en `CLAUDE.md`.
+
+**Lo que bloquea de verdad:** la protección de `main` exige tres checks y se evalúan
+sobre el PR, así que **nada se puede fusionar hasta que el dueño suba el límite de
+gasto** en `github.com/settings/billing`. No hay reintento que lo salte. Verificado
+que Vercel es independiente: llega como `status`, no como check-run, y sigue
+desplegando.
+
+**Y por decisión del dueño se quitó el disparador `push` del workflow**, que era la
+mitad del gasto: 576 corridas desde el 1 de septiembre, **293 de `push`** y 15
+canceladas solas. Consecuencia que hay que saber: **`main` ya no tiene corrida
+después de fusionar.** Nada entra sin revisar —el PR sigue corriendo y la protección
+lo exige— pero se pierde la red de después, el caso de dos PR verdes que juntos
+rompen `main`. La sección de `CLAUDE.md` que mandaba leer el estado del commit
+fusionado queda corregida allí.
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
 

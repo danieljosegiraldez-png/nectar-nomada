@@ -2951,21 +2951,38 @@ se parece a «rojo», así que un vistazo a la columna de estados lo cuenta como
 hecho. Sólo lo delata imprimir **la conclusión de cada comprobación**, una por
 línea, en vez de un resumen o un «¿hay algún fallo?».
 
-**Arreglo.** Después de fusionar, la pregunta correcta no es «¿está verde mi
-commit?» sino **«¿qué commit de `main` contiene mi cambio, y está verde ése?»**.
-Son dos preguntas distintas en cuanto alguien fusiona detrás de ti, y la
-segunda es la que tiene respuesta:
+**CORREGIDO EL 2026-09-14: `main` ya no tiene corrida, así que la mitad de esta
+sección describe un mundo que no existe.** El dueño quitó el disparador `push` del
+workflow —Actions se comía 576 corridas en catorce días, **293 de ellas de `push`**,
+y agotó el presupuesto de la cuenta—. Ahora sólo corre `pull_request`.
+
+**Lo que sigue valiendo, y es la parte que importa:** el verde que juzga un cambio es
+**el del PR**, donde la corrida no compite con nadie. Eso ya lo decía esta sección y
+ahora es lo único que hay.
+
+**Lo que dejó de valer:** buscar el commit de `main` que lleva el cambio y leer sus
+comprobaciones. **No habrá ninguna.** Cero comprobaciones en `main` es lo normal
+desde hoy, no una señal de nada — y confundir «no hay corrida» con «no llegó a
+correr» es exactamente la lectura que esta sección enseñaba a evitar. Lo que sí se
+verifica después de fusionar es **el contenido**, que no depende de Actions:
 
 ```bash
-# 1. el commit que de verdad lleva el cambio — por CONTENIDO, no por el SHA
+# ¿está mi cambio en main? Por CONTENIDO, nunca por el SHA.
 gh api "repos/<owner>/<repo>/contents/<ruta>?ref=main" --jq .content | base64 -d | grep -c '<marca del cambio>'
-# 2. y cómo acabó ESE commit, conclusión por conclusión
-gh api repos/<owner>/<repo>/commits/<sha>/check-runs --jq '.check_runs[] | "\(.name): \(.conclusion)"'
+# y el despliegue, que es de Vercel y NO depende de Actions:
+gh api repos/<owner>/<repo>/commits/<sha>/status --jq '.statuses[] | .context + ": " + .state'
 ```
 
-El verde que sí juzga el cambio es **el del PR**, donde la corrida no compite
-con nadie. El de `main` es la red de después, y a veces esa red no llega a
-tenderse. Decirlo es la respuesta correcta; buscar un verde en otro sitio, no.
+**Y lo que se perdió al quitarlo, dicho sin adornos:** la red de después. `main` ya no
+tiene compuerta propia, así que el caso de dos PR verdes por separado que juntos
+rompen `main` deja de estar cubierto. La protección de rama sigue exigiendo los tres
+checks y se evalúan sobre el PR, así que nada entra sin revisar — pero nadie vuelve a
+mirar después.
+
+El `cancelled` sigue siendo real **dentro de un PR** cuando se empuja dos veces
+seguidas a la misma rama: el grupo de concurrencia cancela la corrida anterior. Ahí la
+regla original se aplica igual — leer **la conclusión de cada comprobación**, una por
+línea, nunca un resumen.
 
 ## Al cerrar la sesión
 
