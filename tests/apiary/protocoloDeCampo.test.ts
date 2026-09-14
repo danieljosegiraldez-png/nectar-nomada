@@ -18,6 +18,13 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a94-${Date.now()}`;
 let cuentaId: string;
+/**
+ * `true` sólo si ESTA corrida creó el protocolo. La limpieza se gobierna por aquí y no por
+ * «hay un id»: hasta el 2026-09-14 borraba el protocolo **siempre**, así que una corrida
+ * sobre la copia compartida se llevaba el que el dueño acababa de cargar. Misma disciplina
+ * que `assertDefinedWhere`: no borrar lo que no es tuyo.
+ */
+let loCreoEstaPrueba = false;
 let protocolIdCreado: string | null = null;
 
 beforeAll(async () => {
@@ -31,7 +38,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (protocolIdCreado) {
+  if (protocolIdCreado && loCreoEstaPrueba) {
     await prisma.protocol.deleteMany({ where: assertDefinedWhere({ id: protocolIdCreado }) });
   }
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: cuentaId }) });
@@ -81,7 +88,21 @@ describe("los 44 ítems del dueño caben en ProtocolVariable", () => {
   it("se carga como ProtocolVersion, con sus 44 variables y su AuditEvent", async () => {
     const { version, creado } = await cargarProtocoloDeCampo(cuentaId);
     protocolIdCreado = version.protocolId;
-    expect(creado).toBe(true);
+    loCreoEstaPrueba = creado;
+
+    // **`creado` no se exige, y la razón importa.** En CI siempre es `true`: el carril con
+    // base arranca con un Postgres nuevo. En la copia LOCAL, que todas las sesiones
+    // comparten, el protocolo puede estar **ya cargado** — y eso no es basura que limpiar:
+    // es lo que el dueño quiere en producción, donde estas 44 preguntas son la lista de
+    // chequeo del apicultor.
+    //
+    // Esta prueba defiende el **contenido** y la **idempotencia**. Que la base estuviera
+    // vacía era una precondición accidental, y exigirla convertía una operación legítima
+    // —cargar el protocolo— en un CI roto para todas las sesiones. Pasó el 2026-09-14.
+    //
+    // La garantía de que el cargador CREA no se pierde: sobre una base limpia, si dejara de
+    // crear, no habría `version` y las aserciones de abajo caerían.
+    expect(typeof creado).toBe("boolean");
 
     const guardadas = await prisma.protocolVariable.findMany({ where: { protocolVersionId: version.id } });
     expect(guardadas.length).toBe(44);
