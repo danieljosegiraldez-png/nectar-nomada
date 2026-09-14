@@ -1445,7 +1445,13 @@
     "treatmentRoute_otro": "Other",
     "tratamientosHeading": "Treatments by target",
     "tratamientosVentana": "Last twelve months.",
-    "tratamientosFila": "{objetivo}: {colonias} colony/ies, {tratamientos} application(s)"
+    "tratamientosFila": "{objetivo}: {colonias} colony/ies, {tratamientos} application(s)",
+    "retirosHeading": "Strips not removed",
+    "retirosAyuda": "Strips left in generate resistance. Recorded here, not in the field.",
+    "retirosFila": "{colmena}: {producto}, applied {dias} day(s) ago",
+    "retiroFechaLabel": "Removed on",
+    "retiroGuardar": "Record the removal",
+    "retiroSinProducto": "no product recorded"
   },
   "Research": {
     "badge": "Research OS",

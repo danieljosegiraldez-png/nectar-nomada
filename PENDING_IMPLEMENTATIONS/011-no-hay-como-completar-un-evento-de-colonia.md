@@ -1,5 +1,24 @@
 # 011 · No hay cómo completar un `ColonyEvent` después, y dos campos del Anexo lo esperan
 
+**Estado: CERRADO el 2026-09-13.** El camino existe:
+`lib/apiary/cierreDeEvento.ts` con `completarCierreDeTratamiento`, y los dos campos
+que esperaban —`treatment_removal_date` y `treatment_efficacy_note`— ya son columnas
+que alguien puede rellenar. ADR-121.
+
+**Lo que la implementación añadió y este documento no preveía:** que **completar** y
+**corregir** son cosas distintas. Completar un hecho que siempre iba a llegar después
+—el retiro de una tira— no lleva razón ni plazo; cambiar algo ya escrito exige razón,
+y el valor anterior queda en `before`. Pedir razón para el curso normal del trabajo
+enseñaría a escribir «.» en el campo.
+
+Queda **sin cerrar la mitad general**: esto completa el CIERRE de un tratamiento, no
+corrige lo capturado en el campo (producto, lote, dosis, carencia, objetivo). Eso
+sigue siendo deliberado — ver ADR-121, «lo que NO deja tocar».
+
+---
+
+**El texto original, como registro de lo que se midió:**
+
 **Estado: no empezado.** Es un hueco **medido**, no supuesto, y bloquea dos campos
 concretos que el dueño pide.
 

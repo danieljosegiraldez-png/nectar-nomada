@@ -12,6 +12,7 @@ import {
   ApiaryAccessError,
   exigeEstadoDeFin,
 } from "../../lib/apiary/hives";
+import { completarCierreDeTratamiento } from "../../lib/apiary/cierreDeEvento";
 import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { recordInspection } from "../../lib/apiary/inspections";
@@ -197,4 +198,35 @@ export async function finalizeApiaryAssetUploadAction(
 
   revalidatePath(revalidationPath);
   return { ok: true };
+}
+
+/**
+ * A9 · Anexo B §4 — completar el cierre de un tratamiento: cuándo se retiró lo que
+ * quedó dentro, y qué se observó después.
+ *
+ * **Es una acción de servidor y no pasa por la cola offline**, a diferencia de todo
+ * lo demás del apiario. El motivo no es técnico: esto se hace **en la casa**, con el
+ * cuaderno delante y señal, semanas después de aplicar. La cola existe para lo que
+ * se anota de pie con guantes, y meter aquí un borrador sería pagar su complejidad
+ * sin comprar nada.
+ *
+ * `removalDate` es un **día** —`type="date"`— y se parsea con `fechaDeDia`, que
+ * falla si la cadena no es un día. Usar el parser de instantes es exactamente lo que
+ * tumbó la creación de colmenas el 2026-09-11.
+ */
+export async function completarCierreDeTratamientoFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  await completarCierreDeTratamiento(user.userAccountId, {
+    colonyEventId: String(formData.get("colonyEventId") ?? ""),
+    removalDate: fechaDeDia(formData.get("removalDate") as string | null, "removalDate"),
+    // `soloLoQueVino`: si el campo no vino en el formulario, no se toca. Mandar
+    // `null` diría «se vació a propósito», que es otra cosa.
+    ...(formData.has("efficacyNote") ? { efficacyNote: emptyToNull(formData.get("efficacyNote")) } : {}),
+    reason: emptyToNull(formData.get("reason")),
+  });
+
+  revalidatePath(`/apiaries/${locationId}`);
 }

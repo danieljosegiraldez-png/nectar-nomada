@@ -9,6 +9,8 @@ import { coloniasPorIrregularidad } from "../../../lib/apiary/irregularidades";
 import { avisosDeEnjambrazon } from "../../../lib/apiary/avisoDeEnjambrazon";
 import { alcanceDelAlimento } from "../../../lib/apiary/alcanceDelAlimento";
 import { tratamientosPorObjetivo } from "../../../lib/apiary/objetivoDelTratamiento";
+import { retirosPendientes } from "../../../lib/apiary/cierreDeEvento";
+import { completarCierreDeTratamientoFormAction } from "../../actions/apiary";
 import { confirmarCoordenadasAction } from "../../actions/traceability";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
@@ -56,6 +58,9 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   // A9 · Anexo B §4 — «eficacia por objetivo; hoy no se puede agrupar». Misma
   // ventana móvil de doce meses que las irregularidades, por la misma razón.
   const tratamientos = await tratamientosPorObjetivo(id, haceUnAno, ahora);
+  // A9 · Anexo B §4 — «las tiras que no se retiran generan resistencia». Espera a
+  // que pase la carencia declarada, o catorce días si nadie la declaró.
+  const retiros = await retirosPendientes(id, ahora, 14);
 
   return (
     <div>
@@ -208,6 +213,38 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           esconde lo vacío igual. Los ceros que sí se enseñan son los de dentro
           del reporte, cuando hay al menos un hallazgo — ahí la distinción entre
           «no hay» y «nadie miró» sí importa. */}
+      {/* Las tiras sin retirar. Con su formulario por fila, porque esto se completa
+          en la casa —semanas después de aplicar— y no en el campo: es la única
+          escritura del apiario que NO pasa por la cola offline, y su fila de
+          auditoría lo dice con `sourceInterface = "apiary.close"`. */}
+      {retiros.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("retirosHeading")}</h2>
+          <p className="nn-muted">{t("retirosAyuda")}</p>
+          <ul>
+            {retiros.map((r) => (
+              <li key={r.colonyEventId} style={{ marginBottom: "0.75rem" }}>
+                {t("retirosFila", {
+                  colmena: r.hiveIdentifier,
+                  producto: r.product ?? t("retiroSinProducto"),
+                  dias: r.diasDesde,
+                })}
+                <form action={completarCierreDeTratamientoFormAction} className="nn-form" style={{ margin: "0.25rem 0 0" }}>
+                  <input type="hidden" name="colonyEventId" value={r.colonyEventId} />
+                  <input type="hidden" name="locationId" value={apiary.id} />
+                  <div className="nn-field">
+                    <label htmlFor={`retiro-${r.colonyEventId}`}>{t("retiroFechaLabel")}</label>
+                    {/* DÍA, no instante: nadie retira una tira «a las 10:30». */}
+                    <input id={`retiro-${r.colonyEventId}`} name="removalDate" type="date" required />
+                  </div>
+                  <BotonDeEnvio>{t("retiroGuardar")}</BotonDeEnvio>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {/* El alimento que se acaba, arriba del todo: es lo que el Anexo C §1.2
           llama el modo de fallo de Toabré. Las filas `sin_fecha` SE ENSEÑAN —una
           alimentación sin «alcanza hasta» es una colonia de la que no se puede
