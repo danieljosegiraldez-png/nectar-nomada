@@ -46,6 +46,12 @@ export default async function EquiposPage() {
       <h1>{t("title")}</h1>
       <p className="nn-muted">{t("intro")}</p>
 
+      <p style={{ marginTop: "1rem" }}>
+        <Link href="/equipos/nuevo" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
+          {t("botonNuevo")}
+        </Link>
+      </p>
+
       {equipos.length === 0 ? (
         <p className="nn-muted" style={{ marginTop: "1.5rem" }}>
           {t("vacio")}

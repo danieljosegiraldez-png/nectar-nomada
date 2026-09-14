@@ -303,6 +303,15 @@ export async function declararPatron(
   if (input.label.trim().length === 0) throw new EquipoError("label_required");
   if (!Number.isFinite(input.toleranceAbs) || input.toleranceAbs < 0) throw new EquipoError("tolerancia_no_negativa");
 
+  // **Quién lo decidió es la persona que actúa**, salvo que quien llama nombre a
+  // otra. Se resuelve AQUÍ y no en la acción de formulario porque el acceso a
+  // datos vive en este módulo por diseño —`CurrentUser` no lleva `personId`— y
+  // un criterio de aceptación sin autor no se puede discutir después.
+  const decidio =
+    input.decidedByPersonId ??
+    (await prisma.userAccount.findUnique({ where: { id: userAccountId }, select: { personId: true } }))?.personId ??
+    null;
+
   return prisma.$transaction(async (tx) => {
     const req = await tx.instrumentCheckRequirement.create({
       data: {
@@ -311,7 +320,7 @@ export async function declararPatron(
         referenceValue: input.referenceValue,
         unit: input.unit.trim(),
         toleranceAbs: input.toleranceAbs,
-        decidedByPersonId: input.decidedByPersonId ?? null,
+        decidedByPersonId: decidio,
         displayOrder: input.displayOrder ?? 0,
         createdBy: userAccountId,
       },
@@ -693,4 +702,40 @@ export async function disponibilidadDeRecipientes(userAccountId: string) {
     });
   }
   return { filas, resumen: resumir(filas.map((f) => f.clasificacion)) };
+}
+
+/**
+ * Los sitios donde esta persona puede registrar equipo.
+ *
+ * **Se filtra por el permiso real, no por una visibilidad paralela.** Preguntar
+ * `can(..., "manage", "equipment", {location})` sitio por sitio es más lento que
+ * una consulta con un `where` astuto, y es lo correcto: una segunda regla de
+ * visibilidad escrita a mano deriva de la que de verdad gobierna, y el día que
+ * derive ofrecerá un sitio donde el guardado va a fallar — o, peor, esconderá
+ * uno donde sí se podía.
+ */
+export async function sitiosParaRegistrar(userAccountId: string) {
+  const sitios = await prisma.location.findMany({
+    where: { organizationId: { not: null } },
+    select: { id: true, name: true, organizationId: true },
+    orderBy: { name: "asc" },
+  });
+  const permitidos = [];
+  for (const s of sitios) {
+    if (!s.organizationId) continue;
+    const ok = await can(userAccountId, "manage", "equipment", { scopeType: "location", scopeRefId: s.id }, "internal");
+    if (ok) permitidos.push({ id: s.id, name: s.name, organizationId: s.organizationId });
+  }
+  return permitidos;
+}
+
+/** ¿Puede esta persona gestionar este equipo? Para decidir qué formularios ofrecer. */
+export async function puedeGestionarEquipo(userAccountId: string, equipmentId: string): Promise<boolean> {
+  const equipo = await prisma.equipment.findUnique({
+    where: { id: equipmentId },
+    select: { id: true, projectId: true, classification: true },
+  });
+  if (!equipo) return false;
+  const objetivo = await objetivoDeEquipo(equipo);
+  return can(userAccountId, "manage", "equipment", objetivo, equipo.classification);
 }

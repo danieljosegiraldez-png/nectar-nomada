@@ -2,11 +2,15 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
-import { informarCondicionFormAction, verificarInstrumentoFormAction } from "../../actions/equipos";
+import {
+  declararPatronFormAction,
+  informarCondicionFormAction,
+  verificarInstrumentoFormAction,
+} from "../../actions/equipos";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { TimezoneOffsetField } from "../../components/TimezoneOffsetField";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { EquipoError, instrumentoParaVerificar } from "../../../lib/equipos/equipos";
+import { EquipoError, instrumentoParaVerificar, puedeGestionarEquipo } from "../../../lib/equipos/equipos";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +45,11 @@ export default async function EquipoPage({
     throw error;
   }
 
-  const [t, sp] = await Promise.all([getTranslations("Equipos"), searchParams]);
+  const [t, sp, puedeGestionar] = await Promise.all([
+    getTranslations("Equipos"),
+    searchParams,
+    puedeGestionarEquipo(user.userAccountId, id),
+  ]);
   const patrones = equipo.checkRequirements;
   const esInstrumento = equipo.kind === "instrument";
 
@@ -56,6 +64,16 @@ export default async function EquipoPage({
       {sp.ok === "verificado" ? (
         <p className="nn-ok" role="status">
           {t("okVerificado")}
+        </p>
+      ) : null}
+      {sp.ok === "registrado" ? (
+        <p className="nn-ok" role="status">
+          {t("okRegistrado")}
+        </p>
+      ) : null}
+      {sp.ok === "patron" ? (
+        <p className="nn-ok" role="status">
+          {t("okPatron")}
         </p>
       ) : null}
       {sp.ok === "condicion" ? (
@@ -131,6 +149,37 @@ export default async function EquipoPage({
               <BotonDeEnvio>{t("botonVerificar")}</BotonDeEnvio>
             </form>
           )}
+        </section>
+      ) : null}
+
+      {esInstrumento && puedeGestionar ? (
+        <section style={{ marginTop: "1.5rem" }}>
+          <h2>{t("patronTitulo")}</h2>
+          {/* Sólo para quien tiene `equipment:manage`. Declarar contra qué se
+              contrasta un instrumento es la decisión del jefe de beneficio con el
+              especialista en procesos, no del operario que lo usa. */}
+          <p className="nn-muted">{t("patronIntro")}</p>
+          <form action={declararPatronFormAction}>
+            <input type="hidden" name="equipmentId" value={equipo.id} />
+            <label>
+              {t("campoEtiqueta")}
+              <input type="text" name="label" required maxLength={80} placeholder={t("campoEtiquetaEjemplo")} />
+            </label>
+            <label>
+              {t("colReferencia")}
+              <input type="number" step="any" name="referenceValue" required />
+            </label>
+            <label>
+              {t("campoUnidad")}
+              <input type="text" name="unit" required maxLength={12} placeholder="°Bx" />
+            </label>
+            <label>
+              {t("colTolerancia")}
+              <input type="number" step="any" name="toleranceAbs" required min={0} />
+            </label>
+            <p className="nn-muted">{t("campoToleranciaAyuda")}</p>
+            <BotonDeEnvio>{t("botonDeclararPatron")}</BotonDeEnvio>
+          </form>
         </section>
       ) : null}
 
