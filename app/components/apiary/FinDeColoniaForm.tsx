@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { queueDraft } from "../../../lib/apiary/offlineQueue";
 import { APIARY_DRAFTS_CHANGED_EVENT } from "./OfflineSyncIndicator";
+import { Ayuda } from "./Ayuda";
 
 /**
  * Registrar que una colonia se perdió, **sin señal**.
@@ -105,7 +106,7 @@ export function FinDeColoniaForm({ colonyId, causas }: { colonyId: string; causa
         {/* Sin preseleccionar: «murió», «se fugó» y «se combinó» son hechos
             distintos y el valor por defecto sería uno que nadie declaró. */}
         <select id="colony-end-status" value={estado} onChange={(e) => setEstado(e.target.value)} required>
-          <option value="">{t("colonyEndStatusUnset")}</option>
+          <option value="" disabled />
           <option value="dead">{t("colonyStatus_dead")}</option>
           <option value="absconded">{t("colonyStatus_absconded")}</option>
           <option value="combined">{t("colonyStatus_combined")}</option>
@@ -131,7 +132,7 @@ export function FinDeColoniaForm({ colonyId, causas }: { colonyId: string; causa
           «Saqueo» queriendo decir «se fue». */}
       <fieldset className="nn-field">
         <legend>{t("colonyEndCausesLegend")}</legend>
-        <p className="nn-muted">{t("colonyEndCausesHelp")}</p>
+        <Ayuda resumen={t("ayudaResumen")}>{t("colonyEndCausesHelp")}</Ayuda>
         {causas.map((c) => (
           <div key={c.id} className="nn-field">
             <label htmlFor={`causa-${c.id}`}>{c.value}</label>

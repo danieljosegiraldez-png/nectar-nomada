@@ -10,6 +10,7 @@ import {
   POBLACIONES,
 } from "../../../lib/apiary/estadoDeColonia";
 import { APIARY_DRAFTS_CHANGED_EVENT } from "./OfflineSyncIndicator";
+import { Ayuda } from "./Ayuda";
 
 /**
  * §4's own design, revised (22_APIARY_V1_SCOPING_REPORT.md): one tap on
@@ -186,7 +187,7 @@ export function InspectionForm({
           <div className="nn-field">
             <label htmlFor={`insp-queen-${colonyId}`}>{t("queenSightedLabel")}</label>
             <select id={`insp-queen-${colonyId}`} value={queenSighted} onChange={(e) => setQueenSighted(e.target.value)}>
-              <option value="">{t("triNoRegistrado")}</option>
+              <option value="" />
               <option value="si">{t("triSi")}</option>
               <option value="no">{t("triNo")}</option>
             </select>
@@ -200,7 +201,7 @@ export function InspectionForm({
           <div className="nn-field">
             <label htmlFor={`insp-pob-${colonyId}`}>{t("populationLabel")}</label>
             <select id={`insp-pob-${colonyId}`} value={poblacion} onChange={(e) => setPoblacion(e.target.value)}>
-              <option value="">{t("triNoRegistrado")}</option>
+              <option value="" />
               {POBLACIONES.map((v) => (
                 <option key={v} value={v}>
                   {t(`population_${v}`)}
@@ -245,14 +246,14 @@ export function InspectionForm({
           <div className="nn-field">
             <label htmlFor={`insp-celdas-${colonyId}`}>{t("queenCellsLabel")}</label>
             <select id={`insp-celdas-${colonyId}`} value={celdas} onChange={(e) => setCeldas(e.target.value)}>
-              <option value="">{t("triNoRegistrado")}</option>
+              <option value="" />
               {CELDAS_REALES.map((v) => (
                 <option key={v} value={v}>
                   {t(`queenCell_${v}`)}
                 </option>
               ))}
             </select>
-            <p className="nn-muted">{t("queenCellsHelp")}</p>
+            <Ayuda resumen={t("ayudaResumen")}>{t("queenCellsHelp")}</Ayuda>
           </div>
           {/* Cuántas, sólo si se vio algo: un número sin tipo no dice de qué hay tres. */}
           {celdas !== "" && celdas !== "no_hay" ? (
@@ -274,7 +275,7 @@ export function InspectionForm({
           <div className="nn-field">
             <label htmlFor={`insp-miel-${colonyId}`}>{t("honeyStoresLabel")}</label>
             <select id={`insp-miel-${colonyId}`} value={mielNivel} onChange={(e) => setMielNivel(e.target.value)}>
-              <option value="">{t("triNoRegistrado")}</option>
+              <option value="" />
               {NIVELES_DE_RESERVA.map((v) => (
                 <option key={v} value={v}>
                   {t(`storesLevel_${v}`)}
@@ -289,7 +290,7 @@ export function InspectionForm({
               value={mielJuntoACria}
               onChange={(e) => setMielJuntoACria(e.target.value)}
             >
-              <option value="">{t("triNoRegistrado")}</option>
+              <option value="" />
               <option value="si">{t("triSi")}</option>
               <option value="no">{t("triNo")}</option>
             </select>
@@ -297,14 +298,14 @@ export function InspectionForm({
           <div className="nn-field">
             <label htmlFor={`insp-polen-${colonyId}`}>{t("pollenStoresLabel")}</label>
             <select id={`insp-polen-${colonyId}`} value={polenNivel} onChange={(e) => setPolenNivel(e.target.value)}>
-              <option value="">{t("triNoRegistrado")}</option>
+              <option value="" />
               {NIVELES_DE_RESERVA.map((v) => (
                 <option key={v} value={v}>
                   {t(`storesLevel_${v}`)}
                 </option>
               ))}
             </select>
-            <p className="nn-muted">{t("pollenStoresHelp")}</p>
+            <Ayuda resumen={t("ayudaResumen")}>{t("pollenStoresHelp")}</Ayuda>
           </div>
           <div className="nn-field">
             <label htmlFor={`insp-polen-cria-${colonyId}`}>{t("nextToBroodLabel")}</label>
@@ -313,7 +314,7 @@ export function InspectionForm({
               value={polenJuntoACria}
               onChange={(e) => setPolenJuntoACria(e.target.value)}
             >
-              <option value="">{t("triNoRegistrado")}</option>
+              <option value="" />
               <option value="si">{t("triSi")}</option>
               <option value="no">{t("triNo")}</option>
             </select>
@@ -321,11 +322,11 @@ export function InspectionForm({
           <div className="nn-field">
             <label htmlFor={`insp-zangano-${colonyId}`}>{t("droneBroodLabel")}</label>
             <select id={`insp-zangano-${colonyId}`} value={zangano} onChange={(e) => setZangano(e.target.value)}>
-              <option value="">{t("triNoRegistrado")}</option>
+              <option value="" />
               <option value="si">{t("triSi")}</option>
               <option value="no">{t("triNo")}</option>
             </select>
-            <p className="nn-muted">{t("droneBroodHelp")}</p>
+            <Ayuda resumen={t("ayudaResumen")}>{t("droneBroodHelp")}</Ayuda>
           </div>
           <div className="nn-field">
             <label htmlFor={`insp-temperament-${colonyId}`}>{t("temperamentLabel")}</label>

@@ -973,6 +973,20 @@ a.nn-card-link:active {
   color: var(--nn-ink-muted);
 }
 
+/* Anexo E §6 — la ayuda de un campo, colapsada. Los diez textos de ayuda del módulo
+   apícola se leían siempre y empujaban el campo siguiente fuera de una pantalla de
+   390 px. El resumen va pequeño y apagado: es una puerta, no un rótulo que compita
+   con el del campo. */
+.nn-ayuda > summary {
+  font-size: 0.85rem;
+  color: var(--nn-ink-muted);
+  cursor: pointer;
+}
+
+.nn-ayuda > p {
+  margin: 0.25rem 0 0;
+}
+
 .nn-vitales-nota {
   margin-top: 1.5rem;
   font-size: 0.85rem;
