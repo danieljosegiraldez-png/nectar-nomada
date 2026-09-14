@@ -38,6 +38,35 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-14 · El traslado de colmenas, y el primer hueco de A9 que era de esquema
+
+Cierra el §8 del Anexo E (ADR-126, PR pendiente). **Invierte el hallazgo de la semana:**
+ADR-118, 122 y 123 encontraron tres veces un mecanismo completo sin pantalla; aquí no había
+dónde escribir el hecho. Ningún evento de apiario tiene `location_id` propio —cero en
+`Inspection`, `ColonyEvent`, `ApiaryHarvestEvent` y `VarroaCount`, contra dos en `Lot`—, así
+que el único camino de un evento a su apiario era `hive.location_id` y moverlo habría movido
+la historia. `HivePlacement` copia el patrón de `StorageAssignment`, con relleno en la
+migración; `hive.locationId` **se queda** porque es el ancla de autorización en ocho sitios.
+
+**Tres restricciones que no eran lo que parecían**, y las tres las dijo medir:
+
+- `@@unique([hiveId, endedAt])` **no habría guardado nada**: en Postgres dos `NULL` no
+  chocan. Medido contra 18.6 con control positivo —rechazó la fila duplicada con valor,
+  admitió las dos con `NULL`—. La invariante la sostiene el servicio.
+- **Mi compuerta del destino negaba el caso normal**: pasaba sólo el `locationId`, y con eso
+  un Farm Operator asignado por proyecto habría sido rechazado al trasladar dentro de su
+  propio proyecto. Lo dijo leer `requireApiaryAccess`, no una corrida.
+- **La aritmética de la carencia la había duplicado** para evitar un N+1. Extraída a
+  `libreDesdeDe`/`diasQueFaltanDe`, puras, y usada por los dos lectores.
+
+**Y un defecto ajeno que sólo salió porque un guardia rechazó código nuevo:**
+`BotonDeEnvio` hacía `disabled={pending} {...resto}`, así que un llamador que pasara su
+propio `disabled` **borraba la protección del doble toque en silencio** — le pasaba a
+`app/sensory/[sessionId]/page.tsx`. Arreglado y con guardia. La primera versión de ese
+guardia comparaba posiciones con `indexOf` y midió **un comentario**; se retiró.
+
+**Pendiente nombrado:** `createHive` no abre la colocación inicial de una colmena nueva.
+
 ### 2026-09-14 · Secado, y con él los 47 criterios del beneficio en verde
 
 `lib/beneficio/secado.ts`. **El tablero cierra: 50 pasando, 0 pendientes.** La
@@ -104,47 +133,6 @@ primeras horas.
 
 **Seis flip-tests**, todos compilando y cada uno por su vector. Uno hubo que
 rehacerlo: no compilaba **y no cayó nada** — una no-mutación.
-
-### 2026-09-13 · El Anexo E entra, y dos de los nueve «vacíos» eran respuestas
-
-El dueño entregó `pantallas-captura-apicola.md`. Queda como
-`48_A9_ANEXO_E_PANTALLAS_Y_FORMULARIOS.md` y **se cruzó contra el código antes de
-construir nada** (ADR-124, PR #296). Once afirmaciones medidas: tres salen a favor del
-código —el orden por urgencia ya existe, la jornada sin cerrar **sí** se persigue a las
-72 h, y las ayudas de apiario no hablan de suelo— y cuatro a favor del dueño.
-
-**Y una que invierte el hallazgo de la semana:** §8, traslado de colmenas, es el primer
-hueco que es de **esquema** y no de pantalla. `Hive.locationId` es un FK escalar sin
-modelo de vigencia, así que mover una colmena hoy reescribiría su pasado y
-`@@unique([locationId, identifier])` chocaría en destino. Tres ADR seguidos —118, 122,
-123— encontraron mecanismos completos sin pantalla; aquí buscar lo mismo sería aplicar
-el hallazgo anterior donde no aplica.
-
-**El §6 ya está construido** (ADR-125): el vacío deja de ofrecerse como opción. Nueve
-grafías en 22 opciones vacías, y **dos de las nueve no eran vacío** — «No — cuento para
-decidir» y el «—» de las causas de pérdida son afirmaciones que guardan `null`.
-Colapsarlas a un término las habría borrado, así que `lib/apiary/vacio.ts` declara tres
-familias y una lista explícita. Y la mitad que no existía: «Sin registrar» ahora **se
-lee**, porque los campos de cierre se enseñaban omitiéndose y «sin cerrar» se leía igual
-que «no aplica».
-
-**El guardia se acota a apiario a propósito:** la app entera tiene 89 opciones vacías
-con 34 grafías, y uno sobre las 89 no podría pasar hoy. El resto queda inventariado en
-ADR-125, no vigilado.
-
-**Su detector tenía un fallo de la clase conocida:** el patrón con cierre se tragaba la
-forma autocerrada y reportó **18 violaciones inexistentes**. Falló en rojo, que es la
-única razón por la que se vio.
-
-**Y un error propio, corregido el mismo día.** Escribí que sin el «plan de renumeración»
-el orden de trabajo no tenía fuente autoritativa, y **le pedí a Daniel un documento que ya
-tenía**. La secuencia está en el repositorio: la tabla «Camino crítico» del
-`48_A9_CAPTURA_DE_CAMPO_REPORTE.md`, **A9.0 … A9.12** con dependencias, y el Anexo H §5 lo
-confirma. Los **trece** tienen ya módulo que los declara, así que la secuencia **está
-agotada** — y por eso no ordena el §8 ni el §9: **no están en ella**. Son alcance nuevo, y
-la pregunta deja de ser «¿en qué orden?» para ser «¿entran o no?». Del paquete sigue sin
-aparecer sólo el «brief del módulo». Y la serie de anexos **salta de E a G**: no hay
-Anexo F en `main`.
 
 ### 2026-09-14 · La humedad de la miel no estaba «parcial»: estaba escondida
 

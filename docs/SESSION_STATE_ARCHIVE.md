@@ -2823,3 +2823,45 @@ diferían; aquí coinciden y dos enums serían dos sitios donde añadir el sigui
 colmena. Aquí no era un accidente — la configuración cambia por definición. El
 historial, otra vez, no hubo que construirlo: `leerEnmiendas` lee cualquier entidad por
 su tipo.
+
+
+### 2026-09-13 · El Anexo E entra, y dos de los nueve «vacíos» eran respuestas
+
+El dueño entregó `pantallas-captura-apicola.md`. Queda como
+`48_A9_ANEXO_E_PANTALLAS_Y_FORMULARIOS.md` y **se cruzó contra el código antes de
+construir nada** (ADR-124, PR #296). Once afirmaciones medidas: tres salen a favor del
+código —el orden por urgencia ya existe, la jornada sin cerrar **sí** se persigue a las
+72 h, y las ayudas de apiario no hablan de suelo— y cuatro a favor del dueño.
+
+**Y una que invierte el hallazgo de la semana:** §8, traslado de colmenas, es el primer
+hueco que es de **esquema** y no de pantalla. `Hive.locationId` es un FK escalar sin
+modelo de vigencia, así que mover una colmena hoy reescribiría su pasado y
+`@@unique([locationId, identifier])` chocaría en destino. Tres ADR seguidos —118, 122,
+123— encontraron mecanismos completos sin pantalla; aquí buscar lo mismo sería aplicar
+el hallazgo anterior donde no aplica.
+
+**El §6 ya está construido** (ADR-125): el vacío deja de ofrecerse como opción. Nueve
+grafías en 22 opciones vacías, y **dos de las nueve no eran vacío** — «No — cuento para
+decidir» y el «—» de las causas de pérdida son afirmaciones que guardan `null`.
+Colapsarlas a un término las habría borrado, así que `lib/apiary/vacio.ts` declara tres
+familias y una lista explícita. Y la mitad que no existía: «Sin registrar» ahora **se
+lee**, porque los campos de cierre se enseñaban omitiéndose y «sin cerrar» se leía igual
+que «no aplica».
+
+**El guardia se acota a apiario a propósito:** la app entera tiene 89 opciones vacías
+con 34 grafías, y uno sobre las 89 no podría pasar hoy. El resto queda inventariado en
+ADR-125, no vigilado.
+
+**Su detector tenía un fallo de la clase conocida:** el patrón con cierre se tragaba la
+forma autocerrada y reportó **18 violaciones inexistentes**. Falló en rojo, que es la
+única razón por la que se vio.
+
+**Y un error propio, corregido el mismo día.** Escribí que sin el «plan de renumeración»
+el orden de trabajo no tenía fuente autoritativa, y **le pedí a Daniel un documento que ya
+tenía**. La secuencia está en el repositorio: la tabla «Camino crítico» del
+`48_A9_CAPTURA_DE_CAMPO_REPORTE.md`, **A9.0 … A9.12** con dependencias, y el Anexo H §5 lo
+confirma. Los **trece** tienen ya módulo que los declara, así que la secuencia **está
+agotada** — y por eso no ordena el §8 ni el §9: **no están en ella**. Son alcance nuevo, y
+la pregunta deja de ser «¿en qué orden?» para ser «¿entran o no?». Del paquete sigue sin
+aparecer sólo el «brief del módulo». Y la serie de anexos **salta de E a G**: no hay
+Anexo F en `main`.
