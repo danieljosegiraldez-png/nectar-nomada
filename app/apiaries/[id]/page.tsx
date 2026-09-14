@@ -16,6 +16,13 @@ import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
 import { Ayuda } from "../../components/apiary/Ayuda";
 import { TrasladoForm } from "../../components/apiary/TrasladoForm";
+import { ConsultaAVecinosForm } from "../../components/apiary/ConsultaAVecinosForm";
+import {
+  consultasDeSitio,
+  estadoDelProtocolo,
+  aplicacionesPrevistas,
+  vecinosOfrecidos,
+} from "../../../lib/apiary/consultaAVecinos";
 import { destinosCandidatos } from "../../../lib/apiary/traslado";
 import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
@@ -55,6 +62,14 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   const destinos = apiary.organizationId
     ? await destinosCandidatos(apiary.organizationId, apiary.id, ahora)
     : [];
+  // Anexo E §4 — el protocolo de vecinos. Cuatro lecturas en paralelo: el estado, lo
+  // anunciado, el historial y a quién se puede preguntar.
+  const [protocolo, anunciadas, consultas, vecinos] = await Promise.all([
+    estadoDelProtocolo(apiary.id, ahora),
+    aplicacionesPrevistas([apiary.id], ahora),
+    consultasDeSitio(apiary.id),
+    vecinosOfrecidos(user.userAccountId, apiary.id),
+  ]);
   const haceUnAno = new Date(ahora.getFullYear() - 1, ahora.getMonth(), ahora.getDate());
   const irregularidades = await coloniasPorIrregularidad(id, haceUnAno, ahora);
   // A9 · Anexo B §2.2 — el aviso de enjambrazón. Ventana más corta que la de las
@@ -380,6 +395,64 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
                 poblada: h.colonies.some((c) => c.status === "active"),
               }))}
               destinos={destinos}
+              hoy={ahora.toISOString().slice(0, 10)}
+            />
+          </details>
+        ) : null}
+      </section>
+
+      {/* Anexo E §4 y §3 — la consulta a vecinos. Va ANTES de las visitas porque su
+          vencimiento decide si la próxima ida lleva una parada más, y el §3 la enseña
+          entre los avisos de cabecera del sitio. */}
+      <section className="nn-section">
+        <h2>{t("consultaHeading")}</h2>
+
+        {/* El estado del protocolo, siempre visible. «Nunca se ha consultado» es un estado
+            y no una alerta: un apiario nuevo no ha incumplido nada (ADR-127). */}
+        <p className={protocolo.estado === "vencida" ? "nn-alerta nn-alerta-aviso" : "nn-muted"}>
+          {protocolo.ultimaConsulta === null
+            ? t("consultaNunca")
+            : protocolo.diasQueFaltan !== null && protocolo.diasQueFaltan < 0
+              ? t("consultaVencidaHace", { dias: -protocolo.diasQueFaltan })
+              : t("consultaVenceEn", { dias: protocolo.diasQueFaltan ?? 0 })}
+        </p>
+
+        {anunciadas.length > 0 ? (
+          <ul className="nn-alertas">
+            {anunciadas.map((a) => (
+              <li key={a.consultationId} className="nn-alerta nn-alerta-critico">
+                {t("consultaAspersionAnunciada", {
+                  vecino: a.vecino,
+                  dias: a.diasQueFaltan,
+                  cultivo: a.crop ?? t("sinRegistrar"),
+                })}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {consultas.length === 0 ? null : (
+          <ul>
+            {consultas.map((c) => (
+              <li key={c.id}>
+                {c.occurredAt.toISOString().slice(0, 10)} · {c.neighbourOrganization.name} ·{" "}
+                {t(`consultaResultado_${c.outcome}`)}
+                {c.plannedApplicationAt ? ` · ${c.plannedApplicationAt.toISOString().slice(0, 10)}` : ""}
+                {c.crop ? ` · ${c.crop}` : ""}
+                {c.informantName ? ` · ${c.informantName}` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {vecinos.length > 0 ? (
+          <details>
+            <summary>{t("consultaRegistrarSummary")}</summary>
+            <ConsultaAVecinosForm
+              locationId={apiary.id}
+              vecinos={vecinos}
+              personas={people.map((p) => ({ id: p.id, name: p.displayName }))}
+              selfPersonId={selfPersonId}
               hoy={ahora.toISOString().slice(0, 10)}
             />
           </details>

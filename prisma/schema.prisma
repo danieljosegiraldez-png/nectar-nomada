@@ -113,6 +113,7 @@ model Person {
   fermentationRunsOperated           FermentationRun[]             @relation("FermentationRunOperator")
   dryingTurnEventsOperated           DryingTurnEvent[]             @relation("DryingTurnEventOperator")
   lotProcessInterventionsOperated    LotProcessIntervention[]      @relation("LotProcessInterventionOperator")
+  neighbourConsultationsOperated     NeighbourConsultation[]       @relation("NeighbourConsultationOperator")
   roastSessionsRoasted               RoastSession[]                @relation("RoastSessionRoaster")
   labourEntriesOperated              LabourEntry[]                 @relation("LabourEntryOperator")
   materialConsumptionEntriesOperated MaterialConsumptionEntry[]    @relation("MaterialConsumptionEntryOperator")
@@ -213,6 +214,7 @@ model UserAccount {
   materialConsumptionEntriesCreated MaterialConsumptionEntry[]   @relation("MaterialConsumptionEntryCreatedBy")
   hivesCreated                      Hive[]                       @relation("HiveCreatedBy")
   hivePlacementsCreated             HivePlacement[]              @relation("HivePlacementCreatedBy")
+  neighbourConsultationsCreated     NeighbourConsultation[]      @relation("NeighbourConsultationCreatedBy")
   coloniesCreated                   Colony[]                     @relation("ColonyCreatedBy")
   colonyLossCausesCreated           ColonyLossCause[]            @relation("ColonyLossCauseCreatedBy")
   inspectionsCreated                Inspection[]                 @relation("InspectionCreatedBy")
@@ -742,6 +744,7 @@ model Location {
   pollinationCommitments      PollinationCommitment[]
   hives                       Hive[]
   hivePlacements              HivePlacement[]
+  neighbourConsultations      NeighbourConsultation[]
   specimens                   Specimen[]
   plantingEvents              PlantingEvent[]
   plantingCohorts             PlantingCohort[]
@@ -853,6 +856,7 @@ model Organization {
   externalCoffeeOriginsAsProducer  ExternalCoffeeOrigin[]   @relation("ExternalCoffeeProducer")
   externalCoffeeOriginsAsProcessor ExternalCoffeeOrigin[]   @relation("ExternalCoffeeProcessor")
   pollinationCommitmentsAsClient   PollinationCommitment[]  @relation("PollinationCommitmentClient")
+  neighbourConsultationsAsNeighbour NeighbourConsultation[] @relation("NeighbourConsultationNeighbour")
   externalCoffeeOriginsAsBrand     ExternalCoffeeOrigin[]   @relation("ExternalCoffeeBrand")
 
   @@map("organization")
@@ -5905,6 +5909,105 @@ model ColonyEvent {
 ///
 /// **Y lleva ventana.** Sin `endsAt` un compromiso cumplido y terminado seguiría
 /// gritando déficit cada temporada. Anulable porque un contrato abierto existe.
+/// Cómo terminó una consulta a una finca vecina. **Anexo E §4.**
+///
+/// **Los tres son respuestas, y por eso es un enum y no un anulable.** «Fuimos y no hay
+/// aplicación prevista» es la respuesta más valiosa del protocolo y la más fácil de
+/// perder: si se guardara como «sin fecha de aplicación», sería indistinguible de «nadie
+/// preguntó». Es la distinción de ADR-080 aplicada a un protocolo mensual — y la misma
+/// que ADR-125 hizo con el vocabulario del vacío: lo que alguien afirma conserva su
+/// nombre, lo que nadie anotó no se disfraza de afirmación.
+enum NeighbourConsultationOutcome {
+  /// Se consultó y la finca declaró que no tiene aplicaciones previstas.
+  sin_aplicacion_prevista
+  /// Se consultó y hay una aplicación prevista. Exige fecha en la capa de servicio.
+  aplicacion_prevista
+  /// Se fue a consultar y no se pudo: nadie a quien preguntar, o se negaron. **No es lo
+  /// mismo que no haber ido**, y por eso ocupa el mes igual que las otras dos: el
+  /// protocolo se cumplió, la información no llegó.
+  no_se_pudo_consultar
+
+  @@schema("apiary")
+}
+
+/// La consulta mensual a las fincas vecinas de un apiario. **Anexo E §4 y §8.**
+///
+/// **Qué cierra, y aparece tres veces en el Anexo:** el §4 la pide como formulario
+/// —*«Finca, cultivo, aplicación prevista y fecha, quién informó. Es protocolo mensual, no
+/// una nota, y el sistema lo reclama solo»*—, el §3 la enseña como alerta del sitio
+/// —«Consulta a vecinos vence en 3 días»— y el §8 la necesita para la mitad del aviso de
+/// traslado que hoy dice que nadie ha preguntado.
+///
+/// **Por qué existe como tabla.** Medido el 2026-09-14 antes de escribir nada: no había
+/// **nada** —cero coincidencias de `vecin|neighbour|aspersi|spray|pesticid|agroquim` en el
+/// esquema y en `lib/apiary/`, con `carencia|Withdrawal` dando diez como control
+/// positivo—. Lo único que existía era la **consecuencia**: `lib/research/catalogs.ts`
+/// tiene «Intoxicación por agroquímicos» como causa de pérdida, y su propia nota dice que
+/// *«en Panamá la literatura la asocia a la deriva de aplicaciones vecinas»*. O sea que el
+/// sistema sabía registrar la colonia muerta y no el aviso que la habría salvado.
+///
+/// **La finca vecina es una `Organization`, obligatoria.** Es el precedente de la casa:
+/// `PollinationCommitment.clientOrganizationId` también lo es. Cuesta un alta la primera
+/// vez por vecino y a cambio la consulta del mes que viene habla de la misma finca que la
+/// de este mes — con texto libre, «la finca de al lado» y «Finca Los Robles» serían dos
+/// vecinos distintos para cualquier consulta.
+model NeighbourConsultation {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// El apiario cuyos vecinos se consultan.
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id])
+
+  neighbourOrganizationId String       @map("neighbour_organization_id") @db.Uuid
+  neighbourOrganization   Organization @relation("NeighbourConsultationNeighbour", fields: [neighbourOrganizationId], references: [id])
+
+  /// Cuándo se consultó. **Campo de DÍA**, no instante: se parsea con `fechaDeDia` y se
+  /// guarda a medianoche UTC. Es lo que cuenta el mes del protocolo.
+  occurredAt DateTime @map("occurred_at")
+
+  outcome NeighbourConsultationOutcome
+
+  /// Qué se cultiva en la finca vecina. **Texto libre a propósito, y conviene decir por
+  /// qué**: no hay catálogo de cultivos en este repositorio —los «cultivo» que aparecen
+  /// son de levaduras— y el dueño no ha dado un vocabulario. Inventarlo sería fabricar un
+  /// hecho de negocio. A diferencia de `harvest_event.condition`, que era texto libre
+  /// sobre algo NUESTRO y acabó con 29 filas diciendo lo mismo, éste es un hecho de la
+  /// finca de otro: se recoge como lo dijeron. El día que haya vocabulario, es un catálogo
+  /// y una migración de valores, no un rediseño.
+  crop String?
+
+  /// Cuándo se aplicará. **Obligatoria en la capa de servicio cuando
+  /// `outcome = aplicacion_prevista`, y prohibida en los otros dos** — una fecha de
+  /// aplicación junto a «no hay aplicación prevista» es una contradicción que después
+  /// nadie sabe leer. Campo de DÍA.
+  plannedApplicationAt DateTime? @map("planned_application_at")
+
+  /// Quién lo informó, en la finca vecina. **Es lo que hace la consulta verificable**: sin
+  /// nombre, «me dijeron que no» no se puede volver a preguntar. Obligatorio en la capa de
+  /// servicio salvo cuando `outcome = no_se_pudo_consultar`, donde no hay informante.
+  informantName String? @map("informant_name")
+
+  /// Quién de los nuestros fue a consultar.
+  operatorPersonId String? @map("operator_person_id") @db.Uuid
+  operator         Person? @relation("NeighbourConsultationOperator", fields: [operatorPersonId], references: [id])
+
+  note String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+  dataQuality     DataQuality?    @map("data_quality")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("NeighbourConsultationCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([locationId])
+  @@index([neighbourOrganizationId])
+  @@index([plannedApplicationAt])
+  @@map("neighbour_consultation")
+  @@schema("apiary")
+}
+
 model PollinationCommitment {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 

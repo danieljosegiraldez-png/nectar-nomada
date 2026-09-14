@@ -38,6 +38,38 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-14 · La consulta a vecinos: sabíamos registrar la colonia muerta, no el aviso
+
+Cierra el hueco que el traslado destapó, y que aparece **tres veces** en el Anexo E: el §4
+lo pide como formulario mensual que «el sistema reclama solo», el §3 como alerta del sitio,
+y el §8 lo necesitaba para la mitad de su aviso que decía que nadie ha preguntado. ADR-127.
+
+**La medición que da el título.** Cero coincidencias de `vecin|aspersi|spray|agroquim` en el
+esquema y en `lib/apiary/`, con `carencia|Withdrawal` dando diez como control. Lo único que
+existía era la **consecuencia**: «Intoxicación por agroquímicos» como causa de pérdida, con
+una nota que la asocia a la deriva de aplicaciones vecinas.
+
+**Un enum de resultado y no una fecha anulable.** «No hay aplicación prevista» es la
+respuesta más valiosa del protocolo y, guardada como «sin fecha», sería indistinguible de
+«nadie preguntó». `no_se_pudo_consultar` tampoco es no haber ido.
+
+**Las dos invariantes están en la BASE, con `CHECK`, y se probó que disparan** —tres
+rechazos nombrando la restricción, dos aceptaciones, y sin crear deriva—. **El primer
+intento de esa prueba no medía nada:** el control positivo falló por `updated_at` sin valor
+por defecto, y los tres «rechazos» siguientes eran «transaction is aborted».
+
+**Una trampa evitada, la del docblock al revés.** Reusar `organizacionesParaApiario` —que
+devuelve `[]` salvo con visibilidad `"all"`— habría dado un desplegable **vacío justo al
+Farm Operator con ámbito de proyecto**, que es quien hace el trabajo de campo.
+
+**Guardia nuevo:** `alertas-con-su-texto`. La lista de apiarios construye
+`t(`alerta_${motivo}`)` en ejecución, así que un motivo sin texto no rompe el build: rompe
+la primera pantalla del módulo.
+
+**Decisión pendiente del dueño, señalada en el código:** si una aspersión anunciada debe
+pintar el borde **antes** que una pérdida ya ocurrida. El Anexo C §1.2 fija el orden de las
+cinco alertas viejas y no se reordenó.
+
 ### 2026-09-14 · El traslado de colmenas, y el primer hueco de A9 que era de esquema
 
 Cierra el §8 del Anexo E (ADR-126, PR pendiente). **Invierte el hallazgo de la semana:**
@@ -136,30 +168,6 @@ y que su autor cometió al redactar— **pasa los 47 vectores sin que caiga uno*
 MB-013 comprueba el estado y el rendimiento, no la **ausencia** del aviso falso.
 Queda cubierto desde fuera en `tests/beneficio/etapas-no-se-confunden.test.ts`,
 sin tocar el fichero de vectores.
-
-### 2026-09-13 · Brix: la alerta que estaba documentada y no existía
-
-`lib/beneficio/brix.ts`. El tablero pasa de **16 + 34 a 28 + 22**.
-
-**Aquí vivía el defecto más grave de toda la v2.x**: la alerta de estancamiento
-estaba especificada en el documento **y** en su `CLAUDE.md`, y el código **no
-tenía ninguna rama que la emitiera**. Una protección documentada que no existe
-es peor que no tenerla — quien lee el documento da por hecho que el sistema
-avisa.
-
-**Y la que más fácil se implementa mal**, dicho por el propio documento: una
-ventana de estancamiento sin lectura comparable **no es evaluable y la
-evaluación debe continuar**. Convertirla en estado terminal deja al motor
-incapaz de emitir `TERMINATION_READY` en casi cualquier cadencia real.
-
-Las otras cuatro: velocidad en ventana móvil y no promedio de vida —que
-enmascara justo la parada que se busca—, mediana de tres **por conteo** contra
-el atípico que mandaba el lote a lavado antes de tiempo, guarda de división por
-cero, y que la solubilización del mucílago **sube el °Bx legítimamente** en las
-primeras horas.
-
-**Seis flip-tests**, todos compilando y cada uno por su vector. Uno hubo que
-rehacerlo: no compilaba **y no cayó nada** — una no-mutación.
 
 ### 2026-09-14 · La humedad de la miel no estaba «parcial»: estaba escondida
 

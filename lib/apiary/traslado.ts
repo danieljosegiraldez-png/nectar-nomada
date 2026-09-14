@@ -30,20 +30,29 @@
  * carencia corriendo»*, y dice por qué: *«Meter colmenas a un cultivo que va a ser
  * aspersado en tres días es el error que este módulo existe para evitar.»*
  *
- * **La mitad de la carencia se avisa. La de las aspersiones no existe en el sistema.** No
- * hay ninguna tabla de aplicaciones previstas de fincas vecinas —buscado `vecin|neighbour|
- * aspersion|spray` en el esquema y en `lib/apiary/`: cero, con `carencia|Withdrawal` dando
- * diez como control positivo—. Es el mismo hueco que el §4 del Anexo pide como «Consulta a
- * fincas vecinas», protocolo mensual que «el sistema reclama solo». Devolver aquí un aviso
- * vacío diría «el destino está limpio» cuando lo cierto es «nadie lo ha preguntado», y ésa
- * es exactamente la ausencia convertida en afirmación que ADR-080 prohíbe. Por eso
- * `avisosDeDestino` devuelve además `aspersionesConsultadas: false`, para que la pantalla
- * pueda decir que ese lado no se sabe en vez de callarlo.
+ * **Las dos mitades ya se avisan — la segunda desde el 2026-09-14.** Cuando se escribió
+ * este módulo no había ninguna tabla de aplicaciones previstas de fincas vecinas, así que
+ * `avisosDeDestino` devolvía `aspersionesConsultadas: false` y la pantalla decía que nadie
+ * lo había preguntado: honesto, y la mitad del trabajo. `NeighbourConsultation` (ADR-127)
+ * cerró el hueco, y ahora el traslado sí puede decir *«el destino tiene una aspersión
+ * anunciada en tres días»* — el error que, en palabras del Anexo, «este módulo existe para
+ * evitar».
+ *
+ * **Lo que NO cambia es la distinción:** `aspersionesConsultadas: false` sigue
+ * significando **«nadie ha preguntado»** y nunca «el destino está limpio», y por eso viaja
+ * junto a `protocolo`, que dice si lo que se preguntó sigue vigente. Una consulta de hace
+ * cinco semanas cumplió el protocolo entonces y no afirma nada de hoy.
  */
 import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
 import { carenciasVigentes, diasQueFaltanDe, libreDesdeDe, type CarenciaVigente } from "./carencia";
+import {
+  aplicacionesPrevistas,
+  estadoDelProtocolo,
+  type AplicacionPrevista,
+  type EstadoDelProtocolo,
+} from "./consultaAVecinos";
 import { TrasladoInvalido, exigeMotivoDeTraslado } from "./motivoDeTraslado";
 
 // El vocabulario vive en `motivoDeTraslado.ts`, **sin `prisma` detrás**, porque
@@ -245,11 +254,27 @@ export interface AvisosDeDestino {
   /** Carencias todavía corriendo en las colonias que YA están en el destino. */
   carencias: Array<{ colonyId: string; vigentes: CarenciaVigente[] }>;
   /**
-   * **Siempre `false` hoy, y es una respuesta.** No hay tabla de aplicaciones previstas de
-   * fincas vecinas, así que el sistema no puede decir que el destino esté limpio: puede
-   * decir que **nadie lo ha preguntado**. La pantalla debe enseñar esa diferencia.
+   * Si alguien ha consultado a los vecinos de este destino **alguna vez**.
+   *
+   * **Hasta el 2026-09-14 esto era siempre `false`** porque no había tabla de consultas, y
+   * la pantalla decía «nadie lo ha preguntado» — que era honesto y no era suficiente. Con
+   * `NeighbourConsultation` (ADR-127) ya es un hecho medido, y la diferencia que sostiene
+   * sigue siendo la misma y sigue importando: `false` significa **«nadie ha preguntado»**,
+   * nunca «el destino está limpio».
    */
   aspersionesConsultadas: boolean;
+  /**
+   * Cuándo vence el protocolo mensual del destino. Una consulta de hace cinco semanas
+   * cumplió el protocolo entonces y **no dice nada de hoy**, así que la pantalla necesita
+   * los dos datos: que se preguntó, y si sigue vigente.
+   */
+  protocolo: EstadoDelProtocolo;
+  /**
+   * Las aspersiones anunciadas en el destino que todavía no han ocurrido. **Es el aviso que
+   * el Anexo E §8 pedía y no se podía dar:** *«Meter colmenas a un cultivo que va a ser
+   * aspersado en tres días es el error que este módulo existe para evitar.»*
+   */
+  aspersionesAnunciadas: AplicacionPrevista[];
 }
 
 /**
@@ -268,7 +293,18 @@ export async function avisosDeDestino(destinoLocationId: string, enLaFecha: Date
     const vigentes = await carenciasVigentes(c.id, enLaFecha);
     if (vigentes.length > 0) carencias.push({ colonyId: c.id, vigentes });
   }
-  return { locationId: destinoLocationId, carencias, aspersionesConsultadas: false };
+  const [consultadasAlguna, protocolo, aspersionesAnunciadas] = await Promise.all([
+    prisma.neighbourConsultation.count({ where: { locationId: destinoLocationId } }),
+    estadoDelProtocolo(destinoLocationId, enLaFecha),
+    aplicacionesPrevistas([destinoLocationId], enLaFecha),
+  ]);
+  return {
+    locationId: destinoLocationId,
+    carencias,
+    aspersionesConsultadas: consultadasAlguna > 0,
+    protocolo,
+    aspersionesAnunciadas,
+  };
 }
 
 export interface DestinoCandidato {

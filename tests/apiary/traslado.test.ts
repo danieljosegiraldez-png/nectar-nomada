@@ -28,6 +28,7 @@ import {
   historialDeColocaciones,
   trasladarColmenas,
 } from "../../lib/apiary/traslado";
+import { registrarConsultaAVecinos } from "../../lib/apiary/consultaAVecinos";
 import { leerEnmiendas } from "../../lib/traceability/enmiendas";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
@@ -41,6 +42,7 @@ describe("el traslado de colmenas", () => {
   let origenId: string;
   let destinoId: string;
   let otroApiarioId: string;
+  let vecinoOrgId: string;
   let noApiarioId: string;
   let userAccountId: string;
   let sinAccesoUserAccountId: string;
@@ -103,6 +105,11 @@ describe("el traslado de colmenas", () => {
     otroApiarioId = await crearUbicacion("Otro", "apiary_site");
     noApiarioId = await crearUbicacion("Parcela", "plot");
 
+    vecinoOrgId = (
+      await prisma.organization.create({
+        data: { organizationType: "farm", name: `TEST Vecina (${RUN_ID})`, status: "approved", classification: "internal" },
+      })
+    ).id;
     userAccountId = await crearCuenta("Traslado");
     sinAccesoUserAccountId = await crearCuenta("SinAcceso");
     const perfil = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
@@ -120,6 +127,7 @@ describe("el traslado de colmenas", () => {
       where: assertDefinedWhere({ actorUserAccountId: { in: [userAccountId, sinAccesoUserAccountId] } }),
     });
     await prisma.colonyEvent.deleteMany({ where: assertDefinedWhere({ colonyId: { in: colonias.map((c) => c.id) } }) });
+    await prisma.neighbourConsultation.deleteMany({ where: assertDefinedWhere({ locationId: { in: [origenId, destinoId, otroApiarioId] } }) });
     await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hiveId: { in: hiveIds } }) });
     await prisma.colony.deleteMany({ where: assertDefinedWhere({ hiveId: { in: hiveIds } }) });
     await prisma.hive.deleteMany({ where: assertDefinedWhere({ id: { in: hiveIds } }) });
@@ -137,7 +145,7 @@ describe("el traslado de colmenas", () => {
     await prisma.location.deleteMany({
       where: assertDefinedWhere({ id: { in: [origenId, destinoId, otroApiarioId, noApiarioId] } }),
     });
-    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: [organizationId, vecinoOrgId] } }) });
   });
 
   it("mueve varias de una vez, cierra la vigencia del origen y abre la del destino", async () => {
@@ -316,9 +324,35 @@ describe("el traslado de colmenas", () => {
     const avisos = await avisosDeDestino(destinoId, DIA_DEL_TRASLADO);
     expect(avisos.carencias).toHaveLength(1);
     expect(avisos.carencias[0]!.vigentes[0]!.diasQueFaltan).toBeGreaterThan(0);
-    // La mitad que NO existe se declara en vez de callarse: un `false` aquí significa
-    // «nadie lo ha preguntado», no «el destino está limpio».
+    // **El comentario que había aquí decía «la mitad que NO existe», y dejó de ser cierto
+    // el 2026-09-14** con `NeighbourConsultation` (ADR-127). Se corrige en vez de dejarlo:
+    // un comentario viejo desorienta más que ninguno.
+    //
+    // Lo que sigue siendo cierto es la distinción: sin consultas, `false` significa
+    // **«nadie ha preguntado»** y nunca «el destino está limpio». Aquí no hay ninguna.
     expect(avisos.aspersionesConsultadas).toBe(false);
+    expect(avisos.protocolo.estado).toBe("sin_consultar");
+    expect(avisos.aspersionesAnunciadas).toEqual([]);
+
+    // Y AHORA LA MITAD QUE ANTES NO SE PODÍA DAR: se consulta al vecino, que anuncia una
+    // aspersión, y el aviso del traslado la lleva con sus días.
+    await registrarConsultaAVecinos(userAccountId, {
+      locationId: destinoId,
+      neighbourOrganizationId: vecinoOrgId,
+      occurredAt: new Date("2026-05-30T00:00:00Z"),
+      outcome: "aplicacion_prevista",
+      crop: "sandía",
+      plannedApplicationAt: new Date("2026-06-04T00:00:00Z"),
+      informantName: "el mayordomo",
+      provenanceClass: "direct_observation",
+    });
+
+    const conAviso = await avisosDeDestino(destinoId, DIA_DEL_TRASLADO);
+    expect(conAviso.aspersionesConsultadas).toBe(true);
+    expect(conAviso.protocolo.estado).toBe("al_dia");
+    expect(conAviso.aspersionesAnunciadas).toHaveLength(1);
+    expect(conAviso.aspersionesAnunciadas[0]!.diasQueFaltan).toBe(3);
+    expect(conAviso.aspersionesAnunciadas[0]!.crop).toBe("sandía");
 
     // Control positivo del lector: un apiario sin tratamientos no inventa carencias.
     expect((await avisosDeDestino(otroApiarioId, DIA_DEL_TRASLADO)).carencias).toEqual([]);

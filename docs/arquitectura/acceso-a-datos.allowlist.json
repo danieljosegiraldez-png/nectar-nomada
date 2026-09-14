@@ -372,6 +372,10 @@
     {
       "archivo": "lib/apiary/traslado.ts",
       "razon": "Anexo E §8 — traslada un grupo de colmenas de un apiario a otro cerrando la vigencia del origen y abriendo la del destino en la MISMA transaccion. Modulo de dominio: el acceso a datos vive aqui por diseno. Comprueba `requireApiaryAccess(\"manage\")` sobre el origen Y sobre el destino, cada uno con su projectId y su locationId, antes de escribir nada."
+    },
+    {
+      "archivo": "lib/apiary/consultaAVecinos.ts",
+      "razon": "Anexo E §4, §3 y §8 — la consulta mensual a las fincas vecinas. Modulo de dominio: el acceso a datos vive aqui por diseno. `registrarConsultaAVecinos` y `vecinosOfrecidos` comprueban `requireApiaryAccess(\"manage\")` sobre el apiario, con su projectId y su locationId, antes de escribir u ofrecer nada."
     }
   ],
   "reciben_transaccion": [
@@ -730,6 +734,30 @@
       "operacion": "historialDeColocaciones",
       "razon": "Devuelve el historial de colocaciones de una colmena para su ficha. El hiveId sale de getHive, que autoriza con requireApiaryAccess(\"view\"). No escribe nada.",
       "verificado": "2026-09-13"
+    },
+    {
+      "archivo": "lib/apiary/consultaAVecinos.ts",
+      "operacion": "estadoDelProtocolo",
+      "razon": "Dice si el protocolo mensual del sitio esta al dia, por vencer o vencido. Sus llamadores son la ficha del apiario —que viene de getApiaryDetail, el cual autoriza con requireApiaryAccess(\"view\")— y `avisosDeDestino` del traslado, que ya autorizo los dos apiarios con \"manage\". No pide principal a proposito: misma disciplina que vitalesDeSitios y carenciasVigentes. Solo lee la fecha de la consulta mas reciente y no escribe nada.",
+      "verificado": "2026-09-14"
+    },
+    {
+      "archivo": "lib/apiary/consultaAVecinos.ts",
+      "operacion": "aplicacionesPrevistas",
+      "razon": "Las aspersiones anunciadas que todavia no han ocurrido en una lista de sitios. Es la mitad del aviso del Anexo E §8 que antes no se podia dar. La llaman la ficha del apiario y `avisosDeDestino`, los dos con ids ya concedidos. No escribe nada, y no expone mas que la fecha y el cultivo que un vecino declaro sobre un sitio que quien mira ya puede ver.",
+      "verificado": "2026-09-14"
+    },
+    {
+      "archivo": "lib/apiary/consultaAVecinos.ts",
+      "operacion": "consultasDeSitio",
+      "razon": "El historial de consultas de un sitio, para su ficha. El locationId sale de getApiaryDetail, que autoriza. No escribe nada.",
+      "verificado": "2026-09-14"
+    },
+    {
+      "archivo": "lib/apiary/consultaAVecinos.ts",
+      "operacion": "vecinosConsultados",
+      "razon": "A quien se le ha preguntado en un sitio, para que el formulario los ofrezca primero. Mismo llamador y misma procedencia del id que consultasDeSitio. **No es una lista de vecinos del apiario**: el sistema no modela colindancia. No escribe nada.",
+      "verificado": "2026-09-14"
     }
   ]
 }
