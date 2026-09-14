@@ -2989,3 +2989,64 @@ ejercen 20 pruebas nuevas, no datos reales — el cuello de botella es la captur
 
 **Pendiente de Daniel:** decir que un lote corre CryoBloom **es un cambio de
 esquema** y se propone aparte.
+
+### 2026-09-14 · El traslado de colmenas, y el primer hueco de A9 que era de esquema
+
+Cierra el §8 del Anexo E (ADR-126, PR pendiente). **Invierte el hallazgo de la semana:**
+ADR-118, 122 y 123 encontraron tres veces un mecanismo completo sin pantalla; aquí no había
+dónde escribir el hecho. Ningún evento de apiario tiene `location_id` propio —cero en
+`Inspection`, `ColonyEvent`, `ApiaryHarvestEvent` y `VarroaCount`, contra dos en `Lot`—, así
+que el único camino de un evento a su apiario era `hive.location_id` y moverlo habría movido
+la historia. `HivePlacement` copia el patrón de `StorageAssignment`, con relleno en la
+migración; `hive.locationId` **se queda** porque es el ancla de autorización en ocho sitios.
+
+**Tres restricciones que no eran lo que parecían**, y las tres las dijo medir:
+
+- `@@unique([hiveId, endedAt])` **no habría guardado nada**: en Postgres dos `NULL` no
+  chocan. Medido contra 18.6 con control positivo —rechazó la fila duplicada con valor,
+  admitió las dos con `NULL`—. La invariante la sostiene el servicio.
+- **Mi compuerta del destino negaba el caso normal**: pasaba sólo el `locationId`, y con eso
+  un Farm Operator asignado por proyecto habría sido rechazado al trasladar dentro de su
+  propio proyecto. Lo dijo leer `requireApiaryAccess`, no una corrida.
+- **La aritmética de la carencia la había duplicado** para evitar un N+1. Extraída a
+  `libreDesdeDe`/`diasQueFaltanDe`, puras, y usada por los dos lectores.
+
+**Y un defecto ajeno que sólo salió porque un guardia rechazó código nuevo:**
+`BotonDeEnvio` hacía `disabled={pending} {...resto}`, así que un llamador que pasara su
+propio `disabled` **borraba la protección del doble toque en silencio** — le pasaba a
+`app/sensory/[sessionId]/page.tsx`. Arreglado y con guardia. La primera versión de ese
+guardia comparaba posiciones con `indexOf` y midió **un comentario**; se retiró.
+
+**Pendiente nombrado:** `createHive` no abre la colocación inicial de una colmena nueva.
+
+### 2026-09-14 · La consulta a vecinos: sabíamos registrar la colonia muerta, no el aviso
+
+Cierra el hueco que el traslado destapó, y que aparece **tres veces** en el Anexo E: el §4
+lo pide como formulario mensual que «el sistema reclama solo», el §3 como alerta del sitio,
+y el §8 lo necesitaba para la mitad de su aviso que decía que nadie ha preguntado. ADR-127.
+
+**La medición que da el título.** Cero coincidencias de `vecin|aspersi|spray|agroquim` en el
+esquema y en `lib/apiary/`, con `carencia|Withdrawal` dando diez como control. Lo único que
+existía era la **consecuencia**: «Intoxicación por agroquímicos» como causa de pérdida, con
+una nota que la asocia a la deriva de aplicaciones vecinas.
+
+**Un enum de resultado y no una fecha anulable.** «No hay aplicación prevista» es la
+respuesta más valiosa del protocolo y, guardada como «sin fecha», sería indistinguible de
+«nadie preguntó». `no_se_pudo_consultar` tampoco es no haber ido.
+
+**Las dos invariantes están en la BASE, con `CHECK`, y se probó que disparan** —tres
+rechazos nombrando la restricción, dos aceptaciones, y sin crear deriva—. **El primer
+intento de esa prueba no medía nada:** el control positivo falló por `updated_at` sin valor
+por defecto, y los tres «rechazos» siguientes eran «transaction is aborted».
+
+**Una trampa evitada, la del docblock al revés.** Reusar `organizacionesParaApiario` —que
+devuelve `[]` salvo con visibilidad `"all"`— habría dado un desplegable **vacío justo al
+Farm Operator con ámbito de proyecto**, que es quien hace el trabajo de campo.
+
+**Guardia nuevo:** `alertas-con-su-texto`. La lista de apiarios construye
+`t(`alerta_${motivo}`)` en ejecución, así que un motivo sin texto no rompe el build: rompe
+la primera pantalla del módulo.
+
+**Decisión pendiente del dueño, señalada en el código:** si una aspersión anunciada debe
+pintar el borde **antes** que una pérdida ya ocurrida. El Anexo C §1.2 fija el orden de las
+cinco alertas viejas y no se reordenó.
