@@ -1626,6 +1626,13 @@
         "stalled_rot_hazard": "pH {ph} has not dropped after {hours} h. Rot hazard from stalling.",
         "kinetic_plateau": "The pH curve has not moved for {hours} h, even though the value is in range. Take a look?",
         "approaching_low": "pH {ph}: approaching the low limit. Get ready to wash."
+      },
+      "brix": {
+        "stagnation": "°Brix has not dropped for {hours} h: fermentation looks stalled. Take a look?",
+        "sensor_fault": "°Brix reading outside the measurable range, or refractometer not zeroed. Saved, but it does not feed alerts.",
+        "mixed_sample_points": "The series mixes sample points and they are not comparable. Split them: there is no conversion between tank liquor and pressed mucilage.",
+        "termination_ready": "Sugars dropped as expected ({drop}%). The recipe suggests closing — the call is yours.",
+        "data_integrity_violation": "°Brix rose {rise} points with no recorded cause. Check the prism or log the enrichment."
       }
     }
   }

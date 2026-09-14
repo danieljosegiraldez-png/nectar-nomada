@@ -1626,6 +1626,13 @@
         "stalled_rot_hazard": "pH {ph} sin bajar tras {hours} h. Riesgo de pudrición por estancamiento.",
         "kinetic_plateau": "La curva de pH lleva {hours} h sin moverse, aunque el valor esté en rango. ¿Lo miras?",
         "approaching_low": "pH {ph}: acercándose al límite bajo. Prepara el lavado."
+      },
+      "brix": {
+        "stagnation": "El °Brix lleva {hours} h sin bajar: la fermentación parece detenida. ¿Lo miras?",
+        "sensor_fault": "Lectura de °Brix fuera del rango medible o refractómetro sin cerar. Se guardó, pero no alimenta las alertas.",
+        "mixed_sample_points": "La serie mezcla puntos de muestreo y no son comparables. Sepáralas: no hay conversión entre licor de tanque y mucílago.",
+        "termination_ready": "Los azúcares bajaron lo previsto ({drop}%). La receta sugiere cerrar — lo decides tú.",
+        "data_integrity_violation": "El °Brix subió {rise} puntos sin causa registrada. Revisa el prisma o anota el enriquecimiento."
       }
     }
   }

@@ -156,3 +156,19 @@ export const RECENT_WINDOW_H = 6.0;
 /** Ventana de confirmación del motor de pH — §9: dos lecturas separadas así. */
 export const PH_CONFIRM_MIN_H = 0.25;
 export const PH_CONFIRM_MAX_H = 4.0;
+
+export const BRIX_PHYSICAL_MIN = 0.0;
+export const BRIX_PHYSICAL_MAX = 32.0;
+/**
+ * La del Brix es **otra ventana**, y no por capricho: su cadencia de muestreo es
+ * más lenta que la del pH. Una ventana única volvía imposible confirmar nada en
+ * los motores lentos.
+ */
+export const BRIX_CONFIRM_MIN_H = 1.0;
+export const BRIX_CONFIRM_MAX_H = 8.0;
+/** Cuántas lecturas entran en la mediana robusta. Por CONTEO, no por ventana. */
+export const MEDIAN_WINDOW = 3;
+/** Por debajo de esto los conjuntos de mediana se solapan e `initial` == `current`. */
+export const MIN_READINGS_FOR_MEDIAN = 4;
+/** Cuánto puede alejarse una lectura del borde de la ventana y seguir sirviendo. */
+export const STALL_MATCH_TOLERANCE_H = 1.5;

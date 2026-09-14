@@ -38,6 +38,30 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-13 · Brix: la alerta que estaba documentada y no existía
+
+`lib/beneficio/brix.ts`. El tablero pasa de **16 + 34 a 28 + 22**.
+
+**Aquí vivía el defecto más grave de toda la v2.x**: la alerta de estancamiento
+estaba especificada en el documento **y** en su `CLAUDE.md`, y el código **no
+tenía ninguna rama que la emitiera**. Una protección documentada que no existe
+es peor que no tenerla — quien lee el documento da por hecho que el sistema
+avisa.
+
+**Y la que más fácil se implementa mal**, dicho por el propio documento: una
+ventana de estancamiento sin lectura comparable **no es evaluable y la
+evaluación debe continuar**. Convertirla en estado terminal deja al motor
+incapaz de emitir `TERMINATION_READY` en casi cualquier cadencia real.
+
+Las otras cuatro: velocidad en ventana móvil y no promedio de vida —que
+enmascara justo la parada que se busca—, mediana de tres **por conteo** contra
+el atípico que mandaba el lote a lavado antes de tiempo, guarda de división por
+cero, y que la solubilización del mucílago **sube el °Bx legítimamente** en las
+primeras horas.
+
+**Seis flip-tests**, todos compilando y cada uno por su vector. Uno hubo que
+rehacerlo: no compilaba **y no cayó nada** — una no-mutación.
+
 ### 2026-09-14 · La humedad de la miel no estaba «parcial»: estaba escondida
 
 §5 era la última fila del Anexo B sin construir, y **medirla cambió la rebanada**.
@@ -159,35 +183,6 @@ migración no tuvo deriva que excluir**, que es lo que compró ADR-120 ayer.
 
 **Desde hoy la compuerta incluye `npm run build`:** `verify` no construye, y eso es
 lo único que ve la clase de defecto que rompió producción esta tarde.
-
-### 2026-09-13 · Vercel saltaba el build de cada PR, y por eso producción se rompió
-
-**La #288 llegó a `main` sin que nada hubiera construido su código.** Rompió el
-build —`ColonyEventQuickEntry` es `"use client"` e importaba un valor de un módulo
-que llega a `prisma`, así que `pg` acabó en el paquete del navegador— y el sitio
-sirvió **un build viejo durante una hora**.
-
-**Por qué nadie lo vio, y es lo que hay que recordar.**
-`scripts/solo-documentacion.sh` deducía la base como `HEAD^`. Eso es verdad en
-GitHub Actions —que saca el commit de **fusión** de la PR— y **falso en Vercel, que
-saca el commit de la rama**. Como cada PR de aquí termina con un commit de estado
-(sólo documentación), el rango decía «sólo docs» y Vercel **saltaba el build**,
-reportando `success — Canceled by Ignored Build Step`. Medido: **#283, #284, #286 y
-#288 dijeron eso**, ninguna construyó su preview, y yo reporté «Vercel: success»
-cuatro veces. **Un `success` que significa «no miré» es peor que un rojo**, y es la
-misma familia que el `cancelled` de las compuertas.
-
-**Tres arreglos, cada uno con su guardia:**
-
-- El reparto puro/consulta que ya existía en `infestacion.ts` y `alimentacion.ts` y
-  a la tercera olvidé: ahora `vocabularioDeTratamiento.ts`. Lo caza
-  `tests/arquitectura/cliente-sin-prisma.test.ts`, con cierre **transitivo** y
-  distinguiendo **valor de tipo** — de ocho pares cliente→prisma, siete son
-  `import type` y están bien.
-- La base se deduce distinguiendo el caso y **se imprime**; ante la duda, construye.
-  Con pruebas, que no tenía: `tests/soloDocumentacion.test.ts`.
-- `npm run verify` **no construye**. Desde hoy, `npm run build` antes de empujar:
-  es lo único que ve esta clase de defecto, como el `"use server"` de septiembre.
 
 ## 3. Bloqueado, y en qué
 
