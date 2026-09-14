@@ -368,6 +368,10 @@
     {
       "archivo": "lib/apiary/cierreDeCosecha.ts",
       "razon": "A9 · Anexo B §5 — el cierre de una cosecha de miel y la lectura de su humedad. Modulo de dominio. `completarCierreDeCosecha` recibe principal, autoriza con requireApiaryAccess y confirma su AuditEvent en la MISMA transaccion que el update."
+    },
+    {
+      "archivo": "lib/apiary/traslado.ts",
+      "razon": "Anexo E §8 — traslada un grupo de colmenas de un apiario a otro cerrando la vigencia del origen y abriendo la del destino en la MISMA transaccion. Modulo de dominio: el acceso a datos vive aqui por diseno. Comprueba `requireApiaryAccess(\"manage\")` sobre el origen Y sobre el destino, cada uno con su projectId y su locationId, antes de escribir nada."
     }
   ],
   "reciben_transaccion": [
@@ -696,6 +700,36 @@
       "operacion": "cosechasDeColonia",
       "razon": "Lista las cosechas de una colonia con su cierre y su humedad. No recibe principal A PROPOSITO, misma disciplina que el resto del modulo: recibe un colonyId que app/apiaries/[id]/hives/[hiveId]/page.tsx ya obtuvo de getHive, que SI autoriza con requireApiaryAccess.",
       "verificado": "2026-09-14"
+    },
+    {
+      "archivo": "lib/apiary/traslado.ts",
+      "operacion": "conteosDeTraslado",
+      "razon": "Cuenta colmenas en dos apiarios para el control de «antes y despues» que el Anexo E §8 llama «el unico control contra un traslado a medias». Sus llamadores son `trasladarColmenas`, que ya autorizo los dos sitios con requireApiaryAccess(\"manage\"), y la ficha del apiario, que viene de getApiaryDetail. No pide principal a proposito: misma disciplina que vitalesDeSitios y carenciasVigentes. Solo cuenta filas y no escribe nada.",
+      "verificado": "2026-09-13"
+    },
+    {
+      "archivo": "lib/apiary/traslado.ts",
+      "operacion": "avisosDeDestino",
+      "razon": "Lee las carencias corriendo en las colonias del apiario de destino para advertir antes de confirmar. Su llamador obtuvo el locationId de destinosCandidatos, que a su vez sale de la ficha del apiario ya autorizada por getApiaryDetail. No escribe nada y no expone mas que dias de carencia de un sitio que quien mira ya puede ver.",
+      "verificado": "2026-09-13"
+    },
+    {
+      "archivo": "lib/apiary/traslado.ts",
+      "operacion": "destinosCandidatos",
+      "razon": "Lista los apiarios de la MISMA organizacion a los que se puede trasladar, con su conteo y su carencia, en tres consultas en vez de un N+1. Lo llama la ficha del apiario, que ya paso por getApiaryDetail —el cual autoriza con requireApiaryAccess(\"view\")— y le pasa el organizationId de esa misma fila. No escribe nada.",
+      "verificado": "2026-09-13"
+    },
+    {
+      "archivo": "lib/apiary/traslado.ts",
+      "operacion": "apiarioDeColmenaEn",
+      "razon": "Resuelve en que apiario estaba una colmena en una fecha, leyendo hive_placement. Es la razon de la tabla: sin ella la historia de un evento se leeria en el apiario actual. Recibe un hiveId que su llamador ya obtuvo de una lectura que autoriza. No escribe nada.",
+      "verificado": "2026-09-13"
+    },
+    {
+      "archivo": "lib/apiary/traslado.ts",
+      "operacion": "historialDeColocaciones",
+      "razon": "Devuelve el historial de colocaciones de una colmena para su ficha. El hiveId sale de getHive, que autoriza con requireApiaryAccess(\"view\"). No escribe nada.",
+      "verificado": "2026-09-13"
     }
   ]
 }

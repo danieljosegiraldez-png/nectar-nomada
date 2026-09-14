@@ -987,6 +987,37 @@ a.nn-card-link:active {
   margin: 0.25rem 0 0;
 }
 
+/* Anexo E §8 — el traslado. «Nadie toca veinte casillas con guante», así que los atajos
+   van arriba y las casillas tienen blanco de sobra para un dedo con guante a 390 px. */
+.nn-atajos {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.nn-seleccion {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.nn-seleccion > li > label {
+  display: block;
+  padding: 0.5rem 0.25rem;
+  cursor: pointer;
+}
+
+/* Los conteos de antes y después: el Anexo los llama «el único control contra un traslado
+   a medias», así que se leen sin buscarlos. */
+.nn-conteos {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin: 0.75rem 0;
+}
+
 .nn-vitales-nota {
   margin-top: 1.5rem;
   font-size: 0.85rem;

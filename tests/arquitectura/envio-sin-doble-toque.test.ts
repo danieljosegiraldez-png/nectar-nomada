@@ -77,6 +77,33 @@ describe("un envío no se puede pulsar dos veces", () => {
 
     const pieza = readFileSync(`${RAIZ}app/components/BotonDeEnvio.tsx`, "utf8");
     expect(pieza, "la pieza compartida debe apagarse con useFormStatus").toContain("useFormStatus");
-    expect(pieza).toContain("disabled={pending}");
+    expect(pieza, "debe apagarse mientras el envío está en curso").toMatch(/disabled=\{pending/);
+  });
+
+  /**
+   * **El defecto que tenía la propia pieza, medido el 2026-09-13.** Con
+   * `disabled={pending} {...resto}`, un llamador que pasara su propio `disabled` lo
+   * **sobrescribía** y perdía la protección del doble toque sin que nada lo dijera — el
+   * botón parecía protegido porque usaba el componente compartido. Le pasaba a
+   * `app/sensory/[sessionId]/page.tsx`.
+   *
+   * Este guardia exige las dos mitades: que `disabled` se saque de las props (y no viaje
+   * dentro del spread) y que se COMBINE con `pending`. Un `disabled={pending}` a secas
+   * seguido de `{...resto}` vuelve a fallar aquí.
+   */
+  it("el propio botón combina el disabled del llamador, no lo deja sobrescribir", () => {
+    const pieza = readFileSync(`${RAIZ}app/components/BotonDeEnvio.tsx`, "utf8");
+    expect(pieza, "`disabled` debe desestructurarse para no llegar dentro del spread").toMatch(
+      /\n\s*disabled,\n/,
+    );
+    expect(pieza, "el pending y el disabled del llamador se combinan").toMatch(
+      /disabled=\{pending \|\| disabled\}/,
+    );
+    // **No hay una tercera aserción de posición, y se dice por qué.** La escribí
+    // —«`{...resto}` va después del `disabled` combinado»— y falló: `indexOf` encontró el
+    // `{...resto}` que este mismo archivo menciona **en un comentario**, no el del JSX.
+    // Era el instrumento midiendo prosa. Y además era redundante: si `disabled` está
+    // desestructurado, ya no viaja dentro de `resto` y el orden del spread deja de
+    // importar. Las dos aserciones de arriba cierran el caso.
   });
 });
