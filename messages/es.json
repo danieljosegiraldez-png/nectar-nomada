@@ -1633,6 +1633,14 @@
       "balance": {
         "discrepancy_flagged": "El balance no cuadra por {kg} kg ({pct}%). Se guardó igual — revisa el pesaje cuando puedas.",
         "gross_imbalance": "El balance se sale por {kg} kg ({pct}%). Queda guardado como borrador y el lote no avanza de etapa hasta que lo revises."
+      },
+      "drying": {
+        "bean_temp": "El grano va a {temp} °C, por encima del máximo. Baja la temperatura del secador.",
+        "uneven": "La cama seca desigual: {pp} puntos entre el extremo más seco y el más húmedo. Remueve antes de volver a medir.",
+        "over_dried": "Humedad {pct} %: por debajo del mínimo. Se pierde peso vendible y el grano se parte al trillar.",
+        "target_reached": "Humedad {pct} % y actividad de agua {aw}: el lote cumple los dos criterios para bodega.",
+        "stalled": "Lleva {hours} h sin bajar por encima del 20 % de humedad. Riesgo de moho — ¿lo miras?",
+        "rate_too_fast": "Está bajando {pp} puntos por día por debajo del 25 %. A esa velocidad la superficie sella y el núcleo queda húmedo."
       }
     }
   }

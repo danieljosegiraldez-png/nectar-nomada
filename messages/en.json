@@ -1633,6 +1633,14 @@
       "balance": {
         "discrepancy_flagged": "The balance is off by {kg} kg ({pct}%). Saved anyway — check the weighing when you can.",
         "gross_imbalance": "The balance is off by {kg} kg ({pct}%). Saved as a draft; the lot will not advance until you review it."
+      },
+      "drying": {
+        "bean_temp": "Bean temperature is {temp} °C, above the maximum. Lower the dryer.",
+        "uneven": "The bed is drying unevenly: {pp} points between the driest and wettest spot. Turn it before measuring again.",
+        "over_dried": "Moisture {pct} %: below the minimum. Sellable weight is lost and the bean cracks at hulling.",
+        "target_reached": "Moisture {pct} % and water activity {aw}: the lot meets both storage criteria.",
+        "stalled": "No drop for {hours} h above 20 % moisture. Mold hazard — take a look?",
+        "rate_too_fast": "Dropping {pp} points per day below 25 %. At that speed the surface seals and the core stays wet."
       }
     }
   }
