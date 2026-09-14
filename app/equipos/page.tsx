@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { getCurrentUser } from "../../lib/auth/session";
-import { listarEquipos } from "../../lib/equipos/equipos";
+import { disponibilidadDeRecipientes, listarEquipos } from "../../lib/equipos/equipos";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,11 @@ export default async function EquiposPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [t, equipos] = await Promise.all([getTranslations("Equipos"), listarEquipos(user.userAccountId)]);
+  const [t, equipos, disponibilidad] = await Promise.all([
+    getTranslations("Equipos"),
+    listarEquipos(user.userAccountId),
+    disponibilidadDeRecipientes(user.userAccountId),
+  ]);
 
   const instrumentos = equipos.filter((e) => e.kind === "instrument");
   const resto = equipos.filter((e) => e.kind !== "instrument");
@@ -46,6 +50,38 @@ export default async function EquiposPage() {
         <p className="nn-muted" style={{ marginTop: "1.5rem" }}>
           {t("vacio")}
         </p>
+      ) : null}
+
+      {disponibilidad.resumen.total > 0 ? (
+        <section style={{ marginTop: "1.5rem" }}>
+          <h2>{t("capacidadTitulo")}</h2>
+          <p className="nn-muted">{t("capacidadIntro")}</p>
+          <p>
+            <strong>{t("capacidadLibres", { n: disponibilidad.resumen.libresYSanos, de: disponibilidad.resumen.total })}</strong>
+            {disponibilidad.resumen.enUso > 0 ? ` · ${t("capacidadEnUso", { n: disponibilidad.resumen.enUso })}` : null}
+            {disponibilidad.resumen.requierenIntervencion > 0
+              ? ` · ${t("capacidadIntervencion", { n: disponibilidad.resumen.requierenIntervencion })}`
+              : null}
+          </p>
+          {/* Las columnas SE SOLAPAN a propósito: un tanque ocupado Y averiado
+              está en las dos, porque son dos hechos que piden dos acciones. */}
+          <p className="nn-muted">{t("capacidadSolape")}</p>
+          <ul>
+            {disponibilidad.filas
+              .filter((f) => !f.clasificacion.libreYSano)
+              .map((f) => (
+                <li key={f.id}>
+                  <Link href={`/equipos/${f.id}`}>{f.name}</Link>
+                  {" — "}
+                  {f.clasificacion.motivos
+                    .map((m) =>
+                      m === "CONDICION" && f.condicion ? t(`condicion_${f.condicion}`) : t(`motivo_${m}`),
+                    )
+                    .join(" · ")}
+                </li>
+              ))}
+          </ul>
+        </section>
       ) : null}
 
       {atencion.length > 0 ? (

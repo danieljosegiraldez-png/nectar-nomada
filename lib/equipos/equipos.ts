@@ -31,6 +31,7 @@
 import { recordAuditEvent } from "../audit";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
+import { clasificar, resumir } from "./disponibilidad";
 import { dentroDeTolerancia, estadoDeVerificacion, type EstadoDeVerificacion } from "./verificacion";
 import type { ClassificationLevel, EquipmentCondition, EquipmentKind, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -640,4 +641,56 @@ export async function instrumentoParaVerificar(userAccountId: string, equipmentI
       momento: new Date(),
     }),
   };
+}
+
+/**
+ * La disponibilidad de los recipientes: cuántos hay libres **y** sanos.
+ *
+ * **«En uso» se DERIVA de la corrida, no se guarda.** Un fermentador está ocupado
+ * porque una `FermentationRun` lo referencia y no ha terminado — el mismo hecho
+ * que la corrida ya registra. Guardarlo aparte crearía dos fuentes que derivan la
+ * primera vez que alguien olvida limpiar una bandera, y entonces la pantalla
+ * diría que hay tanques libres que no lo están: el error caro, no el barato.
+ *
+ * Sólo recipientes: un refractómetro no se «ocupa». Su disponibilidad es otra
+ * cosa y la contesta `listarEquipos` con su estado de revisión.
+ */
+export async function disponibilidadDeRecipientes(userAccountId: string) {
+  const equipos = await prisma.equipment.findMany({
+    where: { kind: "vessel", lifecycleStatus: { not: "disposed" } },
+    include: {
+      transfers: { orderBy: { occurredAt: "desc" }, take: 1, include: { toLocation: { select: { id: true, name: true } } } },
+      conditionReports: { where: { resolvedAt: null }, orderBy: { occurredAt: "desc" }, take: 1 },
+      // Sin `lotId`: `FermentationRun` no lo tiene. Se ata al lote por
+      // `lotProcess`, y es anulable —todo lo anterior a `LotProcess` no cuelga de
+      // ninguno—, así que el código del lote puede faltar legítimamente.
+      fermentationRuns: {
+        where: { endedAt: null },
+        select: { id: true, startedAt: true, lotProcess: { select: { lotId: true } } },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const filas = [];
+  for (const e of equipos) {
+    const objetivo = await objetivoDeEquipo(e);
+    if (!(await can(userAccountId, "view", "equipment", objetivo, e.classification))) continue;
+    const corrida = e.fermentationRuns[0] ?? null;
+    filas.push({
+      id: e.id,
+      name: e.name,
+      ubicacion: e.transfers[0]?.toLocation.name ?? null,
+      clasificacion: clasificar({
+        id: e.id,
+        lifecycleStatus: e.lifecycleStatus,
+        condicion: e.conditionReports[0]?.condition ?? null,
+        enUso: corrida !== null,
+      }),
+      condicion: e.conditionReports[0]?.condition ?? null,
+      ocupadoDesde: corrida?.startedAt ?? null,
+      lotId: corrida?.lotProcess?.lotId ?? null,
+    });
+  }
+  return { filas, resumen: resumir(filas.map((f) => f.clasificacion)) };
 }
