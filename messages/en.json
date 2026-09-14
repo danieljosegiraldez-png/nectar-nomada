@@ -1615,5 +1615,18 @@
     "classification_trade_secret": "Trade secret",
     "error_title_required": "A title is required.",
     "error_no_content_access": "You do not have access to this story."
+  },
+  "Beneficio": {
+    "alert": {
+      "ph": {
+        "suspect_dilution": "Suspicious reading: pH {ph}. Fresh mucilage does not exceed ~6.0 — this may be rinse water or the electrode out of the liquid.",
+        "sensor_fault": "Reading outside the measurable range ({ph}). It was saved, but it does not feed alerts: check the electrode.",
+        "over_fermented_immediate": "pH {ph}: below the immediate threshold. Over-fermentation damage is already happening.",
+        "over_fermented": "pH {ph}: entering over-fermentation. Take a look?",
+        "stalled_rot_hazard": "pH {ph} has not dropped after {hours} h. Rot hazard from stalling.",
+        "kinetic_plateau": "The pH curve has not moved for {hours} h, even though the value is in range. Take a look?",
+        "approaching_low": "pH {ph}: approaching the low limit. Get ready to wash."
+      }
+    }
   }
 }

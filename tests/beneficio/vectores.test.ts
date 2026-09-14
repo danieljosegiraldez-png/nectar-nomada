@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { evaluarPh, type DataConfidence } from "../../lib/beneficio/ph";
+import { PERFILES, type ClaveDePerfil } from "../../lib/beneficio/perfiles";
+
 /**
  * Los 47 criterios de aceptación del módulo de beneficio, ejecutados de verdad.
  *
@@ -45,7 +48,49 @@ const FAMILIAS = [
  * Los motores que YA se pueden ejercer. Se declara a mano, a propósito: es la
  * línea que hay que tocar para decir «esto ya está», y se lee en el diff.
  */
-const MOTORES: ReadonlySet<string> = new Set<string>([]);
+const MOTORES: ReadonlySet<string> = new Set<string>(["lib/beneficio/ph.ts"]);
+
+/**
+ * El instante base de los vectores. Cualquiera sirve: los vectores hablan en
+ * **horas de desfase** desde el inicio de la fermentación, nunca en fechas.
+ * Se fija uno concreto para que una corrida sea reproducible.
+ */
+const INICIO = new Date("2026-03-14T06:00:00-05:00");
+const enHoras = (h: number): Date => new Date(INICIO.getTime() + h * 3_600_000);
+
+/**
+ * Cómo se le da un vector a cada motor y qué se compara.
+ *
+ * **Se compara SÓLO lo que el vector declara en `expect`.** Un vector que no
+ * menciona `severity` no opina sobre ella, y exigirla inventaría un criterio que
+ * el contrato no puso. `raises: false` se comprueba de la única forma honesta:
+ * llamando de verdad y dejando que un lanzamiento tumbe la prueba.
+ */
+const EJECUTORES: Record<string, (v: Vector) => Record<string, unknown>> = {
+  ph: (v) => {
+    const lecturas = (v.readings ?? []).map((r) => ({
+      ph: r.ph as number,
+      measuredAt: enHoras(r.offset_hours as number),
+      confidence: (r.confidence as DataConfidence | undefined) ?? "VALIDATED",
+    }));
+    const r = evaluarPh({
+      readings: lecturas,
+      fermentationStartedAt: INICIO,
+      now: enHoras(v.now_hours ?? 0),
+      profile: PERFILES[(v.profile ?? "WASHED_STANDARD") as ClaveDePerfil],
+    });
+    // Las claves del vector son las del contrato en `snake_case`.
+    return {
+      status: r.status,
+      severity: r.severity,
+      alert_key: r.alertKey,
+      awaiting_confirmation: r.awaitingConfirmation,
+      readings_used: r.readingsUsed,
+      dph_dt_recent: r.dphDtRecent,
+      current_ph: r.currentPh,
+    };
+  },
+};
 
 /**
  * `why` es **opcional**: 37 de los 47 lo traen y diez de ésos empiezan por
@@ -56,6 +101,9 @@ const MOTORES: ReadonlySet<string> = new Set<string>([]);
 interface Vector {
   id: string;
   why?: string;
+  profile?: string;
+  now_hours?: number;
+  readings?: Record<string, unknown>[];
   expect: Record<string, unknown>;
 }
 
@@ -123,11 +171,20 @@ describe("los criterios de aceptación del beneficio", () => {
           it.todo(`${v.id} — ${rotulo(v)}`);
           continue;
         }
-        // Cuando el motor entre, aquí se le pasa el vector y se compara contra
-        // `v.expect`. La rama vive vacía a propósito hasta entonces: escribirla
-        // antes sería adivinar la firma que `docs/03` ya declara.
-        it(`${v.id}`, () => {
-          throw new Error(`${familia.motor} está declarado implementado pero nadie ejerce ${v.id}`);
+        it(`${v.id} — ${rotulo(v)}`, () => {
+          const ejecutar = EJECUTORES[familia.clave];
+          if (!ejecutar) throw new Error(`${familia.motor} se declara implementado y no tiene ejecutor`);
+
+          // `raises: false` se comprueba llamando: si lanzara, la prueba cae aquí.
+          const obtenido = ejecutar(v);
+
+          for (const [campo, esperado] of Object.entries(v.expect)) {
+            if (campo === "raises") {
+              expect(esperado, `${v.id}: este contrato no admite que el motor lance`).toBe(false);
+              continue;
+            }
+            expect(obtenido[campo], `${v.id} · ${campo} — ${v.why ?? v.id}`).toEqual(esperado);
+          }
         });
       }
     });

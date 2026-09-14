@@ -1615,5 +1615,18 @@
     "classification_trade_secret": "Secreto comercial",
     "error_title_required": "El título no puede estar vacío.",
     "error_no_content_access": "No tienes acceso a esta historia."
+  },
+  "Beneficio": {
+    "alert": {
+      "ph": {
+        "suspect_dilution": "Lectura sospechosa: pH {ph}. El mucílago fresco no pasa de ~6,0 — puede ser agua de enjuague o el electrodo fuera del líquido.",
+        "sensor_fault": "Lectura fuera del rango medible ({ph}). Se guardó, pero no cuenta para las alertas: revisa el electrodo.",
+        "over_fermented_immediate": "pH {ph}: por debajo del límite inmediato. El daño por sobrefermentación ya está ocurriendo.",
+        "over_fermented": "pH {ph}: entrando en sobrefermentación. ¿Lo miras?",
+        "stalled_rot_hazard": "pH {ph} sin bajar tras {hours} h. Riesgo de pudrición por estancamiento.",
+        "kinetic_plateau": "La curva de pH lleva {hours} h sin moverse, aunque el valor esté en rango. ¿Lo miras?",
+        "approaching_low": "pH {ph}: acercándose al límite bajo. Prepara el lavado."
+      }
+    }
   }
 }

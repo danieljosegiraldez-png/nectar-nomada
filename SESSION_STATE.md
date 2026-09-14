@@ -63,6 +63,24 @@ escribir. La pantalla tenía formulario de cosecha y **no listaba ninguna cosech
 **Con esto el Anexo B queda completo.** Lo que sigue son decisiones del dueño —si `cebo`
 cuenta como vía que deja material— y el protocolo v2, que ya acumula cinco cosas.
 
+### 2026-09-13 · El motor de pH: 13 de los 47 criterios ya se comprueban
+
+`lib/beneficio/ph.ts` porta el `PHMonitor` de `docs/beneficio/10`, y
+`perfiles.ts` trae los cinco protocolos de §8. El tablero pasa de **3 + 47
+pendientes a 16 + 34**.
+
+**Ningún umbral vive en la lógica**: todos salen de `ProtocolProfile`, y
+`PERFILES` es un `Record` total, así que el compilador obliga a declarar cada
+perfil nuevo entero. Siguen `[PROVISIONAL]` hasta que Daniel los revise — P-F.
+
+**Siete flip-tests, uno por defecto real de la v2.5**, todos compilando y cada
+uno cayendo por su propio vector: el `raise` que derribaba la ingesta (PH-007),
+la banda 3,5–3,8 muda (PH-003), la frontera que ponía 4,50 en dos bandas
+(PH-001), la meseta cinética (PH-009), la supresión del reposo frío de CryoBloom
+(PH-010), la guarda de cero (PH-012) y la histéresis (PH-004). **El cuarto hubo
+que rehacerlo**: la primera versión no compilaba, y una mutación que no compila
+se lee igual que un guardia que funciona.
+
 ### 2026-09-13 · La especificación v3.0 del beneficio entra, y su contrato empieza a contar
 
 Daniel encargó fuera una revisión del material de proceso y llegó `nn-spec` v3.0:
@@ -170,34 +188,6 @@ misma familia que el `cancelled` de las compuertas.
   Con pruebas, que no tenía: `tests/soloDocumentacion.test.ts`.
 - `npm run verify` **no construye**. Desde hoy, `npm run build` antes de empujar:
   es lo único que ve esta clase de defecto, como el `"use server"` de septiembre.
-
-### 2026-09-13 · La deriva de migraciones se cierra al revés de como parecía
-
-`migrate diff` proponía sentencias que no eran de ningún cambio en curso: **seis** el
-2026-09-12 y **quince** el 2026-09-13. Cada migración las excluía a mano y lo decía en
-su prosa — lo cual funciona **hasta el día en que alguien no se dé cuenta**.
-
-**La dirección era la decisión, y no era la obvia.** Medido tabla por tabla, en la
-migración **y** en la base: las migraciones crearon esas FK con `ON DELETE RESTRICT`, y
-el esquema pedía `SET NULL` **no porque nadie lo eligiera, sino porque al no decir nada
-heredaba el defecto de Prisma** para relaciones opcionales. Ejecutar el diff habría
-cambiado producción a «se borra el valor de catálogo y te vacío en silencio el color de
-cereza que alguien observó». Así que se declaró en el esquema lo que la base ya hace:
-**cero SQL, cero migraciones, cero filas**. 15 → 8 → 0. ADR-120.
-
-Dos de las siete las tuve mal al primer intento —`drying_run` y `fermentation_run` sí
-son `SET NULL`— y lo dijo **medir cada una en los dos sitios** en vez de suponer
-simetría.
-
-**Y un guardia, `tests/derivaDeMigraciones.test.ts`,** con control positivo dentro y
-distinguiendo los tres valores de `--exit-code`: 0 vacío, 2 diferencia, **1 error**.
-Eso último no es cosmético: mientras se escribía, **dos veces** un comando que
-reventaba se leyó como «no hay deriva», las dos por esconder `stderr` —`--from-url` ya
-no existe en Prisma 7, y en otra corrida faltaba exportar `SHADOW_DATABASE_URL`—.
-`ci-con-base.sh` deriva ahora la base de sombra para que el guardia pueda medir en CI.
-
-**Y el guardia de temporales me cazó a mí** al escribirlo: mi prueba creaba un
-directorio y no lo borraba.
 
 ## 3. Bloqueado, y en qué
 
