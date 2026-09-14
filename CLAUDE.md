@@ -13,6 +13,43 @@
 > ADR-103 en `docs/architecture/DECISIONS.md`. Esa frase es un arranque
 > histórico, no una instrucción para hoy. Ver «Trampas» al final.
 
+> **Y el dominio del beneficio es normativo, en `docs/beneficio/`.** Catorce
+> documentos, no tres. Este índice existe porque hasta el 2026-09-14 **nada en
+> este archivo los nombraba**: catorce documentos normativos a los que no
+> apuntaba el único archivo que se carga en cada sesión. Medido con su control —
+> `docs/beneficio` daba **cero** menciones aquí, y no sólo las rúbricas.
+>
+> Las tres que el paquete pide citar explícitamente, porque no son referencia
+> sino **criterios de aprobación**:
+>
+> - **`20_modelo_ciclo_completo.md`** — identidad y **genealogía** del lote a
+>   través de divisiones y fusiones, y las etapas posteriores. Extiende
+>   `01_lot_lifecycle.md`. Un puntaje de taza impecable sobre un lote cuya
+>   identidad se perdió en una fusión no vale nada.
+> - **`21_rubrica_veracidad.md`** — *«cada afirmación que emite debe poder
+>   sostenerse»*. Una cifra que no resiste ser desarmada convierte la
+>   herramienta en un generador de documentación creíble, **peor que no tener
+>   nada porque nadie la cuestiona**.
+> - **`22_rubrica_pedagogica.md`** — *«el propósito no es tener el beneficio
+>   documentado, es que quien la usa fermente mejor»*. Documentar es el medio.
+>
+> **Los tres ejes pesan igual**: un módulo que pasa el funcional y falla el
+> pedagógico **no está aprobado**.
+>
+> Y las otras once están al lado, con `docs/beneficio/README.md` explicando cómo
+> se leen. Las transversales que gobiernan sobre el resto son `00_conventions`,
+> `01_lot_lifecycle`, `02_calibration` y **`03_public_api`, que es el contrato
+> autoritativo**: todo enum, modelo, firma y cadena de estado sale de ahí. Si
+> hace falta un nombre que no esté declarado, se para y se pregunta en vez de
+> inventarlo.
+>
+> **Un `[PROVISIONAL]` de esos documentos no se cierra desde aquí.** Son de
+> Daniel, y `99_revision_v2_a_v3.md` §D lista los cinco que siguen abiertos.
+> El 2026-09-14 él cerró uno —la verificación de instrumentos es por contraste
+> contra patrón, no por calendario— y eso **cambió** la §3 de `02_calibration`:
+> cuando una decisión suya contradiga un documento normativo, manda él y se
+> anota en el documento.
+
 ---
 
 # CLAUDE.md
