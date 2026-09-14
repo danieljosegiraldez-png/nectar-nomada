@@ -103,6 +103,8 @@ export const RUTAS = {
       "snapshot de esa versión, y devuelve 404 igual si no existe, caducó o fue revocado.",
   },
   "/field-sessions/[id]/report": { clase: "requiere-sesion", razon: "Una jornada de campo y su hilo de eventos." },
+  "/equipos": { clase: "requiere-sesion", razon: "Inventario de equipos e instrumentos: exige equipment:view sobre el ámbito de cada uno, y la lista omite lo que quien mira no puede ver." },
+  "/equipos/[id]": { clase: "requiere-sesion", razon: "Un equipo, su verificación contra patrones y su condición. Verificar e informar exigen equipment:report_condition; sin permiso da 404, no una página vacía." },
   "/recipes": { clase: "requiere-sesion", razon: "Recetas y formulación." },
   "/recipes/new": { clase: "requiere-sesion", razon: "Recetas y formulación." },
   "/recipes/[id]": { clase: "requiere-sesion", razon: "Recetas y formulación." },

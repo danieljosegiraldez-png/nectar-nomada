@@ -92,7 +92,11 @@ describe("el inventario del router", () => {
     // 69 → 70 el 2026-09-10, con /informe/[token] — el informe de una visita
     // abierto por su enlace, sin sesión. El servicio existía desde A9.6 y no
     // había dónde canjear el token.
-    expect(salida).toContain("70 entradas");
+    // 70 → 72 el 2026-09-14, con /equipos y /equipos/[id] — el inventario de
+    // equipos e instrumentos y el acto de verificar uno contra su patrón. Hasta
+    // ese día el equipo era texto libre en cuatro campos y no había dónde decir
+    // que un refractómetro se había puesto contra el agua.
+    expect(salida).toContain("72 entradas");
     expect(codigo, salida).toBe(0);
   });
 

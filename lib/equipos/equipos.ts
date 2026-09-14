@@ -543,3 +543,101 @@ export async function estadosDeInstrumentoPorMedicion(
   }
   return salida;
 }
+
+export interface EquipoEnLista {
+  id: string;
+  name: string;
+  kind: EquipmentKind;
+  lifecycleStatus: "active" | "retired" | "disposed";
+  /** Del último traslado. `null` = registrado y todavía sin ubicar. */
+  ubicacion: { id: string; name: string } | null;
+  /** El informe más reciente **sin resolver**. `null` = nadie ha informado de nada. */
+  condicion: { condition: EquipmentCondition; occurredAt: Date } | null;
+  /** Sólo para instrumentos. `SIN_INSTRUMENTO` para lo que no lo es. */
+  verificacion: EstadoDeVerificacion;
+  ultimaVerificacion: Date | null;
+  checkAdvisoryHours: number | null;
+}
+
+/**
+ * Los equipos que esta persona puede ver, con su estado de hoy.
+ *
+ * **Las tres columnas se derivan, ninguna se guarda** (§4): la ubicación sale del
+ * último traslado, la condición del último informe sin resolver, y la
+ * verificación de los contrastes. Guardar cualquiera de las tres crearía una
+ * segunda fuente que deriva la primera vez que alguien olvida limpiarla.
+ *
+ * **La condición vigente es el último informe SIN RESOLVER**, no el último a
+ * secas: un «airlock roto» que alguien arregló y cerró no debe seguir pintando
+ * el fermentador en rojo, y un «roto» posterior a un «arreglado» sí.
+ */
+export async function listarEquipos(userAccountId: string): Promise<EquipoEnLista[]> {
+  const equipos = await prisma.equipment.findMany({
+    where: { lifecycleStatus: { not: "disposed" } },
+    include: {
+      transfers: { orderBy: { occurredAt: "desc" }, take: 1, include: { toLocation: { select: { id: true, name: true } } } },
+      conditionReports: { where: { resolvedAt: null }, orderBy: { occurredAt: "desc" }, take: 1 },
+      checks: { orderBy: { occurredAt: "asc" }, select: { occurredAt: true, outcome: true } },
+    },
+    orderBy: [{ kind: "asc" }, { name: "asc" }],
+  });
+
+  const ahora = new Date();
+  const salida: EquipoEnLista[] = [];
+  for (const e of equipos) {
+    const objetivo = await objetivoDeEquipo(e);
+    if (!(await can(userAccountId, "view", "equipment", objetivo, e.classification))) continue;
+    const ultimo = e.transfers[0];
+    const informe = e.conditionReports[0];
+    const aprobadas = e.checks.filter((c) => c.outcome === "pass");
+    salida.push({
+      id: e.id,
+      name: e.name,
+      kind: e.kind,
+      lifecycleStatus: e.lifecycleStatus,
+      ubicacion: ultimo ? { id: ultimo.toLocation.id, name: ultimo.toLocation.name } : null,
+      condicion: informe ? { condition: informe.condition, occurredAt: informe.occurredAt } : null,
+      verificacion:
+        e.kind === "instrument"
+          ? estadoDeVerificacion({
+              instrumentoDeclarado: true,
+              verificaciones: e.checks,
+              horasDeAviso: e.checkAdvisoryHours,
+              momento: ahora,
+            })
+          : "SIN_INSTRUMENTO",
+      ultimaVerificacion: aprobadas.length > 0 ? aprobadas[aprobadas.length - 1]!.occurredAt : null,
+      checkAdvisoryHours: e.checkAdvisoryHours,
+    });
+  }
+  return salida;
+}
+
+/** Un instrumento con sus patrones vigentes, para pintar el formulario de verificación. */
+export async function instrumentoParaVerificar(userAccountId: string, equipmentId: string) {
+  const equipo = await prisma.equipment.findUnique({
+    where: { id: equipmentId },
+    include: {
+      checkRequirements: { where: { retiredAt: null }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }] },
+      checks: {
+        orderBy: { occurredAt: "desc" },
+        take: 10,
+        include: { results: { include: { requirement: { select: { label: true, unit: true } } } } },
+      },
+    },
+  });
+  if (!equipo) throw new EquipoError("equipment_not_found");
+  await exigePermiso(userAccountId, "view", equipo);
+  return {
+    ...equipo,
+    // **Nunca `pass` por defecto**: sin patrones vigentes no hay nada que
+    // contrastar, y el formulario tiene que decirlo en vez de ofrecer un botón
+    // que produciría una verificación vacía.
+    verificacion: estadoDeVerificacion({
+      instrumentoDeclarado: true,
+      verificaciones: equipo.checks,
+      horasDeAviso: equipo.checkAdvisoryHours,
+      momento: new Date(),
+    }),
+  };
+}
