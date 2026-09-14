@@ -14,6 +14,8 @@ import { puedeGestionarAtributosDeUbicacion } from "../../../lib/traceability/lo
 import { computeCurrentQuantity } from "../../../lib/traceability/quantity";
 import { nextActionFor, type BatchAction } from "../../../lib/traceability/batchActions";
 import { veredictoDelLote } from "../../../lib/beneficio/desdeElLote";
+import { estadosDeInstrumentoPorMedicion } from "../../../lib/equipos/equipos";
+import type { EstadoDeVerificacion } from "../../../lib/equipos/verificacion";
 import { listarProcesosDeLote } from "../../../lib/traceability/lotProcess";
 import { VeredictoDeBeneficio } from "../../components/traceability/VeredictoDeBeneficio";
 import { compareRunToTargets } from "../../../lib/traceability/processTargets";
@@ -197,6 +199,16 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       ? { tipo: "secado" as const, iniciadaEn: activeDrying.startedAt }
       : null;
   const procesos = faseAbierta ? await listarProcesosDeLote(user.userAccountId, lot.id) : [];
+  // Cómo estaba el instrumento **en el instante de cada lectura**. Se resuelve por
+  // lotes: un permiso por instrumento, no uno por medición. Hoy devuelve un mapa
+  // vacío porque ninguna medición declara instrumento todavía, y el veredicto lo
+  // dice en voz alta con la limitación `SIN_INSTRUMENTO_DECLARADO`.
+  const estadosDeInstrumento = faseAbierta
+    ? await estadosDeInstrumentoPorMedicion(
+        user.userAccountId,
+        measurements.map((m) => ({ id: m.id, instrumentId: m.instrumentId, occurredAt: m.occurredAt })),
+      )
+    : new Map<string, EstadoDeVerificacion>();
   const procesoAbierto = procesos.find((pr) => pr.endedAt === null) ?? null;
   const veredicto = faseAbierta
     ? veredictoDelLote({
@@ -210,6 +222,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           occurredAt: m.occurredAt,
           provenanceClass: String(m.provenanceClass),
           fueCorregida: supersededMeasurementIds.has(m.id),
+          estadoDelInstrumento: estadosDeInstrumento.get(m.id) ?? "SIN_INSTRUMENTO",
         })),
         ahora: new Date(),
       })

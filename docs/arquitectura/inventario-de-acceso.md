@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-13
 
-**312 operaciones** que tocan la base, en **94 archivos**:
+**325 operaciones** que tocan la base, en **95 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,18 +22,25 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **207** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **220** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **32** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **55** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
 
-> **Y el segundo del 2026-09-14 —311→312 y 93→94— es de una sola operación**: el
-> emplazamiento temporal del Anexo E §9. `lib/apiary/emplazamiento.ts` aporta **un** lector
-> que depende del llamador, `colmenasDeLaVentana`; su aritmética y su alerta de floración son
-> **puras** y por eso no cuentan. Que el salto sea de uno y no de tres es la comprobación de
-> que el módulo lee y no escribe.
+> **El salto del 2026-09-14 por la tarde —311→318 y 93→94— es de una pieza**: el módulo
+> de equipos e instrumentos, `lib/equipos/equipos.ts`. Aporta **catorce** operaciones y las
+> **catorce llevan guardia directo**, que es por lo que la fila de «guardia directo» sube
+> exactamente 207→217 y ninguna otra fila se mueve. 14 = 14: si la cuenta no cerrara, alguna
+> se habría colado sin autorizar. (La octava, `estadosDeInstrumentoPorMedicion`,
+> resuelve el permiso una vez por instrumento en vez de una por lectura.)
+>
+> **Y una de las siete no lo llevaba.** `estadoDelInstrumento` se escribió sin recibir
+> principal —leía el equipo y sus verificaciones para decir si estaba revisado— y lo cazó
+> este mismo guardia, no una relectura. Se le puso `equipment:view`, que §9 de
+> `EQUIPMENT_AND_READINESS.md` creó justo para esa lectura: ver un lote no es ver el
+> inventario de instrumentos de un sitio.
 
 > **Y el del 2026-09-14 —305→311 y 92→93— también**: la consulta a fincas vecinas del
 > Anexo E §4. `lib/apiary/consultaAVecinos.ts` aporta **dos** operaciones con guardia

@@ -130,6 +130,13 @@ model Person {
   fieldEventsOperated                FieldEvent[]                  @relation("FieldEventOperator")
   devicesOperated                    Device[]                      @relation("DeviceOperator")
 
+  equipmentMoved          EquipmentTransfer[]          @relation("EquipmentTransferMovedBy")
+  equipmentConditionsRep  EquipmentConditionReport[]   @relation("EquipmentConditionReportedBy")
+  equipmentConditionsResp EquipmentConditionReport[]   @relation("EquipmentConditionResponsible")
+  instrumentReqDecided    InstrumentCheckRequirement[] @relation("InstrumentRequirementDecidedBy")
+  instrumentChecksDone    InstrumentCheck[]            @relation("InstrumentCheckPerformedBy")
+  measurementsReviewed    MeasurementReviewFlag[]      @relation("MeasurementReviewedBy")
+
   @@map("person")
   @@schema("core")
 }
@@ -270,6 +277,12 @@ model UserAccount {
   /// A9.6 — el otro lado de las FK de `reporting`.
   reportsCreated  Report[]        @relation("ReportCreatedBy")
   reportVersionsGenerated ReportVersion[] @relation("ReportVersionGeneratedBy")
+
+  equipmentCreated          Equipment[]                  @relation("EquipmentCreatedBy")
+  equipmentTransfersCreated EquipmentTransfer[]          @relation("EquipmentTransferCreatedBy")
+  equipmentConditionCreated EquipmentConditionReport[]   @relation("EquipmentConditionCreatedBy")
+  instrumentReqCreated      InstrumentCheckRequirement[] @relation("InstrumentRequirementCreatedBy")
+  instrumentChecksCreated   InstrumentCheck[]            @relation("InstrumentCheckCreatedBy")
 
   @@map("user_account")
   @@schema("core")
@@ -762,6 +775,9 @@ model Location {
 
   @@index([parentLocationId])
   @@index([organizationId])
+  equipmentTransfersFrom EquipmentTransfer[] @relation("EquipmentTransferFrom")
+  equipmentTransfersTo   EquipmentTransfer[] @relation("EquipmentTransferTo")
+
   @@map("location")
   @@schema("core")
 }
@@ -858,6 +874,8 @@ model Organization {
   pollinationCommitmentsAsClient   PollinationCommitment[]  @relation("PollinationCommitmentClient")
   neighbourConsultationsAsNeighbour NeighbourConsultation[] @relation("NeighbourConsultationNeighbour")
   externalCoffeeOriginsAsBrand     ExternalCoffeeOrigin[]   @relation("ExternalCoffeeBrand")
+
+  equipment Equipment[] @relation("EquipmentOwner")
 
   @@map("organization")
   @@schema("core")
@@ -995,6 +1013,8 @@ model Project {
   @@index([organizationId])
   @@index([clientOrganizationId])
   @@index([primaryLocationId])
+  equipment Equipment[] @relation("EquipmentProject")
+
   @@map("project")
   @@schema("core")
 }
@@ -1746,6 +1766,8 @@ model Asset {
   @@index([processingStageId])
   @@index([biocharBatchId])
   @@index([soilProfileId])
+  equipmentConditionEvidence EquipmentConditionReport[] @relation("EquipmentConditionEvidence")
+
   @@map("asset")
   @@schema("core")
 }
@@ -2925,6 +2947,10 @@ model LotTransformation {
   @@index([fermentationRunId])
   @@index([dryingRunId])
   @@index([selectionMethodValueId])
+  /// Junto a `equipmentNote`, nunca en su lugar. Ver `FermentationRun.vesselEquipmentId`.
+  equipmentId String?    @map("equipment_id") @db.Uuid
+  equipment   Equipment? @relation("LotTransformationEquipment", fields: [equipmentId], references: [id])
+
   @@map("lot_transformation")
   @@schema("traceability")
 }
@@ -3182,6 +3208,14 @@ model Measurement {
   @@index([soilSampleId])
   @@index([foliarSampleId])
   @@index([correctsId])
+  /// §7 — QUÉ instrumento produjo esta lectura. Anulable y sin relleno
+  /// retroactivo: las cadenas viejas de `deviceId` se quedan como estaban, que
+  /// es la afirmación honesta de que el vínculo nunca estuvo estructurado.
+  /// Adivinar a qué «refractómetro» se refería alguien sería inventar un hecho.
+  instrumentId String?    @map("instrument_id") @db.Uuid
+  instrument   Equipment? @relation("MeasurementInstrument", fields: [instrumentId], references: [id])
+  reviewFlags  MeasurementReviewFlag[]
+
   @@map("measurement")
   @@schema("traceability")
 }
@@ -3379,6 +3413,13 @@ model FermentationRun {
 
   @@index([processRecipeVersionId])
   @@index([lotProcessId])
+  /// §4 — el texto de arriba es el registro original de lo que el operario
+  /// escribió; esta FK es la INTERPRETACIÓN de a qué objeto se refería. Las dos
+  /// conviven a propósito: `DATA_ARCHITECTURE.md` §4 prohíbe re-etiquetar
+  /// evidencia en su sitio, así que el texto no se toca ni se migra.
+  vesselEquipmentId String?    @map("vessel_equipment_id") @db.Uuid
+  vesselEquipment   Equipment? @relation("FermentationRunVessel", fields: [vesselEquipmentId], references: [id])
+
   @@map("fermentation_run")
   @@schema("traceability")
 }
@@ -3881,6 +3922,10 @@ model RoastSession {
   transformations LotTransformation[]
 
   @@index([roasterPersonId])
+  /// Junto a `equipmentNote`, nunca en su lugar. Ver `FermentationRun.vesselEquipmentId`.
+  equipmentId String?    @map("equipment_id") @db.Uuid
+  equipment   Equipment? @relation("RoastSessionEquipment", fields: [equipmentId], references: [id])
+
   @@map("roast_session")
   @@schema("traceability")
 }
@@ -4321,6 +4366,408 @@ model FieldEvent {
   @@index([varroaCountId])
   @@map("field_event")
   @@schema("traceability")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EQUIPOS E INSTRUMENTOS
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// `docs/architecture/EQUIPMENT_AND_READINESS.md` §2–§4 y §7, con las cuatro
+// decisiones que Daniel tomó el 2026-09-14 sobre su §11 — y una quinta que él
+// añadió y que **cambia el §7 del documento**, abajo.
+//
+// POR QUÉ EXISTE. Hoy el equipo se registra como TEXTO LIBRE en el punto de uso:
+// `FermentationRun.vesselNote` («Tank 3»), `LotTransformation.equipmentNote`,
+// `RoastSession.equipmentNote`, `StorageAssignment.containerNote`. Eso preserva
+// el hecho irreversible —lo que el operario escribió— y no contesta nada sobre
+// el tanque: ni su capacidad, ni su condición, ni dónde está. Tres preguntas
+// quedaban sin responder, y cada una cuesta dinero: «¿qué fermentadores están
+// libres Y sanos?», «¿estaba ese refractómetro verificado cuando dio esa
+// lectura?», «¿tenemos filtros en Cerro Azul?».
+//
+// DECISIÓN 4 DE DANIEL — UN SOLO MODELO. `SPECIMEN_AND_MATERIAL_TRACEABILITY.md`
+// §4 especifica `material.vessel` para el envejecimiento en madera; este módulo
+// especifica fermentadores, camas, despulpadoras e instrumentos. **Son la misma
+// cosa con distinta ropa** y ninguno estaba construido, así que plegarlos costó
+// cero hoy y habría sido caro mañana. `format` viene de `material.vessel`.
+
+enum EquipmentKind {
+  /// Contiene algo: tanque, cooler, barrica, canasta, saco de secado.
+  vessel
+  /// Mide algo: potenciómetro, refractómetro, medidor de humedad, báscula.
+  /// **Es el único `kind` que admite verificaciones** — ver el CHECK de la migración.
+  instrument
+  /// Herramienta de mano: ahumador, palanca, rastrillo.
+  tool
+  /// Máquina: despulpadora, extractor, secadora mecánica.
+  machine
+
+  @@schema("core")
+}
+
+/// De `material.vessel`, y **sólo con sentido cuando `kind = vessel`**.
+enum EquipmentFormat {
+  barrel
+  cube
+  chip
+  stave
+  spiral
+  other
+
+  @@schema("core")
+}
+
+/// Eje 1 de los tres de §4. Los otros dos NO son columnas: la asignación se
+/// DERIVA de la corrida que referencia el equipo, y la condición es el último
+/// `EquipmentConditionReport`. Colapsarlos es justo lo que impide preguntar
+/// «¿cuáles están libres **y** sanos?», porque un fermentador puede estar en uso
+/// **y** tener el airlock roto, y «retirado» no es ninguna de las dos cosas.
+enum EquipmentLifecycle {
+  active
+  retired
+  disposed
+
+  @@schema("core")
+}
+
+enum EquipmentCondition {
+  operational
+  needs_cleaning
+  needs_maintenance
+  faulty
+  out_of_service
+
+  @@schema("core")
+}
+
+model Equipment {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// Legible por una persona, y es lo que el operario reconoce: «Fermentador 3»,
+  /// «Refractómetro A», «Barrica 12».
+  name String
+  kind EquipmentKind
+
+  /// Sólo para `kind = vessel`. La migración lo obliga con un CHECK, porque una
+  /// restricción que vive en TypeScript no existe para un importador ni para SQL
+  /// directo — regla de la casa, y este repositorio la tiene escrita con nombre.
+  format EquipmentFormat?
+
+  /// El tanque de un beneficio no se traslada; un ahumador sí. Decide si la
+  /// ausencia de traslados es un dato o un hueco.
+  isFixedInPlace Boolean @default(false) @map("is_fixed_in_place")
+
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation("EquipmentOwner", fields: [organizationId], references: [id])
+
+  /// Anulable: el equipo de un socio pertenece a su propio `Project`.
+  projectId String?  @map("project_id") @db.Uuid
+  project   Project? @relation("EquipmentProject", fields: [projectId], references: [id])
+
+  classification  ClassificationLevel @default(internal)
+  lifecycleStatus EquipmentLifecycle  @default(active) @map("lifecycle_status")
+
+  /// Cada cuántas horas este instrumento **se considera vencido de revisión**.
+  ///
+  /// **AVISA, NO DESCALIFICA — decisión de Daniel del 2026-09-14**, y es lo que
+  /// distingue este modelo del de calendario que traía el diseño. Pasado el plazo
+  /// el instrumento se sigue usando «como indica su protocolo o decisión
+  /// personal»; lo que cambia es que la lectura queda marcada y la pantalla dice
+  /// en voz alta que no está revisado. Bloquear se esquiva en el patio —el
+  /// operario apunta el número en papel— y entonces el sistema sabe MENOS.
+  ///
+  /// **Nulo = este instrumento no vence por tiempo**, que es el caso por defecto
+  /// de su regla: lo que verifica es el contraste contra el patrón, no el reloj.
+  checkAdvisoryHours Int? @map("check_advisory_hours")
+
+  acquiredAt      DateTime? @map("acquired_at")
+  acquisitionNote String?   @map("acquisition_note")
+
+  /// ADR-038. Un equipo declarado de memoria y uno con factura no valen igual, y
+  /// los parámetros del fabricante que cuelgan de él heredan esa procedencia.
+  provenanceClass ProvenanceClass @map("provenance_class")
+  sourceReference String?         @map("source_reference")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("EquipmentCreatedBy", fields: [createdBy], references: [id])
+
+  transfers         EquipmentTransfer[]
+  conditionReports  EquipmentConditionReport[]
+  checkRequirements InstrumentCheckRequirement[]
+  checks            InstrumentCheck[]
+
+  fermentationRuns    FermentationRun[]   @relation("FermentationRunVessel")
+  lotTransformations  LotTransformation[] @relation("LotTransformationEquipment")
+  roastSessions       RoastSession[]      @relation("RoastSessionEquipment")
+  storageAssignments  StorageAssignment[] @relation("StorageAssignmentContainer")
+  measurements        Measurement[]       @relation("MeasurementInstrument")
+
+  @@index([organizationId])
+  @@index([kind])
+  @@map("equipment")
+  @@schema("core")
+}
+
+/// §3 — la custodia es una cadena de eventos, no una columna mutable.
+///
+/// Una `location_id` que se sobrescribe no puede contestar «¿dónde estaba esto
+/// en marzo?», «¿quién lo tuvo por última vez?» ni «¿volvió?». Misma disciplina
+/// que `LotTransformation` y `QuantityEvent`: se añade, nunca se pisa, y el
+/// estado actual se deriva del `occurredAt` mayor.
+model EquipmentTransfer {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  equipmentId String    @map("equipment_id") @db.Uuid
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  /// Nulo en el primer despliegue: antes no estaba en ningún sitio nuestro.
+  fromLocationId String?   @map("from_location_id") @db.Uuid
+  fromLocation   Location? @relation("EquipmentTransferFrom", fields: [fromLocationId], references: [id])
+  toLocationId   String    @map("to_location_id") @db.Uuid
+  toLocation     Location  @relation("EquipmentTransferTo", fields: [toLocationId], references: [id])
+
+  movedByPersonId String? @map("moved_by_person_id") @db.Uuid
+  movedBy         Person? @relation("EquipmentTransferMovedBy", fields: [movedByPersonId], references: [id])
+
+  occurredAt DateTime @map("occurred_at")
+
+  /// **«Llegó roto» y «se rompió aquí» son hechos distintos**, y el registro de
+  /// la entrega es lo único que los separa. Sin esto, la condición de hoy no
+  /// dice de quién es la responsabilidad.
+  conditionAtHandover EquipmentCondition? @map("condition_at_handover")
+
+  note String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("EquipmentTransferCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([equipmentId, occurredAt])
+  @@map("equipment_transfer")
+  @@schema("core")
+}
+
+/// §4, eje 3. La condición vigente es el informe más reciente sin resolver.
+model EquipmentConditionReport {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  equipmentId String    @map("equipment_id") @db.Uuid
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  condition EquipmentCondition
+
+  reportedByPersonId String? @map("reported_by_person_id") @db.Uuid
+  reportedBy         Person? @relation("EquipmentConditionReportedBy", fields: [reportedByPersonId], references: [id])
+
+  /// §6 — quien lo nota y quien lo arregla suelen ser dos personas distintas.
+  responsiblePersonId String? @map("responsible_person_id") @db.Uuid
+  responsible         Person? @relation("EquipmentConditionResponsible", fields: [responsiblePersonId], references: [id])
+
+  occurredAt DateTime  @map("occurred_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  /// Una foto del sello partido. `core.asset` ya lleva checksum, tipo MIME y
+  /// derechos de uso: no hace falta un almacén de documentos aparte.
+  evidenceAssetId String? @map("evidence_asset_id") @db.Uuid
+  evidenceAsset   Asset?  @relation("EquipmentConditionEvidence", fields: [evidenceAssetId], references: [id])
+
+  note String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("EquipmentConditionCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([equipmentId, occurredAt])
+  @@map("equipment_condition_report")
+  @@schema("core")
+}
+
+// ── Verificación de instrumentos ───────────────────────────────────────────
+//
+// **DECISIÓN DE DANIEL DEL 2026-09-14, Y CAMBIA EL §7 DEL DOCUMENTO DE DISEÑO
+// Y LA §3 DE `docs/beneficio/02_calibration.md`.** Las dos daban por supuesto
+// que la vigencia es de CALENDARIO —«24 h en cosecha activa», «7 días»— con la
+// columna marcada `[PROVISIONAL]`, que es exactamente donde faltaba el dueño.
+// Él lo cerró así, con sus palabras:
+//
+//   «cada aplicación se hace una prueba de refractómetro con agua, y que debe
+//   estar en 0 brix, o si es pHímetro específico, se debe poner una referencia
+//   de solución 4.0 pH y otra de 7.0 y o 10 […] entonces no se debe calibrar si
+//   se han realizado estas pruebas positivamente que están bajo el rango
+//   óptimo, y están por decir calibradas, se continúan usando, no se calibran
+//   por tiempo definido solamente […] si se alerta y queda explícito que no
+//   está revisado.»
+//
+// De ahí salen las tres propiedades que este modelo tiene y el de calendario no:
+//
+//   1. **La verificación es un CONTRASTE contra un patrón declarado**, no el
+//      paso del tiempo. Agua a 0 °Bx; tampones a 4.01, 7.00, 10.01.
+//   2. **Qué patrones exige cada instrumento lo decide una persona** —«lo que
+//      decida el jefe del beneficio con el especialista en procesos»— así que
+//      es un dato por instrumento, con quién lo decidió y cuándo, no una tabla
+//      fija en el código.
+//   3. **El vencimiento AVISA, no descalifica.** Un instrumento sin revisión
+//      reciente se sigue usando; lo que cambia es que la lectura queda marcada
+//      y la pantalla lo dice. Es la misma decisión §7.1 —degradar, nunca
+//      bloquear— aplicada al eje del tiempo: bloquear se esquiva en el patio y
+//      entonces el sistema sabe MENOS.
+
+/// Contra qué hay que contrastar este instrumento. Una fila por patrón.
+///
+/// **No se edita en su sitio: se retira y se crea otra.** Un criterio de
+/// aceptación que cambia bajo los pies vuelve imposible juzgar una verificación
+/// pasada — «pasó» dejaría de significar nada concreto. Misma disciplina que
+/// `ProtocolVersion`.
+model InstrumentCheckRequirement {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  equipmentId String    @map("equipment_id") @db.Uuid
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  /// Lo que el operario ve y reconoce: «agua destilada», «tampón 4.01».
+  label String
+
+  /// Lo que el patrón vale, y en qué unidad. `0` °Bx para el agua; `4.01` pH.
+  referenceValue Decimal @map("reference_value") @db.Decimal(12, 4)
+  unit           String
+
+  /// Tolerancia ABSOLUTA, en la misma unidad. Fuera de `referencia ± tolerancia`
+  /// el contraste no pasa. Absoluta y no relativa a propósito: un cero relativo
+  /// no tiene sentido —el agua vale 0 °Bx y cualquier porcentaje de 0 es 0—, y
+  /// ése es justo el patrón que Daniel nombró primero.
+  toleranceAbs Decimal @map("tolerance_abs") @db.Decimal(12, 4)
+
+  /// **Quién lo decidió.** El documento de Daniel dice «lo que decida el jefe
+  /// del beneficio con el especialista en procesos», y un criterio sin autor no
+  /// se puede discutir después.
+  decidedByPersonId String? @map("decided_by_person_id") @db.Uuid
+  decidedBy         Person? @relation("InstrumentRequirementDecidedBy", fields: [decidedByPersonId], references: [id])
+
+  displayOrder Int       @default(0) @map("display_order")
+  retiredAt    DateTime? @map("retired_at")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("InstrumentRequirementCreatedBy", fields: [createdBy], references: [id])
+
+  results InstrumentCheckResult[]
+
+  @@index([equipmentId])
+  @@map("instrument_check_requirement")
+  @@schema("core")
+}
+
+enum InstrumentCheckOutcome {
+  /// Todos los contrastes cayeron dentro de su tolerancia.
+  pass
+  /// Al menos uno se salió. Dispara la revisión retroactiva de §7.2.
+  fail
+
+  @@schema("core")
+}
+
+/// Un acto de verificación: el operario puso el instrumento contra sus patrones.
+///
+/// **`outcome` se DERIVA de los resultados y la migración lo obliga**, para que
+/// no pueda existir un «pass» con un contraste fuera de rango. Un veredicto
+/// guardado a mano que contradice a sus propios datos es la forma exacta de
+/// guardia falso que este repositorio ya ha pagado varias veces.
+model InstrumentCheck {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  equipmentId String    @map("equipment_id") @db.Uuid
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  occurredAt DateTime @map("occurred_at")
+
+  performedByPersonId String? @map("performed_by_person_id") @db.Uuid
+  performedBy         Person? @relation("InstrumentCheckPerformedBy", fields: [performedByPersonId], references: [id])
+
+  /// La ecuación de Nernst hace el electrodo de pH dependiente de temperatura, y
+  /// el refractómetro también. `02_calibration.md` §4 separa este efecto —error
+  /// del INSTRUMENTO— del efecto real de la temperatura sobre la fermentación.
+  ambientTempC Decimal? @map("ambient_temp_c") @db.Decimal(5, 2)
+
+  /// Nace en `fail` a propósito y un TRIGGER lo sube a `pass`: ver la migración.
+  /// Un acto de verificación SIN un solo contraste no es un aprobado.
+  outcome InstrumentCheckOutcome @default(fail)
+  note    String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("InstrumentCheckCreatedBy", fields: [createdBy], references: [id])
+
+  results InstrumentCheckResult[]
+
+  @@index([equipmentId, occurredAt])
+  reviewFlagsRaised MeasurementReviewFlag[] @relation("ReviewFlagRaisedBy")
+
+  @@map("instrument_check")
+  @@schema("core")
+}
+
+model InstrumentCheckResult {
+  id      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  checkId String          @map("check_id") @db.Uuid
+  check   InstrumentCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+
+  requirementId String                     @map("requirement_id") @db.Uuid
+  requirement   InstrumentCheckRequirement @relation(fields: [requirementId], references: [id])
+
+  /// Lo que el instrumento leyó puesto contra el patrón.
+  observedValue Decimal @map("observed_value") @db.Decimal(12, 4)
+
+  /// Derivado de `|observado − referencia| <= tolerancia`, y el CHECK de la
+  /// migración lo obliga contra `outcome`. Se guarda en vez de recalcularse
+  /// porque el criterio de la fila de requisito puede retirarse después, y
+  /// entonces el veredicto de ayer dejaría de poder reconstruirse.
+  withinTolerance Boolean @map("within_tolerance")
+
+  @@unique([checkId, requirementId])
+  @@index([requirementId])
+  @@map("instrument_check_result")
+  @@schema("core")
+}
+
+/// §7.2 — cuando un instrumento FALLA, sus lecturas desde el último contraste
+/// bueno quedan en duda. **Y la medición no se toca.**
+///
+/// `DATA_ARCHITECTURE.md` §4 y `AI_GOVERNANCE.md` §6 prohíben re-etiquetar
+/// evidencia en silencio, y reescribir `data_quality` en su sitio sería
+/// exactamente eso: destruiría el registro de lo que se creía al medir. Así que
+/// la duda vive aparte, es consultable, y se resuelve a mano con nombre y fecha.
+model MeasurementReviewFlag {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  measurementId String      @map("measurement_id") @db.Uuid
+  measurement   Measurement @relation(fields: [measurementId], references: [id], onDelete: Cascade)
+
+  raisedByCheckId String          @map("raised_by_check_id") @db.Uuid
+  raisedByCheck   InstrumentCheck @relation("ReviewFlagRaisedBy", fields: [raisedByCheckId], references: [id], onDelete: Cascade)
+
+  raisedAt DateTime @default(now()) @map("raised_at")
+
+  reviewedByPersonId String?   @map("reviewed_by_person_id") @db.Uuid
+  reviewedBy         Person?   @relation("MeasurementReviewedBy", fields: [reviewedByPersonId], references: [id])
+  reviewedAt         DateTime? @map("reviewed_at")
+
+  /// Nulo mientras nadie la ha revisado. **«Sin revisar» y «revisada y se
+  /// mantiene» son hechos distintos**, y pintarlos igual es lo que convierte
+  /// una cola de revisión en un adorno.
+  outcome MeasurementReviewOutcome?
+  note    String?
+
+  @@unique([measurementId, raisedByCheckId])
+  @@index([measurementId])
+  @@map("measurement_review_flag")
+  @@schema("core")
+}
+
+enum MeasurementReviewOutcome {
+  /// Se comprobó y el valor se sostiene.
+  confirmed
+  /// Se volvió a medir y aquella queda superseded.
+  superseded
+  /// Se mantiene, diciendo en voz alta con qué limitación.
+  retained_with_limitation
+
+  @@schema("core")
 }
 
 // P1 (42_P1_LAND_FOUNDATION.md §1) — renovation is a *new* cohort, never an
@@ -5080,6 +5527,10 @@ model StorageAssignment {
 
   @@index([lotId])
   @@index([locationId])
+  /// Junto a `containerNote`, nunca en su lugar. Ver `FermentationRun.vesselEquipmentId`.
+  containerEquipmentId String?    @map("container_equipment_id") @db.Uuid
+  containerEquipment   Equipment? @relation("StorageAssignmentContainer", fields: [containerEquipmentId], references: [id])
+
   @@map("storage_assignment")
   @@schema("traceability")
 }
