@@ -1,0 +1,1045 @@
+{
+  "$schema_version": "3.0",
+  "description": "Criterios de aceptacion ejecutables para los motores de beneficio. Los tiempos se expresan como offset_hours desde el inicio de la etapa; el arnes de prueba los convierte a datetime UTC tz-aware. Toda lectura sin 'confidence' se asume VALIDATED.",
+  "conventions": {
+    "default_confidence": "VALIDATED",
+    "fermentation_started_at": "2026-03-14T06:00:00-05:00",
+    "note": "Estos vectores son el contrato. Un motor que no los pase no se integra. Los perfiles con valores concretos estan en docs/00_conventions.md seccion 8; los nombres publicos en docs/03_public_api.md.",
+    "confirmation_windows_hours": {
+      "ph": [
+        0.25,
+        4.0
+      ],
+      "brix": [
+        1.0,
+        8.0
+      ],
+      "drying": [
+        12.0,
+        48.0
+      ]
+    },
+    "drying_started_at": "2026-03-25T06:00:00-05:00"
+  },
+  "ph": [
+    {
+      "id": "PH-001-boundary-optimal-high-exclusive",
+      "why": "4.50 es el borde SUPERIOR EXCLUSIVO de la ventana optima. La v2.5 lo trataba como optimo y como estancado a la vez.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 6.0,
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "ph": 5.6
+        },
+        {
+          "offset_hours": 6.0,
+          "ph": 4.5
+        }
+      ],
+      "expect": {
+        "status": "LAG_PHASE",
+        "severity": "INFO",
+        "awaiting_confirmation": false
+      }
+    },
+    {
+      "id": "PH-002-boundary-optimal-low-inclusive",
+      "why": "3.80 es el borde INFERIOR INCLUSIVO de la ventana optima.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 18.0,
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "ph": 5.6
+        },
+        {
+          "offset_hours": 18.0,
+          "ph": 3.8
+        }
+      ],
+      "expect": {
+        "status": "OPTIMAL_ACTIVE",
+        "severity": "INFO"
+      }
+    },
+    {
+      "id": "PH-003-watch-band-was-silent-in-v2",
+      "why": "REGRESION CRITICA. En v2.5 un pH de 3.65 caia en el return final como MONITORING sin alerta. El operador no recibia aviso en la unica ventana donde todavia puede salvar el lote.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 22.0,
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "ph": 5.5
+        },
+        {
+          "offset_hours": 22.0,
+          "ph": 3.65
+        }
+      ],
+      "expect": {
+        "status": "WATCH_APPROACHING_LOW",
+        "severity": "WARNING",
+        "alert_key": "alert.ph.approaching_low"
+      }
+    },
+    {
+      "id": "PH-004-critical-requires-confirmation",
+      "why": "Una sola lectura bajo 3.50 no puede ordenar el lavado de un lote completo.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 26.0,
+      "readings": [
+        {
+          "offset_hours": 24.0,
+          "ph": 3.9
+        },
+        {
+          "offset_hours": 26.0,
+          "ph": 3.44
+        }
+      ],
+      "expect": {
+        "status": "OVER_FERMENTED_CRITICAL",
+        "severity": "WARNING",
+        "awaiting_confirmation": true
+      }
+    },
+    {
+      "id": "PH-005-critical-confirmed",
+      "why": "Dos lecturas VALIDATED separadas 30 min confirman y elevan a CRITICAL.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 26.5,
+      "readings": [
+        {
+          "offset_hours": 26.0,
+          "ph": 3.44
+        },
+        {
+          "offset_hours": 26.5,
+          "ph": 3.41
+        }
+      ],
+      "expect": {
+        "status": "OVER_FERMENTED_CRITICAL",
+        "severity": "CRITICAL",
+        "awaiting_confirmation": false,
+        "alert_key": "alert.ph.over_fermented"
+      }
+    },
+    {
+      "id": "PH-006-immediate-trigger-no-confirmation",
+      "why": "Por debajo de 3.30 el dano ya ocurrio; esperar confirmacion agrava.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 28.0,
+      "readings": [
+        {
+          "offset_hours": 28.0,
+          "ph": 3.18
+        }
+      ],
+      "expect": {
+        "status": "OVER_FERMENTED_CRITICAL",
+        "severity": "CRITICAL",
+        "awaiting_confirmation": false,
+        "alert_key": "alert.ph.over_fermented_immediate"
+      }
+    },
+    {
+      "id": "PH-007-sensor-fault-must-not-raise",
+      "why": "REGRESION CRITICA. v2.5 hacia raise ValueError con pH fuera de rango fisico, derribando el pipeline de ingesta por un electrodo sucio.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 10.0,
+      "readings": [
+        {
+          "offset_hours": 10.0,
+          "ph": 9.8
+        }
+      ],
+      "expect": {
+        "status": "SENSOR_FAULT",
+        "severity": "WARNING",
+        "raises": false
+      }
+    },
+    {
+      "id": "PH-008-stall-above-threshold-after-grace",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 14.0,
+      "readings": [
+        {
+          "offset_hours": 12.5,
+          "ph": 4.62
+        },
+        {
+          "offset_hours": 14.0,
+          "ph": 4.6
+        }
+      ],
+      "expect": {
+        "status": "STALLED_ROT_HAZARD",
+        "severity": "CRITICAL",
+        "alert_key": "alert.ph.stalled_rot_hazard"
+      }
+    },
+    {
+      "id": "PH-009-kinetic-plateau-inside-optimal-band",
+      "why": "NUEVO. Una fermentacion detenida en pH 4.20 es tan peligrosa como una detenida en 4.70. v2.5 solo detectaba la segunda.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 20.0,
+      "readings": [
+        {
+          "offset_hours": 8.0,
+          "ph": 4.22
+        },
+        {
+          "offset_hours": 14.0,
+          "ph": 4.21
+        },
+        {
+          "offset_hours": 17.0,
+          "ph": 4.21
+        },
+        {
+          "offset_hours": 20.0,
+          "ph": 4.2
+        }
+      ],
+      "expect": {
+        "status": "KINETIC_PLATEAU",
+        "severity": "WARNING"
+      }
+    },
+    {
+      "id": "PH-010-cold-hold-suppresses-stall",
+      "why": "CryoBloom. La meseta de pH durante el reposo frio es el objetivo del protocolo, no una anomalia. Sin esta supresion el sistema alerta continuamente y entrena al operador a ignorar las criticas.",
+      "profile": "COLD_HOLD_PREFERMENT",
+      "now_hours": 30.0,
+      "readings": [
+        {
+          "offset_hours": 2.0,
+          "ph": 5.4
+        },
+        {
+          "offset_hours": 30.0,
+          "ph": 5.35
+        }
+      ],
+      "expect": {
+        "status": "STALL_SUSPENDED_COLD_HOLD",
+        "severity": "INFO"
+      }
+    },
+    {
+      "id": "PH-011-uncalibrated-excluded",
+      "why": "Una lectura sin calibracion vigente se persiste pero no alimenta el calculo de alertas.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 26.0,
+      "readings": [
+        {
+          "offset_hours": 26.0,
+          "ph": 3.2,
+          "confidence": "UNCALIBRATED"
+        }
+      ],
+      "expect": {
+        "status": "DATA_INSUFFICIENT",
+        "severity": "INFO",
+        "readings_used": 0
+      }
+    },
+    {
+      "id": "PH-012-zero-timespan-guard",
+      "why": "Dos lecturas con identico measured_at no deben producir ZeroDivisionError al calcular pendiente.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 9.0,
+      "readings": [
+        {
+          "offset_hours": 9.0,
+          "ph": 4.3
+        },
+        {
+          "offset_hours": 9.0,
+          "ph": 4.3
+        }
+      ],
+      "expect": {
+        "status": "OPTIMAL_ACTIVE",
+        "raises": false,
+        "dph_dt_recent": null
+      }
+    },
+    {
+      "id": "PH-013-suspect-dilution-band",
+      "why": "NUEVO en 3.1. El mucilago fresco no supera pH ~6.0. Un valor mayor apunta a agua de enjuague o electrodo fuera del liquido: es una alerta sobre el DATO. La banda 6.50-8.00 no pertenecia a ninguna banda en 3.0.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 1.0,
+      "readings": [
+        {
+          "offset_hours": 1.0,
+          "ph": 6.9
+        }
+      ],
+      "expect": {
+        "status": "SUSPECT_DILUTION",
+        "severity": "WARNING",
+        "raises": false
+      }
+    }
+  ],
+  "brix": [
+    {
+      "id": "BX-001-stagnation-alert-must-exist",
+      "why": "REGRESION CRITICA. Especificada en v2.5 seccion 1 y en CLAUDE.md, pero SIN NINGUNA RAMA que la emitiera. La proteccion documentada no existia en ejecucion.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 20.0,
+      "sample_point": "TANK_LIQUID_MID",
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "brix": 21.0
+        },
+        {
+          "offset_hours": 4.0,
+          "brix": 19.4
+        },
+        {
+          "offset_hours": 8.0,
+          "brix": 18.9
+        },
+        {
+          "offset_hours": 14.0,
+          "brix": 18.8
+        },
+        {
+          "offset_hours": 20.0,
+          "brix": 18.7
+        }
+      ],
+      "expect": {
+        "status": "STAGNATION_HAZARD",
+        "severity": "CRITICAL"
+      }
+    },
+    {
+      "id": "BX-002-lifetime-average-masks-stall",
+      "why": "REGRESION FUNCIONAL. Consumo rapido inicial seguido de 13 h detenido. La velocidad acumulada de v2.5 se ve saludable y no alerta; la ventana movil detecta la parada.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 21.0,
+      "sample_point": "TANK_LIQUID_MID",
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "brix": 22.0
+        },
+        {
+          "offset_hours": 4.0,
+          "brix": 18.0
+        },
+        {
+          "offset_hours": 8.0,
+          "brix": 17.6
+        },
+        {
+          "offset_hours": 15.0,
+          "brix": 17.5
+        },
+        {
+          "offset_hours": 21.0,
+          "brix": 17.4
+        }
+      ],
+      "expect": {
+        "status": "STAGNATION_HAZARD",
+        "velocity_recent_near_zero": true,
+        "velocity_cumulative_healthy": true
+      }
+    },
+    {
+      "id": "BX-003-zero-initial-guard",
+      "why": "REGRESION CRITICA. v2.5 ejecutaba (initial - current)/initial sin guarda. Un refractometro sin cerar produce initial = 0.0 y ZeroDivisionError que derriba la ingesta.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 5.0,
+      "sample_point": "TANK_LIQUID_MID",
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "brix": 0.0
+        },
+        {
+          "offset_hours": 5.0,
+          "brix": 0.0
+        }
+      ],
+      "expect": {
+        "status": "SENSOR_FAULT",
+        "raises": false
+      }
+    },
+    {
+      "id": "BX-004-outlier-must-not-trigger-termination",
+      "why": "REGRESION CRITICA. v2.5 comparaba solo primera contra ultima lectura. Un enjuague de prisma mal hecho declara TERMINATION_READY y manda el lote a lavado antes de tiempo.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 12.0,
+      "sample_point": "TANK_LIQUID_MID",
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "brix": 22.0
+        },
+        {
+          "offset_hours": 4.0,
+          "brix": 20.5
+        },
+        {
+          "offset_hours": 8.0,
+          "brix": 19.8
+        },
+        {
+          "offset_hours": 11.0,
+          "brix": 19.5
+        },
+        {
+          "offset_hours": 12.0,
+          "brix": 3.2
+        }
+      ],
+      "expect": {
+        "status_not": "TERMINATION_READY"
+      }
+    },
+    {
+      "id": "BX-005-termination-confirmed",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 26.0,
+      "sample_point": "TANK_LIQUID_MID",
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "brix": 22.0
+        },
+        {
+          "offset_hours": 0.5,
+          "brix": 22.1
+        },
+        {
+          "offset_hours": 1.0,
+          "brix": 21.9
+        },
+        {
+          "offset_hours": 24.0,
+          "brix": 14.4
+        },
+        {
+          "offset_hours": 25.0,
+          "brix": 14.2
+        },
+        {
+          "offset_hours": 26.0,
+          "brix": 14.1
+        }
+      ],
+      "expect": {
+        "status": "TERMINATION_READY",
+        "severity": "CRITICAL",
+        "awaiting_confirmation": false
+      }
+    },
+    {
+      "id": "BX-006-early-rise-is-solubilization-not-fraud",
+      "why": "El prompt de v2.5 marcaba cualquier ascenso como DATA_INTEGRITY_VIOLATION. La solubilizacion del mucilago eleva legitimamente el Bx del licor en las primeras horas; la regla original genera anomalias falsas en el arranque de cada lote.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 4.0,
+      "sample_point": "TANK_LIQUID_MID",
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "brix": 17.5
+        },
+        {
+          "offset_hours": 4.0,
+          "brix": 19.1
+        }
+      ],
+      "expect": {
+        "status": "FERMENTING",
+        "severity": "INFO"
+      }
+    },
+    {
+      "id": "BX-007-late-unexplained-rise-flags-data",
+      "why": "Despues de la gracia, un ascenso mayor a 1.0 Bx sin evento de enriquecimiento apunta al DATO, no al lote.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 18.0,
+      "sample_point": "TANK_LIQUID_MID",
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "brix": 21.0
+        },
+        {
+          "offset_hours": 10.0,
+          "brix": 17.0
+        },
+        {
+          "offset_hours": 18.0,
+          "brix": 19.4
+        }
+      ],
+      "expect": {
+        "status": "DATA_INTEGRITY_VIOLATION",
+        "severity": "WARNING",
+        "affects_lot_state": false
+      }
+    },
+    {
+      "id": "BX-008-mixed-sample-points-rejected",
+      "why": "No existe factor de conversion defendible entre licor de tanque y mucilago exprimido.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 10.0,
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "brix": 21.0,
+          "sample_point": "TANK_LIQUID_MID"
+        },
+        {
+          "offset_hours": 10.0,
+          "brix": 17.0,
+          "sample_point": "MUCILAGE_PRESSED"
+        }
+      ],
+      "expect": {
+        "status": "MIXED_SAMPLE_POINTS",
+        "severity": "WARNING"
+      }
+    },
+    {
+      "id": "BX-009-return-contract-complete-on-termination",
+      "why": "REGRESION DE CONTRATO. v2.5 omitia velocity_bx_hr en la rama TERMINATION_READY pero la incluia en DATA_COLLECTION, produciendo KeyError en el evento mas importante del ciclo.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 26.0,
+      "sample_point": "TANK_LIQUID_MID",
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "brix": 22.0
+        },
+        {
+          "offset_hours": 25.0,
+          "brix": 14.2
+        },
+        {
+          "offset_hours": 26.0,
+          "brix": 14.1
+        }
+      ],
+      "expect": {
+        "all_contract_fields_present": true
+      }
+    },
+    {
+      "id": "BX-010-cold-hold-suppresses-stagnation",
+      "profile": "COLD_HOLD_PREFERMENT",
+      "now_hours": 30.0,
+      "sample_point": "TANK_LIQUID_MID",
+      "readings": [
+        {
+          "offset_hours": 2.0,
+          "brix": 20.5
+        },
+        {
+          "offset_hours": 30.0,
+          "brix": 20.3
+        }
+      ],
+      "expect": {
+        "status_not": "STAGNATION_HAZARD"
+      }
+    },
+    {
+      "id": "BX-011-stall-window-unevaluable-must-not-short-circuit",
+      "why": "NUEVO en 3.1. Sin lectura comparable en la ventana de estancamiento, la regla no es evaluable y la evaluacion DEBE continuar. Convertirla en estado terminal deja al motor incapaz de emitir TERMINATION_READY en casi cualquier cadencia real de muestreo.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 30.0,
+      "sample_point": "TANK_LIQUID_MID",
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "brix": 22.0
+        },
+        {
+          "offset_hours": 1.0,
+          "brix": 21.8
+        },
+        {
+          "offset_hours": 28.5,
+          "brix": 14.0
+        },
+        {
+          "offset_hours": 30.0,
+          "brix": 13.9
+        }
+      ],
+      "expect": {
+        "status": "TERMINATION_READY",
+        "warnings_include": [
+          "STALL_NOT_EVALUABLE"
+        ]
+      }
+    },
+    {
+      "id": "BX-012-short-series-no-median",
+      "why": "NUEVO en 3.1. Con menos de 4 lecturas los conjuntos de mediana se solapan e initial == current por construccion, dando siempre total_drop_pct = 0.",
+      "profile": "WASHED_STANDARD",
+      "now_hours": 3.0,
+      "sample_point": "TANK_LIQUID_MID",
+      "readings": [
+        {
+          "offset_hours": 0.0,
+          "brix": 21.0
+        },
+        {
+          "offset_hours": 3.0,
+          "brix": 19.5
+        }
+      ],
+      "expect": {
+        "status": "FERMENTING",
+        "warnings_include": [
+          "SHORT_SERIES_NO_MEDIAN"
+        ],
+        "initial_brix": 21.0,
+        "current_brix": 19.5
+      }
+    }
+  ],
+  "mass_balance": [
+    {
+      "id": "MB-001-pulp-must-not-enter-stage-a",
+      "why": "REGRESION ESTRUCTURAL. En v2.0 este registro fisicamente correcto FALLA con ValueError porque pulp_kg se sumaba contra la cereza entera. La pulpa es el 40-45 % de la masa de las cerezas que ya se contaron en prime_ripe.",
+      "total_cherry_kg": 1000.0,
+      "stage_a": {
+        "prime_ripe": 820.0,
+        "semi_ripe": 60.0,
+        "underripe": 45.0,
+        "overripe": 30.0,
+        "floaters": 35.0,
+        "foreign_matter": 6.0,
+        "sorting_loss": 4.0
+      },
+      "stage_b": {
+        "depulped_input_kg": 910.0,
+        "pulp": 373.0,
+        "process_loss": 5.0,
+        "lot_id": "PAN-TEST-20260314-001",
+        "depulped_in_mucilage": 532.0,
+        "weighing_condition": "DRAINED",
+        "upstream_weighing_condition": "DRAINED"
+      },
+      "expect": {
+        "stage_a_status": "BALANCED",
+        "stage_b_status": "BALANCED",
+        "purity_index": 0.82,
+        "lot_tier": "PREMIUM_SPECIALTY",
+        "raises": false
+      },
+      "lot_id": "PAN-TEST-20260314-001",
+      "weighing_condition": "DRAINED"
+    },
+    {
+      "id": "MB-002-relative-tolerance-large-lot",
+      "why": "La tolerancia absoluta de 0.05 kg de v2.0 exige 0.001 % de precision sobre 5000 kg. Inalcanzable con bascula de plataforma.",
+      "total_cherry_kg": 5000.0,
+      "stage_a": {
+        "prime_ripe": 4100.0,
+        "semi_ripe": 300.0,
+        "underripe": 250.0,
+        "overripe": 150.0,
+        "floaters": 180.0,
+        "foreign_matter": 12.0,
+        "sorting_loss": 6.0
+      },
+      "expect": {
+        "stage_a_status": "BALANCED",
+        "discrepancy_kg": -2.0,
+        "raises": false
+      },
+      "lot_id": "PAN-TEST-20260314-001",
+      "weighing_condition": "DRAINED"
+    },
+    {
+      "id": "MB-003-absolute-floor-small-lot",
+      "why": "0.5 % de un lote de 20 kg son 0.1 kg. El piso absoluto evita falsos desbalances en microlotes.",
+      "total_cherry_kg": 20.0,
+      "stage_a": {
+        "prime_ripe": 17.0,
+        "semi_ripe": 1.0,
+        "underripe": 0.8,
+        "overripe": 0.4,
+        "floaters": 0.6,
+        "foreign_matter": 0.1,
+        "sorting_loss": 0.4
+      },
+      "expect": {
+        "stage_a_status": "BALANCED",
+        "raises": false
+      },
+      "lot_id": "PAN-TEST-20260314-001",
+      "weighing_condition": "DRAINED"
+    },
+    {
+      "id": "MB-004-discrepancy-persists-never-raises",
+      "why": "REGRESION CRITICA. v2.0 lanzaba ValueError y descartaba la captura completa. En un beneficio a las 5 am bajo lluvia, eso significa que el dato no se registra nunca.",
+      "total_cherry_kg": 1000.0,
+      "stage_a": {
+        "prime_ripe": 800.0,
+        "semi_ripe": 50.0,
+        "underripe": 40.0,
+        "overripe": 25.0,
+        "floaters": 30.0,
+        "foreign_matter": 5.0,
+        "sorting_loss": 3.0
+      },
+      "expect": {
+        "stage_a_status": "DISCREPANCY_FLAGGED",
+        "discrepancy_kg": -47.0,
+        "persisted": true,
+        "raises": false
+      },
+      "lot_id": "PAN-TEST-20260314-001",
+      "weighing_condition": "DRAINED"
+    },
+    {
+      "id": "MB-005-gross-imbalance-blocks-transition",
+      "total_cherry_kg": 1000.0,
+      "stage_a": {
+        "prime_ripe": 500.0,
+        "semi_ripe": 20.0,
+        "underripe": 15.0,
+        "overripe": 10.0,
+        "floaters": 12.0,
+        "foreign_matter": 2.0,
+        "sorting_loss": 1.0
+      },
+      "expect": {
+        "stage_a_status": "GROSS_IMBALANCE",
+        "blocks_state_transition": true,
+        "persisted": true,
+        "raises": false
+      },
+      "lot_id": "PAN-TEST-20260314-001",
+      "weighing_condition": "DRAINED"
+    },
+    {
+      "id": "MB-006-missing-prime-ripe-raises",
+      "why": "REGRESION SILENCIOSA. v2.0 usaba .get('prime_ripe_kg', 0.0), devolvia purity_index 0 y etiquetaba COMMERCIAL_VOLUME un lote que podia ser premium. Un campo que alimenta un indice de calidad no admite default.",
+      "total_cherry_kg": 1000.0,
+      "stage_a": {
+        "semi_ripe": 60.0,
+        "underripe": 45.0,
+        "floaters": 35.0
+      },
+      "expect": {
+        "raises": "SchemaError"
+      },
+      "lot_id": "PAN-TEST-20260314-001",
+      "weighing_condition": "DRAINED"
+    },
+    {
+      "id": "MB-007-zero-total-raises",
+      "total_cherry_kg": 0.0,
+      "stage_a": {
+        "prime_ripe": 0.0
+      },
+      "expect": {
+        "raises": "SchemaError"
+      },
+      "lot_id": "PAN-TEST-20260314-001",
+      "weighing_condition": "DRAINED"
+    },
+    {
+      "id": "MB-008-negative-mass-raises",
+      "total_cherry_kg": 100.0,
+      "stage_a": {
+        "prime_ripe": 110.0,
+        "sorting_loss": -10.0
+      },
+      "expect": {
+        "raises": "SchemaError"
+      },
+      "lot_id": "PAN-TEST-20260314-001",
+      "weighing_condition": "DRAINED"
+    },
+    {
+      "id": "MB-009-implausible-pulp-yield-warns",
+      "why": "El balance cuadra pero el rendimiento es imposible: 10 % de pulpa sobre cereza despulpada indica bascula descalibrada o unidad mal digitada.",
+      "total_cherry_kg": 1000.0,
+      "stage_a": {
+        "prime_ripe": 1000.0
+      },
+      "stage_b": {
+        "depulped_input_kg": 1000.0,
+        "pulp": 100.0,
+        "process_loss": 5.0,
+        "lot_id": "PAN-TEST-20260314-001",
+        "depulped_in_mucilage": 895.0,
+        "weighing_condition": "DRAINED",
+        "upstream_weighing_condition": "DRAINED"
+      },
+      "expect": {
+        "stage_b_status": "BALANCED",
+        "warnings_include": [
+          "YIELD_IMPLAUSIBLE_PULP",
+          "YIELD_IMPLAUSIBLE_DEPULPED"
+        ]
+      },
+      "lot_id": "PAN-TEST-20260314-001",
+      "weighing_condition": "DRAINED"
+    },
+    {
+      "id": "MB-010-cascara-batch-spawned",
+      "why": "pulp_kg > 0 debe crear una entidad CascaraBatch enlazada para forzar el inventario aguas abajo.",
+      "total_cherry_kg": 1000.0,
+      "stage_a": {
+        "prime_ripe": 1000.0
+      },
+      "stage_b": {
+        "depulped_input_kg": 1000.0,
+        "pulp": 415.0,
+        "process_loss": 5.0,
+        "lot_id": "PAN-TEST-20260314-001",
+        "depulped_in_mucilage": 580.0,
+        "weighing_condition": "DRAINED",
+        "upstream_weighing_condition": "DRAINED"
+      },
+      "expect": {
+        "spawns_entity": "CascaraBatch",
+        "parent_lot_id_set": true,
+        "flags_include": [
+          "CASCARA_PROFILE_UNVALIDATED"
+        ]
+      },
+      "lot_id": "PAN-TEST-20260314-001",
+      "weighing_condition": "DRAINED"
+    },
+    {
+      "id": "MB-011-routing-returns-enums-not-prose",
+      "why": "v2.0 devolvia frases en espanol dentro de routing_manifest, inutilizables como identificadores y en violacion de la regla de i18n.",
+      "total_cherry_kg": 100.0,
+      "stage_a": {
+        "prime_ripe": 100.0
+      },
+      "expect": {
+        "routing_manifest_values_are_enums": true,
+        "no_spanish_literals": true
+      },
+      "lot_id": "PAN-TEST-20260314-001",
+      "weighing_condition": "DRAINED"
+    },
+    {
+      "id": "MB-012-incomparable-weighing-conditions",
+      "total_cherry_kg": 1000.0,
+      "weighing_condition": "DRAINED",
+      "stage_a": {
+        "prime_ripe": 1000.0
+      },
+      "stage_b": {
+        "depulped_input_kg": 1000.0,
+        "pulp": 420.0,
+        "process_loss": 5.0,
+        "weighing_condition": "WET",
+        "lot_id": "PAN-TEST-20260314-001",
+        "depulped_in_mucilage": 575.0,
+        "upstream_weighing_condition": "DRAINED"
+      },
+      "expect": {
+        "warnings_include": [
+          "INCOMPARABLE_WEIGHING_CONDITION"
+        ]
+      },
+      "lot_id": "PAN-TEST-20260314-001",
+      "why": "Un peso WET no es comparable con el peso DRAINED de la etapa anterior; la relacion de rendimiento resultante es ficticia."
+    },
+    {
+      "id": "MB-013-stage-c-washing-balance",
+      "why": "NUEVO en 3.1. La Etapa C existia en docs/12 sin motor asignado ni vector. El pergamino lavado es 40-46 % de la cereza; compararlo contra el rango de despulpado en baba produce falsos YIELD_IMPLAUSIBLE.",
+      "lot_id": "PAN-TEST-20260314-001",
+      "weighing_condition": "DRAINED",
+      "total_cherry_kg": 1000.0,
+      "stage_a": {
+        "prime_ripe": 1000.0
+      },
+      "stage_c": {
+        "lot_id": "PAN-TEST-20260314-001",
+        "depulped_in_mucilage_kg": 580.0,
+        "wet_parchment": 438.0,
+        "mucilage_washout": 138.0,
+        "wash_loss": 4.0,
+        "weighing_condition": "DRAINED"
+      },
+      "expect": {
+        "stage_a_status": "BALANCED",
+        "stage_c_status": "BALANCED",
+        "parchment_yield_pct": 43.8
+      }
+    }
+  ],
+  "drying": [
+    {
+      "id": "DR-001-fast-rate-only-flagged-in-falling-phase",
+      "why": "Un descenso rapido sobre 25 % de humedad es normal (agua libre). El limite de tasa aplica solo en fase decreciente.",
+      "readings": [
+        {
+          "offset_days": 0.0,
+          "moisture_pct_wb": 48.0
+        },
+        {
+          "offset_days": 1.0,
+          "moisture_pct_wb": 38.0
+        }
+      ],
+      "expect": {
+        "phase": "CONSTANT_RATE",
+        "status": "DRYING_NORMAL"
+      }
+    },
+    {
+      "id": "DR-002-case-hardening-risk",
+      "why": "Mismo descenso de 10 puntos, pero por debajo de 25 %: sella la superficie, el nucleo queda humedo y el moho aparece en bodega semanas despues.",
+      "readings": [
+        {
+          "offset_days": 0.0,
+          "moisture_pct_wb": 24.0
+        },
+        {
+          "offset_days": 1.0,
+          "moisture_pct_wb": 14.0
+        }
+      ],
+      "expect": {
+        "phase": "FALLING_RATE",
+        "status": "RATE_TOO_FAST",
+        "severity": "WARNING"
+      }
+    },
+    {
+      "id": "DR-003-overnight-rise-is-normal",
+      "why": "El pergamino en patio rehidrata de noche. Evaluar punto a punto genera falsas violaciones de integridad cada amanecer.",
+      "readings": [
+        {
+          "offset_days": 1.0,
+          "moisture_pct_wb": 22.0
+        },
+        {
+          "offset_days": 1.4,
+          "moisture_pct_wb": 19.5
+        },
+        {
+          "offset_days": 1.9,
+          "moisture_pct_wb": 21.2
+        },
+        {
+          "offset_days": 2.4,
+          "moisture_pct_wb": 18.4
+        }
+      ],
+      "expect": {
+        "status": "DRYING_NORMAL",
+        "status_not": "DATA_INTEGRITY_VIOLATION"
+      }
+    },
+    {
+      "id": "DR-004-stalled-above-twenty-is-mold-hazard",
+      "readings": [
+        {
+          "offset_days": 3.0,
+          "moisture_pct_wb": 22.5
+        },
+        {
+          "offset_days": 4.0,
+          "moisture_pct_wb": 22.3
+        },
+        {
+          "offset_days": 5.0,
+          "moisture_pct_wb": 22.4
+        }
+      ],
+      "expect": {
+        "status": "STALLED_MOLD_HAZARD",
+        "severity": "CRITICAL"
+      }
+    },
+    {
+      "id": "DR-005-target-requires-both-criteria",
+      "why": "La humedad porcentual sola no garantiza estabilidad microbiana; la actividad de agua es el parametro que la gobierna.",
+      "readings": [
+        {
+          "offset_days": 9.0,
+          "moisture_pct_wb": 11.0,
+          "water_activity": 0.68
+        }
+      ],
+      "expect": {
+        "status_not": "TARGET_REACHED"
+      }
+    },
+    {
+      "id": "DR-006-target-reached",
+      "readings": [
+        {
+          "offset_days": 10.0,
+          "moisture_pct_wb": 10.8,
+          "water_activity": 0.58
+        }
+      ],
+      "expect": {
+        "status": "TARGET_REACHED"
+      }
+    },
+    {
+      "id": "DR-007-over-dried",
+      "readings": [
+        {
+          "offset_days": 12.0,
+          "moisture_pct_wb": 9.1,
+          "water_activity": 0.52
+        }
+      ],
+      "expect": {
+        "status": "OVER_DRIED",
+        "severity": "WARNING"
+      }
+    },
+    {
+      "id": "DR-008-uneven-bed",
+      "readings": [
+        {
+          "offset_days": 6.0,
+          "bed_points_pct": [
+            14.2,
+            17.9,
+            15.1
+          ]
+        }
+      ],
+      "expect": {
+        "status": "UNEVEN_DRYING",
+        "dispersion_pp": 3.7
+      }
+    },
+    {
+      "id": "DR-009-moisture-mass-inconsistency-detects-sealed-grain",
+      "why": "Unica deteccion automatica de endurecimiento superficial: el medidor lee bajo pero la masa no bajo lo suficiente.",
+      "initial_mass_kg": 400.0,
+      "initial_moisture_pct": 45.0,
+      "current_mass_kg": 340.0,
+      "current_moisture_pct": 12.0,
+      "expect": {
+        "warnings_include": [
+          "MOISTURE_MASS_INCONSISTENT"
+        ]
+      }
+    }
+  ]
+}

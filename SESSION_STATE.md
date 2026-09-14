@@ -38,6 +38,32 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-13 · La especificación v3.0 del beneficio entra, y su contrato empieza a contar
+
+Daniel encargó fuera una revisión del material de proceso y llegó `nn-spec` v3.0:
+nueve documentos normativos y **47 criterios ejecutables**, diez de ellos de
+regresión. Encontró por su cuenta los mismos defectos que se habían señalado aquí
+horas antes —la banda de pH 3,5–3,8 muda, el `raise` que se niega a registrar una
+lectura real, la tolerancia de 50 g— y va mucho más lejos: calibración, máquina
+de estados, secado, histéresis y perfiles por protocolo.
+
+**Tres cosas del paquete NO se hicieron, y están dichas en `docs/beneficio/README.md`:**
+su `CLAUDE.md` **no** reemplaza al de la raíz —el nuestro gobierna toda la
+plataforma, el suyo un módulo—; no se implementa en **Python** —0 archivos `.py`
+contra 467 `.ts`, y su propio §1 ya contempla TypeScript—; y su `LOT_ID`
+inventado no sustituye al convenio real de Daniel, `PE-90` → `PE-90-A`.
+
+**El tablero empieza vacío y a la vista.** `tests/beneficio/vectores.test.ts` lee
+los 47 y los saca como `todo` hasta que exista el motor que los conteste: **3
+pasando, 47 pendientes**. Verde mentiría y rojo permanente enseña a ignorar la
+compuerta; `todo` sale contado y aparte, que es lo que es. El inventario de
+motores se declara a mano para que añadir uno se lea en el diff.
+
+**Media especificación ya estaba construida aquí** —`occurredAt`, correcciones
+que superseden, calibración, UTC con Panamá sin DST, procedencia, balance de
+masas, umbrales en la receta—. Lo que falta de verdad son tres piezas:
+`sample_point`, la histéresis de confirmación, y la derivada de estancamiento.
+
 ### 2026-09-14 · La caja se declara, y con eso «cuadros cubiertos» ya se puede comparar
 
 El Anexo B §2.4 son seis filas y ninguna existía. **La elegí antes que las otras dos
