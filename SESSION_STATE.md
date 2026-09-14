@@ -189,34 +189,6 @@ misma familia que el `cancelled` de las compuertas.
 - `npm run verify` **no construye**. Desde hoy, `npm run build` antes de empujar:
   es lo único que ve esta clase de defecto, como el `"use server"` de septiembre.
 
-### 2026-09-13 · La deriva de migraciones se cierra al revés de como parecía
-
-`migrate diff` proponía sentencias que no eran de ningún cambio en curso: **seis** el
-2026-09-12 y **quince** el 2026-09-13. Cada migración las excluía a mano y lo decía en
-su prosa — lo cual funciona **hasta el día en que alguien no se dé cuenta**.
-
-**La dirección era la decisión, y no era la obvia.** Medido tabla por tabla, en la
-migración **y** en la base: las migraciones crearon esas FK con `ON DELETE RESTRICT`, y
-el esquema pedía `SET NULL` **no porque nadie lo eligiera, sino porque al no decir nada
-heredaba el defecto de Prisma** para relaciones opcionales. Ejecutar el diff habría
-cambiado producción a «se borra el valor de catálogo y te vacío en silencio el color de
-cereza que alguien observó». Así que se declaró en el esquema lo que la base ya hace:
-**cero SQL, cero migraciones, cero filas**. 15 → 8 → 0. ADR-120.
-
-Dos de las siete las tuve mal al primer intento —`drying_run` y `fermentation_run` sí
-son `SET NULL`— y lo dijo **medir cada una en los dos sitios** en vez de suponer
-simetría.
-
-**Y un guardia, `tests/derivaDeMigraciones.test.ts`,** con control positivo dentro y
-distinguiendo los tres valores de `--exit-code`: 0 vacío, 2 diferencia, **1 error**.
-Eso último no es cosmético: mientras se escribía, **dos veces** un comando que
-reventaba se leyó como «no hay deriva», las dos por esconder `stderr` —`--from-url` ya
-no existe en Prisma 7, y en otra corrida faltaba exportar `SHADOW_DATABASE_URL`—.
-`ci-con-base.sh` deriva ahora la base de sombra para que el guardia pueda medir en CI.
-
-**Y el guardia de temporales me cazó a mí** al escribirlo: mi prueba creaba un
-directorio y no lo borraba.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
