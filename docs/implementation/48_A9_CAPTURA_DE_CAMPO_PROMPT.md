@@ -25,6 +25,11 @@ línea** — eso es lo que se está pidiendo, no cortesía.
    `docs/architecture/GUIDED_FIELD_STUDY_TOOL.md`.
 7. `CLAUDE.md` §19, §34, §35, §40, §41, §46, §47.
 8. Anexos B, C y D de este prompt — **material de entrada, no especificación**.
+9. `48_A9_ANEXO_G_ESTADO_DEL_ARTE.md` — qué existe en el mercado, qué es
+   estándar, qué no hace nadie, y qué obliga la ley.
+10. `48_A9_ANEXO_H_LO_QUE_EL_ANEXO_G_CAMBIA.md` — qué de E toca lo ya decidido
+    en el informe, y una propuesta de veredicto para D11. **Entrada, no
+    decisión**: contradícela igual que a los demás anexos.
 
 **Referencia visual de las pantallas, no normativa sobre el código.** El
 prototipo «Apiario Néctar Nómada» —mapa de sitios, vitales, línea de vida de
@@ -344,6 +349,32 @@ Lo que hay que resolver, y no es trivial:
 **Fuera de alcance de D10:** construir los cuatro adaptadores. Lo que se pide es
 el modelo de preferencias, la separación entre entrega y bitácora, y el
 veredicto sobre volumen y costo de WhatsApp.
+
+### D11 — ¿Se construye la captura de calificación de fuerza como instrumento contractual?
+
+Abierta por el Anexo G, no estaba en la primera versión de este prompt.
+
+El Anexo G §4.2 documenta que **nadie en el mercado captura la calificación de
+fuerza de colonia como instrumento de contrato**. En almendra —el mercado de
+polinización más maduro que existe— la cláusula estándar es «promedio de 8
+cuadros de abeja, mínimo de 5», el productor contrata inspectores externos que
+muestrean 10% de las colmenas al azar, y el reporte va a las dos partes. Nada de
+ese flujo es software. La única empresa que lo atacó lo hizo con hardware
+—conteo por imagen infrarroja— y se disolvió en 2024.
+
+En Toabré no hay inspector de condado a quien deferir, lo que hace que el
+registro del propio apicultor sea la única evidencia que existe.
+
+- **A favor de construirlo:** es el hueco más limpio de toda la categoría, no
+  requiere hardware, y es lo que vuelve defendible una cifra de fuerza frente a
+  un cliente que paga por polinización dirigida.
+- **En contra:** el estándar de cuadros viene de almendra y **para café no
+  existe equivalente publicado**, así que el número lo fija el contrato, no la
+  industria. Construir la captura antes de que exista un número acordado es
+  construir un formulario sin criterio.
+- **Qué decidir:** si entra en A10 junto al compromiso de polinización —son la
+  misma conversación comercial— o si espera a que el cliente quiera discutir en
+  esos términos.
 
 ---
 
