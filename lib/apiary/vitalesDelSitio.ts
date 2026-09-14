@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { clasificarConsulta, diasHastaLaProximaConsulta } from "./vocabularioDeConsulta";
+import { HORAS_DE_JORNADA_VIEJA } from "../traceability/fieldSessions";
 
 /**
  * A9.8 — los vitales de cada sitio de apiario y el color de su borde.
@@ -50,8 +51,17 @@ import { clasificarConsulta, diasHastaLaProximaConsulta } from "./vocabularioDeC
 export const DIAS_DE_GRACIA_DE_VISITA = 14;
 /** Ventana para coordinar una alimentación antes de que se acabe. Kiva exige avisar con 3 días. */
 export const DIAS_DE_AVISO_DE_ALIMENTO = 7;
-/** Un borrador más viejo que esto se cierra de memoria, no de recuerdo. */
-export const HORAS_DE_BORRADOR_VIEJO = 72;
+/**
+ * **24 horas desde el 2026-09-14, y era 72.** El Anexo E §5 lo dice: «Si la jornada lleva
+ * más de un día abierta, la app lo reclama». Tres días de gracia convertían eso en «lo
+ * reclama pasado mañana», y la jornada del 13 de septiembre que el dueño nombró seguía sin
+ * reclamarse por eso exactamente.
+ *
+ * El número **no vive aquí**: se reexporta de `fieldSessions.ts`, que es donde vive el
+ * lector global de la jornada. Dos constantes para el mismo umbral —una para el aviso del
+ * sitio y otra para el banner— acabarían diciendo cosas distintas de la misma visita.
+ */
+export const HORAS_DE_BORRADOR_VIEJO = HORAS_DE_JORNADA_VIEJA;
 
 const MS_POR_DIA = 86_400_000;
 

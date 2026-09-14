@@ -9352,3 +9352,55 @@ comentario que lo dice. Cuando la ventana no tiene cierre, `colmenasDeLaVentana`
 **Inventario de acceso:** 311→312 y 93→94. **Un solo lector**, porque la aritmética y la alerta
 son puras. Que el salto sea de uno y no de tres es la comprobación de que el módulo lee y no
 escribe.
+
+## ADR-131 — La jornada abierta se ve en todas las pantallas, y se reclama al día y no a los tres
+
+**Contexto.** El Anexo E §5 dice dos cosas que el código no cumplía. *«Una jornada abierta es
+visible en todas las pantallas hasta que se cierra»* y *«si la jornada lleva más de un día
+abierta, la app lo reclama»*. Y las dos con un ejemplo: *«Hoy hay una del 13 de septiembre con
+cero eventos y sin cerrar, y nada la persigue.»*
+
+**Lo medido el 2026-09-14.** `app/layout.tsx` no tenía **ni una** referencia a `FieldSession`:
+la única pantalla que sabía de la visita abierta era la ficha del apiario. Quien abría una
+visita y navegaba a otra parte la perdía de vista — que es exactamente cómo se queda una
+abierta sin que nada la persiga. Y el umbral era **72 horas**, tanto en el código como en el
+texto en español.
+
+**Decisión 1 — 24 horas, y el número vive en UN sitio.** «Más de un día» son 24 h. Tres días
+de gracia convertían «la app lo reclama» en «lo reclama pasado mañana». El umbral vive en
+`fieldSessions.ts` como `HORAS_DE_JORNADA_VIEJA` y `vitalesDelSitio.ts` lo **reexporta**: dos
+constantes para el mismo umbral —una para el aviso del sitio y otra para el banner— acabarían
+diciendo cosas distintas de la misma visita, que es el defecto que ADR-126 ya pagó con la
+aritmética de la carencia.
+
+**Decisión 2 — el banner va en el layout, no en cada página.** Porque «todas las pantallas»
+incluye **las que nadie ha escrito todavía**: ponerlo página a página garantiza que la
+siguiente se olvide. Cuesta una consulta por página —`findFirst` con `select` acotado— y sólo
+cuando hay sesión: una visita anónima no puede tener jornada abierta, así que la página
+pública no paga nada.
+
+**Decisión 3 — dos estados, no uno.** Una jornada de hoy **se recuerda**; una de más de un día
+**se reclama**, con su cuenta de días y un color distinto. Pintarlas igual haría que la segunda
+se leyera como la primera, que es el defecto que este banner viene a arreglar.
+
+**Decisión 4 — `diasAbierta` redondea hacia ABAJO**, al contrario que el resto del módulo. Aquí
+el número se enseña como «lleva N días abierta», y decir «1 día» de una visita de esta mañana
+sería falso. Lo que decide el aviso es el umbral, no ese redondeo — y la prueba lo fija en los
+dos lados del borde: en las 24 h exactas **todavía no**, un minuto más allá **sí**.
+
+**Y el lector está acotado por construcción, no vigilado.** `jornadaAbiertaDe` filtra
+`createdBy` por el propio principal, así que **no puede** devolver la jornada de otra persona.
+El inventario de acceso lo clasifica solo —`acotado por construcción`, 32→33— y por eso **no
+necesita entrada en el allowlist**. El control que lo demuestra no es un UUID inventado, que
+devolvería vacío para cualquiera: son **dos cuentas reales con dos jornadas abiertas en el
+mismo sitio**, y cada una ve la suya.
+
+**Dónde se quedó la función, y por qué no donde parecía.** `visitaAbierta.ts` es la familia
+natural de esta pregunta, pero **no importa el cliente de Prisma a propósito** —recibe el `tx`
+de quien lo llama, y su perfil de acceso lo declara—. Meterla ahí habría cambiado lo que el
+inventario dice de ese archivo. Vive en `fieldSessions.ts`, que ya lo importaba.
+
+**Lo que el §5 pide y sigue sin hacerse:** el cierre produce *«resumen de lo registrado, lo que
+quedó pendiente»*. El resumen **ya existe** (`resumenDeVisita`, con inspecciones, eventos,
+cosechas e inmediatos); **«lo que quedó pendiente» no**. `retirosPendientes` de ADR-121 es la
+mitad obvia de esa respuesta y queda nombrada, no construida.

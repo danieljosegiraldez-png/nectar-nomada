@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createColony, createHive } from "../../lib/apiary/hives";
 import { recordColonyEvent } from "../../lib/apiary/colonyEvents";
+import { jornadaAbiertaDe, HORAS_DE_JORNADA_VIEJA } from "../../lib/traceability/fieldSessions";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import {
   DIAS_DE_AVISO_DE_ALIMENTO,
@@ -272,5 +273,83 @@ describe("A9.8 — la lectura contra Postgres", () => {
       coverageUntil: new Date(AHORA.getTime() + 90 * MS_POR_DIA),
     });
     expect(tratamiento.coverageUntil).toBeNull();
+  });
+
+  /**
+   * Anexo E §5 — «Una jornada abierta es visible en todas las pantallas hasta que se
+   * cierra», y «si lleva más de un día abierta, la app lo reclama».
+   *
+   * **El umbral bajó de 72 h a 24 h el 2026-09-14**, por las palabras del dueño. Tres días
+   * de gracia convertían «la app lo reclama» en «lo reclama pasado mañana», y la jornada
+   * del 13 de septiembre que él nombró seguía sin reclamarse por eso.
+   */
+  it("la jornada abierta se encuentra sin saber el sitio, y a más de un día se RECLAMA", async () => {
+    // Nada abierto: no hay nada que reclamar, y eso no es un error.
+    expect(await jornadaAbiertaDe(userAccountId, AHORA)).toBeNull();
+
+    const deHoy = await prisma.fieldSession.create({
+      data: {
+        locationId, operatorPersonId: personId, createdBy: userAccountId,
+        startedAt: new Date(AHORA.getTime() - 3 * 3_600_000),
+        status: "draft", provenanceClass: "original_record",
+      },
+    });
+    const hoy = await jornadaAbiertaDe(userAccountId, AHORA);
+    expect(hoy?.fieldSessionId).toBe(deHoy.id);
+    expect(hoy?.diasAbierta, "tres horas no son un día").toBe(0);
+    expect(hoy?.reclamable, "una de hoy se recuerda, no se reclama").toBe(false);
+    // Y trae el nombre del sitio, que es lo que el banner necesita para decir dónde.
+    expect(hoy?.sitio).toContain("TEST");
+
+    // Justo en el borde del umbral: todavía no.
+    await prisma.fieldSession.update({
+      where: { id: deHoy.id },
+      data: { startedAt: new Date(AHORA.getTime() - HORAS_DE_JORNADA_VIEJA * 3_600_000) },
+    });
+    expect((await jornadaAbiertaDe(userAccountId, AHORA))?.reclamable, "en el borde exacto todavía no").toBe(false);
+
+    // Un minuto más allá: sí.
+    await prisma.fieldSession.update({
+      where: { id: deHoy.id },
+      data: { startedAt: new Date(AHORA.getTime() - HORAS_DE_JORNADA_VIEJA * 3_600_000 - 60_000) },
+    });
+    const vieja = await jornadaAbiertaDe(userAccountId, AHORA);
+    expect(vieja?.reclamable).toBe(true);
+    expect(vieja?.diasAbierta).toBe(1);
+
+    // CONTROL: una jornada CERRADA no se reclama, aunque sea antigua.
+    await prisma.fieldSession.update({
+      where: { id: deHoy.id },
+      data: { status: "completed", completedAt: AHORA, endedAt: AHORA },
+    });
+    expect(await jornadaAbiertaDe(userAccountId, AHORA)).toBeNull();
+
+    // CONTROL QUE DISCRIMINA: otra cuenta con su PROPIA jornada abierta en el mismo sitio.
+    // Un UUID inventado no serviría —cualquier filtro devuelve vacío para quien no existe—;
+    // lo que hay que probar es que dos jornadas reales no se confunden. Es lo que hace a
+    // este lector «acotado por construcción» y por lo que no necesita guardia.
+    await prisma.fieldSession.update({
+      where: { id: deHoy.id },
+      data: { status: "draft", completedAt: null, endedAt: null },
+    });
+    const otraPersona = await prisma.person.create({
+      data: { givenName: "TEST", familyName: "Otra", displayName: `TEST Otra (${RUN_ID})`, locale: "es" },
+    });
+    const otraCuenta = await prisma.userAccount.create({
+      data: { personId: otraPersona.id, authProvider: "credentials", status: "active" },
+    });
+    const suya = await prisma.fieldSession.create({
+      data: {
+        locationId, operatorPersonId: otraPersona.id, createdBy: otraCuenta.id,
+        startedAt: new Date(AHORA.getTime() - 2 * 3_600_000),
+        status: "draft", provenanceClass: "original_record",
+      },
+    });
+    expect((await jornadaAbiertaDe(otraCuenta.id, AHORA))?.fieldSessionId, "cada cuenta ve la suya").toBe(suya.id);
+    expect((await jornadaAbiertaDe(userAccountId, AHORA))?.fieldSessionId, "y no la de la otra").toBe(deHoy.id);
+
+    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: [deHoy.id, suya.id] } }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: otraCuenta.id }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ id: otraPersona.id }) });
   });
 });

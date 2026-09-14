@@ -38,6 +38,26 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-14 · La jornada abierta se ve en todas las pantallas, y se reclama al día
+
+Cierra las dos frases del Anexo E §5 que el código no cumplía (ADR-131). Medido:
+`app/layout.tsx` no tenía **ni una** referencia a `FieldSession` —sólo la ficha del apiario
+sabía de la visita abierta— y el umbral eran **72 horas** en código y en el texto.
+
+**24 h, y el número vive en un sitio:** `HORAS_DE_JORNADA_VIEJA` en `fieldSessions.ts`, que
+`vitalesDelSitio.ts` reexporta. Dos constantes para el mismo umbral acabarían diciendo cosas
+distintas de la misma visita.
+
+**El banner va en el layout** porque «todas las pantallas» incluye las que nadie ha escrito
+todavía. Dos estados: una de hoy se recuerda, una de más de un día **se reclama**.
+
+**El lector está acotado por construcción**, no vigilado: filtra `createdBy` por el propio
+principal. El control no es un UUID inventado sino **dos cuentas reales con dos jornadas
+abiertas en el mismo sitio**, y cada una ve la suya.
+
+**Pendiente nombrado del §5:** «lo que quedó pendiente» al cerrar. El resumen ya existe
+(`resumenDeVisita`); la otra mitad, no — `retirosPendientes` es el candidato obvio.
+
 ### 2026-09-14 · Equipos e instrumentos, y dos veces la lista equivocada
 
 **El módulo entero de beneficio que faltaba** (PR #306, #308, #310). Antes: el equipo era
@@ -110,45 +130,6 @@ factura de un servicio de polinización.
 **Y Toabré es este mecanismo:** el propio §9 dice que allí el emplazamiento no tiene fecha de
 cierre, y el informe del 2 de septiembre confirma que es un servicio para un cliente —Kiva
 Estates, finca cafetera en Toabré, Penonomé, Coclé.
-
-### 2026-09-14 · Los dos apiarios reales entran, y sólo en la copia local
-
-El dueño declaró el estado real: **dos apiarios, los dos de Néctar Nómada**. Rosina con 2
-colmenas **vacías** (`NN-0041`, `NN-0042`); **Apiario Las Nubes** con 5 (`NN-0043`…`NN-0047`),
-núcleos de Parita criados y vendidos por Chayanne López, implementado el 4 de septiembre a
-las 6:00 con trasiego a cámaras de roble de Cerro Azul. ADR-128, `data:apiario-las-nubes`.
-
-**La distinción que gobierna esto: dato equivocado ≠ historia.** Las colonias que Rosina
-tenía en el sistema no existen en la realidad, así que se **borran**; cerrarlas habría
-exigido una causa de pérdida y afirmado una muerte que no ocurrió. El guion **aborta** si
-encuentra cosechas, fotos o varroa colgando — eso ya sería historia.
-
-**La jerarquía con el café ya existía.** Los dos apiarios cuelgan de la ubicación `Finca
-Rosina` → `Cerro Azul`, con los seis lotes y el beneficio. No se construyó: se midió. Lo que
-faltaba era el dueño.
-
-**⚠ PRODUCCIÓN Y LA COPIA LOCAL HAN DIVERGIDO.** Esto se aplicó **sólo en local**. Quien
-restaure desde un backup anterior lo pierde; para llevarlo a producción, el dueño corre
-`npm run data:apiario-las-nubes -- --rosina-a=NN-0041 --rosina-b=NN-0042 --apply`.
-
-**Tres hechos del dueño sin sitio en el esquema**, nombrados en ADR-128: «patas y tapa», la
-madera del roble —va en un `ColonyEvent` de tipo `other` porque **`ColonyEventType` no tiene
-un valor de instalación**, que el Anexo E §4 pide— y «todas con reina», que se afirma en una
-inspección y **no se inventa**.
-
-**Y la segunda tanda (ADR-129, `data:procedencias-y-sitios`):** Las Nubes llega a **10**
-colmenas —las cinco nuevas llegaron el **2 de septiembre**, ancladas a medianoche **de
-Panamá** para que el día se lea bien—, entran **Marcelino Guevara** y la geografía de Veraguas,
-Herrera y Los Santos, y el cuarto origen **«San Francisco, Veraguas»** se declara en la
-**semilla** y no con un `INSERT`: lo cazó `origenDeColonia.test.ts`, y por ese camino
-producción lo recibe en el próximo despliegue sin tocar Neon.
-
-**NO se crearon Toabré, Río Gatú ni Lagartero:** el dueño no dijo en qué provincia están.
-
-**Y la historia de Toabré está sin registrar porque su aritmética no cierra:** 15 instaladas
-en dic-2025, 12 perdidas en marzo, «las últimas 2» a final de agosto —12+2=14 de 15—, más un
-enjambre que ocupó Finca 2 de abril a julio y 3 nuevas de Chayanne. Falta la colmena que no
-cuadra, el reparto entre Finca 1 y Finca 2, y las causas.
 
 ## 3. Bloqueado, y en qué
 

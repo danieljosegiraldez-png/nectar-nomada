@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-13
 
-**325 operaciones** que tocan la base, en **95 archivos**:
+**326 operaciones** que tocan la base, en **95 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -23,11 +23,19 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
 | **220** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **32** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **33** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **55** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
+
+> **Y el de 325→326, con los archivos igual, es la jornada abierta del Anexo E §5.**
+> `jornadaAbiertaDe` vive en `lib/traceability/fieldSessions.ts`, que ya estaba inventariado,
+> así que sólo sube la cuenta de operaciones. Y sube la de **acotado por construcción** —no la
+> de «depende del llamador»—: filtra `createdBy` por el propio principal, así que **no puede**
+> devolver la jornada de otra persona. Por eso **no necesita entrada en el allowlist**; el
+> script la clasifica solo, y está comprobado que no aparece entre las que hay que mirar a
+> mano.
 
 > **El salto del 2026-09-14 por la tarde —311→318 y 93→94— es de una pieza**: el módulo
 > de equipos e instrumentos, `lib/equipos/equipos.ts`. Aporta **catorce** operaciones y las
