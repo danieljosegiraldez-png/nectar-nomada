@@ -8635,3 +8635,57 @@ porque avisar antes de tiempo enseña a ignorar la sección.
 `entityType`, y el audit del apiario ya escribía `"colony_event"`. La consecuencia de
 haber respetado ese vocabulario meses antes es que el historial de un tratamiento
 existió el mismo día que su cierre.
+
+---
+
+## ADR-122 — La configuración de la caja vive en la colmena, y es lo que hace comparable a «cuadros cubiertos»
+
+**Contexto.** `48_A9_ANEXO_B_CATALOGO_DE_CAMPOS.md` §2.4 son seis filas de
+configuración —cámaras y alzas, cuadros por caja, excluidor, alimentador, reductor de
+piquera, piso sanitario— y **ninguna existía**.
+
+**Por qué esta rebanada antes que las otras dos que quedaban del Anexo.** No por
+orden: `framesPerBox` es el **denominador** de `beeCoveredFrames`, que se construyó en
+ADR-117 hace un día. El Anexo pide ese campo porque es *«la medida cuantitativa de
+fuerza, comparable entre visitas y entre sitios»* — y **no lo era**: ocho cuadros
+cubiertos dicen una cosa en una caja de ocho y otra en una de diez. Terminar lo que
+quedó a medias vale más que añadir campos nuevos al lado.
+
+**Decisión 1 — viven en la colmena, y lo decide el dueño.** Sus palabras: *«Cambia poco
+entre visitas, así que se guarda en la colmena y en la inspección sólo se registra la
+diferencia. Preguntarlo cada vez es coste sin información.»* La fila guarda la
+configuración **actual**; el historial vive en `AuditEvent` con su `before`/`after`.
+
+**Decisión 2 — cambiar la caja NO es corregir, así que no pide razón.** Es la
+distinción de ADR-121 aplicada al caso contrario: allí completar un hecho posterior no
+pedía razón y cambiar lo escrito sí. Aquí **añadir un alza es un hecho del mundo** y el
+cambio **es** el evento, así que exigir una razón para el curso normal del trabajo
+enseñaría a escribir «.». La razón es opcional y se guarda cuando viene.
+
+**Y el límite de eso, dicho en voz alta:** el rastro **no puede** distinguir por su
+cuenta «le puse un alza» de «me equivoqué al teclear». La razón opcional es cómo se
+dice cuál de las dos fue; sin ella, las dos se ven igual. Es un coste aceptado a
+cambio de no convertir el trabajo normal en una excepción justificada.
+
+**Decisión 3 — `feederType` reusa el enum `FeedingMethod`.** Son las mismas cosas
+físicas —en Toabré, «bolsa sobre los cabezales»— y dos enums idénticos serían dos
+sitios donde añadir el siguiente alimentador. Lo que cambia es el sujeto: aquí es lo
+que la caja **lleva**, en §3 es cómo se dejó **una** alimentación. Es el caso opuesto a
+ADR-114 y ADR-119, donde las listas se separaron porque los **significados** diferían;
+aquí coinciden.
+
+**Decisión 4 — sin denominador, la ocupación es `null` y se dice.** `fuerzaDeColonia`
+devuelve `null` cuando la caja no está declarada, y la pantalla escribe *«sin cuadros
+por caja no es comparable»*. Devolver 0 sería falso; **suponer diez cuadros por caja
+sería peor**, porque haría comparables cosas que no lo son y nadie vería la suposición.
+Y no se recorta al 100 %: doce cuadros cubiertos en una caja de diez pasa de verdad
+—abeja en el alza sin cuadros propios— y recortarlo esconde justo la caja que hay que
+dividir.
+
+**El hueco que cerró de paso.** `lib/apiary/` no tenía **ninguna** función para
+actualizar una colmena, igual que hasta ayer no la tenía para un evento (ADR-121). Aquí
+no era un accidente del diseño: la configuración **cambia por definición**, así que el
+camino de actualización es parte del campo y no un añadido.
+
+**Y el historial no hubo que construirlo**, por segunda vez en dos días:
+`leerEnmiendas` lee cualquier entidad por `entityType`, y basta escribir `"hive"`.
