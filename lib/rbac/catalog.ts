@@ -69,6 +69,20 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // `apiary:manage` from the Apiary Colony Event Recorder — a competence and
   // authority boundary, not a tier of the same permission.
   { resourceType: "lot", action: "override_balance", description: "Accept a lot transformation whose mass balance is outside the organization's tolerance." },
+  // §9 de `docs/architecture/EQUIPMENT_AND_READINESS.md`: «No new *machinery*,
+  // only new verbs». Comprobado, no supuesto: el aislamiento entre clientes ya
+  // lo dan los ámbitos hoja de `resolve.ts` —una asignación de `project` nunca
+  // cubre un proyecto hermano— más la clasificación como AND aparte.
+  { resourceType: "equipment", action: "view", description: "Ver equipos, su condición y sus verificaciones." },
+  { resourceType: "equipment", action: "manage", description: "Registrar equipos, moverlos, retirarlos, y declarar contra qué patrones se verifica un instrumento." },
+  // **Deliberadamente separado de `manage`**, y es la parte que importa: quien
+  // trabaja con una máquina tiene que poder decir que está rota sin poder
+  // retirarla del inventario. Misma frontera de competencia y autoridad que
+  // `lot:override_balance` y que `apiary:manage`: no es un escalón del mismo
+  // permiso, es otro acto. Si informar de una avería exigiera `manage`, el
+  // operario que ve el sello partido no informa — y entonces el sistema no se
+  // entera, que es el mismo argumento que la §7.1 usa contra bloquear.
+  { resourceType: "equipment", action: "report_condition", description: "Informar de la condición de un equipo y verificar un instrumento contra sus patrones." },
   { resourceType: "sample", action: "manage", description: "Create samples, including from a traceable lot." },
   // 2026-09-06. `requireSampleAccess` aceptaba `"view"` desde su primera versión
   // y el permiso no existía: nadie podía MIRAR una muestra sin poder cambiarla.
@@ -313,6 +327,11 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       // export (docs/implementation/README.md's "client/producer export").
       ["lot", "export"],
       ["sample", "manage"],
+      // Quien fermenta y seca es quien pone el refractómetro contra el agua y
+      // quien ve el airlock roto. `equipment:manage` NO se le concede: registrar
+      // y retirar equipo es del jefe de beneficio, no del operario.
+      ["equipment", "view"],
+      ["equipment", "report_condition"],
       ["apiary", "manage"],
       ["apiary", "view"],
       // F1 — same reasoning as apiary:manage/view above: Bob and Sherry

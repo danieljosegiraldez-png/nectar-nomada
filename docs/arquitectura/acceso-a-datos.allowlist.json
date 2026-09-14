@@ -380,6 +380,10 @@
     {
       "archivo": "lib/apiary/emplazamiento.ts",
       "razon": "Anexo E §9 — el emplazamiento temporal. Modulo de dominio: el acceso a datos vive aqui por diseno. Solo LEE: cruza `hive_placement` con la ventana del compromiso para decir que colmenas estuvieron y cuantos dias efectivos. No escribe nada. Su aritmetica —`diasEfectivosDe`— y su alerta de floracion son puras y no tocan la base."
+    },
+    {
+      "archivo": "lib/equipos/equipos.ts",
+      "razon": "Modulo de dominio de equipos e instrumentos (EQUIPMENT_AND_READINESS.md §2-§4, §7 y §9). Es el sitio donde el acceso a datos vive por diseno. Cada funcion resuelve `can(..., \"equipment\", ...)` contra el ambito hoja del equipo ANTES de leer o escribir, y toda escritura confirma su AuditEvent en la misma transaccion. El veredicto de una verificacion NO se calcula aqui: lo deriva un trigger de la base."
     }
   ],
   "reciben_transaccion": [
