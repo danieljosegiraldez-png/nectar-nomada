@@ -9285,3 +9285,70 @@ instaló **3 nuevas**. **12 + 2 = 14, de 15: falta una.** No se registró ningun
 pérdidas, porque una muerte de colonia inventada es un hecho falso en la trazabilidad, y el
 sistema guarda causas precisamente para poder preguntar de qué se murieron. Falta también el
 reparto de las 15 entre Finca 1 y Finca 2, que la propia historia distingue.
+
+## ADR-130 — El emplazamiento temporal: la primera pregunta histórica que el módulo puede contestar
+
+**Contexto.** El Anexo E §9 pide que un servicio de polinización tenga *«apertura, vida y
+cierre propios, distintos de los del apiario»*, y que al cerrarlo *«el reporte se genera con
+el alcance de la ventana —no de la vida del apiario— con las colmenas que estuvieron, los días
+efectivos y lo observado»*.
+
+**Por qué esta rebanada va DESPUÉS del traslado y no antes.** «Las colmenas que estuvieron» es
+una pregunta sobre el **pasado**. Hasta ADR-126, el único camino de una colmena a su apiario
+era `hive.locationId`, que dice dónde está **ahora**: la pregunta no tenía respuesta posible,
+ni con una pantalla ni con un informe. `HivePlacement` la hizo contestable, y ésta es **la
+primera vez que el módulo apícola contesta algo histórico**.
+
+**Decisión 1 — tres campos nuevos, y uno de ellos justifica la migración entero.** De las siete
+cosas que el §9 pide al abrir, cuatro existían desde A9.9. Faltaban `crop`, `parcelReference`,
+`committedHives` y la ventana de floración.
+
+**`bloomStartsAt` NO es `startsAt`.** El servicio empieza cuando llegan las colmenas; la
+floración abre cuando la abre la planta. Con una sola fecha, la alerta que el Anexo pide —«que
+se acerque la floración con la meta incompleta»— **no se puede dar**: no habría nada que se
+acerque distinto del propio servicio. Son dos hechos y son dos columnas.
+
+**`committedHives` NO es `hectáreas × densidad`.** El cociente es la regla agronómica; esto es
+lo que dice el contrato. Cuando los dos existen y no coinciden, **la diferencia es el dato**,
+igual que `divergen` en el conteo de colonias (D6).
+
+**`crop` y `parcelReference` son texto libre**, por la misma razón que el cultivo de una finca
+vecina (ADR-127): son hechos de la finca del **cliente**, no hay catálogo de cultivos y el
+dueño no ha dado vocabulario. Y las parcelas ajenas **no se modelan como `Location`**: una
+ubicación por cada parcela de cada cliente llenaría la jerarquía de sitios que nadie visita.
+
+**Decisión 2 — dos `CHECK` en la base, probados en las dos direcciones.** Una ventana de
+floración invertida y un número de colmenas negativo se rechazan en Postgres. Medido con
+`SAVEPOINT` y control positivo: la fila válida entra, las dos contradicciones se rechazan
+**nombrando la restricción**, y una ventana a medias —sólo apertura— **sí** entra. La
+invertida importa más de lo que parece: habría hecho que «se acerca la floración» calculara
+días negativos y **el aviso no saliera nunca**. Un guardia silencioso es el peor.
+
+**Decisión 3 — de las dos alertas del §9, sólo una es nueva.** La de la floración vive aquí,
+pura. La de la aspersión **ya existe** desde ADR-127 —`aplicacionesPrevistas`, y el tablero la
+pinta como la primera de todas— y **no se reimplementa**: dos reglas para el mismo hecho acaban
+diciendo cosas distintas del mismo apiario, que es exactamente lo que pasó con la aritmética de
+la carencia en ADR-126. Esta pantalla la mira en el contexto del compromiso.
+
+**Decisión 4 — `diasEfectivosDe` cuenta SOLAPE, no duración.** Una colmena que llegó antes de
+abrir el servicio y se fue a mitad cuenta sólo los días de en medio. Sumar colocaciones enteras
+**inflaría la factura** de un servicio de polinización, que es el número que un cliente mira. Y
+el `Math.max(0, …)` va **antes** de sumar: un solape negativo restaría días de otra colocación
+y el total saldría plausible y falso — hay prueba de eso, y su flip-test tumba el `it` llamado
+«una colocación FUERA de la ventana cuenta cero, y no resta».
+
+**Decisión 5 — sin ventana de floración declarada NO se avisa.** Un compromiso sin
+`bloomStartsAt` no incumple nada: no se sabe cuándo abre. Gritar ahí convertiría una ausencia
+en una afirmación (ADR-080) y enseñaría a ignorar el aviso. Tampoco se avisa **cuando la
+floración ya abrió**: entonces no «se acerca», y llegar tarde es otro problema — mezclarlos
+haría que este aviso no se pudiera apagar nunca.
+
+**Y lo que ya estaba bien y no se tocó:** `endsAt` sigue siendo anulable, que es el caso de
+Toabré que el propio §9 nombra —*«allí el emplazamiento simplemente no tiene fecha de
+cierre»*—. `densidadDePolinizacion` ya lo trataba así desde A9.9; sólo se le añadió el
+comentario que lo dice. Cuando la ventana no tiene cierre, `colmenasDeLaVentana` la cierra en
+`ahora`: un servicio abierto se mide hasta hoy, no hasta el infinito.
+
+**Inventario de acceso:** 311→312 y 93→94. **Un solo lector**, porque la aritmética y la alerta
+son puras. Que el salto sea de uno y no de tres es la comprobación de que el módulo lee y no
+escribe.
