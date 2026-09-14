@@ -53,6 +53,21 @@ export const CATALOGOS_DE_INTERVENCION: readonly string[] = [
   "recipiente",
   "cereza_flotado",
   "cereza_seleccion",
+  // 2026-09-14, decisión de Daniel: «las cepas de levadura NO ES TEXTO LIBRE, se
+  // deben agregar las levaduras que se van a usar o ya tenerlas en el sistema».
+  //
+  // **Ya las teníamos, y ése es el punto.** `levadura_cultivo` está en
+  // `lib/research/catalogs.ts` desde RO1, con el vocabulario que él mismo
+  // decidió —MP72, HDA54, Sunrise Orange, Deep Amber, Cool Blue, Green Origin y
+  // «Spontaneous Wild» marcada `impliesUnknownIdentity`—. Lo que faltaba era
+  // esta línea: el catálogo existía y **sólo lo alcanzaba Research OS**, por
+  // `ProtocolVariable`. En el beneficio de un lote corriente, `registrarIntervencion`
+  // lo RECHAZABA con `catalog_value_wrong_catalog`.
+  //
+  // O sea que se podía registrar CÓMO se inoculó —`metodo_inoculacion`: direct
+  // pitch, rehydrated, spontaneous— y no CON QUÉ. El dato que distingue dos
+  // fermentaciones por lo demás idénticas era justo el que no tenía dónde ir.
+  "levadura_cultivo",
 ];
 
 /** Lo que declara la intención al abrir un proceso. */
