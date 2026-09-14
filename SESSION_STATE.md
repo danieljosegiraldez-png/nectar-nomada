@@ -38,6 +38,28 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-13 · Balance de masas: tres etapas, no una
+
+`lib/beneficio/balanceDeMasas.ts`. El tablero pasa de **28 + 22 a 41 + 9**.
+
+**El error estructural de la v2.0 era sumar dos dominios.** `pulp_kg` entraba en
+la ecuación de cereza entera, y la pulpa es el 38-45 % de la masa de cerezas
+**que ya se contaron** en `prime_ripe`. Un registro correcto **fallaba**, y para
+que pasara el operador tenía que subdeclarar `prime_ripe` — el numerador del
+índice de pureza. **El índice medía cuánto tuvo que mentir el operador.**
+
+Ahora son tres ecuaciones encadenadas y separadas, cada una con su tolerancia
+sobre el insumo de **su** etapa. Y un desbalance de campo **nunca lanza**: se
+guarda con su discrepancia, porque a las cinco de la mañana bajo lluvia un
+rechazo significa que el dato no existe nunca.
+
+**Ocho flip-tests y uno encontró un hueco EN EL CONTRATO.** Confundir el rango
+del pergamino con el de la baba —la confusión que el propio documento advierte,
+y que su autor cometió al redactar— **pasa los 47 vectores sin que caiga uno**.
+MB-013 comprueba el estado y el rendimiento, no la **ausencia** del aviso falso.
+Queda cubierto desde fuera en `tests/beneficio/etapas-no-se-confunden.test.ts`,
+sin tocar el fichero de vectores.
+
 ### 2026-09-13 · Brix: la alerta que estaba documentada y no existía
 
 `lib/beneficio/brix.ts`. El tablero pasa de **16 + 34 a 28 + 22**.

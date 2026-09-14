@@ -2716,6 +2716,11 @@ misma familia que el `cancelled` de las compuertas.
 - `npm run verify` **no construye**. Desde hoy, `npm run build` antes de empujar:
   es lo único que ve esta clase de defecto, como el `"use server"` de septiembre.
 
+---
+
+**Décimo archivado, 2026-09-13.** El asiento del balance de masas pasó el techo —
+y **por cuarta vez hoy dos sesiones archivaron la misma entrada a la vez**, ésta
+y el #299. Su trabajo vive en el árbol y sus pruebas lo vigilan.
 
 ### 2026-09-13 · Completar no es corregir, y con eso el apiario ya puede cerrar
 
