@@ -8,6 +8,19 @@ y secado salen de aquí.
 `99_revision_v2_a_v3.md` **no** es normativo — es la justificación de los
 cambios, y así lo dice en su primera línea.
 
+**Los tres de la serie 20 llegaron después, con la v3.1**, y son los que cierran
+el ciclo más allá del reposo:
+
+| documento | qué añade |
+|---|---|
+| `20_modelo_ciclo_completo.md` | **la identidad del lote a través de divisiones y fusiones**, más muestreo, tueste, catación, valorización y reporting. Es el tramo que las especificaciones 10–13 no cubren, y el que hace que todo lo anterior signifique algo |
+| `21_rubrica_veracidad.md` | cada cifra que el sistema emite tiene que poder desarmarse. *«Un generador de documentación creíble es peor que no tener nada, porque nadie la cuestiona»* |
+| `22_rubrica_pedagogica.md` | el fin no es tener el beneficio documentado: es que quien usa la herramienta **fermente mejor**. Un formulario que pide pH cada cuatro horas y no dice nada más produce una base de datos impecable y **ningún aprendizaje** |
+
+La rúbrica pedagógica y la Parte II de `docs/arquitectura/propuesta-ux-campo.md`
+dicen lo mismo desde dos sitios: una pantalla que sólo registra deja al operador
+igual que lo encontró.
+
 ## Precedencia
 
 1. `CLAUDE.md` del repositorio y las reglas de casa — gobiernan **todo**.
@@ -31,6 +44,7 @@ borrado las reglas de todo lo demás. Vive aquí, como
 | los 47 vectores como criterio de aceptación | **adoptado** — `tests/fixtures/vectores-de-beneficio.json` |
 | implementar `services/processing/` en **Python**, con `pytest` y `mypy` | **no**. Medido: 0 archivos `.py` contra 467 `.ts/.tsx`. Se porta a TypeScript y vitest, que es la decisión de Daniel del 2026-09-13. Su propio §1 ya contempla «interfaces explícitas en TypeScript» |
 | reemplazar el `CLAUDE.md` de la raíz | **no** — ver arriba |
+| el `instalar.sh` del paquete `nn-instalacion` | **no se ejecuta.** Leído entero: reemplaza el `CLAUDE.md` de la raíz, vuelca los documentos en `docs/` duplicando esta carpeta, copia un test de Python, duplica los vectores con otro nombre y hace **`git add -A`** — que aquí barrería trabajo de otras sesiones. Lo que vale del paquete son los documentos, y se copian a mano |
 | `LOT_ID := {finca}-{YYYYMMDD}-{seq}` → `PAN-LNCA-20260314-001` | **no**. El convenio real de Daniel es `PE-90` → `PE-90-A`, sacado de sus lotes, y `lib/traceability/codigosDerivados.ts` lo continúa a propósito. Una convención inventada no sustituye a una en uso |
 
 **Las rutas que los documentos citan son las del paquete, no las de aquí.**
