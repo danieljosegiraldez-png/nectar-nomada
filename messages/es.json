@@ -1445,7 +1445,13 @@
     "treatmentRoute_otro": "Otra",
     "tratamientosHeading": "Tratamientos por objetivo",
     "tratamientosVentana": "Últimos doce meses.",
-    "tratamientosFila": "{objetivo}: {colonias} colonia(s), {tratamientos} aplicación(es)"
+    "tratamientosFila": "{objetivo}: {colonias} colonia(s), {tratamientos} aplicación(es)",
+    "retirosHeading": "Tiras sin retirar",
+    "retirosAyuda": "Las tiras que no se retiran generan resistencia. Se anota aquí, no en el campo.",
+    "retirosFila": "{colmena}: {producto}, aplicado hace {dias} día(s)",
+    "retiroFechaLabel": "Retirada el",
+    "retiroGuardar": "Anotar el retiro",
+    "retiroSinProducto": "sin producto registrado"
   },
   "Research": {
     "badge": "Research OS",

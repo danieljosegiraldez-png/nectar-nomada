@@ -5694,6 +5694,19 @@ model ColonyEvent {
   treatmentTarget     TreatmentTarget? @map("treatment_target")
   /// Cómo se aplicó. Opcional.
   treatmentRoute      TreatmentRoute?  @map("treatment_route")
+  /// Cuándo se retiró lo que quedó dentro de la colmena. **Campo de DÍA** y de
+  /// etapa **cierre**: no se sabe al aplicar, se sabe semanas después, cuando se
+  /// vuelve al sitio. El Anexo B §4 lo pide con su motivo —*«las tiras que no se
+  /// retiran generan resistencia»*— y hasta el 2026-09-13 no existía **porque no
+  /// había camino para completar un evento ya escrito**
+  /// (`PENDING_IMPLEMENTATIONS/011`). Lo escribe `completarCierreDeTratamiento`,
+  /// con `sourceInterface = "apiary.close"` para que la fila diga que se completó
+  /// en la casa y no se capturó en el campo.
+  treatmentRemovalDate DateTime?       @map("treatment_removal_date")
+  /// Qué se observó después. El Anexo B §4 la llama «eficacia observada», y su
+  /// mitad medible ya vive en `VarroaCount.evaluatesColonyEventId` (ADR-116):
+  /// contar, tratar, volver a contar. Esto es la prosa que acompaña, no el dato.
+  treatmentEfficacyNote String?        @map("treatment_efficacy_note")
   /// Días de carencia del producto aplicado. **El campo que el Anexo B §4 marca
   /// obligatorio y que no existía**, con su consecuencia escrita: *«decide
   /// cuándo se puede cosechar. Sin él, una cosecha puede violar la carencia sin

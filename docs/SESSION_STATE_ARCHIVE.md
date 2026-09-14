@@ -2536,3 +2536,55 @@ Cinco flip-tests; el del guardia cae por su **aserción**, no sólo por su nombr
 
 **Lo que NO prueba:** nadie ha registrado un estado de colonia. Una inspección en
 la copia local, con las diez columnas vacías.
+
+---
+
+### 2026-09-13 · Una receta ya puede decir cada cuánto medir y cuánto debe durar
+
+Auditando la pantalla de lotes, Daniel decidió que la urgencia —«a cuál le toca
+algo ahora»— **sale de la receta**. No se podía calcular: `ProcessTarget` decía a
+qué valores llegar y **ningún ritmo**.
+
+**Tres de las cuatro cosas que describió ya existían**, y por eso el cambio es
+pequeño. Su frase: «una receta requiere un ritmo de medición y tiene un indicador
+target de dónde comenzar y terminar, y un +/- rango». `targetValue` es el
+objetivo, `minValue`/`maxValue` el rango, y `moment` (initial|during|final)
+distingue el inicio del final con una fila cada uno. **Faltaba sólo el ritmo.**
+
+**Dos números y no uno:** `every_hours` dice si el batch te **debe una lectura**;
+`expected_hours` dice si **va tarde**. Un batch puede ir en hora y deberte una
+medición, y al revés. Meterlos en una columna obligaría a elegir qué pregunta se
+puede contestar.
+
+**`null` no es `false`, y ahí está el diseño.** `estadoDeRitmo` devuelve
+`demora: true | false | null` — «no se sabe» y «va bien» son hechos distintos, y
+confundirlos haría que un lote sin receta pareciera puntual. Un batch sin ritmo
+declarado puntúa **0** en urgencia: no se le inventa la que la receta no declara.
+
+**Una regla que se rechaza en vez de guardarse:** `every_hours` sólo tiene
+sentido con `moment: during`. Un objetivo inicial ocurre una vez, y pedirle «cada
+6 h» es una contradicción. Vive en `validateTargets` —donde ADR-102 puso todas
+las reglas juntas— y **no en la base**: se dice en vez de llamarlo estructural.
+
+**Doce pruebas con entrada hostil**, incluidas fase y lectura en el futuro, que
+se rechazan porque devolver horas negativas colaría el lote al principio de la
+cola como «lo más reciente».
+
+**Lo que NO hace:** ninguna pantalla lo usa todavía. El ritmo se puede declarar y
+la urgencia se puede calcular; ordenar la lista es el paso siguiente.
+
+**Y el fallo de verdad lo encontró Codex, no nosotros.** Hay **dos** caminos que
+escriben objetivos —crear receta y publicar una **versión**— y sólo se cerró uno:
+`createRecipeVersion` no persistía `everyHours` ni aceptaba `expectedHours`, así
+que **publicar la v2 le borraba el ritmo a la receta en silencio**. Pérdida de
+dato sin aviso, en trazabilidad. El patrón —añadir un campo y cerrar una sola de
+sus puertas— se cometió tres veces el mismo día.
+
+Por eso queda `tests/arquitectura/campos-con-dos-puertas.test.ts`: lee los campos
+que `CreateRecipeInput` declara y exige que cada uno aparezca en el parseo, en
+**los dos** servicios y en **los dos** formularios. Lleva control positivo de su
+propio parseo —afirma cuántos campos encontró— porque un guardia que lee la
+fuente con regex se queda ciego en silencio cuando el archivo cambia de forma.
+Flip-test de las tres: reintroducir el fallo de Codex, quitar el campo del
+formulario de versión y romper el contrato hacen caer **cada uno a su prueba por
+nombre**, las tres mutaciones compilando.

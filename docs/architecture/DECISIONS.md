@@ -8583,3 +8583,55 @@ mientras se escribía esto: `--from-url` ya no existe en Prisma 7, y en otra cor
 faltaba exportar `SHADOW_DATABASE_URL`; las dos veces el error estaba escondido en un
 `2>/dev/null` y el cero era mentira. `scripts/ci-con-base.sh` deriva ahora la base de
 sombra de `DATABASE_URL` para que el guardia pueda medir en CI.
+
+---
+
+## ADR-121 — Completar no es corregir: el cierre de un tratamiento no pide razón, cambiarlo sí
+
+**Contexto.** `PENDING_IMPLEMENTATIONS/011`: medido el 2026-09-13, `lib/apiary/` **no
+tenía una sola función de actualización**. Un `ColonyEvent` se escribía una vez y no
+había forma auditada de completarlo, así que los dos campos de etapa **cierre** del
+Anexo B §4 —«fecha de retiro» y «eficacia observada»— no se podían añadir sin crear
+columnas que nadie pudiera rellenar. Eso ya costó una semana con `coverage_until`
+(ADR-118) y no se repite.
+
+**La decisión, y es toda la de este ADR: completar y corregir son cosas distintas.**
+
+- **Completar** es escribir por primera vez un hecho que *siempre* iba a llegar
+  después. Las tiras se retiran semanas después de ponerlas: eso no es una
+  corrección, no hay nada que enmendar, y **no lleva razón ni plazo**. Pedirlos
+  convertiría el curso normal del trabajo en una excepción que hay que justificar — y
+  el resultado previsible es que alguien escriba «.» en el campo de la razón.
+- **Corregir** es cambiar algo ya escrito. Ahí la razón es **obligatoria**, el valor
+  anterior queda en `before` del `AuditEvent`, y la operación se llama distinto:
+  `colony_event.correct` frente a `colony_event.close`. Quien lea el rastro necesita
+  distinguir «se completó lo que faltaba» de «se cambió lo que había».
+
+Se decide **campo por campo**: completar el retiro y a la vez cambiar la nota es una
+corrección y pide razón, en vez de dejar que el primero que se mire decida.
+
+**`sourceInterface = "apiary.close"`.** Es el vocabulario que `completarVisita` ya
+estableció en trazabilidad, y su razón vale igual aquí: con `"apiary.service"` para lo
+capturado y `"apiary.close"` para lo completado, **«se anotó en el campo» y «se
+completó en la casa» se distinguen leyendo la fila**. Y de ahí una consecuencia de
+diseño que conviene decir en voz alta: **es la única escritura del apiario que NO pasa
+por la cola offline**, y no por una limitación técnica — se hace con el cuaderno
+delante y señal, así que un borrador local pagaría complejidad sin comprar nada.
+
+**Lo que NO deja tocar, y por qué.** Sólo los dos campos de cierre. El producto, el
+lote, la dosis, la carencia y el objetivo se capturaron con la caja abierta: si
+estuvieran mal, lo que corresponde es un evento nuevo con su razón, **no reescribir la
+evidencia de lo que se hizo aquel día**. `CLAUDE.md` §49 lo tiene en su lista de cosas
+que no se hacen.
+
+**El aviso que esto desbloquea.** `retirosPendientes` contesta *«las tiras que no se
+retiran generan resistencia»* con tres reglas medidas: sólo las vías que **dejan
+material** —hoy `tira`, lo único que el Anexo nombra—; una vía **sin registrar no
+entra**, porque `null` significa que nadie dijo cómo se aplicó y no que fuera una tira
+(ADR-080); y espera a que pase **la carencia declarada**, no una ventana inventada,
+porque avisar antes de tiempo enseña a ignorar la sección.
+
+**Y `leerEnmiendas` no hubo que tocarlo.** Lee el rastro de cualquier entidad por
+`entityType`, y el audit del apiario ya escribía `"colony_event"`. La consecuencia de
+haber respetado ese vocabulario meses antes es que el historial de un tratamiento
+existió el mismo día que su cierre.
