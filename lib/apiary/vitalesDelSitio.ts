@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { clasificarConsulta, diasHastaLaProximaConsulta } from "./vocabularioDeConsulta";
 
 /**
  * A9.8 — los vitales de cada sitio de apiario y el color de su borde.
@@ -60,8 +61,19 @@ export type MotivoDeAlerta =
   | "perdida_sin_reposicion"
   | "visita_vencida"
   | "alimento_vencido"
+  // Anexo E §4 y §3. Los tres entran DESPUÉS de los que ya estaban, y a propósito: el
+  // Anexo C §1.2 fija el orden de las cinco originales —«la primera regla que se cumpla,
+  // en este orden»— y reordenarlas cambiaría una decisión documentada sin pedirlo.
+  //
+  // **Queda una pregunta para el dueño, señalada y no resuelta aquí:** una aspersión
+  // anunciada en tres días es una fecha que impone otro y que no se puede atender
+  // después, así que podría merecer ir **antes** que una pérdida que ya ocurrió. Cambiar
+  // eso es mover el borde de color de la tarjeta, o sea una decisión de producto.
+  | "aspersion_anunciada"
   | "alimento_por_vencer"
-  | "visita_sin_cerrar";
+  | "visita_sin_cerrar"
+  | "consulta_a_vecinos_vencida"
+  | "consulta_a_vecinos_por_vencer";
 
 export interface Alerta {
   nivel: NivelDeAlerta;
@@ -91,6 +103,15 @@ export interface VitalesDeSitio {
   ultimaCosechaKg: number | null;
   /** La visita en borrador más vieja sin cerrar, si la hay. */
   borradorAbiertoDesde: Date | null;
+  /** La consulta a vecinos más reciente del sitio. `null` = nunca se consultó. */
+  ultimaConsultaAVecinos: Date | null;
+  /** Días hasta la próxima consulta; negativo = venció. `null` si nunca se consultó. */
+  diasHastaConsulta: number | null;
+  /**
+   * La aspersión anunciada más próxima que todavía no ha ocurrido, si hay alguna. Sale de
+   * una consulta con resultado `aplicacion_prevista` (Anexo E §4).
+   */
+  aspersionAnunciadaEn: Date | null;
   /** En el orden del Anexo C §1.2: la primera es la que pinta el borde. */
   alertas: Alerta[];
 }
@@ -114,8 +135,29 @@ export function alertasDe(v: Omit<VitalesDeSitio, "alertas">, hubieron: { perdid
     alertas.push({ nivel: "aviso", motivo: "alimento_por_vencer" });
   }
 
+  // Anexo E §4: una aspersión ANUNCIADA es la única fecha de este tablero que la impone
+  // alguien de fuera. Crítica mientras no haya pasado, y sólo mientras no haya pasado: una
+  // aspersión de la semana pasada no es un aviso, es historia.
+  if (v.aspersionAnunciadaEn && v.aspersionAnunciadaEn >= ahora) {
+    alertas.push({ nivel: "critico", motivo: "aspersion_anunciada" });
+  }
+
   if (v.borradorAbiertoDesde && ahora.getTime() - v.borradorAbiertoDesde.getTime() > HORAS_DE_BORRADOR_VIEJO * 3_600_000) {
     alertas.push({ nivel: "aviso", motivo: "visita_sin_cerrar" });
+  }
+
+  // Anexo E §3, «Consulta a vecinos vence en 3 días». La regla la decide
+  // `clasificarConsulta`, que es pura y vive con el resto del vocabulario.
+  //
+  // **`sin_consultar` NO levanta alerta**, y es deliberado: un apiario recién creado no ha
+  // incumplido nada. Gritar el primer día enseñaría a ignorar este aviso, que es
+  // exactamente lo que el Anexo quiere evitar cuando dice «el sistema lo reclama solo».
+  // Lo que sí hace la pantalla del sitio es enseñar «nunca se ha consultado» como estado.
+  const estadoDeConsulta = clasificarConsulta(v.ultimaConsultaAVecinos, ahora);
+  if (estadoDeConsulta === "vencida") {
+    alertas.push({ nivel: "aviso", motivo: "consulta_a_vecinos_vencida" });
+  } else if (estadoDeConsulta === "por_vencer") {
+    alertas.push({ nivel: "aviso", motivo: "consulta_a_vecinos_por_vencer" });
   }
 
   return alertas;
@@ -130,7 +172,7 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
   const salida = new Map<string, VitalesDeSitio>();
   if (locationIds.length === 0) return salida;
 
-  const [sesiones, colmenas, alimentaciones, cosechas] = await Promise.all([
+  const [sesiones, colmenas, alimentaciones, cosechas, consultas] = await Promise.all([
     prisma.fieldSession.findMany({
       where: { locationId: { in: locationIds } },
       select: {
@@ -154,6 +196,13 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
     prisma.apiaryHarvestEvent.findMany({
       where: { colony: { hive: { locationId: { in: locationIds } } } },
       select: { occurredAt: true, extractedWeightKg: true, colony: { select: { hive: { select: { locationId: true } } } } },
+      orderBy: { occurredAt: "desc" },
+    }),
+    // Anexo E §4 — una quinta consulta con `in`, no una por sitio: es el mismo reparto
+    // que las cuatro de arriba, que se filtran en JS después.
+    prisma.neighbourConsultation.findMany({
+      where: { locationId: { in: locationIds } },
+      select: { locationId: true, occurredAt: true, outcome: true, plannedApplicationAt: true },
       orderBy: { occurredAt: "desc" },
     }),
   ]);
@@ -193,7 +242,25 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
 
     const borrador = misSesiones.filter((s) => s.status === "draft").at(-1) ?? null;
 
+    // Anexo E §4. Las consultas vienen ordenadas por fecha descendente, así que la
+    // primera de este sitio es la más reciente.
+    const misConsultas = consultas.filter((c) => c.locationId === locationId);
+    const ultimaConsultaAVecinos = misConsultas[0]?.occurredAt ?? null;
+    // La aspersión anunciada más PRÓXIMA que todavía no ha ocurrido. Se toma el mínimo y
+    // no la primera de la lista, porque la lista está ordenada por fecha de CONSULTA y no
+    // por fecha de aplicación: una consulta vieja puede anunciar algo más cercano.
+    const aspersionAnunciadaEn = misConsultas.reduce<Date | null>((min, c) => {
+      if (c.outcome !== "aplicacion_prevista" || !c.plannedApplicationAt) return min;
+      if (c.plannedApplicationAt < ahora) return min;
+      return !min || c.plannedApplicationAt < min ? c.plannedApplicationAt : min;
+    }, null);
+
     const base: Omit<VitalesDeSitio, "alertas"> = {
+      ultimaConsultaAVecinos,
+      diasHastaConsulta: ultimaConsultaAVecinos
+        ? diasHastaLaProximaConsulta(ultimaConsultaAVecinos, ahora)
+        : null,
+      aspersionAnunciadaEn,
       locationId,
       ultimaVisita,
       diasDesdeUltimaVisita: ultimaVisita ? Math.floor((ahora.getTime() - ultimaVisita.getTime()) / MS_POR_DIA) : null,

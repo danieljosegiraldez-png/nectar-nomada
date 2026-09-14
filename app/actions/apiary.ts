@@ -15,6 +15,7 @@ import {
 import { completarCierreDeTratamiento } from "../../lib/apiary/cierreDeEvento";
 import { actualizarConfiguracionDeCaja } from "../../lib/apiary/configuracionDeCaja";
 import { trasladarColmenas } from "../../lib/apiary/traslado";
+import { registrarConsultaAVecinos } from "../../lib/apiary/consultaAVecinos";
 import { completarCierreDeCosecha } from "../../lib/apiary/cierreDeCosecha";
 import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
@@ -342,4 +343,46 @@ export async function trasladarColmenasFormAction(formData: FormData): Promise<v
 
   revalidatePath(`/apiaries/${origenId}`);
   revalidatePath(`/apiaries/${destinoId}`);
+}
+
+/**
+ * A9 · Anexo E §4 — registrar la consulta mensual a una finca vecina.
+ *
+ * **Acción de servidor y no cola offline.** El Anexo dice que es «protocolo mensual, no una
+ * nota», y se hace hablando con alguien: no es el formulario de un toque frente a la caja.
+ * La cola offline existe para lo que se llena con guantes puestos.
+ *
+ * **Las dos fechas son de DÍA**, no instantes: se parsean con `fechaDeDia`, que las deja a
+ * medianoche UTC. La de la aplicación puede faltar —y debe faltar— cuando no hay aplicación
+ * prevista, y el servicio lo exige en las dos direcciones.
+ */
+export async function registrarConsultaAVecinosFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  const t = await getTranslations("Apiary");
+
+  const occurredAt = fechaDeDia(String(formData.get("occurredAt") ?? ""), "occurredAt");
+  if (!occurredAt) throw new Error(t("consultaFechaRequerida"));
+
+  const prevista = emptyToNull(formData.get("plannedApplicationAt"));
+  const plannedApplicationAt = prevista ? fechaDeDia(prevista, "plannedApplicationAt") : null;
+
+  await registrarConsultaAVecinos(user.userAccountId, {
+    locationId,
+    neighbourOrganizationId: String(formData.get("neighbourOrganizationId") ?? ""),
+    occurredAt,
+    outcome: String(formData.get("outcome") ?? ""),
+    crop: emptyToNull(formData.get("crop")),
+    plannedApplicationAt,
+    informantName: emptyToNull(formData.get("informantName")),
+    operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
+    note: emptyToNull(formData.get("note")),
+    // La consulta es lo que alguien nos dijo, no algo que observáramos. `direct_observation`
+    // afirmaría que vimos el calendario de aspersiones de la finca vecina.
+    provenanceClass: "original_record",
+  });
+
+  revalidatePath(`/apiaries/${locationId}`);
 }

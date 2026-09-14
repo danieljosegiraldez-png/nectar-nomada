@@ -41,6 +41,13 @@ function sitioSano(): Omit<VitalesDeSitio, "alertas"> {
     ultimaCosecha: null,
     ultimaCosechaKg: null,
     borradorAbiertoDesde: null,
+    // Anexo E §4 — un sitio sano tiene el protocolo al día y ninguna aspersión anunciada.
+    // El compilador obligó a declarar los tres al añadirlos a `VitalesDeSitio`, que es
+    // exactamente lo que se quería: un campo nuevo no puede colarse sin que este fixture
+    // diga qué vale en un sitio sano.
+    ultimaConsultaAVecinos: new Date(AHORA.getTime() - 5 * MS_POR_DIA),
+    diasHastaConsulta: 25,
+    aspersionAnunciadaEn: null,
   };
 }
 
