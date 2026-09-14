@@ -38,6 +38,31 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-14 · La humedad de la miel no estaba «parcial»: estaba escondida
+
+§5 era la última fila del Anexo B sin construir, y **medirla cambió la rebanada**.
+«Parcial» no describía un mecanismo a medias: `Measurement` ya admite `lotId`, una cosecha
+de apiario **crea** un `Lot`, `PANEL_DEL_SUJETO` no restringe `lotId`, y `LotType` ya
+tiene `honey` porque A3 decidió que la miel reusa la maquinaria del lote **sin
+modificarla**. **La humedad ya se podía registrar** — lo prueba el test llamando a
+`recordMeasurement`, y el control es que mi diff **no toca ni un archivo** de ese camino.
+
+Así que no hay columna de humedad: hay un **lector**. `honeyType` sí es columna, porque es
+una clasificación y no una lectura — y dice **«declarada»** porque así lo escribió el
+dueño: verificarla es un análisis de polen, no un cambio en ese campo. ADR-123.
+
+**TERCERA vez esta semana con la misma forma:** `coverage_until` existía y nadie lo
+escribía (ADR-118); `frames_covered` existía y no era comparable (ADR-122); la humedad
+existe y no se ve. **Un mecanismo al que nadie llega se ve igual que uno que no existe** —
+y en el Anexo se marca «parcial», que se lee como esquema pendiente. Conclusión
+equivocada, y la tercera vez que el trabajo real fue pantalla y no tabla.
+
+**Y el hueco que había que cerrar para que algo se viera:** `harvest.ts` sólo sabía
+escribir. La pantalla tenía formulario de cosecha y **no listaba ninguna cosecha**.
+
+**Con esto el Anexo B queda completo.** Lo que sigue son decisiones del dueño —si `cebo`
+cuenta como vía que deja material— y el protocolo v2, que ya acumula cinco cosas.
+
 ### 2026-09-13 · La especificación v3.0 del beneficio entra, y su contrato empieza a contar
 
 Daniel encargó fuera una revisión del material de proceso y llegó `nn-spec` v3.0:
@@ -173,31 +198,6 @@ no existe en Prisma 7, y en otra corrida faltaba exportar `SHADOW_DATABASE_URL`�
 
 **Y el guardia de temporales me cazó a mí** al escribirlo: mi prueba creaba un
 directorio y no lo borraba.
-
-### 2026-09-13 · Un tratamiento dice contra qué, y se acabó el Anexo B obligatorio
-
-«Objetivo» era **el último campo que el Anexo B marcaba obligatorio y que no
-existía**, con su consecuencia escrita: *«eficacia por objetivo; hoy no se puede
-agrupar»*. Ya es obligatorio en el servicio, como el lote y la carencia — y a
-diferencia de «alcanza hasta» aquí **no hay caso de urgencia**: quien aplica un
-producto sabe contra qué. Medido: 0 tratamientos en la copia local, y **14 pruebas
-en 8 archivos cayeron** al exigirlo, que es la prueba de que muerde. ADR-119.
-
-**Enum propio, no el catálogo de irregularidades**, aunque cuatro valores coincidan:
-nueve de los trece —moho, loque, alas deformadas, obrera ponedora— no son algo contra
-lo que se aplique un producto. Misma distinción que ADR-114.
-
-**Dos campos del §4 se quedaron fuera A PROPÓSITO**, y el motivo es medido:
-`lib/apiary/` **no tiene una sola función de actualización**, y «fecha de retiro» y
-«eficacia observada» son de etapa cierre —se anotan semanas después—. Añadir la
-columna igual repetiría lo que costó una semana con `coverage_until`: comentario,
-lectura, y **ninguna pantalla capaz de escribirla**. `PENDING_IMPLEMENTATIONS/011`.
-
-**Una pregunta abierta para Daniel, sin resolverla por deducción:**
-`VIAS_QUE_DEJAN_MATERIAL` contiene sólo `tira`, porque es lo único que el Anexo
-nombra. `cebo` también deja material, pero añadirlo sería inventarle una regla.
-
-**Lo que NO prueba:** nadie ha registrado un tratamiento con objetivo todavía.
 
 ## 3. Bloqueado, y en qué
 

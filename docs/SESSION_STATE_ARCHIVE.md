@@ -2618,3 +2618,30 @@ lo convierte con `fechaDeDia`, que **falla** en vez de dejar que `new Date()`
 adivine. Cuatro flip-tests, los cuatro compilando y cada uno con su prueba.
 
 **Lo que NO prueba:** nadie ha registrado un «alcanza hasta» todavía.
+
+---
+
+### 2026-09-13 · Un tratamiento dice contra qué, y se acabó el Anexo B obligatorio
+
+«Objetivo» era **el último campo que el Anexo B marcaba obligatorio y que no
+existía**, con su consecuencia escrita: *«eficacia por objetivo; hoy no se puede
+agrupar»*. Ya es obligatorio en el servicio, como el lote y la carencia — y a
+diferencia de «alcanza hasta» aquí **no hay caso de urgencia**: quien aplica un
+producto sabe contra qué. Medido: 0 tratamientos en la copia local, y **14 pruebas
+en 8 archivos cayeron** al exigirlo, que es la prueba de que muerde. ADR-119.
+
+**Enum propio, no el catálogo de irregularidades**, aunque cuatro valores coincidan:
+nueve de los trece —moho, loque, alas deformadas, obrera ponedora— no son algo contra
+lo que se aplique un producto. Misma distinción que ADR-114.
+
+**Dos campos del §4 se quedaron fuera A PROPÓSITO**, y el motivo es medido:
+`lib/apiary/` **no tiene una sola función de actualización**, y «fecha de retiro» y
+«eficacia observada» son de etapa cierre —se anotan semanas después—. Añadir la
+columna igual repetiría lo que costó una semana con `coverage_until`: comentario,
+lectura, y **ninguna pantalla capaz de escribirla**. `PENDING_IMPLEMENTATIONS/011`.
+
+**Una pregunta abierta para Daniel, sin resolverla por deducción:**
+`VIAS_QUE_DEJAN_MATERIAL` contiene sólo `tira`, porque es lo único que el Anexo
+nombra. `cebo` también deja material, pero añadirlo sería inventarle una regla.
+
+**Lo que NO prueba:** nadie ha registrado un tratamiento con objetivo todavía.
