@@ -9147,3 +9147,78 @@ escrito aquí porque es la cuarta forma distinta que el instrumento ha tomado es
 
 **Inventario de acceso:** 305→311 operaciones y 92→93 archivos. Dos operaciones con guardia
 directo más cuatro lectores que dependen del llamador = 6, que es exactamente el salto.
+
+## ADR-128 — Los dos apiarios reales: una colonia equivocada se borra, una que murió se cierra
+
+**Contexto.** El dueño declaró el 2026-09-14 el estado real de sus apiarios: **son dos, los
+dos propiedad de Néctar Nómada**. El de Finca Rosina tiene **2 colmenas vacías, sin
+colonias, con sus patas y tapa** (`NN-0041`, `NN-0042`). El otro, **Apiario Las Nubes**,
+tiene 5 colmenas `NN-0043`…`NN-0047` con colonia activa: núcleos jóvenes de **Parita
+(Herrera)** criados, trasladados y vendidos por **Chayanne López**, implementado el **4 de
+septiembre a las 6:00**, con trasiego a cámaras de cría hechas con **madera de un roble del
+bosque de Cerro Azul** que estaba caído, secado y tratado.
+
+**Decisión 1 — la distinción que gobierna todo esto: dato equivocado ≠ historia.** Las dos
+colmenas de Rosina tenían una colonia activa cada una y en la realidad están vacías. Esas
+colonias **no son historia, son datos equivocados**, así que se **borran**. Cerrarlas con
+`registrarFinDeColonia` habría exigido una causa de pérdida y **afirmado una muerte de
+colonia que no ocurrió** — inventar un hecho, que es la primera prohibición de `CLAUDE.md`
+§3. **El criterio queda escrito para la próxima vez:** se cierra lo que pasó, se borra lo
+que nunca fue.
+
+**Y el guion se niega a borrar cuando podría estar equivocándose:** si una colonia tiene
+cosechas, fotos o conteos de varroa, aborta y lo dice. Eso ya es historia, y entonces
+borrarla no corrige un registro: pierde un hecho. Medido antes de aplicar: un evento y una
+inspección, nada más.
+
+**Decisión 2 — las cajas se renombran, no se recrean.** `H-0014` → `NN-0041` y
+`PRUEBA-apiario-1788975585395` → `NN-0042`. Las cajas **existen físicamente**; lo que estaba
+mal era cómo se llamaban. Recrearlas habría perdido su `hive_placement` y su fecha de
+instalación.
+
+**Decisión 3 — el dueño es Néctar Nómada; el sitio sigue siendo Finca Rosina.** Los dos
+apiarios estaban `(sin organización)`. Ahora su `organizationId` es Néctar Nómada y su
+`parentLocationId` **no se toca**: sigue siendo la ubicación `Finca Rosina`, que cuelga de la
+localidad `Cerro Azul` junto a los seis lotes de café y al Beneficio Las Nubes. **Esa
+jerarquía ya existía** —medido, no construido— y es lo que permite preguntar por la miel y el
+café del mismo sitio, que es lo que el dueño quiere para la polinización dirigida que viene
+«en el futuro, no ahora». Para eso ya hay mecanismo: `PollinationCommitment` (A9.9).
+
+### Tres hechos del dueño que el esquema NO puede guardar
+
+Se dicen en vez de forzarlos, y son trabajo nombrado:
+
+| hecho | por qué no cabe |
+|---|---|
+| «con sus patas y tapa» | `Hive` no tiene columnas de soporte ni de tapa |
+| la madera de roble de Cerro Azul | `Hive` no tiene material ni nota; va en un `ColonyEvent` de tipo `other` |
+| «todas con reina» | `Colony` no tiene campo de reina: eso se afirma en una inspección, y **no se inventa una inspección que nadie hizo** |
+
+**Y el apaño del roble es consciente:** `ColonyEventType` sólo tiene `feeding`, `treatment`,
+`passing_observation` y `other`, aunque el **Anexo E §4 pide «Instalación o retiro de
+colmena» como tipo propio**. Cuando ese tipo exista, esas cinco filas se migran.
+
+**Decisión 4 — la hora se escribe en UTC explícito.** «4 de septiembre 6AM» es hora de
+Panamá (UTC−5) = `2026-09-04T11:00:00Z`. Escribirlo como `new Date("2026-09-04T06:00")` lo
+habría interpretado en la zona del proceso: en un runner en UTC, la 1 de la madrugada de
+Panamá. Es ADR-112, y aquí no hay formulario que mande el desfase. Verificado leyendo la base
+con `at time zone 'UTC' at time zone 'America/Panama'`: **06:00** en las cinco.
+
+### Señalado y no corregido
+
+- **El catálogo dice «Parita, Chitré» y el dueño dijo «Parita, Herrera».** Parita es distrito
+  de Herrera. El valor del catálogo parece estar mal, pero corregir un catálogo es otra
+  decisión y **dos veces el dato estaba bien y la duda estaba mal**.
+- **`NN-0041` conserva su fecha de instalación original**, que es medianoche UTC del 24 de
+  agosto y se lee como el 23 a las 19:00 en Panamá. Es un artefacto de campo-de-día anterior
+  a este cambio, no algo que este guion haya puesto.
+- **`Finca Las Nubes (Jaramillo Arriba, Boquete)` no se toca.** Es otra finca en otra
+  provincia, y el guion de renombrado de 2026-08-27 ya avisó de esta colisión de nombre. Se
+  compara por nombre **exacto**, nunca por `contains`.
+
+**Aplicado SÓLO en la copia local**, por la regla en pie de que este asistente no toca la
+base de producción de Neon. Producción y la copia local **han divergido**: quien restaure la
+copia desde un backup anterior perderá esto, y quien quiera llevarlo a producción corre el
+mismo guion con `--apply`. Verificado contra la base y no contra el informe del propio guion,
+con controles negativos: cero colmenas `PRUEBA`, cero colonias en Rosina, la finca de Boquete
+intacta, 21 filas de auditoría, y las 28 pruebas que tocan datos reales en verde (258).

@@ -2890,3 +2890,52 @@ primeras horas.
 
 **Seis flip-tests**, todos compilando y cada uno por su vector. Uno hubo que
 rehacerlo: no compilaba **y no cayó nada** — una no-mutación.
+
+
+### 2026-09-14 · La humedad de la miel no estaba «parcial»: estaba escondida
+
+§5 era la última fila del Anexo B sin construir, y **medirla cambió la rebanada**.
+«Parcial» no describía un mecanismo a medias: `Measurement` ya admite `lotId`, una cosecha
+de apiario **crea** un `Lot`, `PANEL_DEL_SUJETO` no restringe `lotId`, y `LotType` ya
+tiene `honey` porque A3 decidió que la miel reusa la maquinaria del lote **sin
+modificarla**. **La humedad ya se podía registrar** — lo prueba el test llamando a
+`recordMeasurement`, y el control es que mi diff **no toca ni un archivo** de ese camino.
+
+Así que no hay columna de humedad: hay un **lector**. `honeyType` sí es columna, porque es
+una clasificación y no una lectura — y dice **«declarada»** porque así lo escribió el
+dueño: verificarla es un análisis de polen, no un cambio en ese campo. ADR-123.
+
+**TERCERA vez esta semana con la misma forma:** `coverage_until` existía y nadie lo
+escribía (ADR-118); `frames_covered` existía y no era comparable (ADR-122); la humedad
+existe y no se ve. **Un mecanismo al que nadie llega se ve igual que uno que no existe** —
+y en el Anexo se marca «parcial», que se lee como esquema pendiente. Conclusión
+equivocada, y la tercera vez que el trabajo real fue pantalla y no tabla.
+
+**Y el hueco que había que cerrar para que algo se viera:** `harvest.ts` sólo sabía
+escribir. La pantalla tenía formulario de cosecha y **no listaba ninguna cosecha**.
+
+**Con esto el Anexo B queda completo.** Lo que sigue son decisiones del dueño —si `cebo`
+cuenta como vía que deja material— y el protocolo v2, que ya acumula cinco cosas.
+
+
+### 2026-09-13 · Balance de masas: tres etapas, no una
+
+`lib/beneficio/balanceDeMasas.ts`. El tablero pasa de **28 + 22 a 41 + 9**.
+
+**El error estructural de la v2.0 era sumar dos dominios.** `pulp_kg` entraba en
+la ecuación de cereza entera, y la pulpa es el 38-45 % de la masa de cerezas
+**que ya se contaron** en `prime_ripe`. Un registro correcto **fallaba**, y para
+que pasara el operador tenía que subdeclarar `prime_ripe` — el numerador del
+índice de pureza. **El índice medía cuánto tuvo que mentir el operador.**
+
+Ahora son tres ecuaciones encadenadas y separadas, cada una con su tolerancia
+sobre el insumo de **su** etapa. Y un desbalance de campo **nunca lanza**: se
+guarda con su discrepancia, porque a las cinco de la mañana bajo lluvia un
+rechazo significa que el dato no existe nunca.
+
+**Ocho flip-tests y uno encontró un hueco EN EL CONTRATO.** Confundir el rango
+del pergamino con el de la baba —la confusión que el propio documento advierte,
+y que su autor cometió al redactar— **pasa los 47 vectores sin que caiga uno**.
+MB-013 comprueba el estado y el rendimiento, no la **ausencia** del aviso falso.
+Queda cubierto desde fuera en `tests/beneficio/etapas-no-se-confunden.test.ts`,
+sin tocar el fichero de vectores.
