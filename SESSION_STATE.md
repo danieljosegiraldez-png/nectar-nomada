@@ -63,6 +63,20 @@ madera del roble —va en un `ColonyEvent` de tipo `other` porque **`ColonyEvent
 un valor de instalación**, que el Anexo E §4 pide— y «todas con reina», que se afirma en una
 inspección y **no se inventa**.
 
+**Y la segunda tanda (ADR-129, `data:procedencias-y-sitios`):** Las Nubes llega a **10**
+colmenas —las cinco nuevas llegaron el **2 de septiembre**, ancladas a medianoche **de
+Panamá** para que el día se lea bien—, entran **Marcelino Guevara** y la geografía de Veraguas,
+Herrera y Los Santos, y el cuarto origen **«San Francisco, Veraguas»** se declara en la
+**semilla** y no con un `INSERT`: lo cazó `origenDeColonia.test.ts`, y por ese camino
+producción lo recibe en el próximo despliegue sin tocar Neon.
+
+**NO se crearon Toabré, Río Gatú ni Lagartero:** el dueño no dijo en qué provincia están.
+
+**Y la historia de Toabré está sin registrar porque su aritmética no cierra:** 15 instaladas
+en dic-2025, 12 perdidas en marzo, «las últimas 2» a final de agosto —12+2=14 de 15—, más un
+enjambre que ocupó Finca 2 de abril a julio y 3 nuevas de Chayanne. Falta la colmena que no
+cuadra, el reparto entre Finca 1 y Finca 2, y las causas.
+
 ### 2026-09-14 · La consulta a vecinos: sabíamos registrar la colonia muerta, no el aviso
 
 Cierra el hueco que el traslado destapó, y que aparece **tres veces** en el Anexo E: el §4

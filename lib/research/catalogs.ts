@@ -499,6 +499,19 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
         definition: "Los tres núcleos instalados en septiembre de 2026, que abrieron la comparación.",
       },
       {
+        // Cuarto origen, declarado por el dueño el 2026-09-14: «todas las demás colmenas
+        // de antes son origen San Francisco, Veraguas, Marcelino Guevara, apicultor».
+        //
+        // **OJO, y no se resuelve aquí:** `Santa Fe, Veraguas` está definido arriba como
+        // «El pie original de Toabré», y el dueño dice que el origen de Toabré es
+        // Marcelino, de **San Francisco**. Los dos son distritos de Veraguas, así que uno
+        // de los dos está mal — y decidirlo cambia la procedencia de 15 colmenas. Se
+        // señala en vez de corregirse: dos veces el dato estaba bien y la duda estaba mal.
+        value: "San Francisco, Veraguas",
+        definition:
+          "Pie criado por Marcelino Guevara. Declarado por el dueño el 2026-09-14 como el origen de casi todos los apiarios — Toabré, Río Gatú, Lagartero y Los Palacios. Ver el aviso sobre «Santa Fe, Veraguas» en el código.",
+      },
+      {
         value: "desconocido",
         impliesUnknownIdentity: true,
         definition:
