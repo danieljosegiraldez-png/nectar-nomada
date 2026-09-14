@@ -2687,7 +2687,6 @@ directorio y no lo borraba.
 
 **Noveno archivado, 2026-09-13.** El asiento de Brix volvió a pasar el techo.
 Su trabajo vive en el árbol y sus pruebas lo vigilan.
-
 ### 2026-09-13 · Vercel saltaba el build de cada PR, y por eso producción se rompió
 
 **La #288 llegó a `main` sin que nada hubiera construido su código.** Rompió el
@@ -2716,3 +2715,57 @@ misma familia que el `cancelled` de las compuertas.
   Con pruebas, que no tenía: `tests/soloDocumentacion.test.ts`.
 - `npm run verify` **no construye**. Desde hoy, `npm run build` antes de empujar:
   es lo único que ve esta clase de defecto, como el `"use server"` de septiembre.
+
+
+### 2026-09-13 · Completar no es corregir, y con eso el apiario ya puede cerrar
+
+`lib/apiary/` **no tenía una sola función de actualización**, y por eso los dos campos
+de etapa cierre del Anexo B §4 no podían existir sin ser columnas que nadie pudiera
+rellenar — lo que ya costó una semana con `coverage_until`.
+`PENDING_IMPLEMENTATIONS/011` queda cerrado. ADR-121.
+
+**La decisión es toda ésta:** **completar** un hecho que siempre iba a llegar después
+—el retiro de una tira, semanas más tarde— **no lleva razón ni plazo**; **corregir**
+algo ya escrito **sí**, con el valor anterior en `before` y una operación de audit
+distinta. Pedir razón para el curso normal del trabajo enseñaría a escribir «.».
+
+**`sourceInterface = "apiary.close"`**, el vocabulario que trazabilidad ya tenía: «se
+anotó en el campo» y «se completó en la casa» se distinguen leyendo la fila. De ahí
+que ésta sea **la única escritura del apiario que no pasa por la cola offline**.
+
+**Lo que NO deja tocar:** producto, lote, dosis, carencia y objetivo. Si estuvieran
+mal, corresponde un evento nuevo, no reescribir la evidencia de aquel día.
+
+Y dos cosas que salieron gratis por decisiones viejas: **`leerEnmiendas` no hubo que
+tocarlo** —el audit del apiario ya escribía `entityType: "colony_event"`— y **esta
+migración no tuvo deriva que excluir**, que es lo que compró ADR-120 ayer.
+
+**Desde hoy la compuerta incluye `npm run build`:** `verify` no construye, y eso es
+lo único que ve la clase de defecto que rompió producción esta tarde.
+
+
+### 2026-09-13 · La especificación v3.0 del beneficio entra, y su contrato empieza a contar
+
+Daniel encargó fuera una revisión del material de proceso y llegó `nn-spec` v3.0:
+nueve documentos normativos y **47 criterios ejecutables**, diez de ellos de
+regresión. Encontró por su cuenta los mismos defectos que se habían señalado aquí
+horas antes —la banda de pH 3,5–3,8 muda, el `raise` que se niega a registrar una
+lectura real, la tolerancia de 50 g— y va mucho más lejos: calibración, máquina
+de estados, secado, histéresis y perfiles por protocolo.
+
+**Tres cosas del paquete NO se hicieron, y están dichas en `docs/beneficio/README.md`:**
+su `CLAUDE.md` **no** reemplaza al de la raíz —el nuestro gobierna toda la
+plataforma, el suyo un módulo—; no se implementa en **Python** —0 archivos `.py`
+contra 467 `.ts`, y su propio §1 ya contempla TypeScript—; y su `LOT_ID`
+inventado no sustituye al convenio real de Daniel, `PE-90` → `PE-90-A`.
+
+**El tablero empieza vacío y a la vista.** `tests/beneficio/vectores.test.ts` lee
+los 47 y los saca como `todo` hasta que exista el motor que los conteste: **3
+pasando, 47 pendientes**. Verde mentiría y rojo permanente enseña a ignorar la
+compuerta; `todo` sale contado y aparte, que es lo que es. El inventario de
+motores se declara a mano para que añadir uno se lea en el diff.
+
+**Media especificación ya estaba construida aquí** —`occurredAt`, correcciones
+que superseden, calibración, UTC con Panamá sin DST, procedencia, balance de
+masas, umbrales en la receta—. Lo que falta de verdad son tres piezas:
+`sample_point`, la histéresis de confirmación, y la derivada de estancamiento.

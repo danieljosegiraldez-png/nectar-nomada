@@ -8790,3 +8790,110 @@ el apiario nuevo— y `@@unique([locationId, identifier])` chocaría si el desti
 una `C-01`. Eso es esquema, migración y un modelo de vigencia; no es una pantalla que
 falta. Buscar aquí un mecanismo escondido sería aplicar el hallazgo anterior donde no
 aplica.
+
+**CORRECCIÓN, 2026-09-13 (mismo día).** La Decisión 2 de arriba decía que, sin el «plan
+de renumeración», *«el orden de trabajo no tiene fuente autoritativa»*. **Es falso, y se
+corrige aquí en vez de trabajar a su alrededor.** La secuencia de tickets **está en el
+repositorio**: la tabla «Camino crítico» de `48_A9_CAPTURA_DE_CAMPO_REPORTE.md` enumera
+**A9.0 … A9.12** con su columna de esquema, de qué depende cada uno y a qué bloquea; A9.0
+a A9.6 son el camino crítico y A9.7 a A9.12 van en paralelo. El `48_A9_ANEXO_H` que entró
+el mismo día lo confirma desde fuera: su §5 dice *«Nada. A9.0 a A9.6 quedan como están»*.
+
+Le pedí al dueño un documento que ya tenía. Lo que sí sigue sin aparecer es el «brief del
+módulo»; la «secuencia de tickets» no faltaba, **faltaba que yo la buscara**.
+
+**Y lo que la medición añade, que es más útil que el reproche:** los **trece** tickets
+tienen ya un módulo que los declara —de `lib/traceability/jornadaDeCampo.ts` (A9.0) a
+`lib/apiary/bitacora.ts` (A9.12)—. O sea que la secuencia **está agotada**, y por eso no
+ordena el §8 ni el §9 del Anexo E: **esos dos no están en ella**. Son alcance nuevo, no
+tickets pendientes, y eso cambia la pregunta de «¿en qué orden?» a «¿entran o no?».
+
+*(Medido con `grep -rlE "A9\.N( |\)|—|,|$)"` sobre `lib/`, `app/` y el esquema, con
+control positivo en A9.6 → `reporteDeVisita.ts`. «Tiene módulo que lo declara» no es
+«está terminado»: es lo que la medición sostiene.)*
+
+**Nota de inventario:** la serie de anexos salta de **E a G**. No hay `48_A9_ANEXO_F_*` en
+`main` al escribir esto. Puede ser deliberado o puede ser una pieza que no llegó; queda
+señalado, no rellenado.
+
+## ADR-125 — El vacío no se ofrece como opción; y dos de los nueve términos no eran vacío, eran respuestas
+
+**Contexto.** El Anexo E §6 pide tres cosas: un solo término para el vacío, sacar «Sin
+registrar» de los desplegables dejándolo como estado, y eliminar «— elegir —». Medido el
+2026-09-13, el módulo apícola tenía **nueve grafías en 22 opciones vacías** y la app
+entera **34 en 89**.
+
+**La medición que cambió la rebanada.** El dueño contó términos y pidió uno. Pero dos de
+los nueve **no son vacío**: son respuestas que casualmente guardan `null`.
+
+- `varroaEvaluatesNone` = «No — cuento para decidir» dice que ese conteo **no evalúa
+  ningún tratamiento**. El comentario que ya estaba en el código lo declara el caso
+  normal: *«contar para decidir es el caso normal, y preseleccionar un tratamiento
+  atribuiría una eficacia que nadie afirmó»*.
+- `colonyEndCauseNo` = «—» dice que **esa causa candidata no participó** en la pérdida.
+  El operador clasifica cada causa; el vacío es un «no, ésta no».
+
+Colapsar las nueve a un término habría borrado las dos. Que el valor guardado sea `null`
+es un detalle de almacenamiento, no su significado.
+
+**Decisión 1 — tres familias, declaradas en código.** `lib/apiary/vacio.ts`:
+
+| familia | qué significa la opción vacía | cómo se escribe | cuántas |
+|---|---|---|---|
+| `vacio` | nadie lo anotó | `<option value="" />`, sin texto | 14 |
+| `placeholder` | obligatorio sin elegir todavía | `<option value="" disabled />` | 4 |
+| `respuesta` | afirmación deliberada que vale «ninguno» | conserva sus palabras | 3 |
+
+**Decisión 2 — la lista de `respuesta` es explícita, no una heurística.** Un detector que
+clasificara por la forma del texto tomaría el «—» de las causas por decoración y se lo
+comería. Añadir una obliga a escribirla en `CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO`, que es
+el sitio nombrado donde aterriza el veredicto.
+
+**Decisión 3 — «Sin registrar» pasa a LEERSE, que es la mitad que no existía.** El origen
+del pie y los dos campos de cierre de la cosecha se enseñaban **omitiéndose** al faltar
+(`c.honeyType ? … : ""`), así que «esta cosecha está sin cerrar» y «no aplica» se leían
+igual: una línea que no aparece. Ahora salen con su rótulo y la clase
+`nn-vital-sin-registro` que ya existía.
+
+**Decisión 4 — cero y `false` están ANOTADOS.** `estadoDelDato` lo afirma y su prueba lo
+defiende. Cero kilos extraídos es haber abierto la caja y no encontrar miel; `false` en un
+tres-estados es haber mirado y no haber visto. Tratarlos como vacío es ADR-080 leído del
+revés: convertir una observación en una ausencia. `NaN` **no** está anotado, y se afirma
+antes de comparar, porque una comparación con `NaN` siempre sale falsa y por tanto siempre
+halaga a quien mide.
+
+**Decisión 5 — el guardia se acota al módulo apícola, y el número es la razón.** Un
+guardia sobre las 89 opciones de la app no podría pasar hoy, y `~/.claude/CLAUDE.md` lo
+dice con nombre: *«Un guardia que nunca puede pasar es peor que ninguno: enseña a ignorar
+una línea roja.»* Lo que queda **inventariado y no vigilado**, medido el 2026-09-13: 89
+opciones vacías, 34 grafías, repartidas por sensorial, investigación, café y admin; las
+más repetidas son «Ninguno» (12), «—» (7), «— elegir —» (6) y «— Elegir —» (5).
+
+**Lo que NO se tocó, con su razón:**
+
+- **`TriStateField`** es de trazabilidad: 2 usos allí, **0** en apiario, donde sólo aparece
+  en comentarios. Tocarlo habría cambiado pantallas de café sin pedirlo.
+- **`humedadSinMedir`** se queda aunque empiece por «Sin medir»: dice algo que «Sin
+  registrar» no puede — que el dato vive en la medición del lote, con su instrumento y su
+  procedencia (ADR-123).
+- **La mitad de «reescritos para apicultura» ya estaba hecha.** El Anexo dice que los
+  textos de ayuda *«hablan de fósforo Bray contra Mehlich y de perfiles de suelo
+  compactado»*. Medido: el namespace `Apiary` tiene **10 ayudas propias y 0** con palabra
+  de suelo o fósforo; la única clave con Bray/Mehlich es `sampleExtractionHelp`, del
+  namespace `Traceability`, que pinta una pantalla de muestras de café. **Queda por
+  confirmar qué pantalla vio el dueño** — no se afirma que se equivocara. Lo que sí
+  faltaba era colapsarlas: había **cero** `<details>` y ahora están los diez.
+
+**El fallo del instrumento, anotado porque es de una clase conocida.** El detector del
+guardia usaba `/<option\s+value=""([^>]*?)>([\s\S]*?)<\/option>/`, que **se traga la forma
+autocerrada**: toma ` /` por atributo y todo lo que sigue hasta el siguiente `</option>`
+por su etiqueta. Con la regla ya arreglada en las fuentes reportó **18 violaciones
+inexistentes**. Falló en rojo y no en verde, que es la única razón por la que se vio — la
+misma forma habría pasado desapercibida al revés. El caso quedó como control del detector,
+con la forma autocerrada seguida de una opción de verdad.
+
+**Flip-test, las tres con sha distinto y compilando:** devolver «Sin registrar» a una
+opción tumba «ninguna opción vacía lleva texto» y «"Sin registrar" no se usa como etiqueta
+de opción»; devolver un «— elegir —» al namespace tumba «ningún texto de apiario dice
+"elegir"»; hacer que cero cuente como vacío tumba «cero y false están ANOTADOS» y, de
+paso, la de `NaN`, porque `-0 === 0` y su control de `-0` también lo caza.
