@@ -8738,3 +8738,55 @@ abrió la caja y no había miel.
 sólo sabía **escribir**. La pantalla de la colmena tenía formulario de cosecha y **no
 listaba ninguna cosecha**, así que ni el tipo, ni el peso, ni la humedad tenían dónde
 mostrarse — ni dónde cerrarse. `cosechasDeColonia` es esa lista.
+
+## ADR-124 — Entra el Anexo E (pantallas y formularios); y por primera vez el hueco es de esquema, no de pantalla
+
+**Contexto.** El dueño entregó `pantallas-captura-apicola.md` el 2026-09-13, sin
+instrucción. Queda como `docs/implementation/48_A9_ANEXO_E_PANTALLAS_Y_FORMULARIOS.md`,
+quinto de la serie A–D, copia byte a byte. Define qué ve y qué llena el operador a 390 px.
+
+**Decisión 1 — se acepta como insumo de planificación, no como orden de construcción.**
+Nada se implementa con su entrada. La secuencia la decide el dueño.
+
+**Decisión 2 — se registran dos referencias que no existen.** Se declara «tercera pieza
+del paquete, junto al brief del módulo y al plan de renumeración», y ninguna de las dos
+está en el repositorio ni en `~/Downloads` (buscado `renumerac|secuencia de tickets|brief
+del m` en `docs/`; control positivo: «ANEXO B» sí encuentra cinco archivos). Importa
+porque su nota de modelo **delega en una de ellas**: «Manda la secuencia de tickets». Sin
+ese documento, el orden de trabajo no tiene fuente autoritativa.
+
+**Lo que el cruce contra el código destapó, y va aquí porque cambia lo que hay que
+construir:**
+
+| lo que el documento dice | lo que está medido |
+|---|---|
+| §2 «Orden por urgencia, no alfabético» | **ya existe**: `pesoDeAlerta` ordena `app/apiaries/page.tsx:50` |
+| §5 «nada la persigue» (jornada sin cerrar) | **falso a las 72 h**: `visita_sin_cerrar` en `alertasDe`, con su cadena, pintada en `app/apiaries/page.tsx:131` |
+| §5 «si lleva más de un día abierta» | el umbral real es `HORAS_DE_BORRADOR_VIEJO = 72`, no 24 |
+| §6 «Elimina "— elegir —"» | **2 apariciones**, y viven en `messages/es.json`, no en los componentes |
+| §6 «un solo término para el vacío» | **siete** en el módulo apícola: `Sin registrar`, `Sin registro`, `Elegir método…`, `Elegir objetivo…`, `Elegir…`, `—`, `— Ninguno —` |
+| §6 «sácalo de las listas desplegables» | `Sin registrar` es `<option value="">` **13 veces** |
+| §6 «los textos hablan de fósforo Bray contra Mehlich» | **no en apiario**: la única clave con Bray/Mehlich es `sampleExtractionHelp`, del namespace `Traceability`, pintada por `SampleForms.tsx`. El namespace `Apiary` tiene **10 textos de ayuda propios** y **0** con palabra de suelo o fósforo. Falta confirmar qué pantalla vio |
+| §6 «los textos de ayuda van colapsados» | **cierto y sin hacer**: `<details>` en formularios de apiario = **0** |
+| §8 traslado de colmenas | **no hay dónde**: `Hive.locationId` es un FK escalar, sin modelo de vigencia |
+| §9 emplazamiento temporal | **parcial de verdad**: `PollinationCommitment` ya trae cliente, hectáreas, meta min/max, contrato, `startsAt`/`endsAt`; faltan cultivo/parcela, ventana de floración y las dos alertas |
+| §4 y §8 consulta a fincas vecinas / aspersiones previstas | **no existe** (control positivo: `carencia|Withdrawal` da 10 en el esquema) |
+
+**Decisión 3 — §6 es retroalimentación contra un patrón que introduje esta semana, y se
+acepta.** Las últimas cuatro rebanadas **añadieron** opciones de vacío a los desplegables
+—`triNoRegistrado`, `treatmentTargetUnset`, `colonyEndStatusUnset`, `varroaMethodUnset`—
+cada una con su propia palabra. El dueño tiene razón en las dos mitades: son siete
+términos para un concepto, y «sin registrar» es un **estado resultante**, no algo que
+alguien elige. Lo que la distinción de tres estados necesitaba era que «no se miró» y «se
+miró y no había» no se confundan (ADR-080); eso se puede sostener con un solo término y
+sin ofrecerlo como opción elegible.
+
+**Decisión 4 — §8 invierte el hallazgo de la semana, y conviene decirlo.** Tres veces
+seguidas —ADR-118, ADR-122, ADR-123— el Anexo marcó «no existe» o «parcial» algo que ya
+funcionaba y a lo que ninguna pantalla llegaba. **El traslado de colmenas es el caso
+contrario:** `Hive.locationId` guarda el apiario **actual** y nada más, así que mover una
+colmena hoy reescribiría su pasado —sus inspecciones viejas parecerían haber ocurrido en
+el apiario nuevo— y `@@unique([locationId, identifier])` chocaría si el destino ya tiene
+una `C-01`. Eso es esquema, migración y un modelo de vigencia; no es una pantalla que
+falta. Buscar aquí un mecanismo escondido sería aplicar el hallazgo anterior donde no
+aplica.
