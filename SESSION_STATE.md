@@ -38,6 +38,27 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-14 · Secado, y con él los 47 criterios del beneficio en verde
+
+`lib/beneficio/secado.ts`. **El tablero cierra: 50 pasando, 0 pendientes.** La
+v2.x no tenía especificación de secado en absoluto, pese a que su propio
+`CLAUDE.md` la exigía — vacío estructural C1.
+
+**El secado no es lineal y un solo umbral de tasa lo arruina en las dos
+direcciones.** Bajar diez puntos por encima del 25 % es normal —agua libre— y
+alertar ahí da un falso aviso por lote; los mismos diez puntos por debajo del
+25 % **sellan la superficie**, el núcleo queda húmedo, el medidor lee bajo y
+falso, y el moho sale en bodega semanas después. La fase se decide **antes** de
+mirar la tasa.
+
+**Y una medición que corrigió lo que yo creía.** En el flip del solape de
+ventanas supuse que caería DR-003 —la rehidratación nocturna—. Cayó **DR-004**.
+Medido: DR-003 da −0,95 semiabierta y −1,05 solapada, y **no dispara en ninguno
+de los dos**; el que vigila la regla es el del estancamiento, porque exige tasa
+≥ 0 y el solape la vuelve negativa. Mirar **cuál** cae es lo único que lo dice.
+
+Seis flip-tests, todos compilando y cada uno por su vector.
+
 ### 2026-09-13 · Balance de masas: tres etapas, no una
 
 `lib/beneficio/balanceDeMasas.ts`. El tablero pasa de **28 + 22 a 41 + 9**.
@@ -149,51 +170,6 @@ escribir. La pantalla tenía formulario de cosecha y **no listaba ninguna cosech
 
 **Con esto el Anexo B queda completo.** Lo que sigue son decisiones del dueño —si `cebo`
 cuenta como vía que deja material— y el protocolo v2, que ya acumula cinco cosas.
-
-### 2026-09-13 · El motor de pH: 13 de los 47 criterios ya se comprueban
-
-`lib/beneficio/ph.ts` porta el `PHMonitor` de `docs/beneficio/10`, y
-`perfiles.ts` trae los cinco protocolos de §8. El tablero pasa de **3 + 47
-pendientes a 16 + 34**.
-
-**Ningún umbral vive en la lógica**: todos salen de `ProtocolProfile`, y
-`PERFILES` es un `Record` total, así que el compilador obliga a declarar cada
-perfil nuevo entero. Siguen `[PROVISIONAL]` hasta que Daniel los revise — P-F.
-
-**Siete flip-tests, uno por defecto real de la v2.5**, todos compilando y cada
-uno cayendo por su propio vector: el `raise` que derribaba la ingesta (PH-007),
-la banda 3,5–3,8 muda (PH-003), la frontera que ponía 4,50 en dos bandas
-(PH-001), la meseta cinética (PH-009), la supresión del reposo frío de CryoBloom
-(PH-010), la guarda de cero (PH-012) y la histéresis (PH-004). **El cuarto hubo
-que rehacerlo**: la primera versión no compilaba, y una mutación que no compila
-se lee igual que un guardia que funciona.
-
-### 2026-09-14 · La caja se declara, y con eso «cuadros cubiertos» ya se puede comparar
-
-El Anexo B §2.4 son seis filas y ninguna existía. **La elegí antes que las otras dos
-por una razón medible:** `framesPerBox` es el **denominador** de `beeCoveredFrames`,
-que se construyó anteayer. El Anexo pide ese campo porque es «comparable entre visitas
-y entre sitios» — y **no lo era**. Terminar lo que quedó a medias vale más que añadir
-campos al lado. ADR-122.
-
-**Cambiar la caja NO es corregir, así que no pide razón.** Es ADR-121 al revés: añadir
-un alza es un hecho del mundo y el cambio **es** el evento. Con su límite dicho: el
-rastro no puede distinguir «le puse un alza» de «me equivoqué al teclear», y la razón
-opcional es cómo se dice cuál fue.
-
-**Sin denominador la ocupación es `null` y se dice.** Devolver 0 sería falso; **suponer
-diez cuadros por caja sería peor**, porque haría comparables cosas que no lo son sin que
-nadie viera la suposición — el flip-test lo deja en una línea: `expected 30 to be null`.
-Y no se recorta al 100 %: doce de diez pasa de verdad.
-
-**`feederType` reusa `FeedingMethod`** porque son las mismas cosas físicas. Caso
-**opuesto** a ADR-114 y ADR-119, donde las listas se separaron porque los significados
-diferían; aquí coinciden y dos enums serían dos sitios donde añadir el siguiente.
-
-**Y el hueco que cerró de paso:** no existía ninguna función para actualizar una
-colmena. Aquí no era un accidente — la configuración cambia por definición. El
-historial, otra vez, no hubo que construirlo: `leerEnmiendas` lee cualquier entidad por
-su tipo.
 
 ## 3. Bloqueado, y en qué
 

@@ -2774,3 +2774,52 @@ motores se declara a mano para que añadir uno se lea en el diff.
 que superseden, calibración, UTC con Panamá sin DST, procedencia, balance de
 masas, umbrales en la receta—. Lo que falta de verdad son tres piezas:
 `sample_point`, la histéresis de confirmación, y la derivada de estancamiento.
+
+---
+
+**Undécimo archivado, 2026-09-14.** El asiento del secado pasó el techo.
+
+### 2026-09-13 · El motor de pH: 13 de los 47 criterios ya se comprueban
+
+`lib/beneficio/ph.ts` porta el `PHMonitor` de `docs/beneficio/10`, y
+`perfiles.ts` trae los cinco protocolos de §8. El tablero pasa de **3 + 47
+pendientes a 16 + 34**.
+
+**Ningún umbral vive en la lógica**: todos salen de `ProtocolProfile`, y
+`PERFILES` es un `Record` total, así que el compilador obliga a declarar cada
+perfil nuevo entero. Siguen `[PROVISIONAL]` hasta que Daniel los revise — P-F.
+
+**Siete flip-tests, uno por defecto real de la v2.5**, todos compilando y cada
+uno cayendo por su propio vector: el `raise` que derribaba la ingesta (PH-007),
+la banda 3,5–3,8 muda (PH-003), la frontera que ponía 4,50 en dos bandas
+(PH-001), la meseta cinética (PH-009), la supresión del reposo frío de CryoBloom
+(PH-010), la guarda de cero (PH-012) y la histéresis (PH-004). **El cuarto hubo
+que rehacerlo**: la primera versión no compilaba, y una mutación que no compila
+se lee igual que un guardia que funciona.
+
+### 2026-09-14 · La caja se declara, y con eso «cuadros cubiertos» ya se puede comparar
+
+El Anexo B §2.4 son seis filas y ninguna existía. **La elegí antes que las otras dos
+por una razón medible:** `framesPerBox` es el **denominador** de `beeCoveredFrames`,
+que se construyó anteayer. El Anexo pide ese campo porque es «comparable entre visitas
+y entre sitios» — y **no lo era**. Terminar lo que quedó a medias vale más que añadir
+campos al lado. ADR-122.
+
+**Cambiar la caja NO es corregir, así que no pide razón.** Es ADR-121 al revés: añadir
+un alza es un hecho del mundo y el cambio **es** el evento. Con su límite dicho: el
+rastro no puede distinguir «le puse un alza» de «me equivoqué al teclear», y la razón
+opcional es cómo se dice cuál fue.
+
+**Sin denominador la ocupación es `null` y se dice.** Devolver 0 sería falso; **suponer
+diez cuadros por caja sería peor**, porque haría comparables cosas que no lo son sin que
+nadie viera la suposición — el flip-test lo deja en una línea: `expected 30 to be null`.
+Y no se recorta al 100 %: doce de diez pasa de verdad.
+
+**`feederType` reusa `FeedingMethod`** porque son las mismas cosas físicas. Caso
+**opuesto** a ADR-114 y ADR-119, donde las listas se separaron porque los significados
+diferían; aquí coinciden y dos enums serían dos sitios donde añadir el siguiente.
+
+**Y el hueco que cerró de paso:** no existía ninguna función para actualizar una
+colmena. Aquí no era un accidente — la configuración cambia por definición. El
+historial, otra vez, no hubo que construirlo: `leerEnmiendas` lee cualquier entidad por
+su tipo.

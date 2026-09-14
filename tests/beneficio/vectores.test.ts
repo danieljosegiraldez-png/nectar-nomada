@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { evaluarPh, type DataConfidence } from "../../lib/beneficio/ph";
 import { PERFILES, type ClaveDePerfil } from "../../lib/beneficio/perfiles";
 import { evaluarBrix, type SamplePoint } from "../../lib/beneficio/brix";
+import { consistenciaHumedadMasa, evaluarSecado } from "../../lib/beneficio/secado";
 import {
   SchemaError,
   validarDespulpado,
@@ -55,7 +56,7 @@ const FAMILIAS = [
  * Los motores que YA se pueden ejercer. Se declara a mano, a propósito: es la
  * línea que hay que tocar para decir «esto ya está», y se lee en el diff.
  */
-const MOTORES: ReadonlySet<string> = new Set<string>(["lib/beneficio/ph.ts", "lib/beneficio/brix.ts", "lib/beneficio/balanceDeMasas.ts"]);
+const MOTORES: ReadonlySet<string> = new Set<string>(["lib/beneficio/ph.ts", "lib/beneficio/brix.ts", "lib/beneficio/balanceDeMasas.ts", "lib/beneficio/secado.ts"]);
 
 /**
  * El instante base de los vectores. Cualquiera sirve: los vectores hablan en
@@ -210,6 +211,44 @@ const EJECUTORES: Record<string, (v: Vector) => Record<string, unknown>> = {
     salida["warnings"] = avisos;
     return salida;
   },
+
+  drying: (v) => {
+    // DR-009 no trae serie: es la verificación cruzada humedad-masa, que no
+    // necesita lecturas de cama sino dos pesadas y dos humedades.
+    if (v.initial_mass_kg !== undefined) {
+      const r = consistenciaHumedadMasa({
+        initialMassKg: v.initial_mass_kg,
+        initialMoisturePct: v.initial_moisture_pct as number,
+        currentMassKg: v.current_mass_kg as number,
+        currentMoisturePct: v.current_moisture_pct as number,
+      });
+      return { warnings: r.warnings, mass_consistency_delta_pct: r.deltaPct };
+    }
+
+    const lecturas = (v.readings ?? []).map((r) => ({
+      measuredAt: new Date(INICIO.getTime() + (r["offset_days"] as number) * 86_400_000),
+      // Un solo valor de humedad es una cama de un punto: la dispersión no
+      // existe, que es distinto de valer cero.
+      bedPointsPct: (r["bed_points_pct"] as number[] | undefined) ?? [r["moisture_pct_wb"] as number],
+      waterActivity: (r["water_activity"] as number | undefined) ?? null,
+      beanTempC: (r["bean_temp_c"] as number | undefined) ?? null,
+      confidence: "VALIDATED" as DataConfidence,
+    }));
+    const ultima = lecturas[lecturas.length - 1]!;
+    const r = evaluarSecado({
+      readings: lecturas,
+      dryingStartedAt: INICIO,
+      now: ultima.measuredAt,
+    });
+    return {
+      status: r.status,
+      severity: r.severity,
+      phase: r.phase,
+      dispersion_pp: r.dispersionPp,
+      daily_rate_pp: r.dailyRatePp,
+      warnings: r.warnings,
+    };
+  },
 };
 
 /**
@@ -230,6 +269,10 @@ interface Vector {
   stage_b?: Record<string, unknown>;
   stage_c?: Record<string, unknown>;
   lot_id?: string;
+  initial_mass_kg?: number;
+  initial_moisture_pct?: number;
+  current_mass_kg?: number;
+  current_moisture_pct?: number;
   weighing_condition?: string;
   expect: Record<string, unknown>;
 }
