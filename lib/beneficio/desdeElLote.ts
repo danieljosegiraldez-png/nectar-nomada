@@ -29,6 +29,11 @@
 
 import { evaluarBrix, type BrixAssessment, type BrixReading } from "./brix";
 import { evaluarPh, type DataConfidence, type PHAssessment, type PHReading } from "./ph";
+import {
+  confianzaPorVerificacion,
+  peorConfianza,
+  type EstadoDeVerificacion,
+} from "../equipos/verificacion";
 import { PERFILES, type ClaveDePerfil, type ProtocolProfile } from "./perfiles";
 import { evaluarSecado, type DryingAssessment, type DryingReading } from "./secado";
 
@@ -65,6 +70,16 @@ export interface MedicionDelLote {
   readonly provenanceClass: string;
   /** Si algo la corrige, esta lectura quedó superseded y no alimenta alertas. */
   readonly fueCorregida: boolean;
+  /**
+   * Cómo estaba el instrumento **en el instante de esta lectura**.
+   *
+   * Opcional y con `SIN_INSTRUMENTO` por defecto, que es el estado real de
+   * todas las lecturas de hoy: `measurement.instrument_id` acaba de existir y
+   * nadie lo ha rellenado. Un defecto distinto —tratar el hueco como avería—
+   * excluiría del cálculo cada lectura del repositorio y apagaría esta pantalla
+   * entera el día que se despliegue.
+   */
+  readonly estadoDelInstrumento?: EstadoDeVerificacion;
 }
 
 /**
@@ -84,8 +99,22 @@ export interface MedicionDelLote {
  * se usa para lo superseded: es exactamente ese comportamiento.
  */
 export function confianzaDe(m: MedicionDelLote): DataConfidence {
-  if (m.fueCorregida) return "UNCALIBRATED";
-  return m.provenanceClass === "measured_fact" ? "VALIDATED" : "TEMP_UNCOMPENSATED";
+  const porProcedencia: DataConfidence = m.fueCorregida
+    ? "UNCALIBRATED"
+    : m.provenanceClass === "measured_fact"
+      ? "VALIDATED"
+      : "TEMP_UNCOMPENSATED";
+
+  // **Y la del instrumento, que es la mitad añadida el 2026-09-14.** Una lectura
+  // impecable tomada con un refractómetro que falló su contraste sigue sin poder
+  // confirmar nada; una lectura corregida tomada con un instrumento impecable
+  // sigue siendo una lectura corregida. Por eso manda la PEOR y no un promedio:
+  // cada motivo por separado basta para dudar.
+  //
+  // `SIN_INSTRUMENTO` devuelve `null` y no impone nada — no saber con qué se
+  // midió no es saber que el instrumento estaba mal.
+  const porInstrumento = confianzaPorVerificacion(m.estadoDelInstrumento ?? "SIN_INSTRUMENTO");
+  return porInstrumento === null ? porProcedencia : peorConfianza(porProcedencia, porInstrumento);
 }
 
 /** Por qué un lote no tiene veredicto. **«No se sabe» no es «va bien».** */
@@ -137,6 +166,13 @@ export function veredictoDelLote(entrada: EntradaDelLote): VeredictoDeFase | Sin
   if (usables.length === 0) return "SIN_LECTURAS";
 
   const limitaciones: string[] = [];
+  // **Se declara cuando NINGUNA lectura usable dice con qué se midió.** Hoy es
+  // siempre, y por eso importa decirlo en vez de callarlo: un veredicto cuyo
+  // origen no se puede auditar no vale más que una corazonada, y el operario
+  // merece saber que nadie ha comprobado el aparato que dio estos números.
+  if (usables.every((m) => (m.estadoDelInstrumento ?? "SIN_INSTRUMENTO") === "SIN_INSTRUMENTO")) {
+    limitaciones.push("SIN_INSTRUMENTO_DECLARADO");
+  }
   const comun = (m: MedicionDelLote) => ({
     measuredAt: m.occurredAt,
     confidence: confianzaDe(m),

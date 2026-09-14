@@ -1727,6 +1727,8 @@
     "estado_UNEVEN_DRYING": "la cama seca desigual",
     "estado_TARGET_REACHED": "llegó al objetivo",
     "estado_OVER_DRIED": "pasado de seco",
-    "estado_BEAN_TEMP_EXCEEDED": "el grano va por encima de la temperatura máxima"
+    "estado_BEAN_TEMP_EXCEEDED": "el grano va por encima de la temperatura máxima",
+    "limitacion_SIN_INSTRUMENTO_DECLARADO": "Ninguna de estas lecturas dice con qué instrumento se tomó, así que no se pudo comprobar si estaba revisado.",
+    "estado_REVISION_VENCIDA": "El instrumento pasó su prueba contra patrón, pero hace más tiempo del previsto. Se puede seguir usando; conviene volver a contrastarlo."
   }
 }

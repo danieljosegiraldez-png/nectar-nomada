@@ -1727,6 +1727,8 @@
     "estado_UNEVEN_DRYING": "the bed is drying unevenly",
     "estado_TARGET_REACHED": "reached the target",
     "estado_OVER_DRIED": "over-dried",
-    "estado_BEAN_TEMP_EXCEEDED": "bean temperature above the maximum"
+    "estado_BEAN_TEMP_EXCEEDED": "bean temperature above the maximum",
+    "limitacion_SIN_INSTRUMENTO_DECLARADO": "None of these readings says which instrument produced it, so whether it was checked could not be verified.",
+    "estado_REVISION_VENCIDA": "The instrument passed its reference check, but longer ago than expected. It can still be used; a fresh check is advisable."
   }
 }

@@ -487,3 +487,59 @@ export async function estadoDelInstrumento(
     momento,
   });
 }
+
+/**
+ * El estado de verificación **de cada medición**, en el instante de cada una.
+ *
+ * Existe por lotes y no llamando `estadoDelInstrumento` en un bucle porque la
+ * pantalla de un lote trae decenas de lecturas y unos pocos instrumentos: se
+ * resuelve el permiso **una vez por instrumento** y sus verificaciones se leen
+ * una sola vez, y el reparto por lectura lo hace la función pura.
+ *
+ * **Un instrumento que quien mira no puede ver se trata como `SIN_INSTRUMENTO`**,
+ * o sea que no impone confianza ninguna. La alternativa —degradar la lectura
+ * porque el lector carece de permiso— haría que el mismo lote se juzgara distinto
+ * según quién lo abre, que es exactamente lo que un veredicto no puede hacer.
+ */
+export async function estadosDeInstrumentoPorMedicion(
+  userAccountId: string,
+  mediciones: readonly { id: string; instrumentId: string | null; occurredAt: Date }[],
+): Promise<Map<string, EstadoDeVerificacion>> {
+  const salida = new Map<string, EstadoDeVerificacion>();
+  const ids = [...new Set(mediciones.map((m) => m.instrumentId).filter((x): x is string => x !== null))];
+  if (ids.length === 0) return salida;
+
+  const equipos = await prisma.equipment.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, projectId: true, classification: true, checkAdvisoryHours: true },
+  });
+  const verificaciones = await prisma.instrumentCheck.findMany({
+    where: { equipmentId: { in: ids } },
+    select: { equipmentId: true, occurredAt: true, outcome: true },
+    orderBy: { occurredAt: "asc" },
+  });
+
+  const visibles = new Map<string, (typeof equipos)[number]>();
+  for (const e of equipos) {
+    const objetivo = await objetivoDeEquipo(e);
+    if (await can(userAccountId, "view", "equipment", objetivo, e.classification)) visibles.set(e.id, e);
+  }
+
+  for (const m of mediciones) {
+    const e = m.instrumentId ? visibles.get(m.instrumentId) : undefined;
+    if (!e) {
+      salida.set(m.id, "SIN_INSTRUMENTO");
+      continue;
+    }
+    salida.set(
+      m.id,
+      estadoDeVerificacion({
+        instrumentoDeclarado: true,
+        verificaciones: verificaciones.filter((v) => v.equipmentId === e.id),
+        horasDeAviso: e.checkAdvisoryHours,
+        momento: m.occurredAt,
+      }),
+    );
+  }
+  return salida;
+}

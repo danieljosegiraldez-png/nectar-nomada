@@ -185,3 +185,60 @@ describe("lo que el puente no puede traducir, lo declara", () => {
     expect(r.secado?.status).toBe("RATE_TOO_FAST");
   });
 });
+
+describe("el instrumento que produjo la lectura también decide su confianza", () => {
+  const conInstrumento = (estado: Parameters<typeof veredictoDelLote>[0]["mediciones"][number]["estadoDelInstrumento"]) =>
+    veredictoDelLote({
+      fase: { tipo: "fermentacion", iniciadaEn: INICIO },
+      gradoDeProceso: "Washed",
+      ahora: h(26.5),
+      mediciones: [
+        lectura(3.44, 26, { estadoDelInstrumento: estado }),
+        lectura(3.41, 26.5, { estadoDelInstrumento: estado }),
+      ],
+    });
+
+  /**
+   * **El control positivo de todo el bloque.** Sin él, las comprobaciones de
+   * abajo pasarían igual con una función que nunca confirmara nada: no estarían
+   * midiendo el efecto del instrumento, sólo una negativa.
+   */
+  it("dos hechos medidos con un instrumento VERIFICADO sí confirman una crítica", () => {
+    const r = conInstrumento("VERIFICADO");
+    if (typeof r === "string") throw new Error("debía haber veredicto");
+    expect(r.ph?.severity).toBe("CRITICAL");
+  });
+
+  it("con el instrumento VENCIDO de revisión, las mismas lecturas NO confirman", () => {
+    const r = conInstrumento("REVISION_VENCIDA");
+    if (typeof r === "string") throw new Error("debía haber veredicto");
+    expect(r.ph?.severity, "vencido avisa, no confirma").not.toBe("CRITICAL");
+    // Y sigue siendo usable: el motor las ve, que es la mitad de la decisión de
+    // Daniel que un `UNCALIBRATED` habría destruido.
+    expect(r.ph?.status, "vencido NO se excluye del cálculo").not.toBe("DATA_INSUFFICIENT");
+  });
+
+  it("y con un instrumento que FALLÓ su contraste, quedan fuera del cálculo", () => {
+    const r = conInstrumento("VERIFICACION_FALLIDA");
+    if (typeof r === "string") throw new Error("debía haber veredicto");
+    expect(r.ph?.status).toBe("DATA_INSUFFICIENT");
+  });
+
+  /**
+   * **La que impide que desplegar esto apague la pantalla.** Hoy ninguna lectura
+   * declara instrumento; si el hueco impusiera confianza, este veredicto —que es
+   * el mismo que la suite ya verifica más arriba— dejaría de existir.
+   */
+  it("sin instrumento declarado, el veredicto es exactamente el de antes", () => {
+    const r = conInstrumento(undefined);
+    if (typeof r === "string") throw new Error("debía haber veredicto");
+    expect(r.ph?.severity).toBe("CRITICAL");
+    expect(r.limitaciones, "pero se dice en voz alta").toContain("SIN_INSTRUMENTO_DECLARADO");
+  });
+
+  it("y con instrumento declarado, esa limitación NO se declara", () => {
+    const r = conInstrumento("VERIFICADO");
+    if (typeof r === "string") throw new Error("debía haber veredicto");
+    expect(r.limitaciones).not.toContain("SIN_INSTRUMENTO_DECLARADO");
+  });
+});
