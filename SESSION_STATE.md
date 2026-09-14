@@ -38,6 +38,32 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-14 · El emplazamiento temporal, y la primera pregunta histórica del módulo
+
+Cierra el §9 del Anexo E (ADR-130). **Va después del traslado y no antes por una razón:**
+«las colmenas que estuvieron» es una pregunta sobre el pasado, y hasta `HivePlacement` el
+único camino de una colmena a su apiario decía dónde está **ahora**. Es la primera vez que el
+módulo contesta algo histórico.
+
+De las siete cosas del «al abrirlo», cuatro existían; faltaban cultivo, parcela, ventana de
+floración y colmenas comprometidas. **`bloomStartsAt` no es `startsAt`** —el servicio empieza
+cuando llegan las colmenas, la floración cuando la abre la planta— y sin esa separación la
+alerta del §9 no se puede dar.
+
+**Dos `CHECK` en la base**, probados en las dos direcciones: ventana invertida y colmenas
+negativas se rechazan; una ventana a medias entra. La invertida habría hecho que el aviso **no
+saliera nunca**.
+
+**De las dos alertas del §9, sólo una es nueva.** La de la aspersión ya existe desde ADR-127 y
+no se reimplementa.
+
+**`diasEfectivosDe` cuenta solape**, no duración: sumar colocaciones enteras inflaría la
+factura de un servicio de polinización.
+
+**Y Toabré es este mecanismo:** el propio §9 dice que allí el emplazamiento no tiene fecha de
+cierre, y el informe del 2 de septiembre confirma que es un servicio para un cliente —Kiva
+Estates, finca cafetera en Toabré, Penonomé, Coclé.
+
 ### 2026-09-14 · Los dos apiarios reales entran, y sólo en la copia local
 
 El dueño declaró el estado real: **dos apiarios, los dos de Néctar Nómada**. Rosina con 2
@@ -137,33 +163,6 @@ propio `disabled` **borraba la protección del doble toque en silencio** — le 
 guardia comparaba posiciones con `indexOf` y midió **un comentario**; se retiró.
 
 **Pendiente nombrado:** `createHive` no abre la colocación inicial de una colmena nueva.
-
-### 2026-09-14 · Los motores de beneficio llegan a la pantalla, y dicen qué no pueden ver
-
-`lib/beneficio/desdeElLote.ts` traduce nuestros registros al lenguaje de los
-motores. Su trabajo de verdad es **declarar lo intraducible** en vez de
-rellenarlo.
-
-**Tres cosas no existen aquí y ninguna se inventa.** El **perfil de protocolo**:
-el catálogo `grado_proceso` de Daniel y los cinco perfiles del paquete **no son
-los mismos cinco** — casan `Washed` y `Natural`; se quedan sin perfil los dos
-semi-lavados y el honey, y sin grado `ANAEROBIC_SHORT`, `CARBONIC_MACERATION` y
-**`COLD_HOLD_PREFERMENT`, que es CryoBloom**. Un lote sin perfil **no recibe los
-del lavado**. La **confianza** se deriva de la corrección y de
-`provenanceClass`. Y el **punto de muestreo** no existe: el guardia de series
-mezcladas de Brix **no puede disparar aquí**, y eso viaja hasta la pantalla.
-
-**La pantalla pregunta, no ordena** —hay un guardia que lo comprueba sobre el
-español— y **dice por qué no hay veredicto cuando no lo hay**: el tipo es
-`VeredictoDeFase | SinVeredicto`, no un opcional.
-
-**Lo que esto NO prueba.** Medido sobre la copia de producción: **0 recetas, 0
-objetivos, 0 procesos de lote, 0 fermentaciones**, y los 3 secados abiertos no
-cuelgan de ningún proceso. **Hoy ningún lote pintaría el bloque.** El camino lo
-ejercen 20 pruebas nuevas, no datos reales — el cuello de botella es la captura.
-
-**Pendiente de Daniel:** decir que un lote corre CryoBloom **es un cambio de
-esquema** y se propone aparte.
 
 ## 3. Bloqueado, y en qué
 
