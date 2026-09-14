@@ -212,6 +212,7 @@ model UserAccount {
   labourEntriesCreated              LabourEntry[]                @relation("LabourEntryCreatedBy")
   materialConsumptionEntriesCreated MaterialConsumptionEntry[]   @relation("MaterialConsumptionEntryCreatedBy")
   hivesCreated                      Hive[]                       @relation("HiveCreatedBy")
+  hivePlacementsCreated             HivePlacement[]              @relation("HivePlacementCreatedBy")
   coloniesCreated                   Colony[]                     @relation("ColonyCreatedBy")
   colonyLossCausesCreated           ColonyLossCause[]            @relation("ColonyLossCauseCreatedBy")
   inspectionsCreated                Inspection[]                 @relation("InspectionCreatedBy")
@@ -740,6 +741,7 @@ model Location {
   storageAssignments          StorageAssignment[]
   pollinationCommitments      PollinationCommitment[]
   hives                       Hive[]
+  hivePlacements              HivePlacement[]
   specimens                   Specimen[]
   plantingEvents              PlantingEvent[]
   plantingCohorts             PlantingCohort[]
@@ -5186,13 +5188,80 @@ model Hive {
   createdBy   String?      @map("created_by") @db.Uuid
   creator     UserAccount? @relation("HiveCreatedBy", fields: [createdBy], references: [id])
 
-  colonies Colony[]
-  assets   Asset[]
+  colonies   Colony[]
+  assets     Asset[]
+  placements HivePlacement[]
 
   @@unique([locationId, identifier])
   @@index([locationId])
   @@index([projectId])
   @@map("hive")
+  @@schema("apiary")
+}
+
+/// Dónde ha estado una colmena, y desde cuándo. **Anexo E §8.**
+///
+/// **Por qué existe.** `Hive.locationId` guarda el apiario **actual** y nada más, así que
+/// hasta ahora mover una colmena habría reescrito su pasado: ni `Inspection`, ni
+/// `ColonyEvent`, ni `ApiaryHarvestEvent`, ni `VarroaCount` guardan un `location_id`
+/// propio —medido: cero en los cuatro, contra dos en `Lot`—, así que el ÚNICO camino de
+/// un evento a su apiario es el puntero actual de la colmena. Cambiarlo movía la historia
+/// entera con él.
+///
+/// **Es el mismo patrón que `StorageAssignment`, a propósito**: un lote ya se mueve entre
+/// ubicaciones así, con `startedAt`/`endedAt` y `null` por «la de ahora». Inventar una
+/// segunda forma para el mismo hecho —una cosa que está en un sitio durante un rato— daría
+/// dos vocabularios que derivan.
+///
+/// **Lo que NO hace: sustituir a `Hive.locationId`.** Ese campo es el ancla de
+/// autorización —`requireApiaryAccess` lo usa en ocho sitios de `lib/apiary/`— y también
+/// lo que hace cumplir `@@unique([locationId, identifier])`. La invariante es que el
+/// `locationId` de la colmena coincide con el de su colocación abierta, y el traslado
+/// mueve las dos cosas en la misma transacción.
+model HivePlacement {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hiveId     String   @map("hive_id") @db.Uuid
+  hive       Hive     @relation(fields: [hiveId], references: [id])
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id])
+
+  startedAt DateTime  @map("started_at")
+  /// `null` = la colocación vigente. Igual que `StorageAssignment.endedAt`.
+  endedAt   DateTime? @map("ended_at")
+
+  /// Por qué se movió. El Anexo E §8 fija cuatro motivos y no son un enum del esquema
+  /// todavía: la primera colocación de cada colmena —la que crea el relleno— no tiene
+  /// motivo ninguno, y un enum obligatorio pediría inventarle uno.
+  reason String?
+
+  /// Si se cerraron las piqueras para el viaje. **Se guarda porque es evidencia, no una
+  /// casilla de trámite**: explica una colonia que llega mermada o estresada, y sin el
+  /// dato esa merma no tiene causa candidata.
+  ///
+  /// Anulable, y son tres estados como manda ADR-080: `null` es «no se anotó», y no es lo
+  /// mismo que `false` —«se viajó con las piqueras abiertas»—. La colocación del relleno
+  /// lo tiene `null` porque no hubo viaje.
+  entrancesClosed Boolean? @map("entrances_closed")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("HivePlacementCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([hiveId])
+  @@index([locationId])
+  /// **Aquí NO va un `@@unique([hiveId, endedAt])`, y conviene decir por qué**: en
+  /// Postgres los `NULL` son distintos entre sí en un índice único, así que dos
+  /// colocaciones abiertas —las dos con `ended_at` nulo— **pasarían**. Medido el
+  /// 2026-09-13 contra Postgres 18.6, con control positivo: el mismo índice rechazó la
+  /// fila duplicada con valor (sobrevivió 1 de 2 inserciones) y admitió **las dos** con
+  /// `NULL`. Habría sido una restricción que se lee como estructural y no existe para la
+  /// base, que es el defecto que este repositorio ya pagó tres veces en un día.
+  ///
+  /// «Una colmena en un solo sitio» lo sostiene **el servicio**, en una transacción, y lo
+  /// defiende su prueba. Un índice único parcial —`where ended_at is null`— sí lo haría,
+  /// pero Prisma no lo expresa y meterlo como SQL suelto crearía la deriva que ADR-120
+  /// cerró. `StorageAssignment`, que es el mismo patrón, tampoco lo tiene.
+  @@map("hive_placement")
   @@schema("apiary")
 }
 

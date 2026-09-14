@@ -27,11 +27,23 @@ import { useFormStatus } from "react-dom";
 export function BotonDeEnvio({
   children,
   className = "nn-button",
+  disabled,
   ...resto
 }: React.ComponentPropsWithoutRef<"button">) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" className={className} disabled={pending} {...resto}>
+    // `disabled` se SACA de `resto` y se combina, no se deja pasar detrás.
+    //
+    // **Era un defecto real, medido el 2026-09-13.** Con `disabled={pending} {...resto}`,
+    // un llamador que pasara su propio `disabled` lo sobrescribía y **perdía la protección
+    // del doble toque sin que nada lo dijera** — el botón parecía protegido porque usaba
+    // este componente. Le pasaba a `app/sensory/[sessionId]/page.tsx`, que pasa
+    // `disabled={...assessments.length === 0}`: con una evaluación en la lista, ese botón
+    // se podía pulsar dos veces. Lo destapó `envio-sin-doble-toque` al rechazar un botón
+    // nuevo, no una lectura de este archivo.
+    //
+    // Lo vigila el `it` «el propio botón combina el disabled del llamador» de ese guardia.
+    <button type="submit" className={className} disabled={pending || disabled} {...resto}>
       {children}
     </button>
   );

@@ -15,6 +15,8 @@ import { confirmarCoordenadasAction } from "../../actions/traceability";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
 import { Ayuda } from "../../components/apiary/Ayuda";
+import { TrasladoForm } from "../../components/apiary/TrasladoForm";
+import { destinosCandidatos } from "../../../lib/apiary/traslado";
 import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 import { FieldSessionStartForm } from "../../components/traceability/FieldSessionForms";
@@ -44,6 +46,15 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   // 2026-09-11 porque el repositorio no define ninguna temporada, y un año
   // natural deja el reporte casi vacío cada enero.
   const ahora = new Date();
+  // Anexo E §8: los apiarios de la MISMA organización, porque un traslado entre dueños no
+  // es un traslado sino una venta, y eso no es este formulario. Si la ubicación no declara
+  // organización la lista sale vacía y el formulario no se pinta — que es lo correcto: sin
+  // saber de quién es el sitio no hay a dónde mover. Reusa el `ahora` de aquí abajo en vez
+  // de declarar un segundo: dos relojes en la misma página pueden dar días distintos a
+  // medianoche.
+  const destinos = apiary.organizationId
+    ? await destinosCandidatos(apiary.organizationId, apiary.id, ahora)
+    : [];
   const haceUnAno = new Date(ahora.getFullYear() - 1, ahora.getMonth(), ahora.getDate());
   const irregularidades = await coloniasPorIrregularidad(id, haceUnAno, ahora);
   // A9 · Anexo B §2.2 — el aviso de enjambrazón. Ventana más corta que la de las
@@ -351,6 +362,28 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
             ))}
           </div>
         )}
+
+        {/* Anexo E §8 — el traslado, colapsado y debajo del inventario: es una operación
+            de día de carga, no de cada visita. Sólo aparece si hay colmenas que mover Y
+            algún apiario a donde moverlas; un formulario que no puede hacer nada es peor
+            que su ausencia. */}
+        {apiary.hives.length > 0 && destinos.length > 0 ? (
+          <details className="nn-traslado">
+            <summary>{t("trasladoHeading")}</summary>
+            <TrasladoForm
+              apiaryId={apiary.id}
+              apiaryNombre={apiary.name}
+              colmenasEnOrigen={apiary.hives.length}
+              colmenas={apiary.hives.map((h) => ({
+                id: h.id,
+                identifier: h.identifier,
+                poblada: h.colonies.some((c) => c.status === "active"),
+              }))}
+              destinos={destinos}
+              hoy={ahora.toISOString().slice(0, 10)}
+            />
+          </details>
+        ) : null}
       </section>
 
       {/* A9.2 — la visita, antes que las colmenas: es lo que agrupa el trabajo

@@ -14,6 +14,7 @@ import {
 } from "../../lib/apiary/hives";
 import { completarCierreDeTratamiento } from "../../lib/apiary/cierreDeEvento";
 import { actualizarConfiguracionDeCaja } from "../../lib/apiary/configuracionDeCaja";
+import { trasladarColmenas } from "../../lib/apiary/traslado";
 import { completarCierreDeCosecha } from "../../lib/apiary/cierreDeCosecha";
 import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
@@ -293,4 +294,52 @@ export async function completarCierreDeCosechaFormAction(formData: FormData): Pr
   });
 
   revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+}
+
+/**
+ * A9 · Anexo E §8 — trasladar un grupo de colmenas a otro apiario.
+ *
+ * **Acción de servidor y no cola offline**, y la razón es la del propio Anexo: el traslado
+ * *«cierra la vigencia de cada colmena en el apiario de origen y abre la del destino en la
+ * misma operación»*. Eso es una transacción sobre varias filas; encolarlo sin señal
+ * dejaría un lote de mutaciones que, aplicadas a medias, es exactamente lo que la regla
+ * prohíbe —una colmena en dos lugares, o en ninguno—. Cargar el camión es además la parte
+ * del trabajo en la que hay tiempo de esperar un guardado.
+ *
+ * **La fecha es de DÍA.** El Anexo la enseña como «13 sep 2026», el campo es
+ * `type="date"` y se parsea con `fechaDeDia`, que la deja a medianoche UTC. Tratarla como
+ * instante es el fallo de ADR-112.
+ *
+ * **Revalida los dos apiarios**, no sólo el de origen: el destino acaba de cambiar de
+ * conteo y su ficha lo enseña.
+ */
+export async function trasladarColmenasFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const origenId = String(formData.get("apiaryId") ?? "");
+  const destinoId = String(formData.get("destinationLocationId") ?? "");
+  const hiveIds = formData.getAll("hiveIds").map((v) => String(v)).filter((v) => v.length > 0);
+
+  const fecha = fechaDeDia(String(formData.get("occurredAt") ?? ""), "occurredAt");
+  if (!fecha) {
+    const t = await getTranslations("Apiary");
+    throw new Error(t("trasladoFechaRequerida"));
+  }
+
+  // Tres estados y no un booleano: `null` es «no se anotó», que no es lo mismo que «se
+  // viajó con las piqueras abiertas» (ADR-080). El formulario manda "si", "no" o nada.
+  const piqueras = String(formData.get("entrancesClosed") ?? "");
+  const entrancesClosed = piqueras === "si" ? true : piqueras === "no" ? false : null;
+
+  await trasladarColmenas(user.userAccountId, {
+    hiveIds,
+    destinationLocationId: destinoId,
+    occurredAt: fecha,
+    reason: String(formData.get("reason") ?? ""),
+    entrancesClosed,
+  });
+
+  revalidatePath(`/apiaries/${origenId}`);
+  revalidatePath(`/apiaries/${destinoId}`);
 }

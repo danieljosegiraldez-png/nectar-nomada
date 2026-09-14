@@ -8897,3 +8897,105 @@ opción tumba «ninguna opción vacía lleva texto» y «"Sin registrar" no se u
 de opción»; devolver un «— elegir —» al namespace tumba «ningún texto de apiario dice
 "elegir"»; hacer que cero cuente como vacío tumba «cero y false están ANOTADOS» y, de
 paso, la de `NaN`, porque `-0 === 0` y su control de `-0` también lo caza.
+
+## ADR-126 — El traslado de colmenas: la primera rebanada de A9 cuyo hueco era de esquema, y tres restricciones que no eran lo que parecían
+
+**Contexto.** El Anexo E §8 pide *«mover un grupo de colmenas de un apiario a otro en un
+solo gesto»* con una regla que no admite medias tintas: *«El traslado cierra la vigencia de
+cada colmena en el apiario de origen y abre la del destino en la misma operación. Nunca
+deja una colmena en dos lugares ni en ninguno.»*
+
+**La medición que decide la forma, y que invierte el hallazgo de la semana.** ADR-118,
+ADR-122 y ADR-123 encontraron tres veces lo mismo: un mecanismo completo al que ninguna
+pantalla llegaba. Aquí es al revés. `Inspection`, `ColonyEvent`, `ApiaryHarvestEvent` y
+`VarroaCount` **no tienen `location_id` propio** —cero en los cuatro, contra dos en `Lot`
+como control positivo—, así que el único camino de un evento a su apiario era
+`hive.location_id`. Mover la colmena habría movido su historia entera: las inspecciones de
+marzo en Santa Fe se leerían como hechas en el destino. **Eso no es una pantalla que falte;
+es un hecho que no se puede escribir.**
+
+**Decisión 1 — `HivePlacement`, con el patrón que la casa ya usa.** `hiveId` + `locationId`
++ `startedAt` + `endedAt` (`null` = vigente), que es exactamente
+`traceability.storage_assignment`: un lote ya se mueve entre ubicaciones así. Inventar una
+segunda forma para el mismo hecho —una cosa que está en un sitio durante un rato— daría dos
+vocabularios que derivan.
+
+**Decisión 2 — `hive.locationId` NO se sustituye.** Es el ancla de autorización
+—`requireApiaryAccess` lo usa en ocho sitios de `lib/apiary/`— y lo que hace cumplir
+`@@unique([locationId, identifier])`. La invariante es que coincide con la colocación
+abierta, y el traslado mueve las dos cosas en la misma transacción.
+
+**Decisión 3 — la migración RELLENA.** Sin eso la tabla nace diciendo que ninguna colmena
+ha estado en ningún sitio, y toda consulta por fecha devolvería vacío para la historia
+existente — una ausencia que se leería como «no se sabe» cuando el dato sí está.
+`started_at` sale de `installed_at` si existe y de `created_at` si no; `reason` queda
+`NULL`, porque los cuatro motivos del Anexo describen traslados y ninguno describe «aquí es
+donde estaba cuando empezamos a registrarlo».
+
+**Decisión 4 — el aviso del destino se construye a medias, y la otra mitad se DECLARA.** El
+Anexo pide advertir *«si el destino tiene aplicaciones previstas o un periodo de carencia
+corriendo»*. La carencia se avisa con sus días. Las aspersiones **no existen en el sistema**
+—buscado `vecin|neighbour|aspersion|spray` en el esquema y en `lib/apiary/`: cero, con
+`carencia|Withdrawal` dando diez como control positivo—; es el mismo hueco que el §4 pide
+como «Consulta a fincas vecinas». Por eso `avisosDeDestino` devuelve
+`aspersionesConsultadas: false` y la pantalla dice **que nadie lo ha preguntado**. Un aviso
+vacío habría significado «el destino está limpio», que es ADR-080 leído del revés.
+
+### Las tres restricciones que no eran lo que parecían
+
+**1. `@@unique([hiveId, endedAt])` no habría guardado nada.** En Postgres los `NULL` son
+distintos entre sí en un índice único, así que dos colocaciones abiertas pasarían. **Medido
+el 2026-09-13 contra Postgres 18.6, con control positivo**: el mismo índice rechazó la fila
+duplicada con valor —sobrevivió 1 de 2 inserciones— y admitió **las dos** con `NULL`. Habría
+sido una restricción que se lee como estructural y no existe para la base: el defecto que
+esta casa ya pagó tres veces en un día. Un índice único **parcial** sí lo haría, pero Prisma
+no lo expresa y meterlo como SQL suelto crearía la deriva que ADR-120 cerró. La invariante
+la sostiene el servicio y la defiende el flip-test (quitar el cierre del origen tumba dos
+pruebas por su nombre). `StorageAssignment`, que es el mismo patrón, tampoco lo tiene.
+
+**2. Mi compuerta del destino negaba el caso normal.** La escribí como
+`requireApiaryAccess(..., [{ locationId: destino }])`. `apiaryScopeTargetsFor` genera un
+objetivo **por cada campo que recibe**, así que eso probaba únicamente el ámbito `location`
+— y un Farm Operator asignado por **proyecto**, que es cómo están asignados los perfiles de
+esta casa, habría sido **rechazado** al trasladar entre dos apiarios de su propio proyecto.
+Una compuerta que niega el caso normal se quita a la semana. Lo dijo **leer
+`requireApiaryAccess`**, no una corrida. Y el límite queda escrito: para quien está asignado
+por proyecto las dos llamadas pasan por el mismo objetivo y la segunda no añade nada.
+
+**3. La aritmética de la carencia estaba duplicada.** `destinosCandidatos` resuelve la lista
+de destinos en tres consultas en vez de un N+1, y para eso **copié** la cuenta de
+`carenciasVigentes`. Se extrajo a `libreDesdeDe` y `diasQueFaltanDe`, puras y exportadas en
+`carencia.ts`, y las usan las dos. Dos copias de la misma cuenta acaban diciendo cosas
+distintas del mismo apiario.
+
+### Un defecto ajeno, encontrado porque un guardia rechazó código nuevo
+
+`BotonDeEnvio` hacía `disabled={pending} {...resto}`. Un llamador que pasara su propio
+`disabled` lo **sobrescribía y perdía la protección del doble toque sin que nada lo dijera**
+— el botón parecía protegido porque usaba el componente compartido. Le pasaba a
+`app/sensory/[sessionId]/page.tsx`, que pasa `disabled={...assessments.length === 0}`: con
+una evaluación en la lista, ese botón se podía pulsar dos veces, y
+`MaterialConsumptionEntry` y compañía no tienen índice único que rechace el duplicado.
+Arreglado combinando, con guardia nuevo de dos aserciones.
+
+**Y el instrumento de ese guardia falló primero.** Mi primera versión comparaba posiciones
+—«el spread va después del `disabled` combinado»— con `indexOf`, y encontró **la mención en
+un comentario de ese mismo archivo**, no el JSX. Era la medición leyendo prosa. La aserción
+era además redundante: con `disabled` desestructurado ya no viaja dentro de `resto` y el
+orden deja de importar. Se retiró, y la retirada está explicada en el archivo para que nadie
+la reponga.
+
+**Lo que dejo nombrado y sin hacer:** `createHive` **no abre la colocación inicial** de una
+colmena nueva. El relleno de la migración cubre las que ya existían; las que se creen desde
+hoy quedan sin fila en `hive_placement` hasta que se trasladen, y su prueba lo abre a mano.
+No entra aquí porque tocar `createHive` es cambiar el alta de colmenas, con su propia
+autorización y sus propias pruebas, y esta rebanada ya trae dos migraciones.
+
+**Cuatro guardias de la casa cazaron este cambio, y los cuatro tenían razón:**
+`cliente-sin-prisma` —un valor importado de un módulo con `prisma` desde un `"use client"`,
+la **cuarta** vez que el módulo apícola necesita este reparto, de ahí
+`motivoDeTraslado.ts`—, `envio-sin-doble-toque`, `acceso-a-datos` —una operación y cinco
+lectores sin inventariar, y después una entrada **muerta** cuando quité un export
+especulativo— y `cifras-del-inventario`: 299→305 operaciones y 91→92 archivos, un delta que
+cuadra exactamente con lo añadido, que es la comprobación de que nada más entró sin pasar
+por el inventario.
