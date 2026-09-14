@@ -13,6 +13,9 @@ import {
 import { puedeGestionarAtributosDeUbicacion } from "../../../lib/traceability/locations";
 import { computeCurrentQuantity } from "../../../lib/traceability/quantity";
 import { nextActionFor, type BatchAction } from "../../../lib/traceability/batchActions";
+import { veredictoDelLote } from "../../../lib/beneficio/desdeElLote";
+import { listarProcesosDeLote } from "../../../lib/traceability/lotProcess";
+import { VeredictoDeBeneficio } from "../../components/traceability/VeredictoDeBeneficio";
 import { compareRunToTargets } from "../../../lib/traceability/processTargets";
 import { TargetComparisonTable } from "../../components/traceability/TargetComparisonTable";
 import { getSignedUrlForAsset } from "../../../lib/traceability/media";
@@ -177,6 +180,40 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   const targetRows = activeFermentation
     ? await compareRunToTargets(user.userAccountId, activeFermentation.id)
     : [];
+
+  /**
+   * **El veredicto de los motores de beneficio para la fase abierta.**
+   *
+   * Se calcula aquí y no dentro del componente porque lee la base: el grado de
+   * proceso vive en `LotProcess`, y los motores son puros a propósito.
+   *
+   * **Puede devolver una razón en vez de un veredicto**, y eso se pinta igual de
+   * explícito: «este lote no declara qué protocolo corre» y «este lote va bien»
+   * son hechos distintos. Ver `lib/beneficio/desdeElLote.ts`.
+   */
+  const faseAbierta = activeFermentation
+    ? { tipo: "fermentacion" as const, iniciadaEn: activeFermentation.startedAt }
+    : activeDrying
+      ? { tipo: "secado" as const, iniciadaEn: activeDrying.startedAt }
+      : null;
+  const procesos = faseAbierta ? await listarProcesosDeLote(user.userAccountId, lot.id) : [];
+  const procesoAbierto = procesos.find((pr) => pr.endedAt === null) ?? null;
+  const veredicto = faseAbierta
+    ? veredictoDelLote({
+        fase: faseAbierta,
+        gradoDeProceso: procesoAbierto?.processGradeValue?.value ?? null,
+        // La corrección supersede a la original, y el puente la excluye del
+        // cálculo. El conjunto ya está resuelto arriba, sin otra consulta.
+        mediciones: measurements.map((m) => ({
+          variable: m.variable,
+          value: m.value.toNumber(),
+          occurredAt: m.occurredAt,
+          provenanceClass: String(m.provenanceClass),
+          fueCorregida: supersededMeasurementIds.has(m.id),
+        })),
+        ahora: new Date(),
+      })
+    : null;
 
   // P3 §6 — the selection form is offered for cherry that is not already in a
   // run. A batch mid-fermentation is not waiting to be sorted, and a lot that
@@ -618,6 +655,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
 
       <section className="nn-section">
         <h2>{t("processingHeading")}</h2>
+        {veredicto ? <VeredictoDeBeneficio veredicto={veredicto} /> : null}
         {activeFermentation ? (
           <div className="nn-card" style={{ maxWidth: "none", marginBottom: "1rem" }}>
             <h3 style={{ margin: 0 }}>{t("activeFermentationHeading")}</h3>
