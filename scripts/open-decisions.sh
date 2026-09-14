@@ -72,6 +72,28 @@ probar "P-B" "www.nectarnomada.com expone el OS (/login, /signup) en la URL de m
    [ -n "$cuerpo" ] || exit 2;
    printf "%s" "$cuerpo" | grep -q "href=\"/login\""'
 
+# P-F · Tres guías de proceso -pH, Brix, subproductos- entraron el 2026-09-13 en
+# docs/dominio/ redactadas por un modelo a partir de indicaciones de Daniel y SIN
+# que él las repase. Traen matrices de umbrales con pinta de norma y frases como
+# "PELIGRO: lave el café de inmediato". Mientras sigan sin revisar, ninguna
+# alerta ni validación del software puede apoyarse en ellas (CLAUDE.md §32), así
+# que la decisión no es técnica: es que Daniel las lea y diga cuáles respalda.
+#
+# Se mira la LÍNEA DE ESTADO y no la frase suelta. La primera versión buscaba
+# "pendiente de revisi" en todo el archivo y la encontraba SIEMPRE, porque la
+# propia cabecera explica qué no puede hacer un borrador usando esas palabras:
+# P-F no habría podido cerrarse nunca, ni después de que Daniel los aprobara. Lo
+# cazó el flip-test de la dirección contraria, no leer el código.
+#
+# La carpeta AUSENTE sale 2 y no 1, a propósito. Cerrar por ausencia es el error
+# que P-A cometió: una prueba que se apaga sola cuando desaparece aquello que
+# vigila informa de "resuelto" cuando lo que hay es "ya no miro".
+probar "P-F" "Revisar las guías de docs/dominio (hoy: borrador de IA sin revisar)" \
+  '[ -d docs/dominio ] || exit 2;
+   docs=$(ls docs/dominio/*.md 2>/dev/null | grep -v README.md);
+   [ -n "$docs" ] || exit 2;
+   grep -lq "^  estado    : borrador" $docs 2>/dev/null && exit 0 || exit 1'
+
 # P-C · Casi nadie en la base tiene correo, y sin correo no hay contraseña.
 # Quién recibe acceso es decisión del dueño, no del sistema. Sin artefacto
 # propio: aterriza como ADR en docs/architecture/DECISIONS.md con esa frase.
