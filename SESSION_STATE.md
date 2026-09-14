@@ -184,35 +184,6 @@ migración no tuvo deriva que excluir**, que es lo que compró ADR-120 ayer.
 **Desde hoy la compuerta incluye `npm run build`:** `verify` no construye, y eso es
 lo único que ve la clase de defecto que rompió producción esta tarde.
 
-### 2026-09-13 · Vercel saltaba el build de cada PR, y por eso producción se rompió
-
-**La #288 llegó a `main` sin que nada hubiera construido su código.** Rompió el
-build —`ColonyEventQuickEntry` es `"use client"` e importaba un valor de un módulo
-que llega a `prisma`, así que `pg` acabó en el paquete del navegador— y el sitio
-sirvió **un build viejo durante una hora**.
-
-**Por qué nadie lo vio, y es lo que hay que recordar.**
-`scripts/solo-documentacion.sh` deducía la base como `HEAD^`. Eso es verdad en
-GitHub Actions —que saca el commit de **fusión** de la PR— y **falso en Vercel, que
-saca el commit de la rama**. Como cada PR de aquí termina con un commit de estado
-(sólo documentación), el rango decía «sólo docs» y Vercel **saltaba el build**,
-reportando `success — Canceled by Ignored Build Step`. Medido: **#283, #284, #286 y
-#288 dijeron eso**, ninguna construyó su preview, y yo reporté «Vercel: success»
-cuatro veces. **Un `success` que significa «no miré» es peor que un rojo**, y es la
-misma familia que el `cancelled` de las compuertas.
-
-**Tres arreglos, cada uno con su guardia:**
-
-- El reparto puro/consulta que ya existía en `infestacion.ts` y `alimentacion.ts` y
-  a la tercera olvidé: ahora `vocabularioDeTratamiento.ts`. Lo caza
-  `tests/arquitectura/cliente-sin-prisma.test.ts`, con cierre **transitivo** y
-  distinguiendo **valor de tipo** — de ocho pares cliente→prisma, siete son
-  `import type` y están bien.
-- La base se deduce distinguiendo el caso y **se imprime**; ante la duda, construye.
-  Con pruebas, que no tenía: `tests/soloDocumentacion.test.ts`.
-- `npm run verify` **no construye**. Desde hoy, `npm run build` antes de empujar:
-  es lo único que ve esta clase de defecto, como el `"use server"` de septiembre.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
