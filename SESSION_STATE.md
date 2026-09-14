@@ -37,6 +37,32 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-13 · Completar no es corregir, y con eso el apiario ya puede cerrar
+
+`lib/apiary/` **no tenía una sola función de actualización**, y por eso los dos campos
+de etapa cierre del Anexo B §4 no podían existir sin ser columnas que nadie pudiera
+rellenar — lo que ya costó una semana con `coverage_until`.
+`PENDING_IMPLEMENTATIONS/011` queda cerrado. ADR-121.
+
+**La decisión es toda ésta:** **completar** un hecho que siempre iba a llegar después
+—el retiro de una tira, semanas más tarde— **no lleva razón ni plazo**; **corregir**
+algo ya escrito **sí**, con el valor anterior en `before` y una operación de audit
+distinta. Pedir razón para el curso normal del trabajo enseñaría a escribir «.».
+
+**`sourceInterface = "apiary.close"`**, el vocabulario que trazabilidad ya tenía: «se
+anotó en el campo» y «se completó en la casa» se distinguen leyendo la fila. De ahí
+que ésta sea **la única escritura del apiario que no pasa por la cola offline**.
+
+**Lo que NO deja tocar:** producto, lote, dosis, carencia y objetivo. Si estuvieran
+mal, corresponde un evento nuevo, no reescribir la evidencia de aquel día.
+
+Y dos cosas que salieron gratis por decisiones viejas: **`leerEnmiendas` no hubo que
+tocarlo** —el audit del apiario ya escribía `entityType: "colony_event"`— y **esta
+migración no tuvo deriva que excluir**, que es lo que compró ADR-120 ayer.
+
+**Desde hoy la compuerta incluye `npm run build`:** `verify` no construye, y eso es
+lo único que ve la clase de defecto que rompió producción esta tarde.
+
 ### 2026-09-13 · Vercel saltaba el build de cada PR, y por eso producción se rompió
 
 **La #288 llegó a `main` sin que nada hubiera construido su código.** Rompió el
@@ -146,56 +172,6 @@ lo convierte con `fechaDeDia`, que **falla** en vez de dejar que `new Date()`
 adivine. Cuatro flip-tests, los cuatro compilando y cada uno con su prueba.
 
 **Lo que NO prueba:** nadie ha registrado un «alcanza hasta» todavía.
-### 2026-09-13 · Una receta ya puede decir cada cuánto medir y cuánto debe durar
-
-Auditando la pantalla de lotes, Daniel decidió que la urgencia —«a cuál le toca
-algo ahora»— **sale de la receta**. No se podía calcular: `ProcessTarget` decía a
-qué valores llegar y **ningún ritmo**.
-
-**Tres de las cuatro cosas que describió ya existían**, y por eso el cambio es
-pequeño. Su frase: «una receta requiere un ritmo de medición y tiene un indicador
-target de dónde comenzar y terminar, y un +/- rango». `targetValue` es el
-objetivo, `minValue`/`maxValue` el rango, y `moment` (initial|during|final)
-distingue el inicio del final con una fila cada uno. **Faltaba sólo el ritmo.**
-
-**Dos números y no uno:** `every_hours` dice si el batch te **debe una lectura**;
-`expected_hours` dice si **va tarde**. Un batch puede ir en hora y deberte una
-medición, y al revés. Meterlos en una columna obligaría a elegir qué pregunta se
-puede contestar.
-
-**`null` no es `false`, y ahí está el diseño.** `estadoDeRitmo` devuelve
-`demora: true | false | null` — «no se sabe» y «va bien» son hechos distintos, y
-confundirlos haría que un lote sin receta pareciera puntual. Un batch sin ritmo
-declarado puntúa **0** en urgencia: no se le inventa la que la receta no declara.
-
-**Una regla que se rechaza en vez de guardarse:** `every_hours` sólo tiene
-sentido con `moment: during`. Un objetivo inicial ocurre una vez, y pedirle «cada
-6 h» es una contradicción. Vive en `validateTargets` —donde ADR-102 puso todas
-las reglas juntas— y **no en la base**: se dice en vez de llamarlo estructural.
-
-**Doce pruebas con entrada hostil**, incluidas fase y lectura en el futuro, que
-se rechazan porque devolver horas negativas colaría el lote al principio de la
-cola como «lo más reciente».
-
-**Lo que NO hace:** ninguna pantalla lo usa todavía. El ritmo se puede declarar y
-la urgencia se puede calcular; ordenar la lista es el paso siguiente.
-
-**Y el fallo de verdad lo encontró Codex, no nosotros.** Hay **dos** caminos que
-escriben objetivos —crear receta y publicar una **versión**— y sólo se cerró uno:
-`createRecipeVersion` no persistía `everyHours` ni aceptaba `expectedHours`, así
-que **publicar la v2 le borraba el ritmo a la receta en silencio**. Pérdida de
-dato sin aviso, en trazabilidad. El patrón —añadir un campo y cerrar una sola de
-sus puertas— se cometió tres veces el mismo día.
-
-Por eso queda `tests/arquitectura/campos-con-dos-puertas.test.ts`: lee los campos
-que `CreateRecipeInput` declara y exige que cada uno aparezca en el parseo, en
-**los dos** servicios y en **los dos** formularios. Lleva control positivo de su
-propio parseo —afirma cuántos campos encontró— porque un guardia que lee la
-fuente con regex se queda ciego en silencio cuando el archivo cambia de forma.
-Flip-test de las tres: reintroducir el fallo de Codex, quitar el campo del
-formulario de versión y romper el contrato hacen caer **cada uno a su prueba por
-nombre**, las tres mutaciones compilando.
-
 ## 3. Bloqueado, y en qué
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
