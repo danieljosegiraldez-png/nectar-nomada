@@ -3090,3 +3090,29 @@ producción lo recibe en el próximo despliegue sin tocar Neon.
 en dic-2025, 12 perdidas en marzo, «las últimas 2» a final de agosto —12+2=14 de 15—, más un
 enjambre que ocupó Finca 2 de abril a julio y 3 nuevas de Chayanne. Falta la colmena que no
 cuadra, el reparto entre Finca 1 y Finca 2, y las causas.
+
+### 2026-09-14 · El emplazamiento temporal, y la primera pregunta histórica del módulo
+
+Cierra el §9 del Anexo E (ADR-130). **Va después del traslado y no antes por una razón:**
+«las colmenas que estuvieron» es una pregunta sobre el pasado, y hasta `HivePlacement` el
+único camino de una colmena a su apiario decía dónde está **ahora**. Es la primera vez que el
+módulo contesta algo histórico.
+
+De las siete cosas del «al abrirlo», cuatro existían; faltaban cultivo, parcela, ventana de
+floración y colmenas comprometidas. **`bloomStartsAt` no es `startsAt`** —el servicio empieza
+cuando llegan las colmenas, la floración cuando la abre la planta— y sin esa separación la
+alerta del §9 no se puede dar.
+
+**Dos `CHECK` en la base**, probados en las dos direcciones: ventana invertida y colmenas
+negativas se rechazan; una ventana a medias entra. La invertida habría hecho que el aviso **no
+saliera nunca**.
+
+**De las dos alertas del §9, sólo una es nueva.** La de la aspersión ya existe desde ADR-127 y
+no se reimplementa.
+
+**`diasEfectivosDe` cuenta solape**, no duración: sumar colocaciones enteras inflaría la
+factura de un servicio de polinización.
+
+**Y Toabré es este mecanismo:** el propio §9 dice que allí el emplazamiento no tiene fecha de
+cierre, y el informe del 2 de septiembre confirma que es un servicio para un cliente —Kiva
+Estates, finca cafetera en Toabré, Penonomé, Coclé.

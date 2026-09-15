@@ -38,6 +38,32 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-14 · La app entra en la jornada abierta, y la vuelta mandaba al apiario a las parcelas
+
+Primera mitad del Anexo E §1 (ADR-132). **El defecto no se razonó, se midió:**
+`app/field-sessions/[id]` se enlazaba de vuelta a `/plots/<id>` **siempre**, así que una
+jornada de apiario mandaba a la pantalla de **parcelas de café** — desde la jornada abierta no
+había forma de llegar a las colmenas, o sea que el «toque 1 → colmena» del §1 estaba roto
+antes de empezar. La consulta **ya traía `locationType`**: el arreglo no cuesta una consulta.
+
+**Una jornada abierta gana a la prioridad por permisos** en `/start` (ADR-082 sólo miraba
+permisos). La consecuencia se dice en vez de esconderse: una cuenta con permisos de plataforma
+y una jornada abierta aterriza **en la jornada**, no en su tablero; es lo que el Anexo pide, y
+el banner de ADR-131 deja ver siempre que hay una abierta. Hay una prueba de ese caso con
+nombre.
+
+**Todo lo que no es `apiary_site` sigue cayendo en `/plots`**, que es lo que hacía antes: no se
+inventa una ruta para `site` ni `locality` porque no existen como pantalla, y la prueba recorre
+los seis tipos.
+
+**Las dos decisiones son puras** y se prueban sin base. Flip-test de las dos, compilando y
+cayendo por su nombre.
+
+**Pendiente nombrado, y es la otra mitad del §1:** «toque 2 → tipo de evento» con el formulario
+ya resuelto. Es ergonomía que **sólo se juzga con el teléfono en la mano y el guante puesto**, y
+no se rediseña a ciegas. Lo medido para que nadie empiece de cero: la ficha del apiario tiene
+**tres `<details>`** que hay que abrir, y la de la colmena ninguno.
+
 ### 2026-09-14 · La jornada abierta se ve en todas las pantallas, y se reclama al día
 
 Cierra las dos frases del Anexo E §5 que el código no cumplía (ADR-131). Medido:
@@ -104,32 +130,6 @@ hoy sólo lo tiene Platform Admin—; el resolvedor de permisos **sólo sabe sum
 personalizar por usuario no es una pantalla que falte sino un concepto que no tiene; y las
 vistas 2 y 3 de disponibilidad necesitan capacidad en `equipment` y un concepto de cosecha
 **planificada**, que `HarvestEvent` no tiene.
-
-### 2026-09-14 · El emplazamiento temporal, y la primera pregunta histórica del módulo
-
-Cierra el §9 del Anexo E (ADR-130). **Va después del traslado y no antes por una razón:**
-«las colmenas que estuvieron» es una pregunta sobre el pasado, y hasta `HivePlacement` el
-único camino de una colmena a su apiario decía dónde está **ahora**. Es la primera vez que el
-módulo contesta algo histórico.
-
-De las siete cosas del «al abrirlo», cuatro existían; faltaban cultivo, parcela, ventana de
-floración y colmenas comprometidas. **`bloomStartsAt` no es `startsAt`** —el servicio empieza
-cuando llegan las colmenas, la floración cuando la abre la planta— y sin esa separación la
-alerta del §9 no se puede dar.
-
-**Dos `CHECK` en la base**, probados en las dos direcciones: ventana invertida y colmenas
-negativas se rechazan; una ventana a medias entra. La invertida habría hecho que el aviso **no
-saliera nunca**.
-
-**De las dos alertas del §9, sólo una es nueva.** La de la aspersión ya existe desde ADR-127 y
-no se reimplementa.
-
-**`diasEfectivosDe` cuenta solape**, no duración: sumar colocaciones enteras inflaría la
-factura de un servicio de polinización.
-
-**Y Toabré es este mecanismo:** el propio §9 dice que allí el emplazamiento no tiene fecha de
-cierre, y el informe del 2 de septiembre confirma que es un servicio para un cliente —Kiva
-Estates, finca cafetera en Toabré, Penonomé, Coclé.
 
 ## 3. Bloqueado, y en qué
 
