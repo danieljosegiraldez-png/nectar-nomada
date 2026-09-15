@@ -42,6 +42,27 @@ export interface CreatePlantingCohortInput {
   // independiente: el comentario era cierto para nuestros llamadores y no
   // estaba impuesto por el código.
   spacingMeters?: number | null;
+  /**
+   * Marco de siembra real: calle × distancia entre plantas, en metros.
+   *
+   * `spacingMeters` sigue existiendo y es legado: un solo número sólo dice la
+   * verdad cuando el marco es cuadrado. Se aceptan los tres para no romper a los
+   * llamadores viejos, y **no se deriva uno de otro en ninguna dirección**:
+   * rellenar `spacingMeters` desde estos dos afirmaría un marco cuadrado que
+   * nadie declaró, y al revés inventaría el número que falta.
+   *
+   * Por separado y anulables: saber la calle y no la distancia entre plantas es
+   * una situación de campo corriente.
+   */
+  rowSpacingMeters?: number | null;
+  plantSpacingMeters?: number | null;
+  /**
+   * `planned` para una siembra decidida y no ejecutada — 600 Pink Bourbon con
+   * objetivo en octubre de 2026. **Existe para que no cuente** en los totales de
+   * plantado. Por defecto `active`, que es el caso de todo lo que ya está en la
+   * tierra.
+   */
+  status?: PlantingCohortStatus | null;
   notes?: string | null;
   // ADR-038 — required, no default. A cohort transcribed from a planting
   // record is an original_record; one reconstructed from memory years later
@@ -101,6 +122,12 @@ export async function createPlantingCohort(userAccountId: string, input: CreateP
   if (input.plantCount != null && input.plantCount < 0) {
     throw new PlantingCohortValidationError("negative_plant_count");
   }
+  // El `CHECK` de la migración dice lo mismo en la base, que es donde de verdad
+  // vale: un importador o un SQL directo no pasan por aquí. Esto lo adelanta al
+  // llamador con un error con nombre, en vez de un fallo de restricción.
+  for (const m of [input.rowSpacingMeters, input.plantSpacingMeters]) {
+    if (m != null && m <= 0) throw new PlantingCohortValidationError("non_positive_spacing");
+  }
 
   const resolvedCultivarValueId = input.cultivarValueId
     ? await resolveCultivarValueId(input.cultivarValueId)
@@ -122,6 +149,9 @@ export async function createPlantingCohort(userAccountId: string, input: CreateP
       // Ver la nota en CreatePlantingCohortInput: derivado, nunca almacenado.
       densityPerHectare: null,
       spacingMeters: input.spacingMeters ?? null,
+      rowSpacingMeters: input.rowSpacingMeters ?? null,
+      plantSpacingMeters: input.plantSpacingMeters ?? null,
+      ...(input.status ? { status: input.status } : {}),
       notes: input.notes ?? null,
       provenanceClass: input.provenanceClass,
       dataQuality: input.dataQuality ?? null,

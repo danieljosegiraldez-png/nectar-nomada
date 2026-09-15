@@ -4778,6 +4778,14 @@ enum PlantingCohortStatus {
   active
   removed
   renovated
+  /// Aprobado por Daniel el 2026-09-15, para la Pink Bourbon: 600 plantas con
+  /// objetivo de siembra en octubre de 2026.
+  ///
+  /// **Existe para que no cuente.** Sin este valor, una siembra planificada sólo
+  /// puede entrar como `active` —que la sumaría a los totales de plantado— o no
+  /// entrar. Las dos opciones pierden algo: la primera miente sobre cuántos
+  /// árboles hay en la finca, la segunda borra una decisión agronómica ya tomada.
+  planned
 
   @@schema("traceability")
 }
@@ -4814,7 +4822,25 @@ model PlantingCohort {
 
   plantCount        Int?     @map("plant_count")
   densityPerHectare Decimal? @map("density_per_hectare") @db.Decimal(10, 2)
+  /// **Legado.** Un solo número, que sólo dice la verdad cuando el marco es
+  /// cuadrado. Se queda como está y **no se rellena hacia atrás** desde las dos
+  /// columnas de abajo: las filas viejas no declararon si su marco era cuadrado,
+  /// y deducirlo sería inventar el dato que falta. Mismo patrón y misma razón que
+  /// `Measurement.deviceId` frente a `captureDeviceId`.
   spacingMeters     Decimal? @map("spacing_meters") @db.Decimal(5, 2)
+  /// Marco de siembra real: distancia entre hileras × distancia entre plantas.
+  ///
+  /// Aprobado por Daniel el 2026-09-15. Los marcos de Finca Rosina son cuadrados
+  /// —2,0 × 2,0 en Catuaí, 1,8 × 1,8 en Caturra, 3,0 × 3,0 en Geisha— y por eso
+  /// `spacingMeters` bastaba por casualidad. **La Pink Bourbon es 1,8 × 2,5**, y
+  /// ahí un solo número obliga a elegir cuál de los dos se guarda, o sea a
+  /// inventar el otro.
+  ///
+  /// Las dos anulables y por separado: un marco a medio conocer —se sabe la calle
+  /// y no la distancia entre plantas— es una situación de campo corriente, y
+  /// exigir las dos empujaría a rellenar la que falta.
+  rowSpacingMeters   Decimal? @map("row_spacing_meters") @db.Decimal(5, 2)
+  plantSpacingMeters Decimal? @map("plant_spacing_meters") @db.Decimal(5, 2)
 
   status    PlantingCohortStatus @default(active)
   removedAt DateTime?            @map("removed_at")
