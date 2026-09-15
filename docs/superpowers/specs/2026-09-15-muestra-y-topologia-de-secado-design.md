@@ -249,9 +249,18 @@ armazón y las rutas del operario ya funcionan sin conexión (`public/sw.js`).
 - **Una sola muestra en la inspección** → no hay dispersión y se dice; `UNEVEN_DRYING` no sale.
 - **Valor fuera del rango del modo** → el aparato no lo produce; la app lo trata como lectura no
   obtenida, no como cero.
-- **`GREEN` en secado** → **única puerta dura del diseño.** Se rechaza por disparador, porque no
-  es un juicio sino un imposible físico. Va contra el espíritu del resto y por eso está señalada
-  como decisión abierta (§11).
+- **`GREEN` en secado** → **avisa y deja pasar**, como todo lo demás. *Decisión de Daniel,
+  2026-09-15.* El diseño llegó a proponer aquí su única puerta dura —rechazar por disparador,
+  porque no es un juicio sino un imposible físico— y él la cerró en el otro sentido: la doctrina
+  de «avisa, no descalifica» **no admite excepciones por lo evidente que parezca el caso**, porque
+  la puerta que se esquiva enseña a esquivar todas. La lectura entra marcada.
+
+  **Y eso abre una decisión de diseño que este spec no cierra:** `MeasurementReviewFlag` —la marca
+  que el módulo de equipos ya trae para «marcada, no bloqueada»— **no se puede reutilizar tal
+  cual**. Su `raisedByCheckId` es `NOT NULL` y apunta a `InstrumentCheck`, o sea que la marca sólo
+  existe como consecuencia de una verificación de instrumento, y un desajuste entre material y
+  etapa no tiene ninguna que la levante. O se hace anulable con un motivo declarado, o hace falta
+  una marca hermana. El plan tiene que elegir, y decir por qué.
 
 Las validaciones cruzadas —etapa↔material y modo↔material— van por **disparador, no por `CHECK`**:
 miran dos tablas, y un `CHECK` no puede. Es el error que se cometió el 2026-09-14 y que se
@@ -305,8 +314,8 @@ vez de a medias.
 
 - **`D-F3-01`** — cuáles son los cinco tipos de muestra y si el testigo es obligatorio. El modelo
   deja `sampleKind` preparado **sin decidir su contenido**.
-- **La puerta dura de `GREEN` en secado** (§9). ¿Rechazar, o avisar y dejar pasar como todo lo
-  demás?
+- ~~La puerta dura de `GREEN` en secado~~ — **cerrada el 2026-09-15: avisa y deja pasar** (§9).
+  Deja en su lugar la de la forma de la marca, que está descrita ahí mismo.
 - **Los nombres reales de los modos** del aparato de Daniel (§6.2), para sembrar filas con el
   vocabulario del fabricante en vez de uno inventado.
 - **`P-F`**, que sigue abierta: todo umbral de motor es `[PROVISIONAL]` hasta que Daniel revise
