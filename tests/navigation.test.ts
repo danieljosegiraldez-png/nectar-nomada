@@ -13,13 +13,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import {
-  buildNavigation,
-  buildSensoryTools,
-  landingDestination,
-  DEFAULT_LANDING,
-  NAV_PERMISSIONS,
-} from "../lib/navigation";
+import { buildNavigation, buildSensoryTools, landingDestination, DEFAULT_LANDING, NAV_PERMISSIONS, destinoDeEntrada, rutaDelSitio } from "../lib/navigation";
 
 const hrefs = (granted: string[]) => buildNavigation(new Set(granted)).map((e) => e.href);
 const toolHrefs = (granted: string[]) => buildSensoryTools(new Set(granted)).map((e) => e.href);
@@ -206,6 +200,45 @@ describe("landingDestination — ADR-082", () => {
     for (const granted of [FARM_OPERATOR, PARTNER, RESEARCHER, JUDGE, HEAD_JUDGE, APIARY_RECORDER, PLATFORM_ADMIN, []]) {
       const nav = buildNavigation(new Set(granted)).map((e) => e.href);
       expect(nav).toContain(landing(granted));
+    }
+  });
+});
+
+/**
+ * Anexo E §1 — el camino de entrada: «Si hay una jornada abierta, la app entra directo en
+ * ella», y desde ahí «toque 1 → colmena».
+ *
+ * Las dos son decisiones **puras**, y por eso se prueban aquí y no con base: una recibe el id
+ * ya resuelto, la otra el tipo de la fila.
+ */
+describe("Anexo E §1 — a dónde entra la app", () => {
+  const conPermisos = new Set(["lot:view"]);
+
+  it("una jornada abierta gana a la prioridad por permisos", () => {
+    expect(destinoDeEntrada(conPermisos, "abc-123")).toBe("/field-sessions/abc-123");
+    // Control: sin jornada, decide el permiso, que es lo que hacía antes.
+    expect(destinoDeEntrada(conPermisos, null)).toBe(landingDestination(conPermisos));
+  });
+
+  it("y gana incluso con permisos de plataforma — es lo que el Anexo pide", () => {
+    // La consecuencia está dicha en el código: quien tiene una visita sin cerrar está en
+    // medio de un trabajo. El banner global deja ver siempre que hay una abierta.
+    const admin = new Set(["user:manage_permissions", "lot:view"]);
+    expect(destinoDeEntrada(admin, "j-1")).toBe("/field-sessions/j-1");
+    expect(destinoDeEntrada(admin, null)).not.toBe("/field-sessions/j-1");
+  });
+
+  it("la vuelta desde la jornada va al APIARIO cuando el sitio es un apiario", () => {
+    // Enlazaba a `/plots` siempre: una jornada de apiario mandaba a la pantalla de parcelas
+    // de café, y desde ahí no se llega a las colmenas.
+    expect(rutaDelSitio("apiary_site", "loc-9")).toBe("/apiaries/loc-9");
+  });
+
+  it("y el resto cae en /plots, que es lo que hacía antes", () => {
+    // No se inventa una ruta para `site` ni `locality`: no existen como pantalla, y mandar
+    // ahí sería cambiar un destino equivocado por otro.
+    for (const tipo of ["plot", "micro_plot", "site", "locality", "province", "country"]) {
+      expect(rutaDelSitio(tipo, "loc-9")).toBe("/plots/loc-9");
     }
   });
 });

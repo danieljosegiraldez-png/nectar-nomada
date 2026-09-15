@@ -169,6 +169,52 @@ export function landingDestination(granted: ReadonlySet<string>): string {
   return match?.href ?? DEFAULT_LANDING;
 }
 
+/**
+ * A dónde entra la app al iniciar sesión. **Anexo E §1, primera frase:** *«Si hay una jornada
+ * abierta, la app entra directo en ella.»*
+ *
+ * **Una jornada abierta gana a la prioridad por permisos, y eso es deliberado.** Quien tiene
+ * una visita sin cerrar está en medio de un trabajo; mandarlo al tablero que le corresponda
+ * por rol le pide un toque para volver a donde estaba, y el Anexo cuenta los toques. El
+ * ejemplo del dueño es el que manda: una jornada del 13 de septiembre con cero eventos y sin
+ * cerrar es lo que pasa cuando la app no lleva a nadie de vuelta.
+ *
+ * **La consecuencia, dicha:** una cuenta con permisos de plataforma y una jornada abierta
+ * aterriza en la jornada, no en su tablero. Es lo que el Anexo pide, y el banner global
+ * (ADR-131) deja ver siempre que hay una abierta, así que nadie llega ahí sin saber por qué.
+ *
+ * **Elegir un destino es una oferta, nunca una autorización** — igual que
+ * `landingDestination`, cuyo comentario lo dice: el destino vuelve a comprobar al llegar.
+ * Pasar un id de jornada aquí no concede nada sobre ella.
+ *
+ * Pura: recibe el id ya resuelto y no consulta nada.
+ */
+export function destinoDeEntrada(granted: ReadonlySet<string>, jornadaAbiertaId: string | null): string {
+  if (jornadaAbiertaId) return `/field-sessions/${jornadaAbiertaId}`;
+  return landingDestination(granted);
+}
+
+/**
+ * La pantalla que le corresponde a una ubicación, según **el tipo de la fila**.
+ *
+ * **Por qué existe.** `app/field-sessions/[id]/page.tsx` enlazaba de vuelta a
+ * `/plots/<id>` **siempre**, así que una jornada de apiario mandaba a la pantalla de parcelas
+ * de café. Eso rompe el «toque 1 → colmena» del Anexo E §1 antes de empezar: desde la jornada
+ * abierta no había forma de llegar a las colmenas.
+ *
+ * **Resuelve por `locationType`, que es un hecho de la fila, y nunca por un parámetro que
+ * elija quien llama** — la misma disciplina que `requireFieldSessionAccess` (A9.0): si el
+ * dominio lo eligiera el llamador, se podría pedir la pantalla equivocada desde el sitio
+ * equivocado.
+ *
+ * **El resto cae en `/plots`, que es lo que hacía antes.** No se inventa una ruta para `site`
+ * ni para `locality`: no existen como pantalla, y mandar ahí sería cambiar un destino
+ * equivocado por otro.
+ */
+export function rutaDelSitio(locationType: string, locationId: string): string {
+  return locationType === "apiary_site" ? `/apiaries/${locationId}` : `/plots/${locationId}`;
+}
+
 function visible(entry: NavDefinition, granted: ReadonlySet<string>): boolean {
   return entry.requiresAnyOf.length === 0 || entry.requiresAnyOf.some((key) => granted.has(key));
 }

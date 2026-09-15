@@ -9404,3 +9404,44 @@ inventario dice de ese archivo. Vive en `fieldSessions.ts`, que ya lo importaba.
 quedó pendiente»*. El resumen **ya existe** (`resumenDeVisita`, con inspecciones, eventos,
 cosechas e inmediatos); **«lo que quedó pendiente» no**. `retirosPendientes` de ADR-121 es la
 mitad obvia de esa respuesta y queda nombrada, no construida.
+
+## ADR-132 — La app entra en la jornada abierta; y la vuelta mandaba al apiario a la pantalla de parcelas de café
+
+**Contexto.** El Anexo E §1 empieza así: *«Si hay una jornada abierta, la app entra directo en
+ella. Desde ahí: toque 1 → colmena, toque 2 → tipo de evento.»*
+
+**Decisión 1 — una jornada abierta gana a la prioridad por permisos.** La decisión de dónde
+aterriza una sesión vive en `/start` desde ADR-082 y sólo miraba permisos. Ahora
+`destinoDeEntrada` la antepone: quien tiene una visita sin cerrar está en medio de un
+trabajo, y mandarlo a su tablero le cobra un toque para volver. El ejemplo del dueño es el
+argumento: *«Hoy hay una del 13 de septiembre con cero eventos y sin cerrar, y nada la
+persigue»* es lo que pasa cuando la app no lleva a nadie de vuelta.
+
+**La consecuencia se dice en vez de esconderse:** una cuenta con permisos de plataforma **y**
+una jornada abierta aterriza en la jornada, no en su tablero. Es lo que el Anexo pide; el
+banner global de ADR-131 deja ver siempre que hay una abierta, así que nadie llega ahí sin
+saber por qué. Hay una prueba de ese caso con nombre.
+
+**Decisión 2 — un defecto encontrado midiendo, no razonando.** `app/field-sessions/[id]` se
+enlazaba de vuelta a `/plots/<id>` **siempre**, así que una jornada de apiario mandaba a la
+pantalla de **parcelas de café**: desde la jornada abierta **no había forma de llegar a las
+colmenas**, o sea que el «toque 1 → colmena» del §1 estaba roto antes de empezar.
+
+`rutaDelSitio` resuelve por `locationType`, que es un hecho de la fila y **nunca un parámetro
+que elija quien llama** — la misma disciplina que `requireFieldSessionAccess` (A9.0). Y **la
+consulta ya traía `locationType`**: el arreglo no cuesta una consulta más.
+
+**Todo lo que no es `apiary_site` sigue cayendo en `/plots`**, que es lo que hacía antes. No se
+inventa una ruta para `site` ni `locality`: no existen como pantalla, y mandar ahí sería cambiar
+un destino equivocado por otro. La prueba recorre los seis tipos.
+
+**Las dos son puras**, y por eso se prueban sin base: una recibe el id ya resuelto y la otra el
+tipo de la fila. Flip-test de las dos, compilando y cayendo por su nombre: quitar la
+preferencia por la jornada tumba «una jornada abierta gana a la prioridad por permisos» y «gana
+incluso con permisos de plataforma»; devolver el enlace a `/plots` tumba «la vuelta desde la
+jornada va al APIARIO cuando el sitio es un apiario».
+
+**Lo que NO entra, y es la mitad del §1.** Queda «toque 2 → tipo de evento» con el formulario
+ya resuelto. Eso es ergonomía que **sólo se juzga con el teléfono en la mano y el guante
+puesto**, y no se rediseña a ciegas. Lo medido para que la próxima sesión no empiece de cero:
+la ficha del apiario tiene **tres `<details>`** que hay que abrir, y la de la colmena ninguno.

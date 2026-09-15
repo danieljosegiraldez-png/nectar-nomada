@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
-import { landingDestination } from "../../lib/navigation";
+import { destinoDeEntrada } from "../../lib/navigation";
+import { jornadaAbiertaDe } from "../../lib/traceability/fieldSessions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,5 +28,11 @@ export default async function StartPage() {
     redirect("/login");
   }
 
-  redirect(landingDestination(await permissionKeysAnywhere(user.userAccountId)));
+  // Anexo E §1 — «Si hay una jornada abierta, la app entra directo en ella». Una consulta
+  // acotada al propio principal, y sólo en el aterrizaje: no se paga en cada página.
+  const [granted, jornada] = await Promise.all([
+    permissionKeysAnywhere(user.userAccountId),
+    jornadaAbiertaDe(user.userAccountId),
+  ]);
+  redirect(destinoDeEntrada(granted, jornada?.fieldSessionId ?? null));
 }
