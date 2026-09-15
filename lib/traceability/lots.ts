@@ -193,6 +193,31 @@ export interface RecordTransformationInput {
  * being transformed; newly-created outputs inherit no independent scope
  * requirement of their own since they don't exist until this call succeeds.
  */
+/**
+ * De qué lote de entrada hereda su contexto —organización, proyecto, sitio— el
+ * lote que sale de una transformación.
+ *
+ * **Extraída sin cambiar su comportamiento** para poder probarla de forma
+ * determinista: el defecto que tiene depende del orden en que Postgres devuelva
+ * las filas, y eso no se puede provocar desde una prueba contra la base.
+ */
+export function loteDeReferencia<T extends { id: string }>(
+  lotesCargados: readonly T[],
+  entradas: readonly { lotId: string }[],
+): T {
+  // **El primero que el operario ESCRIBIÓ**, no el primero que la base devuelva.
+  // `findMany` sin `orderBy` no promete ningún orden, así que antes de esto el
+  // origen de un lote fusionado lo decidía el recorrido de un índice — y con él
+  // la altitud, la parcela y el huso horario que la pantalla imprime (V-001).
+  const primero = entradas[0];
+  if (!primero) throw new TraceabilityAccessError("inputs_required");
+  const elegido = lotesCargados.find((l) => l.id === primero.lotId);
+  // **Falla en vez de caer al primero que haya.** Caer sería el defecto original
+  // con otra cara: un origen elegido por algo que no es la intención de nadie.
+  if (!elegido) throw new TraceabilityAccessError("lot_not_found");
+  return elegido;
+}
+
 export async function recordTransformation(userAccountId: string, input: RecordTransformationInput) {
   if (input.inputs.length === 0) {
     throw new TraceabilityAccessError("inputs_required");
@@ -248,7 +273,7 @@ export async function recordTransformation(userAccountId: string, input: RecordT
     // to model a genuine cross-project transfer explicitly. Guaranteed to
     // exist: input.inputs.length was checked non-zero above, and inputLots
     // was verified to match that count.
-    const sourceLot = inputLots[0]!;
+    const sourceLot = loteDeReferencia(inputLots, input.inputs);
 
     const outputLots = [];
     for (const output of input.outputs) {
