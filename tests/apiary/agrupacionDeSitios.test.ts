@@ -54,7 +54,7 @@ describe("los apiarios se agrupan por el lugar que los contiene", () => {
     expect(grupos.find((g) => g.nombre === "Toabre")!.tipo).toBe("locality");
   });
 
-  it("LA AFIRMACION: agrupar NO entierra lo urgente", () => {
+  it("LA AFIRMACION: agrupar NO entierra lo urgente — manda el grupo que tiene el problema", () => {
     // Toabre alfabeticamente va despues; con una aspersion anunciada va primero, y dentro
     // del grupo manda el sitio que la tiene.
     const conAlerta = REALES.map((s) =>
@@ -91,6 +91,19 @@ describe("los apiarios se agrupan por el lugar que los contiene", () => {
     expect(grupos[0]!.nombre).toBeNull();
     expect(grupos[0]!.sitios[0]!.nombre).toBe("Huerfano critico");
     expect(grupos[1]!.nombre).toBe("Finca tranquila");
+  });
+
+  it("un grupo sin nombre con un problema va ANTES que uno con nombre y sin problemas", () => {
+    // Este es el caso que separa "compite por urgencia" de "los sin nombre al final". Con la
+    // regla del nombre aplicada antes que el recuento, el critico se hundiria.
+    const sitios = [
+      sitio({ id: "conNombre", nombre: "Tranquilo", grupoId: "g", grupoNombre: "Alfa", grupoTipo: "site" }),
+      sitio({ id: "sinNombre", nombre: "Critico", alertas: [critico("visita_vencida")] }),
+    ];
+    const grupos = agruparSitios(sitios);
+    expect(grupos[0]!.nombre).toBeNull();
+    expect(grupos[0]!.alertasCriticas).toBe(1);
+    expect(grupos[1]!.nombre).toBe("Alfa");
   });
 
   it("y con todo empatado, el grupo sin nombre SI queda detras", () => {

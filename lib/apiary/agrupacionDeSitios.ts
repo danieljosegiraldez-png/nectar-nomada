@@ -1,4 +1,4 @@
-import { compararPorUrgencia, pesoDeNivel, type Alerta, type SitioOrdenable } from "./motivoDeAlerta";
+import { compararPorUrgencia, type Alerta, type SitioOrdenable } from "./motivoDeAlerta";
 
 /**
  * Los apiarios agrupados por el lugar que los contiene.
@@ -105,8 +105,12 @@ export function agruparSitios(sitios: readonly SitioAgrupable[]): GrupoDeSitios[
   }
 
   return grupos.sort((a, b) => {
-    const urgencia = pesoDeNivel(a.sitios[0]?.alertas) - pesoDeNivel(b.sitios[0]?.alertas);
-    if (urgencia !== 0) return urgencia;
+    // **Aqui habia un primer criterio por NIVEL y se quito, porque no decidia nada.** Un
+    // flip-test lo destapo: anulandolo, las nueve pruebas seguian en verde. Y la razon es
+    // estructural, no una prueba que faltaba: una alerta critica implica nivel 0, asi que un
+    // grupo con criticas SIEMPRE gana tambien por el recuento de criticas, y uno con avisos
+    // gana por el de avisos. Los dos criterios no pueden discrepar. Un criterio que ninguna
+    // entrada puede hacer decidir es un adorno con forma de regla.
     const criticas = b.alertasCriticas - a.alertasCriticas;
     if (criticas !== 0) return criticas;
     const avisos = b.alertasDeAviso - a.alertasDeAviso;
