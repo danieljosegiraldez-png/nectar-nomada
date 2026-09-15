@@ -38,6 +38,31 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · La lista de apiarios deja de ser plana
+
+ADR-137, y lo pidió el dueño: «devuelta a finca o organizacion y ver apiarios bajo ellos ya sea
+en lista o mapa».
+
+**No construye jerarquía: deja de esconder la que hay.** `parentLocationId` y `organizationId`
+estaban poblados para los cuatro apiarios reales —Finca Rosina con dos, Toabré con dos— y la
+pantalla **no nombraba ninguno de los dos en ninguna línea**. Sexta vez en el módulo que el
+hueco es el camino y no el dato.
+
+**El grupo es el lugar padre y su tipo se enseña**, porque el de Las Nubes es una finca y el de
+Toabré una localidad: rotular los dos igual afirmaría lo que la fila no dice. Agrupar por
+organización daría un grupo de cuatro — la lista plana otra vez.
+
+**La urgencia no se pierde al agrupar**, que era el riesgo entero, y el grupo sin lugar
+declarado no va al final por serlo.
+
+**Dos hallazgos del propio trabajo:** el encabezado rotulaba la organización *del primer
+sitio* —en el grupo sin lugar, cuatro sitios de tres organizaciones bajo el nombre de una—, y
+un flip-test destapó que el primer criterio del orden **no podía decidir nada**: una crítica
+implica nivel 0, así que nivel y recuento nunca discrepan. Se quitó.
+
+**Pendiente nombrado:** el mapa por grupo. Cero de los ocho sitios tienen coordenadas, así que
+hoy dibujaría recuadros vacíos. La frase pide «lista o mapa» y sólo una tiene datos detrás.
+
 ### 2026-09-15 · El mismo manejo a varias colmenas de una vez
 
 ADR-136, y lo pidió el dueño con estas palabras: «poder seleccionar todas las colmenas para
@@ -99,40 +124,6 @@ una importación en vez de una escritura — la misma forma de siempre.
 
 Inventario de acceso **327/96 → 328/96**, con dos entradas nuevas del mismo archivo porque son
 dos preguntas distintas.
-
-### 2026-09-15 · El inventario del sitio, que no decía de dónde vino ninguna colmena
-
-Anexo E §3 (ADR-134). La frase del Anexo trae su razón dentro —«inventario primero, **porque
-decide la acción del día**»— y las dos mitades fallaban.
-
-**La tarjeta enseñaba línea y media de tres.** Faltaban «de dónde vino» y «cuándo se abrió por
-última vez», y **los datos ya estaban en la base** desde A9 y A9.10: nadie los leía. Quinta vez
-en el módulo que el hueco es el camino y no el dato, con una variante — aquí no había que
-construir nada, sólo mirar.
-
-**Y estaba OCTAVO**, debajo del formulario de coordenadas y de seis secciones más. En un
-teléfono, siete pantallazos antes de ver las colmenas. Ahora va tras el título; el orden
-relativo del resto no se toca.
-
-**El `⚠` sale de lo observado y no de un plazo:** el maquetado marca la caja «débil», no la que
-lleva once días sin abrir. Los días se ven, no gritan. Y `null` no avisa.
-
-**Sólo la colonia viva (`endedAt: null`)**, y el caso que lo obliga es real: NN-0041 y NN-0042
-de Finca Rosina son cajas vacías con historia, y sin el filtro dirían «inspección hace 3 d» con
-un aviso de población baja sobre una caja sin abejas. Su prueba lleva control positivo de que
-esa inspección existe.
-
-Inventario de acceso **326/95 → 327/96**, en «depende del llamador» —con un id ajeno devolvería
-el dato ajeno— y con sus dos entradas en el allowlist.
-
-**Sin probar, y dicho:** el orden de las secciones y el renderizado de la tarjeta. No hay
-pruebas de renderizado de páginas aquí, y una aserción posicional sobre el texto del archivo es
-la trampa que ya midió un comentario mío en vez del JSX.
-
-**Pendiente nombrado:** la FLORA MELÍFERA del maquetado **no tiene modelo** —cero modelos y
-cero enums de floración en el esquema— y el §4 nombra el formulario que la llenaría. Es hueco
-de esquema, como fue el §8, y su vocabulario es del dueño: especies, fases fenológicas, escala
-de abundancia.
 
 ## 3. Bloqueado, y en qué
 
