@@ -75,22 +75,52 @@ fi
                      || mal "$SUCIOS archivo(s) con seguimiento sin commitear"
 [ "$SIN_SEG" -gt 0 ] && nota "$SIN_SEG sin seguimiento (pueden ser de otra sesión; no bloquean un fast-forward)"
 
-echo "── Trabajo sin empujar en otros worktrees ──────────────────────────────"
-AJENOS=0
+echo "── Trabajo sin publicar, por rama ──────────────────────────────────────"
+# Mecaniza el paso 6 de §5 —«verificar desde git», no leyendo un log—, y lo hace
+# contra la contrapartida remota DE LA RAMA, no contra `@{u}`.
+#
+# Por qué no vale `@{u}`, medido el 2026-09-15 sobre los seis worktrees vivos:
+#
+#   * `wt-conectar` está publicada en `origin/wt-conectar` y la versión anterior
+#     de este bloque la reportaba como «sin rama remota», porque esa rama no tiene
+#     upstream configurado. **Falso positivo observado.**
+#   * La regla de la casa crea los worktrees con `git worktree add <ruta> -b <rama>
+#     origin/main`, y eso deja `@{u}` apuntando a **origin/main**. Hoy las dos
+#     ramas en ese caso están EN origin/main, así que el conteo da 0 por
+#     casualidad; en cuanto commiteen y empujen a `origin/<rama>`, `@{u}..HEAD`
+#     las contará como «sin empujar» teniéndolo todo publicado. **Peligro latente,
+#     no observado aquí** — pero sí observado ese mismo día en una verificación de
+#     push hecha a mano, que dio «distintos» sobre un push que había llegado.
+#
+# Un guardia que grita en falso enseña a ignorarlo, que es peor que no tenerlo.
+SIN_PUBLICAR=0
 while read -r RUTA _ RAMA_W; do
   [ -d "$RUTA" ] || continue
-  [ "$RUTA" = "$(pwd)" ] && continue
   RAMA_W=${RAMA_W#[}; RAMA_W=${RAMA_W%]}
-  UP=$(git -C "$RUTA" rev-parse --abbrev-ref '@{u}' 2>/dev/null || echo "")
-  if [ -z "$UP" ]; then
-    nota "$(basename "$RUTA") [$RAMA_W] sin rama remota"
-    AJENOS=$((AJENOS + 1))
-  elif [ "$(git -C "$RUTA" rev-list --count "$UP"..HEAD 2>/dev/null || echo 0)" -gt 0 ]; then
-    nota "$(basename "$RUTA") [$RAMA_W] tiene commits sin empujar"
-    AJENOS=$((AJENOS + 1))
+  [ "$RAMA_W" = "main" ] && continue
+  ES_MIO=""; [ "$RUTA" = "$(pwd)" ] && ES_MIO=" (este)"
+  if git -C "$RUTA" rev-parse --verify -q "origin/$RAMA_W" >/dev/null 2>&1; then
+    DELANTE=$(git -C "$RUTA" rev-list --count "origin/$RAMA_W"..HEAD 2>/dev/null || echo 0)
+    if [ "$DELANTE" -eq 0 ]; then
+      bien "$(basename "$RUTA")$ES_MIO [$RAMA_W] publicada y al día"
+    else
+      mal "$(basename "$RUTA")$ES_MIO [$RAMA_W] $DELANTE commit(s) SIN PUBLICAR"
+      SIN_PUBLICAR=$((SIN_PUBLICAR + 1))
+    fi
+  else
+    # Sin rama remota, la pregunta es si hay algo que perder. Una rama recién
+    # creada y sin commits propios no es trabajo en riesgo, y decir «sin publicar»
+    # de ella es el grito en falso que se acaba de quitar.
+    PROPIOS=$(git -C "$RUTA" rev-list --count "origin/main"..HEAD 2>/dev/null || echo 0)
+    if [ "$PROPIOS" -eq 0 ]; then
+      nota "$(basename "$RUTA")$ES_MIO [$RAMA_W] sin publicar y sin commits propios: nada que perder"
+    else
+      mal "$(basename "$RUTA")$ES_MIO [$RAMA_W] $PROPIOS commit(s) que NO EXISTEN EN NINGÚN REMOTO"
+      SIN_PUBLICAR=$((SIN_PUBLICAR + 1))
+    fi
   fi
 done < <(git worktree list)
-[ "$AJENOS" -eq 0 ] && bien "ningún worktree con trabajo sin empujar"
+[ "$SIN_PUBLICAR" -eq 0 ] && bien "ninguna rama con trabajo sin publicar"
 nota "los worktrees ajenos NO son de esta sesión: se informan, no se tocan"
 
 echo "── Estado y decisiones ─────────────────────────────────────────────────"
@@ -107,6 +137,25 @@ ROTAS=$(grep -oE "rotas=[0-9]+" /tmp/cierre-dec.txt | head -1 | cut -d= -f2)
                         || mal "hay ${ROTAS} prueba(s) de decisión ROTAS"
 
 echo "── Procesos y disco ────────────────────────────────────────────────────"
+# Paso 7 de §5, que hasta el 2026-09-15 no se comprobaba en ninguna línea (cero
+# coincidencias de `lsof` en este archivo). Sigue la regla de la casa: **nunca
+# matar un runtime por nombre** —`pkill node` alcanza a todos los proyectos de la
+# máquina—, así que esto se limita a NOMBRAR quién escucha, por puerto, y deja la
+# decisión a quien cierra. El guion mira y dice; no actúa.
+PUERTOS_VIVOS=0
+for P in 3000 3017 3033 55433; do
+  PIDS=$(lsof -ti tcp:"$P" 2>/dev/null | tr "\n" " ")
+  [ -z "$PIDS" ] && continue
+  QUE=$(ps -o comm= -p ${PIDS%% *} 2>/dev/null | sed "s|.*/||")
+  if [ "$P" = "55433" ]; then
+    nota "puerto $P: $QUE (base de pruebas COMPARTIDA — no se para, otras sesiones la usan)"
+  else
+    nota "puerto $P: $QUE (pid $PIDS) — si lo arrancó esta sesión: lsof -ti tcp:$P | xargs kill"
+    PUERTOS_VIVOS=$((PUERTOS_VIVOS + 1))
+  fi
+done
+[ "$PUERTOS_VIVOS" -eq 0 ] && bien "ningún servidor de desarrollo de esta sesión en pie"
+
 LIBRE_KB=$(df -k /System/Volumes/Data 2>/dev/null | awk 'NR==2{print $4}')
 LIBRE_GB=$(( ${LIBRE_KB:-0} / 1024 / 1024 ))
 if [ "${LIBRE_KB:-0}" -lt 2097152 ]; then
