@@ -156,3 +156,35 @@ inventan procedimiento.
 **Lo que necesito de ti son cuatro frases**, no un documento. Una por
 procedimiento, dichas como las dices en el patio.
 
+---
+
+## D-F3-01 · Los cinco tipos de muestra, y si el testigo es obligatorio aquí
+
+**Viene de F3-004 y F3-005, que son el mismo hueco visto dos veces.**
+
+`sampleType` es texto libre y el único valor en uso es `green_coffee`, que no es
+ninguno de los cinco que la especificación nombra: `PROCESS`, `MOISTURE`, `ROAST`,
+`CUPPING`, `RETENTION`. Sin tipo declarado **no hay sobre qué razonar**, así que la
+regla del testigo tampoco puede existir.
+
+**Lo que puedo hacer sin ti:** el catálogo con los cinco, por el camino que esta
+casa ya usa —una entrada en `lib/research/catalogs.ts` y una re-siembra, nunca una
+migración— y el cableado de `sampleType` contra él.
+
+**Lo que es tuyo, y son dos cosas:**
+
+1. **Qué pasa con `green_coffee`.** Es el valor que hay en la base. ¿Es un
+   `RETENTION`, un `CUPPING`, o un sexto tipo que tu operación necesita y la
+   especificación no previó? No lo traduzco por mi cuenta: sería reinterpretar un
+   dato real.
+2. **Si el testigo es obligatorio en Néctar Nómada.** La especificación dice
+   *impedir* la venta sin él. Pero tu §7.1 sobre instrumentos fue lo contrario
+   —degradar, nunca bloquear— y conviene saber si esa regla vale aquí o si ésta es
+   la excepción. Un testigo ausente **sí** es distinto de un instrumento vencido:
+   el instrumento se puede volver a contrastar mañana; una muestra de retención que
+   no se guardó **no se puede guardar después**.
+
+Mi lectura es que ésta sí es caso de bloquear, o al menos de exigir constancia
+explícita de la ausencia —que es la segunda mitad que la propia especificación
+ofrece—. Pero es tu criterio.
+
