@@ -3116,3 +3116,50 @@ factura de un servicio de polinización.
 **Y Toabré es este mecanismo:** el propio §9 dice que allí el emplazamiento no tiene fecha de
 cierre, y el informe del 2 de septiembre confirma que es un servicio para un cliente —Kiva
 Estates, finca cafetera en Toabré, Penonomé, Coclé.
+
+### 2026-09-14 · Equipos e instrumentos, y dos veces la lista equivocada
+
+**El módulo entero de beneficio que faltaba** (PR #306, #308, #310). Antes: el equipo era
+texto libre en cuatro campos —`vessel_note`, dos `equipment_note`, `container_note`— y
+`measurement.device_id` una columna heredada que **ningún código ha escrito nunca**. El
+único modelo de aparato, `device`, son los teléfonos de campo. Control positivo de esa
+medición: la misma búsqueda sí encontraba `calibration_session`, que es calibración de
+**panel sensorial** — personas, no aparatos. De ahí el prefijo `instrument_`.
+
+**La decisión de Daniel cambia el diseño escrito.** `docs/beneficio/02_calibration.md` §3 y
+`EQUIPMENT_AND_READINESS.md` §7 daban vigencias de **calendario** —«24 h», «7 días»— con la
+columna marcada `[PROVISIONAL]`, que era donde faltaba el dueño. Él la cerró al revés: la
+verificación es un **contraste contra patrón declarado** —agua a 0 °Bx, tampones 4.01 y
+7.00— y **el tiempo sólo avisa**. Un instrumento vencido se sigue usando; lo que cambia es
+que la lectura queda marcada. Es la §7.1 —degradar, nunca bloquear— aplicada al reloj:
+bloquear se esquiva en el patio y entonces el sistema sabe **menos**.
+
+**Y de ahí un valor nuevo en `DataConfidence`**, `REVISION_VENCIDA`: ninguno de los cuatro
+podía decirlo. `UNCALIBRATED` **excluye** del cálculo y los tres del medio hablan de
+temperatura y de retraso de captura.
+
+**El veredicto de una verificación se DERIVA en la base, no se guarda a mano.** Un `CHECK`
+no puede mirar otra tabla —lo escribí como si pudiera y era falso—, así que `outcome` nace
+en `fail` y un trigger lo sube a `pass` sólo si hay **al menos un** contraste y ninguno
+fuera. Sin esa primera mitad, `NOT EXISTS` sobre cero filas es verdadero y una verificación
+**vacía** saldría aprobada.
+
+**`equipment:report_condition` está separado de `manage` a propósito:** quien trabaja con la
+máquina tiene que poder decir que está rota, y poner el refractómetro contra el agua, sin
+poder retirarla del inventario.
+
+**Dos veces medí la lista equivocada sobre el mismo tema, y las dos las cazó un control
+positivo, no una relectura.** Dije que CryoBloom no se podía expresar: `cold_hold_prefermentativo`
+ya estaba en `manejo_temperatura`. Dije que la cepa era texto libre: `levadura_cultivo`
+existe desde RO1 **con MP72 dentro**, y lo que faltaba era una línea de cableado — el
+catálogo sólo lo alcanzaba Research OS, y en el beneficio de un lote `registrarIntervencion`
+lo rechazaba. Las dos veces miré una **columna** de texto libre y no el vocabulario.
+
+**Tres guardias de la casa encontraron errores míos:** una operación escrita sin principal
+(`acceso-a-datos`), dos botones sin protección de doble toque, y tres rutas sin declarar.
+
+**Pendiente y es de Daniel:** no existe un perfil «Jefe de beneficio» —`equipment:manage`
+hoy sólo lo tiene Platform Admin—; el resolvedor de permisos **sólo sabe sumar**, así que
+personalizar por usuario no es una pantalla que falte sino un concepto que no tiene; y las
+vistas 2 y 3 de disponibilidad necesitan capacidad en `equipment` y un concepto de cosecha
+**planificada**, que `HarvestEvent` no tiene.

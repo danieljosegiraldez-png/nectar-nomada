@@ -187,11 +187,35 @@ export function landingDestination(granted: ReadonlySet<string>): string {
  * `landingDestination`, cuyo comentario lo dice: el destino vuelve a comprobar al llegar.
  * Pasar un id de jornada aquí no concede nada sobre ella.
  *
- * Pura: recibe el id ya resuelto y no consulta nada.
+ * Pura: recibe los ids ya resueltos y no consulta nada. `apiarioUnicoId` es `null` siempre
+ * que el sitio de llamada no haya comprobado que hay **exactamente uno**; contarlos es trabajo
+ * de quien tiene la base delante, decidir con la cuenta hecha es trabajo de aquí.
  */
-export function destinoDeEntrada(granted: ReadonlySet<string>, jornadaAbiertaId: string | null): string {
+export function destinoDeEntrada(
+  granted: ReadonlySet<string>,
+  jornadaAbiertaId: string | null,
+  apiarioUnicoId: string | null = null,
+): string {
   if (jornadaAbiertaId) return `/field-sessions/${jornadaAbiertaId}`;
-  return landingDestination(granted);
+
+  const aterrizaje = landingDestination(granted);
+
+  // **Anexo E §2, segunda frase: «entrada directa cuando hay uno solo».** Una lista de un
+  // elemento no informa de nada y cobra un toque.
+  //
+  // **Va aquí y NO como un `redirect` dentro de `/apiaries`, y eso se midió.** La ficha del
+  // apiario tiene una sola salida —un enlace «volver a apiarios»—, y la navegación global
+  // sólo ofrece `/apiaries`. Con la lista redirigiendo, ese enlace rebotaría a la misma
+  // ficha y **`/apiaries/new` dejaría de ser alcanzable**: nadie podría crear su segundo
+  // apiario. Es la forma exacta del hallazgo que este módulo ya lleva cuatro veces —un
+  // mecanismo que no se puede alcanzar se ve igual que uno que no existe—, y construir la
+  // frase del Anexo al pie de la letra lo habría creado.
+  //
+  // Sólo cuando el aterrizaje por permisos ES la lista de apiarios. A quien entra por su
+  // tablero no se le cambia el destino por tener un apiario: el id se ignora.
+  if (aterrizaje === "/apiaries" && apiarioUnicoId) return `/apiaries/${apiarioUnicoId}`;
+
+  return aterrizaje;
 }
 
 /**

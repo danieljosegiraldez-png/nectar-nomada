@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
-import { destinoDeEntrada } from "../../lib/navigation";
+import { destinoDeEntrada, landingDestination } from "../../lib/navigation";
+import { getApiaryList } from "../../lib/apiary/hives";
 import { jornadaAbiertaDe } from "../../lib/traceability/fieldSessions";
 
 export const dynamic = "force-dynamic";
@@ -34,5 +35,18 @@ export default async function StartPage() {
     permissionKeysAnywhere(user.userAccountId),
     jornadaAbiertaDe(user.userAccountId),
   ]);
-  redirect(destinoDeEntrada(granted, jornada?.fieldSessionId ?? null));
+  // Anexo E §2 — «entrada directa cuando hay uno solo». La cuenta se paga **sólo** cuando el
+  // aterrizaje por permisos es la lista de apiarios y no hay jornada abierta que gane: a un
+  // administrador de plataforma o a quien entra por su tablero esto no le cuesta una consulta.
+  //
+  // `getApiaryList` es quien autoriza —y trae las colmenas de cada sitio, que aquí no se
+  // usan—. Se reutiliza en vez de escribir un lector nuevo: un `count` propio sería otra
+  // puerta a la misma pregunta, y el inventario de acceso cuenta puertas.
+  let apiarioUnicoId: string | null = null;
+  if (!jornada && landingDestination(granted) === "/apiaries") {
+    const { items } = await getApiaryList(user.userAccountId);
+    apiarioUnicoId = items.length === 1 ? (items[0]?.id ?? null) : null;
+  }
+
+  redirect(destinoDeEntrada(granted, jornada?.fieldSessionId ?? null, apiarioUnicoId));
 }

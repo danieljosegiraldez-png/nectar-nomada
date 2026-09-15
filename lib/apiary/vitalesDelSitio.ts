@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { clasificarConsulta, diasHastaLaProximaConsulta } from "./vocabularioDeConsulta";
+import { pesoDeNivel, type Alerta, type MotivoDeAlerta } from "./motivoDeAlerta";
 import { HORAS_DE_JORNADA_VIEJA } from "../traceability/fieldSessions";
 
 /**
@@ -65,27 +66,25 @@ export const HORAS_DE_BORRADOR_VIEJO = HORAS_DE_JORNADA_VIEJA;
 
 const MS_POR_DIA = 86_400_000;
 
-export type NivelDeAlerta = "critico" | "aviso";
-
-export type MotivoDeAlerta =
-  // **`aspersion_anunciada` va PRIMERA, por decisión del dueño del 2026-09-14.** ADR-127 la
-  // planteó y no la resolvió; el dueño la subió. Es la única fecha del tablero que impone
-  // alguien de fuera y que no se puede atender después, a diferencia de una pérdida que ya
-  // ocurrió. Cambia el orden del Anexo C §1.2, y eso es exactamente por lo que se preguntó
-  // en vez de decidirlo en el código.
-  | "aspersion_anunciada"
-  | "perdida_sin_reposicion"
-  | "visita_vencida"
-  | "alimento_vencido"
-  | "alimento_por_vencer"
-  | "visita_sin_cerrar"
-  | "consulta_a_vecinos_vencida"
-  | "consulta_a_vecinos_por_vencer";
-
-export interface Alerta {
-  nivel: NivelDeAlerta;
-  motivo: MotivoDeAlerta;
-}
+/**
+ * **Los tres tipos y el arreglo de motivos viven en `motivoDeAlerta.ts`, que es puro.** Se
+ * reexportan aquí porque este módulo es el que los demás ya importaban, y mover la puerta
+ * habría sido un cambio en cada sitio de llamada por nada.
+ *
+ * El motivo de la mudanza: el guardia que comprueba que cada alerta tiene su texto corre en
+ * el carril hermético y **no puede importar este archivo**, que arrastra `prisma`. Leía la
+ * unión con una expresión regular sobre el texto de este archivo, y un comentario con un
+ * `;` dentro ya le hizo medir cero motivos una vez. Ahora lee un valor.
+ */
+export {
+  MOTIVOS_DE_ALERTA,
+  rangoDeMotivo,
+  compararPorUrgencia,
+  type Alerta,
+  type MotivoDeAlerta,
+  type NivelDeAlerta,
+  type SitioOrdenable,
+} from "./motivoDeAlerta";
 
 export interface VitalesDeSitio {
   locationId: string;
@@ -302,6 +301,5 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
 
 /** El sitio más urgente primero: crítico, luego aviso, luego el resto por nombre. */
 export function pesoDeAlerta(vitales: VitalesDeSitio | undefined): number {
-  if (!vitales || vitales.alertas.length === 0) return 2;
-  return vitales.alertas[0]?.nivel === "critico" ? 0 : 1;
+  return pesoDeNivel(vitales?.alertas);
 }

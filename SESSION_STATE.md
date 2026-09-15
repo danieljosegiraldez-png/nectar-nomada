@@ -38,6 +38,41 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · El orden de la lista de apiarios, y la prioridad que movía el borde sin mover la tarjeta
+
+Anexo E §2 (ADR-133). **La pantalla sí ordenaba por urgencia — con un criterio de tres
+valores.** Empatados, decidía `localeCompare` del nombre, o sea **el alfabeto**, que es lo que
+el Anexo prohíbe por su nombre. Y eso dejaba la decisión del dueño del día antes aplicada a
+medias: subir `aspersion_anunciada` a la primera prioridad movía el borde de la tarjeta **sin
+mover la tarjeta**, así que un apiario con una aspersión en tres días quedaba debajo de uno con
+una visita vencida por empezar su nombre por T.
+
+**Nada lo vigilaba porque no había qué llamar:** el orden vivía en dos líneas dentro de un
+componente. Misma forma que ADR-132. Ahora es `compararPorUrgencia`, pura, con cuatro
+criterios — nivel, motivo en la prioridad del dueño, cuántas alertas, y **el nombre como
+desempate determinista y no como orden**, que es la diferencia entre «alfabético» y «estable».
+
+**La entrada directa con un solo apiario NO es un `redirect` en `/apiaries`, y eso se midió
+antes de escribir:** la ficha tiene una sola salida —«volver a apiarios»— y la navegación
+global sólo ofrece la lista, así que redirigir habría dejado **`/apiaries/new` sin alcanzar**.
+Nadie podría crear su segundo apiario. Vive en `destinoDeEntrada`, y sólo cuando el aterrizaje
+por permisos es la lista.
+
+**Tres instrumentos que medían prosa en un solo cambio**, y el tercero es el que enseña: el
+guardia de textos de alerta leía la unión con una expresión regular (ya midió cero motivos una
+vez) y ahora lee un valor desde un módulo puro; mi `not.toContain("prisma")` cayó al minuto
+porque la palabra está en el comentario que explica por qué no lo importa; y **un flip-test
+encontró que el despojado de comentarios no lo ejercitaba ninguna prueba** — quitando la línea
+entera, las seis seguían en verde. La trampa del escapado del RSS, otra vez.
+
+**Y de ayer:** la prueba «gana incluso con permisos de plataforma» usaba
+`user:manage_permissions`, que **no existe**. Pasaba porque el aterrizaje lo decidía `lot:view`
+al lado. Corregida, y con ella una suposición mía: un administrador de plataforma sin permiso
+operativo aterriza en `/my-nectar`, no en un tablero de administración.
+
+**Pendiente nombrado:** el «sitio por corregir» del maquetado del §2 no es ninguno de los ocho
+motivos de alerta. No se inventa.
+
 ### 2026-09-14 · La app entra en la jornada abierta, y la vuelta mandaba al apiario a las parcelas
 
 Primera mitad del Anexo E §1 (ADR-132). **El defecto no se razonó, se midió:**
@@ -83,53 +118,6 @@ abiertas en el mismo sitio**, y cada una ve la suya.
 
 **Pendiente nombrado del §5:** «lo que quedó pendiente» al cerrar. El resumen ya existe
 (`resumenDeVisita`); la otra mitad, no — `retirosPendientes` es el candidato obvio.
-
-### 2026-09-14 · Equipos e instrumentos, y dos veces la lista equivocada
-
-**El módulo entero de beneficio que faltaba** (PR #306, #308, #310). Antes: el equipo era
-texto libre en cuatro campos —`vessel_note`, dos `equipment_note`, `container_note`— y
-`measurement.device_id` una columna heredada que **ningún código ha escrito nunca**. El
-único modelo de aparato, `device`, son los teléfonos de campo. Control positivo de esa
-medición: la misma búsqueda sí encontraba `calibration_session`, que es calibración de
-**panel sensorial** — personas, no aparatos. De ahí el prefijo `instrument_`.
-
-**La decisión de Daniel cambia el diseño escrito.** `docs/beneficio/02_calibration.md` §3 y
-`EQUIPMENT_AND_READINESS.md` §7 daban vigencias de **calendario** —«24 h», «7 días»— con la
-columna marcada `[PROVISIONAL]`, que era donde faltaba el dueño. Él la cerró al revés: la
-verificación es un **contraste contra patrón declarado** —agua a 0 °Bx, tampones 4.01 y
-7.00— y **el tiempo sólo avisa**. Un instrumento vencido se sigue usando; lo que cambia es
-que la lectura queda marcada. Es la §7.1 —degradar, nunca bloquear— aplicada al reloj:
-bloquear se esquiva en el patio y entonces el sistema sabe **menos**.
-
-**Y de ahí un valor nuevo en `DataConfidence`**, `REVISION_VENCIDA`: ninguno de los cuatro
-podía decirlo. `UNCALIBRATED` **excluye** del cálculo y los tres del medio hablan de
-temperatura y de retraso de captura.
-
-**El veredicto de una verificación se DERIVA en la base, no se guarda a mano.** Un `CHECK`
-no puede mirar otra tabla —lo escribí como si pudiera y era falso—, así que `outcome` nace
-en `fail` y un trigger lo sube a `pass` sólo si hay **al menos un** contraste y ninguno
-fuera. Sin esa primera mitad, `NOT EXISTS` sobre cero filas es verdadero y una verificación
-**vacía** saldría aprobada.
-
-**`equipment:report_condition` está separado de `manage` a propósito:** quien trabaja con la
-máquina tiene que poder decir que está rota, y poner el refractómetro contra el agua, sin
-poder retirarla del inventario.
-
-**Dos veces medí la lista equivocada sobre el mismo tema, y las dos las cazó un control
-positivo, no una relectura.** Dije que CryoBloom no se podía expresar: `cold_hold_prefermentativo`
-ya estaba en `manejo_temperatura`. Dije que la cepa era texto libre: `levadura_cultivo`
-existe desde RO1 **con MP72 dentro**, y lo que faltaba era una línea de cableado — el
-catálogo sólo lo alcanzaba Research OS, y en el beneficio de un lote `registrarIntervencion`
-lo rechazaba. Las dos veces miré una **columna** de texto libre y no el vocabulario.
-
-**Tres guardias de la casa encontraron errores míos:** una operación escrita sin principal
-(`acceso-a-datos`), dos botones sin protección de doble toque, y tres rutas sin declarar.
-
-**Pendiente y es de Daniel:** no existe un perfil «Jefe de beneficio» —`equipment:manage`
-hoy sólo lo tiene Platform Admin—; el resolvedor de permisos **sólo sabe sumar**, así que
-personalizar por usuario no es una pantalla que falte sino un concepto que no tiene; y las
-vistas 2 y 3 de disponibilidad necesitan capacidad en `equipment` y un concepto de cosecha
-**planificada**, que `HarvestEvent` no tiene.
 
 ## 3. Bloqueado, y en qué
 
