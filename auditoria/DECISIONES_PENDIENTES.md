@@ -55,3 +55,60 @@ Son dos mundos distintos: una lectura tomada con un instrumento vencido sigue
 siendo un hecho ocurrido; una lectura contra un lote que ya no está en ningún
 tanque es, casi seguro, una equivocación de a qué lote se apuntó. **La segunda
 parece caso de bloquear.** Pero es su criterio, no el mío.
+
+---
+
+## D-F1-01 · ¿Son la misma selección, o dos etapas distintas? — viene de F1-001
+
+**El repositorio** tiene una: `accepted + rejected + declared loss = input`,
+construida, en uso, once filas reales.
+
+**La especificación** (`docs/beneficio/12` §A) tiene otra:
+`total_cherry = prime_ripe + semi_ripe + underripe + overripe`, una descomposición
+**por madurez** que alimenta el índice de pureza y el manifiesto de enrutamiento —
+y que **no se guarda en ninguna parte**.
+
+Comparten el nombre y no son lo mismo. Y esto **no lo resuelvo yo**: el prompt
+maestro dice que ante una contradicción entre un documento y el código hay que
+parar y preguntar, no elegir la lectura más cómoda de implementar.
+
+**Las dos lecturas posibles, y cuestan distinto:**
+
+| lectura | qué implica |
+|---|---|
+| **son dos etapas distintas** — una en el patio al recibir la cereza, otra al separar lotes | hacen falta cuatro masas nuevas donde hoy no hay ninguna, y el motor `validarSeleccion` empieza a poder correr |
+| **son la misma vista de dos maneras** | la especificación se ajusta al modelo del repositorio, y el índice de pureza se redefine sobre accepted/rejected |
+
+**No recomiendo ninguna.** Cuál de las dos es depende de cómo se trabaja en tu
+beneficio, que es justo lo que un documento no puede decirme.
+
+---
+
+## D-F1-02 · Dónde vive la cáscara — viene de F1-002
+
+`CascaraBatch` **no existe** como tabla (control positivo: `BiocharBatch` sí). El
+motor devuelve `cascaraBatchPropuesto` —propuesto y no creado, para respetar la
+§32— pero **una propuesta que nadie puede aceptar no es media función: es
+ninguna**.
+
+Hacen falta dos cosas y las dos son decisión de modelo: la tabla, y el sitio donde
+alguien acepta la propuesta. `docs/beneficio/12` trata la cáscara como **producto
+con valor**, así que dejarla fuera de la trazabilidad tiene coste real.
+
+---
+
+## D-F1-03 · Si un peso debe decir con qué báscula se pesó — viene de F1-003
+
+Hoy `HarvestEvent`, `ReceivingEvent` y `QuantityEvent` llevan `provenanceClass`
+obligatorio y sin defecto, así que **medido** y **declarado** ya se distinguen. Lo
+que falta es atar un peso a **qué báscula**.
+
+**Es aditivo y del patrón ya construido:** una columna anulable `instrumentId` en
+`quantity_event`, junto a lo que hay, sin relleno retroactivo — exactamente como
+las cuatro FK de equipo del 2026-09-14.
+
+**Y hoy es una asimetría nueva:** desde esa fecha `Measurement` sí puede decir con
+qué instrumento se midió y si estaba verificado. Un peso, no. Como tú decidiste
+que la verificación es por contraste contra patrón, una báscula se verifica con
+pesa patrón igual que un refractómetro con agua — la maquinaria ya está.
+
