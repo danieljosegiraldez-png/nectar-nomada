@@ -46,10 +46,22 @@ export function creaColmenas(fuente: string): number {
   return [...sinComentarios.matchAll(/\b(?:prisma|tx)\.hive\.create\b/g)].length;
 }
 
-/** Y la colocación, por el ayudante compartido o por la tabla directamente. */
+/**
+ * Y la colocación, por el ayudante compartido o por la tabla directamente.
+ *
+ * **Cuenta LLAMADAS, no menciones, y eso lo corrigió un flip-test.** La primera versión
+ * buscaba el nombre a secas: quitando la llamada de `scripts/apiario-las-nubes.ts` el guardia
+ * seguía en verde, porque **el `import` del ayudante mencionaba el nombre** y contaba como
+ * una creación. El instrumento midió una línea de importación en vez de una escritura — la
+ * misma forma que ya me costó otras dos mediciones este mes. Exigir el paréntesis las
+ * distingue; y las líneas de `import` se quitan antes, que es la otra mitad.
+ */
 export function creaColocaciones(fuente: string): number {
-  const sinComentarios = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-  return [...sinComentarios.matchAll(/\bcrearColocacionInicial\b|\b(?:prisma|tx)\.hivePlacement\.create\b/g)].length;
+  const sinComentarios = fuente
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "")
+    .replace(/^\s*import\b[^\n]*$/gm, "");
+  return [...sinComentarios.matchAll(/\bcrearColocacionInicial\s*\(|\b(?:prisma|tx)\.hivePlacement\.create\s*\(/g)].length;
 }
 
 describe("una colmena no se crea sin su colocación", () => {
@@ -81,5 +93,16 @@ describe("una colmena no se crea sin su colocación", () => {
     expect(creaColocaciones("await crearColocacionInicial(tx, {});")).toBe(1);
     expect(creaColocaciones("await tx.hivePlacement.create({});")).toBe(1);
     expect(creaColocaciones("// crearColocacionInicial")).toBe(0);
+
+    // EL CASO QUE ME CAZÓ, y lo encontró un flip-test y no una relectura: importar el
+    // ayudante NO es llamarlo. Con la versión anterior, un guion que perdiera su llamada
+    // seguía pasando porque su `import` nombraba la función.
+    expect(creaColocaciones('import { crearColocacionInicial } from "../lib/apiary/hives";')).toBe(0);
+    expect(
+      creaColocaciones(
+        'import { crearColocacionInicial } from "../lib/apiary/hives";\nawait crearColocacionInicial(tx, {});',
+      ),
+      "importar Y llamar es una sola llamada",
+    ).toBe(1);
   });
 });
