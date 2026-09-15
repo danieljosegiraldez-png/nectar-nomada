@@ -131,3 +131,28 @@ eso, un lote fusionado seguirá siendo indistinguible de uno de origen único en
 doce superficies de salida — incluida la altitud que la pantalla imprime, y el huso
 horario con el que formatea todas sus fechas.
 
+---
+
+## D-P-01 · Qué se enseña «antes de medir», y eso no lo saca de un documento
+
+**Viene de P-001, el hallazgo de mayor retorno de la auditoría.**
+
+La rúbrica pide que la app enseñe a tomar bien la muestra. Para el licor de tanque
+son cuatro cosas concretas —**punto, profundidad, homogeneización, enjuague del
+prisma**— y para la recepción, cómo se toma la muestra de flotación y cómo se pesa.
+
+**Y esto no es texto que yo pueda redactar.** Es cómo se hace en **tu** beneficio:
+a qué profundidad metes el vaso en el Tanque I, si homogeneizas antes o después,
+con qué enjuagas el prisma, cuántas cerezas van al flotado y en cuánta agua.
+Escribirlo por mí sería inventar un procedimiento — y encima el antipatrón 5 dice
+que *«el productor es el experto en su finca; la app trae un instrumento, no
+autoridad»*.
+
+**Lo que sí puedo hacer sin ti:** el sitio donde ese texto vive —un campo de guía
+por variable, local y sin red, que aparece antes del formulario— y las **diez
+mitades de alerta** de P-002, que sí son inferibles del propio dominio y no
+inventan procedimiento.
+
+**Lo que necesito de ti son cuatro frases**, no un documento. Una por
+procedimiento, dichas como las dices en el patio.
+
