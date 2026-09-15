@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { rutaDelSitio } from "../../../lib/navigation";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
@@ -71,7 +72,13 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
   return (
     <div>
       <p className="nn-detail-meta">
-        <Link href={`/plots/${session.locationId}`}>{t("fieldSessionBackToLocation", { name: session.location.name })}</Link>
+        {/* Anexo E §1 — la vuelta va a la pantalla QUE LE CORRESPONDE al sitio. Enlazaba a
+            `/plots` siempre, así que una jornada de apiario mandaba a la pantalla de parcelas
+            de café y desde la jornada no había forma de llegar a las colmenas. La consulta ya
+            traía `locationType`: el arreglo no cuesta una consulta más. */}
+        <Link href={rutaDelSitio(session.location.locationType, session.locationId)}>
+          {t("fieldSessionBackToLocation", { name: session.location.name })}
+        </Link>
       </p>
 
       <span className="nn-badge">{t("badge")}</span>
