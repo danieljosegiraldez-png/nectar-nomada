@@ -77,6 +77,14 @@ describe("cada alerta del sitio tiene su texto", () => {
     // Y sobre un archivo que sólo NOMBRA prisma en un comentario, `false`.
     expect(detectaImportDePrisma("// hablamos de prisma\nexport const x = 1;\n")).toBe(false);
     expect(detectaImportDePrisma('import { prisma } from "../db";\n')).toBe(true);
+
+    // **EL CASO QUE EXIGE QUITAR LOS COMENTARIOS, y lo añadió un flip-test.** Sin él, la
+    // línea que los quita no la ejercitaba ninguna prueba: quitándola entera, las seis
+    // seguían en verde. Es la trampa del escapado del RSS —una transformación que el corpus
+    // no dispara está sin probar aunque la prueba pase—. Un `import` comentado es el caso
+    // realista: existe en cuanto alguien deja uno apagado con un TODO al lado.
+    expect(detectaImportDePrisma('// import { prisma } from "../db";\nexport const x = 1;\n')).toBe(false);
+    expect(detectaImportDePrisma('/* import { prisma } from "../db"; */\nexport const x = 1;\n')).toBe(false);
   });
 
   for (const lang of ["es", "en"] as const) {
