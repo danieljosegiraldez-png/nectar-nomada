@@ -517,3 +517,71 @@ export async function listFieldSessions(userAccountId: string, locationId: strin
 }
 
 export { LocationAccessError };
+
+/** Milisegundos en un día. Para la jornada abierta del Anexo E §5. */
+const DIA_EN_MS = 86_400_000;
+
+export interface JornadaAbierta {
+  fieldSessionId: string;
+  locationId: string;
+  sitio: string;
+  startedAt: Date;
+  /** Días enteros que lleva abierta. Cero el mismo día. */
+  diasAbierta: number;
+  /** `true` cuando lleva más de un día, que es cuando el Anexo E §5 pide reclamarla. */
+  reclamable: boolean;
+}
+
+/**
+ * La jornada que esta cuenta tiene abierta, si tiene alguna.
+ *
+ * **Existe para que se vea en TODAS las pantallas**, que es lo que el Anexo E §5 pide con
+ * esas palabras: *«Una jornada abierta es visible en todas las pantallas hasta que se
+ * cierra.»* Hasta hoy sólo la sabía la ficha del apiario — `app/layout.tsx` no tenía **ni
+ * una** referencia a `FieldSession`, medido—, así que quien abría una visita y navegaba a
+ * otra parte la perdía de vista, y es justo así como se queda una abierta desde el 13 de
+ * septiembre sin que nada la persiga.
+ *
+ * **Se llama desde el layout, o sea en CADA página.** Por eso es **una** consulta con
+ * `select` acotado y `take: 1`, y por eso ordena por `startedAt` descendente: si hubiera dos
+ * abiertas —que el servicio evita, pero la base no impide— manda la más reciente, que es la
+ * que la persona cree tener abierta.
+ *
+ * **Vive aquí y no en `visitaAbierta.ts`** aunque sean la misma familia de pregunta: ese
+ * módulo **no importa el cliente de Prisma** a propósito —recibe el `tx` de quien lo llama, y
+ * su perfil de acceso lo dice—, y meterlo habría cambiado lo que el inventario de acceso
+ * declara de él. Las cuatro condiciones son las mismas que `visitaAbiertaEn`: sin cerrar, en `draft`, y
+ * abierta por quien pregunta. Aquí no se filtra por sitio a propósito — la pregunta es «¿me
+ * dejé una jornada abierta?», no «¿hay una aquí?».
+ */
+export async function jornadaAbiertaDe(userAccountId: string, ahora = new Date()): Promise<JornadaAbierta | null> {
+  const visita = await prisma.fieldSession.findFirst({
+    where: { createdBy: userAccountId, endedAt: null, status: "draft" },
+    orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+    select: { id: true, locationId: true, startedAt: true, location: { select: { name: true } } },
+  });
+  if (!visita) return null;
+  // Hacia ABAJO, al contrario que el resto del módulo: aquí el número se enseña como «lleva
+  // N días abierta», y decir «1 día» de una visita de esta mañana sería falso. `reclamable`
+  // se decide por el umbral, no por este redondeo.
+  const diasAbierta = Math.floor((ahora.getTime() - visita.startedAt.getTime()) / DIA_EN_MS);
+  return {
+    fieldSessionId: visita.id,
+    locationId: visita.locationId,
+    sitio: visita.location.name,
+    startedAt: visita.startedAt,
+    diasAbierta,
+    reclamable: ahora.getTime() - visita.startedAt.getTime() > HORAS_DE_JORNADA_VIEJA * 3_600_000,
+  };
+}
+
+/**
+ * A partir de cuántas horas se reclama una jornada abierta. **24, por el Anexo E §5:** *«Si
+ * la jornada lleva más de un día abierta, la app lo reclama.»*
+ *
+ * Estaba en **72** —`HORAS_DE_BORRADOR_VIEJO` en `vitalesDelSitio.ts`, que ahora reexporta
+ * esta constante— y el dueño lo dijo con otras palabras el 2026-09-13. Tres días de gracia
+ * convertían «la app lo reclama» en «la app lo reclama pasado mañana», y la jornada del 13
+ * de septiembre que él nombró seguía sin reclamarse por eso.
+ */
+export const HORAS_DE_JORNADA_VIEJA = 24;

@@ -7,6 +7,7 @@ import "./globals.css";
 import { getCurrentUser } from "../lib/auth/session";
 import { permissionKeysAnywhere } from "../lib/rbac/service";
 import { buildNavigation } from "../lib/navigation";
+import { JornadaAbiertaBanner } from "./components/JornadaAbiertaBanner";
 import { logoutAction } from "./actions/auth";
 import { LocaleSwitcher } from "./components/LocaleSwitcher";
 import { ServiceWorkerRegistration } from "./components/ServiceWorkerRegistration";
@@ -87,6 +88,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </div>
             </div>
           </header>
+          {/* Anexo E §5 — «Una jornada abierta es visible en todas las pantallas hasta
+              que se cierra.» Va aquí y no en cada página porque «todas» incluye las que
+              nadie ha escrito todavía. */}
+          {user ? <JornadaAbiertaBanner userAccountId={user.userAccountId} /> : null}
           <main className="nn-shell nn-main">{children}</main>
         </NextIntlClientProvider>
       </body>

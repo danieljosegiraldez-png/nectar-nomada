@@ -1012,6 +1012,22 @@ a.nn-card-link:active {
 
 /* Los conteos de antes y después: el Anexo los llama «el único control contra un traslado
    a medias», así que se leen sin buscarlos. */
+/* Anexo E §5 — la jornada abierta, visible en todas las pantallas. Dos estados: una de hoy
+   se recuerda, una de más de un día se RECLAMA. Pintarlas igual haría que la segunda se
+   leyera como la primera. */
+.nn-jornada {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  background: var(--nn-surface-muted, #f3f1ec);
+  border-bottom: 1px solid var(--nn-border, #ddd8cc);
+}
+
+.nn-jornada-reclamada {
+  background: #fff4e5;
+  border-bottom-color: #e0a760;
+  font-weight: 600;
+}
+
 .nn-conteos {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
