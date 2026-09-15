@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { getApiaryList } from "../../lib/apiary/hives";
-import { pesoDeAlerta, vitalesDeSitios, type VitalesDeSitio } from "../../lib/apiary/vitalesDelSitio";
+import { compararPorUrgencia, vitalesDeSitios, type VitalesDeSitio } from "../../lib/apiary/vitalesDelSitio";
 import { MapaDeSitios } from "../components/apiary/MapaDeSitios";
 
 export const dynamic = "force-dynamic";
@@ -46,10 +46,15 @@ export default async function ApiariesPage() {
   // `getApiaryList` ya autorizó; esto sólo lee hechos de ids ya concedidos.
   const vitales = await vitalesDeSitios(apiaries.map((a) => a.id));
 
-  const ordenados = [...apiaries].sort((a, b) => {
-    const d = pesoDeAlerta(vitales.get(a.id)) - pesoDeAlerta(vitales.get(b.id));
-    return d !== 0 ? d : a.name.localeCompare(b.name);
-  });
+  // Anexo E §2: «orden por urgencia, no alfabético ni por código». La decisión es pura y
+  // vive en `motivoDeAlerta.ts`, que es donde se puede probar — aquí dentro no se podía, y
+  // por eso nada vigilaba el orden de la primera pantalla del módulo.
+  const ordenados = [...apiaries].sort((a, b) =>
+    compararPorUrgencia(
+      { nombre: a.name, alertas: vitales.get(a.id)?.alertas },
+      { nombre: b.name, alertas: vitales.get(b.id)?.alertas },
+    ),
+  );
 
   const fecha = (d: Date | null) => (d === null ? null : d.toISOString().slice(0, 10));
 
@@ -86,8 +91,15 @@ export default async function ApiariesPage() {
 
       {/* El mapa, y debajo lo que el mapa NO está enseñando. Decir cuántos
           sitios faltan es la mitad que cuenta: un mapa con tres pines y
-          veintiún sitios invisibles se lee como si la finca tuviera tres. */}
-      {apiaries.length > 0 ? (
+          veintiún sitios invisibles se lee como si la finca tuviera tres.
+
+          **Con un solo sitio no hay mapa** (Anexo E §2, «mapa cuando hay más de
+          un sitio»): un mapa de un pin no sitúa nada respecto a nada, y ocupa
+          la pantalla que en un teléfono es lo único que hay. La guarda mira los
+          SITIOS y no los pines: tres sitios de los que sólo uno tiene
+          coordenadas sí llevan mapa, porque ahí la línea de abajo —«faltan
+          dos»— es información y no un hueco. */}
+      {apiaries.length > 1 ? (
         <section className="nn-section">
           <h2>{t("mapaHeading")}</h2>
           {enElMapa.length > 0 ? <MapaDeSitios sitios={enElMapa} /> : null}

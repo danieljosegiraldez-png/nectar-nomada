@@ -223,7 +223,13 @@ describe("Anexo E §1 — a dónde entra la app", () => {
   it("y gana incluso con permisos de plataforma — es lo que el Anexo pide", () => {
     // La consecuencia está dicha en el código: quien tiene una visita sin cerrar está en
     // medio de un trabajo. El banner global deja ver siempre que hay una abierta.
-    const admin = new Set(["user:manage_permissions", "lot:view"]);
+    //
+    // **La clave era `user:manage_permissions` y no existe.** Escrita el 2026-09-14 de
+    // memoria; la real es `platform:manage_permissions` (`lib/rbac/admin.ts`). La prueba
+    // pasaba igual —el aterrizaje lo decidía `lot:view`—, así que el nombre del caso
+    // afirmaba algo que la entrada no contenía. Lo destapó otra prueba del mismo día que sí
+    // dependía de la clave.
+    const admin = new Set(["platform:manage_permissions", "lot:view"]);
     expect(destinoDeEntrada(admin, "j-1")).toBe("/field-sessions/j-1");
     expect(destinoDeEntrada(admin, null)).not.toBe("/field-sessions/j-1");
   });
@@ -240,5 +246,56 @@ describe("Anexo E §1 — a dónde entra la app", () => {
     for (const tipo of ["plot", "micro_plot", "site", "locality", "province", "country"]) {
       expect(rutaDelSitio(tipo, "loc-9")).toBe("/plots/loc-9");
     }
+  });
+});
+
+/**
+ * Anexo E §2 — «mapa cuando hay más de un sitio; entrada directa cuando hay uno solo».
+ *
+ * La mitad del mapa vive en la pantalla; la de la entrada, aquí, porque es la misma decisión
+ * de §1 y no un `redirect` dentro de `/apiaries` — ver el comentario de `destinoDeEntrada`,
+ * que dice qué se rompería.
+ */
+describe("Anexo E §2 — con un solo apiario se entra en él", () => {
+  const apicultor = new Set(["apiary:view"]);
+
+  it("un solo apiario y la app entra en él, no en una lista de uno", () => {
+    // Control primero: para esta cuenta el aterrizaje por permisos ES la lista.
+    expect(landingDestination(apicultor)).toBe("/apiaries");
+    expect(destinoDeEntrada(apicultor, null, "loc-uno")).toBe("/apiaries/loc-uno");
+  });
+
+  it("con dos o más, la lista — que es donde el orden por urgencia dice algo", () => {
+    // El sitio de llamada pasa `null` cuando no hay exactamente uno; contar es su trabajo.
+    expect(destinoDeEntrada(apicultor, null, null)).toBe("/apiaries");
+  });
+
+  it("una jornada abierta gana también a la entrada directa", () => {
+    expect(destinoDeEntrada(apicultor, "j-7", "loc-uno")).toBe("/field-sessions/j-7");
+  });
+
+  it("a quien NO aterriza en la lista de apiarios no se le desvía por tener uno", () => {
+    // Si el id llegara sin más comprobación, quien lleva café y abejas entraría en la ficha
+    // del apiario en vez de en los lotes. La condición está en la función y no en el sitio
+    // de llamada, que es donde se puede olvidar.
+    //
+    // **Y este caso corrigió lo que yo suponía:** probé primero con
+    // `user:manage_permissions`, dando por hecho que un administrador de plataforma aterriza
+    // en su tablero. No existe en `LANDING_PRIORITY`: sin un permiso operativo aterriza en
+    // `/my-nectar`, y con `apiary:view` aterriza en la lista de apiarios. La prueba cayó y la
+    // suposición era mía, no del código.
+    const cafeYAbejas = new Set(["lot:view", "apiary:view"]);
+    expect(landingDestination(cafeYAbejas)).toBe("/lots");
+    expect(destinoDeEntrada(cafeYAbejas, null, "loc-uno")).toBe("/lots");
+  });
+
+  it("y un administrador de plataforma sin permiso operativo aterriza en /my-nectar, con apiario o sin él", () => {
+    const soloAdmin = new Set(["platform:manage_permissions"]);
+    expect(landingDestination(soloAdmin)).toBe(DEFAULT_LANDING);
+    expect(destinoDeEntrada(soloAdmin, null, "loc-uno")).toBe(DEFAULT_LANDING);
+  });
+
+  it("el tercer argumento es opcional: quien no lo pasa se comporta como antes", () => {
+    expect(destinoDeEntrada(apicultor, null)).toBe("/apiaries");
   });
 });
