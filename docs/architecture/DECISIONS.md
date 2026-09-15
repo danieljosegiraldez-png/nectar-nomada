@@ -9445,3 +9445,106 @@ jornada va al APIARIO cuando el sitio es un apiario».
 ya resuelto. Eso es ergonomía que **sólo se juzga con el teléfono en la mano y el guante
 puesto**, y no se rediseña a ciegas. Lo medido para que la próxima sesión no empiece de cero:
 la ficha del apiario tiene **tres `<details>`** que hay que abrir, y la de la colmena ninguno.
+
+## ADR-133 — La lista de apiarios ordenaba por alfabeto entre iguales, así que la prioridad del dueño movía el borde sin mover la tarjeta
+
+**Contexto.** Anexo E §2: *«Orden por urgencia, no alfabético ni por código. Mapa cuando hay
+más de un sitio; entrada directa cuando hay uno solo. Lo vencido se ve desde aquí.»*
+
+Tres de esas cuatro frases estaban. La que faltaba es la primera, y faltaba de una forma que
+no se ve leyendo la pantalla: **sí ordenaba por urgencia, con un solo criterio.**
+
+**El defecto, medido.** `app/apiaries/page.tsx` ordenaba con dos líneas — `pesoDeAlerta`, que
+devuelve tres valores (crítico 0, aviso 1, nada 2), y `localeCompare` del nombre para los
+empates. O sea que **entre dos sitios críticos decidía el alfabeto**, que es lo que el Anexo
+prohíbe por su nombre.
+
+Y eso choca con la decisión que el dueño tomó el día antes. ADR-127 dejó planteado el orden de
+los motivos y él subió `aspersion_anunciada` a la primera prioridad, porque es *«la única
+fecha de este tablero que la impone alguien de fuera y que no se puede atender después»*. El
+comentario de `alertasDe` dice que ese orden «decide qué grita primero la lista de apiarios».
+**Decidía el borde de la tarjeta y no su posición:** un apiario con una aspersión en tres días
+quedaba debajo de uno con una visita vencida por empezar su nombre por T. La decisión se
+aplicó a medias y nada lo dijo.
+
+**Nada lo vigilaba, y no por descuido: no había qué llamar.** El orden vivía en dos líneas
+dentro de un componente de servidor. `pesoDeAlerta` tenía prueba —el peso, que es el primer
+criterio—; el orden, ninguna. Es la misma forma que ADR-132: **una decisión metida en JSX no
+se puede probar, así que no se prueba.**
+
+**Decisión — `compararPorUrgencia`, puro, con cuatro criterios y el cuarto no es un criterio.**
+
+1. el nivel: crítico, aviso, nada;
+2. **el motivo más grave, en la prioridad del dueño** (`MOTIVOS_DE_ALERTA`);
+3. **cuántas alertas**, de más a menos — la tarjeta ya enseñaba los tres problemas de un
+   sitio; ahora el orden también lo dice;
+4. el nombre, **como desempate determinista**. Sin él dos sitios igualmente urgentes se
+   barajan entre una carga y otra, y una lista que se mueve sola no se puede leer. Que quede
+   cuarto es toda la diferencia entre «alfabético» y «estable», y por eso se dice aquí en vez
+   de dejarlo en el código como si fuera lo mismo que había.
+
+El motivo va **antes** que el recuento a propósito: un sitio con una aspersión anunciada va
+encima de uno con tres problemas ya ocurridos. Es el argumento del dueño, no una métrica.
+
+**Decisión — la entrada directa va en `destinoDeEntrada` y NO es un `redirect` en `/apiaries`.**
+La frase del Anexo pide entrar en el sitio cuando hay uno solo. Construirla al pie de la letra
+—redirigir desde la lista— **habría creado el hallazgo que este módulo ya lleva cuatro
+veces**, y esto se midió antes de escribir nada: la ficha del apiario tiene **una sola
+salida**, un enlace «volver a apiarios», y la navegación global ofrece **sólo** `/apiaries`.
+Con la lista redirigiendo, ese enlace rebota a la misma ficha y **`/apiaries/new` deja de ser
+alcanzable**: nadie podría crear su segundo apiario. Un mecanismo que no se puede alcanzar se
+ve igual que uno que no existe.
+
+Así que la decisión vive donde ya vive la de §1, y **sólo cuando el aterrizaje por permisos es
+la lista de apiarios**: a quien lleva café y abejas no se le desvía por tener un apiario. La
+condición está dentro de la función y no en el sitio de llamada, que es donde se olvida.
+`/start` sólo paga la cuenta cuando hace falta —no hay jornada abierta que gane y el
+aterrizaje es `/apiaries`—, y reutiliza `getApiaryList`, que ya autoriza: un `count` propio
+sería otra puerta a la misma pregunta y el inventario de acceso cuenta puertas. Sigue en
+326/95.
+
+**Decisión — el mapa aparece con dos SITIOS, no con dos pines.** Tres sitios de los que sólo
+uno tiene coordenadas siguen llevando mapa, porque ahí la línea «faltan dos» es información y
+no un hueco. Con un solo sitio no hay mapa: un pin no sitúa nada respecto a nada y ocupa la
+pantalla que en un teléfono es lo único que hay.
+
+**Y tres instrumentos que medían prosa, en un solo cambio.**
+
+El primero no es nuevo, es el mismo de siempre con otra cara. El guardia que comprueba que
+cada motivo tiene su texto **leía la unión `MotivoDeAlerta` con una expresión regular sobre el
+texto del archivo**, porque `vitalesDelSitio.ts` arrastra `prisma` y el carril hermético no
+puede importarlo. Ese detector ya midió **cero motivos** una vez, el 2026-09-14, cuando un
+comentario con un `;` cortó la unión. Los motivos pasan a un módulo puro,
+`lib/apiary/motivoDeAlerta.ts`, y el guardia **lee un valor**. Sexta vez que hace falta esta
+partición, y la primera en que el motivo no es el paquete del navegador sino un guardia.
+
+El segundo lo escribí y cayó en el mismo minuto: el `it` nuevo que comprueba que ese módulo no
+importa `prisma` era `expect(fuente).not.toContain("prisma")`, y **la palabra está en el
+comentario de cabecera que explica por qué no lo importa**. Ahora mide los `import` sobre el
+código sin comentarios, con control positivo: el mismo detector tiene que ver el `import` en
+`vitalesDelSitio.ts`, y ahí sale `true`.
+
+El tercero lo encontró un flip-test, y es el más instructivo porque la prueba estaba **en
+verde**: quitando entera la línea que quita los comentarios, **las seis pruebas seguían
+pasando**. Ninguna tenía un `import` comentado, así que esa línea no la ejercitaba nada — la
+trampa del escapado del RSS, que ya está escrita en `CLAUDE.md` y volvió a aparecer. Añadidos
+los dos casos, de línea y de bloque, la mutación cae por su nombre.
+
+**Y una cuarta, de ayer, que salió al tirar de este hilo:** la prueba de ADR-132 llamada «gana
+incluso con permisos de plataforma» usaba `user:manage_permissions`, **que no existe** — la
+real es `platform:manage_permissions`. Pasaba igual porque el aterrizaje lo decidía `lot:view`
+que iba al lado, así que el nombre del caso afirmaba algo que la entrada no contenía. La
+destapó una prueba nueva que **sí** dependía de la clave, y de paso midió lo que yo suponía
+mal: un administrador de plataforma **no** aterriza en un tablero de administración, porque
+`/admin/users` no está en `LANDING_PRIORITY`; sin un permiso operativo aterriza en
+`/my-nectar`.
+
+**Flip-test de las cuatro decisiones**, cada una en su corrida, compilando y cayendo por su
+nombre: sin el criterio del motivo caen «entre dos críticos manda el motivo del dueño» y «una
+lista como la del dueño sale por urgencia»; sin el recuento cae la segunda; sin la
+comprobación del aterrizaje caen «a quien NO aterriza en la lista de apiarios no se le desvía»
+y la del administrador; y sin el despojado de comentarios cae «CONTROL DEL DETECTOR».
+
+**Lo que NO entra.** El «sitio por corregir» que el maquetado del §2 enseña debajo de un
+apiario con cero colmenas no es ninguno de los ocho motivos de alerta, y no se inventa: hace
+falta saber qué cuenta como un sitio por corregir antes de rotular uno.
