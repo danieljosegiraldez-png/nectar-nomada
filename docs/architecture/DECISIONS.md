@@ -9732,3 +9732,73 @@ porque son dos preguntas distintas — por qué recibe una transacción abierta
 **Lo que NO entra.** Un índice único parcial que garantice «una sola colocación abierta por
 colmena» sigue sin poder expresarse en Prisma, tal como dejó dicho ADR-126; la invariante la
 sostiene el servicio en una transacción y la defiende su prueba.
+
+## ADR-136 — El mismo manejo a varias colmenas de una vez, y la línea entre lo que se puede aplicar en lote y lo que no la traza el esquema
+
+**Contexto.** Pedido del dueño, literal: *«cuando entro a apiario poder seleccionar todas las
+colmenas para aplicar que se hizo algo que hice igual a todas, y no tener que hacer siempre
+una por una»*. En Toabré una alimentación es una bolsa de jarabe sobre los cabezales de cada
+caja en la misma vuelta; un tratamiento de varroa se aplica al apiario, porque el ácaro no
+respeta cajas.
+
+**No es una idea nueva en el módulo: es terminar una.** El Anexo E §8 ya lo había escrito
+para el traslado —*«selección múltiple con atajos, porque nadie toca veinte casillas con
+guante»*— y `TrasladoForm` ya tiene casillas, botón de «todas» y un conteo antes de
+confirmar. Se reusa el patrón entero, incluido escribir **una fila y un `AuditEvent` por
+colmena** como hace `trasladarColmenas`.
+
+**Decisión 1 — sólo `feeding` y `treatment`, y la línea no es de gusto.** `provenanceClassFor`
+ya la traza: esos dos son **`original_record`**, y `passing_observation` y `other` son
+**`direct_observation`**. Un registro original de algo que **hiciste** en diez cajas son diez
+hechos ciertos; una observación directa de diez cajas sacada de una sola mirada, no. Por eso
+la **inspección** no entra —el Anexo la marca «(por colmena)», y cuadros cubiertos, reina
+vista o patrón de cría son hechos de UNA colonia—, y por eso los otros dos tipos quedan fuera
+hasta que el dueño diga qué significa hacerlos en grupo. La prueba que fija esto se llama por
+su argumento.
+
+**Decisión 2 — en lote sale MÁS correcto que una por una, y ése es el argumento fuerte.** Los
+dos tipos admitidos guardan la fecha que dispara un aviso: `coverageUntil` —hasta cuándo
+alcanza el alimento— y la carencia del tratamiento. Tecleadas diez veces se desvían, y diez
+cajas que recibieron el mismo jarabe el mismo día acabarían avisando en días distintos. Lo
+mismo con `treatmentBatchLabel`: un dedazo en una de diez rompe el agrupado por objetivo que
+el Anexo B §4 pide. El lote no es sólo menos toques: es un solo dato en vez de diez copias
+que derivan.
+
+**Decisión 3 — lo que NO se relaja por ser en lote.**
+
+* **Una fila por colonia**, nunca una fila por lote: la carencia y las alertas se calculan por
+  colonia, y el día que trates 8 de 10 el registro tiene que decir 8.
+* **Un `AuditEvent` por fila**, y `ligarAVisitaAbierta` por fila, para que la jornada abierta
+  las recoja todas.
+* **Una colonia que no está viva no recibe nada**, y el error la nombra por su identificador.
+  Son **doce cajas vacías** entre Finca Rosina y Toabré Finca 1: en el formulario se ven —
+  esconderlas diría que el apiario tiene menos cajas— y no se pueden marcar.
+* **Un lote es de UN sitio.** No porque la base lo impida, sino porque el formulario se ofrece
+  desde la ficha de un apiario: aceptar dos sitios haría que el lote afirmara una vuelta que
+  nadie dio.
+
+**Decisión 4 — las reglas se EXTRAJERON, no se duplicaron.** `normalizarEventoDeColonia`
+recoge las validaciones que ya tenía `recordColonyEvent` y ahora sirve a las dos puertas.
+Duplicarlas habría hecho que una regla añadida después valiera para una y no para la otra —
+que es **exactamente** cómo la invariante de la colocación se aplicó en un guion y se olvidó
+en el siguiente (ADR-135). Hay una prueba que lo fija: un tratamiento sin carencia se rechaza
+también en lote.
+
+**Decisión 5 — la clave de reintento se genera en el servidor.** De ella sale una por fila,
+`<lote>:<colonia>`. Un id nacido en el navegador cambiaría en cada reenvío, que es justo
+cuando hace falta que **no** cambie; sin eso, un «sincronizar» repetido sin señal escribiría
+unas dos veces y otras ninguna. Reenviar el mismo lote escribe una vez y **lo dice**
+(`yaEstaban`), en vez de callarlo.
+
+**Autorización con todos los ámbitos concretos en juego**, no con uno: las colmenas de un
+mismo apiario pueden colgar de proyectos distintos, y pasar sólo el primero rechazaría el caso
+normal — el mismo arreglo que ADR-126 necesitó en el traslado. Por eso sube la fila de
+**guardia directo** del inventario (220 → 221) y no hace falta entrada en el allowlist.
+
+**Flip-test de las cinco decisiones**, cada una en su corrida, compilando y cayendo por su
+nombre.
+
+**Lo que NO entra.** La observación en lote, hasta que el dueño diga qué significa —él la
+nombró y la línea de `direct_observation` dice que no es lo mismo—. Y el «nada fuera de lo
+normal» sobre varias colmenas, que sí es honesto (es lo que observaste recorriendo el apiario)
+pero escribe `Inspection`, no `ColonyEvent`, y merece su propia rebanada.

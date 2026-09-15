@@ -38,6 +38,34 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · El mismo manejo a varias colmenas de una vez
+
+ADR-136, y lo pidió el dueño con estas palabras: «poder seleccionar todas las colmenas para
+aplicar que se hizo algo que hice igual a todas, y no tener que hacer siempre una por una».
+
+**No era una idea nueva: era terminar una.** El §8 ya lo había escrito para el traslado
+—«selección múltiple con atajos, porque nadie toca veinte casillas con guante»— y ese
+formulario ya tenía casillas, «todas» y conteo antes de confirmar. Se reusa entero.
+
+**Sólo alimentación y tratamiento, y la línea la traza el esquema:** `provenanceClassFor` da
+`original_record` a esos dos y `direct_observation` a la observación al paso. Diez registros de
+algo que HICISTE son diez hechos ciertos; diez observaciones sacadas de una mirada, no. La
+inspección queda fuera por lo mismo — el Anexo la marca «(por colmena)».
+
+**Y en lote sale MÁS correcto:** `coverageUntil` y la carencia son las fechas que disparan los
+avisos; tecleadas diez veces se desvían, y diez cajas con el mismo jarabe el mismo día
+acabarían avisando en días distintos.
+
+**Lo que no se relaja:** una fila por colonia, un rastro por fila, una jornada abierta que las
+recoge todas, y **una colonia que no está viva no recibe nada** — el error la nombra, y en el
+formulario las doce cajas vacías se ven y no se pueden marcar. Las reglas del evento
+individual se **extrajeron** en vez de duplicarse, con su prueba: duplicar es como se perdió
+la colocación en ADR-135.
+
+**Pendiente nombrado:** la observación en lote, hasta que el dueño diga qué significa; y el
+«nada fuera de lo normal» sobre varias, que es honesto pero escribe `Inspection` y merece su
+propia rebanada.
+
 ### 2026-09-15 · Una colmena nace con su colocación: diez de las veintinueve reales no la tenían
 
 ADR-135. **La invariante vivía en un comentario de ADR-126** —«`createHive` no la crea»—, y eso
