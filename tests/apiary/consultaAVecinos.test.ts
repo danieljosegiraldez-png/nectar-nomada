@@ -120,6 +120,9 @@ describe("la consulta mensual a las fincas vecinas", () => {
   });
 
   afterAll(async () => {
+    // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado
+    // de abajo falla. `createHive` abre una desde el 2026-09-15 (ADR-135).
+    await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hive: { id: { in: hiveIds } } }) });
     await prisma.hive.deleteMany({ where: assertDefinedWhere({ id: { in: hiveIds } }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
     await prisma.userAccount.deleteMany({

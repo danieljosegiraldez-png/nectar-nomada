@@ -75,6 +75,7 @@
 import "dotenv/config";
 import { prisma } from "../lib/db";
 import { recordAuditEvent } from "../lib/audit";
+import { crearColocacionInicial } from "../lib/apiary/hives";
 
 const RAZON =
   "Dueño, 2026-09-14: dos apiarios, los dos de Néctar Nómada. El de Finca Rosina queda " +
@@ -274,6 +275,12 @@ async function main() {
       const hive = await tx.hive.create({
         data: { identifier, locationId: ESPERADO.apiarioLasNubes.id, installedAt: IMPLEMENTADO_EN, status: "active" },
       });
+      // **Esto faltaba, y era el hueco.** Sin la colocación estas cinco no constaban en
+      // ningún apiario en ninguna fecha para `apiarioDeColmenaEn`, y el §9 no las contaba.
+      // `apiario-toabre.ts` sí la creaba, con una nota al lado explicando por qué; este
+      // guion, escrito el mismo día por el mismo camino, no. Ahora las tres usan el mismo
+      // ayudante y un guardia lo comprueba.
+      await crearColocacionInicial(tx, { hiveId: hive.id, locationId: hive.locationId, startedAt: IMPLEMENTADO_EN });
       await recordAuditEvent(
         { actorUserAccountId: null, operation: "hive.create", entityType: "hive", entityId: hive.id, after: hive, reason: RAZON, sourceInterface: "script" },
         tx,

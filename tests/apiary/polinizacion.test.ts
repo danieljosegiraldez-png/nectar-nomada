@@ -106,6 +106,9 @@ describe("A9.9 — el compromiso y el cociente", () => {
     await prisma.pollinationCommitment.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: { in: colonyIds } }) });
+    // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado
+    // de abajo falla. `createHive` abre una desde el 2026-09-15 (ADR-135).
+    await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hive: { locationId } }) });
     await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: locationId }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
@@ -312,6 +315,13 @@ describe("A9.9 — el compromiso y el cociente", () => {
 
     const hives = await prisma.hive.findMany({ where: { locationId }, orderBy: { identifier: "asc" }, take: 3 });
     expect(hives.length, "control: hacen falta tres colmenas del beforeAll").toBe(3);
+
+    // **Se retiran las colocaciones iniciales primero, y es por ADR-135:** `createHive` abre
+    // una colocación abierta con fecha de hoy, así que sumarle la historia de abajo dejaría
+    // a las tres colmenas dentro de la ventana de octubre y la tercera —la que este `it`
+    // declara FUERA— aparecería. Esta prueba construye una historia completa a mano, así que
+    // parte de cero a propósito.
+    await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hive: { locationId } }) });
 
     // Una estuvo toda la ventana; otra se fue el 16; la tercera sólo estuvo ANTES.
     await prisma.hivePlacement.createMany({

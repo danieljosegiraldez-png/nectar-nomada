@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { ApiaryAccessError, createColony, createHive, getHive } from "../../lib/apiary/hives";
+import { apiarioDeColmenaEn } from "../../lib/apiary/traslado";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a1-${Date.now()}`;
@@ -83,7 +84,12 @@ afterAll(async () => {
   const testHives = await prisma.hive.findMany({ where: { identifier: { startsWith: RUN_ID } } });
   const hiveIds = testHives.map((h) => h.id);
   await prisma.colony.deleteMany({ where: assertDefinedWhere({ hiveId: { in: hiveIds } }) });
+  // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado
+  // de abajo falla. `createHive` abre una desde el 2026-09-15 (ADR-135).
+  await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hive: { id: { in: hiveIds } } }) });
   await prisma.hive.deleteMany({ where: assertDefinedWhere({ id: { in: hiveIds } }) });
+  // Los AuditEvent de `hive.create` son nuevos (ADR-135) y no los borraba nada.
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "hive", entityId: { in: hiveIds } }) });
 
   const userAccountIds = [authorizedUserAccountId, locationScopedUserAccountId, wrongProjectUserAccountId, unauthorizedUserAccountId];
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
@@ -138,6 +144,103 @@ describe("createHive", () => {
     await expect(
       createHive(unauthorizedUserAccountId, { identifier: `${RUN_ID}-H-004`, locationId: apiarySiteId, projectId: projectAId }),
     ).rejects.toThrow(ApiaryAccessError);
+  });
+});
+
+/**
+ * ADR-135 — una colmena nace con su colocación, y con su rastro.
+ *
+ * **Lo que esto habría cazado.** ADR-126 dejó la invariante en un comentario, y medido el
+ * 2026-09-15 sobre la copia local con los datos reales: **10 de 29 colmenas sin ninguna
+ * colocación**, las diez de Apiario Las Nubes. `apiarioDeColmenaEn` devolvía `null` para
+ * todas —«no consta»— y el §9 del Anexo E era ciego al apiario real del dueño. Nada fallaba
+ * en rojo.
+ */
+describe("createHive abre la colocación inicial", () => {
+  it("deja UNA colocación abierta, en la ubicación de la colmena", async () => {
+    const hive = await createHive(authorizedUserAccountId, {
+      identifier: `${RUN_ID}-H-010`,
+      locationId: apiarySiteId,
+      projectId: projectAId,
+    });
+
+    const colocaciones = await prisma.hivePlacement.findMany({ where: { hiveId: hive.id } });
+    expect(colocaciones).toHaveLength(1);
+    expect(colocaciones[0]!.locationId).toBe(apiarySiteId);
+    expect(colocaciones[0]!.endedAt, "abierta: es la vigente").toBeNull();
+    // `reason` queda null: ninguno de los cuatro motivos del Anexo describe «aquí nació».
+    expect(colocaciones[0]!.reason).toBeNull();
+    expect(colocaciones[0]!.createdBy).toBe(authorizedUserAccountId);
+  });
+
+  it("LA AFIRMACIÓN: los lectores por fecha la ven desde el primer segundo", async () => {
+    // Es la prueba que importa, porque es la que fallaba: sin colocación,
+    // `apiarioDeColmenaEn` contesta `null` y `colmenasDeLaVentana` no la cuenta.
+    const hive = await createHive(authorizedUserAccountId, {
+      identifier: `${RUN_ID}-H-011`,
+      locationId: apiarySiteId,
+      projectId: projectAId,
+      installedAt: new Date("2026-09-02T11:00:00Z"),
+    });
+
+    expect(await apiarioDeColmenaEn(hive.id, new Date("2026-09-10T00:00:00Z"))).toBe(apiarySiteId);
+    // Y el intervalo es semiabierto de verdad: antes de instalarse, no consta.
+    expect(await apiarioDeColmenaEn(hive.id, new Date("2026-09-01T00:00:00Z"))).toBeNull();
+  });
+
+  it("la fecha sale de `installedAt` cuando la hay, y de `createdAt` cuando no", async () => {
+    // La misma regla que el relleno de ADR-126: `COALESCE(installed_at, created_at)`.
+    const declarada = await createHive(authorizedUserAccountId, {
+      identifier: `${RUN_ID}-H-012`,
+      locationId: apiarySiteId,
+      projectId: projectAId,
+      installedAt: new Date("2026-08-24T06:00:00Z"),
+    });
+    const conDeclarada = await prisma.hivePlacement.findFirstOrThrow({ where: { hiveId: declarada.id } });
+    expect(conDeclarada.startedAt).toEqual(new Date("2026-08-24T06:00:00Z"));
+
+    const sinDeclarar = await createHive(authorizedUserAccountId, {
+      identifier: `${RUN_ID}-H-013`,
+      locationId: apiarySiteId,
+      projectId: projectAId,
+    });
+    const sinDeclarada = await prisma.hivePlacement.findFirstOrThrow({ where: { hiveId: sinDeclarar.id } });
+    expect(sinDeclarada.startedAt).toEqual(sinDeclarar.createdAt);
+    // Control de que las dos ramas se distinguen: no son la misma fecha.
+    expect(sinDeclarada.startedAt).not.toEqual(conDeclarada.startedAt);
+  });
+
+  it("y escribe su AuditEvent, que el camino de la aplicación no escribía", async () => {
+    const hive = await createHive(authorizedUserAccountId, {
+      identifier: `${RUN_ID}-H-014`,
+      locationId: apiarySiteId,
+      projectId: projectAId,
+    });
+
+    const eventos = await prisma.auditEvent.findMany({
+      where: { entityType: "hive", entityId: hive.id },
+      select: { operation: true, actorUserAccountId: true, sourceInterface: true },
+    });
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0]!.operation).toBe("hive.create");
+    expect(eventos[0]!.actorUserAccountId).toBe(authorizedUserAccountId);
+    expect(eventos[0]!.sourceInterface).toBe("web");
+  });
+
+  it("y si algo falla, no queda ni la colmena ni su colocación: es una transacción", async () => {
+    // El identificador es único por ubicación (`hive_location_id_identifier_key`), así que
+    // repetirlo revienta DENTRO de la transacción. Lo que se comprueba es que el primer
+    // `create` no sobrevive al fallo del segundo paso — la mitad que haría falsa la
+    // invariante entera.
+    const identifier = `${RUN_ID}-H-015`;
+    await createHive(authorizedUserAccountId, { identifier, locationId: apiarySiteId, projectId: projectAId });
+    const antes = await prisma.hive.count({ where: { locationId: apiarySiteId, identifier } });
+    await expect(
+      createHive(authorizedUserAccountId, { identifier, locationId: apiarySiteId, projectId: projectAId }),
+    ).rejects.toThrow();
+    expect(await prisma.hive.count({ where: { locationId: apiarySiteId, identifier } })).toBe(antes);
+    const colmena = await prisma.hive.findFirstOrThrow({ where: { locationId: apiarySiteId, identifier } });
+    expect(await prisma.hivePlacement.count({ where: { hiveId: colmena.id } })).toBe(1);
   });
 });
 

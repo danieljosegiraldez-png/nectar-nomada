@@ -121,6 +121,9 @@ describe("la carencia de un tratamiento", () => {
     await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
     await prisma.colonyEvent.deleteMany({ where: assertDefinedWhere({ colonyId: { in: ids } }) });
     await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: { in: ids } }) });
+    // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado
+    // de abajo falla. `createHive` abre una desde el 2026-09-15 (ADR-135).
+    await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hive: { locationId } }) });
     await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId }) });
   });
 
