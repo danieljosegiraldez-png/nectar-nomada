@@ -134,41 +134,6 @@ cero enums de floración en el esquema— y el §4 nombra el formulario que la l
 de esquema, como fue el §8, y su vocabulario es del dueño: especies, fases fenológicas, escala
 de abundancia.
 
-### 2026-09-15 · El orden de la lista de apiarios, y la prioridad que movía el borde sin mover la tarjeta
-
-Anexo E §2 (ADR-133). **La pantalla sí ordenaba por urgencia — con un criterio de tres
-valores.** Empatados, decidía `localeCompare` del nombre, o sea **el alfabeto**, que es lo que
-el Anexo prohíbe por su nombre. Y eso dejaba la decisión del dueño del día antes aplicada a
-medias: subir `aspersion_anunciada` a la primera prioridad movía el borde de la tarjeta **sin
-mover la tarjeta**, así que un apiario con una aspersión en tres días quedaba debajo de uno con
-una visita vencida por empezar su nombre por T.
-
-**Nada lo vigilaba porque no había qué llamar:** el orden vivía en dos líneas dentro de un
-componente. Misma forma que ADR-132. Ahora es `compararPorUrgencia`, pura, con cuatro
-criterios — nivel, motivo en la prioridad del dueño, cuántas alertas, y **el nombre como
-desempate determinista y no como orden**, que es la diferencia entre «alfabético» y «estable».
-
-**La entrada directa con un solo apiario NO es un `redirect` en `/apiaries`, y eso se midió
-antes de escribir:** la ficha tiene una sola salida —«volver a apiarios»— y la navegación
-global sólo ofrece la lista, así que redirigir habría dejado **`/apiaries/new` sin alcanzar**.
-Nadie podría crear su segundo apiario. Vive en `destinoDeEntrada`, y sólo cuando el aterrizaje
-por permisos es la lista.
-
-**Tres instrumentos que medían prosa en un solo cambio**, y el tercero es el que enseña: el
-guardia de textos de alerta leía la unión con una expresión regular (ya midió cero motivos una
-vez) y ahora lee un valor desde un módulo puro; mi `not.toContain("prisma")` cayó al minuto
-porque la palabra está en el comentario que explica por qué no lo importa; y **un flip-test
-encontró que el despojado de comentarios no lo ejercitaba ninguna prueba** — quitando la línea
-entera, las seis seguían en verde. La trampa del escapado del RSS, otra vez.
-
-**Y de ayer:** la prueba «gana incluso con permisos de plataforma» usaba
-`user:manage_permissions`, que **no existe**. Pasaba porque el aterrizaje lo decidía `lot:view`
-al lado. Corregida, y con ella una suposición mía: un administrador de plataforma sin permiso
-operativo aterriza en `/my-nectar`, no en un tablero de administración.
-
-**Pendiente nombrado:** el «sitio por corregir» del maquetado del §2 no es ninguno de los ocho
-motivos de alerta. No se inventa.
-
 ## 3. Bloqueado, y en qué
 
 #### El presupuesto de Actions se agotó y volvió — y `main` ya no tiene compuerta propia
