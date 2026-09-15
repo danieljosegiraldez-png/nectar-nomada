@@ -1537,7 +1537,17 @@
     "loteTipoLabel": "Qué se hizo",
     "loteFechaLabel": "Cuándo",
     "loteAplicarBoton": "Registrar en las seleccionadas",
-    "loteCoberturaAyuda": "Es la fecha que dispara el aviso de la próxima visita. Puesta una vez para todas, las colmenas que recibieron lo mismo el mismo día avisan el mismo día."
+    "loteCoberturaAyuda": "Es la fecha que dispara el aviso de la próxima visita. Puesta una vez para todas, las colmenas que recibieron lo mismo el mismo día avisan el mismo día.",
+    "grupoSinLugar": "Sin lugar declarado",
+    "grupoResumen": "{sitios} apiario(s) · {colonias} colonias en {cajas} cajas",
+    "grupoAlertas": "{criticas} crítica(s), {avisos} aviso(s)",
+    "locationType_site": "Finca",
+    "locationType_locality": "Localidad",
+    "locationType_province": "Provincia",
+    "locationType_country": "País",
+    "locationType_plot": "Parcela",
+    "locationType_micro_plot": "Microparcela",
+    "locationType_apiary_site": "Apiario"
   },
   "Research": {
     "badge": "Research OS",

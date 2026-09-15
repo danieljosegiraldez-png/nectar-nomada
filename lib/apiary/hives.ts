@@ -508,7 +508,18 @@ export async function getApiaryList(userAccountId: string) {
     // hasta aquí llegaban a la pantalla como el mismo array vacío: `/apiaries`
     // decía «Todavía no hay apiarios», una afirmación sobre la finca hecha a
     // quien simplemente no tiene asignaciones. Misma forma que `getLotList`.
-    return { ...truncate<Prisma.LocationGetPayload<{ include: { hives: true } }>>([]), sinAmbito: true };
+    return {
+      ...truncate<
+        Prisma.LocationGetPayload<{
+          include: {
+            hives: true;
+            parentLocation: { select: { id: true; name: true; locationType: true } };
+            organization: { select: { name: true } };
+          };
+        }>
+      >([]),
+      sinAmbito: true,
+    };
   }
 
   const where: Prisma.LocationWhereInput = {
@@ -525,7 +536,14 @@ export async function getApiaryList(userAccountId: string) {
 
   const rows = await prisma.location.findMany({
     where,
-    include: { hives: true },
+    include: {
+      hives: true,
+      // El lugar que contiene al apiario y de quien es. La jerarquia YA estaba en estas dos
+      // columnas y la lista no las miraba: dibujaba ocho apiarios en fila, mezclando duenos.
+      // Son dos `select` anidados sobre la misma consulta, no consultas nuevas.
+      parentLocation: { select: { id: true, name: true, locationType: true } },
+      organization: { select: { name: true } },
+    },
     orderBy: { name: "asc" },
     take: LIST_LIMIT + 1,
   });

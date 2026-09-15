@@ -1537,7 +1537,17 @@
     "loteTipoLabel": "What was done",
     "loteFechaLabel": "When",
     "loteAplicarBoton": "Record on the selected hives",
-    "loteCoberturaAyuda": "This is the date that triggers the next-visit alert. Set once for all of them, hives that got the same thing on the same day alert on the same day."
+    "loteCoberturaAyuda": "This is the date that triggers the next-visit alert. Set once for all of them, hives that got the same thing on the same day alert on the same day.",
+    "grupoSinLugar": "No place declared",
+    "grupoResumen": "{sitios} apiary(ies) · {colonias} colonies in {cajas} boxes",
+    "grupoAlertas": "{criticas} critical, {avisos} warning(s)",
+    "locationType_site": "Farm",
+    "locationType_locality": "Locality",
+    "locationType_province": "Province",
+    "locationType_country": "Country",
+    "locationType_plot": "Plot",
+    "locationType_micro_plot": "Micro-plot",
+    "locationType_apiary_site": "Apiary"
   },
   "Research": {
     "badge": "Research OS",
