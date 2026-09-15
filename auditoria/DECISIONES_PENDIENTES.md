@@ -112,3 +112,22 @@ qué instrumento se midió y si estaba verificado. Un peso, no. Como tú decidis
 que la verificación es por contraste contra patrón, una báscula se verifica con
 pesa patrón igual que un refractómetro con agua — la maquinaria ya está.
 
+---
+
+## D-V-01 · El `orderBy` que falta se puede arreglar sin ti, y conviene decirlo
+
+**No es una decisión: es la nota de que V-001 tiene dos mitades y sólo una espera.**
+
+`recordTransformation` elige el origen del lote fusionado con `inputLots[0]`, y ese
+`findMany` **no lleva `orderBy`**. Eso hace el defecto **no determinista**: la misma
+fusión puede resolverse distinto en dos lecturas.
+
+**Arreglarlo no necesita tu aprobación** —no toca modelo de datos, ni umbrales, ni
+nada de la lista reservada— y convierte «aleatorio» en «el primero que el operario
+escribió», que sigue estando mal pero al menos es explicable y reproducible.
+
+**Lo que sí te espera es la otra mitad**, `D-F2-01`: qué forma tiene `MIXED`. Sin
+eso, un lote fusionado seguirá siendo indistinguible de uno de origen único en las
+doce superficies de salida — incluida la altitud que la pantalla imprime, y el huso
+horario con el que formatea todas sus fechas.
+
