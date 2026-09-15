@@ -1523,7 +1523,11 @@
     "cierreCosechaGuardar": "Save the close",
     "humedadHeading": "Measured moisture",
     "humedadFila": "{valor} {unidad} — measured on {fecha}",
-    "humedadSinMedir": "Not measured. Recorded as a lot measurement, not here: moisture is a refractometer reading with its instrument and provenance."
+    "humedadSinMedir": "Not measured. Recorded as a lot measurement, not here: moisture is a refractometer reading with its instrument and provenance.",
+    "hiveInspeccionHace": "inspected {dias} d ago",
+    "hiveSinInspeccion": "never inspected",
+    "hiveOrigenYFecha": "{origen} · since {fecha}",
+    "hiveNecesitaAtencion": "low population"
   },
   "Research": {
     "badge": "Research OS",

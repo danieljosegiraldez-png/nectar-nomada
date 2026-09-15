@@ -1523,7 +1523,11 @@
     "cierreCosechaGuardar": "Guardar el cierre",
     "humedadHeading": "Humedad medida",
     "humedadFila": "{valor} {unidad} — medida el {fecha}",
-    "humedadSinMedir": "Sin medir. Se registra como medición del lote, no aquí: la humedad es una lectura de refractómetro con su instrumento y su procedencia."
+    "humedadSinMedir": "Sin medir. Se registra como medición del lote, no aquí: la humedad es una lectura de refractómetro con su instrumento y su procedencia.",
+    "hiveInspeccionHace": "inspección hace {dias} d",
+    "hiveSinInspeccion": "sin inspeccionar",
+    "hiveOrigenYFecha": "{origen} · desde {fecha}",
+    "hiveNecesitaAtencion": "población baja"
   },
   "Research": {
     "badge": "Research OS",
