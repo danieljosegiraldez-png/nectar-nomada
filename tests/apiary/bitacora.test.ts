@@ -146,6 +146,9 @@ describe("A9.12 — el cierre emite, leyendo el rastro real", () => {
     await prisma.inspection.deleteMany({ where: assertDefinedWhere({ colonyId }) });
     await prisma.colonyEvent.deleteMany({ where: assertDefinedWhere({ colonyId }) });
     await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: colonyId }) });
+    // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado
+    // de abajo falla. `createHive` abre una desde el 2026-09-15 (ADR-135).
+    await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hive: { locationId } }) });
     await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: locationId }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });

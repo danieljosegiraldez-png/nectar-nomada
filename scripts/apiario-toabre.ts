@@ -60,6 +60,7 @@
 import "dotenv/config";
 import { prisma } from "../lib/db";
 import { recordAuditEvent } from "../lib/audit";
+import { crearColocacionInicial } from "../lib/apiary/hives";
 
 const RAZON =
   "Dueño 2026-09-14 e informe técnico de Chayanne López del 2026-09-02: los dos sitios de " +
@@ -234,10 +235,11 @@ async function main() {
         for (let i = 0; i < s.colmenas; i++) {
           const identifier = `NN-${String(s.desde + i).padStart(4, "0")}`;
           const hive = await tx.hive.create({ data: { identifier, locationId: sitio.id, installedAt: instaladas!, status: "active" } });
-          // **La colocación se crea A MANO.** `createHive` no la crea —deuda nombrada en
-          // ADR-126— y sin ella `colmenasDeLaVentana` y `apiarioDeColmenaEn` no verían nada
-          // de Toabré: su historia entera quedaría fuera del alcance de la ventana.
-          await tx.hivePlacement.create({ data: { hiveId: hive.id, locationId: sitio.id, startedAt: instaladas! } });
+          // La colocación inicial. **La nota que había aquí decía «se crea A MANO porque
+          // `createHive` no la crea», y eso dejó de ser cierto el 2026-09-15:** ahora la crea,
+          // y las tres rutas comparten este ayudante. Sin ella `colmenasDeLaVentana` y
+          // `apiarioDeColmenaEn` no verían nada de Toabré.
+          await crearColocacionInicial(tx, { hiveId: hive.id, locationId: sitio.id, startedAt: instaladas! });
           const colony = await tx.colony.create({
             data: {
               hiveId: hive.id, status: "active", startedAt: instaladas!,
@@ -285,7 +287,7 @@ async function main() {
       // 9 — 2 de septiembre: tres núcleos de Chayanne. DOS en cajas que ya estaban y UNA
       // caja nueva del almacén central, tal como lo describe el informe.
       const nueva = await tx.hive.create({ data: { identifier: COLMENA_NUEVA, locationId: (await tx.location.findFirstOrThrow({ where: { name: SITIOS[1].nombre } })).id, installedAt: VISITA, status: "active" } });
-      await tx.hivePlacement.create({ data: { hiveId: nueva.id, locationId: nueva.locationId, startedAt: VISITA } });
+      await crearColocacionInicial(tx, { hiveId: nueva.id, locationId: nueva.locationId, startedAt: VISITA });
       await recordAuditEvent({ actorUserAccountId: null, operation: "hive.create", entityType: "hive", entityId: nueva.id, after: nueva, reason: RAZON + " Caja trasladada desde el almacén central.", sourceInterface: "script" }, tx);
 
       for (const hiveId of [f2[0]!.hiveId, f2[1]!.hiveId, nueva.id]) {

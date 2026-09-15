@@ -87,6 +87,9 @@ afterAll(async () => {
   await prisma.colonyEvent.deleteMany({ where: assertDefinedWhere({ colonyId }) });
   await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: colonyId }) });
   const testHives = await prisma.hive.findMany({ where: { identifier: { startsWith: RUN_ID } } });
+  // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado
+  // de abajo falla. `createHive` abre una desde el 2026-09-15 (ADR-135).
+  await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hive: { id: { in: testHives.map((h) => h.id) } } }) });
   await prisma.hive.deleteMany({ where: assertDefinedWhere({ id: { in: testHives.map((h) => h.id) } }) });
 
   const userAccountIds = [authorizedUserAccountId, wrongProjectUserAccountId, unauthorizedUserAccountId];

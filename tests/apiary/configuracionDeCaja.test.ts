@@ -123,6 +123,9 @@ describe("cambiar la configuración de una caja", () => {
     });
     await prisma.inspection.deleteMany({ where: assertDefinedWhere({ colonyId: { in: ids } }) });
     await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: { in: ids } }) });
+    // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado
+    // de abajo falla. `createHive` abre una desde el 2026-09-15 (ADR-135).
+    await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hive: { locationId } }) });
     await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId }) });
   });
 
@@ -200,8 +203,13 @@ describe("cambiar la configuración de una caja", () => {
     });
 
     const historial = await leerEnmiendas([{ entityType: "hive", entityId: h.id }]);
-    expect(historial).toHaveLength(2);
-    expect(historial.every((e) => e.operation === "hive.configure")).toBe(true);
+    // **Tres desde ADR-135, y eran dos:** el historial incluye ahora el `hive.create` con
+    // el que nació la colmena, porque hasta entonces el camino de la aplicación creaba una
+    // colmena SIN dejar rastro. Que aparezca aquí es la mejora, no el ruido: «cuándo
+    // apareció esta caja» era una pregunta que el historial no podía contestar.
+    expect(historial).toHaveLength(3);
+    expect(historial.filter((e) => e.operation === "hive.configure")).toHaveLength(2);
+    expect(historial.filter((e) => e.operation === "hive.create")).toHaveLength(1);
     // El `before` guarda cómo estaba la caja antes, que es lo que hace legible el
     // cambio: sin él, «tiene un alza» no dice cuándo dejó de no tenerla.
     const conAlza = historial.find((e) => e.reason?.includes("apiñada"))!;

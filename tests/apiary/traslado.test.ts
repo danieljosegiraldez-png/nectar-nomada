@@ -74,19 +74,24 @@ describe("el traslado de colmenas", () => {
 
   /** Una colmena en el origen, con su colonia activa. Devuelve el id de las dos. */
   async function colmenaConColonia(identifier: string, locationId = origenId) {
-    const hive = await createHive(userAccountId, { projectId, locationId, identifier });
+    // **`installedAt` es lo que fecha la colocación inicial**, y por eso se pasa: esta
+    // prueba necesita que la colmena esté en el origen desde enero para poder moverla
+    // después. Antes esta función abría la colocación a mano con una nota que decía «que
+    // `createHive` no la cree es una deuda nombrada en ADR-126»; desde ADR-135 la crea, así
+    // que hacerlo aquí dejaría DOS colocaciones abiertas — que es justo lo que la base no
+    // impide y el servicio sí.
+    const hive = await createHive(userAccountId, {
+      projectId,
+      locationId,
+      identifier,
+      installedAt: new Date("2026-01-01T00:00:00Z"),
+    });
     hiveIds.push(hive.id);
     const colony = await createColony(userAccountId, {
       hiveId: hive.id,
       originType: "captured",
       startedAt: new Date("2026-01-01"),
       provenanceClass: "direct_observation",
-    });
-    // El relleno de la migración no cubre las colmenas que se crean DESPUÉS, así que la
-    // colocación inicial la abre esta prueba. Que `createHive` no la cree es una deuda
-    // nombrada en ADR-126, no un descuido de aquí.
-    await prisma.hivePlacement.create({
-      data: { hiveId: hive.id, locationId, startedAt: new Date("2026-01-01T00:00:00Z"), createdBy: userAccountId },
     });
     return { hiveId: hive.id, colonyId: colony.id };
   }

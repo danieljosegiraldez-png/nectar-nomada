@@ -63,6 +63,7 @@
 import "dotenv/config";
 import { prisma } from "../lib/db";
 import { recordAuditEvent } from "../lib/audit";
+import { crearColocacionInicial } from "../lib/apiary/hives";
 
 const RAZON =
   "Dueño, 2026-09-14: procedencias de los apiarios (Marcelino Guevara, San Francisco de " +
@@ -199,6 +200,9 @@ async function main() {
       const hive = await tx.hive.create({
         data: { identifier, locationId: lasNubes!.id, installedAt: LLEGARON_EN, status: "active" },
       });
+      // La colocación inicial, por la misma razón que en `apiario-las-nubes.ts`: sin ella la
+      // colmena no consta en ningún sitio para `apiarioDeColmenaEn`.
+      await crearColocacionInicial(tx, { hiveId: hive.id, locationId: hive.locationId, startedAt: LLEGARON_EN });
       await recordAuditEvent(
         { actorUserAccountId: null, operation: "hive.create", entityType: "hive", entityId: hive.id, after: hive, reason: RAZON, sourceInterface: "script" },
         tx,

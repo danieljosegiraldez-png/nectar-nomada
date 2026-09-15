@@ -3183,3 +3183,29 @@ abiertas en el mismo sitio**, y cada una ve la suya.
 
 **Pendiente nombrado del §5:** «lo que quedó pendiente» al cerrar. El resumen ya existe
 (`resumenDeVisita`); la otra mitad, no — `retirosPendientes` es el candidato obvio.
+
+### 2026-09-14 · La app entra en la jornada abierta, y la vuelta mandaba al apiario a las parcelas
+
+Primera mitad del Anexo E §1 (ADR-132). **El defecto no se razonó, se midió:**
+`app/field-sessions/[id]` se enlazaba de vuelta a `/plots/<id>` **siempre**, así que una
+jornada de apiario mandaba a la pantalla de **parcelas de café** — desde la jornada abierta no
+había forma de llegar a las colmenas, o sea que el «toque 1 → colmena» del §1 estaba roto
+antes de empezar. La consulta **ya traía `locationType`**: el arreglo no cuesta una consulta.
+
+**Una jornada abierta gana a la prioridad por permisos** en `/start` (ADR-082 sólo miraba
+permisos). La consecuencia se dice en vez de esconderse: una cuenta con permisos de plataforma
+y una jornada abierta aterriza **en la jornada**, no en su tablero; es lo que el Anexo pide, y
+el banner de ADR-131 deja ver siempre que hay una abierta. Hay una prueba de ese caso con
+nombre.
+
+**Todo lo que no es `apiary_site` sigue cayendo en `/plots`**, que es lo que hacía antes: no se
+inventa una ruta para `site` ni `locality` porque no existen como pantalla, y la prueba recorre
+los seis tipos.
+
+**Las dos decisiones son puras** y se prueban sin base. Flip-test de las dos, compilando y
+cayendo por su nombre.
+
+**Pendiente nombrado, y es la otra mitad del §1:** «toque 2 → tipo de evento» con el formulario
+ya resuelto. Es ergonomía que **sólo se juzga con el teléfono en la mano y el guante puesto**, y
+no se rediseña a ciegas. Lo medido para que nadie empiece de cero: la ficha del apiario tiene
+**tres `<details>`** que hay que abrir, y la de la colmena ninguno.

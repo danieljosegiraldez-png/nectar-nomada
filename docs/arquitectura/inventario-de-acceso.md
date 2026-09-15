@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-15
 
-**327 operaciones** que tocan la base, en **96 archivos**:
+**328 operaciones** que tocan la base, en **96 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -24,10 +24,17 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 |---:|---|---|
 | **220** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **33** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **56** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **57** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
+
+> **Y el de 327→328, sin archivos nuevos, es `crearColocacionInicial` (ADR-135).** Vive en
+> `lib/apiary/hives.ts`, que ya estaba inventariado. Recibe el `tx` de quien acaba de crear la
+> colmena y escribe **una** fila; no consulta nada, así que no puede leer de más aunque reciba
+> el cliente entero. Lleva sus dos entradas —`reciben_transaccion` y `dependen_del_llamador`—
+> porque las dos preguntas son distintas: por qué se le pasa una transacción abierta, y quién
+> autoriza en su lugar.
 
 > **El de 326→327, con un archivo más, son los vitales por colmena del Anexo E §3.**
 > `vitalesDeColmenas` vive en `lib/apiary/vitalesDeColmena.ts`, nuevo, así que sube archivo y

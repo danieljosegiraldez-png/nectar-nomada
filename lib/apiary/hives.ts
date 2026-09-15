@@ -87,18 +87,82 @@ export interface CreateHiveInput {
   status?: "active" | "empty" | "retired";
 }
 
+/**
+ * La colocación con la que nace una colmena: donde está, desde cuándo, sin fin.
+ *
+ * **Existe porque la invariante vivía en un comentario y se olvidó a la primera.** ADR-126
+ * creó `HivePlacement` y dejó dicho que `createHive` no la abría; `scripts/apiario-toabre.ts`
+ * la creó a mano con esa nota al lado, y `scripts/apiario-las-nubes.ts` —escrito el mismo
+ * día, por el mismo camino— no. Resultado medido el 2026-09-15 sobre la copia local con los
+ * datos reales: **10 de 29 colmenas sin ninguna colocación**, y son justo las diez de Apiario
+ * Las Nubes. Para `apiarioDeColmenaEn` esas diez no constan en ningún sitio, y
+ * `colmenasDeLaVentana` —el §9 entero, la primera pregunta histórica del módulo— no las
+ * cuenta.
+ *
+ * `reason` queda `null` a propósito, igual que en el relleno de ADR-126: el Anexo fija cuatro
+ * motivos de traslado y ninguno describe «aquí es donde nació». Inventarle uno sería afirmar
+ * un hecho que nadie dijo.
+ *
+ * **Recibe el `tx` y no lo abre**, porque la colmena y su colocación son un solo hecho: una
+ * colmena guardada sin su colocación es exactamente el estado que esto viene a impedir.
+ */
+export async function crearColocacionInicial(
+  tx: Prisma.TransactionClient,
+  input: { hiveId: string; locationId: string; startedAt: Date; createdBy?: string | null },
+) {
+  return tx.hivePlacement.create({
+    data: {
+      hiveId: input.hiveId,
+      locationId: input.locationId,
+      startedAt: input.startedAt,
+      createdBy: input.createdBy ?? null,
+    },
+  });
+}
+
 export async function createHive(userAccountId: string, input: CreateHiveInput) {
   await requireApiaryAccess(userAccountId, "manage", [input]);
 
-  return prisma.hive.create({
-    data: {
-      identifier: input.identifier,
-      locationId: input.locationId,
-      projectId: input.projectId ?? null,
-      installedAt: input.installedAt ?? null,
-      status: input.status ?? "active",
+  return prisma.$transaction(async (tx) => {
+    const hive = await tx.hive.create({
+      data: {
+        identifier: input.identifier,
+        locationId: input.locationId,
+        projectId: input.projectId ?? null,
+        installedAt: input.installedAt ?? null,
+        status: input.status ?? "active",
+        createdBy: userAccountId,
+      },
+    });
+
+    // **`installedAt` cuando la hay, porque es la fecha que alguien DECLARÓ.** Es la misma
+    // regla que el relleno de ADR-126 —`COALESCE(installed_at, created_at)`—, y tenerla en
+    // dos sitios que dicen lo mismo es a propósito: uno es la historia y el otro el futuro.
+    await crearColocacionInicial(tx, {
+      hiveId: hive.id,
+      locationId: hive.locationId,
+      startedAt: hive.installedAt ?? hive.createdAt,
       createdBy: userAccountId,
-    },
+    });
+
+    // **Y aquí no había rastro.** Los tres guiones de datos escriben su `hive.create` en el
+    // audit; el camino de la aplicación —el único que usa una persona— no escribía ninguno.
+    // Se añade ahora porque esta escritura ya es una transacción: una colmena que aparece sin
+    // decir quién la creó es el mismo agujero que el módulo cierra en todas sus demás
+    // escrituras.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "hive.create",
+        entityType: "hive",
+        entityId: hive.id,
+        after: hive,
+        sourceInterface: "web",
+      },
+      tx,
+    );
+
+    return hive;
   });
 }
 

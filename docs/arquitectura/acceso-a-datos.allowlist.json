@@ -422,6 +422,10 @@
     {
       "archivo": "lib/sensory/crearProtocolo.ts",
       "razon": "`crearProtocolo` recibe el `tx` del llamador en vez de abrir el suyo porque el protocolo, su versión, sus atributos, su vocabulario y el `AuditEvent` que dice quién lo creó tienen que confirmarse juntos — una versión sin atributos acepta valoraciones vacías, y una sin su vocabulario ofrece menos descriptores de los que su estándar define, que en pantalla se ve igual que un catador que no marcó nada. Salió de `scripts/create-sensory-protocol.ts` el 2026-09-07 para poder probarse: dentro de un `main()` nada verificaba que un archivo de protocolo se convirtiera en las filas que declara. No consulta nada fuera de las cuatro tablas que escribe."
+    },
+    {
+      "archivo": "lib/apiary/hives.ts",
+      "razon": "`crearColocacionInicial` recibe el `tx` del llamador en vez de abrir el suyo porque la colmena y su colocación son UN hecho: una colmena guardada sin la fila que dice dónde está es exactamente el estado que ADR-135 viene a impedir, y medido el 2026-09-15 eran 10 de 29 colmenas reales. Escribe una sola fila en `apiary.hive_placement` y no consulta nada: no puede leer de más aunque reciba el cliente entero. Sus tres llamadores son `createHive` —que autoriza con requireApiaryAccess(\"manage\") antes de abrir la transaccion— y los guiones de datos, que corren con la base delante."
     }
   ],
   "operaciones_sin_patron": [
@@ -781,6 +785,12 @@
       "archivo": "lib/apiary/vitalesDeColmena.ts",
       "operacion": "vitalesDeColmenas",
       "razon": "Recibe ids de colmena que su llamador —la ficha del apiario, vía getApiaryDetail, que autoriza con requireApiaryAccess(\"view\") sobre el sitio y sus colmenas— ya tiene concedidos. No pide principal a proposito: misma disciplina que vitalesDeSitios, densidadDePolinizacion y colmenasDeLaVentana. Un lector que pide un principal parece una compuerta y termina usándose como tal. Lee y no escribe.",
+      "verificado": "2026-09-15"
+    },
+    {
+      "archivo": "lib/apiary/hives.ts",
+      "operacion": "crearColocacionInicial",
+      "razon": "No pide principal porque no decide nada: recibe hiveId, locationId y fecha ya resueltos por quien acaba de crear la colmena en la misma transaccion. `createHive` autoriza antes; los tres guiones de datos corren fuera de la aplicacion. Un guardia aqui volveria a autorizar lo ya autorizado y daria la impresion de ser la frontera. Escribe una fila y no lee ninguna.",
       "verificado": "2026-09-15"
     }
   ]

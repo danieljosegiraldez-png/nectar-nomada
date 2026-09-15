@@ -52,6 +52,9 @@ export async function cleanupApiaryE2eFixtures(runId: string, ids: ApiaryE2eFixt
   await prisma.inspection.deleteMany({ where: assertDefinedWhere({ colonyId: ids.colonyId }) });
   await prisma.colonyEvent.deleteMany({ where: assertDefinedWhere({ colonyId: ids.colonyId }) });
   await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: ids.colonyId }) });
+  // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado
+  // de abajo falla. `createHive` abre una desde el 2026-09-15 (ADR-135).
+  await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hive: { id: ids.hiveId } }) });
   await prisma.hive.deleteMany({ where: assertDefinedWhere({ id: ids.hiveId }) });
 
   const userAccountIds = [ids.operatorUserAccountId, ids.wrongProjectUserAccountId];

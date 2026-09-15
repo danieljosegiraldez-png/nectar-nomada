@@ -38,6 +38,40 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · Una colmena nace con su colocación: diez de las veintinueve reales no la tenían
+
+ADR-135. **La invariante vivía en un comentario de ADR-126** —«`createHive` no la crea»—, y eso
+se aplicó en el guion que se escribió con la nota delante y se olvidó en los dos siguientes, del
+mismo día.
+
+**Medido antes de tocar nada, sobre la copia local con los datos reales: 29 colmenas, 19 con
+colocación, 10 SIN NINGUNA** — y las diez son las de Apiario Las Nubes. Con control positivo:
+NN-0041 sí tenía la suya, así que el cero no era de la consulta.
+
+**Lo que significaba:** `apiarioDeColmenaEn` contestaba `null` —«no consta»— para esas diez en
+cualquier fecha, y `colmenasDeLaVentana` no las contaba. O sea que **el §9, entregado el día
+antes, era ciego al apiario real del dueño**, y en silencio: la respuesta salía vacía.
+
+Cuatro piezas: `createHive` pasa a transacción con colocación y audit; un ayudante compartido
+para las cuatro rutas; una migración de relleno idempotente por `NOT EXISTS` (29/29 en local, y
+los lectores contestan con las fechas que declaró el dueño — 4 de septiembre para NN-0043, 2
+para NN-0048); y un guardia de fuente, porque el de datos se iría a rojo por el montaje de otra
+prueba en la base compartida.
+
+**Un agujero de rastro de paso:** el camino de la aplicación creaba una colmena **sin
+AuditEvent** mientras los tres guiones sí lo escribían. Ahora el historial de una caja incluye
+su creación.
+
+**El coste, dicho: 27 limpiezas de prueba.** La FK es `RESTRICT` y se mantiene: en producción
+una colmena no se borra, se retira, y una cascada se llevaría la historia en silencio.
+
+**Y el flip-test encontró un defecto en mi propio guardia:** contaba el `import` del ayudante
+como una llamada, así que un guion que perdiera su línea seguía pasando. El instrumento midió
+una importación en vez de una escritura — la misma forma de siempre.
+
+Inventario de acceso **327/96 → 328/96**, con dos entradas nuevas del mismo archivo porque son
+dos preguntas distintas.
+
 ### 2026-09-15 · El inventario del sitio, que no decía de dónde vino ninguna colmena
 
 Anexo E §3 (ADR-134). La frase del Anexo trae su razón dentro —«inventario primero, **porque
@@ -106,32 +140,6 @@ operativo aterriza en `/my-nectar`, no en un tablero de administración.
 
 **Pendiente nombrado:** el «sitio por corregir» del maquetado del §2 no es ninguno de los ocho
 motivos de alerta. No se inventa.
-
-### 2026-09-14 · La app entra en la jornada abierta, y la vuelta mandaba al apiario a las parcelas
-
-Primera mitad del Anexo E §1 (ADR-132). **El defecto no se razonó, se midió:**
-`app/field-sessions/[id]` se enlazaba de vuelta a `/plots/<id>` **siempre**, así que una
-jornada de apiario mandaba a la pantalla de **parcelas de café** — desde la jornada abierta no
-había forma de llegar a las colmenas, o sea que el «toque 1 → colmena» del §1 estaba roto
-antes de empezar. La consulta **ya traía `locationType`**: el arreglo no cuesta una consulta.
-
-**Una jornada abierta gana a la prioridad por permisos** en `/start` (ADR-082 sólo miraba
-permisos). La consecuencia se dice en vez de esconderse: una cuenta con permisos de plataforma
-y una jornada abierta aterriza **en la jornada**, no en su tablero; es lo que el Anexo pide, y
-el banner de ADR-131 deja ver siempre que hay una abierta. Hay una prueba de ese caso con
-nombre.
-
-**Todo lo que no es `apiary_site` sigue cayendo en `/plots`**, que es lo que hacía antes: no se
-inventa una ruta para `site` ni `locality` porque no existen como pantalla, y la prueba recorre
-los seis tipos.
-
-**Las dos decisiones son puras** y se prueban sin base. Flip-test de las dos, compilando y
-cayendo por su nombre.
-
-**Pendiente nombrado, y es la otra mitad del §1:** «toque 2 → tipo de evento» con el formulario
-ya resuelto. Es ergonomía que **sólo se juzga con el teléfono en la mano y el guante puesto**, y
-no se rediseña a ciegas. Lo medido para que nadie empiece de cero: la ficha del apiario tiene
-**tres `<details>`** que hay que abrir, y la de la colmena ninguno.
 
 ## 3. Bloqueado, y en qué
 

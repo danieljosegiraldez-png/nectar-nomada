@@ -9638,3 +9638,97 @@ hay **ningún** modelo de observación de floración en el esquema —comprobado
 llenaría: *«Observación de floración. Especie, fase fenológica, abundancia, recurso que
 aporta.»* Es un hueco de **esquema**, como fue el §8, y su vocabulario es conocimiento del
 dueño: qué especies, qué fases, qué escala de abundancia. No se inventa.
+
+## ADR-135 — La invariante de la colocación vivía en un comentario, y diez de las veintinueve colmenas reales no la cumplían
+
+**Contexto.** ADR-126 creó `apiary.hive_placement` para contestar «dónde ha estado esta
+colmena y desde cuándo», rellenó una fila por cada colmena que existía entonces, y dejó
+escrito —en un comentario— que `createHive` no la abría.
+
+**Lo que pasó con esa nota, que es el ADR entero.** `scripts/apiario-toabre.ts` la creó a
+mano, con la nota al lado explicando por qué. `scripts/apiario-las-nubes.ts` y
+`scripts/procedencias-y-sitios.ts`, escritos **el mismo día por el mismo camino**, no. Una
+invariante en prosa se aplica en el archivo donde se escribió y se olvida en el siguiente.
+
+**Medido el 2026-09-15 sobre la copia local con los datos reales, antes de tocar nada:**
+
+| | |
+|---:|---|
+| colmenas | **29** |
+| con alguna colocación | 19 |
+| **sin ninguna** | **10** |
+
+Y las diez son las de **Apiario Las Nubes**. Control positivo en la misma corrida: NN-0041,
+del relleno original, sí tenía la suya — sin eso, un cero se habría leído como «la consulta no
+mide nada».
+
+**Qué significaba ese hueco.** `apiarioDeColmenaEn` devuelve `null` para esas diez **en
+cualquier fecha**, y su propio comentario define ese `null` como «no consta».
+`colmenasDeLaVentana` no las cuenta. O sea que **el §9 del Anexo E —la primera pregunta
+histórica que el módulo sabe contestar, entregada el día antes— era ciego al apiario real del
+dueño.** Y nada fallaba en rojo: la respuesta salía vacía, que se lee como «no hay».
+
+**Decisión 1 — `createHive` es una transacción: colmena, colocación y rastro.** La fecha sale
+de `installedAt` cuando la hay —la que alguien **declaró**— y de `createdAt` cuando no, que es
+literalmente el `COALESCE(installed_at, created_at)` del relleno de ADR-126. Tener la misma
+regla en dos sitios es deliberado: uno es la historia y el otro el futuro.
+
+**Decisión 2 — un ayudante compartido, `crearColocacionInicial`.** Cuatro rutas crean colmenas
+—el servicio y tres guiones— y ahora las cuatro dicen lo mismo en una línea. La nota de
+`apiario-toabre.ts` que decía «se crea A MANO porque `createHive` no la crea» **dejó de ser
+cierta y se corrige en vez de dejarla ahí**: una instrucción vieja es peor que ninguna.
+
+**Decisión 3 — migración de relleno, idempotente por `NOT EXISTS`.** Mira si la colmena tiene
+**cualquier** colocación, no sólo una abierta: una colmena trasladada ya tiene su historia
+completa, y añadirle una tercera fila desde el origen sería inventar que estuvo en dos sitios a
+la vez. No toca el esquema —sólo datos—, así que `migrate diff` sigue diciendo que esquema y
+migraciones coinciden. Aplicada en local: **29 de 29**, con el control positivo intacto. Y
+comprobado después contra los lectores, que es la prueba que importa: `apiarioDeColmenaEn`
+contesta «Apiario Las Nubes» para NN-0043 desde el **4 de septiembre** y para NN-0048 desde el
+**2** — las dos fechas que declaró el dueño, no la de creación de la fila.
+
+**Decisión 4 — el guardia es de FUENTE, y por qué no puede ser de datos.** La comprobación
+fuerte sería «ninguna colmena sin colocación abierta», y no se puede tener:
+`tests/traceability/jornadaEnApiario.test.ts` crea colmenas con `prisma.hive.create` para su
+propio montaje, y sobre la base compartida ese montaje **convive con las demás sesiones**. El
+guardia se iría a rojo por una prueba ajena en vuelo, que es la peor clase de guardia — enseña
+a ignorar una línea roja. Así que se comprueba lo que sí se puede: que **cada archivo que crea
+colmenas cree su colocación**, con su límite dicho (mide por archivo, no por línea).
+
+**Y un agujero de rastro que salió al tirar del hilo.** El camino de la aplicación creaba una
+colmena **sin AuditEvent**, mientras los tres guiones de datos sí escribían su `hive.create`.
+Se añade en la misma transacción, porque esta escritura ya lo era. Consecuencia visible: el
+historial de una caja incluye desde hoy su creación, y la prueba de `configuracionDeCaja` pasa
+de esperar dos entradas a tres. Eso **es** la mejora: «cuándo apareció esta caja» era una
+pregunta que el historial no podía contestar.
+
+**El coste, dicho en vez de escondido: 27 archivos de prueba.** La FK de la colocación es
+`RESTRICT`, así que las 27 limpiezas que borran colmenas necesitan borrar la colocación antes.
+**Se mantiene `RESTRICT` y no se cambia a `CASCADE`** aunque eso habría ahorrado el diff: en
+producción una colmena no se borra —se retira—, y una cascada haría que un borrado se llevara
+la historia en silencio. El diff es ceremonia; la cascada sería una pérdida de datos posible.
+
+**Dos pruebas cambiaron de expectativa porque la suya codificaba el defecto**, y eso se dice
+porque cambiar una expectativa es lo que hace un arnés complaciente:
+
+* `polinizacion.test.ts` contaba con que una colmena **sin** colocación fuera invisible a la
+  ventana. Ahora retira las iniciales y construye su historia entera a mano, a propósito.
+* `traslado.test.ts` abría la colocación por su cuenta —con la nota de la deuda al lado—, lo
+  que hoy dejaría **dos** colocaciones abiertas: el estado que la base no impide (los `NULL`
+  no chocan en un índice único) y el servicio sí.
+
+**Flip-test de las cuatro, compilando y cayendo por su nombre**, y **el cuarto encontró un
+defecto en mi propio guardia**: al quitar la llamada de `apiario-las-nubes.ts` el guardia
+siguió **en verde**, porque el `import` del ayudante mencionaba el nombre y el detector contaba
+la mención. El instrumento midió una línea de importación en vez de una escritura — la misma
+forma que ya me costó dos mediciones este mes. Corregido para exigir el paréntesis, con los dos
+casos sintéticos que lo ejercitan; ahora la mutación tumba «cada uno crea también su
+colocación».
+
+**Inventario de acceso: 327/96 → 328/96**, con dos entradas nuevas para el mismo archivo
+porque son dos preguntas distintas — por qué recibe una transacción abierta
+(`reciben_transaccion`) y quién autoriza en su lugar (`dependen_del_llamador`).
+
+**Lo que NO entra.** Un índice único parcial que garantice «una sola colocación abierta por
+colmena» sigue sin poder expresarse en Prisma, tal como dejó dicho ADR-126; la invariante la
+sostiene el servicio en una transacción y la defiende su prueba.
