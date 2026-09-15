@@ -3163,3 +3163,23 @@ hoy sólo lo tiene Platform Admin—; el resolvedor de permisos **sólo sabe sum
 personalizar por usuario no es una pantalla que falte sino un concepto que no tiene; y las
 vistas 2 y 3 de disponibilidad necesitan capacidad en `equipment` y un concepto de cosecha
 **planificada**, que `HarvestEvent` no tiene.
+
+### 2026-09-14 · La jornada abierta se ve en todas las pantallas, y se reclama al día
+
+Cierra las dos frases del Anexo E §5 que el código no cumplía (ADR-131). Medido:
+`app/layout.tsx` no tenía **ni una** referencia a `FieldSession` —sólo la ficha del apiario
+sabía de la visita abierta— y el umbral eran **72 horas** en código y en el texto.
+
+**24 h, y el número vive en un sitio:** `HORAS_DE_JORNADA_VIEJA` en `fieldSessions.ts`, que
+`vitalesDelSitio.ts` reexporta. Dos constantes para el mismo umbral acabarían diciendo cosas
+distintas de la misma visita.
+
+**El banner va en el layout** porque «todas las pantallas» incluye las que nadie ha escrito
+todavía. Dos estados: una de hoy se recuerda, una de más de un día **se reclama**.
+
+**El lector está acotado por construcción**, no vigilado: filtra `createdBy` por el propio
+principal. El control no es un UUID inventado sino **dos cuentas reales con dos jornadas
+abiertas en el mismo sitio**, y cada una ve la suya.
+
+**Pendiente nombrado del §5:** «lo que quedó pendiente» al cerrar. El resumen ya existe
+(`resumenDeVisita`); la otra mitad, no — `retirosPendientes` es el candidato obvio.

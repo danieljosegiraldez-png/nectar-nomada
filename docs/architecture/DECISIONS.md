@@ -9548,3 +9548,93 @@ y la del administrador; y sin el despojado de comentarios cae «CONTROL DEL DETE
 **Lo que NO entra.** El «sitio por corregir» que el maquetado del §2 enseña debajo de un
 apiario con cero colmenas no es ninguno de los ocho motivos de alerta, y no se inventa: hace
 falta saber qué cuenta como un sitio por corregir antes de rotular uno.
+
+## ADR-134 — El inventario del sitio no decía de dónde vino ninguna colmena ni cuándo se abrió, y estaba octavo
+
+**Contexto.** Anexo E §3, y la frase lleva su propia razón dentro: *«Inventario primero,
+**porque decide la acción del día**. Flora después. Condiciones e historial al final,
+colapsados. La acción vive abajo, al alcance del pulgar.»*
+
+Ese *porque* es comprobable, y las dos mitades fallaban.
+
+**El defecto, medido.** El maquetado del Anexo pone tres líneas en cada tarjeta:
+
+```
+C-07  poblada
+núcleo Parita · 2 sep
+inspección hace 11 d
+```
+
+La pantalla enseñaba la primera y media — identificador, estado de la caja, y si hay colonia
+o no. **Ni cuándo se abrió por última vez, ni de dónde vino.** Un inventario que no dice cuál
+llevas cinco semanas sin abrir no decide ninguna acción: hay que entrar en cada colmena para
+saberlo, que son tantos toques como colmenas, y el Anexo entero está escrito contra eso.
+
+**Y los datos ya estaban.** `Inspection.occurredAt` y `Inspection.population` existen desde
+A9 (Anexo B §2.2), el origen agrupable desde A9.10 (D6). Nadie los leía en la lista. Es la
+quinta vez en este módulo que el hueco no es el dato sino el camino hasta él — con una
+variante: aquí ni siquiera había que construir un mecanismo, sólo mirar.
+
+**El inventario estaba OCTAVO**, debajo del formulario de coordenadas, la polinización, los
+retiros pendientes, el alcance del alimento, la enjambrazón, los tratamientos y las
+irregularidades. Siete secciones que dicen cosas ciertas, y ninguna es lo que se mira al
+llegar al sitio con el ahumador encendido. Ahora va justo tras el título, y **el orden
+relativo del resto no se toca**.
+
+**Decisión — `vitalesDeColmenas`, el gemelo por colmena de `vitalesDeSitios`.** Dos lecturas,
+ninguna escritura, y la misma disciplina del A9.8: **no recibe `userAccountId` a propósito**,
+porque quien la llama ya autorizó el sitio con `getApiaryDetail`. Un lector que pide un
+principal parece una compuerta y termina usándose como tal.
+
+Y **ninguna cifra sin fila detrás** (Anexo C): todo es `null`-able. «Sin inspeccionar» no es
+«hace mucho» y no es cero — y hoy es el estado de casi todo el inventario real, que entró por
+guion y nunca se ha abierto desde la aplicación.
+
+**Decisión — el `⚠` sale de lo observado, no de un plazo.** El maquetado marca una sola caja
+de las tres, la que dice «débil»; **no** marca la que lleva once días sin inspección. Así que
+los días se **ven** y no gritan: convertir «hace mucho» en alerta sería inventar una cadencia
+por colmena, y la cadencia de este módulo la declara una persona al cerrar cada visita en
+`nextVisitDueAt`, no una constante. Y `null` no avisa: **no observar la población no es
+observarla baja** — el campo es opcional por ADR-080, porque una inspección rápida que sólo
+mira si la caja sigue viva es legítima.
+
+**Decisión — sólo la colonia viva, y la prueba que lo obliga es de datos reales.** El lector
+filtra `endedAt: null`. Sin eso, **NN-0041 y NN-0042 de Finca Rosina** —cajas con patas y
+tapa, sin colonia— dirían «inspección hace 3 d» y llevarían un `⚠` de población baja sobre
+una caja donde no hay abejas. La prueba de ese caso trae **control positivo de que la
+inspección de la colonia muerta existe y es reciente**; sin él, pasaría por no haber nada que
+heredar.
+
+**Lo que se enseña cuando hay las dos cosas: la fuente de catálogo, no el tipo.** Los dos
+juntos darían «Comprada Parita», que no es castellano. El catálogo es el dato con el que D6
+compara un pie contra otro, así que gana el sitio en la tarjeta; el tipo aparece cuando no hay
+fuente.
+
+**Inventario de acceso: 326/95 → 327/96**, con sus dos entradas en el allowlist. Cae en
+**«depende del llamador»** y no en «acotado por construcción», y la diferencia se dice en el
+documento porque es la que importa: `jornadaAbiertaDe` filtra por el propio principal y la
+base le impide devolver lo ajeno; éste recibe **ids** que la ficha ya tiene concedidos, y con
+un id ajeno devolvería el dato ajeno.
+
+**Flip-test de las cuatro decisiones**, cada una en su corrida, compilando y cayendo por su
+nombre: leer la inspección más vieja tumba «lee la inspección MÁS RECIENTE»; quitar
+`endedAt: null` tumba «una caja vacía no hereda la inspección de la colonia que se murió»;
+avisar también sin población observada tumba «no observar la población NO es observarla baja»;
+y cortar el origen de catálogo tumba «trae el origen agrupable del catálogo».
+
+**Lo que NO está probado, y se dice en vez de dejarlo implícito.** El **orden de las secciones
+y el renderizado de la tarjeta no tienen prueba**. No hay pruebas de renderizado de páginas en
+este repositorio, y una aserción posicional sobre el texto del archivo es exactamente la
+trampa que ya me costó una medición —`indexOf` encontró `{...resto}` en mi propio comentario y
+no en el JSX—. El lector tiene ocho casos; la disposición tiene el compilador y nada más.
+
+**Lo que NO entra.** La otra mitad del §3: colapsar condiciones e historial, y el
+«[Registrar evento] al alcance del pulgar». Es ergonomía, se juzga con el guante puesto, y
+mover una sección con una razón escrita no es lo mismo que rediseñar la pantalla a ciegas.
+
+**Y la FLORA MELÍFERA del maquetado tampoco, por una razón distinta y peor: no existe.** No
+hay **ningún** modelo de observación de floración en el esquema —comprobado sobre
+`prisma/schema.prisma`, cero modelos y cero enums—, y el §4 nombra el formulario que lo
+llenaría: *«Observación de floración. Especie, fase fenológica, abundancia, recurso que
+aporta.»* Es un hueco de **esquema**, como fue el §8, y su vocabulario es conocimiento del
+dueño: qué especies, qué fases, qué escala de abundancia. No se inventa.
