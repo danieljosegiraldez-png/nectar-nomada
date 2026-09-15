@@ -205,7 +205,17 @@ export function loteDeReferencia<T extends { id: string }>(
   lotesCargados: readonly T[],
   entradas: readonly { lotId: string }[],
 ): T {
-  return lotesCargados[0]!;
+  // **El primero que el operario ESCRIBIÓ**, no el primero que la base devuelva.
+  // `findMany` sin `orderBy` no promete ningún orden, así que antes de esto el
+  // origen de un lote fusionado lo decidía el recorrido de un índice — y con él
+  // la altitud, la parcela y el huso horario que la pantalla imprime (V-001).
+  const primero = entradas[0];
+  if (!primero) throw new TraceabilityAccessError("inputs_required");
+  const elegido = lotesCargados.find((l) => l.id === primero.lotId);
+  // **Falla en vez de caer al primero que haya.** Caer sería el defecto original
+  // con otra cara: un origen elegido por algo que no es la intención de nadie.
+  if (!elegido) throw new TraceabilityAccessError("lot_not_found");
+  return elegido;
 }
 
 export async function recordTransformation(userAccountId: string, input: RecordTransformationInput) {
