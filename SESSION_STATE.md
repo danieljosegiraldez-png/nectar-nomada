@@ -38,6 +38,34 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · El mismo manejo a varias colmenas de una vez
+
+ADR-136, y lo pidió el dueño con estas palabras: «poder seleccionar todas las colmenas para
+aplicar que se hizo algo que hice igual a todas, y no tener que hacer siempre una por una».
+
+**No era una idea nueva: era terminar una.** El §8 ya lo había escrito para el traslado
+—«selección múltiple con atajos, porque nadie toca veinte casillas con guante»— y ese
+formulario ya tenía casillas, «todas» y conteo antes de confirmar. Se reusa entero.
+
+**Sólo alimentación y tratamiento, y la línea la traza el esquema:** `provenanceClassFor` da
+`original_record` a esos dos y `direct_observation` a la observación al paso. Diez registros de
+algo que HICISTE son diez hechos ciertos; diez observaciones sacadas de una mirada, no. La
+inspección queda fuera por lo mismo — el Anexo la marca «(por colmena)».
+
+**Y en lote sale MÁS correcto:** `coverageUntil` y la carencia son las fechas que disparan los
+avisos; tecleadas diez veces se desvían, y diez cajas con el mismo jarabe el mismo día
+acabarían avisando en días distintos.
+
+**Lo que no se relaja:** una fila por colonia, un rastro por fila, una jornada abierta que las
+recoge todas, y **una colonia que no está viva no recibe nada** — el error la nombra, y en el
+formulario las doce cajas vacías se ven y no se pueden marcar. Las reglas del evento
+individual se **extrajeron** en vez de duplicarse, con su prueba: duplicar es como se perdió
+la colocación en ADR-135.
+
+**Pendiente nombrado:** la observación en lote, hasta que el dueño diga qué significa; y el
+«nada fuera de lo normal» sobre varias, que es honesto pero escribe `Inspection` y merece su
+propia rebanada.
+
 ### 2026-09-15 · Una colmena nace con su colocación: diez de las veintinueve reales no la tenían
 
 ADR-135. **La invariante vivía en un comentario de ADR-126** —«`createHive` no la crea»—, y eso
@@ -105,41 +133,6 @@ la trampa que ya midió un comentario mío en vez del JSX.
 cero enums de floración en el esquema— y el §4 nombra el formulario que la llenaría. Es hueco
 de esquema, como fue el §8, y su vocabulario es del dueño: especies, fases fenológicas, escala
 de abundancia.
-
-### 2026-09-15 · El orden de la lista de apiarios, y la prioridad que movía el borde sin mover la tarjeta
-
-Anexo E §2 (ADR-133). **La pantalla sí ordenaba por urgencia — con un criterio de tres
-valores.** Empatados, decidía `localeCompare` del nombre, o sea **el alfabeto**, que es lo que
-el Anexo prohíbe por su nombre. Y eso dejaba la decisión del dueño del día antes aplicada a
-medias: subir `aspersion_anunciada` a la primera prioridad movía el borde de la tarjeta **sin
-mover la tarjeta**, así que un apiario con una aspersión en tres días quedaba debajo de uno con
-una visita vencida por empezar su nombre por T.
-
-**Nada lo vigilaba porque no había qué llamar:** el orden vivía en dos líneas dentro de un
-componente. Misma forma que ADR-132. Ahora es `compararPorUrgencia`, pura, con cuatro
-criterios — nivel, motivo en la prioridad del dueño, cuántas alertas, y **el nombre como
-desempate determinista y no como orden**, que es la diferencia entre «alfabético» y «estable».
-
-**La entrada directa con un solo apiario NO es un `redirect` en `/apiaries`, y eso se midió
-antes de escribir:** la ficha tiene una sola salida —«volver a apiarios»— y la navegación
-global sólo ofrece la lista, así que redirigir habría dejado **`/apiaries/new` sin alcanzar**.
-Nadie podría crear su segundo apiario. Vive en `destinoDeEntrada`, y sólo cuando el aterrizaje
-por permisos es la lista.
-
-**Tres instrumentos que medían prosa en un solo cambio**, y el tercero es el que enseña: el
-guardia de textos de alerta leía la unión con una expresión regular (ya midió cero motivos una
-vez) y ahora lee un valor desde un módulo puro; mi `not.toContain("prisma")` cayó al minuto
-porque la palabra está en el comentario que explica por qué no lo importa; y **un flip-test
-encontró que el despojado de comentarios no lo ejercitaba ninguna prueba** — quitando la línea
-entera, las seis seguían en verde. La trampa del escapado del RSS, otra vez.
-
-**Y de ayer:** la prueba «gana incluso con permisos de plataforma» usaba
-`user:manage_permissions`, que **no existe**. Pasaba porque el aterrizaje lo decidía `lot:view`
-al lado. Corregida, y con ella una suposición mía: un administrador de plataforma sin permiso
-operativo aterriza en `/my-nectar`, no en un tablero de administración.
-
-**Pendiente nombrado:** el «sitio por corregir» del maquetado del §2 no es ninguno de los ocho
-motivos de alerta. No se inventa.
 
 ## 3. Bloqueado, y en qué
 

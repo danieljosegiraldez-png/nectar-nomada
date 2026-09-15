@@ -1527,7 +1527,17 @@
     "hiveInspeccionHace": "inspección hace {dias} d",
     "hiveSinInspeccion": "sin inspeccionar",
     "hiveOrigenYFecha": "{origen} · desde {fecha}",
-    "hiveNecesitaAtencion": "población baja"
+    "hiveNecesitaAtencion": "población baja",
+    "loteHeading": "Aplicar a varias colmenas",
+    "loteColmenasLegend": "A cuáles se lo hiciste",
+    "loteTodasLasPobladas": "Todas las pobladas ({count})",
+    "loteNinguna": "Ninguna",
+    "loteSinColonia": "sin colonia",
+    "loteSeleccionadas": "{count} seleccionada(s)",
+    "loteTipoLabel": "Qué se hizo",
+    "loteFechaLabel": "Cuándo",
+    "loteAplicarBoton": "Registrar en las seleccionadas",
+    "loteCoberturaAyuda": "Es la fecha que dispara el aviso de la próxima visita. Puesta una vez para todas, las colmenas que recibieron lo mismo el mismo día avisan el mismo día."
   },
   "Research": {
     "badge": "Research OS",

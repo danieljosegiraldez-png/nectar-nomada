@@ -101,7 +101,25 @@ function provenanceClassFor(eventType: ColonyEventType): ProvenanceClass {
   }
 }
 
-export async function recordColonyEvent(userAccountId: string, input: RecordColonyEventInput) {
+/**
+ * Las reglas del evento, en un solo sitio, porque ahora hay DOS puertas.
+ *
+ * Se extrajo tal cual al construir el registro en lote (ADR-136): duplicarlas habría hecho
+ * que una regla añadida después valiera para una puerta y no para la otra — que es
+ * exactamente cómo la invariante de la colocación se aplicó en un guion y se olvidó en el
+ * siguiente. Devuelve los tres campos ya normalizados; no toca la base.
+ */
+export function normalizarEventoDeColonia(
+  input: Pick<
+    RecordColonyEventInput,
+    | "eventType"
+    | "treatmentBatchLabel"
+    | "treatmentWithdrawalDays"
+    | "treatmentTarget"
+    | "treatmentRoute"
+    | "feedingMethod"
+  >,
+) {
   if (input.eventType === "treatment" && !input.treatmentBatchLabel?.trim()) {
     throw new ColonyEventValidationError("treatment_batch_label_required");
   }
@@ -143,6 +161,13 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
   if (feedingMethod !== null && input.eventType !== "feeding") {
     throw new ColonyEventValidationError("feeding_method_solo_en_alimentacion");
   }
+
+
+  return { treatmentTarget, treatmentRoute, feedingMethod };
+}
+
+export async function recordColonyEvent(userAccountId: string, input: RecordColonyEventInput) {
+  const { treatmentTarget, treatmentRoute, feedingMethod } = normalizarEventoDeColonia(input);
 
   const scope = await resolveColonyScope(input.colonyId);
   await requireColonyEventWriteAccess(userAccountId, [scope]);
@@ -212,4 +237,181 @@ export async function listColonyEventsForColony(userAccountId: string, colonyId:
   await requireApiaryAccess(userAccountId, "view", [scope]);
 
   return prisma.colonyEvent.findMany({ where: { colonyId }, include: { assets: true }, orderBy: { occurredAt: "desc" } });
+}
+
+/**
+ * El mismo manejo, aplicado a varias colmenas de una vez.
+ *
+ * **Por qué existe, y en boca del dueño:** *«cuando entro a apiario poder seleccionar todas
+ * las colmenas para aplicar que se hizo algo que hice igual a todas, y no tener que hacer
+ * siempre una por una»*. En Toabré una alimentación es una bolsa de jarabe sobre los
+ * cabezales de cada caja en la misma vuelta; un tratamiento de varroa se aplica al apiario,
+ * porque el ácaro no respeta cajas.
+ *
+ * ## Por qué SÓLO `feeding` y `treatment`, y la línea no es de gusto
+ *
+ * El esquema ya la traza: `provenanceClassFor` da **`original_record`** a esos dos y
+ * **`direct_observation`** a `passing_observation` y `other`. Un registro original de algo
+ * que **hiciste** en diez cajas son diez registros ciertos; una observación directa de diez
+ * cajas sacada de una sola mirada no lo es. Por eso una inspección nunca entra aquí —el
+ * Anexo E §4 la marca «(por colmena)», y cuadros cubiertos, reina vista o patrón de cría son
+ * hechos de UNA colonia—, y por eso los otros dos tipos quedan fuera hasta que el dueño diga
+ * qué significa hacerlos en grupo.
+ *
+ * ## Y además sale MÁS correcto que una por una
+ *
+ * Los dos guardan la fecha que dispara un aviso: `coverageUntil` —hasta cuándo alcanza el
+ * alimento— y la carencia del tratamiento. Tecleadas diez veces se desvían, y diez cajas que
+ * recibieron el mismo jarabe el mismo día empiezan a avisar en fechas distintas. Lo mismo con
+ * `treatmentBatchLabel`: un dedazo en una de diez rompe el agrupado por objetivo.
+ *
+ * ## Lo que NO se relaja por ser en lote
+ *
+ * Una fila por colonia, no una fila por lote: la carencia y las alertas se calculan por
+ * colonia, y el día que trates 8 de 10 el registro tiene que decir 8. Un `AuditEvent` por
+ * fila, como hace `trasladarColmenas`. Y `ligarAVisitaAbierta` por fila, para que la jornada
+ * abierta las recoja todas.
+ */
+export class EventoEnLoteInvalido extends Error {
+  constructor(
+    message: string,
+    /** Los identificadores concretos que lo provocaron, para que el mensaje nombre cuáles. */
+    readonly detalles: string[] = [],
+  ) {
+    super(message);
+  }
+}
+
+export interface EventoEnLoteInput
+  extends Omit<RecordColonyEventInput, "colonyId" | "clientDraftId"> {
+  /** Las colonias a las que se aplicó. Vacío es un error, no un no-op silencioso. */
+  colonyIds: readonly string[];
+  /**
+   * La clave de reintento del LOTE. De ella sale una por fila —`<lote>:<colonia>`—, y sin
+   * ella un «sincronizar» repetido sin señal escribiría unas dos veces y otras ninguna.
+   */
+  loteDeClienteId?: string | null;
+}
+
+export async function registrarEventoEnLote(userAccountId: string, input: EventoEnLoteInput) {
+  if (input.eventType !== "feeding" && input.eventType !== "treatment") {
+    throw new EventoEnLoteInvalido("tipo_no_admite_lote", [input.eventType]);
+  }
+
+  const colonyIds = [...new Set(input.colonyIds)];
+  if (colonyIds.length === 0) throw new EventoEnLoteInvalido("sin_colmenas");
+
+  const { treatmentTarget, treatmentRoute, feedingMethod } = normalizarEventoDeColonia(input);
+
+  const colonias = await prisma.colony.findMany({
+    where: { id: { in: colonyIds } },
+    select: {
+      id: true,
+      status: true,
+      endedAt: true,
+      hive: { select: { id: true, identifier: true, projectId: true, locationId: true } },
+    },
+  });
+
+  const faltan = colonyIds.filter((id) => !colonias.some((c) => c.id === id));
+  if (faltan.length > 0) throw new EventoEnLoteInvalido("colonia_no_encontrada", faltan);
+
+  // **Una colonia muerta no recibe jarabe.** Registrarlo sería escribir un manejo sobre una
+  // caja vacía, y el módulo ya tiene doce de ésas entre Finca Rosina y Toabré Finca 1.
+  const noVivas = colonias.filter((c) => c.endedAt !== null || c.status !== "active");
+  if (noVivas.length > 0) {
+    throw new EventoEnLoteInvalido("colonia_no_viva", noVivas.map((c) => c.hive.identifier));
+  }
+
+  // **Un lote es de UN sitio.** No porque la base lo impida, sino porque el formulario lo
+  // ofrece desde la ficha de un apiario: aceptar colmenas de dos sitios haría que el mismo
+  // lote afirmara una vuelta que nadie dio.
+  const sitios = [...new Set(colonias.map((c) => c.hive.locationId))];
+  if (sitios.length > 1) throw new EventoEnLoteInvalido("colmenas_de_varios_sitios", sitios);
+  const locationId = sitios[0]!;
+
+  // Se autoriza con TODOS los ámbitos concretos en juego: las colmenas de un mismo apiario
+  // pueden colgar de proyectos distintos, y pasar sólo uno rechazaría el caso normal. Es el
+  // mismo arreglo que ADR-126 necesitó en el traslado.
+  const candidatos = [...new Map(
+    colonias.map((c) => [`${c.hive.projectId ?? ""}|${c.hive.locationId}`, { projectId: c.hive.projectId, locationId: c.hive.locationId }]),
+  ).values()];
+  await requireColonyEventWriteAccess(userAccountId, candidatos);
+
+  const claveDe = (colonyId: string) =>
+    input.loteDeClienteId ? `${input.loteDeClienteId}:${colonyId}` : null;
+
+  // Idempotencia: lo ya escrito por un intento anterior no se vuelve a escribir ni se cuenta
+  // como nuevo. Se dice cuántas estaban, en vez de callarlo.
+  const claves = colonyIds.map(claveDe).filter((c): c is string => c !== null);
+  const yaEscritas = claves.length
+    ? await prisma.colonyEvent.findMany({ where: { clientDraftId: { in: claves } }, select: { clientDraftId: true } })
+    : [];
+  const yaEstan = new Set(yaEscritas.map((e) => e.clientDraftId));
+  const pendientes = colonias.filter((c) => !yaEstan.has(claveDe(c.id)));
+
+  const occurredAt = input.occurredAt ?? new Date();
+  const provenanceClass = provenanceClassFor(input.eventType);
+
+  const escritos = await prisma.$transaction(async (tx) => {
+    const ids: string[] = [];
+    for (const colonia of pendientes) {
+      const colonyEvent = await tx.colonyEvent.create({
+        data: {
+          colonyId: colonia.id,
+          eventType: input.eventType,
+          occurredAt,
+          operatorPersonId: input.operatorPersonId ?? null,
+          feedingMaterial: input.feedingMaterial ?? null,
+          feedingQuantity: input.feedingQuantity ?? null,
+          feedingUnit: input.feedingUnit ?? null,
+          coverageUntil: input.eventType === "feeding" ? (input.coverageUntil ?? null) : null,
+          feedingMethod,
+          treatmentTarget,
+          treatmentRoute,
+          treatmentProduct: input.treatmentProduct ?? null,
+          treatmentBatchLabel: input.treatmentBatchLabel?.trim() ?? null,
+          treatmentWithdrawalDays: input.treatmentWithdrawalDays ?? null,
+          treatmentDose: input.treatmentDose ?? null,
+          treatmentDoseUnit: input.treatmentDoseUnit ?? null,
+          note: input.note ?? null,
+          provenanceClass,
+          clientDraftId: claveDe(colonia.id),
+          createdBy: userAccountId,
+        },
+      });
+      ids.push(colonyEvent.id);
+
+      await recordAuditEvent(
+        {
+          actorUserAccountId: userAccountId,
+          operation: "colony_event.create",
+          entityType: "colony_event",
+          entityId: colonyEvent.id,
+          after: colonyEvent,
+          reason: `Aplicado en lote a ${pendientes.length} colmena(s) del sitio.`,
+          sourceInterface: "apiary.service",
+        },
+        tx,
+      );
+
+      await ligarAVisitaAbierta(tx, {
+        userAccountId,
+        locationId,
+        occurredAt,
+        provenanceClass,
+        sujeto: { colonyEventId: colonyEvent.id },
+      });
+    }
+    return ids;
+  });
+
+  return {
+    locationId,
+    colonyEventIds: escritos,
+    escritos: escritos.length,
+    /** Las que ya había escrito un intento anterior con la misma clave de lote. */
+    yaEstaban: colonias.length - pendientes.length,
+    colmenas: colonias.map((c) => c.hive.identifier),
+  };
 }
