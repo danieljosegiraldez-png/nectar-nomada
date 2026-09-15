@@ -177,6 +177,73 @@ describe("PlantingCohort — partial knowledge is the normal case", () => {
   });
 });
 
+describe("el marco de siembra son dos números, y una siembra puede no existir todavía", () => {
+  it("guarda calle y distancia entre plantas por separado, sin derivar una de otra", async () => {
+    // 1,8 × 2,5 es el caso que obligó a estas columnas: con un solo
+    // `spacingMeters` hay que elegir cuál de los dos se guarda, o sea inventar
+    // el otro. El control positivo del test es que salgan DISTINTOS.
+    const cohort = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotAId,
+      cultivarValueId: caturraValueId,
+      rowSpacingMeters: 1.8,
+      plantSpacingMeters: 2.5,
+      provenanceClass: "direct_observation",
+    });
+
+    expect(Number(cohort.rowSpacingMeters)).toBe(1.8);
+    expect(Number(cohort.plantSpacingMeters)).toBe(2.5);
+    // Y `spacingMeters`, el legado, sigue nulo: rellenarlo desde estos dos
+    // afirmaría un marco cuadrado que nadie declaró.
+    expect(cohort.spacingMeters).toBeNull();
+  });
+
+  it("acepta media verdad: se sabe la calle y no la distancia entre plantas", async () => {
+    const cohort = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotAId,
+      cultivarValueId: caturraValueId,
+      rowSpacingMeters: 2.0,
+      provenanceClass: "direct_observation",
+    });
+
+    expect(Number(cohort.rowSpacingMeters)).toBe(2.0);
+    expect(cohort.plantSpacingMeters).toBeNull();
+  });
+
+  it("rechaza un marco de cero metros, que se leería luego como densidad infinita", async () => {
+    await expect(
+      createPlantingCohort(authorizedUserAccountId, {
+        locationId: plotAId,
+        cultivarValueId: caturraValueId,
+        plantSpacingMeters: 0,
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(PlantingCohortValidationError);
+  });
+
+  it("una siembra decidida y no ejecutada nace `planned`, y por defecto se nace `active`", async () => {
+    const planificada = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotAId,
+      cultivarValueId: caturraValueId,
+      plantCount: 600,
+      status: "planned",
+      provenanceClass: "direct_observation",
+    });
+    expect(planificada.status).toBe("planned");
+    expect(planificada.plantedAt).toBeNull();
+
+    // El control positivo: sin pedirlo, sigue siendo `active`. Sin esta mitad,
+    // un `status` que se ignorara en silencio daría el mismo verde arriba si el
+    // valor por defecto fuera `planned`.
+    const plantada = await createPlantingCohort(authorizedUserAccountId, {
+      locationId: plotAId,
+      cultivarValueId: caturraValueId,
+      plantCount: 115,
+      provenanceClass: "direct_observation",
+    });
+    expect(plantada.status).toBe("active");
+  });
+});
+
 describe("cultivar aliases resolve to the canonical row", () => {
   it("stores a cohort created with 'Catuai' against the canonical 'Catuaí'", async () => {
     const cohort = await createPlantingCohort(authorizedUserAccountId, {
