@@ -48,6 +48,7 @@ tests/apiary/objetivoDelTratamiento.test.ts
 tests/apiary/origenDeColonia.test.ts
 tests/apiary/varroa.test.ts
 tests/apiary/vitalesDelSitio.test.ts
+tests/apiary/vitalesDeColmena.test.ts
 tests/auth/googleLinking.test.ts
 tests/auth/setPassword.test.ts
 tests/content/stories.test.ts

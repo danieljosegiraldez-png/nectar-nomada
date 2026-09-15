@@ -384,6 +384,10 @@
     {
       "archivo": "lib/equipos/equipos.ts",
       "razon": "Modulo de dominio de equipos e instrumentos (EQUIPMENT_AND_READINESS.md §2-§4, §7 y §9). Es el sitio donde el acceso a datos vive por diseno. Cada funcion resuelve `can(..., \"equipment\", ...)` contra el ambito hoja del equipo ANTES de leer o escribir, y toda escritura confirma su AuditEvent en la misma transaccion. El veredicto de una verificacion NO se calcula aqui: lo deriva un trigger de la base."
+    },
+    {
+      "archivo": "lib/apiary/vitalesDeColmena.ts",
+      "razon": "Los vitales de cada colmena del inventario (Anexo E §3): la última inspección, su población y el origen de la colonia viva. Dos lecturas, ninguna escritura. Es el gemelo por colmena de vitalesDelSitio.ts y comparte su disciplina: no recibe principal a propósito, porque quien lo llama ya autorizó el sitio con getApiaryDetail."
     }
   ],
   "reciben_transaccion": [
@@ -772,6 +776,12 @@
       "operacion": "colmenasDeLaVentana",
       "razon": "Recibe un compromisoId que su llamador —la ficha del apiario, via getApiaryDetail, que autoriza con requireApiaryAccess(\"view\")— ya obtuvo de densidadDePolinizacion. No pide principal a proposito: misma disciplina que densidadDePolinizacion, vitalesDeSitios y carenciasVigentes. Lee colocaciones de un sitio ya concedido y no escribe nada.",
       "verificado": "2026-09-14"
+    },
+    {
+      "archivo": "lib/apiary/vitalesDeColmena.ts",
+      "operacion": "vitalesDeColmenas",
+      "razon": "Recibe ids de colmena que su llamador —la ficha del apiario, vía getApiaryDetail, que autoriza con requireApiaryAccess(\"view\") sobre el sitio y sus colmenas— ya tiene concedidos. No pide principal a proposito: misma disciplina que vitalesDeSitios, densidadDePolinizacion y colmenasDeLaVentana. Un lector que pide un principal parece una compuerta y termina usándose como tal. Lee y no escribe.",
+      "verificado": "2026-09-15"
     }
   ]
 }

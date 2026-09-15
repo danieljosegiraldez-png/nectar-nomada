@@ -10,6 +10,7 @@ import { avisosDeEnjambrazon } from "../../../lib/apiary/avisoDeEnjambrazon";
 import { alcanceDelAlimento } from "../../../lib/apiary/alcanceDelAlimento";
 import { tratamientosPorObjetivo } from "../../../lib/apiary/objetivoDelTratamiento";
 import { retirosPendientes } from "../../../lib/apiary/cierreDeEvento";
+import { vitalesDeColmenas } from "../../../lib/apiary/vitalesDeColmena";
 import { completarCierreDeTratamientoFormAction } from "../../actions/apiary";
 import { confirmarCoordenadasAction } from "../../actions/traceability";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
@@ -88,6 +89,9 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   // A9 · Anexo B §4 — «las tiras que no se retiran generan resistencia». Espera a
   // que pase la carencia declarada, o catorce días si nadie la declaró.
   const retiros = await retirosPendientes(id, ahora, 14);
+  // Anexo E §3 — los vitales de cada caja. `getApiaryDetail` ya autorizó el sitio; esto lee
+  // hechos de las colmenas que ese sitio ya concedió, igual que `vitalesDeSitios` en la lista.
+  const vitalesColmena = await vitalesDeColmenas(apiary.hives.map((h) => h.id), ahora);
 
   return (
     <div>
@@ -96,6 +100,92 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
       </p>
       <span className="nn-badge">{t("badge")}</span>
       <h1>{apiary.name}</h1>
+
+      {/* **El inventario va PRIMERO.** Anexo E §3: «Inventario primero, porque decide la
+          acción del día». Estaba octavo —debajo del formulario de coordenadas, la
+          polinización, los retiros, el alcance, la enjambrazón, los tratamientos y las
+          irregularidades—, así que en un teléfono había que pasar siete secciones para ver
+          las colmenas. Las siete dicen cosas ciertas; ninguna es lo que se mira al llegar
+          al sitio con el ahumador encendido.
+
+          Lo que NO se toca aquí: el orden relativo del resto, ni el «colapsar condiciones e
+          historial» ni el «[Registrar evento] al alcance del pulgar» que el §3 también pide.
+          Eso es ergonomía que se juzga con el guante puesto, y mover una sección con una
+          razón escrita no es lo mismo que rediseñar la pantalla a ciegas. */}
+      <section className="nn-section">
+        <h2>{t("hivesHeading")}</h2>
+        {apiary.hives.length === 0 ? (
+          <p className="nn-muted">{t("noHives")}</p>
+        ) : (
+          <div className="nn-grid">
+            {apiary.hives.map((hive) => {
+              // Anexo E §3 — las dos líneas que la tarjeta no tenía: de dónde vino y cuándo
+              // se abrió por última vez. Sin ellas el inventario no «decide la acción del
+              // día», que es la razón que da el Anexo para ponerlo primero.
+              const v = vitalesColmena.get(hive.id);
+              // El origen AGRUPABLE cuando lo hay, y el tipo cuando no. Los dos juntos darían
+              // «Comprada Parita», que no es castellano; el catálogo es el dato con el que se
+              // compara un pie contra otro (A9.10), así que gana el sitio en la tarjeta.
+              const origen = v?.origenFuente ?? (v?.origenTipo ? t(`originType_${v.origenTipo}`) : null);
+              return (
+                <Link key={hive.id} href={`/apiaries/${apiary.id}/hives/${hive.id}`} className="nn-card-link">
+                  <h3>{hive.identifier}</h3>
+                  <p className="nn-muted">{t(`hiveStatus_${hive.status}`)}</p>
+                  <p className="nn-detail-meta">
+                    {hive.colonies.length > 0 ? t("colonyPresent") : t("colonyAbsent")}
+                  </p>
+
+                  {/* «⚠ débil» del maquetado. Sale de lo OBSERVADO —la población que declaró
+                      la última inspección— y no de un plazo: convertir «hace mucho» en alerta
+                      sería inventar una cadencia por colmena, y la cadencia de este módulo la
+                      declara una persona al cerrar cada visita. */}
+                  {v?.necesitaAtencion ? (
+                    <p className="nn-alerta nn-alerta-aviso">⚠ {t("hiveNecesitaAtencion")}</p>
+                  ) : null}
+
+                  {origen && v?.coloniaDesde ? (
+                    <p className="nn-detail-meta">
+                      {t("hiveOrigenYFecha", { origen, fecha: v.coloniaDesde.toISOString().slice(0, 10) })}
+                    </p>
+                  ) : null}
+
+                  {/* «Sin inspeccionar» no es «hace mucho» y no es cero: es el tercer estado
+                      que el Anexo C exige, y aquí es además el caso de casi todo el inventario
+                      real, que entró por guion y nunca se ha abierto desde la aplicación. */}
+                  <p className={v?.diasDesdeInspeccion == null ? "nn-vital-sin-registro" : "nn-detail-meta"}>
+                    {v?.diasDesdeInspeccion == null
+                      ? t("hiveSinInspeccion")
+                      : t("hiveInspeccionHace", { dias: v.diasDesdeInspeccion })}
+                  </p>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Anexo E §8 — el traslado, colapsado y debajo del inventario: es una operación
+            de día de carga, no de cada visita. Sólo aparece si hay colmenas que mover Y
+            algún apiario a donde moverlas; un formulario que no puede hacer nada es peor
+            que su ausencia. */}
+        {apiary.hives.length > 0 && destinos.length > 0 ? (
+          <details className="nn-traslado">
+            <summary>{t("trasladoHeading")}</summary>
+            <TrasladoForm
+              apiaryId={apiary.id}
+              apiaryNombre={apiary.name}
+              colmenasEnOrigen={apiary.hives.length}
+              colmenas={apiary.hives.map((h) => ({
+                id: h.id,
+                identifier: h.identifier,
+                poblada: h.colonies.some((c) => c.status === "active"),
+              }))}
+              destinos={destinos}
+              hoy={ahora.toISOString().slice(0, 10)}
+            />
+          </details>
+        ) : null}
+      </section>
+
 
       {/* Dónde está este sitio. **La sección aparece siempre**, y ése es el
           arreglo del 2026-09-08: antes se dibujaba sólo si el sitio ya tenía
@@ -359,47 +449,6 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           </p>
         </section>
       ) : null}
-
-      <section className="nn-section">
-        <h2>{t("hivesHeading")}</h2>
-        {apiary.hives.length === 0 ? (
-          <p className="nn-muted">{t("noHives")}</p>
-        ) : (
-          <div className="nn-grid">
-            {apiary.hives.map((hive) => (
-              <Link key={hive.id} href={`/apiaries/${apiary.id}/hives/${hive.id}`} className="nn-card-link">
-                <h3>{hive.identifier}</h3>
-                <p className="nn-muted">{t(`hiveStatus_${hive.status}`)}</p>
-                <p className="nn-detail-meta">
-                  {hive.colonies.length > 0 ? t("colonyPresent") : t("colonyAbsent")}
-                </p>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {/* Anexo E §8 — el traslado, colapsado y debajo del inventario: es una operación
-            de día de carga, no de cada visita. Sólo aparece si hay colmenas que mover Y
-            algún apiario a donde moverlas; un formulario que no puede hacer nada es peor
-            que su ausencia. */}
-        {apiary.hives.length > 0 && destinos.length > 0 ? (
-          <details className="nn-traslado">
-            <summary>{t("trasladoHeading")}</summary>
-            <TrasladoForm
-              apiaryId={apiary.id}
-              apiaryNombre={apiary.name}
-              colmenasEnOrigen={apiary.hives.length}
-              colmenas={apiary.hives.map((h) => ({
-                id: h.id,
-                identifier: h.identifier,
-                poblada: h.colonies.some((c) => c.status === "active"),
-              }))}
-              destinos={destinos}
-              hoy={ahora.toISOString().slice(0, 10)}
-            />
-          </details>
-        ) : null}
-      </section>
 
       {/* Anexo E §4 y §3 — la consulta a vecinos. Va ANTES de las visitas porque su
           vencimiento decide si la próxima ida lleva una parada más, y el §3 la enseña

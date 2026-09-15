@@ -11,9 +11,9 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-13
+## Lo medido el 2026-09-05, actualizado el 2026-09-15
 
-**326 operaciones** que tocan la base, en **95 archivos**:
+**327 operaciones** que tocan la base, en **96 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -24,10 +24,19 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 |---:|---|---|
 | **220** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **33** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **55** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **56** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
+
+> **El de 326→327, con un archivo más, son los vitales por colmena del Anexo E §3.**
+> `vitalesDeColmenas` vive en `lib/apiary/vitalesDeColmena.ts`, nuevo, así que sube archivo y
+> operación. Cae en **«depende del llamador»** y no en «acotado por construcción», y la
+> diferencia con la fila de abajo es exactamente la que importa: `jornadaAbiertaDe` filtra por
+> el propio principal, así que la base le impide devolver lo ajeno; éste recibe **ids de
+> colmena** que la ficha del apiario ya tiene concedidos, y **con un id ajeno devolvería el
+> dato ajeno**. Su seguridad está en quien lo llama, que es lo que dice ese cajón, y por eso
+> lleva entrada en el allowlist con su fecha.
 
 > **Y el de 325→326, con los archivos igual, es la jornada abierta del Anexo E §5.**
 > `jornadaAbiertaDe` vive en `lib/traceability/fieldSessions.ts`, que ya estaba inventariado,
