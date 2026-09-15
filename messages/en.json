@@ -1527,7 +1527,17 @@
     "hiveInspeccionHace": "inspected {dias} d ago",
     "hiveSinInspeccion": "never inspected",
     "hiveOrigenYFecha": "{origen} · since {fecha}",
-    "hiveNecesitaAtencion": "low population"
+    "hiveNecesitaAtencion": "low population",
+    "loteHeading": "Apply to several hives",
+    "loteColmenasLegend": "Which ones you did it to",
+    "loteTodasLasPobladas": "All populated ({count})",
+    "loteNinguna": "None",
+    "loteSinColonia": "no colony",
+    "loteSeleccionadas": "{count} selected",
+    "loteTipoLabel": "What was done",
+    "loteFechaLabel": "When",
+    "loteAplicarBoton": "Record on the selected hives",
+    "loteCoberturaAyuda": "This is the date that triggers the next-visit alert. Set once for all of them, hives that got the same thing on the same day alert on the same day."
   },
   "Research": {
     "badge": "Research OS",

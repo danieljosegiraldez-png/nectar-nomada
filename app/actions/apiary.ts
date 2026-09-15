@@ -20,7 +20,7 @@ import { completarCierreDeCosecha } from "../../lib/apiary/cierreDeCosecha";
 import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { recordInspection } from "../../lib/apiary/inspections";
-import { recordColonyEvent, ColonyEventValidationError } from "../../lib/apiary/colonyEvents";
+import { recordColonyEvent, registrarEventoEnLote, ColonyEventValidationError } from "../../lib/apiary/colonyEvents";
 import { requestApiaryAssetUpload, finalizeApiaryAssetUpload } from "../../lib/apiary/media";
 import type { RecordInspectionInput } from "../../lib/apiary/inspections";
 import type { RecordColonyEventInput } from "../../lib/apiary/colonyEvents";
@@ -314,6 +314,66 @@ export async function completarCierreDeCosechaFormAction(formData: FormData): Pr
  * **Revalida los dos apiarios**, no sólo el de origen: el destino acaba de cambiar de
  * conteo y su ficha lo enseña.
  */
+/**
+ * A9 · Anexo E — aplicar el MISMO manejo a varias colmenas de una vez (ADR-136).
+ *
+ * Pedido por el dueño: *«poder seleccionar todas las colmenas para aplicar que se hizo algo
+ * que hice igual a todas, y no tener que hacer siempre una por una»*. Es el mismo principio
+ * que el §8 ya escribió para el traslado — *«selección múltiple con atajos, porque nadie
+ * toca veinte casillas con guante»*— aplicado al manejo.
+ *
+ * **El id de lote se genera AQUÍ, en el servidor**, y no en el formulario: es la clave de
+ * reintento de la que sale una por fila, y un id que naciera en el navegador cambiaría en
+ * cada reenvío — que es justo cuando hace falta que NO cambie.
+ *
+ * `coverageUntil` es campo de DÍA (medianoche UTC) y no un instante: es la fecha que dispara
+ * el aviso de la próxima visita, y tratarla como instante es el fallo que ADR-112 documenta.
+ */
+export async function aplicarManejoEnLoteFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const colonyIds = formData.getAll("colonyIds").map((v) => String(v)).filter((v) => v.length > 0);
+  const eventType = String(formData.get("eventType") ?? "");
+
+  const dia = fechaDeDia(String(formData.get("occurredAt") ?? ""), "occurredAt");
+  const cobertura = fechaDeDia(String(formData.get("coverageUntil") ?? ""), "coverageUntil");
+
+  const numero = (clave: string) => {
+    const bruto = String(formData.get(clave) ?? "").trim();
+    if (bruto === "") return null;
+    const n = Number(bruto);
+    return Number.isFinite(n) ? n : null;
+  };
+  const texto = (clave: string) => {
+    const bruto = String(formData.get(clave) ?? "").trim();
+    return bruto === "" ? null : bruto;
+  };
+
+  await registrarEventoEnLote(user.userAccountId, {
+    colonyIds,
+    eventType: eventType as "feeding" | "treatment",
+    occurredAt: dia ?? new Date(),
+    feedingMaterial: texto("feedingMaterial"),
+    feedingQuantity: numero("feedingQuantity"),
+    feedingUnit: texto("feedingUnit"),
+    feedingMethod: texto("feedingMethod"),
+    coverageUntil: cobertura,
+    treatmentProduct: texto("treatmentProduct"),
+    treatmentBatchLabel: texto("treatmentBatchLabel"),
+    treatmentWithdrawalDays: numero("treatmentWithdrawalDays"),
+    treatmentTarget: texto("treatmentTarget"),
+    treatmentRoute: texto("treatmentRoute"),
+    treatmentDose: numero("treatmentDose"),
+    treatmentDoseUnit: texto("treatmentDoseUnit"),
+    note: texto("note"),
+    loteDeClienteId: `lote-${crypto.randomUUID()}`,
+  });
+
+  revalidatePath(`/apiaries/${apiaryId}`);
+}
+
 export async function trasladarColmenasFormAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");

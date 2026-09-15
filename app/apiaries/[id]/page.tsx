@@ -17,6 +17,7 @@ import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
 import { Ayuda } from "../../components/apiary/Ayuda";
 import { TrasladoForm } from "../../components/apiary/TrasladoForm";
+import { ManejoEnLoteForm } from "../../components/apiary/ManejoEnLoteForm";
 import { ConsultaAVecinosForm } from "../../components/apiary/ConsultaAVecinosForm";
 import {
   consultasDeSitio,
@@ -162,6 +163,25 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
             })}
           </div>
         )}
+
+        {/* ADR-136 — el mismo manejo a varias colmenas de una vez, colapsado y debajo de las
+            tarjetas. Va ANTES del traslado porque es manejo de cada visita y el traslado es
+            día de carga. Sólo aparece si hay alguna caja con colonia viva: un formulario que
+            no puede hacer nada es peor que su ausencia, el mismo criterio que el traslado. */}
+        {apiary.hives.some((h) => h.colonies.some((c) => c.status === "active")) ? (
+          <details className="nn-traslado">
+            <summary>{t("loteHeading")}</summary>
+            <ManejoEnLoteForm
+              apiaryId={apiary.id}
+              colmenas={apiary.hives.map((h) => ({
+                hiveId: h.id,
+                identifier: h.identifier,
+                colonyId: h.colonies.find((c) => c.status === "active")?.id ?? null,
+              }))}
+              hoy={ahora.toISOString().slice(0, 10)}
+            />
+          </details>
+        ) : null}
 
         {/* Anexo E §8 — el traslado, colapsado y debajo del inventario: es una operación
             de día de carga, no de cada visita. Sólo aparece si hay colmenas que mover Y
