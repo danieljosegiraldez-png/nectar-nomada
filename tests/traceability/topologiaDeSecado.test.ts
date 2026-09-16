@@ -31,4 +31,13 @@ describe("una cama de secado es una Location, no una familia de entidades nueva"
       await prisma.location.delete({ where: { id: inv.id } });
     }
   });
+
+  it("rechaza una corrida cuya cama no es una cama", async () => {
+    const sitio = await prisma.location.findFirstOrThrow({ where: { locationType: "site" } });
+    await expect(
+      prisma.dryingRun.create({
+        data: { startedAt: new Date(), dryingBedLocationId: sitio.id },
+      }),
+    ).rejects.toThrow(/cama de secado/i);
+  });
 });

@@ -776,6 +776,7 @@ model Location {
   harvestEvents               HarvestEvent[]
   receivingEvents             ReceivingEvent[]
   dryingRuns                  DryingRun[]
+  dryingRunsOnBed             DryingRun[]                @relation("DryingRunBed")
   storageAssignments          StorageAssignment[]
   pollinationCommitments      PollinationCommitment[]
   hives                       Hive[]
@@ -3793,6 +3794,12 @@ model DryingRun {
   locationId   String?      @map("location_id") @db.Uuid
   location     Location?    @relation(fields: [locationId], references: [id])
   layerDepthCm Decimal?     @map("layer_depth_cm") @db.Decimal(6, 2)
+
+  /// La cama concreta. `locationId` y `method` se quedan como legado y NO se
+  /// rellenan hacia atrás: las corridas viejas nunca dijeron si su Location era
+  /// una cama o el sitio entero.
+  dryingBedLocationId String?   @map("drying_bed_location_id") @db.Uuid
+  dryingBedLocation   Location? @relation("DryingRunBed", fields: [dryingBedLocationId], references: [id])
 
   /// De qué proceso del lote forma parte esta corrida. Anulable: todo lo que ya
   /// existía es anterior a `LotProcess` y no cuelga de ninguno.
