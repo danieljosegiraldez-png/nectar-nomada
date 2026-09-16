@@ -10377,3 +10377,42 @@ noria".
 orden de construir. Las piezas del biochar --la noria con identidad, las cantidades de entrada y
 salida, la aplicacion como fila propia, y la receta con cantidad por ingrediente-- quedan
 nombradas y sin construir.
+
+## ADR-147 -- Entre dos versiones de una minuta manda la ultima revisada, y la superada se queda
+
+**Contexto.** ADR-146 trajo al repositorio las fuentes de Cerro Azul y dejo cuatro conflictos
+senalados sin resolver. El primero: las **dos versiones de la misma reunion** del 18 de julio de
+2026 discrepan en los anos de cosecha -- la inglesa dice "harvesting **2029**-2033", la espanola
+revisada para Chris Huerbsch dice "cosechando **2031**-2033". Mismo objetivo de 20.000 plantones
+para 2030, misma reunion, mismo redactor.
+
+**Decision del dueno, literal:** "La ultima revision de minutas sera la que debe actualizar,
+puede quedar historial que se penso antes pero la revisada es la version que importa ahora."
+
+Asi que **vale 2031-2033**. Pero lo que se registra aqui no es ese numero: es la **regla**, que
+sirve para cualquier par futuro y evita tener que preguntarselo otra vez.
+
+**Lo que la regla implica, y es la mitad que no es obvia: la version superada NO se corrige.**
+Se le pone una **nota del dueno fechada al final**, y su cuerpo se queda diciendo lo que decia.
+Hecho en `FUENTE_CERRO_AZUL_MINUTA_2026-07-18.md`, que sigue diciendo 2029 a proposito.
+
+Tres razones, y la tercera es la que decide:
+
+- El dueno lo pidio asi -- "puede quedar historial que se penso antes".
+- Es el mecanismo que **esos archivos ya declaraban** en su cabecera: "No editar el cuerpo. Una
+  correccion va como nota del dueno, fechada, al final". Esta es su primera aplicacion, y el
+  mecanismo aguanto sin inventarse nada.
+- **Corregir el cuerpo destruiria la evidencia de que hubo un cambio de criterio.** Un archivo
+  donde las dos versiones coinciden no se distingue de uno donde nadie reviso nada, y quien lo
+  lea dentro de un ano no sabra que 2029 se llego a pensar. Es la misma razon por la que aqui no
+  se reescriben las cifras equivocadas de un ADR viejo: se les pone la nota al lado.
+
+**Como se sabe cual es "la ultima revisada", que no es lo mismo que la mas nueva.** La espanola
+es **revision** de la inglesa -- misma reunion, mismo dia, ampliada y revisada para Chris. Una
+minuta de **otra** reunion, como la ejecutiva del 6 de agosto, es mas nueva y **no** supersede
+nada: es otro documento. La regla compara versiones de una misma reunion, no fechas.
+
+**Lo que NO entra.** Un guardia. Hoy hay **un** par de versiones en el repositorio y una sola
+nota; un detector de "minutas de la misma reunion" sobre ese corpus no tendria nada que
+distinguir, y una prueba que recorre datos reales que no ejercitan la transformacion vale como
+red para el dia que lleguen, no como guardia. Si aparece un segundo par, ahi tiene sentido.

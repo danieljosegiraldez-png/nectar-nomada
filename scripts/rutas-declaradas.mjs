@@ -52,6 +52,7 @@ export const RUTAS = {
 
   // — Todo lo demás exige sesión —
   "/admin/users": { clase: "requiere-sesion", razon: "Administración de usuarios y permisos." },
+  "/admin/users/[assignmentId]/permisos": { clase: "requiere-sesion", razon: "Ajustes de permiso de una asignación concreta." },
   "/ai": { clase: "requiere-sesion", razon: "Asistente sobre datos del titular." },
   "/api/export": { clase: "requiere-sesion", razon: "Descarga de datos. Responde 401/403, no redirige: es una descarga." },
   "/api/v1/devices": { clase: "requiere-sesion", metodos: ["POST"], razon: "P4 §1. Registra un aparato que sincronizará. Responde 401 en JSON, no redirige: la llama un cliente, no un navegador que navega." },

@@ -60,6 +60,7 @@ tests/discover/service.test.ts
 tests/envios/unaVezPorEnvio.test.ts
 tests/partner/projectClassification.test.ts
 tests/rbac/ambitoDeUbicacion.test.ts
+tests/rbac/ajustesDePermiso.test.ts
 tests/rbac/admin.test.ts
 tests/research/amendments.test.ts
 tests/research/ro1.test.ts

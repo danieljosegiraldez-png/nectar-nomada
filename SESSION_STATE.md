@@ -57,10 +57,14 @@ cita 13.345 palabras y la extracción da 13.345 exactas.
 el carbón se vuelve biochar **activo**. Dos pasos separados en el tiempo — «ya se cuenta con carbón
 seco, pero falta que Bob prepare la mezcla de la noria».
 
-**Cuatro conflictos señalados y NO resueltos** (§4 del índice): los años de cosecha discrepan entre
-las dos versiones de la misma minuta (2029 vs 2031); las **dos norias** que Daniel menciona no están
-en ningún documento —7 ocurrencias de «noria», ninguna las nombra—; `BiocharBatch` mete retort y
-noria en la misma fila; y la aplicación al cultivo no existe.
+**Cuatro conflictos señalados** (§4 del índice). **Uno lo resolvió Daniel el mismo día y dio una
+regla, ADR-147:** manda la **última revisión** de una minuta —2031–2033—, y la superada **no se
+corrige**, se le pone una nota fechada al final. Esa fue la primera aplicación del mecanismo que
+las cabeceras `FUENTE_*` ya declaraban.
+
+**Siguen abiertos tres:** las **dos norias** que Daniel menciona no están en ningún documento
+—7 ocurrencias de «noria», ninguna las nombra—; `BiocharBatch` mete retort y noria en la misma
+fila; y la aplicación al cultivo no existe.
 
 **No se implementó nada.** Es entrada de planificación aceptada.
 
@@ -239,6 +243,19 @@ puede afirmar cada pantalla— y sigue sin tomarse.
 - **Falta correr `npm run sensory:create-protocol`** — escribe en producción y
   no se ha ejecutado. La herramienta quedó lista el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
+
+- **`npm run apiary:load-protocol` YA SE CORRIÓ — 2026-09-16, lo confirmó Daniel.**
+  `apiario-campo-v1` está en producción, así que las pantallas de captura de campo
+  tienen qué preguntar. **Se anota justamente porque no estaba anotado:** ese día
+  se le pidió correrlo como «lo único que falta» sacándolo de la memoria de una
+  sesión anterior y **no de este archivo**, donde nunca figuró (control positivo:
+  `sensory:create-protocol`, que sí figura, aparece arriba). Sin esta línea, la
+  siguiente sesión vuelve a pedirle un guion que ya corrió.
+
+  **No se verificó contra la base y no se puede:** leer la base de producción de
+  Neon está prohibido. Es la palabra del dueño, y basta — pero la distinción
+  importa si alguien lo vuelve a dudar: el guion imprime **lo que dice el archivo
+  y lo que hay en la base**, y las dos líneas contienen `apiario-campo-v1`.
 
 - **Dónde se rompe «tarea de finca → puntaje de taza», medido.** Fumigar y
   sembrar se registran como *hechos* (`LabourEntry`, `MaterialConsumptionEntry`,

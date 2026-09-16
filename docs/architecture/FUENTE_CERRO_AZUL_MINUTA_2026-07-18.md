@@ -146,3 +146,25 @@ While Danny is in Boquete over the next couple of weeks, Kenneth will get 2–3 
 - Next check-in in August, budget/yield plan due September.
 - Gap analysis still pending on beneficio equipment — trilladora, cuarto oscuro, measurement instruments, etc. — along with a timeline and budget to have it in place within the next 3–5 years.
 - Once road work near the Grajales boundary is complete, clear (socolear) that area to open access for additional beehives — Danny to cover the cost if needed. Timeline: near-term or by next season.
+
+---
+
+## Notas del dueño
+
+> Esta sección es el **único** sitio donde este archivo se modifica. El cuerpo de
+> arriba queda como se escribió, aunque una nota lo contradiga: es el historial
+> de lo que se pensó, y borrarlo perdería justo eso.
+
+### 2026-09-16 · Los años de cosecha: manda 2031–2033
+
+La línea «Goal: 20,000 plantones in 3–4 years, done by 2030, **harvesting
+2029–2033**» está **superada**. La versión en español revisada para Chris
+Huerbsch —`FUENTE_CERRO_AZUL_MINUTA_2026-07-18_CHRIS_ES.md`— dice «cosechando
+**2031–2033**», y ésa es la vigente.
+
+Daniel, literal: «La última revisión de minutas será la que debe actualizar,
+puede quedar historial que se pensó antes pero la revisada es la versión que
+importa ahora.»
+
+No es una corrección de este caso: es la regla para cualquier par de versiones
+de una misma minuta. Queda como **ADR-147**.

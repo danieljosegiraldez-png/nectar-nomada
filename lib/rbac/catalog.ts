@@ -309,6 +309,45 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
     ],
   },
   {
+    name: "Farm Manager",
+    description:
+      "Runs a coffee farm and its beneficio: everything Farm Operator does, plus the decisions a " +
+      "manager makes rather than executes. Created 2026-09-16 for Bob Huerbsch, farm manager of " +
+      "Finca Rosina and co-owner of beneficio Las Nubes. " +
+      "Adds `equipment:manage` — Farm Operator's own comment says registering and retiring " +
+      "equipment is 'del jefe de beneficio, no del operario', and this is that person. " +
+      "Adds `project:manage_operations` because running the farm is the job, and `research:view` " +
+      "so the manager can see what experiments run on land they are responsible for. " +
+      "DELIBERATELY EXCLUDES `lot:override_balance`: overriding a mass balance should be rare, " +
+      "deliberate and explained, so if it is ever needed it goes as a per-assignment `grant` " +
+      "override with a written reason rather than living silently inside a profile. " +
+      "DELIBERATELY EXCLUDES `platform:manage_users` and `platform:manage_permissions` — running a " +
+      "farm is not running the platform. " +
+      "DELIBERATELY EXCLUDES `classification:clear_confidential` and `clear_trade_secret`: " +
+      "co-owning one beneficio does not imply access to another party's confidential records. " +
+      "Intended scope: the farm's location, which since ADR-144 reaches everything under it — " +
+      "parcels, drying facilities and beds — so one Assignment covers the whole farm.",
+    permissions: [
+      ["lot", "manage"],
+      ["lot", "view"],
+      ["lot", "export"],
+      ["sample", "manage"],
+      // Lo que lo distingue del operario: el jefe REGISTRA y RETIRA equipo.
+      ["equipment", "manage"],
+      ["equipment", "view"],
+      ["equipment", "report_condition"],
+      ["apiary", "manage"],
+      ["apiary", "view"],
+      ["location", "manage_attributes"],
+      ["specimen", "manage"],
+      ["specimen", "view"],
+      ["project", "manage_operations"],
+      ["research", "view"],
+      ["classification", "clear_partner"],
+      ["classification", "clear_internal"],
+    ],
+  },
+  {
     name: "Farm Operator",
     description:
       "Create/transform lots and record measurements, fermentation/drying/storage runs, and samples " +

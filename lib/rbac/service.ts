@@ -28,6 +28,7 @@ async function getResolvedAssignments(userAccountId: string): Promise<ResolvedAs
       roleProfile: {
         include: { permissions: { include: { permission: true } } },
       },
+      overrides: { include: { permission: true } },
     },
   });
 
@@ -37,10 +38,57 @@ async function getResolvedAssignments(userAccountId: string): Promise<ResolvedAs
       scopeType: row.scope.scopeType as ScopeType,
       scopeRefId: row.scope.scopeRefId,
     },
-    permissions: row.roleProfile.permissions.map(
-      (rp) => [rp.permission.resourceType, rp.permission.action] as const,
-    ),
+    permissions: permisosEfectivos(row),
   }));
+}
+
+/**
+ * Los permisos del perfil, MÁS los añadidos y MENOS los quitados de esta
+ * asignación. **Decisión de Daniel, 2026-09-16**: «en admin quitar o agregar
+ * permisos como correspondan para personalizar».
+ *
+ * **Por qué vive aquí y no en `resolve.ts`.** Ese archivo es puro a propósito y su
+ * cabecera explica por qué: la contención de ámbitos «fluye sólo hacia abajo», y
+ * eso es lo que convierte «las asignaciones estrechan, nunca ensanchan» en una
+ * propiedad impuesta en vez de una guía de revisión. Los ajustes son un hecho de
+ * la base, así que se resuelven ANTES y el resolutor sigue recibiendo una lista ya
+ * hecha. No cambia ni una línea suya.
+ *
+ * **El `deny` gana siempre**, sobre el perfil y sobre un `grant` de la misma
+ * asignación. Es la única regla de precedencia que hay, a propósito: una tabla de
+ * prioridades entre concesiones es donde estos sistemas dejan de poder auditarse.
+ * Y la contradicción —conceder y quitar lo mismo— no llega a existir: un índice
+ * único por asignación y permiso la impide en la base.
+ *
+ * **Asimetría deliberada:** un `deny` sólo puede estrechar, así que es libre. Un
+ * `grant` concede lo que ningún perfil concedió, y por eso su migración le exige
+ * razón escrita con un CHECK — no basta con que el servicio lo pida, porque un
+ * importador o un SQL directo se saltan el servicio.
+ */
+function permisosEfectivos(row: {
+  roleProfile: { permissions: { permission: { resourceType: string; action: string } }[] };
+  overrides: { effect: string; permission: { resourceType: string; action: string } }[];
+}): ReadonlyArray<readonly [string, string]> {
+  const quitados = new Set(
+    row.overrides.filter((o) => o.effect === "deny").map((o) => permissionKey(o.permission.resourceType, o.permission.action)),
+  );
+
+  const efectivos = new Map<string, readonly [string, string]>();
+  for (const rp of row.roleProfile.permissions) {
+    const clave = permissionKey(rp.permission.resourceType, rp.permission.action);
+    if (quitados.has(clave)) continue;
+    efectivos.set(clave, [rp.permission.resourceType, rp.permission.action] as const);
+  }
+  for (const o of row.overrides) {
+    if (o.effect !== "grant") continue;
+    const clave = permissionKey(o.permission.resourceType, o.permission.action);
+    // Defensa en profundidad: el índice único ya impide que un permiso esté
+    // concedido y quitado a la vez, pero si alguna vez lo estuviera, el `deny`
+    // manda — igual que manda sobre el perfil.
+    if (quitados.has(clave)) continue;
+    efectivos.set(clave, [o.permission.resourceType, o.permission.action] as const);
+  }
+  return [...efectivos.values()];
 }
 
 /**

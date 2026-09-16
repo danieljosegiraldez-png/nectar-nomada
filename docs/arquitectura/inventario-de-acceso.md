@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-16
 
-**342 operaciones** que tocan la base, en **100 archivos**:
+**345 operaciones** que tocan la base, en **100 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,7 +22,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **232** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **235** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **58** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -66,6 +66,12 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > el cliente entero. Lleva sus dos entradas —`reciben_transaccion` y `dependen_del_llamador`—
 > porque las dos preguntas son distintas: por qué se le pasa una transacción abierta, y quién
 > autoriza en su lugar.
+
+> **Y el de 342→345 son los tres ajustes de permiso por asignación (ADR-146).** Viven en
+> `lib/rbac/admin.ts`, que ya estaba inventariado, y suben la fila de **guardia directo**:
+> `listAssignmentPermissions`, `setPermissionOverride` y `clearPermissionOverride` exigen
+> `platform:manage_users` antes de leer o escribir nada. Ninguna es acotada por construcción:
+> tocan la asignación de otra persona, así que el guardia tiene que ser explícito.
 
 > **Y el de 341→342 es `lugaresParaSitioDeAbejas` (ADR-145).** Vive en `lib/apiary/hives.ts`,
 > que ya estaba inventariado, y sube la fila de **acotado por construcción**: filtra por
