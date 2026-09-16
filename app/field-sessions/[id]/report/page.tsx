@@ -91,7 +91,15 @@ export default async function ReporteDeVisitaPage({ params }: { params: Promise<
           <ul className="nn-detail-meta">
             {snapshot.registros.map((r, i) => (
               <li key={i}>
+                {/* **La colmena va primero, y en negrita.** Es lo que el cliente sigue: un
+                    informe que dice «inspección» sin decir de cuál caja es un listado de
+                    tipos de fila. Los reportes emitidos ANTES del 2026-09-15 no la traen —el
+                    snapshot es inmutable y no se reescribe—, así que el campo puede faltar y
+                    la línea se dibuja igual. */}
+                {r.colmena ? <strong>{r.colmena}</strong> : null}
+                {r.colmena ? " · " : ""}
                 {r.cuando} · {r.clase}
+                {r.detalle ? ` · ${r.detalle}` : ""}
                 {r.sujeto ? ` · ${r.sujeto}` : ""}
                 {r.operador ? ` · ${r.operador}` : ""}
                 {r.notas ? ` — ${r.notas}` : ""}

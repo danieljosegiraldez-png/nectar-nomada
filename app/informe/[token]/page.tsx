@@ -60,7 +60,18 @@ export default async function InformePorEnlacePage({ params }: { params: Promise
           <ul className="nn-list">
             {snapshot.registros.map((r, i) => (
               <li key={i}>
+                {/* **Ésta es la página que ve el cliente por su enlace**, así que es la que
+                    más necesitaba la colmena: decía la clase del registro —«inspección»— sin
+                    decir de cuál caja ni qué se le hizo. Los reportes emitidos antes del
+                    2026-09-15 no traen los dos campos nuevos y se dibujan igual: el snapshot
+                    es inmutable y no se reescribe hacia atrás. */}
+                {r.colmena ? (
+                  <>
+                    <strong>{r.colmena}</strong> ·{" "}
+                  </>
+                ) : null}
                 <strong>{r.clase}</strong> · {r.cuando}
+                {r.detalle ? ` · ${r.detalle}` : ""}
                 {r.sujeto ? ` · ${r.sujeto}` : ""}
                 {r.operador ? ` · ${r.operador}` : ""}
                 {r.notas ? ` — ${r.notas}` : ""}
