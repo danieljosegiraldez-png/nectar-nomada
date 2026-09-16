@@ -21,7 +21,7 @@
  * algo. Es un suelo, no un techo.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const RAIZ = new URL("../..", import.meta.url).pathname;
@@ -78,6 +78,71 @@ describe("un envío no se puede pulsar dos veces", () => {
     const pieza = readFileSync(`${RAIZ}app/components/BotonDeEnvio.tsx`, "utf8");
     expect(pieza, "la pieza compartida debe apagarse con useFormStatus").toContain("useFormStatus");
     expect(pieza, "debe apagarse mientras el envío está en curso").toMatch(/disabled=\{pending/);
+  });
+
+  /**
+   * **`disabled={pending}` no protege el camino SIN señal, y por eso hace falta
+   * esta segunda mitad.** Medido en la revisión final de la cola de parcela: en
+   * un formulario que encola, el `onSubmit` llama a `e.preventDefault()`, así
+   * que la Server Action **nunca corre** y el `pending` de `useActionState` no
+   * se pone a `true` jamás. El botón sigue habilitado mientras el `await
+   * queueFieldEvent(...)` está en vuelo, y dos toques son dos borradores con
+   * `clientDraftId` distintos — o sea **dos filas**. `SoilProfile` y
+   * `PlantingCohort` no tienen clave natural que lo detecte después.
+   *
+   * Lo que se exige es un **pestillo síncrono**: un `useRef` que se mira y se
+   * pone antes del `await`. Un `useState` solo no basta y no es un detalle: el
+   * re-render que apagaría el botón llega DESPUÉS del toque, y el segundo toque
+   * de un doble toque real cabe en esa ventana.
+   *
+   * Su límite, dicho: reconoce **formas escritas**, como el guardia de arriba y
+   * como el inventario de acceso. Comprueba que existe el pestillo y que se lee
+   * antes de encolar, no que la variable signifique lo que dice.
+   */
+  const ENCOLAN = "app/components/traceability";
+
+  /**
+   * Excepción con su motivo, no un hueco. `FieldSessionForms.tsx` tiene el mismo
+   * defecto **heredado** —de ahí lo copiaron los tres de parcela— y arreglarlo
+   * es otro trabajo, con su propia revisión: la cola de jornada de campo está
+   * en producción y su arreglo no se cuela dentro de la ronda de otra rama.
+   * Cuando se arregle, esta línea se borra y el guardia lo cubre sin tocar nada
+   * más.
+   */
+  const PENDIENTE_EN_OTRO_TRABAJO = ["FieldSessionForms.tsx"];
+
+  function archivosQueEncolan(): string[] {
+    return readdirSync(`${RAIZ}${ENCOLAN}`)
+      .filter((f) => f.endsWith(".tsx"))
+      .filter((f) => readFileSync(`${RAIZ}${ENCOLAN}/${f}`, "utf8").includes("queueFieldEvent("))
+      .sort();
+  }
+
+  it("está mirando de verdad: hay formularios que encolan", () => {
+    // Control positivo. Sin esto, un `readdir` roto o un nombre de función
+    // cambiado darían cero culpables de cero archivos.
+    const encolan = archivosQueEncolan();
+    expect(encolan.length, "ningún formulario que encole detectado: el análisis no mide").toBeGreaterThan(2);
+    expect(encolan, "el heredado tiene que seguir apareciendo, o la excepción no significa nada").toContain(
+      "FieldSessionForms.tsx",
+    );
+  });
+
+  it("un formulario que encola sin señal tiene un pestillo síncrono contra el doble toque", () => {
+    const culpables: string[] = [];
+    for (const f of archivosQueEncolan()) {
+      if (PENDIENTE_EN_OTRO_TRABAJO.includes(f)) continue;
+      const src = readFileSync(`${RAIZ}${ENCOLAN}/${f}`, "utf8");
+      // Un `useRef` booleano cuyo `.current` se comprueba y se pone, y un
+      // `disabled` que además de `pending` mira el estado de encolado.
+      if (!/useRef/.test(src)) culpables.push(`${f}: no usa useRef`);
+      else if (!/\.current\s*\)\s*return/.test(src)) culpables.push(`${f}: no corta la reentrada con .current`);
+      else if (!/disabled=\{pending \|\| /.test(src)) culpables.push(`${f}: el botón no se apaga al encolar`);
+    }
+    expect(
+      culpables,
+      "sin señal `pending` nunca se pone a true: hace falta un ref que corte la segunda pulsación",
+    ).toEqual([]);
   });
 
   /**
