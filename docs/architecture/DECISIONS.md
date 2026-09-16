@@ -9802,3 +9802,62 @@ nombre.
 nombró y la línea de `direct_observation` dice que no es lo mismo—. Y el «nada fuera de lo
 normal» sobre varias colmenas, que sí es honesto (es lo que observaste recorriendo el apiario)
 pero escribe `Inspection`, no `ColonyEvent`, y merece su propia rebanada.
+
+## ADR-137 -- La lista de apiarios aplanaba una jerarquia que ya estaba en los datos
+
+**Contexto.** Pedido del dueno: *"devuelta a finca o organizacion y ver apiarios bajo ellos
+ya sea en lista o mapa"*.
+
+**Esto no construye una jerarquia nueva.** Medido antes de escribir nada:
+
+```
+Nectar Nomada / Finca Rosina (site)   / Apiario Finca Rosina    ->  2 cajas
+Nectar Nomada / Finca Rosina (site)   / Apiario Las Nubes       -> 10 cajas
+Nectar Nomada / Toabre (locality)     / Apiario Toabre Finca 1  -> 10 cajas
+Nectar Nomada / Toabre (locality)     / Apiario Toabre Finca 2  ->  6 cajas
+```
+
+`Location.parentLocationId` y `Location.organizationId` estaban poblados para los cuatro
+apiarios reales, y **`app/apiaries/page.tsx` no nombraba ninguno de los dos en ninguna
+linea**: dibujaba ocho apiarios en fila, mezclando duenos. `getApiaryList` tampoco los traia
+-- y son dos `select` anidados sobre la consulta que ya hacia, no consultas nuevas. Sexta vez
+en este modulo que el hueco es el camino y no el dato.
+
+**Decision 1 -- el grupo es el LUGAR PADRE, y su tipo se ensena.** El padre de Las Nubes es un
+`site` (Finca Rosina) y el de Toabre una `locality`. Llamar "finca" a los dos seria rotular
+como hecho algo que la fila no dice, asi que el encabezado dice el tipo. Se agrupa por el
+padre **y no por la organizacion** porque agrupar por ella daria un solo grupo de cuatro, que
+es la lista plana otra vez; la organizacion se ensena al lado.
+
+**Decision 2 -- la urgencia no se pierde al agrupar.** Era el riesgo entero: si agrupar
+enterrara un apiario critico debajo de una finca tranquila, habria costado justo lo que
+ADR-133 acababa de arreglar. Manda entre grupos y dentro de cada uno, y **el grupo sin lugar
+declarado no va al final por serlo** -- a un apiario critico al que le falta el padre no se le
+entierra por un dato que falta. Solo cuando todo empata cae detras.
+
+**No se crea una pantalla `/fincas/[id]`, y se dice por que.** Existe `/locations/[slug]`, pero
+es la ficha **publica** de descubrimiento: mandar ahi a un apicultor desde su lista operativa
+lo sacaria de la aplicacion de trabajo. Una pantalla operativa nueva seria una ruta mas y una
+superficie de autorizacion mas para un nivel que hoy no tiene nada propio que ensenar mas alla
+del resumen que ya cabe en su encabezado. Cuando el nivel tenga contenido propio -- costos,
+un calendario por finca -- tendra su pantalla.
+
+**Un defecto que salio de mirar la salida real, no de releer el codigo.** El encabezado del
+grupo rotulaba la organizacion **del primer sitio**. En el grupo "sin lugar declarado" eso
+juntaba cuatro sitios de **tres** organizaciones bajo el nombre de una. Ahora se afirma solo si
+todos la comparten, con su prueba y su control positivo.
+
+**Y un criterio que no decidia nada, destapado por un flip-test.** El orden entre grupos
+empezaba comparando el nivel del sitio mas urgente. Anulandolo, las nueve pruebas seguian en
+verde -- y no por una prueba que faltara, sino **estructuralmente**: una alerta critica implica
+nivel 0, asi que un grupo con criticas gana tambien por el recuento de criticas, y uno con
+avisos por el de avisos. Los dos criterios no pueden discrepar nunca. Se quito, y se anadio la
+prueba que si aisla lo que queda. Un criterio que ninguna entrada puede hacer decidir es un
+adorno con forma de regla, que es justo lo que `CLAUDE.md` llama peor que ninguno.
+
+**Flip-test de las cinco decisiones que quedan**, cada una compilando y cayendo por su nombre.
+
+**Lo que NO entra.** El mapa por grupo. El mapa sigue arriba y con todos los sitios, porque
+**cero de los ocho tienen coordenadas**: un mapa por finca dibujaria hoy cuatro recuadros
+vacios, y partirlo antes de que haya algo que pintar seria decidir a ciegas como se ve. La
+frase del dueno pide "lista o mapa" y hoy solo una de las dos tiene datos detras.

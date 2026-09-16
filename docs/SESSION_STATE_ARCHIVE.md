@@ -3244,3 +3244,37 @@ operativo aterriza en `/my-nectar`, no en un tablero de administración.
 
 **Pendiente nombrado:** el «sitio por corregir» del maquetado del §2 no es ninguno de los ocho
 motivos de alerta. No se inventa.
+
+### 2026-09-15 · El inventario del sitio, que no decía de dónde vino ninguna colmena
+
+Anexo E §3 (ADR-134). La frase del Anexo trae su razón dentro —«inventario primero, **porque
+decide la acción del día**»— y las dos mitades fallaban.
+
+**La tarjeta enseñaba línea y media de tres.** Faltaban «de dónde vino» y «cuándo se abrió por
+última vez», y **los datos ya estaban en la base** desde A9 y A9.10: nadie los leía. Quinta vez
+en el módulo que el hueco es el camino y no el dato, con una variante — aquí no había que
+construir nada, sólo mirar.
+
+**Y estaba OCTAVO**, debajo del formulario de coordenadas y de seis secciones más. En un
+teléfono, siete pantallazos antes de ver las colmenas. Ahora va tras el título; el orden
+relativo del resto no se toca.
+
+**El `⚠` sale de lo observado y no de un plazo:** el maquetado marca la caja «débil», no la que
+lleva once días sin abrir. Los días se ven, no gritan. Y `null` no avisa.
+
+**Sólo la colonia viva (`endedAt: null`)**, y el caso que lo obliga es real: NN-0041 y NN-0042
+de Finca Rosina son cajas vacías con historia, y sin el filtro dirían «inspección hace 3 d» con
+un aviso de población baja sobre una caja sin abejas. Su prueba lleva control positivo de que
+esa inspección existe.
+
+Inventario de acceso **326/95 → 327/96**, en «depende del llamador» —con un id ajeno devolvería
+el dato ajeno— y con sus dos entradas en el allowlist.
+
+**Sin probar, y dicho:** el orden de las secciones y el renderizado de la tarjeta. No hay
+pruebas de renderizado de páginas aquí, y una aserción posicional sobre el texto del archivo es
+la trampa que ya midió un comentario mío en vez del JSX.
+
+**Pendiente nombrado:** la FLORA MELÍFERA del maquetado **no tiene modelo** —cero modelos y
+cero enums de floración en el esquema— y el §4 nombra el formulario que la llenaría. Es hueco
+de esquema, como fue el §8, y su vocabulario es del dueño: especies, fases fenológicas, escala
+de abundancia.
