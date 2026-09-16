@@ -13,6 +13,9 @@ import { exigeMetodoDeVarroa, registrarConteoDeVarroa, VarroaValidationError } f
 import { EstadoDeColoniaInvalido } from "../apiary/estadoDeColonia";
 import { AlimentacionInvalida } from "../apiary/alimentacion";
 import { TratamientoInvalido } from "../apiary/objetivoDelTratamiento";
+import { createSoilSample, createFoliarSample, SampleValidationError } from "../traceability/soilSamples";
+import { createSoilProfile, SoilProfileValidationError } from "../traceability/soilProfiles";
+import { createPlantingCohort, PlantingCohortValidationError } from "../traceability/plantingCohorts";
 
 /**
  * P4 §4 (46_P4_API_Y_SINCRONIZACION.md) — push por lotes con resultado **por
@@ -451,6 +454,73 @@ async function aplicarConteoDeVarroa(userAccountId: string, m: MutacionDeConteoD
   }
 }
 
+/**
+ * Las cuatro creaciones de parcela. La comprobación previa por `clientDraftId`
+ * es lo que separa `applied` de `duplicate`; sin ella un reintento crearía la
+ * muestra dos veces.
+ */
+async function aplicarCapturaDeParcela(
+  userAccountId: string,
+  m: MutacionDeMuestraDeSuelo | MutacionDeMuestraFoliar | MutacionDePerfilDeSuelo | MutacionDeSiembra,
+): Promise<PushResult> {
+  // Un objeto {kind: delegado} no tipa: cada `findUnique` de Prisma tiene su
+  // propio tipo de argumentos y la unión de las cuatro firmas no es invocable
+  // (TS2349). Se pregunta con un `switch` por la misma razón que el resto del
+  // archivo despacha por `kind` con ternarios, no con una tabla.
+  const yaEstaba = await (
+    m.kind === "soil_sample"
+      ? prisma.soilSample.findUnique({ where: { clientDraftId: m.clientDraftId }, select: { id: true } })
+      : m.kind === "foliar_sample"
+        ? prisma.foliarSample.findUnique({ where: { clientDraftId: m.clientDraftId }, select: { id: true } })
+        : m.kind === "soil_profile"
+          ? prisma.soilProfile.findUnique({ where: { clientDraftId: m.clientDraftId }, select: { id: true } })
+          : prisma.plantingCohort.findUnique({ where: { clientDraftId: m.clientDraftId }, select: { id: true } })
+  );
+  if (yaEstaba) return { clientDraftId: m.clientDraftId, status: "duplicate", id: yaEstaba.id };
+
+  try {
+    const comun = { locationId: m.locationId, provenanceClass: m.provenanceClass as never, clientDraftId: m.clientDraftId };
+    const fila =
+      m.kind === "soil_sample"
+        ? await createSoilSample(userAccountId, { ...comun, sampleCode: m.sampleCode, sampledAt: m.sampledAt,
+            depthTopCm: m.depthTopCm ?? null, depthBottomCm: m.depthBottomCm ?? null,
+            subSampleCount: m.subSampleCount ?? null, samplingPointLabel: m.samplingPointLabel ?? null,
+            extractionMethod: m.extractionMethod ?? null, laboratory: m.laboratory ?? null, notes: m.notes ?? null })
+      : m.kind === "foliar_sample"
+        ? await createFoliarSample(userAccountId, { ...comun, sampleCode: m.sampleCode, sampledAt: m.sampledAt,
+            leafPairPosition: m.leafPairPosition ?? null, canopyPosition: (m.canopyPosition ?? null) as never,
+            treeAgeYears: m.treeAgeYears ?? null, cultivar: m.cultivar ?? null,
+            phenologicalStage: m.phenologicalStage ?? null, branchBearingFruit: m.branchBearingFruit ?? null,
+            laboratory: m.laboratory ?? null, notes: m.notes ?? null })
+      : m.kind === "soil_profile"
+        ? await createSoilProfile(userAccountId, { ...comun, describedAt: m.describedAt,
+            pitDepthCm: m.pitDepthCm ?? null, rootingDepthCm: m.rootingDepthCm ?? null,
+            rootDistribution: m.rootDistribution ?? null, impedingLayerDepthCm: m.impedingLayerDepthCm ?? null,
+            impedingLayerNote: m.impedingLayerNote ?? null, notes: m.notes ?? null })
+      : await createPlantingCohort(userAccountId, { ...comun, cultivarValueId: m.cultivarValueId ?? null,
+            plantedAt: m.plantedAt ?? null, plantCount: m.plantCount ?? null, notes: m.notes ?? null });
+    return { clientDraftId: m.clientDraftId, status: "applied", id: fila.id };
+  } catch (error) {
+    // Un dato malo es respuesta del servidor; un corte de base sube, para que no
+    // borre trabajo de campo disfrazado de dato inválido.
+    // Son CUATRO clases, una por servicio, y no se pueden resumir en una:
+    // soilSamples.ts lanza SampleValidationError (suelo y foliar comparten),
+    // soilProfiles.ts SoilProfileValidationError, plantingCohorts.ts
+    // PlantingCohortValidationError, y los cuatro lanzan LocationAccessError
+    // cuando la parcela no es del usuario. El precedente está en este mismo
+    // archivo: la rama de field_event ya devuelve `rejected` ante uno de acceso.
+    if (
+      error instanceof SampleValidationError ||
+      error instanceof SoilProfileValidationError ||
+      error instanceof PlantingCohortValidationError ||
+      error instanceof LocationAccessError
+    ) {
+      return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
+    }
+    throw error;
+  }
+}
+
 export async function pushFieldEvents(
   userAccountId: string,
   deviceId: string,
@@ -489,6 +559,11 @@ export async function pushFieldEvents(
 
     if (m.kind === "varroa_count") {
       results.push(await aplicarConteoDeVarroa(userAccountId, m));
+      continue;
+    }
+
+    if (m.kind === "soil_sample" || m.kind === "foliar_sample" || m.kind === "soil_profile" || m.kind === "planting_cohort") {
+      results.push(await aplicarCapturaDeParcela(userAccountId, m));
       continue;
     }
 

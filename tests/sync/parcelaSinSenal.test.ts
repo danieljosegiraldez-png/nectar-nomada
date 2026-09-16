@@ -13,12 +13,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { parsearMutaciones } from "../../lib/sync/parsearMutaciones";
+import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
 
 const RUN_ID = `parcela-sin-senal-${Date.now()}`;
 
 let organizationId: string;
 let locationId: string;
 let userAccountId: string;
+let deviceId: string;
+let scopeId: string;
 
 beforeAll(async () => {
   const organization = await prisma.organization.create({
@@ -38,10 +41,30 @@ beforeAll(async () => {
     data: { personId: person.id, authProvider: "credentials", status: "active" },
   });
   userAccountId = account.id;
+
+  // Task 3 — `aplicarCapturaDeParcela` llama a `createSoilSample`, y ésa exige
+  // `location:manage_attributes` vía `requireLocationAttributeAccess`. Sin
+  // esta asignación, todas las mutaciones de este bloque volverían `rejected`
+  // con `no_location_attribute_access` en vez de `applied`.
+  const profile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+  const scope = await prisma.scope.create({ data: { scopeType: "location", scopeRefId: locationId } });
+  scopeId = scope.id;
+  await prisma.assignment.create({ data: { userAccountId, roleProfileId: profile.id, scopeId } });
+
+  // `pushFieldEvents` busca el `deviceId` en la tabla `Device`, cuyo `id` es
+  // `@db.Uuid`: un literal como `"dev1"` no es un UUID válido y Prisma lo
+  // rechaza antes de llegar a la base. Se necesita un dispositivo real.
+  const device = await prisma.device.create({
+    data: { label: `TEST PWA (${RUN_ID})`, platform: "pwa", createdBy: userAccountId },
+  });
+  deviceId = device.id;
 });
 
 afterAll(async () => {
   await prisma.soilSample.deleteMany({ where: assertDefinedWhere({ locationId }) });
+  await prisma.device.deleteMany({ where: assertDefinedWhere({ id: deviceId }) });
+  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: scopeId }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: userAccountId }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: locationId }) });
@@ -160,5 +183,44 @@ describe("el lote reconoce los cuatro tipos de captura de parcela", () => {
       { kind: "soil_sample", clientDraftId: "d1", sampleCode: "S-01", sampledAt: "2026-09-16T12:00:00.000Z" },
     ]);
     expect(r).toEqual({ ok: false, error: "mutation_missing_ids" });
+  });
+});
+
+/**
+ * Task 3 — el replay aplica la captura de parcela contra la base, una sola
+ * vez. Postgres real, contra el `locationId`/`deviceId`/`userAccountId` del
+ * `beforeAll` de arriba.
+ */
+describe("el replay aplica la captura de parcela y no la duplica", () => {
+  it("aplica una vez y la segunda dice duplicate, con UNA sola fila", async () => {
+    const m = {
+      kind: "soil_sample" as const,
+      clientDraftId: `d-${Date.now()}`,
+      locationId,
+      sampleCode: `S-${Date.now()}`,
+      sampledAt: new Date(),
+      provenanceClass: "direct_observation",
+    };
+    const [primera] = await pushFieldEvents(userAccountId, deviceId, [m]);
+    const [segunda] = await pushFieldEvents(userAccountId, deviceId, [m]);
+    expect(primera).toMatchObject({ status: "applied" });
+    expect(segunda).toMatchObject({ status: "duplicate" });
+    // El control que pide CLAUDE.md: contar filas, no conformarse con que la
+    // segunda llamada diga "duplicate".
+    expect(await prisma.soilSample.count({ where: { clientDraftId: m.clientDraftId } })).toBe(1);
+  });
+
+  it("un código vacío vuelve como rejected, no como excepción", async () => {
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "soil_sample" as const,
+        clientDraftId: `d-${Date.now()}`,
+        locationId,
+        sampleCode: "   ",
+        sampledAt: new Date(),
+        provenanceClass: "direct_observation",
+      },
+    ]);
+    expect(r).toMatchObject({ status: "rejected", reason: "sample_code_required" });
   });
 });

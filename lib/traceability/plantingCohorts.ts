@@ -69,6 +69,7 @@ export interface CreatePlantingCohortInput {
   // is not, and pretending otherwise is the failure this column exists for.
   provenanceClass: ProvenanceClass;
   dataQuality?: DataQuality | null;
+  clientDraftId?: string | null;
 }
 
 /**
@@ -155,6 +156,7 @@ export async function createPlantingCohort(userAccountId: string, input: CreateP
       notes: input.notes ?? null,
       provenanceClass: input.provenanceClass,
       dataQuality: input.dataQuality ?? null,
+      clientDraftId: input.clientDraftId ?? null,
       createdBy: userAccountId,
     },
   });

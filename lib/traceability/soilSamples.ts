@@ -38,6 +38,7 @@ export interface CreateSoilSampleInput {
   notes?: string | null;
   sourceReference?: string | null;
   dataQuality?: DataQuality | null;
+  clientDraftId?: string | null;
 }
 
 export interface CreateFoliarSampleInput {
@@ -56,6 +57,7 @@ export interface CreateFoliarSampleInput {
   notes?: string | null;
   sourceReference?: string | null;
   dataQuality?: DataQuality | null;
+  clientDraftId?: string | null;
 }
 
 function exigirCodigo(codigo: string): string {
@@ -106,6 +108,7 @@ export async function createSoilSample(userAccountId: string, input: CreateSoilS
         notes: input.notes ?? null,
         sourceReference: input.sourceReference ?? null,
         dataQuality: input.dataQuality ?? null,
+        clientDraftId: input.clientDraftId ?? null,
         createdBy: userAccountId,
       },
     });
@@ -157,6 +160,7 @@ export async function createFoliarSample(userAccountId: string, input: CreateFol
         notes: input.notes ?? null,
         sourceReference: input.sourceReference ?? null,
         dataQuality: input.dataQuality ?? null,
+        clientDraftId: input.clientDraftId ?? null,
         createdBy: userAccountId,
       },
     });
