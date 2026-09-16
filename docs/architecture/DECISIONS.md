@@ -9913,5 +9913,66 @@ ajeno devolveria el dato ajeno -- y con su entrada en el allowlist.
 
 **Lo que NO entra.** La tercera parte de la frase del §5, *"y de ahi sale el reporte tecnico al
 cliente"*, ya existe: `EmitirReporteForm` y `/field-sessions/[id]/report` estan en esa misma
-pantalla desde el 2026-09-10. Lo que sigue sin existir es el **PDF sin almacenarlo** que el
-Anexo pide al lado, y eso es una pieza propia.
+pantalla desde el 2026-09-10.
+
+> **CORRECCION del 2026-09-15, el mismo dia.** Este parrafo decia que "lo que sigue sin existir
+> es el **PDF sin almacenarlo** que el Anexo pide al lado". **Es falso, y lo afirme sin
+> medirlo.** `PrintButton` existe desde T13 y ADR-039 ya fijo que la impresion del navegador
+> **es** el mecanismo entero -- sin libreria de PDF y sin paso de render en el servidor --, y la
+> pantalla del reporte de visita lo usa en su linea 56. Lo comprobe al ir a construirlo. Se
+> corrige aqui en vez de dejarlo: un pendiente falso manda a la proxima sesion a construir algo
+> que ya esta, que es la forma inversa del hallazgo que este modulo lleva cuatro veces.
+
+## ADR-139 -- El informe al cliente decia la clase de cada registro y no de que colmena hablaba
+
+**Contexto.** El dueno lo pidio de frente: *"deberiamos tambien ver como meter el informe,
+todos los informes son visita y o inspecciones y acciones o manejos en apiario"*. El §5 del
+Anexo E cierra con *"y de ahi sale el reporte tecnico al cliente -- pagina web con enlace"*.
+
+**El reporte existe desde el 2026-09-10** y se congela en un snapshot versionado (A9.6/D7).
+**Lo que decia cada linea, medido:** `cuando · clase · sujeto · operador · notas`, donde
+`sujeto` era la cadena literal `"inspeccion"`, `"evento_de_colonia"` o `"cosecha"` -- el nombre
+de la tabla. O sea que el informe que recibe Kiva Estates por su enlace decia **de que TIPO era
+cada fila y no de que caja hablaba ni que se le hizo**. Un informe tecnico asi es un listado de
+tipos de fila.
+
+El comentario del codigo explicaba el `sujeto` como "que hecho concreto cuelga de este
+registro, **sin exponer el id interno**". El instinto es correcto y estaba aplicado demasiado
+ancho: **`NN-0043` no es un id interno**, es exactamente el dato con el que el cliente sigue su
+servicio.
+
+**Decision 1 -- el snapshot lleva la colmena y una linea de lo que paso.** `colmena` es el
+identificador de la caja cuando el registro cuelga de una colonia; `detalle` es lo que la fila
+declara: el resultado de la inspeccion, el producto del tratamiento, el material de la
+alimentacion, los kilos de la cosecha. **Nada inventado:** un tratamiento sin producto anotado
+da `null`, no "se aplico algo". Y nada de costos -- la cabecera de ese archivo ya fija que no
+entran al snapshot, y esto no los cuela por otra puerta.
+
+**Decision 2 -- los dos campos son OPCIONALES en el tipo, y no por comodidad.** El snapshot se
+guarda como JSON y se lee de vuelta con un `as`, asi que declararlos obligatorios haria creer a
+TypeScript que **todo lo ya emitido los trae**. No los trae: el snapshot es inmutable y no se
+reescribe hacia atras. `undefined` ahi es la verdad sobre esas filas, y las dos pantallas los
+dibujan condicionalmente. Hay una prueba que reescribe un snapshot guardado quitandoselos --
+que es el estado real de lo emitido hasta hoy -- y comprueba que se sigue leyendo.
+
+**Las dos pantallas, y la que importa es la publica.** `/field-sessions/[id]/report` es la del
+operador; **`/informe/[token]` es la que abre el cliente con su enlace**, y era la que mas lo
+necesitaba.
+
+**Un nombre de campo que me invente, y por que el compilador no lo vio.** Escribi `honeyKg`; el
+campo real es `extractedWeightKg`. Paso `tsc` porque el ayudante que lo consume tipaba ese
+parametro como `{ honeyKg: unknown }` -- **un `unknown` en el borde apaga la unica comprobacion
+que habia**. Lo cazo la corrida, con un `PrismaClientValidationError` que nombraba el campo. El
+tipo pasa a ser `Prisma.Decimal | null`, que es lo que la fila tiene.
+
+**Y una prueba que salia verde con el archivo en rojo.** Anadir el tratamiento dejo una fila en
+`colony_event`, cuya FK es `RESTRICT`, asi que la limpieza del archivo fallaba al borrar la
+colonia: **37 pruebas en verde y el archivo en rojo**. La limpieza se amplia, igual que las 27
+de ADR-135.
+
+**Flip-test de las dos decisiones**, compilando y cayendo por su nombre.
+
+**Lo que NO entra.** Las fotos en el informe. `FieldEvent` puede apuntar a un `Asset` y el
+snapshot no lo mira; el Anexo §7 dice que la revision de fotos "se hace despues, en telefono o
+laptop", asi que meterlas en el informe es una decision del dueno sobre que ve el cliente, no
+una que se deduzca del esquema.

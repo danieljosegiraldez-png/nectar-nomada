@@ -38,6 +38,36 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · El informe al cliente ya dice de qué colmena habla
+
+ADR-139, y lo pidió el dueño: «deberíamos también ver cómo meter el informe, todos los informes
+son visita y o inspecciones y acciones o manejos en apiario».
+
+**El reporte existía y cada línea decía el nombre de la TABLA.** Medido: `cuando · clase ·
+sujeto · operador`, con `sujeto` = `"inspeccion"` o `"evento_de_colonia"`. El informe que recibe
+Kiva por su enlace decía de qué **tipo** era cada fila y no de qué caja hablaba ni qué se le
+hizo. El comentario lo justificaba «sin exponer el id interno» — instinto correcto aplicado
+demasiado ancho: **`NN-0043` no es un id interno**, es el dato con el que el cliente sigue su
+servicio.
+
+Ahora el snapshot lleva `colmena` y `detalle` —resultado, producto, material, kilos—, **los dos
+opcionales a propósito**: el snapshot es inmutable, lo ya emitido no los trae, y declararlos
+obligatorios haría creer a TypeScript que sí. Hay una prueba que se los quita a un snapshot
+guardado y comprueba que se sigue leyendo.
+
+**Dos cosas que me cazó la corrida, no el compilador:** me inventé el campo `honeyKg` —el real
+es `extractedWeightKg`— y pasó `tsc` porque tipé el borde como `unknown`, que apaga la única
+comprobación que había. Y la prueba nueva dejó una fila en `colony_event`, cuya FK es RESTRICT:
+**37 pruebas en verde con el archivo en rojo** hasta ampliar la limpieza.
+
+**Una corrección mía en ADR-138**, del mismo día: dije que el PDF «sin almacenarlo» seguía sin
+existir. Es falso — `PrintButton` existe desde T13 y ADR-039 ya fijó que la impresión del
+navegador **es** el mecanismo. Corregido en su sitio: un pendiente falso manda a la próxima
+sesión a construir algo que ya está.
+
+**Pendiente nombrado:** las fotos en el informe. `FieldEvent` puede apuntar a un `Asset` y el
+snapshot no lo mira; qué ve el cliente es decisión del dueño.
+
 ### 2026-09-15 · Las dos mitades del cierre de jornada
 
 ADR-138. Anexo E §5: «Al cerrarla: resumen de lo registrado, **lo que quedó pendiente**». La
@@ -86,34 +116,6 @@ implica nivel 0, así que nivel y recuento nunca discrepan. Se quitó.
 
 **Pendiente nombrado:** el mapa por grupo. Cero de los ocho sitios tienen coordenadas, así que
 hoy dibujaría recuadros vacíos. La frase pide «lista o mapa» y sólo una tiene datos detrás.
-
-### 2026-09-15 · El mismo manejo a varias colmenas de una vez
-
-ADR-136, y lo pidió el dueño con estas palabras: «poder seleccionar todas las colmenas para
-aplicar que se hizo algo que hice igual a todas, y no tener que hacer siempre una por una».
-
-**No era una idea nueva: era terminar una.** El §8 ya lo había escrito para el traslado
-—«selección múltiple con atajos, porque nadie toca veinte casillas con guante»— y ese
-formulario ya tenía casillas, «todas» y conteo antes de confirmar. Se reusa entero.
-
-**Sólo alimentación y tratamiento, y la línea la traza el esquema:** `provenanceClassFor` da
-`original_record` a esos dos y `direct_observation` a la observación al paso. Diez registros de
-algo que HICISTE son diez hechos ciertos; diez observaciones sacadas de una mirada, no. La
-inspección queda fuera por lo mismo — el Anexo la marca «(por colmena)».
-
-**Y en lote sale MÁS correcto:** `coverageUntil` y la carencia son las fechas que disparan los
-avisos; tecleadas diez veces se desvían, y diez cajas con el mismo jarabe el mismo día
-acabarían avisando en días distintos.
-
-**Lo que no se relaja:** una fila por colonia, un rastro por fila, una jornada abierta que las
-recoge todas, y **una colonia que no está viva no recibe nada** — el error la nombra, y en el
-formulario las doce cajas vacías se ven y no se pueden marcar. Las reglas del evento
-individual se **extrajeron** en vez de duplicarse, con su prueba: duplicar es como se perdió
-la colocación en ADR-135.
-
-**Pendiente nombrado:** la observación en lote, hasta que el dueño diga qué significa; y el
-«nada fuera de lo normal» sobre varias, que es honesto pero escribe `Inspection` y merece su
-propia rebanada.
 
 ## 3. Bloqueado, y en qué
 

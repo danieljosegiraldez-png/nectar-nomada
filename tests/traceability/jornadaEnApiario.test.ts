@@ -18,6 +18,7 @@ import {
   FieldSessionValidationError,
 } from "../../lib/traceability/fieldSessions";
 import { recordInspection } from "../../lib/apiary/inspections";
+import { recordColonyEvent } from "../../lib/apiary/colonyEvents";
 import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
 import {
   emitirReporteDeVisita,
@@ -134,6 +135,10 @@ afterAll(async () => {
   await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: sesiones.map((s) => s.id) } }) });
   await prisma.device.deleteMany({ where: assertDefinedWhere({ id: deviceId }) });
   await prisma.inspection.deleteMany({ where: assertDefinedWhere({ colonyId }) });
+  // La prueba del informe registra un tratamiento, y la FK de `colony_event` es RESTRICT:
+  // sin esta linea el borrado de la colonia falla y el archivo entero sale en rojo con
+  // las 37 pruebas en verde.
+  await prisma.colonyEvent.deleteMany({ where: assertDefinedWhere({ colonyId }) });
   await prisma.colony.deleteMany({ where: assertDefinedWhere({ hiveId }) });
   // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado
   // de abajo falla. `createHive` abre una desde el 2026-09-15 (ADR-135).
@@ -421,6 +426,65 @@ describe("A9.6 — el reporte se congela, no se re-consulta", () => {
     const guardado = await prisma.reportVersion.findUniqueOrThrow({ where: { id: version.id } });
     const congelado = guardado.renderedSnapshot as unknown as { visita: { notas: string } };
     expect(congelado.visita.notas, "el snapshot siguió a los datos vivos: no está congelado").toBe("notas originales");
+  });
+
+  it("EL INFORME NOMBRA LA COLMENA Y QUÉ SE HIZO, no sólo la clase del registro", async () => {
+    // Hasta el 2026-09-15 cada línea del informe al cliente decía «inspección · inspeccion ·
+    // operador» y nada más: ni de qué caja hablaba ni qué se le hizo. Un informe técnico que
+    // no nombra la colmena es un listado de tipos de fila.
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-04T13:00:00Z"),
+    });
+    await recordInspection(apicultorConManejo, { colonyId, outcome: "issue_observed" });
+    await recordColonyEvent(apicultorConManejo, {
+      colonyId,
+      eventType: "treatment",
+      treatmentProduct: "Apivar",
+      treatmentBatchLabel: `L-${RUN_ID.slice(-4)}`,
+      treatmentWithdrawalDays: 14,
+      treatmentTarget: "varroa",
+    });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    const { snapshot } = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    const colmena = `${RUN_ID}-H1`;
+    expect(snapshot.registros.length).toBeGreaterThanOrEqual(2);
+    // Las dos líneas nombran la caja.
+    expect(snapshot.registros.every((r) => r.colmena === colmena)).toBe(true);
+    // Y cada una dice lo suyo: el resultado de la inspección y el producto del tratamiento.
+    const detalles = snapshot.registros.map((r) => r.detalle);
+    expect(detalles).toContain("issue_observed");
+    expect(detalles).toContain("Apivar");
+  });
+
+  it("un informe emitido ANTES de este cambio se sigue leyendo, sin los dos campos nuevos", async () => {
+    // El snapshot es inmutable y no se reescribe hacia atrás, así que los campos nuevos
+    // FALTAN en lo ya emitido. El tipo los declara opcionales por eso: un campo obligatorio
+    // haría creer a TypeScript que esas filas lo traen.
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-05T13:00:00Z"),
+    });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    const { version } = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    // Se reescribe el snapshot guardado como lo escribía la versión anterior: sin `colmena`
+    // ni `detalle`. Es el estado real de todo lo emitido hasta hoy.
+    const guardado = await prisma.reportVersion.findUniqueOrThrow({ where: { id: version.id } });
+    const viejo = guardado.renderedSnapshot as unknown as { registros: Record<string, unknown>[] };
+    for (const r of viejo.registros) {
+      delete r.colmena;
+      delete r.detalle;
+    }
+    await prisma.reportVersion.update({ where: { id: version.id }, data: { renderedSnapshot: viejo as object } });
+
+    const leido = await leerReporteDeVisita(apicultorConManejo, visita.id);
+    expect(leido, "el reporte se lee igual").toBeTruthy();
+    for (const r of leido!.snapshot.registros) {
+      expect(r.colmena).toBeUndefined();
+      expect(r.detalle).toBeUndefined();
+    }
   });
 
   it("emitir otra vez crea una VERSIÓN nueva, no pisa la anterior", async () => {
