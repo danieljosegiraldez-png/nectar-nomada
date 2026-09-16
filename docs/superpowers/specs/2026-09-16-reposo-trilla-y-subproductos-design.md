@@ -115,8 +115,20 @@ Daniel los fije: hoy son rangos que da de memoria, y `P-F` sigue abierta.
 - **Muestra**: a los 30 días el sistema **deja de advertir**. Antes de los 30 **avisa
   y deja pasar** — la extracción sigue siendo legítima, sólo que temprana, y quien la
   hace debe saberlo. Doctrina de la casa: bloquear se esquiva en el patio.
-- **Venta**: antes del umbral, el sistema **avisa con fuerza y lo deja explícito en la
-  ficha**. Si se bloquea o no es la decisión abierta de §7.
+- **Venta**: antes del umbral, el sistema **avisa y deja pasar**, y lo deja explícito
+  en la ficha del lote. **Decisión de Daniel, 2026-09-16: sólo avisa, no bloquea.**
+
+  Yo había dudado aquí, y conviene decir por qué y por qué su respuesta es la
+  correcta. Mi duda: vender café sin reposo es un daño comercial irreversible, no un
+  dato de menos, así que parecía el caso donde sí valía la pena bloquear. Su
+  respuesta lo cierra sin excepción, igual que hizo con `GREEN` en secado el día
+  anterior: **la doctrina no admite excepciones por grave que parezca el caso, porque
+  la puerta que se esquiva enseña a esquivar todas**.
+
+  Y hay una razón de negocio que yo no estaba viendo: **«depende el arreglo»**. Un
+  comprador puede aceptar café con menos reposo, o el lote puede venderse a un precio
+  distinto por eso mismo. Bloquear una venta legítima porque el sistema cree saber
+  más que quien negocia es peor que registrarla marcada.
 
 ### A.3 Lo que NO hace
 
@@ -188,9 +200,8 @@ camino, sin un segundo mecanismo.
 1. **La liberación autorizada: ¿firma o estado?** Q17 dice «authorized release» y no
    dice quién autoriza ni contra qué. Un estado del lote y una firma de una persona
    son cosas distintas y la segunda necesita saber **quién puede firmar**.
-2. **¿La venta temprana se bloquea o sólo se avisa?** Toda la casa dice avisar. Pero
-   vender café sin reposo es un daño comercial irreversible, no un dato de menos — es
-   el único caso donde he dudado de la doctrina.
+2. ~~¿La venta temprana se bloquea o sólo se avisa?~~ — **cerrada el 2026-09-16:
+   sólo avisa** (§4.2).
 3. **Los umbrales**, que son `[PROVISIONAL]` mientras `P-F` siga abierta.
 4. **Si la cascarilla compostada vuelve a la finca como enmienda**, y entonces cierra
    el círculo con las parcelas — o si sólo se registra que salió a compost.
