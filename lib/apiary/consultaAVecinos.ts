@@ -28,6 +28,7 @@
  * con control positivo— y está en ADR-127.
  */
 import { prisma } from "../db";
+import { esSitioDeAbejas } from "./sitioDeAbejas";
 import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
@@ -70,7 +71,7 @@ export async function registrarConsultaAVecinos(userAccountId: string, input: Re
     select: { id: true, locationType: true, hives: { select: { projectId: true }, take: 1 } },
   });
   if (!sitio) throw new ApiaryAccessError("location_not_found");
-  if (sitio.locationType !== "apiary_site") throw new ConsultaInvalida("no_es_apiario");
+  if (!esSitioDeAbejas(sitio.locationType)) throw new ConsultaInvalida("no_es_apiario");
   await requireApiaryAccess(userAccountId, "manage", [
     { projectId: sitio.hives[0]?.projectId ?? null, locationId: sitio.id },
   ]);
@@ -254,7 +255,7 @@ export async function vecinosOfrecidos(userAccountId: string, locationId: string
     where: { id: locationId },
     select: { id: true, locationType: true, hives: { select: { projectId: true }, take: 1 } },
   });
-  if (!sitio || sitio.locationType !== "apiary_site") return [];
+  if (!sitio || !esSitioDeAbejas(sitio.locationType)) return [];
   await requireApiaryAccess(userAccountId, "manage", [
     { projectId: sitio.hives[0]?.projectId ?? null, locationId: sitio.id },
   ]);

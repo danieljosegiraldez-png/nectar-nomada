@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { esSitioDeAbejas } from "../apiary/sitioDeAbejas";
 import { LocationAccessError } from "./locations";
 import { requireLocationAttributeAccess } from "./locations";
 import { requireColonyEventWriteAccess, ApiaryAccessError } from "../apiary/hives";
@@ -38,7 +39,7 @@ export async function requireFieldSessionAccess(userAccountId: string, locationI
   // nivel más permisivo a un id malo es cómo se rodea una compuerta.
   if (!location) throw new LocationAccessError("location_not_found");
 
-  if (location.locationType !== "apiary_site") {
+  if (!esSitioDeAbejas(location.locationType)) {
     await requireLocationAttributeAccess(userAccountId, locationId);
     return;
   }

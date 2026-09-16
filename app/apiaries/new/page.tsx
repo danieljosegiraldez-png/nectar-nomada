@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { organizacionesParaApiario, getManageableApiaryProjects } from "../../../lib/apiary/hives";
+import { organizacionesParaApiario, getManageableApiaryProjects, lugaresParaSitioDeAbejas } from "../../../lib/apiary/hives";
 import { NuevoApiarioForm } from "../../components/apiary/NuevoApiarioForm";
 
 export const dynamic = "force-dynamic";
@@ -25,9 +25,11 @@ export default async function NuevoApiarioPage() {
   if (!user) redirect("/login");
 
   const t = await getTranslations("Apiary");
-  const [organizaciones, proyectos] = await Promise.all([
+  const [organizaciones, proyectos, lugares] = await Promise.all([
     organizacionesParaApiario(user.userAccountId),
     getManageableApiaryProjects(user.userAccountId),
+    // Los lugares donde puede colgar el sitio (ADR-145).
+    lugaresParaSitioDeAbejas(user.userAccountId),
   ]);
 
   return (
@@ -42,6 +44,7 @@ export default async function NuevoApiarioPage() {
         <p className="nn-muted">{t("apiaryNoOrganizations")}</p>
       ) : (
         <NuevoApiarioForm
+          lugares={lugares}
           organizaciones={organizaciones}
           proyectos={proyectos.map((p) => ({ id: p.id, name: p.name }))}
         />

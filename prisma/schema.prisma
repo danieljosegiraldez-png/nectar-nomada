@@ -67,6 +67,7 @@ model ExternalIdentity {
 }
 
 model Person {
+  samplingEvents SamplingEvent[] @relation("SamplingEventOperator")
   id                    String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   givenName             String       @map("given_name")
   familyName            String       @map("family_name")
@@ -151,6 +152,7 @@ enum UserAccountStatus {
 }
 
 model UserAccount {
+  samplingEventsCreated SamplingEvent[] @relation("SamplingEventCreatedBy")
   id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   personId        String            @unique @map("person_id") @db.Uuid
   person          Person            @relation(fields: [personId], references: [id])
@@ -587,6 +589,23 @@ enum LocationType {
   // organization that operates an apiary business) — different tables,
   // different enums, deliberately not conflated (§2's own naming flag).
   apiary_site
+  /// Un meliponario: sitio de abejas nativas sin aguijon. **Tipo propio y no un
+  /// `apiary_site` con una especie dentro**, por decision del dueno del 2026-09-16 --
+  /// «tener meliponiarios y tener apiarios separado» — y porque resuelve un borde real: con
+  /// la especie viviendo solo en las colonias, un meliponario VACIO no podia decir de que
+  /// era. El acceso a los dos es configuracion: los permisos ya son por sitio y por proyecto.
+  ///
+  /// El manejo justifica la separacion mas que la pantalla: el manual de ANSA (Gennari, INTA)
+  /// dice que las cajas, sus modulos y sus medidas cambian por especie, y que las especies con
+  /// tendencia al pillaje «deben ser manejadas en meliponarios separados».
+  meliponary
+
+  /// La instalación de secado —invernadero solar, cuarto oscuro, patio,
+  /// marquesina, secadora— y la cama dentro de ella. Mismo patrón que `plot` y
+  /// `apiary_site`: una Location con su tipo y su padre, NO una familia de
+  /// entidades nueva.
+  drying_facility
+  drying_bed
 
   @@schema("core")
 }
@@ -599,6 +618,16 @@ enum SunExposure {
   morning
   afternoon
   both
+
+  @@schema("core")
+}
+
+enum DryingEnvironment {
+  solar_greenhouse
+  dark_room_climate_controlled
+  open_patio
+  covered_patio
+  mechanical_dryer
 
   @@schema("core")
 }
@@ -659,6 +688,7 @@ enum SubdivisionReason {
 }
 
 model Location {
+  samplingEvents SamplingEvent[] @relation("SamplingEventBed")
   id               String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   locationType     LocationType                           @map("location_type")
   parentLocationId String?                                @map("parent_location_id") @db.Uuid
@@ -708,6 +738,12 @@ model Location {
   aspect             Aspect?                 @map("aspect")
   soilType           String?                 @map("soil_type")
   plantSpacingMeters Decimal?                @map("plant_spacing_meters") @db.Decimal(5, 2)
+  /// Sólo para `drying_facility`: qué clase de ambiente es. Es lo que hoy vive
+  /// como texto libre en `DryingRun.method`.
+  dryingEnvironment DryingEnvironment? @map("drying_environment")
+  /// Sólo para `drying_bed`: el nivel del rack en un cuarto de varios niveles.
+  /// Anulable, porque una cama de patio no está en ningún rack.
+  rackLevel         Int?               @map("rack_level")
   // P1 §3 — F1 added sun, shade, altitude range, slope, soil and spacing but
   // no area, so planted area, yield per hectare and cultivar distribution by
   // area could not be computed at all. Deliberately NOT derived from a
@@ -753,6 +789,7 @@ model Location {
   harvestEvents               HarvestEvent[]
   receivingEvents             ReceivingEvent[]
   dryingRuns                  DryingRun[]
+  dryingRunsOnBed             DryingRun[]                @relation("DryingRunBed")
   storageAssignments          StorageAssignment[]
   pollinationCommitments      PollinationCommitment[]
   hives                       Hive[]
@@ -1031,12 +1068,88 @@ model ProjectDomainTagAssignment {
   @@schema("core")
 }
 
+enum MaterialState {
+  CHERRY
+  MUCILAGE_HONEY
+  PARCHMENT
+  /// El café verde NO pertenece al secado: es post-reposo, cuando el beneficio
+  /// ya terminó de transformar (Daniel, 2026-09-15). Existe porque el estado es
+  /// real, no porque se pueda medir en una cama.
+  GREEN
+
+  @@schema("core")
+}
+
+enum SamplingRole {
+  /// Dos zonas distintas de la misma cama: su diferencia ES desigualdad de
+  /// secado, y el motor puede alertar.
+  ZONE
+  /// Dos compuestas de la cama entera: su diferencia es ruido de muestreo, y
+  /// alertar de desigualdad con ellas sería inventar una señal.
+  REPLICATE
+
+  @@schema("core")
+}
+
+enum SampleKind {
+  PROCESS
+  MOISTURE
+  ROAST
+  CUPPING
+  RETENTION
+
+  @@schema("core")
+}
+
+enum SamplingZone {
+  NORTH
+  SOUTH
+  EAST
+  WEST
+  CENTER
+  EDGE
+
+  @@schema("core")
+}
+
 // DOMAIN_MODEL.md §3 — referenced by Research OS/Sensory/Competitions/
 // Traceability, none of which exist yet, so this stays intentionally thin.
 // `sampleType` is a free-text field, not an enum — COMMERCE_OPERATIONS_
 // TOOLS_ARCHITECTURE.md §19's sample-type list is domain-specific and will
 // be constrained (if at all) once a real consuming module exists.
+/// El ACTO de ir a una cama en un momento y sacar muestras. Existe para que
+/// «estas dos son las zonas de esta cama a esta hora» sea ESTRUCTURAL en vez de
+/// inferido por cercanía de fechas. No duplica `Sample`: la muestra es la cosa
+/// física, esto es la ida a buscarla.
+model SamplingEvent {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  dryingBedLocationId String?   @map("drying_bed_location_id") @db.Uuid
+  dryingBedLocation   Location? @relation("SamplingEventBed", fields: [dryingBedLocationId], references: [id])
+  dryingRunId         String?    @map("drying_run_id") @db.Uuid
+  dryingRun           DryingRun? @relation(fields: [dryingRunId], references: [id])
+
+  occurredAt       DateTime @map("occurred_at")
+  operatorPersonId String?  @map("operator_person_id") @db.Uuid
+  operator         Person?  @relation("SamplingEventOperator", fields: [operatorPersonId], references: [id])
+  notes            String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("SamplingEventCreatedBy", fields: [createdBy], references: [id])
+
+  samples Sample[]
+
+  @@index([dryingBedLocationId])
+  @@index([dryingRunId])
+  @@map("sampling_event")
+  @@schema("core")
+}
+
 model Sample {
+  samplingEventId String? @map("sampling_event_id") @db.Uuid
+  samplingEvent SamplingEvent? @relation(fields: [samplingEventId], references: [id])
+
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   // P0 (41_P0_MASS_BALANCE.md §7): scoped per organization, same reasoning
   // as Lot.lotCode. Unlike Lot, `organizationId` stays **nullable** here —
@@ -1048,6 +1161,25 @@ model Sample {
   // organization onto a sample that genuinely has none.
   sampleCode String @map("sample_code")
   sampleType     String              @map("sample_type")
+  /// `sampleType` arriba es LEGADO y no se reescribe: hoy es texto libre y su
+  /// único valor real, `green_coffee`, no es ninguno de los cinco. Traducirlo
+  /// inventaría un hecho. Mismo patrón que `deviceId` / `captureDeviceId`.
+  sampleKind    SampleKind?    @map("sample_kind")
+  materialState MaterialState? @map("material_state")
+  samplingRole  SamplingRole?  @map("sampling_role")
+  samplingZone  SamplingZone?  @map("sampling_zone")
+  /// Texto libre AL LADO del enum, nunca en su lugar — lo que ordena el
+  /// comentario de `SunExposure`.
+  samplingZoneNote String? @map("sampling_zone_note")
+
+  /// La instantánea de F3-003, en columnas nombradas y no en un JSON (CLAUDE.md
+  /// §49). La transformación ya es inmutable y el estado SE PUEDE reconstruir;
+  /// lo que falta es que esté congelado, para que nadie lea el 11 % de hoy
+  /// creyendo que es el 18 % de entonces.
+  stageAtExtraction       String?  @map("stage_at_extraction")
+  massAtExtraction        Decimal? @map("mass_at_extraction") @db.Decimal(12, 4)
+  massUnitAtExtraction    String?  @map("mass_unit_at_extraction")
+  moisturePctAtExtraction Decimal? @map("moisture_pct_at_extraction")  @db.Decimal(5, 2)
   description    String?
   projectId      String?             @map("project_id") @db.Uuid
   project        Project?            @relation(fields: [projectId], references: [id])
@@ -1099,6 +1231,7 @@ model Sample {
   @@index([locationId])
   @@index([sourceLotId])
   @@index([sourceTransformationId])
+  @@index([samplingEventId])
   @@map("sample")
   @@schema("core")
 }
@@ -3214,6 +3347,12 @@ model Measurement {
   /// Adivinar a qué «refractómetro» se refería alguien sería inventar un hecho.
   instrumentId String?    @map("instrument_id") @db.Uuid
   instrument   Equipment? @relation("MeasurementInstrument", fields: [instrumentId], references: [id])
+  /// EN QUÉ MODO estaba el aparato. `instrumentId` dice cuál midió; esto dice
+  /// cómo estaba puesto, que es lo que distingue una lectura buena de un número
+  /// plausible y equivocado.
+  instrumentModeId String?                    @map("instrument_mode_id") @db.Uuid
+  instrumentMode   InstrumentMeasurementMode? @relation("MeasurementMode", fields: [instrumentModeId], references: [id])
+
   reviewFlags  MeasurementReviewFlag[]
 
   @@map("measurement")
@@ -3765,11 +3904,18 @@ enum DryingTurnEventType {
 // the source lot's own project/location, same as every other traceability
 // write path in this module.
 model DryingRun {
+  samplingEvents SamplingEvent[]
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   method       String? // 'raised_bed' | 'patio' | 'mechanical' | free text — §16
   locationId   String?      @map("location_id") @db.Uuid
   location     Location?    @relation(fields: [locationId], references: [id])
   layerDepthCm Decimal?     @map("layer_depth_cm") @db.Decimal(6, 2)
+
+  /// La cama concreta. `locationId` y `method` se quedan como legado y NO se
+  /// rellenan hacia atrás: las corridas viejas nunca dijeron si su Location era
+  /// una cama o el sitio entero.
+  dryingBedLocationId String?   @map("drying_bed_location_id") @db.Uuid
+  dryingBedLocation   Location? @relation("DryingRunBed", fields: [dryingBedLocationId], references: [id])
 
   /// De qué proceso del lote forma parte esta corrida. Anulable: todo lo que ya
   /// existía es anterior a `LotProcess` y no cuelga de ninguno.
@@ -3790,6 +3936,10 @@ model DryingRun {
 
   @@index([locationId])
   @@index([lotProcessId])
+  /// Lo crea la migración `corrida_de_secado_en_su_cama`. Se declara aquí porque
+  /// el esquema y las migraciones tienen que decir lo mismo: el guardia de deriva
+  /// lo cazó el 2026-09-16, y sólo pudo verlo cuando se le dio `SHADOW_DATABASE_URL`.
+  @@index([dryingBedLocationId])
   @@map("drying_run")
   @@schema("traceability")
 }
@@ -4519,6 +4669,7 @@ model Equipment {
 
   transfers         EquipmentTransfer[]
   conditionReports  EquipmentConditionReport[]
+  modes InstrumentMeasurementMode[] @relation("EquipmentModes")
   checkRequirements InstrumentCheckRequirement[]
   checks            InstrumentCheck[]
 
@@ -4635,6 +4786,38 @@ model EquipmentConditionReport {
 //      y la pantalla lo dice. Es la misma decisión §7.1 —degradar, nunca
 //      bloquear— aplicada al eje del tiempo: bloquear se esquiva en el patio y
 //      entonces el sistema sabe MENOS.
+
+/// Hermana de `InstrumentCheckRequirement`, con la misma forma: por instrumento,
+/// qué modos tiene y cómo los llama EL APARATO. El nombre es del fabricante y no
+/// una paráfrasis nuestra: si la app dice «usa el ajuste de pergamino» y el
+/// aparato no lo llama así, el recordatorio estorba en vez de ayudar.
+model InstrumentMeasurementMode {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  equipmentId String    @map("equipment_id") @db.Uuid
+  equipment   Equipment @relation("EquipmentModes", fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  label         String
+  materialState MaterialState @map("material_state")
+  rangeMin      Decimal?      @map("range_min") @db.Decimal(12, 4)
+  rangeMax      Decimal?      @map("range_max") @db.Decimal(12, 4)
+  /// Desfase que una persona aplicó a esta escala. Cambia el número que el
+  /// aparato muestra, así que es procedencia: dos aparatos con desfases
+  /// distintos dan lecturas distintas del mismo grano.
+  calibrationOffset Decimal? @map("calibration_offset") @db.Decimal(5, 2)
+  calibrationMode   String?  @map("calibration_mode")
+
+  displayOrder Int       @default(0) @map("display_order")
+  retiredAt    DateTime? @map("retired_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  createdBy    String?   @map("created_by") @db.Uuid
+
+  measurements Measurement[] @relation("MeasurementMode")
+
+  @@unique([equipmentId, label])
+  @@index([equipmentId])
+  @@map("instrument_measurement_mode")
+  @@schema("core")
+}
 
 /// Contra qué hay que contrastar este instrumento. Una fila por patrón.
 ///
@@ -4763,8 +4946,12 @@ model MeasurementReviewFlag {
   measurementId String      @map("measurement_id") @db.Uuid
   measurement   Measurement @relation(fields: [measurementId], references: [id], onDelete: Cascade)
 
-  raisedByCheckId String          @map("raised_by_check_id") @db.Uuid
-  raisedByCheck   InstrumentCheck @relation("ReviewFlagRaisedBy", fields: [raisedByCheckId], references: [id], onDelete: Cascade)
+  /// Anulable desde 2026-09-15: una marca puede venir de una verificación de
+  /// instrumento O de un desajuste entre el modo y el material, que no tiene
+  /// check que la levante. El motivo de abajo pasa a decir cuál es.
+  raisedByCheckId String?          @map("raised_by_check_id") @db.Uuid
+  raisedByCheck   InstrumentCheck? @relation("ReviewFlagRaisedBy", fields: [raisedByCheckId], references: [id], onDelete: Cascade)
+  reason          MeasurementReviewReason @default(instrument_check_failed)
 
   raisedAt DateTime @default(now()) @map("raised_at")
 
@@ -4781,6 +4968,15 @@ model MeasurementReviewFlag {
   @@unique([measurementId, raisedByCheckId])
   @@index([measurementId])
   @@map("measurement_review_flag")
+  @@schema("core")
+}
+
+enum MeasurementReviewReason {
+  instrument_check_failed
+  instrument_check_overdue
+  mode_material_mismatch
+  material_stage_mismatch
+
   @@schema("core")
 }
 

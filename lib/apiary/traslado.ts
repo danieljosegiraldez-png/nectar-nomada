@@ -44,6 +44,7 @@
  * cinco semanas cumplió el protocolo entonces y no afirma nada de hoy.
  */
 import { prisma } from "../db";
+import { esSitioDeAbejas } from "./sitioDeAbejas";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
 import { carenciasVigentes, diasQueFaltanDe, libreDesdeDe, type CarenciaVigente } from "./carencia";
@@ -127,9 +128,21 @@ export async function trasladarColmenas(
     select: { id: true, locationType: true },
   });
   if (!destino) throw new ApiaryAccessError("location_not_found");
-  // Un apiario y no cualquier ubicación: mandar colmenas a un laboratorio no es un
+  // Un sitio de abejas y no cualquier ubicación: mandar colmenas a un laboratorio no es un
   // traslado, es un dato malo que después nadie sabe leer.
-  if (destino.locationType !== "apiary_site") throw new TrasladoInvalido("destino_no_es_apiario");
+  if (!esSitioDeAbejas(destino.locationType)) throw new TrasladoInvalido("destino_no_es_apiario");
+
+  // **Y del MISMO tipo que el origen** (ADR-145). No es cuestión de familia sino de
+  // compatibilidad: una colonia de Apis en una caja de melipona no existe, y las cajas cambian
+  // de módulos y de medidas según la especie —lo documenta el manual de ANSA—. El predicado de
+  // arriba dice «aquí viven colmenas»; esta línea dice «de las tuyas».
+  const sitioDeOrigen = await prisma.location.findUnique({
+    where: { id: origenLocationId },
+    select: { locationType: true },
+  });
+  if (sitioDeOrigen && sitioDeOrigen.locationType !== destino.locationType) {
+    throw new TrasladoInvalido("destino_de_otro_tipo_de_sitio");
+  }
 
   // Se autoriza sobre LOS DOS apiarios, cada uno con su contexto completo.
   //
@@ -337,8 +350,20 @@ export async function destinosCandidatos(
   excluirLocationId: string,
   enLaFecha: Date,
 ): Promise<DestinoCandidato[]> {
+  // El tipo del sitio de origen decide qué se ofrece. Si el origen no existe o no es un sitio
+  // de abejas, no hay destinos: no se adivina `apiary_site`.
+  const origen = await prisma.location.findUnique({
+    where: { id: excluirLocationId },
+    select: { locationType: true },
+  });
+  if (!origen || !esSitioDeAbejas(origen.locationType)) return [];
+  const tipoDeOrigen = origen.locationType;
+
   const apiarios = await prisma.location.findMany({
-    where: { locationType: "apiary_site", organizationId, id: { not: excluirLocationId } },
+    // **Del mismo tipo que el sitio de origen**, no de la familia entera: ofrecer un
+    // meliponario como destino de colmenas de Apis sería pintar un destino que el servicio va
+    // a rechazar, y eso es peor que no ofrecerlo (ADR-145).
+    where: { locationType: tipoDeOrigen, organizationId, id: { not: excluirLocationId } },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });

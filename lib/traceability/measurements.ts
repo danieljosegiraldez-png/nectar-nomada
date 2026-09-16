@@ -39,7 +39,10 @@ import {
   type MeasurementVariable,
 } from "./units";
 import { recordAuditEvent } from "../audit";
-import type { ProvenanceClass } from "../../generated/prisma/client";
+import { hayDesajuste } from "../equipos/modos";
+import { materialNoEsDeSecado } from "./avisoDeModo";
+import { instrumentosParaMedicion } from "../equipos/equipos";
+import type { MaterialState, SamplingRole, SamplingZone, SampleKind, ProvenanceClass } from "../../generated/prisma/client";
 
 export class MeasurementValidationError extends Error {}
 
@@ -163,6 +166,13 @@ async function scopeCandidatesForSubject(lotId?: string | null, sampleId?: strin
 }
 
 export interface RecordMeasurementInput {
+  instrumentId?: string | null;
+  instrumentModeId?: string | null;
+  materialState?: MaterialState | null;
+  samplingEventId?: string | null;
+  samplingRole?: SamplingRole | null;
+  samplingZone?: SamplingZone | null;
+  sampleKind?: SampleKind | null;
   // Clave de idempotencia del formulario web, igual que en jornales.
   claveDeEnvio?: string | null;
   variable: MeasurementVariable;
@@ -245,6 +255,18 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
     }
   }
 
+  if (input.instrumentId) {
+    const visibles = await instrumentosParaMedicion(userAccountId);
+    if (!visibles.some((e) => e.id === input.instrumentId)) throw new MeasurementValidationError("instrument_not_available");
+  }
+  if (input.instrumentModeId && !input.instrumentId) throw new MeasurementValidationError("instrument_required");
+  if ((input.materialState || input.samplingEventId || input.samplingRole || input.samplingZone || input.sampleKind) && !input.lotId) {
+    throw new MeasurementValidationError("sample_context_requires_lot_id");
+  }
+  if ((input.samplingRole || input.samplingZone) && !input.samplingEventId) throw new MeasurementValidationError("sampling_event_required");
+  if (input.sampleId && (input.materialState || input.samplingEventId || input.samplingRole || input.samplingZone || input.sampleKind)) {
+    throw new MeasurementValidationError("existing_sample_is_immutable");
+  }
   const normalized = normalizeToCanonical(input.variable, input.value, input.unit);
 
   // Escritura y auditoría en la MISMA transacción. Lo pidió la revisión
@@ -258,6 +280,35 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
     tipo: "Measurement",
     recuperar: (id) => prisma.measurement.findUniqueOrThrow({ where: { id } }),
     crear: async (tx) => {
+  const lot = input.lotId ? await tx.lot.findUniqueOrThrow({ where: { id: input.lotId } }) : null;
+  const modo = input.instrumentModeId ? await tx.instrumentMeasurementMode.findUnique({ where: { id: input.instrumentModeId } }) : null;
+  if (input.instrumentModeId && (!modo || modo.equipmentId !== input.instrumentId || modo.retiredAt)) {
+    throw new MeasurementValidationError("instrument_mode_not_available");
+  }
+  if (input.samplingEventId) {
+    const evento = await tx.samplingEvent.findUnique({ where: { id: input.samplingEventId } });
+    if (!evento || !input.dryingRunId || evento.dryingRunId !== input.dryingRunId) throw new MeasurementValidationError("sampling_event_context_mismatch");
+    const origen = await tx.lotTransformation.findFirst({ where: {
+      dryingRunId: input.dryingRunId, inputs: { some: { lotId: input.lotId! } },
+    } });
+    if (!origen) throw new MeasurementValidationError("sampling_event_context_mismatch");
+  }
+  const enSecado = !!input.dryingRunId || lot?.lotType === "drying";
+  let sampleId = input.sampleId ?? null;
+  if (lot && (input.materialState || input.samplingEventId || input.sampleKind)) {
+    const muestra = await tx.sample.create({ data: {
+      sampleCode: `M-${crypto.randomUUID()}`, sampleType: "", sourceLotId: lot.id,
+      projectId: lot.projectId, organizationId: lot.organizationId, locationId: lot.locationId,
+      classification: lot.classification, createdBy: userAccountId,
+      materialState: input.materialState, samplingEventId: input.samplingEventId,
+      samplingRole: input.samplingRole, samplingZone: input.samplingZone, sampleKind: input.sampleKind,
+      stageAtExtraction: enSecado ? "drying" : input.fermentationRunId ? "processing" : lot.lotType,
+    } });
+    sampleId = muestra.id;
+    await recordAuditEvent({ actorUserAccountId: userAccountId, operation: "sample.create",
+      entityType: "sample", entityId: muestra.id, after: muestra, sourceInterface: "traceability.service" }, tx);
+  }
+  const material = input.materialState ?? (sampleId ? (await tx.sample.findUniqueOrThrow({ where: { id: sampleId } })).materialState : null);
   const creada = await tx.measurement.create({
     data: {
       variable: input.variable,
@@ -265,7 +316,9 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
       unit: normalized.unit,
       occurredAt: input.occurredAt,
       lotId: input.lotId ?? null,
-      sampleId: input.sampleId ?? null,
+      sampleId,
+      instrumentId: input.instrumentId ?? null,
+      instrumentModeId: input.instrumentModeId ?? null,
       roastSessionId: input.roastSessionId ?? null,
       fermentationRunId: input.fermentationRunId ?? null,
       dryingRunId: input.dryingRunId ?? null,
@@ -283,6 +336,16 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
       sourceReference: input.sourceReference ?? null,
     },
   });
+
+  const razones = [
+    ...(hayDesajuste(modo ? { ...modo, rangeMin: modo.rangeMin == null ? null : Number(modo.rangeMin), rangeMax: modo.rangeMax == null ? null : Number(modo.rangeMax) } : null, material) ? ["mode_material_mismatch" as const] : []),
+    ...(materialNoEsDeSecado(material, enSecado) ? ["material_stage_mismatch" as const] : []),
+  ];
+  for (const reason of razones) {
+    const marca = await tx.measurementReviewFlag.create({ data: { measurementId: creada.id, reason, raisedByCheckId: null } });
+    await recordAuditEvent({ actorUserAccountId: userAccountId, operation: "measurement_review_flag.create",
+      entityType: "measurement_review_flag", entityId: marca.id, after: marca, sourceInterface: "traceability.service" }, tx);
+  }
 
   // C1 §3: evidentiary write (carries provenanceClass).
   await recordAuditEvent(
@@ -403,4 +466,12 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
   });
 
   return correction;
+}
+
+/** Sólo inspecciones de una corrida vinculada al lote autorizado. */
+export async function inspeccionesParaMedicion(userAccountId: string, lotId: string, dryingRunId: string) {
+  await requireSubjectAccess(userAccountId, { lotId });
+  const origen = await prisma.lotTransformation.findFirst({ where: { dryingRunId, inputs: { some: { lotId } } } });
+  if (!origen) return [];
+  return prisma.samplingEvent.findMany({ where: { dryingRunId }, select: { id: true, occurredAt: true }, orderBy: { occurredAt: "desc" } });
 }

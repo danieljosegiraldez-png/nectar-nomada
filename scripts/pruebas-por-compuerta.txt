@@ -24,6 +24,7 @@ tests/limpiarAuditDePruebas.test.ts
 tests/apiary/ambitoVacioApiarios.test.ts
 tests/notificaciones/canales.test.ts
 tests/equipos/equipos.test.ts
+tests/equipos/marcasDeRevision.test.ts
 tests/apiary/alcanceDelAlimento.test.ts
 tests/apiary/bitacora.test.ts
 tests/apiary/cierreDeEvento.test.ts
@@ -35,6 +36,7 @@ tests/apiary/consultaAVecinos.test.ts
 tests/apiary/carencia.test.ts
 tests/apiary/configuracionDeCaja.test.ts
 tests/apiary/crearApiario.test.ts
+tests/apiary/meliponario.test.ts
 tests/apiary/estadoDeColonia.test.ts
 tests/apiary/e2e.test.ts
 tests/apiary/harvest.test.ts
@@ -57,6 +59,7 @@ tests/content/stories.test.ts
 tests/discover/service.test.ts
 tests/envios/unaVezPorEnvio.test.ts
 tests/partner/projectClassification.test.ts
+tests/rbac/ambitoDeUbicacion.test.ts
 tests/rbac/admin.test.ts
 tests/research/amendments.test.ts
 tests/research/ro1.test.ts
@@ -108,11 +111,15 @@ tests/traceability/recipeAuthoring.test.ts
 tests/traceability/recipeVersions.test.ts
 tests/traceability/reports.test.ts
 tests/traceability/samples.test.ts
+tests/traceability/muestraConMaterial.test.ts
+tests/traceability/eventoDeMuestreo.test.ts
+tests/traceability/instalaciones.test.ts
 tests/traceability/cerezaComoDato.test.ts
 tests/traceability/selection.test.ts
 tests/traceability/soilProfiles.test.ts
 tests/traceability/soilSamples.test.ts
 tests/traceability/storage.test.ts
+tests/traceability/topologiaDeSecado.test.ts
 tests/traceability/v1-vocabulary.test.ts
 # @grupo: datos-reales
 # Necesitan datos que no crean ni la semilla ni ellas.

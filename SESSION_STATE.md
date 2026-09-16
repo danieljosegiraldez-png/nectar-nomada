@@ -38,56 +38,73 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-15 · Las tres preguntas que convierten una visita en informe técnico
+### 2026-09-16 · El meliponario es un tipo de sitio, y diez comparaciones de cadena pasan a ser una
 
-ADR-142: viáticos, causa probable y recomendación. Son de las siete de **casa** (`stage: close`)
-que quedaban sin sitio, y son las que el cliente lee.
+ADR-145. Las abejas sin aguijón entran como **`meliponary`, hermano de `apiary_site`** — no como
+módulo aparte ni como especie. Decisión del dueño: «tener meliponiarios y tener apiarios separado
+aunque el apicultor tiene acceso a ambas si se configura así».
 
-**Van en el cierre, y no es una elección nueva:** el comentario de `completarVisita` ya decía
-que esa función «sólo acepta `notes`» porque un valor de etapa `field` no se edita desde la
-casa. Éstas son de etapa `close` — exactamente lo que ese cierre debía aceptar.
+**Lo que lo hizo barato fue lo que se midió primero:** `"apiary_site"` estaba afirmado a mano en
+**diez sitios** del código. Ahora viven en uno solo, `lib/apiary/sitioDeAbejas.ts`, y un guardia de
+arquitectura impide volver a escribir esa comparación fuera de ahí.
 
-**Cero no es `null`:** una visita en carro propio puede costar cero de verdad, y ese cero es un
-dato. Se valida la ausencia, no la verdad del número (misma forma que ADR-115). El negativo sí
-se rechaza.
+**Se listan juntos, se manejan separados:** la lista devuelve los dos tipos; el traslado **exige el
+mismo tipo** en origen y destino y ni siquiera ofrece los del otro. Y un meliponario puede **colgar
+de un lote** (`parentLocationId`), que es como el dueño los reparte: sueltos entre bloques, o muchos
+juntos bajo el techo del beneficio.
 
-**Los viáticos no viajan al informe salvo que el contrato los pida**, y esa regla ya estaba
-declarada antes de que el campo existiera —`incluyeCostos` nace en `false`—: ahora se cumple
-sola. Su prueba lleva control positivo, o el `null` por defecto lo cumpliría igual un campo que
-nunca se rellena. La causa y la recomendación **sí** van, en las dos pantallas.
+**La mitad que falta es la especie**, y está bloqueada en él: no hay `Species` ni `Colony.especie`,
+así que hoy nada impide que un meliponario herede varroa o cuadros. El tipo de sitio es justo la
+pieza que no depende de los nombres, y por eso fue primero.
 
-El mapa de ADR-140 baja de diez huecos a **siete**.
+**El tercer flip-test hubo que rehacerlo**: la primera versión no compilaba, y una mutación que no
+compila se lee como un guardia que funciona.
+### 2026-09-16 · Pantallas de inspección e instalaciones, y el ámbito de ubicación baja por el árbol
 
-**Pendiente nombrado, y es importante no confundirlo:** `travelCostUsd` es el viático de UNA
-visita, no un modelo de costos. `LabourEntry` sigue sin llevar ninguno, el material consumido no
-tiene movimiento, y «cuánto cuesta sostener Toabré» sigue sin respuesta.
+Inspección manual con dos muestras declaradas como zonas o réplicas, usando
+`registrarInspeccion`; administración sitio → instalación → cama con permiso
+`location:manage_attributes` y auditoría atómica.
 
-### 2026-09-15 · El propósito de la visita, la única obligatoria de patio sin sitio
+**Y ADR-144, que salió de aquí:** un ámbito de ubicación alcanza a sus
+descendientes. La pantalla de instalaciones lo destapó — un operario con ámbito
+sobre la finca podía crear el invernadero y **no las camas de dentro**. Decisión
+del dueño; su mitad negativa —que un hermano sigue fuera— está en
+`tests/rbac/ambitoDeUbicacion.test.ts`.
 
-ADR-141. De las diez preguntas sin sitio que midió ADR-140, **exactamente una** era obligatoria
-y de patio: `purpose`. El protocolo obliga a declarar a qué se fue, con el guante puesto, y no
-había columna.
+Verificado: suite completa **2248/2248**, carril hermético 1146, `build` 0. Y el
+guardia de deriva de migraciones, que **sólo mide con `SHADOW_DATABASE_URL`**,
+encontró un índice que la Tarea 2 creó en la migración sin declararlo en el
+esquema.
+Detalle y comprobaciones: `.superpowers/sdd/2026-09-15-muestra-y-topologia-de-secado/tarea-8-9-report.md`.
 
-**El vocabulario ya estaba:** los seis valores salen literalmente del JSON del dueño, así que
-esta rebanada no preguntó nada.
+### 2026-09-16 · Un «sin sitio» del mapa no lo verificaba nada, y una de las mías era falsa
 
-**Un arreglo y no una columna** —una ida revisa, alimenta y trata, y elegir uno haría que el
-informe mintiera—, con el precedente exacto de `Inspection.broodStages`. **El vacío es «sin
-registrar», no «sin propósito»**: la migración no rellena, no lleva `DEFAULT` con `NOT NULL`, y
-el campo es opcional en la entrada para no romper la cola offline. La **frontera** sí exige
-cuando el campo llega.
+ADR-143. Fui a construir las que el mapa daba por sin sitio y **la primera que miré ya tenía
+columna**: `ColonyEvent.treatmentEfficacyNote` existe desde A9.4 **y el cierre de tratamiento la
+escribe**. `efficacy_note` nunca estuvo sin sitio, y la cuenta de huecos que publiqué era **más
+grande que la real**.
 
-**Tres sitios dicen el vocabulario** —JSON, enum de Postgres, módulo puro para el formulario— y
-un guardia comprueba que coincidan: un propósito añadido al JSON y no al enum **no se puede
-guardar** y el formulario ni lo ofrece.
+**El guardia no podía cazarlo**, y ésa es la parte que importa: comprobaba que los destinos
+declarados existieran, y con eso parecía que el mapa no podía mentir. Un `sin_sitio` era la
+mitad no falsable del instrumento.
 
-**Y el mapa de ADR-140 se cierra sobre sí mismo:** la prueba que contaba las obligatorias de
-patio sin sitio pasa de `["purpose"]` a `[]`. Que esté vacía es el resultado del trabajo, no la
-falta de comprobación. Primera vez en el módulo que una medición de ayer verifica lo de hoy.
+Ahora mira al revés: para cada `sin_sitio` comprueba que ningún campo de los modelos de esa
+actividad se parezca a la clave, y para eso el mapa declara **a qué modelos escribe cada
+actividad**. Es una heurística sobre nombres y lo dice; lleva control positivo sobre el caso
+real que se me escapó.
 
-**Pendiente nombrado:** las otras nueve. Siete son `stage: close` y tres de ellas —viáticos,
-causa probable, recomendación— son las que convierten una visita en informe técnico; la de
-viáticos es el hueco de costos, que no tiene modelo en todo el esquema.
+**Y un flip-test encontró que la declaración nueva no era portante:** vaciándola, las nueve
+seguían en verde. Se exige aparte que cada actividad declare al menos un modelo y que existan.
+Tercera vez esta semana que un flip-test destapa una línea escrita con su justificación al lado
+y sin nada que la ejerza.
+
+**La cuenta real, medida: 38 con campo, 1 en tabla, CINCO sin sitio** — las tres de patio
+(clima, condición del sitio, cajas presentes) y dos de casa (valoración, humedad). Las cifras
+que publiqué ayer iban todas **una de más**, porque se midieron con el instrumento incompleto.
+
+**Pendiente nombrado:** construir las cinco. Y `moisture_pct` trae una pregunta de diseño:
+`moisture` **ya es variable canónica de medición** en este esquema, así que la humedad de la
+miel podría ser un `Measurement` en vez de una columna. Eso se decide aparte, no de paso.
 
 ## 3. Bloqueado, y en qué
 

@@ -52,6 +52,15 @@ export const CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO = [
   "colonyEndCauseNo",
   /** «Ninguno»: el apiario no pertenece a ningún proyecto. `projectId` es anulable. */
   "noProjectOption",
+  /**
+   * «Sin lugar declarado»: el sitio de abejas no cuelga de ninguna finca ni parcela.
+   *
+   * Es una respuesta y no un hueco a rellenar: hasta el 2026-09-16 `crearApiario` **no
+   * aceptaba padre**, así que un sitio suelto es el estado normal de todo lo creado desde la
+   * aplicación. Y seguirá siéndolo: un apiario en terreno prestado puede no tener finca
+   * dentro del sistema, y declararle una inventada sería peor que dejarlo suelto (ADR-145).
+   */
+  "sitioPadreNinguno",
 ] as const satisfies readonly string[];
 
 export type ClaveDeRespuestaQueValeNinguno = (typeof CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO)[number];

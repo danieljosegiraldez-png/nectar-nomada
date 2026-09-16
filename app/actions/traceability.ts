@@ -302,6 +302,13 @@ export async function recordMeasurementAction(
     await recordMeasurement(user.userAccountId, {
       claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
       lotId,
+      instrumentId: emptyToNull(formData.get("instrumentId")),
+      instrumentModeId: emptyToNull(formData.get("instrumentModeId")),
+      materialState: emptyToNull(formData.get("materialState")) as import("../../generated/prisma/client").MaterialState | null,
+      samplingEventId: emptyToNull(formData.get("samplingEventId")),
+      samplingRole: emptyToNull(formData.get("samplingRole")) as import("../../generated/prisma/client").SamplingRole | null,
+      samplingZone: emptyToNull(formData.get("samplingZone")) as import("../../generated/prisma/client").SamplingZone | null,
+      sampleKind: emptyToNull(formData.get("sampleKind")) as import("../../generated/prisma/client").SampleKind | null,
       variable: String(formData.get("variable") ?? "") as never,
       // `?? 0` convertía un valor ausente en una medición de CERO. El
       // `required` del formulario sólo protege la interfaz: invocando la acción

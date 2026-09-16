@@ -9862,6 +9862,41 @@ adorno con forma de regla, que es justo lo que `CLAUDE.md` llama peor que ningun
 vacios, y partirlo antes de que haya algo que pintar seria decidir a ciegas como se ve. La
 frase del dueno pide "lista o mapa" y hoy solo una de las dos tiene datos detras.
 
+## ADR-144 — Un ámbito de ubicación alcanza a sus descendientes
+
+**2026-09-16. Decisión de Daniel.**
+
+**Contexto.** El árbol de secado es sitio → instalación → cama (ADR de la
+topología, `LocationType.drying_facility` y `drying_bed`). Construyendo la
+pantalla de administración se midió que un operario con ámbito sobre la finca
+podía crear el invernadero —cuyo padre es el sitio, que sí está en su ámbito— y
+**no podía crear las camas de dentro**: el guardia comprueba contra el padre
+directo, y el invernadero no estaba en ningún ámbito suyo. Medido antes de tocar
+nada: ámbito en el sitio daba `true` sobre el sitio y `false` sobre su hija.
+
+Con el caso real de Cafelino —dos invernaderos y un cuarto oscuro— la alternativa
+era una asignación a mano por cada instalación construida. Eso no lo hace nadie,
+así que en la práctica las camas sólo las habría creado un administrador de
+plataforma.
+
+**Decisión.** Cuando el objetivo de una comprobación es una ubicación, `can()`
+resuelve también sus **ancestros**: el permiso concedido sobre una ubicación vale
+sobre todo lo que cuelga de ella.
+
+**Qué NO cambia, y es la mitad que importa.** Un **hermano** sigue fuera, y la
+contención no va hacia arriba: quien manda en una cama no manda en la finca. Las
+dos están fijadas en `tests/rbac/ambitoDeUbicacion.test.ts`, que existe
+precisamente por eso — ensanchar una autorización sin fijar dónde termina es como
+se abren agujeros.
+
+**Por qué no contradice «las asignaciones contextuales estrechan, no ensanchan».**
+Esa regla prohíbe conceder por acumulación lo que ningún ámbito concede. Aquí no se
+concede nada nuevo: se reconoce que una ubicación **está dentro de** otra.
+
+**Dónde vive.** En `lib/rbac/service.ts`, no en `resolve.ts`: la jerarquía es un
+hecho de la base y el resolutor es puro a propósito. Lleva tope de profundidad
+porque un `parentLocationId` en ciclo —que el esquema no impide— colgaría el punto
+de estrangulamiento de toda la autorización.
 ## ADR-138 -- Las dos mitades del cierre de jornada faltaban en la pantalla, y una de ellas existia desde hacia dias
 
 **Contexto.** Anexo E §5: *"Al cerrarla: resumen de lo registrado, **lo que quedo pendiente**,
@@ -10094,9 +10129,9 @@ trabajo de hoy.
 
 **Flip-test de las cuatro decisiones**, cada una compilando y cayendo por su nombre.
 
-**Lo que NO entra.** Las otras nueve sin sitio. Siete son `stage: close` -- se escriben en casa,
-y tres de ellas (`travel_cost_usd`, `probable_cause`, `recommendation`) son las que convierten
-una visita en un informe tecnico; el de viaticos es ademas el hueco de costos que ya estaba
+**Lo que NO entra.** Las otras nueve sin sitio. **Seis** son `stage: close` -- se escriben en
+casa, y tres de ellas (`travel_cost_usd`, `probable_cause`, `recommendation`) son las que
+convierten una visita en un informe tecnico; el de viaticos es ademas el hueco de costos que ya estaba
 nombrado y que no tiene modelo en todo el esquema. Las tres de patio que quedan
 --`weather_observed`, `site_condition`, `hives_present_count`-- son opcionales, y ninguna
 bloquea cerrar una visita.
@@ -10104,7 +10139,7 @@ bloquea cerrar una visita.
 ## ADR-142 -- Las tres preguntas que convierten una visita en un informe tecnico
 
 **Contexto.** ADR-140 midio las 44 preguntas del protocolo contra el esquema: diez sin sitio.
-ADR-141 cerro la unica obligatoria de patio. Estas tres son de las siete de **casa**
+ADR-141 cerro la unica obligatoria de patio. Estas tres son de las **seis** de casa
 --`stage: close`-- y son las que el cliente lee: **viaticos, causa probable y recomendacion**.
 
 **Decision 1 -- van en `field_session` y en el CIERRE, y eso no es una eleccion nueva.** El
@@ -10148,11 +10183,133 @@ y "que vi hoy" compartieran fila.
 
 **Flip-test de las cuatro decisiones**, cada una compilando y cayendo por su nombre.
 
-**El mapa de ADR-140 baja de diez huecos a siete**, y la prueba que los nombra no se mueve
-sola: hay que contarlos.
+**El mapa de ADR-140 baja a seis huecos**, y la prueba que los nombra no se mueve sola: hay
+que contarlos.
+
+> **CORRECCION del 2026-09-15, escrita al verificar la fusion.** Este parrafo decia "baja de
+> diez huecos a siete" y estaba **mal dos veces**. Diez fue la cuenta de ADR-140; ADR-141 ya
+> habia cerrado `purpose`, asi que al empezar esta rebanada quedaban **nueve**, y cerrar tres
+> deja **seis**, no siete. El error salio de contar `hives_present_count` dos veces al
+> repartirlas entre "de patio" y "de casa". El codigo estuvo bien todo el tiempo -- la lista
+> del guardia tiene seis nombres y paso en CI --; lo que estaba mal era la prosa, que es
+> justo lo que nadie vuelve a comprobar. Las seis que quedan: `weather_observed`,
+> `site_condition`, `hives_present_count` --las tres de patio, opcionales-- y `assessment`,
+> `efficacy_note`, `moisture_pct` --las tres de casa.
 
 **Lo que NO entra, y es el hueco de costos de verdad.** `travelCostUsd` es **el viatico de una
 visita**, no un modelo de costos: `LabourEntry` sigue sin llevar ninguno, el material que se
 consume no tiene movimiento, y "cuanto cuesta sostener Toabre" sigue sin respuesta. Esta
 columna contesta una pregunta del protocolo, no esa. Confundirlas seria dar por cerrado un
 hueco que sigue abierto.
+
+## ADR-143 -- Un "sin sitio" del mapa era una afirmacion que nada verificaba, y una de las mias era falsa
+
+**Contexto.** ADR-140 declaro el mapa de las 44 preguntas del protocolo y lo puso bajo un
+guardia que comprueba que **ningun destino declarado sea inventado** -- el modelo y el campo
+tienen que existir en el esquema. Con eso di por hecho que el mapa no podia mentir.
+
+**Podia, en la otra direccion.** Fui a construir las que el mapa daba por sin sitio y **la
+primera que mire ya tenia columna**: `ColonyEvent.treatmentEfficacyNote` existe desde A9.4
+**y el cierre de tratamiento la escribe** (`completarCierreDeTratamiento`, con su `tocaNota`).
+O sea que `efficacy_note` nunca estuvo sin sitio, y **la cuenta de huecos que publique era mas
+grande que la real**.
+
+El guardia no podia cazarlo porque **un `sin_sitio` no lo contradecia nada**: era la mitad no
+falsable del instrumento. La mitad que si vigilaba --"los destinos existen"-- es la que protege
+contra declarar un campo que no hay; no hay nada simetrico que proteja contra declarar que no
+hay campo cuando si.
+
+**Decision -- el guardia mira tambien al reves.** Para cada `sin_sitio` comprueba que **ningun
+campo de los modelos de esa actividad se parezca a la clave**, comparando en minusculas y por
+inclusion: `efficacy_note` -> `efficacynote`, que esta dentro de `treatmentEfficacyNote`.
+
+Para poder mirar, el mapa declara ahora **a que modelos escribe cada actividad**
+(`MODELOS_POR_ACTIVIDAD`). Sin saber donde buscar, "no tiene sitio" no se puede contradecir.
+
+**Es una heuristica sobre nombres y el codigo lo dice.** Puede dar una falsa alarma, y se
+resuelve **declarando el destino** -- que es lo que habria que hacer igualmente. Lo que no
+puede es dejar pasar el caso que ocurrio: su **control positivo** exige que
+`efficacy_note` contra `treatmentEfficacyNote` salte, porque sin el, el `[]` lo cumpliria igual
+una comprobacion que no mira nada.
+
+**Y un flip-test encontro que la declaracion nueva no era portante.** Vaciando
+`MODELOS_POR_ACTIVIDAD.inspection` las nueve pruebas seguian en verde: hoy ningun `sin_sitio`
+de esa actividad tiene un campo parecido, asi que la declaracion **no la ejercitaba nada**. Se
+exige aparte que cada actividad del protocolo declare al menos un modelo y que esos modelos
+existan. Es la tercera vez esta semana que un flip-test destapa una linea escrita con su
+justificacion al lado y sin nada que la ejerza.
+
+**La cuenta, medida sobre el mapa y no de memoria: 38 con campo, 1 en tabla, CINCO sin sitio.**
+`weather_observed`, `site_condition`, `hives_present_count` --las tres de patio, opcionales-- y
+`assessment`, `moisture_pct` --las dos de casa.
+
+**Lo que esto le hace a las cifras que publique.** Las tres de ayer --ADR-140 "diez",
+ADR-141 "nueve", ADR-142 "seis"-- se midieron todas con el instrumento que no comprobaba los
+`sin_sitio`, asi que **todas iban una de mas**. No se reescriben: quedan con esta nota, porque
+lo que importa no es el numero de ayer sino que hoy se pueda contradecir.
+
+**Lo que NO entra.** Construir las cinco. `moisture_pct` tiene ademas una pregunta abierta que
+no es de forma sino de diseno: `moisture` **ya es una variable canonica de medicion** en este
+esquema, asi que la humedad de la miel podria ser un `Measurement` en vez de una columna. Esa
+eleccion cambia como se consulta la serie y merece decidirse aparte, no de paso.
+
+## ADR-145 -- El meliponario es un tipo de sitio, no un modulo aparte ni una especie
+
+**Nota de numeracion.** Esto se publico primero como ADR-144 y colisiono: ese numero ya lo
+tenia "Un ambito de ubicacion alcanza a sus descendientes", que estaba en la base de esta misma
+rama. No se vio porque este archivo **no esta en orden numerico** --el 144 vivia en la linea
+9865, antes del 140-- y la lista de encabezados se leyo cortada a las cuatro ultimas. Una salida
+truncada se lee como el mundo entero. Se renumero este, que era el recien llegado y el que menos
+citas tenia (13, todas de su propia rebanada, contra 3 del otro).
+
+**Contexto.** El dueno va a instalar abejas sin aguijon: cinco especies panamenas, minimo dos
+colonias de cada una, traidas de Parita e instaladas en Cerro Azul. Su decision, literal:
+"diria tener meliponiarios y tener apiarios separado aunque el apicultor tiene acceso a ambas
+si se configura asi". Y sobre donde: "pueden haber apiarios por lote de finca rosina y tambien
+bajo beneficio las nubes".
+
+**Lo que se midio antes de decidir.** El modulo A9 entero **da por supuesto que son Apis**: la
+caja es Langstroth (camaras, alzas, cuadros), la plaga es varroa, la revision cuenta cuadros
+cubiertos. Y `"apiary_site"` estaba afirmado **a mano en diez sitios** del codigo -- servicios,
+navegacion, pantallas -- cada uno comparando la cadena por su cuenta.
+
+**Las tres opciones que habia, y por que esta.**
+
+- *Modulo aparte.* Duplica sitio, colmena, colonia, traslado, cosecha, jornada, informe. El
+  manejo difiere; la contabilidad de "una caja que ocupa un sitio durante un periodo" no.
+- *Nada: un `apiary_site` mas.* Gratis hoy y falso manana -- un listado de apiarios mezclaria
+  Langstroth con INPA, y el traslado dejaria mover una melipona a un apiario de Apis.
+- *Un tipo de sitio propio, hermano.* Es lo que se hizo.
+
+**Decision -- `meliponary` entra como valor de `LocationType`**, hermano de `apiary_site`, y
+**todo el codigo deja de comparar cadenas**: `lib/apiary/sitioDeAbejas.ts` es el unico sitio
+donde viven los dos nombres. `TIPOS_DE_SITIO_DE_ABEJAS` es la familia, `esSitioDeAbejas` el
+predicado, `exigeTipoDeSitioDeAbejas` la puerta de entrada. Los diez sitios pasan por ahi.
+
+Anadir un valor a un enum de Postgres **es aditivo y no convierte nada**: ningun sitio existente
+cambia de tipo, ninguna consulta de hoy devuelve algo distinto. Por eso la migracion es una
+linea.
+
+**La familia se lista junta y se maneja separada.** `getApiaryList` devuelve los dos tipos --el
+apicultor con acceso los ve en una lista, que es lo que el dueno pidio-- y el traslado **exige
+el mismo tipo en origen y destino**: no se puede mover una caja INPA a un apiario de Apis, ni al
+reves, y `destinosCandidatos` ni siquiera los ofrece.
+
+**Lo que esto habilita hoy y no antes.** Un meliponario puede **colgar de un lote**
+(`parentLocationId`), porque el dueno los reparte "una entre cada cuantos bloques dentro de
+parcelas" y ademas "muchas juntas bajo el techo" del beneficio. Las dos formas son el mismo
+objeto con distinto padre, y la vista agrupada (ADR-135) las dibuja sola.
+
+**Lo que NO entra, y es la mitad que falta.** **La especie.** No hay tabla `Species`, ni
+`Colony.especie`, ni guardia que impida a un meliponario heredar varroa o cuadros. Eso necesita
+los cinco nombres con su procedencia, y hasta que existan seria inventar taxonomia -- que es
+justo lo que la casa prohibe. El tipo de sitio es la pieza que **no** depende de esos nombres, y
+por eso va primero.
+
+**Un guardia nuevo de arquitectura**, `tests/arquitectura/un-solo-predicado-de-sitio.test.ts`:
+nadie vuelve a escribir `=== "apiary_site"` fuera del predicado. Su control positivo distingue
+**comparar** de **mencionar**, porque el propio predicado nombra la cadena y no debe saltar.
+
+**Cinco flip-tests, los cinco compilando.** El tercero --fijar los destinos a `"apiary_site"` en
+vez del tipo de origen-- hubo que **rehacerlo**: la primera version usaba un simbolo sin
+importar, no compilaba, y una mutacion que no compila se lee como un guardia que funciona.

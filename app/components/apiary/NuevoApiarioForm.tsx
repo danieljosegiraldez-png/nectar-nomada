@@ -26,11 +26,31 @@ interface Opcion {
  * describe una parcela y no un punto, y no tiene columna de notas. Ver el
  * comentario en `crearApiario`.
  */
-export function NuevoApiarioForm({ organizaciones, proyectos }: { organizaciones: Opcion[]; proyectos: Opcion[] }) {
+export function NuevoApiarioForm({
+  organizaciones,
+  proyectos,
+  lugares,
+}: {
+  organizaciones: Opcion[];
+  proyectos: Opcion[];
+  /** Fincas, parcelas y microparcelas donde puede colgar el sitio (ADR-145). */
+  lugares: { id: string; name: string; locationType: string }[];
+}) {
   const t = useTranslations("Apiary");
 
   return (
     <form action={crearApiarioFormAction} className="nn-form" style={{ maxWidth: 520 }}>
+      <div className="nn-field">
+        {/* **Qué es, primero.** El dueño lo decidió el 2026-09-16: «tener meliponiarios y
+            tener apiarios separado». Va arriba porque cambia lo que significa todo lo demás —
+            la caja, el manejo y lo que se pregunta al revisar. */}
+        <label htmlFor="ap-tipo">{t("sitioTipoLabel")}</label>
+        <select id="ap-tipo" name="tipo" required defaultValue="apiary_site">
+          <option value="apiary_site">{t("locationType_apiary_site")}</option>
+          <option value="meliponary">{t("locationType_meliponary")}</option>
+        </select>
+      </div>
+
       <div className="nn-field">
         <label htmlFor="ap-name">{t("apiaryNameLabel")}</label>
         <input id="ap-name" name="name" type="text" required maxLength={200} placeholder="Apiario 3 — Finca Rosina" />
@@ -62,6 +82,21 @@ export function NuevoApiarioForm({ organizaciones, proyectos }: { organizaciones
           </select>
         </div>
       ) : null}
+
+      <div className="nn-field">
+        {/* **De qué lugar cuelga.** Hasta hoy no se podía decir, así que un apiario creado
+            aquí nacía huérfano y no aparecía bajo su finca en la lista agrupada. Vacío sigue
+            siendo legítimo: un sitio suelto es mejor que un padre inventado. */}
+        <label htmlFor="ap-padre">{t("sitioPadreLabel")}</label>
+        <select id="ap-padre" name="parentLocationId" defaultValue="">
+          <option value="">{t("sitioPadreNinguno")}</option>
+          {lugares.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name} · {t(`locationType_${l.locationType}`)}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div className="nn-field">
         <label htmlFor="ap-lat">{t("apiaryLatitudeLabel")}</label>

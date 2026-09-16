@@ -23,7 +23,7 @@ import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { scopeTargetsFor, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 import type { ClassificationLevel } from "../rbac/types";
-import type { DataQuality, HarvestWindowPrecision, ProvenanceClass } from "../../generated/prisma/client";
+import type { DataQuality, HarvestWindowPrecision, ProvenanceClass, MaterialState, SamplingRole, SamplingZone, SampleKind } from "../../generated/prisma/client";
 
 export class SampleValidationError extends Error {}
 
@@ -43,6 +43,15 @@ async function requireSampleAccess(
 export interface CreateSampleFromLotInput {
   sampleCode: string;
   sampleType: string;
+  materialState?: MaterialState | null;
+  samplingRole?: SamplingRole | null;
+  samplingZone?: SamplingZone | null;
+  samplingZoneNote?: string | null;
+  sampleKind?: SampleKind | null;
+  stageAtExtraction?: string | null;
+  massAtExtraction?: number | null;
+  massUnitAtExtraction?: string | null;
+  moisturePctAtExtraction?: number | null;
   description?: string | null;
   sourceLotId: string;
   quantity?: number | null; // amount extracted, if known
@@ -85,6 +94,15 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
       data: {
         sampleCode: input.sampleCode,
         sampleType: input.sampleType,
+        materialState: input.materialState,
+        samplingRole: input.samplingRole,
+        samplingZone: input.samplingZone,
+        samplingZoneNote: input.samplingZoneNote,
+        sampleKind: input.sampleKind,
+        stageAtExtraction: input.stageAtExtraction,
+        massAtExtraction: input.massAtExtraction,
+        massUnitAtExtraction: input.massUnitAtExtraction,
+        moisturePctAtExtraction: input.moisturePctAtExtraction,
         description: input.description ?? null,
         projectId: sourceLot.projectId,
         organizationId: sourceLot.organizationId,

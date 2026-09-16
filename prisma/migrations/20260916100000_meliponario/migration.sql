@@ -1,0 +1,26 @@
+-- A9 · El meliponario como tipo de lugar propio.
+--
+-- DECISION DEL DUENO, 2026-09-16: «diria tener meliponiarios y tener apiarios separado
+-- aunque el apicultor tiene acceso a ambas si se configura asi». El sitio declara lo que es;
+-- el acceso es configuracion, y eso ya funciona porque los permisos son por sitio y por
+-- proyecto.
+--
+-- POR QUE UN TIPO Y NO UNA ESPECIE DENTRO DE UN `apiary_site`. Resuelve un borde medido: con
+-- la especie viviendo solo en las colonias, un meliponario **vacio** no podia decir de que
+-- era. Hoy hay ese caso en el sistema -- Apiario Finca Rosina son dos cajas sin colonia -- asi
+-- que no es hipotetico.
+--
+-- Y el manejo lo justifica mas que la pantalla. El manual de ANSA (Gerardo Gennari, INTA)
+-- documenta que el modelo de caja FO-INTA cambia de modulos y de MEDIDAS segun la especie, y
+-- que las especies con tendencia al pillaje «deben ser manejadas en meliponarios separados».
+-- Separar los sitios no es una preferencia de interfaz: es una regla de manejo.
+--
+-- QUE NO HACE ESTA MIGRACION. No convierte ningun sitio existente. Los cuatro apiarios reales
+-- siguen siendo `apiary_site`, porque son de Apis. Un meliponario se crea cuando haya uno.
+--
+-- ANADIR UN VALOR A UN ENUM DE POSTGRES ES ADITIVO Y NO BLOQUEANTE: no reescribe filas y no
+-- invalida ningun indice. Lo que si exige es que el codigo deje de comparar la cadena
+-- `"apiary_site"` a mano en diez sitios -- ver `lib/apiary/sitioDeAbejas.ts` y su guardia.
+
+-- AlterEnum
+ALTER TYPE "core"."LocationType" ADD VALUE 'meliponary';

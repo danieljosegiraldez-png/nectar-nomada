@@ -12,6 +12,7 @@
  * below (reuse, not a second RBAC helper).
  */
 import { prisma } from "../db";
+import { TIPOS_DE_SITIO_DE_ABEJAS, esSitioDeAbejas, exigeTipoDeSitioDeAbejas, type TipoDeSitioDeAbejas } from "./sitioDeAbejas";
 import { LIST_LIMIT, truncate } from "../listLimit";
 import { can } from "../rbac/service";
 import { classificationForTarget, loadScopeClassifications } from "../rbac/scopeClassification";
@@ -523,7 +524,8 @@ export async function getApiaryList(userAccountId: string) {
   }
 
   const where: Prisma.LocationWhereInput = {
-    locationType: "apiary_site",
+    // Los DOS tipos de sitio de abejas: un meliponario se lista con los apiarios (ADR-145).
+    locationType: { in: [...TIPOS_DE_SITIO_DE_ABEJAS] },
     ...(visibility.mode === "scoped"
       ? {
           OR: [
@@ -555,7 +557,7 @@ export async function getApiaryDetail(userAccountId: string, locationId: string)
     where: { id: locationId },
     include: { hives: { include: { colonies: true }, orderBy: { identifier: "asc" } } },
   });
-  if (!location || location.locationType !== "apiary_site") throw new ApiaryAccessError("apiary_not_found");
+  if (!location || !esSitioDeAbejas(location.locationType)) throw new ApiaryAccessError("apiary_not_found");
 
   // Reachable either directly (a location-scoped Assignment against this
   // apiary itself) or through any Hive already sited here (a project-
@@ -591,6 +593,19 @@ export interface CrearApiarioInput {
   projectId?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  /**
+   * Apiario o meliponario. Por defecto `apiary_site`, que es lo que hacía antes: quien no
+   * elija sigue creando un apiario de Apis y nada cambia para él.
+   */
+  tipo?: TipoDeSitioDeAbejas | string | null;
+  /**
+   * El lugar que lo contiene — un lote, una microparcela, el beneficio.
+   *
+   * **Hasta el 2026-09-16 esta entrada no existía**, así que un apiario creado desde la
+   * aplicación nacía sin padre y quedaba fuera del agrupado por lugar (ADR-137). Los cuatro
+   * apiarios reales lo tienen porque se lo pusieron los guiones de datos.
+   */
+  parentLocationId?: string | null;
 }
 
 /*
@@ -654,7 +669,14 @@ export async function crearApiario(userAccountId: string, input: CrearApiarioInp
     const sitio = await tx.location.create({
       data: {
         name: input.name.trim(),
-        locationType: "apiary_site",
+        // Apiario o meliponario, lo dice quien crea. Se valida en la frontera: un `as never`
+        // dejaria crear un "apiario" cuyo tipo es `plot` (ADR-112).
+        locationType: exigeTipoDeSitioDeAbejas(input.tipo ?? "apiary_site"),
+        // El lugar que lo contiene. Hasta hoy `crearApiario` NO lo aceptaba, asi que los
+        // cuatro apiarios reales tienen padre porque se lo pusieron los guiones de datos y
+        // ninguno creado desde la aplicacion lo tenia. El dueno lo pidio explicito: «pueden
+        // haber apiarios por lote de finca rosina y tambien bajo beneficio las nubes».
+        parentLocationId: input.parentLocationId ?? null,
         organizationId: organizacion.id,
         latitude: input.latitude ?? null,
         longitude: input.longitude ?? null,
@@ -689,6 +711,37 @@ export async function crearApiario(userAccountId: string, input: CrearApiarioInp
  * que ofrece lo que el servicio niega es la lente que ya se aplico en
  * `/sensory/new` y en `/sensory/external-report`.
  */
+/**
+ * Los lugares que pueden contener un sitio de abejas.
+ *
+ * **Por qué existe.** El dueño lo pidió explícito el 2026-09-16: «pueden haber apiarios por
+ * lote de finca rosina y también bajo beneficio las nubes, serían distintos sitios». Hasta
+ * entonces `crearApiario` no aceptaba lugar padre **ninguno**, así que un apiario creado desde
+ * la aplicación nacía huérfano y quedaba fuera del agrupado por lugar (ADR-137).
+ *
+ * **Qué se ofrece y por qué.** Fincas y sitios (`site`), parcelas (`plot`) y microparcelas
+ * (`micro_plot`): los tres niveles que el dueño nombró. NO se ofrecen otros sitios de abejas
+ * —un apiario dentro de otro apiario no significa nada— ni provincias o países, que son
+ * geografía administrativa y no un lugar donde se ponen cajas.
+ *
+ * **No autoriza.** Misma disciplina que `organizacionesParaApiario`: sólo devuelve lista a
+ * quien ya tiene ámbito de plataforma, y `crearApiario` vuelve a comprobarlo al escribir.
+ */
+export async function lugaresParaSitioDeAbejas(userAccountId: string, organizationId?: string | null) {
+  const visibility = await resolveApiaryVisibility(userAccountId, "manage");
+  if (visibility.mode !== "all") return [];
+  return prisma.location.findMany({
+    where: {
+      locationType: { in: ["site", "plot", "micro_plot"] },
+      status: "approved",
+      ...(organizationId ? { organizationId } : {}),
+    },
+    select: { id: true, name: true, locationType: true },
+    orderBy: { name: "asc" },
+    take: LIST_LIMIT,
+  });
+}
+
 export async function organizacionesParaApiario(userAccountId: string) {
   const visibility = await resolveApiaryVisibility(userAccountId, "manage");
   if (visibility.mode !== "all") return [];
