@@ -133,10 +133,41 @@ describe("construirPayloadDePerfilDeSuelo", () => {
     expect(p.impedingLayerNote).toBeNull();
   });
 
-  it("no lleva horizontes ni las banderas de anaerobiosis: el servidor no las acepta en esta cola", () => {
-    const p = construirPayloadDePerfilDeSuelo(form(BASE), "loc1");
-    expect(p).not.toHaveProperty("mottling");
-    expect(p).not.toHaveProperty("horizonTopCm.0");
+  /**
+   * Aunque el `FormData` real de `SoilProfileForm` en modo crear SÍ trae
+   * `mottling` y las filas de horizonte (`horizonTopCm.0`, ...), el payload
+   * que se encola no puede llevarlos: no son parte de
+   * `MutacionDePerfilDeSuelo` y el servidor los ignoraría o los rechazaría.
+   * Se simula ese `FormData` completo, no uno que ya los omite — si el
+   * constructor los copiara sin querer, esta prueba lo vería.
+   */
+  it("no lleva horizontes ni las banderas de anaerobiosis, aunque el FormData real las traiga", () => {
+    const fd = form({
+      ...BASE,
+      mottling: "present",
+      greyColours: "absent",
+      rootChannelConcretions: "not_observed",
+      sourSmell: "present",
+      "horizonOrdinal.0": "1",
+      "horizonTopCm.0": "0",
+      "horizonBottomCm.0": "20",
+    });
+    const p = construirPayloadDePerfilDeSuelo(fd, "loc1");
+    expect(Object.keys(p).sort()).toEqual(
+      [
+        "kind",
+        "locationId",
+        "describedAt",
+        "pitDepthCm",
+        "rootingDepthCm",
+        "rootDistribution",
+        "impedingLayerDepthCm",
+        "impedingLayerNote",
+        "provenanceClass",
+        "dataQuality",
+        "notes",
+      ].sort(),
+    );
   });
 });
 

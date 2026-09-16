@@ -10,6 +10,7 @@ import { fechaDeDia as fechaDeDiaCompartida, FechaDeDiaInvalida,
   LocalDateTimeError,
   TZ_OFFSET_FIELD,
 } from "../../lib/time/localDateTime";
+import { calcularFechaConPrecision } from "../../lib/time/fechaConPrecision";
 import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadasDelSitio";
 import { recordSelection, SelectionValidationError } from "../../lib/traceability/selection";
@@ -1090,15 +1091,19 @@ export async function recordHarvestSourcesFormAction(
  * es lo que impide que la pantalla lo lea después como un día concreto. Sin
  * fecha, los dos van nulos: «no se sabe cuándo» es una respuesta legítima y
  * frecuente, y el servicio la acepta.
+ *
+ * La aritmética de año/mes/día vive en `lib/time/fechaConPrecision.ts` y no
+ * aquí: `lib/sync/parcelaPayload.ts` (la cola sin señal) necesita la MISMA
+ * regla, y antes de la ronda de arreglo 1 sobre Task 5 la tenía duplicada por
+ * su cuenta. Ver la cabecera de ese módulo.
  */
 function parsePlantedAt(formData: FormData): { plantedAt: Date | null; plantedPrecision: string | null } {
   const raw = String(formData.get("plantedAt") ?? "").trim();
   if (!raw) return { plantedAt: null, plantedPrecision: null };
   // <input type="date"> da YYYY-MM-DD; los otros dos modos recortan.
   const precision = String(formData.get("plantedPrecision") ?? "date");
-  if (precision === "year") return { plantedAt: new Date(`${raw.slice(0, 4)}-01-01T00:00:00Z`), plantedPrecision: "year" };
-  if (precision === "month") return { plantedAt: new Date(`${raw.slice(0, 7)}-01T00:00:00Z`), plantedPrecision: "month" };
-  return { plantedAt: new Date(`${raw.slice(0, 10)}T00:00:00Z`), plantedPrecision: "date" };
+  const { fecha, precision: precisionResuelta } = calcularFechaConPrecision(raw, precision);
+  return { plantedAt: fecha, plantedPrecision: precisionResuelta };
 }
 
 export async function createPlantingCohortFormAction(

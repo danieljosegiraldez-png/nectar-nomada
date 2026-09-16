@@ -1,4 +1,5 @@
 import { fechaDeDia } from "../time/localDateTime";
+import { calcularFechaConPrecision } from "../time/fechaConPrecision";
 
 /**
  * Task 5 — los cuatro payloads que la cola guarda para la captura de parcela,
@@ -22,10 +23,12 @@ import { fechaDeDia } from "../time/localDateTime";
  *
  * `plantedAt` es distinto de los otros dos: no es siempre `type="date"`.
  * `PlantingCohortForm` deja elegir precisión (año, mes, día), y el tipo de
- * input sigue a esa elección. Se replica aquí la MISMA aritmética que
- * `parsePlantedAt` en `app/actions/traceability.ts`, para que la fecha que
- * guarda la cola sin señal sea idéntica a la que guardaría la Server Action con
- * señal — no una aproximación con otro redondeo.
+ * input sigue a esa elección. La aritmética de año/mes/día — qué fecha
+ * significa cada precisión — vive en `lib/time/fechaConPrecision.ts` y la
+ * importan LOS DOS lados: `app/actions/traceability.ts` (`parsePlantedAt`, el
+ * camino con señal) y este módulo. Antes de la ronda de arreglo 1 sobre esta
+ * tarea estaba duplicada por su cuenta aquí, atada al otro lado sólo por un
+ * comentario en prosa.
  *
  * **Sólo la rama de CREAR se encola.** `SoilProfileForm` y `PlantingCohortForm`
  * sirven también para corregir un registro existente, y corregir sin señal
@@ -187,22 +190,20 @@ export interface PayloadDeSiembra {
 }
 
 /**
- * La misma aritmética que `parsePlantedAt` en `app/actions/traceability.ts`:
- * un año suelto se guarda como el 1 de enero de ese año con
- * `plantedPrecision: "year"`, un mes como el día 1 de ese mes con `"month"`, y
- * sin fecha los dos van nulos — «no se sabe cuándo» es una respuesta legítima.
+ * La aritmética de precisión vive en `calcularFechaConPrecision`
+ * (`lib/time/fechaConPrecision.ts`), compartida con `parsePlantedAt` en
+ * `app/actions/traceability.ts`: un año suelto se guarda como el 1 de enero
+ * de ese año con `plantedPrecision: "year"`, un mes como el día 1 de ese mes
+ * con `"month"`, y sin fecha los dos van nulos — «no se sabe cuándo» es una
+ * respuesta legítima. Sólo aquí se convierte a cadena ISO, porque el payload
+ * viaja como JSON.
  */
 function construirFechaDeSiembra(fd: FormData): { plantedAt: string | null; plantedPrecision: string | null } {
   const raw = String(fd.get("plantedAt") ?? "").trim();
   if (!raw) return { plantedAt: null, plantedPrecision: null };
   const precision = String(fd.get("plantedPrecision") ?? "date");
-  if (precision === "year") {
-    return { plantedAt: new Date(`${raw.slice(0, 4)}-01-01T00:00:00Z`).toISOString(), plantedPrecision: "year" };
-  }
-  if (precision === "month") {
-    return { plantedAt: new Date(`${raw.slice(0, 7)}-01T00:00:00Z`).toISOString(), plantedPrecision: "month" };
-  }
-  return { plantedAt: new Date(`${raw.slice(0, 10)}T00:00:00Z`).toISOString(), plantedPrecision: "date" };
+  const { fecha, precision: precisionResuelta } = calcularFechaConPrecision(raw, precision);
+  return { plantedAt: fecha.toISOString(), plantedPrecision: precisionResuelta };
 }
 
 /** Sólo la siembra NUEVA se encola: `PlantingCohortForm` en modo corrección no pide `provenanceClass`. */
