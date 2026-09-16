@@ -546,3 +546,92 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
     ).rejects.toThrow(MeasurementValidationError);
   });
 });
+
+/**
+ * La decisión de Daniel del 2026-09-15 sobre el café verde en una cama de secado:
+ * **avisa y deja pasar**, como todo lo demás.
+ *
+ * El diseño llegó a proponer aquí la única puerta dura del plan —rechazar por
+ * disparador, porque medir verde en secado es un imposible físico— y él la cerró
+ * al revés. La razón vale más que el caso: la doctrina de «avisa, no descalifica»
+ * NO admite excepciones por evidente que parezca, porque la puerta que se esquiva
+ * enseña a esquivar todas. Es la misma lógica que ya está escrita en el esquema
+ * para los instrumentos vencidos: *«bloquear se esquiva en el patio —el operario
+ * apunta el número en papel— y entonces el sistema sabe MENOS»*.
+ *
+ * Y comprobar esto importa por una razón medible: hasta hoy
+ * `measurement_review_flag` existía desde el 2026-09-14 y **no tenía un solo
+ * escritor en el código** — cero coincidencias en `lib/` y `app/`, con control
+ * positivo. Una tabla que nadie escribe es una promesa, no un mecanismo.
+ */
+describe("el verde en una cama de secado avisa, y NO impide guardar", () => {
+  async function medirEnSecado(materialState: "GREEN" | "PARCHMENT", sufijo: string) {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-marca-${sufijo}`,
+      lotType: "drying",
+      organizationId,
+      projectId: projectAId,
+    });
+    const { run } = await startDryingRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      lotId: lot.id,
+      startedAt: new Date("2026-03-01"),
+    });
+    const medicion = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      variable: "moisture",
+      value: 11,
+      unit: "%",
+      occurredAt: new Date("2026-03-05T12:00:00Z"),
+      lotId: lot.id,
+      dryingRunId: run.id,
+      materialState,
+    });
+    return { lot, medicion };
+  }
+
+  /** La muestra que `recordMeasurement` crea al recibir un material bloquearía el
+   *  borrado del lote en el `afterAll`, así que se limpia aquí. Va en `finally`
+   *  para que corra aunque una aserción falle: la base es COMPARTIDA. */
+  async function limpiar(lotId: string) {
+    await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId }) });
+    await prisma.sample.deleteMany({ where: assertDefinedWhere({ sourceLotId: lotId }) });
+  }
+
+  it("guarda la medición Y la marca con el motivo del desajuste de etapa", async () => {
+    const { lot, medicion } = await medirEnSecado("GREEN", "verde");
+    try {
+      // Entró: eso es la mitad «deja pasar» de la decisión.
+      expect(medicion.id).toBeTruthy();
+      const guardada = await prisma.measurement.findUniqueOrThrow({ where: { id: medicion.id } });
+      expect(Number(guardada.value)).toBe(11);
+
+      // Y quedó señalada: la mitad «avisa».
+      const marcas = await prisma.measurementReviewFlag.findMany({
+        where: assertDefinedWhere({ measurementId: medicion.id }),
+      });
+      expect(marcas.map((m) => m.reason)).toContain("material_stage_mismatch");
+      // Sin `InstrumentCheck` detrás — ésa es justo la razón por la que
+      // `raisedByCheckId` tuvo que hacerse anulable: un desajuste de etapa no
+      // tiene ninguna verificación de instrumento que lo levante.
+      expect(marcas.find((m) => m.reason === "material_stage_mismatch")?.raisedByCheckId).toBeNull();
+    } finally {
+      await limpiar(lot.id);
+    }
+  });
+
+  it("y el pergamino en secado entra SIN marca — el control positivo", async () => {
+    // Sin esta mitad, un `recordMeasurement` que marcara TODA medición pasaría la
+    // prueba de arriba igual de verde.
+    const { lot, medicion } = await medirEnSecado("PARCHMENT", "pergamino");
+    try {
+      expect(medicion.id).toBeTruthy();
+      const marcas = await prisma.measurementReviewFlag.count({
+        where: assertDefinedWhere({ measurementId: medicion.id }),
+      });
+      expect(marcas).toBe(0);
+    } finally {
+      await limpiar(lot.id);
+    }
+  });
+});
