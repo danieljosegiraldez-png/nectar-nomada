@@ -588,6 +588,13 @@ enum LocationType {
   // different enums, deliberately not conflated (§2's own naming flag).
   apiary_site
 
+  /// La instalación de secado —invernadero solar, cuarto oscuro, patio,
+  /// marquesina, secadora— y la cama dentro de ella. Mismo patrón que `plot` y
+  /// `apiary_site`: una Location con su tipo y su padre, NO una familia de
+  /// entidades nueva.
+  drying_facility
+  drying_bed
+
   @@schema("core")
 }
 
@@ -599,6 +606,16 @@ enum SunExposure {
   morning
   afternoon
   both
+
+  @@schema("core")
+}
+
+enum DryingEnvironment {
+  solar_greenhouse
+  dark_room_climate_controlled
+  open_patio
+  covered_patio
+  mechanical_dryer
 
   @@schema("core")
 }
@@ -708,6 +725,12 @@ model Location {
   aspect             Aspect?                 @map("aspect")
   soilType           String?                 @map("soil_type")
   plantSpacingMeters Decimal?                @map("plant_spacing_meters") @db.Decimal(5, 2)
+  /// Sólo para `drying_facility`: qué clase de ambiente es. Es lo que hoy vive
+  /// como texto libre en `DryingRun.method`.
+  dryingEnvironment DryingEnvironment? @map("drying_environment")
+  /// Sólo para `drying_bed`: el nivel del rack en un cuarto de varios niveles.
+  /// Anulable, porque una cama de patio no está en ningún rack.
+  rackLevel         Int?               @map("rack_level")
   // P1 §3 — F1 added sun, shade, altitude range, slope, soil and spacing but
   // no area, so planted area, yield per hectare and cultivar distribution by
   // area could not be computed at all. Deliberately NOT derived from a
