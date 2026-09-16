@@ -10094,9 +10094,9 @@ trabajo de hoy.
 
 **Flip-test de las cuatro decisiones**, cada una compilando y cayendo por su nombre.
 
-**Lo que NO entra.** Las otras nueve sin sitio. Siete son `stage: close` -- se escriben en casa,
-y tres de ellas (`travel_cost_usd`, `probable_cause`, `recommendation`) son las que convierten
-una visita en un informe tecnico; el de viaticos es ademas el hueco de costos que ya estaba
+**Lo que NO entra.** Las otras nueve sin sitio. **Seis** son `stage: close` -- se escriben en
+casa, y tres de ellas (`travel_cost_usd`, `probable_cause`, `recommendation`) son las que
+convierten una visita en un informe tecnico; el de viaticos es ademas el hueco de costos que ya estaba
 nombrado y que no tiene modelo en todo el esquema. Las tres de patio que quedan
 --`weather_observed`, `site_condition`, `hives_present_count`-- son opcionales, y ninguna
 bloquea cerrar una visita.
@@ -10104,7 +10104,7 @@ bloquea cerrar una visita.
 ## ADR-142 -- Las tres preguntas que convierten una visita en un informe tecnico
 
 **Contexto.** ADR-140 midio las 44 preguntas del protocolo contra el esquema: diez sin sitio.
-ADR-141 cerro la unica obligatoria de patio. Estas tres son de las siete de **casa**
+ADR-141 cerro la unica obligatoria de patio. Estas tres son de las **seis** de casa
 --`stage: close`-- y son las que el cliente lee: **viaticos, causa probable y recomendacion**.
 
 **Decision 1 -- van en `field_session` y en el CIERRE, y eso no es una eleccion nueva.** El
@@ -10148,8 +10148,18 @@ y "que vi hoy" compartieran fila.
 
 **Flip-test de las cuatro decisiones**, cada una compilando y cayendo por su nombre.
 
-**El mapa de ADR-140 baja de diez huecos a siete**, y la prueba que los nombra no se mueve
-sola: hay que contarlos.
+**El mapa de ADR-140 baja a seis huecos**, y la prueba que los nombra no se mueve sola: hay
+que contarlos.
+
+> **CORRECCION del 2026-09-15, escrita al verificar la fusion.** Este parrafo decia "baja de
+> diez huecos a siete" y estaba **mal dos veces**. Diez fue la cuenta de ADR-140; ADR-141 ya
+> habia cerrado `purpose`, asi que al empezar esta rebanada quedaban **nueve**, y cerrar tres
+> deja **seis**, no siete. El error salio de contar `hives_present_count` dos veces al
+> repartirlas entre "de patio" y "de casa". El codigo estuvo bien todo el tiempo -- la lista
+> del guardia tiene seis nombres y paso en CI --; lo que estaba mal era la prosa, que es
+> justo lo que nadie vuelve a comprobar. Las seis que quedan: `weather_observed`,
+> `site_condition`, `hives_present_count` --las tres de patio, opcionales-- y `assessment`,
+> `efficacy_note`, `moisture_pct` --las tres de casa.
 
 **Lo que NO entra, y es el hueco de costos de verdad.** `travelCostUsd` es **el viatico de una
 visita**, no un modelo de costos: `LabourEntry` sigue sin llevar ninguno, el material que se
