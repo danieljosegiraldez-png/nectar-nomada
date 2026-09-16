@@ -141,7 +141,14 @@ describe("qué filas se lleva", () => {
     ).rejects.toBeInstanceOf(Revertir);
 
     const v = visto!;
-    expect(v.borradas).toBe(v.sinActorAntes);
+    // **NO se compara `borradas` con el recuento previo.** Lo hacía, y fallaba
+    // en la suite completa: entre `contar()` y `limpiar()` otras pruebas en
+    // paralelo commitean sus propias filas sin actor, así que el borrado se
+    // lleva MÁS de las que se contaron —medido el 2026-09-15: 38.605 contra
+    // 38.599—. Es una base compartida; ese número cambia mientras se mide, y
+    // una aserción sobre él es una carrera, no un guardia. Lo que sí es estable
+    // es que se llevó al menos las sembradas, y cuál de las dos.
+    expect(v.borradas, "no borró ni la que sembramos sin actor").toBeGreaterThanOrEqual(1);
     expect(v.quedaSinActor, "la de actor nulo debía irse").toBe(0);
     // La mitad que importa: un borrado sin filtro también habría dejado 0 arriba.
     expect(v.quedaConActor, "la de actor vivo NO debía tocarse").toBe(1);
