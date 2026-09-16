@@ -87,6 +87,7 @@ tests/traceability/biocharBatches.test.ts
 tests/traceability/classificationGate.test.ts
 tests/traceability/drying.test.ts
 tests/traceability/e2e.test.ts
+tests/traceability/entradaEnProduccion.test.ts
 tests/traceability/export.test.ts
 tests/traceability/f1.test.ts
 tests/traceability/fermentation.test.ts

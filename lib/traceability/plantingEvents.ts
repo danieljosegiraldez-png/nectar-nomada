@@ -12,8 +12,9 @@
  */
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
+import { requireLocationAttributeAccess } from "./locations";
 import { recordAuditEvent } from "../audit";
-import type { DataQuality, PlantingEventType, ProvenanceClass } from "../../generated/prisma/client";
+import type { DataQuality, HarvestWindowPrecision, PlantingEventType, ProvenanceClass } from "../../generated/prisma/client";
 
 export class PlantingEventValidationError extends Error {}
 
@@ -87,5 +88,78 @@ export async function listPlantingEventsForLocation(userAccountId: string, locat
     where: { locationId },
     include: { sourceOrganization: true, operator: true },
     orderBy: { occurredAt: "desc" },
+  });
+}
+
+export interface RecordEnteredProductionInput {
+  plantingCohortId: string;
+  /** Desde cuándo da cosecha, ya recortado a su precisión (`calcularFechaConPrecision`). */
+  occurredAt: Date;
+  occurredPrecision: HarvestWindowPrecision;
+  provenanceClass: ProvenanceClass;
+  dataQuality?: DataQuality | null;
+  notes?: string | null;
+}
+
+/**
+ * Marca desde cuándo una siembra da cosecha — tablero de parcela, spec §5.
+ *
+ * **No reutiliza `recordPlantingEvent`, y es a propósito.** Esa función protege
+ * con `lot:manage`, mientras que la parcela y la corrección de siembras
+ * (`updatePlantingCohort`) usan `location:manage_attributes`. Reutilizarla
+ * haría que alguien que ve el tablero y puede corregir una siembra fuera
+ * rechazado al marcarla en producción. Además no admite ni la siembra ni la
+ * precisión de la fecha.
+ *
+ * Corregir una fecha equivocada es llamar otra vez con la buena: el evento
+ * anterior no se toca, y cuenta el registrado más recientemente
+ * (`estadoDeProduccion`).
+ */
+export async function recordEnteredProduction(
+  userAccountId: string,
+  input: RecordEnteredProductionInput,
+  ahora: Date = new Date(),
+) {
+  const cohorte = await prisma.plantingCohort.findUnique({
+    where: { id: input.plantingCohortId },
+    select: { id: true, locationId: true, status: true },
+  });
+  if (!cohorte) throw new PlantingEventValidationError("cohort_not_found");
+  await requireLocationAttributeAccess(userAccountId, cohorte.locationId);
+  if (cohorte.status !== "active") throw new PlantingEventValidationError("cohort_not_active");
+  if (input.occurredAt.getTime() > ahora.getTime()) {
+    throw new PlantingEventValidationError("production_date_in_future");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const evento = await tx.plantingEvent.create({
+      data: {
+        locationId: cohorte.locationId,
+        plantingCohortId: cohorte.id,
+        eventType: "entered_production",
+        occurredAt: input.occurredAt,
+        occurredPrecision: input.occurredPrecision,
+        // `unit` tiene «plantones» por defecto; este evento no cuenta material.
+        unit: null,
+        provenanceClass: input.provenanceClass,
+        dataQuality: input.dataQuality ?? null,
+        notes: input.notes ?? null,
+        createdBy: userAccountId,
+      },
+    });
+
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "planting_event.entered_production",
+        entityType: "planting_event",
+        entityId: evento.id,
+        after: evento,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return evento;
   });
 }
