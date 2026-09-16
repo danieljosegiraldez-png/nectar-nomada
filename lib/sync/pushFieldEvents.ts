@@ -150,6 +150,9 @@ export type MutacionDeEventoDeColonia = {
   eventType: string;
   operatorPersonId?: string | null;
   note?: string | null;
+  /** Del vocabulario del dueno (ADR-148). Viaja por la cola: sin esto el desplegable
+   *  funcionaria en linea y se perderia justo en campo, que es donde se usa. */
+  feedingMaterialKind?: string | null;
   feedingMaterial?: string | null;
   feedingQuantity?: number | null;
   feedingUnit?: string | null;
@@ -370,6 +373,7 @@ async function aplicarMutacionDeApiario(
             operatorPersonId: m.operatorPersonId ?? null,
             eventType: m.eventType as never,
             note: m.note ?? null,
+            feedingMaterialKind: m.feedingMaterialKind ?? null,
             feedingMaterial: m.feedingMaterial ?? null,
             feedingQuantity: m.feedingQuantity ?? null,
             feedingUnit: m.feedingUnit ?? null,
