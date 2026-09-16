@@ -17,6 +17,19 @@
  * Es la misma forma que el inventario de acceso: cuando no se puede ver lo que hay, se declara
  * y se vigila que la declaracion no derive.
  *
+ * ## La mitad que faltaba, y me costo una entrada falsa
+ *
+ * El guardia comprobaba que **los destinos declarados existan**, y con eso creia que el mapa no
+ * podia mentir. Podia, en la otra direccion: **un `sin_sitio` era una afirmacion que nada
+ * verificaba**. Declare `efficacy_note` sin sitio el 2026-09-15 y resulta que
+ * `ColonyEvent.treatmentEfficacyNote` existe desde A9.4 **y el cierre de tratamiento lo
+ * escribe** -- o sea que la cuenta de huecos que publique era mas grande que la real.
+ *
+ * Desde hoy el guardia tambien mira al reves: para cada `sin_sitio` comprueba que **ningun
+ * campo de los modelos de esa actividad se parezca a la clave**. No es infalible -- es una
+ * heuristica sobre nombres -- pero habria cazado esta, y una falsa alarma se resuelve
+ * declarando el destino, que es lo que habia que hacer de todos modos.
+ *
  * ## Lo que este mapa NO dice
  *
  * Que la pregunta se pueda **responder desde un formulario**. Dice que el dato tiene sitio
@@ -29,6 +42,18 @@ export type DestinoDelItem =
   | { clase: "campo"; modelo: string; campo: string }
   | { clase: "tabla"; modelo: string; nota: string }
   | { clase: "sin_sitio"; nota: string };
+
+/**
+ * A que modelos escribe cada actividad del protocolo. Lo usa el guardia para poder comprobar
+ * un `sin_sitio`: sin saber donde buscar, "no tiene sitio" no se puede contradecir.
+ */
+export const MODELOS_POR_ACTIVIDAD: Record<string, string[]> = {
+  visit: ["FieldSession"],
+  inspection: ["Inspection", "VarroaCount", "InspectionIrregularity"],
+  feeding: ["ColonyEvent"],
+  treatment: ["ColonyEvent"],
+  harvest: ["ApiaryHarvestEvent"],
+};
 
 export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   // --- visit: la visita al sitio -------------------------------------------------------
@@ -77,7 +102,7 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   route: { clase: "campo", modelo: "ColonyEvent", campo: "treatmentRoute" },
   withdrawal_days: { clase: "campo", modelo: "ColonyEvent", campo: "treatmentWithdrawalDays" },
   removal_date: { clase: "campo", modelo: "ColonyEvent", campo: "treatmentRemovalDate" },
-  efficacy_note: { clase: "sin_sitio", nota: "La eficacia observada del tratamiento, `stage: close`. El Anexo B §4 pide agrupar por objetivo y esto es lo que haria legible esa agrupacion." },
+  efficacy_note: { clase: "campo", modelo: "ColonyEvent", campo: "treatmentEfficacyNote" },
 
   // --- harvest: la cosecha ----------------------------------------------------------------
   frames_harvested: { clase: "campo", modelo: "ApiaryHarvestEvent", campo: "framesHarvested" },

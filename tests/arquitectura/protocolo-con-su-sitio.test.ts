@@ -20,7 +20,7 @@
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { MAPA_DEL_PROTOCOLO, itemsSinSitio } from "../../lib/apiary/mapaDelProtocolo";
+import { MAPA_DEL_PROTOCOLO, MODELOS_POR_ACTIVIDAD, itemsSinSitio } from "../../lib/apiary/mapaDelProtocolo";
 
 interface ItemDelJson {
   key: string;
@@ -109,6 +109,40 @@ describe("el protocolo de campo y el esquema hablan el mismo idioma", () => {
     expect(malos).toEqual([]);
   });
 
+  it("UN «SIN SITIO» TAMBIEN SE COMPRUEBA: ningun campo de su actividad se le parece", () => {
+    // **La mitad que faltaba.** El guardia comprobaba que los destinos declarados existieran,
+    // y con eso parecia que el mapa no podia mentir. Podia en la otra direccion: un
+    // `sin_sitio` era una afirmacion que nada verificaba. Declare `efficacy_note` sin sitio y
+    // resulta que `ColonyEvent.treatmentEfficacyNote` existe **y el cierre de tratamiento lo
+    // escribe**: la cuenta de huecos que publique era mas grande que la real.
+    //
+    // Es una heuristica sobre nombres, no una prueba: puede dar una falsa alarma. Se resuelve
+    // declarando el destino, que es lo que habria que hacer igualmente.
+    const porClave = new Map(ITEMS.map((i) => [i.key, i]));
+    const sospechosos: string[] = [];
+    for (const clave of itemsSinSitio()) {
+      const item = porClave.get(clave)!;
+      const camello = clave.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()).toLowerCase();
+      for (const modelo of MODELOS_POR_ACTIVIDAD[item.actividad] ?? []) {
+        for (const campo of CAMPOS_POR_MODELO.get(modelo) ?? []) {
+          if (campo.toLowerCase().includes(camello)) {
+            sospechosos.push(`${clave}: ${modelo}.${campo} se le parece y el mapa dice «sin sitio»`);
+          }
+        }
+      }
+    }
+    expect(sospechosos).toEqual([]);
+  });
+
+  it("CONTROL DE ESA COMPROBACION: sobre el caso real que se me escapo, habria saltado", () => {
+    // Sin este control, el `[]` de arriba lo cumpliria igual una comprobacion que no mira
+    // nada. `efficacy_note` -> `ColonyEvent.treatmentEfficacyNote` es el caso que ocurrio.
+    const camello = "efficacy_note".replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()).toLowerCase();
+    const campos = CAMPOS_POR_MODELO.get("ColonyEvent") ?? new Set<string>();
+    expect([...campos].some((c) => c.toLowerCase().includes(camello))).toBe(true);
+    expect([...campos].some((c) => c.toLowerCase().includes("siteconditionquenoexiste"))).toBe(false);
+  });
+
   it("lo que NO tiene donde guardarse queda dicho, y son las que deciden el proximo trabajo", () => {
     // No es una prueba de un numero por el numero: es que la lista esté escrita y no se
     // mueva sola. Si alguien anade un destino, esta prueba cae y le obliga a contarlo.
@@ -116,7 +150,6 @@ describe("el protocolo de campo y el esquema hablan el mismo idioma", () => {
     expect(sinSitio).toEqual(
       [
         "assessment",
-        "efficacy_note",
         "hives_present_count",
         "moisture_pct",
         "site_condition",
