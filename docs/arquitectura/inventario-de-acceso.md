@@ -67,7 +67,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > porque las dos preguntas son distintas: por qué se le pasa una transacción abierta, y quién
 > autoriza en su lugar.
 
-> **Y el de 341→342 es `lugaresParaSitioDeAbejas` (ADR-144).** Vive en `lib/apiary/hives.ts`,
+> **Y el de 341→342 es `lugaresParaSitioDeAbejas` (ADR-145).** Vive en `lib/apiary/hives.ts`,
 > que ya estaba inventariado, y sube la fila de **acotado por construcción**: filtra por
 > `resolveApiaryVisibility`, que sale de las asignaciones del propio principal, así que **no
 > puede** devolver los lugares de otro. Por eso no necesita entrada en el allowlist.

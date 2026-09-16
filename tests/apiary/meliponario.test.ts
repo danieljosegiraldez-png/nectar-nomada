@@ -1,5 +1,5 @@
 /**
- * ADR-144 — el meliponario como tipo de sitio propio, y el predicado que lo hace posible.
+ * ADR-145 — el meliponario como tipo de sitio propio, y el predicado que lo hace posible.
  *
  * Decision del dueno, 2026-09-16: *"diria tener meliponiarios y tener apiarios separado aunque
  * el apicultor tiene acceso a ambas si se configura asi"*, y *"pueden haber apiarios por lote
@@ -57,7 +57,7 @@ describe("la familia de sitios de abejas", () => {
   });
 });
 
-describe("ADR-144 contra Postgres", () => {
+describe("ADR-145 contra Postgres", () => {
   let organizationId: string;
   let projectId: string;
   let userAccountId: string;

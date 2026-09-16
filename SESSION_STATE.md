@@ -40,7 +40,7 @@ de «hecho y sin rastro».
 
 ### 2026-09-16 · El meliponario es un tipo de sitio, y diez comparaciones de cadena pasan a ser una
 
-ADR-144. Las abejas sin aguijón entran como **`meliponary`, hermano de `apiary_site`** — no como
+ADR-145. Las abejas sin aguijón entran como **`meliponary`, hermano de `apiary_site`** — no como
 módulo aparte ni como especie. Decisión del dueño: «tener meliponiarios y tener apiarios separado
 aunque el apicultor tiene acceso a ambas si se configura así».
 

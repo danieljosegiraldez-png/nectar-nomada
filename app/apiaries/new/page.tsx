@@ -28,7 +28,7 @@ export default async function NuevoApiarioPage() {
   const [organizaciones, proyectos, lugares] = await Promise.all([
     organizacionesParaApiario(user.userAccountId),
     getManageableApiaryProjects(user.userAccountId),
-    // Los lugares donde puede colgar el sitio (ADR-144).
+    // Los lugares donde puede colgar el sitio (ADR-145).
     lugaresParaSitioDeAbejas(user.userAccountId),
   ]);
 

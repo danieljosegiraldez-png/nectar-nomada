@@ -10253,7 +10253,14 @@ no es de forma sino de diseno: `moisture` **ya es una variable canonica de medic
 esquema, asi que la humedad de la miel podria ser un `Measurement` en vez de una columna. Esa
 eleccion cambia como se consulta la serie y merece decidirse aparte, no de paso.
 
-## ADR-144 -- El meliponario es un tipo de sitio, no un modulo aparte ni una especie
+## ADR-145 -- El meliponario es un tipo de sitio, no un modulo aparte ni una especie
+
+**Nota de numeracion.** Esto se publico primero como ADR-144 y colisiono: ese numero ya lo
+tenia "Un ambito de ubicacion alcanza a sus descendientes", que estaba en la base de esta misma
+rama. No se vio porque este archivo **no esta en orden numerico** --el 144 vivia en la linea
+9865, antes del 140-- y la lista de encabezados se leyo cortada a las cuatro ultimas. Una salida
+truncada se lee como el mundo entero. Se renumero este, que era el recien llegado y el que menos
+citas tenia (13, todas de su propia rebanada, contra 3 del otro).
 
 **Contexto.** El dueno va a instalar abejas sin aguijon: cinco especies panamenas, minimo dos
 colonias de cada una, traidas de Parita e instaladas en Cerro Azul. Su decision, literal:

@@ -2,7 +2,7 @@
  * Nadie vuelve a comparar `"apiary_site"` a mano.
  *
  * **El incidente que lo motiva es del mismo dia que el guardia.** Al anadir `meliponary` como
- * tipo de lugar (ADR-144) habia **diez** afirmaciones sueltas de `"apiary_site"` repartidas por
+ * tipo de lugar (ADR-145) habia **diez** afirmaciones sueltas de `"apiary_site"` repartidas por
  * `lib/` y `app/`: la lista de apiarios, la ficha, el traslado, la consulta a vecinos por dos
  * sitios, la jornada de campo y la ruta de la pantalla. Repasar diez cadenas a mano es como se
  * deja una fuera, y **la que se queda fuera no falla en rojo**: rechaza un meliponario con un

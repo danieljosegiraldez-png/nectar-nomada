@@ -524,7 +524,7 @@ export async function getApiaryList(userAccountId: string) {
   }
 
   const where: Prisma.LocationWhereInput = {
-    // Los DOS tipos de sitio de abejas: un meliponario se lista con los apiarios (ADR-144).
+    // Los DOS tipos de sitio de abejas: un meliponario se lista con los apiarios (ADR-145).
     locationType: { in: [...TIPOS_DE_SITIO_DE_ABEJAS] },
     ...(visibility.mode === "scoped"
       ? {
