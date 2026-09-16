@@ -109,6 +109,26 @@ describe("el protocolo de campo y el esquema hablan el mismo idioma", () => {
     expect(malos).toEqual([]);
   });
 
+  it("cada actividad declara a que modelos escribe, y esos modelos existen", () => {
+    // **Sin esto la declaracion de arriba no es portante.** Un flip-test lo dijo: vaciando
+    // `MODELOS_POR_ACTIVIDAD.inspection` las nueve pruebas seguian en verde, porque hoy
+    // ningun `sin_sitio` de esa actividad tiene un campo parecido. La comprobacion del
+    // `sin_sitio` solo vale si sabe donde buscar, y eso hay que exigirlo aparte.
+    const actividades = [...new Set(ITEMS.map((i) => i.actividad))];
+    const problemas: string[] = [];
+    for (const actividad of actividades) {
+      const modelos = MODELOS_POR_ACTIVIDAD[actividad];
+      if (!modelos || modelos.length === 0) {
+        problemas.push(`${actividad}: no declara ningun modelo`);
+        continue;
+      }
+      for (const m of modelos) {
+        if (!CAMPOS_POR_MODELO.has(m)) problemas.push(`${actividad}: el modelo ${m} no existe`);
+      }
+    }
+    expect(problemas).toEqual([]);
+  });
+
   it("UN «SIN SITIO» TAMBIEN SE COMPRUEBA: ningun campo de su actividad se le parece", () => {
     // **La mitad que faltaba.** El guardia comprobaba que los destinos declarados existieran,
     // y con eso parecia que el mapa no podia mentir. Podia en la otra direccion: un
