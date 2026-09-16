@@ -1229,7 +1229,13 @@
     "visitPurpose_montaje": "Set-up",
     "visitPurpose_diagnostico": "Diagnosis",
     "visitPurposesLine": "Purpose: {purposes}",
-    "visitPurposesSinRegistrar": "Purpose: not recorded"
+    "visitPurposesSinRegistrar": "Purpose: not recorded",
+    "visitTravelCostLabel": "Travel and transport (USD)",
+    "visitProbableCauseLabel": "Probable cause of what was seen",
+    "visitRecommendationLabel": "Recommendation to the client",
+    "reportCauseHeading": "Probable cause",
+    "reportRecommendationHeading": "Recommendation",
+    "reportTravelCost": "Travel and transport: {monto} USD"
   },
   "Apiary": {
     "badge": "Apiary",

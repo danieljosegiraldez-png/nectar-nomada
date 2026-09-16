@@ -37,10 +37,10 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   site_condition: { clase: "sin_sitio", nota: "Sin columna propia." },
   colonies_alive_count: { clase: "campo", modelo: "FieldSession", campo: "coloniesAliveCount" },
   hives_present_count: { clase: "sin_sitio", nota: "Las cajas presentes se cuentan hoy desde `Hive`, no se declaran. Contar y declarar son datos distintos: el segundo es lo que alguien vio." },
-  travel_cost_usd: { clase: "sin_sitio", nota: "Los costos NO tienen modelo en todo el esquema -- `LabourEntry` no lleva ninguno. Y el snapshot del reporte los excluye a proposito (ADR-139). Es hueco conocido." },
+  travel_cost_usd: { clase: "campo", modelo: "FieldSession", campo: "travelCostUsd" },
   next_visit_due_at: { clase: "campo", modelo: "FieldSession", campo: "nextVisitDueAt" },
-  probable_cause: { clase: "sin_sitio", nota: "La causa probable de lo observado en la visita. Distinta de `ColonyLossCause`, que es la causa del FIN de una colonia y si tiene tabla." },
-  recommendation: { clase: "sin_sitio", nota: "La recomendacion al cliente. Es `stage: close`: se escribe en casa, y hoy no hay donde." },
+  probable_cause: { clase: "campo", modelo: "FieldSession", campo: "probableCause" },
+  recommendation: { clase: "campo", modelo: "FieldSession", campo: "recommendation" },
 
   // --- inspection: la inspeccion de colonia ---------------------------------------------
   outcome: { clase: "campo", modelo: "Inspection", campo: "outcome" },

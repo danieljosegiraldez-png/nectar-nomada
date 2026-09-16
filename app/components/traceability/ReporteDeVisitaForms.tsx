@@ -200,6 +200,29 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
         <textarea id="cv-notes" name="notes" rows={3} />
       </div>
 
+      {/* **Las tres de casa.** El protocolo las marca `stage: close`, y el §7 dice por qué:
+          «que los formularios no pidan en el patio lo que puede esperar a la casa». Éste es
+          el formulario de la casa, así que aquí es donde van.
+
+          Los viáticos en blanco son `null` —«no se anotó»— y NO cero: una visita sin viáticos
+          anotados no es una visita que costó cero. Y no salen en el informe del cliente salvo
+          que el contrato lo pida: esa decisión ya estaba declarada antes de que el campo
+          existiera. */}
+      <div className="nn-field">
+        <label htmlFor="cv-costo">{t("visitTravelCostLabel")}</label>
+        <input id="cv-costo" name="travelCostUsd" type="number" inputMode="decimal" min="0" step="0.01" />
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="cv-causa">{t("visitProbableCauseLabel")}</label>
+        <textarea id="cv-causa" name="probableCause" rows={2} />
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="cv-recomendacion">{t("visitRecommendationLabel")}</label>
+        <textarea id="cv-recomendacion" name="recommendation" rows={3} />
+      </div>
+
       {/* Va al `reason` del AuditEvent: por qué se completó así, no qué pasó en
           el sitio. Es la columna que distingue lo escrito en el campo de lo
           completado en la casa. */}

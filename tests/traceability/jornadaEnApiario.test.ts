@@ -531,6 +531,66 @@ describe("A9.6 — el reporte se congela, no se re-consulta", () => {
     ).rejects.toThrow(/trasiego/);
   });
 
+  it("LAS TRES DE CASA se guardan al completar, y la recomendación llega al informe", async () => {
+    // Son las que convierten una visita en un informe técnico (ADR-142). `stage: close`: el
+    // §7 dice que no se piden en el patio, y el cierre es el formulario de la casa.
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-09T13:00:00Z"),
+      purposes: ["diagnostico"],
+    });
+    await completarVisita(apicultorConManejo, {
+      fieldSessionId: visita.id,
+      travelCostUsd: 42.5,
+      probableCause: "Sequía y poca floración en el lindero norte.",
+      recommendation: "Alimentar cada diez días hasta que abra el nance.",
+    });
+    const guardada = await prisma.fieldSession.findUniqueOrThrow({ where: { id: visita.id } });
+    expect(guardada.travelCostUsd?.toString()).toBe("42.5");
+    expect(guardada.probableCause).toMatch(/Sequía/);
+
+    const { snapshot } = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    expect(snapshot.recomendacion).toMatch(/nance/);
+    expect(snapshot.causaProbable).toMatch(/Sequía/);
+  });
+
+  it("LOS VIÁTICOS NO VIAJAN AL INFORME salvo que el contrato los pida", async () => {
+    // La regla ya existía antes de que el campo existiera: `incluyeCostos` nace en `false`.
+    // Lo que no se congela no se puede filtrar mal después.
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-10T13:00:00Z"),
+    });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id, travelCostUsd: 80 });
+
+    const callado = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    expect(callado.snapshot.viaticosUsd, "no se congela por defecto").toBeNull();
+
+    // Control positivo: pidiéndolos, sí viajan. Sin esta mitad, el `null` de arriba lo
+    // cumpliría igual un campo que nunca se rellena.
+    const pedido = await emitirReporteDeVisita(apicultorConManejo, {
+      fieldSessionId: visita.id,
+      incluirCostos: true,
+    });
+    expect(pedido.snapshot.viaticosUsd).toBe("80");
+  });
+
+  it("cero viáticos es un dato, y un viático negativo se rechaza", async () => {
+    // Una visita a Cerro Azul en carro propio puede costar cero de verdad; `null` es «no se
+    // anotó». Y no existe un viático de menos ocho dólares.
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-11T13:00:00Z"),
+    });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id, travelCostUsd: 0 });
+    const guardada = await prisma.fieldSession.findUniqueOrThrow({ where: { id: visita.id } });
+    expect(guardada.travelCostUsd?.toString()).toBe("0");
+
+    await expect(
+      completarVisita(apicultorConManejo, { fieldSessionId: visita.id, travelCostUsd: -8 }),
+    ).rejects.toThrow(/travel_cost_invalid/);
+  });
+
   it("emitir otra vez crea una VERSIÓN nueva, no pisa la anterior", async () => {
     const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
     await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });

@@ -119,10 +119,7 @@ describe("el protocolo de campo y el esquema hablan el mismo idioma", () => {
         "efficacy_note",
         "hives_present_count",
         "moisture_pct",
-        "probable_cause",
-        "recommendation",
         "site_condition",
-        "travel_cost_usd",
         "weather_observed",
       ].sort(),
     );

@@ -82,6 +82,26 @@ export default async function ReporteDeVisitaPage({ params }: { params: Promise<
         </ul>
         {snapshot.visita.notas ? <p>{snapshot.visita.notas}</p> : null}
       </section>
+      {/* La lectura del técnico y lo que le recomienda al cliente — Anexo E §5 y §7: se
+          escriben en casa, y son por lo que el cliente paga el servicio. Opcionales porque lo
+          emitido antes del 2026-09-15 no las trae. */}
+      {snapshot.causaProbable ? (
+        <section className="nn-section">
+          <h2>{t("reportCauseHeading")}</h2>
+          <p>{snapshot.causaProbable}</p>
+        </section>
+      ) : null}
+      {snapshot.recomendacion ? (
+        <section className="nn-section">
+          <h2>{t("reportRecommendationHeading")}</h2>
+          <p>{snapshot.recomendacion}</p>
+        </section>
+      ) : null}
+      {/* Los viáticos sólo viajan en el snapshot si el contrato los pidió. */}
+      {snapshot.viaticosUsd ? (
+        <p className="nn-detail-meta">{t("reportTravelCost", { monto: snapshot.viaticosUsd })}</p>
+      ) : null}
+
 
       <section className="nn-section">
         <h2>{t("reportRecordsHeading", { count: snapshot.registros.length })}</h2>
