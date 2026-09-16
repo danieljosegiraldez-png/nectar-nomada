@@ -85,15 +85,17 @@ offline existe sólo para apiario (`nectar-apiary-offline`) y jornadas de campo
 Es el peor de los dos mundos: la pantalla abierta promete algo que el botón no
 cumple. Un operador sin señal ve su lote, pulsa «registrar» y pierde el dato.
 
-### 3.2 La receta no guarda ritmos, y sin eso no hay urgencia
+### 3.2 La receta no guardaba ritmos — **resuelto el mismo día**
 
-Daniel decidió que la urgencia sale de la receta. Hoy `ProcessRecipeVersion`
-tiene `ProcessTarget` —variable, mínimo, máximo, unidad— y **ningún ritmo**: no
-existe «medir cada 6 horas» ni «esta fase dura 36».
+Daniel decidió que la urgencia sale de la receta. Cuando se midió esta pantalla,
+`ProcessTarget` tenía variable, mínimo, máximo y unidad, y **ningún ritmo**: no
+existía «medir cada 6 horas» ni «esta fase dura 36», así que «a cuál le toca algo
+ahora» no se podía calcular.
 
-**Sin ese dato, «a cuál le toca algo ahora» no se puede calcular.** Sólo se
-puede mostrar «lleva 14 h en fermentación» y que el operador juzgue. Cualquier
-propuesta que ordene por urgencia depende de añadirlo primero.
+**Dejó de ser cierto ese mismo 2026-09-13**, con `aa05f4d` (#287): el esquema
+tiene hoy `everyHours` y `expectedHours`. La observación se conserva porque
+explica por qué la lista de entonces no podía ordenar por urgencia; ya no es un
+bloqueo, y la propuesta §0 lo recoge corregido.
 
 ### 3.3 Las tarjetas hermanas repiten lo que comparten
 

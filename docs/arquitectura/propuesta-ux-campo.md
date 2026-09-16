@@ -14,18 +14,29 @@ Dos respuestas suyas mandan sobre todo lo demás:
 
 ---
 
-## 0. La dependencia que hay que decidir antes
+## 0. La dependencia que había que decidir antes — **ya está resuelta**
 
 Ordenar por urgencia exige saber qué es «tarde», y Daniel decidió que eso sale
-de la receta. **Hoy la receta no lo guarda.** `ProcessTarget` dice a qué valores
-llegar; nada dice cada cuánto medir ni cuánto dura una fase.
+de la receta. Cuando se escribió esta propuesta la receta no lo guardaba, y esta
+sección la declaraba bloqueante.
 
-Sin ese campo esta propuesta funciona igual, pero **degradada**: la lista se
-ordena por «tiempo en fase descendente» en vez de por «se pasó del ritmo», y la
-tarjeta enseña las horas sin poder decir si son muchas. Es la diferencia entre
-«lleva 14 h» y «lleva 14 h, y la receta dice 12».
+**Entró el 2026-09-13, en `aa05f4d` (#287): «Una receta ya puede decir cada
+cuánto medir y cuánto debe durar».** `ProcessTarget` tiene hoy `everyHours` —el
+ritmo— y `expectedHours` —la duración—, comprobado en el esquema de `main`. Las
+dos mitades que faltaban.
 
-**Es una decisión de Daniel, no un detalle de implementación.** Va primero.
+Así que la propuesta **no sale degradada**: la lista puede ordenar por «se pasó
+del ritmo» y la tarjeta puede decir «lleva 14 h, y la receta dice 12», que es lo
+que §1 y §14 dan por hecho.
+
+**Lo que sigue siendo decisión de Daniel es otra cosa, y es menor:** cuántas
+horas sin moverse cuentan como «la curva se paró», y cuánto movimiento cuenta
+como movimiento. Está en §17.2, y no bloquea la forma de ninguna pantalla.
+
+> Corregido el 2026-09-15. Esta sección decía «hoy la receta no lo guarda» y
+> mandaba decidir primero, mientras §14 y el cierre ya decían que el ritmo había
+> entrado: el documento se contradecía, y quien lo leyera en orden se paraba en
+> la primera página por una dependencia que no existe.
 
 ---
 
@@ -222,7 +233,7 @@ donde la Parte I no miraba.
 | pantalla | tamaño | qué es |
 |---|---|---|
 | `/lots` | 223 líneas | la lista — Parte I |
-| **`/lots/[id]`** | **995 líneas** | el detalle: **20 secciones y 8 formularios**, en orden fijo |
+| **`/lots/[id]`** | **995 líneas** al medir · **1.046 hoy** | el detalle: **20 secciones y 8 formularios** (8 tipos, 17 montajes), en orden fijo |
 | `/lots/[id]/process` | 180 líneas | 6 formularios más: abrir, cerrar, intervenir, devolver a secado |
 | gráficas en todo el repositorio | **0** | las series se pintan como `<li>` |
 
