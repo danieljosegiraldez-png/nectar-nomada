@@ -59,6 +59,10 @@ export async function crearApiarioFormAction(formData: FormData): Promise<void> 
     projectId: emptyToNull(formData.get("projectId")),
     latitude: emptyToNullNumber(formData.get("latitude")),
     longitude: emptyToNullNumber(formData.get("longitude")),
+    // Apiario o meliponario (ADR-144), y de qué lugar cuelga. Los dos llegan como cadena y
+    // los valida el servicio: el tipo contra la familia, el padre contra su existencia.
+    tipo: String(formData.get("tipo") ?? "apiary_site"),
+    parentLocationId: emptyToNull(formData.get("parentLocationId")),
   });
 
   revalidatePath("/apiaries");

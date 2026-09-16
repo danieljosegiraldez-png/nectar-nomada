@@ -23,6 +23,8 @@
  * Pure function of a permission set: no I/O, no Prisma, trivially testable.
  */
 
+import { esSitioDeAbejas } from "./apiary/sitioDeAbejas";
+
 export interface NavEntry {
   /** Key under the `Nav` namespace in messages/*.json. */
   labelKey: string;
@@ -236,7 +238,7 @@ export function destinoDeEntrada(
  * equivocado por otro.
  */
 export function rutaDelSitio(locationType: string, locationId: string): string {
-  return locationType === "apiary_site" ? `/apiaries/${locationId}` : `/plots/${locationId}`;
+  return esSitioDeAbejas(locationType) ? `/apiaries/${locationId}` : `/plots/${locationId}`;
 }
 
 function visible(entry: NavDefinition, granted: ReadonlySet<string>): boolean {

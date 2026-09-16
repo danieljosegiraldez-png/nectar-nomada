@@ -589,6 +589,16 @@ enum LocationType {
   // organization that operates an apiary business) — different tables,
   // different enums, deliberately not conflated (§2's own naming flag).
   apiary_site
+  /// Un meliponario: sitio de abejas nativas sin aguijon. **Tipo propio y no un
+  /// `apiary_site` con una especie dentro**, por decision del dueno del 2026-09-16 --
+  /// «tener meliponiarios y tener apiarios separado» — y porque resuelve un borde real: con
+  /// la especie viviendo solo en las colonias, un meliponario VACIO no podia decir de que
+  /// era. El acceso a los dos es configuracion: los permisos ya son por sitio y por proyecto.
+  ///
+  /// El manejo justifica la separacion mas que la pantalla: el manual de ANSA (Gennari, INTA)
+  /// dice que las cajas, sus modulos y sus medidas cambian por especie, y que las especies con
+  /// tendencia al pillaje «deben ser manejadas en meliponarios separados».
+  meliponary
 
   /// La instalación de secado —invernadero solar, cuarto oscuro, patio,
   /// marquesina, secadora— y la cama dentro de ella. Mismo patrón que `plot` y
