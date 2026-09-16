@@ -186,6 +186,56 @@ corrigió su primera respuesta: queda la segunda.
 - Hoy el lote **no puede salir de ninguna forma**: `sale` existe en el enum y ningún
   camino de código lo produce — hallazgo `F3-005` de la auditoría de fase 3.
 
+### El reposo tiene DOS umbrales, no uno
+
+Dicho por el dueño el 2026-09-16, y es la pieza que faltaba para poder diseñarlo.
+
+**El reloj arranca al salir de secado con la humedad en objetivo**, no al terminar la
+fermentación.
+
+| Umbral | Qué habilita |
+|---|---|
+| **~30 días** | **Sacar muestras** — para tostar, analizar, o cerrar una venta |
+| **60 días mínimo** | **Vender**, y sólo en el caso de MENOS reposo |
+
+Y no es un número fijo: es un **perfil por varietal y proceso**.
+
+- **Geisha** — más reposo; suele llevar un tueste más bajo.
+- **Lavado** — más todavía: **60–90 días**.
+- **Natural Catuaí** — óptimo entre **45 y 60 días**.
+- Muchos lotes están **varios meses** antes de venderse, y aun así se les sacan
+  muestras para tostar y analizar.
+
+**Por qué esto encaja sin inventar nada.** Los motores de beneficio YA funcionan por
+perfil (`PERFIL_POR_GRADO` con `WASHED_STANDARD` y `NATURAL`, más tres perfiles sin
+umbrales). El reposo entra por esa misma puerta. Y los dos umbrales caen sobre dos
+mecanismos que ya existen: la **muestra** es una extracción con sus propias reglas, y
+la **venta** es un tipo de transformación declarado que **ningún código produce**
+todavía (`F3-005`).
+
+**Consecuencia que conviene no perder:** un lote puede estar meses sin vender y con
+muestras saliendo todo el tiempo. Así que el reposo **no bloquea** la extracción de
+muestras — sólo la venta. Un diseño que tratara «en reposo» como un estado cerrado
+haría imposible el trabajo normal de cerrar ventas.
+
+**Estos números son `[PROVISIONAL]`** hasta que el dueño los fije, como todo umbral
+de motor mientras `P-F` siga abierta. Son rangos que él da de memoria, no una tabla
+aprobada.
+
+### El destino de la cascarilla, y un hueco que ya existía
+
+**Se composta.** Y eso choca con algo medido: `CompostBatch` y `CascaraBatch` **no
+existen** — sí existe `BiocharBatch`, con 24 apariciones en el esquema, que es el
+precedente de «subproducto del café convertido en enmienda del suelo».
+
+Es **el mismo hueco que `F1-002`** ya había encontrado por otro camino: al generarse
+pulpa debería crearse un lote de cáscara enlazado, y no ocurre. Ahora la cascarilla
+de la trilla llega al mismo sitio vacío. **Dos subproductos del café, los dos
+compostables, ninguno con dónde ir.**
+
+Sin ese destino, el balance de la trilla NO CIERRA: entran 100 kg, salen 80 de verde,
+y 18 se desvanecen en una nota — que es exactamente lo que Q19 prohíbe.
+
 ### Herramientas en uso
 
 - **Bolsas GrainPro** — ya está en el sistema como valor de catálogo `GrainProBag`.
