@@ -42,17 +42,15 @@ const ITEMS = protocolo.activities.flatMap((a) => a.items.map((i) => ({ ...i, ac
  * salida filtrada se lee igual que "no fallo nada". El esquema es la declaracion, asi que se
  * lee el esquema.
  *
- * **Los comentarios se quitan antes de buscar**, y no es cosmetica: este esquema tiene mas
- * lineas de `///` que de campos, y varias nombran campos de otras tablas. Sin quitarlos, el
- * detector encontraria campos donde solo se habla de ellos -- la trampa que ya me costo tres
- * mediciones este mes.
+ * **Aqui hubo un despojado de comentarios y se quito, porque no hacia nada.** Lo dijo un
+ * flip-test: anulandolo, las siete pruebas seguian en verde. La razon es que el patron de
+ * campo exige una palabra pegada a la sangria, y toda linea de comentario del esquema empieza
+ * por `/` -- asi que ninguna podia colarse nunca. Un filtro que ninguna entrada puede hacer
+ * decidir es un adorno con forma de guardia, y en este archivo ademas mentia: sugeria que el
+ * detector se defiende de algo de lo que no tiene que defenderse.
  */
 function camposPorModelo(): Map<string, Set<string>> {
-  const bruto = readFileSync("prisma/schema.prisma", "utf8");
-  const fuente = bruto
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("///") && !l.trim().startsWith("//"))
-    .join("\n");
+  const fuente = readFileSync("prisma/schema.prisma", "utf8");
   const salida = new Map<string, Set<string>>();
   const bloques = fuente.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm);
   for (const b of bloques) {
