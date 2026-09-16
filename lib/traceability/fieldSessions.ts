@@ -20,11 +20,12 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { resumenDeVisita } from "../apiary/bitacora";
+import { exigePropositos } from "../apiary/propositoDeVisita";
 import { destinoDeBitacora } from "../integrations/bitacora";
 import { LocationAccessError } from "./locations";
 // A9.0 — la compuerta resuelve por el tipo de la `Location`. Ver su cabecera.
 import { requireFieldSessionAccess } from "./jornadaDeCampo";
-import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
+import type { DataQuality, ProvenanceClass, VisitPurpose } from "../../generated/prisma/client";
 
 export class FieldSessionValidationError extends Error {}
 
@@ -85,6 +86,16 @@ export interface StartFieldSessionInput {
   startedAt: Date;
   start?: Coordinates;
   notes?: string | null;
+  /**
+   * A qué se fue. **Llega como cadenas** —del formulario y de la cola offline— y lo valida
+   * `exigePropositos` en la frontera: un `as never` dejaría entrar cualquier valor del enum,
+   * que es el fallo que ADR-112 documenta.
+   *
+   * Opcional en la entrada y no en el protocolo: las visitas que ya existen se cerraron sin
+   * esta pregunta, y exigirla aquí rompería la cola offline de los dispositivos que todavía
+   * no la mandan. Cuando llega, el servicio exige **al menos uno**.
+   */
+  purposes?: readonly (string | VisitPurpose)[] | null;
   // ADR-038 — required, no default.
   provenanceClass: ProvenanceClass;
   dataQuality?: DataQuality | null;
@@ -111,6 +122,10 @@ export async function startFieldSession(userAccountId: string, input: StartField
         startLongitude: input.start?.longitude ?? null,
         startAccuracyM: input.start?.accuracyM ?? null,
         notes: input.notes ?? null,
+        // Se valida en la frontera, no se confía en lo que llega. Vacío o `null` guarda un
+        // arreglo vacío, que es «sin registrar»; una lista con algo dentro pasa por
+        // `exigePropositos`, que rechaza lo desconocido y lo vacío.
+        purposes: input.purposes == null ? [] : exigePropositos(input.purposes),
         provenanceClass: input.provenanceClass,
         dataQuality: input.dataQuality ?? null,
         recordedAt: input.capture?.recordedAt ?? null,

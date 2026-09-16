@@ -4132,6 +4132,14 @@ model FieldSession {
   // mes está y bajo qué contrato (D9).
   nextVisitDueAt      DateTime?          @map("next_visit_due_at")
   coloniesAliveCount  Int?               @map("colonies_alive_count")
+  /// Que se fue a hacer. **Arreglo y no una columna**: una misma visita revisa, alimenta y
+  /// trata. Mismo patron que `Inspection.broodStages`.
+  ///
+  /// **El vacio es "sin registrar", no "sin proposito".** Un arreglo de Prisma no admite
+  /// `NULL`, asi que la lista vacia es el tercer estado de ADR-080 para este campo: las
+  /// visitas guardadas antes de 2026-09-15 la tienen vacia porque nadie la pregunto, no
+  /// porque no tuvieran proposito. El servicio EXIGE al menos uno cuando el campo llega.
+  purposes            VisitPurpose[] @map("purposes")
 
   // Where the session began. Nullable — a device without a fix, or a session
   // recorded at a desk afterwards, both genuinely have no coordinates, and a
@@ -5935,6 +5943,23 @@ enum ColonyPopulation {
 
 /// Las etapas de cría presentes. **Varias a la vez**: ver `Inspection.broodStages`.
 /// Huevo presente = reina ponedora hace menos de tres días, sin buscarla — que es
+/// El proposito de una visita al sitio. **Varios a la vez**: una misma ida revisa, alimenta y
+/// trata, y obligar a elegir uno haria que el informe mintiera sobre lo que se fue a hacer.
+///
+/// Los seis valores salen del protocolo del dueno --`protocolos/apiario-campo-v1.json`, item
+/// `purpose`--, que es donde vive su vocabulario. `lib/apiary/propositoDeVisita.ts` los repite
+/// para el formulario y un guardia comprueba que las tres listas digan lo mismo.
+enum VisitPurpose {
+  inspeccion
+  alimentacion
+  tratamiento
+  cosecha
+  montaje
+  diagnostico
+
+  @@schema("traceability")
+}
+
 /// la razón por la que el dueño lo pide.
 enum BroodStage {
   huevo

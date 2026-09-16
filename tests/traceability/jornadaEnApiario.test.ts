@@ -498,6 +498,39 @@ describe("A9.6 — el reporte se congela, no se re-consulta", () => {
     }
   });
 
+  it("LA VISITA GUARDA A QUÉ SE FUE, y lo valida en la frontera", async () => {
+    // Era la única pregunta obligatoria DE PATIO del protocolo sin dónde guardarse (ADR-140).
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-06T13:00:00Z"),
+      purposes: ["tratamiento", "inspeccion"],
+    });
+    const guardada = await prisma.fieldSession.findUniqueOrThrow({ where: { id: visita.id } });
+    // En el orden del catálogo, no en el que llegaron.
+    expect(guardada.purposes).toEqual(["inspeccion", "tratamiento"]);
+  });
+
+  it("una visita sin propósitos los deja VACÍOS, que es «sin registrar» y no «sin propósito»", async () => {
+    // Es el estado de todas las visitas anteriores a este campo, y de la cola offline de un
+    // dispositivo que todavía no lo manda. Exigirlo aquí las rompería.
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-07T13:00:00Z"),
+    });
+    const guardada = await prisma.fieldSession.findUniqueOrThrow({ where: { id: visita.id } });
+    expect(guardada.purposes).toEqual([]);
+  });
+
+  it("pero un propósito inventado se rechaza, no se guarda", async () => {
+    await expect(
+      startFieldSession(apicultorConManejo, {
+        ...visita_(apiarioId),
+        startedAt: new Date("2026-09-08T13:00:00Z"),
+        purposes: ["trasiego"],
+      }),
+    ).rejects.toThrow(/trasiego/);
+  });
+
   it("emitir otra vez crea una VERSIÓN nueva, no pisa la anterior", async () => {
     const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
     await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });

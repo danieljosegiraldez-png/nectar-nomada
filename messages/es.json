@@ -1220,7 +1220,16 @@
     "pendienteSinColonia": "sin colonia",
     "pendienteRetiros": "{count} tratamiento(s) con material sin retirar en este sitio.",
     "resumenHeading": "Lo registrado en esta visita",
-    "resumenCifras": "{inspecciones} inspecciones · {eventos} eventos de colonia · {cosechas} cosechas"
+    "resumenCifras": "{inspecciones} inspecciones · {eventos} eventos de colonia · {cosechas} cosechas",
+    "visitPurposeLegend": "A qué vas",
+    "visitPurpose_inspeccion": "Inspección",
+    "visitPurpose_alimentacion": "Alimentación",
+    "visitPurpose_tratamiento": "Tratamiento",
+    "visitPurpose_cosecha": "Cosecha",
+    "visitPurpose_montaje": "Montaje",
+    "visitPurpose_diagnostico": "Diagnóstico",
+    "visitPurposesLine": "A qué se fue: {purposes}",
+    "visitPurposesSinRegistrar": "A qué se fue: sin registrar"
   },
   "Apiary": {
     "badge": "Apiario",

@@ -32,7 +32,7 @@ export type DestinoDelItem =
 
 export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   // --- visit: la visita al sitio -------------------------------------------------------
-  purpose: { clase: "sin_sitio", nota: "El proposito de la visita no tiene columna ni catalogo. `FieldSession.notes` es texto libre de la visita entera: meterlo ahi seria perder la pregunta." },
+  purpose: { clase: "campo", modelo: "FieldSession", campo: "purposes" },
   weather_observed: { clase: "sin_sitio", nota: "Sin columna. El Anexo C lo pide como vital del sitio y lo deja en una capa externa sin proveedor conectado." },
   site_condition: { clase: "sin_sitio", nota: "Sin columna propia." },
   colonies_alive_count: { clase: "campo", modelo: "FieldSession", campo: "coloniesAliveCount" },
