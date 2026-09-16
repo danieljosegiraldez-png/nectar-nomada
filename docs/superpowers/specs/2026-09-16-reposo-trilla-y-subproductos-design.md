@@ -242,8 +242,12 @@ Hoy el destino es **compost** para los dos. Pero el tipo se declara porque casca
 y pulpa no son el mismo material y algún día uno puede ir al biochar —que ya tiene
 modelo— y el otro no.
 
-**Y cierra `F1-002` de paso**: el despulpado también producirá su lote, por el mismo
-camino, sin un segundo mecanismo.
+**`F1-002` queda HABILITADO, no cerrado, y esta frase antes decía de más.** El despulpado
+podrá producir su lote por el mismo camino y sin un segundo mecanismo — pero el plan pone
+`PULPA` en el enum y **ninguna tarea conecta el despulpado con la creación del
+subproducto**, así que al despulpar seguirá sin crearse nada. Tener el tipo disponible no
+es producirlo. Lo encontró Codex auditando el plan; se deja fuera a propósito, pero
+escrito, para que nadie lea `F1-002` como resuelto.
 
 ### C.1 Hasta dónde llega, y qué queda deliberadamente fuera
 

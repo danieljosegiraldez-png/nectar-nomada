@@ -33,12 +33,23 @@ manda el spec.
   `SIN_INSTRUMENTO_DECLARADO`. Nunca se silencia por falta de dato.
 - **Los umbrales de reposo son `[PROVISIONAL]`** mientras `P-F` siga abierta. Van con
   ese comentario literal en el código, para que una búsqueda los encuentre.
+- **El umbral es por PROCESO, no por varietal — y eso se declara, no se disimula.**
+  El spec §A.1 pide «por varietal y proceso»; este plan sólo hace proceso, porque
+  `PERFIL_POR_GRADO` distingue `Washed` y `Natural` y **la entrada del motor ni
+  siquiera recibe el varietal** (medido en `desdeElLote.ts`). Hacer el varietal es
+  ensanchar la entrada de todo el motor, y es su propio trabajo. Mientras tanto, el
+  reposo emite la limitación `UMBRAL_SIN_VARIETAL`, igual que declara
+  `SIN_INSTRUMENTO_DECLARADO`: el operario ve que el número que le enseñan es del
+  proceso y no de su Geisha. **Callarlo sería peor que no tenerlo.**
 - **`npm run build` en toda tarea que toque TypeScript.** `vitest` no comprueba tipos:
   una tarea puede pasar en verde y romper el build. Costó una hora de producción el
   día 14.
-- **Toda prueba de base de datos se declara en `scripts/pruebas-por-compuerta.txt`.**
-  Por omisión cae en el carril hermético, donde no hay base y el archivo dice
-  «no tests» — que se lee igual que «pasó».
+- **Toda prueba de base de datos se declara en `scripts/pruebas-por-compuerta.txt`,
+  que es una lista de EXCLUSIÓN**: `ci.sh` corre todo lo que NO esté ahí. Una prueba
+  de base sin declarar corre en el carril hermético y **falla ruidosamente** —medido
+  el 2026-09-16: `tests/setup.ts` lanza, vitest imprime «1 failed / no tests» y sale
+  con **1**—. No pasa en silencio. Lo que sí engaña es la línea «no tests» leída
+  sola: **leer el código de salida, no la línea de resumen.**
 - **Commitear antes de mutar.** El arnés de flip-test restaura desde HEAD.
 
 ---
@@ -138,7 +149,26 @@ npx vitest run tests/beneficio/desenlaceDelSecado.test.ts
 npm run build
 ```
 
-- [ ] **Paso 5: declarar la prueba en su carril**
+- [ ] **Paso 5: que `endDryingRun` lo GUARDE — sin esto la columna nace muerta**
+
+Añadir la columna no hace que nadie la escriba. `endDryingRun` hoy guarda sólo
+`endedAt`; hay que ensancharlo para aceptar el desenlace, y ensanchar su acción y su
+formulario para que el operario pueda declararlo al cerrar el secado.
+
+```ts
+it("cerrar un secado declarando objetivo alcanzado lo guarda", async () => {
+  const run = await endDryingRun(actor, { dryingRunId: r.id, endedOutcome: "target_reached" });
+  expect(run.endedOutcome).toBe("target_reached");
+});
+
+it("y cerrarlo sin declararlo sigue permitido — avisa, no bloquea", async () => {
+  const run = await endDryingRun(actor, { dryingRunId: r2.id });
+  expect(run.endedAt).not.toBeNull();
+  expect(run.endedOutcome).toBeNull();
+});
+```
+
+- [ ] **Paso 6: declarar la prueba en su carril**
 
 Añadir `tests/beneficio/desenlaceDelSecado.test.ts` a `scripts/pruebas-por-compuerta.txt`
 en la sección de las que necesitan base. **Sin esto corre en el carril hermético y dice
@@ -440,7 +470,45 @@ y **sólo** en `Farm Manager`:
   releasedBy String?   @map("released_by") @db.Uuid
 ```
 
-- [ ] **Paso 5: migración, verde, build, declarar la prueba en su carril, commit.**
+- [ ] **Paso 5: ensanchar `requireLotAccess` — hoy NO admite liberar**
+
+Medido: su firma es `(userAccountId, action: "manage" | "view", candidates)`
+(`lib/traceability/lots.ts:74`), y lanza `TraceabilityAccessError("no_lot_access")`. Sin
+tocarla no hay forma de pedir `lot:release`, y las pruebas que casen `/permiso/i` no
+casarán nunca con el mensaje real.
+
+```ts
+  action: "manage" | "view" | "release",
+```
+
+- [ ] **Paso 6: escribir `liberarLote`, que tampoco existe**
+
+En `lib/traceability/lots.ts`, junto a las demás operaciones de lote:
+
+```ts
+/**
+ * Marca un lote como liberado para la venta. **No comprueba la edad de reposo**
+ * a propósito: liberar es una decisión de quien negocia, no una consecuencia
+ * del calendario (§A.4). El aviso de venta temprana sigue saliendo después.
+ */
+export async function liberarLote(userAccountId: string, lotId: string) {
+  const lot = await prisma.lot.findUnique({
+    where: { id: lotId },
+    select: { id: true, projectId: true, locationId: true, classification: true },
+  });
+  if (!lot) throw new TraceabilityAccessError("no_lot_access");
+  await requireLotAccess(userAccountId, "release", [lot]);
+  return prisma.lot.update({
+    where: { id: lotId },
+    data: { releasedAt: new Date(), releasedBy: userAccountId },
+  });
+}
+```
+
+y su acción en `app/actions/traceability.ts`, que es el archivo que existe — **no
+`app/actions/lotes.ts`, que no existe**.
+
+- [ ] **Paso 7: migración, verde, build, declarar la prueba en su carril, commit.**
 
 ---
 
@@ -479,6 +547,17 @@ En `prisma/schema.prisma`, dentro de `enum LotTransformationType`, tras `selecti
   hulling
 ```
 
+**Y la unión escrita a mano, que el enum de Prisma NO actualiza.**
+`RecordTransformationInput.transformationType` en `lib/traceability/lots.ts:128` es una
+lista de cadenas mantenida a mano —su propio comentario lo dice: «kept in sync with the
+DB enum by hand»—. Sin añadir `hulling` ahí, ninguna llamada podrá registrar una trilla
+aunque el enum de la base la acepte:
+
+```ts
+    | "selection"
+    | "hulling";
+```
+
 En `lib/traceability/balance.ts`, dentro de `CONSERVING_TYPES`, con su razón:
 
 ```ts
@@ -498,9 +577,13 @@ alguien escriba «para vender verde hace falta una trilla», y entonces el perga
 deja de poder venderse. El guardia:
 
 ```ts
+// No hay `registrarVenta` y no hace falta: `sale` ya está en la unión de
+// `RecordTransformationInput` y el camino es `recordTransformation`, el mismo
+// que usa `selection.ts`. Inventar un servicio de venta para este guardia sería
+// construir un subsistema para probar una ausencia.
 it("un lote SIN trilla puede venderse igual — la trilla nunca es precondición", async () => {
   const pergamino = await loteDePrueba({ stage: "pergamino" });
-  const t = await registrarVenta(gerente, pergamino.id, { masaKg: 50 });
+  const t = await recordTransformation(gerente, { transformationType: "sale", ...ventaDe(pergamino, 50) });
   expect(t.transformationType).toBe("sale");
 });
 
@@ -508,7 +591,7 @@ it("control positivo: un lote CON trilla también puede venderse", async () => {
   // Sin esta línea, una venta rota para todos haría pasar la de arriba por la
   // razón equivocada.
   const verde = await loteTrilladoDePrueba();
-  const t = await registrarVenta(gerente, verde.id, { masaKg: 40 });
+  const t = await recordTransformation(gerente, { transformationType: "sale", ...ventaDe(verde, 40) });
   expect(t.transformationType).toBe("sale");
 });
 ```
@@ -529,9 +612,16 @@ cae la primera prueba por su nombre, con el archivo compilando.
 
 - [ ] **Paso 1: la prueba en rojo**
 
+**Esta tarea prueba las COLUMNAS, no el servicio.** `registrarTrilla` lo crea la Tarea 8,
+así que usarlo aquí invertiría el orden del plan y ninguna de las dos podría empezar.
+Se escribe con el cliente directo, que es lo que corresponde a una tarea de esquema.
+
 ```ts
 it("una trilla en Cafelino declara quién la hizo y cuándo volvió", async () => {
-  const t = await registrarTrilla({ performedByOrganizationId: cafelino.id, custodyOut: salida, custodyIn: vuelta });
+  const t = await prisma.lotTransformation.create({
+    data: { ...transformacionBase, transformationType: "hulling",
+            performedByOrganizationId: cafelino.id, custodyOut: salida, custodyIn: vuelta },
+  });
   expect(t.performedByOrganizationId).toBe(cafelino.id);
   expect(t.custodyIn!.getTime()).toBeGreaterThan(t.custodyOut!.getTime());
 });
@@ -540,7 +630,10 @@ it("una trilla a mano en la propia finca no necesita custodia, y sigue siendo v�
   // Control del «avisa, no bloquea»: mazo y pilón en Las Nubes es una de las
   // tres formas reales (§B.1). Si esta cae, alguien hizo obligatoria la
   // custodia y acaba de prohibir la forma que Daniel usa en su propia finca.
-  const t = await registrarTrilla({ custodyOut: null, custodyIn: null });
+  const t = await prisma.lotTransformation.create({
+    data: { ...transformacionBase, transformationType: "hulling",
+            custodyOut: null, custodyIn: null },
+  });
   expect(t.id).toBeTruthy();
 });
 ```
@@ -583,11 +676,16 @@ it("una trilla produce su lote de cascarilla con destino compost", async () => {
   expect(b.destination).toBe("COMPOST");
 });
 
-it("el subproducto NO es merma: no toca declaredLossQuantity", async () => {
+it("el subproducto NO es merma: la merma declarada son los 2 kg, no los 20", async () => {
   // El guardia del §B.2. Contar la cascarilla como merma inflaría la pérdida
   // declarada un 18 % en cada trilla y escondería la merma de verdad.
+  //
+  // Se afirma el valor EXACTO y se exige que exista. `?? 0` seguido de `< 5`
+  // pasaba con `declaredLossQuantity` nulo — o sea, con una trilla que no
+  // declaró merma ninguna: el caso que esta prueba debía distinguir.
   const t = await prisma.lotTransformation.findUniqueOrThrow({ where: { id: trilla.id } });
-  expect(Number(t.declaredLossQuantity ?? 0)).toBeLessThan(5);
+  expect(t.declaredLossQuantity).not.toBeNull();
+  expect(Number(t.declaredLossQuantity)).toBe(2);
 });
 ```
 
@@ -643,6 +741,10 @@ enum ByproductDestination {
 }
 ```
 
+**Ojo, igual que en la Tarea 6:** las tres relaciones de este modelo
+—`transformation`, `producedAtLocation`, `organization`— necesitan su lado inverso en
+`LotTransformation`, `Location` y `Organization`, o `prisma validate` falla.
+
 - [ ] **Paso 4: migración, verde, build, declarar la prueba, commit.**
 
 ---
@@ -672,24 +774,37 @@ it("100 kg de pergamino producen el lote verde, la cascarilla y la merma", async
   expect(Number(r.subproducto.massKg)).toBe(18);
   expect(Number(r.transformacion.declaredLossQuantity)).toBe(2);
 
-  // Y la suma cierra, que es el punto entero de la tarea.
-  const salidas = 80 + 18 + 2;
-  expect(salidas).toBe(100);
+  // Y la suma cierra CONTRA LO PERSISTIDO, no contra constantes. Sumar
+  // 80+18+2 en el test comprobaría aritmética de JavaScript, no el balance.
+  const balance = await computeLotBalance(prisma, lote.id);
+  expect(balance.quantity.toNumber()).toBe(0); // el pergamino se consumió entero
+  expect(balance.unexplained?.toNumber() ?? 0).toBe(0); // y no quedaron 18 kg sin explicar
 });
 
 it("si falla la creación del subproducto, la trilla ENTERA se revierte", async () => {
   // Atomicidad. Una trilla a medias dejaría el lote descontado sin el verde
   // creado: material desaparecido del libro mayor.
-  await expect(registrarTrillaConSubproductoInvalido()).rejects.toThrow();
+  //
+  // El error se INDUCE y se nombra: un `rejects.toThrow()` pelado acepta
+  // cualquier fallo anterior a la escritura, y entonces «el lote sigue intacto»
+  // no demuestra rollback — demuestra que nunca se empezó.
+  await expect(registrarTrillaConSubproductoInvalido()).rejects.toThrow(/byproduct_mass_invalid/);
   // La firma real es (client, lotId) — balance.ts:199. Sin el cliente no compila.
   const balance = await computeLotBalance(prisma, lote.id);
   expect(balance.quantity.toNumber()).toBe(100);
+  // Y NADA parcial sobrevivió: ni transformación, ni lote verde, ni subproducto.
+  expect(await prisma.byproductBatch.count({ where: { transformation: { inputs: { some: { lotId: lote.id } } } } })).toBe(0);
+  expect(await prisma.lotTransformation.count({ where: { transformationType: "hulling", inputs: { some: { lotId: lote.id } } } })).toBe(0);
 });
 
 it("una humedad desconocida NO se convierte en cero", async () => {
-  // Regla literal del paquete, §B.2.
-  const r = await registrarTrilla({ humedadDelVerde: null });
-  expect(r.humedadDelVerde).toBeNull();
+  // Regla literal del paquete, §B.2. Se RELEE de la base: que la función
+  // devuelva `null` no dice nada sobre lo que se escribió, y cero es
+  // exactamente el valor que un `?? 0` descuidado habría persistido.
+  const r = await registrarTrilla({ humedadDelVerde: null, ...entradaBase });
+  const leido = await prisma.lot.findUniqueOrThrow({ where: { id: r.loteVerde.id } });
+  expect(leido.moisturePct).toBeNull();
+  expect(leido.moisturePct).not.toBe(0);
 });
 
 it("sin permiso lot:manage NO se puede trillar, y el control positivo al lado", async () => {
@@ -706,7 +821,35 @@ it("sin permiso lot:manage NO se puede trillar, y el control positivo al lado", 
 });
 ```
 
-- [ ] **Paso 2: verla fallar. Paso 3: implementar en una `prisma.$transaction`.**
+- [ ] **Paso 2: verla fallar.**
+
+- [ ] **Paso 3: implementar, y hacer que la cascarilla entre en el BALANCE**
+
+Medido: `settleMassBalance(tx, { transformationId, transformationType, organizationId,
+inputs, outputs })` (`balance.ts:418`) recibe cantidades **explícitas** y no consulta los
+subproductos. Si se le pasa sólo el verde, los 18 kg de cascarilla salen como
+**inexplicados** — el hueco del 18 % que la Tarea 5 existe para evitar, reaparecido por
+la otra puerta.
+
+La cascarilla va en `outputs`, junto al verde, en la misma transacción que crea el
+`ByproductBatch`. Molde: `selection.ts`, que su propio comentario describe como «un
+envoltorio fino sobre `recordTransformation`, no un paralelo».
+
+```ts
+it("los 18 kg de cascarilla NO salen como inexplicados", async () => {
+  const r = await registrarTrilla(entradaDe100Kg);
+  const balance = await computeLotBalance(prisma, lote.id);
+  expect(balance.unexplained?.toNumber() ?? 0).toBe(0);
+});
+
+it("control: si la cascarilla NO se pasa a outputs, sí salen inexplicados", async () => {
+  // Sin este control, un balance que ignorara los subproductos daría 0
+  // inexplicados por no mirar, y la prueba de arriba pasaría vacía.
+  const r = await registrarTrillaSinDeclararCascarilla(entradaDe100Kg);
+  const balance = await computeLotBalance(prisma, lote.id);
+  expect(balance.unexplained?.toNumber() ?? 0).toBeGreaterThan(17);
+});
+```
 
 - [ ] **Paso 4: verde, build, declarar la prueba, commit.**
 
@@ -751,12 +894,18 @@ it("un lote en reposo SIN el dato nuevo sigue declarando su limitación, no se c
   expect(v.fase).toBe("reposo");
 });
 
-it("fermentación y secado siguen dando lo mismo que antes", () => {
-  // Control positivo de no-regresión: esta tarea ENSANCHA un tipo que usan dos
-  // fases vivas. Si las rompe, se nota aquí y no en producción.
+it("fermentación sigue dando lo mismo que antes", () => {
   const f = veredictoDelLote(entradaDeFermentacion()) as VeredictoDeFase;
   expect(f.fase).toBe("fermentacion");
   expect(f.ph).not.toBeNull();
+});
+
+it("y SECADO también — las dos, no una", () => {
+  // El título anterior prometía «fermentación y secado» y sólo ejercitaba
+  // fermentación: una promesa que ninguna aserción sostenía.
+  const d = veredictoDelLote(entradaDeSecado()) as VeredictoDeFase;
+  expect(d.fase).toBe("secado");
+  expect(d.secado).not.toBeNull();
 });
 ```
 
@@ -791,11 +940,95 @@ comparan contra ese campo. Buscarlos antes de tocar nada:
 grep -rn "\.fase\b" lib/ app/ --include="*.ts" --include="*.tsx"
 ```
 
-- [ ] **Paso 4: verde, y `npm run build` obligatorio** — esta tarea ensancha un tipo
+- [ ] **Paso 4: LA PANTALLA — sin esto el reposo no se ve, y todo lo anterior sobra**
+
+El defecto más caro que encontró la auditoría, y estaba escondido a plena vista.
+`app/lots/[id]/page.tsx:201` calcula la fase así:
+
+```ts
+const faseAbierta = activeFermentation ? … : activeDrying ? … : null;
+```
+
+**El reposo es justamente lo que pasa cuando NO hay ninguna de las dos.** Con el plan
+como estaba escrito, `faseAbierta` sería `null`, el motor no se llamaría nunca y las
+ocho tareas anteriores no habrían enseñado un solo día de reposo. Ensanchar el tipo
+compila y deja la función invisible.
+
+Hay que añadir la tercera rama —secado terminado con objetivo alcanzado y sin fase
+abierta— y que `VeredictoDeBeneficio` pinte los días y las dos compuertas, que hoy sólo
+pinta pH, Brix y secado.
+
+```ts
+it("la pantalla del lote pide veredicto cuando NO hay fase abierta pero sí reposo", () => {
+  // El guardia de este defecto. Si alguien vuelve a dejar la condición en
+  // `activeFermentation ?? activeDrying ?? null`, esta cae.
+  const fase = faseDelLote({ activeFermentation: null, activeDrying: null,
+    ultimoSecado: { endedAt: hace(41), endedOutcome: "target_reached" } });
+  expect(fase?.tipo).toBe("reposo");
+});
+
+it("y NO la pide si el último secado se abandonó", () => {
+  const fase = faseDelLote({ activeFermentation: null, activeDrying: null,
+    ultimoSecado: { endedAt: hace(41), endedOutcome: "abandoned" } });
+  expect(fase).toBeNull();
+});
+```
+
+- [ ] **Paso 5: verde, y `npm run build` obligatorio** — esta tarea ensancha un tipo
 usado por pantallas: `vitest` pasará y el build es lo único que ve el resto.
 
 - [ ] **Paso 5: commit, y flip-test** — devolver `null` en `reposo` y confirmar que
 cae la primera prueba por su nombre.
+
+---
+
+## Tarea 10: Que una venta temprana de verdad se registre
+
+`tests/beneficio/reposo.test.ts` afirma la FORMA del resultado —sus cuatro claves, sin
+ninguna puerta— y eso guarda contra añadir un `bloquea` al evaluador. **No guarda contra
+que otro sitio bloquee.** Alguien puede dejar `evaluarReposo` intacto y meter el `throw`
+en la acción de venta, y las siete pruebas seguirían verdes. Lo señaló Codex: una
+comprobación sobre la forma de un objeto no dice nada sobre lo que hace el sistema.
+
+El guardia de verdad es de extremo a extremo, y va donde ocurre la venta.
+
+**Archivos:**
+- Probar: `tests/traceability/ventaTemprana.test.ts`
+
+- [ ] **Paso 1: la prueba, con su control positivo**
+
+```ts
+it("un lote con 10 días de reposo SE PUEDE vender — avisa y pasa", async () => {
+  const lote = await loteConReposoDe(10);
+  const t = await recordTransformation(gerente, { transformationType: "sale", ...ventaDe(lote, 30) });
+  expect(t.id).toBeTruthy(); // se registró: la venta temprana NO está bloqueada
+});
+
+it("y el aviso sale igualmente, que es la otra mitad", async () => {
+  // Sin esto, «se puede vender» pasaría también en un sistema que no avisa de
+  // nada — el fallo contrario, e igual de malo.
+  const lote = await loteConReposoDe(10);
+  const v = await estadoDeReposoDelLote(lote.id);
+  expect(v.venta).toBe("TEMPRANA");
+});
+
+it("un lote con 90 días también se vende, y sin aviso", async () => {
+  const lote = await loteConReposoDe(90);
+  const v = await estadoDeReposoDelLote(lote.id);
+  expect(v.venta).toBe("EN_PLAZO");
+});
+```
+
+- [ ] **Paso 2: verla pasar SIN tocar código de producción.** Si ya pasa, ése es el
+resultado correcto: hoy nada bloquea, y esta prueba es la red para el día que alguien lo
+intente. Escribirlo así en su comentario, para que nadie la cuente como trabajo hecho.
+
+- [ ] **Paso 3: flip-test obligatorio** — meter un `throw` por reposo insuficiente en el
+camino de venta y confirmar que cae la primera **por su nombre**. **Sin este flip-test la
+prueba no vale nada**: el día que se escribe todo está en verde, y el verde es la única
+respuesta que se ha visto.
+
+- [ ] **Paso 4: declarar la prueba en su carril, y commit.**
 
 ---
 
