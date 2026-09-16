@@ -33,7 +33,7 @@ export function NuevoApiarioForm({
 }: {
   organizaciones: Opcion[];
   proyectos: Opcion[];
-  /** Fincas, parcelas y microparcelas donde puede colgar el sitio (ADR-144). */
+  /** Fincas, parcelas y microparcelas donde puede colgar el sitio (ADR-145). */
   lugares: { id: string; name: string; locationType: string }[];
 }) {
   const t = useTranslations("Apiary");

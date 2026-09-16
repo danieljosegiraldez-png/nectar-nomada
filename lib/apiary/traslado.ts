@@ -132,7 +132,7 @@ export async function trasladarColmenas(
   // traslado, es un dato malo que después nadie sabe leer.
   if (!esSitioDeAbejas(destino.locationType)) throw new TrasladoInvalido("destino_no_es_apiario");
 
-  // **Y del MISMO tipo que el origen** (ADR-144). No es cuestión de familia sino de
+  // **Y del MISMO tipo que el origen** (ADR-145). No es cuestión de familia sino de
   // compatibilidad: una colonia de Apis en una caja de melipona no existe, y las cajas cambian
   // de módulos y de medidas según la especie —lo documenta el manual de ANSA—. El predicado de
   // arriba dice «aquí viven colmenas»; esta línea dice «de las tuyas».
@@ -362,7 +362,7 @@ export async function destinosCandidatos(
   const apiarios = await prisma.location.findMany({
     // **Del mismo tipo que el sitio de origen**, no de la familia entera: ofrecer un
     // meliponario como destino de colmenas de Apis sería pintar un destino que el servicio va
-    // a rechazar, y eso es peor que no ofrecerlo (ADR-144).
+    // a rechazar, y eso es peor que no ofrecerlo (ADR-145).
     where: { locationType: tipoDeOrigen, organizationId, id: { not: excluirLocationId } },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
