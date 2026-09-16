@@ -51,11 +51,12 @@ export const KIND_DE_FIN_DE_COLONIA = "colony_end";
 export const KINDS_DE_PARCELA = ["soil_sample", "foliar_sample", "soil_profile", "planting_cohort"] as const;
 
 export type ParseoDeLote =
-  | { ok: true; mutations: PushMutation[] }
+  | { ok: true; mutations: PushMutation[]; rechazos: { clientDraftId: string; reason: string }[] }
   | { ok: false; error: string };
 
 export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
   const parsed: PushMutation[] = [];
+  const rechazos: { clientDraftId: string; reason: string }[] = [];
 
   for (const raw of mutations) {
     const m = (raw ?? {}) as Record<string, unknown>;
@@ -134,6 +135,20 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
       continue;
     }
 
+    // Un `kind` que esta versión no conoce no puede tumbar el lote de los demás.
+    // Medido en el cliente: un 400 hace que `clasificarRespuesta` devuelva
+    // `rechazar`, y eso marca **todos** los borradores del lote como `error`,
+    // los buenos incluidos; y como `syncFieldEvents` vuelve a recoger los
+    // `error` en la tanda siguiente, el mismo lote regresa, recibe otro 400, y
+    // la cola no se vacía nunca mientras el borrador raro siga dentro.
+    // Con `clientDraftId` se puede atribuir el rechazo a su mutación; sin él no,
+    // y entonces sí es 400 de lote.
+    if (typeof m.kind === "string" && m.kind !== "field_event") {
+      if (typeof m.clientDraftId !== "string") return { ok: false, error: "mutation_malformed" };
+      rechazos.push({ clientDraftId: m.clientDraftId, reason: "unknown_kind" });
+      continue;
+    }
+
     if (typeof m.clientDraftId !== "string" || typeof m.fieldSessionId !== "string") {
       return { ok: false, error: "mutation_missing_ids" };
     }
@@ -152,5 +167,5 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
     });
   }
 
-  return { ok: true, mutations: parsed };
+  return { ok: true, mutations: parsed, rechazos };
 }

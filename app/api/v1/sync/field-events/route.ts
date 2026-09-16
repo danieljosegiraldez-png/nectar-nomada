@@ -47,7 +47,11 @@ export async function POST(request: Request) {
 
   try {
     const results = await pushFieldEvents(user.userAccountId, deviceId, parseo.mutations);
-    return Response.json({ results }, { status: 200 });
+    const conRechazos = [
+      ...results,
+      ...parseo.rechazos.map((r) => ({ clientDraftId: r.clientDraftId, status: "rejected" as const, reason: r.reason })),
+    ];
+    return Response.json({ results: conRechazos }, { status: 200 });
   } catch (error) {
     if (error instanceof DeviceError) {
       return Response.json({ error: error.message }, { status: 403 });

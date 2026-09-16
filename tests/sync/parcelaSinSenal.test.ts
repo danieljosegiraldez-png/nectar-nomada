@@ -187,6 +187,17 @@ describe("el lote reconoce los cuatro tipos de captura de parcela", () => {
     ]);
     expect(r).toEqual({ ok: false, error: "mutation_missing_ids" });
   });
+
+  it("un kind desconocido rechaza SOLO esa mutación y deja pasar el resto", () => {
+    const r = parsearMutaciones([
+      { kind: "lo_que_sea", clientDraftId: "d-raro", locationId: "loc1" },
+      { kind: "soil_profile", clientDraftId: "d-ok", locationId: "loc1", describedAt: "2026-09-16T12:00:00.000Z", provenanceClass: "direct_observation" },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.mutations).toHaveLength(1);
+    expect(r.rechazos).toEqual([{ clientDraftId: "d-raro", reason: "unknown_kind" }]);
+  });
 });
 
 /**

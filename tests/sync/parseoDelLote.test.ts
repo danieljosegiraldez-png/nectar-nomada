@@ -190,9 +190,14 @@ describe("el parseo del lote de campo", () => {
   it("y el parseo SÍ rechaza cuando hay que rechazar", () => {
     // Control positivo del anterior: un parseo que dijera `ok` a todo pasaría el
     // guardia igual de verde.
-    expect(parsearMutaciones([{ kind: "telepatia", clientDraftId: "x", colonyId: "y" }])).toMatchObject({
+    // Actualizado por la Task 4 (captura de parcela): un `kind` desconocido CON
+    // `clientDraftId` ya no tumba el lote, se rechaza por mutación — por eso el
+    // control de rechazo de LOTE usa aquí un `kind` desconocido SIN
+    // `clientDraftId`, que sigue siendo 400: sin esa clave no hay a quién
+    // atribuirle el rechazo. Ver lib/sync/parsearMutaciones.ts.
+    expect(parsearMutaciones([{ kind: "telepatia", colonyId: "y" }])).toMatchObject({
       ok: false,
-      error: "mutation_missing_ids",
+      error: "mutation_malformed",
     });
     expect(parsearMutaciones([{ kind: "varroa_count", clientDraftId: "x" }])).toMatchObject({
       ok: false,
