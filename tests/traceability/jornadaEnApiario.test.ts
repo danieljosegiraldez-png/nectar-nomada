@@ -145,7 +145,18 @@ afterAll(async () => {
   await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hive: { locationId: apiarioId } }) });
   await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId: apiarioId }) });
 
-  const reportes = await prisma.report.findMany({ where: { subjectEntityType: "field_session" }, select: { id: true } });
+  // **Acotado a las visitas de ESTA prueba.** Antes decía sólo
+  // `{ subjectEntityType: "field_session" }`, sin `RUN_ID` ni nada que lo
+  // atara aquí: cogía TODOS los informes de visita de la base y los borraba
+  // con sus versiones y publicaciones. `assertDefinedWhere` no puede verlo
+  // —el `where` del borrado está perfectamente definido—; lo que estaba mal
+  // era la SELECCIÓN. Medido el 2026-09-15 sembrando un informe ajeno antes
+  // de correrla: desaparecía, y la prueba pasaba 35/35 mientras tanto.
+  const idsDeSesion = sesiones.map((s) => s.id);
+  const reportes = await prisma.report.findMany({
+    where: { subjectEntityType: "field_session", subjectEntityId: { in: idsDeSesion } },
+    select: { id: true },
+  });
   const versiones = await prisma.reportVersion.findMany({ where: { reportId: { in: reportes.map((r) => r.id) } }, select: { id: true } });
   await prisma.reportPublication.deleteMany({ where: assertDefinedWhere({ reportVersionId: { in: versiones.map((v) => v.id) } }) });
   await prisma.reportVersion.deleteMany({ where: assertDefinedWhere({ reportId: { in: reportes.map((r) => r.id) } }) });
