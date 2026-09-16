@@ -512,12 +512,12 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
   // `listPlantingEventsForLocation`, que protege con `lot:view`.
   const eventosDeProduccionCrudos = await prisma.plantingEvent.findMany({
     where: { locationId, eventType: "entered_production", plantingCohortId: { not: null } },
-    select: { plantingCohortId: true, occurredAt: true, occurredPrecision: true, createdAt: true },
+    select: { id: true, plantingCohortId: true, occurredAt: true, occurredPrecision: true, createdAt: true },
   });
   const eventosDeProduccion: EventoDeProduccion[] = eventosDeProduccionCrudos.flatMap((e) =>
     e.plantingCohortId == null
       ? []
-      : [{ plantingCohortId: e.plantingCohortId, occurredAt: e.occurredAt, occurredPrecision: e.occurredPrecision, createdAt: e.createdAt }],
+      : [{ id: e.id, plantingCohortId: e.plantingCohortId, occurredAt: e.occurredAt, occurredPrecision: e.occurredPrecision, createdAt: e.createdAt }],
   );
 
   return {

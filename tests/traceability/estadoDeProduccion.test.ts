@@ -1,12 +1,14 @@
 /**
- * Hermética: no importa lib/db. Los dos casos que tienen que poder fallar son
- * «sin evento nunca es levante» y «gana el registrado último aunque su fecha
- * sea anterior».
+ * Hermética: no importa lib/db. Los tres casos que tienen que poder fallar son
+ * «sin evento nunca es levante», «gana el registrado último aunque su fecha
+ * sea anterior» y «con el mismo `createdAt`, el desempate es estable y va por
+ * `id`, no por orden de llegada».
  */
 import { describe, expect, it } from "vitest";
 import { estadoDeProduccion, estadosPorCohorte, type EventoDeProduccion } from "../../lib/traceability/estadoDeProduccion";
 
 const ev = (over: Partial<EventoDeProduccion>): EventoDeProduccion => ({
+  id: "00000000-0000-0000-0000-000000000001",
   plantingCohortId: "c1",
   occurredAt: new Date("2021-01-01T00:00:00Z"),
   occurredPrecision: "year",
@@ -35,10 +37,20 @@ describe("estadoDeProduccion", () => {
     expect(estado.estado === "en_produccion" && estado.desde.toISOString()).toBe("2020-01-01T00:00:00.000Z");
   });
 
-  it("el orden en que llegan los eventos no cambia el resultado", () => {
-    const a = ev({ occurredAt: new Date("2023-01-01T00:00:00Z"), createdAt: new Date("2026-03-01T00:00:00Z") });
-    const b = ev({ occurredAt: new Date("2020-01-01T00:00:00Z"), createdAt: new Date("2026-04-01T00:00:00Z") });
-    expect(estadoDeProduccion([b, a])).toEqual(estadoDeProduccion([a, b]));
+  it("con el MISMO createdAt, el desempate es por id mayor, sea cual sea el orden de llegada", () => {
+    const idMenor = ev({
+      id: "00000000-0000-0000-0000-000000000001",
+      occurredAt: new Date("2023-01-01T00:00:00Z"),
+      createdAt: new Date("2026-03-01T00:00:00Z"),
+    });
+    const idMayor = ev({
+      id: "00000000-0000-0000-0000-000000000002",
+      occurredAt: new Date("2020-01-01T00:00:00Z"),
+      createdAt: new Date("2026-03-01T00:00:00Z"),
+    });
+    const esperado = { estado: "en_produccion", desde: new Date("2020-01-01T00:00:00Z"), precision: "year" };
+    expect(estadoDeProduccion([idMenor, idMayor])).toEqual(esperado);
+    expect(estadoDeProduccion([idMayor, idMenor])).toEqual(esperado);
   });
 });
 
