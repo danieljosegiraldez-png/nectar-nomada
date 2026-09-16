@@ -3578,3 +3578,22 @@ que publiqué ayer iban todas **una de más**, porque se midieron con el instrum
 `moisture` **ya es variable canónica de medición** en este esquema, así que la humedad de la
 miel podría ser un `Measurement` en vez de una columna. Eso se decide aparte, no de paso.
 
+
+### 2026-09-16 · Pantallas de inspección e instalaciones, y el ámbito de ubicación baja por el árbol
+
+Inspección manual con dos muestras declaradas como zonas o réplicas, usando
+`registrarInspeccion`; administración sitio → instalación → cama con permiso
+`location:manage_attributes` y auditoría atómica.
+
+**Y ADR-144, que salió de aquí:** un ámbito de ubicación alcanza a sus
+descendientes. La pantalla de instalaciones lo destapó — un operario con ámbito
+sobre la finca podía crear el invernadero y **no las camas de dentro**. Decisión
+del dueño; su mitad negativa —que un hermano sigue fuera— está en
+`tests/rbac/ambitoDeUbicacion.test.ts`.
+
+Verificado: suite completa **2248/2248**, carril hermético 1146, `build` 0. Y el
+guardia de deriva de migraciones, que **sólo mide con `SHADOW_DATABASE_URL`**,
+encontró un índice que la Tarea 2 creó en la migración sin declararlo en el
+esquema.
+Detalle y comprobaciones: `.superpowers/sdd/2026-09-15-muestra-y-topologia-de-secado/tarea-8-9-report.md`.
+
