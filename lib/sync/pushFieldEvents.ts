@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { Prisma } from "../../generated/prisma/client";
 import {
   recordFieldEvent,
   FieldSessionValidationError,
@@ -220,6 +221,7 @@ export type MutacionDeMuestraDeSuelo = {
   sampleCode: string;
   sampledAt: Date;
   provenanceClass: string;
+  dataQuality?: string | null;
   treatmentPlotLabel?: string | null;
   samplingPointLabel?: string | null;
   depthTopCm?: number | null;
@@ -237,6 +239,7 @@ export type MutacionDeMuestraFoliar = {
   sampleCode: string;
   sampledAt: Date;
   provenanceClass: string;
+  dataQuality?: string | null;
   treatmentPlotLabel?: string | null;
   leafPairPosition?: number | null;
   canopyPosition?: string | null;
@@ -254,6 +257,7 @@ export type MutacionDePerfilDeSuelo = {
   locationId: string;
   describedAt: Date;
   provenanceClass: string;
+  dataQuality?: string | null;
   pitDepthCm?: number | null;
   rootingDepthCm?: number | null;
   rootDistribution?: string | null;
@@ -267,6 +271,7 @@ export type MutacionDeSiembra = {
   clientDraftId: string;
   locationId: string;
   provenanceClass: string;
+  dataQuality?: string | null;
   cultivarValueId?: string | null;
   plantedAt?: Date | null;
   plantCount?: number | null;
@@ -455,6 +460,51 @@ async function aplicarConteoDeVarroa(userAccountId: string, m: MutacionDeConteoD
 }
 
 /**
+ * Busca por `clientDraftId` en la tabla que corresponde a `kind`.
+ *
+ * Un objeto `{kind: delegado}` no tipa: cada `findUnique` de Prisma tiene su
+ * propio tipo de argumentos y la unión de las cuatro firmas no es invocable
+ * (TS2349). Se pregunta con un `switch` por la misma razón que el resto del
+ * archivo despacha por `kind` con ternarios, no con una tabla. Se usa dos
+ * veces: la comprobación previa al `create`, y la recuperación cuando la
+ * carrera de abajo hace perder a esta llamada.
+ */
+function buscarCapturaPorClientDraftId(
+  kind: "soil_sample" | "foliar_sample" | "soil_profile" | "planting_cohort",
+  clientDraftId: string,
+) {
+  return kind === "soil_sample"
+    ? prisma.soilSample.findUnique({ where: { clientDraftId }, select: { id: true } })
+    : kind === "foliar_sample"
+      ? prisma.foliarSample.findUnique({ where: { clientDraftId }, select: { id: true } })
+      : kind === "soil_profile"
+        ? prisma.soilProfile.findUnique({ where: { clientDraftId }, select: { id: true } })
+        : prisma.plantingCohort.findUnique({ where: { clientDraftId }, select: { id: true } });
+}
+
+/**
+ * ¿Este `P2002` es el índice único de `client_draft_id` chocando, y no el
+ * `@@unique([locationId, sampleCode])` que suelo y foliar también tienen?
+ *
+ * Medido contra la base real (2026-09-16): con el adaptador de driver que usa
+ * este proyecto, Prisma NO pone el nombre de columna en `error.meta.target`
+ * como documenta el caso clásico — lo anida en
+ * `error.meta.driverAdapterError.cause.constraint.fields`. Se comprueban las
+ * dos formas: la documentada, por si el adaptador cambia, y la medida, que es
+ * la que de verdad ocurre aquí. Sin esta distinción, un choque real de
+ * `(locationId, sampleCode)` — dos muestras distintas con el mismo código —
+ * se leería como `duplicate` en vez de subir como el dato malo que es.
+ */
+function esCarreraDeClientDraftId(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") return false;
+  const meta = error.meta as
+    | { target?: unknown; driverAdapterError?: { cause?: { constraint?: { fields?: unknown } } } }
+    | undefined;
+  const target = meta?.target ?? meta?.driverAdapterError?.cause?.constraint?.fields;
+  return Array.isArray(target) && target.length === 1 && target[0] === "client_draft_id";
+}
+
+/**
  * Las cuatro creaciones de parcela. La comprobación previa por `clientDraftId`
  * es lo que separa `applied` de `duplicate`; sin ella un reintento crearía la
  * muestra dos veces.
@@ -463,23 +513,16 @@ async function aplicarCapturaDeParcela(
   userAccountId: string,
   m: MutacionDeMuestraDeSuelo | MutacionDeMuestraFoliar | MutacionDePerfilDeSuelo | MutacionDeSiembra,
 ): Promise<PushResult> {
-  // Un objeto {kind: delegado} no tipa: cada `findUnique` de Prisma tiene su
-  // propio tipo de argumentos y la unión de las cuatro firmas no es invocable
-  // (TS2349). Se pregunta con un `switch` por la misma razón que el resto del
-  // archivo despacha por `kind` con ternarios, no con una tabla.
-  const yaEstaba = await (
-    m.kind === "soil_sample"
-      ? prisma.soilSample.findUnique({ where: { clientDraftId: m.clientDraftId }, select: { id: true } })
-      : m.kind === "foliar_sample"
-        ? prisma.foliarSample.findUnique({ where: { clientDraftId: m.clientDraftId }, select: { id: true } })
-        : m.kind === "soil_profile"
-          ? prisma.soilProfile.findUnique({ where: { clientDraftId: m.clientDraftId }, select: { id: true } })
-          : prisma.plantingCohort.findUnique({ where: { clientDraftId: m.clientDraftId }, select: { id: true } })
-  );
+  const yaEstaba = await buscarCapturaPorClientDraftId(m.kind, m.clientDraftId);
   if (yaEstaba) return { clientDraftId: m.clientDraftId, status: "duplicate", id: yaEstaba.id };
 
   try {
-    const comun = { locationId: m.locationId, provenanceClass: m.provenanceClass as never, clientDraftId: m.clientDraftId };
+    const comun = {
+      locationId: m.locationId,
+      provenanceClass: m.provenanceClass as never,
+      dataQuality: (m.dataQuality ?? null) as never,
+      clientDraftId: m.clientDraftId,
+    };
     const fila =
       m.kind === "soil_sample"
         ? await createSoilSample(userAccountId, { ...comun, sampleCode: m.sampleCode, sampledAt: m.sampledAt,
@@ -501,6 +544,17 @@ async function aplicarCapturaDeParcela(
             plantedAt: m.plantedAt ?? null, plantCount: m.plantCount ?? null, notes: m.notes ?? null });
     return { clientDraftId: m.clientDraftId, status: "applied", id: fila.id };
   } catch (error) {
+    // Carrera: dos llamadas con el mismo `clientDraftId` —un reintento del
+    // cliente disparado antes de que vuelva la primera respuesta— pueden pasar
+    // las dos el `findUnique` de arriba antes de que la primera termine su
+    // `create`. La perdedora choca aquí contra el índice único y Prisma lo
+    // reporta como `P2002`, que sin este caso subiría como excepción no
+    // controlada en vez de resolver a `duplicate` como promete el protocolo.
+    // Se busca la fila del ganador y se devuelve igual que el camino feliz.
+    if (esCarreraDeClientDraftId(error)) {
+      const ganador = await buscarCapturaPorClientDraftId(m.kind, m.clientDraftId);
+      if (ganador) return { clientDraftId: m.clientDraftId, status: "duplicate", id: ganador.id };
+    }
     // Un dato malo es respuesta del servidor; un corte de base sube, para que no
     // borre trabajo de campo disfrazado de dato inválido.
     // Son CUATRO clases, una por servicio, y no se pueden resumir en una:

@@ -62,6 +62,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await prisma.soilSample.deleteMany({ where: assertDefinedWhere({ locationId }) });
+  // Ronda de arreglo 1 — la prueba de `dataQuality` en siembra crea un
+  // `PlantingCohort` en este mismo `locationId`.
+  await prisma.plantingCohort.deleteMany({ where: assertDefinedWhere({ locationId }) });
   await prisma.device.deleteMany({ where: assertDefinedWhere({ id: deviceId }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: scopeId }) });
@@ -222,5 +225,76 @@ describe("el replay aplica la captura de parcela y no la duplica", () => {
       },
     ]);
     expect(r).toMatchObject({ status: "rejected", reason: "sample_code_required" });
+  });
+});
+
+/**
+ * Ronda de arreglo 1 sobre Task 3.
+ *
+ * CRÍTICO: `aplicarCapturaDeParcela` no reenviaba `dataQuality` a ninguno de
+ * los cuatro servicios. No es cosmético en siembra: `createPlantingCohort`
+ * EXIGE `dataQuality` cuando el cultivar tiene `impliesUnknownIdentity: true`
+ * (`plantingCohorts.ts` `requireDataQualityForUnknownCultivar`), así que toda
+ * siembra encolada sin señal con un cultivar de identidad desconocida volvía
+ * `rejected` con `data_quality_required_for_unknown_cultivar` — un rechazo
+ * que se lee como dato malo del operador y era el transporte descartando el
+ * campo.
+ */
+describe("dataQuality viaja en las cuatro ramas de captura de parcela", () => {
+  it("una siembra con cultivar de identidad desconocida y su dataQuality puesto vuelve applied, no rejected", async () => {
+    const cultivarDesconocido = await prisma.variableCatalogValue.findFirstOrThrow({
+      where: { value: "desconocido", catalog: { key: "cultivar" } },
+    });
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "planting_cohort" as const,
+        clientDraftId: `d-${Date.now()}`,
+        locationId,
+        provenanceClass: "direct_observation",
+        cultivarValueId: cultivarDesconocido.id,
+        dataQuality: "provisional",
+      },
+    ]);
+    // Sin el reenvío de `dataQuality`, esto cae en `rejected` con
+    // `data_quality_required_for_unknown_cultivar` — confirmado en rojo antes
+    // de escribir el arreglo (ver task-3-report.md).
+    expect(r).toMatchObject({ status: "applied" });
+  });
+});
+
+/**
+ * IMPORTANTE: dos llamadas concurrentes con el mismo `clientDraftId` pueden
+ * pasar las dos el `findUnique` antes de que la primera termine su `create`.
+ * La perdedora chocaba contra el índice único con un `P2002` que ninguna de
+ * las cuatro clases de error reconocía, así que subía como excepción no
+ * controlada en vez de resolver a `duplicate`.
+ *
+ * `Promise.all` con la MISMA mutación ejerce el camino concurrente de
+ * verdad — no es la llamada secuencial de la prueba de arriba. Si la
+ * excepción no controlada volviera, esta prueba fallaría con ella (no con un
+ * `expect` roto), que es justo la forma en que se descubrió el defecto.
+ */
+describe("una carrera de push con el mismo clientDraftId no lanza excepción", () => {
+  it("de las dos llamadas concurrentes, una aplica y la otra dice duplicate, con UNA sola fila", async () => {
+    const draft = `d-race-${Date.now()}`;
+    // MISMO `clientDraftId`, `sampleCode` DISTINTO: si las dos llamadas
+    // llevaran también el mismo `sampleCode`, la perdedora podría chocar
+    // contra `@@unique([locationId, sampleCode])` en vez de contra
+    // `client_draft_id` —medido: eso es exactamente lo que pasó al escribir
+    // esta prueba, con las dos mutaciones idénticas—, y entonces la prueba no
+    // ejercería la carrera que el arreglo cubre.
+    const base = {
+      kind: "soil_sample" as const,
+      clientDraftId: draft,
+      locationId,
+      sampledAt: new Date(),
+      provenanceClass: "direct_observation",
+    };
+    const [[a], [b]] = await Promise.all([
+      pushFieldEvents(userAccountId, deviceId, [{ ...base, sampleCode: `S-race-a-${Date.now()}` }]),
+      pushFieldEvents(userAccountId, deviceId, [{ ...base, sampleCode: `S-race-b-${Date.now()}` }]),
+    ]);
+    expect([a!.status, b!.status].sort()).toEqual(["applied", "duplicate"]);
+    expect(await prisma.soilSample.count({ where: { clientDraftId: draft } })).toBe(1);
   });
 });
