@@ -3340,3 +3340,28 @@ la colocación en ADR-135.
 **Pendiente nombrado:** la observación en lote, hasta que el dueño diga qué significa; y el
 «nada fuera de lo normal» sobre varias, que es honesto pero escribe `Inspection` y merece su
 propia rebanada.
+
+### 2026-09-15 · La lista de apiarios deja de ser plana
+
+ADR-137, y lo pidió el dueño: «devuelta a finca o organizacion y ver apiarios bajo ellos ya sea
+en lista o mapa».
+
+**No construye jerarquía: deja de esconder la que hay.** `parentLocationId` y `organizationId`
+estaban poblados para los cuatro apiarios reales —Finca Rosina con dos, Toabré con dos— y la
+pantalla **no nombraba ninguno de los dos en ninguna línea**. Sexta vez en el módulo que el
+hueco es el camino y no el dato.
+
+**El grupo es el lugar padre y su tipo se enseña**, porque el de Las Nubes es una finca y el de
+Toabré una localidad: rotular los dos igual afirmaría lo que la fila no dice. Agrupar por
+organización daría un grupo de cuatro — la lista plana otra vez.
+
+**La urgencia no se pierde al agrupar**, que era el riesgo entero, y el grupo sin lugar
+declarado no va al final por serlo.
+
+**Dos hallazgos del propio trabajo:** el encabezado rotulaba la organización *del primer
+sitio* —en el grupo sin lugar, cuatro sitios de tres organizaciones bajo el nombre de una—, y
+un flip-test destapó que el primer criterio del orden **no podía decidir nada**: una crítica
+implica nivel 0, así que nivel y recuento nunca discrepan. Se quitó.
+
+**Pendiente nombrado:** el mapa por grupo. Cero de los ocho sitios tienen coordenadas, así que
+hoy dibujaría recuadros vacíos. La frase pide «lista o mapa» y sólo una tiene datos detrás.
