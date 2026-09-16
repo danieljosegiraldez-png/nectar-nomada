@@ -398,8 +398,12 @@
       "razon": "Tarea 5 de secado: declara modos por instrumento con el permiso manage resuelto por puedeGestionarEquipo y registra modo y AuditEvent en la misma transacción. El dominio puro vive separado en modos.ts."
     },
     {
+      "archivo": "lib/apiary/pendienteDeLaVisita.ts",
+      "razon": "Lo que quedo pendiente al cerrar la jornada (Anexo E §5): las cajas del sitio sin ningun evento de ESA jornada, mas los retiros que ya lee cierreDeEvento. Tres lecturas, ninguna escritura. Misma disciplina que vitalesDeSitios y resumenDeVisita: no recibe principal porque la pantalla de la jornada ya paso por getFieldSessionTimeline, que autoriza."
+    },
+    {
       "archivo": "lib/traceability/instalaciones.ts",
-      "razon": "Tarea 9 de secado: consultas y administración del árbol sitio → instalación → cama. Exige location:manage_attributes sobre el padre al crear y sobre la ubicación al leer/editar; cada escritura y su AuditEvent comparten transacción."
+      "razon": "Tarea 9 del plan de secado — administra el árbol sitio → instalación → cama. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Exige `location:manage_attributes` sobre el padre ANTES de escribir, y desde ADR-144 ese permiso alcanza a los descendientes, así que quien manda en la finca puede crear las camas de dentro sin una asignación por instalación. Escritura y AuditEvent en la MISMA transacción, y su prueba «revierte creación y edición si falla su AuditEvent» lo comprueba en vez de darlo por hecho."
     }
   ],
   "reciben_transaccion": [
@@ -803,6 +807,12 @@
       "archivo": "lib/apiary/hives.ts",
       "operacion": "crearColocacionInicial",
       "razon": "No pide principal porque no decide nada: recibe hiveId, locationId y fecha ya resueltos por quien acaba de crear la colmena en la misma transaccion. `createHive` autoriza antes; los tres guiones de datos corren fuera de la aplicacion. Un guardia aqui volveria a autorizar lo ya autorizado y daria la impresion de ser la frontera. Escribe una fila y no lee ninguna.",
+      "verificado": "2026-09-15"
+    },
+    {
+      "archivo": "lib/apiary/pendienteDeLaVisita.ts",
+      "operacion": "pendientesDeLaVisita",
+      "razon": "Recibe un fieldSessionId que su llamador -la pantalla de la jornada- ya obtuvo de getFieldSessionTimeline, que autoriza con requireFieldSessionAccess. No pide principal a proposito: un lector que pide principal parece una compuerta y termina usandose como tal. Lee la jornada, sus eventos y las cajas del sitio; no escribe.",
       "verificado": "2026-09-15"
     }
   ]

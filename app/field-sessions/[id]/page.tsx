@@ -10,6 +10,8 @@ import { getFieldEventKinds } from "../../../lib/traceability/fieldSessionCatalo
 import { FieldEventForm, FieldSessionEndForm } from "../../components/traceability/FieldSessionForms";
 import { EmitirReporteForm, CompletarVisitaForm } from "../../components/traceability/ReporteDeVisitaForms";
 import { leerReporteDeVisita } from "../../../lib/traceability/reporteDeVisita";
+import { resumenDeVisita } from "../../../lib/apiary/bitacora";
+import { pendientesDeLaVisita } from "../../../lib/apiary/pendienteDeLaVisita";
 import { FieldSyncControls } from "../../components/traceability/FieldSyncControls";
 import { mostrarInstante } from "../../../lib/time/mostrarInstante";
 
@@ -67,6 +69,16 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
   // pero quien sólo quiere leerlo no debería tener que emitir otra vez.
   const reporteEmitido = await leerReporteDeVisita(user.userAccountId, id).catch(() => null);
 
+  // Anexo E §5 — «Al cerrarla: resumen de lo registrado, lo que quedó pendiente». Las dos
+  // mitades faltaban en la pantalla: `resumenDeVisita` existe desde A9.1 y no aparecía en
+  // NINGUNA pantalla —alimentaba un mensaje de bitácora y nada más— y de lo pendiente no
+  // había nada. Las dos lecturas van en paralelo y ninguna autoriza: este componente ya pasó
+  // por `getFieldSessionTimeline`.
+  const [resumen, pendiente] = await Promise.all([
+    resumenDeVisita(id),
+    pendientesDeLaVisita(id),
+  ]);
+
   const enCurso = session.endedAt == null;
 
   return (
@@ -87,6 +99,16 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
         {t("fieldSessionOperatorLabel")}: {session.operator.displayName}
         {" · "}
         {enCurso ? <strong>{t("fieldSessionOpen")}</strong> : t("fieldSessionClosedAt", { date: cuando(session.endedAt!, session.location.timezone) })}
+      </p>
+      {/* A qué se fue. Vacío es «sin registrar» y se dice: las visitas anteriores al
+          2026-09-15 no traen ninguno porque nadie lo preguntó, no porque no tuvieran
+          propósito. */}
+      <p className={session.purposes.length === 0 ? "nn-vital-sin-registro" : "nn-detail-meta"}>
+        {session.purposes.length === 0
+          ? t("visitPurposesSinRegistrar")
+          : t("visitPurposesLine", {
+              purposes: session.purposes.map((p) => t(`visitPurpose_${p}`)).join(", "),
+            })}
       </p>
       {session.notes ? <p className="nn-muted">{session.notes}</p> : null}
       {session.startLatitude != null && session.startLongitude != null ? (
@@ -117,6 +139,38 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
           </ol>
         )}
       </section>
+
+      {/* **Lo que queda por tocar, MIENTRAS la jornada sigue abierta.** El Anexo lo pide «al
+          cerrarla», y aquí aparece también antes por una razón: una lista de lo que te falta
+          que sólo sale cuando ya no puedes añadir eventos es una lista que no se puede
+          atender. Al cerrar se sigue enseñando, como registro de lo que se dejó. */}
+      {pendiente && pendiente.sinTocar.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("pendienteHeading")}</h2>
+          <p className="nn-detail-meta">
+            {t("pendienteResumen", {
+              tocadas: pendiente.tocadas,
+              total: pendiente.tocadas + pendiente.sinTocar.length,
+              pobladas: pendiente.sinTocarPobladas,
+            })}
+          </p>
+          <ul className="nn-detail-meta">
+            {pendiente.sinTocar.map((c) => (
+              <li key={c.hiveId}>
+                {c.identifier}
+                {c.poblada ? "" : ` · ${t("pendienteSinColonia")}`}
+              </li>
+            ))}
+          </ul>
+          {/* Las tiras sin retirar: material que sigue dentro de una caja de este sitio. Es
+              lo otro que todavía se puede resolver sin subir al carro. */}
+          {pendiente.retiros.length > 0 ? (
+            <p className="nn-alerta nn-alerta-aviso">
+              {t("pendienteRetiros", { count: pendiente.retiros.length })}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       {enCurso ? (
         <>
@@ -150,6 +204,21 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
         // botón que va a fallar.
         <>
           <p className="nn-muted">{t("fieldSessionClosedNoMoreEvents")}</p>
+
+          {/* «Resumen de lo registrado» — la primera mitad del §5. La función existía desde
+              A9.1 y no la llamaba ninguna pantalla. */}
+          {resumen ? (
+            <section className="nn-section">
+              <h2>{t("resumenHeading")}</h2>
+              <p className="nn-detail-meta">
+                {t("resumenCifras", {
+                  inspecciones: resumen.resumen.inspecciones,
+                  eventos: resumen.resumen.eventosDeColonia,
+                  cosechas: resumen.resumen.cosechas,
+                })}
+              </p>
+            </section>
+          ) : null}
           {/* **El paso que faltaba, y el orden que importa.** `endedAt` dice
               cuándo se salió del sitio; `completedAt`, cuándo se terminó de
               escribir (A9.1 D4). Emitir el informe exige lo segundo, y nada lo

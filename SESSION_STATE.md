@@ -44,7 +44,7 @@ Inspección manual con dos muestras declaradas como zonas o réplicas, usando
 `registrarInspeccion`; administración sitio → instalación → cama con permiso
 `location:manage_attributes` y auditoría atómica.
 
-**Y ADR-138, que salió de aquí:** un ámbito de ubicación alcanza a sus
+**Y ADR-144, que salió de aquí:** un ámbito de ubicación alcanza a sus
 descendientes. La pantalla de instalaciones lo destapó — un operario con ámbito
 sobre la finca podía crear el invernadero y **no las camas de dentro**. Decisión
 del dueño; su mitad negativa —que un hermano sigue fuera— está en
@@ -56,92 +56,58 @@ encontró un índice que la Tarea 2 creó en la migración sin declararlo en el
 esquema.
 Detalle y comprobaciones: `.superpowers/sdd/2026-09-15-muestra-y-topologia-de-secado/tarea-8-9-report.md`.
 
-### 2026-09-15 · La lista de apiarios deja de ser plana
+### 2026-09-16 · Un «sin sitio» del mapa no lo verificaba nada, y una de las mías era falsa
 
-ADR-137, y lo pidió el dueño: «devuelta a finca o organizacion y ver apiarios bajo ellos ya sea
-en lista o mapa».
+ADR-143. Fui a construir las que el mapa daba por sin sitio y **la primera que miré ya tenía
+columna**: `ColonyEvent.treatmentEfficacyNote` existe desde A9.4 **y el cierre de tratamiento la
+escribe**. `efficacy_note` nunca estuvo sin sitio, y la cuenta de huecos que publiqué era **más
+grande que la real**.
 
-**No construye jerarquía: deja de esconder la que hay.** `parentLocationId` y `organizationId`
-estaban poblados para los cuatro apiarios reales —Finca Rosina con dos, Toabré con dos— y la
-pantalla **no nombraba ninguno de los dos en ninguna línea**. Sexta vez en el módulo que el
-hueco es el camino y no el dato.
+**El guardia no podía cazarlo**, y ésa es la parte que importa: comprobaba que los destinos
+declarados existieran, y con eso parecía que el mapa no podía mentir. Un `sin_sitio` era la
+mitad no falsable del instrumento.
 
-**El grupo es el lugar padre y su tipo se enseña**, porque el de Las Nubes es una finca y el de
-Toabré una localidad: rotular los dos igual afirmaría lo que la fila no dice. Agrupar por
-organización daría un grupo de cuatro — la lista plana otra vez.
+Ahora mira al revés: para cada `sin_sitio` comprueba que ningún campo de los modelos de esa
+actividad se parezca a la clave, y para eso el mapa declara **a qué modelos escribe cada
+actividad**. Es una heurística sobre nombres y lo dice; lleva control positivo sobre el caso
+real que se me escapó.
 
-**La urgencia no se pierde al agrupar**, que era el riesgo entero, y el grupo sin lugar
-declarado no va al final por serlo.
+**Y un flip-test encontró que la declaración nueva no era portante:** vaciándola, las nueve
+seguían en verde. Se exige aparte que cada actividad declare al menos un modelo y que existan.
+Tercera vez esta semana que un flip-test destapa una línea escrita con su justificación al lado
+y sin nada que la ejerza.
 
-**Dos hallazgos del propio trabajo:** el encabezado rotulaba la organización *del primer
-sitio* —en el grupo sin lugar, cuatro sitios de tres organizaciones bajo el nombre de una—, y
-un flip-test destapó que el primer criterio del orden **no podía decidir nada**: una crítica
-implica nivel 0, así que nivel y recuento nunca discrepan. Se quitó.
+**La cuenta real, medida: 38 con campo, 1 en tabla, CINCO sin sitio** — las tres de patio
+(clima, condición del sitio, cajas presentes) y dos de casa (valoración, humedad). Las cifras
+que publiqué ayer iban todas **una de más**, porque se midieron con el instrumento incompleto.
 
-**Pendiente nombrado:** el mapa por grupo. Cero de los ocho sitios tienen coordenadas, así que
-hoy dibujaría recuadros vacíos. La frase pide «lista o mapa» y sólo una tiene datos detrás.
+**Pendiente nombrado:** construir las cinco. Y `moisture_pct` trae una pregunta de diseño:
+`moisture` **ya es variable canónica de medición** en este esquema, así que la humedad de la
+miel podría ser un `Measurement` en vez de una columna. Eso se decide aparte, no de paso.
 
-### 2026-09-15 · El mismo manejo a varias colmenas de una vez
+### 2026-09-15 · Las tres preguntas que convierten una visita en informe técnico
 
-ADR-136, y lo pidió el dueño con estas palabras: «poder seleccionar todas las colmenas para
-aplicar que se hizo algo que hice igual a todas, y no tener que hacer siempre una por una».
+ADR-142: viáticos, causa probable y recomendación. Son de las **seis** de casa (`stage: close`)
+que quedaban sin sitio, y son las que el cliente lee.
 
-**No era una idea nueva: era terminar una.** El §8 ya lo había escrito para el traslado
-—«selección múltiple con atajos, porque nadie toca veinte casillas con guante»— y ese
-formulario ya tenía casillas, «todas» y conteo antes de confirmar. Se reusa entero.
+**Van en el cierre, y no es una elección nueva:** el comentario de `completarVisita` ya decía
+que esa función «sólo acepta `notes`» porque un valor de etapa `field` no se edita desde la
+casa. Éstas son de etapa `close` — exactamente lo que ese cierre debía aceptar.
 
-**Sólo alimentación y tratamiento, y la línea la traza el esquema:** `provenanceClassFor` da
-`original_record` a esos dos y `direct_observation` a la observación al paso. Diez registros de
-algo que HICISTE son diez hechos ciertos; diez observaciones sacadas de una mirada, no. La
-inspección queda fuera por lo mismo — el Anexo la marca «(por colmena)».
+**Cero no es `null`:** una visita en carro propio puede costar cero de verdad, y ese cero es un
+dato. Se valida la ausencia, no la verdad del número (misma forma que ADR-115). El negativo sí
+se rechaza.
 
-**Y en lote sale MÁS correcto:** `coverageUntil` y la carencia son las fechas que disparan los
-avisos; tecleadas diez veces se desvían, y diez cajas con el mismo jarabe el mismo día
-acabarían avisando en días distintos.
+**Los viáticos no viajan al informe salvo que el contrato los pida**, y esa regla ya estaba
+declarada antes de que el campo existiera —`incluyeCostos` nace en `false`—: ahora se cumple
+sola. Su prueba lleva control positivo, o el `null` por defecto lo cumpliría igual un campo que
+nunca se rellena. La causa y la recomendación **sí** van, en las dos pantallas.
 
-**Lo que no se relaja:** una fila por colonia, un rastro por fila, una jornada abierta que las
-recoge todas, y **una colonia que no está viva no recibe nada** — el error la nombra, y en el
-formulario las doce cajas vacías se ven y no se pueden marcar. Las reglas del evento
-individual se **extrajeron** en vez de duplicarse, con su prueba: duplicar es como se perdió
-la colocación en ADR-135.
+El mapa de ADR-140 baja a **seis** huecos.
 
-**Pendiente nombrado:** la observación en lote, hasta que el dueño diga qué significa; y el
-«nada fuera de lo normal» sobre varias, que es honesto pero escribe `Inspection` y merece su
-propia rebanada.
-
-### 2026-09-15 · Una colmena nace con su colocación: diez de las veintinueve reales no la tenían
-
-ADR-135. **La invariante vivía en un comentario de ADR-126** —«`createHive` no la crea»—, y eso
-se aplicó en el guion que se escribió con la nota delante y se olvidó en los dos siguientes, del
-mismo día.
-
-**Medido antes de tocar nada, sobre la copia local con los datos reales: 29 colmenas, 19 con
-colocación, 10 SIN NINGUNA** — y las diez son las de Apiario Las Nubes. Con control positivo:
-NN-0041 sí tenía la suya, así que el cero no era de la consulta.
-
-**Lo que significaba:** `apiarioDeColmenaEn` contestaba `null` —«no consta»— para esas diez en
-cualquier fecha, y `colmenasDeLaVentana` no las contaba. O sea que **el §9, entregado el día
-antes, era ciego al apiario real del dueño**, y en silencio: la respuesta salía vacía.
-
-Cuatro piezas: `createHive` pasa a transacción con colocación y audit; un ayudante compartido
-para las cuatro rutas; una migración de relleno idempotente por `NOT EXISTS` (29/29 en local, y
-los lectores contestan con las fechas que declaró el dueño — 4 de septiembre para NN-0043, 2
-para NN-0048); y un guardia de fuente, porque el de datos se iría a rojo por el montaje de otra
-prueba en la base compartida.
-
-**Un agujero de rastro de paso:** el camino de la aplicación creaba una colmena **sin
-AuditEvent** mientras los tres guiones sí lo escribían. Ahora el historial de una caja incluye
-su creación.
-
-**El coste, dicho: 27 limpiezas de prueba.** La FK es `RESTRICT` y se mantiene: en producción
-una colmena no se borra, se retira, y una cascada se llevaría la historia en silencio.
-
-**Y el flip-test encontró un defecto en mi propio guardia:** contaba el `import` del ayudante
-como una llamada, así que un guion que perdiera su línea seguía pasando. El instrumento midió
-una importación en vez de una escritura — la misma forma de siempre.
-
-Inventario de acceso **327/96 → 328/96**, con dos entradas nuevas del mismo archivo porque son
-dos preguntas distintas.
+**Pendiente nombrado, y es importante no confundirlo:** `travelCostUsd` es el viático de UNA
+visita, no un modelo de costos. `LabourEntry` sigue sin llevar ninguno, el material consumido no
+tiene movimiento, y «cuánto cuesta sostener Toabré» sigue sin respuesta.
 
 ## 3. Bloqueado, y en qué
 

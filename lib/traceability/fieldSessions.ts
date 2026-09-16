@@ -20,11 +20,12 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { resumenDeVisita } from "../apiary/bitacora";
+import { exigePropositos } from "../apiary/propositoDeVisita";
 import { destinoDeBitacora } from "../integrations/bitacora";
 import { LocationAccessError } from "./locations";
 // A9.0 — la compuerta resuelve por el tipo de la `Location`. Ver su cabecera.
 import { requireFieldSessionAccess } from "./jornadaDeCampo";
-import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
+import type { DataQuality, ProvenanceClass, VisitPurpose } from "../../generated/prisma/client";
 
 export class FieldSessionValidationError extends Error {}
 
@@ -85,6 +86,16 @@ export interface StartFieldSessionInput {
   startedAt: Date;
   start?: Coordinates;
   notes?: string | null;
+  /**
+   * A qué se fue. **Llega como cadenas** —del formulario y de la cola offline— y lo valida
+   * `exigePropositos` en la frontera: un `as never` dejaría entrar cualquier valor del enum,
+   * que es el fallo que ADR-112 documenta.
+   *
+   * Opcional en la entrada y no en el protocolo: las visitas que ya existen se cerraron sin
+   * esta pregunta, y exigirla aquí rompería la cola offline de los dispositivos que todavía
+   * no la mandan. Cuando llega, el servicio exige **al menos uno**.
+   */
+  purposes?: readonly (string | VisitPurpose)[] | null;
   // ADR-038 — required, no default.
   provenanceClass: ProvenanceClass;
   dataQuality?: DataQuality | null;
@@ -111,6 +122,10 @@ export async function startFieldSession(userAccountId: string, input: StartField
         startLongitude: input.start?.longitude ?? null,
         startAccuracyM: input.start?.accuracyM ?? null,
         notes: input.notes ?? null,
+        // Se valida en la frontera, no se confía en lo que llega. Vacío o `null` guarda un
+        // arreglo vacío, que es «sin registrar»; una lista con algo dentro pasa por
+        // `exigePropositos`, que rechaza lo desconocido y lo vacío.
+        purposes: input.purposes == null ? [] : exigePropositos(input.purposes),
         provenanceClass: input.provenanceClass,
         dataQuality: input.dataQuality ?? null,
         recordedAt: input.capture?.recordedAt ?? null,
@@ -157,6 +172,19 @@ export interface CerrarVisitaInput {
   nextVisitDueAt?: Date | null;
   /** Colonias contadas al salir del sitio. Sin esto no hay «pérdida sin reposición». */
   coloniesAliveCount?: number | null;
+  /**
+   * Viáticos y transporte, en dólares. `stage: close` del protocolo, así que ésta es su
+   * puerta: se anota en casa.
+   *
+   * **Cero es un valor legítimo y no es lo mismo que `null`.** Una visita a Cerro Azul en
+   * carro propio puede costar cero de verdad; `null` es «nadie lo anotó». Por eso se valida
+   * `!= null` y no la verdad del número, igual que la carencia de un tratamiento (ADR-115).
+   */
+  travelCostUsd?: number | null;
+  /** Por qué se ve lo que se ve. Prosa del técnico, `stage: close`. */
+  probableCause?: string | null;
+  /** La recomendación al cliente. Es la frase por la que Kiva paga el servicio. */
+  recommendation?: string | null;
   /** Por qué se completó así. Va al `reason` del AuditEvent. */
   reason?: string | null;
 }
@@ -183,6 +211,22 @@ export interface CerrarVisitaInput {
  * con su razón, y el original queda en `before`. Eso es política de servicio, y
  * por eso esta función sólo acepta `notes`.
  */
+/**
+ * El costo de viaje, validado en la frontera.
+ *
+ * **Se comprueba `!= null` y no la verdad del número**: cero es legítimo —una visita en carro
+ * propio— y un `!input.travelCostUsd` lo habría rechazado, obligando a mentir poniendo un
+ * céntimo. Misma forma que la carencia de un tratamiento.
+ *
+ * Un negativo sí se rechaza: no existe un viático de menos ocho dólares, y guardarlo haría
+ * que cualquier suma por sitio mintiera.
+ */
+export function exigeCosto(valor: number | null): number | null {
+  if (valor === null) return null;
+  if (!Number.isFinite(valor) || valor < 0) throw new FieldSessionValidationError("travel_cost_invalid");
+  return valor;
+}
+
 export async function completarVisita(userAccountId: string, input: CerrarVisitaInput) {
   const existing = await prisma.fieldSession.findUnique({ where: { id: input.fieldSessionId } });
   if (!existing) throw new FieldSessionValidationError("session_not_found");
@@ -209,6 +253,12 @@ export async function completarVisita(userAccountId: string, input: CerrarVisita
         ...(input.notes === undefined ? {} : { notes: input.notes }),
         ...(input.nextVisitDueAt === undefined ? {} : { nextVisitDueAt: input.nextVisitDueAt }),
         ...(input.coloniesAliveCount === undefined ? {} : { coloniesAliveCount: input.coloniesAliveCount }),
+        // Las tres de `stage: close`. `undefined` no toca la columna —quien completa dos
+        // veces sin rellenarlas no las borra—; `null` sí la limpia, que es cómo se deshace
+        // un valor puesto por error.
+        ...(input.travelCostUsd === undefined ? {} : { travelCostUsd: exigeCosto(input.travelCostUsd) }),
+        ...(input.probableCause === undefined ? {} : { probableCause: input.probableCause }),
+        ...(input.recommendation === undefined ? {} : { recommendation: input.recommendation }),
       },
     });
 

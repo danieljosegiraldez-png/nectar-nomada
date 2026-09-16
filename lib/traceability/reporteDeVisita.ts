@@ -49,8 +49,60 @@ export interface SnapshotDeVisita {
     operador: string | null;
     notas: string | null;
     sujeto: string | null;
+    /**
+     * El identificador de la colmena --NN-0043--, cuando el registro cuelga de una colonia.
+     *
+     * **Opcional a proposito, y no por comodidad.** El snapshot se guarda como JSON y se lee
+     * de vuelta con un `as`, asi que un campo obligatorio en el tipo haria creer a TypeScript
+     * que los reportes ya emitidos lo traen. No lo traen: los emitidos antes del 2026-09-15
+     * no tienen ninguno de estos dos. `undefined` aqui es la verdad sobre esas filas.
+     */
+    colmena?: string | null;
+    /** Que se hizo o que se vio, en una linea: el producto, el alimento, el resultado. */
+    detalle?: string | null;
   }>;
+  /**
+   * La lectura del tecnico y lo que le recomienda al cliente. Opcionales por lo mismo que
+   * `colmena` y `detalle` (ADR-139): el snapshot se lee con un `as` y lo ya emitido no los
+   * trae.
+   */
+  causaProbable?: string | null;
+  recomendacion?: string | null;
+  /**
+   * Los viaticos, **solo cuando el contrato los pide**. La decision ya estaba declarada antes
+   * de que el campo existiera --`generationQuery.incluyeCostos` nace en `false`-- y lo que no
+   * se congela no se puede filtrar mal despues.
+   */
+  viaticosUsd?: string | null;
   emitidoEn: string;
+}
+
+/**
+ * Lo que se hizo o se vio, en una linea, para el informe del cliente.
+ *
+ * **Solo lo que la fila declara.** Sin inventar: un tratamiento sin producto anotado devuelve
+ * `null`, no "se aplico algo". Y sin costos -- la cabecera de este archivo ya fija que no
+ * entran al snapshot, y esto no los cuela por otra puerta.
+ */
+function detalleDe(e: {
+  inspection: { outcome: string } | null;
+  colonyEvent: { eventType: string; treatmentProduct: string | null; feedingMaterial: string | null } | null;
+  // **`Decimal` y no `unknown`.** La primera version tipaba esto como `unknown` y con eso el
+  // compilador dejo pasar un nombre de campo que NO existe --`honeyKg`; el real es
+  // `extractedWeightKg`--. Lo cazó la corrida, no `tsc`: un `unknown` en el borde apaga la
+  // unica comprobacion que habia.
+  apiaryHarvestEvent: { extractedWeightKg: Prisma.Decimal | null } | null;
+}): string | null {
+  if (e.inspection) return e.inspection.outcome;
+  if (e.colonyEvent) {
+    if (e.colonyEvent.eventType === "treatment") return e.colonyEvent.treatmentProduct;
+    if (e.colonyEvent.eventType === "feeding") return e.colonyEvent.feedingMaterial;
+    return null;
+  }
+  if (e.apiaryHarvestEvent?.extractedWeightKg != null) {
+    return `${e.apiaryHarvestEvent.extractedWeightKg.toString()} kg`;
+  }
+  return null;
 }
 
 export async function emitirReporteDeVisita(userAccountId: string, input: EmitirReporteInput) {
@@ -74,6 +126,25 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
     include: {
       eventKindValue: { select: { value: true } },
       operator: { select: { displayName: true } },
+      // **La colmena y lo que se hizo.** Hasta el 2026-09-15 el reporte al cliente decia la
+      // CLASE de cada registro --"inspeccion", "evento_de_colonia"-- y nada mas: ni de que
+      // caja hablaba ni que se le hizo. Un informe tecnico que no nombra la colmena es un
+      // listado de tipos de fila. El identificador NO es un id interno: es justo el dato con
+      // el que el cliente sigue su servicio.
+      inspection: {
+        select: { outcome: true, colony: { select: { hive: { select: { identifier: true } } } } },
+      },
+      colonyEvent: {
+        select: {
+          eventType: true,
+          treatmentProduct: true,
+          feedingMaterial: true,
+          colony: { select: { hive: { select: { identifier: true } } } },
+        },
+      },
+      apiaryHarvestEvent: {
+        select: { extractedWeightKg: true, colony: { select: { hive: { select: { identifier: true } } } } },
+      },
     },
   });
 
@@ -91,6 +162,15 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
       clase: e.eventKindValue.value,
       operador: e.operator?.displayName ?? null,
       notas: e.notes,
+      colmena:
+        e.inspection?.colony.hive.identifier ??
+        e.colonyEvent?.colony.hive.identifier ??
+        e.apiaryHarvestEvent?.colony.hive.identifier ??
+        null,
+      // Una linea de lo que paso, con lo que la fila declara y nada mas. Un tratamiento sin
+      // producto anotado dice `null`, no una cadena vacia ni un "se aplico algo": el vacio se
+      // ve, que es la regla del Anexo C y de ADR-125.
+      detalle: detalleDe(e),
       // Qué hecho concreto cuelga de este registro, sin exponer el id interno.
       sujeto:
         e.inspectionId ? "inspeccion"
@@ -100,6 +180,10 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
         : e.harvestEventId ? "cosecha"
         : null,
     })),
+    causaProbable: visita.probableCause,
+    recomendacion: visita.recommendation,
+    // El costo sale SOLO si el contrato lo pide. `incluyeCostos` nace en `false`.
+    viaticosUsd: input.incluirCostos === true ? (visita.travelCostUsd?.toString() ?? null) : null,
     emitidoEn: new Date().toISOString(),
   };
 

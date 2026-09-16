@@ -1202,6 +1202,9 @@ export async function startFieldSessionFormAction(
       startedAt: fechaLocal(formData, "startedAt"),
       start: parseCoordinates(formData),
       notes: emptyToNull(formData.get("notes")),
+      // Las casillas marcadas. `getAll` devuelve [] cuando no hay ninguna, y el servicio
+      // distingue eso —«sin registrar»— de una lista con valores, que sí valida.
+      purposes: formData.getAll("purposes").map((v) => String(v)),
       // Una jornada la abre quien está en el sitio: es observación directa de
       // que la visita ocurrió, no un registro transcrito de otra fuente.
       provenanceClass: "direct_observation",
@@ -2062,6 +2065,7 @@ export async function completarVisitaAction(
   const fieldSessionId = String(formData.get("fieldSessionId") ?? "");
   const proximaCruda = String(formData.get("nextVisitDueAt") ?? "").trim();
   const coloniasCrudas = String(formData.get("coloniesAliveCount") ?? "").trim();
+  const costoCrudo = String(formData.get("travelCostUsd") ?? "").trim();
 
   try {
     await completarVisita(user.userAccountId, {
@@ -2072,6 +2076,11 @@ export async function completarVisitaAction(
       nextVisitDueAt: proximaCruda === "" ? null : new Date(`${proximaCruda}T00:00:00Z`),
       coloniesAliveCount: coloniasCrudas === "" ? null : Number(coloniasCrudas),
       notes: emptyToNull(formData.get("notes")),
+      // Las tres de casa (`stage: close`). El vacío es `null` —«no se anotó»— y NO cero: una
+      // visita sin viáticos anotados no es una visita que costó cero.
+      travelCostUsd: costoCrudo === "" ? null : Number(costoCrudo),
+      probableCause: emptyToNull(formData.get("probableCause")),
+      recommendation: emptyToNull(formData.get("recommendation")),
       reason: emptyToNull(formData.get("reason")),
     });
   } catch (error) {

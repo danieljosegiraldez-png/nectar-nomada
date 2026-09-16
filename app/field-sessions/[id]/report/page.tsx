@@ -82,6 +82,26 @@ export default async function ReporteDeVisitaPage({ params }: { params: Promise<
         </ul>
         {snapshot.visita.notas ? <p>{snapshot.visita.notas}</p> : null}
       </section>
+      {/* La lectura del técnico y lo que le recomienda al cliente — Anexo E §5 y §7: se
+          escriben en casa, y son por lo que el cliente paga el servicio. Opcionales porque lo
+          emitido antes del 2026-09-15 no las trae. */}
+      {snapshot.causaProbable ? (
+        <section className="nn-section">
+          <h2>{t("reportCauseHeading")}</h2>
+          <p>{snapshot.causaProbable}</p>
+        </section>
+      ) : null}
+      {snapshot.recomendacion ? (
+        <section className="nn-section">
+          <h2>{t("reportRecommendationHeading")}</h2>
+          <p>{snapshot.recomendacion}</p>
+        </section>
+      ) : null}
+      {/* Los viáticos sólo viajan en el snapshot si el contrato los pidió. */}
+      {snapshot.viaticosUsd ? (
+        <p className="nn-detail-meta">{t("reportTravelCost", { monto: snapshot.viaticosUsd })}</p>
+      ) : null}
+
 
       <section className="nn-section">
         <h2>{t("reportRecordsHeading", { count: snapshot.registros.length })}</h2>
@@ -91,7 +111,15 @@ export default async function ReporteDeVisitaPage({ params }: { params: Promise<
           <ul className="nn-detail-meta">
             {snapshot.registros.map((r, i) => (
               <li key={i}>
+                {/* **La colmena va primero, y en negrita.** Es lo que el cliente sigue: un
+                    informe que dice «inspección» sin decir de cuál caja es un listado de
+                    tipos de fila. Los reportes emitidos ANTES del 2026-09-15 no la traen —el
+                    snapshot es inmutable y no se reescribe—, así que el campo puede faltar y
+                    la línea se dibuja igual. */}
+                {r.colmena ? <strong>{r.colmena}</strong> : null}
+                {r.colmena ? " · " : ""}
                 {r.cuando} · {r.clase}
+                {r.detalle ? ` · ${r.detalle}` : ""}
                 {r.sujeto ? ` · ${r.sujeto}` : ""}
                 {r.operador ? ` · ${r.operador}` : ""}
                 {r.notas ? ` — ${r.notas}` : ""}

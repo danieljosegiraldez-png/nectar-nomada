@@ -4272,6 +4272,31 @@ model FieldSession {
   // mes está y bajo qué contrato (D9).
   nextVisitDueAt      DateTime?          @map("next_visit_due_at")
   coloniesAliveCount  Int?               @map("colonies_alive_count")
+  /// Que se fue a hacer. **Arreglo y no una columna**: una misma visita revisa, alimenta y
+  /// trata. Mismo patron que `Inspection.broodStages`.
+  ///
+  /// **El vacio es "sin registrar", no "sin proposito".** Un arreglo de Prisma no admite
+  /// `NULL`, asi que la lista vacia es el tercer estado de ADR-080 para este campo: las
+  /// visitas guardadas antes de 2026-09-15 la tienen vacia porque nadie la pregunto, no
+  /// porque no tuvieran proposito. El servicio EXIGE al menos uno cuando el campo llega.
+  purposes            VisitPurpose[] @map("purposes")
+  /// Viaticos y transporte de la visita, en dolares. **`stage: close`**: se anota en casa.
+  ///
+  /// La moneda va en el NOMBRE y no en una columna aparte porque el protocolo del dueno la
+  /// fija -- `travel_cost_usd` -- y Panama opera en dolares. Inventar un modelo de monedas
+  /// para un campo seria construir lo que nadie pidio.
+  ///
+  /// **Este numero NO entra en el informe al cliente salvo que el contrato lo pida**: el
+  /// reporte ya trae esa decision declarada en `generationQuery.incluyeCostos`, que nace en
+  /// `false`. Lo que no se congela no se puede filtrar mal despues.
+  travelCostUsd       Decimal?      @map("travel_cost_usd") @db.Decimal(10, 2)
+  /// Por que se ve lo que se ve. **Distinta de `ColonyLossCause`**, que es la causa del FIN de
+  /// una colonia y tiene su propia tabla con una fila por causa: esto es la lectura del
+  /// tecnico sobre la visita entera, en prosa, y se escribe en casa.
+  probableCause       String?       @map("probable_cause")
+  /// La recomendacion al cliente. Es la frase por la que Kiva paga el servicio, y hasta hoy
+  /// no tenia donde escribirse.
+  recommendation      String?       @map("recommendation")
 
   // Where the session began. Nullable — a device without a fix, or a session
   // recorded at a desk afterwards, both genuinely have no coordinates, and a
@@ -6121,6 +6146,23 @@ enum ColonyPopulation {
 
 /// Las etapas de cría presentes. **Varias a la vez**: ver `Inspection.broodStages`.
 /// Huevo presente = reina ponedora hace menos de tres días, sin buscarla — que es
+/// El proposito de una visita al sitio. **Varios a la vez**: una misma ida revisa, alimenta y
+/// trata, y obligar a elegir uno haria que el informe mintiera sobre lo que se fue a hacer.
+///
+/// Los seis valores salen del protocolo del dueno --`protocolos/apiario-campo-v1.json`, item
+/// `purpose`--, que es donde vive su vocabulario. `lib/apiary/propositoDeVisita.ts` los repite
+/// para el formulario y un guardia comprueba que las tres listas digan lo mismo.
+enum VisitPurpose {
+  inspeccion
+  alimentacion
+  tratamiento
+  cosecha
+  montaje
+  diagnostico
+
+  @@schema("traceability")
+}
+
 /// la razón por la que el dueño lo pide.
 enum BroodStage {
   huevo

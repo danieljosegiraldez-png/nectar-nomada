@@ -9862,7 +9862,7 @@ adorno con forma de regla, que es justo lo que `CLAUDE.md` llama peor que ningun
 vacios, y partirlo antes de que haya algo que pintar seria decidir a ciegas como se ve. La
 frase del dueno pide "lista o mapa" y hoy solo una de las dos tiene datos detras.
 
-## ADR-138 — Un ámbito de ubicación alcanza a sus descendientes
+## ADR-144 — Un ámbito de ubicación alcanza a sus descendientes
 
 **2026-09-16. Decisión de Daniel.**
 
@@ -9897,3 +9897,358 @@ concede nada nuevo: se reconoce que una ubicación **está dentro de** otra.
 hecho de la base y el resolutor es puro a propósito. Lleva tope de profundidad
 porque un `parentLocationId` en ciclo —que el esquema no impide— colgaría el punto
 de estrangulamiento de toda la autorización.
+## ADR-138 -- Las dos mitades del cierre de jornada faltaban en la pantalla, y una de ellas existia desde hacia dias
+
+**Contexto.** Anexo E §5: *"Al cerrarla: resumen de lo registrado, **lo que quedo pendiente**,
+y de ahi sale el reporte tecnico al cliente"*.
+
+**Medido sobre `main` antes de escribir nada.** La pantalla de la jornada no ensenaba
+**ninguna de las dos mitades**:
+
+* `resumenDeVisita` existe desde A9.1 y aparece en **cero** pantallas -- alimenta un mensaje
+  de bitacora y nada mas. Cuarta vez en este modulo que un mecanismo existe y no tiene puerta.
+* De "lo que quedo pendiente" no habia **nada**, y es la mitad que contesta la pregunta del
+  oficio: **abriste cuatro de diez, cuales seis se quedaron**.
+
+**Decision 1 -- que cuenta como pendiente: lo que todavia puedes hacer antes de irte.** Dos
+cosas, y las dos se resuelven sin subir al carro: las **cajas del sitio sin ningun evento de
+esa jornada** -- el hecho nuevo -- y las **tiras sin retirar**, que `retirosPendientes` ya
+sabia leer.
+
+**Lo que deliberadamente NO se repite aqui:** el alimento por vencer y la consulta a vecinos.
+Las dos son estado del sitio, ya gritan en su tarjeta y en la ficha, y **ninguna se resuelve
+caminando de vuelta a la caja**. Amontonarlas en el cierre haria una pared de avisos que se
+aprende a pasar de largo -- justo lo que el Anexo quiere evitar cuando dice que el sistema
+"lo reclama solo". Un aviso que no se puede atender donde aparece ensena a ignorar los que si.
+
+**Decision 2 -- los tres caminos cuentan, no uno.** Un evento de campo llega a una colmena por
+`inspection`, por `colonyEvent` o por `apiaryHarvestEvent`, y las tres FK las anadio A9.1
+justo para poder leer la visita desde su rastro. Si el lector mirara solo las inspecciones,
+**una caja alimentada saldria como sin tocar** y el cierre reclamaria trabajo ya hecho. Hay una
+prueba por ese caso, y el flip-test la tumba.
+
+**Decision 3 -- el filtro es por JORNADA, no por sitio.** Sin el, los eventos de una visita
+anterior harian creer que ya abriste todo hoy. La prueba de ese caso lleva **control positivo**
+-- comprueba que la jornada de hoy si tiene dos cajas tocadas -- porque sin el, "cero tocadas
+en la otra jornada" lo cumpliria igual un lector que no encuentra nada nunca.
+
+**Decision 4 -- la lista aparece MIENTRAS la jornada sigue abierta, ademas de al cerrar.** El
+Anexo la pide "al cerrarla". Ensenarla solo entonces daria una lista de lo que te falta que
+aparece **cuando ya no puedes anadir eventos**: la forma en miniatura del hallazgo que este
+modulo lleva cuatro veces. Al cerrar se sigue ensenando, como registro de lo que se dejo.
+
+**La caja vacia sigue en la lista, y marcada como tal.** Esconderla diria que el apiario tiene
+menos cajas de las que tiene; la cifra que decide si te vas es la de las **pobladas** sin
+tocar, y va aparte.
+
+**Flip-test de las cuatro decisiones**, cada una compilando y cayendo por su nombre.
+
+**Inventario de acceso: 329/96 -> 330/97**, en "depende del llamador" -- con un id de jornada
+ajeno devolveria el dato ajeno -- y con su entrada en el allowlist.
+
+**Lo que NO entra.** La tercera parte de la frase del §5, *"y de ahi sale el reporte tecnico al
+cliente"*, ya existe: `EmitirReporteForm` y `/field-sessions/[id]/report` estan en esa misma
+pantalla desde el 2026-09-10.
+
+> **CORRECCION del 2026-09-15, el mismo dia.** Este parrafo decia que "lo que sigue sin existir
+> es el **PDF sin almacenarlo** que el Anexo pide al lado". **Es falso, y lo afirme sin
+> medirlo.** `PrintButton` existe desde T13 y ADR-039 ya fijo que la impresion del navegador
+> **es** el mecanismo entero -- sin libreria de PDF y sin paso de render en el servidor --, y la
+> pantalla del reporte de visita lo usa en su linea 56. Lo comprobe al ir a construirlo. Se
+> corrige aqui en vez de dejarlo: un pendiente falso manda a la proxima sesion a construir algo
+> que ya esta, que es la forma inversa del hallazgo que este modulo lleva cuatro veces.
+
+## ADR-139 -- El informe al cliente decia la clase de cada registro y no de que colmena hablaba
+
+**Contexto.** El dueno lo pidio de frente: *"deberiamos tambien ver como meter el informe,
+todos los informes son visita y o inspecciones y acciones o manejos en apiario"*. El §5 del
+Anexo E cierra con *"y de ahi sale el reporte tecnico al cliente -- pagina web con enlace"*.
+
+**El reporte existe desde el 2026-09-10** y se congela en un snapshot versionado (A9.6/D7).
+**Lo que decia cada linea, medido:** `cuando · clase · sujeto · operador · notas`, donde
+`sujeto` era la cadena literal `"inspeccion"`, `"evento_de_colonia"` o `"cosecha"` -- el nombre
+de la tabla. O sea que el informe que recibe Kiva Estates por su enlace decia **de que TIPO era
+cada fila y no de que caja hablaba ni que se le hizo**. Un informe tecnico asi es un listado de
+tipos de fila.
+
+El comentario del codigo explicaba el `sujeto` como "que hecho concreto cuelga de este
+registro, **sin exponer el id interno**". El instinto es correcto y estaba aplicado demasiado
+ancho: **`NN-0043` no es un id interno**, es exactamente el dato con el que el cliente sigue su
+servicio.
+
+**Decision 1 -- el snapshot lleva la colmena y una linea de lo que paso.** `colmena` es el
+identificador de la caja cuando el registro cuelga de una colonia; `detalle` es lo que la fila
+declara: el resultado de la inspeccion, el producto del tratamiento, el material de la
+alimentacion, los kilos de la cosecha. **Nada inventado:** un tratamiento sin producto anotado
+da `null`, no "se aplico algo". Y nada de costos -- la cabecera de ese archivo ya fija que no
+entran al snapshot, y esto no los cuela por otra puerta.
+
+**Decision 2 -- los dos campos son OPCIONALES en el tipo, y no por comodidad.** El snapshot se
+guarda como JSON y se lee de vuelta con un `as`, asi que declararlos obligatorios haria creer a
+TypeScript que **todo lo ya emitido los trae**. No los trae: el snapshot es inmutable y no se
+reescribe hacia atras. `undefined` ahi es la verdad sobre esas filas, y las dos pantallas los
+dibujan condicionalmente. Hay una prueba que reescribe un snapshot guardado quitandoselos --
+que es el estado real de lo emitido hasta hoy -- y comprueba que se sigue leyendo.
+
+**Las dos pantallas, y la que importa es la publica.** `/field-sessions/[id]/report` es la del
+operador; **`/informe/[token]` es la que abre el cliente con su enlace**, y era la que mas lo
+necesitaba.
+
+**Un nombre de campo que me invente, y por que el compilador no lo vio.** Escribi `honeyKg`; el
+campo real es `extractedWeightKg`. Paso `tsc` porque el ayudante que lo consume tipaba ese
+parametro como `{ honeyKg: unknown }` -- **un `unknown` en el borde apaga la unica comprobacion
+que habia**. Lo cazo la corrida, con un `PrismaClientValidationError` que nombraba el campo. El
+tipo pasa a ser `Prisma.Decimal | null`, que es lo que la fila tiene.
+
+**Y una prueba que salia verde con el archivo en rojo.** Anadir el tratamiento dejo una fila en
+`colony_event`, cuya FK es `RESTRICT`, asi que la limpieza del archivo fallaba al borrar la
+colonia: **37 pruebas en verde y el archivo en rojo**. La limpieza se amplia, igual que las 27
+de ADR-135.
+
+**Flip-test de las dos decisiones**, compilando y cayendo por su nombre.
+
+**Lo que NO entra.** Las fotos en el informe. `FieldEvent` puede apuntar a un `Asset` y el
+snapshot no lo mira; el Anexo §7 dice que la revision de fotos "se hace despues, en telefono o
+laptop", asi que meterlas en el informe es una decision del dueno sobre que ve el cliente, no
+una que se deduzca del esquema.
+
+## ADR-140 -- Las 44 preguntas del protocolo y el esquema son dos vocabularios sin traduccion, y por eso nadie podia decir cuantas se capturan
+
+**Contexto.** El protocolo de campo del dueno entro como `ProtocolVersion` en A9.4 (D2): 44
+preguntas en cinco actividades, con su `stage` -- `field` o `close` -- y su `required`. Medido
+el 2026-09-15: **ningun formulario del modulo lo lee**, y la pregunta obvia -- *cuantas de las
+44 puede capturar el sistema hoy* -- no la podia contestar nadie.
+
+**El primer intento de contestarla dio una cifra inventada, y se tira.** Compare las claves del
+JSON contra los nombres de los servicios y salio "29 sin campo". **La mitad de esos 29 existen
+con otro nombre**: `material` es `feedingMaterial`, `frames_covered` es `beeCoveredFrames`,
+`varroa_method` vive en `VarroaCount`. El instrumento medía **mi suposicion sobre los nombres**,
+no el sistema -- la misma forma que ya me costo tres mediciones este mes, esta vez sobre un
+numero que iba a reportar como hallazgo.
+
+**Decision -- el mapa se declara, una entrada por pregunta, y un guardia lo sostiene contra el
+esquema.** `lib/apiary/mapaDelProtocolo.ts` dice de cada item si aterriza en un campo de un
+modelo, en una tabla propia, o en **ningun sitio todavia**, con el porque en cada caso.
+
+Las dos mitades del guardia, y **la segunda es la que lo hace imposible de falsear**:
+
+1. Ningun item del JSON se queda sin entrada -- anadir una pregunta obliga a decidir donde
+   aterriza, o CI se pone en rojo diciendo cual.
+2. **Ningun destino declarado es inventado**: el modelo y el campo existen en
+   `prisma/schema.prisma`. Sin esta mitad el mapa seria prosa; se podria declarar que la
+   humedad va a `ApiaryHarvestEvent.humedad` y nadie lo notaria.
+
+Es la misma forma que el inventario de acceso: cuando no se puede ver lo que hay, se declara y
+se vigila que la declaracion no derive.
+
+**Lo medido, ya con el instrumento bueno: 34 de 44 tienen sitio.** Las diez que no:
+`purpose`, `weather_observed`, `site_condition`, `hives_present_count`, `travel_cost_usd`,
+`probable_cause`, `recommendation`, `assessment`, `efficacy_note`, `moisture_pct`.
+
+**Y de esas diez, exactamente UNA es obligatoria y de patio: `purpose`.** El proposito de la
+visita, que el protocolo marca `required` con `stage: field` y que **no se puede guardar en
+ningun sitio**. Las otras nueve son opcionales o `stage: close` -- se escriben en casa, que es
+lo que el §7 dice que debe pasar.
+
+**El guardia lee el esquema y no `Prisma.dmmf`.** En esta version del cliente el dmmf no viaja
+con el paquete y el `import` revienta al cargar, lo que deja el archivo entero en **"no tests"**
+-- que en una salida filtrada se lee igual que "no fallo nada". El esquema es la declaracion,
+asi que se lee el esquema.
+
+**Y un filtro muerto que quito otro flip-test.** El detector quitaba los comentarios del
+esquema antes de buscar. Anulandolo, las siete pruebas seguian en verde: el patron de campo
+exige una palabra pegada a la sangria y toda linea de comentario empieza por `/`, asi que
+ninguna podia colarse. Se quito -- ademas de no hacer nada, mentia: sugeria que el detector se
+defiende de algo de lo que no tiene que defenderse. Es el segundo criterio inutil que un
+flip-test destapa hoy, y los dos estaban escritos con su justificacion al lado.
+
+**Lo que este mapa NO dice, y hay que decirlo:** que la pregunta se pueda **responder desde un
+formulario**. Dice que el dato tiene sitio donde guardarse. Un campo que existe y que ningun
+formulario ofrece sigue siendo un dato que nadie puede escribir; esa es la otra mitad y se mide
+aparte.
+
+**Lo que sigue, con su vocabulario ya resuelto.** `purpose` es la unica de las diez que bloquea
+el patio, y **el protocolo ya trae sus seis opciones** -- `inspeccion`, `alimentacion`,
+`tratamiento`, `cosecha`, `montaje`, `diagnostico` --, o sea que construirla no inventa nada.
+Es un `multi_enum` sobre la visita, y el esquema ya tiene el precedente exacto:
+`Inspection.broodStages` es un arreglo de enum. Eso es la proxima rebanada, no esta.
+
+## ADR-141 -- El proposito de la visita: la unica pregunta obligatoria de patio que no tenia donde guardarse
+
+**Contexto.** ADR-140 midio las 44 preguntas del protocolo del dueno contra el esquema: 34
+tenian sitio y 10 no. De esas diez, **exactamente una** era `required` con `stage: field` --
+`purpose`. El protocolo obliga a declarar a que se fue, con el guante puesto, y el sistema no
+tenia columna donde ponerlo. Las otras nueve son opcionales o `stage: close`, que es lo que el
+§7 dice que debe pasar: se escriben en casa.
+
+**El vocabulario no se inventa: ya estaba.** Los seis valores -- `inspeccion`, `alimentacion`,
+`tratamiento`, `cosecha`, `montaje`, `diagnostico` -- salen literalmente de
+`protocolos/apiario-campo-v1.json`, item `purpose`, campo `options`. Por eso esta rebanada se
+pudo construir sin preguntar nada: el dueno ya lo habia contestado, en el sitio donde vive su
+vocabulario.
+
+**Decision 1 -- un arreglo y no una columna.** Una misma ida revisa, alimenta y trata. Obligar
+a elegir uno haria que el informe al cliente **mintiera sobre a que se fue**. El precedente
+exacto ya esta en este esquema: `Inspection.broodStages` es un arreglo de enum por la misma
+razon -- varias etapas de cria a la vez.
+
+**Decision 2 -- el vacio es "sin registrar", no "sin proposito".** Un arreglo de Postgres no es
+`NULL`: nace vacio. Las visitas guardadas hasta hoy lo tendran vacio **porque nadie las
+pregunto**, no porque no tuvieran proposito -- el tercer estado de ADR-080 aplicado a un
+arreglo. De ahi tres consecuencias que se toman juntas:
+
+* **la migracion no rellena nada**: inventar un proposito para las visitas viejas seria
+  afirmar lo que nadie declaro;
+* **no lleva `DEFAULT '{}'` con `NOT NULL`**, que diria que toda visita vieja fue declarada
+  sin proposito;
+* **el campo es opcional en la entrada del servicio**, porque exigirlo romperia la cola offline
+  de un dispositivo que todavia no lo manda.
+
+Lo que si es estricto es la **frontera**: cuando el campo llega, `exigePropositos` rechaza el
+vacio y lo desconocido. Llega como **cadena** del formulario y de la cola, y un `as never`
+dejaria entrar cualquier valor del enum -- el fallo que ADR-112 documenta.
+
+**Decision 3 -- se quitan los repetidos, no se rechazan.** Marcar dos veces la misma casilla es
+un resbalon del dedo con guante, no una respuesta distinta. Y se devuelve **en el orden del
+catalogo**, para que dos visitas con los mismos propositos se lean iguales en el informe.
+
+**Decision 4 -- tres sitios, un vocabulario, y un guardia.** El JSON del dueno, el enum de
+Postgres --que es quien lo hace cumplir-- y un modulo puro --lo unico que el formulario puede
+importar sin arrastrar `prisma` al navegador, septima vez que hace falta esta particion--. Tres
+listas en tres archivos que se editan por separado, que es exactamente la forma que
+`valoresEnumerados` vigila para el resto del esquema. **El fallo de la deriva es silencioso en
+una direccion:** un proposito anadido al JSON y no al enum no se puede guardar, y el formulario
+ni siquiera lo ofrece.
+
+**Y el mapa de ADR-140 se cierra sobre si mismo.** `purpose` pasa de "sin sitio" a
+`FieldSession.purposes`, y la prueba que contaba las obligatorias de patio sin sitio pasa de
+`["purpose"]` a `[]`. **Que esa lista este vacia es el resultado del trabajo, no la ausencia de
+comprobacion**: si manana entra al protocolo otra pregunta obligatoria de patio sin sitio, esa
+prueba la nombra. Es la primera vez en este modulo que una medicion construida ayer verifica el
+trabajo de hoy.
+
+**Flip-test de las cuatro decisiones**, cada una compilando y cayendo por su nombre.
+
+**Lo que NO entra.** Las otras nueve sin sitio. **Seis** son `stage: close` -- se escriben en
+casa, y tres de ellas (`travel_cost_usd`, `probable_cause`, `recommendation`) son las que
+convierten una visita en un informe tecnico; el de viaticos es ademas el hueco de costos que ya estaba
+nombrado y que no tiene modelo en todo el esquema. Las tres de patio que quedan
+--`weather_observed`, `site_condition`, `hives_present_count`-- son opcionales, y ninguna
+bloquea cerrar una visita.
+
+## ADR-142 -- Las tres preguntas que convierten una visita en un informe tecnico
+
+**Contexto.** ADR-140 midio las 44 preguntas del protocolo contra el esquema: diez sin sitio.
+ADR-141 cerro la unica obligatoria de patio. Estas tres son de las **seis** de casa
+--`stage: close`-- y son las que el cliente lee: **viaticos, causa probable y recomendacion**.
+
+**Decision 1 -- van en `field_session` y en el CIERRE, y eso no es una eleccion nueva.** El
+comentario de `completarVisita` ya decia que esa funcion *"solo acepta `notes`"* porque un
+valor de etapa `field` no se edita desde la casa. Las tres son de etapa `close`: son
+exactamente lo que ese cierre debia aceptar desde el principio. Y el §7 lo dice del otro lado
+-- *"que los formularios no pidan en el patio lo que puede esperar a la casa"*.
+
+**Decision 2 -- la moneda va en el nombre.** El protocolo dice `travel_cost_usd` y Panama
+opera en dolares. Inventar un modelo de monedas para un campo seria construir lo que nadie
+pidio; si algun dia hay otra, sera una decision del dueno con su columna. `DECIMAL(10,2)` y no
+coma flotante, que es dinero.
+
+**Decision 3 -- cero no es `null`, y por eso la validacion mira la ausencia y no la verdad del
+numero.** Una visita a Cerro Azul en carro propio puede costar **cero de verdad**, y ese cero
+es un dato; `null` es "nadie lo anoto". Un `!valor` habria rechazado el cero, obligando a
+mentir poniendo un centimo -- la misma forma que ADR-115 fijo para la carencia. Un **negativo**
+si se rechaza: no existe un viatico de menos ocho dolares, y guardarlo haria que cualquier suma
+por sitio mintiera.
+
+**Decision 4 -- los viaticos NO viajan al informe salvo que el contrato los pida, y esa regla
+ya estaba declarada antes de que el campo existiera.** `generationQuery.incluyeCostos` nace en
+`false` desde A9.6, con su prueba, y no tenia nada que filtrar porque no habia costos. Ahora
+los hay y la regla se cumple sola: **lo que no se congela no se puede filtrar mal despues**. Su
+prueba lleva **control positivo** -- pidiendolos, si viajan --, porque el `null` por defecto lo
+cumpliria igual un campo que nunca se rellena.
+
+**La causa probable y la recomendacion SI van al informe**, en las dos pantallas, y la que
+importa es `/informe/[token]`: la que abre el cliente con su enlace. Opcionales en el tipo por
+lo mismo que `colmena` y `detalle` (ADR-139): el snapshot es inmutable y lo ya emitido no las
+trae.
+
+**`undefined` no toca la columna; `null` la limpia.** Quien completa dos veces sin rellenarlas
+no las borra, y quien puso un valor por error puede deshacerlo. Es la misma distincion que ya
+usaban `notes` y `nextVisitDueAt` en esa funcion.
+
+**Y la causa probable no es `ColonyLossCause`.** Esa es la causa del **fin** de una colonia,
+tiene su propia tabla y admite varias a la vez con su procedencia. Esto es la lectura del
+tecnico sobre la visita entera, en prosa. Mezclarlas habria hecho que "por que se murieron"
+y "que vi hoy" compartieran fila.
+
+**Flip-test de las cuatro decisiones**, cada una compilando y cayendo por su nombre.
+
+**El mapa de ADR-140 baja a seis huecos**, y la prueba que los nombra no se mueve sola: hay
+que contarlos.
+
+> **CORRECCION del 2026-09-15, escrita al verificar la fusion.** Este parrafo decia "baja de
+> diez huecos a siete" y estaba **mal dos veces**. Diez fue la cuenta de ADR-140; ADR-141 ya
+> habia cerrado `purpose`, asi que al empezar esta rebanada quedaban **nueve**, y cerrar tres
+> deja **seis**, no siete. El error salio de contar `hives_present_count` dos veces al
+> repartirlas entre "de patio" y "de casa". El codigo estuvo bien todo el tiempo -- la lista
+> del guardia tiene seis nombres y paso en CI --; lo que estaba mal era la prosa, que es
+> justo lo que nadie vuelve a comprobar. Las seis que quedan: `weather_observed`,
+> `site_condition`, `hives_present_count` --las tres de patio, opcionales-- y `assessment`,
+> `efficacy_note`, `moisture_pct` --las tres de casa.
+
+**Lo que NO entra, y es el hueco de costos de verdad.** `travelCostUsd` es **el viatico de una
+visita**, no un modelo de costos: `LabourEntry` sigue sin llevar ninguno, el material que se
+consume no tiene movimiento, y "cuanto cuesta sostener Toabre" sigue sin respuesta. Esta
+columna contesta una pregunta del protocolo, no esa. Confundirlas seria dar por cerrado un
+hueco que sigue abierto.
+
+## ADR-143 -- Un "sin sitio" del mapa era una afirmacion que nada verificaba, y una de las mias era falsa
+
+**Contexto.** ADR-140 declaro el mapa de las 44 preguntas del protocolo y lo puso bajo un
+guardia que comprueba que **ningun destino declarado sea inventado** -- el modelo y el campo
+tienen que existir en el esquema. Con eso di por hecho que el mapa no podia mentir.
+
+**Podia, en la otra direccion.** Fui a construir las que el mapa daba por sin sitio y **la
+primera que mire ya tenia columna**: `ColonyEvent.treatmentEfficacyNote` existe desde A9.4
+**y el cierre de tratamiento la escribe** (`completarCierreDeTratamiento`, con su `tocaNota`).
+O sea que `efficacy_note` nunca estuvo sin sitio, y **la cuenta de huecos que publique era mas
+grande que la real**.
+
+El guardia no podia cazarlo porque **un `sin_sitio` no lo contradecia nada**: era la mitad no
+falsable del instrumento. La mitad que si vigilaba --"los destinos existen"-- es la que protege
+contra declarar un campo que no hay; no hay nada simetrico que proteja contra declarar que no
+hay campo cuando si.
+
+**Decision -- el guardia mira tambien al reves.** Para cada `sin_sitio` comprueba que **ningun
+campo de los modelos de esa actividad se parezca a la clave**, comparando en minusculas y por
+inclusion: `efficacy_note` -> `efficacynote`, que esta dentro de `treatmentEfficacyNote`.
+
+Para poder mirar, el mapa declara ahora **a que modelos escribe cada actividad**
+(`MODELOS_POR_ACTIVIDAD`). Sin saber donde buscar, "no tiene sitio" no se puede contradecir.
+
+**Es una heuristica sobre nombres y el codigo lo dice.** Puede dar una falsa alarma, y se
+resuelve **declarando el destino** -- que es lo que habria que hacer igualmente. Lo que no
+puede es dejar pasar el caso que ocurrio: su **control positivo** exige que
+`efficacy_note` contra `treatmentEfficacyNote` salte, porque sin el, el `[]` lo cumpliria igual
+una comprobacion que no mira nada.
+
+**Y un flip-test encontro que la declaracion nueva no era portante.** Vaciando
+`MODELOS_POR_ACTIVIDAD.inspection` las nueve pruebas seguian en verde: hoy ningun `sin_sitio`
+de esa actividad tiene un campo parecido, asi que la declaracion **no la ejercitaba nada**. Se
+exige aparte que cada actividad del protocolo declare al menos un modelo y que esos modelos
+existan. Es la tercera vez esta semana que un flip-test destapa una linea escrita con su
+justificacion al lado y sin nada que la ejerza.
+
+**La cuenta, medida sobre el mapa y no de memoria: 38 con campo, 1 en tabla, CINCO sin sitio.**
+`weather_observed`, `site_condition`, `hives_present_count` --las tres de patio, opcionales-- y
+`assessment`, `moisture_pct` --las dos de casa.
+
+**Lo que esto le hace a las cifras que publique.** Las tres de ayer --ADR-140 "diez",
+ADR-141 "nueve", ADR-142 "seis"-- se midieron todas con el instrumento que no comprobaba los
+`sin_sitio`, asi que **todas iban una de mas**. No se reescriben: quedan con esta nota, porque
+lo que importa no es el numero de ayer sino que hoy se pueda contradecir.
+
+**Lo que NO entra.** Construir las cinco. `moisture_pct` tiene ademas una pregunta abierta que
+no es de forma sino de diseno: `moisture` **ya es una variable canonica de medicion** en este
+esquema, asi que la humedad de la miel podria ser un `Measurement` en vez de una columna. Esa
+eleccion cambia como se consulta la serie y merece decidirse aparte, no de paso.

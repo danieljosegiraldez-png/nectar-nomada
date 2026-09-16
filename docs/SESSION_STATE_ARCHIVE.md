@@ -3278,3 +3278,248 @@ la trampa que ya midió un comentario mío en vez del JSX.
 cero enums de floración en el esquema— y el §4 nombra el formulario que la llenaría. Es hueco
 de esquema, como fue el §8, y su vocabulario es del dueño: especies, fases fenológicas, escala
 de abundancia.
+
+### 2026-09-15 · Una colmena nace con su colocación: diez de las veintinueve reales no la tenían
+
+ADR-135. **La invariante vivía en un comentario de ADR-126** —«`createHive` no la crea»—, y eso
+se aplicó en el guion que se escribió con la nota delante y se olvidó en los dos siguientes, del
+mismo día.
+
+**Medido antes de tocar nada, sobre la copia local con los datos reales: 29 colmenas, 19 con
+colocación, 10 SIN NINGUNA** — y las diez son las de Apiario Las Nubes. Con control positivo:
+NN-0041 sí tenía la suya, así que el cero no era de la consulta.
+
+**Lo que significaba:** `apiarioDeColmenaEn` contestaba `null` —«no consta»— para esas diez en
+cualquier fecha, y `colmenasDeLaVentana` no las contaba. O sea que **el §9, entregado el día
+antes, era ciego al apiario real del dueño**, y en silencio: la respuesta salía vacía.
+
+Cuatro piezas: `createHive` pasa a transacción con colocación y audit; un ayudante compartido
+para las cuatro rutas; una migración de relleno idempotente por `NOT EXISTS` (29/29 en local, y
+los lectores contestan con las fechas que declaró el dueño — 4 de septiembre para NN-0043, 2
+para NN-0048); y un guardia de fuente, porque el de datos se iría a rojo por el montaje de otra
+prueba en la base compartida.
+
+**Un agujero de rastro de paso:** el camino de la aplicación creaba una colmena **sin
+AuditEvent** mientras los tres guiones sí lo escribían. Ahora el historial de una caja incluye
+su creación.
+
+**El coste, dicho: 27 limpiezas de prueba.** La FK es `RESTRICT` y se mantiene: en producción
+una colmena no se borra, se retira, y una cascada se llevaría la historia en silencio.
+
+**Y el flip-test encontró un defecto en mi propio guardia:** contaba el `import` del ayudante
+como una llamada, así que un guion que perdiera su línea seguía pasando. El instrumento midió
+una importación en vez de una escritura — la misma forma de siempre.
+
+Inventario de acceso **327/96 → 328/96**, con dos entradas nuevas del mismo archivo porque son
+dos preguntas distintas.
+
+### 2026-09-15 · El mismo manejo a varias colmenas de una vez
+
+ADR-136, y lo pidió el dueño con estas palabras: «poder seleccionar todas las colmenas para
+aplicar que se hizo algo que hice igual a todas, y no tener que hacer siempre una por una».
+
+**No era una idea nueva: era terminar una.** El §8 ya lo había escrito para el traslado
+—«selección múltiple con atajos, porque nadie toca veinte casillas con guante»— y ese
+formulario ya tenía casillas, «todas» y conteo antes de confirmar. Se reusa entero.
+
+**Sólo alimentación y tratamiento, y la línea la traza el esquema:** `provenanceClassFor` da
+`original_record` a esos dos y `direct_observation` a la observación al paso. Diez registros de
+algo que HICISTE son diez hechos ciertos; diez observaciones sacadas de una mirada, no. La
+inspección queda fuera por lo mismo — el Anexo la marca «(por colmena)».
+
+**Y en lote sale MÁS correcto:** `coverageUntil` y la carencia son las fechas que disparan los
+avisos; tecleadas diez veces se desvían, y diez cajas con el mismo jarabe el mismo día
+acabarían avisando en días distintos.
+
+**Lo que no se relaja:** una fila por colonia, un rastro por fila, una jornada abierta que las
+recoge todas, y **una colonia que no está viva no recibe nada** — el error la nombra, y en el
+formulario las doce cajas vacías se ven y no se pueden marcar. Las reglas del evento
+individual se **extrajeron** en vez de duplicarse, con su prueba: duplicar es como se perdió
+la colocación en ADR-135.
+
+**Pendiente nombrado:** la observación en lote, hasta que el dueño diga qué significa; y el
+«nada fuera de lo normal» sobre varias, que es honesto pero escribe `Inspection` y merece su
+propia rebanada.
+
+### 2026-09-15 · La lista de apiarios deja de ser plana
+
+ADR-137, y lo pidió el dueño: «devuelta a finca o organizacion y ver apiarios bajo ellos ya sea
+en lista o mapa».
+
+**No construye jerarquía: deja de esconder la que hay.** `parentLocationId` y `organizationId`
+estaban poblados para los cuatro apiarios reales —Finca Rosina con dos, Toabré con dos— y la
+pantalla **no nombraba ninguno de los dos en ninguna línea**. Sexta vez en el módulo que el
+hueco es el camino y no el dato.
+
+**El grupo es el lugar padre y su tipo se enseña**, porque el de Las Nubes es una finca y el de
+Toabré una localidad: rotular los dos igual afirmaría lo que la fila no dice. Agrupar por
+organización daría un grupo de cuatro — la lista plana otra vez.
+
+**La urgencia no se pierde al agrupar**, que era el riesgo entero, y el grupo sin lugar
+declarado no va al final por serlo.
+
+**Dos hallazgos del propio trabajo:** el encabezado rotulaba la organización *del primer
+sitio* —en el grupo sin lugar, cuatro sitios de tres organizaciones bajo el nombre de una—, y
+un flip-test destapó que el primer criterio del orden **no podía decidir nada**: una crítica
+implica nivel 0, así que nivel y recuento nunca discrepan. Se quitó.
+
+**Pendiente nombrado:** el mapa por grupo. Cero de los ocho sitios tienen coordenadas, así que
+hoy dibujaría recuadros vacíos. La frase pide «lista o mapa» y sólo una tiene datos detrás.
+
+### 2026-09-15 · Las dos mitades del cierre de jornada
+
+ADR-138. Anexo E §5: «Al cerrarla: resumen de lo registrado, **lo que quedó pendiente**». La
+pantalla **no enseñaba ninguna de las dos**. `resumenDeVisita` existe desde A9.1 y aparecía en
+**cero** pantallas —alimentaba un mensaje de bitácora—, y de lo pendiente no había nada.
+
+**La mitad nueva contesta la pregunta del oficio:** abriste cuatro de diez, ¿cuáles seis se
+quedaron? Cuentan los **tres** caminos —inspección, evento de colonia, cosecha—: mirando sólo
+inspecciones, una caja alimentada saldría como sin tocar. Y el filtro es **por jornada**, no
+por sitio, o una visita anterior haría creer que ya abriste todo hoy.
+
+**La línea de lo que entra:** lo que todavía puedes hacer antes de irte — cajas sin tocar y
+tiras sin retirar. El alimento por vencer y la consulta a vecinos **no se repiten**: no se
+resuelven caminando de vuelta a la caja, y amontonarlas haría la pared de avisos que se aprende
+a ignorar.
+
+**La lista sale también con la jornada abierta**, no sólo al cerrar: una lista de lo que te
+falta que aparece cuando ya no puedes añadir eventos no se puede atender.
+
+Inventario de acceso **329/96 → 330/97**.
+
+**Pendiente nombrado:** el PDF del reporte «sin almacenarlo» que el §5 pide al lado. El reporte
+web y su enlace ya existen desde el 2026-09-10; el PDF es pieza propia.
+
+### 2026-09-15 · El informe al cliente ya dice de qué colmena habla
+
+ADR-139, y lo pidió el dueño: «deberíamos también ver cómo meter el informe, todos los informes
+son visita y o inspecciones y acciones o manejos en apiario».
+
+**El reporte existía y cada línea decía el nombre de la TABLA.** Medido: `cuando · clase ·
+sujeto · operador`, con `sujeto` = `"inspeccion"` o `"evento_de_colonia"`. El informe que recibe
+Kiva por su enlace decía de qué **tipo** era cada fila y no de qué caja hablaba ni qué se le
+hizo. El comentario lo justificaba «sin exponer el id interno» — instinto correcto aplicado
+demasiado ancho: **`NN-0043` no es un id interno**, es el dato con el que el cliente sigue su
+servicio.
+
+Ahora el snapshot lleva `colmena` y `detalle` —resultado, producto, material, kilos—, **los dos
+opcionales a propósito**: el snapshot es inmutable, lo ya emitido no los trae, y declararlos
+obligatorios haría creer a TypeScript que sí. Hay una prueba que se los quita a un snapshot
+guardado y comprueba que se sigue leyendo.
+
+**Dos cosas que me cazó la corrida, no el compilador:** me inventé el campo `honeyKg` —el real
+es `extractedWeightKg`— y pasó `tsc` porque tipé el borde como `unknown`, que apaga la única
+comprobación que había. Y la prueba nueva dejó una fila en `colony_event`, cuya FK es RESTRICT:
+**37 pruebas en verde con el archivo en rojo** hasta ampliar la limpieza.
+
+**Una corrección mía en ADR-138**, del mismo día: dije que el PDF «sin almacenarlo» seguía sin
+existir. Es falso — `PrintButton` existe desde T13 y ADR-039 ya fijó que la impresión del
+navegador **es** el mecanismo. Corregido en su sitio: un pendiente falso manda a la próxima
+sesión a construir algo que ya está.
+
+**Pendiente nombrado:** las fotos en el informe. `FieldEvent` puede apuntar a un `Asset` y el
+snapshot no lo mira; qué ve el cliente es decisión del dueño.
+
+### 2026-09-15 · Las 44 preguntas del protocolo, y las 10 que no tienen dónde guardarse
+
+ADR-140. El protocolo del dueño y el esquema son **dos vocabularios sin traducción**
+—`frames_covered` contra `beeCoveredFrames`—, así que «cuántas de las 44 captura el sistema» no
+lo podía contestar nadie.
+
+**Mi primer intento dio una cifra inventada y se tiró:** comparar claves contra nombres de
+servicios decía «29 sin campo», y la mitad existen con otro nombre. El instrumento medía mi
+suposición sobre los nombres. Ese número no se reportó.
+
+**Ahora el mapa se declara** —una entrada por pregunta, con su porqué— y un guardia lo sostiene:
+ningún ítem se queda sin entrada, y **ningún destino es inventado** (el modelo y el campo
+existen en `schema.prisma`). Sin la segunda mitad el mapa sería prosa.
+
+**Lo medido con el instrumento bueno: 34 de 44 tienen sitio.** De las diez que no, **exactamente
+una es obligatoria y de patio: `purpose`**, el propósito de la visita. Las otras nueve son
+opcionales o `stage: close` — se escriben en casa, que es lo que el §7 pide.
+
+**Dos cosas del camino:** el guardia lee el esquema y no `Prisma.dmmf`, porque en esta versión
+el import revienta y deja el archivo en «no tests» —que se lee igual que «no falló nada»—; y un
+flip-test destapó un filtro muerto en el detector, el **segundo criterio inútil del día**, los
+dos escritos con su justificación al lado.
+
+**Lo que el mapa NO dice:** que la pregunta se pueda responder desde un formulario. Dice que el
+dato tiene sitio. Esa es la otra mitad.
+
+**Siguiente, con vocabulario ya resuelto:** `purpose` es la única de las diez que bloquea el
+patio, el protocolo ya trae sus seis opciones, y `Inspection.broodStages` es el precedente
+exacto de un `multi_enum` en este esquema.
+
+### 2026-09-15 · Dos pruebas que mentían de formas distintas, y una fuga que no se deja atrapar
+
+Buscando unas filas `TEST` que la suite deja en la base local aparecieron dos
+defectos que no tenían que ver con ellas, y ninguno se veía desde el color: las
+dos pruebas pasaban mientras fallaban.
+
+**Una comparaba un número que otras sesiones mueven.**
+`limpiarAuditDePruebas` afirmaba `borradas === sinActorAntes`. Entre `contar()`
+y `limpiar()`, otras pruebas en paralelo commitean sus filas sin actor —medido:
+38.605 contra 38.599—. En una base compartida ese número cambia mientras se
+mide: era una carrera disfrazada de guardia. Pasa a `>= 1`, y quedan las dos
+aserciones estables, que son las que importan.
+
+**La otra borraba los informes de todo el mundo.** El `afterAll` de
+`jornadaEnApiario` recogía con `findMany({ subjectEntityType: "field_session" })`,
+sin `RUN_ID`: **todos** los informes de visita de la base, con sus versiones y
+publicaciones. `assertDefinedWhere` no puede verlo —el `where` del borrado está
+perfectamente definido—; lo que apuntaba demasiado lejos era la **selección**, y
+para eso no hay helper. Sembrando un informe ajeno: sin el arreglo desaparece,
+con él sobrevive, y la prueba da 35/35 en los dos casos.
+
+**Y la fuga original sigue abierta, a propósito.** Tres corridas aisladas de
+`jornadaEnApiario` y nueve archivos sospechosos —aislados y en paralelo— dan
+**delta 0 en los dieciocho casos**. Sólo aparece corriendo los 100 del grupo
+`base-sembrada`, y de forma intermitente: una vez `+2`, la siguiente `+0`. Queda
+nombrada y sin cerrar; una observación no es un mecanismo. **La herramienta para
+retomarla es el delta por archivo, no el `grep`** — el barrido de septiembre 11
+no la vio porque contaba `Scope` huérfanos y esto son `Location`, otra tabla.
+
+**Perseguida el mismo día, desde una base a cero, y NO reproduce.** Cuatro
+mediciones: ocho corridas aisladas, cuatro minutos observando sin correr nada,
+la vuelta completa de los 100, y la vuelta completa **con el arreglo del
+`findMany` revertido** —sha distinto, compilando—. Delta **0** en las cuatro.
+Esa última mata la hipótesis obvia: **el `findMany` sin filtro no era la
+causa**. Lo único que quedó distinto entre los días que fugó y el día que no es
+que la base **estaba sucia** y ahora está limpia; no hay mecanismo que lo
+conecte, y la pista del `take: 200` de `listarInvitables` no se sostiene —79
+cuentas contra un límite de 200—.
+
+Lo que esto le ahorra a quien la retome: esos cuatro experimentos. Y con la
+base a cero, la próxima vuelta que fugue queda identificada por su `RUN_ID`
+—basta contar `core.location where name like 'TEST%'` antes y después—.
+
+**Dato para quien mida en CI:** GitHub prueba el *merge*, no tu rama. Un archivo
+con 35 pruebas en local salió con 37 en CI porque otra sesión había añadido dos
+al mismo archivo. No es un fallo: son árboles distintos a propósito.
+
+### 2026-09-15 · El propósito de la visita, la única obligatoria de patio sin sitio
+
+ADR-141. De las diez preguntas sin sitio que midió ADR-140, **exactamente una** era obligatoria
+y de patio: `purpose`. El protocolo obliga a declarar a qué se fue, con el guante puesto, y no
+había columna.
+
+**El vocabulario ya estaba:** los seis valores salen literalmente del JSON del dueño, así que
+esta rebanada no preguntó nada.
+
+**Un arreglo y no una columna** —una ida revisa, alimenta y trata, y elegir uno haría que el
+informe mintiera—, con el precedente exacto de `Inspection.broodStages`. **El vacío es «sin
+registrar», no «sin propósito»**: la migración no rellena, no lleva `DEFAULT` con `NOT NULL`, y
+el campo es opcional en la entrada para no romper la cola offline. La **frontera** sí exige
+cuando el campo llega.
+
+**Tres sitios dicen el vocabulario** —JSON, enum de Postgres, módulo puro para el formulario— y
+un guardia comprueba que coincidan: un propósito añadido al JSON y no al enum **no se puede
+guardar** y el formulario ni lo ofrece.
+
+**Y el mapa de ADR-140 se cierra sobre sí mismo:** la prueba que contaba las obligatorias de
+patio sin sitio pasa de `["purpose"]` a `[]`. Que esté vacía es el resultado del trabajo, no la
+falta de comprobación. Primera vez en el módulo que una medición de ayer verifica lo de hoy.
+
+**Pendiente nombrado:** las otras nueve. **Seis** son `stage: close` y tres de ellas —viáticos,
+causa probable, recomendación— son las que convierten una visita en informe técnico; la de
+viáticos es el hueco de costos, que no tiene modelo en todo el esquema.
