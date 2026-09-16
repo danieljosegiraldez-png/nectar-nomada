@@ -38,6 +38,36 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · Las 44 preguntas del protocolo, y las 10 que no tienen dónde guardarse
+
+ADR-140. El protocolo del dueño y el esquema son **dos vocabularios sin traducción**
+—`frames_covered` contra `beeCoveredFrames`—, así que «cuántas de las 44 captura el sistema» no
+lo podía contestar nadie.
+
+**Mi primer intento dio una cifra inventada y se tiró:** comparar claves contra nombres de
+servicios decía «29 sin campo», y la mitad existen con otro nombre. El instrumento medía mi
+suposición sobre los nombres. Ese número no se reportó.
+
+**Ahora el mapa se declara** —una entrada por pregunta, con su porqué— y un guardia lo sostiene:
+ningún ítem se queda sin entrada, y **ningún destino es inventado** (el modelo y el campo
+existen en `schema.prisma`). Sin la segunda mitad el mapa sería prosa.
+
+**Lo medido con el instrumento bueno: 34 de 44 tienen sitio.** De las diez que no, **exactamente
+una es obligatoria y de patio: `purpose`**, el propósito de la visita. Las otras nueve son
+opcionales o `stage: close` — se escriben en casa, que es lo que el §7 pide.
+
+**Dos cosas del camino:** el guardia lee el esquema y no `Prisma.dmmf`, porque en esta versión
+el import revienta y deja el archivo en «no tests» —que se lee igual que «no falló nada»—; y un
+flip-test destapó un filtro muerto en el detector, el **segundo criterio inútil del día**, los
+dos escritos con su justificación al lado.
+
+**Lo que el mapa NO dice:** que la pregunta se pueda responder desde un formulario. Dice que el
+dato tiene sitio. Esa es la otra mitad.
+
+**Siguiente, con vocabulario ya resuelto:** `purpose` es la única de las diez que bloquea el
+patio, el protocolo ya trae sus seis opciones, y `Inspection.broodStages` es el precedente
+exacto de un `multi_enum` en este esquema.
+
 ### 2026-09-15 · El informe al cliente ya dice de qué colmena habla
 
 ADR-139, y lo pidió el dueño: «deberíamos también ver cómo meter el informe, todos los informes
@@ -91,31 +121,6 @@ Inventario de acceso **329/96 → 330/97**.
 
 **Pendiente nombrado:** el PDF del reporte «sin almacenarlo» que el §5 pide al lado. El reporte
 web y su enlace ya existen desde el 2026-09-10; el PDF es pieza propia.
-
-### 2026-09-15 · La lista de apiarios deja de ser plana
-
-ADR-137, y lo pidió el dueño: «devuelta a finca o organizacion y ver apiarios bajo ellos ya sea
-en lista o mapa».
-
-**No construye jerarquía: deja de esconder la que hay.** `parentLocationId` y `organizationId`
-estaban poblados para los cuatro apiarios reales —Finca Rosina con dos, Toabré con dos— y la
-pantalla **no nombraba ninguno de los dos en ninguna línea**. Sexta vez en el módulo que el
-hueco es el camino y no el dato.
-
-**El grupo es el lugar padre y su tipo se enseña**, porque el de Las Nubes es una finca y el de
-Toabré una localidad: rotular los dos igual afirmaría lo que la fila no dice. Agrupar por
-organización daría un grupo de cuatro — la lista plana otra vez.
-
-**La urgencia no se pierde al agrupar**, que era el riesgo entero, y el grupo sin lugar
-declarado no va al final por serlo.
-
-**Dos hallazgos del propio trabajo:** el encabezado rotulaba la organización *del primer
-sitio* —en el grupo sin lugar, cuatro sitios de tres organizaciones bajo el nombre de una—, y
-un flip-test destapó que el primer criterio del orden **no podía decidir nada**: una crítica
-implica nivel 0, así que nivel y recuento nunca discrepan. Se quitó.
-
-**Pendiente nombrado:** el mapa por grupo. Cero de los ocho sitios tienen coordenadas, así que
-hoy dibujaría recuadros vacíos. La frase pide «lista o mapa» y sólo una tiene datos detrás.
 
 ## 3. Bloqueado, y en qué
 

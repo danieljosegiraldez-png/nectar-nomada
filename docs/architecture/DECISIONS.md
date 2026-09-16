@@ -9976,3 +9976,64 @@ de ADR-135.
 snapshot no lo mira; el Anexo §7 dice que la revision de fotos "se hace despues, en telefono o
 laptop", asi que meterlas en el informe es una decision del dueno sobre que ve el cliente, no
 una que se deduzca del esquema.
+
+## ADR-140 -- Las 44 preguntas del protocolo y el esquema son dos vocabularios sin traduccion, y por eso nadie podia decir cuantas se capturan
+
+**Contexto.** El protocolo de campo del dueno entro como `ProtocolVersion` en A9.4 (D2): 44
+preguntas en cinco actividades, con su `stage` -- `field` o `close` -- y su `required`. Medido
+el 2026-09-15: **ningun formulario del modulo lo lee**, y la pregunta obvia -- *cuantas de las
+44 puede capturar el sistema hoy* -- no la podia contestar nadie.
+
+**El primer intento de contestarla dio una cifra inventada, y se tira.** Compare las claves del
+JSON contra los nombres de los servicios y salio "29 sin campo". **La mitad de esos 29 existen
+con otro nombre**: `material` es `feedingMaterial`, `frames_covered` es `beeCoveredFrames`,
+`varroa_method` vive en `VarroaCount`. El instrumento medía **mi suposicion sobre los nombres**,
+no el sistema -- la misma forma que ya me costo tres mediciones este mes, esta vez sobre un
+numero que iba a reportar como hallazgo.
+
+**Decision -- el mapa se declara, una entrada por pregunta, y un guardia lo sostiene contra el
+esquema.** `lib/apiary/mapaDelProtocolo.ts` dice de cada item si aterriza en un campo de un
+modelo, en una tabla propia, o en **ningun sitio todavia**, con el porque en cada caso.
+
+Las dos mitades del guardia, y **la segunda es la que lo hace imposible de falsear**:
+
+1. Ningun item del JSON se queda sin entrada -- anadir una pregunta obliga a decidir donde
+   aterriza, o CI se pone en rojo diciendo cual.
+2. **Ningun destino declarado es inventado**: el modelo y el campo existen en
+   `prisma/schema.prisma`. Sin esta mitad el mapa seria prosa; se podria declarar que la
+   humedad va a `ApiaryHarvestEvent.humedad` y nadie lo notaria.
+
+Es la misma forma que el inventario de acceso: cuando no se puede ver lo que hay, se declara y
+se vigila que la declaracion no derive.
+
+**Lo medido, ya con el instrumento bueno: 34 de 44 tienen sitio.** Las diez que no:
+`purpose`, `weather_observed`, `site_condition`, `hives_present_count`, `travel_cost_usd`,
+`probable_cause`, `recommendation`, `assessment`, `efficacy_note`, `moisture_pct`.
+
+**Y de esas diez, exactamente UNA es obligatoria y de patio: `purpose`.** El proposito de la
+visita, que el protocolo marca `required` con `stage: field` y que **no se puede guardar en
+ningun sitio**. Las otras nueve son opcionales o `stage: close` -- se escriben en casa, que es
+lo que el §7 dice que debe pasar.
+
+**El guardia lee el esquema y no `Prisma.dmmf`.** En esta version del cliente el dmmf no viaja
+con el paquete y el `import` revienta al cargar, lo que deja el archivo entero en **"no tests"**
+-- que en una salida filtrada se lee igual que "no fallo nada". El esquema es la declaracion,
+asi que se lee el esquema.
+
+**Y un filtro muerto que quito otro flip-test.** El detector quitaba los comentarios del
+esquema antes de buscar. Anulandolo, las siete pruebas seguian en verde: el patron de campo
+exige una palabra pegada a la sangria y toda linea de comentario empieza por `/`, asi que
+ninguna podia colarse. Se quito -- ademas de no hacer nada, mentia: sugeria que el detector se
+defiende de algo de lo que no tiene que defenderse. Es el segundo criterio inutil que un
+flip-test destapa hoy, y los dos estaban escritos con su justificacion al lado.
+
+**Lo que este mapa NO dice, y hay que decirlo:** que la pregunta se pueda **responder desde un
+formulario**. Dice que el dato tiene sitio donde guardarse. Un campo que existe y que ningun
+formulario ofrece sigue siendo un dato que nadie puede escribir; esa es la otra mitad y se mide
+aparte.
+
+**Lo que sigue, con su vocabulario ya resuelto.** `purpose` es la unica de las diez que bloquea
+el patio, y **el protocolo ya trae sus seis opciones** -- `inspeccion`, `alimentacion`,
+`tratamiento`, `cosecha`, `montaje`, `diagnostico` --, o sea que construirla no inventa nada.
+Es un `multi_enum` sobre la visita, y el esquema ya tiene el precedente exacto:
+`Inspection.broodStages` es un arreglo de enum. Eso es la proxima rebanada, no esta.
