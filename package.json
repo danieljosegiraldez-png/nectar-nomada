@@ -32,6 +32,8 @@
     "data:mover-cohorte-lote4": "tsx scripts/p1-mover-cohorte-lote4.ts",
     "data:cohortes-catuai": "tsx scripts/p1-cohortes-catuai.ts",
     "data:geisha-y-marcos": "tsx scripts/p1-geisha-pinkbourbon-y-marcos.ts",
+    "data:caturra-400-200": "tsx scripts/p1-caturra-400-y-200.ts",
+    "data:lote-7": "tsx scripts/p1-lote-7.ts",
     "data:remove-demo-places": "bash scripts/remove-demo-places.sh",
     "data:remove-orphan-roasts": "bash scripts/remove-orphan-roasts.sh",
     "people:set-email": "tsx scripts/set-person-email.ts",
