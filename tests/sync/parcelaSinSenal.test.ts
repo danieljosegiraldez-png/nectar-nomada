@@ -204,6 +204,60 @@ describe("el lote reconoce los cuatro tipos de captura de parcela", () => {
     expect(r.mutations[0]).toMatchObject({ kind: "soil_profile", describedAt: new Date("2026-09-16T12:00:00.000Z") });
   });
 
+  // Es la costura por la que la calicata encolada perdió sus horizontes (C1 de
+  // la revisión final), y hasta aquí ninguna prueba la cruzaba: las de base
+  // llaman a `pushFieldEvents` directamente y se saltan el parseo.
+  //
+  // Los horizontes van SUCIOS a propósito. El parseo hace `...m` antes de
+  // poner `horizons`, así que si alguien borrara esa línea los crudos pasarían
+  // por el spread, y una prueba con datos limpios seguiría en verde. Sólo lo que
+  // la normalización arregla —ordinales renumerados, una profundidad en texto,
+  // una entrada que no es un objeto— distingue «normalizado» de «crudo».
+  it("los horizontes de una calicata llegan del parseo normalizados, no crudos", () => {
+    const r = parsearMutaciones([
+      {
+        kind: "soil_profile",
+        clientDraftId: "d-horizontes",
+        locationId: "loc1",
+        describedAt: "2026-09-16T12:00:00.000Z",
+        provenanceClass: "direct_observation",
+        horizons: [
+          { ordinal: 7, topCm: 0, bottomCm: "20", designation: "Ap", colour: "10YR 3/2", textureByFeel: "franco arenoso", structure: "" },
+          "basura",
+          null,
+          { ordinal: 9, topCm: 20, bottomCm: 55, designation: "Bt", notes: "   " },
+        ],
+      },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.mutations).toHaveLength(1);
+    expect((r.mutations[0] as { horizons?: unknown }).horizons).toEqual([
+      { ordinal: 1, topCm: 0, bottomCm: 20, designation: "Ap", colour: "10YR 3/2", structure: null, textureByFeel: "franco arenoso", notes: null },
+      { ordinal: 2, topCm: 20, bottomCm: 55, designation: "Bt", colour: null, structure: null, textureByFeel: null, notes: null },
+    ]);
+  });
+
+  // La normalización existe para esto: un `horizons` que no es una lista, pasado
+  // crudo a Prisma, lanza fuera de las clases de validación → 500 → `reintentar`
+  // → el mismo lote vuelve para siempre.
+  it("unos horizontes que no son una lista salen vacíos, sin tumbar el lote", () => {
+    const r = parsearMutaciones([
+      {
+        kind: "soil_profile",
+        clientDraftId: "d-horizontes-rotos",
+        locationId: "loc1",
+        describedAt: "2026-09-16T12:00:00.000Z",
+        provenanceClass: "direct_observation",
+        horizons: "no es una lista",
+      },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.rechazos).toEqual([]);
+    expect((r.mutations[0] as { horizons?: unknown }).horizons).toEqual([]);
+  });
+
   it("un perfil de suelo sin describedAt se rechaza solo, no tumba el lote", () => {
     const r = parsearMutaciones([
       { kind: "soil_profile", clientDraftId: "d3", locationId: "loc1", provenanceClass: "direct_observation" },
