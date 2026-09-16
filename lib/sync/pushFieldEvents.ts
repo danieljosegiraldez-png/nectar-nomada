@@ -274,6 +274,7 @@ export type MutacionDeSiembra = {
   dataQuality?: string | null;
   cultivarValueId?: string | null;
   plantedAt?: Date | null;
+  plantedPrecision?: string | null;
   plantCount?: number | null;
   notes?: string | null;
 };
@@ -541,7 +542,8 @@ async function aplicarCapturaDeParcela(
             rootDistribution: m.rootDistribution ?? null, impedingLayerDepthCm: m.impedingLayerDepthCm ?? null,
             impedingLayerNote: m.impedingLayerNote ?? null, notes: m.notes ?? null })
       : await createPlantingCohort(userAccountId, { ...comun, cultivarValueId: m.cultivarValueId ?? null,
-            plantedAt: m.plantedAt ?? null, plantCount: m.plantCount ?? null, notes: m.notes ?? null });
+            plantedAt: m.plantedAt ?? null, plantedPrecision: (m.plantedPrecision ?? null) as never,
+            plantCount: m.plantCount ?? null, notes: m.notes ?? null });
     return { clientDraftId: m.clientDraftId, status: "applied", id: fila.id };
   } catch (error) {
     // Carrera: dos llamadas con el mismo `clientDraftId` —un reintento del

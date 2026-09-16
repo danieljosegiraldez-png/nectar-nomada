@@ -263,6 +263,35 @@ describe("dataQuality viaja en las cuatro ramas de captura de parcela", () => {
 });
 
 /**
+ * Ronda de arreglo 2 sobre Task 3.
+ *
+ * IMPORTANTE: `MutacionDeSiembra` no llevaba `plantedPrecision`.
+ * `createPlantingCohort` (`plantingCohorts.ts:120`) exige `plantedPrecision`
+ * cuando hay `plantedAt` — «una fecha de siembra sin precisión es una fecha
+ * que afirma más de lo que sabe» — así que TODA siembra encolada con fecha
+ * puesta, que es el caso normal, volvía `rejected` con
+ * `planted_precision_required`.
+ */
+describe("plantedPrecision viaja junto a plantedAt en la siembra", () => {
+  it("una siembra con plantedAt y su plantedPrecision puesto vuelve applied, no rejected", async () => {
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "planting_cohort" as const,
+        clientDraftId: `d-${Date.now()}`,
+        locationId,
+        provenanceClass: "direct_observation",
+        plantedAt: new Date("2026-03-01T00:00:00.000Z"),
+        plantedPrecision: "date",
+      },
+    ]);
+    // Sin el reenvío de `plantedPrecision`, esto cae en `rejected` con
+    // `planted_precision_required` — confirmado en rojo antes de escribir el
+    // arreglo (ver task-3-report.md, ronda 2).
+    expect(r).toMatchObject({ status: "applied" });
+  });
+});
+
+/**
  * IMPORTANTE: dos llamadas concurrentes con el mismo `clientDraftId` pueden
  * pasar las dos el `findUnique` antes de que la primera termine su `create`.
  * La perdedora chocaba contra el índice único con un `P2002` que ninguna de
