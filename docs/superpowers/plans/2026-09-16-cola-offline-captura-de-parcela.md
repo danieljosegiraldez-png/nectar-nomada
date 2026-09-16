@@ -443,11 +443,14 @@ Expected: FAIL — hoy devuelve `{ ok: false, error: "mutation_malformed" }` y t
 En `parsearMutaciones`, al final del bucle, **sustituyendo** la caída al camino de `field_event` cuando el `kind` es una cadena desconocida:
 
 ```ts
-    // Un `kind` que esta versión no conoce no puede tumbar el lote de los demás:
-    // el cliente trata un 4xx de lote como fallo de transporte y reintenta para
-    // siempre, así que un solo borrador raro bloqueaba la cola entera. Con
-    // `clientDraftId` se puede atribuir el rechazo; sin él no, y entonces sí es
-    // 400 de lote.
+    // Un `kind` que esta versión no conoce no puede tumbar el lote de los demás.
+    // Medido en el cliente: un 400 hace que `clasificarRespuesta` devuelva
+    // `rechazar`, y eso marca **todos** los borradores del lote como `error`,
+    // los buenos incluidos; y como `syncFieldEvents` vuelve a recoger los
+    // `error` en la tanda siguiente, el mismo lote regresa, recibe otro 400, y
+    // la cola no se vacía nunca mientras el borrador raro siga dentro.
+    // Con `clientDraftId` se puede atribuir el rechazo a su mutación; sin él no,
+    // y entonces sí es 400 de lote.
     if (typeof m.kind === "string" && m.kind !== "field_event") {
       if (typeof m.clientDraftId !== "string") return { ok: false, error: "mutation_malformed" };
       rechazos.push({ clientDraftId: m.clientDraftId, reason: "unknown_kind" });
@@ -482,8 +485,10 @@ git add lib/sync/parsearMutaciones.ts app/api/v1/sync/field-events/route.ts test
 git commit -F - <<'MSG'
 Un kind desconocido rechaza su mutación, no el lote
 
-Antes devolvía 400 del lote entero y el cliente lo trataba como fallo de
-transporte: un solo borrador raro dejaba la cola bloqueada para siempre.
+Antes devolvia 400 del lote entero, y eso marca error TODOS los borradores
+del lote, los buenos incluidos; como la sincronizacion vuelve a recoger los
+error, el lote regresa y recibe otro 400. Un solo borrador raro dejaba la
+cola sin vaciarse nunca.
 MSG
 ```
 
