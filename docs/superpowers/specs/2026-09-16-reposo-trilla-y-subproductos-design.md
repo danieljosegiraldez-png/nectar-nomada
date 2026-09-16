@@ -81,7 +81,7 @@ tiene hoy dónde ir.
 | Balance de masas | `lib/traceability/balance.ts`, 533 líneas, con merma declarada |
 | `QuantityEvent` | el libro mayor; la muestra ya descuenta masa en la misma transacción |
 | Perfiles de beneficio | `PERFIL_POR_GRADO` con `WASHED_STANDARD` y `NATURAL` — **el reposo entra por esta puerta** |
-| `BiocharBatch` | **el precedente**: subproducto del café convertido en enmienda, con su lote propio, su ubicación de producción y su trazabilidad |
+| `BiocharBatch` | **medio precedente**: el LOTE de subproducto está resuelto —código propio, ubicación de producción, trazabilidad—; su aplicación a una parcela **no existe**, y su propio comentario la da por escrita (§6) |
 | `DryingRun.endedAt` | de donde arranca el reloj del reposo |
 
 **Ausentes, medidos:** `CompostBatch` 0 · `CascaraBatch` 0 · trilla 0 coincidencias ·
