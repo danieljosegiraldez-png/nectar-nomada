@@ -3365,3 +3365,27 @@ implica nivel 0, así que nivel y recuento nunca discrepan. Se quitó.
 
 **Pendiente nombrado:** el mapa por grupo. Cero de los ocho sitios tienen coordenadas, así que
 hoy dibujaría recuadros vacíos. La frase pide «lista o mapa» y sólo una tiene datos detrás.
+
+### 2026-09-15 · Las dos mitades del cierre de jornada
+
+ADR-138. Anexo E §5: «Al cerrarla: resumen de lo registrado, **lo que quedó pendiente**». La
+pantalla **no enseñaba ninguna de las dos**. `resumenDeVisita` existe desde A9.1 y aparecía en
+**cero** pantallas —alimentaba un mensaje de bitácora—, y de lo pendiente no había nada.
+
+**La mitad nueva contesta la pregunta del oficio:** abriste cuatro de diez, ¿cuáles seis se
+quedaron? Cuentan los **tres** caminos —inspección, evento de colonia, cosecha—: mirando sólo
+inspecciones, una caja alimentada saldría como sin tocar. Y el filtro es **por jornada**, no
+por sitio, o una visita anterior haría creer que ya abriste todo hoy.
+
+**La línea de lo que entra:** lo que todavía puedes hacer antes de irte — cajas sin tocar y
+tiras sin retirar. El alimento por vencer y la consulta a vecinos **no se repiten**: no se
+resuelven caminando de vuelta a la caja, y amontonarlas haría la pared de avisos que se aprende
+a ignorar.
+
+**La lista sale también con la jornada abierta**, no sólo al cerrar: una lista de lo que te
+falta que aparece cuando ya no puedes añadir eventos no se puede atender.
+
+Inventario de acceso **329/96 → 330/97**.
+
+**Pendiente nombrado:** el PDF del reporte «sin almacenarlo» que el §5 pide al lado. El reporte
+web y su enlace ya existen desde el 2026-09-10; el PDF es pieza propia.

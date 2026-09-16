@@ -67,6 +67,20 @@ nombrada y sin cerrar; una observación no es un mecanismo. **La herramienta par
 retomarla es el delta por archivo, no el `grep`** — el barrido de septiembre 11
 no la vio porque contaba `Scope` huérfanos y esto son `Location`, otra tabla.
 
+**Perseguida el mismo día, desde una base a cero, y NO reproduce.** Cuatro
+mediciones: ocho corridas aisladas, cuatro minutos observando sin correr nada,
+la vuelta completa de los 100, y la vuelta completa **con el arreglo del
+`findMany` revertido** —sha distinto, compilando—. Delta **0** en las cuatro.
+Esa última mata la hipótesis obvia: **el `findMany` sin filtro no era la
+causa**. Lo único que quedó distinto entre los días que fugó y el día que no es
+que la base **estaba sucia** y ahora está limpia; no hay mecanismo que lo
+conecte, y la pista del `take: 200` de `listarInvitables` no se sostiene —79
+cuentas contra un límite de 200—.
+
+Lo que esto le ahorra a quien la retome: esos cuatro experimentos. Y con la
+base a cero, la próxima vuelta que fugue queda identificada por su `RUN_ID`
+—basta contar `core.location where name like 'TEST%'` antes y después—.
+
 **Dato para quien mida en CI:** GitHub prueba el *merge*, no tu rama. Un archivo
 con 35 pruebas en local salió con 37 en CI porque otra sesión había añadido dos
 al mismo archivo. No es un fallo: son árboles distintos a propósito.
@@ -130,30 +144,6 @@ sesión a construir algo que ya está.
 
 **Pendiente nombrado:** las fotos en el informe. `FieldEvent` puede apuntar a un `Asset` y el
 snapshot no lo mira; qué ve el cliente es decisión del dueño.
-
-### 2026-09-15 · Las dos mitades del cierre de jornada
-
-ADR-138. Anexo E §5: «Al cerrarla: resumen de lo registrado, **lo que quedó pendiente**». La
-pantalla **no enseñaba ninguna de las dos**. `resumenDeVisita` existe desde A9.1 y aparecía en
-**cero** pantallas —alimentaba un mensaje de bitácora—, y de lo pendiente no había nada.
-
-**La mitad nueva contesta la pregunta del oficio:** abriste cuatro de diez, ¿cuáles seis se
-quedaron? Cuentan los **tres** caminos —inspección, evento de colonia, cosecha—: mirando sólo
-inspecciones, una caja alimentada saldría como sin tocar. Y el filtro es **por jornada**, no
-por sitio, o una visita anterior haría creer que ya abriste todo hoy.
-
-**La línea de lo que entra:** lo que todavía puedes hacer antes de irte — cajas sin tocar y
-tiras sin retirar. El alimento por vencer y la consulta a vecinos **no se repiten**: no se
-resuelven caminando de vuelta a la caja, y amontonarlas haría la pared de avisos que se aprende
-a ignorar.
-
-**La lista sale también con la jornada abierta**, no sólo al cerrar: una lista de lo que te
-falta que aparece cuando ya no puedes añadir eventos no se puede atender.
-
-Inventario de acceso **329/96 → 330/97**.
-
-**Pendiente nombrado:** el PDF del reporte «sin almacenarlo» que el §5 pide al lado. El reporte
-web y su enlace ya existen desde el 2026-09-10; el PDF es pieza propia.
 
 ## 3. Bloqueado, y en qué
 
