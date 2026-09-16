@@ -25,10 +25,24 @@ async function requireSamplingAccess(userAccountId: string, context: {
   throw new TraceabilityAccessError("no_sample_access");
 }
 
-export async function createSamplingEvent(
+/**
+ * Autoriza CADA contexto que el evento va a declarar, no sólo uno.
+ *
+ * **Existe porque `registrarInspeccion` no lo hacía, y lo encontró una revisión
+ * independiente (Codex, 2026-09-16, hallazgo I1).** Esa función resolvía el
+ * permiso sobre el lote y después copiaba `dryingBedLocationId` y `dryingRunId`
+ * tal cual: un operador con permiso sobre el lote A podía colgar la inspección de
+ * una cama o una corrida de B. La clave ajena acepta que existan, y el disparador
+ * sólo comprueba que la cama SEA una cama — ninguno de los dos mira de quién es.
+ *
+ * Se extrae aquí, en vez de repetir las comprobaciones, para que no puedan volver
+ * a existir dos versiones que diverjan. Eso es exactamente lo que había pasado.
+ */
+async function autorizarContextos(
   userAccountId: string,
   input: CreateSamplingEventInput,
-): Promise<SamplingEvent> {
+  opciones: { exigirAlgunContexto: boolean },
+) {
   if (input.dryingRunId != null) {
     // DryingRun no tiene lotId: el origen vive en su transformación, como en drying.ts.
     const transformation = await prisma.lotTransformation.findFirst({
@@ -45,10 +59,17 @@ export async function createSamplingEvent(
     if (!bed) throw new TraceabilityAccessError("location_not_found");
     await requireSamplingAccess(userAccountId, { locationId: bed.id, classification: bed.classification });
   }
-  if (input.dryingRunId == null && input.dryingBedLocationId == null) {
+  if (opciones.exigirAlgunContexto && input.dryingRunId == null && input.dryingBedLocationId == null) {
     // Sin contexto sólo una asignación de plataforma puede autorizar el acto.
     await requireSamplingAccess(userAccountId, { classification: DEFAULT_NEW_RECORD_CLASSIFICATION });
   }
+}
+
+export async function createSamplingEvent(
+  userAccountId: string,
+  input: CreateSamplingEventInput,
+): Promise<SamplingEvent> {
+  await autorizarContextos(userAccountId, input, { exigirAlgunContexto: true });
 
   return prisma.$transaction(async (tx) => {
     const event = await tx.samplingEvent.create({
@@ -105,6 +126,9 @@ export async function registrarInspeccion(userAccountId: string, input: Registra
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireSamplingAccess(userAccountId, lot);
+  // Y CADA contexto declarado, por separado. El permiso sobre el lote no autoriza
+  // la cama ni la corrida: hallazgo I1 de la revisión independiente.
+  await autorizarContextos(userAccountId, input, { exigirAlgunContexto: false });
 
   return prisma.$transaction(async (tx) => {
     const event = await tx.samplingEvent.create({

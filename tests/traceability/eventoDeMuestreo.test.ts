@@ -254,10 +254,16 @@ describe("una inspección se guarda entera o no se guarda", () => {
 
   it("si una muestra falla, NO queda ni el acto ni la anterior", async () => {
     await conLote(async (lotId) => {
-      const antes = await prisma.samplingEvent.count();
+      // Una nota única, REGISTRADA ANTES de llamar: identifica el evento de ESTA
+      // invocación aunque la transacción no llegue a devolverlo, y permite
+      // limpiarlo si una regresión lo dejara escrito.
+      const notes = `TEST-EV-ROLLBACK-${randomUUID()}`;
+      eventNotes.push(notes);
+
       await expect(
         registrarInspeccion(actorId, {
           lotId,
+          notes,
           occurredAt: new Date("2026-03-05T10:00:00Z"),
           muestras: [
             { materialState: "PARCHMENT", samplingRole: "ZONE", samplingZone: "NORTH" },
@@ -267,20 +273,48 @@ describe("una inspección se guarda entera o no se guarda", () => {
             { materialState: "PARCHMENT", samplingRole: "REPLICATE", samplingZone: "SOUTH" },
           ],
         }),
-      ).rejects.toThrow();
+      // **Se exige el error POR SU NOMBRE.** Un `rejects.toThrow()` a secas acepta
+      // cualquier excepción: una regresión que rechazara la entrada ANTES de
+      // escribir nada pasaría esta prueba sin haber ejercitado ningún rollback.
+      // Hallazgo I2 de la revisión independiente (Codex, 2026-09-16).
+      ).rejects.toThrow(/sample_zona_exige_papel_zona/);
 
-      // El control que de verdad prueba la atomicidad es CONTAR. Un
-      // `rejects.toThrow` sólo dice que alguien se quejó, no que no quedara basura.
-      expect(await prisma.samplingEvent.count()).toBe(antes);
+      // Y se cuenta SÓLO lo de esta invocación, no un total global: la base es
+      // COMPARTIDA, y otra sesión insertando entre dos `count()` sin filtro daría
+      // un falso fallo — o taparía una fila sobrante.
+      expect(await prisma.samplingEvent.count({ where: assertDefinedWhere({ notes }) })).toBe(0);
       expect(await prisma.sample.count({ where: assertDefinedWhere({ sourceLotId: lotId }) })).toBe(0);
     });
   });
 
-  it("rechaza una inspección sin muestras en vez de guardar un acto vacío", async () => {
+  it("rechaza una inspección sin muestras con `inputs_required`, no con un error cualquiera", async () => {
     await conLote(async (lotId) => {
       await expect(
         registrarInspeccion(actorId, { lotId, occurredAt: new Date("2026-03-05T11:00:00Z"), muestras: [] }),
+      ).rejects.toThrow(/inputs_required/);
+    });
+  });
+
+  it("NO deja colgar la inspección de una cama que el operador no maneja", async () => {
+    // El agujero que abrió el controlador y encontró la revisión independiente
+    // (I1): el permiso sobre el LOTE no autoriza la cama ni la corrida. La clave
+    // ajena acepta que existan y el disparador sólo comprueba que la cama SEA una
+    // cama — ninguno de los dos mira de quién es.
+    await conLote(async (lotId) => {
+      const camaAjena = await ubicacion("drying_bed");
+      const suya = await ubicacion("drying_bed");
+      const forastero = await operador(suya.id);
+
+      await expect(
+        registrarInspeccion(forastero, {
+          lotId,
+          dryingBedLocationId: camaAjena.id,
+          occurredAt: new Date("2026-03-05T12:00:00Z"),
+          muestras: [{ materialState: "PARCHMENT", samplingRole: "ZONE", samplingZone: "NORTH" }],
+        }),
       ).rejects.toThrow();
+
+      expect(await prisma.sample.count({ where: assertDefinedWhere({ sourceLotId: lotId }) })).toBe(0);
     });
   });
 });

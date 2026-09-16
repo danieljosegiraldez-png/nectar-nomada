@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-15
 
-**333 operaciones** que tocan la base, en **98 archivos**:
+**334 operaciones** que tocan la base, en **98 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,18 +22,29 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **225** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **226** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **33** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **57** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
 
-> **Las de 331→333, sin archivos nuevos, son de la Tarea 7 del plan de secado.** Viven en
-> `lib/traceability/measurements.ts`, ya inventariado: la lectura de los modos del instrumento
-> para el aviso previo, y la escritura de la marca de revisión cuando el modo no casa con el
-> material. **Guardia directo las dos**, y la segunda va dentro de la MISMA transacción que la
-> medición — una marca que se escribiera aparte podría perderse dejando la lectura sin señalar.
+> **Las de 331→333 son `instrumentosParaMedicion` (`lib/equipos/equipos.ts`) e
+> `inspeccionesParaMedicion` (`lib/traceability/measurements.ts`)**, las dos de la Tarea 7 del
+> plan de secado y las dos **guardia directo**. Alimentan el formulario de medición: los
+> instrumentos que este usuario puede usar, y las inspecciones a las que puede colgar la lectura.
+>
+> **CORREGIDO EL 2026-09-16.** Esta nota decía antes que las dos operaciones eran «la lectura de
+> los modos y la escritura de la marca dentro de `recordMeasurement`». **Era falso, y lo encontró
+> una revisión independiente.** El detector cuenta **funciones exportadas** que alcanzan la base;
+> dos ramas nuevas dentro de una función que ya estaba inventariada no suman nada. La explicación
+> era plausible y nadie la había medido — que es exactamente el defecto que este documento
+> existe para impedir.
+>
+> **Y la de 333→334 es `registrarInspeccion`** (`lib/traceability/samplingEvents.ts`), de la
+> Tarea 8: el acto de muestreo y sus muestras en una sola transacción. Guardia directo, y desde
+> el hallazgo I1 de esa misma revisión autoriza **cada contexto declarado** —el lote, la cama y
+> la corrida— y no sólo el lote.
 >
 > **El de 329→330, con un archivo nuevo, es `createSamplingEvent`.** Vive en
 > `lib/traceability/samplingEvents.ts`, que entra hoy al inventario. Es **guardia directo**: no
