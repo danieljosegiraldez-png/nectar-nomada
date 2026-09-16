@@ -7,6 +7,10 @@ import { unidadesAceptadas } from "../../../lib/traceability/units";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
 import { paraCampoLocal } from "../../../lib/time/localDateTime";
 
+import type { MaterialState } from "../../../generated/prisma/client";
+import type { ModoDeMedicion } from "../../../lib/equipos/modos";
+import { avisoDeModo, materialNoEsDeSecado, MATERIALES, sinCamposVacios } from "../../../lib/traceability/avisoDeModo";
+
 const initialState: TraceabilityActionState = {};
 
 // §10.3's six Measurement-routed variables — weight is deliberately absent
@@ -56,10 +60,22 @@ export function MeasurementForm({
   dryingRunId,
   storageAssignmentId,
   claveDeEnvio,
+  instrumentos = [],
+  inspecciones = [],
+  materialInicial = null,
+  instrumentInicial = "",
+  modoInicial = "",
+  enSecado = false,
 }: {
   // La genera el servidor al pintar la página, no el cliente: un `useState` con
   // `crypto.randomUUID()` daría un valor al renderizar en servidor y otro al
   // hidratar, que es un desajuste de hidratación.
+  instrumentos?: { id: string; name: string; modos: ModoDeMedicion[] }[];
+  inspecciones?: { id: string; label: string }[];
+  materialInicial?: MaterialState | null;
+  instrumentInicial?: string;
+  modoInicial?: string;
+  enSecado?: boolean;
   claveDeEnvio: string;
   lotId: string;
   observers: ObserverOption[];
@@ -74,6 +90,16 @@ export function MeasurementForm({
 }) {
   const [state, formAction, pending] = useActionState(recordMeasurementAction, initialState);
   const t = useTranslations("Traceability");
+
+  const [instrumentId, setInstrumentId] = useState(instrumentInicial);
+  const [modoId, setModoId] = useState(modoInicial);
+  const [material, setMaterial] = useState<MaterialState | "">(materialInicial ?? "");
+  const [inspeccion, setInspeccion] = useState("");
+  const [otrosMateriales, setOtrosMateriales] = useState(false);
+  const equipo = instrumentos.find((e) => e.id === instrumentId);
+  const aviso = equipo ? avisoDeModo(material || null, equipo.modos, modoId) : null;
+  const secado = enSecado || !!dryingRunId;
+  const materiales = MATERIALES.filter((m) => !secado || otrosMateriales || m !== "GREEN" || material === m);
 
   const [variable, setVariable] = useState<string>("temperature");
   const unidades = unidadesAceptadas(variable);
@@ -91,7 +117,7 @@ export function MeasurementForm({
   }, []);
 
   return (
-    <form action={formAction} className="nn-form" style={{ maxWidth: 480, marginTop: "1rem" }}>
+    <form action={(datos) => formAction(sinCamposVacios(datos))} className="nn-form" style={{ maxWidth: 480, marginTop: "1rem" }}>
       <input type="hidden" name="claveDeEnvio" value={claveDeEnvio} />
       <input type="hidden" name="lotId" value={lotId} />
       <TimezoneOffsetField />
@@ -100,6 +126,54 @@ export function MeasurementForm({
       {fermentationRunId ? <input type="hidden" name="fermentationRunId" value={fermentationRunId} /> : null}
       {dryingRunId ? <input type="hidden" name="dryingRunId" value={dryingRunId} /> : null}
       {storageAssignmentId ? <input type="hidden" name="storageAssignmentId" value={storageAssignmentId} /> : null}
+
+      <div className="nn-field">
+        <label htmlFor="materialState">{t("materialStateLabel")}</label>
+        <select id="materialState" name="materialState" value={material} onChange={(e) => setMaterial(e.target.value as MaterialState | "")}>
+          <option value="">{t("notDeclaredOption")}</option>
+          {materiales.map((m) => <option key={m} value={m}>{t(`material_${m}`)}</option>)}
+        </select>
+        {secado ? <label><input type="checkbox" checked={otrosMateriales} onChange={(e) => setOtrosMateriales(e.target.checked)} />{t("otherStageMaterials")}</label> : null}
+      </div>
+      {materialNoEsDeSecado(material || null, secado) ? <p role="status">{t("aviso_material_no_es_de_esta_etapa")}</p> : null}
+      <div className="nn-field">
+        <label htmlFor="instrumentId">{t("instrumentLabel")}</label>
+        <select id="instrumentId" name="instrumentId" value={instrumentId} onChange={(e) => { setInstrumentId(e.target.value); setModoId(""); }}>
+          <option value="">{t("notDeclaredOption")}</option>
+          {instrumentos.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+      </div>
+      {equipo ? <div className="nn-field">
+        <label htmlFor="instrumentModeId">{t("instrumentModeLabel")}</label>
+        <select id="instrumentModeId" name="instrumentModeId" value={modoId} onChange={(e) => setModoId(e.target.value)}>
+          <option value="">{t("notDeclaredOption")}</option>
+          {equipo.modos.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
+      </div> : null}
+      {aviso && material ? <p role="status">{t(aviso.clave, { modo: aviso.modo, material: t(`material_${material}`) })}</p> : null}
+      {inspecciones.length > 0 ? <div className="nn-field">
+        <label htmlFor="samplingEventId">{t("samplingEventLabel")}</label>
+        <select id="samplingEventId" name="samplingEventId" value={inspeccion} onChange={(e) => setInspeccion(e.target.value)}>
+          <option value="">{t("notDeclaredOption")}</option>
+          {inspecciones.map((i) => <option key={i.id} value={i.id}>{i.label}</option>)}
+        </select>
+      </div> : null}
+      {inspeccion ? <>
+        <div className="nn-field">
+          <label htmlFor="samplingRole">{t("samplingRoleLabel")}</label>
+          <select id="samplingRole" name="samplingRole" defaultValue="">
+            <option value="">{t("notDeclaredOption")}</option>
+            {(["ZONE", "REPLICATE"] as const).map((r) => <option key={r} value={r}>{t(`samplingRole_${r}`)}</option>)}
+          </select>
+        </div>
+        <div className="nn-field">
+          <label htmlFor="samplingZone">{t("samplingZoneLabel")}</label>
+          <select id="samplingZone" name="samplingZone" defaultValue="">
+            <option value="">{t("notDeclaredOption")}</option>
+            {(["NORTH", "SOUTH", "EAST", "WEST", "CENTER", "EDGE"] as const).map((z) => <option key={z} value={z}>{t(`samplingZone_${z}`)}</option>)}
+          </select>
+        </div>
+      </> : null}
 
       <div className="nn-field">
         <label htmlFor="variable">{t("variableLabel")}</label>

@@ -59,7 +59,64 @@ export async function can(
 ): Promise<boolean> {
   if (!userAccountId) return false;
   const assignments = await getResolvedAssignments(userAccountId);
-  return resolveCan(assignments, action, resourceType, target, resourceClassification);
+  for (const objetivo of await conAncestros(target)) {
+    if (resolveCan(assignments, action, resourceType, objetivo, resourceClassification)) return true;
+  }
+  return false;
+}
+
+/**
+ * Un ámbito de ubicación alcanza a sus DESCENDIENTES. **Decisión de Daniel,
+ * 2026-09-16.**
+ *
+ * **El caso que lo obligó, medido.** El árbol de secado es sitio → instalación →
+ * cama. Un operario con ámbito sobre Finca Rosina podía crear el invernadero
+ * —cuyo padre es el sitio, que sí está en su ámbito— y **no podía crear las camas
+ * de dentro**, porque el guardia comprueba contra el padre directo y el
+ * invernadero no estaba en ningún ámbito suyo. Comprobado antes de tocar nada:
+ * ámbito en el sitio daba `true` sobre el sitio y `false` sobre su hija.
+ *
+ * Con el caso real de Cafelino —dos invernaderos y un cuarto oscuro— la
+ * alternativa era una asignación a mano por cada instalación construida. Eso no
+ * lo hace nadie, así que en la práctica las camas sólo las habría creado un
+ * administrador de plataforma.
+ *
+ * **Por qué esto NO es «ampliar» en el sentido que resolve.ts prohíbe.** La regla
+ * de la casa —las asignaciones contextuales estrechan, no ensanchan— habla de no
+ * conceder por acumulación lo que ningún ámbito concede. Aquí no se concede nada
+ * nuevo: se reconoce que una ubicación **está dentro de** otra. Quien manda en la
+ * finca manda en lo que hay dentro de la finca; lo contrario es lo que sorprende.
+ * Un HERMANO sigue fuera, y su prueba lo fija.
+ *
+ * **Por qué vive aquí y no en `resolve.ts`.** La jerarquía es un hecho de la base
+ * y `resolve.ts` es puro a propósito. Esto resuelve la cadena y le entrega
+ * objetivos concretos; el resolutor no cambia.
+ *
+ * El tope de profundidad no es decoración: un `parentLocationId` en ciclo
+ * —posible, porque nada en el esquema lo impide— colgaría este bucle dentro del
+ * punto de estrangulamiento de TODA la autorización.
+ */
+const PROFUNDIDAD_MAXIMA_DE_UBICACION = 12;
+
+async function conAncestros(target: ScopeTarget): Promise<ScopeTarget[]> {
+  if (target.scopeType !== "location" || !target.scopeRefId) return [target];
+
+  const cadena: ScopeTarget[] = [target];
+  const vistos = new Set<string>([target.scopeRefId]);
+  let actual: string | null = target.scopeRefId;
+
+  for (let i = 0; i < PROFUNDIDAD_MAXIMA_DE_UBICACION && actual; i += 1) {
+    const fila: { parentLocationId: string | null } | null = await prisma.location.findUnique({
+      where: { id: actual },
+      select: { parentLocationId: true },
+    });
+    const padre: string | null = fila?.parentLocationId ?? null;
+    if (!padre || vistos.has(padre)) break;
+    vistos.add(padre);
+    cadena.push({ scopeType: "location", scopeRefId: padre });
+    actual = padre;
+  }
+  return cadena;
 }
 
 /** Every permission key an authenticated user holds against one target — for building UI affordances, not for enforcement (enforcement is always a `can()` call server-side, per SECURITY.md §2). */

@@ -29,6 +29,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
   const filter = LOT_TYPES.includes(lotType as never) ? (lotType as LotListFilters["lotType"]) : undefined;
 
   const t = await getTranslations("Traceability");
+  const secado = await getTranslations("Secado");
   const [operations, lots, granted] = await Promise.all([
     getActiveOperations(user.userAccountId),
     getLotList(user.userAccountId, { lotType: filter }),
@@ -78,6 +79,8 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
             {t("recipesTitle")}
           </Link>
         ) : null}
+        {granted.has("sample:manage") && <Link href="/inspecciones/nueva">{secado("inspeccionTitulo")}</Link>}
+        {granted.has("location:manage_attributes") && <Link href="/instalaciones">{secado("instalaciones")}</Link>}
         {canExport ? (
           // A plain anchor, not next/link: this is a file download, and
           // client-side navigation to a route handler would fetch the zip and

@@ -6,13 +6,13 @@
  * esas lecturas aquí**, y su trabajo de verdad no es traducir — es **declarar lo
  * que no se puede traducir** en vez de rellenarlo con un valor por defecto.
  *
- * ## Las tres cosas que nuestro modelo no tiene, y qué se hace con cada una
+ * ## Lo que el puente puede traducir, y lo que debe declarar
  *
  * | lo que el contrato pide | aquí | qué se hace |
  * |---|---|---|
  * | `ProtocolProfile` del lote | **no existe** | se deduce del grado de proceso donde es defendible, y si no, **no hay veredicto** |
  * | `confidence` de la lectura | no existe | se deriva de `provenanceClass` y de si fue corregida |
- * | `sample_point` | **no existe** | el guardia de puntos mezclados de Brix **no puede funcionar aquí**, y se dice |
+ * | `sample_point` | `materialState` cuando está declarado | se traduce al punto compatible; si falta, se declara la limitación |
  *
  * **Ninguna de las tres se inventa.** Un valor por defecto en cualquiera de
  * ellas volvería infalsificable el veredicto —la lección del `??
@@ -27,7 +27,7 @@
  * frente al tanque, que ve el olor, el color y la espuma que ningún motor mide.
  */
 
-import { evaluarBrix, type BrixAssessment, type BrixReading } from "./brix";
+import { evaluarBrix, type BrixAssessment, type BrixReading, type SamplePoint } from "./brix";
 import { evaluarPh, type DataConfidence, type PHAssessment, type PHReading } from "./ph";
 import {
   confianzaPorVerificacion,
@@ -64,6 +64,10 @@ const PERFIL_POR_GRADO: Readonly<Record<string, ClaveDePerfil>> = {
 
 /** Lo mínimo que este módulo necesita de una medición nuestra. */
 export interface MedicionDelLote {
+  readonly materialState?: "CHERRY" | "MUCILAGE_HONEY" | "PARCHMENT" | "GREEN" | null;
+  readonly samplingRole?: "ZONE" | "REPLICATE" | null;
+  readonly samplingEventId?: string | null;
+  readonly waterActivity?: number | null;
   readonly variable: string;
   readonly value: number;
   readonly occurredAt: Date;
@@ -166,6 +170,7 @@ export function veredictoDelLote(entrada: EntradaDelLote): VeredictoDeFase | Sin
   if (usables.length === 0) return "SIN_LECTURAS";
 
   const limitaciones: string[] = [];
+  if (usables.some((m) => !m.materialState)) limitaciones.push("SIN_PUNTO_DE_MUESTREO");
   // **Se declara cuando NINGUNA lectura usable dice con qué se midió.** Hoy es
   // siempre, y por eso importa decirlo en vez de callarlo: un veredicto cuyo
   // origen no se puede auditar no vale más que una corazonada, y el operario
@@ -183,17 +188,24 @@ export function veredictoDelLote(entrada: EntradaDelLote): VeredictoDeFase | Sin
     const deBrix = entrada.mediciones.filter((m) => m.variable === "brix");
 
     const ph: PHReading[] = dePh.map((m) => ({ ...comun(m), ph: m.value }));
-    // **El punto de muestreo no existe en nuestro modelo**, así que se declara
-    // uno solo para toda la serie. Consecuencia que hay que decir en voz alta:
-    // el guardia de `MIXED_SAMPLE_POINTS` **no puede disparar aquí**. Si alguien
-    // mide licor de tanque y mucílago exprimido el mismo día, el motor los
-    // comparará como si fueran la misma serie y nadie lo sabrá.
-    const brix: BrixReading[] = deBrix.map((m) => ({
-      ...comun(m),
-      brix: m.value,
-      samplePoint: "TANK_LIQUID_MID" as const,
-    }));
-    if (deBrix.length > 0) limitaciones.push("SIN_PUNTO_DE_MUESTREO");
+    // GREEN no tiene equivalente en el contrato de Brix: no se inventa uno.
+    const puntos: Partial<Record<NonNullable<MedicionDelLote["materialState"]>, SamplePoint>> = {
+      CHERRY: "CHERRY_PULP",
+      MUCILAGE_HONEY: "MUCILAGE_PRESSED",
+      PARCHMENT: "PARCHMENT_BED",
+    };
+    const brix: BrixReading[] = deBrix.flatMap((m) => {
+      if (m.materialState === "GREEN") return [];
+      return [{
+        ...comun(m),
+        brix: m.value,
+        // Compatibilidad con lecturas antiguas; el hueco se declara abajo.
+        samplePoint: m.materialState ? puntos[m.materialState]! : "TANK_LIQUID_MID",
+      }];
+    });
+    if (deBrix.some((m) => m.materialState === "GREEN")) {
+      limitaciones.push("SIN_PUNTO_DE_MUESTREO");
+    }
 
     return {
       fase: "fermentacion",
@@ -211,20 +223,41 @@ export function veredictoDelLote(entrada: EntradaDelLote): VeredictoDeFase | Sin
 
   const deHumedad = entrada.mediciones.filter((m) => m.variable === "moisture");
   if (deHumedad.length === 0) return "SIN_LECTURAS";
-  // Una lectura de humedad nuestra es **un número, no tres puntos de cama**. El
-  // contrato pide un mínimo de tres —dos extremos y el centro— porque el rango
-  // entre ellos es lo que delata una cama que seca desigual. Con un solo punto
-  // `UNEVEN_DRYING` no puede salir nunca, y eso también se dice.
-  limitaciones.push("UN_SOLO_PUNTO_DE_CAMA");
-  const lecturas: DryingReading[] = deHumedad.map((m) => ({
-    measuredAt: m.occurredAt,
-    bedPointsPct: [m.value],
-    waterActivity: null,
-    beanTempC: null,
-    confidence: confianzaDe(m),
-  }));
-  // Sin actividad de agua `TARGET_REACHED` tampoco puede salir: exige las dos.
-  limitaciones.push("SIN_ACTIVIDAD_DE_AGUA");
+  const zonasPorEvento = new Map<string, MedicionDelLote[]>();
+  for (const m of deHumedad) {
+    if (m.samplingEventId && m.samplingRole === "ZONE" && confianzaDe(m) !== "UNCALIBRATED") {
+      const zonas = zonasPorEvento.get(m.samplingEventId) ?? [];
+      zonas.push(m);
+      zonasPorEvento.set(m.samplingEventId, zonas);
+    }
+  }
+  const actividades = usables.filter((m) => m.variable === "water_activity" && confianzaDe(m) !== "UNCALIBRATED");
+  const emitidos = new Set<string>();
+  const lecturas: DryingReading[] = deHumedad.flatMap((m) => {
+    const zonas = m.samplingEventId ? zonasPorEvento.get(m.samplingEventId) : undefined;
+    const agrupada = zonas?.includes(m) ?? false;
+    if (agrupada && emitidos.has(m.samplingEventId!)) return [];
+    if (agrupada) emitidos.add(m.samplingEventId!);
+    const puntos = agrupada ? zonas! : [m];
+    const aw = m.samplingEventId
+      ? actividades.filter((a) => a.samplingEventId === m.samplingEventId)
+        .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())[0]
+      : undefined;
+    const confianza = puntos.reduce((c, p) => peorConfianza(c, confianzaDe(p)), confianzaDe(m));
+    return [{
+      measuredAt: new Date(Math.max(...puntos.map((p) => p.occurredAt.getTime()))),
+      bedPointsPct: puntos.map((p) => p.value),
+      waterActivity: aw?.value ?? null,
+      beanTempC: null,
+      confidence: aw ? peorConfianza(confianza, confianzaDe(aw)) : confianza,
+    }];
+  });
+  if (![...zonasPorEvento.values()].some((zonas) => zonas.length >= 2)) {
+    limitaciones.push("UN_SOLO_PUNTO_DE_CAMA");
+  }
+  if (!lecturas.some((m) => m.waterActivity != null)) {
+    limitaciones.push("SIN_ACTIVIDAD_DE_AGUA");
+  }
 
   return {
     fase: "secado",

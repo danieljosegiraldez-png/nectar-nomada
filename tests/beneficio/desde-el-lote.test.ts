@@ -242,3 +242,121 @@ describe("el instrumento que produjo la lectura también decide su confianza", (
     expect(r.limitaciones).not.toContain("SIN_INSTRUMENTO_DECLARADO");
   });
 });
+
+it("emite UNEVEN_DRYING cuando dos zonas de la misma cama difieren, y no cuando son réplica", () => {
+  const base = { variable: "moisture", occurredAt: new Date("2026-03-05T09:00:00Z"),
+                 provenanceClass: "direct_observation", fueCorregida: false,
+                 materialState: "PARCHMENT", samplingEventId: "ev-1" } as const;
+
+  const zonas = fase(veredictoDelLote({
+    fase: { tipo: "secado", iniciadaEn: new Date("2026-03-01T06:00:00Z") },
+    gradoDeProceso: "Washed", ahora: new Date("2026-03-05T12:00:00Z"),
+    mediciones: [
+      { ...base, value: 22, samplingRole: "ZONE" },
+      { ...base, value: 13, samplingRole: "ZONE" },
+    ],
+  }));
+  expect(zonas.secado?.status).toBe("UNEVEN_DRYING");
+
+  // Control positivo: los MISMOS números como réplica NO alertan — su diferencia
+  // es ruido de muestreo, y alertar con ellos sería inventar una señal.
+  const replica = fase(veredictoDelLote({
+    fase: { tipo: "secado", iniciadaEn: new Date("2026-03-01T06:00:00Z") },
+    gradoDeProceso: "Washed", ahora: new Date("2026-03-05T12:00:00Z"),
+    mediciones: [
+      { ...base, value: 22, samplingRole: "REPLICATE" },
+      { ...base, value: 13, samplingRole: "REPLICATE" },
+    ],
+  }));
+  expect(replica.secado?.status).not.toBe("UNEVEN_DRYING");
+});
+
+
+// `veredictoDelLote` devuelve `VeredictoDeFase | SinVeredicto`, y `SinVeredicto`
+// es una cadena. Sin este guardia, `v.secado` no compila — y peor, un
+// `(v as any).secado` daría `undefined` y el `not.toContain` pasaría VACÍO.
+function fase(v: ReturnType<typeof veredictoDelLote>) {
+  if (typeof v === "string") throw new Error(`esperaba un veredicto, salió ${v}`);
+  return v;
+}
+
+const COMUN = {
+  fase: { tipo: "secado", iniciadaEn: new Date("2026-03-01T06:00:00Z") },
+  gradoDeProceso: "Washed",
+  ahora: new Date("2026-03-20T12:00:00Z"),
+} as const;
+
+const HUMEDAD_EN_OBJETIVO = {
+  variable: "moisture", value: 11, occurredAt: new Date("2026-03-19T09:00:00Z"),
+  provenanceClass: "direct_observation", fueCorregida: false,
+  materialState: "PARCHMENT", samplingRole: "ZONE", samplingEventId: "ev-aw",
+} as const;
+
+it("emite TARGET_REACHED sólo cuando hay humedad Y actividad de agua", () => {
+  const conAw = fase(veredictoDelLote({
+    ...COMUN,
+    mediciones: [
+      HUMEDAD_EN_OBJETIVO,
+      { variable: "water_activity", value: 0.58, occurredAt: new Date("2026-03-19T09:05:00Z"),
+        provenanceClass: "direct_observation", fueCorregida: false,
+        materialState: "PARCHMENT", samplingEventId: "ev-aw" },
+    ],
+  }));
+  expect(conAw.secado?.status).toBe("TARGET_REACHED");
+
+  // Control positivo: LA MISMA humedad sin actividad de agua no alcanza el
+  // objetivo, y además lo dice en vez de callarlo.
+  const sinAw = fase(veredictoDelLote({ ...COMUN, mediciones: [HUMEDAD_EN_OBJETIVO] }));
+  expect(sinAw.secado?.status).not.toBe("TARGET_REACHED");
+  expect(sinAw.limitaciones).toContain("SIN_ACTIVIDAD_DE_AGUA");
+});
+
+
+it("un lote SIN el dato nuevo sigue declarando sus limitaciones, no se calla", () => {
+  const viejo = fase(veredictoDelLote({
+    fase: { tipo: "secado", iniciadaEn: new Date("2026-03-01T06:00:00Z") },
+    gradoDeProceso: "Washed", ahora: new Date("2026-03-05T12:00:00Z"),
+    mediciones: [{ variable: "moisture", value: 15, occurredAt: new Date("2026-03-04T09:00:00Z"),
+                   provenanceClass: "direct_observation", fueCorregida: false }],
+  }));
+  expect(viejo.limitaciones).toContain("UN_SOLO_PUNTO_DE_CAMA");
+  expect(viejo.limitaciones).toContain("SIN_ACTIVIDAD_DE_AGUA");
+});
+
+
+it("declara sólo los datos que faltan y no mezcla inspecciones ni lecturas corregidas", () => {
+  const aw = { ...HUMEDAD_EN_OBJETIVO, variable: "water_activity", value: 0.58 };
+  const evaluar = (mediciones: MedicionDelLote[]) => fase(veredictoDelLote({ ...COMUN, mediciones }));
+  const completa = evaluar([
+    { ...HUMEDAD_EN_OBJETIVO, estadoDelInstrumento: "VERIFICADO" },
+    { ...HUMEDAD_EN_OBJETIVO, value: 11.2 }, aw,
+  ]);
+  expect(completa.secado?.status).toBe("TARGET_REACHED");
+  expect(completa.secado?.readingsUsed).toBe(1);
+  expect(completa.limitaciones).toEqual([]);
+  for (const extra of [{ samplingEventId: "otra" }, { samplingEventId: null }, { fueCorregida: true }]) {
+    const separada = evaluar([HUMEDAD_EN_OBJETIVO, { ...aw, ...extra }]);
+    expect(separada.secado?.waterActivity).toBeNull();
+    expect(separada.secado?.status).toBe("DRYING_NORMAL");
+    expect(separada.limitaciones).toContain("SIN_ACTIVIDAD_DE_AGUA");
+  }
+  for (const extra of [{ samplingEventId: "otra" }, { samplingEventId: null }, { fueCorregida: true }, { samplingRole: "REPLICATE" as const }]) {
+    const separada = evaluar([HUMEDAD_EN_OBJETIVO, { ...HUMEDAD_EN_OBJETIVO, value: 22, ...extra }]);
+    expect(separada.secado?.dispersionPp).toBeNull();
+    expect(separada.limitaciones).toContain("UN_SOLO_PUNTO_DE_CAMA");
+  }
+});
+
+it("Brix distingue el estado material real y declara el punto ausente", () => {
+  const evaluar = (materiales: MedicionDelLote["materialState"][]) => fase(veredictoDelLote({
+    fase: { tipo: "fermentacion", iniciadaEn: INICIO }, gradoDeProceso: "Washed", ahora: h(6),
+    mediciones: materiales.map((materialState, i) => lectura(21 - i, i * 6, { variable: "brix", materialState })),
+  }));
+  const mezclada = evaluar(["CHERRY", "MUCILAGE_HONEY", "PARCHMENT"]);
+  expect(mezclada.brix?.status).toBe("MIXED_SAMPLE_POINTS");
+  expect(mezclada.limitaciones).not.toContain("SIN_PUNTO_DE_MUESTREO");
+  expect(evaluar(["CHERRY", undefined]).limitaciones).toContain("SIN_PUNTO_DE_MUESTREO");
+  const verde = evaluar(["GREEN"]);
+  expect(verde.brix).toBeNull();
+  expect(verde.limitaciones).toContain("SIN_PUNTO_DE_MUESTREO");
+});

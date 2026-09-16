@@ -1,3 +1,5 @@
+import { instrumentosParaMedicion } from "../../../lib/equipos/equipos";
+import { inspeccionesParaMedicion } from "../../../lib/traceability/measurements";
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -167,6 +169,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
 
   const activeFermentation = fermentationRuns.find((r) => r.endedAt === null) ?? null;
   const activeDrying = dryingRuns.find((r) => r.endedAt === null) ?? null;
+  const instrumentosDeMedicion = puedeRegistrar ? await instrumentosParaMedicion(user.userAccountId) : [];
+  const inspeccionesDeMedicion = puedeRegistrar && activeDrying
+    ? await inspeccionesParaMedicion(user.userAccountId, lot.id, activeDrying.id) : [];
 
   // ADR-096 — which action this batch is waiting for, and the list to render.
   const suggestedAction = nextActionFor(
@@ -928,6 +933,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         )}
         {puedeRegistrar ? (
           <MeasurementForm
+            instrumentos={instrumentosDeMedicion}
+            inspecciones={inspeccionesDeMedicion.map((i) => ({ id: i.id, label: cuando(i.occurredAt) }))}
+            enSecado={!!activeDrying || lot.lotType === "drying"}
             claveDeEnvio={claveDeMedicion}
             lotId={lot.id}
             observers={observers}
