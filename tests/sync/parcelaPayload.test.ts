@@ -134,40 +134,88 @@ describe("construirPayloadDePerfilDeSuelo", () => {
   });
 
   /**
-   * Aunque el `FormData` real de `SoilProfileForm` en modo crear SÍ trae
-   * `mottling` y las filas de horizonte (`horizonTopCm.0`, ...), el payload
-   * que se encola no puede llevarlos: no son parte de
-   * `MutacionDePerfilDeSuelo` y el servidor los ignoraría o los rechazaría.
-   * Se simula ese `FormData` completo, no uno que ya los omite — si el
-   * constructor los copiara sin querer, esta prueba lo vería.
+   * **La prueba que ocupaba este sitio decía lo contrario, y su justificación
+   * era falsa.** Fijaba con `Object.keys(p).sort()` que el payload NO llevaba
+   * ni las banderas de anaerobiosis ni los horizontes, y lo justificaba
+   * diciendo que «no son parte de `MutacionDePerfilDeSuelo` y el servidor los
+   * ignoraría o los rechazaría». Las dos mitades eran falsas: ese tipo se
+   * escribe en esta misma rama —así que lo que lleve es una decisión, no una
+   * restricción heredada— y `createSoilProfile` acepta los cuatro campos
+   * (`SoilProfileFields`) y los horizontes (`horizons`) desde antes.
+   *
+   * El efecto era que el operador cavaba el hoyo, describía cuatro horizontes,
+   * la pantalla decía «guardado en este dispositivo» y se guardaba una
+   * calicata vacía — con una prueba en verde declarándolo correcto.
+   *
+   * Se simula el `FormData` real de `SoilProfileForm` en modo CREAR, que es el
+   * único que se encola: `name={campo}` para las cuatro observaciones y
+   * `` name={`horizonTopCm.${i}`} `` para las filas.
    */
-  it("no lleva horizontes ni las banderas de anaerobiosis, aunque el FormData real las traiga", () => {
-    const fd = form({
-      ...BASE,
+  it("lleva las cuatro banderas de anaerobiosis que el formulario pinta", () => {
+    const p = construirPayloadDePerfilDeSuelo(
+      form({
+        ...BASE,
+        mottling: "present",
+        greyColours: "absent",
+        rootChannelConcretions: "not_observed",
+        sourSmell: "present",
+      }),
+      "loc1",
+    );
+    expect(p).toMatchObject({
       mottling: "present",
       greyColours: "absent",
       rootChannelConcretions: "not_observed",
       sourSmell: "present",
-      "horizonOrdinal.0": "1",
-      "horizonTopCm.0": "0",
-      "horizonBottomCm.0": "20",
     });
-    const p = construirPayloadDePerfilDeSuelo(fd, "loc1");
-    expect(Object.keys(p).sort()).toEqual(
-      [
-        "kind",
-        "locationId",
-        "describedAt",
-        "pitDepthCm",
-        "rootingDepthCm",
-        "rootDistribution",
-        "impedingLayerDepthCm",
-        "impedingLayerNote",
-        "provenanceClass",
-        "dataQuality",
-        "notes",
-      ].sort(),
+  });
+
+  it("una bandera de anaerobiosis sin registrar viaja como null, no como cadena vacía", () => {
+    const p = construirPayloadDePerfilDeSuelo(form({ ...BASE, mottling: "" }), "loc1");
+    expect(p.mottling).toBeNull();
+  });
+
+  it("lleva los horizontes, con el ordinal por posición entre las filas NO vacías", () => {
+    // La fila 1 se deja EN BLANCO a propósito: el formulario ofrece cuatro y el
+    // operador llena las que use. `horizontesDelFormulario` descarta las vacías
+    // y numera por posición, así que la tercera fila del formulario tiene que
+    // salir con `ordinal: 2`, no con 3. Si el payload copiara el índice, este
+    // caso lo vería.
+    const p = construirPayloadDePerfilDeSuelo(
+      form({
+        ...BASE,
+        "horizonOrdinal.0": "1",
+        "horizonTopCm.0": "0",
+        "horizonBottomCm.0": "20",
+        "horizonDesignation.0": "Ap",
+        "horizonColour.0": "10YR 3/2",
+        "horizonStructure.0": "granular",
+        "horizonTexture.0": "franco arenoso",
+        "horizonOrdinal.1": "2",
+        "horizonOrdinal.2": "3",
+        "horizonTopCm.2": "20",
+        "horizonBottomCm.2": "55",
+        "horizonDesignation.2": "Bt",
+      }),
+      "loc1",
     );
+    expect(p.horizons).toHaveLength(2); // control: cuántas leyó, no sólo que hay alguna
+    expect(p.horizons[0]).toEqual({
+      ordinal: 1,
+      topCm: 0,
+      bottomCm: 20,
+      designation: "Ap",
+      colour: "10YR 3/2",
+      structure: "granular",
+      textureByFeel: "franco arenoso",
+      notes: null,
+    });
+    expect(p.horizons[1]).toMatchObject({ ordinal: 2, topCm: 20, bottomCm: 55, designation: "Bt" });
+  });
+
+  it("sin ninguna fila de horizonte llena, el array va vacío", () => {
+    const p = construirPayloadDePerfilDeSuelo(form({ ...BASE, "horizonOrdinal.0": "1" }), "loc1");
+    expect(p.horizons).toEqual([]);
   });
 });
 

@@ -1,5 +1,9 @@
 import { fechaDeDia } from "../time/localDateTime";
 import { calcularFechaConPrecision } from "../time/fechaConPrecision";
+import {
+  horizontesDelFormulario,
+  type HorizonteDelFormulario,
+} from "../traceability/horizontesDelFormulario";
 
 /**
  * Task 5 — los cuatro payloads que la cola guarda para la captura de parcela,
@@ -149,17 +153,36 @@ export interface PayloadDePerfilDeSuelo {
   pitDepthCm: number | null;
   rootingDepthCm: number | null;
   rootDistribution: string | null;
+  /**
+   * §6.1 — las cuatro observaciones de anaerobiosis. El formulario las pinta
+   * con `name={campo}` dentro de un `.map`, y por eso una comparación que
+   * buscara `name="mottling"` en la fuente no las encuentra: así se perdieron
+   * en la primera versión de esta cola.
+   */
+  mottling: string | null;
+  greyColours: string | null;
+  rootChannelConcretions: string | null;
+  sourSmell: string | null;
   impedingLayerDepthCm: number | null;
   impedingLayerNote: string | null;
   provenanceClass: string;
   dataQuality: string | null;
   notes: string | null;
+  /**
+   * Los horizontes descritos, ya numerados. Viaja como array anidado dentro del
+   * JSON del borrador, que es lo que `createSoilProfile` espera en `horizons`.
+   */
+  horizons: HorizonteDelFormulario[];
 }
 
 /**
  * Sólo la calicata NUEVA se encola. `SoilProfileForm` en modo corrección no
  * pide `describedAt` de nuevo ni horizontes, y `values.id` es lo que el
  * componente ya usa para distinguir las dos ramas.
+ *
+ * **Lleva los once campos que el modo crear captura**, no un subconjunto. El
+ * hoyo se cava una vez: una calicata encolada sin sus horizontes ni sus
+ * banderas de anaerobiosis es una fila que dice que alguien miró y no vio nada.
  */
 export function construirPayloadDePerfilDeSuelo(fd: FormData, locationId: string): PayloadDePerfilDeSuelo {
   return {
@@ -169,11 +192,16 @@ export function construirPayloadDePerfilDeSuelo(fd: FormData, locationId: string
     pitDepthCm: numero(fd, "pitDepthCm"),
     rootingDepthCm: numero(fd, "rootingDepthCm"),
     rootDistribution: texto(fd, "rootDistribution"),
+    mottling: texto(fd, "mottling"),
+    greyColours: texto(fd, "greyColours"),
+    rootChannelConcretions: texto(fd, "rootChannelConcretions"),
+    sourSmell: texto(fd, "sourSmell"),
     impedingLayerDepthCm: numero(fd, "impedingLayerDepthCm"),
     impedingLayerNote: texto(fd, "impedingLayerNote"),
     provenanceClass: String(fd.get("provenanceClass") ?? ""),
     dataQuality: texto(fd, "dataQuality"),
     notes: texto(fd, "notes"),
+    horizons: horizontesDelFormulario(fd),
   };
 }
 

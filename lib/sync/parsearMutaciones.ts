@@ -21,7 +21,8 @@
  * el sitio donde se declara la lista de tipos, y que haya un guardia que la
  * compara con los que el cliente sabe encolar.
  */
-import type { PushMutation, MutacionDeEvento } from "./pushFieldEvents";
+import type { PushMutation, MutacionDeEvento, MutacionDePerfilDeSuelo } from "./pushFieldEvents";
+import type { HorizonteDelFormulario } from "../traceability/horizontesDelFormulario";
 import { fechaDeDia } from "../time/localDateTime";
 
 /** Las fechas viajan como texto ISO por JSON y vuelven a ser fechas aquí. */
@@ -49,6 +50,52 @@ export const KIND_DE_FIN_DE_COLONIA = "colony_end";
  * texto de un `if`.
  */
 export const KINDS_DE_PARCELA = ["soil_sample", "foliar_sample", "soil_profile", "planting_cohort"] as const;
+
+/** Un número que llega del JSON, o `null`. `"abc"` es `null`, no `NaN`. */
+function numeroOpcional(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v !== "string" || v.trim() === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Una cadena no vacía que llega del JSON, o `null`. */
+function textoOpcional(v: unknown): string | null {
+  return typeof v === "string" && v.trim() !== "" ? v : null;
+}
+
+/**
+ * Los horizontes de una calicata encolada, normalizados **aquí y no en el
+ * servicio**.
+ *
+ * Es el único campo anidado del protocolo, y por eso el único que puede llegar
+ * con una forma que ni el tipo ni Prisma esperan: un `horizons: "cuatro"`, o
+ * una fila con `topCm: "abc"`. Sin esta normalización eso no sería un rechazo
+ * sino una excepción —`TypeError` al recorrer, o `P2009` de Prisma—, o sea un
+ * **500**, y un 500 hace que `clasificarRespuesta` diga `reintentar` y el mismo
+ * lote vuelva para siempre. Lo que el servicio sí valida —ordinales duplicados,
+ * un horizonte al revés, profundidades negativas— se queda donde está y vuelve
+ * como `rejected` con su razón.
+ *
+ * El `ordinal` se renumera por posición, igual que hace
+ * `horizontesDelFormulario`: es el servidor quien decide la secuencia, no el
+ * cliente.
+ */
+function horizontesDeLaMutacion(v: unknown): HorizonteDelFormulario[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((h): h is Record<string, unknown> => typeof h === "object" && h !== null)
+    .map((h, i) => ({
+      ordinal: i + 1,
+      topCm: numeroOpcional(h.topCm),
+      bottomCm: numeroOpcional(h.bottomCm),
+      designation: textoOpcional(h.designation),
+      colour: textoOpcional(h.colour),
+      structure: textoOpcional(h.structure),
+      textureByFeel: textoOpcional(h.textureByFeel),
+      notes: textoOpcional(h.notes),
+    }));
+}
 
 export type ParseoDeLote =
   | { ok: true; mutations: PushMutation[]; rechazos: { clientDraftId: string; reason: string }[] }
@@ -120,7 +167,16 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
       if (m.kind === "soil_profile") {
         const describedAt = toDate(m.describedAt);
         if (!describedAt) return { ok: false, error: "mutation_malformed" };
-        parsed.push({ ...(m as object), describedAt } as PushMutation);
+        // Tipado de verdad, no `as PushMutation` sobre un literal: con `horizons`
+        // dentro, la aserción directa deja de solapar y TS la rechaza. Declarar
+        // la variable con su tipo es además lo que hace que quitar un campo del
+        // tipo rompa aquí en vez de pasar callado.
+        const perfil: MutacionDePerfilDeSuelo = {
+          ...(m as unknown as MutacionDePerfilDeSuelo),
+          describedAt,
+          horizons: horizontesDeLaMutacion(m.horizons),
+        };
+        parsed.push(perfil);
         continue;
       }
       if (m.kind === "planting_cohort") {

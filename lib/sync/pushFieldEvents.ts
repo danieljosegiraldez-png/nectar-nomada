@@ -17,6 +17,7 @@ import { TratamientoInvalido } from "../apiary/objetivoDelTratamiento";
 import { createSoilSample, createFoliarSample, SampleValidationError } from "../traceability/soilSamples";
 import { createSoilProfile, SoilProfileValidationError } from "../traceability/soilProfiles";
 import { createPlantingCohort, PlantingCohortValidationError } from "../traceability/plantingCohorts";
+import type { HorizonteDelFormulario } from "../traceability/horizontesDelFormulario";
 
 /**
  * P4 §4 (46_P4_API_Y_SINCRONIZACION.md) — push por lotes con resultado **por
@@ -261,9 +262,27 @@ export type MutacionDePerfilDeSuelo = {
   pitDepthCm?: number | null;
   rootingDepthCm?: number | null;
   rootDistribution?: string | null;
+  /**
+   * §6.1 — las cuatro observaciones de anaerobiosis. Viajan como CADENAS y las
+   * valida `aplicarCapturaDeParcela` contra `SoilFeatureObservation` antes de
+   * llamar al servicio, por la misma razón que `method` en el conteo de varroa:
+   * un valor malo tiene que volver como `rejected` con su razón, no como un 500
+   * que deja la cola dando vueltas.
+   */
+  mottling?: string | null;
+  greyColours?: string | null;
+  rootChannelConcretions?: string | null;
+  sourSmell?: string | null;
   impedingLayerDepthCm?: number | null;
   impedingLayerNote?: string | null;
   notes?: string | null;
+  /**
+   * Los horizontes descritos. **Es la única mutación con un array anidado**, y
+   * no es un adorno: el operador cava el hoyo una vez, y una calicata sin sus
+   * horizontes describe un suelo que nadie vio. Misma forma que
+   * `SoilHorizonInput`, que es lo que `createSoilProfile` espera.
+   */
+  horizons?: readonly HorizonteDelFormulario[];
 };
 
 export type MutacionDeSiembra = {
@@ -527,11 +546,13 @@ async function aplicarCapturaDeParcela(
     const fila =
       m.kind === "soil_sample"
         ? await createSoilSample(userAccountId, { ...comun, sampleCode: m.sampleCode, sampledAt: m.sampledAt,
+            treatmentPlotLabel: m.treatmentPlotLabel ?? null,
             depthTopCm: m.depthTopCm ?? null, depthBottomCm: m.depthBottomCm ?? null,
             subSampleCount: m.subSampleCount ?? null, samplingPointLabel: m.samplingPointLabel ?? null,
             extractionMethod: m.extractionMethod ?? null, laboratory: m.laboratory ?? null, notes: m.notes ?? null })
       : m.kind === "foliar_sample"
         ? await createFoliarSample(userAccountId, { ...comun, sampleCode: m.sampleCode, sampledAt: m.sampledAt,
+            treatmentPlotLabel: m.treatmentPlotLabel ?? null,
             leafPairPosition: m.leafPairPosition ?? null, canopyPosition: (m.canopyPosition ?? null) as never,
             treeAgeYears: m.treeAgeYears ?? null, cultivar: m.cultivar ?? null,
             phenologicalStage: m.phenologicalStage ?? null, branchBearingFruit: m.branchBearingFruit ?? null,
@@ -539,8 +560,13 @@ async function aplicarCapturaDeParcela(
       : m.kind === "soil_profile"
         ? await createSoilProfile(userAccountId, { ...comun, describedAt: m.describedAt,
             pitDepthCm: m.pitDepthCm ?? null, rootingDepthCm: m.rootingDepthCm ?? null,
-            rootDistribution: m.rootDistribution ?? null, impedingLayerDepthCm: m.impedingLayerDepthCm ?? null,
-            impedingLayerNote: m.impedingLayerNote ?? null, notes: m.notes ?? null })
+            rootDistribution: m.rootDistribution ?? null,
+            mottling: (m.mottling ?? null) as never, greyColours: (m.greyColours ?? null) as never,
+            rootChannelConcretions: (m.rootChannelConcretions ?? null) as never,
+            sourSmell: (m.sourSmell ?? null) as never,
+            impedingLayerDepthCm: m.impedingLayerDepthCm ?? null,
+            impedingLayerNote: m.impedingLayerNote ?? null, notes: m.notes ?? null,
+            horizons: [...(m.horizons ?? [])] })
       : await createPlantingCohort(userAccountId, { ...comun, cultivarValueId: m.cultivarValueId ?? null,
             plantedAt: m.plantedAt ?? null, plantedPrecision: (m.plantedPrecision ?? null) as never,
             plantCount: m.plantCount ?? null, notes: m.notes ?? null });

@@ -11,6 +11,9 @@ import { fechaDeDia as fechaDeDiaCompartida, FechaDeDiaInvalida,
   TZ_OFFSET_FIELD,
 } from "../../lib/time/localDateTime";
 import { calcularFechaConPrecision } from "../../lib/time/fechaConPrecision";
+// Los horizontes los lee `lib/traceability/horizontesDelFormulario.ts`, que
+// comparten este camino y el de la cola offline. Ver su cabecera.
+import { horizontesDelFormulario, maxIndiceDeFilas } from "../../lib/traceability/horizontesDelFormulario";
 import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadasDelSitio";
 import { recordSelection, SelectionValidationError } from "../../lib/traceability/selection";
@@ -190,22 +193,6 @@ const booleanoDeTresEstados = (value: FormDataEntryValue | null): boolean | null
   if (texto === "no") return false;
   return null;
 };
-/**
- * El índice más alto que trae el formulario para un prefijo dado.
- *
- * Se deriva de lo enviado en vez de fijar un tope: cualquier tope es una
- * suposición sobre cuántas filas cabe que use alguien, y equivocarse descarta
- * datos en silencio. Devuelve -1 si no hay ninguna.
- */
-function maxIndiceDeFilas(formData: FormData, prefijo: string): number {
-  let max = -1;
-  for (const clave of formData.keys()) {
-    if (!clave.startsWith(`${prefijo}.`)) continue;
-    const n = Number(clave.slice(prefijo.length + 1));
-    if (Number.isInteger(n) && n > max) max = n;
-  }
-  return max;
-}
 
 /**
  * Un número que el formulario **debe** traer. Un campo ausente o ilegible falla
@@ -1543,34 +1530,6 @@ function camposDeCalicata(formData: FormData) {
     notes: emptyToNull(formData.get("notes")),
     dataQuality: emptyToNull(formData.get("dataQuality")) as never,
   };
-}
-
-/**
- * Los horizontes que trae el formulario.
- *
- * Una fila entera vacía se descarta —el formulario ofrece más de las que se
- * suelen usar— pero una fila con CUALQUIER dato entra, aunque le falte la
- * profundidad: un horizonte que se vio y no se midió sigue siendo un horizonte,
- * y el ordinal existe justamente para no depender de `topCm`.
- */
-function horizontesDelFormulario(formData: FormData): SoilHorizonInput[] {
-  const filas: SoilHorizonInput[] = [];
-  const total = maxIndiceDeFilas(formData, "horizonOrdinal");
-  for (let i = 0; i <= total; i++) {
-    const campos = {
-      topCm: emptyToNullNumber(formData.get(`horizonTopCm.${i}`)),
-      bottomCm: emptyToNullNumber(formData.get(`horizonBottomCm.${i}`)),
-      designation: emptyToNull(formData.get(`horizonDesignation.${i}`)),
-      colour: emptyToNull(formData.get(`horizonColour.${i}`)),
-      structure: emptyToNull(formData.get(`horizonStructure.${i}`)),
-      textureByFeel: emptyToNull(formData.get(`horizonTexture.${i}`)),
-      notes: emptyToNull(formData.get(`horizonNotes.${i}`)),
-    };
-    const vacia = Object.values(campos).every((v) => v == null);
-    if (vacia) continue;
-    filas.push({ ordinal: filas.length + 1, ...campos });
-  }
-  return filas;
 }
 
 export async function createSoilProfileAction(
