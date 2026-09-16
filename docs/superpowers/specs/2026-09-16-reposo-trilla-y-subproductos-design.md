@@ -136,6 +136,39 @@ No introduce un estado «en reposo» que cierre el lote. El lote sigue vivo, con
 muestras saliendo. El reposo es **una edad que se calcula**, no una fase que se
 declara — y por eso no hay tabla nueva para él.
 
+### A.4 La liberación SÍ es un estado — y por qué eso no contradice a A.3
+
+**Decisión de Daniel, 2026-09-16: un estado del lote, no una firma de persona.**
+
+Leído deprisa, esto choca con A.3, que acaba de decir que el reposo no se declara.
+No chocan porque **no hablan del mismo hecho**:
+
+- La **edad de reposo** es una medición: sale de `DryingRun.endedAt` y del reloj. Nadie
+  la declara, nadie la puede falsear, y sigue calculándose después de la liberación.
+- La **liberación** es una decisión: alguien mira el lote y dice «éste puede salir».
+  Eso no se puede derivar de ninguna fecha, porque depende del arreglo con el
+  comprador — la misma razón por la que §A.2 decidió avisar y no bloquear.
+
+Una medición no necesita estado; una decisión no se puede tener sin él. Por eso el
+lote gana **un** campo, y no una fase.
+
+**La liberación no apaga el aviso.** Un lote liberado a los 41 días se enseña como
+liberado **y** como vendido con 41 días de reposo. Si el estado borrara la
+advertencia, liberar se convertiría en la forma de callar al sistema — que es
+exactamente el esquivo que §A.2 existe para evitar.
+
+**Quién puede liberar: un permiso propio, `lot:release`.** No vale `lot:manage`, y
+esto sí está medido: **`Farm Operator` ya tiene `lot:manage`** (`catalog.ts:363`), o
+sea que colgar de ahí la liberación haría que cualquier operario de campo autorizara
+una decisión comercial. El molde ya existe en la casa: `lot:override_balance` está
+descrito como algo que «debería ser raro» y el perfil de operario lo excluye a
+propósito. `lot:release` sigue ese camino — lo tiene `Farm Manager`, no `Farm
+Operator`.
+
+*Esto último es una resolución mía, no de Daniel: él eligió «estado» y no dijo quién
+lo cambia. Si se equivoca, el coste es una migración de catálogo y un ajuste de
+perfil — barato y reversible, que es por qué se decidió en vez de preguntar otra vez.*
+
 ---
 
 ## 5. Sección B — La trilla
@@ -180,7 +213,15 @@ no uno obligatorio.
 
 ## 6. Sección C — El destino de los subproductos
 
-Sigue el molde de `BiocharBatch`, que ya resolvió esto una vez.
+Sigue el molde de `BiocharBatch` — **pero sólo la mitad que existe.** Medido el
+2026-09-16 sobre `origin/main`: `BiocharBatch` está en el esquema (línea 5511), y su
+propio comentario dice que dosis, frecuencia y parcela «viven en la aplicación de
+enmienda»… que **no existe**. Ninguno de los 149 modelos aplica una enmienda a una
+parcela; control positivo al lado, la misma búsqueda sí encuentra los 149.
+
+O sea: sabemos modelar **el lote de subproducto**; la vuelta al suelo está sin
+modelar y el esquema la da por escrita. Esta sección copia la mitad resuelta y **no**
+intenta tapar la otra.
 
 **`ByproductBatch`** — un lote de subproducto con su tipo (`CASCARILLA` | `PULPA`), su
 masa, la transformación que lo originó, dónde se produjo y su destino
@@ -193,18 +234,37 @@ modelo— y el otro no.
 **Y cierra `F1-002` de paso**: el despulpado también producirá su lote, por el mismo
 camino, sin un segundo mecanismo.
 
+### C.1 Hasta dónde llega, y qué queda deliberadamente fuera
+
+**Decisión de Daniel, 2026-09-16: se registra que salió a compost, y ahí termina.**
+
+El alcance es el `ByproductBatch` con su masa y su destino. **Fuera, y no por olvido:**
+
+- un lote de compost con código propio, que diría cuánto compost hay y de dónde salió;
+- la aplicación de ese compost a una parcela, que cerraría el círculo con el cafetal.
+
+Las dos se descartaron ahora porque el balance de la trilla se cierra sin ellas, y
+porque la segunda arrastra el agujero del biochar: haría falta **un** modelo de
+aplicación de enmienda que sirva a los dos, y ése es su propio trabajo, no un
+apéndice de la trilla.
+
+**Lo que esto deja anotado para quien venga:** el día que se escriba la aplicación de
+enmienda, tiene que servir a biochar y a compost a la vez. Escribir una sólo para la
+cascarilla repetiría el error que este spec acaba de encontrar.
+
 ---
 
 ## 7. Decisiones abiertas — de Daniel, no mías
 
-1. **La liberación autorizada: ¿firma o estado?** Q17 dice «authorized release» y no
-   dice quién autoriza ni contra qué. Un estado del lote y una firma de una persona
-   son cosas distintas y la segunda necesita saber **quién puede firmar**.
+1. ~~**La liberación autorizada: ¿firma o estado?**~~ — **cerrada el 2026-09-16: un
+   estado del lote** (§A.4), con permiso propio `lot:release` porque `Farm Operator`
+   ya tiene `lot:manage`.
 2. ~~¿La venta temprana se bloquea o sólo se avisa?~~ — **cerrada el 2026-09-16:
-   sólo avisa** (§4.2).
+   sólo avisa** (§A.2).
 3. **Los umbrales**, que son `[PROVISIONAL]` mientras `P-F` siga abierta.
-4. **Si la cascarilla compostada vuelve a la finca como enmienda**, y entonces cierra
-   el círculo con las parcelas — o si sólo se registra que salió a compost.
+4. ~~**Si la cascarilla compostada vuelve a la finca como enmienda**~~ — **cerrada el
+   2026-09-16: sólo se registra que salió a compost** (§C.1). El lote de compost y la
+   aplicación a parcela quedan fuera, y con una nota de por qué.
 
 ---
 
