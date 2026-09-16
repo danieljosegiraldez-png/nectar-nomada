@@ -3337,6 +3337,12 @@ model Measurement {
   /// Adivinar a qué «refractómetro» se refería alguien sería inventar un hecho.
   instrumentId String?    @map("instrument_id") @db.Uuid
   instrument   Equipment? @relation("MeasurementInstrument", fields: [instrumentId], references: [id])
+  /// EN QUÉ MODO estaba el aparato. `instrumentId` dice cuál midió; esto dice
+  /// cómo estaba puesto, que es lo que distingue una lectura buena de un número
+  /// plausible y equivocado.
+  instrumentModeId String?                    @map("instrument_mode_id") @db.Uuid
+  instrumentMode   InstrumentMeasurementMode? @relation("MeasurementMode", fields: [instrumentModeId], references: [id])
+
   reviewFlags  MeasurementReviewFlag[]
 
   @@map("measurement")
@@ -4624,6 +4630,7 @@ model Equipment {
 
   transfers         EquipmentTransfer[]
   conditionReports  EquipmentConditionReport[]
+  modes InstrumentMeasurementMode[] @relation("EquipmentModes")
   checkRequirements InstrumentCheckRequirement[]
   checks            InstrumentCheck[]
 
@@ -4740,6 +4747,38 @@ model EquipmentConditionReport {
 //      y la pantalla lo dice. Es la misma decisión §7.1 —degradar, nunca
 //      bloquear— aplicada al eje del tiempo: bloquear se esquiva en el patio y
 //      entonces el sistema sabe MENOS.
+
+/// Hermana de `InstrumentCheckRequirement`, con la misma forma: por instrumento,
+/// qué modos tiene y cómo los llama EL APARATO. El nombre es del fabricante y no
+/// una paráfrasis nuestra: si la app dice «usa el ajuste de pergamino» y el
+/// aparato no lo llama así, el recordatorio estorba en vez de ayudar.
+model InstrumentMeasurementMode {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  equipmentId String    @map("equipment_id") @db.Uuid
+  equipment   Equipment @relation("EquipmentModes", fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  label         String
+  materialState MaterialState @map("material_state")
+  rangeMin      Decimal?      @map("range_min") @db.Decimal(12, 4)
+  rangeMax      Decimal?      @map("range_max") @db.Decimal(12, 4)
+  /// Desfase que una persona aplicó a esta escala. Cambia el número que el
+  /// aparato muestra, así que es procedencia: dos aparatos con desfases
+  /// distintos dan lecturas distintas del mismo grano.
+  calibrationOffset Decimal? @map("calibration_offset") @db.Decimal(5, 2)
+  calibrationMode   String?  @map("calibration_mode")
+
+  displayOrder Int       @default(0) @map("display_order")
+  retiredAt    DateTime? @map("retired_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  createdBy    String?   @map("created_by") @db.Uuid
+
+  measurements Measurement[] @relation("MeasurementMode")
+
+  @@unique([equipmentId, label])
+  @@index([equipmentId])
+  @@map("instrument_measurement_mode")
+  @@schema("core")
+}
 
 /// Contra qué hay que contrastar este instrumento. Una fila por patrón.
 ///
@@ -4868,8 +4907,12 @@ model MeasurementReviewFlag {
   measurementId String      @map("measurement_id") @db.Uuid
   measurement   Measurement @relation(fields: [measurementId], references: [id], onDelete: Cascade)
 
-  raisedByCheckId String          @map("raised_by_check_id") @db.Uuid
-  raisedByCheck   InstrumentCheck @relation("ReviewFlagRaisedBy", fields: [raisedByCheckId], references: [id], onDelete: Cascade)
+  /// Anulable desde 2026-09-15: una marca puede venir de una verificación de
+  /// instrumento O de un desajuste entre el modo y el material, que no tiene
+  /// check que la levante. El motivo de abajo pasa a decir cuál es.
+  raisedByCheckId String?          @map("raised_by_check_id") @db.Uuid
+  raisedByCheck   InstrumentCheck? @relation("ReviewFlagRaisedBy", fields: [raisedByCheckId], references: [id], onDelete: Cascade)
+  reason          MeasurementReviewReason @default(instrument_check_failed)
 
   raisedAt DateTime @default(now()) @map("raised_at")
 
@@ -4886,6 +4929,15 @@ model MeasurementReviewFlag {
   @@unique([measurementId, raisedByCheckId])
   @@index([measurementId])
   @@map("measurement_review_flag")
+  @@schema("core")
+}
+
+enum MeasurementReviewReason {
+  instrument_check_failed
+  instrument_check_overdue
+  mode_material_mismatch
+  material_stage_mismatch
+
   @@schema("core")
 }
 

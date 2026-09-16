@@ -392,6 +392,10 @@
     {
       "archivo": "lib/traceability/samplingEvents.ts",
       "razon": "Tarea 4 del plan de secado — crea el SamplingEvent, el acto de ir a una cama y sacar muestras. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Resuelve permiso ANTES de escribir, por tres caminos según lo que traiga la entrada —la corrida de secado a través del lote de su transformación, la cama, o ámbito de plataforma cuando no hay ninguno de los dos— y escribe su AuditEvent en la MISMA transacción que el evento, lo que su propia prueba «revierte el evento si falla la auditoría» comprueba."
+    },
+    {
+      "archivo": "lib/equipos/modosDeInstrumento.ts",
+      "razon": "Tarea 5 de secado: declara modos por instrumento con el permiso manage resuelto por puedeGestionarEquipo y registra modo y AuditEvent en la misma transacción. El dominio puro vive separado en modos.ts."
     }
   ],
   "reciben_transaccion": [
