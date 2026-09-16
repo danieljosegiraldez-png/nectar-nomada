@@ -81,7 +81,7 @@ tiene hoy dónde ir.
 | Balance de masas | `lib/traceability/balance.ts`, 533 líneas, con merma declarada |
 | `QuantityEvent` | el libro mayor; la muestra ya descuenta masa en la misma transacción |
 | Perfiles de beneficio | `PERFIL_POR_GRADO` con `WASHED_STANDARD` y `NATURAL` — **el reposo entra por esta puerta** |
-| `BiocharBatch` | **medio precedente**: el LOTE de subproducto está resuelto —código propio, ubicación de producción, trazabilidad—; su aplicación a una parcela **no existe**, y su propio comentario la da por escrita (§6) |
+| `BiocharBatch` | **el precedente, y está ENTERO**: el lote de subproducto y su aplicación a una ubicación, que vive en `TreatmentBatch` (esquema:7307) y `applyAmendment()` (`lib/research/amendments.ts:217`), con pruebas |
 | `DryingRun.endedAt` | de donde arranca el reloj del reposo |
 
 **Ausentes, medidos:** `CompostBatch` 0 · `CascaraBatch` 0 · trilla 0 coincidencias ·
@@ -213,15 +213,26 @@ no uno obligatorio.
 
 ## 6. Sección C — El destino de los subproductos
 
-Sigue el molde de `BiocharBatch` — **pero sólo la mitad que existe.** Medido el
-2026-09-16 sobre `origin/main`: `BiocharBatch` está en el esquema (línea 5511), y su
-propio comentario dice que dosis, frecuencia y parcela «viven en la aplicación de
-enmienda»… que **no existe**. Ninguno de los 149 modelos aplica una enmienda a una
-parcela; control positivo al lado, la misma búsqueda sí encuentra los 149.
+Sigue el molde de `BiocharBatch`, que ya resolvió esto **entero**.
 
-O sea: sabemos modelar **el lote de subproducto**; la vuelta al suelo está sin
-modelar y el esquema la da por escrita. Esta sección copia la mitad resuelta y **no**
-intenta tapar la otra.
+> **CORRECCIÓN del 2026-09-16, y es importante porque cambia una premisa.** Este
+> documento afirmó dos veces —y yo se lo dije a Daniel en voz alta— que «la
+> aplicación de enmienda no existe» y que «ninguno de los 149 modelos aplica una
+> enmienda a una parcela». **Era falso.** Existe `TreatmentBatch` (esquema:7307), con
+> `locationId` y `biocharBatchId`, y `applyAmendment()` en
+> `lib/research/amendments.ts:217` la crea, comprobando el ámbito RBAC de la
+> ubicación y con pruebas en `tests/research/amendments.test.ts`.
+>
+> **Por qué no lo vi:** busqué modelos cuyo NOMBRE casara con
+> `Amendment|Enmienda|SoilApplication` y el modelo real se llama `TreatmentBatch`. Mi
+> «control positivo» fue contar los 149 modelos del archivo, que sólo demuestra que
+> el archivo tiene modelos — no que mi búsqueda pudiera encontrar el concepto. Lo
+> encontró Codex auditando este plan.
+>
+> **Lo que esto le hace a §C.1:** la decisión de parar en «salió a compost» se tomó
+> con la premisa de que cerrar el círculo era caro porque faltaba el modelo entero.
+> No falta. La decisión sigue siendo de Daniel, pero se tomó sobre un hecho falso y
+> él lo sabe desde que se escribió esta corrección.
 
 **`ByproductBatch`** — un lote de subproducto con su tipo (`CASCARILLA` | `PULPA`), su
 masa, la transformación que lo originó, dónde se produjo y su destino
@@ -243,14 +254,19 @@ El alcance es el `ByproductBatch` con su masa y su destino. **Fuera, y no por ol
 - un lote de compost con código propio, que diría cuánto compost hay y de dónde salió;
 - la aplicación de ese compost a una parcela, que cerraría el círculo con el cafetal.
 
-Las dos se descartaron ahora porque el balance de la trilla se cierra sin ellas, y
-porque la segunda arrastra el agujero del biochar: haría falta **un** modelo de
-aplicación de enmienda que sirva a los dos, y ése es su propio trabajo, no un
-apéndice de la trilla.
+Se descartaron porque **el balance de la trilla cierra sin ellas**: la cascarilla sale
+del lote con su masa declarada, y a dónde va después no cambia ninguna cuenta. Ésa es
+la razón que se sostiene.
 
-**Lo que esto deja anotado para quien venga:** el día que se escriba la aplicación de
-enmienda, tiene que servir a biochar y a compost a la vez. Escribir una sólo para la
-cascarilla repetiría el error que este spec acaba de encontrar.
+**La otra razón que este documento daba era falsa y se retira:** decía que cerrar el
+círculo obligaba a escribir el modelo de aplicación de enmienda desde cero. Existe
+—`TreatmentBatch` y `applyAmendment()`, ver el recuadro de arriba—, así que conectar
+un lote de compost costaría bastante menos de lo que dije. **Daniel decidió con esa
+información equivocada**; la decisión sigue en pie hasta que él diga otra cosa.
+
+**Lo que queda anotado para quien venga:** `applyAmendment()` hoy sólo acepta un lote
+de biochar. El día que el compost tenga que aplicarse, lo que hace falta es ensanchar
+esa función, no escribir una paralela.
 
 ---
 

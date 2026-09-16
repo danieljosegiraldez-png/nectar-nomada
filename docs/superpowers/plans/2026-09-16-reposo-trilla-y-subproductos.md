@@ -48,7 +48,7 @@ manda el spec.
 | Archivo | Responsabilidad |
 |---|---|
 | `prisma/schema.prisma` | `DryingOutcome`, `LotTransformationType.hulling`, columnas de custodia, `Lot.releasedAt/releasedBy`, `ByproductBatch` |
-| `lib/beneficio/perfiles.ts` | `restingProfile` dentro de `ProtocolProfile` |
+| `lib/beneficio/perfiles.ts` | `reposo` dentro de `ProtocolProfile` — **ése es el nombre**, no `restingProfile` |
 | `lib/beneficio/reposo.ts` | **nuevo** — la edad de reposo y sus dos compuertas, puro |
 | `lib/beneficio/desdeElLote.ts` | la fase `reposo` en `veredictoDelLote` |
 | `lib/traceability/balance.ts` | `hulling` en `CONSERVING_TYPES` |
@@ -398,7 +398,7 @@ describe("liberar un lote", () => {
     // una decisión comercial. Control positivo abajo: el mismo operario SÍ
     // puede hacer una operación de lot:manage, para que este «no puede» no sea
     // el vacío de un operario sin permisos.
-    await expect(liberarLote(operario, lote.id)).rejects.toThrow(/permiso/i);
+    await expect(liberarLote(operario, lote.id)).rejects.toThrow(/no_lot_access|no_release_access/);
     await expect(registrarAlgoDeLotManage(operario, lote.id)).resolves.toBeTruthy();
   });
 
@@ -594,11 +594,11 @@ it("el subproducto NO es merma: no toca declaredLossQuantity", async () => {
 - [ ] **Paso 2: verla fallar. Paso 3: el modelo**
 
 ```prisma
-/// Un lote de subproducto del beneficio. Copia la mitad RESUELTA de
-/// `BiocharBatch` —código, ubicación de producción, trazabilidad— y **no**
-/// intenta la mitad que no existe: la aplicación a una parcela no está
-/// modelada en ningún sitio, y su propio comentario la da por escrita (§C.1).
-/// El día que se escriba, tiene que servir al biochar y a esto a la vez.
+/// Un lote de subproducto del beneficio. Copia el molde de `BiocharBatch`
+/// —código, ubicación de producción, trazabilidad—. **No** crea la aplicación
+/// a una ubicación: ésa ya existe (`TreatmentBatch` + `applyAmendment()`), y
+/// hoy sólo acepta biochar. Conectar el compost es ensanchar esa función, no
+/// escribir una paralela — y queda FUERA de alcance por §C.1.
 model ByproductBatch {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
@@ -681,7 +681,8 @@ it("si falla la creación del subproducto, la trilla ENTERA se revierte", async 
   // Atomicidad. Una trilla a medias dejaría el lote descontado sin el verde
   // creado: material desaparecido del libro mayor.
   await expect(registrarTrillaConSubproductoInvalido()).rejects.toThrow();
-  const balance = await computeLotBalance(lote.id);
+  // La firma real es (client, lotId) — balance.ts:199. Sin el cliente no compila.
+  const balance = await computeLotBalance(prisma, lote.id);
   expect(balance.quantity.toNumber()).toBe(100);
 });
 
@@ -697,7 +698,7 @@ it("sin permiso lot:manage NO se puede trillar, y el control positivo al lado", 
     masaVerdeKg: 80, masaCascarillaKg: 18, mermaKg: 2,
     performedAtLocationId: lasNubes.id,
   };
-  await expect(registrarTrilla({ ...entrada, actor: ajeno })).rejects.toThrow(/permiso/i);
+  await expect(registrarTrilla({ ...entrada, actor: ajeno })).rejects.toThrow(/no_lot_access|no_release_access/);
   // Control positivo: el mismo lote, la misma entrada, un actor CON permiso.
   // Sin esta línea, un `rejects` que saltara por cualquier otra razón —lote
   // inexistente, masa mal formada— se leería como «el permiso funciona».
