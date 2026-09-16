@@ -37,6 +37,7 @@
     "data:remove-demo-places": "bash scripts/remove-demo-places.sh",
     "data:remove-orphan-roasts": "bash scripts/remove-orphan-roasts.sh",
     "people:set-email": "tsx scripts/set-person-email.ts",
+    "data:bob-farm-manager": "tsx scripts/p1-bob-farm-manager.ts",
     "people:add-evaluator": "tsx scripts/add-evaluator.ts",
     "sensory:create-protocol": "tsx scripts/create-sensory-protocol.ts",
     "sensory:archive-protocol": "tsx scripts/create-sensory-protocol.ts --archivar",

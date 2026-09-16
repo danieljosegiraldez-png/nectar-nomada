@@ -97,8 +97,11 @@ describe("el inventario del router", () => {
     // ese día el equipo era texto libre en cuatro campos y no había dónde decir
     // que un refractómetro se había puesto contra el agua.
     // 73 → 77 el 2026-09-16: inspección nueva y lista/alta/detalle de instalaciones.
-    // Medido con scripts/inventario-de-rutas.mjs: 67 páginas y 10 handlers.
-    expect(salida).toContain("77 entradas");
+    // 77 → 78 el 2026-09-16: /admin/users/[assignmentId]/permisos, la pantalla que
+    // permite quitar y añadir permisos sueltos a UNA asignación sin tocar el perfil
+    // ni entrar por SQL. Hasta ese día un ajuste así obligaba a crear un perfil nuevo.
+    // Medido con scripts/inventario-de-rutas.mjs: 68 páginas y 10 handlers.
+    expect(salida).toContain("78 entradas");
     expect(codigo, salida).toBe(0);
   });
 
