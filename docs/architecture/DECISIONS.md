@@ -10166,3 +10166,54 @@ visita**, no un modelo de costos: `LabourEntry` sigue sin llevar ninguno, el mat
 consume no tiene movimiento, y "cuanto cuesta sostener Toabre" sigue sin respuesta. Esta
 columna contesta una pregunta del protocolo, no esa. Confundirlas seria dar por cerrado un
 hueco que sigue abierto.
+
+## ADR-143 -- Un "sin sitio" del mapa era una afirmacion que nada verificaba, y una de las mias era falsa
+
+**Contexto.** ADR-140 declaro el mapa de las 44 preguntas del protocolo y lo puso bajo un
+guardia que comprueba que **ningun destino declarado sea inventado** -- el modelo y el campo
+tienen que existir en el esquema. Con eso di por hecho que el mapa no podia mentir.
+
+**Podia, en la otra direccion.** Fui a construir las que el mapa daba por sin sitio y **la
+primera que mire ya tenia columna**: `ColonyEvent.treatmentEfficacyNote` existe desde A9.4
+**y el cierre de tratamiento la escribe** (`completarCierreDeTratamiento`, con su `tocaNota`).
+O sea que `efficacy_note` nunca estuvo sin sitio, y **la cuenta de huecos que publique era mas
+grande que la real**.
+
+El guardia no podia cazarlo porque **un `sin_sitio` no lo contradecia nada**: era la mitad no
+falsable del instrumento. La mitad que si vigilaba --"los destinos existen"-- es la que protege
+contra declarar un campo que no hay; no hay nada simetrico que proteja contra declarar que no
+hay campo cuando si.
+
+**Decision -- el guardia mira tambien al reves.** Para cada `sin_sitio` comprueba que **ningun
+campo de los modelos de esa actividad se parezca a la clave**, comparando en minusculas y por
+inclusion: `efficacy_note` -> `efficacynote`, que esta dentro de `treatmentEfficacyNote`.
+
+Para poder mirar, el mapa declara ahora **a que modelos escribe cada actividad**
+(`MODELOS_POR_ACTIVIDAD`). Sin saber donde buscar, "no tiene sitio" no se puede contradecir.
+
+**Es una heuristica sobre nombres y el codigo lo dice.** Puede dar una falsa alarma, y se
+resuelve **declarando el destino** -- que es lo que habria que hacer igualmente. Lo que no
+puede es dejar pasar el caso que ocurrio: su **control positivo** exige que
+`efficacy_note` contra `treatmentEfficacyNote` salte, porque sin el, el `[]` lo cumpliria igual
+una comprobacion que no mira nada.
+
+**Y un flip-test encontro que la declaracion nueva no era portante.** Vaciando
+`MODELOS_POR_ACTIVIDAD.inspection` las nueve pruebas seguian en verde: hoy ningun `sin_sitio`
+de esa actividad tiene un campo parecido, asi que la declaracion **no la ejercitaba nada**. Se
+exige aparte que cada actividad del protocolo declare al menos un modelo y que esos modelos
+existan. Es la tercera vez esta semana que un flip-test destapa una linea escrita con su
+justificacion al lado y sin nada que la ejerza.
+
+**La cuenta, medida sobre el mapa y no de memoria: 38 con campo, 1 en tabla, CINCO sin sitio.**
+`weather_observed`, `site_condition`, `hives_present_count` --las tres de patio, opcionales-- y
+`assessment`, `moisture_pct` --las dos de casa.
+
+**Lo que esto le hace a las cifras que publique.** Las tres de ayer --ADR-140 "diez",
+ADR-141 "nueve", ADR-142 "seis"-- se midieron todas con el instrumento que no comprobaba los
+`sin_sitio`, asi que **todas iban una de mas**. No se reescriben: quedan con esta nota, porque
+lo que importa no es el numero de ayer sino que hoy se pueda contradecir.
+
+**Lo que NO entra.** Construir las cinco. `moisture_pct` tiene ademas una pregunta abierta que
+no es de forma sino de diseno: `moisture` **ya es una variable canonica de medicion** en este
+esquema, asi que la humedad de la miel podria ser un `Measurement` en vez de una columna. Esa
+eleccion cambia como se consulta la serie y merece decidirse aparte, no de paso.

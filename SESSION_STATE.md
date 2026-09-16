@@ -38,6 +38,35 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-16 · Un «sin sitio» del mapa no lo verificaba nada, y una de las mías era falsa
+
+ADR-143. Fui a construir las que el mapa daba por sin sitio y **la primera que miré ya tenía
+columna**: `ColonyEvent.treatmentEfficacyNote` existe desde A9.4 **y el cierre de tratamiento la
+escribe**. `efficacy_note` nunca estuvo sin sitio, y la cuenta de huecos que publiqué era **más
+grande que la real**.
+
+**El guardia no podía cazarlo**, y ésa es la parte que importa: comprobaba que los destinos
+declarados existieran, y con eso parecía que el mapa no podía mentir. Un `sin_sitio` era la
+mitad no falsable del instrumento.
+
+Ahora mira al revés: para cada `sin_sitio` comprueba que ningún campo de los modelos de esa
+actividad se parezca a la clave, y para eso el mapa declara **a qué modelos escribe cada
+actividad**. Es una heurística sobre nombres y lo dice; lleva control positivo sobre el caso
+real que se me escapó.
+
+**Y un flip-test encontró que la declaración nueva no era portante:** vaciándola, las nueve
+seguían en verde. Se exige aparte que cada actividad declare al menos un modelo y que existan.
+Tercera vez esta semana que un flip-test destapa una línea escrita con su justificación al lado
+y sin nada que la ejerza.
+
+**La cuenta real, medida: 38 con campo, 1 en tabla, CINCO sin sitio** — las tres de patio
+(clima, condición del sitio, cajas presentes) y dos de casa (valoración, humedad). Las cifras
+que publiqué ayer iban todas **una de más**, porque se midieron con el instrumento incompleto.
+
+**Pendiente nombrado:** construir las cinco. Y `moisture_pct` trae una pregunta de diseño:
+`moisture` **ya es variable canónica de medición** en este esquema, así que la humedad de la
+miel podría ser un `Measurement` en vez de una columna. Eso se decide aparte, no de paso.
+
 ### 2026-09-15 · Las tres preguntas que convierten una visita en informe técnico
 
 ADR-142: viáticos, causa probable y recomendación. Son de las **seis** de casa (`stage: close`)
@@ -61,33 +90,6 @@ El mapa de ADR-140 baja a **seis** huecos.
 **Pendiente nombrado, y es importante no confundirlo:** `travelCostUsd` es el viático de UNA
 visita, no un modelo de costos. `LabourEntry` sigue sin llevar ninguno, el material consumido no
 tiene movimiento, y «cuánto cuesta sostener Toabré» sigue sin respuesta.
-
-### 2026-09-15 · El propósito de la visita, la única obligatoria de patio sin sitio
-
-ADR-141. De las diez preguntas sin sitio que midió ADR-140, **exactamente una** era obligatoria
-y de patio: `purpose`. El protocolo obliga a declarar a qué se fue, con el guante puesto, y no
-había columna.
-
-**El vocabulario ya estaba:** los seis valores salen literalmente del JSON del dueño, así que
-esta rebanada no preguntó nada.
-
-**Un arreglo y no una columna** —una ida revisa, alimenta y trata, y elegir uno haría que el
-informe mintiera—, con el precedente exacto de `Inspection.broodStages`. **El vacío es «sin
-registrar», no «sin propósito»**: la migración no rellena, no lleva `DEFAULT` con `NOT NULL`, y
-el campo es opcional en la entrada para no romper la cola offline. La **frontera** sí exige
-cuando el campo llega.
-
-**Tres sitios dicen el vocabulario** —JSON, enum de Postgres, módulo puro para el formulario— y
-un guardia comprueba que coincidan: un propósito añadido al JSON y no al enum **no se puede
-guardar** y el formulario ni lo ofrece.
-
-**Y el mapa de ADR-140 se cierra sobre sí mismo:** la prueba que contaba las obligatorias de
-patio sin sitio pasa de `["purpose"]` a `[]`. Que esté vacía es el resultado del trabajo, no la
-falta de comprobación. Primera vez en el módulo que una medición de ayer verifica lo de hoy.
-
-**Pendiente nombrado:** las otras nueve. **Seis** son `stage: close` y tres de ellas —viáticos,
-causa probable, recomendación— son las que convierten una visita en informe técnico; la de
-viáticos es el hueco de costos, que no tiene modelo en todo el esquema.
 
 ## 3. Bloqueado, y en qué
 
