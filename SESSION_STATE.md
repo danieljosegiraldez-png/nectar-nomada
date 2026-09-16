@@ -38,6 +38,32 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-16 · Las fuentes de Cerro Azul entran, y faltaba una que otro documento mandaba leer
+
+ADR-146. Cuatro documentos que vivían **sólo en `~/Downloads`**, sin versionar: las dos versiones
+de la minuta del 18 de julio, la minuta ejecutiva del 6 de agosto, y el marco de investigación
+suelo-ambiente-taza. Entran como `FUENTE_*` en `docs/architecture/`, verbatim, con cabecera de
+procedencia y un índice que mapea qué hecho vive en cuál.
+
+**Lo que se perdía, medido:** `Noria mix`, `Inversiones Melissa`, `lejía` y `cal agrícola` salían
+**cero veces** en todo el árbol (control positivo: `Finca Rosina` en 49 archivos, `biochar` en 51).
+La receta de la noria que le pedí a Daniel llevaba semanas en un documento que ya me había dado.
+
+**Y el hallazgo:** `45_S1_SUELO_AMBIENTE_TAZA.md` dice de sí mismo «no lo sustituye ni lo resume» y
+ordena «**leer primero** el propio marco». **Ese marco no estaba.** Control de identidad: `45_S1`
+cita 13.345 palabras y la extracción da 13.345 exactas.
+
+**Vocabulario que estas fuentes fijan:** el **retort** es el horno; la **noria** es la piscina donde
+el carbón se vuelve biochar **activo**. Dos pasos separados en el tiempo — «ya se cuenta con carbón
+seco, pero falta que Bob prepare la mezcla de la noria».
+
+**Cuatro conflictos señalados y NO resueltos** (§4 del índice): los años de cosecha discrepan entre
+las dos versiones de la misma minuta (2029 vs 2031); las **dos norias** que Daniel menciona no están
+en ningún documento —7 ocurrencias de «noria», ninguna las nombra—; `BiocharBatch` mete retort y
+noria en la misma fila; y la aplicación al cultivo no existe.
+
+**No se implementó nada.** Es entrada de planificación aceptada.
+
 ### 2026-09-16 · El meliponario es un tipo de sitio, y diez comparaciones de cadena pasan a ser una
 
 ADR-145. Las abejas sin aguijón entran como **`meliponary`, hermano de `apiary_site`** — no como
@@ -59,6 +85,7 @@ pieza que no depende de los nombres, y por eso fue primero.
 
 **El tercer flip-test hubo que rehacerlo**: la primera versión no compilaba, y una mutación que no
 compila se lee como un guardia que funciona.
+
 ### 2026-09-16 · Pantallas de inspección e instalaciones, y el ámbito de ubicación baja por el árbol
 
 Inspección manual con dos muestras declaradas como zonas o réplicas, usando
@@ -76,35 +103,6 @@ guardia de deriva de migraciones, que **sólo mide con `SHADOW_DATABASE_URL`**,
 encontró un índice que la Tarea 2 creó en la migración sin declararlo en el
 esquema.
 Detalle y comprobaciones: `.superpowers/sdd/2026-09-15-muestra-y-topologia-de-secado/tarea-8-9-report.md`.
-
-### 2026-09-16 · Un «sin sitio» del mapa no lo verificaba nada, y una de las mías era falsa
-
-ADR-143. Fui a construir las que el mapa daba por sin sitio y **la primera que miré ya tenía
-columna**: `ColonyEvent.treatmentEfficacyNote` existe desde A9.4 **y el cierre de tratamiento la
-escribe**. `efficacy_note` nunca estuvo sin sitio, y la cuenta de huecos que publiqué era **más
-grande que la real**.
-
-**El guardia no podía cazarlo**, y ésa es la parte que importa: comprobaba que los destinos
-declarados existieran, y con eso parecía que el mapa no podía mentir. Un `sin_sitio` era la
-mitad no falsable del instrumento.
-
-Ahora mira al revés: para cada `sin_sitio` comprueba que ningún campo de los modelos de esa
-actividad se parezca a la clave, y para eso el mapa declara **a qué modelos escribe cada
-actividad**. Es una heurística sobre nombres y lo dice; lleva control positivo sobre el caso
-real que se me escapó.
-
-**Y un flip-test encontró que la declaración nueva no era portante:** vaciándola, las nueve
-seguían en verde. Se exige aparte que cada actividad declare al menos un modelo y que existan.
-Tercera vez esta semana que un flip-test destapa una línea escrita con su justificación al lado
-y sin nada que la ejerza.
-
-**La cuenta real, medida: 38 con campo, 1 en tabla, CINCO sin sitio** — las tres de patio
-(clima, condición del sitio, cajas presentes) y dos de casa (valoración, humedad). Las cifras
-que publiqué ayer iban todas **una de más**, porque se midieron con el instrumento incompleto.
-
-**Pendiente nombrado:** construir las cinco. Y `moisture_pct` trae una pregunta de diseño:
-`moisture` **ya es variable canónica de medición** en este esquema, así que la humedad de la
-miel podría ser un `Measurement` en vez de una columna. Eso se decide aparte, no de paso.
 
 ## 3. Bloqueado, y en qué
 

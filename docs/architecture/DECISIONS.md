@@ -10313,3 +10313,67 @@ nadie vuelve a escribir `=== "apiary_site"` fuera del predicado. Su control posi
 **Cinco flip-tests, los cinco compilando.** El tercero --fijar los destinos a `"apiary_site"` en
 vez del tipo de origen-- hubo que **rehacerlo**: la primera version usaba un simbolo sin
 importar, no compilaba, y una mutacion que no compila se lee como un guardia que funciona.
+
+## ADR-146 -- Las fuentes de Cerro Azul entran al repositorio, y lo que faltaba era una fuente que otro documento mandaba leer
+
+**Contexto.** El dueno pidio que la investigacion preparada sobre Cerro Azul no se perdiera:
+"esto no quiero que se pierda que fue mucha investigacion y preparacion para que tengas, y
+armes tu support documents que mas adelante esto servira mas alla del build como data de
+referencia".
+
+**Lo que se midio antes de mover nada.** Cuatro documentos vivian **solo en `~/Downloads`**:
+las dos versiones de la minuta del 18 de julio de 2026, la minuta ejecutiva del 6 de agosto, y
+el marco de investigacion suelo-ambiente-taza. Las cadenas **`Noria mix`**, **`Inversiones
+Melissa`**, **`lejia`** y **`cal agricola`** salian **cero veces** en todo el arbol, con control
+positivo --`Finca Rosina` en 49 archivos y `biochar` en 51, asi que la busqueda miraba bien--.
+
+**Y habia un hueco de referencia, que es el hallazgo.**
+`docs/implementation/45_S1_SUELO_AMBIENTE_TAZA.md` dice de si mismo "No lo sustituye ni lo
+resume" y ordena "**Leer primero:** el propio marco, §15, §10, §14.1". **Ese marco no estaba en
+el repositorio.** O sea: un plan que manda leer una fuente ausente, y nadie lo habia notado
+porque el plan si estaba y se lee como completo.
+
+Control de identidad, porque "el documento con ese titulo" no basta: `45_S1` cita **13.345
+palabras** y la extraccion del `.docx` da **13.345 exactas**. Es ese documento y no otra version.
+
+**Decision -- entran como `FUENTE_*` en `docs/architecture/`, verbatim y con cabecera de
+procedencia.** Cinco archivos: los cuatro documentos mas un **indice** que mapea que hecho
+operativo vive en cual.
+
+- **No se resumen.** La minuta en markdown se copia literal; los dos PDF y el `.docx` van como
+  **extraccion de texto**, y su cabecera lo dice: una tabla extraida pierde la cuadricula, asi
+  que si una linea parece descolocada **manda el original**. Llamarlo "el documento" cuando es
+  una extraccion es como se cita una tabla que nadie leyo.
+- **El prefijo `FUENTE_` no es decoracion.** Estos son **registros**, no decisiones de
+  arquitectura, y comparten carpeta con 44 documentos que si lo son. Sin el prefijo, el
+  siguiente que abra la carpeta los lee como arquitectura.
+- **No se editan.** Una correccion va como nota del dueno, fechada, al final -- la misma regla
+  que `docs/beneficio/` ya usa cuando una decision suya contradice un documento normativo.
+
+**El vocabulario que estas fuentes fijan, y que el esquema confunde.** El **retort** es el
+horno; la **noria** es la piscina donde el carbon se vuelve biochar **activo**, inoculado con
+agua, hoja triturada y gallinaza fermentada. Son dos pasos separados **en el tiempo**: la minuta
+del 6 de agosto dice "ya se cuenta con carbon seco, pero falta que Bob prepare la mezcla de la
+noria".
+
+**Los cuatro conflictos se SENALAN y no se resuelven**, y estan en la §4 del indice:
+
+1. **Las dos versiones de la misma minuta discrepan en los anos de cosecha** -- "harvesting
+   **2029**-2033" en ingles, "cosechando **2031**-2033" en la espanola revisada para Chris.
+   Misma reunion. Lo resuelve el dueno.
+2. **Las DOS norias no estan en ningun documento.** El dueno dijo que hay dos, "una de un
+   tamano, y otra doble", y que el detalle estaba en las minutas. **No esta**: siete ocurrencias
+   de "noria" en los cuatro documentos, todas la receta o la tarea de Bob, y el marco tiene 88
+   menciones de "biochar" y **cero** de "noria". Queda anotado como dicho del dueno sin
+   documento, y con eso no se declaran capacidades.
+3. **`BiocharBatch` mete el retort y la noria en la misma fila** -- regimen termico y activacion
+   juntos, cuando la operacion los separa en el tiempo y una noria podria recibir carbon de
+   varias quemas.
+4. **La aplicacion al cultivo no existe.** Un lote se enlaza a `Asset`, `Measurement` y
+   `TreatmentBatch`; ninguno llega a plantones, y el dueno dijo que una misma microparcela puede
+   tener plantones con batches distintos -- lo que obliga a fila propia, no columna.
+
+**Lo que NO entra: nada de implementacion.** Esto es entrada de planificacion aceptada, no una
+orden de construir. Las piezas del biochar --la noria con identidad, las cantidades de entrada y
+salida, la aplicacion como fila propia, y la receta con cantidad por ingrediente-- quedan
+nombradas y sin construir.

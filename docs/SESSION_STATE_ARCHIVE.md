@@ -3548,3 +3548,33 @@ El mapa de ADR-140 baja a **seis** huecos.
 visita, no un modelo de costos. `LabourEntry` sigue sin llevar ninguno, el material consumido no
 tiene movimiento, y «cuánto cuesta sostener Toabré» sigue sin respuesta.
 
+
+### 2026-09-16 · Un «sin sitio» del mapa no lo verificaba nada, y una de las mías era falsa
+
+ADR-143. Fui a construir las que el mapa daba por sin sitio y **la primera que miré ya tenía
+columna**: `ColonyEvent.treatmentEfficacyNote` existe desde A9.4 **y el cierre de tratamiento la
+escribe**. `efficacy_note` nunca estuvo sin sitio, y la cuenta de huecos que publiqué era **más
+grande que la real**.
+
+**El guardia no podía cazarlo**, y ésa es la parte que importa: comprobaba que los destinos
+declarados existieran, y con eso parecía que el mapa no podía mentir. Un `sin_sitio` era la
+mitad no falsable del instrumento.
+
+Ahora mira al revés: para cada `sin_sitio` comprueba que ningún campo de los modelos de esa
+actividad se parezca a la clave, y para eso el mapa declara **a qué modelos escribe cada
+actividad**. Es una heurística sobre nombres y lo dice; lleva control positivo sobre el caso
+real que se me escapó.
+
+**Y un flip-test encontró que la declaración nueva no era portante:** vaciándola, las nueve
+seguían en verde. Se exige aparte que cada actividad declare al menos un modelo y que existan.
+Tercera vez esta semana que un flip-test destapa una línea escrita con su justificación al lado
+y sin nada que la ejerza.
+
+**La cuenta real, medida: 38 con campo, 1 en tabla, CINCO sin sitio** — las tres de patio
+(clima, condición del sitio, cajas presentes) y dos de casa (valoración, humedad). Las cifras
+que publiqué ayer iban todas **una de más**, porque se midieron con el instrumento incompleto.
+
+**Pendiente nombrado:** construir las cinco. Y `moisture_pct` trae una pregunta de diseño:
+`moisture` **ya es variable canónica de medición** en este esquema, así que la humedad de la
+miel podría ser un `Measurement` en vez de una columna. Eso se decide aparte, no de paso.
+
