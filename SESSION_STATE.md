@@ -38,6 +38,30 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · Las dos mitades del cierre de jornada
+
+ADR-138. Anexo E §5: «Al cerrarla: resumen de lo registrado, **lo que quedó pendiente**». La
+pantalla **no enseñaba ninguna de las dos**. `resumenDeVisita` existe desde A9.1 y aparecía en
+**cero** pantallas —alimentaba un mensaje de bitácora—, y de lo pendiente no había nada.
+
+**La mitad nueva contesta la pregunta del oficio:** abriste cuatro de diez, ¿cuáles seis se
+quedaron? Cuentan los **tres** caminos —inspección, evento de colonia, cosecha—: mirando sólo
+inspecciones, una caja alimentada saldría como sin tocar. Y el filtro es **por jornada**, no
+por sitio, o una visita anterior haría creer que ya abriste todo hoy.
+
+**La línea de lo que entra:** lo que todavía puedes hacer antes de irte — cajas sin tocar y
+tiras sin retirar. El alimento por vencer y la consulta a vecinos **no se repiten**: no se
+resuelven caminando de vuelta a la caja, y amontonarlas haría la pared de avisos que se aprende
+a ignorar.
+
+**La lista sale también con la jornada abierta**, no sólo al cerrar: una lista de lo que te
+falta que aparece cuando ya no puedes añadir eventos no se puede atender.
+
+Inventario de acceso **329/96 → 330/97**.
+
+**Pendiente nombrado:** el PDF del reporte «sin almacenarlo» que el §5 pide al lado. El reporte
+web y su enlace ya existen desde el 2026-09-10; el PDF es pieza propia.
+
 ### 2026-09-15 · La lista de apiarios deja de ser plana
 
 ADR-137, y lo pidió el dueño: «devuelta a finca o organizacion y ver apiarios bajo ellos ya sea
@@ -90,40 +114,6 @@ la colocación en ADR-135.
 **Pendiente nombrado:** la observación en lote, hasta que el dueño diga qué significa; y el
 «nada fuera de lo normal» sobre varias, que es honesto pero escribe `Inspection` y merece su
 propia rebanada.
-
-### 2026-09-15 · Una colmena nace con su colocación: diez de las veintinueve reales no la tenían
-
-ADR-135. **La invariante vivía en un comentario de ADR-126** —«`createHive` no la crea»—, y eso
-se aplicó en el guion que se escribió con la nota delante y se olvidó en los dos siguientes, del
-mismo día.
-
-**Medido antes de tocar nada, sobre la copia local con los datos reales: 29 colmenas, 19 con
-colocación, 10 SIN NINGUNA** — y las diez son las de Apiario Las Nubes. Con control positivo:
-NN-0041 sí tenía la suya, así que el cero no era de la consulta.
-
-**Lo que significaba:** `apiarioDeColmenaEn` contestaba `null` —«no consta»— para esas diez en
-cualquier fecha, y `colmenasDeLaVentana` no las contaba. O sea que **el §9, entregado el día
-antes, era ciego al apiario real del dueño**, y en silencio: la respuesta salía vacía.
-
-Cuatro piezas: `createHive` pasa a transacción con colocación y audit; un ayudante compartido
-para las cuatro rutas; una migración de relleno idempotente por `NOT EXISTS` (29/29 en local, y
-los lectores contestan con las fechas que declaró el dueño — 4 de septiembre para NN-0043, 2
-para NN-0048); y un guardia de fuente, porque el de datos se iría a rojo por el montaje de otra
-prueba en la base compartida.
-
-**Un agujero de rastro de paso:** el camino de la aplicación creaba una colmena **sin
-AuditEvent** mientras los tres guiones sí lo escribían. Ahora el historial de una caja incluye
-su creación.
-
-**El coste, dicho: 27 limpiezas de prueba.** La FK es `RESTRICT` y se mantiene: en producción
-una colmena no se borra, se retira, y una cascada se llevaría la historia en silencio.
-
-**Y el flip-test encontró un defecto en mi propio guardia:** contaba el `import` del ayudante
-como una llamada, así que un guion que perdiera su línea seguía pasando. El instrumento midió
-una importación en vez de una escritura — la misma forma de siempre.
-
-Inventario de acceso **327/96 → 328/96**, con dos entradas nuevas del mismo archivo porque son
-dos preguntas distintas.
 
 ## 3. Bloqueado, y en qué
 
