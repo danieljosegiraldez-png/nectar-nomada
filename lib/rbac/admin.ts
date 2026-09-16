@@ -12,6 +12,7 @@
  */
 import { prisma } from "../db";
 import { sortByName } from "../naturalOrder";
+import { recordAuditEvent } from "../audit";
 import { can, createAssignment, revokeAssignment } from "./service";
 import { CLASSIFICATION_NOT_APPLICABLE } from "./resolve";
 import type { ScopeType } from "../../generated/prisma/client";
@@ -204,4 +205,135 @@ export async function revokeRole(actorUserAccountId: string, assignmentId: strin
   }
 
   return revokeAssignment(assignmentId, actorUserAccountId, reason);
+}
+
+/**
+ * Los permisos EFECTIVOS de una asignación, cada uno diciendo DE DÓNDE VIENE.
+ *
+ * **La fuente es la mitad útil.** Una lista de permisos sin decir cuál trae el
+ * perfil y cuál se añadió a mano obliga a adivinar qué pasa si alguien cambia el
+ * perfil — y adivinar sobre autorización es como se abren agujeros. Aquí cada
+ * fila dice `perfil`, `añadido` o `quitado`, y los quitados se enseñan TACHADOS
+ * en vez de desaparecer: que un permiso falte porque alguien lo quitó a propósito
+ * es información, no ausencia.
+ */
+export async function listAssignmentPermissions(actorUserAccountId: string, assignmentId: string) {
+  await requirePermissionAdmin(actorUserAccountId);
+
+  const asignacion = await prisma.assignment.findUnique({
+    where: { id: assignmentId },
+    include: {
+      roleProfile: { include: { permissions: { include: { permission: true } } } },
+      scope: true,
+      overrides: { include: { permission: true } },
+      userAccount: { include: { person: true } },
+    },
+  });
+  if (!asignacion) throw new UserAdminError("assignment_not_found");
+
+  const porClave = new Map<string, {
+    permissionId: string; resourceType: string; action: string;
+    origen: "perfil" | "añadido" | "quitado"; reason: string | null;
+    /// El id del AJUSTE, no el del permiso. Sin él la pantalla no puede deshacer
+    /// un «quitado»: `clearPermissionOverride` borra un ajuste concreto, y pasarle
+    /// un `permissionId` habría fallado siempre. Nulo cuando el permiso viene del
+    /// perfil y no hay ajuste que deshacer.
+    overrideId: string | null;
+  }>();
+  for (const rp of asignacion.roleProfile.permissions) {
+    porClave.set(`${rp.permission.resourceType}:${rp.permission.action}`, {
+      permissionId: rp.permission.id, resourceType: rp.permission.resourceType,
+      action: rp.permission.action, origen: "perfil", reason: null, overrideId: null,
+    });
+  }
+  for (const o of asignacion.overrides) {
+    porClave.set(`${o.permission.resourceType}:${o.permission.action}`, {
+      permissionId: o.permission.id, resourceType: o.permission.resourceType,
+      action: o.permission.action, origen: o.effect === "deny" ? "quitado" : "añadido",
+      reason: o.reason, overrideId: o.id,
+    });
+  }
+
+  // Y los que NINGUNA de las dos cosas concede, para poder añadirlos sin salir de
+  // la pantalla. Sin esto habría que saberse el catálogo de memoria.
+  const todos = await prisma.permission.findMany({ orderBy: [{ resourceType: "asc" }, { action: "asc" }] });
+  const disponibles = todos.filter((t) => !porClave.has(`${t.resourceType}:${t.action}`));
+
+  return {
+    asignacion: {
+      id: asignacion.id,
+      persona: asignacion.userAccount.person?.displayName ?? "—",
+      perfil: asignacion.roleProfile.name,
+      scopeType: asignacion.scope.scopeType,
+      scopeRefId: asignacion.scope.scopeRefId,
+    },
+    permisos: [...porClave.values()].sort((a, b) =>
+      a.resourceType.localeCompare(b.resourceType) || a.action.localeCompare(b.action)),
+    disponibles,
+  };
+}
+
+export interface SetOverrideInput {
+  assignmentId: string;
+  permissionId: string;
+  effect: "deny" | "grant";
+  reason?: string | null;
+}
+
+/**
+ * Quita o añade un permiso sobre UNA asignación.
+ *
+ * **La razón es obligatoria para `grant` y se comprueba aquí Y en la base.** No es
+ * duplicación por descuido: el CHECK de la migración cubre al importador y al SQL
+ * directo, y esta comprobación le da a la pantalla un error que se puede leer en
+ * vez de un fallo de restricción.
+ */
+export async function setPermissionOverride(actorUserAccountId: string, input: SetOverrideInput) {
+  await requirePermissionAdmin(actorUserAccountId);
+
+  const razon = input.reason?.trim() || null;
+  if (input.effect === "grant" && !razon) throw new UserAdminError("grant_requires_reason");
+
+  const asignacion = await prisma.assignment.findUnique({ where: { id: input.assignmentId }, select: { id: true } });
+  if (!asignacion) throw new UserAdminError("assignment_not_found");
+  const permiso = await prisma.permission.findUnique({ where: { id: input.permissionId }, select: { id: true } });
+  if (!permiso) throw new UserAdminError("permission_not_found");
+
+  return prisma.$transaction(async (tx) => {
+    const fila = await tx.assignmentPermissionOverride.upsert({
+      where: { assignmentId_permissionId: { assignmentId: input.assignmentId, permissionId: input.permissionId } },
+      create: { assignmentId: input.assignmentId, permissionId: input.permissionId, effect: input.effect, reason: razon, createdBy: actorUserAccountId },
+      update: { effect: input.effect, reason: razon, createdBy: actorUserAccountId },
+    });
+    await recordAuditEvent({
+      actorUserAccountId,
+      operation: "assignment_permission_override.set",
+      entityType: "assignment_permission_override",
+      entityId: fila.id,
+      after: fila,
+      reason: razon ?? undefined,
+      sourceInterface: "rbac.admin",
+    }, tx);
+    return fila;
+  });
+}
+
+/** Devuelve la asignación a lo que su perfil diga, sin más. */
+export async function clearPermissionOverride(actorUserAccountId: string, overrideId: string) {
+  await requirePermissionAdmin(actorUserAccountId);
+  const fila = await prisma.assignmentPermissionOverride.findUnique({ where: { id: overrideId } });
+  if (!fila) throw new UserAdminError("override_not_found");
+
+  return prisma.$transaction(async (tx) => {
+    await tx.assignmentPermissionOverride.delete({ where: { id: overrideId } });
+    await recordAuditEvent({
+      actorUserAccountId,
+      operation: "assignment_permission_override.clear",
+      entityType: "assignment_permission_override",
+      entityId: overrideId,
+      before: fila,
+      sourceInterface: "rbac.admin",
+    }, tx);
+    return fila;
+  });
 }
