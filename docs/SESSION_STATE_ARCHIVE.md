@@ -3278,3 +3278,37 @@ la trampa que ya midió un comentario mío en vez del JSX.
 cero enums de floración en el esquema— y el §4 nombra el formulario que la llenaría. Es hueco
 de esquema, como fue el §8, y su vocabulario es del dueño: especies, fases fenológicas, escala
 de abundancia.
+
+### 2026-09-15 · Una colmena nace con su colocación: diez de las veintinueve reales no la tenían
+
+ADR-135. **La invariante vivía en un comentario de ADR-126** —«`createHive` no la crea»—, y eso
+se aplicó en el guion que se escribió con la nota delante y se olvidó en los dos siguientes, del
+mismo día.
+
+**Medido antes de tocar nada, sobre la copia local con los datos reales: 29 colmenas, 19 con
+colocación, 10 SIN NINGUNA** — y las diez son las de Apiario Las Nubes. Con control positivo:
+NN-0041 sí tenía la suya, así que el cero no era de la consulta.
+
+**Lo que significaba:** `apiarioDeColmenaEn` contestaba `null` —«no consta»— para esas diez en
+cualquier fecha, y `colmenasDeLaVentana` no las contaba. O sea que **el §9, entregado el día
+antes, era ciego al apiario real del dueño**, y en silencio: la respuesta salía vacía.
+
+Cuatro piezas: `createHive` pasa a transacción con colocación y audit; un ayudante compartido
+para las cuatro rutas; una migración de relleno idempotente por `NOT EXISTS` (29/29 en local, y
+los lectores contestan con las fechas que declaró el dueño — 4 de septiembre para NN-0043, 2
+para NN-0048); y un guardia de fuente, porque el de datos se iría a rojo por el montaje de otra
+prueba en la base compartida.
+
+**Un agujero de rastro de paso:** el camino de la aplicación creaba una colmena **sin
+AuditEvent** mientras los tres guiones sí lo escribían. Ahora el historial de una caja incluye
+su creación.
+
+**El coste, dicho: 27 limpiezas de prueba.** La FK es `RESTRICT` y se mantiene: en producción
+una colmena no se borra, se retira, y una cascada se llevaría la historia en silencio.
+
+**Y el flip-test encontró un defecto en mi propio guardia:** contaba el `import` del ayudante
+como una llamada, así que un guion que perdiera su línea seguía pasando. El instrumento midió
+una importación en vez de una escritura — la misma forma de siempre.
+
+Inventario de acceso **327/96 → 328/96**, con dos entradas nuevas del mismo archivo porque son
+dos preguntas distintas.

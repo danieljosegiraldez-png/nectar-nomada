@@ -9861,3 +9861,57 @@ adorno con forma de regla, que es justo lo que `CLAUDE.md` llama peor que ningun
 **cero de los ocho tienen coordenadas**: un mapa por finca dibujaria hoy cuatro recuadros
 vacios, y partirlo antes de que haya algo que pintar seria decidir a ciegas como se ve. La
 frase del dueno pide "lista o mapa" y hoy solo una de las dos tiene datos detras.
+
+## ADR-138 -- Las dos mitades del cierre de jornada faltaban en la pantalla, y una de ellas existia desde hacia dias
+
+**Contexto.** Anexo E §5: *"Al cerrarla: resumen de lo registrado, **lo que quedo pendiente**,
+y de ahi sale el reporte tecnico al cliente"*.
+
+**Medido sobre `main` antes de escribir nada.** La pantalla de la jornada no ensenaba
+**ninguna de las dos mitades**:
+
+* `resumenDeVisita` existe desde A9.1 y aparece en **cero** pantallas -- alimenta un mensaje
+  de bitacora y nada mas. Cuarta vez en este modulo que un mecanismo existe y no tiene puerta.
+* De "lo que quedo pendiente" no habia **nada**, y es la mitad que contesta la pregunta del
+  oficio: **abriste cuatro de diez, cuales seis se quedaron**.
+
+**Decision 1 -- que cuenta como pendiente: lo que todavia puedes hacer antes de irte.** Dos
+cosas, y las dos se resuelven sin subir al carro: las **cajas del sitio sin ningun evento de
+esa jornada** -- el hecho nuevo -- y las **tiras sin retirar**, que `retirosPendientes` ya
+sabia leer.
+
+**Lo que deliberadamente NO se repite aqui:** el alimento por vencer y la consulta a vecinos.
+Las dos son estado del sitio, ya gritan en su tarjeta y en la ficha, y **ninguna se resuelve
+caminando de vuelta a la caja**. Amontonarlas en el cierre haria una pared de avisos que se
+aprende a pasar de largo -- justo lo que el Anexo quiere evitar cuando dice que el sistema
+"lo reclama solo". Un aviso que no se puede atender donde aparece ensena a ignorar los que si.
+
+**Decision 2 -- los tres caminos cuentan, no uno.** Un evento de campo llega a una colmena por
+`inspection`, por `colonyEvent` o por `apiaryHarvestEvent`, y las tres FK las anadio A9.1
+justo para poder leer la visita desde su rastro. Si el lector mirara solo las inspecciones,
+**una caja alimentada saldria como sin tocar** y el cierre reclamaria trabajo ya hecho. Hay una
+prueba por ese caso, y el flip-test la tumba.
+
+**Decision 3 -- el filtro es por JORNADA, no por sitio.** Sin el, los eventos de una visita
+anterior harian creer que ya abriste todo hoy. La prueba de ese caso lleva **control positivo**
+-- comprueba que la jornada de hoy si tiene dos cajas tocadas -- porque sin el, "cero tocadas
+en la otra jornada" lo cumpliria igual un lector que no encuentra nada nunca.
+
+**Decision 4 -- la lista aparece MIENTRAS la jornada sigue abierta, ademas de al cerrar.** El
+Anexo la pide "al cerrarla". Ensenarla solo entonces daria una lista de lo que te falta que
+aparece **cuando ya no puedes anadir eventos**: la forma en miniatura del hallazgo que este
+modulo lleva cuatro veces. Al cerrar se sigue ensenando, como registro de lo que se dejo.
+
+**La caja vacia sigue en la lista, y marcada como tal.** Esconderla diria que el apiario tiene
+menos cajas de las que tiene; la cifra que decide si te vas es la de las **pobladas** sin
+tocar, y va aparte.
+
+**Flip-test de las cuatro decisiones**, cada una compilando y cayendo por su nombre.
+
+**Inventario de acceso: 329/96 -> 330/97**, en "depende del llamador" -- con un id de jornada
+ajeno devolveria el dato ajeno -- y con su entrada en el allowlist.
+
+**Lo que NO entra.** La tercera parte de la frase del §5, *"y de ahi sale el reporte tecnico al
+cliente"*, ya existe: `EmitirReporteForm` y `/field-sessions/[id]/report` estan en esa misma
+pantalla desde el 2026-09-10. Lo que sigue sin existir es el **PDF sin almacenarlo** que el
+Anexo pide al lado, y eso es una pieza propia.
