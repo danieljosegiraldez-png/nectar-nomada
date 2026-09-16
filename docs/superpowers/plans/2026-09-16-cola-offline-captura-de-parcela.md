@@ -57,11 +57,11 @@ describe("clientDraftId en la captura de parcela", () => {
     const draft = `draft-${Date.now()}`;
     // locationId y sampleCode vienen del `beforeAll` que crea la parcela de prueba.
     await prisma.soilSample.create({
-      data: { locationId, sampleCode: `A-${draft}`, sampledAt: new Date(), provenanceClass: "FIELD_RECORD", clientDraftId: draft },
+      data: { locationId, sampleCode: `A-${draft}`, sampledAt: new Date(), provenanceClass: "direct_observation", clientDraftId: draft },
     });
     await expect(
       prisma.soilSample.create({
-        data: { locationId, sampleCode: `B-${draft}`, sampledAt: new Date(), provenanceClass: "FIELD_RECORD", clientDraftId: draft },
+        data: { locationId, sampleCode: `B-${draft}`, sampledAt: new Date(), provenanceClass: "direct_observation", clientDraftId: draft },
       }),
     ).rejects.toThrow();
   });
@@ -130,7 +130,7 @@ MSG
 it("parsea una muestra de suelo encolada", () => {
   const r = parsearMutaciones([{
     kind: "soil_sample", clientDraftId: "d1", locationId: "loc1",
-    sampleCode: "S-01", sampledAt: "2026-09-16T12:00:00.000Z", provenanceClass: "FIELD_RECORD",
+    sampleCode: "S-01", sampledAt: "2026-09-16T12:00:00.000Z", provenanceClass: "direct_observation",
   }]);
   expect(r.ok).toBe(true);
   if (!r.ok) return;
@@ -286,7 +286,7 @@ MSG
 ```ts
 it("aplica una vez y la segunda dice duplicate, con UNA sola fila", async () => {
   const m = { kind: "soil_sample" as const, clientDraftId: `d-${Date.now()}`, locationId,
-    sampleCode: `S-${Date.now()}`, sampledAt: new Date(), provenanceClass: "FIELD_RECORD" };
+    sampleCode: `S-${Date.now()}`, sampledAt: new Date(), provenanceClass: "direct_observation" };
   const [primera] = await pushFieldEvents(userAccountId, "dev1", [m]);
   const [segunda] = await pushFieldEvents(userAccountId, "dev1", [m]);
   expect(primera.status).toBe("applied");
@@ -297,7 +297,7 @@ it("aplica una vez y la segunda dice duplicate, con UNA sola fila", async () => 
 it("un código vacío vuelve como rejected, no como excepción", async () => {
   const [r] = await pushFieldEvents(userAccountId, "dev1", [{
     kind: "soil_sample" as const, clientDraftId: `d-${Date.now()}`, locationId,
-    sampleCode: "   ", sampledAt: new Date(), provenanceClass: "FIELD_RECORD" }]);
+    sampleCode: "   ", sampledAt: new Date(), provenanceClass: "direct_observation" }]);
   expect(r).toMatchObject({ status: "rejected", reason: "sample_code_required" });
 });
 ```
@@ -424,7 +424,7 @@ MSG
 it("un kind desconocido rechaza SOLO esa mutación y deja pasar el resto", () => {
   const r = parsearMutaciones([
     { kind: "lo_que_sea", clientDraftId: "d-raro", locationId: "loc1" },
-    { kind: "soil_profile", clientDraftId: "d-ok", locationId: "loc1", describedAt: "2026-09-16T12:00:00.000Z", provenanceClass: "FIELD_RECORD" },
+    { kind: "soil_profile", clientDraftId: "d-ok", locationId: "loc1", describedAt: "2026-09-16T12:00:00.000Z", provenanceClass: "direct_observation" },
   ]);
   expect(r.ok).toBe(true);
   if (!r.ok) return;
