@@ -179,6 +179,7 @@ model UserAccount {
   submissionKeys                    SubmissionKey[]
   assignments                       Assignment[]                 @relation("AssignmentToUserAccount")
   assignmentsGranted                Assignment[]                 @relation("AssignmentGrantedBy")
+  permissionOverridesCreated AssignmentPermissionOverride[] @relation("PermissionOverrideCreatedBy")
   auditEvents                       AuditEvent[]
   locationsCreated                  Location[]                   @relation("LocationCreatedBy")
   organizationsCreated              Organization[]               @relation("OrganizationCreatedBy")
@@ -396,6 +397,25 @@ model RoleProfile {
 
 // Permission is a seed-managed catalog (migrated via prisma/seed.ts,
 // RBAC.md §5), not user-editable data — no lifecycle columns needed.
+/**
+ * Un ajuste sobre UNA asignación: quitar un permiso que su perfil concede, o
+ * añadir uno que no concede. **Decisión de Daniel, 2026-09-16.**
+ *
+ * **Quitar y añadir NO son simétricos, y por eso son dos valores y no un
+ * booleano.** Un `deny` sólo puede ESTRECHAR, así que no roza la promesa que
+ * `resolve.ts` tiene escrita —«las asignaciones contextuales estrechan, nunca
+ * ensanchan»—. Un `grant` sí: concede algo que ningún perfil concedió, y por eso
+ * exige razón escrita (ver el CHECK de su migración).
+ */
+enum PermissionOverrideEffect {
+  /// Quita un permiso que el perfil de esta asignación sí concede. GANA SIEMPRE.
+  deny
+  /// Añade un permiso suelto que el perfil no concede. Exige razón.
+  grant
+
+  @@schema("core")
+}
+
 model Permission {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   resourceType String   @map("resource_type")
@@ -404,9 +424,56 @@ model Permission {
   createdAt    DateTime @default(now()) @map("created_at")
 
   roleProfiles RoleProfilePermission[]
+  overrides    AssignmentPermissionOverride[]
 
   @@unique([resourceType, action])
   @@map("permission")
+  @@schema("core")
+}
+
+/**
+ * La personalización que Daniel pidió: «en admin quitar o agregar permisos como
+ * correspondan para personalizar».
+ *
+ * **Por asignación, no por persona, y la diferencia importa.** Un permiso llega
+ * por un perfil EN UN ÁMBITO; quitarlo «de la persona» no querría decir nada si
+ * tiene dos asignaciones que lo conceden en sitios distintos. El ajuste vive donde
+ * vive la concesión, y la pantalla de administración enseña de qué asignación
+ * viene cada permiso para que quitar no sea adivinar.
+ *
+ * **El `deny` gana siempre**, sobre el perfil y sobre cualquier `grant` de la
+ * misma asignación. Es la única regla de precedencia, a propósito: una tabla de
+ * prioridades entre concesiones es donde estos sistemas se vuelven imposibles de
+ * auditar.
+ *
+ * **Dónde se aplica:** en `getResolvedAssignments`, que es el único sitio donde
+ * los permisos de un perfil se convierten en la lista efectiva. `resolve.ts` NO
+ * se toca: es puro a propósito y sigue recibiendo una lista ya resuelta.
+ */
+model AssignmentPermissionOverride {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assignmentId String     @map("assignment_id") @db.Uuid
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  permissionId String     @map("permission_id") @db.Uuid
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  effect PermissionOverrideEffect
+
+  /// Obligatoria para `grant`, opcional para `deny` — lo impone un CHECK en la
+  /// base, no sólo el servicio. Dentro de un año, «por qué esta persona tiene un
+  /// permiso que su perfil no le da» es la pregunta que nadie sabrá contestar sin
+  /// esto.
+  reason String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("PermissionOverrideCreatedBy", fields: [createdBy], references: [id])
+
+  /// Un permiso no puede estar concedido y quitado a la vez en la misma
+  /// asignación: eso no es una precedencia que resolver, es una contradicción.
+  @@unique([assignmentId, permissionId])
+  @@index([assignmentId])
+  @@map("assignment_permission_override")
   @@schema("core")
 }
 
@@ -444,6 +511,7 @@ model Assignment {
   grantedAt     DateTime         @default(now()) @map("granted_at")
   validFrom     DateTime         @default(now()) @map("valid_from")
   validTo       DateTime?        @map("valid_to")
+  overrides     AssignmentPermissionOverride[]
   status        AssignmentStatus @default(active)
   createdAt     DateTime         @default(now()) @map("created_at")
   updatedAt     DateTime         @updatedAt @map("updated_at")
