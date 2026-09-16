@@ -9861,3 +9861,39 @@ adorno con forma de regla, que es justo lo que `CLAUDE.md` llama peor que ningun
 **cero de los ocho tienen coordenadas**: un mapa por finca dibujaria hoy cuatro recuadros
 vacios, y partirlo antes de que haya algo que pintar seria decidir a ciegas como se ve. La
 frase del dueno pide "lista o mapa" y hoy solo una de las dos tiene datos detras.
+
+## ADR-138 — Un ámbito de ubicación alcanza a sus descendientes
+
+**2026-09-16. Decisión de Daniel.**
+
+**Contexto.** El árbol de secado es sitio → instalación → cama (ADR de la
+topología, `LocationType.drying_facility` y `drying_bed`). Construyendo la
+pantalla de administración se midió que un operario con ámbito sobre la finca
+podía crear el invernadero —cuyo padre es el sitio, que sí está en su ámbito— y
+**no podía crear las camas de dentro**: el guardia comprueba contra el padre
+directo, y el invernadero no estaba en ningún ámbito suyo. Medido antes de tocar
+nada: ámbito en el sitio daba `true` sobre el sitio y `false` sobre su hija.
+
+Con el caso real de Cafelino —dos invernaderos y un cuarto oscuro— la alternativa
+era una asignación a mano por cada instalación construida. Eso no lo hace nadie,
+así que en la práctica las camas sólo las habría creado un administrador de
+plataforma.
+
+**Decisión.** Cuando el objetivo de una comprobación es una ubicación, `can()`
+resuelve también sus **ancestros**: el permiso concedido sobre una ubicación vale
+sobre todo lo que cuelga de ella.
+
+**Qué NO cambia, y es la mitad que importa.** Un **hermano** sigue fuera, y la
+contención no va hacia arriba: quien manda en una cama no manda en la finca. Las
+dos están fijadas en `tests/rbac/ambitoDeUbicacion.test.ts`, que existe
+precisamente por eso — ensanchar una autorización sin fijar dónde termina es como
+se abren agujeros.
+
+**Por qué no contradice «las asignaciones contextuales estrechan, no ensanchan».**
+Esa regla prohíbe conceder por acumulación lo que ningún ámbito concede. Aquí no se
+concede nada nuevo: se reconoce que una ubicación **está dentro de** otra.
+
+**Dónde vive.** En `lib/rbac/service.ts`, no en `resolve.ts`: la jerarquía es un
+hecho de la base y el resolutor es puro a propósito. Lleva tope de profundidad
+porque un `parentLocationId` en ciclo —que el esquema no impide— colgaría el punto
+de estrangulamiento de toda la autorización.

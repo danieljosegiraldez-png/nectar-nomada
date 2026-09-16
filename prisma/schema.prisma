@@ -3926,6 +3926,10 @@ model DryingRun {
 
   @@index([locationId])
   @@index([lotProcessId])
+  /// Lo crea la migración `corrida_de_secado_en_su_cama`. Se declara aquí porque
+  /// el esquema y las migraciones tienen que decir lo mismo: el guardia de deriva
+  /// lo cazó el 2026-09-16, y sólo pudo verlo cuando se le dio `SHADOW_DATABASE_URL`.
+  @@index([dryingBedLocationId])
   @@map("drying_run")
   @@schema("traceability")
 }

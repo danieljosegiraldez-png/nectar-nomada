@@ -11,9 +11,9 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-15
+## Lo medido el 2026-09-05, actualizado el 2026-09-16
 
-**334 operaciones** que tocan la base, en **98 archivos**:
+**340 operaciones** que tocan la base, en **99 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,18 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **226** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **232** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **33** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **57** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
+
+> **Tareas 8 y 9 (2026-09-16):** el inventario incluye las opciones de inspección y
+> el servicio de instalaciones. Las cifras anteriores se regeneraron con
+> `node scripts/inventario-de-acceso.mjs --json`. Las lecturas usan los permisos de
+> muestreo o de administración de atributos; las escrituras de instalaciones autorizan
+> el padre o la ubicación editada y auditan dentro de la transacción.
 
 > **Las de 331→333 son `instrumentosParaMedicion` (`lib/equipos/equipos.ts`) e
 > `inspeccionesParaMedicion` (`lib/traceability/measurements.ts`)**, las dos de la Tarea 7 del

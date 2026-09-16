@@ -189,3 +189,30 @@ export async function registrarInspeccion(userAccountId: string, input: Registra
     return { event, muestras };
   });
 }
+
+/** Opciones del formulario con el MISMO permiso que registrarInspeccion. */
+export async function opcionesParaInspeccion(userAccountId: string) {
+  const [lots, beds] = await Promise.all([
+    prisma.lot.findMany({ orderBy: { lotCode: "asc" } }),
+    prisma.location.findMany({ where: { locationType: "drying_bed" }, orderBy: { name: "asc" } }),
+  ]);
+  const lotes = [];
+  const camas = [];
+  for (const lot of lots) {
+    try {
+      await requireSamplingAccess(userAccountId, lot);
+      lotes.push({ id: lot.id, name: lot.lotCode });
+    } catch (error) {
+      if (!(error instanceof TraceabilityAccessError)) throw error;
+    }
+  }
+  for (const bed of beds) {
+    try {
+      await requireSamplingAccess(userAccountId, { locationId: bed.id, classification: bed.classification });
+      camas.push({ id: bed.id, name: bed.name });
+    } catch (error) {
+      if (!(error instanceof TraceabilityAccessError)) throw error;
+    }
+  }
+  return { lotes, camas };
+}

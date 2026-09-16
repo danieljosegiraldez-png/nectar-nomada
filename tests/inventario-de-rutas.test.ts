@@ -96,7 +96,9 @@ describe("el inventario del router", () => {
     // equipos e instrumentos y el acto de verificar uno contra su patrón. Hasta
     // ese día el equipo era texto libre en cuatro campos y no había dónde decir
     // que un refractómetro se había puesto contra el agua.
-    expect(salida).toContain("73 entradas");
+    // 73 → 77 el 2026-09-16: inspección nueva y lista/alta/detalle de instalaciones.
+    // Medido con scripts/inventario-de-rutas.mjs: 67 páginas y 10 handlers.
+    expect(salida).toContain("77 entradas");
     expect(codigo, salida).toBe(0);
   });
 

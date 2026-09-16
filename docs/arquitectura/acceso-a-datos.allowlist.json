@@ -396,6 +396,10 @@
     {
       "archivo": "lib/equipos/modosDeInstrumento.ts",
       "razon": "Tarea 5 de secado: declara modos por instrumento con el permiso manage resuelto por puedeGestionarEquipo y registra modo y AuditEvent en la misma transacción. El dominio puro vive separado en modos.ts."
+    },
+    {
+      "archivo": "lib/traceability/instalaciones.ts",
+      "razon": "Tarea 9 de secado: consultas y administración del árbol sitio → instalación → cama. Exige location:manage_attributes sobre el padre al crear y sobre la ubicación al leer/editar; cada escritura y su AuditEvent comparten transacción."
     }
   ],
   "reciben_transaccion": [

@@ -4,6 +4,7 @@ import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import * as audit from "../../lib/audit";
 import { createSamplingEvent, type CreateSamplingEventInput, registrarInspeccion } from "../../lib/traceability/samplingEvents";
+import { leerInspeccion } from "../../lib/traceability/secadoForm";
 import type { LocationType, Prisma } from "../../generated/prisma/client";
 
 const occurredAt = new Date("2026-03-01T09:00:00Z");
@@ -224,6 +225,8 @@ describe("una inspección se guarda entera o no se guarda", () => {
     try {
       return await fn(lote.id);
     } finally {
+      const samples = await prisma.sample.findMany({ where: assertDefinedWhere({ sourceLotId: lote.id }), select: { id: true } });
+      await prisma.auditEvent.deleteMany({ where: { entityType: "sample", entityId: { in: samples.map((s) => s.id) } } });
       await prisma.sample.deleteMany({ where: assertDefinedWhere({ sourceLotId: lote.id }) });
       await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: lote.id }) });
     }
@@ -231,8 +234,10 @@ describe("una inspección se guarda entera o no se guarda", () => {
 
   it("crea el acto y sus dos muestras, y las deja comparables entre sí", async () => {
     await conLote(async (lotId) => {
+      const notes = `TEST-EV-OK-${randomUUID()}`;
+      eventNotes.push(notes);
       const creado = await registrarInspeccion(actorId, {
-        lotId,
+        lotId, notes,
         occurredAt: new Date("2026-03-05T09:00:00Z"),
         muestras: [
           { materialState: "PARCHMENT", samplingRole: "ZONE", samplingZone: "NORTH" },
@@ -249,6 +254,22 @@ describe("una inspección se guarda entera o no se guarda", () => {
       // la cercanía de sus fechas.
       expect(leido.samples).toHaveLength(2);
       expect(new Set(leido.samples.map((m) => m.samplingZone))).toEqual(new Set(["NORTH", "SOUTH"]));
+    });
+  });
+
+  it("el envío manual conserva dos réplicas, cama y hora en el mismo acto", async () => {
+    await conLote(async (lotId) => {
+      const bed = await ubicacion("drying_bed");
+      const notes = `TEST-EV-FORM-${randomUUID()}`;
+      eventNotes.push(notes);
+      const form = new FormData();
+      for (const [key, value] of Object.entries({ lotId, dryingBedLocationId: bed.id, notes,
+        occurredAt: "2026-09-16T09:30", tzOffsetMinutes: "300",
+        materialState_1: "CHERRY", materialState_2: "CHERRY", samplingRole_1: "REPLICATE", samplingRole_2: "REPLICATE" })) form.set(key, value);
+      const result = await registrarInspeccion(actorId, leerInspeccion(form));
+      expect(result.event).toMatchObject({ dryingBedLocationId: bed.id, occurredAt: new Date("2026-09-16T14:30:00Z") });
+      expect(result.muestras).toHaveLength(2);
+      for (const sample of result.muestras) expect(sample).toMatchObject({ samplingEventId: result.event.id, materialState: "CHERRY", samplingRole: "REPLICATE", samplingZone: null });
     });
   });
 
@@ -346,6 +367,8 @@ describe("una inspección se guarda entera o no se guarda", () => {
       // Una sola muestra: la del caso permitido. La segunda llamada no dejó nada.
       expect(await prisma.sample.count({ where: assertDefinedWhere({ sourceLotId: lote.id }) })).toBe(1);
     } finally {
+      const samples = await prisma.sample.findMany({ where: assertDefinedWhere({ sourceLotId: lote.id }), select: { id: true } });
+      await prisma.auditEvent.deleteMany({ where: { entityType: "sample", entityId: { in: samples.map((s) => s.id) } } });
       await prisma.sample.deleteMany({ where: assertDefinedWhere({ sourceLotId: lote.id }) });
       await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: lote.id }) });
     }

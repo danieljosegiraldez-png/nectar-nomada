@@ -57,6 +57,7 @@ tests/content/stories.test.ts
 tests/discover/service.test.ts
 tests/envios/unaVezPorEnvio.test.ts
 tests/partner/projectClassification.test.ts
+tests/rbac/ambitoDeUbicacion.test.ts
 tests/rbac/admin.test.ts
 tests/research/amendments.test.ts
 tests/research/ro1.test.ts
@@ -109,6 +110,7 @@ tests/traceability/reports.test.ts
 tests/traceability/samples.test.ts
 tests/traceability/muestraConMaterial.test.ts
 tests/traceability/eventoDeMuestreo.test.ts
+tests/traceability/instalaciones.test.ts
 tests/traceability/cerezaComoDato.test.ts
 tests/traceability/selection.test.ts
 tests/traceability/soilProfiles.test.ts
