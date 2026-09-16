@@ -11,20 +11,24 @@ describe("una cama de secado es una Location, no una familia de entidades nueva"
         parentLocationId: sitio.id, dryingEnvironment: "solar_greenhouse",
       },
     });
-    const cama = await prisma.location.create({
-      data: {
-        name: "TEST Cama 3", locationType: "drying_bed",
-        parentLocationId: inv.id, rackLevel: 2,
-      },
-    });
-
-    expect(cama.parentLocationId).toBe(inv.id);
-    expect(inv.parentLocationId).toBe(sitio.id);
-    expect(cama.rackLevel).toBe(2);
-    // Control positivo: el nivel de rack es de la cama, no de la instalación.
-    expect(inv.rackLevel).toBeNull();
-
-    await prisma.location.delete({ where: { id: cama.id } });
-    await prisma.location.delete({ where: { id: inv.id } });
+    try {
+      const cama = await prisma.location.create({
+        data: {
+          name: "TEST Cama 3", locationType: "drying_bed",
+          parentLocationId: inv.id, rackLevel: 2,
+        },
+      });
+      try {
+        expect(cama.parentLocationId).toBe(inv.id);
+        expect(inv.parentLocationId).toBe(sitio.id);
+        expect(cama.rackLevel).toBe(2);
+        // Control positivo: el nivel de rack es de la cama, no de la instalación.
+        expect(inv.rackLevel).toBeNull();
+      } finally {
+        await prisma.location.delete({ where: { id: cama.id } });
+      }
+    } finally {
+      await prisma.location.delete({ where: { id: inv.id } });
+    }
   });
 });
