@@ -87,7 +87,11 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   assessment: { clase: "sin_sitio", nota: "La valoracion de la inspeccion, `stage: close`. `note` es la nota de campo; mezclarlas perderia cual se escribio con el guante puesto." },
 
   // --- feeding: la alimentacion -----------------------------------------------------------
-  material: { clase: "campo", modelo: "ColonyEvent", campo: "feedingMaterial" },
+  // Apunta al VOCABULARIO, no al texto (ADR-148). `feedingMaterial` sigue existiendo como el
+  // «cual» de `otro`, pero la pregunta del protocolo --«con que»-- la contesta el enum: si el
+  // mapa siguiera apuntando al texto, diria que esta capturada una pregunta que en la practica
+  // se responde con un desplegable.
+  material: { clase: "campo", modelo: "ColonyEvent", campo: "feedingMaterialKind" },
   quantity: { clase: "campo", modelo: "ColonyEvent", campo: "feedingQuantity" },
   unit: { clase: "campo", modelo: "ColonyEvent", campo: "feedingUnit" },
   method: { clase: "campo", modelo: "ColonyEvent", campo: "feedingMethod" },

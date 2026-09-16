@@ -12,6 +12,7 @@ import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess, requireColonyEventWriteAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
 import { exigeMetodoDeAlimentacion } from "./alimentacion";
+import { exigeMaterialDeAlimentacion } from "./vocabularioDeAlimentacion";
 import { exigeObjetivo, exigeVia } from "./objetivoDelTratamiento";
 import { ligarAVisitaAbierta } from "../traceability/visitaAbierta";
 import type { ColonyEventType, ProvenanceClass } from "../../generated/prisma/client";
@@ -29,6 +30,8 @@ export interface RecordColonyEventInput {
   eventType: ColonyEventType;
   occurredAt?: Date;
   operatorPersonId?: string | null;
+  /** Del vocabulario del dueno (ADR-148). `otro` obliga a decir cual en `feedingMaterial`. */
+  feedingMaterialKind?: string | null;
   feedingMaterial?: string | null;
   feedingQuantity?: number | null;
   feedingUnit?: string | null;
@@ -118,6 +121,8 @@ export function normalizarEventoDeColonia(
     | "treatmentTarget"
     | "treatmentRoute"
     | "feedingMethod"
+    | "feedingMaterialKind"
+    | "feedingMaterial"
   >,
 ) {
   if (input.eventType === "treatment" && !input.treatmentBatchLabel?.trim()) {
@@ -162,12 +167,25 @@ export function normalizarEventoDeColonia(
     throw new ColonyEventValidationError("feeding_method_solo_en_alimentacion");
   }
 
+  // CON QUÉ, del vocabulario del dueño (ADR-148). Se validan los DOS campos juntos porque la
+  // regla es sobre el par: «otro» obliga a decir cuál, y eso no se ve mirando ninguno solo.
+  const { kind: feedingMaterialKind, cual: feedingMaterial } = exigeMaterialDeAlimentacion(
+    input.feedingMaterialKind,
+    input.feedingMaterial,
+  );
+  // Mismo razonamiento que el método y que el objetivo: un tratamiento «con melaza» es un dato
+  // que nadie podría leer. El TEXTO no se restringe igual --`feedingMaterial` lleva desde antes
+  // del vocabulario lo que se escribiera a mano, y en un tratamiento eso no existe-- pero el
+  // vocabulario nuevo sí, porque es nuestro desde hoy y puede nacer limpio.
+  if (feedingMaterialKind !== null && input.eventType !== "feeding") {
+    throw new ColonyEventValidationError("feeding_material_solo_en_alimentacion");
+  }
 
-  return { treatmentTarget, treatmentRoute, feedingMethod };
+  return { treatmentTarget, treatmentRoute, feedingMethod, feedingMaterialKind, feedingMaterial };
 }
 
 export async function recordColonyEvent(userAccountId: string, input: RecordColonyEventInput) {
-  const { treatmentTarget, treatmentRoute, feedingMethod } = normalizarEventoDeColonia(input);
+  const { treatmentTarget, treatmentRoute, feedingMethod, feedingMaterialKind, feedingMaterial } = normalizarEventoDeColonia(input);
 
   const scope = await resolveColonyScope(input.colonyId);
   await requireColonyEventWriteAccess(userAccountId, [scope]);
@@ -184,7 +202,8 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
         eventType: input.eventType,
         occurredAt: input.occurredAt ?? new Date(),
         operatorPersonId: input.operatorPersonId ?? null,
-        feedingMaterial: input.feedingMaterial ?? null,
+        feedingMaterialKind,
+        feedingMaterial,
         feedingQuantity: input.feedingQuantity ?? null,
         feedingUnit: input.feedingUnit ?? null,
         coverageUntil: input.eventType === "feeding" ? (input.coverageUntil ?? null) : null,
@@ -301,7 +320,7 @@ export async function registrarEventoEnLote(userAccountId: string, input: Evento
   const colonyIds = [...new Set(input.colonyIds)];
   if (colonyIds.length === 0) throw new EventoEnLoteInvalido("sin_colmenas");
 
-  const { treatmentTarget, treatmentRoute, feedingMethod } = normalizarEventoDeColonia(input);
+  const { treatmentTarget, treatmentRoute, feedingMethod, feedingMaterialKind, feedingMaterial } = normalizarEventoDeColonia(input);
 
   const colonias = await prisma.colony.findMany({
     where: { id: { in: colonyIds } },
@@ -362,7 +381,8 @@ export async function registrarEventoEnLote(userAccountId: string, input: Evento
           eventType: input.eventType,
           occurredAt,
           operatorPersonId: input.operatorPersonId ?? null,
-          feedingMaterial: input.feedingMaterial ?? null,
+          feedingMaterialKind,
+          feedingMaterial,
           feedingQuantity: input.feedingQuantity ?? null,
           feedingUnit: input.feedingUnit ?? null,
           coverageUntil: input.eventType === "feeding" ? (input.coverageUntil ?? null) : null,

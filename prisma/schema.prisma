@@ -6463,6 +6463,28 @@ enum FeedingMethod {
   @@schema("apiary")
 }
 
+/// CON QUÉ se alimentó. **Los cinco los dio el dueño**, literal el 2026-09-16:
+/// «azúcar morena, blanca, melaza, miel de abeja y miel de caña». No se añadió
+/// ninguno más: un vocabulario de campo que nadie usa enseña a elegir «otro».
+///
+/// En español y con `otro`, igual que `FeedingMethod`, que es su hermano en el
+/// mismo formulario — no en inglés como `ColonyOriginType`, porque quien lo lee
+/// en el apiario lee esto y no aquello.
+///
+/// `otro` **obliga a decir cuál** en `feedingMaterial`; lo comprueba
+/// `exigeMaterialDeAlimentacion` en `lib/apiary/vocabularioDeAlimentacion.ts`, no
+/// esta lista. Un «otro» sin cuál es la respuesta vacía que ADR-125 persigue.
+enum FeedingMaterial {
+  azucar_morena
+  azucar_blanca
+  melaza
+  miel_de_abeja
+  miel_de_cana
+  otro
+
+  @@schema("apiary")
+}
+
 /// Contra qué se aplicó el producto. **El único campo que el Anexo B §4 marca
 /// obligatorio y que seguía sin existir**, con su consecuencia escrita: *«eficacia
 /// por objetivo; hoy no se puede agrupar»*.
@@ -6586,6 +6608,19 @@ model ColonyEvent {
   occurredAt          DateTime        @map("occurred_at")
   operatorPersonId    String?         @map("operator_person_id") @db.Uuid
   operator            Person?         @relation("ColonyEventOperator", fields: [operatorPersonId], references: [id])
+  /// CON QUÉ se alimentó, del vocabulario del dueño (ADR-148). Decisión suya,
+  /// literal el 2026-09-16: «azúcar morena, blanca, melaza, miel de abeja y miel
+  /// de caña». Antes esto era sólo `feedingMaterial`, texto libre, y por eso «qué
+  /// se alimentó esta temporada» no era una consulta sino una lectura a ojo.
+  ///
+  /// **Columna nueva al lado, no conversión de la vieja.** Convertir
+  /// `feeding_material` a enum exigiría traducir lo ya escrito, y esa base no se
+  /// puede leer desde aquí. Añadir es aditivo y no convierte nada.
+  feedingMaterialKind FeedingMaterial? @map("feeding_material_kind")
+  /// El «¿cuál?» de `feedingMaterialKind = otro`, y el texto de los registros
+  /// anteriores al vocabulario. **No está obsoleta**: es la mitad que permite que
+  /// el vocabulario no bloquee la captura cuando el dueño alimenta con algo que
+  /// no está en la lista — misma forma que `ColonyOriginType.other` + `originNote`.
   feedingMaterial     String?         @map("feeding_material") // e.g. "sugar syrup 1:1" — feeding only
   feedingQuantity     Decimal?        @map("feeding_quantity") @db.Decimal(10, 3)
   feedingUnit         String?         @map("feeding_unit")

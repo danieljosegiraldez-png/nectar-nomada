@@ -1595,7 +1595,14 @@
     "sitioTipoLabel": "What it is",
     "sitioPadreLabel": "Inside",
     "sitioPadreNinguno": "No place declared",
-    "locationType_meliponary": "Meliponary"
+    "locationType_meliponary": "Meliponary",
+    "feedingMaterial_azucar_morena": "Brown sugar",
+    "feedingMaterial_azucar_blanca": "White sugar",
+    "feedingMaterial_melaza": "Molasses",
+    "feedingMaterial_miel_de_abeja": "Honey",
+    "feedingMaterial_miel_de_cana": "Cane syrup",
+    "feedingMaterial_otro": "Other",
+    "feedingMaterialWhichLabel": "Which one?"
   },
   "Research": {
     "badge": "Research OS",

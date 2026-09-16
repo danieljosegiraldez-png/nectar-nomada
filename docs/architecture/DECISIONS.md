@@ -10416,3 +10416,69 @@ nada: es otro documento. La regla compara versiones de una misma reunion, no fec
 nota; un detector de "minutas de la misma reunion" sobre ese corpus no tendria nada que
 distinguir, y una prueba que recorre datos reales que no ejercitan la transformacion vale como
 red para el dia que lleguen, no como guardia. Si aparece un segundo par, ahi tiene sentido.
+
+## ADR-148 -- Con que se alimento deja de ser texto libre, y "otro" tiene que decir cual
+
+**Contexto.** El dueno, en el apiario el 2026-09-16 y con la aplicacion abierta: *"yo quiero que
+todos los campos, lo mas que se pueda, no sea campo libre de texto libre, que sean variables
+como le alimente con azucar morena o azucar blanca o con melaza o con miel de abeja miel de
+cana... y bueno, si hay algo que no entra, puedes poner otro y que uno pueda llenar, que es ese
+otro"*.
+
+**Lo que se midio antes de construir nada**, porque el pidio comprobar si ya estaba: de los
+campos de manejo de campo, **ya eran vocabulario** el metodo de alimentacion, el objetivo y la
+via del tratamiento, el origen de la colonia, el motivo de traslado, la causa de perdida, el
+proposito de la visita, el motivo de alerta, las irregularidades, la poblacion, las reservas,
+los estadios de cria y el tipo de realera. **Seguian en texto libre** `feedingMaterial`,
+`feedingUnit`, `treatmentProduct`, `treatmentDoseUnit`, y dos duplicados de campos que ya tenian
+vocabulario al lado (`storesLevel`, `pestDiseaseFlags`). Este ADR cierra **el primero**, que es
+el que el dueno nombro.
+
+**Decision -- una columna NUEVA, no una conversion.** `feedingMaterialKind` es el enum;
+`feedingMaterial`, el texto de siempre, **se queda**. Convertir la columna de texto a enum
+exigiria traducir lo ya escrito en produccion, y **esa base no se puede leer desde aqui**. Anadir
+un tipo y una columna anulable es aditivo: ninguna fila cambia, ninguna consulta de hoy devuelve
+algo distinto.
+
+El texto no queda obsoleto: pasa a ser **el "cual" de `otro`**, y a la vez lo que se escribiera
+antes del vocabulario. Es la misma forma que `ColonyOriginType.other` + `originNote`, que ya
+existia.
+
+**Los cinco valores son del dueno, literales, y no se anadio ninguno mas** -- ni candy, ni
+sustituto de polen, ni jarabe invertido, que cualquier manual listaria. Un desplegable con
+opciones que en esta finca nadie usa ensena a bajar hasta "otro", y entonces el vocabulario deja
+de leerse. Cuando el alimente con algo nuevo, se anade entonces.
+
+**En espanol, como `FeedingMethod`**, que es su hermano en el mismo formulario. `ColonyOriginType`
+esta en ingles y no se toca: cambiarlo seria un renombrado que nadie pidio.
+
+**Tres reglas, y la tercera es la que el dueno pidio explicitamente:**
+
+1. **Alimentar sin declarar con que NO es un error.** `null` es "sin registrar" (ADR-080), y
+   bloquearlo perderia la captura entera en campo -- peor que un registro al que le falta un dato.
+2. **Un valor del vocabulario admite texto al lado**, como precision: "miel de cana, de la finca
+   de al lado" no es una contradiccion.
+3. **`otro` EXIGE decir cual.** Un "otro" en blanco no es informacion: es la respuesta vacia que
+   ADR-125 persigue, disfrazada de dato.
+
+**Viaja por la cola sin senal.** `lib/sync/pushFieldEvents.ts` lo lleva. Sin eso el desplegable
+funcionaria en linea y se perderia **justo en campo**, que es donde se usa.
+
+**El mapa del protocolo pasa a apuntar al enum y no al texto.** Si siguiera apuntando a
+`feedingMaterial`, diria que esta capturada una pregunta que ahora se contesta con un desplegable.
+
+**Cuatro flip-tests, los cuatro compilando** -- y dos hubo que rehacerlos. El de "quitar un valor
+del vocabulario" **no compila**, y la razon merece quedar escrita: quitar un valor **estrecha la
+union de tipos**, y la prueba nombra `"miel_de_cana"` como literal. O sea que la pertenencia al
+vocabulario **la protege tambien el compilador**, no solo la asercion. El flip valido fue cambiar
+el ORDEN, que no estrecha nada.
+
+**Lo que NO esta guardado todavia, dicho para que nadie lo cuente como hecho:** que
+`feeding_material_solo_en_alimentacion` salte de verdad al escribir, y que el campo llegue por la
+cola sin senal. Las dos reglas existen en el codigo y **ninguna tiene prueba**: cruzan la frontera
+del servicio y van con las de `colonyEvents` contra Postgres.
+
+**Y lo que queda del encargo del dueno:** el vocabulario de **productos de tratamiento** y el de
+**limpieza fitosanitaria** -- que ademas **no existe como tipo de evento**: `ColonyEventType` tiene
+cuatro valores y ninguno es limpieza. Los dos estan bloqueados en el, porque que productos usa y
+que actos de limpieza hace no estan en ningun manual.

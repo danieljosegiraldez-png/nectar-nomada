@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { queueDraft } from "../../../lib/apiary/offlineQueue";
 import { METODOS_DE_ALIMENTACION } from "../../../lib/apiary/alimentacion";
+import { MATERIALES_DE_ALIMENTACION, MATERIAL_QUE_EXIGE_CUAL } from "../../../lib/apiary/vocabularioDeAlimentacion";
 import { OBJETIVOS_DE_TRATAMIENTO, VIAS_DE_TRATAMIENTO } from "../../../lib/apiary/vocabularioDeTratamiento";
 import { fechaDeDia } from "../../../lib/time/localDateTime";
 import { APIARY_DRAFTS_CHANGED_EVENT } from "./OfflineSyncIndicator";
@@ -22,6 +23,8 @@ import { Ayuda } from "./Ayuda";
 export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: string; selfPersonId: string | null }) {
   const t = useTranslations("Apiary");
 
+  /** Del vocabulario (ADR-148). El texto de al lado es el «cual» de `otro`. */
+  const [feedingMaterialKind, setFeedingMaterialKind] = useState("");
   const [feedingMaterial, setFeedingMaterial] = useState("");
   const [feedingQuantity, setFeedingQuantity] = useState("");
   const [feedingUnit, setFeedingUnit] = useState("kg");
@@ -80,6 +83,7 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
         // que es el fallo que tumbó la creación de colmenas el 2026-09-11.
         coverageUntil: coverageUntil ? fechaDeDia(coverageUntil, "coverageUntil")!.toISOString() : null,
         feedingMethod: feedingMethod || null,
+        feedingMaterialKind: feedingMaterialKind || null,
       });
     } catch {
       setSaveError(t("localSaveFailedError"));
@@ -87,6 +91,7 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
     }
     window.dispatchEvent(new Event(APIARY_DRAFTS_CHANGED_EVENT));
     setFeedingSaved(true);
+    setFeedingMaterialKind("");
     setFeedingMaterial("");
     setFeedingQuantity("");
     setCoverageUntil("");
@@ -161,9 +166,34 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
         <div className="nn-form" style={{ margin: 0 }}>
           <h4>{t("logFeedingHeading")}</h4>
           <div className="nn-field">
-            <label htmlFor={`feed-material-${colonyId}`}>{t("feedingMaterialLabel")}</label>
-            <input id={`feed-material-${colonyId}`} value={feedingMaterial} onChange={(e) => setFeedingMaterial(e.target.value)} />
+            <label htmlFor={`feed-material-kind-${colonyId}`}>{t("feedingMaterialLabel")}</label>
+            <select
+              id={`feed-material-kind-${colonyId}`}
+              value={feedingMaterialKind}
+              onChange={(e) => setFeedingMaterialKind(e.target.value)}
+            >
+              <option value="" />
+              {MATERIALES_DE_ALIMENTACION.map((m) => (
+                <option key={m} value={m}>
+                  {t(`feedingMaterial_${m}`)}
+                </option>
+              ))}
+            </select>
           </div>
+          {/* El «cual» sale SOLO con `otro`, y entonces es obligatorio: un «otro» que no dice
+              cual no es informacion. Fuera de ese caso el campo sigue disponible como
+              precision --«miel de cana, de la finca de al lado»-- sin estorbar. */}
+          {feedingMaterialKind === MATERIAL_QUE_EXIGE_CUAL ? (
+            <div className="nn-field">
+              <label htmlFor={`feed-material-${colonyId}`}>{t("feedingMaterialWhichLabel")}</label>
+              <input
+                id={`feed-material-${colonyId}`}
+                value={feedingMaterial}
+                onChange={(e) => setFeedingMaterial(e.target.value)}
+                required
+              />
+            </div>
+          ) : null}
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <div className="nn-field" style={{ flex: 1 }}>
               <label htmlFor={`feed-qty-${colonyId}`}>{t("feedingQuantityLabel")}</label>
