@@ -18,6 +18,18 @@ import { createSoilSample, createFoliarSample, SampleValidationError } from "../
 import { createSoilProfile, SoilProfileValidationError } from "../traceability/soilProfiles";
 import { createPlantingCohort, PlantingCohortValidationError } from "../traceability/plantingCohorts";
 import type { HorizonteDelFormulario } from "../traceability/horizontesDelFormulario";
+import {
+  exigeProcedencia,
+  ProcedenciaInvalida,
+  PROCEDENCIA_DE_REGISTRO_DE_CAMPO,
+  PROCEDENCIA_DE_SIEMBRA,
+} from "../traceability/procedencia";
+import {
+  CanopyPosition,
+  DataQuality,
+  HarvestWindowPrecision,
+  SoilFeatureObservation,
+} from "../../generated/prisma/enums";
 
 /**
  * P4 §4 (46_P4_API_Y_SINCRONIZACION.md) — push por lotes con resultado **por
@@ -515,13 +527,72 @@ function buscarCapturaPorClientDraftId(
  * `(locationId, sampleCode)` — dos muestras distintas con el mismo código —
  * se leería como `duplicate` en vez de subir como el dato malo que es.
  */
-function esCarreraDeClientDraftId(error: unknown): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") return false;
+function camposDelP2002(error: Prisma.PrismaClientKnownRequestError): string[] {
   const meta = error.meta as
     | { target?: unknown; driverAdapterError?: { cause?: { constraint?: { fields?: unknown } } } }
     | undefined;
   const target = meta?.target ?? meta?.driverAdapterError?.cause?.constraint?.fields;
-  return Array.isArray(target) && target.length === 1 && target[0] === "client_draft_id";
+  return Array.isArray(target) ? target.map(String) : [];
+}
+
+function esCarreraDeClientDraftId(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") return false;
+  const campos = camposDelP2002(error);
+  return campos.length === 1 && campos[0] === "client_draft_id";
+}
+
+/**
+ * Un `P2002` que NO es la carrera de arriba: **el dato es malo, y hay que
+ * decirlo con su razón**.
+ *
+ * El caso real es `@@unique([locationId, sampleCode])`, que sigue vivo en las
+ * dos tablas de muestra: dos muestras distintas del mismo bloque con el mismo
+ * código. Sin esta rama subía como excepción → **500** →
+ * `clasificarRespuesta(500)` = `reintentar` → `syncFieldEvents` no marca ni un
+ * borrador, todos quedan pendientes, y el mismo lote vuelve **para siempre**
+ * hasta que la purga de los 21 días lo borre. Y la pantalla decía «el servidor
+ * no pudo atender», que es mentira: el servidor corrió y el dato no se puede
+ * guardar. El spec lo pide explícito — un dato que no se puede validar vuelve
+ * como rechazo **con su razón**.
+ *
+ * La razón nombra las columnas del índice, no un genérico, porque es lo único
+ * que le dice a quien lo lea CUÁL de los datos está repetido.
+ */
+function razonDeUnicidad(error: unknown): string | null {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") return null;
+  const campos = camposDelP2002(error);
+  return campos.length ? `already_used:${campos.join(",")}` : "already_used";
+}
+
+/** Un valor de enum que llegó del cuerpo JSON y no existe en la base. */
+export class ValorEnumeradoInvalido extends Error {}
+
+/**
+ * Devuelve el valor si existe en el enum de la base, o lanza.
+ *
+ * **Sustituye a un `as never`**, con el mismo argumento que `exigeProcedencia`
+ * (`lib/traceability/procedencia.ts`): ese `as never` no convertía nada,
+ * apagaba al compilador y dejaba llegar la cadena cruda a Prisma. Con señal eso
+ * es un error de la acción que el operador ve; **sin señal es un 500**, o sea
+ * la cola atascada en silencio, porque nadie llega a evaluar nada.
+ *
+ * Se comprueba contra el enum de la base y no contra la lista de cada
+ * formulario: el camino CON señal tampoco estrecha estos tres (`dataQuality`,
+ * `canopyPosition`, `plantedPrecision` y las banderas de suelo viajan con `as
+ * never` en `app/actions/traceability.ts`), y rechazar aquí lo que allí se
+ * acepta haría que el mismo dato se guardara o no según hubiera cobertura.
+ * `provenanceClass` es la excepción y va por `exigeProcedencia`, porque ahí los
+ * dos caminos SÍ estrechan igual.
+ */
+function exigeValorEnumerado<T extends string>(
+  valor: string | null | undefined,
+  permitidos: Readonly<Record<string, T>>,
+  campo: string,
+): T | null {
+  if (valor == null || valor === "") return null;
+  const encontrado = Object.values(permitidos).find((p) => p === valor);
+  if (encontrado === undefined) throw new ValorEnumeradoInvalido(`${campo}_not_valid:${valor}`);
+  return encontrado;
 }
 
 /**
@@ -537,10 +608,21 @@ async function aplicarCapturaDeParcela(
   if (yaEstaba) return { clientDraftId: m.clientDraftId, status: "duplicate", id: yaEstaba.id };
 
   try {
+    // Los enums se validan ANTES de llamar al servicio, no se cuelan con
+    // `as never`: un valor que Postgres no conoce sería una excepción, y una
+    // excepción aquí es un 500 que deja la cola dando vueltas. Ver
+    // `exigeValorEnumerado` arriba.
+    //
+    // `provenanceClass` va por `exigeProcedencia`, la MISMA lista que pinta el
+    // formulario, porque aquí los dos caminos sí estrechan igual — y la siembra
+    // ofrece `interpretation` además de las dos de campo, como su pantalla.
     const comun = {
       locationId: m.locationId,
-      provenanceClass: m.provenanceClass as never,
-      dataQuality: (m.dataQuality ?? null) as never,
+      provenanceClass: exigeProcedencia(
+        m.provenanceClass,
+        m.kind === "planting_cohort" ? PROCEDENCIA_DE_SIEMBRA : PROCEDENCIA_DE_REGISTRO_DE_CAMPO,
+      ),
+      dataQuality: exigeValorEnumerado(m.dataQuality, DataQuality, "dataQuality"),
       clientDraftId: m.clientDraftId,
     };
     const fila =
@@ -553,7 +635,8 @@ async function aplicarCapturaDeParcela(
       : m.kind === "foliar_sample"
         ? await createFoliarSample(userAccountId, { ...comun, sampleCode: m.sampleCode, sampledAt: m.sampledAt,
             treatmentPlotLabel: m.treatmentPlotLabel ?? null,
-            leafPairPosition: m.leafPairPosition ?? null, canopyPosition: (m.canopyPosition ?? null) as never,
+            leafPairPosition: m.leafPairPosition ?? null,
+            canopyPosition: exigeValorEnumerado(m.canopyPosition, CanopyPosition, "canopyPosition"),
             treeAgeYears: m.treeAgeYears ?? null, cultivar: m.cultivar ?? null,
             phenologicalStage: m.phenologicalStage ?? null, branchBearingFruit: m.branchBearingFruit ?? null,
             laboratory: m.laboratory ?? null, notes: m.notes ?? null })
@@ -561,14 +644,17 @@ async function aplicarCapturaDeParcela(
         ? await createSoilProfile(userAccountId, { ...comun, describedAt: m.describedAt,
             pitDepthCm: m.pitDepthCm ?? null, rootingDepthCm: m.rootingDepthCm ?? null,
             rootDistribution: m.rootDistribution ?? null,
-            mottling: (m.mottling ?? null) as never, greyColours: (m.greyColours ?? null) as never,
-            rootChannelConcretions: (m.rootChannelConcretions ?? null) as never,
-            sourSmell: (m.sourSmell ?? null) as never,
+            mottling: exigeValorEnumerado(m.mottling, SoilFeatureObservation, "mottling"),
+            greyColours: exigeValorEnumerado(m.greyColours, SoilFeatureObservation, "greyColours"),
+            rootChannelConcretions: exigeValorEnumerado(
+              m.rootChannelConcretions, SoilFeatureObservation, "rootChannelConcretions"),
+            sourSmell: exigeValorEnumerado(m.sourSmell, SoilFeatureObservation, "sourSmell"),
             impedingLayerDepthCm: m.impedingLayerDepthCm ?? null,
             impedingLayerNote: m.impedingLayerNote ?? null, notes: m.notes ?? null,
             horizons: [...(m.horizons ?? [])] })
       : await createPlantingCohort(userAccountId, { ...comun, cultivarValueId: m.cultivarValueId ?? null,
-            plantedAt: m.plantedAt ?? null, plantedPrecision: (m.plantedPrecision ?? null) as never,
+            plantedAt: m.plantedAt ?? null,
+            plantedPrecision: exigeValorEnumerado(m.plantedPrecision, HarvestWindowPrecision, "plantedPrecision"),
             plantCount: m.plantCount ?? null, notes: m.notes ?? null });
     return { clientDraftId: m.clientDraftId, status: "applied", id: fila.id };
   } catch (error) {
@@ -595,10 +681,20 @@ async function aplicarCapturaDeParcela(
       error instanceof SampleValidationError ||
       error instanceof SoilProfileValidationError ||
       error instanceof PlantingCohortValidationError ||
-      error instanceof LocationAccessError
+      error instanceof LocationAccessError ||
+      // Los dos que estrena la cola offline: un enum que la base no conoce y una
+      // procedencia que la pantalla no ofrece. Con señal los ve el operador en
+      // el acto; aquí, sin esta línea, serían un 500 y la cola daría vueltas.
+      error instanceof ValorEnumeradoInvalido ||
+      error instanceof ProcedenciaInvalida
     ) {
       return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
     }
+    // Un `P2002` que no era la carrera de arriba es el dato repetido: se dice
+    // cuál, y se descarta. Va DESPUÉS de las clases de dominio y ANTES del
+    // `throw`, que es donde estaba el agujero.
+    const repetido = razonDeUnicidad(error);
+    if (repetido) return { clientDraftId: m.clientDraftId, status: "rejected", reason: repetido };
     throw error;
   }
 }

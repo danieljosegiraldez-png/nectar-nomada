@@ -62,6 +62,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await prisma.soilSample.deleteMany({ where: assertDefinedWhere({ locationId }) });
+  // Ronda de arreglo de la revisión final: las pruebas de enum crean también
+  // muestras foliares y perfiles en este mismo `locationId`.
+  await prisma.foliarSample.deleteMany({ where: assertDefinedWhere({ locationId }) });
+  await prisma.soilProfile.deleteMany({ where: assertDefinedWhere({ locationId }) });
   // Ronda de arreglo 1 — la prueba de `dataQuality` en siembra crea un
   // `PlantingCohort` en este mismo `locationId`.
   await prisma.plantingCohort.deleteMany({ where: assertDefinedWhere({ locationId }) });
@@ -124,11 +128,47 @@ describe("el lote reconoce los cuatro tipos de captura de parcela", () => {
     expect(r.mutations[0]).toMatchObject({ kind: "soil_sample", sampledAt: new Date("2026-09-16T12:00:00.000Z") });
   });
 
-  it("una muestra sin sampleCode es malformada", () => {
+  /**
+   * **Contrato cambiado por el hallazgo I1/I3 de la revisión final.** Antes esto
+   * devolvía `{ ok: false, error: "mutation_malformed" }`, o sea **400 del lote
+   * entero**, y `clasificarRespuesta(400)` = `rechazar` marca `error` a TODOS los
+   * borradores del lote, los buenos incluidos. Es la misma regla que el spec fija
+   * y que la tarea 4 implementó para el `kind` desconocido, aplicada donde
+   * faltaba: **con `clientDraftId` hay a quién atribuir el rechazo, así que se
+   * rechaza esa mutación y las demás pasan**.
+   *
+   * Y el caso es alcanzable hoy: el payload hace `.trim()` pero no exige, y el
+   * `required` del HTML no bloquea un código de sólo espacios.
+   */
+  it("una muestra sin sampleCode se rechaza SOLA, no tumba el lote", () => {
     const r = parsearMutaciones([
       { kind: "soil_sample", clientDraftId: "d1", locationId: "loc1", sampledAt: "2026-09-16T12:00:00.000Z" },
+      { kind: "soil_sample", clientDraftId: "d-ok", locationId: "loc1", sampleCode: "S-02", sampledAt: "2026-09-16T12:00:00.000Z" },
     ]);
-    expect(r).toEqual({ ok: false, error: "mutation_malformed" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.rechazos).toEqual([{ clientDraftId: "d1", reason: "sample_code_required" }]);
+    // Control: la buena del mismo lote SÍ pasó, que es la propiedad entera.
+    expect(r.mutations).toHaveLength(1);
+    expect(r.mutations[0]).toMatchObject({ clientDraftId: "d-ok" });
+  });
+
+  it("un sampleCode de sólo espacios se rechaza igual: el `required` del HTML no lo bloquea", () => {
+    const r = parsearMutaciones([
+      { kind: "soil_sample", clientDraftId: "d1", locationId: "loc1", sampleCode: "   ", sampledAt: "2026-09-16T12:00:00.000Z" },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.rechazos).toEqual([{ clientDraftId: "d1", reason: "sample_code_required" }]);
+  });
+
+  it("una muestra sin sampledAt se rechaza sola, con su propia razón", () => {
+    const r = parsearMutaciones([
+      { kind: "soil_sample", clientDraftId: "d1", locationId: "loc1", sampleCode: "S-01" },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.rechazos).toEqual([{ clientDraftId: "d1", reason: "sampled_at_required" }]);
   });
 
   it("parsea una muestra foliar encolada", () => {
@@ -164,11 +204,14 @@ describe("el lote reconoce los cuatro tipos de captura de parcela", () => {
     expect(r.mutations[0]).toMatchObject({ kind: "soil_profile", describedAt: new Date("2026-09-16T12:00:00.000Z") });
   });
 
-  it("un perfil de suelo sin describedAt es malformado", () => {
+  it("un perfil de suelo sin describedAt se rechaza solo, no tumba el lote", () => {
     const r = parsearMutaciones([
       { kind: "soil_profile", clientDraftId: "d3", locationId: "loc1", provenanceClass: "direct_observation" },
     ]);
-    expect(r).toEqual({ ok: false, error: "mutation_malformed" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.rechazos).toEqual([{ clientDraftId: "d3", reason: "described_at_required" }]);
+    expect(r.mutations).toHaveLength(0);
   });
 
   it("parsea una siembra encolada, con plantedAt ausente", () => {
@@ -181,9 +224,28 @@ describe("el lote reconoce los cuatro tipos de captura de parcela", () => {
     expect(r.mutations[0]).toMatchObject({ kind: "planting_cohort", plantedAt: null });
   });
 
-  it("una mutación de parcela sin locationId no tiene ids", () => {
+  it("una mutación de parcela sin locationId se rechaza sola: tiene a quién atribuirse", () => {
     const r = parsearMutaciones([
       { kind: "soil_sample", clientDraftId: "d1", sampleCode: "S-01", sampledAt: "2026-09-16T12:00:00.000Z" },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.rechazos).toEqual([{ clientDraftId: "d1", reason: "location_id_required" }]);
+  });
+
+  /**
+   * **El otro lado de la regla, y por eso va aquí al lado.** Sin `clientDraftId`
+   * no hay a quién atribuir el rechazo, así que sigue siendo **400 de lote** —
+   * si esto se rechazara por mutación, el resultado no tendría clave con la que
+   * el cliente pudiera emparejarlo y el borrador se quedaría pendiente para
+   * siempre sin que nadie supiera cuál es.
+   *
+   * Es también el control positivo de los tres casos de arriba: sin él, un
+   * parseo que dijera `ok` a todo los pasaría los tres en verde.
+   */
+  it("una mutación de parcela SIN clientDraftId sigue siendo 400 de lote", () => {
+    const r = parsearMutaciones([
+      { kind: "soil_sample", locationId: "loc1", sampleCode: "S-01", sampledAt: "2026-09-16T12:00:00.000Z" },
     ]);
     expect(r).toEqual({ ok: false, error: "mutation_missing_ids" });
   });
@@ -298,6 +360,158 @@ describe("plantedPrecision viaja junto a plantedAt en la siembra", () => {
     // Sin el reenvío de `plantedPrecision`, esto cae en `rejected` con
     // `planted_precision_required` — confirmado en rojo antes de escribir el
     // arreglo (ver task-3-report.md, ronda 2).
+    expect(r).toMatchObject({ status: "applied" });
+  });
+});
+
+/**
+ * Ronda de arreglo de la revisión final — I1 e I2, que son **el mismo defecto
+ * con dos caras**: un dato que el servidor SÍ evaluó y no puede guardar sube
+ * como excepción, la ruta contesta **500**, y `clasificarRespuesta(500)`
+ * (`lib/sync/offlineQueue.ts:206-212`) devuelve `reintentar`. Esa rama de
+ * `syncFieldEvents` (`:275-280`) **no toca ni un borrador** —todos quedan
+ * `pending`, `serverUnavailable: true`— y como `:257` vuelve a recoger
+ * `pending` y `error` en la tanda siguiente, **el mismo lote regresa para
+ * siempre** hasta la purga de los 21 días. Y la pantalla dice
+ * `fieldSyncUnavailable`, «el servidor no pudo atender», que es mentira: el
+ * servidor corrió y el dato era malo.
+ *
+ * Medido en el código, no supuesto, y citado por línea a propósito.
+ */
+describe("un dato malo vuelve como rejected con su razón, no como 500 eterno", () => {
+  it("un sampleCode repetido en el mismo sitio es rejected, no una excepción", async () => {
+    const sampleCode = `S-dup-${Date.now()}`;
+    const [primera] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "soil_sample" as const,
+        clientDraftId: `d-dup-a-${Date.now()}`,
+        locationId,
+        sampleCode,
+        sampledAt: new Date(),
+        provenanceClass: "direct_observation",
+      },
+    ]);
+    expect(primera).toMatchObject({ status: "applied" });
+
+    // MISMO `sampleCode`, `clientDraftId` DISTINTO: no es la carrera de
+    // `client_draft_id` —ésa tiene su propia prueba abajo— sino el índice
+    // compuesto `@@unique([locationId, sampleCode])`, que sigue vivo en las dos
+    // tablas de muestra. `esCarreraDeClientDraftId` no lo reconoce, y hace bien.
+    const [segunda] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "soil_sample" as const,
+        clientDraftId: `d-dup-b-${Date.now()}`,
+        locationId,
+        sampleCode,
+        sampledAt: new Date(),
+        provenanceClass: "direct_observation",
+      },
+    ]);
+    expect(segunda).toMatchObject({ status: "rejected" });
+    expect((segunda as { reason: string }).reason).toContain("sample_code");
+    // Control: la razón nombra el índice que chocó, no un genérico. Y la fila
+    // buena sigue siendo UNA: el rechazo no escribió nada.
+    expect(await prisma.soilSample.count({ where: { locationId, sampleCode } })).toBe(1);
+  });
+
+  it("un dataQuality que no existe en el enum es rejected, no 500", async () => {
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "soil_sample" as const,
+        clientDraftId: `d-dq-${Date.now()}`,
+        locationId,
+        sampleCode: `S-dq-${Date.now()}`,
+        sampledAt: new Date(),
+        provenanceClass: "direct_observation",
+        dataQuality: "regularcillo",
+      },
+    ]);
+    expect(r).toMatchObject({ status: "rejected" });
+    expect((r as { reason: string }).reason).toContain("dataQuality");
+  });
+
+  it("una provenanceClass que la pantalla no ofrece es rejected, como en el camino con señal", async () => {
+    // `ai_suggestion` existe en el enum de la base: sin validar, Postgres la
+    // aceptaría y quedaría guardada como si alguien lo hubiera visto. El camino
+    // con señal la rechaza con `exigeProcedencia`; éste tiene que hacer lo mismo.
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "soil_sample" as const,
+        clientDraftId: `d-prov-${Date.now()}`,
+        locationId,
+        sampleCode: `S-prov-${Date.now()}`,
+        sampledAt: new Date(),
+        provenanceClass: "ai_suggestion",
+      },
+    ]);
+    expect(r).toMatchObject({ status: "rejected" });
+    expect((r as { reason: string }).reason).toContain("provenance");
+  });
+
+  it("un canopyPosition inválido es rejected, no 500", async () => {
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "foliar_sample" as const,
+        clientDraftId: `d-cp-${Date.now()}`,
+        locationId,
+        sampleCode: `F-cp-${Date.now()}`,
+        sampledAt: new Date(),
+        provenanceClass: "direct_observation",
+        canopyPosition: "en la copa",
+      },
+    ]);
+    expect(r).toMatchObject({ status: "rejected" });
+    expect((r as { reason: string }).reason).toContain("canopyPosition");
+  });
+
+  it("un plantedPrecision inválido es rejected, no 500", async () => {
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "planting_cohort" as const,
+        clientDraftId: `d-pp-${Date.now()}`,
+        locationId,
+        provenanceClass: "direct_observation",
+        plantedAt: new Date("2026-03-01T00:00:00.000Z"),
+        plantedPrecision: "por ahi",
+      },
+    ]);
+    expect(r).toMatchObject({ status: "rejected" });
+    expect((r as { reason: string }).reason).toContain("plantedPrecision");
+  });
+
+  it("una bandera de anaerobiosis inválida es rejected, no 500", async () => {
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "soil_profile" as const,
+        clientDraftId: `d-mot-${Date.now()}`,
+        locationId,
+        describedAt: new Date(),
+        provenanceClass: "direct_observation",
+        mottling: "puede",
+      },
+    ]);
+    expect(r).toMatchObject({ status: "rejected" });
+    expect((r as { reason: string }).reason).toContain("mottling");
+  });
+
+  /**
+   * Control positivo de los seis de arriba: si `aplicarCapturaDeParcela`
+   * rechazara cualquier cosa, los seis pasarían igual de verdes. Los valores
+   * BUENOS de esos mismos cuatro campos tienen que seguir aplicándose.
+   */
+  it("está midiendo: los mismos campos con valores válidos SÍ se aplican", async () => {
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "foliar_sample" as const,
+        clientDraftId: `d-ok-enum-${Date.now()}`,
+        locationId,
+        sampleCode: `F-ok-${Date.now()}`,
+        sampledAt: new Date(),
+        provenanceClass: "original_record",
+        dataQuality: "provisional",
+        canopyPosition: "middle",
+      },
+    ]);
     expect(r).toMatchObject({ status: "applied" });
   });
 });

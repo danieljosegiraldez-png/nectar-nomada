@@ -159,14 +159,29 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
 
     // Captura de parcela: los cuatro tipos de KINDS_DE_PARCELA.
     if (typeof m.kind === "string" && (KINDS_DE_PARCELA as readonly string[]).includes(m.kind)) {
-      if (typeof m.clientDraftId !== "string" || typeof m.locationId !== "string") {
-        return { ok: false, error: "mutation_missing_ids" };
+      // Sin `clientDraftId` no hay a quién atribuir el rechazo, así que es 400
+      // de lote — la misma frontera que el `kind` desconocido de abajo, y la que
+      // el spec fija. CON él, un dato malo se rechaza SOLO y las demás
+      // mutaciones del lote se aplican: tumbar el lote entero marcaba `error`
+      // todos los borradores, los buenos incluidos, y `syncFieldEvents` los
+      // vuelve a recoger en la tanda siguiente — el mismo 400 para siempre.
+      if (typeof m.clientDraftId !== "string") return { ok: false, error: "mutation_missing_ids" };
+      const clientDraftId = m.clientDraftId;
+      const rechazar = (reason: string) => {
+        rechazos.push({ clientDraftId, reason });
+      };
+      if (typeof m.locationId !== "string") {
+        rechazar("location_id_required");
+        continue;
       }
       // Cada tipo tiene su fecha obligatoria y su campo obligatorio; lo demás lo
       // valida su servicio de dominio y vuelve como `rejected` con su razón.
       if (m.kind === "soil_profile") {
         const describedAt = toDate(m.describedAt);
-        if (!describedAt) return { ok: false, error: "mutation_malformed" };
+        if (!describedAt) {
+          rechazar("described_at_required");
+          continue;
+        }
         // Tipado de verdad, no `as PushMutation` sobre un literal: con `horizons`
         // dentro, la aserción directa deja de solapar y TS la rechaza. Declarar
         // la variable con su tipo es además lo que hace que quitar un campo del
@@ -184,8 +199,16 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
         continue;
       }
       const sampledAt = toDate(m.sampledAt);
-      if (!sampledAt || typeof m.sampleCode !== "string" || m.sampleCode.trim() === "") {
-        return { ok: false, error: "mutation_malformed" };
+      if (!sampledAt) {
+        rechazar("sampled_at_required");
+        continue;
+      }
+      // `sample_code_required` es literalmente la razón que lanza `exigirCodigo`
+      // en `lib/traceability/soilSamples.ts`: el operador ve el mismo texto
+      // venga el rechazo del parseo o del servicio.
+      if (typeof m.sampleCode !== "string" || m.sampleCode.trim() === "") {
+        rechazar("sample_code_required");
+        continue;
       }
       parsed.push({ ...(m as object), sampledAt } as PushMutation);
       continue;
