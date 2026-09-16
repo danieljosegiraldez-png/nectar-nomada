@@ -152,6 +152,59 @@ de lo que está a medias. La de IA y la de laboratorio, lo mismo.
 
 ---
 
+## 6.bis Hechos del dueño del 2026-09-16 que el modelo tiene que sostener
+
+Llegaron en conversación y se escriben aquí porque no sobreviven en un chat. **No
+son suposiciones: son respuestas suyas a preguntas concretas.**
+
+### La trilla no es una máquina, es un arreglo
+
+**Finca Rosina / beneficio Las Nubes NO tiene trilladora.** Las demás fincas sí. Así
+que la trilla ocurre de tres maneras y **las tres tienen que caber**:
+
+1. **En Cafelino** — servicio externo.
+2. **En Kiva Estate** — servicio externo.
+3. **A mano, con mazo y pilón**, en Las Nubes — trabajo propio, con jornales y sin
+   equipo.
+
+Consecuencia de diseño, y es la que importa: el modelo **no puede ser «una
+trilladora que produce verde»**. Tiene que ser una transformación que puede ocurrir
+**fuera del control del dueño**, registrando quién la hizo y dónde. Q44 del paquete
+—servicios externos con custodia— deja de ser teórico, y está en cero.
+
+**Vuelve todo.** El grano verde **y** la cascarilla regresan a la finca; no se queda
+nada en el trillador. Así que el balance de masas **cierra dentro de Finca Rosina** y
+no hay salida declarada hacia un tercero. Esto se preguntó dos veces y el dueño
+corrigió su primera respuesta: queda la segunda.
+
+### El café se vende en tres formas
+
+**Verde, pergamino o tostado — «depende el arreglo».** Dos consecuencias:
+
+- **La trilla puede no ocurrir nunca** para un lote que se vende en pergamino, así
+  que **no puede ser una etapa obligatoria** de la cadena.
+- Hoy el lote **no puede salir de ninguna forma**: `sale` existe en el enum y ningún
+  camino de código lo produce — hallazgo `F3-005` de la auditoría de fase 3.
+
+### Herramientas en uso
+
+- **Bolsas GrainPro** — ya está en el sistema como valor de catálogo `GrainProBag`.
+- **Cropster** — **CORRECCIÓN de una medición anterior de este documento.** Se dijo
+  «cero menciones» buscando sólo en `lib/`, `app/` y el esquema. Está en **cinco
+  documentos de `docs/`**, incluido `RECIPES_FORMULATION_AND_DISTILLATION.md`, y en
+  las transcripciones del paquete. Lo que no existe es la **integración en código**:
+  documentado sí, implementado no. Lo vende INFUMAS y el dueño tiene lista de
+  precios.
+
+### El trabajo de campo que hoy desaparece
+
+Socoleo, retiro de árboles podridos o caídos y preparación de terreno en el Lote 7,
+con trabajadores ahora mismo. **`Intervention` no existe**, así que esos jornales no
+tienen dónde guardarse. `LabourEntry` sí existe pero cuelga de corridas de proceso,
+no de una parcela en preparación.
+
+---
+
 ## 7. Decisiones que necesitan a Daniel
 
 No se resuelven inspeccionando, así que no las decido:
