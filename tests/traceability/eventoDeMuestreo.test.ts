@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "../../lib/db";
+import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import * as audit from "../../lib/audit";
-import { createSamplingEvent, type CreateSamplingEventInput } from "../../lib/traceability/samplingEvents";
+import { createSamplingEvent, type CreateSamplingEventInput, registrarInspeccion } from "../../lib/traceability/samplingEvents";
 import type { LocationType, Prisma } from "../../generated/prisma/client";
 
 const occurredAt = new Date("2026-03-01T09:00:00Z");
@@ -187,5 +188,99 @@ describe("el evento de muestreo es el acto que agrupa las muestras", () => {
   it("rechaza referencias inexistentes antes de escribir", async () => {
     await expect(crear({ dryingRunId: randomUUID() })).rejects.toThrow("drying_run_not_found");
     await expect(crear({ dryingBedLocationId: randomUUID() })).rejects.toThrow("location_not_found");
+  });
+});
+
+/**
+ * La inspección entera, atómica.
+ *
+ * **Por qué importa que lo sea.** El motor de secado agrupa por `samplingEventId`
+ * para calcular la dispersión entre zonas de la misma cama. Un evento guardado con
+ * UNA de sus dos zonas da un rango de cero: **una cama perfectamente uniforme que
+ * nadie midió**. Media inspección es peor que ninguna, y por eso un fallo a mitad
+ * no puede dejar rastro.
+ */
+
+/**
+ * La inspección entera, atómica.
+ *
+ * **Por qué importa que lo sea.** El motor de secado agrupa por `samplingEventId`
+ * para calcular la dispersión entre zonas de la misma cama. Un evento guardado con
+ * UNA de sus dos zonas da un rango de cero: **una cama perfectamente uniforme que
+ * nadie midió**. Media inspección es peor que ninguna.
+ */
+describe("una inspección se guarda entera o no se guarda", () => {
+  /** Cada prueba crea y limpia su lote: el `afterEach` de arriba corre entre
+   *  pruebas, así que un lote de `beforeAll` moriría tras la primera. */
+  async function conLote<T>(fn: (lotId: string) => Promise<T>): Promise<T> {
+    // `organizationId` es obligatorio en `Lot`. Se toma una existente en vez de
+    // crear otra: la base es COMPARTIDA y una organización de prueba más es
+    // basura que sobrevive a la corrida.
+    const org = await prisma.organization.findFirstOrThrow();
+    const lote = await prisma.lot.create({ data: {
+      lotCode: `TEST-INSP-${randomUUID()}`, lotType: "drying", status: "draft",
+      classification: "internal", organizationId: org.id,
+    } });
+    try {
+      return await fn(lote.id);
+    } finally {
+      await prisma.sample.deleteMany({ where: assertDefinedWhere({ sourceLotId: lote.id }) });
+      await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: lote.id }) });
+    }
+  }
+
+  it("crea el acto y sus dos muestras, y las deja comparables entre sí", async () => {
+    await conLote(async (lotId) => {
+      const creado = await registrarInspeccion(actorId, {
+        lotId,
+        occurredAt: new Date("2026-03-05T09:00:00Z"),
+        muestras: [
+          { materialState: "PARCHMENT", samplingRole: "ZONE", samplingZone: "NORTH" },
+          { materialState: "PARCHMENT", samplingRole: "ZONE", samplingZone: "SOUTH" },
+        ],
+      });
+      eventIds.push(creado.event.id);
+
+      expect(creado.muestras).toHaveLength(2);
+      const leido = await prisma.samplingEvent.findUniqueOrThrow({
+        where: { id: creado.event.id }, include: { samples: true },
+      });
+      // Las dos cuelgan del MISMO acto: eso es lo que las hace comparables, y no
+      // la cercanía de sus fechas.
+      expect(leido.samples).toHaveLength(2);
+      expect(new Set(leido.samples.map((m) => m.samplingZone))).toEqual(new Set(["NORTH", "SOUTH"]));
+    });
+  });
+
+  it("si una muestra falla, NO queda ni el acto ni la anterior", async () => {
+    await conLote(async (lotId) => {
+      const antes = await prisma.samplingEvent.count();
+      await expect(
+        registrarInspeccion(actorId, {
+          lotId,
+          occurredAt: new Date("2026-03-05T10:00:00Z"),
+          muestras: [
+            { materialState: "PARCHMENT", samplingRole: "ZONE", samplingZone: "NORTH" },
+            // Inválida: una zona sobre una réplica, que el CHECK
+            // `sample_zona_exige_papel_zona` rechaza. La PRIMERA ya está escrita
+            // cuando ésta revienta — ahí es donde se demuestra la atomicidad.
+            { materialState: "PARCHMENT", samplingRole: "REPLICATE", samplingZone: "SOUTH" },
+          ],
+        }),
+      ).rejects.toThrow();
+
+      // El control que de verdad prueba la atomicidad es CONTAR. Un
+      // `rejects.toThrow` sólo dice que alguien se quejó, no que no quedara basura.
+      expect(await prisma.samplingEvent.count()).toBe(antes);
+      expect(await prisma.sample.count({ where: assertDefinedWhere({ sourceLotId: lotId }) })).toBe(0);
+    });
+  });
+
+  it("rechaza una inspección sin muestras en vez de guardar un acto vacío", async () => {
+    await conLote(async (lotId) => {
+      await expect(
+        registrarInspeccion(actorId, { lotId, occurredAt: new Date("2026-03-05T11:00:00Z"), muestras: [] }),
+      ).rejects.toThrow();
+    });
   });
 });
