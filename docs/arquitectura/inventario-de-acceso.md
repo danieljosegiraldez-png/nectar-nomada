@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-16
 
-**341 operaciones** que tocan la base, en **100 archivos**:
+**342 operaciones** que tocan la base, en **100 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -23,7 +23,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
 | **232** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **33** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **58** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
@@ -66,6 +66,11 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > el cliente entero. Lleva sus dos entradas —`reciben_transaccion` y `dependen_del_llamador`—
 > porque las dos preguntas son distintas: por qué se le pasa una transacción abierta, y quién
 > autoriza en su lugar.
+
+> **Y el de 341→342 es `lugaresParaSitioDeAbejas` (ADR-144).** Vive en `lib/apiary/hives.ts`,
+> que ya estaba inventariado, y sube la fila de **acotado por construcción**: filtra por
+> `resolveApiaryVisibility`, que sale de las asignaciones del propio principal, así que **no
+> puede** devolver los lugares de otro. Por eso no necesita entrada en el allowlist.
 
 > **El de 329→330, con un archivo mas, es lo que quedo pendiente al cerrar (ADR-138).**
 > `pendientesDeLaVisita` vive en `lib/apiary/pendienteDeLaVisita.ts`, nuevo. Cae en **«depende

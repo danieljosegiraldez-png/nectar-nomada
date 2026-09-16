@@ -1591,7 +1591,11 @@
     "locationType_country": "Country",
     "locationType_plot": "Plot",
     "locationType_micro_plot": "Micro-plot",
-    "locationType_apiary_site": "Apiary"
+    "locationType_apiary_site": "Apiary",
+    "sitioTipoLabel": "What it is",
+    "sitioPadreLabel": "Inside",
+    "sitioPadreNinguno": "No place declared",
+    "locationType_meliponary": "Meliponary"
   },
   "Research": {
     "badge": "Research OS",
