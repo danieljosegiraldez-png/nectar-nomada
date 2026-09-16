@@ -60,7 +60,11 @@ export type PushMutation =
   | MutacionDeInspeccion
   | MutacionDeEventoDeColonia
   | MutacionDeFinDeColonia
-  | MutacionDeConteoDeVarroa;
+  | MutacionDeConteoDeVarroa
+  | MutacionDeMuestraDeSuelo
+  | MutacionDeMuestraFoliar
+  | MutacionDePerfilDeSuelo
+  | MutacionDeSiembra;
 
 export type MutacionDeEvento = {
   /** Ausente es `field_event`: el protocolo viejo sigue valiendo tal cual. */
@@ -198,6 +202,71 @@ export type MutacionDeConteoDeVarroa = {
   mitesCounted: number;
   evaluatesColonyEventId?: string | null;
   operatorPersonId?: string | null;
+  notes?: string | null;
+};
+
+/**
+ * Cola offline para captura de parcela. Los cuatro tipos que
+ * `lib/sync/parsearMutaciones.ts` reconoce; aplicarlos contra la base es la
+ * tarea siguiente, no ésta.
+ */
+export type MutacionDeMuestraDeSuelo = {
+  kind: "soil_sample";
+  clientDraftId: string;
+  locationId: string;
+  sampleCode: string;
+  sampledAt: Date;
+  provenanceClass: string;
+  treatmentPlotLabel?: string | null;
+  samplingPointLabel?: string | null;
+  depthTopCm?: number | null;
+  depthBottomCm?: number | null;
+  subSampleCount?: number | null;
+  laboratory?: string | null;
+  extractionMethod?: string | null;
+  notes?: string | null;
+};
+
+export type MutacionDeMuestraFoliar = {
+  kind: "foliar_sample";
+  clientDraftId: string;
+  locationId: string;
+  sampleCode: string;
+  sampledAt: Date;
+  provenanceClass: string;
+  treatmentPlotLabel?: string | null;
+  leafPairPosition?: number | null;
+  canopyPosition?: string | null;
+  treeAgeYears?: number | null;
+  cultivar?: string | null;
+  phenologicalStage?: string | null;
+  branchBearingFruit?: boolean | null;
+  laboratory?: string | null;
+  notes?: string | null;
+};
+
+export type MutacionDePerfilDeSuelo = {
+  kind: "soil_profile";
+  clientDraftId: string;
+  locationId: string;
+  describedAt: Date;
+  provenanceClass: string;
+  pitDepthCm?: number | null;
+  rootingDepthCm?: number | null;
+  rootDistribution?: string | null;
+  impedingLayerDepthCm?: number | null;
+  impedingLayerNote?: string | null;
+  notes?: string | null;
+};
+
+export type MutacionDeSiembra = {
+  kind: "planting_cohort";
+  clientDraftId: string;
+  locationId: string;
+  provenanceClass: string;
+  cultivarValueId?: string | null;
+  plantedAt?: Date | null;
+  plantCount?: number | null;
   notes?: string | null;
 };
 

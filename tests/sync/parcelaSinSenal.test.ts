@@ -12,6 +12,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { parsearMutaciones } from "../../lib/sync/parsearMutaciones";
 
 const RUN_ID = `parcela-sin-senal-${Date.now()}`;
 
@@ -72,5 +73,92 @@ describe("clientDraftId en la captura de parcela", () => {
         },
       }),
     ).rejects.toThrow();
+  });
+});
+
+/**
+ * Task 2 — el parseo reconoce los cuatro tipos de captura de parcela. Puras:
+ * sin base ni fixtures, a diferencia del describe de arriba.
+ */
+describe("el lote reconoce los cuatro tipos de captura de parcela", () => {
+  it("parsea una muestra de suelo encolada", () => {
+    const r = parsearMutaciones([
+      {
+        kind: "soil_sample",
+        clientDraftId: "d1",
+        locationId: "loc1",
+        sampleCode: "S-01",
+        sampledAt: "2026-09-16T12:00:00.000Z",
+        provenanceClass: "direct_observation",
+      },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.mutations).toHaveLength(1); // control: cuántas parseó, no sólo que no falló
+    expect(r.mutations[0]).toMatchObject({ kind: "soil_sample", sampledAt: new Date("2026-09-16T12:00:00.000Z") });
+  });
+
+  it("una muestra sin sampleCode es malformada", () => {
+    const r = parsearMutaciones([
+      { kind: "soil_sample", clientDraftId: "d1", locationId: "loc1", sampledAt: "2026-09-16T12:00:00.000Z" },
+    ]);
+    expect(r).toEqual({ ok: false, error: "mutation_malformed" });
+  });
+
+  it("parsea una muestra foliar encolada", () => {
+    const r = parsearMutaciones([
+      {
+        kind: "foliar_sample",
+        clientDraftId: "d2",
+        locationId: "loc1",
+        sampleCode: "F-01",
+        sampledAt: "2026-09-16T12:00:00.000Z",
+        provenanceClass: "direct_observation",
+      },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.mutations).toHaveLength(1);
+    expect(r.mutations[0]).toMatchObject({ kind: "foliar_sample", sampledAt: new Date("2026-09-16T12:00:00.000Z") });
+  });
+
+  it("parsea un perfil de suelo encolado", () => {
+    const r = parsearMutaciones([
+      {
+        kind: "soil_profile",
+        clientDraftId: "d3",
+        locationId: "loc1",
+        describedAt: "2026-09-16T12:00:00.000Z",
+        provenanceClass: "direct_observation",
+      },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.mutations).toHaveLength(1);
+    expect(r.mutations[0]).toMatchObject({ kind: "soil_profile", describedAt: new Date("2026-09-16T12:00:00.000Z") });
+  });
+
+  it("un perfil de suelo sin describedAt es malformado", () => {
+    const r = parsearMutaciones([
+      { kind: "soil_profile", clientDraftId: "d3", locationId: "loc1", provenanceClass: "direct_observation" },
+    ]);
+    expect(r).toEqual({ ok: false, error: "mutation_malformed" });
+  });
+
+  it("parsea una siembra encolada, con plantedAt ausente", () => {
+    const r = parsearMutaciones([
+      { kind: "planting_cohort", clientDraftId: "d4", locationId: "loc1", provenanceClass: "direct_observation" },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.mutations).toHaveLength(1);
+    expect(r.mutations[0]).toMatchObject({ kind: "planting_cohort", plantedAt: null });
+  });
+
+  it("una mutación de parcela sin locationId no tiene ids", () => {
+    const r = parsearMutaciones([
+      { kind: "soil_sample", clientDraftId: "d1", sampleCode: "S-01", sampledAt: "2026-09-16T12:00:00.000Z" },
+    ]);
+    expect(r).toEqual({ ok: false, error: "mutation_missing_ids" });
   });
 });

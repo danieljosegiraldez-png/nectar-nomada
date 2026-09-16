@@ -43,6 +43,13 @@ export const KINDS_DE_APIARIO = ["inspection", "colony_event", "varroa_count"] a
 /** `colony_end` va aparte porque fecha con `endedAt`: cuándo se perdió la colonia. */
 export const KIND_DE_FIN_DE_COLONIA = "colony_end";
 
+/**
+ * Los cuatro tipos de captura de parcela. Exportada como las de apiario: la
+ * prueba compara esta lista con lo que el cliente encola, en vez de leer el
+ * texto de un `if`.
+ */
+export const KINDS_DE_PARCELA = ["soil_sample", "foliar_sample", "soil_profile", "planting_cohort"] as const;
+
 export type ParseoDeLote =
   | { ok: true; mutations: PushMutation[] }
   | { ok: false; error: string };
@@ -99,6 +106,31 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
           ? { ...(m as object), occurredAt, coverageUntil }
           : { ...(m as object), occurredAt }) as PushMutation,
       );
+      continue;
+    }
+
+    // Captura de parcela: los cuatro tipos de KINDS_DE_PARCELA.
+    if (typeof m.kind === "string" && (KINDS_DE_PARCELA as readonly string[]).includes(m.kind)) {
+      if (typeof m.clientDraftId !== "string" || typeof m.locationId !== "string") {
+        return { ok: false, error: "mutation_missing_ids" };
+      }
+      // Cada tipo tiene su fecha obligatoria y su campo obligatorio; lo demás lo
+      // valida su servicio de dominio y vuelve como `rejected` con su razón.
+      if (m.kind === "soil_profile") {
+        const describedAt = toDate(m.describedAt);
+        if (!describedAt) return { ok: false, error: "mutation_malformed" };
+        parsed.push({ ...(m as object), describedAt } as PushMutation);
+        continue;
+      }
+      if (m.kind === "planting_cohort") {
+        parsed.push({ ...(m as object), plantedAt: toDate(m.plantedAt) } as PushMutation);
+        continue;
+      }
+      const sampledAt = toDate(m.sampledAt);
+      if (!sampledAt || typeof m.sampleCode !== "string" || m.sampleCode.trim() === "") {
+        return { ok: false, error: "mutation_malformed" };
+      }
+      parsed.push({ ...(m as object), sampledAt } as PushMutation);
       continue;
     }
 
