@@ -137,14 +137,26 @@ Se listan porque son hechos operativos citables, no porque haya que construirlos
 
 ---
 
-## 4. Conflictos y huecos — señalados, no resueltos
+## 4. Conflictos y huecos
 
-**Estas cuatro cosas no se arreglan desde aquí.**
+**Uno resuelto por el dueño; los otros tres siguen abiertos.**
 
-1. **Las dos versiones de la minuta del 18 de julio no coinciden en los años de
-   cosecha.** La inglesa dice «harvesting **2029**–2033»; la española, revisada
-   para Chris, dice «cosechando **2031**–2033». Misma reunión, mismo objetivo de
-   20.000 plantones para 2030. No se elige una: lo resuelve Daniel.
+1. ~~**Las dos versiones de la minuta del 18 de julio no coinciden en los años de
+   cosecha.**~~ **RESUELTO por Daniel el 2026-09-16.** La inglesa dice «harvesting
+   **2029**–2033»; la española, revisada para Chris, dice «cosechando
+   **2031**–2033». Misma reunión, mismo objetivo de 20.000 plantones para 2030.
+
+   **Vale 2031–2033**, y no por ese caso sino por la regla que Daniel fijó al
+   resolverlo, que es general y se aplica a cualquier par futuro:
+
+   > «La última revisión de minutas será la que debe actualizar, puede quedar
+   > historial que se pensó antes pero la revisada es la versión que importa
+   > ahora.»
+
+   Ver **ADR-147**. La versión superada **no se corrige ni se borra**: se le pone
+   una nota del dueño fechada al final, que es lo que hace
+   `FUENTE_CERRO_AZUL_MINUTA_2026-07-18.md`. Ese archivo sigue diciendo 2029 en
+   su cuerpo **a propósito** — es el historial de lo que se pensó.
 
 2. **Las DOS norias no están en ningún documento.** Daniel dijo el 2026-09-16 que
    hay dos —«una de un tamaño, y otra doble»— y que el detalle estaba en las

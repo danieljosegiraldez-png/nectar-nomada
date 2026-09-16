@@ -57,10 +57,14 @@ cita 13.345 palabras y la extracción da 13.345 exactas.
 el carbón se vuelve biochar **activo**. Dos pasos separados en el tiempo — «ya se cuenta con carbón
 seco, pero falta que Bob prepare la mezcla de la noria».
 
-**Cuatro conflictos señalados y NO resueltos** (§4 del índice): los años de cosecha discrepan entre
-las dos versiones de la misma minuta (2029 vs 2031); las **dos norias** que Daniel menciona no están
-en ningún documento —7 ocurrencias de «noria», ninguna las nombra—; `BiocharBatch` mete retort y
-noria en la misma fila; y la aplicación al cultivo no existe.
+**Cuatro conflictos señalados** (§4 del índice). **Uno lo resolvió Daniel el mismo día y dio una
+regla, ADR-147:** manda la **última revisión** de una minuta —2031–2033—, y la superada **no se
+corrige**, se le pone una nota fechada al final. Esa fue la primera aplicación del mecanismo que
+las cabeceras `FUENTE_*` ya declaraban.
+
+**Siguen abiertos tres:** las **dos norias** que Daniel menciona no están en ningún documento
+—7 ocurrencias de «noria», ninguna las nombra—; `BiocharBatch` mete retort y noria en la misma
+fila; y la aplicación al cultivo no existe.
 
 **No se implementó nada.** Es entrada de planificación aceptada.
 
