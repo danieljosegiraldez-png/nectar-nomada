@@ -65,6 +65,7 @@ export interface CreateSoilProfileInput extends SoilProfileFields {
   // ADR-038 — requerido, sin default.
   provenanceClass: ProvenanceClass;
   horizons?: SoilHorizonInput[];
+  clientDraftId?: string | null;
 }
 
 /**
@@ -141,6 +142,7 @@ export async function createSoilProfile(userAccountId: string, input: CreateSoil
         describedAt: input.describedAt,
         provenanceClass: input.provenanceClass,
         ...datosDePerfil(input),
+        clientDraftId: input.clientDraftId ?? null,
         createdBy: userAccountId,
         horizons: {
           create: horizons.map((h) => ({

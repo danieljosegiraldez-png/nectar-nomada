@@ -21,7 +21,8 @@
  * el sitio donde se declara la lista de tipos, y que haya un guardia que la
  * compara con los que el cliente sabe encolar.
  */
-import type { PushMutation, MutacionDeEvento } from "./pushFieldEvents";
+import type { PushMutation, MutacionDeEvento, MutacionDePerfilDeSuelo } from "./pushFieldEvents";
+import type { HorizonteDelFormulario } from "../traceability/horizontesDelFormulario";
 import { fechaDeDia } from "../time/localDateTime";
 
 /** Las fechas viajan como texto ISO por JSON y vuelven a ser fechas aquí. */
@@ -43,12 +44,76 @@ export const KINDS_DE_APIARIO = ["inspection", "colony_event", "varroa_count"] a
 /** `colony_end` va aparte porque fecha con `endedAt`: cuándo se perdió la colonia. */
 export const KIND_DE_FIN_DE_COLONIA = "colony_end";
 
+/**
+ * Los cuatro tipos de captura de parcela.
+ *
+ * **Este comentario prometía un guardia que no existía**, y el guardia existe
+ * ahora: `tests/sync/parcelaPayload.test.ts`, «los cuatro constructores producen
+ * exactamente KINDS_DE_PARCELA». Llama a los cuatro constructores de
+ * `lib/sync/parcelaPayload.ts` y compara el `kind` que producen **de verdad**
+ * con esta lista, en vez de leer el texto de un `if` o repetir los literales.
+ *
+ * Hace falta porque nada más los ata: los `kind` del cliente son literales
+ * sueltos en su archivo y `queueFieldEvent(payload: Record<string, unknown>)`
+ * borra los tipos, así que TypeScript no ve la relación. Renombrar uno de los
+ * dos lados dejaba cada anotación de ese tipo en `unknown_kind` permanente, sin
+ * que nada se pusiera rojo.
+ */
+export const KINDS_DE_PARCELA = ["soil_sample", "foliar_sample", "soil_profile", "planting_cohort"] as const;
+
+/** Un número que llega del JSON, o `null`. `"abc"` es `null`, no `NaN`. */
+function numeroOpcional(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v !== "string" || v.trim() === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Una cadena no vacía que llega del JSON, o `null`. */
+function textoOpcional(v: unknown): string | null {
+  return typeof v === "string" && v.trim() !== "" ? v : null;
+}
+
+/**
+ * Los horizontes de una calicata encolada, normalizados **aquí y no en el
+ * servicio**.
+ *
+ * Es el único campo anidado del protocolo, y por eso el único que puede llegar
+ * con una forma que ni el tipo ni Prisma esperan: un `horizons: "cuatro"`, o
+ * una fila con `topCm: "abc"`. Sin esta normalización eso no sería un rechazo
+ * sino una excepción —`TypeError` al recorrer, o `P2009` de Prisma—, o sea un
+ * **500**, y un 500 hace que `clasificarRespuesta` diga `reintentar` y el mismo
+ * lote vuelva para siempre. Lo que el servicio sí valida —ordinales duplicados,
+ * un horizonte al revés, profundidades negativas— se queda donde está y vuelve
+ * como `rejected` con su razón.
+ *
+ * El `ordinal` se renumera por posición, igual que hace
+ * `horizontesDelFormulario`: es el servidor quien decide la secuencia, no el
+ * cliente.
+ */
+function horizontesDeLaMutacion(v: unknown): HorizonteDelFormulario[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((h): h is Record<string, unknown> => typeof h === "object" && h !== null)
+    .map((h, i) => ({
+      ordinal: i + 1,
+      topCm: numeroOpcional(h.topCm),
+      bottomCm: numeroOpcional(h.bottomCm),
+      designation: textoOpcional(h.designation),
+      colour: textoOpcional(h.colour),
+      structure: textoOpcional(h.structure),
+      textureByFeel: textoOpcional(h.textureByFeel),
+      notes: textoOpcional(h.notes),
+    }));
+}
+
 export type ParseoDeLote =
-  | { ok: true; mutations: PushMutation[] }
+  | { ok: true; mutations: PushMutation[]; rechazos: { clientDraftId: string; reason: string }[] }
   | { ok: false; error: string };
 
 export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
   const parsed: PushMutation[] = [];
+  const rechazos: { clientDraftId: string; reason: string }[] = [];
 
   for (const raw of mutations) {
     const m = (raw ?? {}) as Record<string, unknown>;
@@ -102,6 +167,81 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
       continue;
     }
 
+    // Va ANTES de la rama del `kind` desconocido de abajo, y ése es todo el
+    // motivo de que la lista esté declarada: sin ella, los cuatro tipos de
+    // parcela caerían ahí y volverían como `unknown_kind` — un rechazo por
+    // mutación que se lee como «el servidor no conoce este tipo» cuando lo que
+    // pasa es que la rama no se escribió.
+    if (typeof m.kind === "string" && (KINDS_DE_PARCELA as readonly string[]).includes(m.kind)) {
+      // Sin `clientDraftId` no hay a quién atribuir el rechazo, así que es 400
+      // de lote — la misma frontera que el `kind` desconocido de abajo, y la que
+      // el spec fija. CON él, un dato malo se rechaza SOLO y las demás
+      // mutaciones del lote se aplican: tumbar el lote entero marcaba `error`
+      // todos los borradores, los buenos incluidos, y `syncFieldEvents` los
+      // vuelve a recoger en la tanda siguiente — el mismo 400 para siempre.
+      if (typeof m.clientDraftId !== "string") return { ok: false, error: "mutation_missing_ids" };
+      const clientDraftId = m.clientDraftId;
+      const rechazar = (reason: string) => {
+        rechazos.push({ clientDraftId, reason });
+      };
+      if (typeof m.locationId !== "string") {
+        rechazar("location_id_required");
+        continue;
+      }
+      // Cada tipo tiene su fecha obligatoria y su campo obligatorio; lo demás lo
+      // valida su servicio de dominio y vuelve como `rejected` con su razón.
+      if (m.kind === "soil_profile") {
+        const describedAt = toDate(m.describedAt);
+        if (!describedAt) {
+          rechazar("described_at_required");
+          continue;
+        }
+        // Tipado de verdad, no `as PushMutation` sobre un literal: con `horizons`
+        // dentro, la aserción directa deja de solapar y TS la rechaza. Declarar
+        // la variable con su tipo es además lo que hace que quitar un campo del
+        // tipo rompa aquí en vez de pasar callado.
+        const perfil: MutacionDePerfilDeSuelo = {
+          ...(m as unknown as MutacionDePerfilDeSuelo),
+          describedAt,
+          horizons: horizontesDeLaMutacion(m.horizons),
+        };
+        parsed.push(perfil);
+        continue;
+      }
+      if (m.kind === "planting_cohort") {
+        parsed.push({ ...(m as object), plantedAt: toDate(m.plantedAt) } as PushMutation);
+        continue;
+      }
+      const sampledAt = toDate(m.sampledAt);
+      if (!sampledAt) {
+        rechazar("sampled_at_required");
+        continue;
+      }
+      // `sample_code_required` es literalmente la razón que lanza `exigirCodigo`
+      // en `lib/traceability/soilSamples.ts`: el operador ve el mismo texto
+      // venga el rechazo del parseo o del servicio.
+      if (typeof m.sampleCode !== "string" || m.sampleCode.trim() === "") {
+        rechazar("sample_code_required");
+        continue;
+      }
+      parsed.push({ ...(m as object), sampledAt } as PushMutation);
+      continue;
+    }
+
+    // Un `kind` que esta versión no conoce no puede tumbar el lote de los demás.
+    // Medido en el cliente: un 400 hace que `clasificarRespuesta` devuelva
+    // `rechazar`, y eso marca **todos** los borradores del lote como `error`,
+    // los buenos incluidos; y como `syncFieldEvents` vuelve a recoger los
+    // `error` en la tanda siguiente, el mismo lote regresa, recibe otro 400, y
+    // la cola no se vacía nunca mientras el borrador raro siga dentro.
+    // Con `clientDraftId` se puede atribuir el rechazo a su mutación; sin él no,
+    // y entonces sí es 400 de lote.
+    if (typeof m.kind === "string" && m.kind !== "field_event") {
+      if (typeof m.clientDraftId !== "string") return { ok: false, error: "mutation_malformed" };
+      rechazos.push({ clientDraftId: m.clientDraftId, reason: "unknown_kind" });
+      continue;
+    }
+
     if (typeof m.clientDraftId !== "string" || typeof m.fieldSessionId !== "string") {
       return { ok: false, error: "mutation_missing_ids" };
     }
@@ -120,5 +260,5 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
     });
   }
 
-  return { ok: true, mutations: parsed };
+  return { ok: true, mutations: parsed, rechazos };
 }

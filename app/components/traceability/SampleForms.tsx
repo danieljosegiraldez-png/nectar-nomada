@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   createSoilSampleAction,
@@ -9,6 +9,8 @@ import {
 } from "../../actions/traceability";
 import { TriStateField } from "./TriStateField";
 import { PROCEDENCIA_DE_REGISTRO_DE_CAMPO } from "../../../lib/traceability/procedencia";
+import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
+import { construirPayloadDeMuestraDeSuelo, construirPayloadDeMuestraFoliar } from "../../../lib/sync/parcelaPayload";
 
 const initialState: TraceabilityActionState = {};
 
@@ -28,9 +30,54 @@ const DATA_QUALITIES = ["verified", "provisional", "unconfirmed", "not_tested"] 
 export function SoilSampleForm({ locationId }: { locationId: string }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(createSoilSampleAction, initialState);
+  const [encolado, setEncolado] = useState(false);
+  const [errorLocal, setErrorLocal] = useState(false);
+  const [encolando, setEncolando] = useState(false);
+  // El pestillo contra el doble toque sin señal. Ref y no sólo estado: el
+  // estado apaga el botón en el render siguiente, y el segundo toque cabe ahí.
+  const yaEncolando = useRef(false);
+
+  /**
+   * P4 §11 — sin señal, la muestra se guarda en la cola local en vez de
+   * perderse. Mismo patrón que `FieldEventForm` en `FieldSessionForms.tsx`:
+   * se decide por `navigator.onLine`, no intentando la petición primero, y el
+   * `try` no es decorativo — tras `preventDefault()` la Server Action ya está
+   * cancelada, así que un fallo al encolar dejaría la anotación en ninguna
+   * parte y ésa es la única copia que existe.
+   *
+   * **Y ese mismo `preventDefault()` es lo que deja el botón sin protección:**
+   * la Server Action no corre, así que el `pending` de `useActionState` no se
+   * pone a `true` nunca y `disabled={pending}` no apaga nada. Dos toques serían
+   * dos borradores con UUID distintos, o sea dos muestras. Aquí el
+   * `@@unique([locationId, sampleCode])` las cazaría a posteriori —y desde este
+   * mismo trabajo, con un `rejected` legible en vez de un 500—, pero eso es la
+   * red, no la protección.
+   */
+  const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
+    if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal
+    e.preventDefault();
+    if (yaEncolando.current) return;
+    yaEncolando.current = true;
+    setEncolando(true);
+    const form = e.currentTarget;
+    try {
+      await queueFieldEvent({ ...construirPayloadDeMuestraDeSuelo(new FormData(form), locationId) });
+      form.reset();
+      setEncolado(true);
+      setErrorLocal(false);
+    } catch {
+      setEncolado(false);
+      setErrorLocal(true);
+    } finally {
+      // Se suelta pase lo que pase: si encolar falló, el operador tiene que
+      // poder volver a intentarlo — ésa es la única copia que existe.
+      yaEncolando.current = false;
+      setEncolando(false);
+    }
+  };
 
   return (
-    <form action={formAction} className="nn-form">
+    <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <input type="hidden" name="locationId" value={locationId} />
 
       <div className="nn-field">
@@ -82,7 +129,17 @@ export function SoilSampleForm({ locationId }: { locationId: string }) {
       <ProvenanceFields prefijo="soil" />
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
-      <button type="submit" className="nn-button" disabled={pending}>
+      {encolado ? (
+        <p className="nn-note" role="status">
+          {t("fieldEventQueuedOffline")}
+        </p>
+      ) : null}
+      {errorLocal ? (
+        <p className="nn-error" role="alert">
+          {t("fieldEventQueueFailed")}
+        </p>
+      ) : null}
+      <button type="submit" className="nn-button" disabled={pending || encolando}>
         {t("sampleSoilSaveButton")}
       </button>
     </form>
@@ -102,9 +159,35 @@ export function SoilSampleForm({ locationId }: { locationId: string }) {
 export function FoliarSampleForm({ locationId }: { locationId: string }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(createFoliarSampleAction, initialState);
+  const [encolado, setEncolado] = useState(false);
+  const [errorLocal, setErrorLocal] = useState(false);
+  const [encolando, setEncolando] = useState(false);
+  const yaEncolando = useRef(false);
+
+  /** Mismo patrón que `SoilSampleForm` arriba, pestillo incluido. */
+  const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
+    if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal
+    e.preventDefault();
+    if (yaEncolando.current) return;
+    yaEncolando.current = true;
+    setEncolando(true);
+    const form = e.currentTarget;
+    try {
+      await queueFieldEvent({ ...construirPayloadDeMuestraFoliar(new FormData(form), locationId) });
+      form.reset();
+      setEncolado(true);
+      setErrorLocal(false);
+    } catch {
+      setEncolado(false);
+      setErrorLocal(true);
+    } finally {
+      yaEncolando.current = false;
+      setEncolando(false);
+    }
+  };
 
   return (
-    <form action={formAction} className="nn-form">
+    <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <input type="hidden" name="locationId" value={locationId} />
 
       <div className="nn-field">
@@ -171,7 +254,17 @@ export function FoliarSampleForm({ locationId }: { locationId: string }) {
       <ProvenanceFields prefijo="foliar" />
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
-      <button type="submit" className="nn-button" disabled={pending}>
+      {encolado ? (
+        <p className="nn-note" role="status">
+          {t("fieldEventQueuedOffline")}
+        </p>
+      ) : null}
+      {errorLocal ? (
+        <p className="nn-error" role="alert">
+          {t("fieldEventQueueFailed")}
+        </p>
+      ) : null}
+      <button type="submit" className="nn-button" disabled={pending || encolando}>
         {t("sampleFoliarSaveButton")}
       </button>
     </form>

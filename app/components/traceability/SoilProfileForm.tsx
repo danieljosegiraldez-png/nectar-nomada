@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   createSoilProfileAction,
@@ -8,6 +8,8 @@ import {
   type TraceabilityActionState,
 } from "../../actions/traceability";
 import { PROCEDENCIA_DE_REGISTRO_DE_CAMPO } from "../../../lib/traceability/procedencia";
+import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
+import { construirPayloadDePerfilDeSuelo } from "../../../lib/sync/parcelaPayload";
 
 const initialState: TraceabilityActionState = {};
 
@@ -63,9 +65,52 @@ export function SoilProfileForm({
     corrigiendo ? updateSoilProfileAction : createSoilProfileAction,
     initialState,
   );
+  const [encolado, setEncolado] = useState(false);
+  const [errorLocal, setErrorLocal] = useState(false);
+  const [encolando, setEncolando] = useState(false);
+  // El pestillo, y por qué es un ref y no sólo el estado de arriba: el estado
+  // apaga el botón en el siguiente render, y el segundo toque de un doble toque
+  // real cabe en esa ventana. Un ref se lee y se pone en el mismo tick.
+  const yaEncolando = useRef(false);
+
+  /**
+   * P4 §11 — sólo la calicata NUEVA se encola sin señal. Corregir una
+   * descripción existente sigue el camino normal siempre: corregir sin señal
+   * exigiría resolver conflictos que el spec deja fuera de alcance a
+   * propósito (Task 5, CORRECCIÓN 3).
+   *
+   * **`disabled={pending}` no protege este camino.** Tras `preventDefault()` la
+   * Server Action ya está cancelada, así que el `pending` de `useActionState`
+   * no se pone a `true` nunca: dos toques serían dos borradores con UUID
+   * distintos, o sea **dos calicatas**, y `SoilProfile` no tiene clave natural
+   * que lo detecte después. De ahí el pestillo.
+   */
+  const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
+    if (corrigiendo) return; // corregir sigue el camino normal siempre
+    if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal
+    e.preventDefault();
+    if (yaEncolando.current) return;
+    yaEncolando.current = true;
+    setEncolando(true);
+    const form = e.currentTarget;
+    try {
+      await queueFieldEvent({ ...construirPayloadDePerfilDeSuelo(new FormData(form), locationId) });
+      form.reset();
+      setEncolado(true);
+      setErrorLocal(false);
+    } catch {
+      setEncolado(false);
+      setErrorLocal(true);
+    } finally {
+      // Se suelta pase lo que pase: si encolar falló, el operador tiene que
+      // poder volver a intentarlo — ésa es la única copia que existe.
+      yaEncolando.current = false;
+      setEncolando(false);
+    }
+  };
 
   return (
-    <form action={formAction} className="nn-form">
+    <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <input type="hidden" name="locationId" value={locationId} />
       {corrigiendo ? <input type="hidden" name="soilProfileId" value={values.id} /> : null}
 
@@ -237,7 +282,17 @@ export function SoilProfileForm({
       </div>
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
-      <button type="submit" className="nn-button" disabled={pending}>
+      {encolado ? (
+        <p className="nn-note" role="status">
+          {t("fieldEventQueuedOffline")}
+        </p>
+      ) : null}
+      {errorLocal ? (
+        <p className="nn-error" role="alert">
+          {t("fieldEventQueueFailed")}
+        </p>
+      ) : null}
+      <button type="submit" className="nn-button" disabled={pending || encolando}>
         {corrigiendo ? t("soilSaveButton") : t("soilDescribeButton")}
       </button>
     </form>

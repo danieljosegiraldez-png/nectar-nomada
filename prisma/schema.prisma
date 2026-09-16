@@ -5073,6 +5073,12 @@ model PlantingCohort {
   provenanceClass ProvenanceClass @map("provenance_class")
   dataQuality     DataQuality?    @map("data_quality")
 
+  /// Idempotencia del replay sin señal. Mismo patrón que `Inspection`: el
+  /// servidor pregunta por esta columna antes de crear, y si ya estaba responde
+  /// `duplicate`. Este modelo no tiene una clave natural que sirva de índice de
+  /// idempotencia — `@@index([locationId])` no es `@@unique` y no lo distingue.
+  clientDraftId String? @unique @map("client_draft_id")
+
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")
   createdBy String?      @map("created_by") @db.Uuid
@@ -5183,6 +5189,12 @@ model SoilSample {
   sourceReference String?         @map("source_reference")
   dataQuality     DataQuality?    @map("data_quality")
 
+  /// Idempotencia del replay sin señal. Mismo patrón que `Inspection`: el
+  /// servidor pregunta por esta columna antes de crear, y si ya estaba responde
+  /// `duplicate`. `@@unique([locationId, sampleCode])` NO sirve para esto: es una
+  /// clave del operador, no del aparato.
+  clientDraftId String? @unique @map("client_draft_id")
+
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")
   createdBy String?      @map("created_by") @db.Uuid
@@ -5246,6 +5258,12 @@ model FoliarSample {
   provenanceClass ProvenanceClass @map("provenance_class")
   sourceReference String?         @map("source_reference")
   dataQuality     DataQuality?    @map("data_quality")
+
+  /// Idempotencia del replay sin señal. Mismo patrón que `Inspection`: el
+  /// servidor pregunta por esta columna antes de crear, y si ya estaba responde
+  /// `duplicate`. `@@unique([locationId, sampleCode])` NO sirve para esto: es una
+  /// clave del operador, no del aparato.
+  clientDraftId String? @unique @map("client_draft_id")
 
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")
@@ -5332,6 +5350,12 @@ model SoilProfile {
   provenanceClass ProvenanceClass @map("provenance_class")
   sourceReference String?         @map("source_reference")
   dataQuality     DataQuality?    @map("data_quality")
+
+  /// Idempotencia del replay sin señal. Mismo patrón que `Inspection`: el
+  /// servidor pregunta por esta columna antes de crear, y si ya estaba responde
+  /// `duplicate`. Este modelo no tiene una clave natural que sirva de índice de
+  /// idempotencia — `@@index([locationId])` no es `@@unique` y no lo distingue.
+  clientDraftId String? @unique @map("client_draft_id")
 
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")

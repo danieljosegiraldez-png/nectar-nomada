@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recortarPorPrecision } from "../../../lib/time/recortarPorPrecision";
 import {
@@ -9,6 +9,8 @@ import {
   type TraceabilityActionState,
 } from "../../actions/traceability";
 import { PROCEDENCIA_DE_SIEMBRA } from "../../../lib/traceability/procedencia";
+import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
+import { construirPayloadDeSiembra } from "../../../lib/sync/parcelaPayload";
 
 const initialState: TraceabilityActionState = {};
 
@@ -69,6 +71,12 @@ export function PlantingCohortForm({
     editando ? updatePlantingCohortFormAction : createPlantingCohortFormAction,
     initialState,
   );
+  const [encolado, setEncolado] = useState(false);
+  const [errorLocal, setErrorLocal] = useState(false);
+  const [encolando, setEncolando] = useState(false);
+  // El pestillo contra el doble toque sin señal. Ref y no sólo estado: el
+  // estado apaga el botón en el render siguiente, y el segundo toque cabe ahí.
+  const yaEncolando = useRef(false);
   const [precision, setPrecision] = useState(cohort?.plantedPrecision ?? "year");
 
   // El tipo de campo sigue a la precisión elegida, así que un año no ofrece
@@ -93,8 +101,44 @@ export function PlantingCohortForm({
     setFecha((actual) => recortarPorPrecision(actual, nueva));
   };
 
+  /**
+   * P4 §11 — sólo la siembra NUEVA se encola sin señal. Corregir una cohorte
+   * existente sigue el camino normal siempre: corregir sin señal exigiría
+   * resolver conflictos que el spec deja fuera de alcance a propósito
+   * (Task 5, CORRECCIÓN 3).
+   *
+   * **`disabled={pending}` no protege este camino.** Tras `preventDefault()` la
+   * Server Action ya está cancelada, así que el `pending` de `useActionState` no
+   * se pone a `true` nunca: dos toques serían dos borradores con UUID distintos,
+   * o sea **dos cohortes**, y `PlantingCohort` no tiene clave natural que lo
+   * detecte después. De ahí el pestillo.
+   */
+  const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
+    if (editando) return; // corregir sigue el camino normal siempre
+    if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal
+    e.preventDefault();
+    if (yaEncolando.current) return;
+    yaEncolando.current = true;
+    setEncolando(true);
+    const form = e.currentTarget;
+    try {
+      await queueFieldEvent({ ...construirPayloadDeSiembra(new FormData(form), locationId) });
+      form.reset();
+      setEncolado(true);
+      setErrorLocal(false);
+    } catch {
+      setEncolado(false);
+      setErrorLocal(true);
+    } finally {
+      // Se suelta pase lo que pase: si encolar falló, el operador tiene que
+      // poder volver a intentarlo — ésa es la única copia que existe.
+      yaEncolando.current = false;
+      setEncolando(false);
+    }
+  };
+
   return (
-    <form action={formAction} className="nn-form">
+    <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <input type="hidden" name="locationId" value={locationId} />
       {editando ? <input type="hidden" name="cohortId" value={cohort.id} /> : null}
 
@@ -209,7 +253,17 @@ export function PlantingCohortForm({
       ) : null}
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
-      <button type="submit" className="nn-button" disabled={pending}>
+      {encolado ? (
+        <p className="nn-note" role="status">
+          {t("fieldEventQueuedOffline")}
+        </p>
+      ) : null}
+      {errorLocal ? (
+        <p className="nn-error" role="alert">
+          {t("fieldEventQueueFailed")}
+        </p>
+      ) : null}
+      <button type="submit" className="nn-button" disabled={pending || encolando}>
         {editando ? t("cohortSaveEditButton") : t("cohortCreateButton")}
       </button>
     </form>

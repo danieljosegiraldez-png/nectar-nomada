@@ -2,10 +2,21 @@
  * P4 §4 — push por lotes de eventos de campo, con resultado por mutación.
  *
  * El cuerpo es `{ deviceId, mutations: [...] }` y la respuesta
- * `{ results: [{ clientDraftId, status, ... }] }`, un resultado por mutación y
- * en el mismo orden. **200 aunque haya rechazos**: un rechazo es una respuesta
- * del protocolo, no un fallo de la petición, y devolver 4xx haría que el
- * cliente lo confundiera con «no llegué» y lo reintentara para siempre.
+ * `{ results: [{ clientDraftId, status, ... }] }`, **un resultado por
+ * mutación**. **200 aunque haya rechazos**: un rechazo es una respuesta del
+ * protocolo, no un fallo de la petición, y devolver 4xx haría que el cliente lo
+ * confundiera con «no llegué» y lo reintentara para siempre.
+ *
+ * **El orden NO es el de entrada, y decirlo importa.** Este comentario afirmaba
+ * «y en el mismo orden», y dejó de ser cierto cuando los rechazos del parseo
+ * pasaron a concatenarse al final (tarea 4): en un lote mixto, el rechazo de
+ * una mutación aparece después de los resultados de las que sí se aplicaron.
+ * La decisión de no reordenar está tomada y se mantiene —el cliente empareja
+ * por `clientDraftId` (`drafts.find(d => d.id === r.clientDraftId)` en
+ * `lib/sync/offlineQueue.ts`), nunca por posición, así que la corrección no
+ * depende del orden— y lo que se corrige es la afirmación, que era falsa. Lo
+ * que se degrada con el orden es la legibilidad de un informe de lote mixto,
+ * no el resultado.
  *
  * Lo que sí es 4xx: el lote entero negado (aparato desconocido o revocado) y el
  * cuerpo mal formado.
@@ -47,7 +58,11 @@ export async function POST(request: Request) {
 
   try {
     const results = await pushFieldEvents(user.userAccountId, deviceId, parseo.mutations);
-    return Response.json({ results }, { status: 200 });
+    const conRechazos = [
+      ...results,
+      ...parseo.rechazos.map((r) => ({ clientDraftId: r.clientDraftId, status: "rejected" as const, reason: r.reason })),
+    ];
+    return Response.json({ results: conRechazos }, { status: 200 });
   } catch (error) {
     if (error instanceof DeviceError) {
       return Response.json({ error: error.message }, { status: 403 });
