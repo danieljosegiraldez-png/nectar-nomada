@@ -244,6 +244,19 @@ puede afirmar cada pantalla— y sigue sin tomarse.
   no se ha ejecutado. La herramienta quedó lista el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
+- **`npm run apiary:load-protocol` YA SE CORRIÓ — 2026-09-16, lo confirmó Daniel.**
+  `apiario-campo-v1` está en producción, así que las pantallas de captura de campo
+  tienen qué preguntar. **Se anota justamente porque no estaba anotado:** ese día
+  se le pidió correrlo como «lo único que falta» sacándolo de la memoria de una
+  sesión anterior y **no de este archivo**, donde nunca figuró (control positivo:
+  `sensory:create-protocol`, que sí figura, aparece arriba). Sin esta línea, la
+  siguiente sesión vuelve a pedirle un guion que ya corrió.
+
+  **No se verificó contra la base y no se puede:** leer la base de producción de
+  Neon está prohibido. Es la palabra del dueño, y basta — pero la distinción
+  importa si alguien lo vuelve a dudar: el guion imprime **lo que dice el archivo
+  y lo que hay en la base**, y las dos líneas contienen `apiario-campo-v1`.
+
 - **Dónde se rompe «tarea de finca → puntaje de taza», medido.** Fumigar y
   sembrar se registran como *hechos* (`LabourEntry`, `MaterialConsumptionEntry`,
   `PlantingCohort`) y sólo son *comparables* como `TreatmentBatch`, que **exige**
