@@ -38,6 +38,33 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · El propósito de la visita, la única obligatoria de patio sin sitio
+
+ADR-141. De las diez preguntas sin sitio que midió ADR-140, **exactamente una** era obligatoria
+y de patio: `purpose`. El protocolo obliga a declarar a qué se fue, con el guante puesto, y no
+había columna.
+
+**El vocabulario ya estaba:** los seis valores salen literalmente del JSON del dueño, así que
+esta rebanada no preguntó nada.
+
+**Un arreglo y no una columna** —una ida revisa, alimenta y trata, y elegir uno haría que el
+informe mintiera—, con el precedente exacto de `Inspection.broodStages`. **El vacío es «sin
+registrar», no «sin propósito»**: la migración no rellena, no lleva `DEFAULT` con `NOT NULL`, y
+el campo es opcional en la entrada para no romper la cola offline. La **frontera** sí exige
+cuando el campo llega.
+
+**Tres sitios dicen el vocabulario** —JSON, enum de Postgres, módulo puro para el formulario— y
+un guardia comprueba que coincidan: un propósito añadido al JSON y no al enum **no se puede
+guardar** y el formulario ni lo ofrece.
+
+**Y el mapa de ADR-140 se cierra sobre sí mismo:** la prueba que contaba las obligatorias de
+patio sin sitio pasa de `["purpose"]` a `[]`. Que esté vacía es el resultado del trabajo, no la
+falta de comprobación. Primera vez en el módulo que una medición de ayer verifica lo de hoy.
+
+**Pendiente nombrado:** las otras nueve. Siete son `stage: close` y tres de ellas —viáticos,
+causa probable, recomendación— son las que convierten una visita en informe técnico; la de
+viáticos es el hueco de costos, que no tiene modelo en todo el esquema.
+
 ### 2026-09-15 · Dos pruebas que mentían de formas distintas, y una fuga que no se deja atrapar
 
 Buscando unas filas `TEST` que la suite deja en la base local aparecieron dos
@@ -130,30 +157,6 @@ sesión a construir algo que ya está.
 
 **Pendiente nombrado:** las fotos en el informe. `FieldEvent` puede apuntar a un `Asset` y el
 snapshot no lo mira; qué ve el cliente es decisión del dueño.
-
-### 2026-09-15 · Las dos mitades del cierre de jornada
-
-ADR-138. Anexo E §5: «Al cerrarla: resumen de lo registrado, **lo que quedó pendiente**». La
-pantalla **no enseñaba ninguna de las dos**. `resumenDeVisita` existe desde A9.1 y aparecía en
-**cero** pantallas —alimentaba un mensaje de bitácora—, y de lo pendiente no había nada.
-
-**La mitad nueva contesta la pregunta del oficio:** abriste cuatro de diez, ¿cuáles seis se
-quedaron? Cuentan los **tres** caminos —inspección, evento de colonia, cosecha—: mirando sólo
-inspecciones, una caja alimentada saldría como sin tocar. Y el filtro es **por jornada**, no
-por sitio, o una visita anterior haría creer que ya abriste todo hoy.
-
-**La línea de lo que entra:** lo que todavía puedes hacer antes de irte — cajas sin tocar y
-tiras sin retirar. El alimento por vencer y la consulta a vecinos **no se repiten**: no se
-resuelven caminando de vuelta a la caja, y amontonarlas haría la pared de avisos que se aprende
-a ignorar.
-
-**La lista sale también con la jornada abierta**, no sólo al cerrar: una lista de lo que te
-falta que aparece cuando ya no puedes añadir eventos no se puede atender.
-
-Inventario de acceso **329/96 → 330/97**.
-
-**Pendiente nombrado:** el PDF del reporte «sin almacenarlo» que el §5 pide al lado. El reporte
-web y su enlace ya existen desde el 2026-09-10; el PDF es pieza propia.
 
 ## 3. Bloqueado, y en qué
 
