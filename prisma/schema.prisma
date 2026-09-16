@@ -1055,6 +1055,50 @@ model ProjectDomainTagAssignment {
   @@schema("core")
 }
 
+enum MaterialState {
+  CHERRY
+  MUCILAGE_HONEY
+  PARCHMENT
+  /// El café verde NO pertenece al secado: es post-reposo, cuando el beneficio
+  /// ya terminó de transformar (Daniel, 2026-09-15). Existe porque el estado es
+  /// real, no porque se pueda medir en una cama.
+  GREEN
+
+  @@schema("core")
+}
+
+enum SamplingRole {
+  /// Dos zonas distintas de la misma cama: su diferencia ES desigualdad de
+  /// secado, y el motor puede alertar.
+  ZONE
+  /// Dos compuestas de la cama entera: su diferencia es ruido de muestreo, y
+  /// alertar de desigualdad con ellas sería inventar una señal.
+  REPLICATE
+
+  @@schema("core")
+}
+
+enum SampleKind {
+  PROCESS
+  MOISTURE
+  ROAST
+  CUPPING
+  RETENTION
+
+  @@schema("core")
+}
+
+enum SamplingZone {
+  NORTH
+  SOUTH
+  EAST
+  WEST
+  CENTER
+  EDGE
+
+  @@schema("core")
+}
+
 // DOMAIN_MODEL.md §3 — referenced by Research OS/Sensory/Competitions/
 // Traceability, none of which exist yet, so this stays intentionally thin.
 // `sampleType` is a free-text field, not an enum — COMMERCE_OPERATIONS_
@@ -1072,6 +1116,25 @@ model Sample {
   // organization onto a sample that genuinely has none.
   sampleCode String @map("sample_code")
   sampleType     String              @map("sample_type")
+  /// `sampleType` arriba es LEGADO y no se reescribe: hoy es texto libre y su
+  /// único valor real, `green_coffee`, no es ninguno de los cinco. Traducirlo
+  /// inventaría un hecho. Mismo patrón que `deviceId` / `captureDeviceId`.
+  sampleKind    SampleKind?    @map("sample_kind")
+  materialState MaterialState? @map("material_state")
+  samplingRole  SamplingRole?  @map("sampling_role")
+  samplingZone  SamplingZone?  @map("sampling_zone")
+  /// Texto libre AL LADO del enum, nunca en su lugar — lo que ordena el
+  /// comentario de `SunExposure`.
+  samplingZoneNote String? @map("sampling_zone_note")
+
+  /// La instantánea de F3-003, en columnas nombradas y no en un JSON (CLAUDE.md
+  /// §49). La transformación ya es inmutable y el estado SE PUEDE reconstruir;
+  /// lo que falta es que esté congelado, para que nadie lea el 11 % de hoy
+  /// creyendo que es el 18 % de entonces.
+  stageAtExtraction       String?  @map("stage_at_extraction")
+  massAtExtraction        Decimal? @map("mass_at_extraction") @db.Decimal(12, 4)
+  massUnitAtExtraction    String?  @map("mass_unit_at_extraction")
+  moisturePctAtExtraction Decimal? @map("moisture_pct_at_extraction")  @db.Decimal(5, 2)
   description    String?
   projectId      String?             @map("project_id") @db.Uuid
   project        Project?            @relation(fields: [projectId], references: [id])
