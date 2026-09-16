@@ -38,6 +38,39 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · Dos pruebas que mentían de formas distintas, y una fuga que no se deja atrapar
+
+Buscando unas filas `TEST` que la suite deja en la base local aparecieron dos
+defectos que no tenían que ver con ellas, y ninguno se veía desde el color: las
+dos pruebas pasaban mientras fallaban.
+
+**Una comparaba un número que otras sesiones mueven.**
+`limpiarAuditDePruebas` afirmaba `borradas === sinActorAntes`. Entre `contar()`
+y `limpiar()`, otras pruebas en paralelo commitean sus filas sin actor —medido:
+38.605 contra 38.599—. En una base compartida ese número cambia mientras se
+mide: era una carrera disfrazada de guardia. Pasa a `>= 1`, y quedan las dos
+aserciones estables, que son las que importan.
+
+**La otra borraba los informes de todo el mundo.** El `afterAll` de
+`jornadaEnApiario` recogía con `findMany({ subjectEntityType: "field_session" })`,
+sin `RUN_ID`: **todos** los informes de visita de la base, con sus versiones y
+publicaciones. `assertDefinedWhere` no puede verlo —el `where` del borrado está
+perfectamente definido—; lo que apuntaba demasiado lejos era la **selección**, y
+para eso no hay helper. Sembrando un informe ajeno: sin el arreglo desaparece,
+con él sobrevive, y la prueba da 35/35 en los dos casos.
+
+**Y la fuga original sigue abierta, a propósito.** Tres corridas aisladas de
+`jornadaEnApiario` y nueve archivos sospechosos —aislados y en paralelo— dan
+**delta 0 en los dieciocho casos**. Sólo aparece corriendo los 100 del grupo
+`base-sembrada`, y de forma intermitente: una vez `+2`, la siguiente `+0`. Queda
+nombrada y sin cerrar; una observación no es un mecanismo. **La herramienta para
+retomarla es el delta por archivo, no el `grep`** — el barrido de septiembre 11
+no la vio porque contaba `Scope` huérfanos y esto son `Location`, otra tabla.
+
+**Dato para quien mida en CI:** GitHub prueba el *merge*, no tu rama. Un archivo
+con 35 pruebas en local salió con 37 en CI porque otra sesión había añadido dos
+al mismo archivo. No es un fallo: son árboles distintos a propósito.
+
 ### 2026-09-15 · Las 44 preguntas del protocolo, y las 10 que no tienen dónde guardarse
 
 ADR-140. El protocolo del dueño y el esquema son **dos vocabularios sin traducción**
