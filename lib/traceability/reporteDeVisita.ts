@@ -61,6 +61,19 @@ export interface SnapshotDeVisita {
     /** Que se hizo o que se vio, en una linea: el producto, el alimento, el resultado. */
     detalle?: string | null;
   }>;
+  /**
+   * La lectura del tecnico y lo que le recomienda al cliente. Opcionales por lo mismo que
+   * `colmena` y `detalle` (ADR-139): el snapshot se lee con un `as` y lo ya emitido no los
+   * trae.
+   */
+  causaProbable?: string | null;
+  recomendacion?: string | null;
+  /**
+   * Los viaticos, **solo cuando el contrato los pide**. La decision ya estaba declarada antes
+   * de que el campo existiera --`generationQuery.incluyeCostos` nace en `false`-- y lo que no
+   * se congela no se puede filtrar mal despues.
+   */
+  viaticosUsd?: string | null;
   emitidoEn: string;
 }
 
@@ -167,6 +180,10 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
         : e.harvestEventId ? "cosecha"
         : null,
     })),
+    causaProbable: visita.probableCause,
+    recomendacion: visita.recommendation,
+    // El costo sale SOLO si el contrato lo pide. `incluyeCostos` nace en `false`.
+    viaticosUsd: input.incluirCostos === true ? (visita.travelCostUsd?.toString() ?? null) : null,
     emitidoEn: new Date().toISOString(),
   };
 

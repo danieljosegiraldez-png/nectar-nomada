@@ -172,6 +172,19 @@ export interface CerrarVisitaInput {
   nextVisitDueAt?: Date | null;
   /** Colonias contadas al salir del sitio. Sin esto no hay «pérdida sin reposición». */
   coloniesAliveCount?: number | null;
+  /**
+   * Viáticos y transporte, en dólares. `stage: close` del protocolo, así que ésta es su
+   * puerta: se anota en casa.
+   *
+   * **Cero es un valor legítimo y no es lo mismo que `null`.** Una visita a Cerro Azul en
+   * carro propio puede costar cero de verdad; `null` es «nadie lo anotó». Por eso se valida
+   * `!= null` y no la verdad del número, igual que la carencia de un tratamiento (ADR-115).
+   */
+  travelCostUsd?: number | null;
+  /** Por qué se ve lo que se ve. Prosa del técnico, `stage: close`. */
+  probableCause?: string | null;
+  /** La recomendación al cliente. Es la frase por la que Kiva paga el servicio. */
+  recommendation?: string | null;
   /** Por qué se completó así. Va al `reason` del AuditEvent. */
   reason?: string | null;
 }
@@ -198,6 +211,22 @@ export interface CerrarVisitaInput {
  * con su razón, y el original queda en `before`. Eso es política de servicio, y
  * por eso esta función sólo acepta `notes`.
  */
+/**
+ * El costo de viaje, validado en la frontera.
+ *
+ * **Se comprueba `!= null` y no la verdad del número**: cero es legítimo —una visita en carro
+ * propio— y un `!input.travelCostUsd` lo habría rechazado, obligando a mentir poniendo un
+ * céntimo. Misma forma que la carencia de un tratamiento.
+ *
+ * Un negativo sí se rechaza: no existe un viático de menos ocho dólares, y guardarlo haría
+ * que cualquier suma por sitio mintiera.
+ */
+export function exigeCosto(valor: number | null): number | null {
+  if (valor === null) return null;
+  if (!Number.isFinite(valor) || valor < 0) throw new FieldSessionValidationError("travel_cost_invalid");
+  return valor;
+}
+
 export async function completarVisita(userAccountId: string, input: CerrarVisitaInput) {
   const existing = await prisma.fieldSession.findUnique({ where: { id: input.fieldSessionId } });
   if (!existing) throw new FieldSessionValidationError("session_not_found");
@@ -224,6 +253,12 @@ export async function completarVisita(userAccountId: string, input: CerrarVisita
         ...(input.notes === undefined ? {} : { notes: input.notes }),
         ...(input.nextVisitDueAt === undefined ? {} : { nextVisitDueAt: input.nextVisitDueAt }),
         ...(input.coloniesAliveCount === undefined ? {} : { coloniesAliveCount: input.coloniesAliveCount }),
+        // Las tres de `stage: close`. `undefined` no toca la columna —quien completa dos
+        // veces sin rellenarlas no las borra—; `null` sí la limpia, que es cómo se deshace
+        // un valor puesto por error.
+        ...(input.travelCostUsd === undefined ? {} : { travelCostUsd: exigeCosto(input.travelCostUsd) }),
+        ...(input.probableCause === undefined ? {} : { probableCause: input.probableCause }),
+        ...(input.recommendation === undefined ? {} : { recommendation: input.recommendation }),
       },
     });
 

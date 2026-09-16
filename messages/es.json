@@ -1229,7 +1229,13 @@
     "visitPurpose_montaje": "Montaje",
     "visitPurpose_diagnostico": "Diagnóstico",
     "visitPurposesLine": "A qué se fue: {purposes}",
-    "visitPurposesSinRegistrar": "A qué se fue: sin registrar"
+    "visitPurposesSinRegistrar": "A qué se fue: sin registrar",
+    "visitTravelCostLabel": "Viáticos y transporte (USD)",
+    "visitProbableCauseLabel": "Causa probable de lo observado",
+    "visitRecommendationLabel": "Recomendación al cliente",
+    "reportCauseHeading": "Causa probable",
+    "reportRecommendationHeading": "Recomendación",
+    "reportTravelCost": "Viáticos y transporte: {monto} USD"
   },
   "Apiary": {
     "badge": "Apiario",
