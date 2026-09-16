@@ -8,7 +8,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import { createPlantingCohort } from "../../lib/traceability/plantingCohorts";
+import { createPlantingCohort, getPlotDetail } from "../../lib/traceability/plantingCohorts";
 import { recordEnteredProduction, PlantingEventValidationError } from "../../lib/traceability/plantingEvents";
 import { LocationAccessError } from "../../lib/traceability/locations";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -159,5 +159,24 @@ describe("recordEnteredProduction", () => {
         provenanceClass: "original_record",
       }),
     ).rejects.toThrow(new PlantingEventValidationError("cohort_not_active"));
+  });
+});
+
+describe("getPlotDetail — eventos de producción", () => {
+  it("devuelve el evento de la siembra marcada y ninguno de la que no", async () => {
+    const marcada = await siembraActiva(plotId);
+    const sinMarcar = await siembraActiva(plotId);
+    await recordEnteredProduction(operadorId, {
+      plantingCohortId: marcada.id,
+      occurredAt: new Date("2021-01-01T00:00:00Z"),
+      occurredPrecision: "year",
+      provenanceClass: "original_record",
+    });
+
+    const detalle = await getPlotDetail(operadorId, plotId);
+    const deMarcada = detalle.eventosDeProduccion.filter((e) => e.plantingCohortId === marcada.id);
+    expect(deMarcada).toHaveLength(1);
+    expect(deMarcada[0]!.occurredPrecision).toBe("year");
+    expect(detalle.eventosDeProduccion.some((e) => e.plantingCohortId === sinMarcar.id)).toBe(false);
   });
 });

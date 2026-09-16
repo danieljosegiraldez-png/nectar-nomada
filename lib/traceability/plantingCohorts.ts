@@ -17,6 +17,7 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
+import type { EventoDeProduccion } from "./estadoDeProduccion";
 import type {
   DataQuality,
   HarvestWindowPrecision,
@@ -505,10 +506,25 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     orderBy: { value: "asc" },
   });
 
+  // Los eventos «entró en producción» de las siembras de este bloque, para el
+  // estado de producción del tablero. Detrás de la MISMA compuerta que el resto
+  // (ver el comentario de arriba): no se reutiliza
+  // `listPlantingEventsForLocation`, que protege con `lot:view`.
+  const eventosDeProduccionCrudos = await prisma.plantingEvent.findMany({
+    where: { locationId, eventType: "entered_production", plantingCohortId: { not: null } },
+    select: { plantingCohortId: true, occurredAt: true, occurredPrecision: true, createdAt: true },
+  });
+  const eventosDeProduccion: EventoDeProduccion[] = eventosDeProduccionCrudos.flatMap((e) =>
+    e.plantingCohortId == null
+      ? []
+      : [{ plantingCohortId: e.plantingCohortId, occurredAt: e.occurredAt, occurredPrecision: e.occurredPrecision, createdAt: e.createdAt }],
+  );
+
   return {
     location,
     cohorts,
     cultivarOptions,
+    eventosDeProduccion,
     density: computePlotDensity(cohorts, location.areaHectares),
     yield: computePlotYield(
       harvestContributions.map((c) => ({
