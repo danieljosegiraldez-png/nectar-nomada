@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-15
 
-**329 operaciones** que tocan la base, en **96 archivos**:
+**330 operaciones** que tocan la base, en **97 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,13 +22,21 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **221** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **222** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **33** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **57** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
 
+> **El de 329→330, con un archivo nuevo, es `createSamplingEvent`.** Vive en
+> `lib/traceability/samplingEvents.ts`, que entra hoy al inventario. Es **guardia directo**: no
+> hereda el permiso de nadie, lo resuelve él por tres caminos según lo que traiga la entrada —la
+> corrida de secado a través del lote de su transformación, la cama, o ámbito de plataforma
+> cuando no hay ninguno de los dos— y sólo entonces escribe. Su `AuditEvent` va en la MISMA
+> transacción que el evento, y su prueba «revierte el evento si falla la auditoría» lo comprueba
+> en vez de darlo por hecho.
+>
 > **Y el de 327→328, sin archivos nuevos, es `crearColocacionInicial` (ADR-135).** Vive en
 > `lib/apiary/hives.ts`, que ya estaba inventariado. Recibe el `tx` de quien acaba de crear la
 > colmena y escribe **una** fila; no consulta nada, así que no puede leer de más aunque reciba

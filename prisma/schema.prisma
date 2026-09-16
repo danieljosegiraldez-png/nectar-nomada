@@ -67,6 +67,7 @@ model ExternalIdentity {
 }
 
 model Person {
+  samplingEvents SamplingEvent[] @relation("SamplingEventOperator")
   id                    String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   givenName             String       @map("given_name")
   familyName            String       @map("family_name")
@@ -151,6 +152,7 @@ enum UserAccountStatus {
 }
 
 model UserAccount {
+  samplingEventsCreated SamplingEvent[] @relation("SamplingEventCreatedBy")
   id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   personId        String            @unique @map("person_id") @db.Uuid
   person          Person            @relation(fields: [personId], references: [id])
@@ -676,6 +678,7 @@ enum SubdivisionReason {
 }
 
 model Location {
+  samplingEvents SamplingEvent[] @relation("SamplingEventBed")
   id               String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   locationType     LocationType                           @map("location_type")
   parentLocationId String?                                @map("parent_location_id") @db.Uuid
@@ -1104,7 +1107,39 @@ enum SamplingZone {
 // `sampleType` is a free-text field, not an enum — COMMERCE_OPERATIONS_
 // TOOLS_ARCHITECTURE.md §19's sample-type list is domain-specific and will
 // be constrained (if at all) once a real consuming module exists.
+/// El ACTO de ir a una cama en un momento y sacar muestras. Existe para que
+/// «estas dos son las zonas de esta cama a esta hora» sea ESTRUCTURAL en vez de
+/// inferido por cercanía de fechas. No duplica `Sample`: la muestra es la cosa
+/// física, esto es la ida a buscarla.
+model SamplingEvent {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  dryingBedLocationId String?   @map("drying_bed_location_id") @db.Uuid
+  dryingBedLocation   Location? @relation("SamplingEventBed", fields: [dryingBedLocationId], references: [id])
+  dryingRunId         String?    @map("drying_run_id") @db.Uuid
+  dryingRun           DryingRun? @relation(fields: [dryingRunId], references: [id])
+
+  occurredAt       DateTime @map("occurred_at")
+  operatorPersonId String?  @map("operator_person_id") @db.Uuid
+  operator         Person?  @relation("SamplingEventOperator", fields: [operatorPersonId], references: [id])
+  notes            String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("SamplingEventCreatedBy", fields: [createdBy], references: [id])
+
+  samples Sample[]
+
+  @@index([dryingBedLocationId])
+  @@index([dryingRunId])
+  @@map("sampling_event")
+  @@schema("core")
+}
+
 model Sample {
+  samplingEventId String? @map("sampling_event_id") @db.Uuid
+  samplingEvent SamplingEvent? @relation(fields: [samplingEventId], references: [id])
+
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   // P0 (41_P0_MASS_BALANCE.md §7): scoped per organization, same reasoning
   // as Lot.lotCode. Unlike Lot, `organizationId` stays **nullable** here —
@@ -1186,6 +1221,7 @@ model Sample {
   @@index([locationId])
   @@index([sourceLotId])
   @@index([sourceTransformationId])
+  @@index([samplingEventId])
   @@map("sample")
   @@schema("core")
 }
@@ -3852,6 +3888,7 @@ enum DryingTurnEventType {
 // the source lot's own project/location, same as every other traceability
 // write path in this module.
 model DryingRun {
+  samplingEvents SamplingEvent[]
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   method       String? // 'raised_bed' | 'patio' | 'mechanical' | free text — §16
   locationId   String?      @map("location_id") @db.Uuid

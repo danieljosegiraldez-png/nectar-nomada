@@ -388,6 +388,10 @@
     {
       "archivo": "lib/apiary/vitalesDeColmena.ts",
       "razon": "Los vitales de cada colmena del inventario (Anexo E §3): la última inspección, su población y el origen de la colonia viva. Dos lecturas, ninguna escritura. Es el gemelo por colmena de vitalesDelSitio.ts y comparte su disciplina: no recibe principal a propósito, porque quien lo llama ya autorizó el sitio con getApiaryDetail."
+    },
+    {
+      "archivo": "lib/traceability/samplingEvents.ts",
+      "razon": "Tarea 4 del plan de secado — crea el SamplingEvent, el acto de ir a una cama y sacar muestras. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Resuelve permiso ANTES de escribir, por tres caminos según lo que traiga la entrada —la corrida de secado a través del lote de su transformación, la cama, o ámbito de plataforma cuando no hay ninguno de los dos— y escribe su AuditEvent en la MISMA transacción que el evento, lo que su propia prueba «revierte el evento si falla la auditoría» comprueba."
     }
   ],
   "reciben_transaccion": [
