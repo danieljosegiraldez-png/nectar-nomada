@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   createSoilSampleAction,
@@ -9,6 +9,8 @@ import {
 } from "../../actions/traceability";
 import { TriStateField } from "./TriStateField";
 import { PROCEDENCIA_DE_REGISTRO_DE_CAMPO } from "../../../lib/traceability/procedencia";
+import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
+import { construirPayloadDeMuestraDeSuelo, construirPayloadDeMuestraFoliar } from "../../../lib/sync/parcelaPayload";
 
 const initialState: TraceabilityActionState = {};
 
@@ -28,9 +30,34 @@ const DATA_QUALITIES = ["verified", "provisional", "unconfirmed", "not_tested"] 
 export function SoilSampleForm({ locationId }: { locationId: string }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(createSoilSampleAction, initialState);
+  const [encolado, setEncolado] = useState(false);
+  const [errorLocal, setErrorLocal] = useState(false);
+
+  /**
+   * P4 §11 — sin señal, la muestra se guarda en la cola local en vez de
+   * perderse. Mismo patrón que `FieldEventForm` en `FieldSessionForms.tsx`:
+   * se decide por `navigator.onLine`, no intentando la petición primero, y el
+   * `try` no es decorativo — tras `preventDefault()` la Server Action ya está
+   * cancelada, así que un fallo al encolar dejaría la anotación en ninguna
+   * parte y ésa es la única copia que existe.
+   */
+  const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
+    if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal
+    e.preventDefault();
+    const form = e.currentTarget;
+    try {
+      await queueFieldEvent({ ...construirPayloadDeMuestraDeSuelo(new FormData(form), locationId) });
+      form.reset();
+      setEncolado(true);
+      setErrorLocal(false);
+    } catch {
+      setEncolado(false);
+      setErrorLocal(true);
+    }
+  };
 
   return (
-    <form action={formAction} className="nn-form">
+    <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <input type="hidden" name="locationId" value={locationId} />
 
       <div className="nn-field">
@@ -82,6 +109,16 @@ export function SoilSampleForm({ locationId }: { locationId: string }) {
       <ProvenanceFields prefijo="soil" />
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
+      {encolado ? (
+        <p className="nn-note" role="status">
+          {t("fieldEventQueuedOffline")}
+        </p>
+      ) : null}
+      {errorLocal ? (
+        <p className="nn-error" role="alert">
+          {t("fieldEventQueueFailed")}
+        </p>
+      ) : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("sampleSoilSaveButton")}
       </button>
@@ -102,9 +139,27 @@ export function SoilSampleForm({ locationId }: { locationId: string }) {
 export function FoliarSampleForm({ locationId }: { locationId: string }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(createFoliarSampleAction, initialState);
+  const [encolado, setEncolado] = useState(false);
+  const [errorLocal, setErrorLocal] = useState(false);
+
+  /** Mismo patrón que `SoilSampleForm` arriba y que `FieldEventForm`. */
+  const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
+    if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal
+    e.preventDefault();
+    const form = e.currentTarget;
+    try {
+      await queueFieldEvent({ ...construirPayloadDeMuestraFoliar(new FormData(form), locationId) });
+      form.reset();
+      setEncolado(true);
+      setErrorLocal(false);
+    } catch {
+      setEncolado(false);
+      setErrorLocal(true);
+    }
+  };
 
   return (
-    <form action={formAction} className="nn-form">
+    <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <input type="hidden" name="locationId" value={locationId} />
 
       <div className="nn-field">
@@ -171,6 +226,16 @@ export function FoliarSampleForm({ locationId }: { locationId: string }) {
       <ProvenanceFields prefijo="foliar" />
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
+      {encolado ? (
+        <p className="nn-note" role="status">
+          {t("fieldEventQueuedOffline")}
+        </p>
+      ) : null}
+      {errorLocal ? (
+        <p className="nn-error" role="alert">
+          {t("fieldEventQueueFailed")}
+        </p>
+      ) : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("sampleFoliarSaveButton")}
       </button>

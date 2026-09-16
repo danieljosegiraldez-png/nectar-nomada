@@ -9,6 +9,8 @@ import {
   type TraceabilityActionState,
 } from "../../actions/traceability";
 import { PROCEDENCIA_DE_SIEMBRA } from "../../../lib/traceability/procedencia";
+import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
+import { construirPayloadDeSiembra } from "../../../lib/sync/parcelaPayload";
 
 const initialState: TraceabilityActionState = {};
 
@@ -69,6 +71,8 @@ export function PlantingCohortForm({
     editando ? updatePlantingCohortFormAction : createPlantingCohortFormAction,
     initialState,
   );
+  const [encolado, setEncolado] = useState(false);
+  const [errorLocal, setErrorLocal] = useState(false);
   const [precision, setPrecision] = useState(cohort?.plantedPrecision ?? "year");
 
   // El tipo de campo sigue a la precisión elegida, así que un año no ofrece
@@ -93,8 +97,30 @@ export function PlantingCohortForm({
     setFecha((actual) => recortarPorPrecision(actual, nueva));
   };
 
+  /**
+   * P4 §11 — sólo la siembra NUEVA se encola sin señal. Corregir una cohorte
+   * existente sigue el camino normal siempre: corregir sin señal exigiría
+   * resolver conflictos que el spec deja fuera de alcance a propósito
+   * (Task 5, CORRECCIÓN 3).
+   */
+  const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
+    if (editando) return; // corregir sigue el camino normal siempre
+    if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal
+    e.preventDefault();
+    const form = e.currentTarget;
+    try {
+      await queueFieldEvent({ ...construirPayloadDeSiembra(new FormData(form), locationId) });
+      form.reset();
+      setEncolado(true);
+      setErrorLocal(false);
+    } catch {
+      setEncolado(false);
+      setErrorLocal(true);
+    }
+  };
+
   return (
-    <form action={formAction} className="nn-form">
+    <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <input type="hidden" name="locationId" value={locationId} />
       {editando ? <input type="hidden" name="cohortId" value={cohort.id} /> : null}
 
@@ -209,6 +235,16 @@ export function PlantingCohortForm({
       ) : null}
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
+      {encolado ? (
+        <p className="nn-note" role="status">
+          {t("fieldEventQueuedOffline")}
+        </p>
+      ) : null}
+      {errorLocal ? (
+        <p className="nn-error" role="alert">
+          {t("fieldEventQueueFailed")}
+        </p>
+      ) : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {editando ? t("cohortSaveEditButton") : t("cohortCreateButton")}
       </button>
