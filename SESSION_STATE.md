@@ -38,6 +38,30 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · Las tres preguntas que convierten una visita en informe técnico
+
+ADR-142: viáticos, causa probable y recomendación. Son de las siete de **casa** (`stage: close`)
+que quedaban sin sitio, y son las que el cliente lee.
+
+**Van en el cierre, y no es una elección nueva:** el comentario de `completarVisita` ya decía
+que esa función «sólo acepta `notes`» porque un valor de etapa `field` no se edita desde la
+casa. Éstas son de etapa `close` — exactamente lo que ese cierre debía aceptar.
+
+**Cero no es `null`:** una visita en carro propio puede costar cero de verdad, y ese cero es un
+dato. Se valida la ausencia, no la verdad del número (misma forma que ADR-115). El negativo sí
+se rechaza.
+
+**Los viáticos no viajan al informe salvo que el contrato los pida**, y esa regla ya estaba
+declarada antes de que el campo existiera —`incluyeCostos` nace en `false`—: ahora se cumple
+sola. Su prueba lleva control positivo, o el `null` por defecto lo cumpliría igual un campo que
+nunca se rellena. La causa y la recomendación **sí** van, en las dos pantallas.
+
+El mapa de ADR-140 baja de diez huecos a **siete**.
+
+**Pendiente nombrado, y es importante no confundirlo:** `travelCostUsd` es el viático de UNA
+visita, no un modelo de costos. `LabourEntry` sigue sin llevar ninguno, el material consumido no
+tiene movimiento, y «cuánto cuesta sostener Toabré» sigue sin respuesta.
+
 ### 2026-09-15 · El propósito de la visita, la única obligatoria de patio sin sitio
 
 ADR-141. De las diez preguntas sin sitio que midió ADR-140, **exactamente una** era obligatoria
@@ -64,113 +88,6 @@ falta de comprobación. Primera vez en el módulo que una medición de ayer veri
 **Pendiente nombrado:** las otras nueve. Siete son `stage: close` y tres de ellas —viáticos,
 causa probable, recomendación— son las que convierten una visita en informe técnico; la de
 viáticos es el hueco de costos, que no tiene modelo en todo el esquema.
-
-### 2026-09-15 · Dos pruebas que mentían de formas distintas, y una fuga que no se deja atrapar
-
-Buscando unas filas `TEST` que la suite deja en la base local aparecieron dos
-defectos que no tenían que ver con ellas, y ninguno se veía desde el color: las
-dos pruebas pasaban mientras fallaban.
-
-**Una comparaba un número que otras sesiones mueven.**
-`limpiarAuditDePruebas` afirmaba `borradas === sinActorAntes`. Entre `contar()`
-y `limpiar()`, otras pruebas en paralelo commitean sus filas sin actor —medido:
-38.605 contra 38.599—. En una base compartida ese número cambia mientras se
-mide: era una carrera disfrazada de guardia. Pasa a `>= 1`, y quedan las dos
-aserciones estables, que son las que importan.
-
-**La otra borraba los informes de todo el mundo.** El `afterAll` de
-`jornadaEnApiario` recogía con `findMany({ subjectEntityType: "field_session" })`,
-sin `RUN_ID`: **todos** los informes de visita de la base, con sus versiones y
-publicaciones. `assertDefinedWhere` no puede verlo —el `where` del borrado está
-perfectamente definido—; lo que apuntaba demasiado lejos era la **selección**, y
-para eso no hay helper. Sembrando un informe ajeno: sin el arreglo desaparece,
-con él sobrevive, y la prueba da 35/35 en los dos casos.
-
-**Y la fuga original sigue abierta, a propósito.** Tres corridas aisladas de
-`jornadaEnApiario` y nueve archivos sospechosos —aislados y en paralelo— dan
-**delta 0 en los dieciocho casos**. Sólo aparece corriendo los 100 del grupo
-`base-sembrada`, y de forma intermitente: una vez `+2`, la siguiente `+0`. Queda
-nombrada y sin cerrar; una observación no es un mecanismo. **La herramienta para
-retomarla es el delta por archivo, no el `grep`** — el barrido de septiembre 11
-no la vio porque contaba `Scope` huérfanos y esto son `Location`, otra tabla.
-
-**Perseguida el mismo día, desde una base a cero, y NO reproduce.** Cuatro
-mediciones: ocho corridas aisladas, cuatro minutos observando sin correr nada,
-la vuelta completa de los 100, y la vuelta completa **con el arreglo del
-`findMany` revertido** —sha distinto, compilando—. Delta **0** en las cuatro.
-Esa última mata la hipótesis obvia: **el `findMany` sin filtro no era la
-causa**. Lo único que quedó distinto entre los días que fugó y el día que no es
-que la base **estaba sucia** y ahora está limpia; no hay mecanismo que lo
-conecte, y la pista del `take: 200` de `listarInvitables` no se sostiene —79
-cuentas contra un límite de 200—.
-
-Lo que esto le ahorra a quien la retome: esos cuatro experimentos. Y con la
-base a cero, la próxima vuelta que fugue queda identificada por su `RUN_ID`
-—basta contar `core.location where name like 'TEST%'` antes y después—.
-
-**Dato para quien mida en CI:** GitHub prueba el *merge*, no tu rama. Un archivo
-con 35 pruebas en local salió con 37 en CI porque otra sesión había añadido dos
-al mismo archivo. No es un fallo: son árboles distintos a propósito.
-
-### 2026-09-15 · Las 44 preguntas del protocolo, y las 10 que no tienen dónde guardarse
-
-ADR-140. El protocolo del dueño y el esquema son **dos vocabularios sin traducción**
-—`frames_covered` contra `beeCoveredFrames`—, así que «cuántas de las 44 captura el sistema» no
-lo podía contestar nadie.
-
-**Mi primer intento dio una cifra inventada y se tiró:** comparar claves contra nombres de
-servicios decía «29 sin campo», y la mitad existen con otro nombre. El instrumento medía mi
-suposición sobre los nombres. Ese número no se reportó.
-
-**Ahora el mapa se declara** —una entrada por pregunta, con su porqué— y un guardia lo sostiene:
-ningún ítem se queda sin entrada, y **ningún destino es inventado** (el modelo y el campo
-existen en `schema.prisma`). Sin la segunda mitad el mapa sería prosa.
-
-**Lo medido con el instrumento bueno: 34 de 44 tienen sitio.** De las diez que no, **exactamente
-una es obligatoria y de patio: `purpose`**, el propósito de la visita. Las otras nueve son
-opcionales o `stage: close` — se escriben en casa, que es lo que el §7 pide.
-
-**Dos cosas del camino:** el guardia lee el esquema y no `Prisma.dmmf`, porque en esta versión
-el import revienta y deja el archivo en «no tests» —que se lee igual que «no falló nada»—; y un
-flip-test destapó un filtro muerto en el detector, el **segundo criterio inútil del día**, los
-dos escritos con su justificación al lado.
-
-**Lo que el mapa NO dice:** que la pregunta se pueda responder desde un formulario. Dice que el
-dato tiene sitio. Esa es la otra mitad.
-
-**Siguiente, con vocabulario ya resuelto:** `purpose` es la única de las diez que bloquea el
-patio, el protocolo ya trae sus seis opciones, y `Inspection.broodStages` es el precedente
-exacto de un `multi_enum` en este esquema.
-
-### 2026-09-15 · El informe al cliente ya dice de qué colmena habla
-
-ADR-139, y lo pidió el dueño: «deberíamos también ver cómo meter el informe, todos los informes
-son visita y o inspecciones y acciones o manejos en apiario».
-
-**El reporte existía y cada línea decía el nombre de la TABLA.** Medido: `cuando · clase ·
-sujeto · operador`, con `sujeto` = `"inspeccion"` o `"evento_de_colonia"`. El informe que recibe
-Kiva por su enlace decía de qué **tipo** era cada fila y no de qué caja hablaba ni qué se le
-hizo. El comentario lo justificaba «sin exponer el id interno» — instinto correcto aplicado
-demasiado ancho: **`NN-0043` no es un id interno**, es el dato con el que el cliente sigue su
-servicio.
-
-Ahora el snapshot lleva `colmena` y `detalle` —resultado, producto, material, kilos—, **los dos
-opcionales a propósito**: el snapshot es inmutable, lo ya emitido no los trae, y declararlos
-obligatorios haría creer a TypeScript que sí. Hay una prueba que se los quita a un snapshot
-guardado y comprueba que se sigue leyendo.
-
-**Dos cosas que me cazó la corrida, no el compilador:** me inventé el campo `honeyKg` —el real
-es `extractedWeightKg`— y pasó `tsc` porque tipé el borde como `unknown`, que apaga la única
-comprobación que había. Y la prueba nueva dejó una fila en `colony_event`, cuya FK es RESTRICT:
-**37 pruebas en verde con el archivo en rojo** hasta ampliar la limpieza.
-
-**Una corrección mía en ADR-138**, del mismo día: dije que el PDF «sin almacenarlo» seguía sin
-existir. Es falso — `PrintButton` existe desde T13 y ADR-039 ya fijó que la impresión del
-navegador **es** el mecanismo. Corregido en su sitio: un pendiente falso manda a la próxima
-sesión a construir algo que ya está.
-
-**Pendiente nombrado:** las fotos en el informe. `FieldEvent` puede apuntar a un `Asset` y el
-snapshot no lo mira; qué ve el cliente es decisión del dueño.
 
 ## 3. Bloqueado, y en qué
 

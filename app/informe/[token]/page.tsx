@@ -53,6 +53,25 @@ export default async function InformePorEnlacePage({ params }: { params: Promise
         {snapshot.visita.notas ? <p>{snapshot.visita.notas}</p> : null}
       </section>
 
+      {/* **La página que ve el cliente por su enlace.** La lectura del técnico y su
+          recomendación son por lo que paga el servicio, y hasta hoy no tenían dónde escribirse.
+          Opcionales: lo emitido antes del 2026-09-15 no las trae. */}
+      {snapshot.causaProbable ? (
+        <section className="nn-section">
+          <h2>{t("reportCauseHeading")}</h2>
+          <p>{snapshot.causaProbable}</p>
+        </section>
+      ) : null}
+      {snapshot.recomendacion ? (
+        <section className="nn-section">
+          <h2>{t("reportRecommendationHeading")}</h2>
+          <p>{snapshot.recomendacion}</p>
+        </section>
+      ) : null}
+      {/* Los viáticos sólo viajan en el snapshot si el contrato los pidió. */}
+      {snapshot.viaticosUsd ? (
+        <p className="nn-detail-meta">{t("reportTravelCost", { monto: snapshot.viaticosUsd })}</p>
+      ) : null}
       <section className="nn-section">
         {snapshot.registros.length === 0 ? (
           <p className="nn-muted">{t("reportNoRecords")}</p>

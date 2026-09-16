@@ -10100,3 +10100,59 @@ una visita en un informe tecnico; el de viaticos es ademas el hueco de costos qu
 nombrado y que no tiene modelo en todo el esquema. Las tres de patio que quedan
 --`weather_observed`, `site_condition`, `hives_present_count`-- son opcionales, y ninguna
 bloquea cerrar una visita.
+
+## ADR-142 -- Las tres preguntas que convierten una visita en un informe tecnico
+
+**Contexto.** ADR-140 midio las 44 preguntas del protocolo contra el esquema: diez sin sitio.
+ADR-141 cerro la unica obligatoria de patio. Estas tres son de las siete de **casa**
+--`stage: close`-- y son las que el cliente lee: **viaticos, causa probable y recomendacion**.
+
+**Decision 1 -- van en `field_session` y en el CIERRE, y eso no es una eleccion nueva.** El
+comentario de `completarVisita` ya decia que esa funcion *"solo acepta `notes`"* porque un
+valor de etapa `field` no se edita desde la casa. Las tres son de etapa `close`: son
+exactamente lo que ese cierre debia aceptar desde el principio. Y el §7 lo dice del otro lado
+-- *"que los formularios no pidan en el patio lo que puede esperar a la casa"*.
+
+**Decision 2 -- la moneda va en el nombre.** El protocolo dice `travel_cost_usd` y Panama
+opera en dolares. Inventar un modelo de monedas para un campo seria construir lo que nadie
+pidio; si algun dia hay otra, sera una decision del dueno con su columna. `DECIMAL(10,2)` y no
+coma flotante, que es dinero.
+
+**Decision 3 -- cero no es `null`, y por eso la validacion mira la ausencia y no la verdad del
+numero.** Una visita a Cerro Azul en carro propio puede costar **cero de verdad**, y ese cero
+es un dato; `null` es "nadie lo anoto". Un `!valor` habria rechazado el cero, obligando a
+mentir poniendo un centimo -- la misma forma que ADR-115 fijo para la carencia. Un **negativo**
+si se rechaza: no existe un viatico de menos ocho dolares, y guardarlo haria que cualquier suma
+por sitio mintiera.
+
+**Decision 4 -- los viaticos NO viajan al informe salvo que el contrato los pida, y esa regla
+ya estaba declarada antes de que el campo existiera.** `generationQuery.incluyeCostos` nace en
+`false` desde A9.6, con su prueba, y no tenia nada que filtrar porque no habia costos. Ahora
+los hay y la regla se cumple sola: **lo que no se congela no se puede filtrar mal despues**. Su
+prueba lleva **control positivo** -- pidiendolos, si viajan --, porque el `null` por defecto lo
+cumpliria igual un campo que nunca se rellena.
+
+**La causa probable y la recomendacion SI van al informe**, en las dos pantallas, y la que
+importa es `/informe/[token]`: la que abre el cliente con su enlace. Opcionales en el tipo por
+lo mismo que `colmena` y `detalle` (ADR-139): el snapshot es inmutable y lo ya emitido no las
+trae.
+
+**`undefined` no toca la columna; `null` la limpia.** Quien completa dos veces sin rellenarlas
+no las borra, y quien puso un valor por error puede deshacerlo. Es la misma distincion que ya
+usaban `notes` y `nextVisitDueAt` en esa funcion.
+
+**Y la causa probable no es `ColonyLossCause`.** Esa es la causa del **fin** de una colonia,
+tiene su propia tabla y admite varias a la vez con su procedencia. Esto es la lectura del
+tecnico sobre la visita entera, en prosa. Mezclarlas habria hecho que "por que se murieron"
+y "que vi hoy" compartieran fila.
+
+**Flip-test de las cuatro decisiones**, cada una compilando y cayendo por su nombre.
+
+**El mapa de ADR-140 baja de diez huecos a siete**, y la prueba que los nombra no se mueve
+sola: hay que contarlos.
+
+**Lo que NO entra, y es el hueco de costos de verdad.** `travelCostUsd` es **el viatico de una
+visita**, no un modelo de costos: `LabourEntry` sigue sin llevar ninguno, el material que se
+consume no tiene movimiento, y "cuanto cuesta sostener Toabre" sigue sin respuesta. Esta
+columna contesta una pregunta del protocolo, no esa. Confundirlas seria dar por cerrado un
+hueco que sigue abierto.
