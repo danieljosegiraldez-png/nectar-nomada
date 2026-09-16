@@ -295,26 +295,59 @@ describe("una inspección se guarda entera o no se guarda", () => {
     });
   });
 
+  /**
+   * El agujero que abrió el controlador y encontró la revisión independiente (I1):
+   * el permiso sobre el LOTE no autoriza la cama ni la corrida. La clave ajena
+   * acepta que existan y el disparador sólo comprueba que la cama SEA una cama —
+   * ninguno de los dos mira DE QUIÉN ES.
+   *
+   * **La primera versión de esta prueba no probaba nada, y lo dijo el flip-test:**
+   * quitando el arreglo no caía. El operador tampoco tenía permiso sobre el lote,
+   * así que reventaba en la PRIMERA comprobación y nunca llegaba a la del
+   * contexto. Para aislar el contexto, el lote tiene que estar DENTRO de su
+   * alcance y la cama fuera.
+   */
   it("NO deja colgar la inspección de una cama que el operador no maneja", async () => {
-    // El agujero que abrió el controlador y encontró la revisión independiente
-    // (I1): el permiso sobre el LOTE no autoriza la cama ni la corrida. La clave
-    // ajena acepta que existan y el disparador sólo comprueba que la cama SEA una
-    // cama — ninguno de los dos mira de quién es.
-    await conLote(async (lotId) => {
-      const camaAjena = await ubicacion("drying_bed");
-      const suya = await ubicacion("drying_bed");
-      const forastero = await operador(suya.id);
+    const suya = await ubicacion("drying_bed");
+    const camaAjena = await ubicacion("drying_bed");
+    const forastero = await operador(suya.id);
 
+    const org = await prisma.organization.findFirstOrThrow();
+    const lote = await prisma.lot.create({ data: {
+      lotCode: `TEST-INSP-I1-${randomUUID()}`, lotType: "drying", status: "draft",
+      classification: "internal", organizationId: org.id,
+      // El lote vive en SU ubicación: así la autorización del lote PASA y lo único
+      // que puede rechazar es la de la cama ajena.
+      locationId: suya.id,
+    } });
+
+    try {
+      // Control positivo primero: sobre su propia cama, el mismo operador SÍ puede.
+      // Sin esta mitad, un servicio que rechazara todo pasaría la mitad de abajo.
+      const permitido = await registrarInspeccion(forastero, {
+        lotId: lote.id,
+        dryingBedLocationId: suya.id,
+        occurredAt: new Date("2026-03-05T12:00:00Z"),
+        muestras: [{ materialState: "PARCHMENT", samplingRole: "ZONE", samplingZone: "NORTH" }],
+      });
+      eventIds.push(permitido.event.id);
+      expect(permitido.muestras).toHaveLength(1);
+
+      // Y sobre la ajena, no.
       await expect(
         registrarInspeccion(forastero, {
-          lotId,
+          lotId: lote.id,
           dryingBedLocationId: camaAjena.id,
-          occurredAt: new Date("2026-03-05T12:00:00Z"),
-          muestras: [{ materialState: "PARCHMENT", samplingRole: "ZONE", samplingZone: "NORTH" }],
+          occurredAt: new Date("2026-03-05T13:00:00Z"),
+          muestras: [{ materialState: "PARCHMENT", samplingRole: "ZONE", samplingZone: "SOUTH" }],
         }),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/no_sample_access/);
 
-      expect(await prisma.sample.count({ where: assertDefinedWhere({ sourceLotId: lotId }) })).toBe(0);
-    });
+      // Una sola muestra: la del caso permitido. La segunda llamada no dejó nada.
+      expect(await prisma.sample.count({ where: assertDefinedWhere({ sourceLotId: lote.id }) })).toBe(1);
+    } finally {
+      await prisma.sample.deleteMany({ where: assertDefinedWhere({ sourceLotId: lote.id }) });
+      await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: lote.id }) });
+    }
   });
 });
