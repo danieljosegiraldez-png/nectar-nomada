@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-15
 
-**331 operaciones** que tocan la base, en **98 archivos**:
+**333 operaciones** que tocan la base, en **98 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,13 +22,19 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **223** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **225** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **33** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **57** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
 
+> **Las de 331→333, sin archivos nuevos, son de la Tarea 7 del plan de secado.** Viven en
+> `lib/traceability/measurements.ts`, ya inventariado: la lectura de los modos del instrumento
+> para el aviso previo, y la escritura de la marca de revisión cuando el modo no casa con el
+> material. **Guardia directo las dos**, y la segunda va dentro de la MISMA transacción que la
+> medición — una marca que se escribiera aparte podría perderse dejando la lectura sin señalar.
+>
 > **El de 329→330, con un archivo nuevo, es `createSamplingEvent`.** Vive en
 > `lib/traceability/samplingEvents.ts`, que entra hoy al inventario. Es **guardia directo**: no
 > hereda el permiso de nadie, lo resuelve él por tres caminos según lo que traiga la entrada —la

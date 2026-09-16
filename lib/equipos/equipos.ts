@@ -739,3 +739,22 @@ export async function puedeGestionarEquipo(userAccountId: string, equipmentId: s
   const objetivo = await objetivoDeEquipo(equipo);
   return can(userAccountId, "manage", "equipment", objetivo, equipo.classification);
 }
+
+/** Instrumentos visibles y modos vigentes; las escalas conservan el label del aparato. */
+export async function instrumentosParaMedicion(userAccountId: string) {
+  const equipos = await prisma.equipment.findMany({
+    where: { kind: "instrument", lifecycleStatus: "active" },
+    include: { modes: { where: { retiredAt: null }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }] } },
+    orderBy: { name: "asc" },
+  });
+  const visibles = [];
+  for (const equipo of equipos) {
+    if (!await can(userAccountId, "view", "equipment", await objetivoDeEquipo(equipo), equipo.classification)) continue;
+    visibles.push({ id: equipo.id, name: equipo.name, modos: equipo.modes.map((m) => ({
+      id: m.id, label: m.label, materialState: m.materialState,
+      rangeMin: m.rangeMin == null ? null : Number(m.rangeMin),
+      rangeMax: m.rangeMax == null ? null : Number(m.rangeMax),
+    })) });
+  }
+  return visibles;
+}
