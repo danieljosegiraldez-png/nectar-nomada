@@ -10252,3 +10252,57 @@ lo que importa no es el numero de ayer sino que hoy se pueda contradecir.
 no es de forma sino de diseno: `moisture` **ya es una variable canonica de medicion** en este
 esquema, asi que la humedad de la miel podria ser un `Measurement` en vez de una columna. Esa
 eleccion cambia como se consulta la serie y merece decidirse aparte, no de paso.
+
+## ADR-144 -- El meliponario es un tipo de sitio, no un modulo aparte ni una especie
+
+**Contexto.** El dueno va a instalar abejas sin aguijon: cinco especies panamenas, minimo dos
+colonias de cada una, traidas de Parita e instaladas en Cerro Azul. Su decision, literal:
+"diria tener meliponiarios y tener apiarios separado aunque el apicultor tiene acceso a ambas
+si se configura asi". Y sobre donde: "pueden haber apiarios por lote de finca rosina y tambien
+bajo beneficio las nubes".
+
+**Lo que se midio antes de decidir.** El modulo A9 entero **da por supuesto que son Apis**: la
+caja es Langstroth (camaras, alzas, cuadros), la plaga es varroa, la revision cuenta cuadros
+cubiertos. Y `"apiary_site"` estaba afirmado **a mano en diez sitios** del codigo -- servicios,
+navegacion, pantallas -- cada uno comparando la cadena por su cuenta.
+
+**Las tres opciones que habia, y por que esta.**
+
+- *Modulo aparte.* Duplica sitio, colmena, colonia, traslado, cosecha, jornada, informe. El
+  manejo difiere; la contabilidad de "una caja que ocupa un sitio durante un periodo" no.
+- *Nada: un `apiary_site` mas.* Gratis hoy y falso manana -- un listado de apiarios mezclaria
+  Langstroth con INPA, y el traslado dejaria mover una melipona a un apiario de Apis.
+- *Un tipo de sitio propio, hermano.* Es lo que se hizo.
+
+**Decision -- `meliponary` entra como valor de `LocationType`**, hermano de `apiary_site`, y
+**todo el codigo deja de comparar cadenas**: `lib/apiary/sitioDeAbejas.ts` es el unico sitio
+donde viven los dos nombres. `TIPOS_DE_SITIO_DE_ABEJAS` es la familia, `esSitioDeAbejas` el
+predicado, `exigeTipoDeSitioDeAbejas` la puerta de entrada. Los diez sitios pasan por ahi.
+
+Anadir un valor a un enum de Postgres **es aditivo y no convierte nada**: ningun sitio existente
+cambia de tipo, ninguna consulta de hoy devuelve algo distinto. Por eso la migracion es una
+linea.
+
+**La familia se lista junta y se maneja separada.** `getApiaryList` devuelve los dos tipos --el
+apicultor con acceso los ve en una lista, que es lo que el dueno pidio-- y el traslado **exige
+el mismo tipo en origen y destino**: no se puede mover una caja INPA a un apiario de Apis, ni al
+reves, y `destinosCandidatos` ni siquiera los ofrece.
+
+**Lo que esto habilita hoy y no antes.** Un meliponario puede **colgar de un lote**
+(`parentLocationId`), porque el dueno los reparte "una entre cada cuantos bloques dentro de
+parcelas" y ademas "muchas juntas bajo el techo" del beneficio. Las dos formas son el mismo
+objeto con distinto padre, y la vista agrupada (ADR-135) las dibuja sola.
+
+**Lo que NO entra, y es la mitad que falta.** **La especie.** No hay tabla `Species`, ni
+`Colony.especie`, ni guardia que impida a un meliponario heredar varroa o cuadros. Eso necesita
+los cinco nombres con su procedencia, y hasta que existan seria inventar taxonomia -- que es
+justo lo que la casa prohibe. El tipo de sitio es la pieza que **no** depende de esos nombres, y
+por eso va primero.
+
+**Un guardia nuevo de arquitectura**, `tests/arquitectura/un-solo-predicado-de-sitio.test.ts`:
+nadie vuelve a escribir `=== "apiary_site"` fuera del predicado. Su control positivo distingue
+**comparar** de **mencionar**, porque el propio predicado nombra la cadena y no debe saltar.
+
+**Cinco flip-tests, los cinco compilando.** El tercero --fijar los destinos a `"apiary_site"` en
+vez del tipo de origen-- hubo que **rehacerlo**: la primera version usaba un simbolo sin
+importar, no compilaba, y una mutacion que no compila se lee como un guardia que funciona.

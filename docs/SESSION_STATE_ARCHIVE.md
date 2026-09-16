@@ -3523,3 +3523,28 @@ falta de comprobación. Primera vez en el módulo que una medición de ayer veri
 **Pendiente nombrado:** las otras nueve. **Seis** son `stage: close` y tres de ellas —viáticos,
 causa probable, recomendación— son las que convierten una visita en informe técnico; la de
 viáticos es el hueco de costos, que no tiene modelo en todo el esquema.
+
+### 2026-09-15 · Las tres preguntas que convierten una visita en informe técnico
+
+ADR-142: viáticos, causa probable y recomendación. Son de las **seis** de casa (`stage: close`)
+que quedaban sin sitio, y son las que el cliente lee.
+
+**Van en el cierre, y no es una elección nueva:** el comentario de `completarVisita` ya decía
+que esa función «sólo acepta `notes`» porque un valor de etapa `field` no se edita desde la
+casa. Éstas son de etapa `close` — exactamente lo que ese cierre debía aceptar.
+
+**Cero no es `null`:** una visita en carro propio puede costar cero de verdad, y ese cero es un
+dato. Se valida la ausencia, no la verdad del número (misma forma que ADR-115). El negativo sí
+se rechaza.
+
+**Los viáticos no viajan al informe salvo que el contrato los pida**, y esa regla ya estaba
+declarada antes de que el campo existiera —`incluyeCostos` nace en `false`—: ahora se cumple
+sola. Su prueba lleva control positivo, o el `null` por defecto lo cumpliría igual un campo que
+nunca se rellena. La causa y la recomendación **sí** van, en las dos pantallas.
+
+El mapa de ADR-140 baja a **seis** huecos.
+
+**Pendiente nombrado, y es importante no confundirlo:** `travelCostUsd` es el viático de UNA
+visita, no un modelo de costos. `LabourEntry` sigue sin llevar ninguno, el material consumido no
+tiene movimiento, y «cuánto cuesta sostener Toabré» sigue sin respuesta.
+

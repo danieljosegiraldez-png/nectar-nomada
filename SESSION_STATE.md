@@ -38,6 +38,27 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-16 · El meliponario es un tipo de sitio, y diez comparaciones de cadena pasan a ser una
+
+ADR-144. Las abejas sin aguijón entran como **`meliponary`, hermano de `apiary_site`** — no como
+módulo aparte ni como especie. Decisión del dueño: «tener meliponiarios y tener apiarios separado
+aunque el apicultor tiene acceso a ambas si se configura así».
+
+**Lo que lo hizo barato fue lo que se midió primero:** `"apiary_site"` estaba afirmado a mano en
+**diez sitios** del código. Ahora viven en uno solo, `lib/apiary/sitioDeAbejas.ts`, y un guardia de
+arquitectura impide volver a escribir esa comparación fuera de ahí.
+
+**Se listan juntos, se manejan separados:** la lista devuelve los dos tipos; el traslado **exige el
+mismo tipo** en origen y destino y ni siquiera ofrece los del otro. Y un meliponario puede **colgar
+de un lote** (`parentLocationId`), que es como el dueño los reparte: sueltos entre bloques, o muchos
+juntos bajo el techo del beneficio.
+
+**La mitad que falta es la especie**, y está bloqueada en él: no hay `Species` ni `Colony.especie`,
+así que hoy nada impide que un meliponario herede varroa o cuadros. El tipo de sitio es justo la
+pieza que no depende de los nombres, y por eso fue primero.
+
+**El tercer flip-test hubo que rehacerlo**: la primera versión no compilaba, y una mutación que no
+compila se lee como un guardia que funciona.
 ### 2026-09-16 · Pantallas de inspección e instalaciones, y el ámbito de ubicación baja por el árbol
 
 Inspección manual con dos muestras declaradas como zonas o réplicas, usando
@@ -84,30 +105,6 @@ que publiqué ayer iban todas **una de más**, porque se midieron con el instrum
 **Pendiente nombrado:** construir las cinco. Y `moisture_pct` trae una pregunta de diseño:
 `moisture` **ya es variable canónica de medición** en este esquema, así que la humedad de la
 miel podría ser un `Measurement` en vez de una columna. Eso se decide aparte, no de paso.
-
-### 2026-09-15 · Las tres preguntas que convierten una visita en informe técnico
-
-ADR-142: viáticos, causa probable y recomendación. Son de las **seis** de casa (`stage: close`)
-que quedaban sin sitio, y son las que el cliente lee.
-
-**Van en el cierre, y no es una elección nueva:** el comentario de `completarVisita` ya decía
-que esa función «sólo acepta `notes`» porque un valor de etapa `field` no se edita desde la
-casa. Éstas son de etapa `close` — exactamente lo que ese cierre debía aceptar.
-
-**Cero no es `null`:** una visita en carro propio puede costar cero de verdad, y ese cero es un
-dato. Se valida la ausencia, no la verdad del número (misma forma que ADR-115). El negativo sí
-se rechaza.
-
-**Los viáticos no viajan al informe salvo que el contrato los pida**, y esa regla ya estaba
-declarada antes de que el campo existiera —`incluyeCostos` nace en `false`—: ahora se cumple
-sola. Su prueba lleva control positivo, o el `null` por defecto lo cumpliría igual un campo que
-nunca se rellena. La causa y la recomendación **sí** van, en las dos pantallas.
-
-El mapa de ADR-140 baja a **seis** huecos.
-
-**Pendiente nombrado, y es importante no confundirlo:** `travelCostUsd` es el viático de UNA
-visita, no un modelo de costos. `LabourEntry` sigue sin llevar ninguno, el material consumido no
-tiene movimiento, y «cuánto cuesta sostener Toabré» sigue sin respuesta.
 
 ## 3. Bloqueado, y en qué
 
