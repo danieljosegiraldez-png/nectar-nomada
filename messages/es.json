@@ -1214,7 +1214,13 @@
     "recipeEveryHoursPlaceholder": "12",
     "recipeEveryHoursHint": "Opcional. Si la receta no lo declara, la lista no puede decir si el batch te debe una lectura.",
     "recipeExpectedHoursLabel": "Cuánto debe durar (horas)",
-    "recipeExpectedHoursHint": "Opcional. Sirve para saber si un batch va tarde en esta fase."
+    "recipeExpectedHoursHint": "Opcional. Sirve para saber si un batch va tarde en esta fase.",
+    "pendienteHeading": "Lo que queda por tocar",
+    "pendienteResumen": "{tocadas} de {total} cajas con algo anotado. Quedan {pobladas} con colonia sin tocar.",
+    "pendienteSinColonia": "sin colonia",
+    "pendienteRetiros": "{count} tratamiento(s) con material sin retirar en este sitio.",
+    "resumenHeading": "Lo registrado en esta visita",
+    "resumenCifras": "{inspecciones} inspecciones · {eventos} eventos de colonia · {cosechas} cosechas"
   },
   "Apiary": {
     "badge": "Apiario",

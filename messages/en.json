@@ -1214,7 +1214,13 @@
     "recipeEveryHoursPlaceholder": "12",
     "recipeEveryHoursHint": "Optional. If the recipe does not declare it, the list cannot say whether the batch owes you a reading.",
     "recipeExpectedHoursLabel": "Expected duration (hours)",
-    "recipeExpectedHoursHint": "Optional. Tells whether a batch is running late in this phase."
+    "recipeExpectedHoursHint": "Optional. Tells whether a batch is running late in this phase.",
+    "pendienteHeading": "Still untouched",
+    "pendienteResumen": "{tocadas} of {total} boxes have something recorded. {pobladas} with a colony are still untouched.",
+    "pendienteSinColonia": "no colony",
+    "pendienteRetiros": "{count} treatment(s) with material not yet removed at this site.",
+    "resumenHeading": "Recorded on this visit",
+    "resumenCifras": "{inspecciones} inspections · {eventos} colony events · {cosechas} harvests"
   },
   "Apiary": {
     "badge": "Apiary",
