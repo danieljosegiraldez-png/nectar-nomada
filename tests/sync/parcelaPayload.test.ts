@@ -5,6 +5,7 @@ import {
   construirPayloadDePerfilDeSuelo,
   construirPayloadDeSiembra,
 } from "../../lib/sync/parcelaPayload";
+import { KINDS_DE_PARCELA } from "../../lib/sync/parsearMutaciones";
 
 /**
  * Task 5 — los cuatro payloads que la cola guarda para la captura de parcela.
@@ -29,6 +30,46 @@ const form = (campos: Record<string, string>) => {
 
 // Un día que nunca coincide con el de la corrida, sea cuando sea.
 const UN_DIA_QUE_NO_ES_HOY = "2020-03-01";
+
+/**
+ * **El guardia que el comentario de `KINDS_DE_PARCELA` prometía y no existía.**
+ *
+ * Ese comentario decía que «la prueba compara esta lista con lo que el cliente
+ * encola». Medido: `git grep` daba **dos** usos de la constante, los dos dentro
+ * de su propio archivo. Los cuatro `kind` del cliente eran literales sueltos en
+ * `lib/sync/parcelaPayload.ts`, y `queueFieldEvent(payload: Record<string,
+ * unknown>)` borra los tipos, así que TypeScript tampoco los ataba: renombrar
+ * uno de los dos lados dejaba cada anotación de ese tipo en `unknown_kind`
+ * **permanente**, sin que nada se pusiera rojo.
+ *
+ * No lee la fuente: **llama a los cuatro constructores y mira el `kind` que
+ * producen de verdad**, que es el lado del cliente, y lo compara con la lista
+ * que el parseo usa para decidir. Renombrar cualquiera de los dos lados lo
+ * rompe.
+ */
+describe("los kind del cliente y los que el lote reconoce son la misma lista", () => {
+  it("los cuatro constructores producen exactamente KINDS_DE_PARCELA", () => {
+    const delCliente = [
+      construirPayloadDeMuestraDeSuelo(
+        form({ sampleCode: "S-01", sampledAt: UN_DIA_QUE_NO_ES_HOY, provenanceClass: "direct_observation" }),
+        "loc1",
+      ).kind,
+      construirPayloadDeMuestraFoliar(
+        form({ sampleCode: "F-01", sampledAt: UN_DIA_QUE_NO_ES_HOY, provenanceClass: "direct_observation" }),
+        "loc1",
+      ).kind,
+      construirPayloadDePerfilDeSuelo(
+        form({ describedAt: UN_DIA_QUE_NO_ES_HOY, provenanceClass: "direct_observation" }),
+        "loc1",
+      ).kind,
+      construirPayloadDeSiembra(form({ provenanceClass: "direct_observation" }), "loc1").kind,
+    ];
+    // Control: que sean cuatro distintos. Si dos constructores devolvieran el
+    // mismo `kind`, `sort()` contra la lista lo escondería a medias.
+    expect(new Set(delCliente).size).toBe(4);
+    expect([...delCliente].sort()).toEqual([...KINDS_DE_PARCELA].sort());
+  });
+});
 
 describe("construirPayloadDeMuestraDeSuelo", () => {
   const BASE = {

@@ -302,6 +302,148 @@ describe("el replay aplica la captura de parcela y no la duplica", () => {
 });
 
 /**
+ * **I5 de la revisión final: ninguna prueba leía la fila creada.**
+ *
+ * Hasta aquí este archivo sólo usaba `count()` —cuántas filas hay— y
+ * `toMatchObject({ status })` —qué contestó el servidor—. Ninguna de las dos
+ * mira lo que se GUARDÓ, y por eso los tres campos que el transporte perdía
+ * (`treatmentPlotLabel`, las banderas de anaerobiosis y los horizontes) fueron
+ * invisibles a la suite: el `applied` salía igual de verde con el campo dentro
+ * que fuera.
+ *
+ * El patrón es el de `tests/sync/pushFieldEvents.test.ts`, que lo usa cinco
+ * veces: `findUniqueOrThrow` por `clientDraftId` y afirmar sobre **un valor que
+ * escribió el operador**, no sobre el estado de la respuesta.
+ *
+ * Una por tipo, y cada una elige un campo que **sólo puede estar ahí si el
+ * transporte lo llevó entero**. Comprobado quitando el reenvío de cada uno: cae
+ * la prueba de ese tipo, por su nombre. (Ver el informe de la tarea.)
+ */
+describe("lo que escribió el operador llega a la fila, no sólo un applied", () => {
+  it("la muestra de suelo guarda su treatmentPlotLabel", async () => {
+    const clientDraftId = `d-fila-suelo-${Date.now()}`;
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "soil_sample" as const,
+        clientDraftId,
+        locationId,
+        sampleCode: `S-fila-${Date.now()}`,
+        sampledAt: new Date("2026-04-02T00:00:00.000Z"),
+        provenanceClass: "direct_observation",
+        treatmentPlotLabel: "T3-repetición-2",
+        samplingPointLabel: "P-07",
+        subSampleCount: 12,
+      },
+    ]);
+    expect(r).toMatchObject({ status: "applied" });
+
+    const fila = await prisma.soilSample.findUniqueOrThrow({ where: { clientDraftId } });
+    expect(fila.treatmentPlotLabel).toBe("T3-repetición-2");
+    expect(fila.samplingPointLabel).toBe("P-07");
+    expect(fila.subSampleCount).toBe(12);
+    // La fecha es la del formulario, no la del reloj de la sincronización.
+    expect(fila.sampledAt.toISOString()).toBe("2026-04-02T00:00:00.000Z");
+  });
+
+  it("la muestra foliar guarda su treatmentPlotLabel y su canopyPosition", async () => {
+    const clientDraftId = `d-fila-foliar-${Date.now()}`;
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "foliar_sample" as const,
+        clientDraftId,
+        locationId,
+        sampleCode: `F-fila-${Date.now()}`,
+        sampledAt: new Date("2026-04-02T00:00:00.000Z"),
+        provenanceClass: "direct_observation",
+        treatmentPlotLabel: "T1-repetición-3",
+        canopyPosition: "middle",
+        leafPairPosition: 4,
+        phenologicalStage: "Prefloración",
+        branchBearingFruit: false,
+      },
+    ]);
+    expect(r).toMatchObject({ status: "applied" });
+
+    const fila = await prisma.foliarSample.findUniqueOrThrow({ where: { clientDraftId } });
+    expect(fila.treatmentPlotLabel).toBe("T1-repetición-3");
+    expect(fila.canopyPosition).toBe("middle");
+    expect(fila.leafPairPosition).toBe(4);
+    expect(fila.phenologicalStage).toBe("Prefloración");
+    // `false` no es `null`: «se miró y la rama no llevaba fruto» es un hecho
+    // distinto de «no se miró», que es justo lo que ADR-080 protege.
+    expect(fila.branchBearingFruit).toBe(false);
+  });
+
+  it("la calicata guarda sus banderas de anaerobiosis y sus horizontes", async () => {
+    const clientDraftId = `d-fila-perfil-${Date.now()}`;
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "soil_profile" as const,
+        clientDraftId,
+        locationId,
+        describedAt: new Date("2026-04-02T00:00:00.000Z"),
+        provenanceClass: "direct_observation",
+        pitDepthCm: 90,
+        rootingDepthCm: 45,
+        mottling: "present",
+        greyColours: "absent",
+        rootChannelConcretions: "not_observed",
+        sourSmell: "absent",
+        horizons: [
+          { ordinal: 1, topCm: 0, bottomCm: 20, designation: "Ap", colour: "10YR 3/2", structure: "granular", textureByFeel: "franco arenoso", notes: null },
+          { ordinal: 2, topCm: 20, bottomCm: 55, designation: "Bt", colour: null, structure: null, textureByFeel: null, notes: null },
+        ],
+      },
+    ]);
+    expect(r).toMatchObject({ status: "applied" });
+
+    const fila = await prisma.soilProfile.findUniqueOrThrow({
+      where: { clientDraftId },
+      include: { horizons: { orderBy: { ordinal: "asc" } } },
+    });
+    expect(fila.mottling).toBe("present");
+    expect(fila.greyColours).toBe("absent");
+    expect(fila.rootChannelConcretions).toBe("not_observed");
+    expect(fila.sourSmell).toBe("absent");
+    expect(fila.pitDepthCm).toBe(90);
+    // Control de cuántos leyó, no sólo de que hay alguno: con un solo horizonte
+    // guardado de los dos, el `toBe("Ap")` de abajo pasaría igual.
+    expect(fila.horizons).toHaveLength(2);
+    expect(fila.horizons[0]!.designation).toBe("Ap");
+    expect(fila.horizons[0]!.textureByFeel).toBe("franco arenoso");
+    expect(fila.horizons[1]!.designation).toBe("Bt");
+    expect(fila.horizons[1]!.bottomCm).toBe(55);
+  });
+
+  it("la siembra guarda su plantCount y su dataQuality", async () => {
+    const clientDraftId = `d-fila-siembra-${Date.now()}`;
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "planting_cohort" as const,
+        clientDraftId,
+        locationId,
+        provenanceClass: "interpretation",
+        plantedAt: new Date("2019-01-01T00:00:00.000Z"),
+        plantedPrecision: "year",
+        plantCount: 340,
+        dataQuality: "unconfirmed",
+      },
+    ]);
+    expect(r).toMatchObject({ status: "applied" });
+
+    const fila = await prisma.plantingCohort.findUniqueOrThrow({ where: { clientDraftId } });
+    expect(fila.plantCount).toBe(340);
+    expect(fila.dataQuality).toBe("unconfirmed");
+    expect(fila.plantedPrecision).toBe("year");
+    // `interpretation` sólo la ofrece la pantalla de siembra
+    // (`PROCEDENCIA_DE_SIEMBRA`): que llegue a la fila es la prueba de que la
+    // cola usa la lista de SU formulario y no la de campo.
+    expect(fila.provenanceClass).toBe("interpretation");
+    expect(fila.plantedAt?.toISOString()).toBe("2019-01-01T00:00:00.000Z");
+  });
+});
+
+/**
  * Ronda de arreglo 1 sobre Task 3.
  *
  * CRÍTICO: `aplicarCapturaDeParcela` no reenviaba `dataQuality` a ninguno de
@@ -313,7 +455,11 @@ describe("el replay aplica la captura de parcela y no la duplica", () => {
  * que se lee como dato malo del operador y era el transporte descartando el
  * campo.
  */
-describe("dataQuality viaja en las cuatro ramas de captura de parcela", () => {
+describe("dataQuality viaja en la siembra, que es donde el servicio lo exige", () => {
+  // **Se llamaba «en las cuatro ramas» y ejercía una.** Un nombre que promete
+  // más de lo que hace es la misma clase de defecto que un comentario falso:
+  // quien lo lea contará cuatro ramas cubiertas donde hay una. Las otras tres
+  // las cubre ahora el describe de las filas creadas, que sí lee lo guardado.
   it("una siembra con cultivar de identidad desconocida y su dataQuality puesto vuelve applied, no rejected", async () => {
     const cultivarDesconocido = await prisma.variableCatalogValue.findFirstOrThrow({
       where: { value: "desconocido", catalog: { key: "cultivar" } },

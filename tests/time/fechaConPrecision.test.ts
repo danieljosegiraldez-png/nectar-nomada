@@ -80,6 +80,65 @@ const leer = (r: string) => readFileSync(join(RAIZ, r), "utf8");
 const SERVIDOR = "app/actions/traceability.ts";
 const CLIENTE = "lib/sync/parcelaPayload.ts";
 
+/** El grupo `{…}` que empieza en `abre`, contando llaves. `null` si no cierra. */
+function grupoDeLlaves(src: string, abre: number): { fin: number } | null {
+  let profundidad = 0;
+  for (let j = abre; j < src.length; j++) {
+    if (src[j] === "{") profundidad++;
+    else if (src[j] === "}") {
+      profundidad--;
+      if (profundidad === 0) return { fin: j };
+    }
+  }
+  return null;
+}
+
+/** El primer carácter que no es espacio a partir de `desde`, o -1. */
+function siguienteVisible(src: string, desde: number): number {
+  for (let j = desde; j < src.length; j++) {
+    if (!/\s/.test(src[j]!)) return j;
+  }
+  return -1;
+}
+
+/**
+ * El cuerpo de una función, **contando llaves**, no buscando un `}` a columna
+ * cero.
+ *
+ * **Por qué cambió.** Cortaba con `src.indexOf("\n}", i)`, que es literalmente
+ * el defecto que el `CLAUDE.md` de este repositorio documenta —«un guardia que
+ * lee la fuente no puede fiarse de la indentación»— y que ya costó marcar como
+ * incorrectos tres archivos que estaban bien. Funcionaba **por casualidad**:
+ * estas dos funciones no tienen hoy ningún bloque anidado. Un `if` multilínea
+ * dentro de cualquiera de las dos habría cortado el cuerpo en su primer `}` a
+ * columna cero y el `toContain` de abajo habría fallado sobre código correcto.
+ * Precedente que sí cuenta: `textoDeLaLlamada` en
+ * `tests/arquitectura/audit-atomico.test.ts`.
+ *
+ * **Y la trampa que contar llaves NO resuelve sola, encontrada al escribir
+ * esto:** la primera `{` tras la firma puede ser la del **tipo de retorno**.
+ * `parsePlantedAt` declara `): { plantedAt: Date | null; plantedPrecision:
+ * string | null }`, así que quedarse con el primer grupo devolvía la anotación
+ * de tipo como si fuera el cuerpo — y el `toContain` fallaba sobre código
+ * correcto, igual que antes, por otra razón. Se distingue por lo que viene
+ * DESPUÉS: si al grupo le sigue otra `{`, el grupo era el tipo y el cuerpo es
+ * el siguiente.
+ *
+ * Devuelve `null` si las llaves no cierran, para que la prueba anule la corrida
+ * en vez de afirmar sobre un trozo.
+ */
+function cuerpoDeFuncion(src: string, desdeLaFirma: number): string | null {
+  let abre = src.indexOf("{", desdeLaFirma);
+  while (abre !== -1) {
+    const grupo = grupoDeLlaves(src, abre);
+    if (!grupo) return null;
+    const siguiente = siguienteVisible(src, grupo.fin + 1);
+    if (siguiente === -1 || src[siguiente] !== "{") return src.slice(desdeLaFirma, grupo.fin + 1);
+    abre = siguiente; // el grupo anterior era el tipo de retorno
+  }
+  return null;
+}
+
 describe("los dos caminos de plantedAt comparten la aritmética, no la duplican", () => {
   it("LOS DOS sitios importan calcularFechaConPrecision", () => {
     for (const ruta of [SERVIDOR, CLIENTE]) {
@@ -95,8 +154,16 @@ describe("los dos caminos de plantedAt comparten la aritmética, no la duplican"
       const nombreFuncion = ruta === SERVIDOR ? "parsePlantedAt" : "construirFechaDeSiembra";
       const i = src.indexOf(`function ${nombreFuncion}`);
       expect(i, `no encuentro ${nombreFuncion} en ${ruta}`).toBeGreaterThan(-1);
-      const cierre = src.indexOf("\n}", i);
-      const cuerpo = src.slice(i, cierre);
+      const cuerpo = cuerpoDeFuncion(src, i);
+      // Control del ANÁLISIS, no del código: si las llaves no cierran, el
+      // recorte no midió nada y la corrida se anula aquí en vez de afirmar
+      // sobre un trozo. Sin esta línea, un `null` se leería como cuerpo vacío.
+      expect(cuerpo, `no pude delimitar el cuerpo de ${nombreFuncion} en ${ruta}`).not.toBeNull();
+      // Segunda mitad del control: que lo recortado sea el CUERPO y no la
+      // anotación de tipo de retorno, que también va entre llaves. Un tipo no
+      // tiene `return`; el cuerpo de estas dos sí, y termina en su llave.
+      expect(cuerpo, `lo recortado de ${nombreFuncion} no parece un cuerpo`).toContain("return");
+      expect(cuerpo!.endsWith("}"), `el cuerpo de ${nombreFuncion} no cierra`).toBe(true);
       expect(cuerpo, `${nombreFuncion} en ${ruta} no llama a calcularFechaConPrecision`).toContain(
         "calcularFechaConPrecision(",
       );

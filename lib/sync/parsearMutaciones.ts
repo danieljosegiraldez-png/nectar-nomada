@@ -45,9 +45,19 @@ export const KINDS_DE_APIARIO = ["inspection", "colony_event", "varroa_count"] a
 export const KIND_DE_FIN_DE_COLONIA = "colony_end";
 
 /**
- * Los cuatro tipos de captura de parcela. Exportada como las de apiario: la
- * prueba compara esta lista con lo que el cliente encola, en vez de leer el
- * texto de un `if`.
+ * Los cuatro tipos de captura de parcela.
+ *
+ * **Este comentario prometía un guardia que no existía**, y el guardia existe
+ * ahora: `tests/sync/parcelaPayload.test.ts`, «los cuatro constructores producen
+ * exactamente KINDS_DE_PARCELA». Llama a los cuatro constructores de
+ * `lib/sync/parcelaPayload.ts` y compara el `kind` que producen **de verdad**
+ * con esta lista, en vez de leer el texto de un `if` o repetir los literales.
+ *
+ * Hace falta porque nada más los ata: los `kind` del cliente son literales
+ * sueltos en su archivo y `queueFieldEvent(payload: Record<string, unknown>)`
+ * borra los tipos, así que TypeScript no ve la relación. Renombrar uno de los
+ * dos lados dejaba cada anotación de ese tipo en `unknown_kind` permanente, sin
+ * que nada se pusiera rojo.
  */
 export const KINDS_DE_PARCELA = ["soil_sample", "foliar_sample", "soil_profile", "planting_cohort"] as const;
 
@@ -157,7 +167,11 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
       continue;
     }
 
-    // Captura de parcela: los cuatro tipos de KINDS_DE_PARCELA.
+    // Va ANTES de la rama del `kind` desconocido de abajo, y ése es todo el
+    // motivo de que la lista esté declarada: sin ella, los cuatro tipos de
+    // parcela caerían ahí y volverían como `unknown_kind` — un rechazo por
+    // mutación que se lee como «el servidor no conoce este tipo» cuando lo que
+    // pasa es que la rama no se escribió.
     if (typeof m.kind === "string" && (KINDS_DE_PARCELA as readonly string[]).includes(m.kind)) {
       // Sin `clientDraftId` no hay a quién atribuir el rechazo, así que es 400
       // de lote — la misma frontera que el `kind` desconocido de abajo, y la que
