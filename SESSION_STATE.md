@@ -38,6 +38,30 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · Las tres preguntas que convierten una visita en informe técnico
+
+ADR-142: viáticos, causa probable y recomendación. Son de las siete de **casa** (`stage: close`)
+que quedaban sin sitio, y son las que el cliente lee.
+
+**Van en el cierre, y no es una elección nueva:** el comentario de `completarVisita` ya decía
+que esa función «sólo acepta `notes`» porque un valor de etapa `field` no se edita desde la
+casa. Éstas son de etapa `close` — exactamente lo que ese cierre debía aceptar.
+
+**Cero no es `null`:** una visita en carro propio puede costar cero de verdad, y ese cero es un
+dato. Se valida la ausencia, no la verdad del número (misma forma que ADR-115). El negativo sí
+se rechaza.
+
+**Los viáticos no viajan al informe salvo que el contrato los pida**, y esa regla ya estaba
+declarada antes de que el campo existiera —`incluyeCostos` nace en `false`—: ahora se cumple
+sola. Su prueba lleva control positivo, o el `null` por defecto lo cumpliría igual un campo que
+nunca se rellena. La causa y la recomendación **sí** van, en las dos pantallas.
+
+El mapa de ADR-140 baja de diez huecos a **siete**.
+
+**Pendiente nombrado, y es importante no confundirlo:** `travelCostUsd` es el viático de UNA
+visita, no un modelo de costos. `LabourEntry` sigue sin llevar ninguno, el material consumido no
+tiene movimiento, y «cuánto cuesta sostener Toabré» sigue sin respuesta.
+
 ### 2026-09-15 · El propósito de la visita, la única obligatoria de patio sin sitio
 
 ADR-141. De las diez preguntas sin sitio que midió ADR-140, **exactamente una** era obligatoria
@@ -141,36 +165,6 @@ dato tiene sitio. Esa es la otra mitad.
 **Siguiente, con vocabulario ya resuelto:** `purpose` es la única de las diez que bloquea el
 patio, el protocolo ya trae sus seis opciones, y `Inspection.broodStages` es el precedente
 exacto de un `multi_enum` en este esquema.
-
-### 2026-09-15 · El informe al cliente ya dice de qué colmena habla
-
-ADR-139, y lo pidió el dueño: «deberíamos también ver cómo meter el informe, todos los informes
-son visita y o inspecciones y acciones o manejos en apiario».
-
-**El reporte existía y cada línea decía el nombre de la TABLA.** Medido: `cuando · clase ·
-sujeto · operador`, con `sujeto` = `"inspeccion"` o `"evento_de_colonia"`. El informe que recibe
-Kiva por su enlace decía de qué **tipo** era cada fila y no de qué caja hablaba ni qué se le
-hizo. El comentario lo justificaba «sin exponer el id interno» — instinto correcto aplicado
-demasiado ancho: **`NN-0043` no es un id interno**, es el dato con el que el cliente sigue su
-servicio.
-
-Ahora el snapshot lleva `colmena` y `detalle` —resultado, producto, material, kilos—, **los dos
-opcionales a propósito**: el snapshot es inmutable, lo ya emitido no los trae, y declararlos
-obligatorios haría creer a TypeScript que sí. Hay una prueba que se los quita a un snapshot
-guardado y comprueba que se sigue leyendo.
-
-**Dos cosas que me cazó la corrida, no el compilador:** me inventé el campo `honeyKg` —el real
-es `extractedWeightKg`— y pasó `tsc` porque tipé el borde como `unknown`, que apaga la única
-comprobación que había. Y la prueba nueva dejó una fila en `colony_event`, cuya FK es RESTRICT:
-**37 pruebas en verde con el archivo en rojo** hasta ampliar la limpieza.
-
-**Una corrección mía en ADR-138**, del mismo día: dije que el PDF «sin almacenarlo» seguía sin
-existir. Es falso — `PrintButton` existe desde T13 y ADR-039 ya fijó que la impresión del
-navegador **es** el mecanismo. Corregido en su sitio: un pendiente falso manda a la próxima
-sesión a construir algo que ya está.
-
-**Pendiente nombrado:** las fotos en el informe. `FieldEvent` puede apuntar a un `Asset` y el
-snapshot no lo mira; qué ve el cliente es decisión del dueño.
 
 ## 3. Bloqueado, y en qué
 

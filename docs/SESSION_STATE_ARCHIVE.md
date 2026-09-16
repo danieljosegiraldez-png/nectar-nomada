@@ -3389,3 +3389,33 @@ Inventario de acceso **329/96 → 330/97**.
 
 **Pendiente nombrado:** el PDF del reporte «sin almacenarlo» que el §5 pide al lado. El reporte
 web y su enlace ya existen desde el 2026-09-10; el PDF es pieza propia.
+
+### 2026-09-15 · El informe al cliente ya dice de qué colmena habla
+
+ADR-139, y lo pidió el dueño: «deberíamos también ver cómo meter el informe, todos los informes
+son visita y o inspecciones y acciones o manejos en apiario».
+
+**El reporte existía y cada línea decía el nombre de la TABLA.** Medido: `cuando · clase ·
+sujeto · operador`, con `sujeto` = `"inspeccion"` o `"evento_de_colonia"`. El informe que recibe
+Kiva por su enlace decía de qué **tipo** era cada fila y no de qué caja hablaba ni qué se le
+hizo. El comentario lo justificaba «sin exponer el id interno» — instinto correcto aplicado
+demasiado ancho: **`NN-0043` no es un id interno**, es el dato con el que el cliente sigue su
+servicio.
+
+Ahora el snapshot lleva `colmena` y `detalle` —resultado, producto, material, kilos—, **los dos
+opcionales a propósito**: el snapshot es inmutable, lo ya emitido no los trae, y declararlos
+obligatorios haría creer a TypeScript que sí. Hay una prueba que se los quita a un snapshot
+guardado y comprueba que se sigue leyendo.
+
+**Dos cosas que me cazó la corrida, no el compilador:** me inventé el campo `honeyKg` —el real
+es `extractedWeightKg`— y pasó `tsc` porque tipé el borde como `unknown`, que apaga la única
+comprobación que había. Y la prueba nueva dejó una fila en `colony_event`, cuya FK es RESTRICT:
+**37 pruebas en verde con el archivo en rojo** hasta ampliar la limpieza.
+
+**Una corrección mía en ADR-138**, del mismo día: dije que el PDF «sin almacenarlo» seguía sin
+existir. Es falso — `PrintButton` existe desde T13 y ADR-039 ya fijó que la impresión del
+navegador **es** el mecanismo. Corregido en su sitio: un pendiente falso manda a la próxima
+sesión a construir algo que ya está.
+
+**Pendiente nombrado:** las fotos en el informe. `FieldEvent` puede apuntar a un `Asset` y el
+snapshot no lo mira; qué ve el cliente es decisión del dueño.
