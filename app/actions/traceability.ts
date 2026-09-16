@@ -1195,6 +1195,9 @@ export async function startFieldSessionFormAction(
       startedAt: fechaLocal(formData, "startedAt"),
       start: parseCoordinates(formData),
       notes: emptyToNull(formData.get("notes")),
+      // Las casillas marcadas. `getAll` devuelve [] cuando no hay ninguna, y el servicio
+      // distingue eso —«sin registrar»— de una lista con valores, que sí valida.
+      purposes: formData.getAll("purposes").map((v) => String(v)),
       // Una jornada la abre quien está en el sitio: es observación directa de
       // que la visita ocurrió, no un registro transcrito de otra fuente.
       provenanceClass: "direct_observation",

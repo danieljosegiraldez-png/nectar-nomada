@@ -100,6 +100,16 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
         {" · "}
         {enCurso ? <strong>{t("fieldSessionOpen")}</strong> : t("fieldSessionClosedAt", { date: cuando(session.endedAt!, session.location.timezone) })}
       </p>
+      {/* A qué se fue. Vacío es «sin registrar» y se dice: las visitas anteriores al
+          2026-09-15 no traen ninguno porque nadie lo preguntó, no porque no tuvieran
+          propósito. */}
+      <p className={session.purposes.length === 0 ? "nn-vital-sin-registro" : "nn-detail-meta"}>
+        {session.purposes.length === 0
+          ? t("visitPurposesSinRegistrar")
+          : t("visitPurposesLine", {
+              purposes: session.purposes.map((p) => t(`visitPurpose_${p}`)).join(", "),
+            })}
+      </p>
       {session.notes ? <p className="nn-muted">{session.notes}</p> : null}
       {session.startLatitude != null && session.startLongitude != null ? (
         <p className="nn-detail-meta">

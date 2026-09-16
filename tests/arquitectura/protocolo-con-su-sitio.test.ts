@@ -120,7 +120,6 @@ describe("el protocolo de campo y el esquema hablan el mismo idioma", () => {
         "hives_present_count",
         "moisture_pct",
         "probable_cause",
-        "purpose",
         "recommendation",
         "site_condition",
         "travel_cost_usd",
@@ -137,6 +136,9 @@ describe("el protocolo de campo y el esquema hablan el mismo idioma", () => {
       .map((k) => porClave.get(k)!)
       .filter((i) => i.required && i.stage === "field")
       .map((i) => i.key);
-    expect(criticas, "una pregunta obligatoria de campo sin donde guardarse").toEqual(["purpose"]);
+    // **Era `["purpose"]` y ahora es ninguna** (ADR-141). Que esta lista este vacia es el
+    // resultado del trabajo, no la ausencia de comprobacion: si manana entra al protocolo una
+    // pregunta obligatoria de patio sin sitio, esta prueba la nombra.
+    expect(criticas, "una pregunta obligatoria de campo sin donde guardarse").toEqual([]);
   });
 });

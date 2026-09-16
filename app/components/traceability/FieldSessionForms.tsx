@@ -9,6 +9,7 @@ import {
   type TraceabilityActionState,
 } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
+import { PROPOSITOS_DE_VISITA } from "../../../lib/apiary/propositoDeVisita";
 import { paraCampoLocal } from "../../../lib/time/localDateTime";
 import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
 import { construirEventoEncolado } from "../../../lib/sync/fieldEventPayload";
@@ -135,6 +136,27 @@ export function FieldSessionStartForm({
         <label htmlFor="startedAt">{t("fieldSessionStartedAtLabel")}</label>
         <input id="startedAt" type="datetime-local" name="startedAt" required defaultValue={ahoraLocal()} />
       </div>
+
+      {/* **A qué se va.** Es la única pregunta que el protocolo marca obligatoria EN EL PATIO
+          y que hasta el 2026-09-15 no tenía dónde guardarse (ADR-140). Casillas y no una
+          lista: una misma ida revisa, alimenta y trata, y obligar a elegir una haría que el
+          informe mintiera sobre a qué se fue.
+
+          Los seis valores salen del protocolo del dueño; el módulo es puro para que este
+          formulario no arrastre `prisma` al navegador. */}
+      <fieldset>
+        <legend>{t("visitPurposeLegend")}</legend>
+        <ul className="nn-seleccion">
+          {PROPOSITOS_DE_VISITA.map((p) => (
+            <li key={p}>
+              <label htmlFor={`purpose-${p}`}>
+                <input id={`purpose-${p}`} type="checkbox" name="purposes" value={p} />{" "}
+                {t(`visitPurpose_${p}`)}
+              </label>
+            </li>
+          ))}
+        </ul>
+      </fieldset>
 
       <CamposDeCoordenadas prefijo="start" />
 

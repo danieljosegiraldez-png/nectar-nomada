@@ -10037,3 +10037,66 @@ el patio, y **el protocolo ya trae sus seis opciones** -- `inspeccion`, `aliment
 `tratamiento`, `cosecha`, `montaje`, `diagnostico` --, o sea que construirla no inventa nada.
 Es un `multi_enum` sobre la visita, y el esquema ya tiene el precedente exacto:
 `Inspection.broodStages` es un arreglo de enum. Eso es la proxima rebanada, no esta.
+
+## ADR-141 -- El proposito de la visita: la unica pregunta obligatoria de patio que no tenia donde guardarse
+
+**Contexto.** ADR-140 midio las 44 preguntas del protocolo del dueno contra el esquema: 34
+tenian sitio y 10 no. De esas diez, **exactamente una** era `required` con `stage: field` --
+`purpose`. El protocolo obliga a declarar a que se fue, con el guante puesto, y el sistema no
+tenia columna donde ponerlo. Las otras nueve son opcionales o `stage: close`, que es lo que el
+§7 dice que debe pasar: se escriben en casa.
+
+**El vocabulario no se inventa: ya estaba.** Los seis valores -- `inspeccion`, `alimentacion`,
+`tratamiento`, `cosecha`, `montaje`, `diagnostico` -- salen literalmente de
+`protocolos/apiario-campo-v1.json`, item `purpose`, campo `options`. Por eso esta rebanada se
+pudo construir sin preguntar nada: el dueno ya lo habia contestado, en el sitio donde vive su
+vocabulario.
+
+**Decision 1 -- un arreglo y no una columna.** Una misma ida revisa, alimenta y trata. Obligar
+a elegir uno haria que el informe al cliente **mintiera sobre a que se fue**. El precedente
+exacto ya esta en este esquema: `Inspection.broodStages` es un arreglo de enum por la misma
+razon -- varias etapas de cria a la vez.
+
+**Decision 2 -- el vacio es "sin registrar", no "sin proposito".** Un arreglo de Postgres no es
+`NULL`: nace vacio. Las visitas guardadas hasta hoy lo tendran vacio **porque nadie las
+pregunto**, no porque no tuvieran proposito -- el tercer estado de ADR-080 aplicado a un
+arreglo. De ahi tres consecuencias que se toman juntas:
+
+* **la migracion no rellena nada**: inventar un proposito para las visitas viejas seria
+  afirmar lo que nadie declaro;
+* **no lleva `DEFAULT '{}'` con `NOT NULL`**, que diria que toda visita vieja fue declarada
+  sin proposito;
+* **el campo es opcional en la entrada del servicio**, porque exigirlo romperia la cola offline
+  de un dispositivo que todavia no lo manda.
+
+Lo que si es estricto es la **frontera**: cuando el campo llega, `exigePropositos` rechaza el
+vacio y lo desconocido. Llega como **cadena** del formulario y de la cola, y un `as never`
+dejaria entrar cualquier valor del enum -- el fallo que ADR-112 documenta.
+
+**Decision 3 -- se quitan los repetidos, no se rechazan.** Marcar dos veces la misma casilla es
+un resbalon del dedo con guante, no una respuesta distinta. Y se devuelve **en el orden del
+catalogo**, para que dos visitas con los mismos propositos se lean iguales en el informe.
+
+**Decision 4 -- tres sitios, un vocabulario, y un guardia.** El JSON del dueno, el enum de
+Postgres --que es quien lo hace cumplir-- y un modulo puro --lo unico que el formulario puede
+importar sin arrastrar `prisma` al navegador, septima vez que hace falta esta particion--. Tres
+listas en tres archivos que se editan por separado, que es exactamente la forma que
+`valoresEnumerados` vigila para el resto del esquema. **El fallo de la deriva es silencioso en
+una direccion:** un proposito anadido al JSON y no al enum no se puede guardar, y el formulario
+ni siquiera lo ofrece.
+
+**Y el mapa de ADR-140 se cierra sobre si mismo.** `purpose` pasa de "sin sitio" a
+`FieldSession.purposes`, y la prueba que contaba las obligatorias de patio sin sitio pasa de
+`["purpose"]` a `[]`. **Que esa lista este vacia es el resultado del trabajo, no la ausencia de
+comprobacion**: si manana entra al protocolo otra pregunta obligatoria de patio sin sitio, esa
+prueba la nombra. Es la primera vez en este modulo que una medicion construida ayer verifica el
+trabajo de hoy.
+
+**Flip-test de las cuatro decisiones**, cada una compilando y cayendo por su nombre.
+
+**Lo que NO entra.** Las otras nueve sin sitio. Siete son `stage: close` -- se escriben en casa,
+y tres de ellas (`travel_cost_usd`, `probable_cause`, `recommendation`) son las que convierten
+una visita en un informe tecnico; el de viaticos es ademas el hueco de costos que ya estaba
+nombrado y que no tiene modelo en todo el esquema. Las tres de patio que quedan
+--`weather_observed`, `site_condition`, `hives_present_count`-- son opcionales, y ninguna
+bloquea cerrar una visita.

@@ -38,6 +38,33 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-15 · El propósito de la visita, la única obligatoria de patio sin sitio
+
+ADR-141. De las diez preguntas sin sitio que midió ADR-140, **exactamente una** era obligatoria
+y de patio: `purpose`. El protocolo obliga a declarar a qué se fue, con el guante puesto, y no
+había columna.
+
+**El vocabulario ya estaba:** los seis valores salen literalmente del JSON del dueño, así que
+esta rebanada no preguntó nada.
+
+**Un arreglo y no una columna** —una ida revisa, alimenta y trata, y elegir uno haría que el
+informe mintiera—, con el precedente exacto de `Inspection.broodStages`. **El vacío es «sin
+registrar», no «sin propósito»**: la migración no rellena, no lleva `DEFAULT` con `NOT NULL`, y
+el campo es opcional en la entrada para no romper la cola offline. La **frontera** sí exige
+cuando el campo llega.
+
+**Tres sitios dicen el vocabulario** —JSON, enum de Postgres, módulo puro para el formulario— y
+un guardia comprueba que coincidan: un propósito añadido al JSON y no al enum **no se puede
+guardar** y el formulario ni lo ofrece.
+
+**Y el mapa de ADR-140 se cierra sobre sí mismo:** la prueba que contaba las obligatorias de
+patio sin sitio pasa de `["purpose"]` a `[]`. Que esté vacía es el resultado del trabajo, no la
+falta de comprobación. Primera vez en el módulo que una medición de ayer verifica lo de hoy.
+
+**Pendiente nombrado:** las otras nueve. Siete son `stage: close` y tres de ellas —viáticos,
+causa probable, recomendación— son las que convierten una visita en informe técnico; la de
+viáticos es el hueco de costos, que no tiene modelo en todo el esquema.
+
 ### 2026-09-15 · Dos pruebas que mentían de formas distintas, y una fuga que no se deja atrapar
 
 Buscando unas filas `TEST` que la suite deja en la base local aparecieron dos
