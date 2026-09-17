@@ -29,16 +29,8 @@ const RAIZ = new URL("../..", import.meta.url).pathname;
 /**
  * Excepciones deliberadas. Vacío a propósito: si algún día hace falta una, va
  * aquí con su motivo escrito, no como un `disabled` suelto que nadie explica.
- *
- * `BotonQueNecesitaConexion.tsx` (tablero de parcela, Task 5): igual que
- * `BotonDeEnvio.tsx`, es la pieza compartida, no un botón suelto — su
- * `disabled` lo decide siempre el llamador. Las cuatro veces que se usa hoy
- * (`PlantingCohortForm`, `PlotAttributesForm`, `SoilProfileForm`,
- * `MarcarEnProduccionForm`) pasan `pending` o `pending || encolando`, así que
- * el heurístico de texto no ve la palabra dentro de ESTE archivo pero la
- * protección real está en cada sitio de llamada.
  */
-const PERMITIDOS: string[] = ["app/components/traceability/BotonQueNecesitaConexion.tsx"];
+const PERMITIDOS: string[] = [];
 
 function archivosTsx(): string[] {
   return execFileSync("find", ["app", "-name", "*.tsx"], { cwd: RAIZ, encoding: "utf8" })

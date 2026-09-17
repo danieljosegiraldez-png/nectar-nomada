@@ -266,7 +266,7 @@ export function PlantingCohortForm({
       ) : null}
       {/* Registrar una siembra se encola sin señal (#345); corregirla no. */}
       {editando ? (
-        <BotonQueNecesitaConexion disabled={pending || encolando}>{t("cohortSaveEditButton")}</BotonQueNecesitaConexion>
+        <BotonQueNecesitaConexion pending={pending || encolando}>{t("cohortSaveEditButton")}</BotonQueNecesitaConexion>
       ) : (
         <button type="submit" className="nn-button" disabled={pending || encolando}>
           {t("cohortCreateButton")}

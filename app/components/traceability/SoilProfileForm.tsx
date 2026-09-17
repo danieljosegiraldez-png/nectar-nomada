@@ -295,7 +295,7 @@ export function SoilProfileForm({
       ) : null}
       {/* Describir una calicata se encola sin señal (#345); corregirla no. */}
       {corrigiendo ? (
-        <BotonQueNecesitaConexion disabled={pending || encolando}>{t("soilSaveButton")}</BotonQueNecesitaConexion>
+        <BotonQueNecesitaConexion pending={pending || encolando}>{t("soilSaveButton")}</BotonQueNecesitaConexion>
       ) : (
         <button type="submit" className="nn-button" disabled={pending || encolando}>
           {t("soilDescribeButton")}

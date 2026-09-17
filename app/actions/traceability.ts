@@ -1182,13 +1182,17 @@ export async function recordEnteredProductionFormAction(
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
 
-  const locationId = String(formData.get("locationId") ?? "");
   const raw = String(formData.get("occurredAt") ?? "").trim();
   if (!raw) return { error: t("plotDashboardProductionDateRequired") };
   const { fecha, precision } = calcularFechaConPrecision(raw, String(formData.get("occurredPrecision") ?? "year"));
 
+  let locationId: string;
   try {
-    await recordEnteredProduction(user.userAccountId, {
+    // El servicio devuelve el evento creado, y de ahí sale la ruta a revalidar
+    // — igual que `updateSoilProfileAction` con `perfil.locationId`. El
+    // `locationId` del POST es un campo independiente, no la parcela real de
+    // la siembra.
+    const evento = await recordEnteredProduction(user.userAccountId, {
       plantingCohortId: String(formData.get("cohortId") ?? ""),
       occurredAt: fecha,
       occurredPrecision: precision,
@@ -1196,6 +1200,7 @@ export async function recordEnteredProductionFormAction(
       dataQuality: emptyToNull(formData.get("dataQuality")) as never,
       notes: emptyToNull(formData.get("notes")),
     });
+    locationId = evento.locationId;
   } catch (error) {
     return { error: friendlyError(t, error) };
   }
@@ -1631,6 +1636,7 @@ export async function updateSoilProfileAction(
       ...soloLoQueVino(formData, camposDeCalicata(formData)),
     });
     revalidatePath(`/plots/${perfil.locationId}`);
+    revalidatePath(`/plots/${perfil.locationId}/ajustes`);
   } catch (error) {
     return { error: friendlyError(t, error) };
   }

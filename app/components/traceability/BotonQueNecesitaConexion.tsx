@@ -9,12 +9,12 @@ import { useSinConexion } from "./useSinConexion";
  * (spec §6.1). Sin conexión se desactiva y dice por qué, en vez de dejar que el
  * envío falle. Nada se descarta en silencio.
  */
-export function BotonQueNecesitaConexion({ disabled, children }: { disabled: boolean; children: ReactNode }) {
+export function BotonQueNecesitaConexion({ pending, children }: { pending: boolean; children: ReactNode }) {
   const t = useTranslations("Traceability");
   const sinConexion = useSinConexion();
   return (
     <>
-      <button type="submit" className="nn-button" disabled={disabled || sinConexion}>
+      <button type="submit" className="nn-button" disabled={pending || sinConexion}>
         {children}
       </button>
       {sinConexion ? (

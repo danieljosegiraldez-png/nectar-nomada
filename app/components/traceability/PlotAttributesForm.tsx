@@ -186,7 +186,7 @@ export function PlotAttributesForm({
       </div>
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
-      <BotonQueNecesitaConexion disabled={pending}>{t("savePlotAttributesButton")}</BotonQueNecesitaConexion>
+      <BotonQueNecesitaConexion pending={pending}>{t("savePlotAttributesButton")}</BotonQueNecesitaConexion>
     </form>
   );
 }

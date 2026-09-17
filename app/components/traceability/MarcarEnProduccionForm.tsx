@@ -95,7 +95,7 @@ export function MarcarEnProduccionForm({ cohortId, locationId }: { cohortId: str
       </div>
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
-      <BotonQueNecesitaConexion disabled={pending}>{t("plotDashboardProductionSaveButton")}</BotonQueNecesitaConexion>
+      <BotonQueNecesitaConexion pending={pending}>{t("plotDashboardProductionSaveButton")}</BotonQueNecesitaConexion>
     </form>
   );
 }
