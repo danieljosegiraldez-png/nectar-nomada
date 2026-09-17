@@ -73,7 +73,10 @@ export function scopeTargetsFor(input: { projectId?: string | null; locationId?:
  */
 export async function requireLotAccess(
   userAccountId: string,
-  action: "manage" | "view",
+  // `release` se añadió el 2026-09-16 y NO es un escalón más de `manage`: es un
+  // permiso distinto porque todo `Farm Operator` tiene `manage`, y autorizar una
+  // venta no es trabajo de campo (§A.4 del spec de reposo).
+  action: "manage" | "view" | "release",
   candidates: ReadonlyArray<{
     projectId?: string | null;
     locationId?: string | null;
@@ -1083,4 +1086,41 @@ export async function getLotSummary(userAccountId: string, lotId: string) {
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
   return lot;
+}
+
+/**
+ * Marca un lote como liberado para la venta.
+ *
+ * **No comprueba la edad de reposo, y es deliberado.** Liberar es una decisión
+ * de quien negocia —«depende el arreglo»: un comprador puede aceptar menos
+ * reposo, o el precio puede reflejarlo— y no una consecuencia del calendario.
+ * El aviso de venta temprana sigue saliendo después de liberar: si el estado
+ * callara la advertencia, liberar sería la manera de esquivar el sistema, que
+ * es justo lo que la doctrina de avisar-y-no-bloquear existe para evitar.
+ *
+ * Idempotente: liberar un lote ya liberado no mueve la fecha ni el autor. Quién
+ * y cuándo lo autorizó primero es el hecho que interesa.
+ */
+export async function liberarLote(userAccountId: string, lotId: string) {
+  const lot = await prisma.lot.findUnique({
+    where: { id: lotId },
+    select: { id: true, projectId: true, locationId: true, classification: true, releasedAt: true },
+  });
+  if (!lot) throw new TraceabilityAccessError("no_lot_access");
+  await requireLotAccess(userAccountId, "release", [lot]);
+  if (lot.releasedAt) return prisma.lot.findUniqueOrThrow({ where: { id: lotId } });
+
+  const liberado = await prisma.lot.update({
+    where: { id: lotId },
+    data: { releasedAt: new Date(), releasedBy: userAccountId },
+  });
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "lot.release",
+    sourceInterface: "traceability.service",
+    entityType: "lot",
+    entityId: lotId,
+    after: liberado,
+  });
+  return liberado;
 }

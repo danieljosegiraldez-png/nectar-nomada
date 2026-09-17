@@ -2991,6 +2991,20 @@ model Lot {
   // overwritable column").
   status         RecordStatus        @default(draft)
   classification ClassificationLevel @default(internal)
+
+  /// **La liberación para la venta: una DECISIÓN, no una medición.**
+  ///
+  /// No se deriva de la edad de reposo y no la comprueba: depende del arreglo
+  /// con el comprador, que puede aceptar menos reposo o pagarlo distinto
+  /// (§A.4 del spec). Y **no apaga el aviso**: un lote liberado a los 41 días
+  /// se enseña liberado Y con 41 días de reposo. Si el estado callara la
+  /// advertencia, liberar sería la forma de esquivar el sistema.
+  ///
+  /// Exige `lot:release`, que es un permiso propio y no `lot:manage`: todo
+  /// `Farm Operator` tiene `lot:manage`, y autorizar una venta no es trabajo de
+  /// campo.
+  releasedAt DateTime? @map("released_at")
+  releasedBy String?   @map("released_by") @db.Uuid
   // P0 (§8) — the reliability of this lot's own quantity record, distinct
   // from `status` (its administrative lifecycle) and from the
   // provenanceClass carried by each individual event. Set to `conflicting`

@@ -68,6 +68,7 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // different act by someone else. Same separation A7 applied when it withheld
   // `apiary:manage` from the Apiary Colony Event Recorder — a competence and
   // authority boundary, not a tier of the same permission.
+  { resourceType: "lot", action: "release", description: "Authorize a rested lot for sale. Deliberately separate from lot:manage, which every Farm Operator holds: releasing is a commercial decision, not field work. Does not check the resting age — that is a judgement about the buyer, not the calendar." },
   { resourceType: "lot", action: "override_balance", description: "Accept a lot transformation whose mass balance is outside the organization's tolerance." },
   // §9 de `docs/architecture/EQUIPMENT_AND_READINESS.md`: «No new *machinery*,
   // only new verbs». Comprobado, no supuesto: el aislamiento entre clientes ya
@@ -328,6 +329,7 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       "Intended scope: the farm's location, which since ADR-144 reaches everything under it — " +
       "parcels, drying facilities and beds — so one Assignment covers the whole farm.",
     permissions: [
+      ["lot", "release"],
       ["lot", "manage"],
       ["lot", "view"],
       ["lot", "export"],
