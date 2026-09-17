@@ -408,6 +408,10 @@
     {
       "archivo": "lib/traceability/instalaciones.ts",
       "razon": "Tarea 9 del plan de secado — administra el árbol sitio → instalación → cama. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Exige `location:manage_attributes` sobre el padre ANTES de escribir, y desde ADR-144 ese permiso alcanza a los descendientes, así que quien manda en la finca puede crear las camas de dentro sin una asignación por instalación. Escritura y AuditEvent en la MISMA transacción, y su prueba «revierte creación y edición si falla su AuditEvent» lo comprueba en vez de darlo por hecho."
+    },
+    {
+      "archivo": "lib/traceability/subproductos.ts",
+      "razon": "Servicio de dominio de los lotes de subproducto (cascarilla, pulpa). Autoriza contra los lotes de ENTRADA de la transformacion de origen —quien no puede tocar ese lote no puede declarar lo que salio de el— y escribe la fila con su AuditEvent en la misma transaccion. Mismo patron que selection.ts."
     }
   ],
   "reciben_transaccion": [

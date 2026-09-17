@@ -150,24 +150,32 @@ async function main() {
       continue;
     }
     if (!loc) {
-      loc = await prisma.location.create({
-        data: {
-          name: nombre,
-          locationType: "plot",
-          parentLocationId: finca.id,
-          organizationId: finca.organizationId,
-          classification: finca.classification,
-          description: siembra.nota,
-        },
-        select: { id: true },
-      });
-      await recordAuditEvent({
-        actorUserAccountId: actor.id,
-        operation: "location.create",
-        sourceInterface: "traceability.service",
-        entityType: "location",
-        entityId: loc.id,
-        after: { name: nombre },
+      // La parcela y su auditoría, en la misma transacción: una parcela sin su
+      // AuditEvent no dice quién la creó ni cuándo.
+      loc = await prisma.$transaction(async (tx) => {
+        const creada = await tx.location.create({
+          data: {
+            name: nombre,
+            locationType: "plot",
+            parentLocationId: finca.id,
+            organizationId: finca.organizationId,
+            classification: finca.classification,
+            description: siembra.nota,
+          },
+          select: { id: true },
+        });
+        await recordAuditEvent(
+          {
+            actorUserAccountId: actor.id,
+            operation: "location.create",
+            sourceInterface: "traceability.service",
+            entityType: "location",
+            entityId: creada.id,
+            after: { name: nombre },
+          },
+          tx,
+        );
+        return creada;
       });
     }
 

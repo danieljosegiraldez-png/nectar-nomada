@@ -25,13 +25,23 @@ export interface CrearSubproductoInput {
   readonly notes?: string | null;
 }
 
-export async function crearSubproducto(userAccountId: string, input: CrearSubproductoInput) {
-  // **Cero es un dato, negativo es un error de captura.** Una trilla puede no
-  // dejar cascarilla aprovechable —se mojó, se perdió, no se recogió— y eso hay
-  // que poder escribirlo. Una masa negativa no significa nada en el mundo.
-  if (!Number.isFinite(input.massKg) || input.massKg < 0) {
-    throw new ByproductValidationError(`masa inválida: ${input.massKg}. Cero es válido; negativo no.`);
+/**
+ * **Cero es un dato, negativo es un error de captura.** Una trilla puede no
+ * dejar cascarilla aprovechable —se mojó, se perdió, no se recogió— y eso hay
+ * que poder escribirlo. Una masa negativa no significa nada en el mundo.
+ *
+ * Exportada porque `recordTransformation` crea subproductos dentro de su propia
+ * transacción y necesita la MISMA regla: dos validaciones parecidas en dos
+ * sitios se separan en cuanto alguien toca una.
+ */
+export function validarMasaDeSubproducto(massKg: number): void {
+  if (!Number.isFinite(massKg) || massKg < 0) {
+    throw new ByproductValidationError(`masa inválida: ${massKg}. Cero es válido; negativo no.`);
   }
+}
+
+export async function crearSubproducto(userAccountId: string, input: CrearSubproductoInput) {
+  validarMasaDeSubproducto(input.massKg);
 
   const transformacion = await prisma.lotTransformation.findUnique({
     where: { id: input.transformationId },
@@ -53,28 +63,34 @@ export async function crearSubproducto(userAccountId: string, input: CrearSubpro
 
   const organizationId = lotes[0]!.organizationId;
 
-  const lote = await prisma.byproductBatch.create({
-    data: {
-      transformationId: input.transformationId,
-      byproductType: input.byproductType,
-      destination: input.destination,
-      massKg: input.massKg,
-      producedAtLocationId: input.producedAtLocationId,
-      organizationId,
-      notes: input.notes ?? null,
-      provenanceClass: "measured_fact",
-      createdBy: userAccountId,
-    },
+  // La creación y su auditoría, en la misma transacción: un subproducto sin su
+  // AuditEvent seria masa declarada sin rastro de quien la declaro.
+  return prisma.$transaction(async (tx) => {
+    const lote = await tx.byproductBatch.create({
+      data: {
+        transformationId: input.transformationId,
+        byproductType: input.byproductType,
+        destination: input.destination,
+        massKg: input.massKg,
+        producedAtLocationId: input.producedAtLocationId,
+        organizationId,
+        notes: input.notes ?? null,
+        provenanceClass: "measured_fact",
+        createdBy: userAccountId,
+      },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "byproduct_batch.create",
+        sourceInterface: "traceability.service",
+        entityType: "byproduct_batch",
+        entityId: lote.id,
+        after: lote,
+      },
+      tx,
+    );
+    return lote;
   });
 
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "byproduct_batch.create",
-    sourceInterface: "traceability.service",
-    entityType: "byproduct_batch",
-    entityId: lote.id,
-    after: lote,
-  });
-
-  return lote;
 }

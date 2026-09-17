@@ -15,6 +15,8 @@ import { prisma } from "../../lib/db";
 import { createLot, recordTransformation } from "../../lib/traceability/lots";
 import { recordQuantityEvent } from "../../lib/traceability/quantity";
 import { crearSubproducto } from "../../lib/traceability/subproductos";
+import { registrarTrilla } from "../../lib/traceability/trilla";
+import { computeLotBalance } from "../../lib/traceability/balance";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
@@ -176,5 +178,107 @@ describe("el lote de subproducto", () => {
       producedAtLocationId: locationId,
     });
     expect(Number(cero.massKg)).toBe(0);
+  }, 20000);
+});
+
+/**
+ * Registrar una trilla de punta a punta — Tarea 8 del plan.
+ *
+ * Una entrada, tres salidas, **una sola transacción**: el lote verde, el lote
+ * de cascarilla y la merma declarada. Y los 18 kg de cascarilla tienen que
+ * ENTRAR EN EL BALANCE, o saldrían como inexplicados — el mismo hueco del 18 %
+ * que la Tarea 5 existe para evitar, entrando por la otra puerta.
+ */
+describe("registrar una trilla", () => {
+  it("100 kg de pergamino producen el verde, la cascarilla y la merma", async () => {
+    const entrada = await pergamino("e2e", 100);
+    const r = await registrarTrilla(operarioId, {
+      lotePergaminoId: entrada.id,
+      masaEntradaKg: 100,
+      loteVerde: { lotCode: `${RUN_ID}-e2e-verde`, masaKg: 80 },
+      cascarillaKg: 18,
+      mermaKg: 2,
+      producedAtLocationId: locationId,
+      occurredAt: new Date("2026-04-10"),
+      provenanceClass: "original_record",
+    });
+    expect(r.transformacion.transformationType).toBe("hulling");
+    expect(Number(r.subproducto.massKg)).toBe(18);
+    expect(Number(r.transformacion.declaredLossQuantity)).toBe(2);
+  }, 20000);
+
+  it("los 18 kg de cascarilla NO salen como inexplicados", async () => {
+    const entrada = await pergamino("balance", 100);
+    await registrarTrilla(operarioId, {
+      lotePergaminoId: entrada.id,
+      masaEntradaKg: 100,
+      loteVerde: { lotCode: `${RUN_ID}-balance-verde`, masaKg: 80 },
+      cascarillaKg: 18,
+      mermaKg: 2,
+      producedAtLocationId: locationId,
+      occurredAt: new Date("2026-04-11"),
+      provenanceClass: "original_record",
+    });
+    // Se lee de la TRANSFORMACIÓN, que es donde se persiste lo inexplicado.
+    // `LotBalance` no lo lleva: sólo dice cuánto queda en el lote.
+    const t = await prisma.lotTransformation.findFirstOrThrow({
+      where: { transformationType: "hulling", inputs: { some: { lotId: entrada.id } } },
+    });
+    expect(Number(t.unexplainedQuantity ?? 0)).toBe(0);
+  }, 20000);
+
+  it("y el CONTROL: sin declarar la cascarilla, el hueco del 18 % sí aparece", async () => {
+    // Sin este control, la prueba de arriba pasaría también en un sistema que
+    // nunca calcula inexplicados — daría 0 por no mirar.
+    //
+    // Y fíjate en QUÉ hace el sistema con el hueco: **no rechaza la trilla,
+    // levanta una `Deviation`**. Avisa y no bloquea, igual que todo lo demás.
+    // Mi primera versión de esta prueba esperaba un `throw` y estaba mal: era
+    // la prueba la equivocada, no el código.
+    const entrada = await pergamino("control-hueco", 100);
+    const r = await registrarTrilla(operarioId, {
+      lotePergaminoId: entrada.id,
+      masaEntradaKg: 100,
+      loteVerde: { lotCode: `${RUN_ID}-control-hueco-verde`, masaKg: 80 },
+      cascarillaKg: 0,
+      mermaKg: 2,
+      producedAtLocationId: locationId,
+      occurredAt: new Date("2026-04-12"),
+      provenanceClass: "original_record",
+    });
+    expect(Number(r.transformacion.unexplainedQuantity)).toBe(18);
+    const desvios = await prisma.deviation.count({
+      where: { lotTransformationId: r.transformacion.id, severity: "mass_balance" },
+    });
+    expect(desvios).toBe(1);
+  }, 20000);
+
+  it("si falla el subproducto, la trilla ENTERA se revierte", async () => {
+    // Atomicidad. Una trilla a medias dejaria el pergamino descontado sin el
+    // verde creado: material desaparecido del libro mayor. El error se INDUCE
+    // y se NOMBRA — un `rejects.toThrow()` pelado aceptaria cualquier fallo
+    // anterior a la escritura, y entonces «el lote sigue intacto» no demuestra
+    // rollback, demuestra que nunca se empezó.
+    const entrada = await pergamino("atomica", 100);
+    await expect(
+      registrarTrilla(operarioId, {
+        lotePergaminoId: entrada.id,
+        masaEntradaKg: 100,
+        loteVerde: { lotCode: `${RUN_ID}-atomica-verde`, masaKg: 80 },
+        cascarillaKg: -18,
+        mermaKg: 2,
+        producedAtLocationId: locationId,
+        occurredAt: new Date("2026-04-13"),
+        provenanceClass: "original_record",
+      }),
+    ).rejects.toThrow(/masa/i);
+
+    // Y NADA parcial sobrevivió.
+    const balance = await computeLotBalance(prisma, entrada.id);
+    expect(balance.quantity.toNumber()).toBe(100);
+    expect(await prisma.lot.count({ where: { lotCode: `${RUN_ID}-atomica-verde` } })).toBe(0);
+    expect(await prisma.lotTransformation.count({
+      where: { transformationType: "hulling", inputs: { some: { lotId: entrada.id } } },
+    })).toBe(0);
   }, 20000);
 });

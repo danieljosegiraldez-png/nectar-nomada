@@ -119,23 +119,31 @@ async function main() {
     return;
   }
 
-  const lote = await prisma.biocharBatch.create({
-    data: {
-      batchCode: CODIGO_LOTE,
-      organizationId: finca.organizationId,
-      producedAtLocationId: produccion.id,
-      producedAt: null,
-      feedstock: MATERIA_PRIMA,
-      provenanceClass: "direct_observation",
-    },
-  });
-  await recordAuditEvent({
-    actorUserAccountId: actor.id,
-    operation: "biochar_batch.create",
-    sourceInterface: "traceability.service",
-    entityType: "biochar_batch",
-    entityId: lote.id,
-    after: { batchCode: CODIGO_LOTE },
+  // El lote y su auditoría, en la misma transacción: un lote de biochar sin su
+  // AuditEvent no dice quién lo declaró.
+  const lote = await prisma.$transaction(async (tx) => {
+    const creado = await tx.biocharBatch.create({
+      data: {
+        batchCode: CODIGO_LOTE,
+        organizationId: finca.organizationId!,
+        producedAtLocationId: produccion.id,
+        producedAt: null,
+        feedstock: MATERIA_PRIMA,
+        provenanceClass: "direct_observation",
+      },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: actor.id,
+        operation: "biochar_batch.create",
+        sourceInterface: "traceability.service",
+        entityType: "biochar_batch",
+        entityId: creado.id,
+        after: { batchCode: CODIGO_LOTE },
+      },
+      tx,
+    );
+    return creado;
   });
 
   for (const parcela of parcelas) {

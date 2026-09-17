@@ -26,6 +26,8 @@ import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { settleMassBalance } from "./balance";
+import { validarMasaDeSubproducto } from "./subproductos";
+import type { ByproductDestination, ByproductType } from "../../generated/prisma/client";
 import { leerEnmiendas } from "./enmiendas";
 
 export class TraceabilityAccessError extends Error {}
@@ -200,6 +202,25 @@ export interface RecordTransformationInput {
   performedAtLocationId?: string | null;
   custodyOut?: Date | null;
   custodyIn?: Date | null;
+  /**
+   * **Subproductos que salen de esta transformación** — la cascarilla de una
+   * trilla, la pulpa de un despulpado.
+   *
+   * Van aquí y no en una llamada aparte por dos razones. La primera es
+   * atomicidad: una trilla que descuenta el pergamino y falla al crear la
+   * cascarilla dejaría material desaparecido del libro mayor. La segunda es el
+   * BALANCE: su masa cuenta como salida, y sin eso los 18 kg de cascarilla de
+   * una trilla de 100 saldrían como **inexplicados** — el mismo hueco del 18 %
+   * que clasificar `hulling` como conservadora existe para evitar, entrando por
+   * la otra puerta.
+   */
+  byproducts?: ReadonlyArray<{
+    byproductType: ByproductType;
+    destination: ByproductDestination;
+    massKg: number;
+    producedAtLocationId: string;
+    notes?: string | null;
+  }>;
 }
 
 /**
@@ -346,6 +367,25 @@ export async function recordTransformation(userAccountId: string, input: RecordT
       outputLots.push(outputLot);
     }
 
+    // Los subproductos, DENTRO de la misma transacción: si uno falla, la
+    // transformación entera se revierte y el lote de entrada queda intacto.
+    for (const sub of input.byproducts ?? []) {
+      validarMasaDeSubproducto(sub.massKg);
+      await tx.byproductBatch.create({
+        data: {
+          transformationId: transformation.id,
+          byproductType: sub.byproductType,
+          destination: sub.destination,
+          massKg: sub.massKg,
+          producedAtLocationId: sub.producedAtLocationId,
+          organizationId: sourceLot.organizationId,
+          notes: sub.notes ?? null,
+          provenanceClass,
+          createdBy: userAccountId,
+        },
+      });
+    }
+
     // P0 — the half of the ledger that was missing. Guarded by
     // movesMaterial() so a run-opening stage_change (one input, zero outputs)
     // records its marker without consuming anything; see balance.ts.
@@ -354,7 +394,13 @@ export async function recordTransformation(userAccountId: string, input: RecordT
       transformationType: input.transformationType,
       organizationId: sourceLot.organizationId,
       inputs: input.inputs,
-      outputs: input.outputs,
+      // La masa de cada subproducto cuenta como salida. No crea lote de café
+      // —la cascarilla no es café— pero sí es masa que salió del pergamino, y
+      // el balance tiene que verla o la declarará inexplicada.
+      outputs: [
+        ...input.outputs,
+        ...(input.byproducts ?? []).map((b) => ({ quantity: b.massKg, unit: "kg" })),
+      ],
       occurredAt: input.occurredAt,
       provenanceClass,
       sourceReference: input.sourceReference ?? null,
@@ -1131,17 +1177,25 @@ export async function liberarLote(userAccountId: string, lotId: string) {
   await requireLotAccess(userAccountId, "release", [lot]);
   if (lot.releasedAt) return prisma.lot.findUniqueOrThrow({ where: { id: lotId } });
 
-  const liberado = await prisma.lot.update({
-    where: { id: lotId },
-    data: { releasedAt: new Date(), releasedBy: userAccountId },
+  // La escritura y su auditoría van en la MISMA transacción: un lote liberado
+  // sin su AuditEvent seria una autorizacion comercial sin rastro de quien la
+  // dio. Ver la cabecera de `lib/audit.ts`.
+  return prisma.$transaction(async (tx) => {
+    const liberado = await tx.lot.update({
+      where: { id: lotId },
+      data: { releasedAt: new Date(), releasedBy: userAccountId },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "lot.release",
+        sourceInterface: "traceability.service",
+        entityType: "lot",
+        entityId: lotId,
+        after: liberado,
+      },
+      tx,
+    );
+    return liberado;
   });
-  await recordAuditEvent({
-    actorUserAccountId: userAccountId,
-    operation: "lot.release",
-    sourceInterface: "traceability.service",
-    entityType: "lot",
-    entityId: lotId,
-    after: liberado,
-  });
-  return liberado;
 }
