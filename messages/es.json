@@ -1302,7 +1302,12 @@
     "reportRecommendationHeading": "Recomendación",
     "reportTravelCost": "Viáticos y transporte: {monto} USD",
     "visitHivesPresentLabel": "Cajas presentes",
-    "visitHivesPresentHelp": "Cuántas cajas contaste en el sitio. Si no coincide con lo que el sistema tiene colocado, se avisa: puede faltar una o sobrar."
+    "visitHivesPresentHelp": "Cuántas cajas contaste en el sitio. Si no coincide con lo que el sistema tiene colocado, se avisa: puede faltar una o sobrar.",
+    "visitWeatherObservedLabel": "Clima observado",
+    "weatherObserved_despejado": "Despejado",
+    "weatherObserved_nublado": "Nublado",
+    "weatherObserved_viento": "Viento",
+    "weatherObserved_lluvia": "Lluvia"
   },
   "Apiary": {
     "badge": "Apiario",

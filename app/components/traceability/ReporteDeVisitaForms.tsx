@@ -2,6 +2,8 @@
 
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
+// Del módulo PURO: importar `fieldSessions.ts` arrastraría `prisma` al navegador.
+import { CLIMAS_OBSERVADOS } from "../../../lib/apiary/climaObservado";
 import {
   emitirReporteDeVisitaAction,
   completarVisitaAction,
@@ -202,6 +204,20 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
         <label htmlFor="cv-hives">{t("visitHivesPresentLabel")}</label>
         <input id="cv-hives" name="hivesPresentCount" type="number" inputMode="numeric" min="0" step="1" />
         <p className="nn-muted">{t("visitHivesPresentHelp")}</p>
+      </div>
+
+      {/* Clima OBSERVADO, no pronosticado (ADR-152). Los cuatro valores salen del protocolo, no
+          de una lista escrita aquí. La opción vacía es «nadie miró el cielo» y NO «despejado». */}
+      <div className="nn-field">
+        <label htmlFor="cv-weather">{t("visitWeatherObservedLabel")}</label>
+        <select id="cv-weather" name="weatherObserved" defaultValue="">
+          <option value="" />
+          {CLIMAS_OBSERVADOS.map((c) => (
+            <option key={c} value={c}>
+              {t(`weatherObserved_${c}`)}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="nn-field">
