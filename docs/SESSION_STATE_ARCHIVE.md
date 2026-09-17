@@ -3739,3 +3739,23 @@ sitio en la misma transacción — 29 colmenas, 0 sin colocación abierta, 0 div
 Las pruebas de alerta trabajan sobre un fixture en memoria, así que la lectura contra la base no
 estaba cubierta. Se añadió, con dos sesiones para que «la más nueva gana» también sea falsable.
 
+
+### 2026-09-17 · Clima observado, y el guardia que ata el protocolo al esquema
+
+ADR-152. El mapa daba `weather_observed` por **sin sitio** porque su nota **confundía dos
+preguntas**: el «Clima 7 días» del Anexo C es un **pronóstico** externo sin proveedor —sigue
+bloqueado, y bien—; el Anexo E pregunta **lo que el apicultor vio**, y sus cuatro opciones ya
+estaban escritas en el protocolo. Segunda vez que un `sin_sitio` resulta ser una lectura
+equivocada de su propia nota (ADR-143 fue la primera).
+
+**Y el guardia, que es lo que de verdad faltaba.** `feedingMethod` lleva desde A9.4 con sus opciones
+escritas **dos veces** —el JSON y el enum— y **nada lo comprobaba**. Coincidían por haberlas escrito
+bien a mano.
+
+**Encontró cuatro divergencias el primer día, y una es mía:** ADR-148 construyó `FeedingMaterial`
+con los cinco valores que Daniel dictó **y no se actualizó el protocolo**, que sigue ofreciendo
+`jarabe_1_1`. Las cuatro quedan declaradas con su razón; tres son decisiones suyas —incluida
+`apiñada` con ñ contra `apinada`, que **nadie traduce**—. Desde hoy no puede aparecer una quinta.
+
+**La lista de huecos baja de cuatro a tres:** `site_condition`, `assessment`, `moisture_pct`.
+
