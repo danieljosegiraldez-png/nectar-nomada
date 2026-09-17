@@ -10598,3 +10598,55 @@ prueba fija la lista, asi que la cuenta no pudo cambiar en silencio. Y al revert
 existen y estan probadas, pero **ninguna pantalla las llama todavia**: lo que entra aqui es que el
 dato se pueda capturar y que la comparacion exista. Pintarla es una pieza propia, y se dice aqui
 para que nadie la cuente como hecha.
+
+## ADR-151 -- La divergencia de cajas se ve: alerta de sitio, nivel aviso
+
+**Contexto.** ADR-150 construyo `compararCajasPresentes` y `avisoDeCajas`, con sus nueve pruebas, y
+**dijo explicitamente que ninguna pantalla las llamaba**. Eso es el patron del que este repositorio
+se queja de haber repetido **tres veces en una semana** --lo dice la cabecera de
+`scripts/cargar-protocolo-de-campo.ts`: *«el servicio hecho y la puerta sin poner»*--. Este ADR pone
+la puerta.
+
+**Decision -- va como ALERTA del sitio, no como un vital mas.** Un vital es una cifra que se
+consulta; esto es **una razon para ir a mirar**, que es lo que el mecanismo de alertas ya modela. El
+hermano mas cercano es `perdida_sin_reposicion`: tambien una discrepancia, tambien algo que pide
+accion.
+
+**Nivel `aviso` y no `critico`, y la razon es la que decide.** La divergencia es **ambigua por
+construccion**: puede ser una caja que se fue sin registrarse, o un recuento mal hecho.
+`perdida_sin_reposicion` es critica porque unas colonias murieron de verdad; esto es «ve a mirar».
+**Subir una senal ambigua a critica es como se ensena a ignorar lo critico**, y este tablero ya
+tiene cinco motivos criticos compitiendo por el borde de la tarjeta.
+
+**Sin recuento NO alerta.** Avisar de que nadie conto seria avisar de una ausencia que el propio
+protocolo marca **opcional** (`"required": false`). Y «coinciden» tampoco se pinta: decir «todo
+bien» en cada visita entrena a no leer el aviso.
+
+**El motivo nuevo va AL FINAL del arreglo de prioridad, y eso no es pereza.**
+`lib/apiary/motivoDeAlerta.ts` dice de si mismo que el orden es *«la prioridad que fijo el dueno el
+2026-09-14»* y que **«se cambia con el dueno delante y no al pasar»**. El final es la unica posicion
+que **no reordena ninguno de los ocho** que el decidio. **Donde debe ir de verdad es decision suya**
+y queda abierta; el flip-test 4 comprueba que colarlo al principio salta.
+
+**La cuenta del sistema es `Hive.locationId` y no `HivePlacement`, medido y no supuesto.**
+`trasladarColmenas` cierra la colocacion abierta, crea la nueva **y** actualiza `Hive.locationId`
+**en la misma transaccion**, asi que no pueden divergir. Comprobado el 2026-09-17 contra la base
+compartida: **29 colmenas, 0 sin colocacion abierta, 0 divergentes**. Y `vitalesDeSitios` ya carga
+las colmenas, asi que no hace falta consulta nueva.
+
+**Dos guardias existentes obligaron a declarar el cambio**, y ninguno lo tuve que recordar yo: el
+que exige texto en los dos idiomas para cada motivo, y el que **fija la cuenta del arreglo en ocho**.
+El segundo es de los buenos: cambio a nueve con la razon escrita al lado.
+
+**Y un flip-test encontro un agujero real.** Vaciar el filtro que lee `hivesPresentCount` de la
+sesion mas nueva **no rompia NADA** --«NADIE CAYO»--: las pruebas de alerta trabajan sobre un
+fixture en memoria, asi que **la lectura contra la base no estaba cubierta**. Se anadio una prueba
+con DOS sesiones --una vieja con un recuento que no debe ganar y una nueva que si-- para que la
+regla de «la mas nueva que lo traiga» tambien sea falsable. Rehecho el flip: cae una sola prueba,
+por su nombre.
+
+**Nota sobre el flip-test 3, para que nadie lo lea mal.** Hacer que la alerta salte con
+`!== "coinciden"` tumbo **diez** pruebas, que normalmente es la senal de sospechar del arnes. Aqui
+es legitimo: `sin_recuento` es el estado del sitio sano del fixture, asi que esa mutacion hace
+alertar a **todos** los sitios y rompe cada prueba que espera una lista exacta. El control negativo
+cayo entre ellas, por su nombre.
