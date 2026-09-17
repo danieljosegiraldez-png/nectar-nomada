@@ -30,6 +30,11 @@ export const MOTIVOS_DE_ALERTA = [
   "visita_sin_cerrar",
   "consulta_a_vecinos_vencida",
   "consulta_a_vecinos_por_vencer",
+  // AÑADIDO EL 2026-09-17 (ADR-151), y AL FINAL a proposito: es la unica posicion que NO
+  // reordena ninguno de los ocho que el dueno fijo el 2026-09-14. Donde debe ir de verdad es
+  // decision suya --este archivo dice que el orden «se cambia con el dueno delante y no al
+  // pasar»-- y queda señalado en el ADR como pendiente suyo.
+  "cajas_no_cuadran",
 ] as const;
 
 export type MotivoDeAlerta = (typeof MOTIVOS_DE_ALERTA)[number];

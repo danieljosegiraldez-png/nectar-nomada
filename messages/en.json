@@ -1617,7 +1617,8 @@
     "loteError_prefijo_vacio": "The prefix is missing.",
     "loteError_desde_invalido": "“Start at” must be a whole number of 1 or more.",
     "loteError_cuantas_invalido": "“How many” must be a whole number of 1 or more.",
-    "loteError_cuantas_sobre_el_techo": "That is too many at once."
+    "loteError_cuantas_sobre_el_techo": "That is too many at once.",
+    "alerta_cajas_no_cuadran": "The hives counted do not match the ones on record"
   },
   "Research": {
     "badge": "Research OS",

@@ -38,6 +38,10 @@ function sitioSano(): Omit<VitalesDeSitio, "alertas"> {
     fechaDelConteoDeclarado: new Date(AHORA.getTime() - 3 * MS_POR_DIA),
     coloniasActivas: 10,
     cajas: 12,
+    // Un sitio sano no tiene recuento declarado de cajas: «sin recuento» es el estado por
+    // omisión, y NO «coinciden» (ADR-150). Si este fixture dijera «coinciden», las pruebas de
+    // alertas pasarían sobre un sitio que afirma algo que nadie midió.
+    cajasComparadas: { declaradas: null, enSistema: 12, estado: "sin_recuento" as const, diferencia: null },
     alimentoHasta: new Date(AHORA.getTime() + 30 * MS_POR_DIA),
     ultimaCosecha: null,
     ultimaCosechaKg: null,
@@ -86,6 +90,32 @@ describe("A9.8 — las reglas de alerta", () => {
     const fuera = sitioSano();
     fuera.alimentoHasta = new Date(AHORA.getTime() + (DIAS_DE_AVISO_DE_ALIMENTO + 1) * MS_POR_DIA);
     expect(alertasDe(fuera, SIN_NADA, AHORA)).toEqual([]);
+  });
+
+  it("CAJAS QUE NO CUADRAN: avisa cuando divergen, y con nivel aviso, no crítico", () => {
+    // `aviso` y no `critico` a propósito: la divergencia es AMBIGUA —una caja que se fue, o un
+    // recuento mal hecho—. Subir una señal ambigua a crítica enseña a ignorar lo crítico.
+    const v = sitioSano();
+    v.cajasComparadas = { declaradas: 8, enSistema: 12, estado: "divergen", diferencia: -4 };
+    expect(alertasDe(v, SIN_NADA, AHORA)).toEqual([{ nivel: "aviso", motivo: "cajas_no_cuadran" }]);
+  });
+
+  it("y avisa igual cuando SOBRAN, no sólo cuando faltan", () => {
+    const v = sitioSano();
+    v.cajasComparadas = { declaradas: 14, enSistema: 12, estado: "divergen", diferencia: 2 };
+    expect(alertasDe(v, SIN_NADA, AHORA)).toEqual([{ nivel: "aviso", motivo: "cajas_no_cuadran" }]);
+  });
+
+  it("CONTROL NEGATIVO: sin recuento NO alerta, y coincidir tampoco", () => {
+    // Es la mitad que hace falsable lo de arriba. Avisar de «nadie contó» sería avisar de una
+    // ausencia que el propio protocolo marca como opcional; y avisar de «coinciden» es ruido.
+    const sinRecuento = sitioSano();
+    expect(sinRecuento.cajasComparadas.estado).toBe("sin_recuento");
+    expect(alertasDe(sinRecuento, SIN_NADA, AHORA)).toEqual([]);
+
+    const cuadran = sitioSano();
+    cuadran.cajasComparadas = { declaradas: 12, enSistema: 12, estado: "coinciden", diferencia: 0 };
+    expect(alertasDe(cuadran, SIN_NADA, AHORA)).toEqual([]);
   });
 
   it("un borrador viejo avisa; uno reciente no", () => {
