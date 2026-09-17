@@ -3597,3 +3597,25 @@ encontró un índice que la Tarea 2 creó en la migración sin declararlo en el
 esquema.
 Detalle y comprobaciones: `.superpowers/sdd/2026-09-15-muestra-y-topologia-de-secado/tarea-8-9-report.md`.
 
+
+### 2026-09-16 · El meliponario es un tipo de sitio, y diez comparaciones de cadena pasan a ser una
+
+ADR-145. Las abejas sin aguijón entran como **`meliponary`, hermano de `apiary_site`** — no como
+módulo aparte ni como especie. Decisión del dueño: «tener meliponiarios y tener apiarios separado
+aunque el apicultor tiene acceso a ambas si se configura así».
+
+**Lo que lo hizo barato fue lo que se midió primero:** `"apiary_site"` estaba afirmado a mano en
+**diez sitios** del código. Ahora viven en uno solo, `lib/apiary/sitioDeAbejas.ts`, y un guardia de
+arquitectura impide volver a escribir esa comparación fuera de ahí.
+
+**Se listan juntos, se manejan separados:** la lista devuelve los dos tipos; el traslado **exige el
+mismo tipo** en origen y destino y ni siquiera ofrece los del otro. Y un meliponario puede **colgar
+de un lote** (`parentLocationId`), que es como el dueño los reparte: sueltos entre bloques, o muchos
+juntos bajo el techo del beneficio.
+
+**La mitad que falta es la especie**, y está bloqueada en él: no hay `Species` ni `Colony.especie`,
+así que hoy nada impide que un meliponario herede varroa o cuadros. El tipo de sitio es justo la
+pieza que no depende de los nombres, y por eso fue primero.
+
+**El tercer flip-test hubo que rehacerlo**: la primera versión no compilaba, y una mutación que no
+compila se lee como un guardia que funciona.

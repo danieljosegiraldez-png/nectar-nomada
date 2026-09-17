@@ -10482,3 +10482,68 @@ del servicio y van con las de `colonyEvents` contra Postgres.
 **limpieza fitosanitaria** -- que ademas **no existe como tipo de evento**: `ColonyEventType` tiene
 cuatro valores y ninguno es limpieza. Los dos estan bloqueados en el, porque que productos usa y
 que actos de limpieza hace no estan en ningun manual.
+
+## ADR-149 -- Dar de alta colmenas en lote, con prefijo, vista previa y todo-o-nada
+
+**Contexto.** El dueno abrio la aplicacion en el apiario el 2026-09-16, los apiarios salieron, y
+lo que faltaba era registrar **cinco colmenas en cada uno**. El unico camino era `NewHiveForm`,
+que crea **una**: cinco envios por apiario, diez en total, tecleando el identificador cada vez.
+Es literalmente lo que el ya habia pedido antes --"no tener que hacer siempre una por una"--
+resuelto entonces para tratar y alimentar (`registrarEventoEnLote`, ADR-136) y no para dar de alta.
+
+**Decision -- una transaccion, todo o nada.** Un alta en lote a medias es peor que ninguna: deja
+al dueno sin saber cuales de las cinco entraron, y el segundo intento choca con las que si.
+
+**Los identificadores se comprueban DENTRO de la transaccion, no antes.** Comprobar fuera deja
+una ventana en la que otra sesion crea `LN-03` y este lote la pisa con un choque de clave unica
+**a media escritura** -- que es el mismo estado que la transaccion venia a impedir. Y el error
+dice **cuales** estan repetidos, no solo que algo fallo: "ya existe alguno" obliga a adivinar.
+
+**La vista previa no es adorno: es la respuesta a una pregunta de diseno que no se puede acertar.**
+El relleno de ceros depende del esquema que el dueno ya usa --tiene colmenas de tres cifras
+(`H-014`)-- asi que en vez de adivinarle el ancho, el formulario le ensena **los identificadores
+exactos** antes de enviar, calculados con la **misma funcion** que valida en el servidor. Si no
+son los que quiere, cambia el prefijo o el numero y lo ve al momento.
+
+Por la misma razon **el separador va dentro del prefijo**: `"LN-"` da `LN-01`, `"LN"` da `LN01`.
+Anadirle un guion por nuestra cuenta es como se parte una numeracion en dos familias que no
+ordenan juntas.
+
+**El relleno va al ancho del numero mas grande del lote, con minimo de dos.** Con ancho fijo, un
+lote de 8 a 11 daria `LN-8, LN-9, LN-10, LN-11`, que como texto ordena 10, 11, 8, 9 -- y en una
+lista se ordena como texto.
+
+**La colonia es opcional y EXPLICITA, y eso no es pereza.** `CreateColonyInput.originType` no
+tiene valor por omision a proposito: su propio comentario lo llama *"a capture-or-lose-it fact"*.
+Crear N colonias de oficio obligaria a **inventarles un origen**. Cuando el dueno marca la
+casilla, afirma que las N vienen del mismo sitio --cierto cuando llegan juntas, y el lo sabe--;
+cuando no la marca, se crean cajas vacias y la colonia se anade despues, colmena por colmena,
+donde cada una puede decir su propia verdad.
+
+**Cada colmena nace con su colocacion** (ADR-135): esto **llama** a `crearColocacionInicial`, no
+repite su cuerpo. Una colmena guardada sin colocacion es el estado que aquel ADR vino a impedir, y
+un camino nuevo que lo olvide lo reabre sin que nada se ponga rojo.
+
+**Un AuditEvent por colmena, no uno por lote.** Agruparlos haria que una consulta por `entityId`
+encontrara el alta individual y no esta, y el audit dejaria de responder "quien creo esta colmena"
+para la mitad de ellas.
+
+**El techo es 50, y no es redondo por gusto.** El dueno instala cinco por apiario y el plan mas
+grande de sus minutas son diez. Cincuenta deja sitio de sobra y convierte un cero de mas al
+teclear --500-- en un error visible en vez de en quinientas filas. Una prueba exige que el techo
+no baje de diez, para que nadie lo apriete por debajo de lo que el instala.
+
+**El modulo se partio en dos.** `identificadoresDeLote.ts` es puro; `altaEnLote.ts` tiene `prisma`.
+El formulario es `"use client"` y necesita la funcion para la vista previa: importarla del servicio
+arrastraria `lib/db` --y `pg`-- al navegador y rompe el build. Es la misma division que
+`vocabularioDeTratamiento` / `objetivoDelTratamiento`, y la vigila
+`tests/arquitectura/cliente-sin-prisma.test.ts` -- comprobado, 71 en verde.
+
+**Cinco flip-tests, los cinco compilando, y el quinto hubo que rehacerlo.** La primera version
+--`input.colonia ?? true`-- **no compilaba** y tumbo **seis** pruebas, que es la senal de
+sospechar del arnes y no del codigo. La valida inventa los valores a mano
+(`originType: input.colonia?.originType ?? "other"`), compila, y cae **una sola** prueba: el
+control negativo "sin declararla, las colmenas nacen VACIAS".
+
+**Lo que NO entra.** Dar de alta en lote **sin senal**. Es en linea como `NewHiveForm`, por la
+misma razon: dar de alta el inventario de un sitio se hace una vez, no con el guante puesto.

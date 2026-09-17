@@ -15,6 +15,8 @@ import { completarCierreDeTratamientoFormAction } from "../../actions/apiary";
 import { confirmarCoordenadasAction } from "../../actions/traceability";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
+import { AltaEnLoteForm } from "../../components/apiary/AltaEnLoteForm";
+import { origenesDeColonia } from "../../../lib/apiary/origenDeColonia";
 import { Ayuda } from "../../components/apiary/Ayuda";
 import { TrasladoForm } from "../../components/apiary/TrasladoForm";
 import { ManejoEnLoteForm } from "../../components/apiary/ManejoEnLoteForm";
@@ -66,11 +68,12 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
     : [];
   // Anexo E §4 — el protocolo de vecinos. Cuatro lecturas en paralelo: el estado, lo
   // anunciado, el historial y a quién se puede preguntar.
-  const [protocolo, anunciadas, consultas, vecinos] = await Promise.all([
+  const [protocolo, anunciadas, consultas, vecinos, origenes] = await Promise.all([
     estadoDelProtocolo(apiary.id, ahora),
     aplicacionesPrevistas([apiary.id], ahora),
     consultasDeSitio(apiary.id),
     vecinosOfrecidos(user.userAccountId, apiary.id),
+    origenesDeColonia(),
   ]);
   const haceUnAno = new Date(ahora.getFullYear() - 1, ahora.getMonth(), ahora.getDate());
   const irregularidades = await coloniasPorIrregularidad(id, haceUnAno, ahora);
@@ -566,6 +569,12 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
       <section className="nn-section">
         <h2>{t("newHiveHeading")}</h2>
         <NewHiveForm locationId={apiary.id} projects={projects} />
+        {/* El alta en lote va PLEGADA y debajo de la de una: dar de alta el inventario de un
+            sitio se hace una vez, y el camino de todos los dias es la colmena suelta. */}
+        <details>
+          <summary>{t("loteAltaHeading")}</summary>
+          <AltaEnLoteForm locationId={apiary.id} projects={projects} origenes={origenes} />
+        </details>
       </section>
     </div>
   );
