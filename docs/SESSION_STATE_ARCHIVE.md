@@ -3696,3 +3696,25 @@ colmena por colmena.
 **El quinto flip-test hubo que rehacerlo:** la primera versión no compilaba y tumbó **seis** pruebas
 —la señal de sospechar del arnés—. La válida cae por una sola: el control negativo.
 
+
+### 2026-09-16 · Cajas presentes: lo contado contra lo colocado
+
+ADR-150. El Anexo E pregunta «Cajas presentes» y el mapa la daba por **sin sitio** con la razón ya
+escrita —«contar y declarar son datos distintos»—, que es justo la que la construye.
+
+`HivePlacement` sabe cuántas cajas **colocó**; eso no es cuántas **hay**. Una caja puede irse sin que
+nadie registre el traslado, y hasta hoy **el sistema no podía ni notarlo**.
+
+**Y aquí ninguno de los dos manda**, a diferencia de las colonias: allí el declarado gana porque el
+sistema no sabe cuáles murieron; aquí `HivePlacement` sí es un registro deliberado. La salida no es
+un número, **es la comparación**.
+
+**El estado tiene tres valores, no un booleano:** un `divergen: false` mentiría cuando nadie contó.
+Y **la diferencia lleva signo** — faltar una caja y sobrar una son problemas distintos.
+
+**La lista de huecos del protocolo baja de cinco a cuatro** (quedan `weather_observed`,
+`site_condition`, `assessment`, `moisture_pct`). El guardia de ADR-143 obligó a declararlo.
+
+**Lo que NO entra y no se cuenta como hecho:** ninguna pantalla pinta el aviso todavía. El dato se
+captura y la comparación existe; dibujarla es pieza propia.
+

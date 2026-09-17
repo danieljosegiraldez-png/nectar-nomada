@@ -1670,7 +1670,11 @@
     "hiveEntrar": "open to inspect and record",
     "sinPermisoInspeccion": "Your profile does not record formal inspections. You can note what you see as a colony event below, and ask whoever manages the apiary to record the inspection.",
     "sinPermisoEvento": "Your profile does not record events on this hive.",
-    "sinPermisoGestion": "Managing the apiary is required for this."
+    "sinPermisoGestion": "Managing the apiary is required for this.",
+    "feedingMaterial_jarabe_1_1": "Syrup 1:1",
+    "feedingMaterial_jarabe_2_1": "Syrup 2:1",
+    "feedingMaterial_sustituto_polen": "Pollen substitute",
+    "feedingMaterial_torta": "Patty"
   },
   "Research": {
     "badge": "Research OS",
