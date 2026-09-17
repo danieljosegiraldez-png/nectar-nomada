@@ -31,6 +31,37 @@ describe("cifrasDelLote", () => {
     expect(r.plantasConocidas).toBe(600);
     expect(r.cohortesSinConteo).toBe(1);
     expect(r.variedades).toEqual([{ nombre: "Caturra", plantas: 600, cohortesSinConteo: 1 }]);
+    // Las dos están marcadas: «en producción» son DOS siembras, y una no tiene
+    // conteo. Sin estas cifras la tarjeta decía «en producción: 600» como total
+    // medido.
+    expect(r).toMatchObject({
+      enProduccion: 600,
+      siembrasEnProduccion: 2,
+      enProduccionSinConteo: 1,
+      sinMarcar: 0,
+      siembrasSinMarcar: 0,
+      sinMarcarSinConteo: 0,
+    });
+  });
+
+  it("si ninguna siembra tiene conteo, cada estado dice cuántas siembras tiene sin conteo, no un 0", () => {
+    const cohortes: CohorteParaCifras[] = [
+      { id: "a", plantCount: null, cultivarValue: null },
+      { id: "b", plantCount: null, cultivarValue: null },
+      { id: "c", plantCount: null, cultivarValue: null },
+    ];
+    const estados = new Map<string, EstadoDeProduccion>([["a", enProd]]);
+    const r = cifrasDelLote(cohortes, estados);
+    expect(r).toMatchObject({
+      plantasConocidas: 0,
+      cohortesSinConteo: 3,
+      enProduccion: 0,
+      siembrasEnProduccion: 1,
+      enProduccionSinConteo: 1,
+      sinMarcar: 0,
+      siembrasSinMarcar: 2,
+      sinMarcarSinConteo: 2,
+    });
   });
 
   it("agrupa por variedad, de más a menos plantas, y la desconocida al final", () => {

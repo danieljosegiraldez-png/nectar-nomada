@@ -123,15 +123,32 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             ) : (
               <>
                 <p style={{ fontVariantNumeric: "tabular-nums", fontSize: "1.25rem" }}>
-                  {/* ADR-080: un conteo ausente no suma 0 en silencio. */}
-                  {cifras.cohortesSinConteo > 0
-                    ? t("plotDashboardPlantsAtLeast", { n: cifras.plantasConocidas, cohorts: cifras.cohortesSinConteo })
-                    : t("plotDashboardPlantsTotal", { n: cifras.plantasConocidas })}
+                  {/* ADR-080: un conteo ausente no suma 0 en silencio. Sin
+                      ninguna planta conocida, «al menos 0» sería un cero
+                      inventado: se dice cuántas siembras no tienen conteo,
+                      igual que en la tarjeta «Variedades». */}
+                  {cifras.plantasConocidas === 0 && cifras.cohortesSinConteo > 0 ? (
+                    <span className="nn-muted">{t("plotDashboardAlertNoCount", { n: cifras.cohortesSinConteo })}</span>
+                  ) : cifras.cohortesSinConteo > 0 ? (
+                    t("plotDashboardPlantsAtLeast", { n: cifras.plantasConocidas, cohorts: cifras.cohortesSinConteo })
+                  ) : (
+                    t("plotDashboardPlantsTotal", { n: cifras.plantasConocidas })
+                  )}
                 </p>
                 <p className="nn-detail-meta">
-                  {t("plotDashboardPlantsInProduction", { n: cifras.enProduccion })}
+                  {/* Lo mismo por estado. Un 0 sólo sale cuando no hay NINGUNA
+                      siembra en ese estado, que sí es un cero sabido. */}
+                  {cifras.enProduccionSinConteo === 0
+                    ? t("plotDashboardPlantsInProduction", { n: cifras.enProduccion })
+                    : cifras.enProduccion === 0
+                      ? t("plotDashboardPlantsInProductionNoCount", { cohorts: cifras.enProduccionSinConteo })
+                      : t("plotDashboardPlantsInProductionAtLeast", { n: cifras.enProduccion })}
                   {" · "}
-                  {t("plotDashboardPlantsUnmarked", { n: cifras.sinMarcar })}
+                  {cifras.sinMarcarSinConteo === 0
+                    ? t("plotDashboardPlantsUnmarked", { n: cifras.sinMarcar })
+                    : cifras.sinMarcar === 0
+                      ? t("plotDashboardPlantsUnmarkedNoCount", { cohorts: cifras.sinMarcarSinConteo })
+                      : t("plotDashboardPlantsUnmarkedAtLeast", { n: cifras.sinMarcar })}
                 </p>
               </>
             )}
@@ -187,6 +204,10 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
                       : t("densityNoCohorts")}
               </p>
             )}
+            {/* Dicho para que nadie busque una columna guardada que está vacía
+                a propósito: se calcula al leer, nunca se escribe en
+                `PlantingCohort.densityPerHectare`. */}
+            <p className="nn-detail-meta">{t("densityComputedNote")}</p>
           </article>
 
           <article className="nn-card">
@@ -240,6 +261,16 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
                         ) : (
                           <span className="nn-muted">{t("yieldNothingWeighed")}</span>
                         )}
+                        {y.unweighedContributions > 0 ? (
+                          // El total es un MÍNIMO. Sin esto, un número más bajo
+                          // de lo real se leería como medido.
+                          <>
+                            <br />
+                            <span className="nn-muted">
+                              {t("yieldUnweighedNote", { count: y.unweighedContributions })}
+                            </span>
+                          </>
+                        ) : null}
                       </td>
                       <td style={{ fontVariantNumeric: "tabular-nums", textAlign: "right", padding: "0.4rem 0 0.4rem 0.75rem" }}>
                         {y.kgPerHectare != null ? (
