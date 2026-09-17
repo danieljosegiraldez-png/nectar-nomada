@@ -97,7 +97,7 @@ Eso choca con dos cosas escritas antes:
 
 **Es aditivo y barato ahora, caro después:** un `locationId` anulable en `ConsumableStockEvent` —el sitio donde ocurrió el movimiento— convierte el saldo global en un saldo por sitio sin tocar nada más, y **nadie ha construido todavía** ese plan. Añadirlo cuando ya haya filas obliga a adivinar dónde estaba cada cosa.
 
-**Decisión de Daniel, pendiente.** Si dice que no, este spec se ajusta: los mínimos pasan a ser por material y los avisos dejan de saber dónde falta. Se dice aquí en vez de construirlo a medias.
+**DECIDIDO el 2026-09-17: se añade.** Daniel dijo que sí, y el cambio va en el PR #379, que toca el spec y el plan de aquel inventario —sólo documentación— con sus dos pruebas y el flip-test que las cubre: el saldo por sitio no mezcla dos sitios, y un movimiento sin sitio cuenta en el total y en ninguno. Así los mínimos de §3.3 pueden avisar de **dónde** falta.
 
 ## 6. Reglas que esta capa añade a las de aquel spec
 
