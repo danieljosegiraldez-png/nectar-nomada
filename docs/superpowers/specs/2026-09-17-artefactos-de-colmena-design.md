@@ -193,11 +193,17 @@ El paquete asigna a la plataforma su `G10`, y estas piezas son las que bloquean:
 
 ## 7. Decisiones abiertas — de Daniel, no mías
 
-1. **Qué permiso exige instalar o retirar un artefacto.** ¿Basta `apiary:manage`
-   —lo que ya tiene un `Farm Operator`— o instalar un nodo de 400 dólares merece
-   uno propio, como pasó con `lot:release`?
-2. **Si el intervalo se puede corregir a posteriori**, y quién. Una fecha de
-   instalación mal tecleada reasigna datos de una colmena a otra.
+1. ~~**Qué permiso exige instalar o retirar un artefacto.**~~ — **resuelta al
+   escribir el plan, el 2026-09-17, y la resolución es MÍA, no de Daniel:** un
+   artefacto corriente va con `apiary:manage`; instalar o **mover un nodo** exige
+   `hive_node:manage`, propio. La razón es la que cerró `lot:release`: todo
+   `Farm Operator` tiene `apiary:manage`, y **mover un nodo reasigna datos** —las
+   observaciones de mayo pasan a colgar de otra colmena—. Si Daniel prefiere lo
+   contrario, cuesta una migración de catálogo y un ajuste de perfil.
+2. ~~**Si el intervalo se puede corregir a posteriori.**~~ — **resuelta igual:
+   sí, con `apiary:manage` y auditoría.** Una fecha mal tecleada reasigna
+   observaciones, así que tiene que poder arreglarse; y por eso la corrección se
+   audita en vez de prohibirse.
 3. **Abejas nativas.** El paquete avisa en `G13` de que *«el rango de 150 kg
    puede no dar resolución útil para colmenas pequeñas de abejas sin aguijón»*.
    Si van a llevar nodo, eso decide el hardware antes que el software.
