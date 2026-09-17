@@ -10720,3 +10720,61 @@ si alguien arregla una, la lista se queda corta y lo dice.
 valor a un `as const satisfies` estrecha la union y no compila. Los validos fueron **reordenar** el
 vocabulario y **vaciar el predicado**. El cuarto es el que vale: separar el JSON del enum
 --anadiendo `"neblina"` solo al protocolo-- cae por el guardia nuevo, compilando.
+
+## ADR-153 -- Las dos divergencias del dueno, resueltas: la eñe y el vocabulario completo
+
+**Contexto.** El guardia de ADR-152 encontro cuatro divergencias entre el protocolo del dueno y el
+esquema, y le llevo las tres que eran decisiones suyas. Contesto dos el mismo dia: *«mis cinco mas
+los jarabes, y arregla apiñada»*.
+
+## 1 · La eñe, y la afirmacion falsa que la causaba
+
+`apiñada` es su ortografia y la que **su protocolo ya usaba**; el enum decia `apinada` y **nadie
+traducia**. No rompia todavia porque el formulario sale de `POBLACIONES`, la constante del codigo
+-- pero el protocolo existe para que la captura salga **de el**, y ese dia habria ofrecido un valor
+que Postgres rechaza.
+
+**La causa raiz estaba escrita en el esquema, y era falsa.** El comentario de `ColonyPopulation`
+justificaba la ausencia asi: *«`apinada` sin eñe porque un identificador de enum no la admite»*.
+**Un enum de Prisma SI la admite**: `prisma validate` dice «the schema is valid» con `apiñada`
+dentro. Esa suposicion --escrita como justificacion y nunca medida-- es la razon de la divergencia,
+y **se corrige el comentario en vez de dejarlo al lado**: una regla que resulta falsa hay que
+corregirla, no reforzarla.
+
+**La migracion se escribe A MANO, y esa es la decision tecnica de esta mitad.** Prisma genero un
+**intercambio de tipo**: crear `ColonyPopulation_new` y castear
+`population::text::ColonyPopulation_new`. **Ese cast revienta para cualquier fila que valga
+`'apinada'`.** En la base local hay cero --medido: 2 inspecciones, 0 con ese valor-- pero **la de
+produccion no se puede leer desde aqui**, asi que la ausencia no se puede afirmar.
+`ALTER TYPE ... RENAME VALUE` preserva los datos **por definicion**: renombra la etiqueta, no
+reescribe filas. Sin deriva de esquema despues, comprobado.
+
+## 2 · «Mis cinco mas los jarabes»
+
+`FeedingMaterial` pasa de seis valores a diez: los **cinco** que el dueno dicto el 2026-09-16
+--primero, porque son los que usa--, los **dos jarabes**, y `sustituto_polen` y `torta`.
+
+**Esos dos ultimos NO son jarabes** --son alimentos proteicos-- y **se quedan igual**: ya estaban
+en **su** protocolo, y quitarlos seria una perdida de capacidad que nadie pidio. Queda dicho que si
+no los usa, se quitan entonces. Es la eleccion de menor perdida con la pregunta a la vista, en vez
+de decidirla en silencio en cualquiera de las dos direcciones.
+
+**Y esto revisa a ADR-148, con su razon.** Aquella prueba decia «exactamente sus cinco, ni uno
+mas», y su argumento era bueno: *un desplegable con opciones que nadie usa ensena a bajar hasta
+«otro»*. Lo que no habia visto es que **el protocolo ya ofrecia otras cuatro**, asi que el efecto
+neto de «no anadir ninguna» no era un vocabulario corto: eran **dos vocabularios** para la misma
+pregunta. El argumento sigue valiendo; la premisa estaba incompleta.
+
+## Lo que impide que vuelvan a separarse
+
+Dos cosas, y la segunda es la que faltaba en ADR-148:
+
+- El guardia `enum-del-protocolo` pasa ahora con **solo las dos divergencias legitimas**
+  (`honey_stores`, `pollen_stores`), que son de modelado y estan declaradas.
+- Una prueba nueva **compara el vocabulario con el ARCHIVO del protocolo**, no con una lista
+  escrita en la prueba. Compararse con una lista propia es compararse consigo mismo.
+
+**Tres flip-tests, y el tercero hubo que rehacerlo.** Quitar la eñe de `POBLACIONES` **no
+compila** --rompe el `satisfies readonly ColonyPopulation[]`--, o sea que **ahi la protege el
+compilador y no una prueba**, que es mas fuerte. El flip valido quita la eñe **del JSON**, que no
+pasa por tipos, y cae por el guardia.
