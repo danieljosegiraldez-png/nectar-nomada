@@ -10547,3 +10547,54 @@ control negativo "sin declararla, las colmenas nacen VACIAS".
 
 **Lo que NO entra.** Dar de alta en lote **sin senal**. Es en linea como `NewHiveForm`, por la
 misma razon: dar de alta el inventario de un sitio se hace una vez, no con el guante puesto.
+
+## ADR-150 -- Cajas presentes: lo que alguien conto contra lo que el sistema tiene colocado
+
+**Contexto.** El Anexo E pregunta *«Cajas presentes»* en la etapa de campo, y el mapa del protocolo
+la daba por **sin sitio** desde ADR-140, con la razon ya escrita: *«Las cajas presentes se cuentan
+hoy desde `Hive`, no se declaran. Contar y declarar son datos distintos: el segundo es lo que
+alguien vio.»* **Esa razon es exactamente la que la construye**, no la que la posterga.
+
+**El problema medible.** `HivePlacement` sabe cuantas cajas **coloco** en un sitio. Eso no es
+cuantas **hay**: una caja puede irse --robada, movida por un vecino, prestada-- sin que nadie
+registre el traslado. Hoy el sistema **no puede ni notarlo**.
+
+**Decision -- `FieldSession.hivesPresentCount`, hermana de `coloniesAliveCount`.** Un entero
+anulable, capturado en el cierre de la visita, al lado de las colonias vivas. No es lo mismo: **una
+caja puede estar ahi vacia.**
+
+**Y aqui NINGUNO de los dos manda, a diferencia de las colonias.** Para colonias vivas la regla de
+`polinizacion.ts` es explicita --*«ese conteo declarado manda cuando existe»*-- porque el sistema no
+sabe cuales murieron: una colonia muere sin que nadie lo apunte. Para cajas esa regla no vale:
+`HivePlacement` **si** es un registro deliberado, asi que ninguno de los dos es obviamente mejor.
+
+Elegir uno **esconderia la senal**. Asi que la salida de `compararCajasPresentes` **no es un numero:
+es la comparacion**. Se sigue la mitad de `polinizacion.ts` que si aplica --*«el que no manda NO se
+tira»*--: los dos viajan.
+
+**El estado tiene TRES valores y no es un booleano.** Un `divergen: boolean` diria `false` cuando
+nadie conto, y `false` se lee como «coinciden» cuando significa «no lo se». Es ADR-080 aplicado a un
+**valor derivado**: `sin_recuento | coinciden | divergen`.
+
+**La diferencia lleva signo.** Un `-2` es «faltan dos de las registradas» y un `+2` es «hay dos que
+el sistema no tiene»: son problemas distintos --una caja perdida contra una caja sin registrar-- y
+un valor absoluto los meteria en el mismo aviso. Su flip-test lo confirma: poner `Math.abs` tumba
+el caso que motiva todo esto.
+
+**Cero declarado es valido y no es «sin recuento».** Un apiario vaciado se cuenta como cero, y ese
+cero es un dato -- confundirlo con «no conte» perderia justo el caso mas grave. Por eso la guarda es
+`declaradas == null` y no `!declaradas`; el flip-test 3 lo demuestra.
+
+**Y no se pinta un «coinciden».** `avisoDeCajas` devuelve `null` cuando no hay nada que decir: decir
+«todo bien» en cada visita entrena a no leer el aviso.
+
+**La lista de huecos del protocolo baja de CINCO a CUATRO** --quedan `weather_observed`,
+`site_condition`, `assessment` y `moisture_pct`--. El guardia de ADR-143 **obligo a declararlo**: la
+prueba fija la lista, asi que la cuenta no pudo cambiar en silencio. Y al revertir el mapa a
+`sin_sitio`, el flip-test 5 lo caza **por dos guardias** a la vez, incluido el que comprueba que un
+`sin_sitio` no miente -- porque ahora existe un campo que se parece a la clave.
+
+**Lo que NO entra.** El aviso en la ficha del sitio. `compararCajasPresentes` y `avisoDeCajas`
+existen y estan probadas, pero **ninguna pantalla las llama todavia**: lo que entra aqui es que el
+dato se pueda capturar y que la comparacion exista. Pintarla es una pieza propia, y se dice aqui
+para que nadie la cuente como hecha.

@@ -173,6 +173,15 @@ export interface CerrarVisitaInput {
   /** Colonias contadas al salir del sitio. Sin esto no hay «pérdida sin reposición». */
   coloniesAliveCount?: number | null;
   /**
+   * CAJAS contadas al salir del sitio — Anexo E, etapa de campo (ADR-150). Hermana de la de
+   * arriba y **no lo mismo**: una caja puede estar ahí vacía.
+   *
+   * No sustituye a la cuenta de `HivePlacement`, la CONTRADICE cuando difieren, y eso es el
+   * dato: una caja que se fue sin registrarse, o un recuento mal hecho.
+   * `compararCajasPresentes` las junta; aquí sólo se guarda lo que alguien vio.
+   */
+  hivesPresentCount?: number | null;
+  /**
    * Viáticos y transporte, en dólares. `stage: close` del protocolo, así que ésta es su
    * puerta: se anota en casa.
    *
@@ -253,6 +262,7 @@ export async function completarVisita(userAccountId: string, input: CerrarVisita
         ...(input.notes === undefined ? {} : { notes: input.notes }),
         ...(input.nextVisitDueAt === undefined ? {} : { nextVisitDueAt: input.nextVisitDueAt }),
         ...(input.coloniesAliveCount === undefined ? {} : { coloniesAliveCount: input.coloniesAliveCount }),
+        ...(input.hivesPresentCount === undefined ? {} : { hivesPresentCount: input.hivesPresentCount }),
         // Las tres de `stage: close`. `undefined` no toca la columna —quien completa dos
         // veces sin rellenarlas no las borra—; `null` sí la limpia, que es cómo se deshace
         // un valor puesto por error.

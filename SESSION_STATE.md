@@ -38,6 +38,27 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-16 · Cajas presentes: lo contado contra lo colocado
+
+ADR-150. El Anexo E pregunta «Cajas presentes» y el mapa la daba por **sin sitio** con la razón ya
+escrita —«contar y declarar son datos distintos»—, que es justo la que la construye.
+
+`HivePlacement` sabe cuántas cajas **colocó**; eso no es cuántas **hay**. Una caja puede irse sin que
+nadie registre el traslado, y hasta hoy **el sistema no podía ni notarlo**.
+
+**Y aquí ninguno de los dos manda**, a diferencia de las colonias: allí el declarado gana porque el
+sistema no sabe cuáles murieron; aquí `HivePlacement` sí es un registro deliberado. La salida no es
+un número, **es la comparación**.
+
+**El estado tiene tres valores, no un booleano:** un `divergen: false` mentiría cuando nadie contó.
+Y **la diferencia lleva signo** — faltar una caja y sobrar una son problemas distintos.
+
+**La lista de huecos del protocolo baja de cinco a cuatro** (quedan `weather_observed`,
+`site_condition`, `assessment`, `moisture_pct`). El guardia de ADR-143 obligó a declararlo.
+
+**Lo que NO entra y no se cuenta como hecho:** ninguna pantalla pinta el aviso todavía. El dato se
+captura y la comparación existe; dibujarla es pieza propia.
+
 ### 2026-09-16 · Alta de colmenas en lote: cinco de una vez, con vista previa
 
 ADR-149. Daniel abrió la app en el apiario y lo que faltaba era registrar **cinco colmenas en cada
@@ -81,36 +102,6 @@ dos duplicados de campos que ya tienen vocabulario al lado (`storesLevel`, `pest
 **Y lo que falta del encargo, bloqueado en Daniel:** los productos de tratamiento que usa, y los actos
 de **limpieza fitosanitaria** — que además **no existe como tipo de evento**: `ColonyEventType` tiene
 cuatro valores y ninguno es limpieza.
-
-### 2026-09-16 · Las fuentes de Cerro Azul entran, y faltaba una que otro documento mandaba leer
-
-ADR-146. Cuatro documentos que vivían **sólo en `~/Downloads`**, sin versionar: las dos versiones
-de la minuta del 18 de julio, la minuta ejecutiva del 6 de agosto, y el marco de investigación
-suelo-ambiente-taza. Entran como `FUENTE_*` en `docs/architecture/`, verbatim, con cabecera de
-procedencia y un índice que mapea qué hecho vive en cuál.
-
-**Lo que se perdía, medido:** `Noria mix`, `Inversiones Melissa`, `lejía` y `cal agrícola` salían
-**cero veces** en todo el árbol (control positivo: `Finca Rosina` en 49 archivos, `biochar` en 51).
-La receta de la noria que le pedí a Daniel llevaba semanas en un documento que ya me había dado.
-
-**Y el hallazgo:** `45_S1_SUELO_AMBIENTE_TAZA.md` dice de sí mismo «no lo sustituye ni lo resume» y
-ordena «**leer primero** el propio marco». **Ese marco no estaba.** Control de identidad: `45_S1`
-cita 13.345 palabras y la extracción da 13.345 exactas.
-
-**Vocabulario que estas fuentes fijan:** el **retort** es el horno; la **noria** es la piscina donde
-el carbón se vuelve biochar **activo**. Dos pasos separados en el tiempo — «ya se cuenta con carbón
-seco, pero falta que Bob prepare la mezcla de la noria».
-
-**Cuatro conflictos señalados** (§4 del índice). **Uno lo resolvió Daniel el mismo día y dio una
-regla, ADR-147:** manda la **última revisión** de una minuta —2031–2033—, y la superada **no se
-corrige**, se le pone una nota fechada al final. Esa fue la primera aplicación del mecanismo que
-las cabeceras `FUENTE_*` ya declaraban.
-
-**Siguen abiertos tres:** las **dos norias** que Daniel menciona no están en ningún documento
-—7 ocurrencias de «noria», ninguna las nombra—; `BiocharBatch` mete retort y noria en la misma
-fila; y la aplicación al cultivo no existe.
-
-**No se implementó nada.** Es entrada de planificación aceptada.
 
 
 ## 3. Bloqueado, y en qué
