@@ -1668,7 +1668,14 @@
     "loteError_cuantas_sobre_el_techo": "Son demasiadas de una vez.",
     "alerta_cajas_no_cuadran": "Las cajas contadas no cuadran con las registradas",
     "hivesHint": "Abrí una colmena para inspeccionarla, alimentarla o tratarla, contar varroa y registrar su cosecha. Lo de aquí arriba es lo que se hace al apiario entero.",
-    "hiveEntrar": "abrir para inspeccionar y registrar"
+    "hiveEntrar": "abrir para inspeccionar y registrar",
+    "sinPermisoInspeccion": "Tu perfil no registra inspecciones formales. Podés anotar lo que veas como evento de colmena aquí abajo, y pedirle a quien gestiona el apiario que la inspección quede registrada.",
+    "sinPermisoEvento": "Tu perfil no registra eventos en esta colmena.",
+    "sinPermisoGestion": "Hace falta gestionar el apiario para esto.",
+    "feedingMaterial_jarabe_1_1": "Jarabe 1:1",
+    "feedingMaterial_jarabe_2_1": "Jarabe 2:1",
+    "feedingMaterial_sustituto_polen": "Sustituto de polen",
+    "feedingMaterial_torta": "Torta"
   },
   "Research": {
     "badge": "Research OS",

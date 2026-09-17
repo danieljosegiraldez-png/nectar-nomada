@@ -4317,6 +4317,22 @@ model MaterialConsumptionEntry {
   locationId        String?          @map("location_id") @db.Uuid
   location          Location?        @relation(fields: [locationId], references: [id])
 
+  /// **La JORNADA en la que se gastó**, cuando el consumo pertenece a una
+  /// visita y no a un sitio ni a una corrida.
+  ///
+  /// Daniel, 2026-09-17, contando una visita real al apiario: aserrín y hojas
+  /// para el ahumador, un encendedor, una lija. Colgado sólo de la ubicación,
+  /// el sistema podía decir «se gastó aserrín en el Apiario Finca Rosina» y no
+  /// «en la visita del martes» — y la visita es la unidad en la que se trabaja,
+  /// con su operario, su hora y su ventana de edición.
+  ///
+  /// Una variante más del padre discriminado, no un mecanismo paralelo: el
+  /// `switch` de `consumptionParentData` es exhaustivo, así que añadir la
+  /// variante obliga a tratarla.
+  fieldSessionId String?       @map("field_session_id") @db.Uuid
+  fieldSession   FieldSession? @relation(fields: [fieldSessionId], references: [id])
+
+
   materialName String   @map("material_name")
   batchLabel   String   @map("batch_label")
   quantity     Decimal? @db.Decimal(10, 3)
@@ -4517,6 +4533,7 @@ model FieldSession {
   @@index([updatedAt, id])
   @@map("field_session")
   @@schema("traceability")
+  materialConsumptionEntries MaterialConsumptionEntry[]
 }
 
 // P2 (43_P2_OPERATOR_CORE.md §4). A chronological **spine**, not a replacement.
@@ -6342,11 +6359,22 @@ enum InspectionOutcome {
 /// El Anexo B §2.2 —«estado de la colonia, nuevo, por protocolo»— con el
 /// vocabulario que el dueño ya escribió en `protocolos/apiario-campo-v1.json`.
 /// No se traduce a inglés a propósito: es su lista, y `VarroaMethod` ya sentó el
-/// precedente. `apinada` sin eñe porque un identificador de enum no la admite.
+/// precedente.
+///
+/// **CORREGIDO EL 2026-09-17 (ADR-153), y la correccion es de una afirmacion falsa.** Aqui
+/// decia: *«`apinada` sin eñe porque un identificador de enum no la admite»*. **Un enum de
+/// Prisma SI admite la eñe**: comprobado con `prisma validate`, que dice «the schema is valid»
+/// con `apiñada` dentro. Esa suposicion --escrita como justificacion y nunca medida-- es la
+/// razon por la que el esquema decia `apinada` mientras el protocolo decia `apiñada`, con
+/// NADIE traduciendo entre los dos.
+///
+/// No rompia todavia porque el formulario sale de `POBLACIONES`, la constante del codigo. Pero
+/// el protocolo existe para que la captura salga DE EL, y ese dia habria ofrecido un valor que
+/// Postgres rechaza. Lo vigila ahora `tests/arquitectura/enum-del-protocolo.test.ts`.
 enum ColonyPopulation {
   baja
   normal
-  apinada
+  apiñada
 
   @@schema("apiary")
 }
@@ -6452,6 +6480,17 @@ model Inspection {
   /// porque trae el motivo escrito. Anotado para la v2 del protocolo.
   droneBroodPresent Boolean?         @map("drone_brood_present")
   temperamentNote  String?           @map("temperament_note")
+  /// LA VALORACION del tecnico sobre esta colonia -- Anexo E, y el UNICO campo de etapa
+  /// «cierre» de la inspeccion: los otros dieciseis son de campo. Se escribe en casa.
+  ///
+  /// **No es `note`, y mezclarlas perderia cual se escribio con el guante puesto.** `note`
+  /// es la nota de campo --lo que se apunto ahi mismo-- y esto es la lectura de despues.
+  ///
+  /// **PROCEDENCIA: el protocolo la declara `interpretation` y esta fila esta estampada
+  /// `direct_observation`** (`inspections.ts` la fija asi). El desajuste NO es nuevo:
+  /// ADR-142 lo introdujo para `probableCause` y `recommendation`, que el protocolo marca
+  /// igual, y no lo dijo. Queda declarado y vigilado en ADR-154.
+  assessment          String?       @map("assessment")
   /// El «Otro» de la lista del Anexo B §2.3: lo que el catálogo de
   /// irregularidades no cubre. Desde el 2026-09-11 ya **no** es el único sitio
   /// donde vive el dato — ver `InspectionIrregularity`.
@@ -6599,11 +6638,20 @@ enum FeedingMethod {
 /// `exigeMaterialDeAlimentacion` en `lib/apiary/vocabularioDeAlimentacion.ts`, no
 /// esta lista. Un «otro» sin cuál es la respuesta vacía que ADR-125 persigue.
 enum FeedingMaterial {
+  // Los CINCO del dueno, dictados en el apiario el 2026-09-16.
   azucar_morena
   azucar_blanca
   melaza
   miel_de_abeja
   miel_de_cana
+  // Los CUATRO que su protocolo ya ofrecia. Decision suya el 2026-09-17: «mis cinco mas los
+  // jarabes». `sustituto_polen` y `torta` NO son jarabes --son alimentos proteicos-- y se
+  // quedan porque ya estaban en SU protocolo: quitarlos seria una perdida de capacidad que
+  // nadie pidio. Si no los usa, se quitan entonces (ADR-153).
+  jarabe_1_1
+  jarabe_2_1
+  sustituto_polen
+  torta
   otro
 
   @@schema("apiary")

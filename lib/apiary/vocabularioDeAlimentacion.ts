@@ -30,11 +30,20 @@ export class AlimentacionInvalida extends Error {}
  * piensa la lista, y por tanto el orden en el que la busca en un desplegable.
  */
 export const MATERIALES_DE_ALIMENTACION = [
+  // Los CINCO que el dueño dictó en el apiario el 2026-09-16, primero porque son los que usa.
   "azucar_morena",
   "azucar_blanca",
   "melaza",
   "miel_de_abeja",
   "miel_de_cana",
+  // Los que su protocolo ya ofrecía. Decisión suya el 2026-09-17: «mis cinco más los jarabes».
+  "jarabe_1_1",
+  "jarabe_2_1",
+  // `sustituto_polen` y `torta` NO son jarabes —son alimentos proteicos— y se quedan porque ya
+  // estaban en SU protocolo: quitarlos sería una pérdida de capacidad que nadie pidió. Si no
+  // los usa, se quitan entonces.
+  "sustituto_polen",
+  "torta",
   "otro",
 ] as const satisfies readonly FeedingMaterial[];
 

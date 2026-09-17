@@ -10721,7 +10721,117 @@ valor a un `as const satisfies` estrecha la union y no compila. Los validos fuer
 vocabulario y **vaciar el predicado**. El cuarto es el que vale: separar el JSON del enum
 --anadiendo `"neblina"` solo al protocolo-- cae por el guardia nuevo, compilando.
 
-## ADR-153 — `beneficio` es un tipo de ubicación, y crear un sitio es del jefe
+## ADR-153 -- Las dos divergencias del dueno, resueltas: la eñe y el vocabulario completo
+
+**Contexto.** El guardia de ADR-152 encontro cuatro divergencias entre el protocolo del dueno y el
+esquema, y le llevo las tres que eran decisiones suyas. Contesto dos el mismo dia: *«mis cinco mas
+los jarabes, y arregla apiñada»*.
+
+## 1 · La eñe, y la afirmacion falsa que la causaba
+
+`apiñada` es su ortografia y la que **su protocolo ya usaba**; el enum decia `apinada` y **nadie
+traducia**. No rompia todavia porque el formulario sale de `POBLACIONES`, la constante del codigo
+-- pero el protocolo existe para que la captura salga **de el**, y ese dia habria ofrecido un valor
+que Postgres rechaza.
+
+**La causa raiz estaba escrita en el esquema, y era falsa.** El comentario de `ColonyPopulation`
+justificaba la ausencia asi: *«`apinada` sin eñe porque un identificador de enum no la admite»*.
+**Un enum de Prisma SI la admite**: `prisma validate` dice «the schema is valid» con `apiñada`
+dentro. Esa suposicion --escrita como justificacion y nunca medida-- es la razon de la divergencia,
+y **se corrige el comentario en vez de dejarlo al lado**: una regla que resulta falsa hay que
+corregirla, no reforzarla.
+
+**La migracion se escribe A MANO, y esa es la decision tecnica de esta mitad.** Prisma genero un
+**intercambio de tipo**: crear `ColonyPopulation_new` y castear
+`population::text::ColonyPopulation_new`. **Ese cast revienta para cualquier fila que valga
+`'apinada'`.** En la base local hay cero --medido: 2 inspecciones, 0 con ese valor-- pero **la de
+produccion no se puede leer desde aqui**, asi que la ausencia no se puede afirmar.
+`ALTER TYPE ... RENAME VALUE` preserva los datos **por definicion**: renombra la etiqueta, no
+reescribe filas. Sin deriva de esquema despues, comprobado.
+
+## 2 · «Mis cinco mas los jarabes»
+
+`FeedingMaterial` pasa de seis valores a diez: los **cinco** que el dueno dicto el 2026-09-16
+--primero, porque son los que usa--, los **dos jarabes**, y `sustituto_polen` y `torta`.
+
+**Esos dos ultimos NO son jarabes** --son alimentos proteicos-- y **se quedan igual**: ya estaban
+en **su** protocolo, y quitarlos seria una perdida de capacidad que nadie pidio. Queda dicho que si
+no los usa, se quitan entonces. Es la eleccion de menor perdida con la pregunta a la vista, en vez
+de decidirla en silencio en cualquiera de las dos direcciones.
+
+**Y esto revisa a ADR-148, con su razon.** Aquella prueba decia «exactamente sus cinco, ni uno
+mas», y su argumento era bueno: *un desplegable con opciones que nadie usa ensena a bajar hasta
+«otro»*. Lo que no habia visto es que **el protocolo ya ofrecia otras cuatro**, asi que el efecto
+neto de «no anadir ninguna» no era un vocabulario corto: eran **dos vocabularios** para la misma
+pregunta. El argumento sigue valiendo; la premisa estaba incompleta.
+
+## Lo que impide que vuelvan a separarse
+
+Dos cosas, y la segunda es la que faltaba en ADR-148:
+
+- El guardia `enum-del-protocolo` pasa ahora con **solo las dos divergencias legitimas**
+  (`honey_stores`, `pollen_stores`), que son de modelado y estan declaradas.
+- Una prueba nueva **compara el vocabulario con el ARCHIVO del protocolo**, no con una lista
+  escrita en la prueba. Compararse con una lista propia es compararse consigo mismo.
+
+**Tres flip-tests, y el tercero hubo que rehacerlo.** Quitar la eñe de `POBLACIONES` **no
+compila** --rompe el `satisfies readonly ColonyPopulation[]`--, o sea que **ahi la protege el
+compilador y no una prueba**, que es mas fuerte. El flip valido quita la eñe **del JSON**, que no
+pasa por tipos, y cae por el guardia.
+
+## ADR-154 -- La valoracion del tecnico, por el cierre de la visita y no por uno nuevo
+
+**Contexto.** El Anexo E pide «Valoracion» y el mapa del protocolo la daba por **sin sitio** con la
+razon escrita: *«`note` es la nota de campo; mezclarlas perderia cual se escribio con el guante
+puesto»*. Esa distincion es la que la construye: son dos columnas porque son **dos momentos**.
+
+**Y el dato que decide el diseno, medido:** `assessment` es el **UNICO** campo de etapa `close` de
+la inspeccion. Los otros **dieciseis** son de campo.
+
+## La decision: no se le inventa un cierre a la inspeccion
+
+`Inspection` **no tiene nada de cierre** -- ni `completedAt`, ni ventana de edicion, ni una funcion
+que la complete: solo `recordInspection` y el listado. `FieldSession` si tiene las tres cosas, con
+sus reglas ya decididas y **distinguidas entre si a proposito**: `locked` por decision,
+`editWindowExpiresAt` por plazo, *«porque quien lo lea necesita saber cual de las dos»*.
+
+Inventar un segundo cierre duplicaria esa maquina y la haria derivar. Asi que **la puerta es la
+visita**: el servicio encuentra la sesion a la que pertenece la inspeccion y le aplica **sus**
+reglas. La ruta existe y no hubo que crearla -- `FieldEvent` une `fieldSessionId` con
+`inspectionId`.
+
+**Una inspeccion SIN visita se acepta, y el servicio lo DICE.** Se puede inspeccionar sin jornada
+abierta, asi que el enlace puede faltar; negarlo dejaria esa valoracion **sin poder escribirse
+nunca**, que es peor que escribirla sin plazo. Devuelve `origenDeLaVentana` --`"visita"` o
+`"sin_visita"`-- para que la pantalla lo pueda decir y nadie suponga un plazo que no hubo.
+
+**El AuditEvent lleva el ANTES.** Una valoracion es una lectura del tecnico; saber que la cambio
+--y desde que-- es parte de poder sostenerla. El vacio **borra**, que es como se deshace una puesta
+por error: misma regla que los campos de cierre de la visita.
+
+## El desajuste de procedencia, que NO es nuevo y queda dicho
+
+El protocolo declara `assessment` como **`interpretation`**, y esta fila esta estampada
+**`direct_observation`** -- `inspections.ts` la fija asi para toda la inspeccion. Una fila tiene
+**una** procedencia, y esta lleva dos clases de afirmacion.
+
+**El desajuste ya existia y ADR-142 no lo dijo:** `probable_cause` y `recommendation` son los otros
+dos items que el protocolo marca `interpretation`, y viven como columnas de `FieldSession`, cuya
+fila tampoco es una interpretacion. Son los tres unicos items con procedencia declarada en todo el
+protocolo.
+
+**No se arregla aqui, y la razon no es pereza:** separarlo bien significa decidir si una
+interpretacion merece fila propia --`FieldEvent` ya tiene su propio `provenanceClass`, asi que el
+esquema ya modela procedencia por evento-- y eso cambia como se consulta la serie. Es una pieza
+propia, y hacerla de paso en una rebanada de una columna seria decidirlo sin mirarlo.
+
+**La lista de huecos del protocolo baja de TRES a DOS** -- quedan `site_condition` y `moisture_pct`.
+
+**Seis flip-tests, los seis compilando y cayendo por su nombre**: la ventana deja de aplicarse, una
+visita cerrada deja de bloquear, las dos causas se dicen igual, el audit pierde el antes, la
+valoracion escribe en `note`, y el mapa vuelve a declararla sin sitio.
+
+## ADR-155 — `beneficio` es un tipo de ubicación, y crear un sitio es del jefe
 
 **Estado: aceptado, construido.** Decisiones de Daniel del 2026-09-17, en conversación.
 

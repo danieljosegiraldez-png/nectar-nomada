@@ -3696,3 +3696,46 @@ colmena por colmena.
 **El quinto flip-test hubo que rehacerlo:** la primera versión no compilaba y tumbó **seis** pruebas
 —la señal de sospechar del arnés—. La válida cae por una sola: el control negativo.
 
+
+### 2026-09-16 · Cajas presentes: lo contado contra lo colocado
+
+ADR-150. El Anexo E pregunta «Cajas presentes» y el mapa la daba por **sin sitio** con la razón ya
+escrita —«contar y declarar son datos distintos»—, que es justo la que la construye.
+
+`HivePlacement` sabe cuántas cajas **colocó**; eso no es cuántas **hay**. Una caja puede irse sin que
+nadie registre el traslado, y hasta hoy **el sistema no podía ni notarlo**.
+
+**Y aquí ninguno de los dos manda**, a diferencia de las colonias: allí el declarado gana porque el
+sistema no sabe cuáles murieron; aquí `HivePlacement` sí es un registro deliberado. La salida no es
+un número, **es la comparación**.
+
+**El estado tiene tres valores, no un booleano:** un `divergen: false` mentiría cuando nadie contó.
+Y **la diferencia lleva signo** — faltar una caja y sobrar una son problemas distintos.
+
+**La lista de huecos del protocolo baja de cinco a cuatro** (quedan `weather_observed`,
+`site_condition`, `assessment`, `moisture_pct`). El guardia de ADR-143 obligó a declararlo.
+
+**Lo que NO entra y no se cuenta como hecho:** ninguna pantalla pinta el aviso todavía. El dato se
+captura y la comparación existe; dibujarla es pieza propia.
+
+
+### 2026-09-17 · La divergencia de cajas se ve: alerta de sitio
+
+ADR-151. ADR-150 dejó la comparación construida, probada, **y sin que ninguna pantalla la llamara** —
+el «servicio hecho y la puerta sin poner» que este repositorio se queja de haber repetido tres veces
+en una semana. Esto pone la puerta.
+
+**Va como alerta y no como vital**: un vital es una cifra que se consulta; esto es una razón para ir
+a mirar. **Nivel `aviso`, no `crítico`:** la divergencia es ambigua por construcción —una caja que se
+fue, o un recuento malo—, y subir una señal ambigua a crítica enseña a ignorar lo crítico.
+
+**El motivo nuevo va al final del arreglo de prioridad**, la única posición que no reordena los ocho
+que Daniel fijó el 2026-09-14. **Dónde va de verdad sigue siendo decisión suya.**
+
+**La cuenta del sistema es `Hive.locationId`, medido:** el traslado actualiza la colocación y el
+sitio en la misma transacción — 29 colmenas, 0 sin colocación abierta, 0 divergentes.
+
+**Un flip-test encontró un agujero real:** vaciar la lectura de `hivesPresentCount` no rompía nada.
+Las pruebas de alerta trabajan sobre un fixture en memoria, así que la lectura contra la base no
+estaba cubierta. Se añadió, con dos sesiones para que «la más nueva gana» también sea falsable.
+
