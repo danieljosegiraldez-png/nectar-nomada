@@ -39,6 +39,8 @@
     "people:set-email": "tsx scripts/set-person-email.ts",
     "data:bob-farm-manager": "tsx scripts/p1-bob-farm-manager.ts",
     "data:kenis-apicultor": "tsx scripts/p1-kenis-apicultor.ts",
+    "data:siembra-2022": "tsx scripts/p1-siembra-2022.ts",
+    "data:biochar-2023": "tsx scripts/p1-biochar-2023.ts",
     "people:add-evaluator": "tsx scripts/add-evaluator.ts",
     "sensory:create-protocol": "tsx scripts/create-sensory-protocol.ts",
     "sensory:archive-protocol": "tsx scripts/create-sensory-protocol.ts --archivar",
