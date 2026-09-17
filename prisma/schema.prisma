@@ -5651,6 +5651,11 @@ enum PlantingEventType {
   // day as `received` or weeks later (nursery holding period); two
   // distinct facts, not implied by each other.
   planted
+  // Tablero de parcela (2026-09-16): desde cuándo una siembra da cosecha. Lo marca
+  // el operador; no se deduce de la edad. Es un evento y no una columna para que
+  // la historia no se sobrescriba: corregir es registrar otro, y cuenta el
+  // registrado más recientemente.
+  entered_production
 
   @@schema("traceability")
 }
@@ -5682,6 +5687,10 @@ model PlantingEvent {
   plantingCohort   PlantingCohort? @relation(fields: [plantingCohortId], references: [id])
 
   occurredAt       DateTime @default(now()) @map("occurred_at")
+  // Precisión de `occurredAt`. Nulo = instante exacto, como en todas las filas
+  // anteriores, que no se rellenan. «En producción desde 2019» no es el 1 de enero:
+  // sin esto la fecha afirma más de lo que sabe, igual que `plantedPrecision`.
+  occurredPrecision HarvestWindowPrecision? @map("occurred_precision")
   operatorPersonId String?  @map("operator_person_id") @db.Uuid
   operator         Person?  @relation("PlantingEventOperator", fields: [operatorPersonId], references: [id])
   notes            String?

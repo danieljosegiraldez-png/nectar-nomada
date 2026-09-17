@@ -52,6 +52,7 @@ import {
   updatePlantingCohort,
   PlantingCohortValidationError,
 } from "../../lib/traceability/plantingCohorts";
+import { recordEnteredProduction, PlantingEventValidationError } from "../../lib/traceability/plantingEvents";
 import {
   updateLocationAttributes,
   LocationAccessError,
@@ -128,6 +129,7 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof SelectionValidationError) return t("error_selection", { detail: error.message });
   if (error instanceof LocationAccessError) return t("error_access", { detail: error.message });
   if (error instanceof LocationValidationError) return t("error_location", { detail: error.message });
+  if (error instanceof PlantingEventValidationError) return t("error_production", { detail: error.message });
   if (error instanceof PlantingCohortValidationError) return t("error_harvest_sources", { detail: error.message });
   if (error instanceof FieldSessionValidationError) return t("error_field_session", { detail: error.message });
   if (error instanceof BiocharBatchValidationError) return t("error_biochar", { detail: error.message });
@@ -1013,6 +1015,7 @@ export async function updatePlotAttributesAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
   revalidatePath("/plots");
   return {};
 }
@@ -1129,6 +1132,7 @@ export async function createPlantingCohortFormAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
   return {};
 }
 
@@ -1159,6 +1163,50 @@ export async function updatePlantingCohortFormAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+  return {};
+}
+
+/**
+ * Marca una siembra en producción — tablero de parcela, spec §5.
+ *
+ * La fecha pasa por `calcularFechaConPrecision`, la misma aritmética de
+ * `plantedAt`, porque «desde 2019» no es el 1 de enero. Revalida el tablero y
+ * los ajustes: los dos pintan el estado.
+ */
+export async function recordEnteredProductionFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const raw = String(formData.get("occurredAt") ?? "").trim();
+  if (!raw) return { error: t("plotDashboardProductionDateRequired") };
+  const { fecha, precision } = calcularFechaConPrecision(raw, String(formData.get("occurredPrecision") ?? "year"));
+
+  let locationId: string;
+  try {
+    // El servicio devuelve el evento creado, y de ahí sale la ruta a revalidar
+    // — igual que `updateSoilProfileAction` con `perfil.locationId`. El
+    // formulario ya no manda `locationId`: un campo del POST sería
+    // independiente de la parcela real de la siembra.
+    const evento = await recordEnteredProduction(user.userAccountId, {
+      plantingCohortId: String(formData.get("cohortId") ?? ""),
+      occurredAt: fecha,
+      occurredPrecision: precision,
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_SIEMBRA),
+      dataQuality: emptyToNull(formData.get("dataQuality")) as never,
+      notes: emptyToNull(formData.get("notes")),
+    });
+    locationId = evento.locationId;
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
   return {};
 }
 
@@ -1562,6 +1610,7 @@ export async function createSoilProfileAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
   return {};
 }
 
@@ -1587,6 +1636,7 @@ export async function updateSoilProfileAction(
       ...soloLoQueVino(formData, camposDeCalicata(formData)),
     });
     revalidatePath(`/plots/${perfil.locationId}`);
+    revalidatePath(`/plots/${perfil.locationId}/ajustes`);
   } catch (error) {
     return { error: friendlyError(t, error) };
   }
