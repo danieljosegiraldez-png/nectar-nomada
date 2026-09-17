@@ -169,7 +169,10 @@ describe("el protocolo de campo y el esquema hablan el mismo idioma", () => {
     const sinSitio = itemsSinSitio().sort();
     expect(sinSitio).toEqual(
       [
-        "assessment",
+        // `assessment` salio de esta lista el 2026-09-17 (ADR-154): ahora vive en
+        // `Inspection.assessment`, y se escribe por el cierre de la VISITA, que es el unico
+        // cierre que existe. La lista baja de TRES a DOS.
+        //
         // `hives_present_count` salio de esta lista el 2026-09-16 (ADR-150): ahora vive en
         // `FieldSession.hivesPresentCount`. La lista baja de CINCO a CUATRO, y este guardia
         // existe precisamente para que ese numero no cambie en silencio (ADR-143).

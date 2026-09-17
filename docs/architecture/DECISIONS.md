@@ -10778,3 +10778,55 @@ Dos cosas, y la segunda es la que faltaba en ADR-148:
 compila** --rompe el `satisfies readonly ColonyPopulation[]`--, o sea que **ahi la protege el
 compilador y no una prueba**, que es mas fuerte. El flip valido quita la eñe **del JSON**, que no
 pasa por tipos, y cae por el guardia.
+
+## ADR-154 -- La valoracion del tecnico, por el cierre de la visita y no por uno nuevo
+
+**Contexto.** El Anexo E pide «Valoracion» y el mapa del protocolo la daba por **sin sitio** con la
+razon escrita: *«`note` es la nota de campo; mezclarlas perderia cual se escribio con el guante
+puesto»*. Esa distincion es la que la construye: son dos columnas porque son **dos momentos**.
+
+**Y el dato que decide el diseno, medido:** `assessment` es el **UNICO** campo de etapa `close` de
+la inspeccion. Los otros **dieciseis** son de campo.
+
+## La decision: no se le inventa un cierre a la inspeccion
+
+`Inspection` **no tiene nada de cierre** -- ni `completedAt`, ni ventana de edicion, ni una funcion
+que la complete: solo `recordInspection` y el listado. `FieldSession` si tiene las tres cosas, con
+sus reglas ya decididas y **distinguidas entre si a proposito**: `locked` por decision,
+`editWindowExpiresAt` por plazo, *«porque quien lo lea necesita saber cual de las dos»*.
+
+Inventar un segundo cierre duplicaria esa maquina y la haria derivar. Asi que **la puerta es la
+visita**: el servicio encuentra la sesion a la que pertenece la inspeccion y le aplica **sus**
+reglas. La ruta existe y no hubo que crearla -- `FieldEvent` une `fieldSessionId` con
+`inspectionId`.
+
+**Una inspeccion SIN visita se acepta, y el servicio lo DICE.** Se puede inspeccionar sin jornada
+abierta, asi que el enlace puede faltar; negarlo dejaria esa valoracion **sin poder escribirse
+nunca**, que es peor que escribirla sin plazo. Devuelve `origenDeLaVentana` --`"visita"` o
+`"sin_visita"`-- para que la pantalla lo pueda decir y nadie suponga un plazo que no hubo.
+
+**El AuditEvent lleva el ANTES.** Una valoracion es una lectura del tecnico; saber que la cambio
+--y desde que-- es parte de poder sostenerla. El vacio **borra**, que es como se deshace una puesta
+por error: misma regla que los campos de cierre de la visita.
+
+## El desajuste de procedencia, que NO es nuevo y queda dicho
+
+El protocolo declara `assessment` como **`interpretation`**, y esta fila esta estampada
+**`direct_observation`** -- `inspections.ts` la fija asi para toda la inspeccion. Una fila tiene
+**una** procedencia, y esta lleva dos clases de afirmacion.
+
+**El desajuste ya existia y ADR-142 no lo dijo:** `probable_cause` y `recommendation` son los otros
+dos items que el protocolo marca `interpretation`, y viven como columnas de `FieldSession`, cuya
+fila tampoco es una interpretacion. Son los tres unicos items con procedencia declarada en todo el
+protocolo.
+
+**No se arregla aqui, y la razon no es pereza:** separarlo bien significa decidir si una
+interpretacion merece fila propia --`FieldEvent` ya tiene su propio `provenanceClass`, asi que el
+esquema ya modela procedencia por evento-- y eso cambia como se consulta la serie. Es una pieza
+propia, y hacerla de paso en una rebanada de una columna seria decidirlo sin mirarlo.
+
+**La lista de huecos del protocolo baja de TRES a DOS** -- quedan `site_condition` y `moisture_pct`.
+
+**Seis flip-tests, los seis compilando y cayendo por su nombre**: la ventana deja de aplicarse, una
+visita cerrada deja de bloquear, las dos causas se dicen igual, el audit pierde el antes, la
+valoracion escribe en `note`, y el mapa vuelve a declararla sin sitio.
