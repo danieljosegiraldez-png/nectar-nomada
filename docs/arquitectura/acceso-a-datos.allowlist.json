@@ -432,6 +432,10 @@
     {
       "archivo": "lib/inventario/lotes.ts",
       "razon": "Lotes de material consumible y su libro mayor. Autoriza con `lot:manage` juzgado donde se declare el sitio —recibir es faena, no gestion— y escribe el lote, su evento de entrada y el AuditEvent en una sola transaccion."
+    },
+    {
+      "archivo": "lib/inventario/existencias.ts",
+      "razon": "Saldo DERIVADO de un lote de material y los movimientos que lo mueven. No guarda saldo en ninguna columna: lo recalcula del libro mayor, copiando la forma de `computeLotBalance` incluido su `recorded` (ADR-080). Autoriza con `lot:manage` juzgado donde se declare el sitio."
     }
   ],
   "reciben_transaccion": [

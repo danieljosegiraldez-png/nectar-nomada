@@ -16,7 +16,14 @@ export class LoteAccessError extends Error {}
 export interface RecibirLoteInput {
   readonly materialId: string;
   readonly batchLabel: string;
-  readonly quantity: number;
+  /**
+   * **Opcional a propósito: un lote puede llegar sin pesar.** Llega el camión y
+   * nadie tiene la báscula a mano — el agua de la receta de biochar del dueño
+   * es literalmente «sin calcular». Sin cantidad NO se crea evento de entrada, y
+   * el saldo dirá «nunca contado» en vez de cero, que son dos afirmaciones
+   * distintas sobre la finca (ADR-080).
+   */
+  readonly quantity?: number | null;
   readonly unit: string;
   readonly occurredAt?: Date;
   readonly supplier?: string | null;
@@ -39,7 +46,7 @@ export async function recibirLote(userAccountId: string, input: RecibirLoteInput
   // SENTIDO lo pone el tipo de evento, no el signo — un «consumed» de -5 sumaría
   // existencias por la puerta de atrás. La base lo rechaza igual con su CHECK;
   // aquí sale con una frase legible.
-  if (!Number.isFinite(input.quantity) || input.quantity < 0) {
+  if (input.quantity != null && (!Number.isFinite(input.quantity) || input.quantity < 0)) {
     throw new LoteValidationError(`cantidad inválida: ${input.quantity}. Cero es válido; negativo no.`);
   }
 
@@ -73,17 +80,23 @@ export async function recibirLote(userAccountId: string, input: RecibirLoteInput
 
       // El evento de entrada, en la MISMA transacción. Si esto fallara, el lote
       // no debe existir.
-      await tx.consumableStockEvent.create({
-        data: {
-          consumableLotId: lote.id,
-          eventType: "received",
-          quantity: input.quantity,
-          unit,
-          occurredAt,
-          provenanceClass: "direct_observation",
-          createdBy: userAccountId,
-        },
-      });
+      //
+      // **Sin cantidad no hay evento**, y es deliberado: un lote que llegó sin
+      // pesar es un lote cuyo contenido nadie ha contado. Escribir un cero aquí
+      // convertiría «no lo sé» en «no hay», que es la afirmación contraria.
+      if (input.quantity != null) {
+        await tx.consumableStockEvent.create({
+          data: {
+            consumableLotId: lote.id,
+            eventType: "received",
+            quantity: input.quantity,
+            unit,
+            occurredAt,
+            provenanceClass: "direct_observation",
+            createdBy: userAccountId,
+          },
+        });
+      }
 
       await recordAuditEvent(
         {
