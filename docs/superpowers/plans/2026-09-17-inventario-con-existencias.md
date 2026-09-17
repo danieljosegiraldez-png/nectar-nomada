@@ -160,6 +160,28 @@ it("mezclar unidades se rechaza", async () => {
   await expect(registrarConsumo(operario, { consumableLotId: l.id, quantity: 1, unit: "gal" }))
     .rejects.toThrow(/unidad/);
 });
+
+// ——— El sitio, añadido el 2026-09-17 por decisión de Daniel ———
+
+it("el saldo se puede pedir POR SITIO, y no mezcla dos sitios", async () => {
+  const l = await recibirLote(gestor, { materialId, batchLabel: "S", quantity: 20, unit: "quintal", locationId: cerroAzul.id });
+  await registrarConsumo(operario, { consumableLotId: l.id, quantity: 4, unit: "quintal", locationId: cerroAzul.id });
+  await registrarConsumo(operario, { consumableLotId: l.id, quantity: 6, unit: "quintal", locationId: lasNubes.id });
+  expect((await existencias(gestor, l.id, { locationId: cerroAzul.id })).quantity.toNumber()).toBe(16);
+  // El control positivo: el total sigue siendo el total, así que la consulta
+  // por sitio está filtrando de verdad y no devolviendo lo mismo dos veces.
+  expect((await existencias(gestor, l.id)).quantity.toNumber()).toBe(10);
+});
+
+it("un movimiento SIN sitio cuenta en el total y en NINGÚN sitio", async () => {
+  // Es el caso que hace la columna anulable: una recepción anotada tarde, sin
+  // saber dónde se descargó. Repartirla a ciegas inventaría un hecho.
+  const l = await recibirLote(gestor, { materialId, batchLabel: "T", quantity: 9, unit: "quintal" });
+  expect((await existencias(gestor, l.id)).quantity.toNumber()).toBe(9);
+  const enSitio = await existencias(gestor, l.id, { locationId: cerroAzul.id });
+  expect(enSitio.recorded).toBe(false);   // en ese sitio nadie ha contado nada
+  expect(enSitio.quantity.toNumber()).toBe(0);
+});
 ```
 
 - [ ] **Paso 2: verla fallar. Paso 3: el modelo y la derivación**
@@ -178,6 +200,15 @@ model ConsumableStockEvent {
   unit      String
   occurredAt DateTime                @map("occurred_at")
 
+  /// **Dónde pasó el movimiento.** Añadido el 2026-09-17 por decisión de
+  /// Daniel: sin él el saldo derivado es global, y `EQUIPMENT_AND_READINESS.md`
+  /// §8 (ADR-060) dice que el mismo consumible en tres sitios son tres saldos.
+  ///
+  /// Anulable: un movimiento puede no saber su sitio, y exigirlo obligaría a
+  /// inventar uno. Un evento sin sitio cuenta en el total y en ningún sitio.
+  locationId String?   @map("location_id") @db.Uuid
+  location   Location? @relation(fields: [locationId], references: [id])
+
   /// Obligatoria en las reconciliaciones: cuadrar un negativo es una
   /// afirmación sobre lo que pasó, y una afirmación sin razón no se puede
   /// auditar. Lo impone un CHECK, no la interfaz.
@@ -186,6 +217,7 @@ model ConsumableStockEvent {
   provenanceClass ProvenanceClass @map("provenance_class")
 
   @@index([consumableLotId, occurredAt])
+  @@index([locationId, occurredAt])
   @@map("consumable_stock_event")
   @@schema("traceability")
 }
@@ -224,10 +256,14 @@ export async function existencias(userAccountId: string, consumableLotId: string
 
 - [ ] **Paso 4: migración, verde, build, declarar, commit.**
 
-- [ ] **Paso 5: flip-test doble.** Devolver `recorded: true` siempre y confirmar
+- [ ] **Paso 5: flip-test triple.** Devolver `recorded: true` siempre y confirmar
       que cae «un lote SIN ningún evento dice nunca contado» por su nombre.
       Después, guardar el saldo en una columna y confirmar que cae la prueba de
-      la Tarea 2 que lo prohíbe.
+      la Tarea 2 que lo prohíbe. Y tercero, **ignorar el `locationId` en el
+      filtro del saldo** —devolver el total cuando se pide un sitio— y confirmar
+      que cae «el saldo se puede pedir POR SITIO, y no mezcla dos sitios» por su
+      nombre. Los tres con sus tres cosas: sha antes y después, que **compile**,
+      y qué prueba cae nombrada.
 
 ---
 

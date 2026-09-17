@@ -75,6 +75,25 @@ nota. Tipos: `received`, `consumed`, `reserved`, `released`, `waste`,
 envejecimiento del biochar: un saldo guardado y un libro mayor **dejan de cuadrar
 en silencio**, y entonces el número que se enseña es el que nadie comprobó.
 
+**Y el evento dice DÓNDE pasó: `locationId`, anulable.** Añadido el 2026-09-17
+por decisión de Daniel, antes de que este plan se ejecute.
+
+La primera versión de este spec no lo tenía —medido: `locationId` no aparecía ni
+una vez en él ni en su plan—, así que el saldo derivado era **global**: decía
+cuánta gallinaza hay *en total*, no cuánta hay **en Cerro Azul** frente a **Las
+Nubes**. Eso choca con `docs/architecture/EQUIPMENT_AND_READINESS.md` §8,
+aceptado por **ADR-060**: *«el mismo consumible en tres sitios son tres saldos,
+no uno»*, y deja sin poder avisar de **dónde** falta algo.
+
+**Anulable, y no por comodidad:** un movimiento puede no saber su sitio —una
+recepción anotada tarde, una corrección de escritorio—, y exigirlo obligaría a
+inventar uno. Un evento sin sitio cuenta en el saldo total y **no** en el de
+ningún sitio, y la pantalla lo dice en vez de repartirlo a ciegas.
+
+**Se añade ahora porque ahora es una columna y después es una adivinanza:** con
+filas dentro, rellenar el sitio hacia atrás exige suponer dónde estaba cada cosa,
+que es exactamente lo que este repositorio no hace (ADR-080).
+
 ---
 
 ## 4. Lo negativo se avisa, no se bloquea
