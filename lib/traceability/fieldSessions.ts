@@ -18,6 +18,7 @@
  * blocker `Task.assignedToUserAccountId` still has (P2 §1, not built here).
  */
 import { prisma } from "../db";
+import { exigeClimaObservado } from "../apiary/climaObservado";
 import { recordAuditEvent } from "../audit";
 import { resumenDeVisita } from "../apiary/bitacora";
 import { exigePropositos } from "../apiary/propositoDeVisita";
@@ -182,6 +183,12 @@ export interface CerrarVisitaInput {
    */
   hivesPresentCount?: number | null;
   /**
+   * Clima OBSERVADO al visitar — Anexo E, etapa de campo (ADR-152). Llega como CADENA del
+   * formulario y la valida `exigeClimaObservado`: un `as never` dejaria guardar cualquier cosa
+   * (ADR-112).
+   */
+  weatherObserved?: string | null;
+  /**
    * Viáticos y transporte, en dólares. `stage: close` del protocolo, así que ésta es su
    * puerta: se anota en casa.
    *
@@ -263,6 +270,9 @@ export async function completarVisita(userAccountId: string, input: CerrarVisita
         ...(input.nextVisitDueAt === undefined ? {} : { nextVisitDueAt: input.nextVisitDueAt }),
         ...(input.coloniesAliveCount === undefined ? {} : { coloniesAliveCount: input.coloniesAliveCount }),
         ...(input.hivesPresentCount === undefined ? {} : { hivesPresentCount: input.hivesPresentCount }),
+        ...(input.weatherObserved === undefined
+          ? {}
+          : { weatherObserved: exigeClimaObservado(input.weatherObserved) }),
         // Las tres de `stage: close`. `undefined` no toca la columna —quien completa dos
         // veces sin rellenarlas no las borra—; `null` sí la limpia, que es cómo se deshace
         // un valor puesto por error.

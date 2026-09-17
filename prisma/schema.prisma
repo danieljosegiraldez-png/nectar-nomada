@@ -4433,6 +4433,9 @@ model FieldSession {
   /// porque el sistema no sabe cuáles murieron; para cajas el sistema sí tiene un registro
   /// deliberado, así que elegir uno esconderia la señal. La divergencia ES la salida.
   hivesPresentCount   Int?               @map("hives_present_count")
+  /// Clima OBSERVADO al visitar — Anexo E, etapa de campo (ADR-152). Lo que alguien vio,
+  /// no un pronostico: el «Clima 7 dias» del Anexo C sigue siendo capa externa sin proveedor.
+  weatherObserved   WeatherObserved? @map("weather_observed")
   /// Que se fue a hacer. **Arreglo y no una columna**: una misma visita revisa, alimenta y
   /// trata. Mismo patron que `Inspection.broodStages`.
   ///
@@ -6546,6 +6549,25 @@ enum ColonyEventType {
 /// `protocolos/apiario-campo-v1.json`: *«bolsa sobre cabezales»* es literalmente
 /// lo que se usó en Toabré. Sirve para comparar consumo entre métodos, que es
 /// para lo que el Anexo B §3 lo pide.
+/// CLIMA OBSERVADO por quien visita — Anexo E, etapa de campo (ADR-152).
+///
+/// **No es el «Clima 7 dias» del Anexo C**, y el mapa del protocolo los confundia: aquel es un
+/// PRONOSTICO de una capa externa sin proveedor conectado; esto es lo que el apicultor VIO
+/// estando ahi. La segunda no necesita ningun proveedor.
+///
+/// **Los cuatro valores son los que el protocolo ya declaraba**, literales y sin anadir
+/// ninguno. No hay `otro`: el protocolo no lo declara, y el sitio donde se anade un quinto
+/// --«neblina», por ejemplo, que en Cerro Azul no es raro-- es `protocolos/apiario-campo-v1.json`
+/// mas su migracion, no este archivo por su cuenta.
+enum WeatherObserved {
+  despejado
+  nublado
+  viento
+  lluvia
+
+  @@schema("traceability")
+}
+
 enum FeedingMethod {
   bolsa_sobre_cabezales
   alimentador_entrada

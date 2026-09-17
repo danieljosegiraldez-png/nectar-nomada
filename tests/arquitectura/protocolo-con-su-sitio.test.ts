@@ -175,7 +175,10 @@ describe("el protocolo de campo y el esquema hablan el mismo idioma", () => {
         // existe precisamente para que ese numero no cambie en silencio (ADR-143).
         "moisture_pct",
         "site_condition",
-        "weather_observed",
+        // `weather_observed` salio de esta lista el 2026-09-17 (ADR-152), y NO porque se
+        // construyera un proveedor de clima: porque la nota que lo daba por hueco confundia el
+        // «Clima 7 dias» del Anexo C --un pronostico externo, que sigue sin proveedor-- con la
+        // pregunta del Anexo E, que es lo que el apicultor VIO. La lista baja de CUATRO a TRES.
       ].sort(),
     );
   });

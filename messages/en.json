@@ -1302,7 +1302,12 @@
     "reportRecommendationHeading": "Recommendation",
     "reportTravelCost": "Travel and transport: {monto} USD",
     "visitHivesPresentLabel": "Hives present",
-    "visitHivesPresentHelp": "How many boxes you counted on site. If it does not match what the system has placed, you will be told: one may be missing or extra."
+    "visitHivesPresentHelp": "How many boxes you counted on site. If it does not match what the system has placed, you will be told: one may be missing or extra.",
+    "visitWeatherObservedLabel": "Weather observed",
+    "weatherObserved_despejado": "Clear",
+    "weatherObserved_nublado": "Cloudy",
+    "weatherObserved_viento": "Windy",
+    "weatherObserved_lluvia": "Rain"
   },
   "Apiary": {
     "badge": "Apiary",

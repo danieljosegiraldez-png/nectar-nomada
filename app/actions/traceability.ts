@@ -2080,6 +2080,9 @@ export async function completarVisitaAction(
   const proximaCruda = String(formData.get("nextVisitDueAt") ?? "").trim();
   const coloniasCrudas = String(formData.get("coloniesAliveCount") ?? "").trim();
   const cajasCrudas = String(formData.get("hivesPresentCount") ?? "").trim();
+  // Cadena, validada por el servicio. El vacio es `null` --nadie mirO el cielo-- y NO
+  // «despejado»: el protocolo la marca opcional.
+  const climaCrudo = String(formData.get("weatherObserved") ?? "").trim();
   const costoCrudo = String(formData.get("travelCostUsd") ?? "").trim();
 
   try {
@@ -2093,6 +2096,7 @@ export async function completarVisitaAction(
       // Vacío es `null` —«nadie contó»— y NO cero: un apiario vaciado se cuenta como cero, y
       // ese cero es un dato distinto de no haber contado (ADR-080).
       hivesPresentCount: cajasCrudas === "" ? null : Number(cajasCrudas),
+      weatherObserved: climaCrudo === "" ? null : climaCrudo,
       notes: emptyToNull(formData.get("notes")),
       // Las tres de casa (`stage: close`). El vacío es `null` —«no se anotó»— y NO cero: una
       // visita sin viáticos anotados no es una visita que costó cero.

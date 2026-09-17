@@ -58,7 +58,11 @@ export const MODELOS_POR_ACTIVIDAD: Record<string, string[]> = {
 export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   // --- visit: la visita al sitio -------------------------------------------------------
   purpose: { clase: "campo", modelo: "FieldSession", campo: "purposes" },
-  weather_observed: { clase: "sin_sitio", nota: "Sin columna. El Anexo C lo pide como vital del sitio y lo deja en una capa externa sin proveedor conectado." },
+  // CORRIGE la nota anterior, que confundia dos preguntas (ADR-152). Decia: "el Anexo C lo
+  // pide como vital del sitio y lo deja en una capa externa sin proveedor conectado". Eso es
+  // cierto del "Clima 7 dias" del Anexo C --un PRONOSTICO--, y falso de esta: el Anexo E
+  // pregunta lo que el apicultor VIO estando ahi, y su vocabulario ya estaba en el protocolo.
+  weather_observed: { clase: "campo", modelo: "FieldSession", campo: "weatherObserved" },
   site_condition: { clase: "sin_sitio", nota: "Sin columna propia." },
   colonies_alive_count: { clase: "campo", modelo: "FieldSession", campo: "coloniesAliveCount" },
   // Ya tiene sitio (ADR-150). La nota anterior decia la razon por la que faltaba --"contar y

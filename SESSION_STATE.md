@@ -38,6 +38,25 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-17 · Clima observado, y el guardia que ata el protocolo al esquema
+
+ADR-152. El mapa daba `weather_observed` por **sin sitio** porque su nota **confundía dos
+preguntas**: el «Clima 7 días» del Anexo C es un **pronóstico** externo sin proveedor —sigue
+bloqueado, y bien—; el Anexo E pregunta **lo que el apicultor vio**, y sus cuatro opciones ya
+estaban escritas en el protocolo. Segunda vez que un `sin_sitio` resulta ser una lectura
+equivocada de su propia nota (ADR-143 fue la primera).
+
+**Y el guardia, que es lo que de verdad faltaba.** `feedingMethod` lleva desde A9.4 con sus opciones
+escritas **dos veces** —el JSON y el enum— y **nada lo comprobaba**. Coincidían por haberlas escrito
+bien a mano.
+
+**Encontró cuatro divergencias el primer día, y una es mía:** ADR-148 construyó `FeedingMaterial`
+con los cinco valores que Daniel dictó **y no se actualizó el protocolo**, que sigue ofreciendo
+`jarabe_1_1`. Las cuatro quedan declaradas con su razón; tres son decisiones suyas —incluida
+`apiñada` con ñ contra `apinada`, que **nadie traduce**—. Desde hoy no puede aparecer una quinta.
+
+**La lista de huecos baja de cuatro a tres:** `site_condition`, `assessment`, `moisture_pct`.
+
 ### 2026-09-17 · La divergencia de cajas se ve: alerta de sitio
 
 ADR-151. ADR-150 dejó la comparación construida, probada, **y sin que ninguna pantalla la llamara** —
@@ -78,26 +97,6 @@ Y **la diferencia lleva signo** — faltar una caja y sobrar una son problemas d
 
 **Lo que NO entra y no se cuenta como hecho:** ninguna pantalla pinta el aviso todavía. El dato se
 captura y la comparación existe; dibujarla es pieza propia.
-
-### 2026-09-16 · Alta de colmenas en lote: cinco de una vez, con vista previa
-
-ADR-149. Daniel abrió la app en el apiario y lo que faltaba era registrar **cinco colmenas en cada
-sitio**. El único camino creaba una: diez envíos para dos apiarios.
-
-**Todo o nada en una transacción, con los identificadores comprobados DENTRO de ella** — comprobar
-antes deja una ventana en la que otra sesión crea el `03` y el lote lo pisa a media escritura. El
-error dice **cuáles** están repetidos.
-
-**La vista previa enseña los identificadores exactos antes de enviar**, con la misma función que
-valida en el servidor. No es adorno: el relleno de ceros no se puede acertar —él ya tiene colmenas
-de tres cifras— así que en vez de adivinarlo, se le enseña.
-
-**La colonia es opcional y explícita:** `originType` no tiene valor por omisión porque es un hecho
-que se captura o se pierde. Sin marcar la casilla nacen cajas vacías, y la colonia se añade después
-colmena por colmena.
-
-**El quinto flip-test hubo que rehacerlo:** la primera versión no compilaba y tumbó **seis** pruebas
-—la señal de sospechar del arnés—. La válida cae por una sola: el control negativo.
 
 
 ## 3. Bloqueado, y en qué

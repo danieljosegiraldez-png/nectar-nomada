@@ -10650,3 +10650,73 @@ por su nombre.
 es legitimo: `sin_recuento` es el estado del sitio sano del fixture, asi que esa mutacion hace
 alertar a **todos** los sitios y rompe cada prueba que espera una lista exacta. El control negativo
 cayo entre ellas, por su nombre.
+
+## ADR-152 -- Clima observado, y el guardia que ata el protocolo al esquema
+
+**Contexto.** El mapa del protocolo daba `weather_observed` por **sin sitio** con esta nota:
+*«Sin columna. El Anexo C lo pide como vital del sitio y lo deja en una capa externa sin proveedor
+conectado.»*
+
+**Esa nota confunde dos preguntas distintas**, y por eso el hueco no era un hueco:
+
+| | |
+|---|---|
+| **Anexo C** | «Clima 7 dias» -- un **pronostico**, capa externa, sin proveedor conectado. Sigue bloqueado, y bien. |
+| **Anexo E** | «Clima observado» -- lo que el apicultor **vio estando ahi**, con sus cuatro opciones **ya declaradas** en `protocolos/apiario-campo-v1.json`. |
+
+La segunda no necesita ningun proveedor. **Es la segunda vez que un `sin_sitio` resulta ser una
+lectura equivocada de su propia nota**; ADR-143 fue la primera, con `efficacy_note`.
+
+**Decision -- `FieldSession.weatherObserved`, enum de cuatro valores.** Hermana de
+`hivesPresentCount` y `coloniesAliveCount`. Los cuatro valores son **los del protocolo,
+literales**. El vacio es `null` --«nadie miro el cielo»-- y **no** `despejado`: el protocolo la
+marca `"required": false`, y no mirar no invalida la visita.
+
+**No hay `otro`, y es deliberado.** El protocolo no lo declara, y el sitio donde el dueno anade un
+quinto valor es **ese JSON** -- toda la idea de A9.4. **`neblina` merece mencion aparte**: el marco
+de investigacion describe Las Nubes como *«low-elevation cloud-forest environment»*, asi que ahi
+la neblina no es rara. Anadirla es decision del dueno, y hay que hacerlo **en los dos sitios a la
+vez**.
+
+## El guardia, que es lo que de verdad faltaba
+
+**`feedingMethod` lleva desde A9.4 con sus cuatro opciones escritas DOS veces** --el JSON y el
+`enum FeedingMethod`-- y **nada comprobaba que coincidieran**. Coincidian por haberlas escrito
+bien a mano.
+
+Eso es deriva esperando a ocurrir: las `options` del protocolo se guardan como `enumValues` de una
+`ProtocolVariable` **en la base**, asi que el dueno puede cambiarlas sin migracion -- pero cuando
+el mapa manda esa pregunta a una **columna de enum**, Postgres solo acepta los valores del tipo.
+El dia que alguien anada `"neblina"` al JSON, la captura lo ofrecera y la escritura lo rechazara
+con un error que no dice nada de protocolos.
+
+`tests/arquitectura/enum-del-protocolo.test.ts` lo ata. Solo mira las preguntas que **el mapa
+dice** que van a un enum del esquema: las que ya prometieron esa correspondencia.
+
+## Lo que el guardia encontro el primer dia, y una es mia
+
+**Cuatro divergencias que ya existian**, declaradas con su razon y su dueno porque **tres son
+decisiones de Daniel** y un guardia que no puede pasar nunca ensena a ignorar una linea roja:
+
+1. **`population`** -- el protocolo dice `apiñada` **con ñ** y el enum dice `apinada`. **Nadie
+   traduce**: `POBLACIONES` usa la del codigo. Hoy no rompe porque el formulario sale de esa
+   constante, pero el protocolo existe para que la captura salga **de el**. Cual de los dos se
+   cambia es decision del dueno: la ñ es su ortografia.
+2. **`honey_stores`** y 3. **`pollen_stores`** -- el protocolo declara `junto_a_cria` como cuarto
+   nivel; el esquema lo modela **aparte**, como booleano (`honeyNextToBrood`). Es deliberado y
+   mejor: «junto a cria» no es una cantidad, es una posicion.
+4. **`material`** -- **DIVERGENCIA MIA, del 2026-09-16.** ADR-148 construyo `FeedingMaterial` con
+   los cinco valores que el dueno dicto en el apiario **y no se actualizo el protocolo**, que
+   sigue ofreciendo `jarabe_1_1`, `jarabe_2_1`, `sustituto_polen` y `torta`. **Son dos
+   vocabularios para la misma pregunta**, y cual gana es decision suya.
+
+Desde hoy **no puede aparecer una quinta**, y una prueba aparte exige que las cuatro **sigan ahi**:
+si alguien arregla una, la lista se queda corta y lo dice.
+
+**La lista de huecos del protocolo baja de CUATRO a TRES** -- quedan `site_condition`,
+`assessment` y `moisture_pct`.
+
+**Cinco flip-tests, los cinco compilando, y dos rehechos** por la razon de siempre: anadir un
+valor a un `as const satisfies` estrecha la union y no compila. Los validos fueron **reordenar** el
+vocabulario y **vaciar el predicado**. El cuarto es el que vale: separar el JSON del enum
+--anadiendo `"neblina"` solo al protocolo-- cae por el guardia nuevo, compilando.
