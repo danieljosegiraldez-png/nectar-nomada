@@ -1,4 +1,3 @@
-import type { PlotDensity } from "./plantingCohorts";
 import type { EstadoDeProduccion } from "./estadoDeProduccion";
 
 /**
@@ -16,7 +15,13 @@ import type { EstadoDeProduccion } from "./estadoDeProduccion";
 export interface EntradaDePendiente {
   /** Hoy como `YYYY-MM-DD`, de `diaDeHoy(ahora, location.timezone)`. */
   hoy: string;
-  density: PlotDensity;
+  /**
+   * `location.areaHectares`, pasado por `Number()` sólo si no es nulo. El aviso
+   * de área sale de aquí y NO de `computePlotDensity`: ésa devuelve
+   * `conteo_incompleto` antes de mirar el área, así que un lote sin área y con
+   * una siembra sin conteo se quedaba sin su aviso.
+   */
+  areaHectares: number | null;
   cohortesActivas: readonly { id: string; plantCount: number | null }[];
   estados: ReadonlyMap<string, EstadoDeProduccion>;
   jornadas: readonly { id: string; startedAt: Date; endedAt: Date | null }[];
@@ -72,8 +77,9 @@ export function pendienteDeLaParcela(e: EntradaDePendiente): { tocaHacer: Aviso[
     tocaHacer.push({ tipo: "muestras_sin_resultado", suelo: sueloSinResultado, foliar: foliarSinResultado });
   }
 
-  if (e.density.status === "sin_area") faltaUnDato.push({ tipo: "sin_area" });
-  if (e.density.status === "area_no_positiva") faltaUnDato.push({ tipo: "area_no_valida" });
+  if (e.areaHectares == null) faltaUnDato.push({ tipo: "sin_area" });
+  // `!(x > 0)` y no `x <= 0`: con `NaN` la segunda es falsa y lo dejaría pasar.
+  else if (!(e.areaHectares > 0)) faltaUnDato.push({ tipo: "area_no_valida" });
 
   const sinConteo = e.cohortesActivas.filter((c) => c.plantCount == null).length;
   if (sinConteo > 0) faltaUnDato.push({ tipo: "siembras_sin_conteo", n: sinConteo });

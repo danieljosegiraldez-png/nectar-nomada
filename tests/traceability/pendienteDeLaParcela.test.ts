@@ -14,7 +14,7 @@ import type { EstadoDeProduccion } from "../../lib/traceability/estadoDeProducci
 
 const base = (over: Partial<EntradaDePendiente> = {}): EntradaDePendiente => ({
   hoy: "2026-09-16",
-  density: { status: "ok", plantsPerHectare: 4000, totalPlants: 4000, hectares: 1 },
+  areaHectares: 1,
   cohortesActivas: [{ id: "c1", plantCount: 4000 }],
   // Tipo explícito: sin él TypeScript ensancha "en_produccion" a string.
   estados: new Map<string, EstadoDeProduccion>([["c1", { estado: "en_produccion", desde: new Date("2020-01-01T00:00:00Z"), precision: "year" }]]),
@@ -96,10 +96,15 @@ describe("pendienteDeLaParcela", () => {
     expect(r.tocaHacer).toEqual([{ tipo: "jornada_sin_cerrar", fieldSessionId: "j1", startedAt: new Date("2026-09-10T12:00:00Z") }]);
   });
 
+  // Revisión final, I2: esta prueba construía `density: sin_area` junto a una
+  // siembra sin conteo, combinación que `computePlotDensity` nunca produce
+  // (devuelve `conteo_incompleto` antes de mirar el área). El aviso sale ahora
+  // del área de la ubicación, y el caso es el que sí ocurre: sin área Y con una
+  // siembra sin conteo. Tienen que salir los dos avisos.
   it("falta un dato: sin área, área no válida, siembras sin conteo y sin marcar", () => {
     const r = pendienteDeLaParcela(
       base({
-        density: { status: "sin_area" },
+        areaHectares: null,
         cohortesActivas: [
           { id: "c1", plantCount: null },
           { id: "c2", plantCount: 300 },
@@ -115,9 +120,9 @@ describe("pendienteDeLaParcela", () => {
       { tipo: "siembras_sin_conteo", n: 1 },
       { tipo: "siembras_sin_marcar", n: 2 },
     ]);
-    expect(pendienteDeLaParcela(base({ density: { status: "area_no_positiva", hectares: 0 } })).faltaUnDato).toEqual([
-      { tipo: "area_no_valida" },
-    ]);
+    expect(pendienteDeLaParcela(base({ areaHectares: 0 })).faltaUnDato).toEqual([{ tipo: "area_no_valida" }]);
+    expect(pendienteDeLaParcela(base({ areaHectares: -2 })).faltaUnDato).toEqual([{ tipo: "area_no_valida" }]);
+    expect(pendienteDeLaParcela(base({ areaHectares: Number.NaN })).faltaUnDato).toEqual([{ tipo: "area_no_valida" }]);
   });
 });
 

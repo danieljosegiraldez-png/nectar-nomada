@@ -65,7 +65,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
   const cifras = cifrasDelLote(activas, estados);
   const pendiente = pendienteDeLaParcela({
     hoy: diaDeHoy(new Date(), location.timezone),
-    density,
+    areaHectares: location.areaHectares == null ? null : Number(location.areaHectares),
     cohortesActivas: activas,
     estados,
     jornadas,
