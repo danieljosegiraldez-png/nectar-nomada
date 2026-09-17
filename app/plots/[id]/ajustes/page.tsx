@@ -76,6 +76,16 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
                   <strong>{t("plotDashboardProductionUnmarked")}</strong>
                 )}
               </p>
+              <p className="nn-detail-meta">
+                {t(`provenanceClass_${cohort.provenanceClass}` as "provenanceClass_direct_observation")}
+                {cohort.dataQuality ? (
+                  <>
+                    {" · "}
+                    <strong>{t(`dataQuality_${cohort.dataQuality}` as "dataQuality_provisional")}</strong>
+                  </>
+                ) : null}
+              </p>
+              {cohort.notes ? <p className="nn-detail-meta">{cohort.notes}</p> : null}
               <details>
                 <summary>{t("plotDashboardMarkProductionSummary")}</summary>
                 <MarcarEnProduccionForm cohortId={cohort.id} locationId={location.id} />

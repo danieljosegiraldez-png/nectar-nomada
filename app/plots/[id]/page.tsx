@@ -145,10 +145,20 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
               <ul className="nn-detail-meta">
                 {cifras.variedades.map((v) => (
                   <li key={v.nombre ?? "desconocida"}>
-                    {v.nombre ?? t("cultivarUnknown")}: {t("plotDashboardPlantsTotal", { n: v.plantas })}
-                    {v.cohortesSinConteo > 0 ? (
-                      <span className="nn-muted"> · {t("plotDashboardAlertNoCount", { n: v.cohortesSinConteo })}</span>
-                    ) : null}
+                    {v.nombre ?? t("cultivarUnknown")}:{" "}
+                    {/* ADR-080: si no hay ninguna planta CONOCIDA y sí hay
+                        siembras sin conteo, «0 plantas» sería un cero
+                        inventado para un dato que no se sabe. */}
+                    {v.plantas === 0 && v.cohortesSinConteo > 0 ? (
+                      <span className="nn-muted">{t("plotDashboardAlertNoCount", { n: v.cohortesSinConteo })}</span>
+                    ) : (
+                      <>
+                        {t("plotDashboardPlantsTotal", { n: v.plantas })}
+                        {v.cohortesSinConteo > 0 ? (
+                          <span className="nn-muted"> · {t("plotDashboardAlertNoCount", { n: v.cohortesSinConteo })}</span>
+                        ) : null}
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -285,7 +295,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
       </section>
 
       <section className="nn-section">
-        <h2>{t("fieldSessionsHeading")}</h2>
+        <h2>{t("plotDashboardRecentSessions")}</h2>
         {jornadas.length === 0 ? (
           <p className="nn-muted">{t("fieldSessionsNone")}</p>
         ) : (
@@ -313,9 +323,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
       </section>
 
       <details className="nn-section" id="condiciones">
-        <summary>
-          <h2 style={{ display: "inline" }}>{t("plotDashboardConditionsHeading")}</h2>
-        </summary>
+        <summary style={{ fontSize: "1.25rem", fontWeight: 600 }}>{t("plotDashboardConditionsHeading")}</summary>
 
         <h3>{t("groundConditionsHeading")}</h3>
         <dl className="nn-detail-meta">
@@ -464,9 +472,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
       </details>
 
       <details className="nn-section" id="muestras">
-        <summary>
-          <h2 style={{ display: "inline" }}>{t("labSamplesHeading")}</h2>
-        </summary>
+        <summary style={{ fontSize: "1.25rem", fontWeight: 600 }}>{t("labSamplesHeading")}</summary>
         <p className="nn-muted">{t("samplesIntro")}</p>
 
         <h3>{t("samplesSoilHeading")}</h3>
