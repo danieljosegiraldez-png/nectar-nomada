@@ -3,7 +3,13 @@ import { describe, expect, it } from "vitest";
 import { cifrasDelLote, type CohorteParaCifras } from "../../lib/traceability/cifrasDelLote";
 import type { EstadoDeProduccion } from "../../lib/traceability/estadoDeProduccion";
 
-const enProd: EstadoDeProduccion = { estado: "en_produccion", desde: new Date("2020-01-01T00:00:00Z"), precision: "year" };
+const enProd: EstadoDeProduccion = {
+  estado: "en_produccion",
+  desde: new Date("2020-01-01T00:00:00Z"),
+  precision: "year",
+  provenanceClass: "original_record",
+  dataQuality: null,
+};
 const sinMarcar: EstadoDeProduccion = { estado: "sin_marcar" };
 
 describe("cifrasDelLote", () => {

@@ -69,9 +69,21 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
               </h3>
               <p className="nn-detail-meta">
                 {estado?.estado === "en_produccion" ? (
-                  t("plotDashboardProductionSince", {
-                    fecha: recortarPorPrecision(estado.desde.toISOString(), estado.precision ?? "date"),
-                  })
+                  <>
+                    {t("plotDashboardProductionSince", {
+                      fecha: recortarPorPrecision(estado.desde.toISOString(), estado.precision ?? "date"),
+                    })}
+                    {/* R12: cómo se sabe esa fecha, con la misma forma que la
+                        procedencia de la siembra de debajo. */}
+                    {" · "}
+                    {t(`provenanceClass_${estado.provenanceClass}` as "provenanceClass_direct_observation")}
+                    {estado.dataQuality ? (
+                      <>
+                        {" · "}
+                        <strong>{t(`dataQuality_${estado.dataQuality}` as "dataQuality_provisional")}</strong>
+                      </>
+                    ) : null}
+                  </>
                 ) : (
                   <strong>{t("plotDashboardProductionUnmarked")}</strong>
                 )}
@@ -88,7 +100,7 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
               {cohort.notes ? <p className="nn-detail-meta">{cohort.notes}</p> : null}
               <details>
                 <summary>{t("plotDashboardMarkProductionSummary")}</summary>
-                <MarcarEnProduccionForm cohortId={cohort.id} locationId={location.id} />
+                <MarcarEnProduccionForm cohortId={cohort.id} />
               </details>
               <details>
                 <summary>

@@ -17,7 +17,9 @@ const base = (over: Partial<EntradaDePendiente> = {}): EntradaDePendiente => ({
   areaHectares: 1,
   cohortesActivas: [{ id: "c1", plantCount: 4000 }],
   // Tipo explícito: sin él TypeScript ensancha "en_produccion" a string.
-  estados: new Map<string, EstadoDeProduccion>([["c1", { estado: "en_produccion", desde: new Date("2020-01-01T00:00:00Z"), precision: "year" }]]),
+  estados: new Map<string, EstadoDeProduccion>([
+    ["c1", { estado: "en_produccion", desde: new Date("2020-01-01T00:00:00Z"), precision: "year", provenanceClass: "original_record", dataQuality: null }],
+  ]),
   jornadas: [],
   muestrasDeSuelo: [{ sampledAt: new Date("2026-03-01T00:00:00Z"), resultados: 1 }],
   muestrasFoliares: [{ sampledAt: new Date("2026-03-01T00:00:00Z"), resultados: 1 }],

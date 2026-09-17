@@ -1,5 +1,5 @@
 /** Hermética. «Hoy» es un día, no un instante, y sin zona se va al caso más temprano. */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { diaDeHoy } from "../../lib/time/diaDeHoy";
 
 describe("diaDeHoy", () => {
@@ -15,5 +15,19 @@ describe("diaDeHoy", () => {
 
   it("sin zona, a las 13:00Z ya es 16 en cualquier sitio del planeta", () => {
     expect(diaDeHoy(new Date("2026-09-16T13:00:00Z"), null)).toBe("2026-09-16");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // T3: `diaDeHoy` confía en que `en-CA` formatea `YYYY-MM-DD`. Si un runtime
+  // formatea otra cosa, las comparaciones de cadenas de los avisos saldrían mal
+  // sin error. Con un formateador roto inyectado tiene que lanzar, y decir qué salió.
+  it("lanza, diciendo qué salió, si el formateador no devuelve YYYY-MM-DD", () => {
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function () {
+      return { format: () => "16/9/2026" } as unknown as Intl.DateTimeFormat;
+    });
+    expect(() => diaDeHoy(new Date("2026-09-16T13:00:00Z"), "America/Panama")).toThrow(/16\/9\/2026/);
   });
 });

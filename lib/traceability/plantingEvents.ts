@@ -127,6 +127,11 @@ export async function recordEnteredProduction(
   if (!cohorte) throw new PlantingEventValidationError("cohort_not_found");
   await requireLocationAttributeAccess(userAccountId, cohorte.locationId);
   if (cohorte.status !== "active") throw new PlantingEventValidationError("cohort_not_active");
+  // Antes del guardia de futuro: con una fecha inválida `getTime()` es NaN, y
+  // `NaN > ahora` es false, así que ese guardia la dejaba pasar hasta Prisma.
+  if (Number.isNaN(input.occurredAt.getTime())) {
+    throw new PlantingEventValidationError("production_date_invalid");
+  }
   if (input.occurredAt.getTime() > ahora.getTime()) {
     throw new PlantingEventValidationError("production_date_in_future");
   }

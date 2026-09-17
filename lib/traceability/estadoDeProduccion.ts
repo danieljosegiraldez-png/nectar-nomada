@@ -1,3 +1,4 @@
+import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
 import type { PrecisionDeSiembra } from "../time/fechaConPrecision";
 
 /**
@@ -33,10 +34,20 @@ export interface EventoDeProduccion {
   occurredAt: Date;
   occurredPrecision: PrecisionDeSiembra | null;
   createdAt: Date;
+  /** Cómo se sabe la fecha. Ajustes lo enseña junto a «En producción desde…» (R12). */
+  provenanceClass: ProvenanceClass;
+  dataQuality: DataQuality | null;
 }
 
 export type EstadoDeProduccion =
-  | { estado: "en_produccion"; desde: Date; precision: PrecisionDeSiembra | null }
+  | {
+      estado: "en_produccion";
+      desde: Date;
+      precision: PrecisionDeSiembra | null;
+      /** Del evento GANADOR, no del primero: la corrección trae su propia procedencia. */
+      provenanceClass: ProvenanceClass;
+      dataQuality: DataQuality | null;
+    }
   | { estado: "sin_marcar" };
 
 export function estadoDeProduccion(eventos: readonly EventoDeProduccion[]): EstadoDeProduccion {
@@ -46,7 +57,13 @@ export function estadoDeProduccion(eventos: readonly EventoDeProduccion[]): Esta
     if (diferencia !== 0) return diferencia > 0 ? b : a;
     return b.id > a.id ? b : a;
   });
-  return { estado: "en_produccion", desde: ultimo.occurredAt, precision: ultimo.occurredPrecision };
+  return {
+    estado: "en_produccion",
+    desde: ultimo.occurredAt,
+    precision: ultimo.occurredPrecision,
+    provenanceClass: ultimo.provenanceClass,
+    dataQuality: ultimo.dataQuality,
+  };
 }
 
 export function estadosPorCohorte(

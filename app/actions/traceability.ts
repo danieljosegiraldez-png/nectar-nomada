@@ -1190,8 +1190,8 @@ export async function recordEnteredProductionFormAction(
   try {
     // El servicio devuelve el evento creado, y de ahí sale la ruta a revalidar
     // — igual que `updateSoilProfileAction` con `perfil.locationId`. El
-    // `locationId` del POST es un campo independiente, no la parcela real de
-    // la siembra.
+    // formulario ya no manda `locationId`: un campo del POST sería
+    // independiente de la parcela real de la siembra.
     const evento = await recordEnteredProduction(user.userAccountId, {
       plantingCohortId: String(formData.get("cohortId") ?? ""),
       occurredAt: fecha,

@@ -13,6 +13,8 @@ const ev = (over: Partial<EventoDeProduccion>): EventoDeProduccion => ({
   occurredAt: new Date("2021-01-01T00:00:00Z"),
   occurredPrecision: "year",
   createdAt: new Date("2026-01-01T00:00:00Z"),
+  provenanceClass: "original_record",
+  dataQuality: null,
   ...over,
 });
 
@@ -27,14 +29,23 @@ describe("estadoDeProduccion", () => {
       estado: "en_produccion",
       desde: new Date("2021-01-01T00:00:00Z"),
       precision: "year",
+      provenanceClass: "original_record",
+      dataQuality: null,
     });
   });
 
   it("gana el REGISTRADO más recientemente aunque su fecha sea ANTERIOR", () => {
     const equivocado = ev({ occurredAt: new Date("2023-01-01T00:00:00Z"), createdAt: new Date("2026-03-01T00:00:00Z") });
-    const corregido = ev({ occurredAt: new Date("2020-01-01T00:00:00Z"), createdAt: new Date("2026-04-01T00:00:00Z") });
+    const corregido = ev({
+      occurredAt: new Date("2020-01-01T00:00:00Z"),
+      createdAt: new Date("2026-04-01T00:00:00Z"),
+      provenanceClass: "direct_observation",
+      dataQuality: "provisional",
+    });
     const estado = estadoDeProduccion([equivocado, corregido]);
     expect(estado.estado === "en_produccion" && estado.desde.toISOString()).toBe("2020-01-01T00:00:00.000Z");
+    // R12: la procedencia que se enseña es la del evento GANADOR, no la del primero.
+    expect(estado).toMatchObject({ provenanceClass: "direct_observation", dataQuality: "provisional" });
   });
 
   it("con el MISMO createdAt, el desempate es por id mayor, sea cual sea el orden de llegada", () => {
@@ -48,7 +59,13 @@ describe("estadoDeProduccion", () => {
       occurredAt: new Date("2020-01-01T00:00:00Z"),
       createdAt: new Date("2026-03-01T00:00:00Z"),
     });
-    const esperado = { estado: "en_produccion", desde: new Date("2020-01-01T00:00:00Z"), precision: "year" };
+    const esperado = {
+      estado: "en_produccion",
+      desde: new Date("2020-01-01T00:00:00Z"),
+      precision: "year",
+      provenanceClass: "original_record",
+      dataQuality: null,
+    };
     expect(estadoDeProduccion([idMenor, idMayor])).toEqual(esperado);
     expect(estadoDeProduccion([idMayor, idMenor])).toEqual(esperado);
   });

@@ -21,7 +21,7 @@ const initialState: TraceabilityActionState = {};
  * antigua casi nunca se sabe al día, y el tipo de campo sigue a la precisión.
  * Necesita conexión: no se encola.
  */
-export function MarcarEnProduccionForm({ cohortId, locationId }: { cohortId: string; locationId: string }) {
+export function MarcarEnProduccionForm({ cohortId }: { cohortId: string }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(recordEnteredProductionFormAction, initialState);
   const [precision, setPrecision] = useState<(typeof PRECISIONES)[number]>("year");
@@ -31,7 +31,6 @@ export function MarcarEnProduccionForm({ cohortId, locationId }: { cohortId: str
   return (
     <form action={formAction} className="nn-form">
       <input type="hidden" name="cohortId" value={cohortId} />
-      <input type="hidden" name="locationId" value={locationId} />
 
       <div className="nn-field">
         <label htmlFor={`occurredPrecision-${cohortId}`}>{t("plantedPrecisionLabel")}</label>
@@ -59,6 +58,9 @@ export function MarcarEnProduccionForm({ cohortId, locationId }: { cohortId: str
           id={`occurredAt-${cohortId}`}
           name="occurredAt"
           type={inputType}
+          // Los mismos límites que el año de `PlantingCohortForm`: sin ellos un
+          // «99» llegaba al servidor como una fecha inválida.
+          {...(inputType === "number" ? { min: 1900, max: 2200, step: 1, inputMode: "numeric" as const } : {})}
           required
           value={valor}
           onChange={(e) => setValor(e.target.value)}

@@ -148,6 +148,27 @@ describe("recordEnteredProduction", () => {
     ).rejects.toThrow(new PlantingEventValidationError("production_date_in_future"));
   });
 
+  it("rechaza una fecha inválida con production_date_invalid y no escribe ninguna fila", async () => {
+    // Revisión final, I4: un año «99» da `new Date("99-01-01T00:00:00Z")`,
+    // inválida. `NaN > ahora` es false, así que el guardia de futuro la dejaba
+    // pasar y Prisma lanzaba un error que `friendlyError` no reconoce.
+    const cohorte = await siembraActiva(plotId);
+    const occurredAt = new Date("99-01-01T00:00:00Z");
+    // Control: la entrada ES inválida. Si no lo fuera, la prueba no mediría nada.
+    expect(Number.isNaN(occurredAt.getTime())).toBe(true);
+    const filasAntes = await prisma.plantingEvent.count({ where: { plantingCohortId: cohorte.id } });
+    await expect(
+      recordEnteredProduction(operadorId, {
+        plantingCohortId: cohorte.id,
+        occurredAt,
+        occurredPrecision: "year",
+        provenanceClass: "original_record",
+      }),
+    ).rejects.toThrow(new PlantingEventValidationError("production_date_invalid"));
+    const filasDespues = await prisma.plantingEvent.count({ where: { plantingCohortId: cohorte.id } });
+    expect(filasDespues).toBe(filasAntes);
+  });
+
   it("rechaza una siembra que no está activa", async () => {
     const cohorte = await siembraActiva(plotId);
     await prisma.plantingCohort.update({ where: { id: cohorte.id }, data: { status: "removed" } });
@@ -171,12 +192,16 @@ describe("getPlotDetail — eventos de producción", () => {
       occurredAt: new Date("2021-01-01T00:00:00Z"),
       occurredPrecision: "year",
       provenanceClass: "original_record",
+      dataQuality: "unconfirmed",
     });
 
     const detalle = await getPlotDetail(operadorId, plotId);
     const deMarcada = detalle.eventosDeProduccion.filter((e) => e.plantingCohortId === marcada.id);
     expect(deMarcada).toHaveLength(1);
     expect(deMarcada[0]!.occurredPrecision).toBe("year");
+    // R12: ajustes enseña cómo se sabe la fecha, así que tienen que llegar.
+    expect(deMarcada[0]!.provenanceClass).toBe("original_record");
+    expect(deMarcada[0]!.dataQuality).toBe("unconfirmed");
     expect(detalle.eventosDeProduccion.some((e) => e.plantingCohortId === sinMarcar.id)).toBe(false);
   });
 });
