@@ -6,6 +6,7 @@ import { aplicarManejoEnLoteFormAction } from "../../actions/apiary";
 // De los módulos PUROS: importar `colonyEvents.ts` arrastraría `prisma` —y `pg`— al paquete
 // del navegador. Lo vigila `cliente-sin-prisma`.
 import { METODOS_DE_ALIMENTACION } from "../../../lib/apiary/alimentacion";
+import { MATERIALES_DE_ALIMENTACION, MATERIAL_QUE_EXIGE_CUAL } from "../../../lib/apiary/vocabularioDeAlimentacion";
 import { OBJETIVOS_DE_TRATAMIENTO, VIAS_DE_TRATAMIENTO } from "../../../lib/apiary/vocabularioDeTratamiento";
 import { Ayuda } from "./Ayuda";
 import { BotonDeEnvio } from "../BotonDeEnvio";
@@ -42,6 +43,7 @@ export function ManejoEnLoteForm({ apiaryId, colmenas, hoy }: { apiaryId: string
   const t = useTranslations("Apiary");
   const pobladas = colmenas.filter((c) => c.colonyId !== null);
   const [seleccion, setSeleccion] = useState<string[]>([]);
+  const [materialKind, setMaterialKind] = useState("");
   const [tipo, setTipo] = useState<"feeding" | "treatment">("feeding");
 
   function alternar(id: string) {
@@ -111,9 +113,29 @@ export function ManejoEnLoteForm({ apiaryId, colmenas, hoy }: { apiaryId: string
       {tipo === "feeding" ? (
         <>
           <div className="nn-field">
-            <label htmlFor="lote-material">{t("feedingMaterialLabel")}</label>
-            <input id="lote-material" name="feedingMaterial" type="text" />
+            <label htmlFor="lote-material-kind">{t("feedingMaterialLabel")}</label>
+            <select
+              id="lote-material-kind"
+              name="feedingMaterialKind"
+              value={materialKind}
+              onChange={(e) => setMaterialKind(e.target.value)}
+            >
+              <option value="" />
+              {MATERIALES_DE_ALIMENTACION.map((m) => (
+                <option key={m} value={m}>
+                  {t(`feedingMaterial_${m}`)}
+                </option>
+              ))}
+            </select>
           </div>
+          {/* El «cual» sale SOLO con `otro`, y entonces es obligatorio: un «otro» que no dice
+              cual no es informacion, es la respuesta vacia de ADR-125 disfrazada de dato. */}
+          {materialKind === MATERIAL_QUE_EXIGE_CUAL ? (
+            <div className="nn-field">
+              <label htmlFor="lote-material">{t("feedingMaterialWhichLabel")}</label>
+              <input id="lote-material" name="feedingMaterial" type="text" required />
+            </div>
+          ) : null}
           <div className="nn-field">
             <label htmlFor="lote-cantidad">{t("feedingQuantityLabel")}</label>
             <input id="lote-cantidad" name="feedingQuantity" type="number" step="0.001" min="0" inputMode="decimal" />

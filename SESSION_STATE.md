@@ -38,6 +38,50 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-16 · Alta de colmenas en lote: cinco de una vez, con vista previa
+
+ADR-149. Daniel abrió la app en el apiario y lo que faltaba era registrar **cinco colmenas en cada
+sitio**. El único camino creaba una: diez envíos para dos apiarios.
+
+**Todo o nada en una transacción, con los identificadores comprobados DENTRO de ella** — comprobar
+antes deja una ventana en la que otra sesión crea el `03` y el lote lo pisa a media escritura. El
+error dice **cuáles** están repetidos.
+
+**La vista previa enseña los identificadores exactos antes de enviar**, con la misma función que
+valida en el servidor. No es adorno: el relleno de ceros no se puede acertar —él ya tiene colmenas
+de tres cifras— así que en vez de adivinarlo, se le enseña.
+
+**La colonia es opcional y explícita:** `originType` no tiene valor por omisión porque es un hecho
+que se captura o se pierde. Sin marcar la casilla nacen cajas vacías, y la colonia se añade después
+colmena por colmena.
+
+**El quinto flip-test hubo que rehacerlo:** la primera versión no compilaba y tumbó **seis** pruebas
+—la señal de sospechar del arnés—. La válida cae por una sola: el control negativo.
+
+### 2026-09-16 · Con qué se alimentó deja de ser texto libre
+
+ADR-148. Daniel, en el apiario: «yo quiero que todos los campos, lo más que se pueda, no sea campo
+libre de texto libre, que sean variables». **Los cinco valores son suyos, literales** — azúcar
+morena, blanca, melaza, miel de abeja, miel de caña — **y no se añadió ninguno más**: un desplegable
+con opciones que en esta finca nadie usa enseña a bajar hasta «otro».
+
+**Columna nueva al lado, no conversión.** `feedingMaterial` se queda como el «cuál» de `otro` y como
+lo escrito antes del vocabulario; convertirla exigiría traducir lo guardado en producción, y esa base
+no se puede leer desde aquí.
+
+**Viaja por la cola sin señal**, o el desplegable funcionaría en línea y se perdería justo en campo.
+
+**Lo que NO está guardado y no se cuenta como hecho:** que la regla «material sólo en alimentación»
+salte al escribir, y que el campo llegue por la cola. Las dos existen en el código, ninguna tiene
+prueba.
+
+**Lo que se midió y sigue en texto libre:** `feedingUnit`, `treatmentProduct`, `treatmentDoseUnit`, y
+dos duplicados de campos que ya tienen vocabulario al lado (`storesLevel`, `pestDiseaseFlags`).
+
+**Y lo que falta del encargo, bloqueado en Daniel:** los productos de tratamiento que usa, y los actos
+de **limpieza fitosanitaria** — que además **no existe como tipo de evento**: `ColonyEventType` tiene
+cuatro valores y ninguno es limpieza.
+
 ### 2026-09-16 · Las fuentes de Cerro Azul entran, y faltaba una que otro documento mandaba leer
 
 ADR-146. Cuatro documentos que vivían **sólo en `~/Downloads`**, sin versionar: las dos versiones
@@ -68,45 +112,6 @@ fila; y la aplicación al cultivo no existe.
 
 **No se implementó nada.** Es entrada de planificación aceptada.
 
-### 2026-09-16 · El meliponario es un tipo de sitio, y diez comparaciones de cadena pasan a ser una
-
-ADR-145. Las abejas sin aguijón entran como **`meliponary`, hermano de `apiary_site`** — no como
-módulo aparte ni como especie. Decisión del dueño: «tener meliponiarios y tener apiarios separado
-aunque el apicultor tiene acceso a ambas si se configura así».
-
-**Lo que lo hizo barato fue lo que se midió primero:** `"apiary_site"` estaba afirmado a mano en
-**diez sitios** del código. Ahora viven en uno solo, `lib/apiary/sitioDeAbejas.ts`, y un guardia de
-arquitectura impide volver a escribir esa comparación fuera de ahí.
-
-**Se listan juntos, se manejan separados:** la lista devuelve los dos tipos; el traslado **exige el
-mismo tipo** en origen y destino y ni siquiera ofrece los del otro. Y un meliponario puede **colgar
-de un lote** (`parentLocationId`), que es como el dueño los reparte: sueltos entre bloques, o muchos
-juntos bajo el techo del beneficio.
-
-**La mitad que falta es la especie**, y está bloqueada en él: no hay `Species` ni `Colony.especie`,
-así que hoy nada impide que un meliponario herede varroa o cuadros. El tipo de sitio es justo la
-pieza que no depende de los nombres, y por eso fue primero.
-
-**El tercer flip-test hubo que rehacerlo**: la primera versión no compilaba, y una mutación que no
-compila se lee como un guardia que funciona.
-
-### 2026-09-16 · Pantallas de inspección e instalaciones, y el ámbito de ubicación baja por el árbol
-
-Inspección manual con dos muestras declaradas como zonas o réplicas, usando
-`registrarInspeccion`; administración sitio → instalación → cama con permiso
-`location:manage_attributes` y auditoría atómica.
-
-**Y ADR-144, que salió de aquí:** un ámbito de ubicación alcanza a sus
-descendientes. La pantalla de instalaciones lo destapó — un operario con ámbito
-sobre la finca podía crear el invernadero y **no las camas de dentro**. Decisión
-del dueño; su mitad negativa —que un hermano sigue fuera— está en
-`tests/rbac/ambitoDeUbicacion.test.ts`.
-
-Verificado: suite completa **2248/2248**, carril hermético 1146, `build` 0. Y el
-guardia de deriva de migraciones, que **sólo mide con `SHADOW_DATABASE_URL`**,
-encontró un índice que la Tarea 2 creó en la migración sin declararlo en el
-esquema.
-Detalle y comprobaciones: `.superpowers/sdd/2026-09-15-muestra-y-topologia-de-secado/tarea-8-9-report.md`.
 
 ## 3. Bloqueado, y en qué
 

@@ -3578,3 +3578,44 @@ que publiqué ayer iban todas **una de más**, porque se midieron con el instrum
 `moisture` **ya es variable canónica de medición** en este esquema, así que la humedad de la
 miel podría ser un `Measurement` en vez de una columna. Eso se decide aparte, no de paso.
 
+
+### 2026-09-16 · Pantallas de inspección e instalaciones, y el ámbito de ubicación baja por el árbol
+
+Inspección manual con dos muestras declaradas como zonas o réplicas, usando
+`registrarInspeccion`; administración sitio → instalación → cama con permiso
+`location:manage_attributes` y auditoría atómica.
+
+**Y ADR-144, que salió de aquí:** un ámbito de ubicación alcanza a sus
+descendientes. La pantalla de instalaciones lo destapó — un operario con ámbito
+sobre la finca podía crear el invernadero y **no las camas de dentro**. Decisión
+del dueño; su mitad negativa —que un hermano sigue fuera— está en
+`tests/rbac/ambitoDeUbicacion.test.ts`.
+
+Verificado: suite completa **2248/2248**, carril hermético 1146, `build` 0. Y el
+guardia de deriva de migraciones, que **sólo mide con `SHADOW_DATABASE_URL`**,
+encontró un índice que la Tarea 2 creó en la migración sin declararlo en el
+esquema.
+Detalle y comprobaciones: `.superpowers/sdd/2026-09-15-muestra-y-topologia-de-secado/tarea-8-9-report.md`.
+
+
+### 2026-09-16 · El meliponario es un tipo de sitio, y diez comparaciones de cadena pasan a ser una
+
+ADR-145. Las abejas sin aguijón entran como **`meliponary`, hermano de `apiary_site`** — no como
+módulo aparte ni como especie. Decisión del dueño: «tener meliponiarios y tener apiarios separado
+aunque el apicultor tiene acceso a ambas si se configura así».
+
+**Lo que lo hizo barato fue lo que se midió primero:** `"apiary_site"` estaba afirmado a mano en
+**diez sitios** del código. Ahora viven en uno solo, `lib/apiary/sitioDeAbejas.ts`, y un guardia de
+arquitectura impide volver a escribir esa comparación fuera de ahí.
+
+**Se listan juntos, se manejan separados:** la lista devuelve los dos tipos; el traslado **exige el
+mismo tipo** en origen y destino y ni siquiera ofrece los del otro. Y un meliponario puede **colgar
+de un lote** (`parentLocationId`), que es como el dueño los reparte: sueltos entre bloques, o muchos
+juntos bajo el techo del beneficio.
+
+**La mitad que falta es la especie**, y está bloqueada en él: no hay `Species` ni `Colony.especie`,
+así que hoy nada impide que un meliponario herede varroa o cuadros. El tipo de sitio es justo la
+pieza que no depende de los nombres, y por eso fue primero.
+
+**El tercer flip-test hubo que rehacerlo**: la primera versión no compilaba, y una mutación que no
+compila se lee como un guardia que funciona.

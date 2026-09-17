@@ -15,6 +15,7 @@ import {
 import { completarCierreDeTratamiento } from "../../lib/apiary/cierreDeEvento";
 import { actualizarConfiguracionDeCaja } from "../../lib/apiary/configuracionDeCaja";
 import { trasladarColmenas } from "../../lib/apiary/traslado";
+import { altaDeColmenasEnLote } from "../../lib/apiary/altaEnLote";
 import { registrarConsultaAVecinos } from "../../lib/apiary/consultaAVecinos";
 import { completarCierreDeCosecha } from "../../lib/apiary/cierreDeCosecha";
 import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
@@ -84,6 +85,58 @@ export async function createHiveFormAction(formData: FormData): Promise<void> {
     // un `digest`; sin fecha funcionaba, que es por qué pasó desapercibido.
     // Nadie instala una colmena «a las 10:30»: es un día.
     installedAt: fechaDeDia(formData.get("installedAt") as string | null, "installedAt"),
+  });
+
+  revalidatePath(`/apiaries/${locationId}`);
+}
+
+/**
+ * Dar de alta VARIAS colmenas de una vez. ADR-149.
+ *
+ * **El encargo, del dueno en el apiario el 2026-09-16:** habia que registrar cinco colmenas en
+ * cada sitio y el unico camino era `createHiveFormAction`, que crea UNA. Diez envios para dos
+ * apiarios, tecleando el identificador cada vez.
+ *
+ * `desde` y `cuantas` llegan como cadena y los valida el servicio, igual que el tipo de sitio en
+ * `crearApiarioFormAction`: aqui solo se convierten. Quien decide que es valido es
+ * `identificadoresDelLote`, que es lo que el guardia puede llamar con la entrada hostil.
+ */
+export async function altaDeColmenasEnLoteFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  const entero = (clave: string) => {
+    const bruto = String(formData.get(clave) ?? "").trim();
+    // Cadena vacia -> NaN y NO 0: `Number("")` es 0, y un 0 aqui se leeria como
+    // «empieza en cero» en vez de como un campo sin llenar.
+    return bruto === "" ? Number.NaN : Number(bruto);
+  };
+
+  // La colonia solo viaja si el dueno lo marco. Sin la casilla se crean cajas vacias y la
+  // colonia se anade despues, colmena por colmena, donde cada una puede decir su propio origen.
+  const conColonia = String(formData.get("conColonia") ?? "") !== "";
+  const instalada = fechaDeDia(formData.get("installedAt") as string | null, "installedAt");
+
+  await altaDeColmenasEnLote(user.userAccountId, {
+    locationId,
+    prefijo: String(formData.get("prefijo") ?? ""),
+    desde: entero("desde"),
+    cuantas: entero("cuantas"),
+    projectId: emptyToNull(formData.get("projectId")),
+    installedAt: instalada,
+    colonia: conColonia
+      ? {
+          originType: String(formData.get("originType") ?? "other") as never,
+          originSourceValueId: emptyToNull(formData.get("originSourceValueId")),
+          originNote: emptyToNull(formData.get("originNote")),
+          // El mismo dia que la instalacion si la hay; si no, hoy. Una colonia que llega con
+          // la caja no empieza otro dia.
+          startedAt: instalada ?? new Date(),
+          // Igual que `createColonyFormAction`: el apicultor la establecio y lo vio.
+          provenanceClass: "direct_observation",
+        }
+      : null,
   });
 
   revalidatePath(`/apiaries/${locationId}`);

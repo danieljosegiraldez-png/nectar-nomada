@@ -37,6 +37,7 @@ tests/apiary/carencia.test.ts
 tests/apiary/configuracionDeCaja.test.ts
 tests/apiary/crearApiario.test.ts
 tests/apiary/meliponario.test.ts
+tests/apiary/altaEnLote.test.ts
 tests/apiary/estadoDeColonia.test.ts
 tests/apiary/e2e.test.ts
 tests/apiary/harvest.test.ts
