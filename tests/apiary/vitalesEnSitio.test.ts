@@ -98,14 +98,33 @@ describe("los vitales anotados en sitio", () => {
     expect(fila.fieldVitalsOnSiteAt).toEqual(ahora);
   });
 
-  it("los tres son INDEPENDIENTES: anotar sólo el clima no borra un recuento anterior", async () => {
+  it("los tres son INDEPENDIENTES: lo que se deja vacío NO se borra", async () => {
+    // **El orden importa y la primera versión de esta prueba lo tenía al revés.** Escribía el
+    // recuento y DESPUÉS el clima, así que la mutación que borra el clima cuando llega vacío no
+    // cambiaba nada: el clima estaba vacío igualmente. «NADIE CAYÓ».
+    //
+    // Se prueba en las DOS direcciones, cada campo escrito primero y luego omitido, porque cada
+    // una sólo puede cazar la mutación de su propio campo.
     const id = await visitaAbierta();
-    await registrarVitalesEnSitio(userAccountId, { fieldSessionId: id, hivesPresentCount: 9 });
-    await registrarVitalesEnSitio(userAccountId, { fieldSessionId: id, weatherObserved: "lluvia" });
 
-    const fila = await prisma.fieldSession.findUniqueOrThrow({ where: { id } });
-    expect(fila.hivesPresentCount, "el recuento de la primera pasada debe sobrevivir").toBe(9);
-    expect(fila.weatherObserved).toBe("lluvia");
+    // 1. el clima primero, y luego una pasada que NO lo menciona
+    await registrarVitalesEnSitio(userAccountId, { fieldSessionId: id, weatherObserved: "lluvia" });
+    await registrarVitalesEnSitio(userAccountId, { fieldSessionId: id, hivesPresentCount: 9 });
+    let fila = await prisma.fieldSession.findUniqueOrThrow({ where: { id } });
+    expect(fila.weatherObserved, "el clima de la primera pasada debe sobrevivir").toBe("lluvia");
+    expect(fila.hivesPresentCount).toBe(9);
+
+    // 2. y al revés: el recuento ya está, y una pasada que sólo toca el clima no lo borra
+    await registrarVitalesEnSitio(userAccountId, { fieldSessionId: id, weatherObserved: "despejado" });
+    fila = await prisma.fieldSession.findUniqueOrThrow({ where: { id } });
+    expect(fila.hivesPresentCount, "el recuento debe sobrevivir").toBe(9);
+    expect(fila.weatherObserved).toBe("despejado");
+
+    // 3. y las colonias, que es el tercero y no lo cubría ninguna de las dos de arriba
+    await registrarVitalesEnSitio(userAccountId, { fieldSessionId: id, coloniesAliveCount: 5 });
+    await registrarVitalesEnSitio(userAccountId, { fieldSessionId: id, hivesPresentCount: 6 });
+    fila = await prisma.fieldSession.findUniqueOrThrow({ where: { id } });
+    expect(fila.coloniesAliveCount, "las colonias deben sobrevivir").toBe(5);
   });
 
   it("y devuelve la comparación de cajas YA RESUELTA: quien cuenta allí es quien puede actuar", async () => {
