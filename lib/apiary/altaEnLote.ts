@@ -27,42 +27,19 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { crearColocacionInicial, requireApiaryAccess } from "./hives";
+import { identificadoresDelLote, AltaEnLoteInvalida } from "./identificadoresDeLote";
 import type { ColonyOriginType, DataQuality, ProvenanceClass } from "../../generated/prisma/client";
 
-export class AltaEnLoteInvalida extends Error {}
-
 /**
- * El techo, y no es redondo por gusto: el dueño instala **cinco** por apiario y el plan más
- * grande de sus minutas son **diez**. Cincuenta deja sitio de sobra para un apiario grande y
- * convierte un cero de más al teclear —500— en un error visible en vez de en quinientas filas.
+ * El vocabulario vive en `./identificadoresDeLote`, sin `prisma` detras, porque el formulario es
+ * `"use client"`. Se re-exporta para que nadie mas tenga que saberlo -- pero **un componente de
+ * cliente debe importarlo de alli**, no de aqui.
  */
-export const MAXIMO_POR_LOTE = 50;
-
-/**
- * Los identificadores que saldrían, sin tocar la base. Exportada **porque el guardia tiene que
- * poder llamarla con la entrada hostil**: probar el relleno de ceros a través de un formulario
- * y una transacción es probar otra cosa.
- *
- * **El prefijo se escribe tal cual ha de salir, separador incluido.** `"LN-"` da `LN-01`; `"LN"`
- * daría `LN01`. No se añade un guion por nuestra cuenta: el dueño ya tiene colmenas con su
- * propio esquema y adivinarle el separador es cómo se parte una numeración en dos familias.
- *
- * **El relleno va al ancho del número MÁS GRANDE del lote, con un mínimo de dos.** Así cinco
- * desde 1 dan `01…05` y ordenan bien como texto, que es como se ordenan en una lista.
- */
-export function identificadoresDelLote(prefijo: string, desde: number, cuantas: number): string[] {
-  const p = prefijo.trim();
-  if (p === "") throw new AltaEnLoteInvalida("prefijo_vacio");
-  if (!Number.isInteger(desde) || desde < 1) throw new AltaEnLoteInvalida("desde_invalido");
-  if (!Number.isInteger(cuantas) || cuantas < 1) throw new AltaEnLoteInvalida("cuantas_invalido");
-  if (cuantas > MAXIMO_POR_LOTE) throw new AltaEnLoteInvalida("cuantas_sobre_el_techo");
-
-  const ultimo = desde + cuantas - 1;
-  const ancho = Math.max(2, String(ultimo).length);
-  const ids: string[] = [];
-  for (let n = desde; n <= ultimo; n += 1) ids.push(`${p}${String(n).padStart(ancho, "0")}`);
-  return ids;
-}
+export {
+  AltaEnLoteInvalida,
+  MAXIMO_POR_LOTE,
+  identificadoresDelLote,
+} from "./identificadoresDeLote";
 
 export interface AltaEnLoteInput {
   locationId: string;

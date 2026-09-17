@@ -1602,7 +1602,20 @@
     "feedingMaterial_miel_de_abeja": "Honey",
     "feedingMaterial_miel_de_cana": "Cane syrup",
     "feedingMaterial_otro": "Other",
-    "feedingMaterialWhichLabel": "Which one?"
+    "feedingMaterialWhichLabel": "Which one?",
+    "loteAltaHeading": "Add several hives",
+    "loteAltaSubmit": "Add the batch",
+    "lotePrefijoLabel": "Identifier prefix",
+    "lotePrefijoAyuda": "Exactly as it should appear, separator included. “LN-” gives LN-01, LN-02…",
+    "loteDesdeLabel": "Start at",
+    "loteCuantasLabel": "How many",
+    "lotePreviaLabel": "Will create:",
+    "loteConColoniaLabel": "These hives already have bees",
+    "loteConColoniaAyuda": "Only if all of them share the same origin. Otherwise leave it unchecked and add each colony afterwards.",
+    "loteError_prefijo_vacio": "The prefix is missing.",
+    "loteError_desde_invalido": "“Start at” must be a whole number of 1 or more.",
+    "loteError_cuantas_invalido": "“How many” must be a whole number of 1 or more.",
+    "loteError_cuantas_sobre_el_techo": "That is too many at once."
   },
   "Research": {
     "badge": "Research OS",

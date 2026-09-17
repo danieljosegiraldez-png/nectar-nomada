@@ -66,6 +66,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/apiary/altaEnLote.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Da de alta N colmenas en UNA transacción, porque un alta en lote a medias deja al dueño sin saber cuáles entraron; comprueba los identificadores DENTRO de la transacción, no antes, para que no se cuele una colmena entre la comprobación y la escritura. Reutiliza `crearColocacionInicial` en vez de repetirla (ADR-135) y escribe un AuditEvent por colmena, con la misma forma que el alta de una."
+    },
+    {
       "archivo": "lib/apiary/inspections.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
