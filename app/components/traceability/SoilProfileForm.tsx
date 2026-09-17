@@ -8,6 +8,7 @@ import {
   type TraceabilityActionState,
 } from "../../actions/traceability";
 import { PROCEDENCIA_DE_REGISTRO_DE_CAMPO } from "../../../lib/traceability/procedencia";
+import { BotonQueNecesitaConexion } from "./BotonQueNecesitaConexion";
 import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
 import { construirPayloadDePerfilDeSuelo } from "../../../lib/sync/parcelaPayload";
 
@@ -292,9 +293,14 @@ export function SoilProfileForm({
           {t("fieldEventQueueFailed")}
         </p>
       ) : null}
-      <button type="submit" className="nn-button" disabled={pending || encolando}>
-        {corrigiendo ? t("soilSaveButton") : t("soilDescribeButton")}
-      </button>
+      {/* Describir una calicata se encola sin señal (#345); corregirla no. */}
+      {corrigiendo ? (
+        <BotonQueNecesitaConexion disabled={pending || encolando}>{t("soilSaveButton")}</BotonQueNecesitaConexion>
+      ) : (
+        <button type="submit" className="nn-button" disabled={pending || encolando}>
+          {t("soilDescribeButton")}
+        </button>
+      )}
     </form>
   );
 }
