@@ -229,7 +229,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, vi } from "vitest";
 import * as audit from "../../lib/audit";
 import { BeneficioError, actualizarBeneficio, crearBeneficio, listarBeneficios, sitiosParaBeneficio } from "../../lib/traceability/beneficios";
-import { LocationAccessError } from "../../lib/traceability/locations";
+import { LocationAccessError, puedeGestionarAtributosDeUbicacion } from "../../lib/traceability/locations";
 
 const names: string[] = [];
 function nombre() { const n = `TEST-BEN-${randomUUID()}`; names.push(n); return n; }
@@ -284,8 +284,13 @@ describe("crearBeneficio", () => {
     const capataz = await cuenta(finca.id, "Farm Operator");
     await expect(crearBeneficio(capataz, { name: nombre(), parentLocationId: finca.id }))
       .rejects.toThrow(LocationAccessError);
-    // Control positivo: el capataz SÍ ve los atributos del sitio, así que la
-    // negativa de arriba es del permiso nuevo y no de no tener acceso a nada.
+    // **Control positivo de verdad:** el capataz SÍ gestiona los atributos de
+    // ese sitio. Sin esta línea, la negativa de arriba se cumpliría igual con un
+    // capataz que no tiene acceso a NADA, y no probaría que lo que falta es el
+    // permiso nuevo. (La primera versión de este plan ponía aquí una segunda
+    // aserción negativa y la llamaba control positivo.)
+    expect(await puedeGestionarAtributosDeUbicacion(capataz, finca.id)).toBe(true);
+    // Y con eso, que no se le ofrezca ningún sitio donde crear es la consecuencia.
     await expect(sitiosParaBeneficio(capataz)).rejects.toThrow(LocationAccessError);
   });
 
