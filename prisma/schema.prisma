@@ -291,6 +291,8 @@ model UserAccount {
   @@schema("core")
   byproductBatchesCreated ByproductBatch[] @relation("ByproductBatchCreatedBy")
   consumableMaterialsCreated ConsumableMaterial[] @relation("ConsumableMaterialCreatedBy")
+  consumableLotsCreated ConsumableLot[] @relation("ConsumableLotCreatedBy")
+  consumableStockEventsCreated ConsumableStockEvent[] @relation("ConsumableStockEventCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -8349,5 +8351,82 @@ model ConsumableMaterial {
   /// 2026-09-17. La restricción vive en la base; la prueba que la comprueba va
   /// contra Postgres.
   @@map("consumable_material")
+  @@schema("traceability")
+  lots ConsumableLot[]
+}
+
+/// Lo que entró una vez: 28 quintales de gallinaza del 1 de julio, con su
+/// etiqueta de lote.
+///
+/// **No lleva saldo.** El saldo se deriva del libro mayor al leer, igual que
+/// `computeLotBalance` lo hace con el café. Un número guardado y un libro mayor
+/// dejan de cuadrar en silencio, y entonces nadie sabe cuál manda.
+///
+/// Dos lotes del mismo material NO se mezclan: dos sacos de gallinaza de
+/// proveedores distintos no son intercambiables el día que uno sale malo.
+model ConsumableLot {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  materialId String             @map("material_id") @db.Uuid
+  material   ConsumableMaterial @relation(fields: [materialId], references: [id])
+
+  /// Lo que dice el saco o la factura. Es del proveedor, no nuestro.
+  batchLabel String @map("batch_label")
+
+  receivedAt DateTime @map("received_at")
+  supplier   String?
+  notes      String?
+
+  events ConsumableStockEvent[]
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ConsumableLotCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([materialId, batchLabel])
+  @@index([materialId])
+  @@map("consumable_lot")
+  @@schema("traceability")
+}
+
+/// El libro mayor de las existencias: **sólo se añade**. Nada actualiza una
+/// fila; corregir es otro evento con su razón.
+///
+/// Misma forma que `QuantityEvent`, que lleva el café — y por la misma razón:
+/// la historia de cómo se llegó al número es tan interesante como el número.
+model ConsumableStockEvent {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  consumableLotId String        @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot @relation(fields: [consumableLotId], references: [id])
+
+  eventType ConsumableStockEventType @map("event_type")
+  quantity  Decimal                  @db.Decimal(10, 3)
+  unit      String
+  occurredAt DateTime                @map("occurred_at")
+
+  /// Obligatoria en los ajustes, por CHECK de la base y no por la interfaz:
+  /// cuadrar un descuadre es una afirmación sobre lo que pasó, y una afirmación
+  /// sin razón no se puede auditar.
+  reason String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ConsumableStockEventCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([consumableLotId, occurredAt])
+  @@map("consumable_stock_event")
+  @@schema("traceability")
+}
+
+enum ConsumableStockEventType {
+  received
+  consumed
+  waste
+  adjustment_increase
+  adjustment_decrease
+
   @@schema("traceability")
 }

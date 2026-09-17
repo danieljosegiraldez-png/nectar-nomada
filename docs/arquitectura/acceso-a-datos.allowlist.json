@@ -428,6 +428,10 @@
     {
       "archivo": "lib/inventario/materiales.ts",
       "razon": "Catalogo de materiales consumibles. Autoriza con `equipment:manage` juzgado donde se declare el sitio —mismo criterio que `registrarEquipo`— y escribe la fila con su AuditEvent en la misma transaccion."
+    },
+    {
+      "archivo": "lib/inventario/lotes.ts",
+      "razon": "Lotes de material consumible y su libro mayor. Autoriza con `lot:manage` juzgado donde se declare el sitio —recibir es faena, no gestion— y escribe el lote, su evento de entrada y el AuditEvent en una sola transaccion."
     }
   ],
   "reciben_transaccion": [
