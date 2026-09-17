@@ -407,3 +407,65 @@ describe("outturn", () => {
     await expect(getSelectionOutturn(transformation.id)).rejects.toThrow(SelectionValidationError);
   });
 });
+
+/**
+ * §B.3 del spec de reposo y trilla: **la trilla es OPCIONAL.**
+ *
+ * «Depende el arreglo»: el café se vende verde, en pergamino o tostado. Un lote
+ * vendido en pergamino **nunca se trilla**, así que ninguna etapa posterior
+ * puede exigir una trilla como precondición, y el café verde tiene UN origen
+ * posible, no uno obligatorio.
+ *
+ * Es fácil de romper sin darse cuenta el día que alguien escriba «para vender
+ * verde hace falta una trilla» — y entonces el pergamino deja de poder
+ * venderse, que es la mitad del negocio.
+ */
+describe("la trilla nunca es precondición", () => {
+  it("un lote SIN trilla se vende igual", async () => {
+    const pergamino = await cherryLot("sin-trilla", 60);
+    const { transformation } = await recordTransformation(operatorUserAccountId, {
+      transformationType: "sale",
+      occurredAt: new Date(),
+      provenanceClass: "original_record",
+      inputs: [{ lotId: pergamino.id }],
+      outputs: [],
+    });
+    expect(transformation.transformationType).toBe("sale");
+  });
+
+  it("y un lote CON trilla también — el control positivo", async () => {
+    // Sin esta mitad, una venta rota para todos haría pasar la de arriba por la
+    // razón equivocada. Aquí el lote pasa por una trilla ANTES de venderse.
+    const pergamino = await cherryLot("con-trilla", 100);
+    const { transformation: trilla } = await recordTransformation(operatorUserAccountId, {
+      transformationType: "hulling",
+      occurredAt: new Date(),
+      provenanceClass: "original_record",
+      inputs: [{ lotId: pergamino.id, quantity: 100, unit: "kg" }],
+      outputs: [
+        {
+          // Una salida hereda organización, proyecto y ubicación del lote de
+          // entrada: no se repiten aquí, y el tipo no las admite.
+          lotCode: `${RUN_ID}-con-trilla-verde`,
+          lotType: "green",
+          quantity: 80,
+          unit: "kg",
+        },
+      ],
+      declaredLossQuantity: 20,
+      declaredLossUnit: "kg",
+      declaredLossReason: "cascarilla y merma — sin subproducto todavía (Tarea 7)",
+    });
+    expect(trilla.transformationType).toBe("hulling");
+
+    const verde = await prisma.lot.findFirstOrThrow({ where: { lotCode: `${RUN_ID}-con-trilla-verde` } });
+    const { transformation: venta } = await recordTransformation(operatorUserAccountId, {
+      transformationType: "sale",
+      occurredAt: new Date(),
+      provenanceClass: "original_record",
+      inputs: [{ lotId: verde.id }],
+      outputs: [],
+    });
+    expect(venta.transformationType).toBe("sale");
+  });
+});

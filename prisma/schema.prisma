@@ -3080,6 +3080,13 @@ enum LotTransformationType {
   // yield (ADR-094 Decision 4).
   selection
 
+  /// La trilla: quitar el pergamino y dejar café verde. Conserva masa —el
+  /// verde, la cascarilla y la merma declarada suman la entrada— porque las
+  /// tres formas de trillar devuelven todo a la finca. Y es OPCIONAL: un lote
+  /// vendido en pergamino nunca se trilla, así que ninguna etapa posterior
+  /// puede exigirla.
+  hulling
+
   @@schema("traceability")
 }
 

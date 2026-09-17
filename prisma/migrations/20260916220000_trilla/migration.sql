@@ -1,0 +1,21 @@
+-- La trilla como tipo de transformacion.
+--
+-- QUE ES. Quitar el pergamino y dejar cafe verde. Ocurre de tres formas en esta
+-- finca —en Cafelino, en Kiva Estate, o a mano con mazo y pilon en Las Nubes,
+-- porque el beneficio Las Nubes no tiene trilladora— y en las tres VUELVE TODO:
+-- el grano verde y la cascarilla. Ninguna se queda con material.
+--
+-- POR ESO CONSERVA MASA, y esa clasificacion vive en `CONSERVING_TYPES` de
+-- lib/traceability/balance.ts, no aqui. 100 kg de pergamino salen como ~80 de
+-- verde, ~18 de cascarilla y ~2 de merma declarada. Si el codigo no la
+-- clasificara como conservadora, cada trilla pasaria con un hueco del 18 % —la
+-- cascarilla— leido como rendimiento normal.
+--
+-- Y ES OPCIONAL POR DISENO. Un lote vendido en pergamino nunca se trilla, asi
+-- que ninguna etapa posterior puede exigir una trilla como precondicion. El
+-- cafe verde tiene UN origen posible, no uno obligatorio.
+--
+-- Anadir un valor a un enum es aditivo: ninguna fila existente cambia.
+
+-- AlterEnum
+ALTER TYPE "traceability"."LotTransformationType" ADD VALUE 'hulling';

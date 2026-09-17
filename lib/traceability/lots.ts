@@ -139,7 +139,11 @@ export interface RecordTransformationInput {
     | "disposal"
     | "sale"
     // P3 — kept in sync with the DB enum by hand, same as CreateLotInput.lotType.
-    | "selection";
+    | "selection"
+    // La trilla. Va aquí Y en el enum de Prisma: esta unión se mantiene a mano,
+    // así que añadir el valor al esquema NO la actualiza, y sin esta línea
+    // ninguna llamada podría registrar una trilla aunque la base la aceptara.
+    | "hulling";
   occurredAt: Date;
   operatorPersonId?: string | null;
   notes?: string | null;
