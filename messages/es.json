@@ -810,6 +810,7 @@
     "plotDashboardSamplingFoliar": "foliar",
     "plotDashboardConditionsHeading": "Condiciones",
     "plotDashboardRecentSessions": "Últimas jornadas",
+    "plotDashboardSessionsSeeAll": "Ver todas ({n})",
     "error_production": "No se pudo marcar en producción: {detail}",
     "cohortReasonLabel": "¿Por qué cambia?",
     "cohortReasonPlaceholder": "Ej.: conté la parcela y son 812, no 833",

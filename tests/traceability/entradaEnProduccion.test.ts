@@ -194,6 +194,20 @@ describe("getPlotDetail — eventos de producción", () => {
       provenanceClass: "original_record",
       dataQuality: "unconfirmed",
     });
+    // M2: un evento de OTRO tipo en la siembra sin marcar. `createPlantingCohort`
+    // no escribe eventos, así que sin esta fila quitar el filtro
+    // `eventType: "entered_production"` de getPlotDetail dejaba la prueba en verde.
+    // Con ella, una siembra plantada y nunca marcada saldría «en producción».
+    await prisma.plantingEvent.create({
+      data: {
+        locationId: plotId,
+        plantingCohortId: sinMarcar.id,
+        eventType: "planted",
+        provenanceClass: "original_record",
+      },
+    });
+    // Control: la fila existe, así que la ausencia de abajo mide algo.
+    expect(await prisma.plantingEvent.count({ where: { plantingCohortId: sinMarcar.id, eventType: "planted" } })).toBe(1);
 
     const detalle = await getPlotDetail(operadorId, plotId);
     const deMarcada = detalle.eventosDeProduccion.filter((e) => e.plantingCohortId === marcada.id);

@@ -74,6 +74,17 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
   });
   const ultimoAnio = rendimiento.status === "ok" ? rendimiento.years[0] : undefined;
 
+  const lineaDeJornada = (j: (typeof jornadas)[number]) => (
+    <li key={j.id}>
+      <Link href={`/field-sessions/${j.id}`}>{mostrarInstante(j.startedAt, location.timezone)}</Link>
+      {" · "}
+      {j.operator.displayName}
+      {" · "}
+      {t("fieldSessionEventCount", { count: j._count.events })}
+      {j.endedAt == null ? <> · <strong>{t("fieldSessionOpen")}</strong></> : null}
+    </li>
+  );
+
   const textoDelAviso = (aviso: Aviso): string => {
     switch (aviso.tipo) {
       case "jornada_sin_cerrar":
@@ -330,18 +341,18 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         {jornadas.length === 0 ? (
           <p className="nn-muted">{t("fieldSessionsNone")}</p>
         ) : (
-          <ul className="nn-detail-meta">
-            {jornadas.slice(0, 3).map((j) => (
-              <li key={j.id}>
-                <Link href={`/field-sessions/${j.id}`}>{mostrarInstante(j.startedAt, location.timezone)}</Link>
-                {" · "}
-                {j.operator.displayName}
-                {" · "}
-                {t("fieldSessionEventCount", { count: j._count.events })}
-                {j.endedAt == null ? <> · <strong>{t("fieldSessionOpen")}</strong></> : null}
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul className="nn-detail-meta">{jornadas.slice(0, 3).map(lineaDeJornada)}</ul>
+            {/* R11: no hay ruta que liste las jornadas de una parcela, así que
+                las que no caben en las 3 últimas se pliegan aquí en vez de
+                quedar inalcanzables. */}
+            {jornadas.length > 3 ? (
+              <details>
+                <summary>{t("plotDashboardSessionsSeeAll", { n: jornadas.length })}</summary>
+                <ul className="nn-detail-meta">{jornadas.slice(3).map(lineaDeJornada)}</ul>
+              </details>
+            ) : null}
+          </>
         )}
         <details>
           <summary>{t("fieldSessionStartSummary")}</summary>
@@ -353,10 +364,13 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         </details>
       </section>
 
-      <details className="nn-section" id="condiciones">
+      {/* M1: el `id` va DENTRO del <details>. El navegador sólo abre un
+          <details> al navegar a un fragmento cuando el destino está dentro de
+          él; en el propio <details> cerrado, el enlace no lo abre. */}
+      <details className="nn-section">
         <summary style={{ fontSize: "1.25rem", fontWeight: 600 }}>{t("plotDashboardConditionsHeading")}</summary>
 
-        <h3>{t("groundConditionsHeading")}</h3>
+        <h3 id="condiciones">{t("groundConditionsHeading")}</h3>
         <dl className="nn-detail-meta">
           <p>{t("areaLabel")}: {location.areaHectares?.toString() ?? <span className="nn-muted">{t("notRecorded")}</span>}</p>
           <p>{t("spacingLabel")}: {location.plantSpacingMeters?.toString() ?? <span className="nn-muted">{t("notRecorded")}</span>}</p>
@@ -502,9 +516,10 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         </details>
       </details>
 
-      <details className="nn-section" id="muestras">
+      {/* M1: igual que #condiciones. `enlaceDelAviso` enlaza a #muestras. */}
+      <details className="nn-section">
         <summary style={{ fontSize: "1.25rem", fontWeight: 600 }}>{t("labSamplesHeading")}</summary>
-        <p className="nn-muted">{t("samplesIntro")}</p>
+        <p className="nn-muted" id="muestras">{t("samplesIntro")}</p>
 
         <h3>{t("samplesSoilHeading")}</h3>
         {muestras.soil.length === 0 ? (

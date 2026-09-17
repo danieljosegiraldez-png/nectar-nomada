@@ -810,6 +810,7 @@
     "plotDashboardSamplingFoliar": "foliar",
     "plotDashboardConditionsHeading": "Conditions",
     "plotDashboardRecentSessions": "Latest field sessions",
+    "plotDashboardSessionsSeeAll": "See all ({n})",
     "error_production": "Could not mark as in production: {detail}",
     "cohortReasonLabel": "Why is it changing?",
     "cohortReasonPlaceholder": "e.g. counted the plot and it is 812, not 833",
