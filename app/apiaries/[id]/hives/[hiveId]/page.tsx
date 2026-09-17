@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getHive } from "../../../../../lib/apiary/hives";
+import { permissionKeysAnywhere } from "../../../../../lib/rbac/service";
 import { origenesDeColonia } from "../../../../../lib/apiary/origenDeColonia";
 import { sinRegistrar } from "../../../../../lib/apiary/vacio";
 import { causasDePerdida } from "../../../../../lib/apiary/causaDePerdida";
@@ -37,7 +38,23 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
 
   const { id: apiaryId, hiveId } = await params;
   const t = await getTranslations("Apiary");
-  const [hive, { people: observers, selfPersonId }, origenes, causas, irregularidades] = await Promise.all([
+  /**
+   * **Qué puede hacer de verdad quien está mirando.**
+   *
+   * Hasta el 2026-09-17 esta pantalla pintaba los seis formularios a todo el
+   * mundo y la acción decidía al enviar. Para un `Apiary Colony Event Recorder`
+   * —Kenis, que registra alimentaciones y tratamientos pero NO crea
+   * inspecciones— eso era un formulario que se rellena entero y revienta al
+   * final. Una promesa rota es peor que una ausencia explicada.
+   *
+   * **`permissionKeysAnywhere` dice «en algún ámbito», no «en ESTE apiario»**, y
+   * es a propósito: aquí sólo decide qué se PINTA. La autorización de verdad
+   * sigue en la acción, por ámbito y por clasificación. Una cuenta con
+   * `apiary:manage` en otro apiario vería el formulario y la acción lo
+   * rechazaría — el fallo menos malo de los dos, y el que ya se corre en el
+   * resto de la aplicación.
+   */
+  const [hive, { people: observers, selfPersonId }, origenes, causas, irregularidades, granted] = await Promise.all([
     getHive(user.userAccountId, hiveId),
     getObserverCandidates(user.userAccountId),
     // Lecturas sin sujeto: los dos vocabularios salen del catálogo, no de una
@@ -45,7 +62,16 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
     origenesDeColonia(),
     causasDePerdida(),
     irregularidadesOfrecidas(),
+    permissionKeysAnywhere(user.userAccountId),
   ]);
+
+  /**
+   * Los dos niveles de autoridad, y NO son un escalón del mismo permiso:
+   * `colony_event:manage` es una autoridad más pequeña, no una clearance más
+   * baja — lo dice el propio guardia en `lib/apiary/hives.ts`.
+   */
+  const puedeGestionar = granted.has("apiary:manage");
+  const puedeRegistrarEventos = puedeGestionar || granted.has("colony_event:manage");
 
   // A Hive holds at most one *current* Colony in practice (A1/A2's own
   // scope — a move/reassignment operation isn't built yet); prefer an
@@ -116,7 +142,11 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
         <section className="nn-section">
           <h2>{t("newColonyHeading")}</h2>
           <p className="nn-muted">{t("noColonyYet")}</p>
-          <NewColonyForm apiaryId={apiaryId} hiveId={hiveId} origenes={origenes} />
+          {puedeGestionar ? (
+            <NewColonyForm apiaryId={apiaryId} hiveId={hiveId} origenes={origenes} />
+          ) : (
+            <p className="nn-muted">{t("sinPermisoGestion")}</p>
+          )}
         </section>
       ) : (
         <>
@@ -148,8 +178,10 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
               <p className="nn-muted">
                 {t("colonyEndedOn", { fecha: colony.endedAt.toISOString().slice(0, 10) })}
               </p>
-            ) : (
+            ) : puedeGestionar ? (
               <FinDeColoniaForm colonyId={colony.id} causas={causas} />
+            ) : (
+              <p className="nn-muted">{t("sinPermisoGestion")}</p>
             )}
             <ApiaryPhotoUploadForm
               parent={{ kind: "colony", colonyId: colony.id }}
@@ -235,12 +267,23 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
 
           <section className="nn-section">
             <h2>{t("inspectionHeading")}</h2>
-            <InspectionForm colonyId={colony.id} selfPersonId={selfPersonId} irregularidades={irregularidades} />
+            {/* **Se dice por qué, no se esconde a secas.** Un formulario que
+                desaparece sin explicación se lee como una pantalla rota. Misma
+                doctrina que las limitaciones del veredicto: la falta se declara. */}
+            {puedeGestionar ? (
+              <InspectionForm colonyId={colony.id} selfPersonId={selfPersonId} irregularidades={irregularidades} />
+            ) : (
+              <p className="nn-muted">{t("sinPermisoInspeccion")}</p>
+            )}
           </section>
 
           <section className="nn-section">
             <h2>{t("colonyEventHeading")}</h2>
-            <ColonyEventQuickEntry colonyId={colony.id} selfPersonId={selfPersonId} />
+            {puedeRegistrarEventos ? (
+              <ColonyEventQuickEntry colonyId={colony.id} selfPersonId={selfPersonId} />
+            ) : (
+              <p className="nn-muted">{t("sinPermisoEvento")}</p>
+            )}
           </section>
 
           {/* A9.6 — varroa: el conteo y su serie. La serie va junta con el
@@ -248,7 +291,11 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
               el conteo anterior, y tenerla en otra pantalla obliga a recordarla. */}
           <section className="nn-section">
             <h2>{t("varroaHeading")}</h2>
-            <ConteoDeVarroaForm colonyId={colony.id} selfPersonId={selfPersonId} tratamientos={tratamientos} />
+            {puedeGestionar ? (
+              <ConteoDeVarroaForm colonyId={colony.id} selfPersonId={selfPersonId} tratamientos={tratamientos} />
+            ) : (
+              <p className="nn-muted">{t("sinPermisoGestion")}</p>
+            )}
             {serieDeVarroa.length === 0 ? (
               <p className="nn-muted">{t("varroaNoCounts")}</p>
             ) : (
@@ -272,7 +319,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
 
           <section className="nn-section">
             <h2>{t("harvestHeading")}</h2>
-            <HarvestForm colonyId={colony.id} />
+            {puedeGestionar ? <HarvestForm colonyId={colony.id} /> : <p className="nn-muted">{t("sinPermisoGestion")}</p>}
 
             {/* Las cosechas, con su cierre. Cada una lleva su formulario porque el tipo
                 de miel y el peso se saben al extraer, semanas después de cosechar. */}
