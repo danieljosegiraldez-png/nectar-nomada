@@ -10831,7 +10831,74 @@ propia, y hacerla de paso en una rebanada de una columna seria decidirlo sin mir
 visita cerrada deja de bloquear, las dos causas se dicen igual, el audit pierde el antes, la
 valoracion escribe en `note`, y el mapa vuelve a declararla sin sitio.
 
-## ADR-155 — `beneficio` es un tipo de ubicación, y crear un sitio es del jefe
+## ADR-155 -- Tres guardias que pasaban por razones equivocadas, y el segundo asiento que lo demostro mutando
+
+**Contexto.** El 2026-09-17 se le paso el trabajo del dia al CLI de Codex. No encontro un fallo de
+producto: encontro **tres guardias en verde que no vigilaban lo que decian vigilar**, y los
+demostro **mutando el codigo y ensenando que las pruebas seguian pasando** -- no opinando.
+
+**1. La exencion por clave eximia el futuro.** `enum-del-protocolo` declaraba sus divergencias
+heredadas como un `Map<clave, razon>`. Bastaba con que la clave estuviera para que **cualquier**
+desajuste de esa pregunta quedara exento: anadir un valor inventado a `honey_stores` dejaba **4/4
+en verde**. Ahora se declara el **par exacto** --que hay en el protocolo y que hay en el esquema--
+y cualquier otra diferencia vuelve a ser un desajuste.
+
+**2. Un `continue` sacaba preguntas de la vigilancia en silencio.** Si el protocolo dejaba de
+declarar `options`, el bucle la saltaba. Quitarselas a `method` dejaba **4/4 en verde**. Ahora,
+cuando el mapa manda la pregunta a una columna de enum, **la ausencia de `options` ES un
+desajuste**.
+
+**Y al cerrar ese agujero salio un numero: la cobertura real era de CINCO preguntas, no doce.** Se
+estaban saltando siete --`honey_type`, `outcome`, `queen_cells`, `route`, `target`, `varroa_method`,
+`weather_observed`-- y las siete coinciden, asi que no habia deuda escondida; habia **vigilancia
+que no existia**. La lista de doce queda fijada por nombre.
+
+**3. El «control positivo» probaba los lectores, no el detector.** Reducir el comparador a mirar
+solo dos preguntas dejaba **4/4 en verde** con todo lo demas sin vigilar. La causa era estructural
+y es la leccion general: **el detector leia sus entradas del modulo, asi que no se podia llamar con
+entrada hostil.** Ahora las recibe por parametro, y el control se las inventa -- que es la unica
+forma de probar un detector. Es literalmente la regla de la casa: *«el guardia es el que llama a la
+funcion con la entrada hostil, lo que suele obligar a exportarla»*.
+
+**4. `take: 1` presuponia una invariante que el esquema no garantiza.**
+`FieldEvent.inspectionId` tiene indice pero **no unicidad**, asi que una inspeccion puede colgar de
+dos visitas. Con una cerrada y otra abierta, la misma escritura se permitia o se rechazaba **segun
+el orden que devolviera Postgres**.
+
+Y aqui la observacion de Codex fue mejor que el arreglo obvio: **anadir `orderBy` solo habria
+vuelto determinista la arbitrariedad.** Lo que hacia falta era decidir cual manda. Manda la **mas
+restrictiva**: si cualquier visita que contiene la inspeccion esta cerrada o vencida, la ventana
+esta cerrada. La valoracion pertenece a la inspeccion, y una inspeccion contenida en algo ya
+cerrado no se reabre porque otra visita siga abierta. Asi no hay nada que ordenar ni que elegir.
+
+**5. El `before` del audit se leia y luego se escribia.** Con el aislamiento por omision de
+Postgres --read committed-- dos escrituras concurrentes leen el mismo valor A, guardan B y C, y
+**auditan las dos «desde A»**: la segunda afirma haber partido de A cuando reemplazo a B. La
+transaccion pasa a `Serializable`.
+
+**Y la parte que mas vale de todo esto: DOS DE MIS PROPIAS PRUEBAS eran adorno, y lo dijo su
+flip-test, no yo.**
+
+- La de «manda la mas restrictiva» decia en su comentario estar montada «al reves de lo comodo» y
+  **era falso**: dejaba la visita CERRADA primera, asi que un `sesiones[0]` daba la respuesta
+  correcta por accidente. «NADIE CAYO». Ahora la abierta va primera --la unica disposicion que
+  distingue «la mas restrictiva» de «la que salga antes»-- y **el orden se afirma** antes del
+  veredicto en vez de suponerse.
+- El `Serializable` **no tenia guardia ninguno**. Ahora hay uno con concurrencia de verdad, y
+  afirma **el rastro** --que ningun audit diga haber partido de un valor que otro ya reemplazo--
+  en vez de exigir que una transaccion falle: si las dos no llegan a solaparse, las dos tienen
+  exito legitimamente y sus audits son correctos.
+
+Reincidi en la trampa que Codex me acababa de ensenar, una hora despues, en el arreglo de esa misma
+trampa. Escribirla otra vez no arregla nada; lo que la caza es el flip-test, y por eso los cinco de
+esta rebanada repiten **las mutaciones exactas de Codex**.
+
+**Lo que NO entra.** Una restriccion de unicidad en `FieldEvent.inspectionId`, que seria el arreglo
+mas fuerte del punto 4. Es una migracion cuya seguridad **no se puede comprobar contra produccion**
+--leer esa base esta prohibido-- y que fallaria si ya hubiera duplicados. Queda nombrada: exige
+primero contar duplicados en produccion, y eso lo hace el dueno.
+
+## ADR-156 — `beneficio` es un tipo de ubicación, y crear un sitio es del jefe
 
 **Estado: aceptado, construido.** Decisiones de Daniel del 2026-09-17, en conversación.
 

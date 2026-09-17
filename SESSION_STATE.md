@@ -38,6 +38,31 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-17 · Codex revisó el día: tres guardias pasaban por razones equivocadas
+
+ADR-155. El segundo asiento no encontró un fallo de producto: encontró **guardias en verde que no
+vigilaban lo que decían**, y lo demostró **mutando**, no opinando. Tres mutaciones dejaban 4/4 en
+verde.
+
+**La causa de la más grave era estructural:** el detector leía sus entradas del módulo, así que
+**no se podía llamar con entrada hostil**. Ahora las recibe por parámetro. Es la regla de la casa
+—«el guardia es el que llama a la función con la entrada hostil»— aplicada a un detector.
+
+**Y al cerrar el agujero del `continue`, la cobertura real era de CINCO preguntas, no doce.** Se
+saltaban siete en silencio; las siete coinciden, así que no había deuda escondida — había
+vigilancia que no existía.
+
+**En el servicio:** `take: 1` presuponía una invariante que el esquema no garantiza, y la
+observación de Codex fue mejor que el arreglo obvio — **`orderBy` sólo volvería determinista la
+arbitrariedad**. Manda la visita más restrictiva. Y el `before` del audit pasa a `Serializable`.
+
+**Lo que más vale: dos de mis propias pruebas eran adorno, y lo dijo su flip-test.** La de «manda
+la más restrictiva» afirmaba en su comentario estar montada al revés de lo cómodo **y era falso**;
+el `Serializable` no tenía guardia ninguno. Reincidí en la trampa que Codex me acababa de enseñar,
+una hora después, arreglando esa misma trampa.
+
+Los cinco flip-tests de la rebanada repiten **las mutaciones exactas de Codex**.
+
 ### 2026-09-17 · La valoración del técnico, por el cierre de la visita
 
 ADR-154. El Anexo E pide «Valoración» y el mapa la daba por sin sitio con la razón escrita: «`note`
@@ -83,25 +108,6 @@ añadir ninguna» daba **dos** vocabularios, no uno corto.
 
 **Lo que impide la recaída:** el guardia pasa con sólo las dos divergencias de modelado, y una
 prueba nueva compara el vocabulario **con el archivo del protocolo**, no con una lista propia.
-
-### 2026-09-17 · Clima observado, y el guardia que ata el protocolo al esquema
-
-ADR-152. El mapa daba `weather_observed` por **sin sitio** porque su nota **confundía dos
-preguntas**: el «Clima 7 días» del Anexo C es un **pronóstico** externo sin proveedor —sigue
-bloqueado, y bien—; el Anexo E pregunta **lo que el apicultor vio**, y sus cuatro opciones ya
-estaban escritas en el protocolo. Segunda vez que un `sin_sitio` resulta ser una lectura
-equivocada de su propia nota (ADR-143 fue la primera).
-
-**Y el guardia, que es lo que de verdad faltaba.** `feedingMethod` lleva desde A9.4 con sus opciones
-escritas **dos veces** —el JSON y el enum— y **nada lo comprobaba**. Coincidían por haberlas escrito
-bien a mano.
-
-**Encontró cuatro divergencias el primer día, y una es mía:** ADR-148 construyó `FeedingMaterial`
-con los cinco valores que Daniel dictó **y no se actualizó el protocolo**, que sigue ofreciendo
-`jarabe_1_1`. Las cuatro quedan declaradas con su razón; tres son decisiones suyas —incluida
-`apiñada` con ñ contra `apinada`, que **nadie traduce**—. Desde hoy no puede aparecer una quinta.
-
-**La lista de huecos baja de cuatro a tres:** `site_condition`, `assessment`, `moisture_pct`.
 
 
 ## 3. Bloqueado, y en qué
