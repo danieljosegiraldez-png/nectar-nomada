@@ -57,9 +57,14 @@ export async function registrarValoracionDeInspeccion(
       id: true,
       colony: { select: { hive: { select: { projectId: true, locationId: true } } } },
       // La visita a la que pertenece, si pertenece a alguna.
+      // **TODAS las visitas vinculadas, no una** (hallazgo de Codex, 2026-09-17).
+      // `FieldEvent.inspectionId` tiene indice pero NO unicidad, asi que el esquema no garantiza
+      // que haya una sola. El `take: 1` presuponia esa invariante: con dos vinculos --una visita
+      // cerrada y otra abierta-- habria permitido o rechazado la misma escritura segun el orden
+      // que devolviera Postgres. Y anadir `orderBy` solo habria vuelto DETERMINISTA la
+      // arbitrariedad; lo que hace falta es decidir cual manda, que es lo de abajo.
       fieldEvents: {
-        select: { fieldSession: { select: { status: true, editWindowExpiresAt: true } } },
-        take: 1,
+        select: { fieldSession: { select: { id: true, status: true, editWindowExpiresAt: true } } },
       },
     },
   });
@@ -70,19 +75,38 @@ export async function registrarValoracionDeInspeccion(
     { projectId: inspeccion.colony.hive.projectId, locationId: inspeccion.colony.hive.locationId },
   ]);
 
-  const sesion = inspeccion.fieldEvents[0]?.fieldSession ?? null;
+  const sesiones = inspeccion.fieldEvents
+    .map((e) => e.fieldSession)
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
   let origenDeLaVentana: OrigenDeLaVentana = "sin_visita";
-  if (sesion) {
+  if (sesiones.length > 0) {
     origenDeLaVentana = "visita";
-    // Las reglas son las de la VISITA, no unas nuevas. Y se distinguen entre sí, como allí.
-    if (sesion.status === "locked") throw new ValoracionInvalida("visita_cerrada");
-    if (sesion.editWindowExpiresAt && sesion.editWindowExpiresAt < ahora) {
+    // **Manda la MAS RESTRICTIVA, y no una elegida.** Si CUALQUIER visita que contiene esta
+    // inspeccion esta cerrada o vencida, la ventana esta cerrada. La valoracion pertenece a la
+    // inspeccion, y una inspeccion contenida en algo ya cerrado no se reabre porque otra visita
+    // siga abierta. Asi no hay nada que ordenar ni que elegir, y el resultado no depende del
+    // orden en que Postgres devuelva las filas.
+    //
+    // Las reglas son las de la VISITA, no unas nuevas, y se distinguen entre si como alli:
+    // `locked` se comprueba ANTES de la ventana porque una esta cerrada por decision y la otra
+    // por plazo, y decirlas igual perderia cual fue.
+    if (sesiones.some((s) => s.status === "locked")) throw new ValoracionInvalida("visita_cerrada");
+    if (sesiones.some((s) => s.editWindowExpiresAt !== null && s.editWindowExpiresAt < ahora)) {
       throw new ValoracionInvalida("ventana_de_edicion_vencida");
     }
   }
 
   const texto = input.assessment === null ? null : input.assessment.trim() === "" ? null : input.assessment.trim();
 
+  // **`Serializable`, y no es adorno** (hallazgo de Codex, 2026-09-17). Abajo se LEE `antes` y
+  // luego se escribe. Con el aislamiento por omision de Postgres --read committed-- dos
+  // escrituras concurrentes leen el MISMO valor A, guardan B y C, y auditan las dos «desde A»:
+  // la segunda dice haber partido de A cuando en realidad reemplazo B, y el rastro queda
+  // afirmando algo falso. Serializable hace que una de las dos falle en vez de mentir.
+  //
+  // Se paga con un reintento posible, y es el precio correcto: este audit existe para poder
+  // sostener una valoracion tecnica, y un rastro que miente no sostiene nada.
   await prisma.$transaction(async (tx) => {
     const antes = await tx.inspection.findUniqueOrThrow({
       where: { id: input.inspectionId },
@@ -107,7 +131,7 @@ export async function registrarValoracionDeInspeccion(
       },
       tx,
     );
-  });
+  }, { isolationLevel: "Serializable" });
 
   return { origenDeLaVentana };
 }

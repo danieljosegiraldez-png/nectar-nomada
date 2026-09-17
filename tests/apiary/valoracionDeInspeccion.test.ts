@@ -196,6 +196,61 @@ describe("la valoración de una inspección", () => {
     ).rejects.toThrow(/visita_cerrada/);
   });
 
+  it("DOS VISITAS vinculadas: manda la más restrictiva, no la que salga primero", async () => {
+    // **El hallazgo de Codex, hecho prueba.** `FieldEvent.inspectionId` tiene índice pero NO
+    // unicidad, así que una inspección PUEDE colgar de dos visitas. El `take: 1` de la primera
+    // versión elegía una arbitrariamente: con una cerrada y otra abierta, la misma escritura se
+    // permitía o se rechazaba según el orden que devolviera Postgres.
+    //
+    // Se monta el caso al revés de lo cómodo a propósito: la visita abierta se crea DESPUÉS, así
+    // que si algo eligiera «la primera» o «la última» daría la respuesta equivocada.
+    await prisma.fieldSession.update({
+      where: { id: sesionId },
+      data: { status: "locked", editWindowExpiresAt: null },
+    });
+    const kind = await prisma.variableCatalogValue.findFirstOrThrow();
+    const abierta = await prisma.fieldSession.create({
+      data: {
+        locationId: apiarioId,
+        operatorPersonId: personId,
+        startedAt: new Date("2026-09-11T14:00:00Z"),
+        status: "draft",
+        provenanceClass: "original_record",
+      },
+    });
+    const vinculo = await prisma.fieldEvent.create({
+      data: {
+        fieldSessionId: abierta.id,
+        eventKindValueId: kind.id,
+        occurredAt: new Date("2026-09-11T14:00:00Z"),
+        inspectionId: inspeccionEnVisita,
+        provenanceClass: "direct_observation",
+      },
+    });
+
+    // Control de que el caso está MONTADO: sin esto, un fallo del andamio daría el mismo rechazo
+    // por la razón equivocada y la prueba pasaría sin haber probado nada.
+    const cuantos = await prisma.fieldEvent.count({ where: { inspectionId: inspeccionEnVisita } });
+    expect(cuantos, "el caso necesita DOS vínculos para discriminar").toBe(2);
+
+    await expect(
+      registrarValoracionDeInspeccion(userAccountId, { inspectionId: inspeccionEnVisita, assessment: "x" }),
+    ).rejects.toThrow(/visita_cerrada/);
+
+    // Y el control positivo: quitando la cerrada, la MISMA escritura pasa. Sin esta mitad, el
+    // rechazo de arriba podría venir de cualquier otra cosa.
+    await prisma.fieldSession.update({ where: { id: sesionId }, data: { status: "draft" } });
+    const r = await registrarValoracionDeInspeccion(userAccountId, {
+      inspectionId: inspeccionEnVisita,
+      assessment: "con las dos abiertas si",
+    });
+    expect(r.origenDeLaVentana).toBe("visita");
+
+    await prisma.fieldEvent.delete({ where: { id: vinculo.id } });
+    await prisma.fieldSession.delete({ where: { id: abierta.id } });
+    await prisma.fieldSession.update({ where: { id: sesionId }, data: { status: "completed" } });
+  });
+
   it("CONTROL: una inspección SIN visita se acepta, y lo dice", async () => {
     // Es la mitad que hace falsable lo anterior. Negarlo dejaría esa valoración sin poder
     // escribirse nunca, que es peor que escribirla sin plazo — y el servicio lo declara en vez
