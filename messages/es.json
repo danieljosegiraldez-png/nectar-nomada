@@ -2041,5 +2041,24 @@
     "error_fecha_invalida": "La fecha, la hora o la zona horaria del dispositivo no son válidas.",
     "error_rack_invalido": "El nivel de rack debe ser un número entero positivo.",
     "error_tipo_invalido": "La ubicación o sus atributos no corresponden al árbol sitio → instalación → cama."
+  },
+  "AjustesDelBeneficio": {
+    "ajustesTitulo": "Ajustes del beneficio",
+    "ajustesIntro": "Configuración: el beneficio como lugar. Las capacidades, los equipos y las recetas llegan aquí cuando exista el tablero.",
+    "misBeneficios": "Beneficios",
+    "sinBeneficios": "Todavía no hay ninguno.",
+    "enSitio": "En {sitio}",
+    "sitioNoVisible": "Su sitio no está a tu alcance.",
+    "crear": "Crear un beneficio",
+    "renombrar": "Cambiar el nombre",
+    "guardar": "Guardar",
+    "sitio": "Sitio",
+    "sinSeleccion": "Elige un sitio",
+    "nombre": "Nombre",
+    "volverALotes": "Volver a lotes",
+    "error_sin_acceso": "No tienes permiso para configurar un beneficio aquí.",
+    "error_datos_invalidos": "El nombre es obligatorio y no puede pasar de 120 caracteres.",
+    "error_padre_invalido": "Un beneficio cuelga de un sitio, no de una parcela ni de otra instalación.",
+    "error_tipo_invalido": "Esa ubicación no es un beneficio."
   }
 }

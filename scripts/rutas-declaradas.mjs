@@ -109,6 +109,7 @@ export const RUTAS = {
   "/instalaciones": { clase: "requiere-sesion", razon: "Árbol de secado con location:manage_attributes; la ausencia de permiso se muestra como fallo explícito." },
   "/instalaciones/nueva": { clase: "requiere-sesion", razon: "Alta de instalación: location:manage_attributes sobre el sitio padre, comprobado también por el servicio." },
   "/instalaciones/[id]": { clase: "requiere-sesion", razon: "Administración de instalación y camas: autorización individual de lectura, creación y edición; escrituras con auditoría atómica." },
+  "/beneficio/ajustes": { clase: "requiere-sesion", razon: "Configuración del beneficio, separada de la operación: exige location:manage_attributes y location:create_site sobre el sitio padre, comprobados también por el servicio; sin permiso da 404, no una página vacía." },
   "/equipos": { clase: "requiere-sesion", razon: "Inventario de equipos e instrumentos: exige equipment:view sobre el ámbito de cada uno, y la lista omite lo que quien mira no puede ver." },
   "/equipos/nuevo": { clase: "requiere-sesion", razon: "Registrar un equipo. Sólo ofrece los sitios donde quien mira tiene equipment:manage, y vuelve a resolverlos en el servidor: el value de un desplegable no es autorización." },
   "/equipos/[id]": { clase: "requiere-sesion", razon: "Un equipo, su verificación contra patrones y su condición. Verificar e informar exigen equipment:report_condition; sin permiso da 404, no una página vacía." },

@@ -38,6 +38,15 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > cerrara con la fila de «guardia directo», algo se habría colado sin ese segundo
 > permiso.
 
+> **Tarea 3 (2026-09-17, sin cambio de cifras): la pantalla de ajustes del beneficio.**
+> `app/actions/beneficios.ts`, `app/beneficio/ajustes/page.tsx` y su formulario no
+> aparecen como operaciones propias: no llaman a `prisma` directamente, sólo a
+> `sitiosParaBeneficio`, `listarBeneficios`, `crearBeneficio` y `actualizarBeneficio`,
+> que ya están inventariadas desde la Tarea 2. `node scripts/inventario-de-acceso.mjs`
+> vuelve a imprimir exactamente **354** operaciones en **104** archivos — el mismo
+> reparto de la nota anterior—, y eso es lo esperado: una pantalla que delega toda su
+> autorización en el servicio no suma una fila nueva al inventario.
+
 > **Tareas 8 y 9 (2026-09-16):** el inventario incluye las opciones de inspección y
 > el servicio de instalaciones. Las cifras anteriores se regeneraron con
 > `node scripts/inventario-de-acceso.mjs --json`. Las lecturas usan los permisos de
