@@ -1307,7 +1307,13 @@
     "weatherObserved_despejado": "Despejado",
     "weatherObserved_nublado": "Nublado",
     "weatherObserved_viento": "Viento",
-    "weatherObserved_lluvia": "Lluvia"
+    "weatherObserved_lluvia": "Lluvia",
+    "vitalesEnSitioHelp": "Anótalo aquí si lo estás viendo ahora. Lo que dejes vacío no se toca.",
+    "vitalesEnSitioSinTocar": "— sin tocar —",
+    "vitalesEnSitioSubmit": "Anotar en sitio",
+    "vitalesEnSitioHeading": "Anotar estando aquí",
+    "vitalesEnSitioMarca": "Anotado en sitio el {fecha}",
+    "vitalesEnSitioSinMarca": "Sin anotar en sitio — se rellenará al cerrar"
   },
   "Apiary": {
     "badge": "Apiario",

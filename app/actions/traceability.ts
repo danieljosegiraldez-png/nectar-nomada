@@ -46,6 +46,7 @@ import {
   recordFieldEvent,
   FieldSessionValidationError,
 } from "../../lib/traceability/fieldSessions";
+import { registrarVitalesEnSitio } from "../../lib/apiary/vitalesEnSitio";
 import {
   recordHarvestSources,
   createPlantingCohort,
@@ -2104,6 +2105,43 @@ export async function completarVisitaAction(
       probableCause: emptyToNull(formData.get("probableCause")),
       recommendation: emptyToNull(formData.get("recommendation")),
       reason: emptyToNull(formData.get("reason")),
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidatePath(`/field-sessions/${fieldSessionId}`);
+  return {};
+}
+
+/**
+ * Los vitales de campo, anotados ESTANDO EN EL SITIO (ADR-156).
+ *
+ * Es el mismo dato que el cierre puede escribir, por otra puerta: la diferencia es que ésta
+ * estampa `fieldVitalsOnSiteAt`. El dueño pidió poder hacerlo de las dos formas; lo que esto
+ * añade no es una restricción sino el registro de cuál de las dos pasó.
+ */
+export async function vitalesEnSitioAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const fieldSessionId = String(formData.get("fieldSessionId") ?? "");
+  const clima = String(formData.get("weatherObserved") ?? "").trim();
+  const colonias = String(formData.get("coloniesAliveCount") ?? "").trim();
+  const cajas = String(formData.get("hivesPresentCount") ?? "").trim();
+
+  try {
+    await registrarVitalesEnSitio(user.userAccountId, {
+      fieldSessionId,
+      // `undefined` NO toca la columna; la cadena vacía se traduce a `undefined` y no a `null`
+      // a propósito: quien anota sólo el clima en el sitio no borra el recuento de antes.
+      weatherObserved: clima === "" ? undefined : clima,
+      coloniesAliveCount: colonias === "" ? undefined : Number(colonias),
+      hivesPresentCount: cajas === "" ? undefined : Number(cajas),
     });
   } catch (error) {
     return { error: friendlyError(t, error) };

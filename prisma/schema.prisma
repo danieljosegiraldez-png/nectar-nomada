@@ -4452,6 +4452,21 @@ model FieldSession {
   /// Clima OBSERVADO al visitar — Anexo E, etapa de campo (ADR-152). Lo que alguien vio,
   /// no un pronostico: el «Clima 7 dias» del Anexo C sigue siendo capa externa sin proveedor.
   weatherObserved   WeatherObserved? @map("weather_observed")
+  /// CUANDO se anotaron los vitales de campo --clima, colonias, cajas-- ESTANDO EN EL SITIO.
+  ///
+  /// **Existe porque el dueno pidio poder hacerlo de las dos formas** (2026-09-17): «se deberia
+  /// poder hacer durante la visita o al cierre, a veces en sitio y si solo un apicultor es
+  /// dificil maniobrar y ser eficiente de entrar y salir y estresar menos a las abejas».
+  ///
+  /// Asi que NO se restringe: se REGISTRA cual de las dos paso. El protocolo marca esas tres
+  /// preguntas `stage: field` --son cosas que se VEN estando ahi-- y anotarlas en casa es
+  /// legitimo pero no es lo mismo. Sin esta columna las dos filas se leen identicas.
+  ///
+  /// Tres estados (ADR-080): `null` = no se anotaron en sitio --o se corrigieron despues desde
+  /// casa--; una marca de tiempo = los valores que hay AHORA se escribieron alli, entonces.
+  /// Describe la procedencia del valor ACTUAL, no un historico: por eso el cierre la limpia si
+  /// reescribe alguno.
+  fieldVitalsOnSiteAt DateTime?      @map("field_vitals_on_site_at")
   /// Que se fue a hacer. **Arreglo y no una columna**: una misma visita revisa, alimenta y
   /// trata. Mismo patron que `Inspection.broodStages`.
   ///
