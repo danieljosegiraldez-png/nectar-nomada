@@ -7,7 +7,7 @@
 | PR | qué | depende de |
 |---|---|---|
 | **A · este spec en detalle** | catálogo, existencias por sitio, envases de lo perecedero, recibir / abrir / descartar / ajustar, escaneo y QR propio | nada nuevo; ver §8 |
-| B | dosis en las recetas y la dosis realmente usada, enlazada al envase | decisión sobre la rama `ritmo-de-receta` (worktree `cadena`), que también toca recetas |
+| B | dosis en las recetas y la dosis realmente usada, enlazada al envase PR A. **No depende de ninguna rama**: el ritmo de receta que se creía pendiente ya estaba en `main` (#287) — ver §8 |
 | C | lotes planificados: necesidad contra existencia **viable en la fecha del lote**, y bloque de insumos en el tablero del beneficio | que exista el tablero (#363) |
 
 B y C tendrán su propia ronda corta de diseño. Aquí sólo se nombran para no cerrarles la puerta.
@@ -161,7 +161,7 @@ Una función pura, sin base de datos, que recibe insumos, envases, movimientos, 
 1. **Este spec**, PR sólo de documentación.
 2. **PR A.** Tablas, permisos y página nuevos. Comparte con trabajo abierto sólo `prisma/schema.prisma`, `lib/rbac/catalog.ts` y los archivos de cuentas (inventario de rutas y de acceso): conflictos mecánicos que se resuelven recalculando con script. **Espera a #362** por `diaDeHoy`. Plan con `superpowers:writing-plans` sobre el `main` de ese momento.
 3. **Antes de PR A, de Daniel:** la lista real de insumos — nombres, tamaños de envase y días viables tras abrir. Sin ella la pantalla funciona pero está vacía.
-4. **PR B**, cuando se decida qué pasa con la rama `ritmo-de-receta`.
+4. **PR B**, después de PR A. **Corrección del 2026-09-17:** la primera versión decía que esperaba a una decisión sobre la rama `ritmo-de-receta`. Esa rama ya se había fusionado como #287 el 2026-09-13, así que no hay nada que esperar. B toca las mismas pantallas de receta que #287 dejó, y parte de su forma.
 5. **PR C**, cuando exista el tablero del beneficio.
 6. Fusiones y despliegues: **decisión de Daniel**.
 
