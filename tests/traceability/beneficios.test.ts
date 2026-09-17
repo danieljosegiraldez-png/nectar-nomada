@@ -134,6 +134,16 @@ describe("crearBeneficio", () => {
     expect(suyo.locationType).toBe("beneficio");
   });
 
+  it("rechaza un sitio padre que no existe, y no es un error de Prisma", async () => {
+    const finca = await sitio();
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    await expect(crearBeneficio(jefe, { name: nombre(), parentLocationId: randomUUID() }))
+      .rejects.toThrow(LocationAccessError);
+    // Control positivo: el mismo jefe, bajo su sitio REAL, sí puede.
+    const ben = await crearBeneficio(jefe, { name: nombre(), parentLocationId: finca.id });
+    expect(ben.locationType).toBe("beneficio");
+  });
+
   it("no cuelga de una parcela", async () => {
     const finca = await sitio();
     const lote = await parcela(finca.id);

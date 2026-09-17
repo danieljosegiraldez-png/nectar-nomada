@@ -10,9 +10,13 @@ export class BeneficioError extends Error {}
  * permisos sobre el sitio padre: `manage_attributes` —que ya gobierna el árbol
  * de ubicaciones— y `location:create_site`, que es el que el capataz no tiene.
  *
- * Se comprueba sobre el PADRE a propósito: es lo que impide que un Farm Manager
- * de una finca cree un beneficio en otra, sin escribir una segunda regla de
- * visibilidad que derivaría de la que de verdad gobierna.
+ * Se comprueba sobre el PADRE a propósito, pero cada línea rechaza algo
+ * distinto — medido con flip-test el 2026-09-17, no supuesto: `create_site`,
+ * resuelto contra el ámbito del `Assignment` del actor, es lo que rechaza al
+ * capataz y al Farm Manager de OTRA finca; `requireLocationAttributeAccess`
+ * es lo que rechaza un `parentLocationId` que no existe (en vez de dejar que
+ * `findUniqueOrThrow` lo convierta en un error de Prisma sin traducir) y lo
+ * que aplica la compuerta de clasificación del padre.
  */
 async function exigePoderCrearBajo(userAccountId: string, parentLocationId: string) {
   await requireLocationAttributeAccess(userAccountId, parentLocationId);

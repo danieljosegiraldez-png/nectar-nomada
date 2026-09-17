@@ -10753,6 +10753,11 @@ exclusión explícita que ya usa Farm Manager con `lot:override_balance`.
 Eso es lo que impide que un Farm Manager de una finca cree un beneficio en
 otra, y lo hace con el mecanismo de asignaciones que ADR-144 ya define, sin una
 segunda regla de visibilidad escrita a mano que derivaría de la primera.
+Medido por flip-test el 2026-09-17: cada comprobación rechaza algo distinto —
+`create_site`, resuelto contra el ámbito del `Assignment`, es lo que rechaza al
+capataz y al Farm Manager de otra finca; `manage_attributes`
+(`requireLocationAttributeAccess`) es lo que rechaza un sitio padre inexistente
+en vez de dejarlo caer como un error de Prisma sin traducir.
 
 **El precedente contrario, y por qué no se sigue aquí.** `crearSitioDeAbejas`
 exige alcance de plataforma (`apiary_create_needs_platform_scope`) porque un
