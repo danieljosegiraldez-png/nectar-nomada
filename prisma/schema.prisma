@@ -669,6 +669,16 @@ enum LocationType {
   /// tendencia al pillaje «deben ser manejadas en meliponarios separados».
   meliponary
 
+  /// El beneficio: donde se despulpa, fermenta, lava, seca y trilla. **Tipo
+  /// propio y no un `site` con otro nombre**, por decisión de Daniel del
+  /// 2026-09-17: sin tipo, nada distingue un beneficio de una finca salvo su
+  /// nombre, y deducirlo del nombre es lo que este repositorio prohíbe.
+  ///
+  /// Mismo patrón que `drying_facility`: una Location con su tipo y su padre,
+  /// NO una familia de entidades nueva. Cuelga del `site` de la finca, y un
+  /// `Equipment` colocado ahí vive «en el beneficio» y no en la finca entera.
+  beneficio
+
   /// La instalación de secado —invernadero solar, cuarto oscuro, patio,
   /// marquesina, secadora— y la cama dentro de ella. Mismo patrón que `plot` y
   /// `apiary_site`: una Location con su tipo y su padre, NO una familia de
