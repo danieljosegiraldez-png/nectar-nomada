@@ -91,7 +91,10 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   varroa_bees_sampled: { clase: "campo", modelo: "VarroaCount", campo: "sampleBees" },
   varroa_mites_counted: { clase: "campo", modelo: "VarroaCount", campo: "mitesCounted" },
   note: { clase: "campo", modelo: "Inspection", campo: "note" },
-  assessment: { clase: "sin_sitio", nota: "La valoracion de la inspeccion, `stage: close`. `note` es la nota de campo; mezclarlas perderia cual se escribio con el guante puesto." },
+  // Ya tiene sitio (ADR-154). La nota anterior decia la razon --«`note` es la nota de campo;
+  // mezclarlas perderia cual se escribio con el guante puesto»-- y esa razon es la que la
+  // construyo: son dos columnas porque son dos momentos.
+  assessment: { clase: "campo", modelo: "Inspection", campo: "assessment" },
 
   // --- feeding: la alimentacion -----------------------------------------------------------
   // Apunta al VOCABULARIO, no al texto (ADR-148). `feedingMaterial` sigue existiendo como el

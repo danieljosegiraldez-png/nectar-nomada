@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-16
 
-**350 operaciones** que tocan la base, en **103 archivos**:
+**351 operaciones** que tocan la base, en **104 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,7 +22,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **240** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **241** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **58** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -79,6 +79,12 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > `listAssignmentPermissions`, `setPermissionOverride` y `clearPermissionOverride` exigen
 > `platform:manage_users` antes de leer o escribir nada. Ninguna es acotada por construcción:
 > tocan la asignación de otra persona, así que el guardia tiene que ser explícito.
+
+> **Y el de 350→351 es `registrarValoracionDeInspeccion` (ADR-154).** Vive en
+> `lib/apiary/valoracionDeInspeccion.ts` y sube la fila de **guardia directo**: exige
+> `requireApiaryAccess` resuelto por la colmena de la colonia antes de escribir. Y aplica las
+> reglas de plazo de la **visita** —no unas nuevas— porque `Inspection` no tiene cierre
+> propio; inventarle uno duplicaría la máquina de `FieldSession`.
 
 > **Y el de 341→342 es `lugaresParaSitioDeAbejas` (ADR-145).** Vive en `lib/apiary/hives.ts`,
 > que ya estaba inventariado, y sube la fila de **acotado por construcción**: filtra por

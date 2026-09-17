@@ -6470,6 +6470,17 @@ model Inspection {
   /// porque trae el motivo escrito. Anotado para la v2 del protocolo.
   droneBroodPresent Boolean?         @map("drone_brood_present")
   temperamentNote  String?           @map("temperament_note")
+  /// LA VALORACION del tecnico sobre esta colonia -- Anexo E, y el UNICO campo de etapa
+  /// «cierre» de la inspeccion: los otros dieciseis son de campo. Se escribe en casa.
+  ///
+  /// **No es `note`, y mezclarlas perderia cual se escribio con el guante puesto.** `note`
+  /// es la nota de campo --lo que se apunto ahi mismo-- y esto es la lectura de despues.
+  ///
+  /// **PROCEDENCIA: el protocolo la declara `interpretation` y esta fila esta estampada
+  /// `direct_observation`** (`inspections.ts` la fija asi). El desajuste NO es nuevo:
+  /// ADR-142 lo introdujo para `probableCause` y `recommendation`, que el protocolo marca
+  /// igual, y no lo dijo. Queda declarado y vigilado en ADR-154.
+  assessment          String?       @map("assessment")
   /// El «Otro» de la lista del Anexo B §2.3: lo que el catálogo de
   /// irregularidades no cubre. Desde el 2026-09-11 ya **no** es el único sitio
   /// donde vive el dato — ver `InspectionIrregularity`.
