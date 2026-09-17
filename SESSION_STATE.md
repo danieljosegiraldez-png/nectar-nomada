@@ -38,6 +38,28 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-17 · La valoración del técnico, por el cierre de la visita
+
+ADR-154. El Anexo E pide «Valoración» y el mapa la daba por sin sitio con la razón escrita: «`note`
+es la nota de campo; mezclarlas perdería cuál se escribió con el guante puesto». Son dos columnas
+porque son **dos momentos**. Y es el **único** campo de etapa cierre de la inspección: los otros
+dieciséis son de campo.
+
+**La decisión: no se le inventa un cierre a la inspección.** `Inspection` no tiene ni `completedAt`
+ni ventana; `FieldSession` sí, con sus reglas ya distinguidas entre sí. Así que la puerta es la
+visita, y el enlace ya existía —`FieldEvent` une sesión e inspección—.
+
+**Una inspección sin visita se acepta y el servicio lo dice** (`sin_visita`): negarlo dejaría esa
+valoración sin poder escribirse nunca. **El audit lleva el ANTES**, porque saber desde qué se cambió
+una lectura del técnico es parte de poder sostenerla.
+
+**Un desajuste declarado y NO arreglado:** el protocolo marca esta pregunta `interpretation` y la
+fila está estampada `direct_observation`. **Ya pasaba con `probableCause` y `recommendation`, y
+ADR-142 no lo dijo.** Son los tres únicos items con procedencia declarada. Arreglarlo bien exige
+decidir si una interpretación merece fila propia, y eso es pieza aparte.
+
+**Los huecos del protocolo bajan de tres a dos:** `site_condition` y `moisture_pct`.
+
 ### 2026-09-17 · Las dos divergencias del dueño, resueltas
 
 ADR-153. Daniel contestó las dos que le llevé: **«mis cinco más los jarabes, y arregla apiñada»**.
@@ -80,26 +102,6 @@ con los cinco valores que Daniel dictó **y no se actualizó el protocolo**, que
 `apiñada` con ñ contra `apinada`, que **nadie traduce**—. Desde hoy no puede aparecer una quinta.
 
 **La lista de huecos baja de cuatro a tres:** `site_condition`, `assessment`, `moisture_pct`.
-
-### 2026-09-17 · La divergencia de cajas se ve: alerta de sitio
-
-ADR-151. ADR-150 dejó la comparación construida, probada, **y sin que ninguna pantalla la llamara** —
-el «servicio hecho y la puerta sin poner» que este repositorio se queja de haber repetido tres veces
-en una semana. Esto pone la puerta.
-
-**Va como alerta y no como vital**: un vital es una cifra que se consulta; esto es una razón para ir
-a mirar. **Nivel `aviso`, no `crítico`:** la divergencia es ambigua por construcción —una caja que se
-fue, o un recuento malo—, y subir una señal ambigua a crítica enseña a ignorar lo crítico.
-
-**El motivo nuevo va al final del arreglo de prioridad**, la única posición que no reordena los ocho
-que Daniel fijó el 2026-09-14. **Dónde va de verdad sigue siendo decisión suya.**
-
-**La cuenta del sistema es `Hive.locationId`, medido:** el traslado actualiza la colocación y el
-sitio en la misma transacción — 29 colmenas, 0 sin colocación abierta, 0 divergentes.
-
-**Un flip-test encontró un agujero real:** vaciar la lectura de `hivesPresentCount` no rompía nada.
-Las pruebas de alerta trabajan sobre un fixture en memoria, así que la lectura contra la base no
-estaba cubierta. Se añadió, con dos sesiones para que «la más nueva gana» también sea falsable.
 
 
 ## 3. Bloqueado, y en qué
