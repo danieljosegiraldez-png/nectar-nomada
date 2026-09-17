@@ -41,6 +41,10 @@ tareas 5 a 7: no se inventan cargas útiles.
   pregunta por visita, está mal.
 - **`npm run build` en toda tarea que toque TypeScript.** `vitest` no comprueba
   tipos.
+- **La identidad del aparato sale del REGISTRO y de la ruta, nunca de la carga.**
+  Regla literal del traspaso del paquete: *«authenticate using registry and route
+  identity, not payload labels»*. Un `device_id` en el cuerpo es una etiqueta que
+  cualquiera puede escribir.
 - **Toda prueba de base se declara en `scripts/pruebas-por-compuerta.txt`** — es
   lista de EXCLUSIÓN: lo que no esté ahí corre en el carril hermético, sin base,
   y falla ruidosamente.
@@ -419,8 +423,23 @@ it("resuelve la colmena DEL MOMENTO de la medición, no la de ahora", async () =
 });
 
 it("una observación de un aparato desconocido se rechaza", async () => {
-  await expect(ingerirObservacion({ ...cargaCompleta, device_id: "rp2040-inventado" }))
+  await expect(ingerirObservacion({ ...cargaCompleta, device_id: "rp2040-inventado" }, rutaAutenticada))
     .rejects.toThrow(/aparato_no_registrado/);
+});
+
+it("la identidad NO sale del cuerpo: un device_id ajeno en la carga no cuela", async () => {
+  // **Corrección del CLAUDE_CODE_HANDOFF del paquete, leído el 2026-09-17:**
+  // «autenticar usando el registro y la identidad de la ruta, no las etiquetas
+  // de la carga». Mi primera versión de esta prueba rechazaba por el
+  // `device_id` del cuerpo — que es autenticar por etiqueta, justo lo que el
+  // paquete prohíbe: cualquiera que sepa un id podría mandar datos como si
+  // fuera ese aparato.
+  //
+  // La identidad viene del `notecard_uid` que la ruta de Notehub trae
+  // verificado, y el cuerpo sólo se CONTRASTA con él.
+  await expect(
+    ingerirObservacion({ ...cargaCompleta, device_id: otroAparato.deviceId }, rutaAutenticadaDeNodoA),
+  ).rejects.toThrow(/identidad_no_coincide/);
 });
 ```
 
@@ -544,6 +563,32 @@ permisos del 2026-09-17 ya dejó el molde, incluido decir por qué.
 
 - [ ] Prueba, implementación, paridad de claves en las dos lenguas, verde,
       build, commit.
+
+---
+
+## Lo que el paso 5 del traspaso pide y este plan NO cubre
+
+Leído el `CLAUDE_CODE_HANDOFF.md` el 2026-09-17, su paso 5 asigna a la
+plataforma: *«migración, registro de aparatos y autorización por inquilino,
+ingestión idempotente, separación crudo/derivado/evento, lecturas por cursor,
+alertas, historial de servicio y calibración, publicación de documentos con
+permisos, y exportación»*.
+
+Este plan cubre las cuatro primeras. **Quedan fuera, y se dice para que nadie lea
+el plan como completo:**
+
+- **Lecturas por cursor** — el `openapi.json` del paquete las especifica con
+  paginación opaca y orden estable `(received_at, event_id)`.
+- **Alertas** — el paquete insiste en que son «indicaciones basadas en reglas»
+  y que él no envía notificaciones. Su propio trabajo.
+- **Historial de servicio y calibración** por número de serie.
+- **Publicación de documentos con permisos** — el paquete quiere publicarse como
+  release versionado e inmutable, con su SHA-256.
+- **Exportación sin dependencia de proveedor.**
+
+Y un track entero que no es de sensores: `research/RESEARCH_SOFTWARE_REQUIREMENTS.md`
+trae un contrato de software de investigación con **12 casos de aceptación**, un
+paquete de referencia con su esquema y un registro de estudios. Es otro spec.
 
 ---
 
