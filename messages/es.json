@@ -1660,7 +1660,9 @@
     "loteError_desde_invalido": "«Empezar en» tiene que ser un número entero de 1 o más.",
     "loteError_cuantas_invalido": "«Cuántas» tiene que ser un número entero de 1 o más.",
     "loteError_cuantas_sobre_el_techo": "Son demasiadas de una vez.",
-    "alerta_cajas_no_cuadran": "Las cajas contadas no cuadran con las registradas"
+    "alerta_cajas_no_cuadran": "Las cajas contadas no cuadran con las registradas",
+    "hivesHint": "Abrí una colmena para inspeccionarla, alimentarla o tratarla, contar varroa y registrar su cosecha. Lo de aquí arriba es lo que se hace al apiario entero.",
+    "hiveEntrar": "abrir para inspeccionar y registrar"
   },
   "Research": {
     "badge": "Research OS",
