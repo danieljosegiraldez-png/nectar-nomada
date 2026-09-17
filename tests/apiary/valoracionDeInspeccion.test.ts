@@ -202,31 +202,46 @@ describe("la valoración de una inspección", () => {
     // versión elegía una arbitrariamente: con una cerrada y otra abierta, la misma escritura se
     // permitía o se rechazaba según el orden que devolviera Postgres.
     //
-    // Se monta el caso al revés de lo cómodo a propósito: la visita abierta se crea DESPUÉS, así
-    // que si algo eligiera «la primera» o «la última» daría la respuesta equivocada.
+    // **El ORDEN importa, y la primera versión de esta prueba lo tenía al revés.** Decía estar
+    // montada «al revés de lo cómodo» y era falso: dejaba la CERRADA primero, así que un
+    // `sesiones[0]` daba la respuesta correcta por accidente y la mutación pasaba en verde. Lo
+    // destapó su propio flip-test — «NADIE CAYÓ».
+    //
+    // Ahora la ABIERTA va primera y la CERRADA segunda. Así, cualquier código que elija «la
+    // primera» concluye que se puede escribir, y esta prueba falla. Es la única disposición que
+    // distingue «manda la más restrictiva» de «manda la que salga antes».
+    const kind = await prisma.variableCatalogValue.findFirstOrThrow();
     await prisma.fieldSession.update({
       where: { id: sesionId },
-      data: { status: "locked", editWindowExpiresAt: null },
+      data: { status: "draft", editWindowExpiresAt: null },
     });
-    const kind = await prisma.variableCatalogValue.findFirstOrThrow();
-    const abierta = await prisma.fieldSession.create({
+    const cerrada = await prisma.fieldSession.create({
       data: {
         locationId: apiarioId,
         operatorPersonId: personId,
         startedAt: new Date("2026-09-11T14:00:00Z"),
-        status: "draft",
+        status: "locked",
         provenanceClass: "original_record",
       },
     });
     const vinculo = await prisma.fieldEvent.create({
       data: {
-        fieldSessionId: abierta.id,
+        fieldSessionId: cerrada.id,
         eventKindValueId: kind.id,
         occurredAt: new Date("2026-09-11T14:00:00Z"),
         inspectionId: inspeccionEnVisita,
         provenanceClass: "direct_observation",
       },
     });
+
+    // Y se AFIRMA el orden en vez de suponerlo: si Postgres lo devolviera al contrario, la
+    // prueba volvería a pasar por accidente y esta línea lo dice antes que el veredicto.
+    const enOrden = await prisma.fieldEvent.findMany({
+      where: { inspectionId: inspeccionEnVisita },
+      select: { fieldSession: { select: { id: true, status: true } } },
+    });
+    expect(enOrden[0]?.fieldSession?.status, "la ABIERTA tiene que salir primera o esto no discrimina").toBe("draft");
+    expect(enOrden[1]?.fieldSession?.status).toBe("locked");
 
     // Control de que el caso está MONTADO: sin esto, un fallo del andamio daría el mismo rechazo
     // por la razón equivocada y la prueba pasaría sin haber probado nada.
@@ -239,7 +254,7 @@ describe("la valoración de una inspección", () => {
 
     // Y el control positivo: quitando la cerrada, la MISMA escritura pasa. Sin esta mitad, el
     // rechazo de arriba podría venir de cualquier otra cosa.
-    await prisma.fieldSession.update({ where: { id: sesionId }, data: { status: "draft" } });
+    await prisma.fieldSession.update({ where: { id: cerrada.id }, data: { status: "draft" } });
     const r = await registrarValoracionDeInspeccion(userAccountId, {
       inspectionId: inspeccionEnVisita,
       assessment: "con las dos abiertas si",
@@ -247,8 +262,49 @@ describe("la valoración de una inspección", () => {
     expect(r.origenDeLaVentana).toBe("visita");
 
     await prisma.fieldEvent.delete({ where: { id: vinculo.id } });
-    await prisma.fieldSession.delete({ where: { id: abierta.id } });
+    await prisma.fieldSession.delete({ where: { id: cerrada.id } });
     await prisma.fieldSession.update({ where: { id: sesionId }, data: { status: "completed" } });
+  });
+
+  it("DOS ESCRITURAS A LA VEZ: una falla en vez de que el audit mienta", async () => {
+    // **El tercer hallazgo de Codex, y hace falta concurrencia de verdad para probarlo.** El
+    // `before` del AuditEvent se LEE y luego se escribe. Con el aislamiento por omisión de
+    // Postgres —read committed— dos escrituras simultáneas leen el MISMO valor A, guardan B y C,
+    // y auditan las dos «desde A»: la segunda afirma haber partido de A cuando reemplazó a B, y
+    // el rastro queda diciendo algo falso.
+    //
+    // Con `Serializable`, una de las dos falla. Eso es lo que se comprueba aquí: no que el audit
+    // esté bien, sino que **no puede quedar mal en silencio**.
+    await prisma.inspection.update({ where: { id: inspeccionSuelta }, data: { assessment: "A" } });
+
+    const dos = await Promise.allSettled([
+      registrarValoracionDeInspeccion(userAccountId, { inspectionId: inspeccionSuelta, assessment: "B" }),
+      registrarValoracionDeInspeccion(userAccountId, { inspectionId: inspeccionSuelta, assessment: "C" }),
+    ]);
+    const rechazadas = dos.filter((r) => r.status === "rejected").length;
+
+    // **La afirmación es «no las dos», no «exactamente una».** Con Serializable, si las dos
+    // transacciones no llegan a solaparse de verdad —y en una máquina rápida puede pasar— las
+    // dos tienen éxito legítimamente, una después de otra, y sus dos audits son correctos. Lo
+    // que NO puede ocurrir es que las dos pasen habiendo leído el mismo `before`.
+    //
+    // Así que se comprueba el rastro, que es lo que importa: ningún audit puede decir que partió
+    // de un valor que otro ya había reemplazado.
+    const rastros = await prisma.auditEvent.findMany({
+      where: assertDefinedWhere({ entityId: inspeccionSuelta, operation: "inspection.assessment" }),
+      orderBy: { occurredAt: "asc" },
+      select: { before: true, after: true },
+    });
+    const desdeA = rastros.filter((r) => (r.before as { assessment?: string } | null)?.assessment === "A");
+    expect(
+      desdeA.length,
+      `dos audits dicen partir de «A»; con read committed esto pasa y es una mentira. rechazadas=${rechazadas}`,
+    ).toBeLessThanOrEqual(1);
+
+    await prisma.auditEvent.deleteMany({
+      where: assertDefinedWhere({ entityId: inspeccionSuelta, operation: "inspection.assessment" }),
+    });
+    await prisma.inspection.update({ where: { id: inspeccionSuelta }, data: { assessment: null } });
   });
 
   it("CONTROL: una inspección SIN visita se acepta, y lo dice", async () => {
