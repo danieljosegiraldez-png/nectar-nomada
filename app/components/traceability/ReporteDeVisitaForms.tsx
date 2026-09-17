@@ -195,6 +195,15 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
         <p className="nn-muted">{t("visitColoniesAliveHelp")}</p>
       </div>
 
+      {/* Las CAJAS, al lado de las colonias y no en su lugar: una caja puede estar ahí vacía
+          (ADR-150). No sustituye a la cuenta de `HivePlacement` — la contradice cuando difieren,
+          y esa diferencia es el dato: una caja que se fue sin registrarse, o un recuento malo. */}
+      <div className="nn-field">
+        <label htmlFor="cv-hives">{t("visitHivesPresentLabel")}</label>
+        <input id="cv-hives" name="hivesPresentCount" type="number" inputMode="numeric" min="0" step="1" />
+        <p className="nn-muted">{t("visitHivesPresentHelp")}</p>
+      </div>
+
       <div className="nn-field">
         <label htmlFor="cv-notes">{t("visitCompleteNotesLabel")}</label>
         <textarea id="cv-notes" name="notes" rows={3} />

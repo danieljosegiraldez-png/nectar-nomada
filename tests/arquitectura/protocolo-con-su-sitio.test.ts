@@ -170,7 +170,9 @@ describe("el protocolo de campo y el esquema hablan el mismo idioma", () => {
     expect(sinSitio).toEqual(
       [
         "assessment",
-        "hives_present_count",
+        // `hives_present_count` salio de esta lista el 2026-09-16 (ADR-150): ahora vive en
+        // `FieldSession.hivesPresentCount`. La lista baja de CINCO a CUATRO, y este guardia
+        // existe precisamente para que ese numero no cambie en silencio (ADR-143).
         "moisture_pct",
         "site_condition",
         "weather_observed",

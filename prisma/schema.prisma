@@ -4350,6 +4350,17 @@ model FieldSession {
   // mes está y bajo qué contrato (D9).
   nextVisitDueAt      DateTime?          @map("next_visit_due_at")
   coloniesAliveCount  Int?               @map("colonies_alive_count")
+  /// CAJAS presentes, contadas por quien visita — Anexo E, «Cajas presentes», etapa de campo.
+  /// Hermana de `coloniesAliveCount` y **no lo mismo**: una caja puede estar ahí vacía.
+  ///
+  /// **Por qué se declara si el sistema ya las cuenta** (ADR-150). `HivePlacement` sabe cuántas
+  /// colocó; esto es cuántas alguien VIO. Cuando no coinciden, eso no es ruido: es una caja que
+  /// se fue sin registrarse, o un recuento mal hecho. Hoy el sistema no puede ni notarlo.
+  ///
+  /// **Y a diferencia de las colonias, aquí NINGUNO manda.** Para colonias el declarado gana
+  /// porque el sistema no sabe cuáles murieron; para cajas el sistema sí tiene un registro
+  /// deliberado, así que elegir uno esconderia la señal. La divergencia ES la salida.
+  hivesPresentCount   Int?               @map("hives_present_count")
   /// Que se fue a hacer. **Arreglo y no una columna**: una misma visita revisa, alimenta y
   /// trata. Mismo patron que `Inspection.broodStages`.
   ///

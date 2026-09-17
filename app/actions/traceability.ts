@@ -2029,6 +2029,7 @@ export async function completarVisitaAction(
   const fieldSessionId = String(formData.get("fieldSessionId") ?? "");
   const proximaCruda = String(formData.get("nextVisitDueAt") ?? "").trim();
   const coloniasCrudas = String(formData.get("coloniesAliveCount") ?? "").trim();
+  const cajasCrudas = String(formData.get("hivesPresentCount") ?? "").trim();
   const costoCrudo = String(formData.get("travelCostUsd") ?? "").trim();
 
   try {
@@ -2039,6 +2040,9 @@ export async function completarVisitaAction(
       // con el desfase del dispositivo, que la movería un día.
       nextVisitDueAt: proximaCruda === "" ? null : new Date(`${proximaCruda}T00:00:00Z`),
       coloniesAliveCount: coloniasCrudas === "" ? null : Number(coloniasCrudas),
+      // Vacío es `null` —«nadie contó»— y NO cero: un apiario vaciado se cuenta como cero, y
+      // ese cero es un dato distinto de no haber contado (ADR-080).
+      hivesPresentCount: cajasCrudas === "" ? null : Number(cajasCrudas),
       notes: emptyToNull(formData.get("notes")),
       // Las tres de casa (`stage: close`). El vacío es `null` —«no se anotó»— y NO cero: una
       // visita sin viáticos anotados no es una visita que costó cero.

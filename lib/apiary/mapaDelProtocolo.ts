@@ -61,7 +61,10 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   weather_observed: { clase: "sin_sitio", nota: "Sin columna. El Anexo C lo pide como vital del sitio y lo deja en una capa externa sin proveedor conectado." },
   site_condition: { clase: "sin_sitio", nota: "Sin columna propia." },
   colonies_alive_count: { clase: "campo", modelo: "FieldSession", campo: "coloniesAliveCount" },
-  hives_present_count: { clase: "sin_sitio", nota: "Las cajas presentes se cuentan hoy desde `Hive`, no se declaran. Contar y declarar son datos distintos: el segundo es lo que alguien vio." },
+  // Ya tiene sitio (ADR-150). La nota anterior decia la razon por la que faltaba --"contar y
+  // declarar son datos distintos: el segundo es lo que alguien vio"-- y esa razon es justo la
+  // que la construyo. La cuenta del sistema NO desaparece: `compararCajasPresentes` las junta.
+  hives_present_count: { clase: "campo", modelo: "FieldSession", campo: "hivesPresentCount" },
   travel_cost_usd: { clase: "campo", modelo: "FieldSession", campo: "travelCostUsd" },
   next_visit_due_at: { clase: "campo", modelo: "FieldSession", campo: "nextVisitDueAt" },
   probable_cause: { clase: "campo", modelo: "FieldSession", campo: "probableCause" },
