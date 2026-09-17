@@ -96,6 +96,7 @@ tests/traceability/venta-temprana.test.ts
 tests/inventario/materiales.test.ts
 tests/inventario/lotes.test.ts
 tests/inventario/existencias.test.ts
+tests/inventario/negativo.test.ts
 tests/traceability/e2e.test.ts
 tests/traceability/entradaEnProduccion.test.ts
 tests/traceability/export.test.ts

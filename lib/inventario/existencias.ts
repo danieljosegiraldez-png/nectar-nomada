@@ -176,3 +176,40 @@ export async function registrarConteo(userAccountId: string, input: MovimientoIn
   if (!input.reason?.trim()) throw new ExistenciasError("un conteo declara por qué se cuenta ahora");
   return registrarMovimiento(userAccountId, input, "adjustment_increase");
 }
+
+/** Se echó a perder. Sale del saldo igual que un consumo, pero no es lo mismo. */
+export async function registrarMerma(userAccountId: string, input: MovimientoInput) {
+  return registrarMovimiento(userAccountId, input, "waste");
+}
+
+export interface ReconciliarInput extends MovimientoInput {
+  readonly reason: string;
+  /**
+   * `alza` cuando en la bodega hay MÁS de lo que dice el papel —apareció un
+   * bidón sin registrar—; `baja` cuando hay menos. Por defecto `alza`, que es el
+   * caso que empuja a reconciliar: el saldo negativo.
+   */
+  readonly direccion?: "alza" | "baja";
+}
+
+/**
+ * Cuadrar un descuadre. **Es un evento más, nunca una edición**: el negativo
+ * sigue en la historia después de cuadrarlo, porque cómo se llegó al número es
+ * tan interesante como el número.
+ *
+ * **La razón es obligatoria**, aquí y en la base con su CHECK. Cuadrar es una
+ * afirmación sobre lo que pasó —«apareció un bidón», «se derramó»— y una
+ * afirmación sin razón no se puede auditar. Se comprueba en los dos sitios a
+ * propósito: aquí sale una frase legible, y el CHECK atrapa al guion que rodee
+ * el servicio.
+ */
+export async function reconciliar(userAccountId: string, input: ReconciliarInput) {
+  if (!input.reason.trim()) {
+    throw new ExistenciasError("una reconciliación sin razón no se puede auditar");
+  }
+  return registrarMovimiento(
+    userAccountId,
+    input,
+    input.direccion === "baja" ? "adjustment_decrease" : "adjustment_increase",
+  );
+}
