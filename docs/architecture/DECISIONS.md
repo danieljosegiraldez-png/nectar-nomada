@@ -10897,3 +10897,59 @@ esta rebanada repiten **las mutaciones exactas de Codex**.
 mas fuerte del punto 4. Es una migracion cuya seguridad **no se puede comprobar contra produccion**
 --leer esa base esta prohibido-- y que fallaria si ya hubiera duplicados. Queda nombrada: exige
 primero contar duplicados en produccion, y eso lo hace el dueno.
+
+## ADR-156 -- Los vitales de campo se pueden anotar en el sitio, y queda dicho que fue alli
+
+**El hallazgo, y es sobre mi propio trabajo.** El protocolo marca `weather_observed`,
+`colonies_alive_count` y `hives_present_count` como **`stage: field`** --son cosas que se VEN
+estando ahi-- y las tres se capturaban **solo en el formulario de cierre**, que se rellena en
+casa. Dos de ellas las puse yo el 2026-09-16 (ADR-150, ADR-152) siguiendo a las que ya estaban,
+**sin comprobar que las que seguia estuvieran bien**.
+
+Medido: de los ocho items que van a `FieldSession`, los cuatro de `stage: close` estan donde
+deben y **los cuatro de `stage: field` estan todos en el cierre**.
+
+**Le lleve dos opciones al dueno y contesto una tercera, mejor:**
+
+> «se deberia poder hacer durante la visita o al cierre, a veces en sitio y si solo un apicultor
+> es dificil maniobrar y ser eficiente de entrar y salir y estresar menos a las abejas»
+
+Un apicultor solo, con las manos ocupadas y una caja abierta, **tiene una razon real** para salir
+y anotar despues. Esa razon no convierte lo anotado despues en lo mismo que lo visto.
+
+**Decision -- no se restringe, se REGISTRA cual de las dos paso.** `FieldSession` gana
+`fieldVitalsOnSiteAt`, y hay una puerta nueva --`registrarVitalesEnSitio`-- disponible **mientras
+la visita esta abierta**, en la pantalla de la visita.
+
+Sin la marca, **una cifra vista con el guante puesto y una reconstruida de memoria dos horas
+despues son la MISMA fila**, las dos estampadas `original_record`. Es la misma forma que el
+desajuste que ADR-154 declaro sin arreglar: el protocolo declara una propiedad de la captura y
+nada la hace cumplir.
+
+**La marca describe el valor ACTUAL, no un historico**, y por eso **el cierre la limpia** cuando
+reescribe alguno de los tres: una cifra corregida desde casa ya no es la que se vio. El historico
+completo vive en el `AuditEvent`, que es su sitio. Su prueba lleva el control de que un cierre que
+**no** toca los tres deja la marca intacta -- sin el, un `null` puesto siempre la cumpliria igual.
+
+**Por que UNA marca y no una por campo.** Tres columnas dirian mas y cuestan tres caminos de
+escritura y tres formas de quedar inconsistentes. La marca de grupo responde la pregunta que se
+hace de verdad al leer una visita: *«esto se anoto alli o en casa?»*. Si hace falta la precision
+por campo, se anade con el caso delante.
+
+**Lo que la puerta afirma, y lo que NO.** Afirma **una sola cosa**: que la visita seguia abierta.
+**No comprueba GPS a proposito.** Las coordenadas de `startLatitude` son del arranque, no de
+ahora, y exigirlas dejaria sin registrar una visita bajo dosel cerrado -- que es justo donde estan
+las abejas. Decir «el aparato estaba en el apiario» seria inventarlo.
+
+**Y devuelve la comparacion de cajas ya resuelta** (ADR-150): quien acaba de contar en el sitio es
+exactamente quien puede hacer algo si no cuadra, y decirselo al cerrar en casa llega tarde.
+
+**Un flip-test volvio a destapar una prueba mia que no discriminaba.** La de «los tres son
+independientes» escribia el recuento primero y el clima despues, asi que la mutacion que borra el
+clima cuando llega vacio no cambiaba nada: el clima estaba vacio igualmente. «NADIE CAYO». Ahora
+se prueba en las **tres** direcciones, porque cada una solo puede cazar la mutacion de su campo.
+Es la tercera vez en dos dias, y las tres las dijo el flip-test.
+
+**Lo que NO entra.** `purpose` es el cuarto `stage: field` y se queda donde esta: «que se fue a
+hacer» se sabe **antes** de llegar, asi que no es una observacion del sitio y la marca no diria
+nada sobre ella.

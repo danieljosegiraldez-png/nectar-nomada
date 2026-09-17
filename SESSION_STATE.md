@@ -38,6 +38,30 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-17 · Los vitales de campo se anotan en el sitio, y queda dicho que fue allí
+
+ADR-156, y el hallazgo es sobre mi propio trabajo. El protocolo marca clima, colonias vivas y cajas
+presentes como **`stage: field`** —cosas que se VEN estando ahí— y **las tres se capturaban sólo en
+el formulario de cierre**, que se rellena en casa. Dos las puse yo el día anterior siguiendo a las
+que ya estaban, sin comprobar que estuvieran bien.
+
+**Daniel contestó una tercera opción, mejor que las dos que le llevé:** «se debería poder hacer
+durante la visita o al cierre, a veces en sitio y si solo un apicultor es difícil maniobrar y ser
+eficiente de entrar y salir y estresar menos a las abejas».
+
+**Así que no se restringe: se registra cuál de las dos pasó.** `fieldVitalsOnSiteAt`, y una puerta
+nueva disponible mientras la visita está abierta. Sin la marca, una cifra vista con el guante puesto
+y una reconstruida de memoria son la misma fila, las dos `original_record`.
+
+**La marca describe el valor ACTUAL:** el cierre la limpia si reescribe alguno de los tres. Su
+prueba lleva el control de que un cierre que NO los toca la deja intacta.
+
+**Lo que la puerta afirma es una sola cosa —que la visita seguía abierta—** y no comprueba GPS a
+propósito: las coordenadas son del arranque, y exigirlas dejaría sin registrar una visita bajo dosel
+cerrado, que es donde están las abejas.
+
+**Y un flip-test volvió a destapar una prueba mía que no discriminaba** — la tercera en dos días.
+
 ### 2026-09-17 · Codex revisó el día: tres guardias pasaban por razones equivocadas
 
 ADR-155. El segundo asiento no encontró un fallo de producto: encontró **guardias en verde que no
@@ -84,30 +108,6 @@ ADR-142 no lo dijo.** Son los tres únicos items con procedencia declarada. Arre
 decidir si una interpretación merece fila propia, y eso es pieza aparte.
 
 **Los huecos del protocolo bajan de tres a dos:** `site_condition` y `moisture_pct`.
-
-### 2026-09-17 · Las dos divergencias del dueño, resueltas
-
-ADR-153. Daniel contestó las dos que le llevé: **«mis cinco más los jarabes, y arregla apiñada»**.
-
-**La eñe, y su causa raíz era una afirmación falsa escrita en el esquema:** el comentario de
-`ColonyPopulation` decía que «un identificador de enum no la admite». **Prisma sí la admite** —
-`prisma validate` lo confirma—. Esa suposición nunca medida es la razón de que el enum dijera
-`apinada` mientras su protocolo decía `apiñada`, con nadie traduciendo. Se corrige el comentario,
-no se deja al lado.
-
-**La migración se escribió a mano:** Prisma proponía un intercambio de tipo que castea
-`population::text`, y ese cast **revienta con cualquier fila que valga `apinada`**. En local hay 0
-—medido— pero la de producción no se puede leer. `RENAME VALUE` preserva los datos por definición.
-
-**El vocabulario pasa de seis valores a diez.** `sustituto_polen` y `torta` no son jarabes, pero se
-quedan porque ya estaban en su protocolo; si no los usa, se quitan entonces.
-
-**Y esto revisa ADR-148:** su argumento seguía valiendo —opciones que nadie usa enseñan a bajar
-hasta «otro»— pero su premisa estaba incompleta: el protocolo ya ofrecía otras cuatro, así que «no
-añadir ninguna» daba **dos** vocabularios, no uno corto.
-
-**Lo que impide la recaída:** el guardia pasa con sólo las dos divergencias de modelado, y una
-prueba nueva compara el vocabulario **con el archivo del protocolo**, no con una lista propia.
 
 
 ## 3. Bloqueado, y en qué
