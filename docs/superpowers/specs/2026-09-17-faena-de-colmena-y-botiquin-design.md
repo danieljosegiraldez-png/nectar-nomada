@@ -72,6 +72,55 @@ comprado contra aplicado, cosa que un solo log no permite»*.
 con su libro mayor ya guarda lo que entró y lo que salió. Lo que falta es lo que
 un medicamento tiene y un saco de gallinaza no:
 
+### B.0 Qué se documenta AL REGISTRAR LA COMPRA
+
+Aclaración de Daniel, 2026-09-17: *«cuando uno registra compra y stock en
+inventario que ingresó, se indica su vencimiento y marca o casa farmacéutica, y
+lo que se documenta estándar de estas cosas para manejo de uso y almacenamiento
+seguro»*.
+
+**Y esto no se inventa: está regulado**, y el `ANEXO_G` §5.1 cita las cuatro
+jurisdicciones. El Reglamento (UE) 2019/6 art. 108 exige *«nombre del producto,
+cantidad, proveedor con dirección, evidencia de adquisición, veterinario
+prescriptor, período de supresión aunque sea cero»*; la NOM-064-ZOO-2000 de
+México añade explícitamente **la fecha de caducidad del medicamento**; y
+Argentina obliga a **conservar los troqueles o marbetes**, de donde el propio
+anexo saca su conclusión de diseño: *«guardar foto de la etiqueta como adjunto
+del registro de tratamiento»*.
+
+**La división que hace este diseño, y es la mitad del trabajo:** unas cosas son
+del PRODUCTO y otras del FRASCO. Confundirlas obliga a teclear la casa
+farmacéutica en cada compra, y entonces se teclea distinto cada vez — el mismo
+problema que el material en texto libre tenía antes de la Tarea 1.
+
+**Del producto** (`ConsumableMaterial`, se escribe UNA vez):
+
+| Campo | Por qué |
+|---|---|
+| **Casa farmacéutica / marca** | Lo que Daniel pidió. Es del producto: el Apivar de un laboratorio es el mismo en todos los frascos |
+| Principio activo | Dos marcas pueden llevar el mismo, y para la carencia y la alergia manda el principio |
+| Registro sanitario | El número de autorización; lo pide toda la normativa citada |
+| **Período de carencia por defecto** | Es propiedad del producto, no del frasco. «Aunque sea cero», dice el reglamento — y cero declarado no es lo mismo que sin declarar |
+| **Condiciones de almacenamiento** | «Refrigerado 2–8 °C», «proteger de la luz». Es el «almacenamiento seguro» que pidió |
+| **Advertencias de seguridad** | §B.2 — van aquí y no en la salud de nadie |
+
+**Del frasco que entró** (`ConsumableLot`, se escribe en CADA compra):
+
+| Campo | Por qué |
+|---|---|
+| **Vencimiento** | Lo que Daniel pidió, y la NOM lo exige. §B.1 |
+| Número de lote del fabricante | Ya existe: `batchLabel`. Es lo que se retira del mercado si hay alerta |
+| Proveedor **con dirección** | Literal del Reglamento (UE) 2019/6 |
+| **Evidencia de adquisición** | La factura. Literal del mismo artículo |
+| **Foto de la etiqueta o el troquel** | Conclusión de diseño del propio `ANEXO_G` a partir de la norma argentina |
+| Presentación y cantidad | Tres frascos de 500 ml no son «tres» |
+
+**Lo que NO se pide en la compra**, y conviene decirlo: el veterinario
+prescriptor y el diagnóstico son de la APLICACIÓN, no del ingreso. Pedirlos al
+recibir obligaría a inventarlos.
+
+---
+
 ### B.1 Vencimiento
 
 `ConsumableLot.expiresAt`, anulable. **Nulo significa «no caduca o no se sabe»,
@@ -117,25 +166,58 @@ convertiría un registro legalmente exigido en un trámite que se esquiva.
 
 ---
 
-## 4. Lo que NO se puede entregar todavía, y hay que decirlo
+## 4. El aviso de vencimiento — y una corrección a lo que dije primero
 
-Daniel pidió **«un calendario con notificación si se venció o está por vencer»**.
+**Me equivoqué al decir que el aviso no se podía entregar.** Lo dije porque
+`lib/notificaciones/canales.ts` avisa de que *«aquí no se envía nada: no hay
+proveedor»*, y eso es cierto **del correo y del WhatsApp**. Daniel lo aclaró el
+2026-09-17: lo quiere **en el tablero**, y un aviso en pantalla no necesita
+proveedor de mensajería ninguno.
 
-**La notificación no se puede entregar.** `lib/notificaciones/canales.ts` es
-explícito: *«aquí no se envía nada: no hay proveedor»* — existe la preferencia de
-canal por persona, no el envío.
+### 4.1 El plazo lo define el producto
 
-**Lo que sí se entrega**, y cubre la mitad práctica:
+*«Uno puede definir para cada medicamento tiempo de notificación antes»*.
 
-- El vencimiento **se ve** donde se usa: al ir a aplicar, el lote vencido sale
-  marcado.
-- Una **lista de lo que caduca** — vencidos y por vencer— en la pantalla de
-  inventario.
-- Los datos quedan listos para que el día que haya proveedor, el aviso sea
-  conectar un canal y no construir el concepto.
+`ConsumableMaterial.avisarDiasAntes`, anulable. Es del PRODUCTO y no del frasco
+—§B.0—: un acaricida que tarda tres semanas en llegar necesita más aviso que uno
+que se compra en el pueblo. **Nulo significa «no avisar»**, no «avisar con el
+plazo que el sistema crea»: inventar un plazo por defecto haría que un aviso
+apareciera sin que nadie lo pidiera y que su ausencia no significara nada.
 
-Prometer el aviso sin proveedor sería prometer una seguridad que no ocurre, y
-con medicamentos eso es peor que no prometer nada.
+### 4.2 A quién le llega, sin inventar una figura nueva
+
+Daniel: al **encargado del apiario**, y al **apicultor vinculado cuando no hay
+más encargado que él**.
+
+**Medido: la figura de «encargado» NO existe en el esquema** — cero menciones. Y
+**no hace falta crearla**, porque el sistema ya sabe quién atiende un apiario:
+son las asignaciones de RBAC con ámbito sobre esa ubicación, y desde ADR-144 un
+ámbito alcanza a sus descendientes.
+
+La regla, en ese orden:
+
+1. Quien tenga asignación con **autoridad de gestión** sobre ese apiario —
+   `apiary:manage`— es el encargado a efectos del aviso.
+2. Si no hay ninguno, **quien tenga cualquier asignación sobre él**: el apicultor
+   vinculado, que es el caso que Daniel describe.
+3. Si no hay nadie, el aviso **existe igual** y se ve desde arriba. Un
+   medicamento vencido en un apiario que nadie atiende no deja de estar vencido —
+   y que no tenga destinatario es, en sí, algo que hay que ver.
+
+**Crear un campo `encargado` sería una segunda fuente de verdad** sobre quién
+atiende qué, y el día que discrepe de las asignaciones nadie sabría cuál manda.
+
+### 4.3 Dónde se ve
+
+En `/start`, que es el aterrizaje tras iniciar sesión. Dos estados y se
+distinguen: **vencido** y **por vencer**, con los días. Y en la pantalla de
+inventario, la lista completa.
+
+### 4.4 Lo que sigue sin poder entregarse
+
+El aviso **fuera de la aplicación** —correo, WhatsApp— sigue necesitando un
+proveedor que no existe. Los datos quedan listos para que ese día sea conectar un
+canal y no construir el concepto.
 
 ---
 
