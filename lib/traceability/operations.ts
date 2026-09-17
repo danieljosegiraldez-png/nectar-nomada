@@ -171,7 +171,12 @@ export async function recordLabourEntry(userAccountId: string, input: RecordLabo
 export type MaterialConsumptionParent =
   | { kind: "fermentationRun"; fermentationRunId: string }
   | { kind: "dryingRun"; dryingRunId: string }
-  | { kind: "location"; locationId: string };
+  | { kind: "location"; locationId: string }
+  // La JORNADA: lo gastado en una visita concreta —aserrín y hojas para el
+  // ahumador, un encendedor, una lija— pertenece a la visita y no al sitio.
+  // El ámbito de autorización sale de la ubicación DE la jornada: una visita
+  // no lleva permisos propios.
+  | { kind: "fieldSession"; fieldSessionId: string };
 
 export interface RecordMaterialConsumptionEntryInput {
   // Required for every parent kind except "location" — same convention as
@@ -201,6 +206,8 @@ function consumptionParentData(parent: MaterialConsumptionParent) {
       return { dryingRunId: parent.dryingRunId };
     case "location":
       return { locationId: parent.locationId };
+    case "fieldSession":
+      return { fieldSessionId: parent.fieldSessionId };
   }
 }
 
@@ -218,6 +225,18 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
     const location = await prisma.location.findUnique({ where: { id: input.parent.locationId } });
     if (!location) throw new TraceabilityAccessError("location_not_found");
     await requireLotAccess(userAccountId, "manage", [{ locationId: input.parent.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+  } else if (input.parent.kind === "fieldSession") {
+    // El ámbito sale de DÓNDE ocurrió la jornada. Una visita no lleva permisos
+    // propios, y sin esta lectura cualquiera podría declarar consumos en el
+    // apiario de otro con sólo saber el id de la jornada.
+    const jornada = await prisma.fieldSession.findUnique({
+      where: { id: input.parent.fieldSessionId },
+      select: { locationId: true },
+    });
+    if (!jornada) throw new TraceabilityAccessError("field_session_not_found");
+    await requireLotAccess(userAccountId, "manage", [
+      { locationId: jornada.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION },
+    ]);
   } else {
     if (!input.lotId) throw new MaterialConsumptionValidationError("lot_id_required");
     const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
