@@ -127,6 +127,12 @@ const CONSERVING_TYPES: ReadonlySet<LotTransformationType> = new Set([
   // yield. Everything before it either re-partitioned material (split/merge/
   // blend) or transformed it (stage_change, deliberately excluded).
   "selection",
+  // La trilla conserva por diseño: verde + cascarilla + merma declarada suman
+  // la entrada, y **todo vuelve a la finca** — ninguna de las tres formas de
+  // trillar (Cafelino, Kiva Estate, o mazo y pilón en Las Nubes) se queda con
+  // material. Si esto saliera de aquí, cada trilla pasaría con un hueco del
+  // ~18 %, que es la cascarilla, leído como rendimiento normal.
+  "hulling",
 ] as const);
 
 /** Whether a difference between input and output mass is suspicious for this type. */

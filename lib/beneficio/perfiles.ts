@@ -31,6 +31,28 @@ export type ClaveDePerfil = (typeof CLAVES_DE_PERFIL)[number];
 
 export interface ProtocolProfile {
   readonly key: ClaveDePerfil;
+  /**
+   * Los dos umbrales del reposo, en días desde que el secado terminó **con
+   * objetivo alcanzado** (`DryingRun.endedOutcome === "target_reached"`).
+   *
+   * Opcional: un perfil sin reposo declarado no avisa de nada, que es distinto
+   * de avisar que el café está listo. El motor lo dice con `PERFIL_SIN_REPOSO`.
+   *
+   * **`[PROVISIONAL]`** — los números salen de lo que Daniel dio de memoria el
+   * 2026-09-16 y `P-F` sigue abierta. No están medidos, y el comentario se
+   * queda para que una búsqueda los encuentre el día que se fijen.
+   *
+   * **Son por PROCESO, no por varietal**, y el spec §A.1 pide las dos cosas.
+   * Hacer el varietal obliga a ensanchar la entrada de todo el motor, que es su
+   * propio trabajo; mientras tanto el reposo declara `UMBRAL_SIN_VARIETAL` para
+   * que el operario sepa que el número es del lavado, no de su Geisha.
+   */
+  readonly reposo?: {
+    /** Habilita sacar muestra: tostar, analizar, cerrar una venta. */
+    readonly diasParaMuestra: number;
+    /** Habilita vender. SIEMPRE mayor que `diasParaMuestra`. */
+    readonly diasParaVenta: number;
+  };
   // --- pH ---
   /** Borde inferior **inclusivo** de la ventana óptima. */
   readonly phOptimalLow: number;
@@ -62,6 +84,9 @@ export interface ProtocolProfile {
 export const PERFILES: Readonly<Record<ClaveDePerfil, ProtocolProfile>> = {
   WASHED_STANDARD: {
     key: "WASHED_STANDARD",
+    // [PROVISIONAL] Daniel, 2026-09-16: «lavado 60–90 días». Se toma el borde
+    // bajo del rango, que es donde empieza a poder venderse, no donde es óptimo.
+    reposo: { diasParaMuestra: 30, diasParaVenta: 60 },
     phOptimalLow: 3.8,
     phOptimalHigh: 4.5,
     phCriticalLow: 3.5,
@@ -76,6 +101,8 @@ export const PERFILES: Readonly<Record<ClaveDePerfil, ProtocolProfile>> = {
   },
   NATURAL: {
     key: "NATURAL",
+    // [PROVISIONAL] Daniel, 2026-09-16: «natural Catuaí óptimo entre 45 y 60».
+    reposo: { diasParaMuestra: 30, diasParaVenta: 45 },
     phOptimalLow: 3.9,
     phOptimalHigh: 4.8,
     phCriticalLow: 3.6,

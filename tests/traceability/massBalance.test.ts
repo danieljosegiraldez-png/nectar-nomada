@@ -454,3 +454,35 @@ describe("lot code uniqueness is scoped to the organization", () => {
     ).rejects.toThrow();
   });
 });
+
+/**
+ * La trilla — Tarea 5 del plan de reposo, trilla y subproductos.
+ *
+ * **La trilla CONSERVA masa.** 100 kg de pergamino salen como ~80 de café
+ * verde, ~18 de cascarilla y ~2 de merma declarada, y **todo vuelve a la
+ * finca**: ninguna de las tres formas de trillar —Cafelino, Kiva Estate, o a
+ * mano con mazo y pilón en Las Nubes— se queda con material.
+ *
+ * Por eso `hulling` tiene que estar en `CONSERVING_TYPES`. Si no lo estuviera,
+ * cada trilla pasaría con un hueco del ~18 % —que es la cascarilla— leído como
+ * normal, y el balance dejaría de servir justo donde más falta hace.
+ */
+describe("la trilla en el balance de masas", () => {
+  it("conserva masa: 100 = 80 verde + 18 cascarilla + 2 merma", () => {
+    expect(conservesMass("hulling")).toBe(true);
+  });
+
+  it("y el control negativo: stage_change NO conserva", () => {
+    // Sin esta línea, un `return true` para todo pasaría la prueba de arriba.
+    // `stage_change` está excluido a propósito porque transforma material en
+    // vez de repartirlo, y ahí un hueco no es sospechoso sino rendimiento.
+    expect(conservesMass("stage_change")).toBe(false);
+  });
+
+  it("la trilla mueve material: una transformación con salidas descuenta el lote", () => {
+    // El otro lado del mismo cambio. `movesMaterial` decide si el lote de
+    // entrada se descuenta; una trilla con salidas tiene que descontar, o el
+    // pergamino seguiría entero en el libro mayor después de trillarlo.
+    expect(movesMaterial({ transformationType: "hulling", outputCount: 2 })).toBe(true);
+  });
+});

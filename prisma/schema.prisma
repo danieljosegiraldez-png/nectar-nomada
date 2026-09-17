@@ -289,6 +289,7 @@ model UserAccount {
 
   @@map("user_account")
   @@schema("core")
+  byproductBatchesCreated ByproductBatch[] @relation("ByproductBatchCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -885,6 +886,8 @@ model Location {
 
   @@map("location")
   @@schema("core")
+  lotTransformationsPerformedHere LotTransformation[] @relation("LotTransformationPerformedAt")
+  byproductBatchesProduced ByproductBatch[] @relation("ByproductBatchProducedAt")
 }
 
 enum DryingRoomLightExposure {
@@ -984,6 +987,8 @@ model Organization {
 
   @@map("organization")
   @@schema("core")
+  lotTransformationsPerformed LotTransformation[] @relation("LotTransformationPerformedBy")
+  byproductBatches ByproductBatch[] @relation("ByproductBatchOwner")
 }
 
 enum MembershipStatus {
@@ -2991,6 +2996,20 @@ model Lot {
   // overwritable column").
   status         RecordStatus        @default(draft)
   classification ClassificationLevel @default(internal)
+
+  /// **La liberación para la venta: una DECISIÓN, no una medición.**
+  ///
+  /// No se deriva de la edad de reposo y no la comprueba: depende del arreglo
+  /// con el comprador, que puede aceptar menos reposo o pagarlo distinto
+  /// (§A.4 del spec). Y **no apaga el aviso**: un lote liberado a los 41 días
+  /// se enseña liberado Y con 41 días de reposo. Si el estado callara la
+  /// advertencia, liberar sería la forma de esquivar el sistema.
+  ///
+  /// Exige `lot:release`, que es un permiso propio y no `lot:manage`: todo
+  /// `Farm Operator` tiene `lot:manage`, y autorizar una venta no es trabajo de
+  /// campo.
+  releasedAt DateTime? @map("released_at")
+  releasedBy String?   @map("released_by") @db.Uuid
   // P0 (§8) — the reliability of this lot's own quantity record, distinct
   // from `status` (its administrative lifecycle) and from the
   // provenanceClass carried by each individual event. Set to `conflicting`
@@ -3066,6 +3085,13 @@ enum LotTransformationType {
   // yield (ADR-094 Decision 4).
   selection
 
+  /// La trilla: quitar el pergamino y dejar café verde. Conserva masa —el
+  /// verde, la cascarilla y la merma declarada suman la entrada— porque las
+  /// tres formas de trillar devuelven todo a la finca. Y es OPCIONAL: un lote
+  /// vendido en pergamino nunca se trilla, así que ninguna etapa posterior
+  /// puede exigirla.
+  hulling
+
   @@schema("traceability")
 }
 
@@ -3111,6 +3137,27 @@ model LotTransformation {
   // Same mechanism, T7's DryingRun.
   dryingRunId       String?          @map("drying_run_id") @db.Uuid
   dryingRun         DryingRun?       @relation(fields: [dryingRunId], references: [id])
+
+  /// **Quién ejecutó la transformación, cuando NO fue la organización dueña.**
+  /// Finca Rosina no tiene trilladora: se trilla en Cafelino, en Kiva Estate, o
+  /// a mano con mazo y pilón en Las Nubes. Dos de las tres ocurren fuera del
+  /// control del dueño. Nulo = la propia organización, que es el caso de mazo y
+  /// pilón — y por eso es nulo y no obligatorio: exigirlo prohibiría la forma
+  /// que la finca usa en su propio patio.
+  ///
+  /// Van sobre la transformación y no sobre un tipo concreto: mañana un tueste
+  /// puede hacerse fuera igual que una trilla.
+  performedByOrganizationId String?       @map("performed_by_organization_id") @db.Uuid
+  performedByOrganization   Organization? @relation("LotTransformationPerformedBy", fields: [performedByOrganizationId], references: [id])
+  performedAtLocationId     String?       @map("performed_at_location_id") @db.Uuid
+  performedAtLocation       Location?     @relation("LotTransformationPerformedAt", fields: [performedAtLocationId], references: [id])
+
+  /// Cuándo salió el material de la finca y cuándo volvió. Los dos nulos cuando
+  /// nunca salió. No se valida el orden aquí: un material que aún no ha vuelto
+  /// tiene `custodyIn` nulo, y eso es un estado legítimo, no un error.
+  custodyOut DateTime? @map("custody_out")
+  custodyIn  DateTime? @map("custody_in")
+
   // Same mechanism, R1's RoastSession.
   roastSessionId    String?          @map("roast_session_id") @db.Uuid
   roastSession      RoastSession?    @relation(fields: [roastSessionId], references: [id])
@@ -3154,6 +3201,7 @@ model LotTransformation {
 
   @@map("lot_transformation")
   @@schema("traceability")
+  byproductBatches ByproductBatch[]
 }
 
 model LotTransformationInput {
@@ -3971,6 +4019,20 @@ enum DryingTurnEventType {
 // context only, not a second RBAC gate — access is still resolved against
 // the source lot's own project/location, same as every other traceability
 // write path in this module.
+/// Cómo terminó un secado. Ver `DryingRun.endedOutcome`.
+enum DryingOutcome {
+  /// Llegó a la humedad objetivo. **El único que arranca el reloj del reposo.**
+  target_reached
+  /// Se dejó a medias: el café no llegó a objetivo.
+  abandoned
+  /// Se cortó por una causa externa —lluvia, plaga, avería— y no por decisión
+  /// sobre el café. Se distingue de `abandoned` porque para el productor son
+  /// cosas distintas aunque el reposo las trate igual.
+  interrupted
+
+  @@schema("traceability")
+}
+
 model DryingRun {
   samplingEvents SamplingEvent[]
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -3991,6 +4053,16 @@ model DryingRun {
   lotProcess   LotProcess? @relation(fields: [lotProcessId], references: [id])
   startedAt    DateTime     @map("started_at")
   endedAt      DateTime?    @map("ended_at")
+
+  /// **Cómo** terminó, que `endedAt` no distingue: llegar a humedad objetivo y
+  /// abandonar el secado son hechos distintos y dan la misma fecha. El reloj
+  /// del reposo sólo arranca con `target_reached` (§A del spec de reposo).
+  ///
+  /// Nullable a propósito y para siempre: todos los secados cerrados antes del
+  /// 2026-09-16 no lo tienen, y obligarlo los invalidaría a todos. Un secado
+  /// sin desenlace no reposa, pero tampoco es un error — se declara la
+  /// limitación y se sigue.
+  endedOutcome DryingOutcome? @map("ended_outcome")
   createdAt    DateTime     @default(now()) @map("created_at")
   createdBy    String?      @map("created_by") @db.Uuid
   creator      UserAccount? @relation("DryingRunCreatedBy", fields: [createdBy], references: [id])
@@ -8062,4 +8134,76 @@ model ReportPublication {
   @@index([reportVersionId])
   @@map("report_publication")
   @@schema("reporting")
+}
+
+/// Un lote de subproducto del beneficio: la cascarilla que deja la trilla, o la
+/// pulpa que deja el despulpado.
+///
+/// **No es merma, y esa es toda la razón de esta tabla.** 100 kg de pergamino
+/// salen como ~80 de verde, ~18 de cascarilla y ~2 de merma declarada. Contar
+/// la cascarilla como merma inflaría la pérdida un 18 % en cada trilla y
+/// escondería la merma de verdad — que es el número que dice si alguien pesó
+/// mal.
+///
+/// Copia el molde de `BiocharBatch` —código propio, ubicación de producción,
+/// trazabilidad— y **no** crea la aplicación a una parcela: ésa ya existe
+/// (`TreatmentBatch` + `applyAmendment()`) y hoy sólo acepta biochar. Conectar
+/// el compost es ensanchar esa función, no escribir una paralela, y queda
+/// fuera de alcance por §C.1.
+model ByproductBatch {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  byproductType ByproductType        @map("byproduct_type")
+  destination   ByproductDestination
+
+  /// Siempre en kg, y por eso el nombre lo dice. Los subproductos se pesan a
+  /// granel; una unidad libre aquí invitaría a mezclar sacos con kilos y a que
+  /// el balance dejara de poder sumarse.
+  massKg Decimal @map("mass_kg") @db.Decimal(10, 3)
+
+  /// De qué transformación salió. **Requerido**: un subproducto sin origen no
+  /// es trazable, y la trazabilidad es la razón de esta tabla.
+  transformationId String            @map("transformation_id") @db.Uuid
+  transformation   LotTransformation @relation(fields: [transformationId], references: [id])
+
+  /// Dónde se produjo. Requerido por lo mismo que en `BiocharBatch`: es el
+  /// ancla de RBAC, y sin un ámbito concreto no hay autorización que comprobar.
+  producedAtLocationId String   @map("produced_at_location_id") @db.Uuid
+  producedAtLocation   Location @relation("ByproductBatchProducedAt", fields: [producedAtLocationId], references: [id])
+
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation("ByproductBatchOwner", fields: [organizationId], references: [id])
+
+  notes String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ByproductBatchCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([transformationId])
+  @@map("byproduct_batch")
+  @@schema("traceability")
+}
+
+/// Qué subproducto es. Cascarilla y pulpa no son el mismo material y algún día
+/// uno puede ir al biochar y el otro no, así que el tipo se declara aunque hoy
+/// los dos vayan a compost.
+enum ByproductType {
+  CASCARILLA
+  PULPA
+
+  @@schema("traceability")
+}
+
+/// A dónde va. Hoy los dos van a compost; el enum lleva los otros tres porque
+/// el destino es un dato del mundo, no una constante del código.
+enum ByproductDestination {
+  COMPOST
+  BIOCHAR
+  DISPOSAL
+  SALE
+
+  @@schema("traceability")
 }

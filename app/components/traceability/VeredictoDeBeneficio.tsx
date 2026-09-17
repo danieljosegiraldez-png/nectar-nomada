@@ -58,6 +58,33 @@ export async function VeredictoDeBeneficio({ veredicto }: { veredicto: Veredicto
         ))}
       </ul>
 
+      {/* El reposo: los días y las dos compuertas. Va ANTES de las
+          limitaciones porque es el dato, y las limitaciones son lo que le
+          falta al dato. Ninguna de las dos compuertas bloquea nada: dicen
+          «temprana» y dejan pasar, con la marca puesta. */}
+      {veredicto.reposo ? (
+        <div style={{ marginTop: "0.5rem" }}>
+          <strong>{t("reposoHeading")}</strong>
+          <p style={{ margin: "0.25rem 0" }}>
+            {veredicto.reposo.diasDeReposo === null
+              ? t("reposoSinDias")
+              : t("reposoDias", { dias: veredicto.reposo.diasDeReposo })}
+          </p>
+          <ul>
+            <li>
+              <strong>{t("reposoMuestra")}</strong>
+              {" — "}
+              {t(`compuerta_${veredicto.reposo.muestra}` as "compuerta_EN_PLAZO")}
+            </li>
+            <li>
+              <strong>{t("reposoVenta")}</strong>
+              {" — "}
+              {t(`compuerta_${veredicto.reposo.venta}` as "compuerta_EN_PLAZO")}
+            </li>
+          </ul>
+        </div>
+      ) : null}
+
       {veredicto.limitaciones.length > 0 ? (
         <p className="nn-muted">
           {t("limitacionesPrefijo")}{" "}

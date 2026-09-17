@@ -228,3 +228,89 @@ describe("Drying — full start/turn/measure/end cycle", () => {
     ).rejects.toThrow(TraceabilityAccessError);
   });
 });
+
+/**
+ * El desenlace del secado — Tarea 1 del plan de reposo, trilla y subproductos.
+ *
+ * `endedAt` solo dice CUÁNDO se cerró, no si se llegó a la humedad objetivo o
+ * se abandonó. El reloj del reposo no puede arrancar de una fecha que significa
+ * las dos cosas (§A del spec).
+ */
+describe("Secado — el desenlace, no solo la fecha", () => {
+  async function secadoAbierto(sufijo: string) {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-${sufijo}`,
+      lotType: "drying",
+      organizationId,
+      projectId: projectAId,
+    });
+    await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      lotId: lot.id,
+      eventType: "received",
+      quantity: 100,
+      unit: "kg",
+      occurredAt: new Date("2026-02-01"),
+    });
+    const { run } = await startDryingRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      lotId: lot.id,
+      method: "raised_bed",
+      startedAt: new Date("2026-02-01T01:00:00Z"),
+      quantity: 100,
+      unit: "kg",
+    });
+    return run;
+  }
+
+  it("cerrar un secado declarando objetivo alcanzado lo guarda", async () => {
+    const run = await secadoAbierto("desenlace-ok");
+    const { run: cerrado } = await endDryingRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      dryingRunId: run.id,
+      endedAt: new Date("2026-02-20"),
+      endedOutcome: "target_reached",
+      outputLotCode: `${RUN_ID}-desenlace-ok-verde`,
+      outputLotType: "green",
+      quantity: 80,
+      unit: "kg",
+    });
+    expect(cerrado.endedOutcome).toBe("target_reached");
+  }, 20000);
+
+  it("y cerrarlo SIN declararlo sigue permitido — avisa, no bloquea", async () => {
+    // El guardia de que esto no rompe nada de lo anterior. Todos los secados
+    // cerrados antes de hoy no tienen desenlace, y hacerlo obligatorio los
+    // invalidaría a todos. Si esta prueba cae, alguien puso el campo required.
+    const run = await secadoAbierto("desenlace-sin");
+    const { run: cerrado } = await endDryingRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      dryingRunId: run.id,
+      endedAt: new Date("2026-02-20"),
+      outputLotCode: `${RUN_ID}-desenlace-sin-verde`,
+      outputLotType: "green",
+      quantity: 80,
+      unit: "kg",
+    });
+    expect(cerrado.endedAt).not.toBeNull();
+    expect(cerrado.endedOutcome).toBeNull();
+  }, 20000);
+
+  it("un secado ABANDONADO se puede declarar como tal", async () => {
+    // La otra mitad: el enum no existe solo para decir que sí. Un secado que se
+    // interrumpe es un hecho que el sistema debe poder registrar, y es
+    // justamente el que NO arranca el reloj del reposo.
+    const run = await secadoAbierto("desenlace-abandono");
+    const { run: cerrado } = await endDryingRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      dryingRunId: run.id,
+      endedAt: new Date("2026-02-20"),
+      endedOutcome: "abandoned",
+      outputLotCode: `${RUN_ID}-desenlace-abandono-verde`,
+      outputLotType: "green",
+      quantity: 80,
+      unit: "kg",
+    });
+    expect(cerrado.endedOutcome).toBe("abandoned");
+  }, 20000);
+});

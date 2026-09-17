@@ -1869,7 +1869,19 @@
     "estado_OVER_DRIED": "pasado de seco",
     "estado_BEAN_TEMP_EXCEEDED": "el grano va por encima de la temperatura máxima",
     "limitacion_SIN_INSTRUMENTO_DECLARADO": "Ninguna de estas lecturas dice con qué instrumento se tomó, así que no se pudo comprobar si estaba revisado.",
-    "estado_REVISION_VENCIDA": "El instrumento pasó su prueba contra patrón, pero hace más tiempo del previsto. Se puede seguir usando; conviene volver a contrastarlo."
+    "estado_REVISION_VENCIDA": "El instrumento pasó su prueba contra patrón, pero hace más tiempo del previsto. Se puede seguir usando; conviene volver a contrastarlo.",
+    "limitacion_UMBRAL_SIN_VARIETAL": "el umbral de reposo es del proceso, no de este varietal (un Geisha puede pedir más)",
+    "limitacion_SIN_FIN_DE_SECADO": "el secado no se ha cerrado, así que el reloj del reposo no ha arrancado",
+    "limitacion_SECADO_SIN_OBJETIVO_ALCANZADO": "el secado se cerró sin declarar que llegó a la humedad objetivo",
+    "limitacion_PERFIL_SIN_REPOSO": "este perfil no declara umbrales de reposo",
+    "reposoHeading": "Reposo",
+    "reposoDias": "{dias} días desde que terminó el secado",
+    "reposoSinDias": "sin días de reposo: el reloj no ha arrancado",
+    "reposoMuestra": "muestra",
+    "reposoVenta": "venta",
+    "compuerta_TEMPRANA": "temprana — se puede, y queda marcado",
+    "compuerta_EN_PLAZO": "en plazo",
+    "compuerta_SIN_UMBRAL": "sin umbral declarado"
   },
   "Equipos": {
     "atencionIntro": "Nada de esto impide trabajar. Se dice para que se sepa.",

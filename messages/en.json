@@ -1869,7 +1869,19 @@
     "estado_OVER_DRIED": "over-dried",
     "estado_BEAN_TEMP_EXCEEDED": "bean temperature above the maximum",
     "limitacion_SIN_INSTRUMENTO_DECLARADO": "None of these readings says which instrument produced it, so whether it was checked could not be verified.",
-    "estado_REVISION_VENCIDA": "The instrument passed its reference check, but longer ago than expected. It can still be used; a fresh check is advisable."
+    "estado_REVISION_VENCIDA": "The instrument passed its reference check, but longer ago than expected. It can still be used; a fresh check is advisable.",
+    "limitacion_UMBRAL_SIN_VARIETAL": "the resting threshold is the process's, not this varietal's (a Geisha may need more)",
+    "limitacion_SIN_FIN_DE_SECADO": "drying has not been closed, so the resting clock has not started",
+    "limitacion_SECADO_SIN_OBJETIVO_ALCANZADO": "drying was closed without declaring it reached target moisture",
+    "limitacion_PERFIL_SIN_REPOSO": "this profile declares no resting thresholds",
+    "reposoHeading": "Resting",
+    "reposoDias": "{dias} days since drying ended",
+    "reposoSinDias": "no resting days: the clock has not started",
+    "reposoMuestra": "sampling",
+    "reposoVenta": "sale",
+    "compuerta_TEMPRANA": "early — allowed, and recorded as such",
+    "compuerta_EN_PLAZO": "within window",
+    "compuerta_SIN_UMBRAL": "no threshold declared"
   },
   "Equipos": {
     "atencionIntro": "None of this stops work. It is said so that it is known.",
