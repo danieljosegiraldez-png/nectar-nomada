@@ -68,14 +68,6 @@ export function tipoDelCampo(modelo: string, campo: string): string | null {
  */
 const DIVERGENCIAS_HEREDADAS: ReadonlyMap<string, string> = new Map([
   [
-    "population",
-    "El protocolo dice `apiñada` (con ñ) y el enum dice `apinada`. NADIE TRADUCE: " +
-      "`POBLACIONES` en `estadoDeColonia.ts` usa la del código. Hoy no rompe porque el " +
-      "formulario sale de esa constante — pero el protocolo existe para que la captura salga " +
-      "DE ÉL, y ese día la opción ofrecida no será un valor válido. Arreglarlo es cambiar uno " +
-      "de los dos, y cuál es decisión del dueño: la ñ es su ortografía.",
-  ],
-  [
     "honey_stores",
     "El protocolo declara `junto_a_cria` como cuarto nivel; el esquema lo modela APARTE, como " +
       "`honeyNextToBrood` booleano. Es deliberado y mejor: «junto a cría» no es una cantidad, " +
@@ -83,14 +75,6 @@ const DIVERGENCIAS_HEREDADAS: ReadonlyMap<string, string> = new Map([
       "decir dónde está. La lista plana del protocolo no puede expresar esa separación.",
   ],
   ["pollen_stores", "Igual que `honey_stores`: `pollenNextToBrood` es una columna aparte."],
-  [
-    "material",
-    "DIVERGENCIA CREADA EL 2026-09-16 Y ES MÍA. ADR-148 construyó `FeedingMaterial` con los " +
-      "cinco valores que Daniel dictó en el apiario —azúcar morena, blanca, melaza, miel de " +
-      "abeja, miel de caña— y NO se actualizó el protocolo, que sigue ofreciendo `jarabe_1_1`, " +
-      "`jarabe_2_1`, `sustituto_polen` y `torta`. Son dos vocabularios para la misma pregunta. " +
-      "Cuál gana es decisión del dueño: puede que quiera los suyos, o los suyos MÁS los jarabes.",
-  ],
 ]);
 
 /**

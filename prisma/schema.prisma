@@ -6349,11 +6349,22 @@ enum InspectionOutcome {
 /// El Anexo B §2.2 —«estado de la colonia, nuevo, por protocolo»— con el
 /// vocabulario que el dueño ya escribió en `protocolos/apiario-campo-v1.json`.
 /// No se traduce a inglés a propósito: es su lista, y `VarroaMethod` ya sentó el
-/// precedente. `apinada` sin eñe porque un identificador de enum no la admite.
+/// precedente.
+///
+/// **CORREGIDO EL 2026-09-17 (ADR-153), y la correccion es de una afirmacion falsa.** Aqui
+/// decia: *«`apinada` sin eñe porque un identificador de enum no la admite»*. **Un enum de
+/// Prisma SI admite la eñe**: comprobado con `prisma validate`, que dice «the schema is valid»
+/// con `apiñada` dentro. Esa suposicion --escrita como justificacion y nunca medida-- es la
+/// razon por la que el esquema decia `apinada` mientras el protocolo decia `apiñada`, con
+/// NADIE traduciendo entre los dos.
+///
+/// No rompia todavia porque el formulario sale de `POBLACIONES`, la constante del codigo. Pero
+/// el protocolo existe para que la captura salga DE EL, y ese dia habria ofrecido un valor que
+/// Postgres rechaza. Lo vigila ahora `tests/arquitectura/enum-del-protocolo.test.ts`.
 enum ColonyPopulation {
   baja
   normal
-  apinada
+  apiñada
 
   @@schema("apiary")
 }
@@ -6606,11 +6617,20 @@ enum FeedingMethod {
 /// `exigeMaterialDeAlimentacion` en `lib/apiary/vocabularioDeAlimentacion.ts`, no
 /// esta lista. Un «otro» sin cuál es la respuesta vacía que ADR-125 persigue.
 enum FeedingMaterial {
+  // Los CINCO del dueno, dictados en el apiario el 2026-09-16.
   azucar_morena
   azucar_blanca
   melaza
   miel_de_abeja
   miel_de_cana
+  // Los CUATRO que su protocolo ya ofrecia. Decision suya el 2026-09-17: «mis cinco mas los
+  // jarabes». `sustituto_polen` y `torta` NO son jarabes --son alimentos proteicos-- y se
+  // quedan porque ya estaban en SU protocolo: quitarlos seria una perdida de capacidad que
+  // nadie pidio. Si no los usa, se quitan entonces (ADR-153).
+  jarabe_1_1
+  jarabe_2_1
+  sustituto_polen
+  torta
   otro
 
   @@schema("apiary")
