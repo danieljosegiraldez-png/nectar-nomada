@@ -289,6 +289,7 @@ model UserAccount {
 
   @@map("user_account")
   @@schema("core")
+  byproductBatchesCreated ByproductBatch[] @relation("ByproductBatchCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -886,6 +887,7 @@ model Location {
   @@map("location")
   @@schema("core")
   lotTransformationsPerformedHere LotTransformation[] @relation("LotTransformationPerformedAt")
+  byproductBatchesProduced ByproductBatch[] @relation("ByproductBatchProducedAt")
 }
 
 enum DryingRoomLightExposure {
@@ -986,6 +988,7 @@ model Organization {
   @@map("organization")
   @@schema("core")
   lotTransformationsPerformed LotTransformation[] @relation("LotTransformationPerformedBy")
+  byproductBatches ByproductBatch[] @relation("ByproductBatchOwner")
 }
 
 enum MembershipStatus {
@@ -3198,6 +3201,7 @@ model LotTransformation {
 
   @@map("lot_transformation")
   @@schema("traceability")
+  byproductBatches ByproductBatch[]
 }
 
 model LotTransformationInput {
@@ -8130,4 +8134,76 @@ model ReportPublication {
   @@index([reportVersionId])
   @@map("report_publication")
   @@schema("reporting")
+}
+
+/// Un lote de subproducto del beneficio: la cascarilla que deja la trilla, o la
+/// pulpa que deja el despulpado.
+///
+/// **No es merma, y esa es toda la razón de esta tabla.** 100 kg de pergamino
+/// salen como ~80 de verde, ~18 de cascarilla y ~2 de merma declarada. Contar
+/// la cascarilla como merma inflaría la pérdida un 18 % en cada trilla y
+/// escondería la merma de verdad — que es el número que dice si alguien pesó
+/// mal.
+///
+/// Copia el molde de `BiocharBatch` —código propio, ubicación de producción,
+/// trazabilidad— y **no** crea la aplicación a una parcela: ésa ya existe
+/// (`TreatmentBatch` + `applyAmendment()`) y hoy sólo acepta biochar. Conectar
+/// el compost es ensanchar esa función, no escribir una paralela, y queda
+/// fuera de alcance por §C.1.
+model ByproductBatch {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  byproductType ByproductType        @map("byproduct_type")
+  destination   ByproductDestination
+
+  /// Siempre en kg, y por eso el nombre lo dice. Los subproductos se pesan a
+  /// granel; una unidad libre aquí invitaría a mezclar sacos con kilos y a que
+  /// el balance dejara de poder sumarse.
+  massKg Decimal @map("mass_kg") @db.Decimal(10, 3)
+
+  /// De qué transformación salió. **Requerido**: un subproducto sin origen no
+  /// es trazable, y la trazabilidad es la razón de esta tabla.
+  transformationId String            @map("transformation_id") @db.Uuid
+  transformation   LotTransformation @relation(fields: [transformationId], references: [id])
+
+  /// Dónde se produjo. Requerido por lo mismo que en `BiocharBatch`: es el
+  /// ancla de RBAC, y sin un ámbito concreto no hay autorización que comprobar.
+  producedAtLocationId String   @map("produced_at_location_id") @db.Uuid
+  producedAtLocation   Location @relation("ByproductBatchProducedAt", fields: [producedAtLocationId], references: [id])
+
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation("ByproductBatchOwner", fields: [organizationId], references: [id])
+
+  notes String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ByproductBatchCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([transformationId])
+  @@map("byproduct_batch")
+  @@schema("traceability")
+}
+
+/// Qué subproducto es. Cascarilla y pulpa no son el mismo material y algún día
+/// uno puede ir al biochar y el otro no, así que el tipo se declara aunque hoy
+/// los dos vayan a compost.
+enum ByproductType {
+  CASCARILLA
+  PULPA
+
+  @@schema("traceability")
+}
+
+/// A dónde va. Hoy los dos van a compost; el enum lleva los otros tres porque
+/// el destino es un dato del mundo, no una constante del código.
+enum ByproductDestination {
+  COMPOST
+  BIOCHAR
+  DISPOSAL
+  SALE
+
+  @@schema("traceability")
 }
