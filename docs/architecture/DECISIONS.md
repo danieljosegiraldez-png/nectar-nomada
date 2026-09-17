@@ -10897,3 +10897,55 @@ esta rebanada repiten **las mutaciones exactas de Codex**.
 mas fuerte del punto 4. Es una migracion cuya seguridad **no se puede comprobar contra produccion**
 --leer esa base esta prohibido-- y que fallaria si ya hubiera duplicados. Queda nombrada: exige
 primero contar duplicados en produccion, y eso lo hace el dueno.
+
+## ADR-156 — `beneficio` es un tipo de ubicación, y crear un sitio es del jefe
+
+**Estado: aceptado, construido.** Decisiones de Daniel del 2026-09-17, en conversación.
+
+**Contexto.** Hasta hoy un beneficio sólo podía ser una `Location` de tipo
+`site`, así que **nada lo distinguía de una finca o una bodega salvo su
+nombre** — y deducir el dominio del nombre es exactamente lo que este
+repositorio prohíbe en otras cuatro secciones. Consecuencia práctica: un
+`Equipment` se coloca en un sitio, así que un fermentador vivía «en Finca
+Rosina» y ninguna pantalla podía decir qué hay **en el beneficio**.
+
+**Decisión 1: tipo propio, hijo del `site`.** `LocationType.beneficio`, mismo
+patrón que `drying_facility` y `drying_bed`: una `Location` con su tipo y su
+padre, **no una familia de entidades nueva**. Sigue el precedente de
+`meliponary`, que Daniel separó el 2026-09-16 con el mismo argumento — cuando
+el manejo cambia, el tipo es propio. Hoy una `drying_facility` sólo puede
+colgar del `site`: `crearUbicacionDeSecado` (lib/traceability/instalaciones.ts)
+exige `parent.locationType === "site"` y esta rama no lo cambia. Colgar una de
+un `beneficio` es un cambio futuro sobre esa función, no algo que ya soporte.
+
+**Decisión 2: `location:create_site`, y el capataz no lo tiene.** Crear un
+lugar nuevo no es editar los atributos de uno existente, así que no se pliega
+en `location:manage_attributes`. Se concede a Platform Admin —que recibe todos
+los permisos por construcción— y a **Farm Manager**. Se **excluye
+deliberadamente** de Farm Operator: palabras de Daniel, «farm manager/owner
+quien puede crear o editar un beneficio, no un capataz». Es la misma forma de
+exclusión explícita que ya usa Farm Manager con `lot:override_balance`.
+
+**Decisión 3: se comprueba sobre el sitio padre.** `crearBeneficio` exige
+`manage_attributes` **y** `create_site` sobre el padre, no sobre la plataforma.
+Eso es lo que impide que un Farm Manager de una finca cree un beneficio en
+otra, y lo hace con el mecanismo de asignaciones que ADR-144 ya define, sin una
+segunda regla de visibilidad escrita a mano que derivaría de la primera.
+Medido por flip-test el 2026-09-17: cada comprobación rechaza algo distinto —
+`create_site`, resuelto contra el ámbito del `Assignment`, es lo que rechaza al
+capataz y al Farm Manager de otra finca; `manage_attributes`
+(`requireLocationAttributeAccess`) es lo que rechaza un sitio padre inexistente
+en vez de dejarlo caer como un error de Prisma sin traducir.
+
+**El precedente contrario, y por qué no se sigue aquí.** `crearSitioDeAbejas`
+exige alcance de plataforma (`apiary_create_needs_platform_scope`) porque un
+apiario puede nacer sin padre y entonces no hay de quién heredar el acceso. Un
+beneficio **siempre** nace bajo un sitio, así que el padre es un sujeto real
+para el permiso. Un beneficio suelto, sin finca, queda fuera de alcance.
+
+**Consecuencia.** La pantalla es `/beneficio/ajustes`, primera sección del
+centro de configuración que describe PR #370.
+Las otras cuatro —capacidades, equipos, instalaciones y recetas— llegan con el
+tablero del beneficio, porque una capacidad declarada sin dónde leerse no sirve
+de nada. Sin permiso, la ruta responde **404** y no una página vacía, como ya
+hace `/equipos/[id]`.

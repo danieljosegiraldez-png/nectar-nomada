@@ -115,6 +115,15 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // row, so it gets its own permission rather than folding into lot:manage.
   { resourceType: "location", action: "manage_attributes", description: "Edit a Location's terroir attributes (sun, shade, altitude range, slope, soil, plant spacing, description) and create microlots beneath it." },
 
+  // Decisión de Daniel, 2026-09-17: crear un beneficio es de Farm Manager y
+  // dueño, «no de un capataz». Va aparte de `manage_attributes` porque crear
+  // un lugar nuevo no es editar los atributos de uno existente, y se comprueba
+  // SOBRE EL SITIO PADRE: así una asignación estrecha no ensancha el acceso
+  // (RBAC.md §3), y un Farm Manager de una finca no puede crear un beneficio
+  // en otra. El precedente contrario es `crearSitioDeAbejas`, que exige alcance
+  // de plataforma porque parte de ninguna ubicación.
+  { resourceType: "location", action: "create_site", description: "Crear una ubicación nueva bajo un sitio que ya se gestiona — hoy, un beneficio." },
+
   // F1 §3/§5 — a Specimen is a standing land asset (a tracked tree, or a
   // broca trap modeled as a Specimen per direct product-owner decision),
   // not a Lot in the processing-chain sense — same reasoning A1 used to
@@ -341,6 +350,8 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       ["apiary", "manage"],
       ["apiary", "view"],
       ["location", "manage_attributes"],
+      // El jefe de beneficio da de alta su beneficio; el operario no.
+      ["location", "create_site"],
       ["specimen", "manage"],
       ["specimen", "view"],
       ["project", "manage_operations"],

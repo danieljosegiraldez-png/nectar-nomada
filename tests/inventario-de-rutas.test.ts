@@ -102,8 +102,10 @@ describe("el inventario del router", () => {
     // ni entrar por SQL. Hasta ese día un ajuste así obligaba a crear un perfil nuevo.
     // 78 → 79 el 2026-09-16: /plots/[id]/ajustes — la pantalla de gestión de una
     // parcela (siembras, condiciones y calicatas), separada del tablero.
-    // Medido con scripts/inventario-de-rutas.mjs: 69 páginas y 10 handlers.
-    expect(salida).toContain("79 entradas");
+    // 79 → 80 el 2026-09-17: /beneficio/ajustes — el alta y la edición del
+    // beneficio como Location, separado de su operación.
+    // Medido con scripts/inventario-de-rutas.mjs: 70 páginas y 10 handlers.
+    expect(salida).toContain("80 entradas");
     expect(codigo, salida).toBe(0);
   });
 

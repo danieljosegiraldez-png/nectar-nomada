@@ -11,9 +11,9 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-16
+## Lo medido el 2026-09-05, actualizado el 2026-09-17
 
-**351 operaciones** que tocan la base, en **104 archivos**:
+**355 operaciones** que tocan la base, en **105 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,30 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **241** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **245** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **58** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
+
+> **Y el de 350→354, con un archivo nuevo, es el servicio de beneficio (Tarea 2 del
+> plan de alta de beneficio).** `lib/traceability/beneficios.ts` aporta **cuatro**
+> operaciones y las cuatro llevan **guardia directo**: `sitiosParaBeneficio`,
+> `listarBeneficios`, `crearBeneficio` y `actualizarBeneficio` resuelven `can()` contra
+> el sitio antes de leer u ofrecer nada, y crear exige además `location:create_site`
+> sobre el padre, que es el permiso nuevo de la Tarea 1. 4 = 4: si la cuenta no
+> cerrara con la fila de «guardia directo», algo se habría colado sin ese segundo
+> permiso.
+
+> **Tarea 3 (2026-09-17, sin cambio de cifras): la pantalla de ajustes del beneficio.**
+> `app/actions/beneficios.ts`, `app/beneficio/ajustes/page.tsx` y su formulario no
+> aparecen como operaciones propias: no llaman a `prisma` directamente, sólo a
+> `sitiosParaBeneficio`, `listarBeneficios`, `crearBeneficio` y `actualizarBeneficio`,
+> que ya están inventariadas desde la Tarea 2. `node scripts/inventario-de-acceso.mjs`
+> vuelve a imprimir exactamente **354** operaciones en **104** archivos — el mismo
+> reparto de la nota anterior—, y eso es lo esperado: una pantalla que delega toda su
+> autorización en el servicio no suma una fila nueva al inventario.
 
 > **Tareas 8 y 9 (2026-09-16):** el inventario incluye las opciones de inspección y
 > el servicio de instalaciones. Las cifras anteriores se regeneraron con
