@@ -181,6 +181,21 @@ describe("actualizarBeneficio", () => {
     await expect(actualizarBeneficio(jefe, { locationId: finca.id, name: nombre() }))
       .rejects.toThrow(new BeneficioError("tipo_invalido"));
   });
+
+  it("un capataz asignado en el sitio NO puede renombrar un beneficio", async () => {
+    const finca = await sitio();
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const ben = await crearBeneficio(jefe, { name: nombre(), parentLocationId: finca.id });
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    await expect(actualizarBeneficio(capataz, { locationId: ben.id, name: nombre() }))
+      .rejects.toThrow(LocationAccessError);
+    // Control positivo de verdad: el capataz SÍ gestiona los atributos de ESTE
+    // beneficio (`manage_attributes` sube por ancestros desde su asignación en
+    // el sitio). Sin esta línea, el rechazo de arriba se cumpliría igual con un
+    // capataz sin ningún acceso, y no probaría que lo que falta es
+    // `create_site` y no todo el acceso.
+    expect(await puedeGestionarAtributosDeUbicacion(capataz, ben.id)).toBe(true);
+  });
 });
 
 describe("listarBeneficios", () => {

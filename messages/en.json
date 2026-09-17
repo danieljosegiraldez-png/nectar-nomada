@@ -618,6 +618,7 @@
     "targetsCountSuffix": "targets",
     "recipesBadge": "PROCESSES",
     "recipesTitle": "Process recipes",
+    "beneficioAjustesLink": "Mill settings",
     "recipesIntro": "What a fermentation should reach. Pick a recipe when starting a run, and the lot page compares what is measured against its targets.",
     "recipesEmpty": "No recipes yet. Create one and you will be able to attach it to fermentations.",
     "recipesBackLink": "Back to Recipes",
@@ -2056,9 +2057,11 @@
     "sinSeleccion": "Choose a site",
     "nombre": "Name",
     "volverALotes": "Back to lots",
+    "sinSitios": "There are no sites yet. A mill hangs from a site, so create one first.",
     "error_sin_acceso": "You do not have permission to configure a mill here.",
     "error_datos_invalidos": "The name is required and cannot exceed 120 characters.",
     "error_padre_invalido": "A mill hangs from a site, not from a plot or another facility.",
-    "error_tipo_invalido": "That location is not a mill."
+    "error_tipo_invalido": "That location is not a mill.",
+    "error_no_encontrado": "That mill no longer exists."
   }
 }

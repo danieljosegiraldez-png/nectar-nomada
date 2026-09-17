@@ -15,6 +15,15 @@ export default async function AjustesDelBeneficioPage() {
   try { sitios = await sitiosParaBeneficio(user.userAccountId); }
   catch (error) {
     if (!(error instanceof LocationAccessError)) throw error;
+    // Un mundo sin ningún sitio no es una negativa de permiso: decirlo,
+    // en vez del mismo 404 mudo que usa la falta de acceso.
+    if (error.message === "no_sites_exist") {
+      return <div>
+        <h1>{t("ajustesTitulo")}</h1>
+        <p className="nn-muted">{t("sinSitios")}</p>
+        <p><Link href="/lots">← {t("volverALotes")}</Link></p>
+      </div>;
+    }
     // Quien no puede configurar no ve la pantalla: 404, como `/equipos/[id]`.
     // Una página vacía diría qué hay dentro. `notFound()` devuelve `never`, así
     // que TypeScript sabe que `sitios` está definido a partir de aquí.

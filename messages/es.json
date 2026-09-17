@@ -618,6 +618,7 @@
     "targetsCountSuffix": "objetivos",
     "recipesBadge": "PROCESOS",
     "recipesTitle": "Recetas de proceso",
+    "beneficioAjustesLink": "Ajustes del beneficio",
     "recipesIntro": "Lo que una fermentación debería alcanzar. Al arrancar una corrida eliges una receta, y la página del lote compara lo medido con sus objetivos.",
     "recipesEmpty": "Todavía no hay recetas. Crea una y podrás asociarla a las fermentaciones.",
     "recipesBackLink": "Volver a Recetas",
@@ -2056,9 +2057,11 @@
     "sinSeleccion": "Elige un sitio",
     "nombre": "Nombre",
     "volverALotes": "Volver a lotes",
+    "sinSitios": "Todavía no hay ningún sitio. Un beneficio cuelga de un sitio, así que hay que crear uno primero.",
     "error_sin_acceso": "No tienes permiso para configurar un beneficio aquí.",
     "error_datos_invalidos": "El nombre es obligatorio y no puede pasar de 120 caracteres.",
     "error_padre_invalido": "Un beneficio cuelga de un sitio, no de una parcela ni de otra instalación.",
-    "error_tipo_invalido": "Esa ubicación no es un beneficio."
+    "error_tipo_invalido": "Esa ubicación no es un beneficio.",
+    "error_no_encontrado": "Ese beneficio ya no existe."
   }
 }

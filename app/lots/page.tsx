@@ -81,6 +81,13 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
         ) : null}
         {granted.has("sample:manage") && <Link href="/inspecciones/nueva">{secado("inspeccionTitulo")}</Link>}
         {granted.has("location:manage_attributes") && <Link href="/instalaciones">{secado("instalaciones")}</Link>}
+        {/* Mismo criterio de visibilidad que `sitiosParaBeneficio`: sin los dos
+            permisos, la pantalla no ofrece nada que crear ni renombrar. No es
+            una regla de visibilidad nueva — es la misma, expresada con
+            `permissionKeysAnywhere` como ya hace el enlace de instalaciones. */}
+        {granted.has("location:manage_attributes") && granted.has("location:create_site") && (
+          <Link href="/beneficio/ajustes">{t("beneficioAjustesLink")}</Link>
+        )}
         {canExport ? (
           // A plain anchor, not next/link: this is a file download, and
           // client-side navigation to a route handler would fetch the zip and

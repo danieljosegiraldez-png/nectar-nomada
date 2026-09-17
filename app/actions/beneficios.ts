@@ -20,7 +20,11 @@ export async function guardarBeneficioFormAction(_state: BeneficioFormState, for
       await crearBeneficio(user.userAccountId, { name, parentLocationId: String(form.get("parentLocationId") ?? "") });
     }
   } catch (error) {
-    if (error instanceof LocationAccessError) return { error: "sin_acceso" };
+    if (error instanceof LocationAccessError) {
+      // Un id que no existe no es una negativa de permiso: decirle a quien
+      // guarda que la ubicación no está, en vez de que crea que le falta acceso.
+      return { error: error.message === "location_not_found" ? "no_encontrado" : "sin_acceso" };
+    }
     if (error instanceof BeneficioError) return { error: error.message };
     throw error;
   }

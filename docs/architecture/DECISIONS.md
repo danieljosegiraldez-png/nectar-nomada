@@ -10736,9 +10736,10 @@ Rosina» y ninguna pantalla podía decir qué hay **en el beneficio**.
 patrón que `drying_facility` y `drying_bed`: una `Location` con su tipo y su
 padre, **no una familia de entidades nueva**. Sigue el precedente de
 `meliponary`, que Daniel separó el 2026-09-16 con el mismo argumento — cuando
-el manejo cambia, el tipo es propio. Una `drying_facility` puede seguir
-colgando del `site` **o** del `beneficio`; **las existentes no se reasignan
-hacia atrás**: donde están es donde alguien las puso.
+el manejo cambia, el tipo es propio. Hoy una `drying_facility` sólo puede
+colgar del `site`: `crearUbicacionDeSecado` (lib/traceability/instalaciones.ts)
+exige `parent.locationType === "site"` y esta rama no lo cambia. Colgar una de
+un `beneficio` es un cambio futuro sobre esa función, no algo que ya soporte.
 
 **Decisión 2: `location:create_site`, y el capataz no lo tiene.** Crear un
 lugar nuevo no es editar los atributos de uno existente, así que no se pliega
@@ -10766,8 +10767,7 @@ beneficio **siempre** nace bajo un sitio, así que el padre es un sujeto real
 para el permiso. Un beneficio suelto, sin finca, queda fuera de alcance.
 
 **Consecuencia.** La pantalla es `/beneficio/ajustes`, primera sección del
-centro de configuración que
-`docs/superpowers/specs/2026-09-17-ajustes-del-beneficio-design.md` describe.
+centro de configuración que describe PR #370.
 Las otras cuatro —capacidades, equipos, instalaciones y recetas— llegan con el
 tablero del beneficio, porque una capacidad declarada sin dónde leerse no sirve
 de nada. Sin permiso, la ruta responde **404** y no una página vacía, como ya
