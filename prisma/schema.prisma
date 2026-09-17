@@ -3971,6 +3971,20 @@ enum DryingTurnEventType {
 // context only, not a second RBAC gate — access is still resolved against
 // the source lot's own project/location, same as every other traceability
 // write path in this module.
+/// Cómo terminó un secado. Ver `DryingRun.endedOutcome`.
+enum DryingOutcome {
+  /// Llegó a la humedad objetivo. **El único que arranca el reloj del reposo.**
+  target_reached
+  /// Se dejó a medias: el café no llegó a objetivo.
+  abandoned
+  /// Se cortó por una causa externa —lluvia, plaga, avería— y no por decisión
+  /// sobre el café. Se distingue de `abandoned` porque para el productor son
+  /// cosas distintas aunque el reposo las trate igual.
+  interrupted
+
+  @@schema("traceability")
+}
+
 model DryingRun {
   samplingEvents SamplingEvent[]
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -3991,6 +4005,16 @@ model DryingRun {
   lotProcess   LotProcess? @relation(fields: [lotProcessId], references: [id])
   startedAt    DateTime     @map("started_at")
   endedAt      DateTime?    @map("ended_at")
+
+  /// **Cómo** terminó, que `endedAt` no distingue: llegar a humedad objetivo y
+  /// abandonar el secado son hechos distintos y dan la misma fecha. El reloj
+  /// del reposo sólo arranca con `target_reached` (§A del spec de reposo).
+  ///
+  /// Nullable a propósito y para siempre: todos los secados cerrados antes del
+  /// 2026-09-16 no lo tienen, y obligarlo los invalidaría a todos. Un secado
+  /// sin desenlace no reposa, pero tampoco es un error — se declara la
+  /// limitación y se sigue.
+  endedOutcome DryingOutcome? @map("ended_outcome")
   createdAt    DateTime     @default(now()) @map("created_at")
   createdBy    String?      @map("created_by") @db.Uuid
   creator      UserAccount? @relation("DryingRunCreatedBy", fields: [createdBy], references: [id])
