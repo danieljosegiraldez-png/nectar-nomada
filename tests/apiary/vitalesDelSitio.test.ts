@@ -295,6 +295,44 @@ describe("A9.8 — la lectura contra Postgres", () => {
     expect(v.alertas.map((a) => a.motivo)).toEqual(["visita_vencida", "alimento_vencido"]);
   });
 
+  it("LEE EL RECUENTO DE CAJAS DE LA BASE, y de la sesión más nueva que lo traiga", async () => {
+    // **Esta prueba existe porque un flip-test la echó en falta.** Vaciar `conCajas` en
+    // `vitalesDeSitios` —dejar de leer la columna— no rompía NADA: las pruebas de alerta
+    // trabajan sobre un fixture en memoria, así que la lectura real no estaba cubierta. Es el
+    // «NADIE CAYÓ» que distingue un guardia de un adorno.
+    const cajasEnSistema = await prisma.hive.count({ where: assertDefinedWhere({ locationId }) });
+    expect(cajasEnSistema).toBeGreaterThan(0); // fila patrón: sin cajas no se compara nada
+
+    // Una visita VIEJA con un recuento que NO debe ganar, y una nueva que sí.
+    await prisma.fieldSession.create({
+      data: {
+        locationId,
+        operatorPersonId: personId,
+        startedAt: new Date(AHORA.getTime() - 60 * MS_POR_DIA),
+        status: "completed",
+        hivesPresentCount: cajasEnSistema + 99,
+        provenanceClass: "original_record",
+      },
+    });
+    await prisma.fieldSession.create({
+      data: {
+        locationId,
+        operatorPersonId: personId,
+        startedAt: new Date(AHORA.getTime() - 2 * MS_POR_DIA),
+        status: "completed",
+        hivesPresentCount: cajasEnSistema - 1,
+        provenanceClass: "original_record",
+      },
+    });
+
+    const v = (await vitalesDeSitios([locationId], AHORA)).get(locationId)!;
+    expect(v.cajasComparadas.declaradas).toBe(cajasEnSistema - 1);
+    expect(v.cajasComparadas.enSistema).toBe(cajasEnSistema);
+    expect(v.cajasComparadas.estado).toBe("divergen");
+    expect(v.cajasComparadas.diferencia).toBe(-1);
+    expect(v.alertas.map((a) => a.motivo)).toContain("cajas_no_cuadran");
+  });
+
   it("`coverageUntil` sólo se guarda en una alimentación", async () => {
     const tratamiento = await recordColonyEvent(userAccountId, {
       colonyId,
