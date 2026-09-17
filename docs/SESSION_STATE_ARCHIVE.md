@@ -3650,3 +3650,92 @@ fila; y la aplicación al cultivo no existe.
 
 **No se implementó nada.** Es entrada de planificación aceptada.
 
+
+### 2026-09-16 · Con qué se alimentó deja de ser texto libre
+
+ADR-148. Daniel, en el apiario: «yo quiero que todos los campos, lo más que se pueda, no sea campo
+libre de texto libre, que sean variables». **Los cinco valores son suyos, literales** — azúcar
+morena, blanca, melaza, miel de abeja, miel de caña — **y no se añadió ninguno más**: un desplegable
+con opciones que en esta finca nadie usa enseña a bajar hasta «otro».
+
+**Columna nueva al lado, no conversión.** `feedingMaterial` se queda como el «cuál» de `otro` y como
+lo escrito antes del vocabulario; convertirla exigiría traducir lo guardado en producción, y esa base
+no se puede leer desde aquí.
+
+**Viaja por la cola sin señal**, o el desplegable funcionaría en línea y se perdería justo en campo.
+
+**Lo que NO está guardado y no se cuenta como hecho:** que la regla «material sólo en alimentación»
+salte al escribir, y que el campo llegue por la cola. Las dos existen en el código, ninguna tiene
+prueba.
+
+**Lo que se midió y sigue en texto libre:** `feedingUnit`, `treatmentProduct`, `treatmentDoseUnit`, y
+dos duplicados de campos que ya tienen vocabulario al lado (`storesLevel`, `pestDiseaseFlags`).
+
+**Y lo que falta del encargo, bloqueado en Daniel:** los productos de tratamiento que usa, y los actos
+de **limpieza fitosanitaria** — que además **no existe como tipo de evento**: `ColonyEventType` tiene
+cuatro valores y ninguno es limpieza.
+
+
+### 2026-09-16 · Alta de colmenas en lote: cinco de una vez, con vista previa
+
+ADR-149. Daniel abrió la app en el apiario y lo que faltaba era registrar **cinco colmenas en cada
+sitio**. El único camino creaba una: diez envíos para dos apiarios.
+
+**Todo o nada en una transacción, con los identificadores comprobados DENTRO de ella** — comprobar
+antes deja una ventana en la que otra sesión crea el `03` y el lote lo pisa a media escritura. El
+error dice **cuáles** están repetidos.
+
+**La vista previa enseña los identificadores exactos antes de enviar**, con la misma función que
+valida en el servidor. No es adorno: el relleno de ceros no se puede acertar —él ya tiene colmenas
+de tres cifras— así que en vez de adivinarlo, se le enseña.
+
+**La colonia es opcional y explícita:** `originType` no tiene valor por omisión porque es un hecho
+que se captura o se pierde. Sin marcar la casilla nacen cajas vacías, y la colonia se añade después
+colmena por colmena.
+
+**El quinto flip-test hubo que rehacerlo:** la primera versión no compilaba y tumbó **seis** pruebas
+—la señal de sospechar del arnés—. La válida cae por una sola: el control negativo.
+
+
+### 2026-09-16 · Cajas presentes: lo contado contra lo colocado
+
+ADR-150. El Anexo E pregunta «Cajas presentes» y el mapa la daba por **sin sitio** con la razón ya
+escrita —«contar y declarar son datos distintos»—, que es justo la que la construye.
+
+`HivePlacement` sabe cuántas cajas **colocó**; eso no es cuántas **hay**. Una caja puede irse sin que
+nadie registre el traslado, y hasta hoy **el sistema no podía ni notarlo**.
+
+**Y aquí ninguno de los dos manda**, a diferencia de las colonias: allí el declarado gana porque el
+sistema no sabe cuáles murieron; aquí `HivePlacement` sí es un registro deliberado. La salida no es
+un número, **es la comparación**.
+
+**El estado tiene tres valores, no un booleano:** un `divergen: false` mentiría cuando nadie contó.
+Y **la diferencia lleva signo** — faltar una caja y sobrar una son problemas distintos.
+
+**La lista de huecos del protocolo baja de cinco a cuatro** (quedan `weather_observed`,
+`site_condition`, `assessment`, `moisture_pct`). El guardia de ADR-143 obligó a declararlo.
+
+**Lo que NO entra y no se cuenta como hecho:** ninguna pantalla pinta el aviso todavía. El dato se
+captura y la comparación existe; dibujarla es pieza propia.
+
+
+### 2026-09-17 · La divergencia de cajas se ve: alerta de sitio
+
+ADR-151. ADR-150 dejó la comparación construida, probada, **y sin que ninguna pantalla la llamara** —
+el «servicio hecho y la puerta sin poner» que este repositorio se queja de haber repetido tres veces
+en una semana. Esto pone la puerta.
+
+**Va como alerta y no como vital**: un vital es una cifra que se consulta; esto es una razón para ir
+a mirar. **Nivel `aviso`, no `crítico`:** la divergencia es ambigua por construcción —una caja que se
+fue, o un recuento malo—, y subir una señal ambigua a crítica enseña a ignorar lo crítico.
+
+**El motivo nuevo va al final del arreglo de prioridad**, la única posición que no reordena los ocho
+que Daniel fijó el 2026-09-14. **Dónde va de verdad sigue siendo decisión suya.**
+
+**La cuenta del sistema es `Hive.locationId`, medido:** el traslado actualiza la colocación y el
+sitio en la misma transacción — 29 colmenas, 0 sin colocación abierta, 0 divergentes.
+
+**Un flip-test encontró un agujero real:** vaciar la lectura de `hivesPresentCount` no rompía nada.
+Las pruebas de alerta trabajan sobre un fixture en memoria, así que la lectura contra la base no
+estaba cubierta. Se añadió, con dos sesiones para que «la más nueva gana» también sea falsable.
+

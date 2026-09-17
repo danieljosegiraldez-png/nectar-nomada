@@ -26,6 +26,8 @@ import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { settleMassBalance } from "./balance";
+import { validarMasaDeSubproducto } from "./subproductos";
+import type { ByproductDestination, ByproductType } from "../../generated/prisma/client";
 import { leerEnmiendas } from "./enmiendas";
 
 export class TraceabilityAccessError extends Error {}
@@ -73,7 +75,10 @@ export function scopeTargetsFor(input: { projectId?: string | null; locationId?:
  */
 export async function requireLotAccess(
   userAccountId: string,
-  action: "manage" | "view",
+  // `release` se añadió el 2026-09-16 y NO es un escalón más de `manage`: es un
+  // permiso distinto porque todo `Farm Operator` tiene `manage`, y autorizar una
+  // venta no es trabajo de campo (§A.4 del spec de reposo).
+  action: "manage" | "view" | "release",
   candidates: ReadonlyArray<{
     projectId?: string | null;
     locationId?: string | null;
@@ -136,7 +141,11 @@ export interface RecordTransformationInput {
     | "disposal"
     | "sale"
     // P3 — kept in sync with the DB enum by hand, same as CreateLotInput.lotType.
-    | "selection";
+    | "selection"
+    // La trilla. Va aquí Y en el enum de Prisma: esta unión se mantiene a mano,
+    // así que añadir el valor al esquema NO la actualiza, y sin esta línea
+    // ninguna llamada podría registrar una trilla aunque la base la aceptara.
+    | "hulling";
   occurredAt: Date;
   operatorPersonId?: string | null;
   notes?: string | null;
@@ -183,6 +192,35 @@ export interface RecordTransformationInput {
    * for review.
    */
   acceptUnexplained?: { reason: string } | null;
+  /**
+   * **Custodia — §B.1.** Quién ejecutó la transformación cuando NO fue la
+   * organización dueña (Cafelino, Kiva Estate), dónde ocurrió, y cuándo salió y
+   * volvió el material. Todos opcionales: mazo y pilón en la propia finca es
+   * una de las tres formas reales, y exigirlos la prohibiría.
+   */
+  performedByOrganizationId?: string | null;
+  performedAtLocationId?: string | null;
+  custodyOut?: Date | null;
+  custodyIn?: Date | null;
+  /**
+   * **Subproductos que salen de esta transformación** — la cascarilla de una
+   * trilla, la pulpa de un despulpado.
+   *
+   * Van aquí y no en una llamada aparte por dos razones. La primera es
+   * atomicidad: una trilla que descuenta el pergamino y falla al crear la
+   * cascarilla dejaría material desaparecido del libro mayor. La segunda es el
+   * BALANCE: su masa cuenta como salida, y sin eso los 18 kg de cascarilla de
+   * una trilla de 100 saldrían como **inexplicados** — el mismo hueco del 18 %
+   * que clasificar `hulling` como conservadora existe para evitar, entrando por
+   * la otra puerta.
+   */
+  byproducts?: ReadonlyArray<{
+    byproductType: ByproductType;
+    destination: ByproductDestination;
+    massKg: number;
+    producedAtLocationId: string;
+    notes?: string | null;
+  }>;
 }
 
 /**
@@ -258,6 +296,13 @@ export async function recordTransformation(userAccountId: string, input: RecordT
         sourceReference: input.sourceReference ?? null,
         selectionMethodValueId: input.selectionMethodValueId ?? null,
         equipmentNote: input.equipmentNote ?? null,
+        // Custodia: quién la hizo, dónde, y cuándo salió y volvió el material.
+        // Nulos cuando la hizo la propia organización en su propio patio, que
+        // es una de las tres formas reales de trillar (§B.1).
+        performedByOrganizationId: input.performedByOrganizationId ?? null,
+        performedAtLocationId: input.performedAtLocationId ?? null,
+        custodyOut: input.custodyOut ?? null,
+        custodyIn: input.custodyIn ?? null,
         inputs: {
           create: input.inputs.map((i) => ({
             lotId: i.lotId,
@@ -322,6 +367,25 @@ export async function recordTransformation(userAccountId: string, input: RecordT
       outputLots.push(outputLot);
     }
 
+    // Los subproductos, DENTRO de la misma transacción: si uno falla, la
+    // transformación entera se revierte y el lote de entrada queda intacto.
+    for (const sub of input.byproducts ?? []) {
+      validarMasaDeSubproducto(sub.massKg);
+      await tx.byproductBatch.create({
+        data: {
+          transformationId: transformation.id,
+          byproductType: sub.byproductType,
+          destination: sub.destination,
+          massKg: sub.massKg,
+          producedAtLocationId: sub.producedAtLocationId,
+          organizationId: sourceLot.organizationId,
+          notes: sub.notes ?? null,
+          provenanceClass,
+          createdBy: userAccountId,
+        },
+      });
+    }
+
     // P0 — the half of the ledger that was missing. Guarded by
     // movesMaterial() so a run-opening stage_change (one input, zero outputs)
     // records its marker without consuming anything; see balance.ts.
@@ -330,7 +394,13 @@ export async function recordTransformation(userAccountId: string, input: RecordT
       transformationType: input.transformationType,
       organizationId: sourceLot.organizationId,
       inputs: input.inputs,
-      outputs: input.outputs,
+      // La masa de cada subproducto cuenta como salida. No crea lote de café
+      // —la cascarilla no es café— pero sí es masa que salió del pergamino, y
+      // el balance tiene que verla o la declarará inexplicada.
+      outputs: [
+        ...input.outputs,
+        ...(input.byproducts ?? []).map((b) => ({ quantity: b.massKg, unit: "kg" })),
+      ],
       occurredAt: input.occurredAt,
       provenanceClass,
       sourceReference: input.sourceReference ?? null,
@@ -1083,4 +1153,49 @@ export async function getLotSummary(userAccountId: string, lotId: string) {
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
   return lot;
+}
+
+/**
+ * Marca un lote como liberado para la venta.
+ *
+ * **No comprueba la edad de reposo, y es deliberado.** Liberar es una decisión
+ * de quien negocia —«depende el arreglo»: un comprador puede aceptar menos
+ * reposo, o el precio puede reflejarlo— y no una consecuencia del calendario.
+ * El aviso de venta temprana sigue saliendo después de liberar: si el estado
+ * callara la advertencia, liberar sería la manera de esquivar el sistema, que
+ * es justo lo que la doctrina de avisar-y-no-bloquear existe para evitar.
+ *
+ * Idempotente: liberar un lote ya liberado no mueve la fecha ni el autor. Quién
+ * y cuándo lo autorizó primero es el hecho que interesa.
+ */
+export async function liberarLote(userAccountId: string, lotId: string) {
+  const lot = await prisma.lot.findUnique({
+    where: { id: lotId },
+    select: { id: true, projectId: true, locationId: true, classification: true, releasedAt: true },
+  });
+  if (!lot) throw new TraceabilityAccessError("no_lot_access");
+  await requireLotAccess(userAccountId, "release", [lot]);
+  if (lot.releasedAt) return prisma.lot.findUniqueOrThrow({ where: { id: lotId } });
+
+  // La escritura y su auditoría van en la MISMA transacción: un lote liberado
+  // sin su AuditEvent seria una autorizacion comercial sin rastro de quien la
+  // dio. Ver la cabecera de `lib/audit.ts`.
+  return prisma.$transaction(async (tx) => {
+    const liberado = await tx.lot.update({
+      where: { id: lotId },
+      data: { releasedAt: new Date(), releasedBy: userAccountId },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "lot.release",
+        sourceInterface: "traceability.service",
+        entityType: "lot",
+        entityId: lotId,
+        after: liberado,
+      },
+      tx,
+    );
+    return liberado;
+  });
 }

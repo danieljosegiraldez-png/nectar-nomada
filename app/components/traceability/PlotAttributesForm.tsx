@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { updatePlotAttributesAction, type TraceabilityActionState } from "../../actions/traceability";
+import { BotonQueNecesitaConexion } from "./BotonQueNecesitaConexion";
 
 const initialState: TraceabilityActionState = {};
 
@@ -185,9 +186,7 @@ export function PlotAttributesForm({
       </div>
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
-      <button type="submit" className="nn-button" disabled={pending}>
-        {t("savePlotAttributesButton")}
-      </button>
+      <BotonQueNecesitaConexion pending={pending}>{t("savePlotAttributesButton")}</BotonQueNecesitaConexion>
     </form>
   );
 }

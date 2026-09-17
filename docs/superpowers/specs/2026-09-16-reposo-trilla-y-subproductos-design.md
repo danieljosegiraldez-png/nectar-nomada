@@ -81,7 +81,7 @@ tiene hoy dónde ir.
 | Balance de masas | `lib/traceability/balance.ts`, 533 líneas, con merma declarada |
 | `QuantityEvent` | el libro mayor; la muestra ya descuenta masa en la misma transacción |
 | Perfiles de beneficio | `PERFIL_POR_GRADO` con `WASHED_STANDARD` y `NATURAL` — **el reposo entra por esta puerta** |
-| `BiocharBatch` | **el precedente**: subproducto del café convertido en enmienda, con su lote propio, su ubicación de producción y su trazabilidad |
+| `BiocharBatch` | **el precedente, y está ENTERO**: el lote de subproducto y su aplicación a una ubicación, que vive en `TreatmentBatch` (esquema:7307) y `applyAmendment()` (`lib/research/amendments.ts:217`), con pruebas |
 | `DryingRun.endedAt` | de donde arranca el reloj del reposo |
 
 **Ausentes, medidos:** `CompostBatch` 0 · `CascaraBatch` 0 · trilla 0 coincidencias ·
@@ -136,6 +136,39 @@ No introduce un estado «en reposo» que cierre el lote. El lote sigue vivo, con
 muestras saliendo. El reposo es **una edad que se calcula**, no una fase que se
 declara — y por eso no hay tabla nueva para él.
 
+### A.4 La liberación SÍ es un estado — y por qué eso no contradice a A.3
+
+**Decisión de Daniel, 2026-09-16: un estado del lote, no una firma de persona.**
+
+Leído deprisa, esto choca con A.3, que acaba de decir que el reposo no se declara.
+No chocan porque **no hablan del mismo hecho**:
+
+- La **edad de reposo** es una medición: sale de `DryingRun.endedAt` y del reloj. Nadie
+  la declara, nadie la puede falsear, y sigue calculándose después de la liberación.
+- La **liberación** es una decisión: alguien mira el lote y dice «éste puede salir».
+  Eso no se puede derivar de ninguna fecha, porque depende del arreglo con el
+  comprador — la misma razón por la que §A.2 decidió avisar y no bloquear.
+
+Una medición no necesita estado; una decisión no se puede tener sin él. Por eso el
+lote gana **un** campo, y no una fase.
+
+**La liberación no apaga el aviso.** Un lote liberado a los 41 días se enseña como
+liberado **y** como vendido con 41 días de reposo. Si el estado borrara la
+advertencia, liberar se convertiría en la forma de callar al sistema — que es
+exactamente el esquivo que §A.2 existe para evitar.
+
+**Quién puede liberar: un permiso propio, `lot:release`.** No vale `lot:manage`, y
+esto sí está medido: **`Farm Operator` ya tiene `lot:manage`** (`catalog.ts:363`), o
+sea que colgar de ahí la liberación haría que cualquier operario de campo autorizara
+una decisión comercial. El molde ya existe en la casa: `lot:override_balance` está
+descrito como algo que «debería ser raro» y el perfil de operario lo excluye a
+propósito. `lot:release` sigue ese camino — lo tiene `Farm Manager`, no `Farm
+Operator`.
+
+*Esto último es una resolución mía, no de Daniel: él eligió «estado» y no dijo quién
+lo cambia. Si se equivoca, el coste es una migración de catálogo y un ajuste de
+perfil — barato y reversible, que es por qué se decidió en vez de preguntar otra vez.*
+
 ---
 
 ## 5. Sección B — La trilla
@@ -180,7 +213,26 @@ no uno obligatorio.
 
 ## 6. Sección C — El destino de los subproductos
 
-Sigue el molde de `BiocharBatch`, que ya resolvió esto una vez.
+Sigue el molde de `BiocharBatch`, que ya resolvió esto **entero**.
+
+> **CORRECCIÓN del 2026-09-16, y es importante porque cambia una premisa.** Este
+> documento afirmó dos veces —y yo se lo dije a Daniel en voz alta— que «la
+> aplicación de enmienda no existe» y que «ninguno de los 149 modelos aplica una
+> enmienda a una parcela». **Era falso.** Existe `TreatmentBatch` (esquema:7307), con
+> `locationId` y `biocharBatchId`, y `applyAmendment()` en
+> `lib/research/amendments.ts:217` la crea, comprobando el ámbito RBAC de la
+> ubicación y con pruebas en `tests/research/amendments.test.ts`.
+>
+> **Por qué no lo vi:** busqué modelos cuyo NOMBRE casara con
+> `Amendment|Enmienda|SoilApplication` y el modelo real se llama `TreatmentBatch`. Mi
+> «control positivo» fue contar los 149 modelos del archivo, que sólo demuestra que
+> el archivo tiene modelos — no que mi búsqueda pudiera encontrar el concepto. Lo
+> encontró Codex auditando este plan.
+>
+> **Lo que esto le hace a §C.1:** la decisión de parar en «salió a compost» se tomó
+> con la premisa de que cerrar el círculo era caro porque faltaba el modelo entero.
+> No falta. La decisión sigue siendo de Daniel, pero se tomó sobre un hecho falso y
+> él lo sabe desde que se escribió esta corrección.
 
 **`ByproductBatch`** — un lote de subproducto con su tipo (`CASCARILLA` | `PULPA`), su
 masa, la transformación que lo originó, dónde se produjo y su destino
@@ -190,21 +242,49 @@ Hoy el destino es **compost** para los dos. Pero el tipo se declara porque casca
 y pulpa no son el mismo material y algún día uno puede ir al biochar —que ya tiene
 modelo— y el otro no.
 
-**Y cierra `F1-002` de paso**: el despulpado también producirá su lote, por el mismo
-camino, sin un segundo mecanismo.
+**`F1-002` queda HABILITADO, no cerrado, y esta frase antes decía de más.** El despulpado
+podrá producir su lote por el mismo camino y sin un segundo mecanismo — pero el plan pone
+`PULPA` en el enum y **ninguna tarea conecta el despulpado con la creación del
+subproducto**, así que al despulpar seguirá sin crearse nada. Tener el tipo disponible no
+es producirlo. Lo encontró Codex auditando el plan; se deja fuera a propósito, pero
+escrito, para que nadie lea `F1-002` como resuelto.
+
+### C.1 Hasta dónde llega, y qué queda deliberadamente fuera
+
+**Decisión de Daniel, 2026-09-16: se registra que salió a compost, y ahí termina.**
+
+El alcance es el `ByproductBatch` con su masa y su destino. **Fuera, y no por olvido:**
+
+- un lote de compost con código propio, que diría cuánto compost hay y de dónde salió;
+- la aplicación de ese compost a una parcela, que cerraría el círculo con el cafetal.
+
+Se descartaron porque **el balance de la trilla cierra sin ellas**: la cascarilla sale
+del lote con su masa declarada, y a dónde va después no cambia ninguna cuenta. Ésa es
+la razón que se sostiene.
+
+**La otra razón que este documento daba era falsa y se retira:** decía que cerrar el
+círculo obligaba a escribir el modelo de aplicación de enmienda desde cero. Existe
+—`TreatmentBatch` y `applyAmendment()`, ver el recuadro de arriba—, así que conectar
+un lote de compost costaría bastante menos de lo que dije. **Daniel decidió con esa
+información equivocada**; la decisión sigue en pie hasta que él diga otra cosa.
+
+**Lo que queda anotado para quien venga:** `applyAmendment()` hoy sólo acepta un lote
+de biochar. El día que el compost tenga que aplicarse, lo que hace falta es ensanchar
+esa función, no escribir una paralela.
 
 ---
 
 ## 7. Decisiones abiertas — de Daniel, no mías
 
-1. **La liberación autorizada: ¿firma o estado?** Q17 dice «authorized release» y no
-   dice quién autoriza ni contra qué. Un estado del lote y una firma de una persona
-   son cosas distintas y la segunda necesita saber **quién puede firmar**.
+1. ~~**La liberación autorizada: ¿firma o estado?**~~ — **cerrada el 2026-09-16: un
+   estado del lote** (§A.4), con permiso propio `lot:release` porque `Farm Operator`
+   ya tiene `lot:manage`.
 2. ~~¿La venta temprana se bloquea o sólo se avisa?~~ — **cerrada el 2026-09-16:
-   sólo avisa** (§4.2).
+   sólo avisa** (§A.2).
 3. **Los umbrales**, que son `[PROVISIONAL]` mientras `P-F` siga abierta.
-4. **Si la cascarilla compostada vuelve a la finca como enmienda**, y entonces cierra
-   el círculo con las parcelas — o si sólo se registra que salió a compost.
+4. ~~**Si la cascarilla compostada vuelve a la finca como enmienda**~~ — **cerrada el
+   2026-09-16: sólo se registra que salió a compost** (§C.1). El lote de compost y la
+   aplicación a parcela quedan fuera, y con una nota de por qué.
 
 ---
 

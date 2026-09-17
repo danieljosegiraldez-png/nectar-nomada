@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { clasificarConsulta, diasHastaLaProximaConsulta } from "./vocabularioDeConsulta";
 import { pesoDeNivel, type Alerta, type MotivoDeAlerta } from "./motivoDeAlerta";
 import { HORAS_DE_JORNADA_VIEJA } from "../traceability/fieldSessions";
+import { compararCajasPresentes, type ComparacionDeCajas } from "./cajasPresentes";
 
 /**
  * A9.8 — los vitales de cada sitio de apiario y el color de su borde.
@@ -104,6 +105,14 @@ export interface VitalesDeSitio {
   /** Filas `Colony` en estado activo ahora mismo. Distinto de lo declarado, y a propósito. */
   coloniasActivas: number;
   cajas: number;
+  /**
+   * Lo que alguien CONTÓ frente a `cajas`, que es lo que el sistema tiene colocado (ADR-150).
+   *
+   * **`cajas` no sobra ni se sustituye**: es uno de los dos lados de la comparación, y aquí
+   * ninguno de los dos manda. Los llamadores que sólo quieren la cuenta del sistema siguen
+   * leyendo `cajas`; quien quiera saber si cuadra, lee esto.
+   */
+  cajasComparadas: ComparacionDeCajas;
   alimentoHasta: Date | null;
   ultimaCosecha: Date | null;
   ultimaCosechaKg: number | null;
@@ -161,6 +170,17 @@ export function alertasDe(v: Omit<VitalesDeSitio, "alertas">, hubieron: { perdid
     alertas.push({ nivel: "aviso", motivo: "visita_sin_cerrar" });
   }
 
+  // Las cajas contadas no cuadran con las colocadas (ADR-150/151).
+  //
+  // **`aviso` y no `critico`, y la razon importa:** la divergencia es AMBIGUA por construccion
+  // --puede ser una caja que se fue, o un recuento mal hecho--. `perdida_sin_reposicion` es
+  // critica porque unas colonias murieron de verdad; esto es «ve a mirar». Subir una senal
+  // ambigua a critica es como se ensena a ignorar lo critico.
+  //
+  // Sin recuento NO alerta: nadie conto, y avisar de eso seria avisar de una ausencia que el
+  // propio protocolo marca como opcional.
+  if (v.cajasComparadas.estado === "divergen") alertas.push({ nivel: "aviso", motivo: "cajas_no_cuadran" });
+
   // Anexo E §3, «Consulta a vecinos vence en 3 días». La regla la decide
   // `clasificarConsulta`, que es pura y vive con el resto del vocabulario.
   //
@@ -196,6 +216,7 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
         status: true,
         nextVisitDueAt: true,
         coloniesAliveCount: true,
+        hivesPresentCount: true,
         completedAt: true,
       },
       orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
@@ -270,6 +291,14 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
       return !min || c.plannedApplicationAt < min ? c.plannedApplicationAt : min;
     }, null);
 
+    // El recuento declarado más reciente, con la MISMA regla que el de colonias: la sesión más
+    // nueva que traiga uno. Una visita sin recuento no borra el de la anterior.
+    const conCajas = misSesiones.filter((s) => s.hivesPresentCount != null);
+    // `misColmenas.length` es la cuenta del sistema, y es la buena: `trasladarColmenas`
+    // actualiza `Hive.locationId` y la colocación EN LA MISMA transacción, así que no pueden
+    // divergir. Medido el 2026-09-17: 29 colmenas, 0 sin colocación abierta, 0 divergentes.
+    const cajasComparadas = compararCajasPresentes(conCajas[0]?.hivesPresentCount ?? null, misColmenas.length);
+
     const base: Omit<VitalesDeSitio, "alertas"> = {
       ultimaConsultaAVecinos,
       diasHastaConsulta: ultimaConsultaAVecinos
@@ -284,6 +313,7 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
       fechaDelConteoDeclarado: conConteo[0]?.startedAt ?? null,
       coloniasActivas: misColmenas.reduce((n, h) => n + h.colonies.filter((c) => c.status === "active").length, 0),
       cajas: misColmenas.length,
+      cajasComparadas,
       alimentoHasta,
       ultimaCosecha: miCosecha?.occurredAt ?? null,
       ultimaCosechaKg: miCosecha?.extractedWeightKg == null ? null : Number(miCosecha.extractedWeightKg),

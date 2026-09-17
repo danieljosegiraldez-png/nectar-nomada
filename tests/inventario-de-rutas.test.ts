@@ -100,8 +100,10 @@ describe("el inventario del router", () => {
     // 77 → 78 el 2026-09-16: /admin/users/[assignmentId]/permisos, la pantalla que
     // permite quitar y añadir permisos sueltos a UNA asignación sin tocar el perfil
     // ni entrar por SQL. Hasta ese día un ajuste así obligaba a crear un perfil nuevo.
-    // Medido con scripts/inventario-de-rutas.mjs: 68 páginas y 10 handlers.
-    expect(salida).toContain("78 entradas");
+    // 78 → 79 el 2026-09-16: /plots/[id]/ajustes — la pantalla de gestión de una
+    // parcela (siembras, condiciones y calicatas), separada del tablero.
+    // Medido con scripts/inventario-de-rutas.mjs: 69 páginas y 10 handlers.
+    expect(salida).toContain("79 entradas");
     expect(codigo, salida).toBe(0);
   });
 

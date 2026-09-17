@@ -9,6 +9,7 @@ import {
   type TraceabilityActionState,
 } from "../../actions/traceability";
 import { PROCEDENCIA_DE_SIEMBRA } from "../../../lib/traceability/procedencia";
+import { BotonQueNecesitaConexion } from "./BotonQueNecesitaConexion";
 import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
 import { construirPayloadDeSiembra } from "../../../lib/sync/parcelaPayload";
 
@@ -263,9 +264,14 @@ export function PlantingCohortForm({
           {t("fieldEventQueueFailed")}
         </p>
       ) : null}
-      <button type="submit" className="nn-button" disabled={pending || encolando}>
-        {editando ? t("cohortSaveEditButton") : t("cohortCreateButton")}
-      </button>
+      {/* Registrar una siembra se encola sin señal (#345); corregirla no. */}
+      {editando ? (
+        <BotonQueNecesitaConexion pending={pending || encolando}>{t("cohortSaveEditButton")}</BotonQueNecesitaConexion>
+      ) : (
+        <button type="submit" className="nn-button" disabled={pending || encolando}>
+          {t("cohortCreateButton")}
+        </button>
+      )}
     </form>
   );
 }

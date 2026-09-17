@@ -19,7 +19,7 @@ import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
-import type { LotType, ProvenanceClass } from "../../generated/prisma/client";
+import type { DryingOutcome, LotType, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveRunSourceLot(dryingRunId: string) {
   const transformation = await prisma.lotTransformation.findFirst({
@@ -137,6 +137,13 @@ export interface EndDryingRunInput {
   // T9.5: required — same reasoning as StartDryingRunInput above.
   provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
+  /**
+   * Cómo terminó. Opcional a propósito: cerrar un secado sin declararlo sigue
+   * siendo válido, porque obligarlo invalidaría todo lo anterior al 2026-09-16
+   * y porque bloquear se esquiva en el patio. Sin esto, el lote no reposa — y
+   * el motor lo dice con `SECADO_SIN_OBJETIVO_ALCANZADO` en vez de callarlo.
+   */
+  endedOutcome?: DryingOutcome | null;
 }
 
 export async function endDryingRun(userAccountId: string, input: EndDryingRunInput) {
@@ -152,7 +159,7 @@ export async function endDryingRun(userAccountId: string, input: EndDryingRunInp
   const result = await prisma.$transaction(async (tx) => {
     const endedRun = await tx.dryingRun.update({
       where: { id: input.dryingRunId },
-      data: { endedAt: input.endedAt },
+      data: { endedAt: input.endedAt, endedOutcome: input.endedOutcome ?? null },
     });
 
     const transformation = await tx.lotTransformation.create({

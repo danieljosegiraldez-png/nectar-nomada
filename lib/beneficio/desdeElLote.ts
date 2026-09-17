@@ -35,6 +35,7 @@ import {
   type EstadoDeVerificacion,
 } from "../equipos/verificacion";
 import { PERFILES, type ClaveDePerfil, type ProtocolProfile } from "./perfiles";
+import { evaluarReposo, type EstadoDeReposo } from "./reposo";
 import { evaluarSecado, type DryingAssessment, type DryingReading } from "./secado";
 
 /**
@@ -129,11 +130,16 @@ export type SinVeredicto =
   | "SIN_LECTURAS";
 
 export interface VeredictoDeFase {
-  readonly fase: "fermentacion" | "secado";
+  readonly fase: "fermentacion" | "secado" | "reposo";
   readonly perfil: ProtocolProfile;
   readonly ph: PHAssessment | null;
   readonly brix: BrixAssessment | null;
   readonly secado: DryingAssessment | null;
+  /**
+   * Sólo en la fase `reposo`; nulo en las otras dos. Lleva los días y las dos
+   * compuertas —muestra y venta—, ninguna de las cuales bloquea nada.
+   */
+  readonly reposo: EstadoDeReposo | null;
   /**
    * Lo que este puente no pudo traducir. Va hasta la pantalla a propósito: un
    * veredicto cuyo origen no se puede auditar no vale más que una corazonada.
@@ -143,7 +149,7 @@ export interface VeredictoDeFase {
 
 export interface EntradaDelLote {
   /** `null` si el lote no tiene fase abierta. */
-  readonly fase: { tipo: "fermentacion" | "secado"; iniciadaEn: Date } | null;
+  readonly fase: { tipo: "fermentacion" | "secado" | "reposo"; iniciadaEn: Date } | null;
   /** El `value` del catálogo `grado_proceso`, tal cual. `null` si no hay proceso. */
   readonly gradoDeProceso: string | null;
   readonly mediciones: readonly MedicionDelLote[];
@@ -165,6 +171,34 @@ export function veredictoDelLote(entrada: EntradaDelLote): VeredictoDeFase | Sin
   const clave = PERFIL_POR_GRADO[entrada.gradoDeProceso];
   if (!clave) return "GRADO_SIN_PERFIL";
   const perfil = PERFILES[clave];
+
+  if (entrada.fase.tipo === "reposo") {
+    // **El reposo no necesita lecturas.** Es una edad, no una medición, así que
+    // no cae por `SIN_LECTURAS` como las otras dos fases: un lote reposando en
+    // bodega no produce mediciones y sigue teniendo días.
+    const reposo = evaluarReposo({
+      finDeSecado: entrada.fase.iniciadaEn,
+      desenlace: "target_reached",
+      perfil: perfil.reposo,
+      ahora: entrada.ahora,
+    });
+
+    // El umbral es del PROCESO, no del varietal, y eso se declara en vez de
+    // disimularlo: el operario tiene que ver que el número que le enseñan es
+    // del lavado y no de su Geisha. El spec §A.1 pide las dos cosas y esto
+    // hace una; callarlo sería peor que no tenerlo.
+    const limitacionesDeReposo = [...reposo.limitaciones, "UMBRAL_SIN_VARIETAL"];
+
+    return {
+      fase: "reposo",
+      perfil,
+      ph: null,
+      brix: null,
+      secado: null,
+      reposo: { ...reposo, limitaciones: reposo.limitaciones },
+      limitaciones: limitacionesDeReposo,
+    };
+  }
 
   const usables = entrada.mediciones.filter((m) => !m.fueCorregida);
   if (usables.length === 0) return "SIN_LECTURAS";
@@ -217,6 +251,7 @@ export function veredictoDelLote(entrada: EntradaDelLote): VeredictoDeFase | Sin
         ? evaluarBrix({ readings: brix, fermentationStartedAt: entrada.fase.iniciadaEn, now: entrada.ahora, profile: perfil })
         : null,
       secado: null,
+      reposo: null,
       limitaciones,
     };
   }
@@ -265,6 +300,7 @@ export function veredictoDelLote(entrada: EntradaDelLote): VeredictoDeFase | Sin
     ph: null,
     brix: null,
     secado: evaluarSecado({ readings: lecturas, dryingStartedAt: entrada.fase.iniciadaEn, now: entrada.ahora }),
+    reposo: null,
     limitaciones,
   };
 }

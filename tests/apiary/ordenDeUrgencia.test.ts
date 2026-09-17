@@ -109,6 +109,11 @@ describe("Anexo E §2 — el orden de la lista de apiarios", () => {
     expect(MOTIVOS_DE_ALERTA[0]).toBe("aspersion_anunciada");
     expect(rangoDeMotivo("aspersion_anunciada")).toBeLessThan(rangoDeMotivo("perdida_sin_reposicion"));
     expect(rangoDeMotivo("perdida_sin_reposicion")).toBeLessThan(rangoDeMotivo("visita_vencida"));
-    expect(MOTIVOS_DE_ALERTA.length).toBe(8);
+    // NUEVE desde el 2026-09-17 (ADR-151). Eran ocho, y el noveno --`cajas_no_cuadran`-- se
+    // puso AL FINAL a proposito: es la unica posicion que no reordena ninguno de los ocho que
+    // el dueno fijo el 2026-09-14. **Donde debe ir de verdad es decision suya**, y hasta que la
+    // tome esta linea deja dicho que se anadio sin reordenar nada.
+    expect(MOTIVOS_DE_ALERTA.length).toBe(9);
+    expect(MOTIVOS_DE_ALERTA[MOTIVOS_DE_ALERTA.length - 1]).toBe("cajas_no_cuadran");
   });
 });

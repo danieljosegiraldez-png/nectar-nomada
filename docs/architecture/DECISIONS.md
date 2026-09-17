@@ -10598,3 +10598,235 @@ prueba fija la lista, asi que la cuenta no pudo cambiar en silencio. Y al revert
 existen y estan probadas, pero **ninguna pantalla las llama todavia**: lo que entra aqui es que el
 dato se pueda capturar y que la comparacion exista. Pintarla es una pieza propia, y se dice aqui
 para que nadie la cuente como hecha.
+
+## ADR-151 -- La divergencia de cajas se ve: alerta de sitio, nivel aviso
+
+**Contexto.** ADR-150 construyo `compararCajasPresentes` y `avisoDeCajas`, con sus nueve pruebas, y
+**dijo explicitamente que ninguna pantalla las llamaba**. Eso es el patron del que este repositorio
+se queja de haber repetido **tres veces en una semana** --lo dice la cabecera de
+`scripts/cargar-protocolo-de-campo.ts`: *«el servicio hecho y la puerta sin poner»*--. Este ADR pone
+la puerta.
+
+**Decision -- va como ALERTA del sitio, no como un vital mas.** Un vital es una cifra que se
+consulta; esto es **una razon para ir a mirar**, que es lo que el mecanismo de alertas ya modela. El
+hermano mas cercano es `perdida_sin_reposicion`: tambien una discrepancia, tambien algo que pide
+accion.
+
+**Nivel `aviso` y no `critico`, y la razon es la que decide.** La divergencia es **ambigua por
+construccion**: puede ser una caja que se fue sin registrarse, o un recuento mal hecho.
+`perdida_sin_reposicion` es critica porque unas colonias murieron de verdad; esto es «ve a mirar».
+**Subir una senal ambigua a critica es como se ensena a ignorar lo critico**, y este tablero ya
+tiene cinco motivos criticos compitiendo por el borde de la tarjeta.
+
+**Sin recuento NO alerta.** Avisar de que nadie conto seria avisar de una ausencia que el propio
+protocolo marca **opcional** (`"required": false`). Y «coinciden» tampoco se pinta: decir «todo
+bien» en cada visita entrena a no leer el aviso.
+
+**El motivo nuevo va AL FINAL del arreglo de prioridad, y eso no es pereza.**
+`lib/apiary/motivoDeAlerta.ts` dice de si mismo que el orden es *«la prioridad que fijo el dueno el
+2026-09-14»* y que **«se cambia con el dueno delante y no al pasar»**. El final es la unica posicion
+que **no reordena ninguno de los ocho** que el decidio. **Donde debe ir de verdad es decision suya**
+y queda abierta; el flip-test 4 comprueba que colarlo al principio salta.
+
+**La cuenta del sistema es `Hive.locationId` y no `HivePlacement`, medido y no supuesto.**
+`trasladarColmenas` cierra la colocacion abierta, crea la nueva **y** actualiza `Hive.locationId`
+**en la misma transaccion**, asi que no pueden divergir. Comprobado el 2026-09-17 contra la base
+compartida: **29 colmenas, 0 sin colocacion abierta, 0 divergentes**. Y `vitalesDeSitios` ya carga
+las colmenas, asi que no hace falta consulta nueva.
+
+**Dos guardias existentes obligaron a declarar el cambio**, y ninguno lo tuve que recordar yo: el
+que exige texto en los dos idiomas para cada motivo, y el que **fija la cuenta del arreglo en ocho**.
+El segundo es de los buenos: cambio a nueve con la razon escrita al lado.
+
+**Y un flip-test encontro un agujero real.** Vaciar el filtro que lee `hivesPresentCount` de la
+sesion mas nueva **no rompia NADA** --«NADIE CAYO»--: las pruebas de alerta trabajan sobre un
+fixture en memoria, asi que **la lectura contra la base no estaba cubierta**. Se anadio una prueba
+con DOS sesiones --una vieja con un recuento que no debe ganar y una nueva que si-- para que la
+regla de «la mas nueva que lo traiga» tambien sea falsable. Rehecho el flip: cae una sola prueba,
+por su nombre.
+
+**Nota sobre el flip-test 3, para que nadie lo lea mal.** Hacer que la alerta salte con
+`!== "coinciden"` tumbo **diez** pruebas, que normalmente es la senal de sospechar del arnes. Aqui
+es legitimo: `sin_recuento` es el estado del sitio sano del fixture, asi que esa mutacion hace
+alertar a **todos** los sitios y rompe cada prueba que espera una lista exacta. El control negativo
+cayo entre ellas, por su nombre.
+
+## ADR-152 -- Clima observado, y el guardia que ata el protocolo al esquema
+
+**Contexto.** El mapa del protocolo daba `weather_observed` por **sin sitio** con esta nota:
+*«Sin columna. El Anexo C lo pide como vital del sitio y lo deja en una capa externa sin proveedor
+conectado.»*
+
+**Esa nota confunde dos preguntas distintas**, y por eso el hueco no era un hueco:
+
+| | |
+|---|---|
+| **Anexo C** | «Clima 7 dias» -- un **pronostico**, capa externa, sin proveedor conectado. Sigue bloqueado, y bien. |
+| **Anexo E** | «Clima observado» -- lo que el apicultor **vio estando ahi**, con sus cuatro opciones **ya declaradas** en `protocolos/apiario-campo-v1.json`. |
+
+La segunda no necesita ningun proveedor. **Es la segunda vez que un `sin_sitio` resulta ser una
+lectura equivocada de su propia nota**; ADR-143 fue la primera, con `efficacy_note`.
+
+**Decision -- `FieldSession.weatherObserved`, enum de cuatro valores.** Hermana de
+`hivesPresentCount` y `coloniesAliveCount`. Los cuatro valores son **los del protocolo,
+literales**. El vacio es `null` --«nadie miro el cielo»-- y **no** `despejado`: el protocolo la
+marca `"required": false`, y no mirar no invalida la visita.
+
+**No hay `otro`, y es deliberado.** El protocolo no lo declara, y el sitio donde el dueno anade un
+quinto valor es **ese JSON** -- toda la idea de A9.4. **`neblina` merece mencion aparte**: el marco
+de investigacion describe Las Nubes como *«low-elevation cloud-forest environment»*, asi que ahi
+la neblina no es rara. Anadirla es decision del dueno, y hay que hacerlo **en los dos sitios a la
+vez**.
+
+## El guardia, que es lo que de verdad faltaba
+
+**`feedingMethod` lleva desde A9.4 con sus cuatro opciones escritas DOS veces** --el JSON y el
+`enum FeedingMethod`-- y **nada comprobaba que coincidieran**. Coincidian por haberlas escrito
+bien a mano.
+
+Eso es deriva esperando a ocurrir: las `options` del protocolo se guardan como `enumValues` de una
+`ProtocolVariable` **en la base**, asi que el dueno puede cambiarlas sin migracion -- pero cuando
+el mapa manda esa pregunta a una **columna de enum**, Postgres solo acepta los valores del tipo.
+El dia que alguien anada `"neblina"` al JSON, la captura lo ofrecera y la escritura lo rechazara
+con un error que no dice nada de protocolos.
+
+`tests/arquitectura/enum-del-protocolo.test.ts` lo ata. Solo mira las preguntas que **el mapa
+dice** que van a un enum del esquema: las que ya prometieron esa correspondencia.
+
+## Lo que el guardia encontro el primer dia, y una es mia
+
+**Cuatro divergencias que ya existian**, declaradas con su razon y su dueno porque **tres son
+decisiones de Daniel** y un guardia que no puede pasar nunca ensena a ignorar una linea roja:
+
+1. **`population`** -- el protocolo dice `apiñada` **con ñ** y el enum dice `apinada`. **Nadie
+   traduce**: `POBLACIONES` usa la del codigo. Hoy no rompe porque el formulario sale de esa
+   constante, pero el protocolo existe para que la captura salga **de el**. Cual de los dos se
+   cambia es decision del dueno: la ñ es su ortografia.
+2. **`honey_stores`** y 3. **`pollen_stores`** -- el protocolo declara `junto_a_cria` como cuarto
+   nivel; el esquema lo modela **aparte**, como booleano (`honeyNextToBrood`). Es deliberado y
+   mejor: «junto a cria» no es una cantidad, es una posicion.
+4. **`material`** -- **DIVERGENCIA MIA, del 2026-09-16.** ADR-148 construyo `FeedingMaterial` con
+   los cinco valores que el dueno dicto en el apiario **y no se actualizo el protocolo**, que
+   sigue ofreciendo `jarabe_1_1`, `jarabe_2_1`, `sustituto_polen` y `torta`. **Son dos
+   vocabularios para la misma pregunta**, y cual gana es decision suya.
+
+Desde hoy **no puede aparecer una quinta**, y una prueba aparte exige que las cuatro **sigan ahi**:
+si alguien arregla una, la lista se queda corta y lo dice.
+
+**La lista de huecos del protocolo baja de CUATRO a TRES** -- quedan `site_condition`,
+`assessment` y `moisture_pct`.
+
+**Cinco flip-tests, los cinco compilando, y dos rehechos** por la razon de siempre: anadir un
+valor a un `as const satisfies` estrecha la union y no compila. Los validos fueron **reordenar** el
+vocabulario y **vaciar el predicado**. El cuarto es el que vale: separar el JSON del enum
+--anadiendo `"neblina"` solo al protocolo-- cae por el guardia nuevo, compilando.
+
+## ADR-153 -- Las dos divergencias del dueno, resueltas: la eñe y el vocabulario completo
+
+**Contexto.** El guardia de ADR-152 encontro cuatro divergencias entre el protocolo del dueno y el
+esquema, y le llevo las tres que eran decisiones suyas. Contesto dos el mismo dia: *«mis cinco mas
+los jarabes, y arregla apiñada»*.
+
+## 1 · La eñe, y la afirmacion falsa que la causaba
+
+`apiñada` es su ortografia y la que **su protocolo ya usaba**; el enum decia `apinada` y **nadie
+traducia**. No rompia todavia porque el formulario sale de `POBLACIONES`, la constante del codigo
+-- pero el protocolo existe para que la captura salga **de el**, y ese dia habria ofrecido un valor
+que Postgres rechaza.
+
+**La causa raiz estaba escrita en el esquema, y era falsa.** El comentario de `ColonyPopulation`
+justificaba la ausencia asi: *«`apinada` sin eñe porque un identificador de enum no la admite»*.
+**Un enum de Prisma SI la admite**: `prisma validate` dice «the schema is valid» con `apiñada`
+dentro. Esa suposicion --escrita como justificacion y nunca medida-- es la razon de la divergencia,
+y **se corrige el comentario en vez de dejarlo al lado**: una regla que resulta falsa hay que
+corregirla, no reforzarla.
+
+**La migracion se escribe A MANO, y esa es la decision tecnica de esta mitad.** Prisma genero un
+**intercambio de tipo**: crear `ColonyPopulation_new` y castear
+`population::text::ColonyPopulation_new`. **Ese cast revienta para cualquier fila que valga
+`'apinada'`.** En la base local hay cero --medido: 2 inspecciones, 0 con ese valor-- pero **la de
+produccion no se puede leer desde aqui**, asi que la ausencia no se puede afirmar.
+`ALTER TYPE ... RENAME VALUE` preserva los datos **por definicion**: renombra la etiqueta, no
+reescribe filas. Sin deriva de esquema despues, comprobado.
+
+## 2 · «Mis cinco mas los jarabes»
+
+`FeedingMaterial` pasa de seis valores a diez: los **cinco** que el dueno dicto el 2026-09-16
+--primero, porque son los que usa--, los **dos jarabes**, y `sustituto_polen` y `torta`.
+
+**Esos dos ultimos NO son jarabes** --son alimentos proteicos-- y **se quedan igual**: ya estaban
+en **su** protocolo, y quitarlos seria una perdida de capacidad que nadie pidio. Queda dicho que si
+no los usa, se quitan entonces. Es la eleccion de menor perdida con la pregunta a la vista, en vez
+de decidirla en silencio en cualquiera de las dos direcciones.
+
+**Y esto revisa a ADR-148, con su razon.** Aquella prueba decia «exactamente sus cinco, ni uno
+mas», y su argumento era bueno: *un desplegable con opciones que nadie usa ensena a bajar hasta
+«otro»*. Lo que no habia visto es que **el protocolo ya ofrecia otras cuatro**, asi que el efecto
+neto de «no anadir ninguna» no era un vocabulario corto: eran **dos vocabularios** para la misma
+pregunta. El argumento sigue valiendo; la premisa estaba incompleta.
+
+## Lo que impide que vuelvan a separarse
+
+Dos cosas, y la segunda es la que faltaba en ADR-148:
+
+- El guardia `enum-del-protocolo` pasa ahora con **solo las dos divergencias legitimas**
+  (`honey_stores`, `pollen_stores`), que son de modelado y estan declaradas.
+- Una prueba nueva **compara el vocabulario con el ARCHIVO del protocolo**, no con una lista
+  escrita en la prueba. Compararse con una lista propia es compararse consigo mismo.
+
+**Tres flip-tests, y el tercero hubo que rehacerlo.** Quitar la eñe de `POBLACIONES` **no
+compila** --rompe el `satisfies readonly ColonyPopulation[]`--, o sea que **ahi la protege el
+compilador y no una prueba**, que es mas fuerte. El flip valido quita la eñe **del JSON**, que no
+pasa por tipos, y cae por el guardia.
+
+## ADR-154 -- La valoracion del tecnico, por el cierre de la visita y no por uno nuevo
+
+**Contexto.** El Anexo E pide «Valoracion» y el mapa del protocolo la daba por **sin sitio** con la
+razon escrita: *«`note` es la nota de campo; mezclarlas perderia cual se escribio con el guante
+puesto»*. Esa distincion es la que la construye: son dos columnas porque son **dos momentos**.
+
+**Y el dato que decide el diseno, medido:** `assessment` es el **UNICO** campo de etapa `close` de
+la inspeccion. Los otros **dieciseis** son de campo.
+
+## La decision: no se le inventa un cierre a la inspeccion
+
+`Inspection` **no tiene nada de cierre** -- ni `completedAt`, ni ventana de edicion, ni una funcion
+que la complete: solo `recordInspection` y el listado. `FieldSession` si tiene las tres cosas, con
+sus reglas ya decididas y **distinguidas entre si a proposito**: `locked` por decision,
+`editWindowExpiresAt` por plazo, *«porque quien lo lea necesita saber cual de las dos»*.
+
+Inventar un segundo cierre duplicaria esa maquina y la haria derivar. Asi que **la puerta es la
+visita**: el servicio encuentra la sesion a la que pertenece la inspeccion y le aplica **sus**
+reglas. La ruta existe y no hubo que crearla -- `FieldEvent` une `fieldSessionId` con
+`inspectionId`.
+
+**Una inspeccion SIN visita se acepta, y el servicio lo DICE.** Se puede inspeccionar sin jornada
+abierta, asi que el enlace puede faltar; negarlo dejaria esa valoracion **sin poder escribirse
+nunca**, que es peor que escribirla sin plazo. Devuelve `origenDeLaVentana` --`"visita"` o
+`"sin_visita"`-- para que la pantalla lo pueda decir y nadie suponga un plazo que no hubo.
+
+**El AuditEvent lleva el ANTES.** Una valoracion es una lectura del tecnico; saber que la cambio
+--y desde que-- es parte de poder sostenerla. El vacio **borra**, que es como se deshace una puesta
+por error: misma regla que los campos de cierre de la visita.
+
+## El desajuste de procedencia, que NO es nuevo y queda dicho
+
+El protocolo declara `assessment` como **`interpretation`**, y esta fila esta estampada
+**`direct_observation`** -- `inspections.ts` la fija asi para toda la inspeccion. Una fila tiene
+**una** procedencia, y esta lleva dos clases de afirmacion.
+
+**El desajuste ya existia y ADR-142 no lo dijo:** `probable_cause` y `recommendation` son los otros
+dos items que el protocolo marca `interpretation`, y viven como columnas de `FieldSession`, cuya
+fila tampoco es una interpretacion. Son los tres unicos items con procedencia declarada en todo el
+protocolo.
+
+**No se arregla aqui, y la razon no es pereza:** separarlo bien significa decidir si una
+interpretacion merece fila propia --`FieldEvent` ya tiene su propio `provenanceClass`, asi que el
+esquema ya modela procedencia por evento-- y eso cambia como se consulta la serie. Es una pieza
+propia, y hacerla de paso en una rebanada de una columna seria decidirlo sin mirarlo.
+
+**La lista de huecos del protocolo baja de TRES a DOS** -- quedan `site_condition` y `moisture_pct`.
+
+**Seis flip-tests, los seis compilando y cayendo por su nombre**: la ventana deja de aplicarse, una
+visita cerrada deja de bloquear, las dos causas se dicen igual, el audit pierde el antes, la
+valoracion escribe en `note`, y el mapa vuelve a declararla sin sitio.

@@ -38,70 +38,70 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-16 · Cajas presentes: lo contado contra lo colocado
+### 2026-09-17 · La valoración del técnico, por el cierre de la visita
 
-ADR-150. El Anexo E pregunta «Cajas presentes» y el mapa la daba por **sin sitio** con la razón ya
-escrita —«contar y declarar son datos distintos»—, que es justo la que la construye.
+ADR-154. El Anexo E pide «Valoración» y el mapa la daba por sin sitio con la razón escrita: «`note`
+es la nota de campo; mezclarlas perdería cuál se escribió con el guante puesto». Son dos columnas
+porque son **dos momentos**. Y es el **único** campo de etapa cierre de la inspección: los otros
+dieciséis son de campo.
 
-`HivePlacement` sabe cuántas cajas **colocó**; eso no es cuántas **hay**. Una caja puede irse sin que
-nadie registre el traslado, y hasta hoy **el sistema no podía ni notarlo**.
+**La decisión: no se le inventa un cierre a la inspección.** `Inspection` no tiene ni `completedAt`
+ni ventana; `FieldSession` sí, con sus reglas ya distinguidas entre sí. Así que la puerta es la
+visita, y el enlace ya existía —`FieldEvent` une sesión e inspección—.
 
-**Y aquí ninguno de los dos manda**, a diferencia de las colonias: allí el declarado gana porque el
-sistema no sabe cuáles murieron; aquí `HivePlacement` sí es un registro deliberado. La salida no es
-un número, **es la comparación**.
+**Una inspección sin visita se acepta y el servicio lo dice** (`sin_visita`): negarlo dejaría esa
+valoración sin poder escribirse nunca. **El audit lleva el ANTES**, porque saber desde qué se cambió
+una lectura del técnico es parte de poder sostenerla.
 
-**El estado tiene tres valores, no un booleano:** un `divergen: false` mentiría cuando nadie contó.
-Y **la diferencia lleva signo** — faltar una caja y sobrar una son problemas distintos.
+**Un desajuste declarado y NO arreglado:** el protocolo marca esta pregunta `interpretation` y la
+fila está estampada `direct_observation`. **Ya pasaba con `probableCause` y `recommendation`, y
+ADR-142 no lo dijo.** Son los tres únicos items con procedencia declarada. Arreglarlo bien exige
+decidir si una interpretación merece fila propia, y eso es pieza aparte.
 
-**La lista de huecos del protocolo baja de cinco a cuatro** (quedan `weather_observed`,
-`site_condition`, `assessment`, `moisture_pct`). El guardia de ADR-143 obligó a declararlo.
+**Los huecos del protocolo bajan de tres a dos:** `site_condition` y `moisture_pct`.
 
-**Lo que NO entra y no se cuenta como hecho:** ninguna pantalla pinta el aviso todavía. El dato se
-captura y la comparación existe; dibujarla es pieza propia.
+### 2026-09-17 · Las dos divergencias del dueño, resueltas
 
-### 2026-09-16 · Alta de colmenas en lote: cinco de una vez, con vista previa
+ADR-153. Daniel contestó las dos que le llevé: **«mis cinco más los jarabes, y arregla apiñada»**.
 
-ADR-149. Daniel abrió la app en el apiario y lo que faltaba era registrar **cinco colmenas en cada
-sitio**. El único camino creaba una: diez envíos para dos apiarios.
+**La eñe, y su causa raíz era una afirmación falsa escrita en el esquema:** el comentario de
+`ColonyPopulation` decía que «un identificador de enum no la admite». **Prisma sí la admite** —
+`prisma validate` lo confirma—. Esa suposición nunca medida es la razón de que el enum dijera
+`apinada` mientras su protocolo decía `apiñada`, con nadie traduciendo. Se corrige el comentario,
+no se deja al lado.
 
-**Todo o nada en una transacción, con los identificadores comprobados DENTRO de ella** — comprobar
-antes deja una ventana en la que otra sesión crea el `03` y el lote lo pisa a media escritura. El
-error dice **cuáles** están repetidos.
+**La migración se escribió a mano:** Prisma proponía un intercambio de tipo que castea
+`population::text`, y ese cast **revienta con cualquier fila que valga `apinada`**. En local hay 0
+—medido— pero la de producción no se puede leer. `RENAME VALUE` preserva los datos por definición.
 
-**La vista previa enseña los identificadores exactos antes de enviar**, con la misma función que
-valida en el servidor. No es adorno: el relleno de ceros no se puede acertar —él ya tiene colmenas
-de tres cifras— así que en vez de adivinarlo, se le enseña.
+**El vocabulario pasa de seis valores a diez.** `sustituto_polen` y `torta` no son jarabes, pero se
+quedan porque ya estaban en su protocolo; si no los usa, se quitan entonces.
 
-**La colonia es opcional y explícita:** `originType` no tiene valor por omisión porque es un hecho
-que se captura o se pierde. Sin marcar la casilla nacen cajas vacías, y la colonia se añade después
-colmena por colmena.
+**Y esto revisa ADR-148:** su argumento seguía valiendo —opciones que nadie usa enseñan a bajar
+hasta «otro»— pero su premisa estaba incompleta: el protocolo ya ofrecía otras cuatro, así que «no
+añadir ninguna» daba **dos** vocabularios, no uno corto.
 
-**El quinto flip-test hubo que rehacerlo:** la primera versión no compilaba y tumbó **seis** pruebas
-—la señal de sospechar del arnés—. La válida cae por una sola: el control negativo.
+**Lo que impide la recaída:** el guardia pasa con sólo las dos divergencias de modelado, y una
+prueba nueva compara el vocabulario **con el archivo del protocolo**, no con una lista propia.
 
-### 2026-09-16 · Con qué se alimentó deja de ser texto libre
+### 2026-09-17 · Clima observado, y el guardia que ata el protocolo al esquema
 
-ADR-148. Daniel, en el apiario: «yo quiero que todos los campos, lo más que se pueda, no sea campo
-libre de texto libre, que sean variables». **Los cinco valores son suyos, literales** — azúcar
-morena, blanca, melaza, miel de abeja, miel de caña — **y no se añadió ninguno más**: un desplegable
-con opciones que en esta finca nadie usa enseña a bajar hasta «otro».
+ADR-152. El mapa daba `weather_observed` por **sin sitio** porque su nota **confundía dos
+preguntas**: el «Clima 7 días» del Anexo C es un **pronóstico** externo sin proveedor —sigue
+bloqueado, y bien—; el Anexo E pregunta **lo que el apicultor vio**, y sus cuatro opciones ya
+estaban escritas en el protocolo. Segunda vez que un `sin_sitio` resulta ser una lectura
+equivocada de su propia nota (ADR-143 fue la primera).
 
-**Columna nueva al lado, no conversión.** `feedingMaterial` se queda como el «cuál» de `otro` y como
-lo escrito antes del vocabulario; convertirla exigiría traducir lo guardado en producción, y esa base
-no se puede leer desde aquí.
+**Y el guardia, que es lo que de verdad faltaba.** `feedingMethod` lleva desde A9.4 con sus opciones
+escritas **dos veces** —el JSON y el enum— y **nada lo comprobaba**. Coincidían por haberlas escrito
+bien a mano.
 
-**Viaja por la cola sin señal**, o el desplegable funcionaría en línea y se perdería justo en campo.
+**Encontró cuatro divergencias el primer día, y una es mía:** ADR-148 construyó `FeedingMaterial`
+con los cinco valores que Daniel dictó **y no se actualizó el protocolo**, que sigue ofreciendo
+`jarabe_1_1`. Las cuatro quedan declaradas con su razón; tres son decisiones suyas —incluida
+`apiñada` con ñ contra `apinada`, que **nadie traduce**—. Desde hoy no puede aparecer una quinta.
 
-**Lo que NO está guardado y no se cuenta como hecho:** que la regla «material sólo en alimentación»
-salte al escribir, y que el campo llegue por la cola. Las dos existen en el código, ninguna tiene
-prueba.
-
-**Lo que se midió y sigue en texto libre:** `feedingUnit`, `treatmentProduct`, `treatmentDoseUnit`, y
-dos duplicados de campos que ya tienen vocabulario al lado (`storesLevel`, `pestDiseaseFlags`).
-
-**Y lo que falta del encargo, bloqueado en Daniel:** los productos de tratamiento que usa, y los actos
-de **limpieza fitosanitaria** — que además **no existe como tipo de evento**: `ColonyEventType` tiene
-cuatro valores y ninguno es limpieza.
+**La lista de huecos baja de cuatro a tres:** `site_condition`, `assessment`, `moisture_pct`.
 
 
 ## 3. Bloqueado, y en qué

@@ -52,7 +52,9 @@ export function MaterialConsumptionForm({
             ? parent.fermentationRunId
             : parent.kind === "dryingRun"
               ? parent.dryingRunId
-              : parent.locationId
+              : parent.kind === "fieldSession"
+                ? parent.fieldSessionId
+                : parent.locationId
         }
       />
       <div className="nn-field">

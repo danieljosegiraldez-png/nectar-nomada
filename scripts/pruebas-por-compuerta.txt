@@ -38,6 +38,7 @@ tests/apiary/configuracionDeCaja.test.ts
 tests/apiary/crearApiario.test.ts
 tests/apiary/meliponario.test.ts
 tests/apiary/altaEnLote.test.ts
+tests/apiary/valoracionDeInspeccion.test.ts
 tests/apiary/estadoDeColonia.test.ts
 tests/apiary/e2e.test.ts
 tests/apiary/harvest.test.ts
@@ -87,7 +88,11 @@ tests/traceability/ambitoVacio.test.ts
 tests/traceability/biocharBatches.test.ts
 tests/traceability/classificationGate.test.ts
 tests/traceability/drying.test.ts
+tests/traceability/liberacion-del-lote.test.ts
+tests/traceability/subproductos.test.ts
+tests/traceability/venta-temprana.test.ts
 tests/traceability/e2e.test.ts
+tests/traceability/entradaEnProduccion.test.ts
 tests/traceability/export.test.ts
 tests/traceability/f1.test.ts
 tests/traceability/fermentation.test.ts

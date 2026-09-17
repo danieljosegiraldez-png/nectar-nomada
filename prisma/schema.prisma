@@ -289,6 +289,7 @@ model UserAccount {
 
   @@map("user_account")
   @@schema("core")
+  byproductBatchesCreated ByproductBatch[] @relation("ByproductBatchCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -885,6 +886,8 @@ model Location {
 
   @@map("location")
   @@schema("core")
+  lotTransformationsPerformedHere LotTransformation[] @relation("LotTransformationPerformedAt")
+  byproductBatchesProduced ByproductBatch[] @relation("ByproductBatchProducedAt")
 }
 
 enum DryingRoomLightExposure {
@@ -984,6 +987,8 @@ model Organization {
 
   @@map("organization")
   @@schema("core")
+  lotTransformationsPerformed LotTransformation[] @relation("LotTransformationPerformedBy")
+  byproductBatches ByproductBatch[] @relation("ByproductBatchOwner")
 }
 
 enum MembershipStatus {
@@ -2991,6 +2996,20 @@ model Lot {
   // overwritable column").
   status         RecordStatus        @default(draft)
   classification ClassificationLevel @default(internal)
+
+  /// **La liberación para la venta: una DECISIÓN, no una medición.**
+  ///
+  /// No se deriva de la edad de reposo y no la comprueba: depende del arreglo
+  /// con el comprador, que puede aceptar menos reposo o pagarlo distinto
+  /// (§A.4 del spec). Y **no apaga el aviso**: un lote liberado a los 41 días
+  /// se enseña liberado Y con 41 días de reposo. Si el estado callara la
+  /// advertencia, liberar sería la forma de esquivar el sistema.
+  ///
+  /// Exige `lot:release`, que es un permiso propio y no `lot:manage`: todo
+  /// `Farm Operator` tiene `lot:manage`, y autorizar una venta no es trabajo de
+  /// campo.
+  releasedAt DateTime? @map("released_at")
+  releasedBy String?   @map("released_by") @db.Uuid
   // P0 (§8) — the reliability of this lot's own quantity record, distinct
   // from `status` (its administrative lifecycle) and from the
   // provenanceClass carried by each individual event. Set to `conflicting`
@@ -3066,6 +3085,13 @@ enum LotTransformationType {
   // yield (ADR-094 Decision 4).
   selection
 
+  /// La trilla: quitar el pergamino y dejar café verde. Conserva masa —el
+  /// verde, la cascarilla y la merma declarada suman la entrada— porque las
+  /// tres formas de trillar devuelven todo a la finca. Y es OPCIONAL: un lote
+  /// vendido en pergamino nunca se trilla, así que ninguna etapa posterior
+  /// puede exigirla.
+  hulling
+
   @@schema("traceability")
 }
 
@@ -3111,6 +3137,27 @@ model LotTransformation {
   // Same mechanism, T7's DryingRun.
   dryingRunId       String?          @map("drying_run_id") @db.Uuid
   dryingRun         DryingRun?       @relation(fields: [dryingRunId], references: [id])
+
+  /// **Quién ejecutó la transformación, cuando NO fue la organización dueña.**
+  /// Finca Rosina no tiene trilladora: se trilla en Cafelino, en Kiva Estate, o
+  /// a mano con mazo y pilón en Las Nubes. Dos de las tres ocurren fuera del
+  /// control del dueño. Nulo = la propia organización, que es el caso de mazo y
+  /// pilón — y por eso es nulo y no obligatorio: exigirlo prohibiría la forma
+  /// que la finca usa en su propio patio.
+  ///
+  /// Van sobre la transformación y no sobre un tipo concreto: mañana un tueste
+  /// puede hacerse fuera igual que una trilla.
+  performedByOrganizationId String?       @map("performed_by_organization_id") @db.Uuid
+  performedByOrganization   Organization? @relation("LotTransformationPerformedBy", fields: [performedByOrganizationId], references: [id])
+  performedAtLocationId     String?       @map("performed_at_location_id") @db.Uuid
+  performedAtLocation       Location?     @relation("LotTransformationPerformedAt", fields: [performedAtLocationId], references: [id])
+
+  /// Cuándo salió el material de la finca y cuándo volvió. Los dos nulos cuando
+  /// nunca salió. No se valida el orden aquí: un material que aún no ha vuelto
+  /// tiene `custodyIn` nulo, y eso es un estado legítimo, no un error.
+  custodyOut DateTime? @map("custody_out")
+  custodyIn  DateTime? @map("custody_in")
+
   // Same mechanism, R1's RoastSession.
   roastSessionId    String?          @map("roast_session_id") @db.Uuid
   roastSession      RoastSession?    @relation(fields: [roastSessionId], references: [id])
@@ -3154,6 +3201,7 @@ model LotTransformation {
 
   @@map("lot_transformation")
   @@schema("traceability")
+  byproductBatches ByproductBatch[]
 }
 
 model LotTransformationInput {
@@ -3971,6 +4019,20 @@ enum DryingTurnEventType {
 // context only, not a second RBAC gate — access is still resolved against
 // the source lot's own project/location, same as every other traceability
 // write path in this module.
+/// Cómo terminó un secado. Ver `DryingRun.endedOutcome`.
+enum DryingOutcome {
+  /// Llegó a la humedad objetivo. **El único que arranca el reloj del reposo.**
+  target_reached
+  /// Se dejó a medias: el café no llegó a objetivo.
+  abandoned
+  /// Se cortó por una causa externa —lluvia, plaga, avería— y no por decisión
+  /// sobre el café. Se distingue de `abandoned` porque para el productor son
+  /// cosas distintas aunque el reposo las trate igual.
+  interrupted
+
+  @@schema("traceability")
+}
+
 model DryingRun {
   samplingEvents SamplingEvent[]
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -3991,6 +4053,16 @@ model DryingRun {
   lotProcess   LotProcess? @relation(fields: [lotProcessId], references: [id])
   startedAt    DateTime     @map("started_at")
   endedAt      DateTime?    @map("ended_at")
+
+  /// **Cómo** terminó, que `endedAt` no distingue: llegar a humedad objetivo y
+  /// abandonar el secado son hechos distintos y dan la misma fecha. El reloj
+  /// del reposo sólo arranca con `target_reached` (§A del spec de reposo).
+  ///
+  /// Nullable a propósito y para siempre: todos los secados cerrados antes del
+  /// 2026-09-16 no lo tienen, y obligarlo los invalidaría a todos. Un secado
+  /// sin desenlace no reposa, pero tampoco es un error — se declara la
+  /// limitación y se sigue.
+  endedOutcome DryingOutcome? @map("ended_outcome")
   createdAt    DateTime     @default(now()) @map("created_at")
   createdBy    String?      @map("created_by") @db.Uuid
   creator      UserAccount? @relation("DryingRunCreatedBy", fields: [createdBy], references: [id])
@@ -4235,6 +4307,22 @@ model MaterialConsumptionEntry {
   locationId        String?          @map("location_id") @db.Uuid
   location          Location?        @relation(fields: [locationId], references: [id])
 
+  /// **La JORNADA en la que se gastó**, cuando el consumo pertenece a una
+  /// visita y no a un sitio ni a una corrida.
+  ///
+  /// Daniel, 2026-09-17, contando una visita real al apiario: aserrín y hojas
+  /// para el ahumador, un encendedor, una lija. Colgado sólo de la ubicación,
+  /// el sistema podía decir «se gastó aserrín en el Apiario Finca Rosina» y no
+  /// «en la visita del martes» — y la visita es la unidad en la que se trabaja,
+  /// con su operario, su hora y su ventana de edición.
+  ///
+  /// Una variante más del padre discriminado, no un mecanismo paralelo: el
+  /// `switch` de `consumptionParentData` es exhaustivo, así que añadir la
+  /// variante obliga a tratarla.
+  fieldSessionId String?       @map("field_session_id") @db.Uuid
+  fieldSession   FieldSession? @relation(fields: [fieldSessionId], references: [id])
+
+
   materialName String   @map("material_name")
   batchLabel   String   @map("batch_label")
   quantity     Decimal? @db.Decimal(10, 3)
@@ -4361,6 +4449,9 @@ model FieldSession {
   /// porque el sistema no sabe cuáles murieron; para cajas el sistema sí tiene un registro
   /// deliberado, así que elegir uno esconderia la señal. La divergencia ES la salida.
   hivesPresentCount   Int?               @map("hives_present_count")
+  /// Clima OBSERVADO al visitar — Anexo E, etapa de campo (ADR-152). Lo que alguien vio,
+  /// no un pronostico: el «Clima 7 dias» del Anexo C sigue siendo capa externa sin proveedor.
+  weatherObserved   WeatherObserved? @map("weather_observed")
   /// Que se fue a hacer. **Arreglo y no una columna**: una misma visita revisa, alimenta y
   /// trata. Mismo patron que `Inspection.broodStages`.
   ///
@@ -4432,6 +4523,7 @@ model FieldSession {
   @@index([updatedAt, id])
   @@map("field_session")
   @@schema("traceability")
+  materialConsumptionEntries MaterialConsumptionEntry[]
 }
 
 // P2 (43_P2_OPERATOR_CORE.md §4). A chronological **spine**, not a replacement.
@@ -5651,6 +5743,11 @@ enum PlantingEventType {
   // day as `received` or weeks later (nursery holding period); two
   // distinct facts, not implied by each other.
   planted
+  // Tablero de parcela (2026-09-16): desde cuándo una siembra da cosecha. Lo marca
+  // el operador; no se deduce de la edad. Es un evento y no una columna para que
+  // la historia no se sobrescriba: corregir es registrar otro, y cuenta el
+  // registrado más recientemente.
+  entered_production
 
   @@schema("traceability")
 }
@@ -5682,6 +5779,10 @@ model PlantingEvent {
   plantingCohort   PlantingCohort? @relation(fields: [plantingCohortId], references: [id])
 
   occurredAt       DateTime @default(now()) @map("occurred_at")
+  // Precisión de `occurredAt`. Nulo = instante exacto, como en todas las filas
+  // anteriores, que no se rellenan. «En producción desde 2019» no es el 1 de enero:
+  // sin esto la fecha afirma más de lo que sabe, igual que `plantedPrecision`.
+  occurredPrecision HarvestWindowPrecision? @map("occurred_precision")
   operatorPersonId String?  @map("operator_person_id") @db.Uuid
   operator         Person?  @relation("PlantingEventOperator", fields: [operatorPersonId], references: [id])
   notes            String?
@@ -6248,11 +6349,22 @@ enum InspectionOutcome {
 /// El Anexo B §2.2 —«estado de la colonia, nuevo, por protocolo»— con el
 /// vocabulario que el dueño ya escribió en `protocolos/apiario-campo-v1.json`.
 /// No se traduce a inglés a propósito: es su lista, y `VarroaMethod` ya sentó el
-/// precedente. `apinada` sin eñe porque un identificador de enum no la admite.
+/// precedente.
+///
+/// **CORREGIDO EL 2026-09-17 (ADR-153), y la correccion es de una afirmacion falsa.** Aqui
+/// decia: *«`apinada` sin eñe porque un identificador de enum no la admite»*. **Un enum de
+/// Prisma SI admite la eñe**: comprobado con `prisma validate`, que dice «the schema is valid»
+/// con `apiñada` dentro. Esa suposicion --escrita como justificacion y nunca medida-- es la
+/// razon por la que el esquema decia `apinada` mientras el protocolo decia `apiñada`, con
+/// NADIE traduciendo entre los dos.
+///
+/// No rompia todavia porque el formulario sale de `POBLACIONES`, la constante del codigo. Pero
+/// el protocolo existe para que la captura salga DE EL, y ese dia habria ofrecido un valor que
+/// Postgres rechaza. Lo vigila ahora `tests/arquitectura/enum-del-protocolo.test.ts`.
 enum ColonyPopulation {
   baja
   normal
-  apinada
+  apiñada
 
   @@schema("apiary")
 }
@@ -6358,6 +6470,17 @@ model Inspection {
   /// porque trae el motivo escrito. Anotado para la v2 del protocolo.
   droneBroodPresent Boolean?         @map("drone_brood_present")
   temperamentNote  String?           @map("temperament_note")
+  /// LA VALORACION del tecnico sobre esta colonia -- Anexo E, y el UNICO campo de etapa
+  /// «cierre» de la inspeccion: los otros dieciseis son de campo. Se escribe en casa.
+  ///
+  /// **No es `note`, y mezclarlas perderia cual se escribio con el guante puesto.** `note`
+  /// es la nota de campo --lo que se apunto ahi mismo-- y esto es la lectura de despues.
+  ///
+  /// **PROCEDENCIA: el protocolo la declara `interpretation` y esta fila esta estampada
+  /// `direct_observation`** (`inspections.ts` la fija asi). El desajuste NO es nuevo:
+  /// ADR-142 lo introdujo para `probableCause` y `recommendation`, que el protocolo marca
+  /// igual, y no lo dijo. Queda declarado y vigilado en ADR-154.
+  assessment          String?       @map("assessment")
   /// El «Otro» de la lista del Anexo B §2.3: lo que el catálogo de
   /// irregularidades no cubre. Desde el 2026-09-11 ya **no** es el único sitio
   /// donde vive el dato — ver `InspectionIrregularity`.
@@ -6465,6 +6588,25 @@ enum ColonyEventType {
 /// `protocolos/apiario-campo-v1.json`: *«bolsa sobre cabezales»* es literalmente
 /// lo que se usó en Toabré. Sirve para comparar consumo entre métodos, que es
 /// para lo que el Anexo B §3 lo pide.
+/// CLIMA OBSERVADO por quien visita — Anexo E, etapa de campo (ADR-152).
+///
+/// **No es el «Clima 7 dias» del Anexo C**, y el mapa del protocolo los confundia: aquel es un
+/// PRONOSTICO de una capa externa sin proveedor conectado; esto es lo que el apicultor VIO
+/// estando ahi. La segunda no necesita ningun proveedor.
+///
+/// **Los cuatro valores son los que el protocolo ya declaraba**, literales y sin anadir
+/// ninguno. No hay `otro`: el protocolo no lo declara, y el sitio donde se anade un quinto
+/// --«neblina», por ejemplo, que en Cerro Azul no es raro-- es `protocolos/apiario-campo-v1.json`
+/// mas su migracion, no este archivo por su cuenta.
+enum WeatherObserved {
+  despejado
+  nublado
+  viento
+  lluvia
+
+  @@schema("traceability")
+}
+
 enum FeedingMethod {
   bolsa_sobre_cabezales
   alimentador_entrada
@@ -6486,11 +6628,20 @@ enum FeedingMethod {
 /// `exigeMaterialDeAlimentacion` en `lib/apiary/vocabularioDeAlimentacion.ts`, no
 /// esta lista. Un «otro» sin cuál es la respuesta vacía que ADR-125 persigue.
 enum FeedingMaterial {
+  // Los CINCO del dueno, dictados en el apiario el 2026-09-16.
   azucar_morena
   azucar_blanca
   melaza
   miel_de_abeja
   miel_de_cana
+  // Los CUATRO que su protocolo ya ofrecia. Decision suya el 2026-09-17: «mis cinco mas los
+  // jarabes». `sustituto_polen` y `torta` NO son jarabes --son alimentos proteicos-- y se
+  // quedan porque ya estaban en SU protocolo: quitarlos seria una perdida de capacidad que
+  // nadie pidio. Si no los usa, se quitan entonces (ADR-153).
+  jarabe_1_1
+  jarabe_2_1
+  sustituto_polen
+  torta
   otro
 
   @@schema("apiary")
@@ -8053,4 +8204,76 @@ model ReportPublication {
   @@index([reportVersionId])
   @@map("report_publication")
   @@schema("reporting")
+}
+
+/// Un lote de subproducto del beneficio: la cascarilla que deja la trilla, o la
+/// pulpa que deja el despulpado.
+///
+/// **No es merma, y esa es toda la razón de esta tabla.** 100 kg de pergamino
+/// salen como ~80 de verde, ~18 de cascarilla y ~2 de merma declarada. Contar
+/// la cascarilla como merma inflaría la pérdida un 18 % en cada trilla y
+/// escondería la merma de verdad — que es el número que dice si alguien pesó
+/// mal.
+///
+/// Copia el molde de `BiocharBatch` —código propio, ubicación de producción,
+/// trazabilidad— y **no** crea la aplicación a una parcela: ésa ya existe
+/// (`TreatmentBatch` + `applyAmendment()`) y hoy sólo acepta biochar. Conectar
+/// el compost es ensanchar esa función, no escribir una paralela, y queda
+/// fuera de alcance por §C.1.
+model ByproductBatch {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  byproductType ByproductType        @map("byproduct_type")
+  destination   ByproductDestination
+
+  /// Siempre en kg, y por eso el nombre lo dice. Los subproductos se pesan a
+  /// granel; una unidad libre aquí invitaría a mezclar sacos con kilos y a que
+  /// el balance dejara de poder sumarse.
+  massKg Decimal @map("mass_kg") @db.Decimal(10, 3)
+
+  /// De qué transformación salió. **Requerido**: un subproducto sin origen no
+  /// es trazable, y la trazabilidad es la razón de esta tabla.
+  transformationId String            @map("transformation_id") @db.Uuid
+  transformation   LotTransformation @relation(fields: [transformationId], references: [id])
+
+  /// Dónde se produjo. Requerido por lo mismo que en `BiocharBatch`: es el
+  /// ancla de RBAC, y sin un ámbito concreto no hay autorización que comprobar.
+  producedAtLocationId String   @map("produced_at_location_id") @db.Uuid
+  producedAtLocation   Location @relation("ByproductBatchProducedAt", fields: [producedAtLocationId], references: [id])
+
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation("ByproductBatchOwner", fields: [organizationId], references: [id])
+
+  notes String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ByproductBatchCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([transformationId])
+  @@map("byproduct_batch")
+  @@schema("traceability")
+}
+
+/// Qué subproducto es. Cascarilla y pulpa no son el mismo material y algún día
+/// uno puede ir al biochar y el otro no, así que el tipo se declara aunque hoy
+/// los dos vayan a compost.
+enum ByproductType {
+  CASCARILLA
+  PULPA
+
+  @@schema("traceability")
+}
+
+/// A dónde va. Hoy los dos van a compost; el enum lleva los otros tres porque
+/// el destino es un dato del mundo, no una constante del código.
+enum ByproductDestination {
+  COMPOST
+  BIOCHAR
+  DISPOSAL
+  SALE
+
+  @@schema("traceability")
 }
