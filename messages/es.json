@@ -1300,7 +1300,9 @@
     "visitRecommendationLabel": "Recomendación al cliente",
     "reportCauseHeading": "Causa probable",
     "reportRecommendationHeading": "Recomendación",
-    "reportTravelCost": "Viáticos y transporte: {monto} USD"
+    "reportTravelCost": "Viáticos y transporte: {monto} USD",
+    "visitHivesPresentLabel": "Cajas presentes",
+    "visitHivesPresentHelp": "Cuántas cajas contaste en el sitio. Si no coincide con lo que el sistema tiene colocado, se avisa: puede faltar una o sobrar."
   },
   "Apiary": {
     "badge": "Apiario",

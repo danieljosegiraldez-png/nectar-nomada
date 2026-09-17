@@ -3619,3 +3619,34 @@ pieza que no depende de los nombres, y por eso fue primero.
 
 **El tercer flip-test hubo que rehacerlo**: la primera versión no compilaba, y una mutación que no
 compila se lee como un guardia que funciona.
+
+### 2026-09-16 · Las fuentes de Cerro Azul entran, y faltaba una que otro documento mandaba leer
+
+ADR-146. Cuatro documentos que vivían **sólo en `~/Downloads`**, sin versionar: las dos versiones
+de la minuta del 18 de julio, la minuta ejecutiva del 6 de agosto, y el marco de investigación
+suelo-ambiente-taza. Entran como `FUENTE_*` en `docs/architecture/`, verbatim, con cabecera de
+procedencia y un índice que mapea qué hecho vive en cuál.
+
+**Lo que se perdía, medido:** `Noria mix`, `Inversiones Melissa`, `lejía` y `cal agrícola` salían
+**cero veces** en todo el árbol (control positivo: `Finca Rosina` en 49 archivos, `biochar` en 51).
+La receta de la noria que le pedí a Daniel llevaba semanas en un documento que ya me había dado.
+
+**Y el hallazgo:** `45_S1_SUELO_AMBIENTE_TAZA.md` dice de sí mismo «no lo sustituye ni lo resume» y
+ordena «**leer primero** el propio marco». **Ese marco no estaba.** Control de identidad: `45_S1`
+cita 13.345 palabras y la extracción da 13.345 exactas.
+
+**Vocabulario que estas fuentes fijan:** el **retort** es el horno; la **noria** es la piscina donde
+el carbón se vuelve biochar **activo**. Dos pasos separados en el tiempo — «ya se cuenta con carbón
+seco, pero falta que Bob prepare la mezcla de la noria».
+
+**Cuatro conflictos señalados** (§4 del índice). **Uno lo resolvió Daniel el mismo día y dio una
+regla, ADR-147:** manda la **última revisión** de una minuta —2031–2033—, y la superada **no se
+corrige**, se le pone una nota fechada al final. Esa fue la primera aplicación del mecanismo que
+las cabeceras `FUENTE_*` ya declaraban.
+
+**Siguen abiertos tres:** las **dos norias** que Daniel menciona no están en ningún documento
+—7 ocurrencias de «noria», ninguna las nombra—; `BiocharBatch` mete retort y noria en la misma
+fila; y la aplicación al cultivo no existe.
+
+**No se implementó nada.** Es entrada de planificación aceptada.
+

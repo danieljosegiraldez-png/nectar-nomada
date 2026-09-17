@@ -1300,7 +1300,9 @@
     "visitRecommendationLabel": "Recommendation to the client",
     "reportCauseHeading": "Probable cause",
     "reportRecommendationHeading": "Recommendation",
-    "reportTravelCost": "Travel and transport: {monto} USD"
+    "reportTravelCost": "Travel and transport: {monto} USD",
+    "visitHivesPresentLabel": "Hives present",
+    "visitHivesPresentHelp": "How many boxes you counted on site. If it does not match what the system has placed, you will be told: one may be missing or extra."
   },
   "Apiary": {
     "badge": "Apiary",
