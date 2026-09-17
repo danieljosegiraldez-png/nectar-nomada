@@ -85,3 +85,38 @@ export function evaluarReposo(entrada: EntradaDeReposo): EstadoDeReposo {
     limitaciones,
   };
 }
+
+/**
+ * Qué fase corre en un lote AHORA — y la tercera rama es la que faltaba.
+ *
+ * **El defecto que esto arregla estaba escondido a plena vista.** La pantalla
+ * del lote calculaba la fase como «fermentación abierta, o secado abierto, o
+ * nada», y **el reposo es justamente lo que pasa cuando no hay ninguna de las
+ * dos**. Con esa condición, ensanchar el tipo del veredicto habría compilado,
+ * pasado las pruebas y dejado el reposo invisible para siempre.
+ *
+ * El reposo sólo arranca con un secado **terminado y con objetivo alcanzado**.
+ * Un secado abandonado no reposa, y uno cerrado sin declarar desenlace —todos
+ * los anteriores al 2026-09-16— tampoco: no se les inventa una edad.
+ */
+export interface EntradaDeFase {
+  readonly fermentacionAbierta: { readonly startedAt: Date } | null;
+  readonly secadoAbierto: { readonly startedAt: Date } | null;
+  readonly ultimoSecadoTerminado: { readonly endedAt: Date; readonly endedOutcome: string | null } | null;
+}
+
+export type FaseDelLote = { readonly tipo: "fermentacion" | "secado" | "reposo"; readonly iniciadaEn: Date };
+
+export function faseDelLote(entrada: EntradaDeFase): FaseDelLote | null {
+  if (entrada.fermentacionAbierta) {
+    return { tipo: "fermentacion", iniciadaEn: entrada.fermentacionAbierta.startedAt };
+  }
+  if (entrada.secadoAbierto) {
+    return { tipo: "secado", iniciadaEn: entrada.secadoAbierto.startedAt };
+  }
+  const ultimo = entrada.ultimoSecadoTerminado;
+  if (ultimo && ultimo.endedOutcome === "target_reached") {
+    return { tipo: "reposo", iniciadaEn: ultimo.endedAt };
+  }
+  return null;
+}

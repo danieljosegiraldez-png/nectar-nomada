@@ -16,6 +16,7 @@ import { puedeGestionarAtributosDeUbicacion } from "../../../lib/traceability/lo
 import { computeCurrentQuantity } from "../../../lib/traceability/quantity";
 import { nextActionFor, type BatchAction } from "../../../lib/traceability/batchActions";
 import { veredictoDelLote } from "../../../lib/beneficio/desdeElLote";
+import { faseDelLote } from "../../../lib/beneficio/reposo";
 import { estadosDeInstrumentoPorMedicion } from "../../../lib/equipos/equipos";
 import type { EstadoDeVerificacion } from "../../../lib/equipos/verificacion";
 import { listarProcesosDeLote } from "../../../lib/traceability/lotProcess";
@@ -198,11 +199,18 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
    * explícito: «este lote no declara qué protocolo corre» y «este lote va bien»
    * son hechos distintos. Ver `lib/beneficio/desdeElLote.ts`.
    */
-  const faseAbierta = activeFermentation
-    ? { tipo: "fermentacion" as const, iniciadaEn: activeFermentation.startedAt }
-    : activeDrying
-      ? { tipo: "secado" as const, iniciadaEn: activeDrying.startedAt }
-      : null;
+  // **El reposo es lo que pasa cuando NO hay fase abierta**, así que esta
+  // condición no puede ser «fermentación o secado o nada»: así estaba, y por
+  // eso el reposo habría sido invisible por mucho que el motor lo calculara.
+  // La lógica vive en `faseDelLote`, donde tiene pruebas.
+  const secadosTerminados = dryingRuns
+    .flatMap((r) => (r.endedAt === null ? [] : [{ endedAt: r.endedAt, endedOutcome: r.endedOutcome }]))
+    .sort((x, y) => y.endedAt.getTime() - x.endedAt.getTime());
+  const faseAbierta = faseDelLote({
+    fermentacionAbierta: activeFermentation,
+    secadoAbierto: activeDrying,
+    ultimoSecadoTerminado: secadosTerminados[0] ?? null,
+  });
   const procesos = faseAbierta ? await listarProcesosDeLote(user.userAccountId, lot.id) : [];
   // Cómo estaba el instrumento **en el instante de cada lectura**. Se resuelve por
   // lotes: un permiso por instrumento, no uno por medición. Hoy devuelve un mapa
@@ -215,10 +223,15 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       )
     : new Map<string, EstadoDeVerificacion>();
   const procesoAbierto = procesos.find((pr) => pr.endedAt === null) ?? null;
+  // En reposo NO hay proceso abierto —el secado ya terminó— así que el grado, y
+  // con él los umbrales, salen del último proceso que corrió. Sin esto el lote
+  // en reposo caería por `GRADO_SIN_PERFIL` y no enseñaría ningún día.
+  const procesoDelVeredicto =
+    faseAbierta?.tipo === "reposo" ? (procesos[procesos.length - 1] ?? null) : procesoAbierto;
   const veredicto = faseAbierta
     ? veredictoDelLote({
         fase: faseAbierta,
-        gradoDeProceso: procesoAbierto?.processGradeValue?.value ?? null,
+        gradoDeProceso: procesoDelVeredicto?.processGradeValue?.value ?? null,
         // La corrección supersede a la original, y el puente la excluye del
         // cálculo. El conjunto ya está resuelto arriba, sin otra consulta.
         mediciones: measurements.map((m) => ({
