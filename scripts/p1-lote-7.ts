@@ -15,8 +15,16 @@
  *   trabajo real con jornales, y **no tiene dónde guardarse**: `Intervention` no
  *   existe en el esquema (medido el 2026-09-16 en el análisis de brechas). Se dice
  *   aquí en vez de fingir que cabe en otro sitio.
- * - **No inventa área ni coordenadas.** `CLAUDE.md` §54 las nombra entre lo que no
- *   se fabrica. Quedan nulas hasta que alguien las mida.
+ * - **No inventa área.** `CLAUDE.md` §54 la nombra entre lo que no se fabrica, y
+ *   sigue nula hasta que alguien mida las esquinas.
+ * - **El punto SÍ va, el polígono NO.** El 2026-09-16 Daniel mandó seis capturas
+ *   de la brújula del iPhone. Sirven para ubicar la parcela y no para dibujarla,
+ *   y la razón está medida: la brújula redondea al segundo de arco, que a esta
+ *   latitud son **31 m**, así que cada lectura es una caja de 31 x 31 m. La
+ *   prueba más clara la dio él mismo sin querer: la casa principal y una de las
+ *   seis lecturas del lote —separadas 60-70 m en el suelo— devuelven la MISMA
+ *   coordenada, 9°11'17\" N 79°24'59\" O. Por eso aquí va el centroide con su
+ *   error declarado y no un polígono que no se puede sostener.
  *
  * Usage:
  *   npm run data:lote-7             (simulación)
@@ -29,6 +37,17 @@ import { recordAuditEvent } from "../lib/audit";
 const NOMBRE = "Lote 7 — Finca Rosina";
 const FINCA = "Finca Rosina";
 
+/**
+ * Centroide de las seis lecturas del 2026-09-16, con ±15 m de error por el
+ * redondeo al segundo de arco. Ubica la parcela; no la delimita.
+ */
+const LATITUD = 9.18796;
+const LONGITUD = -79.41731;
+
+/** Rango medido en las mismas capturas: 710 arriba, junto a la casa; 700 en el extremo sur. */
+const ALTITUD_MIN_M = 700;
+const ALTITUD_MAX_M = 710;
+
 const NOTAS =
   "Parcela en preparación al 2026-09-16: socoleo, retiro de árboles podridos o " +
   "caídos y acondicionamiento del espacio. Destinada a ~600 Pink Bourbon con " +
@@ -37,7 +56,10 @@ const NOTAS =
   "crió el semillero propio de Crispiliano, ingeniero agrónomo que trabaja para Don " +
   "Benjie, Lamastus y otras fincas, pero cuyo semillero es aparte. Se escribe aquí " +
   "porque `PlantingEvent.sourceOrganizationId` guarda UN solo origen y no puede " +
-  "sostener la cadena entera — ver Q11B del paquete de descubrimiento.";
+  "sostener la cadena entera — ver Q11B del paquete de descubrimiento. "  +
+  "UBICACIÓN: el punto guardado es el centroide de seis lecturas de brújula del " +
+  "2026-09-16, con ±15 m de error; el polígono y el área siguen sin medir. " +
+  "Siembra prevista: ~600 plantas a 1,8 x 2,5 m = unos 2.700 m².";
 
 class PreconditionError extends Error {}
 
@@ -73,7 +95,9 @@ async function main() {
   console.log(`  padre: ${finca.name}`);
   console.log(`  hermanas existentes: ${hermanos.map((h) => h.name.replace(" — Finca Rosina", "")).join(", ")}`);
   console.log(`  a crear: ${NOMBRE} · plot · clasificación ${finca.classification}`);
-  console.log(`  área y coordenadas: NULAS (nadie las ha medido)`);
+  console.log(`  punto:   ${LATITUD}, ${LONGITUD}  (±15 m — centroide de 6 lecturas al segundo de arco)`);
+  console.log(`  altitud: ${ALTITUD_MIN_M}–${ALTITUD_MAX_M} m`);
+  console.log(`  área y polígono: NULOS — hacen falta las cuatro esquinas con decimales`);
 
   if (!apply) {
     console.log("\nSimulación: no se escribió nada.");
@@ -89,6 +113,10 @@ async function main() {
         organizationId: finca.organizationId,
         classification: finca.classification,
         description: NOTAS,
+        latitude: LATITUD,
+        longitude: LONGITUD,
+        altitudeMinM: ALTITUD_MIN_M,
+        altitudeMaxM: ALTITUD_MAX_M,
       },
     });
     await recordAuditEvent(
