@@ -11,9 +11,9 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-16
+## Lo medido el 2026-09-05, actualizado el 2026-09-17
 
-**350 operaciones** que tocan la base, en **103 archivos**:
+**352 operaciones** que tocan la base, en **104 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,7 +22,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **240** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **242** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **58** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -73,6 +73,11 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > entrada propia en el allowlist. Las tres suben la fila de **guardia directo**:
 > `crearSubproducto` autoriza contra los lotes de ENTRADA de la transformación,
 > porque quien no puede tocar ese lote no puede declarar lo que salió de él.
+
+> **Y el de 350→352, con un archivo nuevo, es `lib/traceability/plotBlocks.ts`.**
+> `createPlotBlock` y `listPlotBlocks` (Tarea 2 de trampas de broca) suben la fila de
+> **guardia directo**: las dos llaman a `requireLocationAttributeAccess` antes de tocar
+> `PlotBlock`, la misma compuerta de «configurar la parcela» que usa `locations.ts`.
 
 > **Y el de 342→345 son los tres ajustes de permiso por asignación (ADR-146).** Viven en
 > `lib/rbac/admin.ts`, que ya estaba inventariado, y suben la fila de **guardia directo**:
