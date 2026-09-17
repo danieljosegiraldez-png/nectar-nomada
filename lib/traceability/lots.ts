@@ -190,6 +190,16 @@ export interface RecordTransformationInput {
    * for review.
    */
   acceptUnexplained?: { reason: string } | null;
+  /**
+   * **Custodia — §B.1.** Quién ejecutó la transformación cuando NO fue la
+   * organización dueña (Cafelino, Kiva Estate), dónde ocurrió, y cuándo salió y
+   * volvió el material. Todos opcionales: mazo y pilón en la propia finca es
+   * una de las tres formas reales, y exigirlos la prohibiría.
+   */
+  performedByOrganizationId?: string | null;
+  performedAtLocationId?: string | null;
+  custodyOut?: Date | null;
+  custodyIn?: Date | null;
 }
 
 /**
@@ -265,6 +275,13 @@ export async function recordTransformation(userAccountId: string, input: RecordT
         sourceReference: input.sourceReference ?? null,
         selectionMethodValueId: input.selectionMethodValueId ?? null,
         equipmentNote: input.equipmentNote ?? null,
+        // Custodia: quién la hizo, dónde, y cuándo salió y volvió el material.
+        // Nulos cuando la hizo la propia organización en su propio patio, que
+        // es una de las tres formas reales de trillar (§B.1).
+        performedByOrganizationId: input.performedByOrganizationId ?? null,
+        performedAtLocationId: input.performedAtLocationId ?? null,
+        custodyOut: input.custodyOut ?? null,
+        custodyIn: input.custodyIn ?? null,
         inputs: {
           create: input.inputs.map((i) => ({
             lotId: i.lotId,

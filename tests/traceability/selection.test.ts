@@ -469,3 +469,80 @@ describe("la trilla nunca es precondición", () => {
     expect(venta.transformationType).toBe("sale");
   });
 });
+
+/**
+ * §B.1: **la trilla no es una máquina, es un arreglo.**
+ *
+ * Finca Rosina / beneficio Las Nubes NO tiene trilladora. Se trilla de tres
+ * formas: en Cafelino, en Kiva Estate, o a mano con mazo y pilón en Las Nubes.
+ * **Dos de las tres ocurren fuera del control del dueño**, así que la
+ * transformación tiene que declarar quién la hizo, dónde, y cuándo salió y
+ * volvió el material.
+ *
+ * No es una tabla nueva: son columnas sobre la transformación que ya existe,
+ * igual que `dryingRunId` cuelga de ella. Un `HullingRun` paralelo duplicaría
+ * lo que `LotTransformation` ya hace.
+ */
+describe("la custodia de una trilla que ocurre fuera", () => {
+  it("una trilla en Cafelino declara quién la hizo y cuándo volvió", async () => {
+    const pergamino = await cherryLot("custodia", 100);
+    const salida = new Date("2026-05-01T08:00:00Z");
+    const vuelta = new Date("2026-05-03T17:00:00Z");
+
+    const { transformation } = await recordTransformation(operatorUserAccountId, {
+      transformationType: "hulling",
+      occurredAt: vuelta,
+      provenanceClass: "original_record",
+      performedByOrganizationId: organizationId,
+      performedAtLocationId: locationId,
+      custodyOut: salida,
+      custodyIn: vuelta,
+      inputs: [{ lotId: pergamino.id, quantity: 100, unit: "kg" }],
+      outputs: [{ lotCode: `${RUN_ID}-custodia-verde`, lotType: "green", quantity: 80, unit: "kg" }],
+      declaredLossQuantity: 20,
+      declaredLossUnit: "kg",
+      declaredLossReason: "cascarilla y merma",
+    });
+
+    expect(transformation.performedByOrganizationId).toBe(organizationId);
+    expect(transformation.performedAtLocationId).toBe(locationId);
+    expect(transformation.custodyIn!.getTime()).toBeGreaterThan(transformation.custodyOut!.getTime());
+  });
+
+  it("una trilla a mano en la propia finca no necesita custodia, y sigue siendo válida", async () => {
+    // Control del «avisa, no bloquea»: mazo y pilón en Las Nubes es UNA DE LAS
+    // TRES formas reales. Si esta prueba cae, alguien hizo obligatoria la
+    // custodia y acaba de prohibir la forma que se usa en la propia finca.
+    const pergamino = await cherryLot("custodia-mano", 50);
+    const { transformation } = await recordTransformation(operatorUserAccountId, {
+      transformationType: "hulling",
+      occurredAt: new Date(),
+      provenanceClass: "original_record",
+      inputs: [{ lotId: pergamino.id, quantity: 50, unit: "kg" }],
+      outputs: [{ lotCode: `${RUN_ID}-custodia-mano-verde`, lotType: "green", quantity: 40, unit: "kg" }],
+      declaredLossQuantity: 10,
+      declaredLossUnit: "kg",
+      declaredLossReason: "cascarilla y merma",
+    });
+    expect(transformation.id).toBeTruthy();
+    expect(transformation.custodyOut).toBeNull();
+    expect(transformation.custodyIn).toBeNull();
+    expect(transformation.performedByOrganizationId).toBeNull();
+  });
+
+  it("la custodia no es exclusiva de la trilla — cualquier transformación puede salir de la finca", async () => {
+    // Las columnas van sobre `LotTransformation`, no sobre un tipo concreto.
+    // Mañana un tueste puede hacerse fuera igual que una trilla, y este guardia
+    // impide que alguien las ate a `hulling` por comodidad.
+    const lote = await cherryLot("custodia-venta", 30);
+    const { transformation } = await recordTransformation(operatorUserAccountId, {
+      transformationType: "sale",
+      occurredAt: new Date(),
+      provenanceClass: "original_record",
+      performedAtLocationId: locationId,
+      inputs: [{ lotId: lote.id }],
+      outputs: [],
+    });
+    expect(transformation.performedAtLocationId).toBe(locationId);
+  });
+});

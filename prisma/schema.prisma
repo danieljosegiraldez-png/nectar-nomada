@@ -885,6 +885,7 @@ model Location {
 
   @@map("location")
   @@schema("core")
+  lotTransformationsPerformedHere LotTransformation[] @relation("LotTransformationPerformedAt")
 }
 
 enum DryingRoomLightExposure {
@@ -984,6 +985,7 @@ model Organization {
 
   @@map("organization")
   @@schema("core")
+  lotTransformationsPerformed LotTransformation[] @relation("LotTransformationPerformedBy")
 }
 
 enum MembershipStatus {
@@ -3132,6 +3134,27 @@ model LotTransformation {
   // Same mechanism, T7's DryingRun.
   dryingRunId       String?          @map("drying_run_id") @db.Uuid
   dryingRun         DryingRun?       @relation(fields: [dryingRunId], references: [id])
+
+  /// **Quién ejecutó la transformación, cuando NO fue la organización dueña.**
+  /// Finca Rosina no tiene trilladora: se trilla en Cafelino, en Kiva Estate, o
+  /// a mano con mazo y pilón en Las Nubes. Dos de las tres ocurren fuera del
+  /// control del dueño. Nulo = la propia organización, que es el caso de mazo y
+  /// pilón — y por eso es nulo y no obligatorio: exigirlo prohibiría la forma
+  /// que la finca usa en su propio patio.
+  ///
+  /// Van sobre la transformación y no sobre un tipo concreto: mañana un tueste
+  /// puede hacerse fuera igual que una trilla.
+  performedByOrganizationId String?       @map("performed_by_organization_id") @db.Uuid
+  performedByOrganization   Organization? @relation("LotTransformationPerformedBy", fields: [performedByOrganizationId], references: [id])
+  performedAtLocationId     String?       @map("performed_at_location_id") @db.Uuid
+  performedAtLocation       Location?     @relation("LotTransformationPerformedAt", fields: [performedAtLocationId], references: [id])
+
+  /// Cuándo salió el material de la finca y cuándo volvió. Los dos nulos cuando
+  /// nunca salió. No se valida el orden aquí: un material que aún no ha vuelto
+  /// tiene `custodyIn` nulo, y eso es un estado legítimo, no un error.
+  custodyOut DateTime? @map("custody_out")
+  custodyIn  DateTime? @map("custody_in")
+
   // Same mechanism, R1's RoastSession.
   roastSessionId    String?          @map("roast_session_id") @db.Uuid
   roastSession      RoastSession?    @relation(fields: [roastSessionId], references: [id])
