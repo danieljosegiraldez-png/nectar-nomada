@@ -3675,3 +3675,24 @@ dos duplicados de campos que ya tienen vocabulario al lado (`storesLevel`, `pest
 de **limpieza fitosanitaria** — que además **no existe como tipo de evento**: `ColonyEventType` tiene
 cuatro valores y ninguno es limpieza.
 
+
+### 2026-09-16 · Alta de colmenas en lote: cinco de una vez, con vista previa
+
+ADR-149. Daniel abrió la app en el apiario y lo que faltaba era registrar **cinco colmenas en cada
+sitio**. El único camino creaba una: diez envíos para dos apiarios.
+
+**Todo o nada en una transacción, con los identificadores comprobados DENTRO de ella** — comprobar
+antes deja una ventana en la que otra sesión crea el `03` y el lote lo pisa a media escritura. El
+error dice **cuáles** están repetidos.
+
+**La vista previa enseña los identificadores exactos antes de enviar**, con la misma función que
+valida en el servidor. No es adorno: el relleno de ceros no se puede acertar —él ya tiene colmenas
+de tres cifras— así que en vez de adivinarlo, se le enseña.
+
+**La colonia es opcional y explícita:** `originType` no tiene valor por omisión porque es un hecho
+que se captura o se pierde. Sin marcar la casilla nacen cajas vacías, y la colonia se añade después
+colmena por colmena.
+
+**El quinto flip-test hubo que rehacerlo:** la primera versión no compilaba y tumbó **seis** pruebas
+—la señal de sospechar del arnés—. La válida cae por una sola: el control negativo.
+
