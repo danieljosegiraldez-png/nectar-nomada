@@ -290,6 +290,7 @@ model UserAccount {
   @@map("user_account")
   @@schema("core")
   byproductBatchesCreated ByproductBatch[] @relation("ByproductBatchCreatedBy")
+  consumableMaterialsCreated ConsumableMaterial[] @relation("ConsumableMaterialCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -999,6 +1000,7 @@ model Organization {
   @@schema("core")
   lotTransformationsPerformed LotTransformation[] @relation("LotTransformationPerformedBy")
   byproductBatches ByproductBatch[] @relation("ByproductBatchOwner")
+  consumableMaterials ConsumableMaterial[] @relation("ConsumableMaterialOwner")
 }
 
 enum MembershipStatus {
@@ -8300,5 +8302,52 @@ enum ByproductDestination {
   DISPOSAL
   SALE
 
+  @@schema("traceability")
+}
+
+/// Qué es la cosa que se gasta: aserrín, gallinaza, melaza, hojarasca.
+///
+/// **Sin esto no hay existencias, y ésa es toda la razón de esta tabla.** Hasta
+/// el 2026-09-17 el material vivía como TEXTO LIBRE en
+/// `MaterialConsumptionEntry.materialName`, y no se puede sumar lo que se
+/// escribe distinto cada vez: «aserrín», «aserrin» y «aserrín para el ahumador»
+/// son tres materiales para una base de datos.
+///
+/// **No es un `VariableCatalogValue`.** Esa maquinaria guarda ETIQUETAS de un
+/// vocabulario —un cultivar, una forma de alimentar—; un material tiene unidad,
+/// categoría y existencias. Meterlo ahí haría que un valor de catálogo
+/// significara dos cosas según quién lo lea.
+model ConsumableMaterial {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  name     String
+  category String?
+
+  /// La unidad en la que la finca lo compra y lo gasta: saco, quintal, galón.
+  /// **No se normaliza a kilos al guardar** — el operario teclea la unidad en
+  /// la que trabaja, y convertir al escribir pierde el dato original.
+  defaultUnit String @map("default_unit")
+
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation("ConsumableMaterialOwner", fields: [organizationId], references: [id])
+
+  notes String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ConsumableMaterialCreatedBy", fields: [createdBy], references: [id])
+
+  /// **La unicidad NO se declara aquí, y es deliberado.** El índice real es
+  /// FUNCIONAL —`(organization_id, lower(btrim(name)))`, migración
+  /// `20260917201000`— porque «Aserrín» y «aserrin» son el mismo material y un
+  /// único exacto los dejaría pasar, que es justo el problema que esta tabla
+  /// existe para resolver.
+  ///
+  /// Prisma no sabe expresar índices funcionales. Declarar aquí el exacto haría
+  /// que el esquema PIDIERA un índice que las migraciones no crean — y el
+  /// guardia `derivaDeMigraciones` lo caza, como cazó este mismo error el
+  /// 2026-09-17. La restricción vive en la base; la prueba que la comprueba va
+  /// contra Postgres.
+  @@map("consumable_material")
   @@schema("traceability")
 }
