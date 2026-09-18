@@ -137,7 +137,12 @@ describe("qué filas se lleva", () => {
           quedaConActor: await tx.auditEvent.count({ where: { id: idConActor } }),
         };
         throw new Revertir();
-      }),
+        // **El tope, a propósito.** `limpiar()` bloquea TODAS las filas sin actor, y otras
+        // pruebas en paralelo retienen algunas dentro de sus transacciones. Mientras espera,
+        // el reloj de Prisma corre: con el tope por defecto (5 s) la transacción caduca y la
+        // consulta siguiente revienta con P2028 en vez de llegar a `Revertir`. Reproducido el
+        // 2026-09-18 reteniendo una fila 14 s desde otro proceso: sin esto cae, con esto pasa.
+      }, { timeout: 60_000 }),
     ).rejects.toBeInstanceOf(Revertir);
 
     const v = visto!;
