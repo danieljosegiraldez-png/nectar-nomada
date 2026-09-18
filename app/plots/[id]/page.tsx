@@ -628,12 +628,11 @@ export default async function PlotDetailPage({
             )}
             etiqueta={t}
           />
-          <LandPhotoUploadForm
-            locationId={location.id}
-            parent={{ kind: "location" }}
-            observers={people}
-            selfPersonId={selfPersonId}
-          />
+          <p>
+            <Link href={`/plots/${location.id}/fotos/nueva`} className="nn-button">
+              {t("addPhotoButton")}
+            </Link>
+          </p>
 
           {/* Spec §3: las fotos de las revisiones de trampa también se ven
               aquí, rotuladas — no sólo la galería general de la parcela. */}

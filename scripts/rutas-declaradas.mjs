@@ -99,6 +99,7 @@ export const RUTAS = {
   "/plots/[id]/jornada/nueva": { clase: "requiere-sesion", razon: "Abrir una jornada de campo, mudado fuera del tablero (Tarea 6)." },
   "/plots/[id]/muestras/nueva": { clase: "requiere-sesion", razon: "Registrar una muestra de suelo o foliar, mudado fuera del tablero (Tarea 6)." },
   "/plots/[id]/suelo/nuevo": { clase: "requiere-sesion", razon: "Describir una calicata nueva, mudado fuera del tablero (Tarea 6)." },
+  "/plots/[id]/fotos/nueva": { clase: "requiere-sesion", razon: "Subir una fotografía general de la parcela, mudado fuera del tablero (Tarea 6, fix round 1)." },
   "/biochar": { clase: "requiere-sesion", razon: "Lotes de biochar producidos en la finca." },
   "/biochar/[id]": { clase: "requiere-sesion", razon: "Un lote de biochar y su registro de quema." },
   "/field-sessions/[id]": { clase: "requiere-sesion", razon: "Una jornada de campo y su hilo de eventos." },

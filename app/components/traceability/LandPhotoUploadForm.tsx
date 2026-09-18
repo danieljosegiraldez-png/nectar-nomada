@@ -48,12 +48,17 @@ export function LandPhotoUploadForm({
   observers,
   selfPersonId,
   revisionOptions,
+  volverA,
 }: {
   locationId: string;
   parent: LandAssetParent;
   observers: ObserverOption[];
   selfPersonId: string | null;
   revisionOptions?: RevisionOption[];
+  /** Fix round 1 (Tarea 6): con esto, guardar vuelve a esa ruta en vez de
+   * refrescar la misma página. Sólo `/plots/[id]/fotos/nueva` lo pasa; el
+   * servidor revalida además contra `locationId` (`volverAValido`). */
+  volverA?: string;
 }) {
   const t = useTranslations("Traceability");
   const router = useRouter();
@@ -117,6 +122,7 @@ export function LandPhotoUploadForm({
       file.name,
       parentEfectivo,
       creatorPersonId || null,
+      volverA,
     );
 
     if ("error" in finalized) {

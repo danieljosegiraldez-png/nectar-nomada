@@ -29,9 +29,9 @@ export default async function NuevaMuestraPage({ params }: { params: Promise<{ i
         <Link href={`/plots/${id}?pestana=muestras`}>{t("plotDashboardBackLink")}</Link>
       </p>
       <h1>{t("samplesSoilAdd")}</h1>
-      <SoilSampleForm locationId={detail.location.id} />
+      <SoilSampleForm locationId={detail.location.id} volverA={`/plots/${id}?pestana=muestras`} />
       <h1>{t("samplesFoliarAdd")}</h1>
-      <FoliarSampleForm locationId={detail.location.id} />
+      <FoliarSampleForm locationId={detail.location.id} volverA={`/plots/${id}?pestana=muestras`} />
     </div>
   );
 }

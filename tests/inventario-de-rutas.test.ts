@@ -130,7 +130,11 @@ describe("el inventario del router", () => {
     // /plots/[id]/muestras/nueva y /plots/[id]/suelo/nuevo — los tres
     // formularios de captura que salieron del tablero de parcela. 78 páginas
     // y 11 handlers, medido sobre el árbol de la rama.
-    expect(salida).toContain("89 entradas");
+    // 89 → 90 el mismo día (Tarea 6, fix round 1): /plots/[id]/fotos/nueva —
+    // la revisión encontró que la spec pide las CUATRO rutas de captura y el
+    // brief original sólo había pedido tres; ésta faltaba. 79 páginas y 11
+    // handlers.
+    expect(salida).toContain("90 entradas");
     expect(codigo, salida).toBe(0);
   });
 

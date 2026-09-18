@@ -102,6 +102,7 @@ import {
   LandMediaValidationError,
   type LandAssetParent,
 } from "../../lib/traceability/landMedia";
+import { volverAValido } from "../../lib/traceability/volverA";
 import {
   recordLabourEntry,
   recordMaterialConsumptionEntry,
@@ -1454,6 +1455,8 @@ export async function startFieldSessionFormAction(
     return { error: friendlyError(t, error) };
   }
 
+  // Intencional, y NO es el patrón `volverA` de las otras acciones de esta
+  // tarea: quien abre una jornada va a trabajar en ella, no vuelve al tablero.
   redirect(`/field-sessions/${sessionId}`);
 }
 
@@ -1811,6 +1814,11 @@ export async function createSoilProfileAction(
 
   revalidatePath(`/plots/${locationId}`);
   revalidatePath(`/plots/${locationId}/ajustes`);
+  // Fix round 1 (Tarea 6): `/plots/[id]/suelo/nuevo` manda `volverA` para
+  // volver a la pestaña Condiciones al guardar. Fuera del try/catch: `redirect()`
+  // lanza una señal especial (NEXT_REDIRECT) que un catch de arriba se tragaría.
+  const destino = volverAValido(String(formData.get("volverA") ?? ""), locationId);
+  if (destino) redirect(destino);
   return {};
 }
 
@@ -1876,6 +1884,11 @@ export async function createSoilSampleAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  // Fix round 1 (Tarea 6): `/plots/[id]/muestras/nueva` manda `volverA` para
+  // volver a la pestaña Muestras al guardar. Fuera del try/catch: `redirect()`
+  // lanza una señal especial (NEXT_REDIRECT) que un catch de arriba se tragaría.
+  const destino = volverAValido(String(formData.get("volverA") ?? ""), locationId);
+  if (destino) redirect(destino);
   return {};
 }
 
@@ -1910,6 +1923,11 @@ export async function createFoliarSampleAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  // Fix round 1 (Tarea 6): `/plots/[id]/muestras/nueva` manda `volverA` para
+  // volver a la pestaña Muestras al guardar. Fuera del try/catch: `redirect()`
+  // lanza una señal especial (NEXT_REDIRECT) que un catch de arriba se tragaría.
+  const destino = volverAValido(String(formData.get("volverA") ?? ""), locationId);
+  if (destino) redirect(destino);
   return {};
 }
 
@@ -1941,6 +1959,11 @@ export async function finalizeLandAssetUploadAction(
   originalFilename: string,
   parent: LandAssetParent,
   creatorPersonId: string | null,
+  // Fix round 1 (Tarea 6): opcional — `/plots/[id]/fotos/nueva` lo manda para
+  // volver a la pestaña Fotos al guardar. Los demás llamadores (la foto de una
+  // calicata, en la pestaña Condiciones) no lo pasan y quedan exactamente como
+  // antes.
+  volverA?: string | null,
 ): Promise<{ ok: true } | { error: string }> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -1964,6 +1987,10 @@ export async function finalizeLandAssetUploadAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  // Fuera del try/catch: `redirect()` lanza una señal especial (NEXT_REDIRECT)
+  // que un catch de arriba se tragaría.
+  const destino = volverAValido(volverA, locationId);
+  if (destino) redirect(destino);
   return { ok: true };
 }
 

@@ -27,7 +27,15 @@ const DATA_QUALITIES = ["verified", "provisional", "unconfirmed", "not_tested"] 
  * antes de que vuelva un número, y forzarlos juntos obligaría a inventar
  * resultados para poder guardar la muestra.
  */
-export function SoilSampleForm({ locationId }: { locationId: string }) {
+export function SoilSampleForm({
+  locationId,
+  volverA,
+}: {
+  locationId: string;
+  /** Fix round 1 (Tarea 6): sólo lo pasa `/plots/[id]/muestras/nueva` —
+   * con esto, guardar vuelve a la pestaña Muestras. */
+  volverA?: string;
+}) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(createSoilSampleAction, initialState);
   const [encolado, setEncolado] = useState(false);
@@ -79,6 +87,7 @@ export function SoilSampleForm({ locationId }: { locationId: string }) {
   return (
     <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <input type="hidden" name="locationId" value={locationId} />
+      {volverA ? <input type="hidden" name="volverA" value={volverA} /> : null}
 
       <div className="nn-field">
         <label htmlFor="soilSampleCode">{t("sampleCodeLabel")}</label>
@@ -156,7 +165,15 @@ export function SoilSampleForm({ locationId }: { locationId: string }) {
  * faltan en cada muestra, en vez de dejar que un dato incomparable parezca uno
  * bueno.
  */
-export function FoliarSampleForm({ locationId }: { locationId: string }) {
+export function FoliarSampleForm({
+  locationId,
+  volverA,
+}: {
+  locationId: string;
+  /** Fix round 1 (Tarea 6): sólo lo pasa `/plots/[id]/muestras/nueva` —
+   * con esto, guardar vuelve a la pestaña Muestras. */
+  volverA?: string;
+}) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(createFoliarSampleAction, initialState);
   const [encolado, setEncolado] = useState(false);
@@ -189,6 +206,7 @@ export function FoliarSampleForm({ locationId }: { locationId: string }) {
   return (
     <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <input type="hidden" name="locationId" value={locationId} />
+      {volverA ? <input type="hidden" name="volverA" value={volverA} /> : null}
 
       <div className="nn-field">
         <label htmlFor="foliarSampleCode">{t("sampleCodeLabel")}</label>

@@ -37,6 +37,7 @@ export default async function NuevaCalicataPage({ params }: { params: Promise<{ 
           impedingLayerDepthCm: null, impedingLayerNote: null, provenanceClass: "",
           dataQuality: null, notes: null,
         }}
+        volverA={`/plots/${id}?pestana=condiciones`}
       />
     </div>
   );
