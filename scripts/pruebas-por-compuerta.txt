@@ -139,6 +139,7 @@ tests/traceability/muestraConMaterial.test.ts
 tests/traceability/eventoDeMuestreo.test.ts
 tests/traceability/instalaciones.test.ts
 tests/traceability/intervenciones.test.ts
+tests/traceability/carenciaEnLaCosecha.test.ts
 tests/traceability/cerezaComoDato.test.ts
 tests/traceability/selection.test.ts
 tests/traceability/soilProfiles.test.ts

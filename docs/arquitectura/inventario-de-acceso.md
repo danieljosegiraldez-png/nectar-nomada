@@ -13,14 +13,14 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**382 operaciones** que tocan la base, en **118 archivos**:<!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
+**383 operaciones** que tocan la base, en **118 archivos**:<!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
      la compuerta falla y dice cuál. Todo el trabajo del 2026-08-31 empezó por
      una discrepancia de uno entre este documento y la medición. -->
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **271** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo || **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **272** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo || **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **59** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama || **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
@@ -130,6 +130,18 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > —la misma razón que `crearColocacionInicial`— y por eso llevan su propia entrada en
 > `reciben_transaccion`, no en `dependen_del_llamador`: no son funciones exportadas que el
 > detector cuente como operación propia.
+
+> **Y el de 382→383, sin archivo nuevo, es `listarIntervenciones` (Tarea 6,
+> manejo fitosanitario, spec 2026-09-18 §3.3/§3.4).** Vive en
+> `lib/traceability/intervenciones.ts`, ya inventariado desde la Tarea 5, y sube
+> **guardia directo**: resuelve `requireLotAccess("view")` sobre la parcela antes
+> de listar sus intervenciones. **`intervencionesVigentes`, la otra función nueva
+> de esta tarea, no aparece como operación propia**: no recibe principal —toma
+> una lista de `locationIds` ya resuelta por `ubicacionesEmparentadas`, que
+> tampoco autoriza— porque quien la llama (`recordHarvestEvent`) ya pasó su
+> propia compuerta. Es la misma razón que ya excluye a
+> `crearAreas`/`crearLineasDeIntervencion` de la nota de arriba: el detector
+> cuenta operaciones con principal, no cada función que toca `prisma`.
 
 > **Y el de 355→356 es `registrarVitalesEnSitio` (ADR-157).** Vive en
 > `lib/apiary/vitalesEnSitio.ts` y sube la fila de **guardia directo**: exige

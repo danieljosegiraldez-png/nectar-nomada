@@ -21,6 +21,7 @@ import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION, TraceabilityAccessError } from "./lots";
 import { ubicacionesEmparentadas } from "./ubicacionesEmparentadas";
+import type { IntervencionParaCarencia } from "./carenciaDeIntervencion";
 import { estadoDeVencimiento } from "../inventario/vencimiento";
 import { diaDeHoy } from "../time/diaDeHoy";
 import { recordAuditEvent } from "../audit";
@@ -441,5 +442,72 @@ export async function corregirIntervencion(
     );
 
     return creada;
+  });
+}
+
+/**
+ * Intervenciones vigentes (sin corrección que las sustituya) en las
+ * ubicaciones dadas — Tarea 6, spec §3.4. Un solo `findMany`: la marca de
+ * carencia en la cosecha llama esto por cada `ubicacionesEmparentadas`.
+ *
+ * **No autoriza**: quien la llama ya pasó la compuerta (`recordHarvestEvent`)
+ * o no necesita una (`ubicacionesEmparentadas` tampoco autoriza).
+ */
+export async function intervencionesVigentes(
+  locationIds: readonly string[],
+  opciones?: { hasta?: Date; db?: Prisma.TransactionClient },
+): Promise<(IntervencionParaCarencia & { locationId: string; target: PlotInterventionTarget })[]> {
+  const db = opciones?.db ?? prisma;
+  return db.plotIntervention.findMany({
+    where: {
+      locationId: { in: [...locationIds] },
+      correcciones: { none: {} },
+      ...(opciones?.hasta ? { occurredAt: { lte: opciones.hasta } } : {}),
+    },
+    select: {
+      id: true,
+      kind: true,
+      occurredAt: true,
+      locationId: true,
+      target: true,
+      lineas: { select: { withdrawalDays: true, reentryHours: true } },
+    },
+  });
+}
+
+export type IntervencionListada = Prisma.PlotInterventionGetPayload<{
+  include: {
+    lineas: {
+      include: {
+        material: { select: { name: true; defaultWithdrawalDays: true; defaultReentryHours: true; safetyNotes: true } };
+      };
+    };
+    areas: { include: { specimen: { select: { commonName: true } } } };
+    operator: { select: { displayName: true } };
+    correcciones: { select: { id: true } };
+  };
+}>;
+
+/**
+ * La lista para la pantalla de la parcela — Tarea 6, spec §5. Vigentes y
+ * corregidas, más recientes primero: la corrección es información, no algo
+ * que ocultar.
+ */
+export async function listarIntervenciones(userAccountId: string, locationId: string): Promise<IntervencionListada[]> {
+  await requireLotAccess(userAccountId, "view", [{ locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+
+  return prisma.plotIntervention.findMany({
+    where: { locationId },
+    include: {
+      lineas: {
+        include: {
+          material: { select: { name: true, defaultWithdrawalDays: true, defaultReentryHours: true, safetyNotes: true } },
+        },
+      },
+      areas: { include: { specimen: { select: { commonName: true } } } },
+      operator: { select: { displayName: true } },
+      correcciones: { select: { id: true } },
+    },
+    orderBy: { occurredAt: "desc" },
   });
 }
