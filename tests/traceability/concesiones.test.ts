@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { LocationAccessError, exigeEditarBeneficioEn } from "../../lib/traceability/locations";
-import { ConcesionError, concederEditarBeneficio, personasDelBeneficio, quitarEditarBeneficio } from "../../lib/traceability/concesiones";
+import {
+  ConcesionError,
+  personasDelBeneficio,
+  concederEditarBeneficio as concederEditarBeneficioRaw,
+  quitarEditarBeneficio as quitarEditarBeneficioRaw,
+} from "../../lib/traceability/concesiones";
 
 /**
  * Plan 3, Task 1 — la delegación estrecha: sólo `location:edit_beneficio`,
@@ -48,13 +53,37 @@ async function ponerDeny(userAccountId: string) {
   });
 }
 
+/**
+ * Fix round 1 (hallazgo de revisión): `quitarEditarBeneficio` BORRA el
+ * override, así que si el `afterEach` busca los overrides a limpiar
+ * RE-CONSULTANDO la tabla al final del test, el override que ya se quitó no
+ * aparece — y su `AuditEvent` (`beneficio.conceder_edicion` y
+ * `beneficio.quitar_edicion`, con `entityId` = el id de ESE override) se queda
+ * sin nadie que lo borre. `overridesAuditados` graba el id EN EL MOMENTO en que
+ * la fila existe (el valor de retorno de `concederEditarBeneficio`, que es el
+ * mismo id que `quitarEditarBeneficio` borra después), así que el `afterEach`
+ * no depende de que la fila siga viva para saber qué `AuditEvent` limpiar.
+ */
+const overridesAuditados: string[] = [];
+async function concederEditarBeneficio(actorId: string, input: Parameters<typeof concederEditarBeneficioRaw>[1]) {
+  const fila = await concederEditarBeneficioRaw(actorId, input);
+  overridesAuditados.push(fila.id);
+  return fila;
+}
+async function quitarEditarBeneficio(actorId: string, input: Parameters<typeof quitarEditarBeneficioRaw>[1]) {
+  return quitarEditarBeneficioRaw(actorId, input);
+}
+
 afterEach(async () => {
   const asignaciones = await prisma.assignment.findMany({ where: { userAccountId: { in: accountIds } }, select: { id: true } });
   const asignacionIds = asignaciones.map((a) => a.id);
   const overrides = await prisma.assignmentPermissionOverride.findMany({ where: { assignmentId: { in: asignacionIds } }, select: { id: true } });
-  const overrideIds = overrides.map((o) => o.id);
+  // Unión de lo que sigue vivo (overrides sin quitar, p. ej. un `deny`) con lo
+  // que se auditó y pudo haberse borrado ya (un `grant` quitado por
+  // `quitarEditarBeneficio` dentro del propio test).
+  const overrideIds = [...new Set([...overrides.map((o) => o.id), ...overridesAuditados])];
   await prisma.auditEvent.deleteMany({ where: { entityType: "assignment_permission_override", entityId: { in: overrideIds } } });
-  await prisma.assignmentPermissionOverride.deleteMany({ where: { id: { in: overrideIds } } });
+  await prisma.assignmentPermissionOverride.deleteMany({ where: { assignmentId: { in: asignacionIds } } });
   await prisma.assignment.deleteMany({ where: { id: { in: asignacionIds } } });
   await prisma.scope.deleteMany({ where: { id: { in: scopeIds } } });
   await prisma.userAccount.deleteMany({ where: { id: { in: accountIds } } });
@@ -65,7 +94,7 @@ afterEach(async () => {
   await prisma.location.deleteMany({ where: { parentLocationId: { in: ids } } });
   await prisma.location.deleteMany({ where: { id: { in: ids } } });
 
-  names.length = 0; accountIds.length = 0; personIds.length = 0; scopeIds.length = 0;
+  names.length = 0; accountIds.length = 0; personIds.length = 0; scopeIds.length = 0; overridesAuditados.length = 0;
 });
 
 describe("concederEditarBeneficio", () => {
@@ -177,7 +206,7 @@ describe("quitarEditarBeneficio", () => {
     const jefe = await cuenta(finca.id, "Farm Manager");
     const capataz = await cuenta(finca.id, "Farm Operator");
     const assignmentId = await idDeLaAsignacion(capataz);
-    await concederEditarBeneficio(jefe, { beneficioId: ben.id, assignmentId, reason: "temporal" });
+    const override = await concederEditarBeneficio(jefe, { beneficioId: ben.id, assignmentId, reason: "temporal" });
     await expect(exigeEditarBeneficioEn(capataz, ben.id)).resolves.toBeUndefined();
 
     await quitarEditarBeneficio(jefe, { beneficioId: ben.id, assignmentId });
@@ -185,6 +214,21 @@ describe("quitarEditarBeneficio", () => {
     await expect(exigeEditarBeneficioEn(capataz, ben.id)).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
     const evento = await prisma.auditEvent.findFirst({ where: { operation: "beneficio.quitar_edicion", entityType: "assignment_permission_override" } });
     expect(evento).not.toBeNull();
+
+    // Control positivo (fix round 1): el override YA está borrado aquí
+    // (`quitarEditarBeneficio` lo borró arriba), y la cuenta de sus dos
+    // AuditEvent —conceder y quitar— por `entityId` SÍ los encuentra, ANTES
+    // de que el `afterEach` limpie nada. Sin este control, un `entityId` mal
+    // escrito o un `where` vacío pasarían con el mismo "not.toBeNull()" de
+    // arriba sin que nadie lo notara.
+    const eventosDeEsteOverride = await prisma.auditEvent.count({
+      where: {
+        entityType: "assignment_permission_override",
+        entityId: override.id,
+        operation: { in: ["beneficio.conceder_edicion", "beneficio.quitar_edicion"] },
+      },
+    });
+    expect(eventosDeEsteOverride).toBe(2);
   });
 
   it("quitar sin concesión: sin_concesion", async () => {
