@@ -104,6 +104,14 @@ describe("apuntar es faena; anular es gestión", () => {
     const fila = await prisma.careRoutineEvent.findUniqueOrThrow({ where: { id: ev.id } });
     expect(fila.voidReason).toBe("fecha equivocada");
   });
+  it("en una rutina retirada no se apunta", async () => {
+    const e = await equipo();
+    const r = await crearRutina(f.jefeA, { equipmentId: e.id, kind: "mantenimiento", intervalDays: 30 });
+    await retirarRutina(f.jefeA, r.id, new Date());
+    await expect(
+      registrarRealizada(f.operarioA, { routineId: r.id, performedOn: dia("2026-09-10"), provenanceClass: "original_record" }),
+    ).rejects.toThrow(new RutinaError("rutina_retirada"));
+  });
 });
 
 describe("el estado que ve la ficha y la lista", () => {
@@ -121,8 +129,9 @@ describe("el estado que ve la ficha y la lista", () => {
   it("vencidasPorEquipo cuenta las vencidas y omite lo que no se ve", async () => {
     const e = await equipo();
     await crearRutina(f.jefeA, { equipmentId: e.id, kind: "limpieza", intervalDays: 7 });
+    await crearRutina(f.jefeA, { equipmentId: e.id, kind: "fumigacion", intervalDays: 7 });
     const paraElOperario = await vencidasPorEquipo(f.operarioA, [e.id], "2026-09-18");
-    expect(paraElOperario.get(e.id)).toBe(1);
+    expect(paraElOperario.get(e.id)).toBe(2);
     const paraElAjeno = await vencidasPorEquipo(f.ajeno, [e.id], "2026-09-18");
     expect(paraElAjeno.has(e.id)).toBe(false);
   });

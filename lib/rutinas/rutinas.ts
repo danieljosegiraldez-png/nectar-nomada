@@ -174,12 +174,20 @@ export async function rutinasDeEquipo(userAccountId: string, equipmentId: string
 /** Para la lista: cuántas rutinas vencidas tiene cada equipo VISIBLE. */
 export async function vencidasPorEquipo(userAccountId: string, equipmentIds: readonly string[], hoy: string): Promise<Map<string, number>> {
   const salida = new Map<string, number>();
+  // Un equipo con varias rutinas activas no vuelve a resolver su visibilidad
+  // por cada una: `puedeSobreEquipo` hace su propio `findUnique` + resolución
+  // de ámbito, y esta función es justo la que alimenta la página de lista.
+  const visible = new Map<string, boolean>();
   const rutinas = await prisma.careRoutine.findMany({
     where: { equipmentId: { in: [...equipmentIds] }, retiredAt: null },
     include: { events: { select: { performedOn: true, voidedAt: true } }, equipment: { select: { acquiredAt: true } } },
   });
   for (const r of rutinas) {
-    if (!r.equipmentId || !(await puedeSobreEquipo(userAccountId, r.equipmentId, "view"))) continue;
+    if (!r.equipmentId) continue;
+    if (!visible.has(r.equipmentId)) {
+      visible.set(r.equipmentId, await puedeSobreEquipo(userAccountId, r.equipmentId, "view"));
+    }
+    if (!visible.get(r.equipmentId)) continue;
     const e = estadoDeRutina({ intervalDays: r.intervalDays, registros: r.events, alta: r.equipment?.acquiredAt ?? null, hoy });
     if (e.estado === "vencida") salida.set(r.equipmentId, (salida.get(r.equipmentId) ?? 0) + 1);
   }
