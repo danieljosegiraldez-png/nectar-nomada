@@ -94,6 +94,17 @@ afterAll(async () => {
   await prisma.plantingEvent.deleteMany({ where: assertDefinedWhere({ id: { in: plantingEventIds } }) });
   await prisma.labourEntry.deleteMany({ where: assertDefinedWhere({ locationId: { in: [locationId, otherLocationId] } }) });
   await prisma.materialConsumptionEntry.deleteMany({ where: assertDefinedWhere({ locationId: { in: [locationId, otherLocationId] } }) });
+  // Las jornadas de campo y lo que colgó de ellas. Van ANTES de las personas:
+  // una `FieldSession` referencia a su operario, y borrar la persona primero
+  // revienta la limpieza entera — que es exactamente lo que pasó al añadir
+  // estas pruebas.
+  const jornadasDePrueba = await prisma.fieldSession.findMany({
+    where: { locationId: { in: [locationId, otherLocationId] } },
+    select: { id: true },
+  });
+  const jornadaIds = jornadasDePrueba.map((j) => j.id);
+  await prisma.materialConsumptionEntry.deleteMany({ where: assertDefinedWhere({ fieldSessionId: { in: jornadaIds } }) });
+  await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: jornadaIds } }) });
 
   const userAccountIds = [authorizedUserAccountId, wrongLocationUserAccountId, unauthorizedUserAccountId];
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
@@ -497,5 +508,86 @@ describe("recordMaterialConsumptionEntry — location parent (F1 §4)", () => {
     expect(entry.locationId).toBe(locationId);
     expect(entry.fermentationRunId).toBeNull();
     expect(entry.dryingRunId).toBeNull();
+  });
+});
+
+/**
+ * **Los consumibles de una visita al apiario** — 2026-09-17.
+ *
+ * Daniel, contando una visita real: uniforme de apicultor, ahumador, aserrín y
+ * hojas para el ahumador, encendedor, una lija de ebanistería y diez reductores
+ * de piquera.
+ *
+ * Hasta hoy eso sólo se podía colgar de una UBICACIÓN, así que el sistema
+ * podía decir «se gastó aserrín en el Apiario Finca Rosina» y no «en la visita
+ * del martes». Y la visita es la unidad en la que se trabaja: una jornada tiene
+ * su operario, su hora de inicio y su ventana de edición, y lo gastado forma
+ * parte de ella igual que los jornales.
+ *
+ * `FieldSession` ya existía y **no tenía relación con los consumos**. Esto la
+ * añade por la puerta que ya estaba: una variante más del padre discriminado,
+ * no un mecanismo paralelo.
+ */
+describe("recordMaterialConsumptionEntry — parent jornada de campo", () => {
+  it("cuelga el consumo de LA VISITA, no sólo del sitio", async () => {
+    const jornada = await prisma.fieldSession.create({
+      data: {
+        locationId,
+        operatorPersonId: (await prisma.userAccount.findUniqueOrThrow({
+          where: { id: authorizedUserAccountId }, select: { personId: true },
+        })).personId,
+        startedAt: new Date(),
+        provenanceClass: "direct_observation",
+      },
+    });
+    const entry = await recordMaterialConsumptionEntry(authorizedUserAccountId, {
+      parent: { kind: "fieldSession", fieldSessionId: jornada.id },
+      materialName: "Aserrín para el ahumador",
+      batchLabel: "sin lote",
+      quantity: 1,
+      unit: "saco",
+      provenanceClass: "direct_observation",
+    });
+    expect(entry.fieldSessionId).toBe(jornada.id);
+    // Y NO se cuelga además de la ubicación: un consumo con dos padres se
+    // contaría dos veces el día que alguien sume por sitio y por jornada.
+    expect(entry.locationId).toBeNull();
+    expect(entry.fermentationRunId).toBeNull();
+    expect(entry.dryingRunId).toBeNull();
+  });
+
+  it("rechaza a quien no alcanza la ubicación DE LA JORNADA", async () => {
+    // El ámbito sale de dónde ocurrió la jornada, no de la jornada misma: una
+    // visita no lleva permisos propios. Si esto cayera, cualquiera podría
+    // declarar consumos en el apiario de otro con sólo saber el id.
+    const jornada = await prisma.fieldSession.create({
+      data: {
+        locationId,
+        operatorPersonId: (await prisma.userAccount.findUniqueOrThrow({
+          where: { id: authorizedUserAccountId }, select: { personId: true },
+        })).personId,
+        startedAt: new Date(),
+        provenanceClass: "direct_observation",
+      },
+    });
+    await expect(
+      recordMaterialConsumptionEntry(wrongLocationUserAccountId, {
+        parent: { kind: "fieldSession", fieldSessionId: jornada.id },
+        materialName: "Aserrín para el ahumador",
+        batchLabel: "sin lote",
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(TraceabilityAccessError);
+  });
+
+  it("y una jornada que no existe se rechaza — el control de que se mira de verdad", async () => {
+    await expect(
+      recordMaterialConsumptionEntry(authorizedUserAccountId, {
+        parent: { kind: "fieldSession", fieldSessionId: "00000000-0000-0000-0000-000000000000" },
+        materialName: "Aserrín",
+        batchLabel: "sin lote",
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(TraceabilityAccessError);
   });
 });

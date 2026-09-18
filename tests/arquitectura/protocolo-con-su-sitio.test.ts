@@ -169,13 +169,22 @@ describe("el protocolo de campo y el esquema hablan el mismo idioma", () => {
     const sinSitio = itemsSinSitio().sort();
     expect(sinSitio).toEqual(
       [
-        "assessment",
+        // `assessment` salio de esta lista el 2026-09-17 (ADR-154): ahora vive en
+        // `Inspection.assessment`, y se escribe por el cierre de la VISITA, que es el unico
+        // cierre que existe. La lista baja de TRES a DOS.
+        //
         // `hives_present_count` salio de esta lista el 2026-09-16 (ADR-150): ahora vive en
         // `FieldSession.hivesPresentCount`. La lista baja de CINCO a CUATRO, y este guardia
         // existe precisamente para que ese numero no cambie en silencio (ADR-143).
-        "moisture_pct",
+        // `moisture_pct` salio de esta lista el 2026-09-17 (ADR-160): es la escala H% del
+        // refractometro de miel, y vive como `Measurement` sobre el `Lot` de la cosecha -- no en
+        // una columna, porque el lote es lo que sigue a la miel al dividirse o envasarse. La
+        // lista baja de DOS a UNA.
         "site_condition",
-        "weather_observed",
+        // `weather_observed` salio de esta lista el 2026-09-17 (ADR-152), y NO porque se
+        // construyera un proveedor de clima: porque la nota que lo daba por hueco confundia el
+        // «Clima 7 dias» del Anexo C --un pronostico externo, que sigue sin proveedor-- con la
+        // pregunta del Anexo E, que es lo que el apicultor VIO. La lista baja de CUATRO a TRES.
       ].sort(),
     );
   });

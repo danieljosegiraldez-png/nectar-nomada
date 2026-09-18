@@ -2966,6 +2966,39 @@ caían **2** —la mutada y otra, arrastrada por la visita que sobrevivió— y
 quedaban **7 filas** en la base; después cae **1** y quedan **0**. Un fallo que
 se multiplica por tres es la firma de este defecto, no de tres defectos.
 
+### Un admin de plataforma ve la base compartida entera
+
+**Síntoma.** 2026-09-17, tres veces en tres ramas que no tocaban nada de lo que
+la prueba lee: `reporteDeProceso.test.ts` fallaba en el carril con base
+(`expected 3 to be 1`) y **pasaba siempre sola**.
+
+**Causa.** El fixture le daba a su usuario **Platform Admin en ámbito de
+plataforma**. Con eso `resolveLotVisibility` devuelve `mode: "all"`, y la
+función bajo prueba calcula sobre **toda la base**, no sobre lo que el archivo
+creó. Los archivos corren en paralelo contra la misma base, así que el recuento
+sumaba los procesos que `lotProcess.test.ts` tenía vivos en ese instante. Sola,
+la prueba nunca tiene vecinos: por eso pasaba.
+
+**Filtrar por el RUN no basta si la función no deja filtrar**: un agregado
+(`faltan.procesosCerrados`) no tiene dónde meter el filtro. Lo que aísla es el
+**ámbito del usuario**: Farm Operator de su propio plot, y la visibilidad real
+hace el resto.
+
+**Y que la prueba afirme el aislamiento.** Con el ámbito acotado, un recuento
+de lo visible puede ser **exacto** (`toBe(2)`, no `>= 2`). Si alguien vuelve a
+darle ámbito de plataforma, cae **siempre** —la base tiene lotes sembrados— en
+vez de a veces. Flip-test: volver a poner el admin → `expected 56 to be 2`.
+
+**Reproducirlo sin esperar a la suerte:** una prueba temporal, no commiteada,
+que crea la fila ajena en `beforeAll`, la mantiene viva 20 s en un `it` y la
+borra en `afterAll`; correrla en el mismo `vitest run` que la sospechosa.
+
+**La forma lenta del mismo defecto: una lista con tope.** Si la función corta
+en N (`LIST_LIMIT`, `take: 500` y 200 visibles…), un admin ve todo, y lo propio
+sale de la lista cuando otros dejan N filas que ordenan antes. No falla hasta el
+día que la basura acumulada cruza el tope. Dos casos medidos el 2026-09-18 en
+`PENDING_IMPLEMENTATIONS/012`.
+
 ### Un `failure` de Actions puede ser el presupuesto, y el job nunca arrancó
 
 **2026-09-14.** Un PR salió con `¿Hay código en este cambio?: FAILURE` y las otras tres

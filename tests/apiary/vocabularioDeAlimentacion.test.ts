@@ -14,6 +14,8 @@
  * `colonyEvents`, contra Postgres, y todavía no está escrita.
  */
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   MATERIALES_DE_ALIMENTACION,
   MATERIAL_QUE_EXIGE_CUAL,
@@ -24,17 +26,40 @@ import {
 } from "../../lib/apiary/vocabularioDeAlimentacion";
 
 describe("el vocabulario que el dueño dictó", () => {
-  it("son exactamente sus cinco, más «otro» — ni uno más", () => {
-    // Un valor de más no es inocuo: un desplegable con opciones que en esta finca nadie usa
-    // enseña a bajar hasta «otro», y entonces el vocabulario deja de leerse.
+  it("sus cinco PRIMERO, y después los que su protocolo ya ofrecía", () => {
+    // **CAMBIÓ EL 2026-09-17 (ADR-153), por decisión del dueño: «mis cinco más los jarabes».**
+    //
+    // Esta prueba decía «exactamente sus cinco, ni uno más», y su razón era buena: un
+    // desplegable con opciones que nadie usa enseña a bajar hasta «otro». Lo que ADR-148 no
+    // había visto es que el protocolo —que es SUYO— ya ofrecía otras cuatro, así que había dos
+    // vocabularios para la misma pregunta. Lo destapó `enum-del-protocolo` el 2026-09-17.
+    //
+    // `sustituto_polen` y `torta` NO son jarabes —son alimentos proteicos— y se quedan porque
+    // ya estaban en su protocolo: quitarlos sería una pérdida de capacidad que nadie pidió.
     expect([...MATERIALES_DE_ALIMENTACION]).toEqual([
       "azucar_morena",
       "azucar_blanca",
       "melaza",
       "miel_de_abeja",
       "miel_de_cana",
+      "jarabe_1_1",
+      "jarabe_2_1",
+      "sustituto_polen",
+      "torta",
       "otro",
     ]);
+  });
+
+  it("y el vocabulario es el MISMO que el del protocolo, leído del archivo", () => {
+    // La prueba de arriba se compara con una lista escrita aquí — o sea, conmigo mismo. Ésta lo
+    // compara con el artefacto del dueño, que es lo que impide que vuelvan a separarse.
+    const protocolo = JSON.parse(
+      readFileSync(join(process.cwd(), "protocolos/apiario-campo-v1.json"), "utf8"),
+    );
+    const items = (protocolo.activities ?? []).flatMap((a: { items?: unknown[] }) => a.items ?? []);
+    const material = items.find((i: { key: string }) => i.key === "material") as { options?: string[] } | undefined;
+    expect(material?.options, "el protocolo ya no declara `material` con opciones").toBeDefined();
+    expect([...MATERIALES_DE_ALIMENTACION]).toEqual(material!.options);
   });
 
   it("y en el orden en que él los dijo, que es el orden en que los busca", () => {

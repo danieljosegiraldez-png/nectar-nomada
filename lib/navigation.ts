@@ -48,10 +48,18 @@ const NAV: readonly NavDefinition[] = [
     href: "/partner",
     requiresAnyOf: ["partner:submit_task", "partner:submit_data", "partner:upload_media"],
   },
-  { labelKey: "lots", href: "/lots", requiresAnyOf: ["lot:view", "lot:manage"] },
+  // 2026-09-17, decisión de Daniel: la entrada es «Beneficio», y los lotes, las
+  // recetas, las instalaciones y los equipos cuelgan de ella. Hereda la regla que
+  // tenía «Lotes» sin tocarla: quien veía lotes ve la sección, y nadie más.
+  // Las rutas no se mueven todavía (`/lots` sigue donde estaba); eso va en su PR
+  // cuando exista el tablero del beneficio, para no mudarlas dos veces.
+  { labelKey: "beneficio", href: "/beneficio", requiresAnyOf: ["lot:view", "lot:manage"] },
+  // 2026-09-18, decisión de Daniel: «Parcelas» pasa a ser la sección «Finca»
+  // —parcelas, cosecha, recolectores, rendimiento—, hermana de «Beneficio».
+  // Hereda la regla que tenía Parcelas sin tocarla. `/plots` no se mueve.
   {
-    labelKey: "plots",
-    href: "/plots",
+    labelKey: "finca",
+    href: "/finca",
     requiresAnyOf: ["location:manage_attributes", "lot:view", "lot:manage"],
   },
   { labelKey: "apiaries", href: "/apiaries", requiresAnyOf: ["apiary:view", "apiary:manage"] },
@@ -255,6 +263,34 @@ function visible(entry: NavDefinition, granted: ReadonlySet<string>): boolean {
  */
 export function buildNavigation(granted: ReadonlySet<string>): NavEntry[] {
   return NAV.filter((entry) => visible(entry, granted)).map(({ labelKey, href }) => ({ labelKey, href }));
+}
+
+/**
+ * Las páginas que no son entrada del menú pero viven DENTRO de una sección que sí
+ * lo es, con la sección que las enlaza.
+ *
+ * Existe desde el 2026-09-17, cuando «Lotes» dejó de ser entrada del menú y pasó a
+ * colgar de «Beneficio» (decisión de Daniel), pero el aterrizaje de un operario
+ * siguió en `/lots` (también decisión suya: nadie cambia su mañana). El invariante
+ * de ADR-082 —«no aterrizar donde el menú no te deja volver»— sigue valiendo; lo
+ * que cambia es que «volver» puede pasar por una sección. Escrito como dato y no
+ * como excepción en una prueba, para que el compilador lo vea y la página índice de
+ * la sección y este mapa no puedan divergir sin que algo lo note.
+ */
+export const DENTRO_DE_SECCION: Readonly<Record<string, string>> = {
+  "/lots": "/beneficio",
+  // 2026-09-18: las parcelas cuelgan de Finca.
+  "/plots": "/finca",
+};
+
+/**
+ * ¿Se puede volver a `href` desde el menú de quien mira? Sí si es una entrada, o si
+ * vive dentro de una sección que es entrada. Es la pregunta que protege ADR-082.
+ */
+export function seAlcanzaDesdeElMenu(href: string, menu: readonly string[]): boolean {
+  if (menu.includes(href)) return true;
+  const seccion = DENTRO_DE_SECCION[href];
+  return seccion !== undefined && menu.includes(seccion);
 }
 
 /**

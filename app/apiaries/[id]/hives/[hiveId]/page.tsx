@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getHive } from "../../../../../lib/apiary/hives";
+import { permissionKeysAnywhere } from "../../../../../lib/rbac/service";
 import { origenesDeColonia } from "../../../../../lib/apiary/origenDeColonia";
 import { sinRegistrar } from "../../../../../lib/apiary/vacio";
 import { causasDePerdida } from "../../../../../lib/apiary/causaDePerdida";
@@ -21,9 +22,14 @@ import { cosechasDeColonia, TIPOS_DE_MIEL } from "../../../../../lib/apiary/cier
 import { completarCierreDeCosechaFormAction } from "../../../../actions/apiary";
 import { NewColonyForm } from "../../../../components/apiary/NewColonyForm";
 import { Ayuda } from "../../../../components/apiary/Ayuda";
+import { LimpiezaDeCajaForm } from "../../../../components/apiary/LimpiezaDeCajaForm";
+import { LecturaDeRefractometroForm } from "../../../../components/apiary/LecturaDeRefractometroForm";
+import { instrumentosParaMedicion } from "../../../../../lib/equipos/equipos";
+import { limpiezasDeCaja } from "../../../../../lib/apiary/limpiezaDeCaja";
 import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
 import { ColonyEventQuickEntry } from "../../../../components/apiary/ColonyEventQuickEntry";
+import { frascosParaTratar } from "../../../../../lib/inventario/frascosParaTratar";
 import { ConteoDeVarroaForm } from "../../../../components/apiary/ConteoDeVarroaForm";
 import { HarvestForm } from "../../../../components/apiary/HarvestForm";
 import { ApiaryPhotoUploadForm } from "../../../../components/apiary/ApiaryPhotoUploadForm";
@@ -37,7 +43,23 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
 
   const { id: apiaryId, hiveId } = await params;
   const t = await getTranslations("Apiary");
-  const [hive, { people: observers, selfPersonId }, origenes, causas, irregularidades] = await Promise.all([
+  /**
+   * **Qué puede hacer de verdad quien está mirando.**
+   *
+   * Hasta el 2026-09-17 esta pantalla pintaba los seis formularios a todo el
+   * mundo y la acción decidía al enviar. Para un `Apiary Colony Event Recorder`
+   * —Kenis, que registra alimentaciones y tratamientos pero NO crea
+   * inspecciones— eso era un formulario que se rellena entero y revienta al
+   * final. Una promesa rota es peor que una ausencia explicada.
+   *
+   * **`permissionKeysAnywhere` dice «en algún ámbito», no «en ESTE apiario»**, y
+   * es a propósito: aquí sólo decide qué se PINTA. La autorización de verdad
+   * sigue en la acción, por ámbito y por clasificación. Una cuenta con
+   * `apiary:manage` en otro apiario vería el formulario y la acción lo
+   * rechazaría — el fallo menos malo de los dos, y el que ya se corre en el
+   * resto de la aplicación.
+   */
+  const [hive, { people: observers, selfPersonId }, origenes, causas, irregularidades, granted] = await Promise.all([
     getHive(user.userAccountId, hiveId),
     getObserverCandidates(user.userAccountId),
     // Lecturas sin sujeto: los dos vocabularios salen del catálogo, no de una
@@ -45,7 +67,23 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
     origenesDeColonia(),
     causasDePerdida(),
     irregularidadesOfrecidas(),
+    permissionKeysAnywhere(user.userAccountId),
   ]);
+  // Las limpiezas de la CAJA (ADR-159). DESPUÉS del `Promise.all`, no dentro: `limpiezasDeCaja`
+  // no autoriza, y `getHive` —que sí— lanza si no hay permiso de ver. Se usa `hive.id`, el de la
+  // caja ya autorizada, no el parámetro crudo de la URL.
+  const limpiezas = await limpiezasDeCaja(hive.id);
+
+  /**
+   * Los dos niveles de autoridad, y NO son un escalón del mismo permiso:
+   * `colony_event:manage` es una autoridad más pequeña, no una clearance más
+   * baja — lo dice el propio guardia en `lib/apiary/hives.ts`.
+   */
+  const puedeGestionar = granted.has("apiary:manage");
+  const puedeRegistrarEventos = puedeGestionar || granted.has("colony_event:manage");
+  // Botiquín, Tarea 7: sólo los frascos que esta persona puede descontar. Sin
+  // ninguno, el formulario de tratamiento es el de siempre.
+  const frascos = puedeRegistrarEventos ? await frascosParaTratar(user.userAccountId) : [];
 
   // A Hive holds at most one *current* Colony in practice (A1/A2's own
   // scope — a move/reassignment operation isn't built yet); prefer an
@@ -80,6 +118,20 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
   // A9 · Anexo B §5 — las cosechas no se listaban en ninguna parte, así que ni el tipo
   // de miel ni el peso ni la humedad tenían dónde verse.
   const cosechas = colony ? await cosechasDeColonia(colony.id) : [];
+  // ADR-160: sólo los aparatos con algún modo sobre MIEL DE ABEJA. El refractómetro del
+  // beneficio lee mosto de café y no es el de mieles. La lista ya viene autorizada.
+  const refractometrosDeMiel =
+    cosechas.length === 0
+      ? []
+      : (await instrumentosParaMedicion(user.userAccountId))
+          .map((i) => ({
+            id: i.id,
+            name: i.name,
+            escalas: i.modos
+              .filter((m) => m.materialState === "BEE_HONEY" && (m.variable === "brix" || m.variable === "moisture"))
+              .map((m) => `${m.variable === "brix" ? "°Bx" : "H%"} ${m.rangeMin ?? "?"}–${m.rangeMax ?? "?"}`),
+          }))
+          .filter((i) => i.escalas.length > 0);
 
   const revalidationPath = `/apiaries/${apiaryId}/hives/${hiveId}`;
 
@@ -116,7 +168,11 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
         <section className="nn-section">
           <h2>{t("newColonyHeading")}</h2>
           <p className="nn-muted">{t("noColonyYet")}</p>
-          <NewColonyForm apiaryId={apiaryId} hiveId={hiveId} origenes={origenes} />
+          {puedeGestionar ? (
+            <NewColonyForm apiaryId={apiaryId} hiveId={hiveId} origenes={origenes} />
+          ) : (
+            <p className="nn-muted">{t("sinPermisoGestion")}</p>
+          )}
         </section>
       ) : (
         <>
@@ -148,8 +204,10 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
               <p className="nn-muted">
                 {t("colonyEndedOn", { fecha: colony.endedAt.toISOString().slice(0, 10) })}
               </p>
-            ) : (
+            ) : puedeGestionar ? (
               <FinDeColoniaForm colonyId={colony.id} causas={causas} />
+            ) : (
+              <p className="nn-muted">{t("sinPermisoGestion")}</p>
             )}
             <ApiaryPhotoUploadForm
               parent={{ kind: "colony", colonyId: colony.id }}
@@ -233,14 +291,55 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
             )}
           </section>
 
+          {/* ADR-159 — la limpieza de la CAJA. Va junto a su configuración porque las dos son de la
+              caja, no de la colonia: una caja vacía se desinfecta ANTES de recibir otra. */}
+          <section className="nn-section">
+            <h2>{t("limpiezaHeading")}</h2>
+            <Ayuda resumen={t("ayudaResumen")}>{t("limpiezaAyuda")}</Ayuda>
+            {limpiezas.length === 0 ? (
+              <p className="nn-muted">{t("limpiezaNinguna")}</p>
+            ) : (
+              <ul>
+                {limpiezas.map((l) => (
+                  <li key={l.id}>
+                    {/* Un DÍA: se muestra tal cual, sin convertir a la zona del sitio, que lo movería un
+                        día atrás (la trampa de los campos de día del CLAUDE.md). */}
+                    <strong>{l.occurredAt.toISOString().slice(0, 10)}</strong>
+                    {" — "}
+                    {l.acts.map((a) => (a === "otro" && l.actOtherNote ? l.actOtherNote : t(`limpiezaActo_${a}`))).join(", ")}
+                    {l.reason ? ` · ${l.reason === "otro" && l.reasonOtherNote ? l.reasonOtherNote : t(`limpiezaRazon_${l.reason}`)}` : null}
+                    {l.notes ? <span className="nn-muted"> · {l.notes}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {puedeGestionar ? (
+              <details>
+                <summary>{t("limpiezaRegistrar")}</summary>
+                <LimpiezaDeCajaForm hiveId={hive.id} apiaryId={apiaryId} />
+              </details>
+            ) : null}
+          </section>
+
           <section className="nn-section">
             <h2>{t("inspectionHeading")}</h2>
-            <InspectionForm colonyId={colony.id} selfPersonId={selfPersonId} irregularidades={irregularidades} />
+            {/* **Se dice por qué, no se esconde a secas.** Un formulario que
+                desaparece sin explicación se lee como una pantalla rota. Misma
+                doctrina que las limitaciones del veredicto: la falta se declara. */}
+            {puedeGestionar ? (
+              <InspectionForm colonyId={colony.id} selfPersonId={selfPersonId} irregularidades={irregularidades} />
+            ) : (
+              <p className="nn-muted">{t("sinPermisoInspeccion")}</p>
+            )}
           </section>
 
           <section className="nn-section">
             <h2>{t("colonyEventHeading")}</h2>
-            <ColonyEventQuickEntry colonyId={colony.id} selfPersonId={selfPersonId} />
+            {puedeRegistrarEventos ? (
+              <ColonyEventQuickEntry colonyId={colony.id} selfPersonId={selfPersonId} frascos={frascos} />
+            ) : (
+              <p className="nn-muted">{t("sinPermisoEvento")}</p>
+            )}
           </section>
 
           {/* A9.6 — varroa: el conteo y su serie. La serie va junta con el
@@ -248,7 +347,11 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
               el conteo anterior, y tenerla en otra pantalla obliga a recordarla. */}
           <section className="nn-section">
             <h2>{t("varroaHeading")}</h2>
-            <ConteoDeVarroaForm colonyId={colony.id} selfPersonId={selfPersonId} tratamientos={tratamientos} />
+            {puedeGestionar ? (
+              <ConteoDeVarroaForm colonyId={colony.id} selfPersonId={selfPersonId} tratamientos={tratamientos} />
+            ) : (
+              <p className="nn-muted">{t("sinPermisoGestion")}</p>
+            )}
             {serieDeVarroa.length === 0 ? (
               <p className="nn-muted">{t("varroaNoCounts")}</p>
             ) : (
@@ -272,7 +375,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
 
           <section className="nn-section">
             <h2>{t("harvestHeading")}</h2>
-            <HarvestForm colonyId={colony.id} />
+            {puedeGestionar ? <HarvestForm colonyId={colony.id} /> : <p className="nn-muted">{t("sinPermisoGestion")}</p>}
 
             {/* Las cosechas, con su cierre. Cada una lleva su formulario porque el tipo
                 de miel y el peso se saben al extraer, semanas después de cosechar. */}
@@ -313,6 +416,30 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                               )
                               .join(" · ")}
                       </p>
+
+                      {/* El Brix, junto a la humedad: las dos escalas del refractómetro de miel. */}
+                      <p className={c.brix.length === 0 ? "nn-vital-sin-registro" : undefined}>
+                        {c.brix.length === 0
+                          ? t("brixSinMedir")
+                          : c.brix
+                              .map((m) => t("brixFila", { valor: m.valor, fecha: m.measuredAt.toISOString().slice(0, 10) }))
+                              .join(" · ")}
+                      </p>
+
+                      {/* Una lectura por cosecha (Daniel, 2026-09-17): el formulario sólo aparece
+                          mientras falte alguna de las dos escalas. Después se CORRIGE, no se apila. */}
+                      {c.brix.length === 0 || c.humedad.length === 0 ? (
+                        <details>
+                          <summary>{t("refractometroTitulo")}</summary>
+                          <LecturaDeRefractometroForm
+                            apiaryHarvestEventId={c.id}
+                            hiveId={hiveId}
+                            apiaryId={apiaryId}
+                            instrumentos={refractometrosDeMiel}
+                            claveDeEnvio={crypto.randomUUID()}
+                          />
+                        </details>
+                      ) : null}
 
                       <form action={completarCierreDeCosechaFormAction} className="nn-form" style={{ margin: 0 }}>
                         <input type="hidden" name="apiaryHarvestEventId" value={c.id} />

@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-17
 
-**356 operaciones** que tocan la base, en **106 archivos**:
+**382 operaciones** que tocan la base, en **119 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,35 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **246** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **271** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **58** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **59** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
+
+> **Fusión de `origin/main` en `trampas-broca` (2026-09-18).** Los dos lados
+> traían cifras propias —356/106 la rama, 376/116 `main`— y **ninguna de las dos
+> vale para el árbol combinado**. Las de arriba son las que imprime
+> `node scripts/inventario-de-acceso.mjs` sobre la fusión: **382 en 119**.
+
+> **Y el de 350→354, con un archivo nuevo, es el servicio de beneficio (Tarea 2 del
+> plan de alta de beneficio).** `lib/traceability/beneficios.ts` aporta **cuatro**
+> operaciones y las cuatro llevan **guardia directo**: `sitiosParaBeneficio`,
+> `listarBeneficios`, `crearBeneficio` y `actualizarBeneficio` resuelven `can()` contra
+> el sitio antes de leer u ofrecer nada, y crear exige además `location:create_site`
+> sobre el padre, que es el permiso nuevo de la Tarea 1. 4 = 4: si la cuenta no
+> cerrara con la fila de «guardia directo», algo se habría colado sin ese segundo
+> permiso.
+
+> **Tarea 3 (2026-09-17, sin cambio de cifras): la pantalla de ajustes del beneficio.**
+> `app/actions/beneficios.ts`, `app/beneficio/ajustes/page.tsx` y su formulario no
+> aparecen como operaciones propias: no llaman a `prisma` directamente, sólo a
+> `sitiosParaBeneficio`, `listarBeneficios`, `crearBeneficio` y `actualizarBeneficio`,
+> que ya están inventariadas desde la Tarea 2. `node scripts/inventario-de-acceso.mjs`
+> vuelve a imprimir exactamente **354** operaciones en **104** archivos — el mismo
+> reparto de la nota anterior—, y eso es lo esperado: una pantalla que delega toda su
+> autorización en el servicio no suma una fila nueva al inventario.
 
 > **Tareas 8 y 9 (2026-09-16):** el inventario incluye las opciones de inspección y
 > el servicio de instalaciones. Las cifras anteriores se regeneraron con
@@ -67,6 +90,11 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > porque las dos preguntas son distintas: por qué se le pasa una transacción abierta, y quién
 > autoriza en su lugar.
 
+> **Y el inventario con existencias suma cinco archivos** —`lib/inventario/`
+> materiales, lotes, existencias y lista— y sube la fila de **guardia directo**:
+> definir un material exige `equipment:manage`, recibir y gastar `lot:manage`,
+> leer existencias `lot:view`, y la lista filtra cada lote por su ubicación.
+
 > **Y el de 347→350, con dos archivos nuevos, es la trilla y sus subproductos.**
 > `lib/traceability/trilla.ts` es un envoltorio fino sobre `recordTransformation`
 > —no toca la base por su cuenta— y `lib/traceability/subproductos.ts` sí, con su
@@ -103,6 +131,32 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > `listAssignmentPermissions`, `setPermissionOverride` y `clearPermissionOverride` exigen
 > `platform:manage_users` antes de leer o escribir nada. Ninguna es acotada por construcción:
 > tocan la asignación de otra persona, así que el guardia tiene que ser explícito.
+
+> **Y el de 364→366 son las dos de la limpieza de la caja (ADR-159).** `registrarLimpiezaDeCaja`
+> sube **guardia directo**: exige `requireApiaryAccess` sobre la caja antes de escribir.
+> `limpiezasDeCaja` **no recibe principal** y va en `dependen_del_llamador`: su único llamador es
+> la ficha de la colmena, que la invoca DESPUÉS de que `getHive` autorice —y `getHive` lanza si
+> no hay permiso—, pasándole el id de la caja ya autorizada.
+
+> **Y el de 366→367 es `registrarLecturaDeRefractometro` (ADR-160).** Vive en
+> `lib/apiary/cierreDeCosecha.ts`, que ya estaba inventariado, y sube **guardia directo**: exige
+> `requireApiaryAccess` sobre la colmena de la cosecha antes de leer modos o escribir, y cada
+> medición pasa además por `recordMeasurement`, que vuelve a autorizar contra el lote.
+> `cosechasDeColonia` sigue en `dependen_del_llamador` sin cambio de cifra: ahora lee también
+> el Brix, pero es la misma consulta sobre los mismos lotes ya autorizados.
+
+> **Y el de 355→356 es `registrarVitalesEnSitio` (ADR-157).** Vive en
+> `lib/apiary/vitalesEnSitio.ts` y sube la fila de **guardia directo**: exige
+> `requireApiaryAccess` sobre el sitio de la visita antes de escribir. Su puerta afirma **una
+> sola cosa** —que la visita seguía abierta— y a propósito no comprueba GPS: las coordenadas de
+> `startLatitude` son del arranque, no de ahora, y exigirlo dejaría sin registrar una visita bajo
+> dosel cerrado, que es justo donde están las abejas.
+
+> **Y el de 350→351 es `registrarValoracionDeInspeccion` (ADR-154).** Vive en
+> `lib/apiary/valoracionDeInspeccion.ts` y sube la fila de **guardia directo**: exige
+> `requireApiaryAccess` resuelto por la colmena de la colonia antes de escribir. Y aplica las
+> reglas de plazo de la **visita** —no unas nuevas— porque `Inspection` no tiene cierre
+> propio; inventarle uno duplicaría la máquina de `FieldSession`.
 
 > **Y el de 341→342 es `lugaresParaSitioDeAbejas` (ADR-145).** Vive en `lib/apiary/hives.ts`,
 > que ya estaba inventariado, y sube la fila de **acotado por construcción**: filtra por

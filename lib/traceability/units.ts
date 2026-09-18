@@ -361,6 +361,7 @@ export function normalizeToCanonical(
   variable: MeasurementVariable,
   value: number,
   sourceUnit: string,
+  limites?: { min: number; max: number },
 ): { value: number; unit: string } {
   const definition = REGISTRY[variable];
   const converter = definition.acceptedUnits[sourceUnit];
@@ -368,7 +369,8 @@ export function normalizeToCanonical(
     throw new UnitValidationError(`unsupported_unit:${variable}:${sourceUnit}`);
   }
   const normalized = converter(value);
-  if (normalized < definition.min || normalized > definition.max) {
+  const { min, max } = limites ?? definition;
+  if (normalized < min || normalized > max) {
     throw new UnitValidationError(`out_of_range:${variable}:${normalized}`);
   }
   return { value: normalized, unit: definition.canonicalUnit };
@@ -561,6 +563,21 @@ export function listVariableDefinitions(dominio: DominioDeVariable): {
 }
 
 /** The bounds for one variable, or null when the name is not canonical. */
+/**
+ * Los limites que cambian cuando el sujeto es MIEL DE ABEJA -- ADR-160.
+ *
+ * El `brix` del registro va de 0 a 40 porque su sujeto de siempre es el mosto y la cereza
+ * del cafe: ahi un 180 es un 18 mal tecleado, y el limite lo caza. **La miel se lee entre
+ * 58 y 90 °Bx**, asi que con ese limite ninguna lectura de miel entraria nunca.
+ *
+ * No se ensancha el limite de todos: se pierde el guardia del cafe para ganar la miel. Se
+ * ensancha **solo sobre un lote de miel**, al limite fisico de la escala (0-100 %), y lo
+ * que acota de verdad es el rango del modo del refractometro, que el servicio comprueba.
+ */
+export const LIMITES_SOBRE_MIEL: Partial<Record<MeasurementVariable, { min: number; max: number }>> = {
+  brix: { min: 0, max: 100 },
+};
+
 export function boundsFor(variable: string): { canonicalUnit: string; min: number; max: number } | null {
   if (!isKnownVariable(variable)) return null;
   const d = REGISTRY[variable];

@@ -154,7 +154,7 @@ describe("el estado de la colonia, escrito", () => {
     const insp = await recordInspection(userAccountId, {
       colonyId,
       outcome: "issue_observed",
-      population: "apinada",
+      population: "apiñada",
       beeCoveredFrames: 8,
       broodStages: ["huevo", "operculada"],
       queenCellKind: "enjambrazon",
@@ -166,7 +166,7 @@ describe("el estado de la colonia, escrito", () => {
       droneBroodPresent: true,
     });
     const fila = await prisma.inspection.findUniqueOrThrow({ where: { id: insp.id } });
-    expect(fila.population).toBe("apinada");
+    expect(fila.population).toBe("apiñada");
     expect(fila.beeCoveredFrames).toBe(8);
     expect(fila.broodStages).toEqual(["huevo", "operculada"]);
     expect(fila.queenCellKind).toBe("enjambrazon");

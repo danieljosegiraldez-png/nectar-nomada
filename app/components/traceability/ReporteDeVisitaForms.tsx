@@ -2,9 +2,12 @@
 
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
+// Del módulo PURO: importar `fieldSessions.ts` arrastraría `prisma` al navegador.
+import { CLIMAS_OBSERVADOS } from "../../../lib/apiary/climaObservado";
 import {
   emitirReporteDeVisitaAction,
   completarVisitaAction,
+  vitalesEnSitioAction,
   publicarEnlaceDeReporteAction,
   revocarEnlaceDeReporteAction,
   type TraceabilityActionState,
@@ -204,6 +207,20 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
         <p className="nn-muted">{t("visitHivesPresentHelp")}</p>
       </div>
 
+      {/* Clima OBSERVADO, no pronosticado (ADR-152). Los cuatro valores salen del protocolo, no
+          de una lista escrita aquí. La opción vacía es «nadie miró el cielo» y NO «despejado». */}
+      <div className="nn-field">
+        <label htmlFor="cv-weather">{t("visitWeatherObservedLabel")}</label>
+        <select id="cv-weather" name="weatherObserved" defaultValue="">
+          <option value="" />
+          {CLIMAS_OBSERVADOS.map((c) => (
+            <option key={c} value={c}>
+              {t(`weatherObserved_${c}`)}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div className="nn-field">
         <label htmlFor="cv-notes">{t("visitCompleteNotesLabel")}</label>
         <textarea id="cv-notes" name="notes" rows={3} />
@@ -247,6 +264,56 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
       ) : null}
       <button type="submit" className="nn-button" disabled={pending}>
         {t("visitCompleteButton")}
+      </button>
+    </form>
+  );
+}
+
+/**
+ * Los vitales de campo, anotados ESTANDO EN EL SITIO (ADR-157).
+ *
+ * Es el mismo dato que `CompletarVisitaForm` puede escribir, por otra puerta. Sale **sólo
+ * mientras la visita está abierta**, porque eso es exactamente lo que la marca afirma.
+ *
+ * **Los tres son opcionales y los tres son independientes:** quien mira el cielo al llegar y no
+ * cuenta cajas anota uno solo. Un campo vacío aquí NO borra lo que hubiera — se traduce a
+ * «no toques esta columna», no a `null`.
+ */
+export function VitalesEnSitioForm({ fieldSessionId }: { fieldSessionId: string }) {
+  const [estado, accion, pending] = useActionState(vitalesEnSitioAction, inicial);
+  const t = useTranslations("Traceability");
+
+  return (
+    <form action={accion} className="nn-form" style={{ maxWidth: 520 }}>
+      <input type="hidden" name="fieldSessionId" value={fieldSessionId} />
+      <p className="nn-muted">{t("vitalesEnSitioHelp")}</p>
+
+      <div className="nn-field">
+        <label htmlFor="vs-clima">{t("visitWeatherObservedLabel")}</label>
+        <select id="vs-clima" name="weatherObserved" defaultValue="">
+          <option value="">{t("vitalesEnSitioSinTocar")}</option>
+          {CLIMAS_OBSERVADOS.map((c) => (
+            <option key={c} value={c}>
+              {t(`weatherObserved_${c}`)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="vs-colonias">{t("visitColoniesAliveLabel")}</label>
+        <input id="vs-colonias" name="coloniesAliveCount" type="number" inputMode="numeric" min="0" step="1" />
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="vs-cajas">{t("visitHivesPresentLabel")}</label>
+        <input id="vs-cajas" name="hivesPresentCount" type="number" inputMode="numeric" min="0" step="1" />
+        <p className="nn-muted">{t("visitHivesPresentHelp")}</p>
+      </div>
+
+      {estado.error ? <p className="nn-error">{estado.error}</p> : null}
+      <button type="submit" disabled={pending}>
+        {pending ? t("saving") : t("vitalesEnSitioSubmit")}
       </button>
     </form>
   );

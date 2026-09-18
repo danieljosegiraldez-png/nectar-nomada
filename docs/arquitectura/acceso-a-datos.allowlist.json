@@ -74,6 +74,18 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/apiary/limpiezaDeCaja.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. `registrarLimpiezaDeCaja` exige `requireApiaryAccess` sobre la caja ANTES de escribir, y comprueba DENTRO de la transacción que ninguna colonia ocupara la caja el día entero —la regla que no puede ser un CHECK porque cruza a `colony`—. Escritura y AuditEvent en la MISMA transacción."
+    },
+    {
+      "archivo": "lib/apiary/vitalesEnSitio.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Exige `requireApiaryAccess` sobre el sitio de la visita ANTES de escribir, y sólo acepta mientras la visita está ABIERTA — que es exactamente lo que la marca `fieldVitalsOnSiteAt` afirma, ni más. Escritura y AuditEvent con su `before` en la MISMA transacción."
+    },
+    {
+      "archivo": "lib/apiary/valoracionDeInspeccion.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Exige `requireApiaryAccess` resuelto por la colmena de la colonia ANTES de escribir, y aplica las reglas de plazo de la VISITA —`locked` y `editWindowExpiresAt`, distinguidas entre sí— en vez de inventarle un cierre a `Inspection`, que no tiene ninguno. Escritura y AuditEvent con su `before` en la MISMA transacción."
+    },
+    {
       "archivo": "lib/apiary/media.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
@@ -424,6 +436,46 @@
     {
       "archivo": "lib/traceability/subproductos.ts",
       "razon": "Servicio de dominio de los lotes de subproducto (cascarilla, pulpa). Autoriza contra los lotes de ENTRADA de la transformacion de origen —quien no puede tocar ese lote no puede declarar lo que salio de el— y escribe la fila con su AuditEvent en la misma transaccion. Mismo patron que selection.ts."
+    },
+    {
+      "archivo": "lib/traceability/beneficios.ts",
+      "razon": "Tarea 2 del plan de alta de beneficio — crea y renombra el beneficio (LocationType nuevo) bajo un sitio. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. A diferencia de instalaciones.ts, crear exige DOS permisos sobre el padre —`location:manage_attributes` y `location:create_site`—, porque dar de alta un lugar nuevo es una autoridad más estrecha que administrar el árbol de uno existente y es justo la que un Farm Operator no tiene. Escritura y AuditEvent en la MISMA transacción, tanto al crear como al renombrar."
+    },
+    {
+      "archivo": "lib/inventario/materiales.ts",
+      "razon": "Catalogo de materiales consumibles. Autoriza con `equipment:manage` juzgado donde se declare el sitio —mismo criterio que `registrarEquipo`— y escribe la fila con su AuditEvent en la misma transaccion."
+    },
+    {
+      "archivo": "lib/inventario/lotes.ts",
+      "razon": "Lotes de material consumible y su libro mayor. Autoriza con `lot:manage` juzgado donde se declare el sitio —recibir es faena, no gestion— y escribe el lote, su evento de entrada y el AuditEvent en una sola transaccion."
+    },
+    {
+      "archivo": "lib/inventario/existencias.ts",
+      "razon": "Saldo DERIVADO de un lote de material y los movimientos que lo mueven. No guarda saldo en ninguna columna: lo recalcula del libro mayor, copiando la forma de `computeLotBalance` incluido su `recorded` (ADR-080). Autoriza con `lot:manage` juzgado donde se declare el sitio."
+    },
+    {
+      "archivo": "lib/inventario/lista.ts",
+      "razon": "Lista del inventario. Filtra CADA LOTE por su propio ambito —su ubicacion, que es el ancla de RBAC— con lot:view, igual que listarEquipos filtra cada equipo. Un lote sin ubicacion cae a plataforma: lo desconocido se cierra."
+    },
+    {
+      "archivo": "lib/inventario/custodia.ts",
+      "razon": "Custodia de un frasco (donde esta y quien responde). Mover exige lot:manage sobre el sitio de DESTINO; leer la vigente, lot:view sobre donde esta. Cierra la anterior y abre la nueva en una transaccion, con su AuditEvent y el ANTES."
+    },
+    {
+      "archivo": "lib/inventario/etiqueta.ts",
+      "razon": "Foto de la etiqueta del frasco. Pedir y finalizar exigen lot:manage sobre el sitio del frasco (plataforma si no tiene); finalizar exige ademas que la clave sea de la carpeta de ESE frasco, y crea el Asset con su AuditEvent en una transaccion."
+    },
+    {
+      "archivo": "lib/inventario/frascosParaTratar.ts",
+      "razon": "Selector de frasco del formulario de tratamiento. Filtra CADA frasco con lot:manage sobre su sitio (plataforma si no tiene) —la misma compuerta con la que recordColonyEvent descuenta—, asi que sólo ofrece lo que quien mira puede usar. Sólo lectura."
+    },
+    {
+      "archivo": "lib/inventario/avisos.ts",
+      "razon": "Aviso del botiquin (vencido o por vencer). Filtra CADA frasco con lot:manage sobre donde ESTA —su custodia vigente, o donde se recibio; plataforma si no tiene ninguna—, asi que nadie ve el botiquin de un sitio que no atiende. Sólo lectura."
+    },
+    {
+      "archivo": "lib/inventario/recepcion.ts",
+      "razon": "Recepcion del botiquin. Las opciones filtran CADA sitio con lot:manage y dicen si ademas tiene equipment:manage; los productos salen sólo de las fincas de esos sitios. completarProducto exige equipment:manage sobre un sitio de la MISMA finca que el producto, sólo rellena huecos y escribe con su AuditEvent y el ANTES en una transaccion."
     }
   ],
   "reciben_transaccion": [
@@ -834,6 +886,12 @@
       "operacion": "pendientesDeLaVisita",
       "razon": "Recibe un fieldSessionId que su llamador -la pantalla de la jornada- ya obtuvo de getFieldSessionTimeline, que autoriza con requireFieldSessionAccess. No pide principal a proposito: un lector que pide principal parece una compuerta y termina usandose como tal. Lee la jornada, sus eventos y las cajas del sitio; no escribe.",
       "verificado": "2026-09-15"
+    },
+    {
+      "archivo": "lib/apiary/limpiezaDeCaja.ts",
+      "operacion": "limpiezasDeCaja",
+      "razon": "No recibe principal, misma disciplina que `vitalesDeSitios`. Su único llamador es la ficha de la colmena, que la invoca DESPUÉS del `Promise.all` donde `getHive` autoriza —y `getHive` LANZA si no hay permiso de ver—, y le pasa `hive.id`, el de la caja ya autorizada, no el parámetro crudo de la URL.",
+      "verificado": "2026-09-17"
     }
   ]
 }

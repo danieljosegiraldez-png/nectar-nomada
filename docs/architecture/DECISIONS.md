@@ -10650,3 +10650,537 @@ por su nombre.
 es legitimo: `sin_recuento` es el estado del sitio sano del fixture, asi que esa mutacion hace
 alertar a **todos** los sitios y rompe cada prueba que espera una lista exacta. El control negativo
 cayo entre ellas, por su nombre.
+
+## ADR-152 -- Clima observado, y el guardia que ata el protocolo al esquema
+
+**Contexto.** El mapa del protocolo daba `weather_observed` por **sin sitio** con esta nota:
+*«Sin columna. El Anexo C lo pide como vital del sitio y lo deja en una capa externa sin proveedor
+conectado.»*
+
+**Esa nota confunde dos preguntas distintas**, y por eso el hueco no era un hueco:
+
+| | |
+|---|---|
+| **Anexo C** | «Clima 7 dias» -- un **pronostico**, capa externa, sin proveedor conectado. Sigue bloqueado, y bien. |
+| **Anexo E** | «Clima observado» -- lo que el apicultor **vio estando ahi**, con sus cuatro opciones **ya declaradas** en `protocolos/apiario-campo-v1.json`. |
+
+La segunda no necesita ningun proveedor. **Es la segunda vez que un `sin_sitio` resulta ser una
+lectura equivocada de su propia nota**; ADR-143 fue la primera, con `efficacy_note`.
+
+**Decision -- `FieldSession.weatherObserved`, enum de cuatro valores.** Hermana de
+`hivesPresentCount` y `coloniesAliveCount`. Los cuatro valores son **los del protocolo,
+literales**. El vacio es `null` --«nadie miro el cielo»-- y **no** `despejado`: el protocolo la
+marca `"required": false`, y no mirar no invalida la visita.
+
+**No hay `otro`, y es deliberado.** El protocolo no lo declara, y el sitio donde el dueno anade un
+quinto valor es **ese JSON** -- toda la idea de A9.4. **`neblina` merece mencion aparte**: el marco
+de investigacion describe Las Nubes como *«low-elevation cloud-forest environment»*, asi que ahi
+la neblina no es rara. Anadirla es decision del dueno, y hay que hacerlo **en los dos sitios a la
+vez**.
+
+## El guardia, que es lo que de verdad faltaba
+
+**`feedingMethod` lleva desde A9.4 con sus cuatro opciones escritas DOS veces** --el JSON y el
+`enum FeedingMethod`-- y **nada comprobaba que coincidieran**. Coincidian por haberlas escrito
+bien a mano.
+
+Eso es deriva esperando a ocurrir: las `options` del protocolo se guardan como `enumValues` de una
+`ProtocolVariable` **en la base**, asi que el dueno puede cambiarlas sin migracion -- pero cuando
+el mapa manda esa pregunta a una **columna de enum**, Postgres solo acepta los valores del tipo.
+El dia que alguien anada `"neblina"` al JSON, la captura lo ofrecera y la escritura lo rechazara
+con un error que no dice nada de protocolos.
+
+`tests/arquitectura/enum-del-protocolo.test.ts` lo ata. Solo mira las preguntas que **el mapa
+dice** que van a un enum del esquema: las que ya prometieron esa correspondencia.
+
+## Lo que el guardia encontro el primer dia, y una es mia
+
+**Cuatro divergencias que ya existian**, declaradas con su razon y su dueno porque **tres son
+decisiones de Daniel** y un guardia que no puede pasar nunca ensena a ignorar una linea roja:
+
+1. **`population`** -- el protocolo dice `apiñada` **con ñ** y el enum dice `apinada`. **Nadie
+   traduce**: `POBLACIONES` usa la del codigo. Hoy no rompe porque el formulario sale de esa
+   constante, pero el protocolo existe para que la captura salga **de el**. Cual de los dos se
+   cambia es decision del dueno: la ñ es su ortografia.
+2. **`honey_stores`** y 3. **`pollen_stores`** -- el protocolo declara `junto_a_cria` como cuarto
+   nivel; el esquema lo modela **aparte**, como booleano (`honeyNextToBrood`). Es deliberado y
+   mejor: «junto a cria» no es una cantidad, es una posicion.
+4. **`material`** -- **DIVERGENCIA MIA, del 2026-09-16.** ADR-148 construyo `FeedingMaterial` con
+   los cinco valores que el dueno dicto en el apiario **y no se actualizo el protocolo**, que
+   sigue ofreciendo `jarabe_1_1`, `jarabe_2_1`, `sustituto_polen` y `torta`. **Son dos
+   vocabularios para la misma pregunta**, y cual gana es decision suya.
+
+Desde hoy **no puede aparecer una quinta**, y una prueba aparte exige que las cuatro **sigan ahi**:
+si alguien arregla una, la lista se queda corta y lo dice.
+
+**La lista de huecos del protocolo baja de CUATRO a TRES** -- quedan `site_condition`,
+`assessment` y `moisture_pct`.
+
+**Cinco flip-tests, los cinco compilando, y dos rehechos** por la razon de siempre: anadir un
+valor a un `as const satisfies` estrecha la union y no compila. Los validos fueron **reordenar** el
+vocabulario y **vaciar el predicado**. El cuarto es el que vale: separar el JSON del enum
+--anadiendo `"neblina"` solo al protocolo-- cae por el guardia nuevo, compilando.
+
+## ADR-153 -- Las dos divergencias del dueno, resueltas: la eñe y el vocabulario completo
+
+**Contexto.** El guardia de ADR-152 encontro cuatro divergencias entre el protocolo del dueno y el
+esquema, y le llevo las tres que eran decisiones suyas. Contesto dos el mismo dia: *«mis cinco mas
+los jarabes, y arregla apiñada»*.
+
+## 1 · La eñe, y la afirmacion falsa que la causaba
+
+`apiñada` es su ortografia y la que **su protocolo ya usaba**; el enum decia `apinada` y **nadie
+traducia**. No rompia todavia porque el formulario sale de `POBLACIONES`, la constante del codigo
+-- pero el protocolo existe para que la captura salga **de el**, y ese dia habria ofrecido un valor
+que Postgres rechaza.
+
+**La causa raiz estaba escrita en el esquema, y era falsa.** El comentario de `ColonyPopulation`
+justificaba la ausencia asi: *«`apinada` sin eñe porque un identificador de enum no la admite»*.
+**Un enum de Prisma SI la admite**: `prisma validate` dice «the schema is valid» con `apiñada`
+dentro. Esa suposicion --escrita como justificacion y nunca medida-- es la razon de la divergencia,
+y **se corrige el comentario en vez de dejarlo al lado**: una regla que resulta falsa hay que
+corregirla, no reforzarla.
+
+**La migracion se escribe A MANO, y esa es la decision tecnica de esta mitad.** Prisma genero un
+**intercambio de tipo**: crear `ColonyPopulation_new` y castear
+`population::text::ColonyPopulation_new`. **Ese cast revienta para cualquier fila que valga
+`'apinada'`.** En la base local hay cero --medido: 2 inspecciones, 0 con ese valor-- pero **la de
+produccion no se puede leer desde aqui**, asi que la ausencia no se puede afirmar.
+`ALTER TYPE ... RENAME VALUE` preserva los datos **por definicion**: renombra la etiqueta, no
+reescribe filas. Sin deriva de esquema despues, comprobado.
+
+## 2 · «Mis cinco mas los jarabes»
+
+`FeedingMaterial` pasa de seis valores a diez: los **cinco** que el dueno dicto el 2026-09-16
+--primero, porque son los que usa--, los **dos jarabes**, y `sustituto_polen` y `torta`.
+
+**Esos dos ultimos NO son jarabes** --son alimentos proteicos-- y **se quedan igual**: ya estaban
+en **su** protocolo, y quitarlos seria una perdida de capacidad que nadie pidio. Queda dicho que si
+no los usa, se quitan entonces. Es la eleccion de menor perdida con la pregunta a la vista, en vez
+de decidirla en silencio en cualquiera de las dos direcciones.
+
+**Y esto revisa a ADR-148, con su razon.** Aquella prueba decia «exactamente sus cinco, ni uno
+mas», y su argumento era bueno: *un desplegable con opciones que nadie usa ensena a bajar hasta
+«otro»*. Lo que no habia visto es que **el protocolo ya ofrecia otras cuatro**, asi que el efecto
+neto de «no anadir ninguna» no era un vocabulario corto: eran **dos vocabularios** para la misma
+pregunta. El argumento sigue valiendo; la premisa estaba incompleta.
+
+## Lo que impide que vuelvan a separarse
+
+Dos cosas, y la segunda es la que faltaba en ADR-148:
+
+- El guardia `enum-del-protocolo` pasa ahora con **solo las dos divergencias legitimas**
+  (`honey_stores`, `pollen_stores`), que son de modelado y estan declaradas.
+- Una prueba nueva **compara el vocabulario con el ARCHIVO del protocolo**, no con una lista
+  escrita en la prueba. Compararse con una lista propia es compararse consigo mismo.
+
+**Tres flip-tests, y el tercero hubo que rehacerlo.** Quitar la eñe de `POBLACIONES` **no
+compila** --rompe el `satisfies readonly ColonyPopulation[]`--, o sea que **ahi la protege el
+compilador y no una prueba**, que es mas fuerte. El flip valido quita la eñe **del JSON**, que no
+pasa por tipos, y cae por el guardia.
+
+## ADR-154 -- La valoracion del tecnico, por el cierre de la visita y no por uno nuevo
+
+**Contexto.** El Anexo E pide «Valoracion» y el mapa del protocolo la daba por **sin sitio** con la
+razon escrita: *«`note` es la nota de campo; mezclarlas perderia cual se escribio con el guante
+puesto»*. Esa distincion es la que la construye: son dos columnas porque son **dos momentos**.
+
+**Y el dato que decide el diseno, medido:** `assessment` es el **UNICO** campo de etapa `close` de
+la inspeccion. Los otros **dieciseis** son de campo.
+
+## La decision: no se le inventa un cierre a la inspeccion
+
+`Inspection` **no tiene nada de cierre** -- ni `completedAt`, ni ventana de edicion, ni una funcion
+que la complete: solo `recordInspection` y el listado. `FieldSession` si tiene las tres cosas, con
+sus reglas ya decididas y **distinguidas entre si a proposito**: `locked` por decision,
+`editWindowExpiresAt` por plazo, *«porque quien lo lea necesita saber cual de las dos»*.
+
+Inventar un segundo cierre duplicaria esa maquina y la haria derivar. Asi que **la puerta es la
+visita**: el servicio encuentra la sesion a la que pertenece la inspeccion y le aplica **sus**
+reglas. La ruta existe y no hubo que crearla -- `FieldEvent` une `fieldSessionId` con
+`inspectionId`.
+
+**Una inspeccion SIN visita se acepta, y el servicio lo DICE.** Se puede inspeccionar sin jornada
+abierta, asi que el enlace puede faltar; negarlo dejaria esa valoracion **sin poder escribirse
+nunca**, que es peor que escribirla sin plazo. Devuelve `origenDeLaVentana` --`"visita"` o
+`"sin_visita"`-- para que la pantalla lo pueda decir y nadie suponga un plazo que no hubo.
+
+**El AuditEvent lleva el ANTES.** Una valoracion es una lectura del tecnico; saber que la cambio
+--y desde que-- es parte de poder sostenerla. El vacio **borra**, que es como se deshace una puesta
+por error: misma regla que los campos de cierre de la visita.
+
+## El desajuste de procedencia, que NO es nuevo y queda dicho
+
+El protocolo declara `assessment` como **`interpretation`**, y esta fila esta estampada
+**`direct_observation`** -- `inspections.ts` la fija asi para toda la inspeccion. Una fila tiene
+**una** procedencia, y esta lleva dos clases de afirmacion.
+
+**El desajuste ya existia y ADR-142 no lo dijo:** `probable_cause` y `recommendation` son los otros
+dos items que el protocolo marca `interpretation`, y viven como columnas de `FieldSession`, cuya
+fila tampoco es una interpretacion. Son los tres unicos items con procedencia declarada en todo el
+protocolo.
+
+**No se arregla aqui, y la razon no es pereza:** separarlo bien significa decidir si una
+interpretacion merece fila propia --`FieldEvent` ya tiene su propio `provenanceClass`, asi que el
+esquema ya modela procedencia por evento-- y eso cambia como se consulta la serie. Es una pieza
+propia, y hacerla de paso en una rebanada de una columna seria decidirlo sin mirarlo.
+
+**La lista de huecos del protocolo baja de TRES a DOS** -- quedan `site_condition` y `moisture_pct`.
+
+**Seis flip-tests, los seis compilando y cayendo por su nombre**: la ventana deja de aplicarse, una
+visita cerrada deja de bloquear, las dos causas se dicen igual, el audit pierde el antes, la
+valoracion escribe en `note`, y el mapa vuelve a declararla sin sitio.
+
+## ADR-155 -- Tres guardias que pasaban por razones equivocadas, y el segundo asiento que lo demostro mutando
+
+**Contexto.** El 2026-09-17 se le paso el trabajo del dia al CLI de Codex. No encontro un fallo de
+producto: encontro **tres guardias en verde que no vigilaban lo que decian vigilar**, y los
+demostro **mutando el codigo y ensenando que las pruebas seguian pasando** -- no opinando.
+
+**1. La exencion por clave eximia el futuro.** `enum-del-protocolo` declaraba sus divergencias
+heredadas como un `Map<clave, razon>`. Bastaba con que la clave estuviera para que **cualquier**
+desajuste de esa pregunta quedara exento: anadir un valor inventado a `honey_stores` dejaba **4/4
+en verde**. Ahora se declara el **par exacto** --que hay en el protocolo y que hay en el esquema--
+y cualquier otra diferencia vuelve a ser un desajuste.
+
+**2. Un `continue` sacaba preguntas de la vigilancia en silencio.** Si el protocolo dejaba de
+declarar `options`, el bucle la saltaba. Quitarselas a `method` dejaba **4/4 en verde**. Ahora,
+cuando el mapa manda la pregunta a una columna de enum, **la ausencia de `options` ES un
+desajuste**.
+
+**Y al cerrar ese agujero salio un numero: la cobertura real era de CINCO preguntas, no doce.** Se
+estaban saltando siete --`honey_type`, `outcome`, `queen_cells`, `route`, `target`, `varroa_method`,
+`weather_observed`-- y las siete coinciden, asi que no habia deuda escondida; habia **vigilancia
+que no existia**. La lista de doce queda fijada por nombre.
+
+**3. El «control positivo» probaba los lectores, no el detector.** Reducir el comparador a mirar
+solo dos preguntas dejaba **4/4 en verde** con todo lo demas sin vigilar. La causa era estructural
+y es la leccion general: **el detector leia sus entradas del modulo, asi que no se podia llamar con
+entrada hostil.** Ahora las recibe por parametro, y el control se las inventa -- que es la unica
+forma de probar un detector. Es literalmente la regla de la casa: *«el guardia es el que llama a la
+funcion con la entrada hostil, lo que suele obligar a exportarla»*.
+
+**4. `take: 1` presuponia una invariante que el esquema no garantiza.**
+`FieldEvent.inspectionId` tiene indice pero **no unicidad**, asi que una inspeccion puede colgar de
+dos visitas. Con una cerrada y otra abierta, la misma escritura se permitia o se rechazaba **segun
+el orden que devolviera Postgres**.
+
+Y aqui la observacion de Codex fue mejor que el arreglo obvio: **anadir `orderBy` solo habria
+vuelto determinista la arbitrariedad.** Lo que hacia falta era decidir cual manda. Manda la **mas
+restrictiva**: si cualquier visita que contiene la inspeccion esta cerrada o vencida, la ventana
+esta cerrada. La valoracion pertenece a la inspeccion, y una inspeccion contenida en algo ya
+cerrado no se reabre porque otra visita siga abierta. Asi no hay nada que ordenar ni que elegir.
+
+**5. El `before` del audit se leia y luego se escribia.** Con el aislamiento por omision de
+Postgres --read committed-- dos escrituras concurrentes leen el mismo valor A, guardan B y C, y
+**auditan las dos «desde A»**: la segunda afirma haber partido de A cuando reemplazo a B. La
+transaccion pasa a `Serializable`.
+
+**Y la parte que mas vale de todo esto: DOS DE MIS PROPIAS PRUEBAS eran adorno, y lo dijo su
+flip-test, no yo.**
+
+- La de «manda la mas restrictiva» decia en su comentario estar montada «al reves de lo comodo» y
+  **era falso**: dejaba la visita CERRADA primera, asi que un `sesiones[0]` daba la respuesta
+  correcta por accidente. «NADIE CAYO». Ahora la abierta va primera --la unica disposicion que
+  distingue «la mas restrictiva» de «la que salga antes»-- y **el orden se afirma** antes del
+  veredicto en vez de suponerse.
+- El `Serializable` **no tenia guardia ninguno**. Ahora hay uno con concurrencia de verdad, y
+  afirma **el rastro** --que ningun audit diga haber partido de un valor que otro ya reemplazo--
+  en vez de exigir que una transaccion falle: si las dos no llegan a solaparse, las dos tienen
+  exito legitimamente y sus audits son correctos.
+
+Reincidi en la trampa que Codex me acababa de ensenar, una hora despues, en el arreglo de esa misma
+trampa. Escribirla otra vez no arregla nada; lo que la caza es el flip-test, y por eso los cinco de
+esta rebanada repiten **las mutaciones exactas de Codex**.
+
+**Lo que NO entra.** Una restriccion de unicidad en `FieldEvent.inspectionId`, que seria el arreglo
+mas fuerte del punto 4. Es una migracion cuya seguridad **no se puede comprobar contra produccion**
+--leer esa base esta prohibido-- y que fallaria si ya hubiera duplicados. Queda nombrada: exige
+primero contar duplicados en produccion, y eso lo hace el dueno.
+
+## ADR-156 — `beneficio` es un tipo de ubicación, y crear un sitio es del jefe
+
+**Estado: aceptado, construido.** Decisiones de Daniel del 2026-09-17, en conversación.
+
+**Contexto.** Hasta hoy un beneficio sólo podía ser una `Location` de tipo
+`site`, así que **nada lo distinguía de una finca o una bodega salvo su
+nombre** — y deducir el dominio del nombre es exactamente lo que este
+repositorio prohíbe en otras cuatro secciones. Consecuencia práctica: un
+`Equipment` se coloca en un sitio, así que un fermentador vivía «en Finca
+Rosina» y ninguna pantalla podía decir qué hay **en el beneficio**.
+
+**Decisión 1: tipo propio, hijo del `site`.** `LocationType.beneficio`, mismo
+patrón que `drying_facility` y `drying_bed`: una `Location` con su tipo y su
+padre, **no una familia de entidades nueva**. Sigue el precedente de
+`meliponary`, que Daniel separó el 2026-09-16 con el mismo argumento — cuando
+el manejo cambia, el tipo es propio. Hoy una `drying_facility` sólo puede
+colgar del `site`: `crearUbicacionDeSecado` (lib/traceability/instalaciones.ts)
+exige `parent.locationType === "site"` y esta rama no lo cambia. Colgar una de
+un `beneficio` es un cambio futuro sobre esa función, no algo que ya soporte.
+
+**Decisión 2: `location:create_site`, y el capataz no lo tiene.** Crear un
+lugar nuevo no es editar los atributos de uno existente, así que no se pliega
+en `location:manage_attributes`. Se concede a Platform Admin —que recibe todos
+los permisos por construcción— y a **Farm Manager**. Se **excluye
+deliberadamente** de Farm Operator: palabras de Daniel, «farm manager/owner
+quien puede crear o editar un beneficio, no un capataz». Es la misma forma de
+exclusión explícita que ya usa Farm Manager con `lot:override_balance`.
+
+**Decisión 3: se comprueba sobre el sitio padre.** `crearBeneficio` exige
+`manage_attributes` **y** `create_site` sobre el padre, no sobre la plataforma.
+Eso es lo que impide que un Farm Manager de una finca cree un beneficio en
+otra, y lo hace con el mecanismo de asignaciones que ADR-144 ya define, sin una
+segunda regla de visibilidad escrita a mano que derivaría de la primera.
+Medido por flip-test el 2026-09-17: cada comprobación rechaza algo distinto —
+`create_site`, resuelto contra el ámbito del `Assignment`, es lo que rechaza al
+capataz y al Farm Manager de otra finca; `manage_attributes`
+(`requireLocationAttributeAccess`) es lo que rechaza un sitio padre inexistente
+en vez de dejarlo caer como un error de Prisma sin traducir.
+
+**El precedente contrario, y por qué no se sigue aquí.** `crearSitioDeAbejas`
+exige alcance de plataforma (`apiary_create_needs_platform_scope`) porque un
+apiario puede nacer sin padre y entonces no hay de quién heredar el acceso. Un
+beneficio **siempre** nace bajo un sitio, así que el padre es un sujeto real
+para el permiso. Un beneficio suelto, sin finca, queda fuera de alcance.
+
+**Consecuencia.** La pantalla es `/beneficio/ajustes`, primera sección del
+centro de configuración que describe PR #370.
+Las otras cuatro —capacidades, equipos, instalaciones y recetas— llegan con el
+tablero del beneficio, porque una capacidad declarada sin dónde leerse no sirve
+de nada. Sin permiso, la ruta responde **404** y no una página vacía, como ya
+hace `/equipos/[id]`.
+
+## ADR-157 -- Los vitales de campo se pueden anotar en el sitio, y queda dicho que fue alli
+
+**El hallazgo, y es sobre mi propio trabajo.** El protocolo marca `weather_observed`,
+`colonies_alive_count` y `hives_present_count` como **`stage: field`** --son cosas que se VEN
+estando ahi-- y las tres se capturaban **solo en el formulario de cierre**, que se rellena en
+casa. Dos de ellas las puse yo el 2026-09-16 (ADR-150, ADR-152) siguiendo a las que ya estaban,
+**sin comprobar que las que seguia estuvieran bien**.
+
+Medido: de los ocho items que van a `FieldSession`, los cuatro de `stage: close` estan donde
+deben y **los cuatro de `stage: field` estan todos en el cierre**.
+
+**Le lleve dos opciones al dueno y contesto una tercera, mejor:**
+
+> «se deberia poder hacer durante la visita o al cierre, a veces en sitio y si solo un apicultor
+> es dificil maniobrar y ser eficiente de entrar y salir y estresar menos a las abejas»
+
+Un apicultor solo, con las manos ocupadas y una caja abierta, **tiene una razon real** para salir
+y anotar despues. Esa razon no convierte lo anotado despues en lo mismo que lo visto.
+
+**Decision -- no se restringe, se REGISTRA cual de las dos paso.** `FieldSession` gana
+`fieldVitalsOnSiteAt`, y hay una puerta nueva --`registrarVitalesEnSitio`-- disponible **mientras
+la visita esta abierta**, en la pantalla de la visita.
+
+Sin la marca, **una cifra vista con el guante puesto y una reconstruida de memoria dos horas
+despues son la MISMA fila**, las dos estampadas `original_record`. Es la misma forma que el
+desajuste que ADR-154 declaro sin arreglar: el protocolo declara una propiedad de la captura y
+nada la hace cumplir.
+
+**La marca describe el valor ACTUAL, no un historico**, y por eso **el cierre la limpia** cuando
+reescribe alguno de los tres: una cifra corregida desde casa ya no es la que se vio. El historico
+completo vive en el `AuditEvent`, que es su sitio. Su prueba lleva el control de que un cierre que
+**no** toca los tres deja la marca intacta -- sin el, un `null` puesto siempre la cumpliria igual.
+
+**Por que UNA marca y no una por campo.** Tres columnas dirian mas y cuestan tres caminos de
+escritura y tres formas de quedar inconsistentes. La marca de grupo responde la pregunta que se
+hace de verdad al leer una visita: *«esto se anoto alli o en casa?»*. Si hace falta la precision
+por campo, se anade con el caso delante.
+
+**Lo que la puerta afirma, y lo que NO.** Afirma **una sola cosa**: que la visita seguia abierta.
+**No comprueba GPS a proposito.** Las coordenadas de `startLatitude` son del arranque, no de
+ahora, y exigirlas dejaria sin registrar una visita bajo dosel cerrado -- que es justo donde estan
+las abejas. Decir «el aparato estaba en el apiario» seria inventarlo.
+
+**Y devuelve la comparacion de cajas ya resuelta** (ADR-150): quien acaba de contar en el sitio es
+exactamente quien puede hacer algo si no cuadra, y decirselo al cerrar en casa llega tarde.
+
+**Un flip-test volvio a destapar una prueba mia que no discriminaba.** La de «los tres son
+independientes» escribia el recuento primero y el clima despues, asi que la mutacion que borra el
+clima cuando llega vacio no cambiaba nada: el clima estaba vacio igualmente. «NADIE CAYO». Ahora
+se prueba en las **tres** direcciones, porque cada una solo puede cazar la mutacion de su campo.
+Es la tercera vez en dos dias, y las tres las dijo el flip-test.
+
+**Lo que NO entra.** `purpose` es el cuarto `stage: field` y se queda donde esta: «que se fue a
+hacer» se sabe **antes** de llegar, asi que no es una observacion del sitio y la marca no diria
+nada sobre ella.
+
+## ADR-158 -- El material de soporte se guarda entero, verificable, y separado entre registro y conocimiento
+
+**Contexto.** Daniel, el 2026-09-17: *«deberias tener mas documentacion y material de soporte
+guardado, revisar todo»*. Antes lo habia pedido con otras palabras: *«no quiero que se pierda que
+fue mucha investigacion y preparacion... servira mas alla del build como data de referencia»*.
+
+**Tenia razon, y se midio -- buscando por CONTENIDO, con control positivo.** De todo lo entregado en
+septiembre, el repositorio guardaba **solo las cuatro fuentes de Cerro Azul** (ADR-146):
+
+| material | en el repositorio |
+|---|---|
+| paquete Meliponini y su seeder | nada |
+| libro de ANSA (Gennari, INTA) | nada, ni citado |
+| **paquete Q1-Q49** -- las 49 decisiones de descubrimiento | solo dos analisis mios que lo CITAN |
+| paquete smart-hive-v1 -- 68 archivos | una mencion en un plan |
+| manual de Varroa del 2026-09-17 | nada |
+| **trece decisiones de Daniel dichas en la conversacion** | solo en la transcripcion |
+
+El caso grave es el de Q1-Q49: **si se perdia la carpeta de Codex, de las 49 decisiones del dueno
+quedaba solo el resumen de quien construyo.** Es exactamente lo que no debe pasar.
+
+**Decision 1 -- dos clases, en dos sitios, y no se mezclan.**
+
+- **Registros** -- lo que se dijo o decidio -- a `docs/architecture/`: `FUENTE_DECISIONES_DEL_DUENO_2026-09.md`,
+  `fuentes/paquete-q1-q49/`, `fuentes/smart-hive-v1/`.
+- **Conocimiento con cifras** -- umbrales, dosis, medidas -- a `docs/dominio/`, con su `estado`
+  declarado: Varroa y Meliponini como **borrador**, ANSA como **referencia externa**.
+
+No es de estilo: `material-de-dominio-declarado` existe porque *«una matriz sin su rotulo es
+indistinguible de un umbral que el dueno respalda, y el codigo se apoya en los dos por igual»*. El
+manual de Varroa tiene exactamente esa forma -- dosis, umbrales del 3 % y 5 %, «estrictamente
+obligatorio» -- y ninguna fuente citada.
+
+**Decision 2 -- «verbatim» deja de ser una promesa.** `tests/arquitectura/fuentes-verbatim.test.ts`
+verifica cada copia en cada corrida: smart-hive contra **su propio** `MANIFEST.sha256` -- hecho por
+quien lo produjo, mejor juez que uno propio --, Q1-Q49 contra uno generado sobre la copia tras
+comprobarla identica al original, y los documentos con cabecera contra el sha que declaran. Lleva
+cuatro controles que **alteran copias a proposito**, porque un verificador que solo se prueba contra
+copias buenas no se ha probado.
+
+**Lo que el contraste encontro, y va en las cabeceras, no en un resumen aparte:**
+
+- **El manual de Varroa esta escrito para clima TEMPLADO.** Habla de invernada y de aplicar a
+  5-12 C. En Cerro Azul no hay invierno. **El acido formico es un asunto de SEGURIDAD**: el propio
+  texto dice que por encima de 27 C mata a la reina, y en el tropico 27 C se superan buena parte del
+  dia. El oxalico depende de un bloqueo de cria invernal que alli no ocurre. Los umbrales de
+  tratamiento estan anclados a estaciones que no existen.
+- **Meliponini no es fiable todavia:** tres especies uno, cuatro el otro, cinco segun Daniel; y de
+  las tres que comparten, **dos discrepan entre si** en medidas de caja y alcance de vuelo.
+- **ANSA es la unica fuente publicada del lote, pero es de Tucuman.** Sus especies son argentinas
+  -- *T. fiebrigi*, *S. jujuyensis* --: los generos coinciden con los de Daniel y las especies no.
+  Se guarda la **ficha**, extraida del propio PDF, no el libro, que es obra publicada.
+
+**Y las trece decisiones de Daniel, en sus palabras literales**, extraidas de la transcripcion por
+programa, cada una con su linea y con **lo que produjo** -- o en que esta bloqueada. Seis habian
+llegado como mensajes enviados mientras se trabajaba, que la herramienta entrega incrustados en la
+salida de otra orden: **la primera busqueda solo encontro siete**, porque miraba los mensajes aparte.
+No faltaban; estaban en otro sitio.
+
+**P-F pasa de tres guias a cinco.** Su prueba no cambia -- ya miraba la carpeta entera -- pero su
+texto decia «tres» y se corrigio, porque una instruccion vieja es peor que ninguna.
+
+**Seguridad, comprobada antes de copiar.** Ningun `CLAUDE.md` en los paquetes -- se cargaria en cada
+sesion --. Ningun secreto: el detector se probo en tres formas, y la primera version **no cubria el
+caso JSON**, donde una comilla separa la clave de los dos puntos. Las ocho coincidencias de la version
+ampliada fueron nombres de esquemas de autenticacion OpenAPI, no valores.
+
+**Lo que NO entra.** El PDF de ANSA (obra publicada: si Daniel quiere versionarlo, se anade con el sha
+que ya declara la ficha), los `.zip` (redundantes, comprobado archivo por archivo) y `.DS_Store`.
+**Ni una sola cifra de estos documentos pasa al software**: los vocabularios de tratamiento y de
+limpieza se proponen a partir del de Varroa, pero los decide Daniel.
+
+## ADR-159 -- La limpieza se registra sobre la CAJA, no sobre la colonia
+
+**Contexto.** Daniel pidio vocabularios fijos para la limpieza fitosanitaria, y el manual de
+Varroa (ADR-158) trajo los procedimientos. La pregunta de diseno era donde cuelga: la limpieza
+-- raspar, flamear, hervir en sosa -- se le hace al MATERIAL, no a una colonia. Se le llevaron
+tres opciones y eligio: **«1, sobre la caja»**.
+
+**Medido antes de construir:** de `Hive` colgaban solo `Colony`, `HivePlacement` y `Asset`.
+**Ningun evento del apiario colgaba de la caja**: todos lo hacen de la colonia. Asi que la
+limpieza necesita su propia tabla, y no por gusto: una caja vacia se desinfecta ANTES de recibir
+otra colonia, y en ese momento no hay colonia de la que colgarla.
+
+**Decision -- `HiveCleaning`,** con los actos como **arreglo** -- una limpieza raspa y DESPUES
+flamea -- y dos vocabularios fijos con «otro, ¿cual?»: los actos y la razon.
+
+**Los nombres salen del manual de Varroa, que es borrador, y se toman SOLO los nombres.** La
+concentracion de la sosa, los minutos de inmersion o las 48 h al sol no son el valor por defecto
+de nada (ADR-158). Y **faltan dos actos del manual a proposito**: desbrozar es del SITIO y
+desinfectar la herramienta es del OPERARIO; ninguno se le hace a una caja.
+
+**Las reglas viven TAMBIEN en la base.** Tres `CHECK` --al menos un acto; «otro» dice cual;
+razon «otra» dice cual-- probados contra Postgres con su control positivo, **7 de 7**, dentro
+de transacciones que se deshacen. Es el primer `CHECK` del repositorio sobre un **arreglo de
+enum**. Cada rechazo lo atribuye la base a la restriccion concreta, no a un error generico.
+
+**La regla que no puede ser `CHECK` -- la caja vacia -- es por DIA ENTERO, no por instante.** La
+limpieza es un dia, y con dias hay dos transiciones que son lo normal: la colonia muere el 10 y
+la caja se limpia el 10; la caja se limpia el 10 y ese dia entra una colonia nueva. Una regla por
+instante las rechazaria segun la hora. **Su flip-test lo demuestra: volver al instante tumba las
+dos pruebas del mismo dia.** Se rechaza solo si una colonia ocupo la caja el dia entero.
+
+**La ocupacion sale del intervalo `[startedAt, endedAt)`, no del `status`.** El `status` es el de
+HOY: una colonia hoy muerta pudo estar viva en la fecha que se pregunta. Esto se apoya en que una
+colonia no activa lleva `endedAt` -- medido: 34 colonias, las 16 fugadas con fecha de fin, **cero**
+no activas sin ella --, y la prueba «limpiar despues de la muerte se acepta» lo vigila.
+
+**Renovar cera es la excepcion**, porque se hace CON la colonia dentro. Y «otro» tampoco exige caja
+vacia: no se sabe que es, y bloquearlo seria decidir por el apicultor.
+
+**La primera accion del apiario que DEVUELVE el error en vez de lanzarlo.** Sus hermanas casi nunca
+fallan; esta rechaza en un caso normal -- «esa caja tenia colonia ese dia» -- y el apicultor tiene
+que leer por que, no ver una pagina de error.
+
+**Cinco guardias de la casa pararon este cambio, los cinco con razon:** el inventario de acceso, la
+lectura sin principal -- que obligo a escribir QUIEN la autoriza y DESDE CUANDO --, las cifras del
+inventario, y ADR-125, porque la opcion vacia «sin registrar» llevaba texto sin estar declarada.
+
+**Lo que NO entra.** Los productos de tratamiento: esperan a que Daniel diga cuales usa, y hay un
+plan recien fusionado -- «el botiquin del apiario» (#386) -- que hay que leer antes, porque puede
+tocar lo mismo.
+
+## ADR-160 -- El refractometro de miel: su lectura va sobre el LOTE, y el aparato dice que lee
+
+**Contexto.** Daniel corrigio una confusion mia: un refractometro **no mide humedad en general**.
+El de cafe mide Brix del mosto; la humedad del grano la da un medidor de humedad de grano; y el
+refractometro **de miel** lee dos escalas -- Brix y H% (agua). Y «el refractometro del beneficio es
+diferente al de mieles»: los rangos de Brix son otros (0-32 para mosto y jugos, 58-92 para miel) y
+la escala H% solo existe en los de miel. Pidio: una lectura por cosecha, el refractometro como
+INSTRUMENTO con su modo, y la miel como material. Respuesta: **«si, construyelo asi»**.
+
+**La primera version ponia tres columnas en `ApiaryHarvestEvent`, y se quito antes de commitear.**
+El propio esquema ya lo prohibia en un comentario del 2026-09-14 -- «la humedad NO esta aqui a
+proposito» -- y a mitad del trabajo Daniel lo dijo con otras palabras: **la miel es un lote**, y hay
+que seguirla cuando se divide, se filtra, se guarda, se envasa y se muestrea hasta la cata. Una
+columna en la cosecha se queda atras en la primera division. `Measurement` ya tenia `lotId`,
+`instrumentId` e `instrumentModeId`; la miel ya era un `Lot` (A3). Faltaban tres cosas pequenas.
+
+**Decision.**
+
+1. **`MaterialState.BEE_HONEY`** -- miel de ABEJA. No confundir con `MUCILAGE_HONEY`, que es el
+   proceso *honey* del cafe. Hasta hoy el enum solo conocia estados del cafe, y el modo de un
+   refractometro de miel no tenia sobre que declararse.
+2. **`InstrumentMeasurementMode.variable`** -- QUE lee el modo, del mismo vocabulario que
+   `Measurement.variable` (`isKnownVariable`), no de una lista propia. Un refractometro de miel son
+   **dos modos**: `brix` 58-90 y `moisture` 12-27 sobre `BEE_HONEY`. Anulable: los modos que ya
+   existian no la declaraban (ADR-080). `CHECK` de no vacia en la base.
+3. **`recordMeasurement`**: (a) un modo que declara variable no firma otra -- el modo H% no produce
+   un Brix; (b) **fuera del rango del modo se rechaza**: el aparato no puede marcar ese numero, asi
+   que no es una lectura; (c) sobre un lote de miel el material se INFIERE del tipo de lote, sin
+   crear una muestra para declararlo -- y un modo de cafe usado sobre miel levanta su marca
+   `mode_material_mismatch`.
+
+**El limite del Brix no se ensancha para todos.** El registro lo tiene en 0-40 porque su sujeto es
+el mosto: ahi un 180 es un 18 mal tecleado. Con ese limite ninguna miel entraria nunca. Se abre al
+limite fisico (0-100) **solo sobre un lote `honey`** (`LIMITES_SOBRE_MIEL`), y lo que acota de
+verdad es el rango del modo. La prueba de control mete el mismo 81 sobre un lote de cereza y sigue
+fuera.
+
+**`registrarLecturaDeRefractometro`** es la puerta desde la cosecha: una o dos escalas, con o sin
+aparato. **El H% nunca se calcula desde el Brix** y se guarda como leido -- la tabla de Chataway lo
+permitiria, y seria un valor calculado vestido de medido. **Una lectura por cosecha**: la segunda de
+la misma escala se rechaza; si esta mal, se corrige la que hay (`correctMeasurement` conserva la
+original). Con aparato, **todo se valida ANTES de escribir**: una lectura de dos escalas con una
+fuera de rango no deja escrita la otra a medias. Cada escala lleva su propia clave de envio, asi que
+un reintento no duplica.
+
+**`moisture_pct` sale de «sin sitio».** Va como `tabla: Measurement` sobre el lote de la cosecha. La
+lista de items del protocolo sin sitio baja de DOS a UNA: queda `site_condition`.
+
+**La ficha del equipo no tenia donde declarar modos** -- `declararModoDeInstrumento` existia sin
+ninguna pantalla que lo llamara. Ahora la tiene, con material y variable como listas cerradas.
+
+**Lo que NO entra, y es lo siguiente que pide el mensaje de Daniel.** La maquinaria del lote ya
+divide (`split`), fusiona (`merge`/`blend`), cambia de etapa, extrae muestras, guarda
+(`StorageAssignment`) y llega a la cata por `Sample`. **Lo que no tiene nombre todavia es filtrar y
+envasar miel**, ni una pantalla del lote de miel que recorra esa cadena. Es la rebanada siguiente.

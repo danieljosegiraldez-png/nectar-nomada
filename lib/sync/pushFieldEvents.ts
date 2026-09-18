@@ -163,6 +163,8 @@ export type MutacionDeEventoDeColonia = {
   treatmentBatchLabel?: string | null;
   /** Días de carencia. Obligatorio en el servicio cuando el tipo es tratamiento. */
   treatmentWithdrawalDays?: number | null;
+  /** Botiquín, Tarea 7: el frasco del que salió la dosis. Opcional; viaja por la cola. */
+  consumableLotId?: string | null;
   /**
    * A9 · Anexo B §3 — «alcanza hasta». **Fecha ya parseada**, no cadena: el
    * parseo la convierte con `fechaDeDia` porque es un campo de DÍA. Pasarla como
@@ -382,6 +384,7 @@ async function aplicarMutacionDeApiario(
             treatmentDoseUnit: m.treatmentDoseUnit ?? null,
             treatmentBatchLabel: m.treatmentBatchLabel ?? null,
             treatmentWithdrawalDays: m.treatmentWithdrawalDays ?? null,
+            consumableLotId: m.consumableLotId ?? null,
             coverageUntil: m.coverageUntil ?? null,
             feedingMethod: m.feedingMethod ?? null,
             treatmentTarget: m.treatmentTarget ?? null,

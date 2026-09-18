@@ -1,5 +1,6 @@
 "use client";
 
+import type { FrascoParaTratar } from "../../../lib/inventario/frascosParaTratar";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { queueDraft } from "../../../lib/apiary/offlineQueue";
@@ -20,7 +21,16 @@ import { Ayuda } from "./Ayuda";
  * behind an expand toggle — a beekeeper who only feeds twelve hives in
  * sequence taps "Log feeding" twelve times without re-expanding anything.
  */
-export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: string; selfPersonId: string | null }) {
+export function ColonyEventQuickEntry({
+  colonyId,
+  selfPersonId,
+  frascos = [],
+}: {
+  colonyId: string;
+  selfPersonId: string | null;
+  /** Botiquín, Tarea 7 — los frascos que quien mira puede descontar. Vacío: sin selector. */
+  frascos?: readonly FrascoParaTratar[];
+}) {
   const t = useTranslations("Apiary");
 
   /** Del vocabulario (ADR-148). El texto de al lado es el «cual» de `otro`. */
@@ -57,6 +67,27 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
    */
   const [treatmentTarget, setTreatmentTarget] = useState("");
   const [treatmentRoute, setTreatmentRoute] = useState("");
+  const [frascoId, setFrascoId] = useState("");
+  const frasco = frascos.find((f) => f.id === frascoId) ?? null;
+  // Día del dispositivo: el formulario sólo AVISA; la marca que vale la calcula
+  // el servidor con el día del sitio.
+  const hoy = new Date().toLocaleDateString("en-CA");
+  const frascoVencido = frasco?.vence != null && frasco.vence <= hoy;
+
+  /**
+   * Elegir frasco PRECARGA producto, lote, unidad y la carencia del producto —
+   * a la vista y editables. El servicio nunca rellena la carencia: si el
+   * operario la cambia, manda la suya.
+   */
+  function elegirFrasco(id: string) {
+    setFrascoId(id);
+    const f = frascos.find((x) => x.id === id);
+    if (!f) return;
+    setTreatmentProduct(f.producto);
+    setTreatmentBatchLabel(f.batchLabel);
+    setTreatmentDoseUnit(f.unidad);
+    if (f.carenciaDelProducto != null) setTreatmentWithdrawalDays(String(f.carenciaDelProducto));
+  }
   const [treatmentSaved, setTreatmentSaved] = useState(false);
 
   const [observationNote, setObservationNote] = useState("");
@@ -119,6 +150,7 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
         treatmentTarget: treatmentTarget || null,
         treatmentRoute: treatmentRoute || null,
         treatmentWithdrawalDays: Number(treatmentWithdrawalDays),
+        consumableLotId: frascoId || null,
       });
     } catch {
       setSaveError(t("localSaveFailedError"));
@@ -133,6 +165,7 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
     setTreatmentWithdrawalDays("");
     setTreatmentTarget("");
     setTreatmentRoute("");
+    setFrascoId("");
   }
 
   async function logObservation() {
@@ -246,6 +279,21 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
 
         <div className="nn-form" style={{ margin: 0 }}>
           <h4>{t("logTreatmentHeading")}</h4>
+          {frascos.length > 0 ? (
+            <div className="nn-field">
+              <label htmlFor={`treat-frasco-${colonyId}`}>{t("treatmentFrascoLabel")}</label>
+              <select id={`treat-frasco-${colonyId}`} value={frascoId} onChange={(e) => elegirFrasco(e.target.value)}>
+                <option value="">{t("treatmentFrascoNinguno")}</option>
+                {frascos.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.producto} · {f.batchLabel}
+                    {f.vence ? ` · ${t("treatmentFrascoVence", { fecha: f.vence })}` : ""}
+                  </option>
+                ))}
+              </select>
+              {frascoVencido ? <p className="nn-muted">{t("treatmentFrascoVencido", { fecha: frasco!.vence! })}</p> : null}
+            </div>
+          ) : null}
           <div className="nn-field">
             <label htmlFor={`treat-product-${colonyId}`}>{t("treatmentProductLabel")}</label>
             <input id={`treat-product-${colonyId}`} value={treatmentProduct} onChange={(e) => setTreatmentProduct(e.target.value)} />
@@ -311,6 +359,14 @@ export function ColonyEventQuickEntry({ colonyId, selfPersonId }: { colonyId: st
               <input id={`treat-dose-unit-${colonyId}`} value={treatmentDoseUnit} onChange={(e) => setTreatmentDoseUnit(e.target.value)} />
             </div>
           </div>
+          {/* Botiquín, Tarea 9 — las advertencias del producto, justo antes de aplicar:
+              es el momento en que alguien tiene el frasco en la mano. */}
+          {frasco && (frasco.storageConditions || frasco.safetyNotes) ? (
+            <div className="nn-alerta nn-alerta-aviso">
+              {frasco.safetyNotes ? <p><strong>{t("treatmentFrascoAdvertencias")}:</strong> {frasco.safetyNotes}</p> : null}
+              {frasco.storageConditions ? <p><strong>{t("treatmentFrascoAlmacenamiento")}:</strong> {frasco.storageConditions}</p> : null}
+            </div>
+          ) : null}
           <button type="button" className="nn-button" onClick={() => void logTreatment()} disabled={!treatmentBatchLabel.trim() || !carenciaPuesta || treatmentTarget === ""}>
             {t("logTreatmentButton")}
           </button>

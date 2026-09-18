@@ -30,7 +30,8 @@ export class EstadoDeColoniaInvalido extends Error {}
  * HTTP**: el formulario manda cadenas y la cola offline manda cadenas, así que la
  * frontera tiene que ser una función que falla y no un `as never` (ADR-112).
  */
-export const POBLACIONES = ["baja", "normal", "apinada"] as const satisfies readonly ColonyPopulation[];
+/** La ñ es la ortografia del dueno, y la que su protocolo ya usaba (ADR-153). */
+export const POBLACIONES = ["baja", "normal", "apiñada"] as const satisfies readonly ColonyPopulation[];
 export const ETAPAS_DE_CRIA = ["huevo", "larva", "operculada", "pupa"] as const satisfies readonly BroodStage[];
 export const CELDAS_REALES = ["no_hay", "emergencia", "enjambrazon", "reemplazo"] as const satisfies readonly QueenCellKind[];
 export const NIVELES_DE_RESERVA = ["alta", "media", "baja"] as const satisfies readonly StoresLevel[];

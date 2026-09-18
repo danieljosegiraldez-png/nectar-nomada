@@ -1,0 +1,138 @@
+import { prisma } from "../db";
+import { can } from "../rbac/service";
+import { recordAuditEvent } from "../audit";
+import { LocationAccessError, puedeGestionarAtributosDeUbicacion, requireLocationAttributeAccess } from "./locations";
+
+export class BeneficioError extends Error {}
+
+/**
+ * Crear un lugar nuevo no es editar uno existente, así que exige los DOS
+ * permisos sobre el sitio padre: `manage_attributes` —que ya gobierna el árbol
+ * de ubicaciones— y `location:create_site`, que es el que el capataz no tiene.
+ *
+ * Se comprueba sobre el PADRE a propósito, pero cada línea rechaza algo
+ * distinto — medido con flip-test el 2026-09-17, no supuesto: `create_site`,
+ * resuelto contra el ámbito del `Assignment` del actor, es lo que rechaza al
+ * capataz y al Farm Manager de OTRA finca; `requireLocationAttributeAccess`
+ * es lo que rechaza un `parentLocationId` que no existe (en vez de dejar que
+ * `findUniqueOrThrow` lo convierta en un error de Prisma sin traducir) y lo
+ * que aplica la compuerta de clasificación del padre.
+ */
+async function exigePoderCrearBajo(userAccountId: string, parentLocationId: string) {
+  await requireLocationAttributeAccess(userAccountId, parentLocationId);
+  const padre = await prisma.location.findUniqueOrThrow({
+    where: { id: parentLocationId },
+    select: { id: true, name: true, locationType: true, organizationId: true, classification: true, timezone: true },
+  });
+  const target = { scopeType: "location" as const, scopeRefId: padre.id };
+  if (!(await can(userAccountId, "create_site", "location", target, padre.classification))) {
+    throw new LocationAccessError("no_location_create_access");
+  }
+  return padre;
+}
+
+// El límite de 120 caracteres y la no-vacuidad viven sólo aquí, en TypeScript:
+// `Location.name` es una columna sin longitud máxima ni restricción de unicidad
+// en la base de datos, así que dos beneficios bajo el mismo sitio pueden
+// compartir nombre. No se añade una constraint — toda escritura de un
+// beneficio pasa por este servicio, y es donde se exige.
+function exigeNombre(name: string) {
+  const limpio = name.trim();
+  if (!limpio || limpio.length > 120) throw new BeneficioError("datos_invalidos");
+  return limpio;
+}
+
+/**
+ * Los sitios donde quien mira puede crear un beneficio. La negativa es un
+ * fallo explícito, no una lista vacía.
+ *
+ * Un mundo sin ningún sitio y una cuenta sin permiso se veían idénticos desde
+ * fuera: los dos daban `no_location_attribute_access` y la pantalla los
+ * confundía en el mismo 404 sin razón. Se distinguen aquí, antes de mirar
+ * permisos, para que la ausencia de datos no se lea como una negativa.
+ */
+export async function sitiosParaBeneficio(userAccountId: string) {
+  const sitios = await prisma.location.findMany({ where: { locationType: "site" }, orderBy: { name: "asc" } });
+  if (!sitios.length) throw new LocationAccessError("no_sites_exist");
+  const permitidos: { id: string; name: string }[] = [];
+  for (const s of sitios) {
+    const target = { scopeType: "location" as const, scopeRefId: s.id };
+    if (await can(userAccountId, "manage_attributes", "location", target, s.classification)
+      && await can(userAccountId, "create_site", "location", target, s.classification)) {
+      permitidos.push({ id: s.id, name: s.name });
+    }
+  }
+  if (!permitidos.length) throw new LocationAccessError("no_location_attribute_access");
+  return permitidos;
+}
+
+export async function listarBeneficios(userAccountId: string) {
+  const rows = await prisma.location.findMany({ where: { locationType: "beneficio" }, orderBy: { name: "asc" } });
+  const salida: { id: string; name: string; sitio: { id: string; name: string } | null }[] = [];
+  for (const row of rows) {
+    const target = { scopeType: "location" as const, scopeRefId: row.id };
+    if (!(await can(userAccountId, "manage_attributes", "location", target, row.classification))) continue;
+    // El permiso sobre el hijo no concede el nombre del padre — misma regla y el
+    // mismo ayudante que `detalleInstalacion`, que resuelve la clasificación DEL
+    // PADRE en vez de reusar la del hijo (reusarla juzgaría con la etiqueta
+    // equivocada en cuanto las dos difieran).
+    const padre = row.parentLocationId
+      && await puedeGestionarAtributosDeUbicacion(userAccountId, row.parentLocationId)
+      ? await prisma.location.findUnique({ where: { id: row.parentLocationId }, select: { id: true, name: true } })
+      : null;
+    salida.push({ id: row.id, name: row.name, sitio: padre });
+  }
+  return salida;
+}
+
+export async function crearBeneficio(userAccountId: string, input: { name: string; parentLocationId: string }) {
+  const padre = await exigePoderCrearBajo(userAccountId, input.parentLocationId);
+  if (padre.locationType !== "site") throw new BeneficioError("padre_invalido");
+  const name = exigeNombre(input.name);
+  return prisma.$transaction(async (tx) => {
+    const after = await tx.location.create({ data: {
+      name, locationType: "beneficio", parentLocationId: padre.id,
+      organizationId: padre.organizationId, classification: padre.classification,
+      timezone: padre.timezone, createdBy: userAccountId,
+    } });
+    await recordAuditEvent({
+      actorUserAccountId: userAccountId, operation: "location.create_beneficio",
+      entityType: "location", entityId: after.id, after, sourceInterface: "traceability.service",
+    }, tx);
+    return after;
+  });
+}
+
+export async function actualizarBeneficio(userAccountId: string, input: { locationId: string; name: string }) {
+  await requireLocationAttributeAccess(userAccountId, input.locationId);
+  const before = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
+  if (before.locationType !== "beneficio") throw new BeneficioError("tipo_invalido");
+  // `manage_attributes` sola no basta: Farm Operator la tiene, y `can()` sube
+  // por los ancestros, así que un capataz asignado en el sitio la pasa sobre
+  // el beneficio hijo. Renombrar un beneficio es la misma autoridad que
+  // crearlo — «farm manager/owner quien puede crear o editar un beneficio, no
+  // un capataz» (Daniel) — así que exige `create_site` también. Medido con
+  // flip-test el 2026-09-17: sin esta comprobación, un Farm Operator asignado
+  // en el sitio renombra el beneficio.
+  //
+  // Se comprueba sobre el BENEFICIO MISMO, no sobre su padre: la contención de
+  // ámbitos ya hace que una asignación en el sitio cubra a sus hijos, así que
+  // comprobar sobre el propio beneficio no pierde nada. Y el padre puede ser
+  // legítimamente null — `location.parent_location_id` es `ON DELETE SET
+  // NULL` (prisma/migrations/20260810002142_foundational_entities/
+  // migration.sql:150) — así que exigirlo sobre el padre dejaría un beneficio
+  // irrenombrable en cuanto su fila de sitio desapareciera.
+  const target = { scopeType: "location" as const, scopeRefId: before.id };
+  if (!(await can(userAccountId, "create_site", "location", target, before.classification))) {
+    throw new LocationAccessError("no_location_create_access");
+  }
+  const name = exigeNombre(input.name);
+  return prisma.$transaction(async (tx) => {
+    const after = await tx.location.update({ where: { id: before.id }, data: { name } });
+    await recordAuditEvent({
+      actorUserAccountId: userAccountId, operation: "location.update_beneficio",
+      entityType: "location", entityId: after.id, before, after, sourceInterface: "traceability.service",
+    }, tx);
+    return after;
+  });
+}

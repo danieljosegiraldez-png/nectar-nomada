@@ -24,7 +24,7 @@ describe("Anexo E §3 — el ⚠ de la tarjeta sale de lo observado", () => {
   it("avisa con población baja, y con nada más", () => {
     expect(atencionPorPoblacion("baja")).toBe(true);
     expect(atencionPorPoblacion("normal")).toBe(false);
-    expect(atencionPorPoblacion("apinada")).toBe(false);
+    expect(atencionPorPoblacion("apiñada")).toBe(false);
   });
 
   it("no observar la población NO es observarla baja", () => {

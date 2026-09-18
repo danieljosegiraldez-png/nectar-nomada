@@ -171,7 +171,12 @@ export async function recordLabourEntry(userAccountId: string, input: RecordLabo
 export type MaterialConsumptionParent =
   | { kind: "fermentationRun"; fermentationRunId: string }
   | { kind: "dryingRun"; dryingRunId: string }
-  | { kind: "location"; locationId: string };
+  | { kind: "location"; locationId: string }
+  // La JORNADA: lo gastado en una visita concreta —aserrín y hojas para el
+  // ahumador, un encendedor, una lija— pertenece a la visita y no al sitio.
+  // El ámbito de autorización sale de la ubicación DE la jornada: una visita
+  // no lleva permisos propios.
+  | { kind: "fieldSession"; fieldSessionId: string };
 
 export interface RecordMaterialConsumptionEntryInput {
   // Required for every parent kind except "location" — same convention as
@@ -191,6 +196,14 @@ export interface RecordMaterialConsumptionEntryInput {
   provenanceClass: ProvenanceClass;
   dataQuality?: DataQuality | null;
   notes?: string | null;
+  /**
+   * **De qué lote salió**, cuando se sabe. Enlazarlo DESCUENTA existencias en
+   * la misma transacción que guarda el consumo.
+   *
+   * Opcional para siempre: obligar a elegir lote convertiría una anotación de
+   * diez segundos en un trámite, y lo que no se anota no existe.
+   */
+  consumableLotId?: string | null;
 }
 
 function consumptionParentData(parent: MaterialConsumptionParent) {
@@ -201,6 +214,8 @@ function consumptionParentData(parent: MaterialConsumptionParent) {
       return { dryingRunId: parent.dryingRunId };
     case "location":
       return { locationId: parent.locationId };
+    case "fieldSession":
+      return { fieldSessionId: parent.fieldSessionId };
   }
 }
 
@@ -218,6 +233,18 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
     const location = await prisma.location.findUnique({ where: { id: input.parent.locationId } });
     if (!location) throw new TraceabilityAccessError("location_not_found");
     await requireLotAccess(userAccountId, "manage", [{ locationId: input.parent.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+  } else if (input.parent.kind === "fieldSession") {
+    // El ámbito sale de DÓNDE ocurrió la jornada. Una visita no lleva permisos
+    // propios, y sin esta lectura cualquiera podría declarar consumos en el
+    // apiario de otro con sólo saber el id de la jornada.
+    const jornada = await prisma.fieldSession.findUnique({
+      where: { id: input.parent.fieldSessionId },
+      select: { locationId: true },
+    });
+    if (!jornada) throw new TraceabilityAccessError("field_session_not_found");
+    await requireLotAccess(userAccountId, "manage", [
+      { locationId: jornada.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION },
+    ]);
   } else {
     if (!input.lotId) throw new MaterialConsumptionValidationError("lot_id_required");
     const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
@@ -237,6 +264,7 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
         data: {
           materialName: input.materialName.trim(),
           batchLabel: input.batchLabel.trim(),
+          consumableLotId: input.consumableLotId ?? null,
           quantity: input.quantity ?? null,
           unit: input.unit ?? null,
           occurredAt: input.occurredAt ?? new Date(),
@@ -248,6 +276,38 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
           ...consumptionParentData(input.parent),
         },
       });
+
+      // **El descuento, en la MISMA transacción.** Un consumo guardado sin su
+      // descuento sería material gastado que el inventario nunca vio, y el
+      // saldo mentiría desde ese momento.
+      //
+      // Sin cantidad no se descuenta y la fila se guarda igual: «se usó aserrín
+      // de este saco» sin pesar dice DE QUÉ LOTE salió aunque no cuánto, e
+      // inventar un descuento sería peor que no descontar nada.
+      if (input.consumableLotId && input.quantity != null) {
+        const unidad = (input.unit ?? "").trim();
+        if (!unidad) throw new MaterialConsumptionValidationError("unidad requerida para descontar del lote");
+        const previo = await tx.consumableStockEvent.findFirst({
+          where: { consumableLotId: input.consumableLotId },
+          select: { unit: true },
+        });
+        if (previo && previo.unit !== unidad) {
+          throw new MaterialConsumptionValidationError(
+            `unidad distinta: el lote va en ${previo.unit} y el consumo viene en ${unidad}`,
+          );
+        }
+        await tx.consumableStockEvent.create({
+          data: {
+            consumableLotId: input.consumableLotId,
+            eventType: "consumed",
+            quantity: input.quantity,
+            unit: unidad,
+            occurredAt: input.occurredAt ?? new Date(),
+            provenanceClass: input.provenanceClass,
+            createdBy: userAccountId,
+          },
+        });
+      }
 
       // C1 §3: evidentiary write (carries provenanceClass).
       await recordAuditEvent(

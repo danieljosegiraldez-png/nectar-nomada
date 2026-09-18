@@ -1,0 +1,4 @@
+{"idle_ma": 0.1, "session_s_day": 30, "mah_day": 8.695, "days_70pct": 531.4}
+{"idle_ma": 0.3, "session_s_day": 120, "mah_day": 25.984, "days_70pct": 177.8}
+{"idle_ma": 1.5, "session_s_day": 300, "mah_day": 79.72, "days_70pct": 58.0}
+{"idle_ma": 20, "session_s_day": 30, "mah_day": 485.233, "days_70pct": 9.5}

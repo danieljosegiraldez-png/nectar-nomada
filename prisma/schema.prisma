@@ -120,6 +120,7 @@ model Person {
   materialConsumptionEntriesOperated MaterialConsumptionEntry[]    @relation("MaterialConsumptionEntryOperator")
   inspectionsOperated                Inspection[]                  @relation("InspectionOperator")
   colonyEventsOperated               ColonyEvent[]                 @relation("ColonyEventOperator")
+  hiveCleaningsOperated HiveCleaning[] @relation("HiveCleaningOperator")
   apiaryHarvestEventsOperated        ApiaryHarvestEvent[]          @relation("ApiaryHarvestEventOperator")
   varroaCountsOperated               VarroaCount[]                 @relation("VarroaCountOperator")
   organizationMemberships            OrganizationMembership[]
@@ -140,6 +141,7 @@ model Person {
 
   @@map("person")
   @@schema("core")
+  consumableCustodiesResponsible ConsumableCustody[] @relation("ConsumableCustodyResponsible")
 }
 
 enum UserAccountStatus {
@@ -230,6 +232,7 @@ model UserAccount {
   inspectionsCreated                Inspection[]                 @relation("InspectionCreatedBy")
   apiaryHarvestEventsCreated        ApiaryHarvestEvent[]         @relation("ApiaryHarvestEventCreatedBy")
   colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
+  hiveCleaningsCreated HiveCleaning[] @relation("HiveCleaningCreatedBy")
   varroaCountsCreated               VarroaCount[]                @relation("VarroaCountCreatedBy")
   organizationMembershipsCreated    OrganizationMembership[]     @relation("OrganizationMembershipCreatedBy")
   plantingEventsCreated             PlantingEvent[]              @relation("PlantingEventCreatedBy")
@@ -292,6 +295,10 @@ model UserAccount {
   @@map("user_account")
   @@schema("core")
   byproductBatchesCreated ByproductBatch[] @relation("ByproductBatchCreatedBy")
+  consumableMaterialsCreated ConsumableMaterial[] @relation("ConsumableMaterialCreatedBy")
+  consumableLotsCreated ConsumableLot[] @relation("ConsumableLotCreatedBy")
+  consumableStockEventsCreated ConsumableStockEvent[] @relation("ConsumableStockEventCreatedBy")
+  consumableCustodiesCreated ConsumableCustody[] @relation("ConsumableCustodyCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -671,6 +678,16 @@ enum LocationType {
   /// tendencia al pillaje «deben ser manejadas en meliponarios separados».
   meliponary
 
+  /// El beneficio: donde se despulpa, fermenta, lava, seca y trilla. **Tipo
+  /// propio y no un `site` con otro nombre**, por decisión de Daniel del
+  /// 2026-09-17: sin tipo, nada distingue un beneficio de una finca salvo su
+  /// nombre, y deducirlo del nombre es lo que este repositorio prohíbe.
+  ///
+  /// Mismo patrón que `drying_facility`: una Location con su tipo y su padre,
+  /// NO una familia de entidades nueva. Cuelga del `site` de la finca, y un
+  /// `Equipment` colocado ahí vive «en el beneficio» y no en la finca entera.
+  beneficio
+
   /// La instalación de secado —invernadero solar, cuarto oscuro, patio,
   /// marquesina, secadora— y la cama dentro de ella. Mismo patrón que `plot` y
   /// `apiary_site`: una Location con su tipo y su padre, NO una familia de
@@ -893,6 +910,8 @@ model Location {
   @@schema("core")
   lotTransformationsPerformedHere LotTransformation[] @relation("LotTransformationPerformedAt")
   byproductBatchesProduced ByproductBatch[] @relation("ByproductBatchProducedAt")
+  consumableLots ConsumableLot[] @relation("ConsumableLotLocation")
+  consumableCustodies ConsumableCustody[] @relation("ConsumableCustodyLocation")
 }
 
 enum DryingRoomLightExposure {
@@ -994,6 +1013,7 @@ model Organization {
   @@schema("core")
   lotTransformationsPerformed LotTransformation[] @relation("LotTransformationPerformedBy")
   byproductBatches ByproductBatch[] @relation("ByproductBatchOwner")
+  consumableMaterials ConsumableMaterial[] @relation("ConsumableMaterialOwner")
 }
 
 enum MembershipStatus {
@@ -1154,6 +1174,10 @@ enum MaterialState {
   /// ya terminó de transformar (Daniel, 2026-09-15). Existe porque el estado es
   /// real, no porque se pueda medir en una cama.
   GREEN
+  /// MIEL DE ABEJA (ADR-160). **No confundir con `MUCILAGE_HONEY`**, que es el proceso
+  /// *honey* del CAFE, no miel de abeja. Existe para que un refractometro de miel pueda
+  /// declarar sobre que mide: hasta hoy este enum solo conocia estados del cafe.
+  BEE_HONEY
 
   @@schema("core")
 }
@@ -1946,6 +1970,12 @@ model Asset {
   treatmentBatch    TreatmentBatch?  @relation(fields: [treatmentBatchId], references: [id])
   processingStageId String?          @map("processing_stage_id") @db.Uuid
   processingStage   ProcessingStage? @relation(fields: [processingStageId], references: [id])
+  /// **La foto de la etiqueta de un frasco** — botiquín, Tarea 6. El `ANEXO_G`
+  /// saca de la norma argentina (SENASA obliga a conservar los troqueles) su
+  /// conclusión de diseño: «guardar foto de la etiqueta como adjunto». Una
+  /// columna más por padre, el molde que ya siguen las diecinueve de arriba.
+  consumableLotId String?        @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot? @relation(fields: [consumableLotId], references: [id], onDelete: Restrict)
 
   // T12.5: required, no default — same reasoning as ADR-038 (T9.5): a
   // photograph is a fact-bearing record, and a silent default would
@@ -4317,8 +4347,36 @@ model MaterialConsumptionEntry {
   locationId        String?          @map("location_id") @db.Uuid
   location          Location?        @relation(fields: [locationId], references: [id])
 
+  /// **La JORNADA en la que se gastó**, cuando el consumo pertenece a una
+  /// visita y no a un sitio ni a una corrida.
+  ///
+  /// Daniel, 2026-09-17, contando una visita real al apiario: aserrín y hojas
+  /// para el ahumador, un encendedor, una lija. Colgado sólo de la ubicación,
+  /// el sistema podía decir «se gastó aserrín en el Apiario Finca Rosina» y no
+  /// «en la visita del martes» — y la visita es la unidad en la que se trabaja,
+  /// con su operario, su hora y su ventana de edición.
+  ///
+  /// Una variante más del padre discriminado, no un mecanismo paralelo: el
+  /// `switch` de `consumptionParentData` es exhaustivo, así que añadir la
+  /// variante obliga a tratarla.
+  fieldSessionId String?       @map("field_session_id") @db.Uuid
+  fieldSession   FieldSession? @relation(fields: [fieldSessionId], references: [id])
+
+
   materialName String   @map("material_name")
   batchLabel   String   @map("batch_label")
+
+  /// **De qué lote salió**, cuando se sabe. Enlazarlo DESCUENTA existencias.
+  ///
+  /// Anulable para siempre, y no por comodidad: las filas anteriores al
+  /// 2026-09-17 llevan el material en texto libre y no se pueden reasignar sin
+  /// adivinar. Y obligar a elegir lote convertiría una anotación de diez
+  /// segundos en un trámite — y lo que no se anota no existe.
+  ///
+  /// `batchLabel` se queda: es lo que dice el saco, y sigue valiendo cuando
+  /// nadie ha dado de alta el lote en el sistema.
+  consumableLotId String?        @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot? @relation(fields: [consumableLotId], references: [id])
   quantity     Decimal? @db.Decimal(10, 3)
   unit         String?
 
@@ -4443,6 +4501,24 @@ model FieldSession {
   /// porque el sistema no sabe cuáles murieron; para cajas el sistema sí tiene un registro
   /// deliberado, así que elegir uno esconderia la señal. La divergencia ES la salida.
   hivesPresentCount   Int?               @map("hives_present_count")
+  /// Clima OBSERVADO al visitar — Anexo E, etapa de campo (ADR-152). Lo que alguien vio,
+  /// no un pronostico: el «Clima 7 dias» del Anexo C sigue siendo capa externa sin proveedor.
+  weatherObserved   WeatherObserved? @map("weather_observed")
+  /// CUANDO se anotaron los vitales de campo --clima, colonias, cajas-- ESTANDO EN EL SITIO.
+  ///
+  /// **Existe porque el dueno pidio poder hacerlo de las dos formas** (2026-09-17): «se deberia
+  /// poder hacer durante la visita o al cierre, a veces en sitio y si solo un apicultor es
+  /// dificil maniobrar y ser eficiente de entrar y salir y estresar menos a las abejas».
+  ///
+  /// Asi que NO se restringe: se REGISTRA cual de las dos paso. El protocolo marca esas tres
+  /// preguntas `stage: field` --son cosas que se VEN estando ahi-- y anotarlas en casa es
+  /// legitimo pero no es lo mismo. Sin esta columna las dos filas se leen identicas.
+  ///
+  /// Tres estados (ADR-080): `null` = no se anotaron en sitio --o se corrigieron despues desde
+  /// casa--; una marca de tiempo = los valores que hay AHORA se escribieron alli, entonces.
+  /// Describe la procedencia del valor ACTUAL, no un historico: por eso el cierre la limpia si
+  /// reescribe alguno.
+  fieldVitalsOnSiteAt DateTime?      @map("field_vitals_on_site_at")
   /// Que se fue a hacer. **Arreglo y no una columna**: una misma visita revisa, alimenta y
   /// trata. Mismo patron que `Inspection.broodStages`.
   ///
@@ -4514,6 +4590,7 @@ model FieldSession {
   @@index([updatedAt, id])
   @@map("field_session")
   @@schema("traceability")
+  materialConsumptionEntries MaterialConsumptionEntry[]
 }
 
 // P2 (43_P2_OPERATOR_CORE.md §4). A chronological **spine**, not a replacement.
@@ -4959,6 +5036,16 @@ model InstrumentMeasurementMode {
 
   label         String
   materialState MaterialState @map("material_state")
+  /// QUE lee este modo -- ADR-160. Del MISMO vocabulario que `Measurement.variable`
+  /// (`lib/traceability/units.ts`), no de uno propio: dos listas para lo mismo derivan.
+  ///
+  /// **Rango de Brix y escala H% son propiedades DISTINTAS** (Daniel, 2026-09-17). Un
+  /// refractometro de miel son DOS modos del mismo aparato: `brix` 58-90 y `moisture`
+  /// 12-27 sobre `BEE_HONEY`. Uno de jarabe de 45-82 es solo un modo `brix`, sin humedad.
+  ///
+  /// Anulable: los modos que ya existian no la declaraban, y rellenarla supondria que
+  /// variable leian (ADR-080). El servicio la valida con `isKnownVariable`.
+  variable      String?       @map("variable")
   rangeMin      Decimal?      @map("range_min") @db.Decimal(12, 4)
   rangeMax      Decimal?      @map("range_max") @db.Decimal(12, 4)
   /// Desfase que una persona aplicó a esta escala. Cambia el número que el
@@ -6151,11 +6238,82 @@ model Hive {
   colonies   Colony[]
   assets     Asset[]
   placements HivePlacement[]
+  cleanings  HiveCleaning[]
 
   @@unique([locationId, identifier])
   @@index([locationId])
   @@index([projectId])
   @@map("hive")
+  @@schema("apiary")
+}
+
+/// Lo que se le hizo a la CAJA al limpiarla (ADR-159). Varios a la vez en una misma limpieza:
+/// el metodo termico es raspar y DESPUES flamear; el quimico es sumergir, aclarar y secar.
+///
+/// **Los nombres salen de `docs/dominio/varroa-inspeccion-desinfeccion.md`**, que es borrador.
+/// Se toman los NOMBRES de los procedimientos, no sus cifras: la concentracion de la sosa, los
+/// minutos de inmersion o las 48 h al sol NO son valores por defecto de nada, porque ese
+/// documento no esta revisado (ADR-158).
+///
+/// **Faltan dos actos del manual A PROPOSITO:** desbrozar el terreno es del SITIO y desinfectar
+/// la herramienta es del OPERARIO. Ninguno se le hace a una caja, y meterlos aqui les daria un
+/// sujeto falso.
+enum HiveCleaningAct {
+  raspado
+  flameado
+  inmersion_sosa
+  aclarado
+  secado_al_sol
+  renovacion_de_cera
+  otro
+
+  @@schema("apiary")
+}
+
+/// Por que se limpio la caja. Del mismo manual: el material se higieniza «cuando queda vacio
+/// debido a bajas, fusion de colonias o renovacion programada», y con metodo quimico
+/// obligatorio «ante sospechas o brotes confirmados» de enfermedad.
+///
+/// Importa para bioseguridad: una caja limpiada tras una sospecha de loque y una limpiada por
+/// rutina no son el mismo registro, aunque los actos coincidan.
+enum HiveCleaningReason {
+  baja_de_colonia
+  fusion_de_colonias
+  renovacion_programada
+  sospecha_de_enfermedad
+  otro
+
+  @@schema("apiary")
+}
+
+/// Una limpieza de la CAJA -- el hardware --, no de una colonia (ADR-159).
+///
+/// **Por que cuelga de `Hive` y no de `Colony`, que es donde cuelga todo lo demas.** Decision
+/// del dueno el 2026-09-17: «1, sobre la caja». Una caja vacia se desinfecta ANTES de recibir
+/// otra colonia, y en ese momento no hay colonia de la que colgarla. Registrarla sobre la
+/// colonia la haria imposible justo en el caso para el que existe.
+model HiveCleaning {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hiveId           String               @map("hive_id") @db.Uuid
+  hive             Hive                 @relation(fields: [hiveId], references: [id], onDelete: Restrict)
+  occurredAt       DateTime             @map("occurred_at")
+  /// Arreglo y no columna, como `FieldSession.purposes`: una limpieza hace varios actos.
+  acts             HiveCleaningAct[]    @map("acts")
+  /// El «cual» de `otro`. Obligatorio cuando `acts` incluye `otro` (ADR-125).
+  actOtherNote     String?              @map("act_other_note")
+  reason           HiveCleaningReason?  @map("reason")
+  reasonOtherNote  String?              @map("reason_other_note")
+  notes            String?
+  operatorPersonId String?              @map("operator_person_id") @db.Uuid
+  operator         Person?              @relation("HiveCleaningOperator", fields: [operatorPersonId], references: [id])
+  provenanceClass  ProvenanceClass      @map("provenance_class")
+  dataQuality      DataQuality?         @map("data_quality")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  createdBy        String?              @map("created_by") @db.Uuid
+  creator          UserAccount?         @relation("HiveCleaningCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([hiveId])
+  @@map("hive_cleaning")
   @@schema("apiary")
 }
 
@@ -6403,11 +6561,22 @@ enum InspectionOutcome {
 /// El Anexo B §2.2 —«estado de la colonia, nuevo, por protocolo»— con el
 /// vocabulario que el dueño ya escribió en `protocolos/apiario-campo-v1.json`.
 /// No se traduce a inglés a propósito: es su lista, y `VarroaMethod` ya sentó el
-/// precedente. `apinada` sin eñe porque un identificador de enum no la admite.
+/// precedente.
+///
+/// **CORREGIDO EL 2026-09-17 (ADR-153), y la correccion es de una afirmacion falsa.** Aqui
+/// decia: *«`apinada` sin eñe porque un identificador de enum no la admite»*. **Un enum de
+/// Prisma SI admite la eñe**: comprobado con `prisma validate`, que dice «the schema is valid»
+/// con `apiñada` dentro. Esa suposicion --escrita como justificacion y nunca medida-- es la
+/// razon por la que el esquema decia `apinada` mientras el protocolo decia `apiñada`, con
+/// NADIE traduciendo entre los dos.
+///
+/// No rompia todavia porque el formulario sale de `POBLACIONES`, la constante del codigo. Pero
+/// el protocolo existe para que la captura salga DE EL, y ese dia habria ofrecido un valor que
+/// Postgres rechaza. Lo vigila ahora `tests/arquitectura/enum-del-protocolo.test.ts`.
 enum ColonyPopulation {
   baja
   normal
-  apinada
+  apiñada
 
   @@schema("apiary")
 }
@@ -6513,6 +6682,17 @@ model Inspection {
   /// porque trae el motivo escrito. Anotado para la v2 del protocolo.
   droneBroodPresent Boolean?         @map("drone_brood_present")
   temperamentNote  String?           @map("temperament_note")
+  /// LA VALORACION del tecnico sobre esta colonia -- Anexo E, y el UNICO campo de etapa
+  /// «cierre» de la inspeccion: los otros dieciseis son de campo. Se escribe en casa.
+  ///
+  /// **No es `note`, y mezclarlas perderia cual se escribio con el guante puesto.** `note`
+  /// es la nota de campo --lo que se apunto ahi mismo-- y esto es la lectura de despues.
+  ///
+  /// **PROCEDENCIA: el protocolo la declara `interpretation` y esta fila esta estampada
+  /// `direct_observation`** (`inspections.ts` la fija asi). El desajuste NO es nuevo:
+  /// ADR-142 lo introdujo para `probableCause` y `recommendation`, que el protocolo marca
+  /// igual, y no lo dijo. Queda declarado y vigilado en ADR-154.
+  assessment          String?       @map("assessment")
   /// El «Otro» de la lista del Anexo B §2.3: lo que el catálogo de
   /// irregularidades no cubre. Desde el 2026-09-11 ya **no** es el único sitio
   /// donde vive el dato — ver `InspectionIrregularity`.
@@ -6620,6 +6800,25 @@ enum ColonyEventType {
 /// `protocolos/apiario-campo-v1.json`: *«bolsa sobre cabezales»* es literalmente
 /// lo que se usó en Toabré. Sirve para comparar consumo entre métodos, que es
 /// para lo que el Anexo B §3 lo pide.
+/// CLIMA OBSERVADO por quien visita — Anexo E, etapa de campo (ADR-152).
+///
+/// **No es el «Clima 7 dias» del Anexo C**, y el mapa del protocolo los confundia: aquel es un
+/// PRONOSTICO de una capa externa sin proveedor conectado; esto es lo que el apicultor VIO
+/// estando ahi. La segunda no necesita ningun proveedor.
+///
+/// **Los cuatro valores son los que el protocolo ya declaraba**, literales y sin anadir
+/// ninguno. No hay `otro`: el protocolo no lo declara, y el sitio donde se anade un quinto
+/// --«neblina», por ejemplo, que en Cerro Azul no es raro-- es `protocolos/apiario-campo-v1.json`
+/// mas su migracion, no este archivo por su cuenta.
+enum WeatherObserved {
+  despejado
+  nublado
+  viento
+  lluvia
+
+  @@schema("traceability")
+}
+
 enum FeedingMethod {
   bolsa_sobre_cabezales
   alimentador_entrada
@@ -6641,11 +6840,20 @@ enum FeedingMethod {
 /// `exigeMaterialDeAlimentacion` en `lib/apiary/vocabularioDeAlimentacion.ts`, no
 /// esta lista. Un «otro» sin cuál es la respuesta vacía que ADR-125 persigue.
 enum FeedingMaterial {
+  // Los CINCO del dueno, dictados en el apiario el 2026-09-16.
   azucar_morena
   azucar_blanca
   melaza
   miel_de_abeja
   miel_de_cana
+  // Los CUATRO que su protocolo ya ofrecia. Decision suya el 2026-09-17: «mis cinco mas los
+  // jarabes». `sustituto_polen` y `torta` NO son jarabes --son alimentos proteicos-- y se
+  // quedan porque ya estaban en SU protocolo: quitarlos seria una perdida de capacidad que
+  // nadie pidio. Si no los usa, se quitan entonces (ADR-153).
+  jarabe_1_1
+  jarabe_2_1
+  sustituto_polen
+  torta
   otro
 
   @@schema("apiary")
@@ -6819,6 +7027,17 @@ model ColonyEvent {
   treatmentBatchLabel String?         @map("treatment_batch_label")
   treatmentDose       Decimal?        @map("treatment_dose") @db.Decimal(10, 3)
   treatmentDoseUnit   String?         @map("treatment_dose_unit")
+  /// El frasco del botiquín del que salió la dosis. Opcional para siempre: un
+  /// tratamiento es un registro legalmente exigido y no depende del inventario.
+  /// Cuando está, `recordColonyEvent` descuenta la dosis en la misma transacción.
+  /// RESTRICT como toda evidencia desde el 2026-09-01: no se borra el frasco de
+  /// un tratamiento aplicado.
+  consumableLotId     String?         @map("consumable_lot_id") @db.Uuid
+  consumableLot       ConsumableLot?  @relation(fields: [consumableLotId], references: [id], onDelete: Restrict)
+  /// ¿El frasco estaba vencido el día de la aplicación? Nulo = sin frasco, o
+  /// frasco sin fecha: lo desconocido no se convierte en «vigente». Avisa, no
+  /// bloquea — se guarda para que el registro legal lo diga.
+  treatmentLotExpiredAtApplication Boolean? @map("treatment_lot_expired_at_application")
   /// Contra qué. **Obligatorio en la capa de servicio cuando `eventType =
   /// treatment`**, como el lote y la carencia: el Anexo B §4 lo marca así y dice
   /// por qué —sin él no se puede agrupar la eficacia por objetivo—. Anulable en la
@@ -8303,5 +8522,235 @@ model TrapRule {
   creator   UserAccount? @relation("TrapRuleCreatedBy", fields: [createdBy], references: [id])
 
   @@map("trap_rule")
+  @@schema("traceability")
+}
+
+/// Qué es la cosa que se gasta: aserrín, gallinaza, melaza, hojarasca.
+///
+/// **Sin esto no hay existencias, y ésa es toda la razón de esta tabla.** Hasta
+/// el 2026-09-17 el material vivía como TEXTO LIBRE en
+/// `MaterialConsumptionEntry.materialName`, y no se puede sumar lo que se
+/// escribe distinto cada vez: «aserrín», «aserrin» y «aserrín para el ahumador»
+/// son tres materiales para una base de datos.
+///
+/// **No es un `VariableCatalogValue`.** Esa maquinaria guarda ETIQUETAS de un
+/// vocabulario —un cultivar, una forma de alimentar—; un material tiene unidad,
+/// categoría y existencias. Meterlo ahí haría que un valor de catálogo
+/// significara dos cosas según quién lo lea.
+model ConsumableMaterial {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  name     String
+  category String?
+
+  /// La unidad en la que la finca lo compra y lo gasta: saco, quintal, galón.
+  /// **No se normaliza a kilos al guardar** — el operario teclea la unidad en
+  /// la que trabaja, y convertir al escribir pierde el dato original.
+  defaultUnit String @map("default_unit")
+
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation("ConsumableMaterialOwner", fields: [organizationId], references: [id])
+
+  notes String?
+
+  /// **Lo que un medicamento tiene y un saco de gallinaza no** — botiquín,
+  /// Tarea 1. Todo del PRODUCTO, escrito una vez: el Apivar de un laboratorio
+  /// es el mismo en todos los frascos, y pedirlo en cada compra hace que se
+  /// escriba distinto cada vez — el mismo problema que el material en texto
+  /// libre tenía antes de esta tabla.
+  ///
+  /// Marca el material como medicamento veterinario: separa el botiquín de la
+  /// bodega, y sólo aquí se piden los campos de abajo.
+  isVeterinaryMedicine  Boolean @default(false) @map("is_veterinary_medicine")
+  /// La casa farmacéutica o la marca.
+  manufacturer          String?
+  /// Para la carencia y para la alergia manda el principio, no la marca: dos
+  /// marcas pueden llevar el mismo.
+  activeIngredient      String? @map("active_ingredient")
+  sanitaryRegistration  String? @map("sanitary_registration")
+  /// **«Aunque sea cero»**, Reglamento (UE) 2019/6. Nulo = sin declarar; 0 =
+  /// declarado cero. Son afirmaciones distintas y no se confunden. CHECK ≥ 0.
+  defaultWithdrawalDays Int?    @map("default_withdrawal_days")
+  /// El «almacenamiento seguro» que Daniel pidió: «refrigerado 2–8 °C».
+  storageConditions     String? @map("storage_conditions")
+  /// Advertencias de seguridad. **Van aquí y no en la persona**: decisión de
+  /// Daniel, porque la alergia de un trabajador es dato de salud (spec §B.2).
+  safetyNotes           String? @map("safety_notes")
+  /// Días de antelación del aviso de vencimiento. Nulo = no avisar de que VA a
+  /// vencer; lo VENCIDO avisa siempre (plan del botiquín, decisión 1). CHECK ≥ 0.
+  avisarDiasAntes       Int?    @map("avisar_dias_antes")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ConsumableMaterialCreatedBy", fields: [createdBy], references: [id])
+
+  /// **La unicidad NO se declara aquí, y es deliberado.** El índice real es
+  /// FUNCIONAL —`(organization_id, lower(btrim(name)))`, migración
+  /// `20260917201000`— porque «Aserrín» y «aserrin» son el mismo material y un
+  /// único exacto los dejaría pasar, que es justo el problema que esta tabla
+  /// existe para resolver.
+  ///
+  /// Prisma no sabe expresar índices funcionales. Declarar aquí el exacto haría
+  /// que el esquema PIDIERA un índice que las migraciones no crean — y el
+  /// guardia `derivaDeMigraciones` lo caza, como cazó este mismo error el
+  /// 2026-09-17. La restricción vive en la base; la prueba que la comprueba va
+  /// contra Postgres.
+  @@map("consumable_material")
+  @@schema("traceability")
+  lots ConsumableLot[]
+}
+
+/// Lo que entró una vez: 28 quintales de gallinaza del 1 de julio, con su
+/// etiqueta de lote.
+///
+/// **No lleva saldo.** El saldo se deriva del libro mayor al leer, igual que
+/// `computeLotBalance` lo hace con el café. Un número guardado y un libro mayor
+/// dejan de cuadrar en silencio, y entonces nadie sabe cuál manda.
+///
+/// Dos lotes del mismo material NO se mezclan: dos sacos de gallinaza de
+/// proveedores distintos no son intercambiables el día que uno sale malo.
+model ConsumableLot {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  materialId String             @map("material_id") @db.Uuid
+  material   ConsumableMaterial @relation(fields: [materialId], references: [id])
+
+  /// Lo que dice el saco o la factura. Es del proveedor, no nuestro.
+  batchLabel String @map("batch_label")
+
+  receivedAt DateTime @map("received_at")
+
+  /// **Dónde se recibió, y es el ancla de RBAC.** Sin esto una lista no tiene
+  /// contra qué filtrar: el material se creaba con un sitio para juzgar el
+  /// permiso, pero no se guardaba — y una pantalla de inventario no sabría qué
+  /// enseñar a quién. Mismo papel que `BiocharBatch.producedAtLocationId`, cuyo
+  /// comentario lo llama así.
+  ///
+  /// Anulable: los lotes anteriores no lo tienen. Uno sin ubicación cae al
+  /// ámbito de plataforma — sólo lo ve quien manda en toda la plataforma. Que
+  /// lo desconocido se cierre en vez de abrirse es a propósito.
+  locationId String?   @map("location_id") @db.Uuid
+  location   Location? @relation("ConsumableLotLocation", fields: [locationId], references: [id])
+  supplier   String?
+
+  /// **Lo que se escribe en CADA compra** — botiquín, Tarea 2. Del frasco y no
+  /// del producto: dos frascos del mismo Apivar vencen distinto y vienen de
+  /// facturas distintas.
+  ///
+  /// Vencimiento. **Nulo = «sin fecha», nunca «vigente»**: lo desconocido no se
+  /// convierte en bueno. Lo exige la NOM-064-ZOO-2000. Un frasco ya vencido al
+  /// recibirlo se acepta igual — puede ser una compra vieja registrada hoy.
+  expiresAt        DateTime? @map("expires_at")
+  /// «Proveedor con dirección», literal del Reglamento (UE) 2019/6 art. 108.
+  supplierAddress  String?   @map("supplier_address")
+  /// La «evidencia de adquisición» del mismo artículo: la factura.
+  invoiceReference String?   @map("invoice_reference")
+  /// «Sobre de 10 tiras», «frasco de 500 ml». Tres frascos no son «tres».
+  presentation     String?
+  notes      String?
+
+  events ConsumableStockEvent[]
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ConsumableLotCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([materialId, batchLabel])
+  @@index([materialId])
+  @@map("consumable_lot")
+  @@schema("traceability")
+  consumptionEntries MaterialConsumptionEntry[]
+  custodies ConsumableCustody[]
+  assets Asset[]
+  colonyEvents ColonyEvent[]
+}
+
+/// El libro mayor de las existencias: **sólo se añade**. Nada actualiza una
+/// fila; corregir es otro evento con su razón.
+///
+/// Misma forma que `QuantityEvent`, que lleva el café — y por la misma razón:
+/// la historia de cómo se llegó al número es tan interesante como el número.
+model ConsumableStockEvent {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  consumableLotId String        @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot @relation(fields: [consumableLotId], references: [id])
+
+  eventType ConsumableStockEventType @map("event_type")
+  quantity  Decimal                  @db.Decimal(10, 3)
+  unit      String
+  occurredAt DateTime                @map("occurred_at")
+
+  /// Obligatoria en los ajustes, por CHECK de la base y no por la interfaz:
+  /// cuadrar un descuadre es una afirmación sobre lo que pasó, y una afirmación
+  /// sin razón no se puede auditar.
+  reason String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ConsumableStockEventCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([consumableLotId, occurredAt])
+  @@map("consumable_stock_event")
+  @@schema("traceability")
+}
+
+enum ConsumableStockEventType {
+  received
+  consumed
+  /// Se botó: se sabe dónde terminó. Exige motivo («vencido», «dañado»).
+  waste
+  adjustment_increase
+  adjustment_decrease
+  /// **Se perdió — y perder no es botar.** Un frasco perdido puede estar en
+  /// alguna parte, y con un medicamento eso es un asunto de seguridad. Exige
+  /// motivo. Resta del saldo igual que `waste`; el sentido lo pone el tipo.
+  lost
+
+  @@schema("traceability")
+}
+
+/// **Dónde está un frasco y quién responde por él**, con intervalo —
+/// botiquín, Tarea 5.
+///
+/// Dos preguntas distintas, y las dos son de Daniel: «¿dónde está el Apivar?» y
+/// «¿quién lo tiene?». El equipo y el medicamento pueden estar bajo distinto
+/// custodio o lugar. Es la figura de `StorageAssignment`, que está atada al
+/// lote de café y por eso no sirve tal cual.
+///
+/// **Nunca dos abiertas del mismo lote**: lo impone un índice único PARCIAL
+/// —`(consumable_lot_id) WHERE hasta IS NULL`— escrito a mano en la migración,
+/// porque Prisma no sabe expresarlo. No se declara aquí por la misma razón que el
+/// índice funcional del material: declararlo mal haría que el esquema pidiera
+/// algo que las migraciones no crean, y el guardia de deriva lo caza.
+model ConsumableCustody {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  consumableLotId String        @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot @relation(fields: [consumableLotId], references: [id])
+
+  /// Dónde está. Requerido: una custodia sin sitio no contesta nada.
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation("ConsumableCustodyLocation", fields: [locationId], references: [id])
+
+  /// Quién responde. Anulable: el sitio basta. Es una PERSONA y no una cuenta,
+  /// como `operatorPersonId`: quien guarda el frasco a menudo no tiene cuenta.
+  responsiblePersonId String? @map("responsible_person_id") @db.Uuid
+  responsiblePerson   Person? @relation("ConsumableCustodyResponsible", fields: [responsiblePersonId], references: [id])
+
+  desde DateTime
+  /// Nulo = es la vigente.
+  hasta DateTime?
+
+  notes String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ConsumableCustodyCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([consumableLotId, desde])
+  @@map("consumable_custody")
   @@schema("traceability")
 }

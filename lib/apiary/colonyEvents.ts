@@ -15,6 +15,9 @@ import { exigeMetodoDeAlimentacion } from "./alimentacion";
 import { exigeMaterialDeAlimentacion } from "./vocabularioDeAlimentacion";
 import { exigeObjetivo, exigeVia } from "./objetivoDelTratamiento";
 import { ligarAVisitaAbierta } from "../traceability/visitaAbierta";
+import { estadoDeVencimiento } from "../inventario/vencimiento";
+import { diaDeHoy } from "../time/diaDeHoy";
+import { can } from "../rbac/service";
 import type { ColonyEventType, ProvenanceClass } from "../../generated/prisma/client";
 
 export class ColonyEventValidationError extends Error {}
@@ -71,6 +74,13 @@ export interface RecordColonyEventInput {
   treatmentWithdrawalDays?: number | null;
   treatmentDose?: number | null;
   treatmentDoseUnit?: string | null;
+  /**
+   * El frasco del botiquín del que salió la dosis — botiquín, Tarea 7. **Opcional
+   * para siempre**: obligar a elegir frasco convertiría un registro legalmente
+   * exigido en un trámite que se esquiva. Sólo en `treatment`. Con dosis, se
+   * descuenta del frasco en la misma transacción.
+   */
+  consumableLotId?: string | null;
   /**
    * Contra qué. **Obligatorio cuando `eventType = treatment`**, como el lote y la
    * carencia: el Anexo B §4 lo marca así y dice por qué —*«eficacia por objetivo;
@@ -195,12 +205,84 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
     if (existing) return existing;
   }
 
+  if (input.consumableLotId && input.eventType !== "treatment") {
+    throw new ColonyEventValidationError("consumable_lot_only_for_treatment");
+  }
+  if (input.consumableLotId) {
+    // Un id malformado haría fallar a Prisma con un error que la cola de campo
+    // trataría como avería y reintentaría para siempre; esto es un dato malo.
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.consumableLotId)) {
+      throw new ColonyEventValidationError("consumable_lot_not_found");
+    }
+    // Descontar es escribir en el libro del frasco: la misma compuerta que
+    // `registrarConsumo`, sobre el sitio del frasco. Registrar el evento en la
+    // colmena no da permiso sobre el botiquín de otro.
+    const frasco = await prisma.consumableLot.findUnique({ where: { id: input.consumableLotId }, select: { locationId: true } });
+    if (!frasco) throw new ColonyEventValidationError("consumable_lot_not_found");
+    const objetivo = frasco.locationId
+      ? ({ scopeType: "location", scopeRefId: frasco.locationId } as const)
+      : ({ scopeType: "platform", scopeRefId: null } as const);
+    if (!(await can(userAccountId, "manage", "lot", objetivo, "internal"))) {
+      throw new ApiaryAccessError("forbidden");
+    }
+  }
+
   const colonyEvent = await prisma.$transaction(async (tx) => {
+    const occurredAt = input.occurredAt ?? new Date();
+
+    // ¿Vencido el día de la aplicación? Avisa, no bloquea: se aplica igual y la
+    // marca queda en el evento. El día se cuenta en la zona del sitio, y sin
+    // fecha en el frasco la marca queda en nulo — lo desconocido no es vigente.
+    let treatmentLotExpiredAtApplication: boolean | null = null;
+    if (input.consumableLotId) {
+      const frasco = await tx.consumableLot.findUnique({
+        where: { id: input.consumableLotId },
+        select: { expiresAt: true },
+      });
+      if (!frasco) throw new ColonyEventValidationError("consumable_lot_not_found");
+      const sitio = await tx.location.findUnique({ where: { id: scope.locationId }, select: { timezone: true } });
+      const estado = estadoDeVencimiento({
+        expiresAt: frasco.expiresAt,
+        avisarDiasAntes: null,
+        hoy: diaDeHoy(occurredAt, sitio?.timezone ?? null),
+      });
+      treatmentLotExpiredAtApplication = estado.estado === "SIN_FECHA" ? null : estado.estado === "VENCIDO";
+
+      // **El descuento, en la MISMA transacción**, con la misma comprobación de
+      // unidad que el consumo (`recordMaterialConsumptionEntry`): un tratamiento
+      // guardado sin su descuento sería medicamento aplicado que el inventario no
+      // vio. Sin dosis no se descuenta: el enlace dice DE QUÉ frasco, no cuánto.
+      if (input.treatmentDose != null) {
+        const unidad = (input.treatmentDoseUnit ?? "").trim();
+        if (!unidad) throw new ColonyEventValidationError("unidad requerida para descontar del frasco");
+        const previo = await tx.consumableStockEvent.findFirst({
+          where: { consumableLotId: input.consumableLotId },
+          select: { unit: true },
+        });
+        if (previo && previo.unit !== unidad) {
+          throw new ColonyEventValidationError(
+            `unidad distinta: el frasco va en ${previo.unit} y la dosis viene en ${unidad}`,
+          );
+        }
+        await tx.consumableStockEvent.create({
+          data: {
+            consumableLotId: input.consumableLotId,
+            eventType: "consumed",
+            quantity: input.treatmentDose,
+            unit: unidad,
+            occurredAt,
+            provenanceClass: provenanceClassFor(input.eventType),
+            createdBy: userAccountId,
+          },
+        });
+      }
+    }
+
     const colonyEvent = await tx.colonyEvent.create({
       data: {
         colonyId: input.colonyId,
         eventType: input.eventType,
-        occurredAt: input.occurredAt ?? new Date(),
+        occurredAt,
         operatorPersonId: input.operatorPersonId ?? null,
         feedingMaterialKind,
         feedingMaterial,
@@ -215,6 +297,8 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
         treatmentWithdrawalDays: input.treatmentWithdrawalDays ?? null,
         treatmentDose: input.treatmentDose ?? null,
         treatmentDoseUnit: input.treatmentDoseUnit ?? null,
+        consumableLotId: input.consumableLotId ?? null,
+        treatmentLotExpiredAtApplication,
         note: input.note ?? null,
         provenanceClass: provenanceClassFor(input.eventType),
         clientDraftId: input.clientDraftId ?? null,
@@ -302,7 +386,9 @@ export class EventoEnLoteInvalido extends Error {
 }
 
 export interface EventoEnLoteInput
-  extends Omit<RecordColonyEventInput, "colonyId" | "clientDraftId"> {
+  // `consumableLotId` fuera: una dosis por colmena contra UN frasco es otro
+  // cálculo, y aceptarlo aquí para ignorarlo sería perder el dato en silencio.
+  extends Omit<RecordColonyEventInput, "colonyId" | "clientDraftId" | "consumableLotId"> {
   /** Las colonias a las que se aplicó. Vacío es un error, no un no-op silencioso. */
   colonyIds: readonly string[];
   /**

@@ -102,8 +102,25 @@ describe("el inventario del router", () => {
     // ni entrar por SQL. Hasta ese día un ajuste así obligaba a crear un perfil nuevo.
     // 78 → 79 el 2026-09-16: /plots/[id]/ajustes — la pantalla de gestión de una
     // parcela (siembras, condiciones y calicatas), separada del tablero.
-    // Medido con scripts/inventario-de-rutas.mjs: 69 páginas y 10 handlers.
-    expect(salida).toContain("79 entradas");
+    // 79 → 80 el 2026-09-17: /beneficio/ajustes — el alta y la edición del
+    // beneficio como Location, separado de su operación.
+    // 80 → 81 el mismo día: /beneficio, el índice de la sección que sustituye a
+    // «Lotes» en el menú. Medido con scripts/inventario-de-rutas.mjs: 71 páginas
+    // y 10 handlers.
+    // 81 → 82 el mismo día: /inventario — el inventario de materiales, con el
+    // saldo DERIVADO y los dos estados que no se confunden: «nunca contado» y
+    // «hay que cuadrarlo». Filtra cada lote por su ubicación.
+    //
+    // TERCERA vez el mismo día que dos sesiones suben esta cifra al mismo
+    // número con pantallas distintas. Se midió sobre el árbol resuelto:
+    // 72 páginas y 10 handlers.
+    // 82 → 83 el 2026-09-18: /finca, el índice de la sección que sustituye a
+    // «Parcelas». 73 páginas y 10 handlers.
+    // 83 → 84 el mismo día: /inventario/recibir — recibir un medicamento en el
+    // botiquín. CUARTA vez que dos sesiones suben la cifra al mismo número con
+    // pantallas distintas: la rama decía 83 y, rebasada sobre /finca, se MIDIÓ
+    // sobre el árbol resuelto: 74 páginas y 10 handlers.
+    expect(salida).toContain("84 entradas");
     expect(codigo, salida).toBe(0);
   });
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AvisosDeBotiquin } from "../../components/inventario/AvisosDeBotiquin";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getApiaryDetail, getManageableApiaryProjects } from "../../../lib/apiary/hives";
@@ -104,6 +105,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
       </p>
       <span className="nn-badge">{t("badge")}</span>
       <h1>{apiary.name}</h1>
+      <AvisosDeBotiquin userAccountId={user.userAccountId} />
 
       {/* **El inventario va PRIMERO.** Anexo E §3: «Inventario primero, porque decide la
           acción del día». Estaba octavo —debajo del formulario de coordenadas, la
@@ -118,6 +120,17 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           razón escrita no es lo mismo que rediseñar la pantalla a ciegas. */}
       <section className="nn-section">
         <h2>{t("hivesHeading")}</h2>
+        {/* **Dónde está la inspección.** Esta línea existe porque el dueño no
+            encontró la inspección estructurada: está construida, pero DENTRO de
+            cada colmena, y nada en esta pantalla lo decía. Lo colectivo —abrir
+            jornada, manejo en lote, traslado, consulta a vecinos— vive aquí; lo
+            de una colmena concreta vive un nivel más adentro.
+
+            Va una sola vez, bajo el encabezado, y no repetida en cada tarjeta:
+            las tarjetas ya están llenas de dato real —estado, colonia, origen,
+            días desde la última inspección— y repetir una instrucción 29 veces
+            la convierte en ruido que se deja de leer. */}
+        <p className="nn-muted">{t("hivesHint")}</p>
         {apiary.hives.length === 0 ? (
           <p className="nn-muted">{t("noHives")}</p>
         ) : (
@@ -161,6 +174,12 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
                       ? t("hiveSinInspeccion")
                       : t("hiveInspeccionHace", { dias: v.diasDesdeInspeccion })}
                   </p>
+
+                  {/* La tarjeta ES un enlace, pero eso sólo lo sabe quien pasa
+                      el ratón por encima — y en el patio se usa con el pulgar y
+                      bajo sol. La acción va en palabra, igual que la severidad
+                      de las alertas va en palabra y no sólo en color. */}
+                  <p className="nn-detail-meta">{t("hiveEntrar")} →</p>
                 </Link>
               );
             })}

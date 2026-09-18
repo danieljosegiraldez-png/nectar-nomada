@@ -52,6 +52,9 @@ export const CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO = [
   "colonyEndCauseNo",
   /** «Ninguno»: el apiario no pertenece a ningún proyecto. `projectId` es anulable. */
   "noProjectOption",
+  /** «— sin registrar —»: la razón de la limpieza no se anotó (ADR-080). La razón es opcional,
+   *  y el vacío es exactamente eso: no se sabe, que no es ninguna de las razones. */
+  "limpiezaRazonSinRegistrar",
   /**
    * «Sin lugar declarado»: el sitio de abejas no cuelga de ninguna finca ni parcela.
    *
@@ -61,6 +64,18 @@ export const CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO = [
    * dentro del sistema, y declararle una inventada sería peor que dejarlo suelto (ADR-145).
    */
   "sitioPadreNinguno",
+  /**
+   * «— sin decir —»: no se dijo con qué refractómetro se leyó la miel (ADR-160). El aparato es
+   * opcional a propósito —bloquear la lectura por no nombrarlo perdería el dato—, y el vacío
+   * es exactamente eso: no se sabe, que no es ninguno de los aparatos de la lista.
+   */
+  "refractometroAparatoSinDecir",
+  /**
+   * «Sin frasco — no descuenta del inventario»: el tratamiento se aplicó sin elegir
+   * frasco del botiquín. Es una respuesta y dice su consecuencia: el enlace es
+   * opcional para siempre (botiquín, Tarea 7), y sin él nada se descuenta.
+   */
+  "treatmentFrascoNinguno",
 ] as const satisfies readonly string[];
 
 export type ClaveDeRespuestaQueValeNinguno = (typeof CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO)[number];

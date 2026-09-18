@@ -21,6 +21,7 @@
 
 tests/derivaDeMigraciones.test.ts
 tests/limpiarAuditDePruebas.test.ts
+tests/traceability/beneficios.test.ts
 tests/apiary/ambitoVacioApiarios.test.ts
 tests/notificaciones/canales.test.ts
 tests/equipos/equipos.test.ts
@@ -38,6 +39,10 @@ tests/apiary/configuracionDeCaja.test.ts
 tests/apiary/crearApiario.test.ts
 tests/apiary/meliponario.test.ts
 tests/apiary/altaEnLote.test.ts
+tests/apiary/valoracionDeInspeccion.test.ts
+tests/apiary/vitalesEnSitio.test.ts
+tests/apiary/limpiezaDeCaja.test.ts
+tests/apiary/refractometroDeMiel.test.ts
 tests/apiary/estadoDeColonia.test.ts
 tests/apiary/e2e.test.ts
 tests/apiary/harvest.test.ts
@@ -90,6 +95,17 @@ tests/traceability/drying.test.ts
 tests/traceability/liberacion-del-lote.test.ts
 tests/traceability/subproductos.test.ts
 tests/traceability/venta-temprana.test.ts
+tests/inventario/materiales.test.ts
+tests/inventario/lotes.test.ts
+tests/inventario/existencias.test.ts
+tests/inventario/negativo.test.ts
+tests/inventario/consumo-descuenta.test.ts
+tests/inventario/lista.test.ts
+tests/inventario/custodia.test.ts
+tests/inventario/etiqueta.test.ts
+tests/apiary/tratamiento-descuenta.test.ts
+tests/inventario/avisos.test.ts
+tests/inventario/recepcion.test.ts
 tests/traceability/e2e.test.ts
 tests/traceability/entradaEnProduccion.test.ts
 tests/traceability/export.test.ts

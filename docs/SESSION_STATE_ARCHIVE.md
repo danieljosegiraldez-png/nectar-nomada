@@ -3675,3 +3675,206 @@ dos duplicados de campos que ya tienen vocabulario al lado (`storesLevel`, `pest
 de **limpieza fitosanitaria** — que además **no existe como tipo de evento**: `ColonyEventType` tiene
 cuatro valores y ninguno es limpieza.
 
+
+### 2026-09-16 · Alta de colmenas en lote: cinco de una vez, con vista previa
+
+ADR-149. Daniel abrió la app en el apiario y lo que faltaba era registrar **cinco colmenas en cada
+sitio**. El único camino creaba una: diez envíos para dos apiarios.
+
+**Todo o nada en una transacción, con los identificadores comprobados DENTRO de ella** — comprobar
+antes deja una ventana en la que otra sesión crea el `03` y el lote lo pisa a media escritura. El
+error dice **cuáles** están repetidos.
+
+**La vista previa enseña los identificadores exactos antes de enviar**, con la misma función que
+valida en el servidor. No es adorno: el relleno de ceros no se puede acertar —él ya tiene colmenas
+de tres cifras— así que en vez de adivinarlo, se le enseña.
+
+**La colonia es opcional y explícita:** `originType` no tiene valor por omisión porque es un hecho
+que se captura o se pierde. Sin marcar la casilla nacen cajas vacías, y la colonia se añade después
+colmena por colmena.
+
+**El quinto flip-test hubo que rehacerlo:** la primera versión no compilaba y tumbó **seis** pruebas
+—la señal de sospechar del arnés—. La válida cae por una sola: el control negativo.
+
+
+### 2026-09-16 · Cajas presentes: lo contado contra lo colocado
+
+ADR-150. El Anexo E pregunta «Cajas presentes» y el mapa la daba por **sin sitio** con la razón ya
+escrita —«contar y declarar son datos distintos»—, que es justo la que la construye.
+
+`HivePlacement` sabe cuántas cajas **colocó**; eso no es cuántas **hay**. Una caja puede irse sin que
+nadie registre el traslado, y hasta hoy **el sistema no podía ni notarlo**.
+
+**Y aquí ninguno de los dos manda**, a diferencia de las colonias: allí el declarado gana porque el
+sistema no sabe cuáles murieron; aquí `HivePlacement` sí es un registro deliberado. La salida no es
+un número, **es la comparación**.
+
+**El estado tiene tres valores, no un booleano:** un `divergen: false` mentiría cuando nadie contó.
+Y **la diferencia lleva signo** — faltar una caja y sobrar una son problemas distintos.
+
+**La lista de huecos del protocolo baja de cinco a cuatro** (quedan `weather_observed`,
+`site_condition`, `assessment`, `moisture_pct`). El guardia de ADR-143 obligó a declararlo.
+
+**Lo que NO entra y no se cuenta como hecho:** ninguna pantalla pinta el aviso todavía. El dato se
+captura y la comparación existe; dibujarla es pieza propia.
+
+
+### 2026-09-17 · La divergencia de cajas se ve: alerta de sitio
+
+ADR-151. ADR-150 dejó la comparación construida, probada, **y sin que ninguna pantalla la llamara** —
+el «servicio hecho y la puerta sin poner» que este repositorio se queja de haber repetido tres veces
+en una semana. Esto pone la puerta.
+
+**Va como alerta y no como vital**: un vital es una cifra que se consulta; esto es una razón para ir
+a mirar. **Nivel `aviso`, no `crítico`:** la divergencia es ambigua por construcción —una caja que se
+fue, o un recuento malo—, y subir una señal ambigua a crítica enseña a ignorar lo crítico.
+
+**El motivo nuevo va al final del arreglo de prioridad**, la única posición que no reordena los ocho
+que Daniel fijó el 2026-09-14. **Dónde va de verdad sigue siendo decisión suya.**
+
+**La cuenta del sistema es `Hive.locationId`, medido:** el traslado actualiza la colocación y el
+sitio en la misma transacción — 29 colmenas, 0 sin colocación abierta, 0 divergentes.
+
+**Un flip-test encontró un agujero real:** vaciar la lectura de `hivesPresentCount` no rompía nada.
+Las pruebas de alerta trabajan sobre un fixture en memoria, así que la lectura contra la base no
+estaba cubierta. Se añadió, con dos sesiones para que «la más nueva gana» también sea falsable.
+
+
+### 2026-09-17 · Clima observado, y el guardia que ata el protocolo al esquema
+
+ADR-152. El mapa daba `weather_observed` por **sin sitio** porque su nota **confundía dos
+preguntas**: el «Clima 7 días» del Anexo C es un **pronóstico** externo sin proveedor —sigue
+bloqueado, y bien—; el Anexo E pregunta **lo que el apicultor vio**, y sus cuatro opciones ya
+estaban escritas en el protocolo. Segunda vez que un `sin_sitio` resulta ser una lectura
+equivocada de su propia nota (ADR-143 fue la primera).
+
+**Y el guardia, que es lo que de verdad faltaba.** `feedingMethod` lleva desde A9.4 con sus opciones
+escritas **dos veces** —el JSON y el enum— y **nada lo comprobaba**. Coincidían por haberlas escrito
+bien a mano.
+
+**Encontró cuatro divergencias el primer día, y una es mía:** ADR-148 construyó `FeedingMaterial`
+con los cinco valores que Daniel dictó **y no se actualizó el protocolo**, que sigue ofreciendo
+`jarabe_1_1`. Las cuatro quedan declaradas con su razón; tres son decisiones suyas —incluida
+`apiñada` con ñ contra `apinada`, que **nadie traduce**—. Desde hoy no puede aparecer una quinta.
+
+**La lista de huecos baja de cuatro a tres:** `site_condition`, `assessment`, `moisture_pct`.
+
+
+### 2026-09-17 · Las dos divergencias del dueño, resueltas
+
+ADR-153. Daniel contestó las dos que le llevé: **«mis cinco más los jarabes, y arregla apiñada»**.
+
+**La eñe, y su causa raíz era una afirmación falsa escrita en el esquema:** el comentario de
+`ColonyPopulation` decía que «un identificador de enum no la admite». **Prisma sí la admite** —
+`prisma validate` lo confirma—. Esa suposición nunca medida es la razón de que el enum dijera
+`apinada` mientras su protocolo decía `apiñada`, con nadie traduciendo. Se corrige el comentario,
+no se deja al lado.
+
+**La migración se escribió a mano:** Prisma proponía un intercambio de tipo que castea
+`population::text`, y ese cast **revienta con cualquier fila que valga `apinada`**. En local hay 0
+—medido— pero la de producción no se puede leer. `RENAME VALUE` preserva los datos por definición.
+
+**El vocabulario pasa de seis valores a diez.** `sustituto_polen` y `torta` no son jarabes, pero se
+quedan porque ya estaban en su protocolo; si no los usa, se quitan entonces.
+
+**Y esto revisa ADR-148:** su argumento seguía valiendo —opciones que nadie usa enseñan a bajar
+hasta «otro»— pero su premisa estaba incompleta: el protocolo ya ofrecía otras cuatro, así que «no
+añadir ninguna» daba **dos** vocabularios, no uno corto.
+
+**Lo que impide la recaída:** el guardia pasa con sólo las dos divergencias de modelado, y una
+prueba nueva compara el vocabulario **con el archivo del protocolo**, no con una lista propia.
+
+
+### 2026-09-17 · La valoración del técnico, por el cierre de la visita
+
+ADR-154. El Anexo E pide «Valoración» y el mapa la daba por sin sitio con la razón escrita: «`note`
+es la nota de campo; mezclarlas perdería cuál se escribió con el guante puesto». Son dos columnas
+porque son **dos momentos**. Y es el **único** campo de etapa cierre de la inspección: los otros
+dieciséis son de campo.
+
+**La decisión: no se le inventa un cierre a la inspección.** `Inspection` no tiene ni `completedAt`
+ni ventana; `FieldSession` sí, con sus reglas ya distinguidas entre sí. Así que la puerta es la
+visita, y el enlace ya existía —`FieldEvent` une sesión e inspección—.
+
+**Una inspección sin visita se acepta y el servicio lo dice** (`sin_visita`): negarlo dejaría esa
+valoración sin poder escribirse nunca. **El audit lleva el ANTES**, porque saber desde qué se cambió
+una lectura del técnico es parte de poder sostenerla.
+
+**Un desajuste declarado y NO arreglado:** el protocolo marca esta pregunta `interpretation` y la
+fila está estampada `direct_observation`. **Ya pasaba con `probableCause` y `recommendation`, y
+ADR-142 no lo dijo.** Son los tres únicos items con procedencia declarada. Arreglarlo bien exige
+decidir si una interpretación merece fila propia, y eso es pieza aparte.
+
+**Los huecos del protocolo bajan de tres a dos:** `site_condition` y `moisture_pct`.
+
+
+### 2026-09-17 · Codex revisó el día: tres guardias pasaban por razones equivocadas
+
+ADR-155. El segundo asiento no encontró un fallo de producto: encontró **guardias en verde que no
+vigilaban lo que decían**, y lo demostró **mutando**, no opinando. Tres mutaciones dejaban 4/4 en
+verde.
+
+**La causa de la más grave era estructural:** el detector leía sus entradas del módulo, así que
+**no se podía llamar con entrada hostil**. Ahora las recibe por parámetro. Es la regla de la casa
+—«el guardia es el que llama a la función con la entrada hostil»— aplicada a un detector.
+
+**Y al cerrar el agujero del `continue`, la cobertura real era de CINCO preguntas, no doce.** Se
+saltaban siete en silencio; las siete coinciden, así que no había deuda escondida — había
+vigilancia que no existía.
+
+**En el servicio:** `take: 1` presuponía una invariante que el esquema no garantiza, y la
+observación de Codex fue mejor que el arreglo obvio — **`orderBy` sólo volvería determinista la
+arbitrariedad**. Manda la visita más restrictiva. Y el `before` del audit pasa a `Serializable`.
+
+**Lo que más vale: dos de mis propias pruebas eran adorno, y lo dijo su flip-test.** La de «manda
+la más restrictiva» afirmaba en su comentario estar montada al revés de lo cómodo **y era falso**;
+el `Serializable` no tenía guardia ninguno. Reincidí en la trampa que Codex me acababa de enseñar,
+una hora después, arreglando esa misma trampa.
+
+Los cinco flip-tests de la rebanada repiten **las mutaciones exactas de Codex**.
+
+### 2026-09-17 · Los vitales de campo se anotan en el sitio, y queda dicho que fue allí
+
+ADR-157, y el hallazgo es sobre mi propio trabajo. El protocolo marca clima, colonias vivas y cajas
+presentes como **`stage: field`** —cosas que se VEN estando ahí— y **las tres se capturaban sólo en
+el formulario de cierre**, que se rellena en casa. Dos las puse yo el día anterior siguiendo a las
+que ya estaban, sin comprobar que estuvieran bien.
+
+**Daniel contestó una tercera opción, mejor que las dos que le llevé:** «se debería poder hacer
+durante la visita o al cierre, a veces en sitio y si solo un apicultor es difícil maniobrar y ser
+eficiente de entrar y salir y estresar menos a las abejas».
+
+**Así que no se restringe: se registra cuál de las dos pasó.** `fieldVitalsOnSiteAt`, y una puerta
+nueva disponible mientras la visita está abierta. Sin la marca, una cifra vista con el guante puesto
+y una reconstruida de memoria son la misma fila, las dos `original_record`.
+
+**La marca describe el valor ACTUAL:** el cierre la limpia si reescribe alguno de los tres. Su
+prueba lleva el control de que un cierre que NO los toca la deja intacta.
+
+**Lo que la puerta afirma es una sola cosa —que la visita seguía abierta—** y no comprueba GPS a
+propósito: las coordenadas son del arranque, y exigirlas dejaría sin registrar una visita bajo dosel
+cerrado, que es donde están las abejas.
+
+**Y un flip-test volvió a destapar una prueba mía que no discriminaba** — la tercera en dos días.
+
+### 2026-09-17 · El material de soporte, guardado entero y verificable
+
+ADR-158. Daniel: «deberías tener más documentación y material de soporte guardado, revisar todo».
+**Tenía razón:** medido por contenido, el repositorio guardaba sólo las cuatro fuentes de Cerro Azul.
+El grave era el **paquete Q1–Q49**: sus 49 decisiones vivían sólo en una carpeta de Documentos, y el
+repositorio tenía únicamente mis análisis que lo citan.
+
+**Ahora está todo, en dos clases que no se mezclan:** los **registros** —Q1–Q49, smart-hive, y
+**trece decisiones de Daniel en sus palabras literales**, sacadas de la transcripción con su línea—
+en `docs/architecture/`; el **conocimiento con cifras** —Varroa y Meliponini como **borrador**, ANSA
+como **referencia externa**— en `docs/dominio/`. Índice: `FUENTES_INDICE.md`.
+
+**«Verbatim» ya no es una promesa:** `fuentes-verbatim.test.ts` verifica cada copia en cada corrida,
+smart-hive contra **su propio** manifiesto.
+
+**Lo que encontró el contraste:** el manual de Varroa es de **clima templado**, y el **ácido fórmico
+es de seguridad** en el trópico —el propio texto dice que por encima de 27 °C mata a la reina—.
+Meliponini se contradice consigo mismo. ANSA es de Tucumán: géneros iguales, especies no.
+
+**P-F pasa de tres guías a cinco**, y su texto se corrigió. Ninguna cifra de estos documentos entra
+al software: los vocabularios de tratamiento y limpieza los decide Daniel.

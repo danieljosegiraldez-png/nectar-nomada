@@ -26,7 +26,7 @@ flip-test el 2026-08-28, en ambas direcciones.
 | P-B | A qué proyecto apunta el dominio de marca — **cerrada el 2026-08-28** | Decisión de Daniel. Se deja la fila porque vuelve a abrirse sola si el dominio volviera a este proyecto | `curl -s -L https://www.nectarnomada.com/ \| grep -q 'href="/login"'` |
 | P-C | Quiénes reciben correo y, con él, acceso | Casi nadie en la base tiene correo; sin correo no hay contraseña. Hoy solo Daniel y José. Quién entra no lo decide el sistema | `! grep -qi "correos de las personas" docs/architecture/DECISIONS.md` |
 | P-D | Nombres y roles de la **familia Huerbsch** — **cerrada el 2026-08-29** | La premisa era falsa: sí están en la base desde A7 — Bob (copropietario), Sherry (copropietaria) y Chris (representante familiar), con membresías reales. Faltaba el ADR, que es lo único que la prueba mira. Ver ADR-106 | `! grep -qi "huerbsch registrada" docs/architecture/DECISIONS.md` |
-| P-F | Revisar las tres guías de `docs/dominio/` — pH, Brix y subproductos | Las redactó un modelo a partir de indicaciones suyas y **nadie las ha repasado**. Traen umbrales con pinta de norma y frases como «PELIGRO: lave el café de inmediato». Qué respalda él y qué no, no lo decide el sistema | `grep -lq "^  estado    : borrador"` sobre los `.md` de la carpeta; carpeta ausente sale **2**, no cerrada |
+| P-F | Revisar las **cinco** guías de `docs/dominio/` — pH, Brix, subproductos y, desde el 2026-09-17, **Varroa** y **Meliponini** (ADR-158) | Las redactó un modelo a partir de indicaciones suyas y **nadie las ha repasado**. Traen umbrales con pinta de norma y frases como «PELIGRO: lave el café de inmediato». Qué respalda él y qué no, no lo decide el sistema | `grep -lq "^  estado    : borrador"` sobre los `.md` de la carpeta; carpeta ausente sale **2**, no cerrada |
 | P-E | Destino de backup fuera de la máquina | *Cerrada hoy* — `NN_BACKUP_DIR` está en `~/.zshrc`. Se deja en la tabla porque vuelve a abrirse sola si alguien lo quita, y porque una tabla donde todo dice «abierta» no demuestra que el mecanismo discrimine | `! grep -q "NN_BACKUP_DIR" "$HOME/.zshrc"` |
 
 **P-C y P-D no cambian ningún artefacto por sí solas.** Su veredicto aterriza
@@ -38,67 +38,102 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-17 · La divergencia de cajas se ve: alerta de sitio
+### 2026-09-18 · `reporteDeProceso.test.ts` dejó de fallar a veces (PR #395)
 
-ADR-151. ADR-150 dejó la comparación construida, probada, **y sin que ninguna pantalla la llamara** —
-el «servicio hecho y la puerta sin poner» que este repositorio se queja de haber repetido tres veces
-en una semana. Esto pone la puerta.
+Fallaba intermitente en el carril con base (`expected 3 to be 1`) y pasaba sola. **El gestor del
+fixture era Platform Admin**, así que el reporte contaba toda la base, incluidos los procesos que
+`lotProcess.test.ts` cierra en paralelo. Ahora es Farm Operator de su plot, y los recuentos de lotes
+son exactos para que la prueba afirme su propio aislamiento. Reproducido con un contaminante
+temporal (antes cae, después 6/6) y flip de la mutación (volver a poner el admin → `56 ≠ 2`).
+**Sin reproducir:** el fallo de «agrupa por grado»; se atribuye a la misma causa, sin medirlo.
 
-**Va como alerta y no como vital**: un vital es una cifra que se consulta; esto es una razón para ir
-a mirar. **Nivel `aviso`, no `crítico`:** la divergencia es ambigua por construcción —una caja que se
-fue, o un recuento malo—, y subir una señal ambigua a crítica enseña a ignorar lo crítico.
+Auditadas las otras 21 pruebas que buscan Platform Admin: **ninguna con el defecto hoy**, dos con su
+forma lenta — ver `PENDING_IMPLEMENTATIONS/012`. Lección en `CLAUDE.md`, «Un admin de plataforma ve la
+base compartida entera».
 
-**El motivo nuevo va al final del arreglo de prioridad**, la única posición que no reordena los ocho
-que Daniel fijó el 2026-09-14. **Dónde va de verdad sigue siendo decisión suya.**
+### 2026-09-18 · El botiquín: vencimiento, custodia, descuento y aviso
 
-**La cuenta del sistema es `Hive.locationId`, medido:** el traslado actualiza la colocación y el
-sitio en la misma transacción — 29 colmenas, 0 sin colocación abierta, 0 divergentes.
+Nueve tareas del plan `docs/superpowers/plans/2026-09-17-botiquin.md`, en un PR. El producto lleva
+una vez fabricante, principio activo, registro, carencia, con cuánto aviso, almacenamiento y
+advertencias; el frasco, en cada compra, vencimiento, presentación y factura. **Botado y perdido**
+restan y exigen motivo (`CHECK` en la base). **Custodia** = sitio + persona, en intervalos sin hueco
+ni solape. Foto de la etiqueta sobre el frasco. **Aplicar un tratamiento descuenta del frasco** en la
+misma transacción; vencido se aplica y queda marcado. `/inventario/recibir`, y la lista con «Vence»
+y «Dónde está».
 
-**Un flip-test encontró un agujero real:** vaciar la lectura de `hivesPresentCount` no rompía nada.
-Las pruebas de alerta trabajan sobre un fixture en memoria, así que la lectura contra la base no
-estaba cubierta. Se añadió, con dos sesiones para que «la más nueva gana» también sea falsable.
+**Decisiones de la ejecución que el plan no traía, para que Daniel las vea:**
+- **El aviso NO va en `/start`**: esa ruta sólo redirige (ADR-082). Va en `/lots`, `/apiaries` y la
+  ficha del apiario, a quien tiene `lot:manage` donde ESTÁ el frasco.
+- **Descontar exige `lot:manage` sobre el frasco.** Kenis (sólo eventos de colonia) registra el
+  tratamiento sin frasco. El manejo en lote no acepta frasco todavía.
+- **FK de evidencia en RESTRICT** (foto y tratamiento), como fijó la revisión del 2026-09-01; la
+  primera versión copió SET NULL de padres anteriores y la deriva de migraciones lo cazó.
+- **Completar un producto sólo rellena huecos**; corregir lo ya declarado no tiene pantalla.
 
-### 2026-09-16 · Cajas presentes: lo contado contra lo colocado
+**Migraciones fuera de orden:** tres del botiquín (`20260918000000`–`020000`) tienen fecha anterior a
+`20260918023857_limpieza_de_caja`, ya en producción. Son de tablas independientes; `migrate deploy`
+aplica las pendientes, pero **leer el log del despliegue** y confirmar que nombra las seis.
 
-ADR-150. El Anexo E pregunta «Cajas presentes» y el mapa la daba por **sin sitio** con la razón ya
-escrita —«contar y declarar son datos distintos»—, que es justo la que la construye.
+**Sin verificar en navegador** —hace falta sesión—. **La cifra del router chocó por cuarta vez:** la
+rama decía 83 y, rebasada sobre `/finca`, se midió 84.
 
-`HivePlacement` sabe cuántas cajas **colocó**; eso no es cuántas **hay**. Una caja puede irse sin que
-nadie registre el traslado, y hasta hoy **el sistema no podía ni notarlo**.
+### 2026-09-17 · El refractómetro de miel: la lectura va sobre el lote
 
-**Y aquí ninguno de los dos manda**, a diferencia de las colonias: allí el declarado gana porque el
-sistema no sabe cuáles murieron; aquí `HivePlacement` sí es un registro deliberado. La salida no es
-un número, **es la comparación**.
+ADR-160. Daniel corrigió: un refractómetro no mide humedad en general; **el de miel lee Brix y H%**, y
+**el del beneficio es otro aparato** (Brix 0–32 de mosto, sin H%). La primera versión metía tres
+columnas en la cosecha; **se quitaron antes de commitear** porque el esquema ya lo prohibía y Daniel
+lo dijo a mitad: **la miel es un lote**, que se sigue al dividir, filtrar, envasar y muestrear.
 
-**El estado tiene tres valores, no un booleano:** un `divergen: false` mentiría cuando nadie contó.
-Y **la diferencia lleva signo** — faltar una caja y sobrar una son problemas distintos.
+`MaterialState.BEE_HONEY`, `InstrumentMeasurementMode.variable`, y `recordMeasurement` que rechaza
+un modo que no lee esa variable y una lectura fuera de su rango. **El Brix 0–40 del café no se
+ensancha**: se abre a 0–100 sólo sobre lotes `honey`. **El H% nunca se calcula desde el Brix.** Una
+lectura por cosecha. La ficha del equipo gana dónde declarar modos: no había ninguna pantalla.
 
-**La lista de huecos del protocolo baja de cinco a cuatro** (quedan `weather_observed`,
-`site_condition`, `assessment`, `moisture_pct`). El guardia de ADR-143 obligó a declararlo.
+**Pendiente:** filtrar y envasar miel no tienen nombre en la cadena del lote, ni hay pantalla del
+lote de miel. Es lo siguiente.
 
-**Lo que NO entra y no se cuenta como hecho:** ninguna pantalla pinta el aviso todavía. El dato se
-captura y la comparación existe; dibujarla es pieza propia.
+### 2026-09-17 · La limpieza se registra sobre la caja
 
-### 2026-09-16 · Alta de colmenas en lote: cinco de una vez, con vista previa
+ADR-159. Decisión de Daniel: «1, sobre la caja». **Ningún evento del apiario colgaba de la caja**
+—todos de la colonia—, y la limpieza no puede: una caja vacía se desinfecta antes de recibir otra.
+`HiveCleaning`, con los actos como arreglo y dos vocabularios fijos sacados del manual de Varroa
+—**sólo los nombres, no sus cifras**—.
 
-ADR-149. Daniel abrió la app en el apiario y lo que faltaba era registrar **cinco colmenas en cada
-sitio**. El único camino creaba una: diez envíos para dos apiarios.
+**Las reglas viven también en la base:** tres `CHECK` probados contra Postgres, 7 de 7, el primero
+del repositorio sobre un arreglo de enum.
 
-**Todo o nada en una transacción, con los identificadores comprobados DENTRO de ella** — comprobar
-antes deja una ventana en la que otra sesión crea el `03` y el lote lo pisa a media escritura. El
-error dice **cuáles** están repetidos.
+**La caja vacía es por día entero, no por instante.** La colonia muere el 10 y la caja se limpia el
+10; la caja se limpia el 10 y entra colonia nueva ese día: las dos pasan. Su flip-test lo demuestra —
+volver al instante tumba las dos. Renovar cera es la excepción: se hace con la colonia dentro.
 
-**La vista previa enseña los identificadores exactos antes de enviar**, con la misma función que
-valida en el servidor. No es adorno: el relleno de ceros no se puede acertar —él ya tiene colmenas
-de tres cifras— así que en vez de adivinarlo, se le enseña.
+**La primera acción del apiario que devuelve el error en vez de lanzarlo**, porque ésta rechaza en un
+caso normal y el apicultor tiene que leer por qué.
 
-**La colonia es opcional y explícita:** `originType` no tiene valor por omisión porque es un hecho
-que se captura o se pierde. Sin marcar la casilla nacen cajas vacías, y la colonia se añade después
-colmena por colmena.
+**Pendiente:** los productos de tratamiento, que esperan a Daniel — y a leer «el botiquín del apiario»
+(#386), recién fusionado.
 
-**El quinto flip-test hubo que rehacerlo:** la primera versión no compilaba y tumbó **seis** pruebas
-—la señal de sospechar del arnés—. La válida cae por una sola: el control negativo.
+### 2026-09-17 · Reposo, trilla, inventario — y una sesión que no leyó este archivo
 
+**Fusionado:** #366 (reposo, trilla y subproductos: el café ya no se pierde entre secado y venta),
+#368 y #371 (la inspección estaba construida dentro de la colmena y no se veía; y los formularios
+respetan el permiso — Kenis ve su entrada de eventos y no una inspección que no puede enviar), #372,
+#375 y #376 (specs de artefactos de colmena, nodo Smart Hive, inventario y análisis del contrato de
+investigación). **Fusionado después:** #382, inventario con existencias — el saldo se deriva y «nunca contado»
+no es «cero».
+
+**Lo que hay que saber, y es la lección:** esta sesión arrancó en `~`, trabajó de resúmenes de su
+propia memoria y **no leyó este archivo en ningún momento**. Le pidió a Daniel tres veces el correo
+de Bob cuando Bob ya había entrado — la misma forma exacta que la nota de `apiary:load-protocol` de
+abajo describe. Lo destapó `auditar-cableado`, no la sesión. **Leer esto al arrancar no es un
+trámite: es la única fuente de lo que ya pasó.**
+
+**Y un error con daño a otras sesiones, revertido:** renombró `apiñada` a `apinada` en la base de
+pruebas compartida creyéndola derivada; iba POR DELANTE de git —otra sesión había aplicado
+`vocabulario_del_dueno` antes de fusionarla—. La base compartida puede ir por delante de git.
+
+**Diseño esperando a Daniel:** la «faena» —preguntar a qué vas antes de enseñar seis
+formularios—, §A de `docs/superpowers/specs/2026-09-17-faena-de-colmena-y-botiquin-design.md`. El
+botiquín, §B del mismo spec, ya se ejecutó: ver 2026-09-18.
 
 ## 3. Bloqueado, y en qué
 
@@ -171,12 +206,13 @@ enum tenga diez valores y las pantallas ofrezcan cinco, y si
 puede afirmar cada pantalla— y sigue sin tomarse.
 
 
-- **Dar acceso a alguien más que Daniel y José** — bloqueado en P-C. Medido el
-  2026-08-29: 13 de 14 cuentas siguen en `invited` sin clave. Bob y Sherry
-  tienen 10 Assignments cada uno y Chris 2 — 22 en total que resuelven bien y
-  no llegan a nadie, porque ninguna de las tres Personas tiene correo.
-  ADR-083 ya arregló el callback que rechazaba `invited`: la puerta funciona,
-  falta a quién darle la llave.
+- **Dar acceso a alguien más que Daniel y José** — **Bob Huerbsch YA ENTRÓ**: lo
+  dijo Daniel el 2026-09-17. **No se verificó contra la base y no se puede** —
+  leer producción está prohibido—; es la palabra del dueño, y basta. Queda
+  **Kenis Abdiel Rodríguez Núñez** (`rodriguezkenis907@gmail.com`, perfil `Apiary
+  Colony Event Recorder` sobre los dos apiarios de Finca Rosina: guion
+  `data:kenis-apicultor`). Sherry y Chris siguen sin correo. **Antes de pedirle a
+  Daniel que corra algo, buscarlo aquí.**
 - **La protección de `main`, tal como quedó** — no es un bloqueo, es la
   configuración viva. Exige los dos checks de compuerta —el pesado y el
   ligero—, prohíbe force-push y borrar la rama. **Sin revisiones exigidas a

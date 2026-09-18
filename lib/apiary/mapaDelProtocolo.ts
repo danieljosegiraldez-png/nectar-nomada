@@ -58,7 +58,11 @@ export const MODELOS_POR_ACTIVIDAD: Record<string, string[]> = {
 export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   // --- visit: la visita al sitio -------------------------------------------------------
   purpose: { clase: "campo", modelo: "FieldSession", campo: "purposes" },
-  weather_observed: { clase: "sin_sitio", nota: "Sin columna. El Anexo C lo pide como vital del sitio y lo deja en una capa externa sin proveedor conectado." },
+  // CORRIGE la nota anterior, que confundia dos preguntas (ADR-152). Decia: "el Anexo C lo
+  // pide como vital del sitio y lo deja en una capa externa sin proveedor conectado". Eso es
+  // cierto del "Clima 7 dias" del Anexo C --un PRONOSTICO--, y falso de esta: el Anexo E
+  // pregunta lo que el apicultor VIO estando ahi, y su vocabulario ya estaba en el protocolo.
+  weather_observed: { clase: "campo", modelo: "FieldSession", campo: "weatherObserved" },
   site_condition: { clase: "sin_sitio", nota: "Sin columna propia." },
   colonies_alive_count: { clase: "campo", modelo: "FieldSession", campo: "coloniesAliveCount" },
   // Ya tiene sitio (ADR-150). La nota anterior decia la razon por la que faltaba --"contar y
@@ -87,7 +91,10 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   varroa_bees_sampled: { clase: "campo", modelo: "VarroaCount", campo: "sampleBees" },
   varroa_mites_counted: { clase: "campo", modelo: "VarroaCount", campo: "mitesCounted" },
   note: { clase: "campo", modelo: "Inspection", campo: "note" },
-  assessment: { clase: "sin_sitio", nota: "La valoracion de la inspeccion, `stage: close`. `note` es la nota de campo; mezclarlas perderia cual se escribio con el guante puesto." },
+  // Ya tiene sitio (ADR-154). La nota anterior decia la razon --«`note` es la nota de campo;
+  // mezclarlas perderia cual se escribio con el guante puesto»-- y esa razon es la que la
+  // construyo: son dos columnas porque son dos momentos.
+  assessment: { clase: "campo", modelo: "Inspection", campo: "assessment" },
 
   // --- feeding: la alimentacion -----------------------------------------------------------
   // Apunta al VOCABULARIO, no al texto (ADR-148). `feedingMaterial` sigue existiendo como el
@@ -115,7 +122,13 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   frames_harvested: { clase: "campo", modelo: "ApiaryHarvestEvent", campo: "framesHarvested" },
   extracted_weight_kg: { clase: "campo", modelo: "ApiaryHarvestEvent", campo: "extractedWeightKg" },
   honey_type: { clase: "campo", modelo: "ApiaryHarvestEvent", campo: "honeyType" },
-  moisture_pct: { clase: "sin_sitio", nota: "La humedad de la miel, `stage: close`. El Anexo E §4 la marca «si se midio»." },
+  // ADR-160: la escala H% del refractometro de miel, como `Measurement` (variable `moisture`)
+  // sobre el `Lot` que la cosecha produce -- no una columna: el lote es lo que sigue a la miel.
+  moisture_pct: {
+    clase: "tabla",
+    modelo: "Measurement",
+    nota: "variable `moisture` sobre el Lot de miel de la cosecha (`resultingLotId`), con su instrumento y modo. `registrarLecturaDeRefractometro`.",
+  },
 };
 
 /** Los items que hoy no tienen donde guardarse. La lista corta que decide el proximo trabajo. */
