@@ -4,7 +4,6 @@
     "myNectar": "My Néctar",
     "partnerWorkspace": "Partners",
     "lots": "Lots",
-    "plots": "Plots",
     "apiaries": "Apiaries",
     "research": "Research",
     "sensory": "Sensory",
@@ -20,7 +19,8 @@
     "recipes": "Recipes",
     "newSession": "Create cupping session",
     "externalReport": "External report",
-    "beneficio": "Mill"
+    "beneficio": "Mill",
+    "finca": "Farm"
   },
   "Home": {
     "badge": "Slices 1–2 — Identity and Discovery",
@@ -2108,5 +2108,14 @@
     "estadoPorCuadrar": "needs reconciling",
     "estadoSinContar": "never counted",
     "estadoContado": "counted"
+  },
+  "SeccionFinca": {
+    "titulo": "Farm",
+    "intro": "Everything on the farm up to the harvest: the plots, the work before harvesting, and the harvest itself.",
+    "parcelas": "Plots",
+    "parcelasAyuda": "What is planted, how each plot is doing, and what it is missing.",
+    "cosecha": "Record a harvest",
+    "cosechaAyuda": "How much was harvested, from which plot, and what the cherry was like.",
+    "proximamente": "Coming next: pickers, yield and efficiency, and harvest quality with what the mill's selection sends back."
   }
 }

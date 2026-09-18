@@ -54,9 +54,12 @@ const NAV: readonly NavDefinition[] = [
   // Las rutas no se mueven todavía (`/lots` sigue donde estaba); eso va en su PR
   // cuando exista el tablero del beneficio, para no mudarlas dos veces.
   { labelKey: "beneficio", href: "/beneficio", requiresAnyOf: ["lot:view", "lot:manage"] },
+  // 2026-09-18, decisión de Daniel: «Parcelas» pasa a ser la sección «Finca»
+  // —parcelas, cosecha, recolectores, rendimiento—, hermana de «Beneficio».
+  // Hereda la regla que tenía Parcelas sin tocarla. `/plots` no se mueve.
   {
-    labelKey: "plots",
-    href: "/plots",
+    labelKey: "finca",
+    href: "/finca",
     requiresAnyOf: ["location:manage_attributes", "lot:view", "lot:manage"],
   },
   { labelKey: "apiaries", href: "/apiaries", requiresAnyOf: ["apiary:view", "apiary:manage"] },
@@ -276,6 +279,8 @@ export function buildNavigation(granted: ReadonlySet<string>): NavEntry[] {
  */
 export const DENTRO_DE_SECCION: Readonly<Record<string, string>> = {
   "/lots": "/beneficio",
+  // 2026-09-18: las parcelas cuelgan de Finca.
+  "/plots": "/finca",
 };
 
 /**
