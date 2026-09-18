@@ -1,0 +1,288 @@
+/**
+ * El catálogo de modelos de equipo (spec de catálogos §3.1-3.2). Primer consumidor
+ * del contrato común de `lib/catalogos/`.
+ *
+ * Definir qué es un «ATAGO PAL-1» es GESTIÓN, no faena: `equipment:manage`, como
+ * `crearMaterial`. Las especificaciones son del FABRICANTE y no se mezclan con los
+ * contrastes contra patrón, que dicen lo que el aparato hace de verdad.
+ */
+import { Prisma, type EquipmentContactMaterial, type EquipmentKind, type ProvenanceClass } from "../../generated/prisma/client";
+import { recordAuditEvent } from "../audit";
+import {
+  filtroVisible,
+  organizacionesVisibles,
+  requireCatalogoAccess,
+  requireEntradaDeCatalogoAccess,
+  type Dueno,
+} from "../catalogos/propiedad";
+import { prisma } from "../db";
+
+export class ModeloError extends Error {}
+
+const GESTIONAR = { resourceType: "equipment", action: "manage" } as const;
+const VER = { resourceType: "equipment", action: "view" } as const;
+
+export interface DatosDeModelo {
+  manufacturer: string;
+  modelName: string;
+  recommendedMaintenanceDays?: number | null;
+  capacityValue?: string | null;
+  capacityUnit?: string | null;
+  contactMaterial?: EquipmentContactMaterial | null;
+  contactMaterialNote?: string | null;
+  provenanceClass: ProvenanceClass;
+  sourceReference?: string | null;
+  notes?: string | null;
+}
+
+export interface CrearModeloInput extends DatosDeModelo {
+  dueno: Dueno;
+  kind: EquipmentKind;
+}
+
+export interface EspecificacionInput {
+  quantity: string;
+  unit: string;
+  rangeMin?: string | null;
+  rangeMax?: string | null;
+  resolution?: string | null;
+  accuracyAbs?: string | null;
+}
+
+export interface ModeloEnLista {
+  id: string;
+  manufacturer: string;
+  modelName: string;
+  kind: EquipmentKind;
+  organizationId: string | null;
+  recommendedMaintenanceDays: number | null;
+  retiredAt: Date | null;
+  equipos: number;
+}
+
+const texto = (v: string | null | undefined) => (v?.trim() ? v.trim() : null);
+
+/** Normaliza y valida lo que la base también rechazaría, para devolver una frase legible. */
+function datosLimpios(kind: EquipmentKind, d: DatosDeModelo) {
+  const manufacturer = d.manufacturer.trim();
+  const modelName = d.modelName.trim();
+  if (!manufacturer) throw new ModeloError("fabricante_obligatorio");
+  if (!modelName) throw new ModeloError("modelo_obligatorio");
+  const dias = d.recommendedMaintenanceDays ?? null;
+  if (dias !== null && (!Number.isInteger(dias) || dias <= 0)) throw new ModeloError("mantenimiento_positivo");
+  const capacityValue = texto(d.capacityValue);
+  const capacityUnit = texto(d.capacityUnit);
+  if ((capacityValue === null) !== (capacityUnit === null)) throw new ModeloError("capacidad_con_unidad");
+  const material = d.contactMaterial ?? null;
+  const conCapacidad = kind === "vessel" || kind === "machine";
+  if (!conCapacidad && (capacityValue !== null || material !== null)) throw new ModeloError("capacidad_solo_en_vaso_o_maquina");
+  const nota = texto(d.contactMaterialNote);
+  if (material === "otro" && nota === null) throw new ModeloError("material_otro_con_nota");
+  return {
+    manufacturer,
+    modelName,
+    recommendedMaintenanceDays: dias,
+    capacityValue: capacityValue === null ? null : new Prisma.Decimal(capacityValue),
+    capacityUnit,
+    contactMaterial: material,
+    contactMaterialNote: nota,
+    provenanceClass: d.provenanceClass,
+    sourceReference: texto(d.sourceReference),
+    notes: texto(d.notes),
+  };
+}
+
+function esDuplicado(e: unknown) {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
+}
+
+export async function crearModelo(userAccountId: string, input: CrearModeloInput): Promise<{ id: string }> {
+  const organizationId = await requireCatalogoAccess(userAccountId, input.dueno, GESTIONAR);
+  const datos = datosLimpios(input.kind, input);
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const m = await tx.equipmentModel.create({
+        data: { ...datos, kind: input.kind, organizationId, createdBy: userAccountId },
+        select: { id: true },
+      });
+      await recordAuditEvent(
+        {
+          actorUserAccountId: userAccountId,
+          entityType: "equipment_model",
+          entityId: m.id,
+          operation: "create",
+          sourceInterface: "lib/equipos/modelos.ts",
+          after: { ...datos, kind: input.kind, organizationId },
+        },
+        tx,
+      );
+      return m;
+    });
+  } catch (e) {
+    if (esDuplicado(e)) throw new ModeloError("modelo_duplicado");
+    throw e;
+  }
+}
+
+export async function editarModelo(userAccountId: string, modelId: string, d: DatosDeModelo): Promise<void> {
+  const antes = await prisma.equipmentModel.findUnique({ where: { id: modelId } });
+  if (!antes) throw new ModeloError("modelo_no_encontrado");
+  await requireEntradaDeCatalogoAccess(userAccountId, antes, GESTIONAR);
+  const datos = datosLimpios(antes.kind, d);
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.equipmentModel.update({ where: { id: modelId }, data: datos });
+      await recordAuditEvent(
+        {
+          actorUserAccountId: userAccountId,
+          entityType: "equipment_model",
+          entityId: modelId,
+          operation: "update",
+          sourceInterface: "lib/equipos/modelos.ts",
+          before: {
+            manufacturer: antes.manufacturer,
+            modelName: antes.modelName,
+            recommendedMaintenanceDays: antes.recommendedMaintenanceDays,
+            capacityValue: antes.capacityValue?.toString() ?? null,
+            capacityUnit: antes.capacityUnit,
+            contactMaterial: antes.contactMaterial,
+            contactMaterialNote: antes.contactMaterialNote,
+            provenanceClass: antes.provenanceClass,
+            sourceReference: antes.sourceReference,
+            notes: antes.notes,
+          },
+          after: { ...datos, capacityValue: datos.capacityValue?.toString() ?? null },
+        },
+        tx,
+      );
+    });
+  } catch (e) {
+    if (esDuplicado(e)) throw new ModeloError("modelo_duplicado");
+    throw e;
+  }
+}
+
+export async function retirarModelo(userAccountId: string, modelId: string, cuando: Date): Promise<void> {
+  const m = await prisma.equipmentModel.findUnique({ where: { id: modelId } });
+  if (!m) throw new ModeloError("modelo_no_encontrado");
+  await requireEntradaDeCatalogoAccess(userAccountId, m, GESTIONAR);
+  if (m.retiredAt) return;
+  await prisma.$transaction(async (tx) => {
+    await tx.equipmentModel.update({ where: { id: modelId }, data: { retiredAt: cuando } });
+    await recordAuditEvent(
+      { actorUserAccountId: userAccountId, entityType: "equipment_model", entityId: modelId, operation: "retire", sourceInterface: "lib/equipos/modelos.ts", after: { retiredAt: cuando.toISOString() } },
+      tx,
+    );
+  });
+}
+
+export async function declararEspecificacion(userAccountId: string, modelId: string, e: EspecificacionInput): Promise<{ id: string }> {
+  const m = await prisma.equipmentModel.findUnique({ where: { id: modelId } });
+  if (!m) throw new ModeloError("modelo_no_encontrado");
+  await requireEntradaDeCatalogoAccess(userAccountId, m, GESTIONAR);
+  if (m.kind !== "instrument") throw new ModeloError("especificacion_solo_en_instrumentos");
+  const quantity = e.quantity.trim();
+  const unit = e.unit.trim();
+  if (!quantity || !unit) throw new ModeloError("magnitud_y_unidad_obligatorias");
+  const dec = (v: string | null | undefined) => (texto(v) === null ? null : new Prisma.Decimal(texto(v)!));
+  const data = { quantity, unit, rangeMin: dec(e.rangeMin), rangeMax: dec(e.rangeMax), resolution: dec(e.resolution), accuracyAbs: dec(e.accuracyAbs) };
+  return prisma.$transaction(async (tx) => {
+    const s = await tx.equipmentModelSpec.create({ data: { ...data, modelId, createdBy: userAccountId }, select: { id: true } });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        entityType: "equipment_model_spec",
+        entityId: s.id,
+        operation: "create",
+        sourceInterface: "lib/equipos/modelos.ts",
+        after: { modelId, quantity, unit, rangeMin: e.rangeMin ?? null, rangeMax: e.rangeMax ?? null, resolution: e.resolution ?? null, accuracyAbs: e.accuracyAbs ?? null },
+      },
+      tx,
+    );
+    return s;
+  });
+}
+
+export async function retirarEspecificacion(userAccountId: string, specId: string, cuando: Date): Promise<void> {
+  const s = await prisma.equipmentModelSpec.findUnique({ where: { id: specId }, include: { model: true } });
+  if (!s) throw new ModeloError("especificacion_no_encontrada");
+  await requireEntradaDeCatalogoAccess(userAccountId, s.model, GESTIONAR);
+  if (s.retiredAt) return;
+  await prisma.$transaction(async (tx) => {
+    await tx.equipmentModelSpec.update({ where: { id: specId }, data: { retiredAt: cuando } });
+    await recordAuditEvent(
+      { actorUserAccountId: userAccountId, entityType: "equipment_model_spec", entityId: specId, operation: "retire", sourceInterface: "lib/equipos/modelos.ts", after: { retiredAt: cuando.toISOString() } },
+      tx,
+    );
+  });
+}
+
+async function enLista(where: Prisma.EquipmentModelWhereInput): Promise<ModeloEnLista[]> {
+  const filas = await prisma.equipmentModel.findMany({
+    where,
+    select: { id: true, manufacturer: true, modelName: true, kind: true, organizationId: true, recommendedMaintenanceDays: true, retiredAt: true, _count: { select: { equipment: true } } },
+    orderBy: [{ manufacturer: "asc" }, { modelName: "asc" }],
+  });
+  return filas.map(({ _count, ...f }) => ({ ...f, equipos: _count.equipment }));
+}
+
+export async function listarModelos(
+  userAccountId: string,
+  filtro: { kind?: EquipmentKind; incluirRetirados?: boolean } = {},
+): Promise<{ compartidos: ModeloEnLista[]; propios: ModeloEnLista[] }> {
+  const orgs = await organizacionesVisibles(userAccountId, VER);
+  const base: Prisma.EquipmentModelWhereInput = {
+    ...(filtro.kind ? { kind: filtro.kind } : {}),
+    ...(filtro.incluirRetirados ? {} : { retiredAt: null }),
+  };
+  const [compartidos, propios] = await Promise.all([
+    enLista({ ...base, organizationId: null }),
+    orgs.length > 0 ? enLista({ ...base, organizationId: { in: orgs } }) : Promise.resolve([]),
+  ]);
+  return { compartidos, propios };
+}
+
+/** Para el desplegable del alta: sólo vigentes, del tipo dado, compartidos + los de ESA organización. */
+export async function modelosParaElegir(userAccountId: string, organizationId: string, kind: EquipmentKind) {
+  const orgs = await organizacionesVisibles(userAccountId, VER);
+  const propios = orgs.includes(organizationId)
+    ? await enLista({ kind, retiredAt: null, organizationId })
+    : [];
+  const compartidos = await enLista({ kind, retiredAt: null, organizationId: null });
+  return { compartidos, propios };
+}
+
+export async function modeloParaFicha(userAccountId: string, modelId: string) {
+  const orgs = await organizacionesVisibles(userAccountId, VER);
+  const m = await prisma.equipmentModel.findFirst({
+    where: { id: modelId, ...filtroVisible(orgs) },
+    include: {
+      organization: { select: { name: true } },
+      specs: { where: { retiredAt: null }, orderBy: [{ displayOrder: "asc" }, { quantity: "asc" }] },
+      equipment: { where: { organizationId: { in: orgs } }, select: { id: true, name: true }, orderBy: { name: "asc" } },
+    },
+  });
+  if (!m) throw new ModeloError("modelo_no_encontrado");
+  return m;
+}
+export type FichaDeModelo = Awaited<ReturnType<typeof modeloParaFicha>>;
+
+export async function puedeEditarModelo(userAccountId: string, modelId: string): Promise<boolean> {
+  const m = await prisma.equipmentModel.findUnique({ where: { id: modelId }, select: { organizationId: true } });
+  if (!m) return false;
+  try {
+    await requireEntradaDeCatalogoAccess(userAccountId, m, GESTIONAR);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function puedeCrearCompartido(userAccountId: string): Promise<boolean> {
+  try {
+    await requireCatalogoAccess(userAccountId, { tipo: "compartido" }, GESTIONAR);
+    return true;
+  } catch {
+    return false;
+  }
+}
