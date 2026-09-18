@@ -230,6 +230,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/intervenciones.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Registrar y corregir una intervención fitosanitaria (Tarea 5, spec 2026-09-18)."
+    },
+    {
       "archivo": "lib/traceability/plantingCohorts.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
@@ -514,6 +518,10 @@
     {
       "archivo": "lib/apiary/hives.ts",
       "razon": "`crearColocacionInicial` recibe el `tx` del llamador en vez de abrir el suyo porque la colmena y su colocación son UN hecho: una colmena guardada sin la fila que dice dónde está es exactamente el estado que ADR-135 viene a impedir, y medido el 2026-09-15 eran 10 de 29 colmenas reales. Escribe una sola fila en `apiary.hive_placement` y no consulta nada: no puede leer de más aunque reciba el cliente entero. Sus tres llamadores son `createHive` —que autoriza con requireApiaryAccess(\"manage\") antes de abrir la transaccion— y los guiones de datos, que corren con la base delante."
+    },
+    {
+      "archivo": "lib/traceability/intervenciones.ts",
+      "razon": "`crearAreas`/`crearLineasDeIntervencion` son ayudantes PRIVADOS del mismo módulo, nunca exportados: sólo los llama `registrarIntervencion`/`corregirIntervencion`, que ya resolvieron `requireLotAccess(\"manage\")` sobre la parcela ANTES de abrir la transacción. Reciben el `tx` para que la intervención, sus áreas, sus líneas y el descuento del frasco se confirmen juntos — la misma razón que `recordColonyEvent` (lib/apiary/colonyEvents.ts, sin cliente de transacción explícito por no factorizar su cuerpo en un ayudante aparte)."
     }
   ],
   "operaciones_sin_patron": [
