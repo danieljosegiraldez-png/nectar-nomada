@@ -11,6 +11,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import type { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../lib/db";
 import { ubicacionesEmparentadas } from "../../lib/traceability/ubicacionesEmparentadas";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -84,5 +85,29 @@ describe("ubicacionesEmparentadas", () => {
   it("un ciclo de parentLocationId termina", async () => {
     const r = await ubicacionesEmparentadas(cicloX);
     expect(new Set(r)).toEqual(new Set([cicloX, cicloY]));
+  });
+
+  it("subir corta el ciclo pronto: no gasta las 12 vueltas del tope", async () => {
+    // El resultado final da igual con o sin la guarda `vistos.has(padre)` al
+    // subir — el tope de 12 y el `Set` idempotente convergen al mismo par—,
+    // así que lo único que demuestra que la guarda hace algo es CONTAR: sin
+    // ella, cicloX↔cicloY se recorre las 12 vueltas enteras.
+    let llamadas = 0;
+    // Cliente acotado: delega en `prisma` y sólo añade el contador sobre
+    // `findUnique`, que es lo único que el ascenso llama. Nada de mocks de
+    // módulo — es el mismo cliente real, envuelto.
+    const contador = {
+      location: {
+        findUnique: (args: Prisma.LocationFindUniqueArgs) => {
+          llamadas += 1;
+          return prisma.location.findUnique(args);
+        },
+        findMany: (args: Prisma.LocationFindManyArgs) => prisma.location.findMany(args),
+      },
+    } as unknown as Prisma.TransactionClient;
+
+    const r = await ubicacionesEmparentadas(cicloX, contador);
+    expect(new Set(r)).toEqual(new Set([cicloX, cicloY]));
+    expect(llamadas).toBeLessThanOrEqual(3);
   });
 });
