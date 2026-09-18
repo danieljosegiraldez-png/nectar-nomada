@@ -121,6 +121,9 @@ describe("cambiar la configuración de una caja", () => {
     await prisma.auditEvent.deleteMany({
       where: assertDefinedWhere({ actorUserAccountId: { in: [userAccountId, sinAccesoUserAccountId] } }),
     });
+    // Los intervalos de artefacto (Tarea 3 de artefactos): marcar el excluidor abre uno, y su
+    // FK a la colmena y a la inspección es RESTRICT. Van antes que las dos.
+    await prisma.hiveFitting.deleteMany({ where: assertDefinedWhere({ hive: { locationId } }) });
     await prisma.inspection.deleteMany({ where: assertDefinedWhere({ colonyId: { in: ids } }) });
     await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: { in: ids } }) });
     // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado

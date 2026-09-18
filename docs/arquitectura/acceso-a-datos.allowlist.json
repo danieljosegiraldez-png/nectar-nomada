@@ -484,6 +484,10 @@
   ],
   "reciben_transaccion": [
     {
+      "archivo": "lib/apiary/artefactos.ts",
+      "razon": "Artefactos de colmena: el UNICO escritor de los intervalos y de la foto en Hive. `abrirIntervaloEn`, `cerrarIntervaloEn` y `cerrarAbiertosEn` devuelven un cierre que recibe el `tx` de quien llama —la inspeccion, el formulario de la caja, la propia pantalla— para que el intervalo, la foto y sus AuditEvent se confirmen en LA MISMA transaccion que la escritura que los declara. Quien llama ya autorizo con requireApiaryAccess; los ayudantes solo tocan hive_fitting y hive de la colmena que reciben."
+    },
+    {
       "archivo": "lib/traceability/reporteDeVisita.ts",
       "razon": "A9.6 — abre su propia transaccion al emitir y al publicar, para que la escritura y su AuditEvent se confirmen juntos. El ayudante `versionIdDe` recibe ese `tx` en vez de importar el cliente: opera dentro de la transaccion que este mismo modulo abrio."
     },

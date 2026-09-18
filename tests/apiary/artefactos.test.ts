@@ -9,7 +9,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
-import { ApiaryAccessError, crearApiario, createHive } from "../../lib/apiary/hives";
+import { ApiaryAccessError, crearApiario, createColony, createHive } from "../../lib/apiary/hives";
+import { recordInspection } from "../../lib/apiary/inspections";
+import { actualizarConfiguracionDeCaja } from "../../lib/apiary/configuracionDeCaja";
 import { artefactosDeColmena, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
 
 const RUN = `art-${Date.now()}`;
@@ -67,6 +69,12 @@ afterEach(async () => {
   const ids = (await prisma.hiveFitting.findMany({ where: assertDefinedWhere({ hiveId: { in: cajas } }), select: { id: true } })).map((f) => f.id);
   if (ids.length) await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: ids } }) });
   await prisma.hiveFitting.deleteMany({ where: assertDefinedWhere({ hiveId: { in: cajas } }) });
+  // La inspección va después: el intervalo la referencia con RESTRICT.
+  const colonias = (await prisma.colony.findMany({ where: assertDefinedWhere({ hiveId: { in: cajas } }), select: { id: true } })).map((c) => c.id);
+  const insp = (await prisma.inspection.findMany({ where: assertDefinedWhere({ colonyId: { in: colonias } }), select: { id: true } })).map((i) => i.id);
+  if (insp.length) await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: insp } }) });
+  await prisma.inspection.deleteMany({ where: assertDefinedWhere({ colonyId: { in: colonias } }) });
+  await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: { in: colonias } }) });
 });
 
 afterAll(async () => {
@@ -169,5 +177,132 @@ describe("el intervalo — qué lleva puesta una colmena y desde cuándo", () =>
     await expect(instalarArtefacto(ajeno, { hiveId, kind: "excluidor", installedAt: hace(1) })).rejects.toThrow(ApiaryAccessError);
     await expect(artefactosDeColmena(ajeno, hiveId)).rejects.toThrow(ApiaryAccessError);
     await expect(instalarArtefacto(operario, { hiveId, kind: "excluidor", installedAt: hace(1) })).resolves.toBeTruthy();
+  }, 20000);
+});
+
+describe("la inspección declara el cambio, que es donde nacen los intervalos", () => {
+  async function colonia() {
+    await cajaNueva();
+    return (
+      await createColony(adminId, { hiveId, originType: "purchased", startedAt: hace(90), provenanceClass: "direct_observation" })
+    ).id;
+  }
+
+  it("declarar el cambio en la inspección abre el intervalo, en la fecha de la inspección", async () => {
+    const colonyId = await colonia();
+    const cuando = hace(2);
+    const i = await recordInspection(operario, {
+      colonyId, outcome: "nothing_unusual", occurredAt: cuando,
+      cambiosDeConfiguracion: [{ kind: "excluidor", accion: "instalado" }],
+    });
+    const f = await prisma.hiveFitting.findFirstOrThrow({ where: { hiveId } });
+    expect(f.kind).toBe("excluidor");
+    expect(f.installedAt.toISOString()).toBe(cuando.toISOString());
+    // El intervalo queda atado a la inspección que lo declaró.
+    expect(f.installedInspectionId).toBe(i.id);
+  }, 20000);
+
+  it("una inspección SIN cambios no toca nada — la captura no cambia", async () => {
+    // El guardia de la instrucción de Daniel. Si esta cae, alguien hizo
+    // obligatorio declarar la configuración en cada visita, que es exactamente
+    // «coste sin información».
+    const colonyId = await colonia();
+    const antes = await prisma.hiveFitting.count({ where: { hiveId } });
+    const h0 = await prisma.hive.findUniqueOrThrow({ where: { id: hiveId } });
+    await recordInspection(operario, { colonyId, outcome: "nothing_unusual" });
+    expect(await prisma.hiveFitting.count({ where: { hiveId } })).toBe(antes);
+    expect((await prisma.hive.findUniqueOrThrow({ where: { id: hiveId } })).queenExcluder).toBe(h0.queenExcluder);
+  }, 20000);
+
+  it("retirar en la inspección cierra el intervalo abierto y lo ata a esa inspección", async () => {
+    const colonyId = await colonia();
+    await instalarArtefacto(operario, { hiveId, kind: "reductor_de_piquera", installedAt: hace(20) });
+    const i = await recordInspection(operario, {
+      colonyId, outcome: "nothing_unusual", occurredAt: hace(1),
+      cambiosDeConfiguracion: [{ kind: "reductor_de_piquera", accion: "retirado" }],
+    });
+    const f = await prisma.hiveFitting.findFirstOrThrow({ where: { hiveId } });
+    expect(f.removedInspectionId).toBe(i.id);
+    expect(await artefactosDeColmena(operario, hiveId)).toHaveLength(0);
+  }, 20000);
+
+  it("si el cambio es inválido, la inspección TAMPOCO se guarda — una sola transacción", async () => {
+    const colonyId = await colonia();
+    const antes = await prisma.inspection.count({ where: { colonyId } });
+    await expect(
+      recordInspection(operario, {
+        colonyId, outcome: "nothing_unusual",
+        cambiosDeConfiguracion: [{ kind: "alza", accion: "instalado" }], // sin cuenta
+      }),
+    ).rejects.toThrow(/cuenta_de_alzas/);
+    expect(await prisma.inspection.count({ where: { colonyId } })).toBe(antes);
+  }, 20000);
+
+  it("un tipo que no existe se rechaza, y el nodo no se declara aquí", async () => {
+    const colonyId = await colonia();
+    await expect(
+      recordInspection(operario, { colonyId, outcome: "nothing_unusual", cambiosDeConfiguracion: [{ kind: "cohete", accion: "instalado" }] }),
+    ).rejects.toThrow(/artefacto_desconocido/);
+    // El nodo tiene identidad y permiso propio: se instala por su pantalla, no con un toque.
+    await expect(
+      recordInspection(operario, { colonyId, outcome: "nothing_unusual", cambiosDeConfiguracion: [{ kind: "nodo_de_sensores", accion: "instalado" }] }),
+    ).rejects.toThrow(/nodo_por_su_pantalla/);
+  }, 20000);
+});
+
+describe("el booleano pasa a ser una caché con un solo escritor", () => {
+  it("instalar un excluidor pone el booleano de la colmena", async () => {
+    await cajaNueva();
+    await instalarArtefacto(operario, { hiveId, kind: "excluidor", installedAt: hace(1) });
+    expect((await prisma.hive.findUniqueOrThrow({ where: { id: hiveId } })).queenExcluder).toBe(true);
+  }, 20000);
+
+  it("retirarlo lo apaga", async () => {
+    await cajaNueva();
+    const a = await instalarArtefacto(operario, { hiveId, kind: "excluidor", installedAt: hace(5) });
+    await retirarArtefacto(operario, { fittingId: a.id, removedAt: hace(1) });
+    expect((await prisma.hive.findUniqueOrThrow({ where: { id: hiveId } })).queenExcluder).toBe(false);
+  }, 20000);
+
+  it("un artefacto que NO tiene booleano no toca los otros — lo no declarado sigue sin declarar", async () => {
+    // ADR-080: un nulo es «nadie miró». Instalar un alimentador no afirma nada del excluidor.
+    await cajaNueva();
+    await instalarArtefacto(operario, { hiveId, kind: "alimentador", installedAt: hace(1) });
+    const h = await prisma.hive.findUniqueOrThrow({ where: { id: hiveId } });
+    expect(h.queenExcluder).toBeNull();
+    expect(h.entranceReducer).toBeNull();
+    expect(h.screenedBottomBoard).toBeNull();
+  }, 20000);
+
+  it("el formulario de la caja ya no escribe el booleano: abre o cierra el intervalo", async () => {
+    // La segunda puerta que había. Marcar «sí» en la configuración es instalar hoy.
+    await cajaNueva();
+    await actualizarConfiguracionDeCaja(operario, { hiveId, queenExcluder: true });
+    expect((await artefactosDeColmena(operario, hiveId)).map((a) => a.kind)).toEqual(["excluidor"]);
+    await actualizarConfiguracionDeCaja(operario, { hiveId, queenExcluder: false });
+    expect(await artefactosDeColmena(operario, hiveId)).toHaveLength(0);
+    expect((await prisma.hive.findUniqueOrThrow({ where: { id: hiveId } })).queenExcluder).toBe(false);
+  }, 20000);
+
+  it("y el booleano NUNCA discrepa del intervalo — el guardia de la caché", async () => {
+    // Una caché con dos escritores es una segunda fuente de verdad disfrazada.
+    // Recorre los tres caminos que escriben y exige que digan lo mismo.
+    await cajaNueva();
+    await instalarArtefacto(operario, { hiveId, kind: "piso_ventilado", installedAt: hace(3) });
+    await actualizarConfiguracionDeCaja(operario, { hiveId, queenExcluder: true, entranceReducer: false });
+    const h = await prisma.hive.findUniqueOrThrow({ where: { id: hiveId } });
+    const puestos = (await artefactosDeColmena(operario, hiveId)).map((a) => a.kind);
+    expect(h.screenedBottomBoard).toBe(puestos.includes("piso_ventilado"));
+    expect(h.queenExcluder).toBe(puestos.includes("excluidor"));
+    expect(h.entranceReducer ?? false).toBe(puestos.includes("reductor_de_piquera"));
+  }, 20000);
+
+  it("cada cambio de la foto queda auditado sobre la colmena, con su antes", async () => {
+    await cajaNueva();
+    await instalarArtefacto(operario, { hiveId, kind: "excluidor", installedAt: hace(1) });
+    const ev = await prisma.auditEvent.findFirst({ where: { entityType: "hive", entityId: hiveId, operation: "hive.fittings_snapshot" } });
+    expect(ev).not.toBeNull();
+    expect((ev!.before as { queenExcluder: boolean | null }).queenExcluder).toBeNull();
+    expect((ev!.after as { queenExcluder: boolean | null }).queenExcluder).toBe(true);
   }, 20000);
 });

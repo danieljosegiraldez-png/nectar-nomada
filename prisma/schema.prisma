@@ -6700,6 +6700,9 @@ model Inspection {
   /// el trabajo de apiario dentro de una jornada.
   fieldEvents FieldEvent[]
 
+  fittingsInstalled HiveFitting[] @relation("HiveFittingInstalledIn")
+  fittingsRemoved   HiveFitting[] @relation("HiveFittingRemovedIn")
+
   @@index([colonyId])
   @@map("inspection")
   @@schema("apiary")
@@ -8769,6 +8772,13 @@ model HiveFitting {
   installedAt DateTime  @map("installed_at")
   /// Nulo = sigue puesta. **No** se rellena con «hoy» al leer.
   removedAt   DateTime? @map("removed_at")
+
+  /// La inspección donde se declaró el cambio, si vino de una — la mitad de la instrucción
+  /// de Daniel: «en la inspección sólo se registra la diferencia». RESTRICT: es evidencia.
+  installedInspectionId String?     @map("installed_inspection_id") @db.Uuid
+  installedInspection   Inspection? @relation("HiveFittingInstalledIn", fields: [installedInspectionId], references: [id], onDelete: Restrict)
+  removedInspectionId   String?     @map("removed_inspection_id") @db.Uuid
+  removedInspection     Inspection? @relation("HiveFittingRemovedIn", fields: [removedInspectionId], references: [id], onDelete: Restrict)
 
   /// El «cuál» de `otro`, y lo que no cabe en el vocabulario.
   notes String?
