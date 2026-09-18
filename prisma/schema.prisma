@@ -6207,6 +6207,7 @@ model Hive {
   placements HivePlacement[]
   cleanings  HiveCleaning[]
   fittings   HiveFitting[]
+  nodeObservations NodeObservation[]
 
   @@unique([locationId, identifier])
   @@index([locationId])
@@ -8825,6 +8826,10 @@ model HiveNode {
   /// El `device_id` que manda el propio aparato: «rp2040-0011223344556677». Único: es la
   /// identidad del REGISTRO, contra la que se contrasta lo que llegue (nunca al revés).
   deviceId        String  @unique @map("device_id")
+  /// El UID del Notecard que la ruta de Notehub trae VERIFICADO. Es la identidad con la que
+  /// se autentica una observación; el `device_id` del cuerpo sólo se contrasta con ella.
+  /// Nulo mientras el nodo no tenga módem: sus datos llegan por USB, no por la ruta.
+  notecardUid     String? @unique @map("notecard_uid")
   hardware        String?
   firmware        String?
   configurationId String? @map("configuration_id")
@@ -8835,7 +8840,8 @@ model HiveNode {
 
   lifecycleStatus EquipmentLifecycle @default(active) @map("lifecycle_status")
 
-  fittings HiveFitting[]
+  fittings     HiveFitting[]
+  observations NodeObservation[]
 
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
@@ -8843,5 +8849,75 @@ model HiveNode {
 
   @@index([organizationId])
   @@map("hive_node")
+  @@schema("apiary")
+}
+
+/// Lo que mandó un nodo, TAL COMO LLEGÓ — spec «artefactos de colmena» §B.3. **Inmutable**: un
+/// disparador de la base rechaza cualquier UPDATE. Recalibrar produce una lectura derivada nueva
+/// (`NodeDerivedReading`), nunca toca esto.
+///
+/// No es `Measurement`: ésa es la medición humana, una variable y un valor. Esto son
+/// observaciones anidadas con crudos, fallos y muestras perdidas, muchas veces al día.
+model NodeObservation {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// La identidad del evento según el aparato. `(deviceId, epoch, seq)` es único: eso da la
+  /// idempotencia que el paquete exige — un acuse perdido produce un duplicado.
+  deviceId String @map("device_id")
+  epoch    String
+  seq      Int
+  eventId  String @map("event_id")
+
+  /// El aparato del REGISTRO que la ruta autenticó — no el que dice el cuerpo.
+  hiveNodeId String   @map("hive_node_id") @db.Uuid
+  hiveNode   HiveNode @relation(fields: [hiveNodeId], references: [id], onDelete: Restrict)
+
+  /// Los TRES tiempos, separados a propósito. `observedAt` nulo es DESCONOCIDO y no se rellena
+  /// con `receivedAt`: el paquete lo prohíbe con esas palabras.
+  observedAt  DateTime? @map("observed_at")
+  receivedAt  DateTime  @default(now()) @map("received_at")
+  timeQuality String    @map("time_quality")
+
+  /// A qué colmena pertenecía EN EL MOMENTO de medirse. Nulo cuando no se pudo resolver —sin
+  /// hora, o sin nodo instalado entonces— y entonces se dice, no se adivina.
+  hiveId String? @map("hive_id") @db.Uuid
+  hive   Hive?   @relation(fields: [hiveId], references: [id], onDelete: Restrict)
+
+  /// El cuerpo entero, sin tocar, y su huella canónica: con ella se distingue el duplicado
+  /// exacto del «mismo id, otro contenido».
+  payload     Json
+  payloadHash String @map("payload_hash")
+
+  faults        Json
+  missedSamples Int @map("missed_samples")
+
+  conflicts NodeObservationConflict[]
+
+  @@unique([deviceId, epoch, seq])
+  @@index([hiveId, observedAt])
+  @@index([hiveNodeId, receivedAt])
+  @@map("node_observation")
+  @@schema("apiary")
+}
+
+/// La cuarentena: un evento con el MISMO id que uno ya guardado y OTRO contenido. No pisa al
+/// primero ni se descarta — se guarda para que una persona decida (paquete: «409 en
+/// cuarentena»).
+model NodeObservationConflict {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  deviceId String @map("device_id")
+  epoch    String
+  seq      Int
+
+  existingObservationId String          @map("existing_observation_id") @db.Uuid
+  existingObservation   NodeObservation @relation(fields: [existingObservationId], references: [id], onDelete: Restrict)
+
+  payload     Json
+  payloadHash String   @map("payload_hash")
+  receivedAt  DateTime @default(now()) @map("received_at")
+
+  @@index([deviceId, epoch, seq])
+  @@map("node_observation_conflict")
   @@schema("apiary")
 }

@@ -29,6 +29,8 @@ export interface RegistrarNodoInput {
   readonly hardware?: string | null;
   readonly firmware?: string | null;
   readonly configurationId?: string | null;
+  /** El UID del Notecard, cuando el nodo tiene módem: la identidad con que la ruta lo autentica. */
+  readonly notecardUid?: string | null;
 }
 
 export async function registrarNodo(userAccountId: string, input: RegistrarNodoInput) {
@@ -50,6 +52,7 @@ export async function registrarNodo(userAccountId: string, input: RegistrarNodoI
           hardware: input.hardware?.trim() || null,
           firmware: input.firmware?.trim() || null,
           configurationId: input.configurationId?.trim() || null,
+          notecardUid: input.notecardUid?.trim() || null,
           createdBy: userAccountId,
         },
       });
@@ -68,8 +71,9 @@ export async function registrarNodo(userAccountId: string, input: RegistrarNodoI
     });
   } catch (error) {
     // El choque lo decide la BASE (índice único): una comprobación previa tendría carrera.
-    if (error instanceof Error && /device_id/.test(error.message) && /Unique constraint/i.test(error.message)) {
-      throw new ArtefactoInvalido("device_id_ya_registrado");
+    if (error instanceof Error && /Unique constraint/i.test(error.message)) {
+      if (/notecard_uid/.test(error.message)) throw new ArtefactoInvalido("notecard_ya_registrado");
+      if (/device_id/.test(error.message)) throw new ArtefactoInvalido("device_id_ya_registrado");
     }
     throw error;
   }
