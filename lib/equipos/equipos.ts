@@ -29,11 +29,12 @@
  */
 
 import { recordAuditEvent } from "../audit";
+import { organizacionesVisibles } from "../catalogos/propiedad";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { clasificar, resumir } from "./disponibilidad";
 import { dentroDeTolerancia, estadoDeVerificacion, type EstadoDeVerificacion } from "./verificacion";
-import type { ClassificationLevel, EquipmentCondition, EquipmentKind, ProvenanceClass } from "../../generated/prisma/client";
+import { Prisma, type ClassificationLevel, type EquipmentCondition, type EquipmentKind, type ProvenanceClass } from "../../generated/prisma/client";
 
 export class EquipoError extends Error {}
 
@@ -108,7 +109,16 @@ async function equipoOFalla(id: string) {
   return equipo;
 }
 
-export interface RegistrarEquipoInput {
+export interface DatosDeEquipo {
+  modelId?: string | null;
+  serialNumber?: string | null;
+  internalCode?: string | null;
+  supplierOrganizationId?: string | null;
+  /** Campo de día: ya convertido con `fechaDeDia` por quien llama. */
+  warrantyUntil?: Date | null;
+}
+
+export interface RegistrarEquipoInput extends DatosDeEquipo {
   name: string;
   kind: EquipmentKind;
   organizationId: string;
@@ -134,6 +144,35 @@ export interface RegistrarEquipoInput {
   initialLocationId?: string | null;
 }
 
+/**
+ * El modelo elegido tiene que ser compartido o de la MISMA organización, del
+ * mismo tipo, y vigente. La base lo impide también (FK compuesta + disparador);
+ * esto sólo lo dice con una frase legible.
+ */
+async function comprobarModelo(modelId: string | null | undefined, organizationId: string, kind: EquipmentKind) {
+  if (!modelId) return;
+  const m = await prisma.equipmentModel.findUnique({ where: { id: modelId }, select: { organizationId: true, kind: true, retiredAt: true } });
+  if (!m) throw new EquipoError("modelo_no_encontrado");
+  if (m.organizationId !== null && m.organizationId !== organizationId) throw new EquipoError("modelo_no_elegible");
+  if (m.kind !== kind) throw new EquipoError("modelo_de_otro_tipo");
+  if (m.retiredAt) throw new EquipoError("modelo_retirado");
+}
+
+function datosDeEquipoLimpios(d: DatosDeEquipo) {
+  const t = (v: string | null | undefined) => (v?.trim() ? v.trim() : null);
+  return {
+    modelId: d.modelId || null,
+    serialNumber: t(d.serialNumber),
+    internalCode: t(d.internalCode),
+    supplierOrganizationId: d.supplierOrganizationId || null,
+    warrantyUntil: d.warrantyUntil ?? null,
+  };
+}
+
+function esCodigoDuplicado(e: unknown) {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
+}
+
 export async function registrarEquipo(userAccountId: string, input: RegistrarEquipoInput) {
   // Mismo orden que `objetivoDeEquipo`, y por la misma razón: si se dice dónde
   // queda el equipo, el permiso se juzga AHÍ. Sin esto, registrar un
@@ -154,48 +193,127 @@ export async function registrarEquipo(userAccountId: string, input: RegistrarEqu
   if (input.checkAdvisoryHours != null && input.checkAdvisoryHours <= 0) {
     throw new EquipoError("advisory_hours_positivo");
   }
+  await comprobarModelo(input.modelId, input.organizationId, input.kind);
+  const datosNuevos = datosDeEquipoLimpios(input);
 
-  return prisma.$transaction(async (tx) => {
-    const equipo = await tx.equipment.create({
-      data: {
-        name: input.name.trim(),
-        kind: input.kind,
-        organizationId: input.organizationId,
-        projectId: input.projectId ?? null,
-        format: input.format ?? null,
-        isFixedInPlace: input.isFixedInPlace ?? false,
-        classification: clasificacion,
-        provenanceClass: input.provenanceClass,
-        sourceReference: input.sourceReference?.trim() || null,
-        acquiredAt: input.acquiredAt ?? null,
-        acquisitionNote: input.acquisitionNote?.trim() || null,
-        checkAdvisoryHours: input.checkAdvisoryHours ?? null,
-        createdBy: userAccountId,
-      },
-    });
-    if (input.initialLocationId) {
-      await tx.equipmentTransfer.create({
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const equipo = await tx.equipment.create({
         data: {
-          equipmentId: equipo.id,
-          fromLocationId: null,
-          toLocationId: input.initialLocationId,
-          occurredAt: input.acquiredAt ?? new Date(),
+          name: input.name.trim(),
+          kind: input.kind,
+          organizationId: input.organizationId,
+          projectId: input.projectId ?? null,
+          format: input.format ?? null,
+          isFixedInPlace: input.isFixedInPlace ?? false,
+          classification: clasificacion,
+          provenanceClass: input.provenanceClass,
+          sourceReference: input.sourceReference?.trim() || null,
+          acquiredAt: input.acquiredAt ?? null,
+          acquisitionNote: input.acquisitionNote?.trim() || null,
+          checkAdvisoryHours: input.checkAdvisoryHours ?? null,
           createdBy: userAccountId,
+          ...datosNuevos,
         },
       });
-    }
-    await recordAuditEvent(
-      {
-        actorUserAccountId: userAccountId,
-        entityType: "equipment",
-        entityId: equipo.id,
-        operation: "create",
-        sourceInterface: "lib/equipos/equipos.ts",
-        after: { name: equipo.name, kind: equipo.kind, locationId: input.initialLocationId ?? null },
-      },
-      tx,
-    );
-    return equipo;
+      if (input.initialLocationId) {
+        await tx.equipmentTransfer.create({
+          data: {
+            equipmentId: equipo.id,
+            fromLocationId: null,
+            toLocationId: input.initialLocationId,
+            occurredAt: input.acquiredAt ?? new Date(),
+            createdBy: userAccountId,
+          },
+        });
+      }
+      await recordAuditEvent(
+        {
+          actorUserAccountId: userAccountId,
+          entityType: "equipment",
+          entityId: equipo.id,
+          operation: "create",
+          sourceInterface: "lib/equipos/equipos.ts",
+          after: {
+            name: equipo.name,
+            kind: equipo.kind,
+            locationId: input.initialLocationId ?? null,
+            modelId: equipo.modelId,
+            serialNumber: equipo.serialNumber,
+            internalCode: equipo.internalCode,
+            supplierOrganizationId: equipo.supplierOrganizationId,
+            warrantyUntil: equipo.warrantyUntil?.toISOString() ?? null,
+          },
+        },
+        tx,
+      );
+      return equipo;
+    });
+  } catch (e) {
+    if (esCodigoDuplicado(e)) throw new EquipoError("codigo_interno_duplicado");
+    throw e;
+  }
+}
+
+export async function editarDatosDeEquipo(userAccountId: string, equipmentId: string, datos: DatosDeEquipo): Promise<void> {
+  const antes = await prisma.equipment.findUnique({ where: { id: equipmentId } });
+  if (!antes) throw new EquipoError("equipment_not_found");
+  await exigePermiso(userAccountId, "manage", antes);
+  await comprobarModelo(datos.modelId, antes.organizationId, antes.kind);
+  const limpios = datosDeEquipoLimpios(datos);
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.equipment.update({ where: { id: equipmentId }, data: limpios });
+      await recordAuditEvent(
+        {
+          actorUserAccountId: userAccountId,
+          entityType: "equipment",
+          entityId: equipmentId,
+          operation: "update_datos",
+          sourceInterface: "lib/equipos/equipos.ts",
+          before: {
+            modelId: antes.modelId,
+            serialNumber: antes.serialNumber,
+            internalCode: antes.internalCode,
+            supplierOrganizationId: antes.supplierOrganizationId,
+            warrantyUntil: antes.warrantyUntil?.toISOString() ?? null,
+          },
+          after: { ...limpios, warrantyUntil: limpios.warrantyUntil?.toISOString() ?? null },
+        },
+        tx,
+      );
+    });
+  } catch (e) {
+    if (esCodigoDuplicado(e)) throw new EquipoError("codigo_interno_duplicado");
+    throw e;
+  }
+}
+
+/** Un permiso sobre un equipo, para otros módulos (rutinas, documentos). */
+export async function puedeSobreEquipo(
+  userAccountId: string,
+  equipmentId: string,
+  accion: "view" | "manage" | "report_condition",
+): Promise<boolean> {
+  const equipo = await prisma.equipment.findUnique({ where: { id: equipmentId }, select: { id: true, projectId: true, classification: true } });
+  if (!equipo) return false;
+  const objetivo = await objetivoDeEquipo(equipo);
+  if (accion === "manage") return puedeConfigurar(userAccountId, objetivo, equipo.classification);
+  return can(userAccountId, accion, "equipment", objetivo, equipo.classification);
+}
+
+/**
+ * Proveedores para el desplegable: organizaciones de tipo `supplier` aprobadas.
+ * Un proveedor es una entidad canónica (CLAUDE.md §9), no texto. Si no existe,
+ * se da de alta por la vía de organizaciones de siempre: aquí no se crea.
+ */
+export async function proveedoresPosibles(userAccountId: string) {
+  const orgs = await organizacionesVisibles(userAccountId, { resourceType: "equipment", action: "view" });
+  if (orgs.length === 0) return [];
+  return prisma.organization.findMany({
+    where: { organizationType: "supplier", status: "approved" },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
   });
 }
 
