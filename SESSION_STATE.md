@@ -38,6 +38,19 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · `reporteDeProceso.test.ts` dejó de fallar a veces (PR #395)
+
+Fallaba intermitente en el carril con base (`expected 3 to be 1`) y pasaba sola. **El gestor del
+fixture era Platform Admin**, así que el reporte contaba toda la base, incluidos los procesos que
+`lotProcess.test.ts` cierra en paralelo. Ahora es Farm Operator de su plot, y los recuentos de lotes
+son exactos para que la prueba afirme su propio aislamiento. Reproducido con un contaminante
+temporal (antes cae, después 6/6) y flip de la mutación (volver a poner el admin → `56 ≠ 2`).
+**Sin reproducir:** el fallo de «agrupa por grado»; se atribuye a la misma causa, sin medirlo.
+
+Auditadas las otras 21 pruebas que buscan Platform Admin: **ninguna con el defecto hoy**, dos con su
+forma lenta — ver `PENDING_IMPLEMENTATIONS/012`. Lección en `CLAUDE.md`, «Un admin de plataforma ve la
+base compartida entera».
+
 ### 2026-09-18 · El botiquín: vencimiento, custodia, descuento y aviso
 
 Nueve tareas del plan `docs/superpowers/plans/2026-09-17-botiquin.md`, en un PR. El producto lleva
