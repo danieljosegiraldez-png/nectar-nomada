@@ -13,7 +13,13 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import { crearSesionDeCata, listarMuestrasParaCata, SesionDeCataError } from "../../lib/sensory/sessions";
+import {
+  buscarMuestrasParaCata,
+  crearSesionDeCata,
+  LIMITE_BUSQUEDA_MUESTRAS,
+  listarMuestrasParaCata,
+  SesionDeCataError,
+} from "../../lib/sensory/sessions";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `cata-${Date.now()}`;
@@ -168,7 +174,9 @@ describe("crear una sesión de cata", () => {
    * rechazara todas.
    */
   it("lista las muestras que alcanza, y son las suyas", async () => {
-    const suyas = (await listarMuestrasParaCata(gestor)).map((m) => m.id);
+    // Buscando por el RUN y no leyendo la lista: la lista corta en 200 y el admin
+    // la ve entera, así que lo propio saldría el día que otros dejen 200 delante.
+    const suyas = (await buscarMuestrasParaCata(gestor, RUN)).muestras.map((m) => m.id);
     expect(suyas, "control positivo: alcanza las dos que creó").toEqual(expect.arrayContaining([m1, m2]));
   });
 
@@ -239,7 +247,7 @@ describe("listarMuestrasParaCata — el batch de origen", () => {
   });
 
   it("trae el código del batch y la finca de la muestra que sí viene de un lote", async () => {
-    const todas = await listarMuestrasParaCata(gestor);
+    const todas = (await buscarMuestrasParaCata(gestor, RUN)).muestras;
     const mia = todas.find((m) => m.id === muestraConLote);
     expect(mia, "control positivo: la muestra está en la lista").toBeDefined();
     expect(mia!.lotCode).toBe(`PE-TEST-${RUN}`);
@@ -253,11 +261,198 @@ describe("listarMuestrasParaCata — el batch de origen", () => {
    * en null, no en cadena vacía: «no viene de un batch» es un hecho, no un hueco.
    */
   it("deja el batch en null cuando la muestra no viene de ninguno", async () => {
-    const todas = await listarMuestrasParaCata(gestor);
+    const todas = (await buscarMuestrasParaCata(gestor, RUN)).muestras;
     const sinLote = todas.find((m) => m.id === m1);
     expect(sinLote, "control positivo: la muestra sin lote también se lista").toBeDefined();
     expect(sinLote!.lotCode).toBeNull();
     expect(sinLote!.organizationName).toBeNull();
     expect(sinLote!.processGrade).toBeNull();
+  });
+});
+
+/**
+ * **La comprobación de la cata no puede depender de la lista que se enseña.**
+ * Hasta el 2026-09-18 `crearSesionDeCata` aceptaba sólo muestras que salieran en
+ * `listarMuestrasParaCata`, que corta en 200. Pasadas las 200, una muestra
+ * propia se rechazaba con `sample_not_accessible`. Aquí se crean 201 muestras que
+ * ordenan ANTES que la de la prueba, así que la lista no la enseña — y la cata
+ * tiene que aceptarla igual.
+ */
+describe("crear una cata con una muestra que la lista no enseña", () => {
+  let tapon: string[] = [];
+  let lejana: string;
+
+  beforeAll(async () => {
+    await prisma.sample.createMany({
+      data: Array.from({ length: 201 }, (_, i) => ({
+        sampleCode: `0000-TAPON-${RUN}-${String(i).padStart(3, "0")}`,
+        sampleType: "green",
+        organizationId: orgId,
+        locationId: plotId,
+        status: "approved" as const,
+        classification: "internal" as const,
+        createdBy: gestor,
+      })),
+    });
+    tapon = (
+      await prisma.sample.findMany({
+        where: { sampleCode: { startsWith: `0000-TAPON-${RUN}` } },
+        select: { id: true },
+      })
+    ).map((m) => m.id);
+    lejana = (
+      await prisma.sample.create({
+        data: {
+          sampleCode: `ZZZZ-LEJANA-${RUN}`,
+          sampleType: "green",
+          organizationId: orgId,
+          locationId: plotId,
+          status: "approved",
+          classification: "internal",
+          createdBy: gestor,
+        },
+      })
+    ).id;
+  });
+
+  afterAll(async () => {
+    const sesiones = await prisma.sensoryBlindMapping.findMany({
+      where: assertDefinedWhere({ sampleId: lejana }),
+      select: { blindSample: { select: { flight: { select: { sessionId: true } } } } },
+    });
+    await prisma.sensorySession.deleteMany({
+      where: assertDefinedWhere({ id: { in: sesiones.map((m) => m.blindSample.flight.sessionId) } }),
+    });
+    await prisma.sample.deleteMany({ where: assertDefinedWhere({ id: { in: [...tapon, lejana] } }) });
+  });
+
+  it("control: la lista inicial NO la enseña", async () => {
+    expect(tapon, "fila patrón: se crearon las 201").toHaveLength(201);
+    const ids = (await listarMuestrasParaCata(gestor)).map((m) => m.id);
+    expect(ids).not.toContain(lejana);
+  });
+
+  it("y aun así la cata la acepta", async () => {
+    const s = await crearSesionDeCata(gestor, { name: `Lejana ${RUN}`, protocolVersionId: versionOk, muestras: [lejana] });
+    expect(s.id).toBeTruthy();
+  });
+
+  it("y la búsqueda la encuentra por su código", async () => {
+    const { muestras } = await buscarMuestrasParaCata(gestor, `LEJANA-${RUN}`);
+    expect(muestras.map((m) => m.id)).toEqual([lejana]);
+  });
+
+  it("una búsqueda con más resultados que el límite lo dice", async () => {
+    const r = await buscarMuestrasParaCata(gestor, `TAPON-${RUN}`);
+    expect(r.muestras).toHaveLength(LIMITE_BUSQUEDA_MUESTRAS);
+    expect(r.hayMas).toBe(true);
+  });
+});
+
+/**
+ * La búsqueda que usa la pantalla para elegir muestras de sitios distintos.
+ * Encuentra por código de muestra, código de batch y nombre de finca — y nunca
+ * devuelve una muestra que la cuenta no puede ver.
+ */
+describe("buscarMuestrasParaCata", () => {
+  let loteId: string, conLote: string, otroPlot: string, ajena: string;
+  let juez: string;
+
+  beforeAll(async () => {
+    loteId = (
+      await prisma.lot.create({
+        data: {
+          lotCode: `BUSCA-LOTE-${RUN}`,
+          lotType: "cherry",
+          organizationId: orgId,
+          locationId: plotId,
+          status: "approved",
+          classification: "internal",
+          createdBy: gestor,
+        },
+      })
+    ).id;
+    conLote = (
+      await prisma.sample.create({
+        data: {
+          sampleCode: `BUSCA-M-${RUN}`,
+          sampleType: "green",
+          organizationId: orgId,
+          locationId: plotId,
+          sourceLotId: loteId,
+          status: "approved",
+          classification: "internal",
+          createdBy: gestor,
+        },
+      })
+    ).id;
+    // Otra parcela, que el juez NO alcanza.
+    otroPlot = (
+      await prisma.location.create({
+        data: { locationType: "plot", name: `TEST plot ajeno ${RUN}`, organizationId: orgId, status: "approved", classification: "internal" },
+      })
+    ).id;
+    ajena = (
+      await prisma.sample.create({
+        data: {
+          sampleCode: `BUSCA-AJENA-${RUN}`,
+          sampleType: "green",
+          organizationId: orgId,
+          locationId: otroPlot,
+          status: "approved",
+          classification: "internal",
+          createdBy: gestor,
+        },
+      })
+    ).id;
+
+    // Un juez: puede montar catas (Head Judge, en plataforma) y sólo ve las
+    // muestras de SU parcela (Farm Operator sobre `plotId`).
+    juez = await cuenta("Juez");
+    const juezJefe = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Sensory Head Judge" } });
+    const farm = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+    const plataforma = (await prisma.scope.findFirst({ where: { scopeType: "platform" } }))!;
+    await prisma.assignment.create({ data: { userAccountId: juez, roleProfileId: juezJefe.id, scopeId: plataforma.id } });
+    // El ámbito de la parcela ya lo creó el fixture de arriba (`scopeId`): es único por sitio.
+    await prisma.assignment.create({ data: { userAccountId: juez, roleProfileId: farm.id, scopeId } });
+  });
+
+  afterAll(async () => {
+    await prisma.sample.deleteMany({ where: assertDefinedWhere({ id: { in: [conLote, ajena] } }) });
+    await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: loteId }) });
+    await prisma.location.deleteMany({ where: assertDefinedWhere({ id: otroPlot }) });
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: juez }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: juez }) });
+  });
+
+  it("encuentra por código de batch", async () => {
+    const { muestras } = await buscarMuestrasParaCata(gestor, `busca-lote-${RUN}`);
+    expect(muestras.map((m) => m.id)).toEqual([conLote]);
+  });
+
+  it("encuentra por nombre de finca, sin distinguir mayúsculas", async () => {
+    const ids = (await buscarMuestrasParaCata(gestor, `test ${RUN}`.toUpperCase())).muestras.map((m) => m.id);
+    expect(ids).toEqual(expect.arrayContaining([m1, m2, conLote, ajena]));
+  });
+
+  it("control: el admin sí ve la muestra de la otra parcela", async () => {
+    const ids = (await buscarMuestrasParaCata(gestor, `BUSCA-`)).muestras.map((m) => m.id);
+    expect(ids).toEqual(expect.arrayContaining([conLote, ajena]));
+  });
+
+  it("nunca devuelve una muestra que la cuenta no ve", async () => {
+    const ids = (await buscarMuestrasParaCata(juez, `BUSCA-`)).muestras.map((m) => m.id);
+    expect(ids, "control positivo: ve la de su parcela").toContain(conLote);
+    expect(ids).not.toContain(ajena);
+  });
+
+  it("y la cata rechaza esa muestra aunque llegue en el formulario", async () => {
+    await expect(
+      crearSesionDeCata(juez, { name: `Ajena ${RUN}`, protocolVersionId: versionOk, muestras: [ajena] }),
+    ).rejects.toThrow(/sample_not_accessible/);
+  });
+
+  it("sin permiso para montar catas, no busca", async () => {
+    await expect(buscarMuestrasParaCata(sinPermiso, RUN)).rejects.toBeInstanceOf(SesionDeCataError);
   });
 });

@@ -5,7 +5,13 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { submitAssessment, computePanelResult, SensoryAccessError } from "../../lib/sensory/service";
-import { crearSesionDeCata, invitarParticipante, SesionDeCataError } from "../../lib/sensory/sessions";
+import {
+  buscarMuestrasParaCata,
+  crearSesionDeCata,
+  invitarParticipante,
+  SesionDeCataError,
+} from "../../lib/sensory/sessions";
+import { etiquetaDeMuestra } from "../../lib/sensory/muestraEnCata";
 import { registrarInformeExterno, InformeExternoError } from "../../lib/sensory/informeExterno";
 
 export interface SensoryActionState {
@@ -117,6 +123,29 @@ export async function crearSesionDeCataAction(
 }
 
 /** Invitar a alguien a puntuar en una cata. */
+/**
+ * La búsqueda del selector de muestras de una cata. Devuelve etiquetas ya
+ * hechas —la misma `etiquetaDeMuestra` que la página— y `hayMas` para que la
+ * pantalla diga que hay que afinar en vez de callar que cortó.
+ *
+ * El permiso lo pone `buscarMuestrasParaCata`, no esta acción: que la llame un
+ * formulario no la vuelve un control de acceso.
+ */
+export async function buscarMuestrasParaCataAction(
+  texto: string,
+): Promise<{ muestras: { id: string; label: string }[]; hayMas: boolean } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Sensory");
+  try {
+    const r = await buscarMuestrasParaCata(user.userAccountId, String(texto ?? "").slice(0, 100));
+    return { muestras: r.muestras.map((m) => ({ id: m.id, label: etiquetaDeMuestra(m) })), hayMas: r.hayMas };
+  } catch (error) {
+    if (error instanceof SesionDeCataError) return { error: t(`error_${error.message}` as "error_name_required") };
+    throw error;
+  }
+}
+
 export async function invitarParticipanteAction(
   _prevState: SensoryActionState,
   formData: FormData,

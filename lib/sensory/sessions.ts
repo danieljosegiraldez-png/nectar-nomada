@@ -19,7 +19,8 @@ import { prisma } from "../db";
 import { can, CLASSIFICATION_NOT_APPLICABLE } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { scopeTargetsFor } from "../traceability/lots";
-import type { ClassificationLevel, SensoryPurpose, SensorySubject } from "../../generated/prisma/client";
+import { codigoCiego } from "./muestraEnCata";
+import type { ClassificationLevel, Prisma, SensoryPurpose, SensorySubject } from "../../generated/prisma/client";
 
 export class SesionDeCataError extends Error {}
 
@@ -67,48 +68,102 @@ export async function listarMuestrasParaCata(userAccountId: string) {
   // proceso ABIERTO más reciente de ese batch: un batch puede llevar varios
   // procesos en secuencia, y el que describe la muestra es el último, no el
   // primero.
-  const candidatas = await prisma.sample.findMany({
-    select: {
-      id: true,
-      sampleCode: true,
-      sampleType: true,
-      description: true,
-      projectId: true,
-      locationId: true,
-      classification: true,
-      sourceLot: {
-        select: {
-          lotCode: true,
-          organization: { select: { name: true } },
-          lotProcesses: {
-            select: { processGradeValue: { select: { value: true } } },
-            orderBy: { sequenceOrder: "desc" },
-            take: 1,
+  return (await muestrasVisibles(userAccountId, {}, 200)).muestras;
+}
+
+/** Cuántas devuelve como mucho una búsqueda: las que caben leyendo, no todas. */
+export const LIMITE_BUSQUEDA_MUESTRAS = 50;
+
+/**
+ * Buscar muestras para una cata, por código de muestra, código de batch o nombre
+ * de finca, sin distinguir mayúsculas.
+ *
+ * **Por qué existe (Daniel, 2026-09-18):** «un cupping se debe poder seleccionar o
+ * hacer búsquedas y seleccionar varias muestras y a veces no vienen mismo lugar,
+ * lote, finca, parcela». La lista de arriba corta en 200; con esto la pantalla
+ * encuentra cualquier muestra, y combina búsquedas en el navegador.
+ *
+ * `hayMas` dice que la búsqueda tenía más resultados de los que se devuelven:
+ * sin él, 50 resultados se leen como «son todas».
+ */
+export async function buscarMuestrasParaCata(userAccountId: string, texto: string) {
+  await requireManageSession(userAccountId);
+  const t = texto.trim();
+  const where: Prisma.SampleWhereInput = t
+    ? {
+        OR: [
+          { sampleCode: { contains: t, mode: "insensitive" } },
+          { sourceLot: { lotCode: { contains: t, mode: "insensitive" } } },
+          { sourceLot: { organization: { name: { contains: t, mode: "insensitive" } } } },
+          { organization: { name: { contains: t, mode: "insensitive" } } },
+        ],
+      }
+    : {};
+  return muestrasVisibles(userAccountId, where, LIMITE_BUSQUEDA_MUESTRAS);
+}
+
+export type MuestraParaCata = Awaited<ReturnType<typeof listarMuestrasParaCata>>[number];
+
+/**
+ * Las primeras `limite` muestras visibles que cumplen `where`, por código.
+ *
+ * La visibilidad se decide muestra a muestra (`puedeVerMuestra`), así que se lee
+ * por tandas hasta tener `limite + 1` visibles o acabar la tabla. Antes se leían
+ * 500 filas y se filtraba: con más de 500 invisibles delante, una visible no
+ * salía nunca.
+ */
+async function muestrasVisibles(userAccountId: string, where: Prisma.SampleWhereInput, limite: number) {
+  const TANDA = 200;
+  const visibles = [];
+  for (let saltar = 0; visibles.length <= limite; saltar += TANDA) {
+    const tanda = await prisma.sample.findMany({
+      where,
+      select: {
+        id: true,
+        sampleCode: true,
+        sampleType: true,
+        description: true,
+        projectId: true,
+        locationId: true,
+        classification: true,
+        sourceLot: {
+          select: {
+            lotCode: true,
+            organization: { select: { name: true } },
+            lotProcesses: {
+              select: { processGradeValue: { select: { value: true } } },
+              orderBy: { sequenceOrder: "desc" },
+              take: 1,
+            },
           },
         },
       },
-    },
-    orderBy: { sampleCode: "asc" },
-    take: 500,
-  });
-
-  const visibles = [];
-  for (const m of candidatas) {
-    if (await puedeVerMuestra(userAccountId, m)) visibles.push(m);
-    if (visibles.length >= 200) break;
+      orderBy: [{ sampleCode: "asc" }, { id: "asc" }],
+      skip: saltar,
+      take: TANDA,
+    });
+    for (const m of tanda) {
+      if (await puedeVerMuestra(userAccountId, m)) visibles.push(m);
+      if (visibles.length > limite) break;
+    }
+    if (tanda.length < TANDA) break;
   }
-  return visibles.map(({ id, sampleCode, sampleType, description, sourceLot }) => ({
-    id,
-    sampleCode,
-    sampleType,
-    description,
-    // Null, no cadena vacía: una muestra externa no tiene batch de origen
-    // (`recordExternalCoffeeSample` deja `sourceLotId` sin poner a propósito), y
-    // eso es un hecho distinto de «no lo sé».
-    lotCode: sourceLot?.lotCode ?? null,
-    organizationName: sourceLot?.organization?.name ?? null,
-    processGrade: sourceLot?.lotProcesses[0]?.processGradeValue?.value ?? null,
-  }));
+  const hayMas = visibles.length > limite;
+  return {
+    hayMas,
+    muestras: visibles.slice(0, limite).map(({ id, sampleCode, sampleType, description, sourceLot }) => ({
+      id,
+      sampleCode,
+      sampleType,
+      description,
+      // Null, no cadena vacía: una muestra externa no tiene batch de origen
+      // (`recordExternalCoffeeSample` deja `sourceLotId` sin poner a propósito), y
+      // eso es un hecho distinto de «no lo sé».
+      lotCode: sourceLot?.lotCode ?? null,
+      organizationName: sourceLot?.organization?.name ?? null,
+      processGrade: sourceLot?.lotProcesses[0]?.processGradeValue?.value ?? null,
+    })),
+  };
 }
 
 /** `view` o `manage`, sobre cualquiera de los ámbitos concretos de la muestra. */
@@ -162,22 +217,6 @@ export interface CrearSesionInput {
   preparationMethod?: string | null;
 }
 
-/**
- * Códigos ciegos: A, B, C… en el orden dado, y **no barajados**.
- *
- * Deliberado y con su límite dicho: el juez sólo ve el código, así que el orden
- * no le filtra nada. Quien SÍ podría deducir el mapeo es quien vea la lista de
- * muestras con la que se creó la sesión — y ése es el head judge, que puede ver
- * el mapeo de todos modos (`blind_mapping:view`). Barajar sería mejor práctica y
- * es una línea, pero cambia lo que significa el código para quien prepara la
- * mesa; no se decide desde aquí.
- */
-function codigoCiego(indice: number): string {
-  const letras = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  if (indice < letras.length) return letras[indice]!;
-  return `${letras[Math.floor(indice / letras.length) - 1]}${letras[indice % letras.length]}`;
-}
-
 export async function crearSesionDeCata(userAccountId: string, input: CrearSesionInput) {
   await requireManageSession(userAccountId);
 
@@ -201,10 +240,17 @@ export async function crearSesionDeCata(userAccountId: string, input: CrearSesio
   // puntuar. Hay cinco así en producción, todos `TEST`.
   if (version.attributes.length === 0) throw new SesionDeCataError("protocol_has_no_attributes");
 
-  // Las muestras deben ser de las que esta cuenta alcanza. Comprobarlo contra la
-  // misma lista que se le ofreció, y no confiar en lo que llegue del formulario:
-  // el `select` de una pantalla no es un control de acceso.
-  const alcanzables = new Set((await listarMuestrasParaCata(userAccountId)).map((m) => m.id));
+  // Las muestras deben ser de las que esta cuenta alcanza, y no se confía en lo
+  // que llegue del formulario: las casillas de una pantalla no son un control de
+  // acceso. **Se comprueba cada muestra por su id, no contra la lista que se
+  // ofreció**: esa lista corta en 200, y hasta el 2026-09-18 una muestra propia
+  // que quedaba fuera se rechazaba aquí como ajena.
+  const pedidas = await prisma.sample.findMany({
+    where: { id: { in: input.muestras } },
+    select: { id: true, projectId: true, locationId: true, classification: true },
+  });
+  const alcanzables = new Set<string>();
+  for (const m of pedidas) if (await puedeVerMuestra(userAccountId, m)) alcanzables.add(m.id);
   const ajenas = input.muestras.filter((id) => !alcanzables.has(id));
   if (ajenas.length > 0) throw new SesionDeCataError("sample_not_accessible");
 

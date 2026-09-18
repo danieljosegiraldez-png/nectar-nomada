@@ -38,6 +38,17 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · Buscar y combinar muestras al montar una cata
+
+Decisión de Daniel: «un cupping se debe poder … hacer búsquedas y seleccionar varias muestras y a veces
+no vienen mismo lugar, lote, finca, parcela». «Nueva cata» busca por código de muestra, batch o finca,
+y **la selección sobrevive a cada búsqueda**. El orden de selección decide el código ciego, y la
+pantalla enseña la letra — el texto de ayuda ya lo prometía y **no era verdad**: el orden era el de la
+pantalla. **Y un defecto de camino:** `crearSesionDeCata` comprobaba las muestras contra la lista que
+corta en 200, así que pasadas las 200 rechazaba una muestra propia. Ahora comprueba cada una por id.
+Flips de las dos cosas. **Sin verificar en navegador** —hace falta sesión—. Cierra
+`PENDING_IMPLEMENTATIONS/012`.
+
 ### 2026-09-18 · Dividir un lote de miel
 
 ADR-162. `split` ya existía y conserva masa; faltaba la pantalla. De dos a seis partes, cada una un

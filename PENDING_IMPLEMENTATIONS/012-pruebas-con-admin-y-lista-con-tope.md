@@ -1,6 +1,6 @@
 # 012 · Pruebas que ven toda la base y afirman sobre una lista con tope
 
-**Estado: dos de tres hechos el 2026-09-18** —la fuga de `limpiezaDeCaja` y `meliponario`; queda `crearSesion`, que no se puede arreglar desde la prueba (ver «Arreglo»). Encontrado el 2026-09-18 auditando las pruebas que
+**Estado: hecho el 2026-09-18**, los tres —`limpiezaDeCaja` y `meliponario` en el PR #402; `crearSesion` con el buscador de muestras de cata, que quitó el tope del producto (ver «Arreglo»). Encontrado el 2026-09-18 auditando las pruebas que
 buscan el perfil Platform Admin, después de arreglar `reporteDeProceso.test.ts`
 (PR #395; la causa está en `CLAUDE.md`, «Un admin de plataforma ve la base
 compartida entera»). **Ninguna falla hoy**: son la forma lenta del defecto, y
@@ -38,12 +38,17 @@ asignación. **Crece con cada corrida.** Muestras: 8, lejos del tope.
 - **`meliponario.test.ts` — hecho.** La lista la lee un lector con Farm Operator
   sólo sobre los dos sitios, y la aserción es exacta. Flip-test: volver a leer con
   el admin → cae «los dos salen en la lista» con **65 sitios en vez de 2**.
-- **`crearSesion.test.ts` — sin hacer, y no se puede desde la prueba.**
-  `listarMuestrasParaCata` exige `sensory:manage_session`, que sólo existe en
-  ámbito de plataforma: quien la llama **ve todas las muestras siempre**. El tope
-  está en el producto (`take: 500` por código y 200 visibles, en
-  `lib/sensory/sessions.ts`), no en el fixture. Hoy hay 8 muestras. Arreglarlo es
-  decidir cómo pagina esa lista.
+- **`crearSesion.test.ts` — hecho, arreglando el producto.** La prueba no podía
+  aislarse: `listarMuestrasParaCata` exige un permiso que sólo existe en ámbito de
+  plataforma, y el tope estaba en el producto. Y el tope hacía más daño que en la
+  prueba: **`crearSesionDeCata` comprobaba las muestras contra esa misma lista
+  cortada**, así que pasadas las 200 rechazaba como ajena una muestra propia.
+  Daniel pidió buscar y combinar búsquedas (una cata junta muestras de sitios,
+  lotes y fincas distintos): `buscarMuestrasParaCata` y el selector de la
+  pantalla; la comprobación va ahora muestra a muestra por id; y las pruebas
+  buscan por su RUN. Flips: volver a comprobar contra la lista → cae «y aun así
+  la cata la acepta»; buscar sin filtrar visibilidad → cae «nunca devuelve una
+  muestra que la cuenta no ve».
 
 ## De paso, sin relación con el admin
 
