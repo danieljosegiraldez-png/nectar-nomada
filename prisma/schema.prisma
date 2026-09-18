@@ -297,6 +297,9 @@ model UserAccount {
   consumableLotsCreated ConsumableLot[] @relation("ConsumableLotCreatedBy")
   consumableStockEventsCreated ConsumableStockEvent[] @relation("ConsumableStockEventCreatedBy")
   consumableCustodiesCreated ConsumableCustody[] @relation("ConsumableCustodyCreatedBy")
+  /// ADR-163
+  storeAllocationsAssigned StoreAllocation[] @relation("StoreAllocationAssignedBy")
+  storeAllocationsReceived StoreAllocation[] @relation("StoreAllocationReceivedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -1579,6 +1582,8 @@ model ProductVariant {
 
   cartItems  CartItem[]
   orderItems OrderItem[]
+  /// ADR-163 — lo que llega de un lote envasado. Sólo lo RECIBIDO suma al inventario.
+  storeAllocations StoreAllocation[]
 
   @@index([productId])
   @@map("product_variant")
@@ -3096,6 +3101,8 @@ model Lot {
   @@index([rejectionCategoryValueId])
   @@map("lot")
   @@schema("traceability")
+  /// ADR-163
+  storeAllocations StoreAllocation[] @relation("StoreAllocationLot")
 }
 
 /// ADR-161 -- los actos de procesar miel. Vocabulario fijo con «otro, ¿cual?» (Daniel).
@@ -8683,4 +8690,36 @@ model ConsumableCustody {
   @@index([consumableLotId, desde])
   @@map("consumable_custody")
   @@schema("traceability")
+}
+
+/// ADR-163 -- envases de un lote envasado asignados a la tienda, y su recepcion.
+///
+/// **Dos actos y no uno** (Daniel, 2026-09-18): no todo lo envasado va a la tienda de Nectar
+/// Nomada. Despues de envasar se ASIGNA una cantidad a una variante; en la tienda alguien
+/// CONFIRMA lo que llego, y solo entonces sube el inventario. Asignar no toca la tienda.
+model StoreAllocation {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// El lote ENVASADO del que salen los envases (sale de una transformacion `packaging`).
+  lotId            String         @map("lot_id") @db.Uuid
+  lot              Lot            @relation("StoreAllocationLot", fields: [lotId], references: [id], onDelete: Restrict)
+  productVariantId String         @map("product_variant_id") @db.Uuid
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  unitsAssigned    Int            @map("units_assigned")
+  /// El DIA en que se asigno (medianoche UTC).
+  assignedAt       DateTime       @map("assigned_at")
+  assignedBy       String         @map("assigned_by") @db.Uuid
+  assigner         UserAccount    @relation("StoreAllocationAssignedBy", fields: [assignedBy], references: [id], onDelete: Restrict)
+  /// La recepcion: las tres van juntas o ninguna (CHECK). Menos de lo asignado exige nota.
+  receivedAt       DateTime?      @map("received_at")
+  receivedBy       String?        @map("received_by") @db.Uuid
+  receiver         UserAccount?   @relation("StoreAllocationReceivedBy", fields: [receivedBy], references: [id], onDelete: Restrict)
+  unitsReceived    Int?           @map("units_received")
+  receiptNote      String?        @map("receipt_note")
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  @@index([lotId])
+  @@index([productVariantId])
+  @@index([receivedAt])
+  @@map("store_allocation")
+  @@schema("commerce")
 }

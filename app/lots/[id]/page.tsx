@@ -45,6 +45,8 @@ import { HarvestSourcesForm } from "../../components/traceability/HarvestSources
 import type { LabourEntry } from "../../../generated/prisma/client";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { DividirMielForm, EnvasarMielForm, ProcesarMielForm } from "../../components/apiary/PasosDeMielForm";
+import { AsignarATiendaForm } from "../../components/commerce/TiendaForms";
+import { asignacionesDeLote, variantesParaAsignar } from "../../../lib/commerce/tienda";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +61,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
 
   const t = await getTranslations("Traceability");
   const tMiel = await getTranslations("Apiary");
+  const tTienda = await getTranslations("Tienda");
 
   let detail;
   try {
@@ -257,6 +260,10 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   // ADR-161 — un lote de MIEL no fermenta, no se seca ni tiene proceso de café: se procesa y se
   // envasa. Ofrecerle los botones del café era invitar a registrar algo que no existe.
   const esMiel = lot.lotType === "honey";
+  // ADR-163 — sólo un lote que SALIÓ de un envasado tiene envases que asignar a la tienda.
+  // `getLotDetail` ya autorizó este lote; las dos lecturas trabajan sobre su id.
+  const tienda = esMiel ? await asignacionesDeLote(lot.id) : null;
+  const variantesTienda = tienda && puedeRegistrar && tienda.libres > 0 ? await variantesParaAsignar() : [];
   const selectionCatalogs = canSelect ? await getSelectionCatalogs() : null;
   // Los códigos que ya cuelgan de este batch, para que la pantalla sugiera el
   // siguiente libre y no uno que abortaría la transacción.
@@ -478,6 +485,36 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               <EnvasarMielForm lotId={lot.id} />
               <h3 id="dividir-miel">{tMiel("mielDividirTitulo")}</h3>
               <DividirMielForm lotId={lot.id} />
+            </>
+          ) : null}
+
+          {/* ADR-163 — a la tienda. Asignar no toca el inventario: lo sube la recepción. */}
+          {tienda ? (
+            <>
+              <h3 id="a-la-tienda">{tTienda("loteTitulo")}</h3>
+              <p className="nn-muted">{tTienda("loteResumen", { envases: tienda.envases, asignados: tienda.asignados, libres: tienda.libres })}</p>
+              {tienda.filas.length > 0 ? (
+                <ul>
+                  {tienda.filas.map((f) => (
+                    <li key={f.id}>
+                      {f.assignedAt.toISOString().slice(0, 10)} ·{" "}
+                      {tTienda("pendienteFila", {
+                        envases: f.unitsAssigned,
+                        producto: f.productVariant.product.name,
+                        variante: f.productVariant.variantName ?? f.productVariant.sku,
+                      })}{" "}
+                      ·{" "}
+                      {f.receivedAt
+                        ? tTienda("recibidaFila", { n: f.unitsReceived ?? 0, fecha: f.receivedAt.toISOString().slice(0, 10) }) +
+                          (f.receiptNote ? ` — ${f.receiptNote}` : "")
+                        : tTienda("esperandoRecepcion")}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {puedeRegistrar && tienda.libres > 0 ? (
+                <AsignarATiendaForm lotId={lot.id} variantes={variantesTienda} libres={tienda.libres} />
+              ) : null}
             </>
           ) : null}
         </section>

@@ -120,7 +120,9 @@ describe("el inventario del router", () => {
     // botiquín. CUARTA vez que dos sesiones suben la cifra al mismo número con
     // pantallas distintas: la rama decía 83 y, rebasada sobre /finca, se MIDIÓ
     // sobre el árbol resuelto: 74 páginas y 10 handlers.
-    expect(salida).toContain("84 entradas");
+    // 84 → 85 el 2026-09-18: /tienda — la tienda por dentro, recepciones y variantes (ADR-163).
+    // 75 páginas y 10 handlers, medido sobre el árbol de la rama.
+    expect(salida).toContain("85 entradas");
     expect(codigo, salida).toBe(0);
   });
 
