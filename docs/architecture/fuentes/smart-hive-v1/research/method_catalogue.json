@@ -1,0 +1,232 @@
+{
+  "version": "1.0",
+  "methods": [
+    {
+      "id": "P01",
+      "name": "Site, cohort and net qualification",
+      "study_ids": [
+        "C09",
+        "C12",
+        "M01",
+        "M02"
+      ],
+      "prerequisites": "Eligible unopened cohort, crop identity, qualified mesh and microclimate comparison",
+      "required_records": "allocation; baseline; mesh/material lot; flower denominator; net integrity",
+      "interpretation_guard": "Microclimate/ingress uncertainty or untrackable denominator blocks interpretation.",
+      "inventory_ids": [
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E05",
+        "E06",
+        "E11",
+        "E12",
+        "E28"
+      ],
+      "status": "proposed_local_workflow",
+      "crop_specific_sop_required": true
+    },
+    {
+      "id": "P02",
+      "name": "Open versus excluded floral access",
+      "study_ids": [
+        "C01",
+        "C02",
+        "C07",
+        "K09"
+      ],
+      "prerequisites": "Randomized matched units; bags before access; explicit pollen/insect permeability",
+      "required_records": "access intervals; breaches; initial and final fruit outcomes",
+      "interpretation_guard": "Different mesh changes the causal contrast; pollinator-specific claims require validated exclusion.",
+      "inventory_ids": [
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E05",
+        "E11",
+        "E12",
+        "E34"
+      ],
+      "status": "proposed_local_workflow",
+      "crop_specific_sop_required": true
+    },
+    {
+      "id": "P03",
+      "name": "Single-visit effectiveness",
+      "study_ids": [
+        "C03",
+        "C11",
+        "K13"
+      ],
+      "prerequisites": "Unvisited receptive flower; witnessed single visit; immediate re-isolation; matched no-visit and hand-cross controls",
+      "required_records": "visit; floral contact; isolation; pollen or fruit outcome",
+      "interpretation_guard": "Two visitors or uncertain prior access invalidates single-visit label; destructive pollen cohort separate.",
+      "inventory_ids": [
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E11",
+        "E12",
+        "E18",
+        "E19",
+        "E20",
+        "E23",
+        "E34"
+      ],
+      "status": "proposed_local_workflow",
+      "crop_specific_sop_required": true
+    },
+    {
+      "id": "P04",
+      "name": "Controlled self/cross pollen supplementation",
+      "study_ids": [
+        "K02",
+        "K03",
+        "K05",
+        "K06",
+        "K10",
+        "M03"
+      ],
+      "prerequisites": "Verified recipient and donor; trained operator; crop-specific isolation and timing SOP",
+      "required_records": "donor_recipient; pollen transfer time; dose proxy; early set; final harvest; labor",
+      "interpretation_guard": "Do not generalize genotype thresholds or call anther count a measured pollen-grain dose.",
+      "inventory_ids": [
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E05",
+        "E11",
+        "E12",
+        "E18",
+        "E19",
+        "E20",
+        "E23",
+        "E34"
+      ],
+      "status": "proposed_local_workflow",
+      "crop_specific_sop_required": true
+    },
+    {
+      "id": "P05",
+      "name": "Scheduled video and visitor annotation",
+      "study_ids": [
+        "K12",
+        "K13",
+        "K15",
+        "M04",
+        "C16"
+      ],
+      "prerequisites": "Validated object-plane optics; schedule/detection audit; no artificial access changes",
+      "required_records": "clip; usable effort; taxon; confidence; behavior; provenance",
+      "interpretation_guard": "Video detection supports presence/behavior, not automatically effective pollination or colony attribution.",
+      "inventory_ids": [
+        "E04",
+        "E05",
+        "E06",
+        "E11",
+        "E12",
+        "E13",
+        "E14",
+        "E15",
+        "E16",
+        "E17",
+        "E28",
+        "E33",
+        "E34"
+      ],
+      "status": "proposed_local_workflow",
+      "crop_specific_sop_required": false
+    },
+    {
+      "id": "P06",
+      "name": "Habitat or colony intervention",
+      "study_ids": [
+        "C14",
+        "C15",
+        "K04",
+        "K07",
+        "K11",
+        "X01"
+      ],
+      "prerequisites": "Independent treatment/control units; spillover assessment; baseline and concurrent controls",
+      "required_records": "intervention; colony/substrate metadata; management; weather; harvest; labor",
+      "interpretation_guard": "Near/far alone or before/after alone may confound effects; no pathogen-bearing substrate deployment by default.",
+      "inventory_ids": [
+        "E04",
+        "E05",
+        "E11",
+        "E12",
+        "E13",
+        "E26",
+        "E27",
+        "E28"
+      ],
+      "status": "proposed_local_workflow",
+      "crop_specific_sop_required": false
+    },
+    {
+      "id": "P07",
+      "name": "Specimen, pollen and compatibility verification",
+      "study_ids": [
+        "C11",
+        "K02",
+        "K12",
+        "K13",
+        "K14",
+        "M03"
+      ],
+      "prerequisites": "Lab agreement, sampling authorization, chain-of-custody and nondestructive/destructive allocation",
+      "required_records": "specimen; preservation; microscopy; viable pollen; taxonomic review",
+      "interpretation_guard": "Preservation can change pollen evidence; separate observed and inferred identity.",
+      "inventory_ids": [
+        "E04",
+        "E06",
+        "E11",
+        "E12",
+        "E18",
+        "E21",
+        "E22",
+        "E23",
+        "E24",
+        "E25"
+      ],
+      "status": "proposed_local_workflow",
+      "crop_specific_sop_required": true
+    },
+    {
+      "id": "P08",
+      "name": "Fruit fate, harvest, economics and quality",
+      "study_ids": [
+        "C07",
+        "C09",
+        "C13",
+        "K01",
+        "K05",
+        "K07",
+        "X01"
+      ],
+      "prerequisites": "Defined cohort, ripeness, independent replicate, calibrated balance and processing rule",
+      "required_records": "fruit transitions; harvested mass/count; seed processing; sensory; costs",
+      "interpretation_guard": "Early set and mature yield are separate; retained fruit is not necessarily marketable yield.",
+      "inventory_ids": [
+        "E04",
+        "E07",
+        "E08",
+        "E09",
+        "E10",
+        "E11",
+        "E12",
+        "E29",
+        "E30",
+        "E31",
+        "E32"
+      ],
+      "status": "proposed_local_workflow",
+      "crop_specific_sop_required": false
+    }
+  ]
+}

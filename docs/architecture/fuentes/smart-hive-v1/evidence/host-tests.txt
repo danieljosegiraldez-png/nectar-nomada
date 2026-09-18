@@ -1,0 +1,61 @@
+test_arbitrary_remote_code_rejected (test_core.ConfigTests) ... ok
+test_bool_interval_rejected (test_core.ConfigTests) ... ok
+test_cloud_without_product (test_core.ConfigTests) ... ok
+test_epoch_required (test_core.ConfigTests) ... ok
+test_nan_gain (test_core.ConfigTests) ... ok
+test_offline_default (test_core.ConfigTests) ... ok
+test_audio_dc_removed (test_core.SensorTests) ... ok
+test_audio_rms (test_core.SensorTests) ... ok
+test_bad_fit (test_core.SensorTests) ... ok
+test_climate_limits (test_core.SensorTests) ... ok
+test_crc_corruption (test_core.SensorTests) ... ok
+test_crc_reference (test_core.SensorTests) ... ok
+test_negative_polarity (test_core.SensorTests) ... ok
+test_nonfinite_fit (test_core.SensorTests) ... ok
+test_pressure_analytic_vector (test_core.SensorTests) ... ok
+test_pressure_bad_trim (test_core.SensorTests) ... ok
+test_scale_fit (test_core.SensorTests) ... ok
+test_short_read (test_core.SensorTests) ... ok
+test_spike_filter (test_core.SensorTests) ... ok
+test_uncalibrated (test_core.SensorTests) ... ok
+test_ack_removes_only_selected (test_core.StorageTests) ... ok
+test_both_states_bad_fail_closed (test_core.StorageTests) ... ok
+test_corrupt_blocks_transfer (test_core.StorageTests) ... ok
+test_crc_bitflip (test_core.StorageTests) ... ok
+test_cut_before_record_rename (test_core.StorageTests) ... ok
+test_full_preserves_old (test_core.StorageTests) ... ok
+test_one_state_copy_bad_does_not_reuse_ack_id (test_core.StorageTests) ... ok
+test_partial_temp_ignored (test_core.StorageTests) ... ok
+test_reboot_monotonic (test_core.StorageTests) ... ok
+test_error_not_success (test_core.TransportTests) ... ok
+test_fragmented_ack (test_core.TransportTests) ... ok
+test_noise_ignored (test_core.TransportTests) ... ok
+test_short_write (test_core.TransportTests) ... ok
+test_stale_ack_ignored (test_core.TransportTests) ... ok
+test_timeout_quarantines (test_core.TransportTests) ... ok
+test_unknown_ack_keeps_journal (test_core.TransportTests) ... ok
+test_custody_failure_retains_local (test_cycle.CycleTests) ... ok
+test_custody_success_deletes_local (test_cycle.CycleTests) ... ok
+test_failed_sensor_is_null_but_committed (test_cycle.CycleTests) ... ok
+test_log_failure_does_not_clear_inspection (test_cycle.CycleTests) ... ok
+test_low_battery_skips_sensors_and_disables_sync (test_cycle.CycleTests) ... ok
+test_off_to_on_restores_sync_policy (test_cycle.CycleTests) ... ok
+test_offline_commit_no_enqueue_and_off (test_cycle.CycleTests) ... ok
+test_three_incomplete_boots_recovery_mode (test_cycle.CycleTests) ... ok
+
+----------------------------------------------------------------------
+Ran 44 tests in 8.283s
+
+OK
+DELIVERY DEFERRED network unavailable
+CYCLE rp2040-0101010101010101 committed True faults ['WEIGHT_UNCALIBRATED']
+CYCLE rp2040-0101010101010101 committed True faults ['WEIGHT_UNCALIBRATED']
+CYCLE rp2040-0101010101010101 committed True faults ['weight:HX_TIMEOUT']
+LOGGING FAULT JOURNAL_FULL
+CYCLE rp2040-0101010101010101 committed False faults ['WEIGHT_UNCALIBRATED']
+CYCLE rp2040-0101010101010101 committed True faults ['BATTERY_CRITICAL_OR_UNKNOWN']
+CYCLE rp2040-0101010101010101 committed True faults ['WEIGHT_UNCALIBRATED']
+CYCLE rp2040-0101010101010101 committed True faults ['WEIGHT_UNCALIBRATED']
+CYCLE rp2040-0101010101010101 committed True faults ['WEIGHT_UNCALIBRATED']
+CYCLE rp2040-0101010101010101 committed True faults ['WEIGHT_UNCALIBRATED']
+CYCLE rp2040-0101010101010101 committed True faults ['REBOOT_RECOVERY_MODE']

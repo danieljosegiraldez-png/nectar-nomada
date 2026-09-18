@@ -1,0 +1,553 @@
+{
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "nn.hive.observation/1"
+    },
+    "device_id": {
+      "type": "string",
+      "pattern": "^rp2040-[0-9a-f]{16}$"
+    },
+    "epoch": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "ts": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1704067200,
+          "maximum": 4102444799
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "time_quality": {
+      "enum": [
+        "unknown",
+        "notecard"
+      ]
+    },
+    "boot": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "uptime_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "hardware": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "firmware": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "configuration_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "reset_cause": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "observations": {
+      "type": "object",
+      "properties": {
+        "battery": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "raw_u16": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                "mv": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 6600
+                }
+              },
+              "required": [
+                "raw_u16",
+                "mv"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inspection": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "open": {
+                  "type": "boolean"
+                },
+                "latched": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "open",
+                "latched"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "weight": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "raw": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -8388607,
+                    "maximum": 8388606
+                  },
+                  "minItems": 9,
+                  "maxItems": 32
+                },
+                "raw_filtered": {
+                  "type": "number"
+                },
+                "mad_counts": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "retained": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 32
+                },
+                "kg": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "lb": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "calibration_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "spread_kg": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "raw",
+                "raw_filtered",
+                "mad_counts",
+                "retained",
+                "kg",
+                "lb",
+                "calibration_id"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "brood": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "raw_t": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                "raw_rh": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                "t_c": {
+                  "type": "number",
+                  "minimum": -45,
+                  "maximum": 130
+                },
+                "rh_pct": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                }
+              },
+              "required": [
+                "raw_t",
+                "raw_rh",
+                "t_c",
+                "rh_pct"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ambient": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "raw_t": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                "raw_rh": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                "t_c": {
+                  "type": "number",
+                  "minimum": -45,
+                  "maximum": 130
+                },
+                "rh_pct": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                }
+              },
+              "required": [
+                "raw_t",
+                "raw_rh",
+                "t_c",
+                "rh_pct"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pressure": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "raw_p": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 16777215
+                },
+                "raw_t": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 16777215
+                },
+                "trim": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "minItems": 21,
+                  "maxItems": 21
+                },
+                "pa": {
+                  "type": "number",
+                  "minimum": 30000,
+                  "maximum": 125000
+                },
+                "die_t_c": {
+                  "type": "number",
+                  "minimum": -40,
+                  "maximum": 85
+                }
+              },
+              "required": [
+                "raw_p",
+                "raw_t",
+                "trim",
+                "pa",
+                "die_t_c"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "accel": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "mean_raw": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "n": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000
+                },
+                "rate_hz": {
+                  "const": 100
+                },
+                "xyz_g": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -16,
+                    "maximum": 16
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "ac_rms_g": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "peak_total_g": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "tilt_deg": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 180
+                }
+              },
+              "required": [
+                "mean_raw",
+                "n",
+                "rate_hz",
+                "xyz_g",
+                "ac_rms_g",
+                "peak_total_g",
+                "tilt_deg"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "light": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "raw": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65534
+                },
+                "lux": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "raw",
+                "lux"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "audio": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "n": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65536
+                },
+                "rate_hz": {
+                  "const": 16000
+                },
+                "rms_fs": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "peak_fs": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "clipped": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65536
+                },
+                "dc_fs": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "n",
+                "rate_hz",
+                "rms_fs",
+                "peak_fs",
+                "clipped",
+                "dc_fs"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "battery",
+        "inspection",
+        "weight",
+        "brood",
+        "ambient",
+        "pressure",
+        "accel",
+        "light",
+        "audio"
+      ],
+      "additionalProperties": false
+    },
+    "faults": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 140
+      },
+      "minItems": 0,
+      "maxItems": 32
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "minItems": 0,
+      "maxItems": 16
+    },
+    "missed_samples": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "schema",
+    "device_id",
+    "epoch",
+    "seq",
+    "event_id",
+    "ts",
+    "time_quality",
+    "boot",
+    "uptime_ms",
+    "hardware",
+    "firmware",
+    "configuration_id",
+    "reset_cause",
+    "observations",
+    "faults",
+    "events",
+    "missed_samples"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:nectar-nomada:hive:observation:1",
+  "title": "Smart Hive Node observation v1",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "time_quality": {
+            "const": "unknown"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ts": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "ts": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  ]
+}

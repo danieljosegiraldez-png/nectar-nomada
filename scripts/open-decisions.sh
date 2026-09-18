@@ -72,7 +72,10 @@ probar "P-B" "www.nectarnomada.com expone el OS (/login, /signup) en la URL de m
    [ -n "$cuerpo" ] || exit 2;
    printf "%s" "$cuerpo" | grep -q "href=\"/login\""'
 
-# P-F · Tres guías de proceso -pH, Brix, subproductos- entraron el 2026-09-13 en
+# P-F · CORREGIDO EL 2026-09-17: eran tres guías y son CINCO. Las dos nuevas -Varroa y
+# Meliponini (ADR-158)- tienen la misma forma: umbrales y dosis sin fuente citada.
+#
+# Tres guías de proceso -pH, Brix, subproductos- entraron el 2026-09-13 en
 # docs/dominio/ redactadas por un modelo a partir de indicaciones de Daniel y SIN
 # que él las repase. Traen matrices de umbrales con pinta de norma y frases como
 # "PELIGRO: lave el café de inmediato". Mientras sigan sin revisar, ninguna

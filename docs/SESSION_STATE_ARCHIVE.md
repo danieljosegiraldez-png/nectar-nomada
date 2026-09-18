@@ -3784,3 +3784,26 @@ añadir ninguna» daba **dos** vocabularios, no uno corto.
 **Lo que impide la recaída:** el guardia pasa con sólo las dos divergencias de modelado, y una
 prueba nueva compara el vocabulario **con el archivo del protocolo**, no con una lista propia.
 
+
+### 2026-09-17 · La valoración del técnico, por el cierre de la visita
+
+ADR-154. El Anexo E pide «Valoración» y el mapa la daba por sin sitio con la razón escrita: «`note`
+es la nota de campo; mezclarlas perdería cuál se escribió con el guante puesto». Son dos columnas
+porque son **dos momentos**. Y es el **único** campo de etapa cierre de la inspección: los otros
+dieciséis son de campo.
+
+**La decisión: no se le inventa un cierre a la inspección.** `Inspection` no tiene ni `completedAt`
+ni ventana; `FieldSession` sí, con sus reglas ya distinguidas entre sí. Así que la puerta es la
+visita, y el enlace ya existía —`FieldEvent` une sesión e inspección—.
+
+**Una inspección sin visita se acepta y el servicio lo dice** (`sin_visita`): negarlo dejaría esa
+valoración sin poder escribirse nunca. **El audit lleva el ANTES**, porque saber desde qué se cambió
+una lectura del técnico es parte de poder sostenerla.
+
+**Un desajuste declarado y NO arreglado:** el protocolo marca esta pregunta `interpretation` y la
+fila está estampada `direct_observation`. **Ya pasaba con `probableCause` y `recommendation`, y
+ADR-142 no lo dijo.** Son los tres únicos items con procedencia declarada. Arreglarlo bien exige
+decidir si una interpretación merece fila propia, y eso es pieza aparte.
+
+**Los huecos del protocolo bajan de tres a dos:** `site_condition` y `moisture_pct`.
+

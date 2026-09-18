@@ -1,0 +1,2 @@
+PASS: 24 Python sources parse; JSON loads; schema references and Markdown links resolve; manifest checked if present.
+Full JSON Schema/OpenAPI standards validation not performed: optional validator unavailable in authoring environment.

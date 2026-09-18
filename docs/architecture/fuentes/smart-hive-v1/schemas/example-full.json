@@ -1,0 +1,126 @@
+{
+  "schema": "nn.hive.observation/1",
+  "device_id": "rp2040-0011223344556677",
+  "epoch": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "seq": 7,
+  "event_id": "rp2040-0011223344556677:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:7",
+  "ts": 1789516800,
+  "time_quality": "notecard",
+  "boot": 8,
+  "uptime_ms": 500,
+  "hardware": "V1-P1",
+  "firmware": "1.0.0-rc1",
+  "configuration_id": "local-1",
+  "reset_cause": 1,
+  "observations": {
+    "battery": {
+      "raw_u16": 36739,
+      "mv": 3700
+    },
+    "inspection": {
+      "open": false,
+      "latched": true
+    },
+    "weight": {
+      "raw": [
+        245600,
+        245600,
+        245600,
+        245600,
+        245600,
+        245600,
+        245600,
+        245600,
+        245600,
+        245600,
+        245600,
+        245600,
+        245600,
+        245600,
+        245600
+      ],
+      "raw_filtered": 245600,
+      "mad_counts": 0,
+      "retained": 15,
+      "kg": 50,
+      "lb": 110.231,
+      "calibration_id": "TEST-CAL",
+      "spread_kg": 0
+    },
+    "brood": {
+      "raw_t": 29000,
+      "raw_rh": 42000,
+      "t_c": 32.441,
+      "rh_pct": 64.088
+    },
+    "ambient": {
+      "raw_t": 28000,
+      "raw_rh": 40000,
+      "t_c": 29.769,
+      "rh_pct": 61.036
+    },
+    "pressure": {
+      "raw_p": 2560000,
+      "raw_t": 13107200,
+      "trim": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "pa": 100000,
+      "die_t_c": 25
+    },
+    "accel": {
+      "mean_raw": [
+        0,
+        0,
+        256
+      ],
+      "n": 100,
+      "rate_hz": 100,
+      "xyz_g": [
+        0,
+        0,
+        0.9984
+      ],
+      "ac_rms_g": 0.01,
+      "peak_total_g": 1.02,
+      "tilt_deg": 0
+    },
+    "light": {
+      "raw": 1200,
+      "lux": 1000
+    },
+    "audio": {
+      "n": 8192,
+      "rate_hz": 16000,
+      "rms_fs": 0.001,
+      "peak_fs": 0.005,
+      "clipped": 0,
+      "dc_fs": 0.0001
+    }
+  },
+  "faults": [
+    "SYNTHETIC_VALUES_NOT_A_CALIBRATION_VECTOR"
+  ],
+  "events": [],
+  "missed_samples": 0
+}
