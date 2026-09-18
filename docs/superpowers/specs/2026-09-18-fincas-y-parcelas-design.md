@@ -1,6 +1,6 @@
 # Fincas y parcelas: elegir la finca, y crear fincas, parcelas y microparcelas desde la app
 
-**Estado:** borrador para revisión de Daniel, 2026-09-18.
+**Estado:** aprobado por Daniel el 2026-09-18 («aprobado, escribe el plan y constrúyelo»).
 
 ## 1. Lo que pidió Daniel
 
@@ -25,10 +25,12 @@ Respuestas del 2026-09-18:
   - Una `Location` de tipo `plot` también, sólo por script o seed.
   - Desde la app se crean `beneficio` y `drying_facility` (`location:create_site`, bajo un sitio
     que ya existe) y `apiary_site`.
-- **Microparcela:** existe `createMicrolot` en `lib/traceability/locations.ts:228`, que exige un
-  padre `plot`. Ninguna pantalla la llama.
+- **Microparcela:** existe `createMicrolot` en `lib/traceability/locations.ts:228`, que ninguna
+  pantalla llama. **Copia el tipo del padre**: una microparcela bajo una parcela es otra
+  `plot`, hija de la primera y con su `subdivisionReason` (altitud, sombra, pendiente u otro).
+  El tipo `micro_plot` existe en el esquema, pero nada lo crea.
 - **El modelo ya tiene la jerarquía.** Organización → `Location site` (el terreno de la finca) →
-  `plot` → `micro_plot`, por `parentLocationId`. No hace falta ninguna tabla nueva.
+  `plot` → `plot` hija (la microparcela), por `parentLocationId`. No hace falta ninguna tabla nueva.
 - **No hay selector.**
   - `/plots` y el formulario de cosecha (`/lots/new`) pintan todas las parcelas del usuario
     mezcladas; salen de `getManageableContext`, que no recibe finca.
@@ -48,7 +50,8 @@ Respuestas del 2026-09-18:
   `estate` con un `site` al que tiene acceso, más la entrada «Ver todas».
   - El administrador ve también las **organizaciones de finca sin terreno**, marcadas «sin
     terreno · crearlo». Es el caso de Kiva Estate hoy.
-- Elegir una finca guarda su `site` en una cookie de sesión (`finca`). «Ver todas» la borra.
+- Elegir una finca guarda su `site` en una cookie de sesión (`finca`). «Ver todas» guarda `todas`:
+  borrarla haría que cada página volviera a preguntar.
 - **`/finca`, `/plots` y `/lots/new`**:
   - Sin elección y con varias fincas, mandan a `/fincas`.
   - Con una sola finca, la eligen solos.
@@ -82,8 +85,9 @@ Respuestas del 2026-09-18:
     beneficio, así que el Farm Manager lo tiene y el Farm Operator no, sin tocar roles.
   - Su descripción en el catálogo cambia de «hoy, un beneficio» a «un beneficio, una
     instalación o una parcela».
-- **Microparcela.** En la ficha de la parcela, «Nueva microparcela» (nombre) llama a
-  `createMicrolot`, que ya existe con su permiso.
+- **Microparcela.** En la ficha de la parcela, «Nueva microparcela» pide nombre y motivo
+  (altitud, sombra, pendiente u otro, con nota si es otro). Llama a `createMicrolot`, que ya
+  existe con su permiso (`location:manage_attributes` sobre la parcela).
 - **Nombres:** no se repiten dentro del mismo padre, sin distinguir mayúsculas ni espacios.
   Dos fincas sí pueden tener cada una su «Lote 1».
 
@@ -91,10 +95,11 @@ Respuestas del 2026-09-18:
 
 - El selector de parcela de `/lots/new` enseña **sólo las parcelas de la finca elegida**, y
   debajo de cada una sus microparcelas.
-- Una cosecha puede ir a una parcela **o a una microparcela**. Hoy `recordHarvestEvent`
-  **no comprueba el tipo** del `locationId` (`lib/traceability/harvest.ts`): lo único que la
-  limita a parcelas es la lista del formulario. Se añade la comprobación en el servicio (sólo
-  `plot` o `micro_plot`), para que no dependa de la pantalla.
+- Una cosecha puede ir a una parcela **o a una microparcela**. Las dos son `plot`, así que la
+  lista ya las incluye; se ordenan con cada microparcela debajo de su parcela.
+- Hoy `recordHarvestEvent` **no comprueba el tipo** del `locationId`
+  (`lib/traceability/harvest.ts`): lo único que la limita a parcelas es la lista del formulario.
+  Se añade la comprobación en el servicio (sólo `plot`), para que no dependa de la pantalla.
 
 ## 4. Fuera de esto
 
@@ -112,5 +117,5 @@ Respuestas del 2026-09-18:
 - Crear una finca escribe la organización, el terreno y el `AuditEvent` en la misma transacción:
   si una falla, no queda ninguna.
 - Un nombre de parcela repetido en la misma finca se rechaza. El mismo nombre en otra finca, no.
-- Una cosecha sobre una microparcela de la finca elegida se registra. Sobre una de otra finca,
-  no.
+- Una cosecha sobre una microparcela se registra. Sobre un beneficio o sobre el sitio de la
+  finca, el servicio la rechaza.
