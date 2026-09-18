@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { PERMISSIONS, ROLE_PROFILES } from "../../lib/rbac/catalog";
-import { LocationAccessError, LocationValidationError, createMicrolot, updateLocationAttributes } from "../../lib/traceability/locations";
+import { LocationAccessError, LocationValidationError, createMicrolot, exigeEditarBeneficioEnOrganizacion, updateLocationAttributes } from "../../lib/traceability/locations";
 import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadasDelSitio";
 import { actualizarBeneficio } from "../../lib/traceability/beneficios";
 import { actualizarUbicacionDeSecado, crearUbicacionDeSecado } from "../../lib/traceability/instalaciones";
@@ -76,6 +76,22 @@ async function conceder(userAccountId: string) {
   await prisma.assignmentPermissionOverride.create({
     data: { assignmentId: asignacion.id, permissionId: permiso.id, effect: "grant", reason: "TEST concesión de editar beneficio" },
   });
+}
+/** Cuenta Platform Admin propia, de ámbito de plataforma — el control positivo
+ *  de las guardias sobre `exigeEditarBeneficioEnOrganizacion`. Se asigna sobre
+ *  un Scope de plataforma YA EXISTENTE (no es único: la base compartida tiene
+ *  muchos); nunca se crea ni se borra ese Scope, sólo esta cuenta. */
+async function cuentaPlatformAdmin() {
+  const personId = randomUUID();
+  await prisma.person.create({ data: { id: personId, givenName: "TEST", familyName: "EditarBeneficio", displayName: personId } });
+  personIds.push(personId);
+  const userAccountId = randomUUID();
+  await prisma.userAccount.create({ data: { id: userAccountId, personId, status: "active", authProvider: "credentials" } });
+  accountIds.push(userAccountId);
+  const roleProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Platform Admin" } });
+  const scope = await prisma.scope.findFirstOrThrow({ where: { scopeType: "platform" } });
+  await prisma.assignment.create({ data: { userAccountId, scopeId: scope.id, roleProfileId: roleProfile.id } });
+  return userAccountId;
 }
 
 afterEach(async () => {
@@ -251,17 +267,6 @@ describe("recetas (crear, editar, publicar)", () => {
     return { name, organizationId, targets: unTarget };
   };
 
-  /** Concede a una cuenta YA existente una asignación Farm Manager adicional
-   *  sobre otro ámbito, sin crear una cuenta nueva. Reutiliza el Scope si ya
-   *  existe, igual que `cuenta()`. */
-  async function tambienGestiona(userAccountId: string, scopeType: "location" | "project", scopeRefId: string) {
-    const roleProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Manager" } });
-    const existente = await prisma.scope.findFirst({ where: { scopeType, scopeRefId } });
-    const scope = existente ?? await prisma.scope.create({ data: { id: randomUUID(), scopeType, scopeRefId } });
-    if (!existente) scopeIds.push(scope.id);
-    await prisma.assignment.create({ data: { userAccountId, scopeId: scope.id, roleProfileId: roleProfile.id } });
-  }
-
   it("un capataz NO crea una receta de su organización; un Farm Manager sí", async () => {
     const { org, finca } = await fincaConLote();
     const capataz = await cuenta(finca.id, "Farm Operator");
@@ -296,22 +301,40 @@ describe("recetas (crear, editar, publicar)", () => {
     await conceder(capataz);
     await expect(createRecipeVersion(capataz, creada.id, unTarget)).resolves.toBeDefined();
   });
+});
 
-  it("una receta compartida (sin organización) no la crea un Farm Manager de finca", async () => {
-    const { finca } = await fincaConLote();
+describe("exigeEditarBeneficioEnOrganizacion (guardia compartida por las recetas)", () => {
+  const orgIds: string[] = [];
+  afterEach(async () => {
+    await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
+    orgIds.length = 0;
+  });
+
+  it("una organización sin ninguna Location propia rechaza a un Farm Manager de otro sitio; un Platform Admin sí pasa", async () => {
+    // El caso que forzó el respaldo de plataforma en
+    // exigeEditarBeneficioEnOrganizacion: una organización con lotes pero SIN
+    // ninguna Location — como las de recipeAuthoring.test.ts y
+    // recipeVersions.test.ts — deja `lugares` vacío, así que el bucle nunca
+    // corre `can()` ni una vez. Sin el respaldo, ni siquiera un Platform Admin
+    // pasaría.
+    const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
+    orgIds.push(org.id);
+    const otroSitio = await sitio();
+    const jefe = await cuenta(otroSitio.id, "Farm Manager");
+    await expect(exigeEditarBeneficioEnOrganizacion(jefe, org.id)).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    // Control positivo: el mismo camino, con un Platform Admin de ámbito de
+    // plataforma.
+    const admin = await cuentaPlatformAdmin();
+    await expect(exigeEditarBeneficioEnOrganizacion(admin, org.id)).resolves.toBeUndefined();
+  });
+
+  it("una receta compartida (sin organización) no la configura un Farm Manager de finca", async () => {
+    const finca = await sitio();
     const jefe = await cuenta(finca.id, "Farm Manager");
-    // Para `organizationId: null`, `createRecipeWithVersion` busca el gate de
-    // `requireLotAccess` en CUALQUIER lote de la base compartida (línea ~330
-    // de processTargets.ts) — no en uno del jefe. Sin dársela, el jefe cae
-    // antes de llegar a la guardia bajo prueba, con `no_lot_access` de
-    // `requireLotAccess`, no con `no_beneficio_edit_access`. Se le concede la
-    // MISMA asignación (Farm Manager, ámbito de ubicación) sobre el lugar de
-    // ese lote arbitrario — nunca ámbito de plataforma, que es justo lo que
-    // el guardia bajo prueba exige y lo que este jefe no tiene.
-    const cualquierLote = await prisma.lot.findFirst({ where: {} });
-    if (cualquierLote?.locationId) await tambienGestiona(jefe, "location", cualquierLote.locationId);
-    else if (cualquierLote?.projectId) await tambienGestiona(jefe, "project", cualquierLote.projectId);
-    await expect(createRecipeWithVersion(jefe, receta(null)))
-      .rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    await expect(exigeEditarBeneficioEnOrganizacion(jefe, null)).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    // Control positivo: el mismo camino, con un Platform Admin de ámbito de
+    // plataforma.
+    const admin = await cuentaPlatformAdmin();
+    await expect(exigeEditarBeneficioEnOrganizacion(admin, null)).resolves.toBeUndefined();
   });
 });
