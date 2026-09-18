@@ -12,6 +12,7 @@ import { crearMaterial } from "../../lib/inventario/materiales";
 import { recibirLote } from "../../lib/inventario/lotes";
 import { registrarConsumo } from "../../lib/inventario/existencias";
 import { listarInventario } from "../../lib/inventario/lista";
+import { moverACustodia } from "../../lib/inventario/custodia";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
@@ -52,6 +53,7 @@ afterAll(async () => {
   const lotes = await prisma.consumableLot.findMany({ where: { materialId }, select: { id: true } });
   const ids = lotes.map((l) => l.id);
   await prisma.consumableStockEvent.deleteMany({ where: assertDefinedWhere({ consumableLotId: { in: ids } }) });
+  await prisma.consumableCustody.deleteMany({ where: assertDefinedWhere({ consumableLotId: { in: ids } }) });
   await prisma.consumableLot.deleteMany({ where: assertDefinedWhere({ id: { in: ids } }) });
   await prisma.consumableMaterial.deleteMany({ where: assertDefinedWhere({ organizationId }) });
   const personas = await prisma.person.findMany({ where: { displayName: { contains: RUN_ID } }, select: { id: true } });
@@ -107,5 +109,20 @@ describe("la lista del inventario", () => {
     const n = lotes.find((l) => l.batchLabel === `NEG-${RUN_ID}`)!;
     expect(n.requiereReconciliacion).toBe(true);
     expect(n.quantity).toBe(-3);
+  }, 20000);
+
+  it("cada lote trae su vencimiento y su custodia vigente — y sin fecha dice SIN_FECHA, no vigente", async () => {
+    const venc = await recibirLote(gestorA, { locationId: sitioA, materialId, batchLabel: `VEN-${RUN_ID}`, quantity: 1, unit: "quintal", expiresAt: new Date("2020-01-01T00:00:00Z") });
+    await recibirLote(gestorA, { locationId: sitioA, materialId, batchLabel: `SF-${RUN_ID}`, quantity: 1, unit: "quintal" });
+    const persona = await prisma.person.findFirstOrThrow({ where: { displayName: { contains: RUN_ID } } });
+    await moverACustodia(gestorA, { consumableLotId: venc.id, locationId: sitioA, responsiblePersonId: persona.id, desde: new Date() });
+
+    const lotes = (await listarInventario(gestorA)).flatMap((m) => m.lotes);
+    const v = lotes.find((l) => l.batchLabel === `VEN-${RUN_ID}`)!;
+    expect(v.vencimiento.estado).toBe("VENCIDO");
+    expect(v.custodia).toEqual({ sitio: `TEST Bodega A (${RUN_ID})`, responsable: persona.displayName });
+    const sf = lotes.find((l) => l.batchLabel === `SF-${RUN_ID}`)!;
+    expect(sf.vencimiento).toEqual({ estado: "SIN_FECHA" });
+    expect(sf.custodia).toBeNull();
   }, 20000);
 });

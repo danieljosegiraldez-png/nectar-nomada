@@ -444,6 +444,26 @@
     {
       "archivo": "lib/inventario/lista.ts",
       "razon": "Lista del inventario. Filtra CADA LOTE por su propio ambito —su ubicacion, que es el ancla de RBAC— con lot:view, igual que listarEquipos filtra cada equipo. Un lote sin ubicacion cae a plataforma: lo desconocido se cierra."
+    },
+    {
+      "archivo": "lib/inventario/custodia.ts",
+      "razon": "Custodia de un frasco (donde esta y quien responde). Mover exige lot:manage sobre el sitio de DESTINO; leer la vigente, lot:view sobre donde esta. Cierra la anterior y abre la nueva en una transaccion, con su AuditEvent y el ANTES."
+    },
+    {
+      "archivo": "lib/inventario/etiqueta.ts",
+      "razon": "Foto de la etiqueta del frasco. Pedir y finalizar exigen lot:manage sobre el sitio del frasco (plataforma si no tiene); finalizar exige ademas que la clave sea de la carpeta de ESE frasco, y crea el Asset con su AuditEvent en una transaccion."
+    },
+    {
+      "archivo": "lib/inventario/frascosParaTratar.ts",
+      "razon": "Selector de frasco del formulario de tratamiento. Filtra CADA frasco con lot:manage sobre su sitio (plataforma si no tiene) —la misma compuerta con la que recordColonyEvent descuenta—, asi que sólo ofrece lo que quien mira puede usar. Sólo lectura."
+    },
+    {
+      "archivo": "lib/inventario/avisos.ts",
+      "razon": "Aviso del botiquin (vencido o por vencer). Filtra CADA frasco con lot:manage sobre donde ESTA —su custodia vigente, o donde se recibio; plataforma si no tiene ninguna—, asi que nadie ve el botiquin de un sitio que no atiende. Sólo lectura."
+    },
+    {
+      "archivo": "lib/inventario/recepcion.ts",
+      "razon": "Recepcion del botiquin. Las opciones filtran CADA sitio con lot:manage y dicen si ademas tiene equipment:manage; los productos salen sólo de las fincas de esos sitios. completarProducto exige equipment:manage sobre un sitio de la MISMA finca que el producto, sólo rellena huecos y escribe con su AuditEvent y el ANTES en una transaccion."
     }
   ],
   "reciben_transaccion": [

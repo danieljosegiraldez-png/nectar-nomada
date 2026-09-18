@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AvisosDeBotiquin } from "../components/inventario/AvisosDeBotiquin";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { getApiaryList } from "../../lib/apiary/hives";
@@ -93,6 +94,7 @@ export default async function ApiariesPage() {
       <span className="nn-badge">{t("badge")}</span>
       <h1>{t("apiariesTitle")}</h1>
       <p className="nn-muted">{t("apiariesIntro")}</p>
+      <AvisosDeBotiquin userAccountId={user.userAccountId} />
 
       {/* La puerta que faltaba: hasta el 2026-09-09 no habia forma de crear un
           apiario desde la aplicacion, solo colmenas dentro de uno que ya

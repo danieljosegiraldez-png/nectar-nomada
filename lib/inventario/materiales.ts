@@ -21,6 +21,20 @@ export interface CrearMaterialInput {
   readonly category?: string | null;
   readonly notes?: string | null;
   /**
+   * **Los campos del producto como medicamento** — botiquín, Tarea 1. Todos
+   * opcionales: la gallinaza no los tiene, y exigirlos convertiría el alta de un
+   * saco en un formulario de farmacia.
+   */
+  readonly isVeterinaryMedicine?: boolean;
+  readonly manufacturer?: string | null;
+  readonly activeIngredient?: string | null;
+  readonly sanitaryRegistration?: string | null;
+  /** «Aunque sea cero». Nulo = sin declarar. */
+  readonly defaultWithdrawalDays?: number | null;
+  readonly storageConditions?: string | null;
+  readonly safetyNotes?: string | null;
+  readonly avisarDiasAntes?: number | null;
+  /**
    * Dónde se juzga el permiso. Mismo criterio que `registrarEquipo`, y por la
    * misma razón que dice su comentario: si se declara el sitio, el permiso se
    * juzga AHÍ — sin esto, dar de alta «gallinaza» para tu propia finca exigiría
@@ -38,6 +52,17 @@ export async function crearMaterial(userAccountId: string, input: CrearMaterialI
   // **Sin unidad no hay existencias**: una cantidad sin unidad no se puede
   // sumar ni comparar, y guardarla invitaría a sumar sacos con galones.
   if (!defaultUnit) throw new MaterialValidationError("default_unit_required");
+
+  // Los dos días, no negativos. La base lo rechaza igual con su CHECK; aquí
+  // sale una frase legible. Cero SÍ vale: es la carencia «aunque sea cero».
+  for (const [campo, valor] of [
+    ["defaultWithdrawalDays", input.defaultWithdrawalDays],
+    ["avisarDiasAntes", input.avisarDiasAntes],
+  ] as const) {
+    if (valor != null && (!Number.isInteger(valor) || valor < 0)) {
+      throw new MaterialValidationError(`${campo} inválido: ${valor}. Cero es válido; negativo no.`);
+    }
+  }
 
   // **Definir qué es «gallinaza» es un acto de GESTIÓN, no de faena.** Se usa
   // `equipment:manage` —que hoy sólo tiene `Farm Manager`— en vez de inventar un
@@ -65,6 +90,16 @@ export async function crearMaterial(userAccountId: string, input: CrearMaterialI
           defaultUnit,
           category: input.category ?? null,
           notes: input.notes ?? null,
+          // `?? null` y NUNCA `|| null`: con `||`, la carencia CERO declarada se
+          // volvería «sin declarar». Hay una prueba y un flip-test para eso.
+          isVeterinaryMedicine: input.isVeterinaryMedicine ?? false,
+          manufacturer: input.manufacturer?.trim() || null,
+          activeIngredient: input.activeIngredient?.trim() || null,
+          sanitaryRegistration: input.sanitaryRegistration?.trim() || null,
+          defaultWithdrawalDays: input.defaultWithdrawalDays ?? null,
+          storageConditions: input.storageConditions?.trim() || null,
+          safetyNotes: input.safetyNotes?.trim() || null,
+          avisarDiasAntes: input.avisarDiasAntes ?? null,
           createdBy: userAccountId,
         },
       });

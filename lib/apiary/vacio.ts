@@ -70,6 +70,12 @@ export const CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO = [
    * es exactamente eso: no se sabe, que no es ninguno de los aparatos de la lista.
    */
   "refractometroAparatoSinDecir",
+  /**
+   * «Sin frasco — no descuenta del inventario»: el tratamiento se aplicó sin elegir
+   * frasco del botiquín. Es una respuesta y dice su consecuencia: el enlace es
+   * opcional para siempre (botiquín, Tarea 7), y sin él nada se descuenta.
+   */
+  "treatmentFrascoNinguno",
 ] as const satisfies readonly string[];
 
 export type ClaveDeRespuestaQueValeNinguno = (typeof CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO)[number];

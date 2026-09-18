@@ -141,6 +141,7 @@ model Person {
 
   @@map("person")
   @@schema("core")
+  consumableCustodiesResponsible ConsumableCustody[] @relation("ConsumableCustodyResponsible")
 }
 
 enum UserAccountStatus {
@@ -295,6 +296,7 @@ model UserAccount {
   consumableMaterialsCreated ConsumableMaterial[] @relation("ConsumableMaterialCreatedBy")
   consumableLotsCreated ConsumableLot[] @relation("ConsumableLotCreatedBy")
   consumableStockEventsCreated ConsumableStockEvent[] @relation("ConsumableStockEventCreatedBy")
+  consumableCustodiesCreated ConsumableCustody[] @relation("ConsumableCustodyCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -904,6 +906,7 @@ model Location {
   lotTransformationsPerformedHere LotTransformation[] @relation("LotTransformationPerformedAt")
   byproductBatchesProduced ByproductBatch[] @relation("ByproductBatchProducedAt")
   consumableLots ConsumableLot[] @relation("ConsumableLotLocation")
+  consumableCustodies ConsumableCustody[] @relation("ConsumableCustodyLocation")
 }
 
 enum DryingRoomLightExposure {
@@ -1958,6 +1961,12 @@ model Asset {
   treatmentBatch    TreatmentBatch?  @relation(fields: [treatmentBatchId], references: [id])
   processingStageId String?          @map("processing_stage_id") @db.Uuid
   processingStage   ProcessingStage? @relation(fields: [processingStageId], references: [id])
+  /// **La foto de la etiqueta de un frasco** — botiquín, Tarea 6. El `ANEXO_G`
+  /// saca de la norma argentina (SENASA obliga a conservar los troqueles) su
+  /// conclusión de diseño: «guardar foto de la etiqueta como adjunto». Una
+  /// columna más por padre, el molde que ya siguen las diecinueve de arriba.
+  consumableLotId String?        @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot? @relation(fields: [consumableLotId], references: [id], onDelete: Restrict)
 
   // T12.5: required, no default — same reasoning as ADR-038 (T9.5): a
   // photograph is a fact-bearing record, and a silent default would
@@ -6944,6 +6953,17 @@ model ColonyEvent {
   treatmentBatchLabel String?         @map("treatment_batch_label")
   treatmentDose       Decimal?        @map("treatment_dose") @db.Decimal(10, 3)
   treatmentDoseUnit   String?         @map("treatment_dose_unit")
+  /// El frasco del botiquín del que salió la dosis. Opcional para siempre: un
+  /// tratamiento es un registro legalmente exigido y no depende del inventario.
+  /// Cuando está, `recordColonyEvent` descuenta la dosis en la misma transacción.
+  /// RESTRICT como toda evidencia desde el 2026-09-01: no se borra el frasco de
+  /// un tratamiento aplicado.
+  consumableLotId     String?         @map("consumable_lot_id") @db.Uuid
+  consumableLot       ConsumableLot?  @relation(fields: [consumableLotId], references: [id], onDelete: Restrict)
+  /// ¿El frasco estaba vencido el día de la aplicación? Nulo = sin frasco, o
+  /// frasco sin fecha: lo desconocido no se convierte en «vigente». Avisa, no
+  /// bloquea — se guarda para que el registro legal lo diga.
+  treatmentLotExpiredAtApplication Boolean? @map("treatment_lot_expired_at_application")
   /// Contra qué. **Obligatorio en la capa de servicio cuando `eventType =
   /// treatment`**, como el lote y la carencia: el Anexo B §4 lo marca así y dice
   /// por qué —sin él no se puede agrupar la eficacia por objetivo—. Anulable en la
@@ -8435,6 +8455,33 @@ model ConsumableMaterial {
 
   notes String?
 
+  /// **Lo que un medicamento tiene y un saco de gallinaza no** — botiquín,
+  /// Tarea 1. Todo del PRODUCTO, escrito una vez: el Apivar de un laboratorio
+  /// es el mismo en todos los frascos, y pedirlo en cada compra hace que se
+  /// escriba distinto cada vez — el mismo problema que el material en texto
+  /// libre tenía antes de esta tabla.
+  ///
+  /// Marca el material como medicamento veterinario: separa el botiquín de la
+  /// bodega, y sólo aquí se piden los campos de abajo.
+  isVeterinaryMedicine  Boolean @default(false) @map("is_veterinary_medicine")
+  /// La casa farmacéutica o la marca.
+  manufacturer          String?
+  /// Para la carencia y para la alergia manda el principio, no la marca: dos
+  /// marcas pueden llevar el mismo.
+  activeIngredient      String? @map("active_ingredient")
+  sanitaryRegistration  String? @map("sanitary_registration")
+  /// **«Aunque sea cero»**, Reglamento (UE) 2019/6. Nulo = sin declarar; 0 =
+  /// declarado cero. Son afirmaciones distintas y no se confunden. CHECK ≥ 0.
+  defaultWithdrawalDays Int?    @map("default_withdrawal_days")
+  /// El «almacenamiento seguro» que Daniel pidió: «refrigerado 2–8 °C».
+  storageConditions     String? @map("storage_conditions")
+  /// Advertencias de seguridad. **Van aquí y no en la persona**: decisión de
+  /// Daniel, porque la alergia de un trabajador es dato de salud (spec §B.2).
+  safetyNotes           String? @map("safety_notes")
+  /// Días de antelación del aviso de vencimiento. Nulo = no avisar de que VA a
+  /// vencer; lo VENCIDO avisa siempre (plan del botiquín, decisión 1). CHECK ≥ 0.
+  avisarDiasAntes       Int?    @map("avisar_dias_antes")
+
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
   creator   UserAccount? @relation("ConsumableMaterialCreatedBy", fields: [createdBy], references: [id])
@@ -8487,6 +8534,21 @@ model ConsumableLot {
   locationId String?   @map("location_id") @db.Uuid
   location   Location? @relation("ConsumableLotLocation", fields: [locationId], references: [id])
   supplier   String?
+
+  /// **Lo que se escribe en CADA compra** — botiquín, Tarea 2. Del frasco y no
+  /// del producto: dos frascos del mismo Apivar vencen distinto y vienen de
+  /// facturas distintas.
+  ///
+  /// Vencimiento. **Nulo = «sin fecha», nunca «vigente»**: lo desconocido no se
+  /// convierte en bueno. Lo exige la NOM-064-ZOO-2000. Un frasco ya vencido al
+  /// recibirlo se acepta igual — puede ser una compra vieja registrada hoy.
+  expiresAt        DateTime? @map("expires_at")
+  /// «Proveedor con dirección», literal del Reglamento (UE) 2019/6 art. 108.
+  supplierAddress  String?   @map("supplier_address")
+  /// La «evidencia de adquisición» del mismo artículo: la factura.
+  invoiceReference String?   @map("invoice_reference")
+  /// «Sobre de 10 tiras», «frasco de 500 ml». Tres frascos no son «tres».
+  presentation     String?
   notes      String?
 
   events ConsumableStockEvent[]
@@ -8500,6 +8562,9 @@ model ConsumableLot {
   @@map("consumable_lot")
   @@schema("traceability")
   consumptionEntries MaterialConsumptionEntry[]
+  custodies ConsumableCustody[]
+  assets Asset[]
+  colonyEvents ColonyEvent[]
 }
 
 /// El libro mayor de las existencias: **sólo se añade**. Nada actualiza una
@@ -8537,9 +8602,57 @@ model ConsumableStockEvent {
 enum ConsumableStockEventType {
   received
   consumed
+  /// Se botó: se sabe dónde terminó. Exige motivo («vencido», «dañado»).
   waste
   adjustment_increase
   adjustment_decrease
+  /// **Se perdió — y perder no es botar.** Un frasco perdido puede estar en
+  /// alguna parte, y con un medicamento eso es un asunto de seguridad. Exige
+  /// motivo. Resta del saldo igual que `waste`; el sentido lo pone el tipo.
+  lost
 
+  @@schema("traceability")
+}
+
+/// **Dónde está un frasco y quién responde por él**, con intervalo —
+/// botiquín, Tarea 5.
+///
+/// Dos preguntas distintas, y las dos son de Daniel: «¿dónde está el Apivar?» y
+/// «¿quién lo tiene?». El equipo y el medicamento pueden estar bajo distinto
+/// custodio o lugar. Es la figura de `StorageAssignment`, que está atada al
+/// lote de café y por eso no sirve tal cual.
+///
+/// **Nunca dos abiertas del mismo lote**: lo impone un índice único PARCIAL
+/// —`(consumable_lot_id) WHERE hasta IS NULL`— escrito a mano en la migración,
+/// porque Prisma no sabe expresarlo. No se declara aquí por la misma razón que el
+/// índice funcional del material: declararlo mal haría que el esquema pidiera
+/// algo que las migraciones no crean, y el guardia de deriva lo caza.
+model ConsumableCustody {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  consumableLotId String        @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot @relation(fields: [consumableLotId], references: [id])
+
+  /// Dónde está. Requerido: una custodia sin sitio no contesta nada.
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation("ConsumableCustodyLocation", fields: [locationId], references: [id])
+
+  /// Quién responde. Anulable: el sitio basta. Es una PERSONA y no una cuenta,
+  /// como `operatorPersonId`: quien guarda el frasco a menudo no tiene cuenta.
+  responsiblePersonId String? @map("responsible_person_id") @db.Uuid
+  responsiblePerson   Person? @relation("ConsumableCustodyResponsible", fields: [responsiblePersonId], references: [id])
+
+  desde DateTime
+  /// Nulo = es la vigente.
+  hasta DateTime?
+
+  notes String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ConsumableCustodyCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([consumableLotId, desde])
+  @@map("consumable_custody")
   @@schema("traceability")
 }

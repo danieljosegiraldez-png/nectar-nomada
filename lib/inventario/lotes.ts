@@ -27,6 +27,15 @@ export interface RecibirLoteInput {
   readonly unit: string;
   readonly occurredAt?: Date;
   readonly supplier?: string | null;
+  /**
+   * **Lo del frasco** — botiquín, Tarea 2. Vencimiento nulo = «sin fecha», nunca
+   * «vigente». Un frasco ya vencido al recibirlo se acepta: puede ser una compra
+   * vieja registrada hoy.
+   */
+  readonly expiresAt?: Date | null;
+  readonly supplierAddress?: string | null;
+  readonly invoiceReference?: string | null;
+  readonly presentation?: string | null;
   readonly notes?: string | null;
   /** Dónde se juzga el permiso; mismo criterio que `crearMaterial`. */
   readonly projectId?: string | null;
@@ -39,6 +48,11 @@ export async function recibirLote(userAccountId: string, input: RecibirLoteInput
 
   if (!batchLabel) throw new LoteValidationError("batch_label_required");
   if (!unit) throw new LoteValidationError("unit_required");
+  // `new Date("patata")` es un Date para TypeScript y un Invalid Date en
+  // ejecución. Guardarlo sería inventar una fecha: se rechaza.
+  if (input.expiresAt != null && Number.isNaN(input.expiresAt.getTime())) {
+    throw new LoteValidationError("fecha de vencimiento inválida");
+  }
 
   // **Cero es un dato, negativo es un error.** Llegó el camión y el saco venía
   // vacío, o se recibe para dejar constancia y se pesa después: las dos cosas
@@ -76,6 +90,10 @@ export async function recibirLote(userAccountId: string, input: RecibirLoteInput
           // lote; con `null` cae a plataforma, que es cerrarse, no abrirse.
           locationId: input.locationId ?? null,
           supplier: input.supplier ?? null,
+          expiresAt: input.expiresAt ?? null,
+          supplierAddress: input.supplierAddress?.trim() || null,
+          invoiceReference: input.invoiceReference?.trim() || null,
+          presentation: input.presentation?.trim() || null,
           notes: input.notes ?? null,
           createdBy: userAccountId,
         },

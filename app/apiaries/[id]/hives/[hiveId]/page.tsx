@@ -29,6 +29,7 @@ import { limpiezasDeCaja } from "../../../../../lib/apiary/limpiezaDeCaja";
 import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
 import { ColonyEventQuickEntry } from "../../../../components/apiary/ColonyEventQuickEntry";
+import { frascosParaTratar } from "../../../../../lib/inventario/frascosParaTratar";
 import { ConteoDeVarroaForm } from "../../../../components/apiary/ConteoDeVarroaForm";
 import { HarvestForm } from "../../../../components/apiary/HarvestForm";
 import { ApiaryPhotoUploadForm } from "../../../../components/apiary/ApiaryPhotoUploadForm";
@@ -80,6 +81,9 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
    */
   const puedeGestionar = granted.has("apiary:manage");
   const puedeRegistrarEventos = puedeGestionar || granted.has("colony_event:manage");
+  // Botiquín, Tarea 7: sólo los frascos que esta persona puede descontar. Sin
+  // ninguno, el formulario de tratamiento es el de siempre.
+  const frascos = puedeRegistrarEventos ? await frascosParaTratar(user.userAccountId) : [];
 
   // A Hive holds at most one *current* Colony in practice (A1/A2's own
   // scope — a move/reassignment operation isn't built yet); prefer an
@@ -332,7 +336,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
           <section className="nn-section">
             <h2>{t("colonyEventHeading")}</h2>
             {puedeRegistrarEventos ? (
-              <ColonyEventQuickEntry colonyId={colony.id} selfPersonId={selfPersonId} />
+              <ColonyEventQuickEntry colonyId={colony.id} selfPersonId={selfPersonId} frascos={frascos} />
             ) : (
               <p className="nn-muted">{t("sinPermisoEvento")}</p>
             )}

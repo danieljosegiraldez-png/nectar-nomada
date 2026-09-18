@@ -152,3 +152,58 @@ async function cuentaSinAmbito() {
   });
   return ua.id;
 }
+/**
+ * El botiquín, Tarea 2: lo que se escribe en CADA COMPRA.
+ *
+ * Vencimiento, proveedor con dirección, factura y presentación. Del frasco y no
+ * del producto: dos frascos del mismo Apivar vencen en fechas distintas y
+ * vienen de facturas distintas. `batchLabel` ya es el lote del fabricante y
+ * `supplier` ya existía.
+ *
+ * Dirección del proveedor y evidencia de adquisición son literales del
+ * Reglamento (UE) 2019/6 art. 108; la caducidad, de la NOM-064-ZOO-2000.
+ */
+describe("el frasco que entró", () => {
+  it("guarda vencimiento, dirección del proveedor, factura y presentación", async () => {
+    const l = await recibirLote(gestorId, {
+      projectId, materialId, batchLabel: `FR-${RUN_ID}`, quantity: 10, unit: "quintal",
+      expiresAt: new Date("2027-03-31T00:00:00Z"),
+      supplier: "Agroveterinaria El Valle", supplierAddress: "Boquete, Chiriquí",
+      invoiceReference: "F-0042", presentation: "sobre de 10 tiras",
+    });
+    expect(l.expiresAt?.toISOString().slice(0, 10)).toBe("2027-03-31");
+    expect(l.supplier).toBe("Agroveterinaria El Valle");
+    expect(l.supplierAddress).toBe("Boquete, Chiriquí");
+    expect(l.invoiceReference).toBe("F-0042");
+    expect(l.presentation).toBe("sobre de 10 tiras");
+  }, 20000);
+
+  it("un frasco SIN fecha de vencimiento se acepta y queda NULO — no «vigente»", async () => {
+    // Lo desconocido no se convierte en bueno. Un nulo aquí lo leerá el estado
+    // de vencimiento (Tarea 3) como «sin fecha», nunca como «vigente».
+    const l = await recibirLote(gestorId, { projectId, materialId, batchLabel: `SF-${RUN_ID}`, quantity: 1, unit: "quintal" });
+    expect(l.expiresAt).toBeNull();
+    expect(l.supplierAddress).toBeNull();
+  }, 20000);
+
+  it("un frasco ya vencido AL RECIBIRLO se acepta igual — avisa, no bloquea", async () => {
+    // Se puede estar registrando hoy una compra vieja. Rechazarlo haría que el
+    // frasco existiera en la bodega y no en el sistema.
+    const l = await recibirLote(gestorId, {
+      projectId, materialId, batchLabel: `YV-${RUN_ID}`, quantity: 1, unit: "quintal",
+      expiresAt: new Date("2020-01-01T00:00:00Z"),
+    });
+    // Y se GUARDA la fecha: sin esta línea la prueba pasaba antes de
+    // implementar nada, porque el servicio ignoraba el campo en vez de aceptarlo.
+    expect(l.expiresAt?.toISOString().slice(0, 10)).toBe("2020-01-01");
+  }, 20000);
+
+  it("una fecha de vencimiento inválida se rechaza en vez de guardarse", async () => {
+    // `new Date("patata")` es un Date válido para TypeScript e Invalid Date en
+    // ejecución. Guardarlo sería inventar una fecha.
+    await expect(recibirLote(gestorId, {
+      projectId, materialId, batchLabel: `BAD-${RUN_ID}`, quantity: 1, unit: "quintal",
+      expiresAt: new Date("no es una fecha"),
+    })).rejects.toThrow(LoteValidationError);
+  }, 20000);
+});

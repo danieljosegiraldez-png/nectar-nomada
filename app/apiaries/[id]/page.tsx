@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AvisosDeBotiquin } from "../../components/inventario/AvisosDeBotiquin";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getApiaryDetail, getManageableApiaryProjects } from "../../../lib/apiary/hives";
@@ -104,6 +105,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
       </p>
       <span className="nn-badge">{t("badge")}</span>
       <h1>{apiary.name}</h1>
+      <AvisosDeBotiquin userAccountId={user.userAccountId} />
 
       {/* **El inventario va PRIMERO.** Anexo E §3: «Inventario primero, porque decide la
           acción del día». Estaba octavo —debajo del formulario de coordenadas, la

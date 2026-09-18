@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { crearMaterial } from "../../lib/inventario/materiales";
 import { recibirLote } from "../../lib/inventario/lotes";
-import { existencias, registrarConsumo, reconciliar, ExistenciasError } from "../../lib/inventario/existencias";
+import { existencias, registrarConsumo, reconciliar, registrarMerma, registrarPerdida, ExistenciasError } from "../../lib/inventario/existencias";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
@@ -131,5 +131,53 @@ describe("lo negativo avisa, no bloquea", () => {
     });
     const e = await existencias(gestorId, l.id, { projectId });
     expect(e.quantity.toNumber()).toBe(6);
+  }, 20000);
+});
+
+/**
+ * Botado y perdido — botiquín, Tarea 4. Lo que Daniel nombró: «si están
+ * vencidas o se botaron o perdieron».
+ *
+ * **Perder no es botar.** Un frasco botado se sabe dónde terminó; uno perdido
+ * puede estar en alguna parte, y con un medicamento eso es un asunto de
+ * seguridad. Colapsarlos en uno perdería justo la distinción que importa.
+ */
+describe("botado y perdido", () => {
+  it("perder un frasco es un evento PROPIO, distinto de botarlo", async () => {
+    const l = await loteDe(3, "perdido");
+    await registrarPerdida(gestorId, { projectId, consumableLotId: l.id, quantity: 1, unit: "gal", reason: "no aparece tras la jornada del martes" });
+    const e = await prisma.consumableStockEvent.findFirstOrThrow({ where: { consumableLotId: l.id, eventType: "lost" } });
+    expect(e.reason).toContain("martes");
+  }, 20000);
+
+  it("botar EXIGE motivo en el servicio", async () => {
+    const l = await loteDe(3, "botar-sin");
+    await expect(registrarMerma(gestorId, { projectId, consumableLotId: l.id, quantity: 1, unit: "gal", reason: "  " }))
+      .rejects.toThrow(ExistenciasError);
+  }, 20000);
+
+  it("perder EXIGE motivo en el servicio", async () => {
+    const l = await loteDe(3, "perder-sin");
+    await expect(registrarPerdida(gestorId, { projectId, consumableLotId: l.id, quantity: 1, unit: "gal", reason: "" }))
+      .rejects.toThrow(ExistenciasError);
+  }, 20000);
+
+  it("y la BASE lo exige aunque alguien rodee el servicio — por el nombre del CHECK", async () => {
+    // Se exige el NOMBRE: la Tarea 1 enseñó que un `toThrow()` pelado acepta
+    // cualquier error, incluido el de un valor de enum que aún no existe.
+    const l = await loteDe(3, "check-perdido");
+    await expect(prisma.consumableStockEvent.create({ data: {
+      consumableLotId: l.id, eventType: "lost", quantity: 1, unit: "gal",
+      occurredAt: new Date(), provenanceClass: "direct_observation",
+    } })).rejects.toThrow(/cse_baja_exige_motivo/);
+  }, 20000);
+
+  it("los dos bajan el saldo: 3 − 1 botado − 1 perdido = 1", async () => {
+    // `lost` tiene que RESTAR. Está fuera de `SUMAN` en `saldoDeEventos`, y eso
+    // se comprueba aquí en vez de suponerlo.
+    const l = await loteDe(3, "baja-dos");
+    await registrarMerma(gestorId, { projectId, consumableLotId: l.id, quantity: 1, unit: "gal", reason: "vencido" });
+    await registrarPerdida(gestorId, { projectId, consumableLotId: l.id, quantity: 1, unit: "gal", reason: "no aparece" });
+    expect((await existencias(gestorId, l.id, { projectId })).quantity.toNumber()).toBe(1);
   }, 20000);
 });

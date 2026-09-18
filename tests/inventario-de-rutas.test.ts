@@ -116,7 +116,11 @@ describe("el inventario del router", () => {
     // 72 páginas y 10 handlers.
     // 82 → 83 el 2026-09-18: /finca, el índice de la sección que sustituye a
     // «Parcelas». 73 páginas y 10 handlers.
-    expect(salida).toContain("83 entradas");
+    // 83 → 84 el mismo día: /inventario/recibir — recibir un medicamento en el
+    // botiquín. CUARTA vez que dos sesiones suben la cifra al mismo número con
+    // pantallas distintas: la rama decía 83 y, rebasada sobre /finca, se MIDIÓ
+    // sobre el árbol resuelto: 74 páginas y 10 handlers.
+    expect(salida).toContain("84 entradas");
     expect(codigo, salida).toBe(0);
   });
 
