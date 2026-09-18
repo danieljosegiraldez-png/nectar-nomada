@@ -1302,6 +1302,12 @@ model Sample {
   location       Location?           @relation(fields: [locationId], references: [id])
   status         RecordStatus        @default(draft)
   classification ClassificationLevel @default(internal)
+  /// Con rastro, nunca editada en su sitio — mismo principio que
+  /// `InstrumentCheckRequirement.retiredAt` (`lib/equipos/equipos.ts::retirarPatron`).
+  /// El motivo va al `AuditEvent` de la operación `sample.retire`, no a una
+  /// columna nueva aquí: es la misma decisión que ya toma `recordAuditEvent`
+  /// para cualquier corrección con causa.
+  retiredAt      DateTime?           @map("retired_at")
   createdAt      DateTime            @default(now()) @map("created_at")
   updatedAt      DateTime            @updatedAt @map("updated_at")
   createdBy      String?             @map("created_by") @db.Uuid

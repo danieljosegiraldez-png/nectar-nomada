@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { createSampleAction, type TraceabilityActionState } from "../../actions/traceability";
+import { MATERIALES } from "../../../lib/traceability/avisoDeModo";
 
 const initialState: TraceabilityActionState = {};
 
@@ -20,6 +21,17 @@ export function SampleForm({ lotId }: { lotId: string }) {
       <div className="nn-field">
         <label htmlFor="sm-sampleType">{t("sampleTypeLabel")}</label>
         <input id="sm-sampleType" name="sampleType" type="text" required placeholder="green_coffee" />
+      </div>
+      <div className="nn-field">
+        <label htmlFor="sm-materialState">{t("materialStateLabel")}</label>
+        <select id="sm-materialState" name="materialState" defaultValue="">
+          <option value="">{t("notDeclaredOption")}</option>
+          {MATERIALES.map((m) => (
+            <option key={m} value={m}>
+              {t(`material_${m}`)}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="nn-field">
         <label htmlFor="sm-quantity">{t("quantityLabel")}</label>
