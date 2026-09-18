@@ -22,6 +22,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# **Rutas con tildes, sin comillas.** Con `core.quotePath` por defecto, git escribe
+# `docs/año.md` como `"docs/a\303\261o.md"`, y esa cadena no es una ruta: la sección
+# del texto completo decía «borrado en este rango» de archivos que el rango añadía.
+# Va por el entorno, que alcanza a todas las llamadas a git del script.
+#
+# **Y no con una función `git() { command git -c … "$@"; }`**, que fue lo primero:
+# en bash 3.2 —el `/bin/bash` de macOS— `set -e` mata el script cuando falla el
+# último comando de una función, aunque la llamada esté a la izquierda de un `||`.
+# Así, `git cat-file -e "$PUNTA:$f" || …` sobre un archivo borrado salía con 128 y
+# sin mensaje. Lo guarda tests/pack-for-review.test.ts.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.quotePath GIT_CONFIG_VALUE_0=false
+
 RANGO="${1:?falta el rango, p.ej. origin/main..HEAD}"
 
 # `git diff A..B` compara los DOS EXTREMOS, no el cambio del autor. Si la base
