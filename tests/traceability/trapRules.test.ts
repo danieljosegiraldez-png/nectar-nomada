@@ -185,6 +185,24 @@ describe("regla de trampas de la finca", () => {
     expect(await prisma.trapRule.count({ where: { farmLocationId: parcela.parentLocationId! } })).toBe(0);
   });
 
+  it("rechaza una lectura fuera de la escala con su código, no con un error de Prisma", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    await expect(
+      saveTrapRule(usuario.userAccountId, {
+        farmLocationId: parcela.parentLocationId!, ...reglaValida, triggerLevel: "" as never,
+      }),
+    ).rejects.toThrow(new TrapRuleValidationError("trigger_level_invalid"));
+    expect(await prisma.trapRule.count({ where: { farmLocationId: parcela.parentLocationId! } })).toBe(0);
+  });
+
   it("rechaza días que no son enteros", async () => {
     const usuario = await crearUsuarioConAcceso();
     userAccountIds.push(usuario.userAccountId);

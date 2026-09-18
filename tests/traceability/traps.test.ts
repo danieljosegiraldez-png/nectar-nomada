@@ -27,6 +27,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
 import { createSpecimen } from "../../lib/traceability/specimens";
+import { getPlotDetail } from "../../lib/traceability/plantingCohorts";
+import { saveTrapRule } from "../../lib/traceability/trapRules";
 import { prisma } from "../../lib/db";
 import { crearUsuarioConAcceso, crearParcela, crearFinca, crearUsuarioSinAcceso } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -42,6 +44,7 @@ afterEach(async () => {
   await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
   await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
   await prisma.plotBlock.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
+  await prisma.trapRule.deleteMany({ where: assertDefinedWhere({ farmLocationId: { in: locationIds } }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
@@ -332,5 +335,44 @@ describe("revisión de trampa", () => {
       specimenId: planta.id, observedAt: new Date("2026-09-15"),
       brocaLevel: "pocos", provenanceClass: "direct_observation",
     })).rejects.toThrow(TrapValidationError);
+  });
+});
+
+describe("getPlotDetail — lo que necesitan los avisos de trampas", () => {
+  it("devuelve el día de instalación, la última revisión y la regla de la FINCA", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    // Sin regla: `null`, no un plazo por defecto.
+    expect((await getPlotDetail(userAccountId, parcela.id)).reglaDeTrampas).toBeNull();
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-02"), provenanceClass: "direct_observation",
+    });
+    await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"), brocaLevel: "muchos",
+      provenanceClass: "direct_observation",
+    });
+    // La regla va sobre la finca (el padre), no sobre la parcela.
+    await saveTrapRule(userAccountId, {
+      farmLocationId: parcela.parentLocationId!, triggerLevel: "algunos", normalDays: 14, alertDays: 7,
+      suggestedAction: "aplicar Bralic",
+    });
+
+    const detalle = await getPlotDetail(userAccountId, parcela.id);
+    expect(detalle.reglaDeTrampas).toEqual({
+      triggerLevel: "algunos", normalDays: 14, alertDays: 7, suggestedAction: "aplicar Bralic",
+    });
+    expect(detalle.trampas).toHaveLength(1);
+    expect(detalle.trampas[0]!.instaladaEl?.toISOString().slice(0, 10)).toBe("2026-09-02");
+    expect(detalle.trampas[0]!.ultimaRevision).toMatchObject({ brocaLevel: "muchos" });
+    expect(detalle.trampas[0]!.ultimaRevision?.observedAt.toISOString().slice(0, 10)).toBe("2026-09-15");
   });
 });

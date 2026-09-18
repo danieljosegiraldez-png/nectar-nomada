@@ -14,6 +14,7 @@ import { MarcarEnProduccionForm } from "../../../components/traceability/MarcarE
 import { listPlotBlocks } from "../../../../lib/traceability/plotBlocks";
 import { AltaDeBloqueForm } from "../../../components/traceability/AltaDeBloqueForm";
 import { AltaDeTrampaForm } from "../../../components/traceability/AltaDeTrampaForm";
+import { ReglaDeTrampasForm } from "../../../components/traceability/ReglaDeTrampasForm";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
     throw error;
   }
 
-  const { location, cohorts, cultivarOptions, eventosDeProduccion, trampas } = detail;
+  const { location, cohorts, cultivarOptions, eventosDeProduccion, trampas, reglaDeTrampas } = detail;
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
   const [calicatas, bloques] = await Promise.all([
@@ -225,6 +226,30 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
           <summary>{t("trapNewTitle")}</summary>
           <AltaDeTrampaForm locationId={location.id} bloques={bloques.map((b) => ({ id: b.id, name: b.name }))} />
         </details>
+      </section>
+
+      {/* La regla es de la FINCA —el padre de la parcela, la misma clave que
+          usa `createTrap`—, así que vale para todas sus parcelas. */}
+      <section className="nn-section" id="regla-trampas">
+        <h2>{t("trapRuleTitle")}</h2>
+        <p className="nn-muted">{t("trapRuleIntro")}</p>
+        {reglaDeTrampas ? (
+          <p className="nn-detail-meta">
+            {t("trapRuleCurrent", {
+              lectura: t(`trapsLevel_${reglaDeTrampas.triggerLevel}`),
+              normal: reglaDeTrampas.normalDays,
+              alerta: reglaDeTrampas.alertDays,
+              accion: reglaDeTrampas.suggestedAction,
+            })}
+          </p>
+        ) : (
+          <p className="nn-muted">{t("trapRuleNone")}</p>
+        )}
+        <ReglaDeTrampasForm
+          locationId={location.id}
+          farmLocationId={location.parentLocation?.id ?? location.id}
+          regla={reglaDeTrampas}
+        />
       </section>
     </div>
   );

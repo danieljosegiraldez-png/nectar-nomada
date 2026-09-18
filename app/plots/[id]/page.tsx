@@ -21,6 +21,7 @@ import { estadosPorCohorte } from "../../../lib/traceability/estadoDeProduccion"
 import { cifrasDelLote } from "../../../lib/traceability/cifrasDelLote";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
 import { pendienteDeLaParcela, enlaceDelAviso, type Aviso } from "../../../lib/traceability/pendienteDeLaParcela";
+import { trampasParaAviso } from "../../../lib/traceability/pendienteDeTrampas";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
     throw error;
   }
 
-  const { location, cohorts, density, organizationName, eventosDeProduccion, trampas } = detail;
+  const { location, cohorts, density, organizationName, eventosDeProduccion, trampas, reglaDeTrampas } = detail;
   const rendimiento = detail.yield;
   const [jornadas, { people, selfPersonId }, calicatas] = await Promise.all([
     listFieldSessions(user.userAccountId, id),
@@ -72,11 +73,9 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
     jornadas,
     muestrasDeSuelo: muestras.soil.map((m) => ({ sampledAt: m.sampledAt, resultados: m.measurements.length })),
     muestrasFoliares: muestras.foliar.map((m) => ({ sampledAt: m.sampledAt, resultados: m.measurements.length })),
-    // Trampas de broca: los datos reales (y la regla de la finca, que
-    // `getPlotDetail` aún no devuelve) los conecta la Tarea 9. Con `regla: null`
-    // no sale ningún aviso de trampas, que es lo correcto sin regla.
-    trampas: [],
-    regla: null,
+    // Sin regla de la finca (`null`) no sale ningún aviso de trampas.
+    trampas: trampasParaAviso(trampas),
+    regla: reglaDeTrampas,
   });
   const ultimoAnio = rendimiento.status === "ok" ? rendimiento.years[0] : undefined;
 
@@ -112,11 +111,13 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
       case "siembras_sin_marcar":
         return t("plotDashboardAlertUnmarked", { n: aviso.n });
       case "trampa_por_revisar":
+        return t("trapsDueAlert", { n: aviso.trapNumber ?? t("notRecorded"), d: aviso.diasDeRetraso });
       case "trampa_con_lectura_alta":
-        // Inalcanzable mientras la entrada lleve `regla: null`. Sus textos
-        // (`trapsDueAlert`, `trapsHighAlert`) los añade la Tarea 9; lanzar es
-        // mejor que pintar un aviso sin texto.
-        throw new Error(`aviso ${aviso.tipo} sin texto todavía: lo conecta la Tarea 9`);
+        return t("trapsHighAlert", {
+          n: aviso.trapNumber ?? t("notRecorded"),
+          lectura: t(`trapsLevel_${aviso.lectura}` as "trapsLevel_muchos"),
+          accion: aviso.accion,
+        });
     }
   };
 

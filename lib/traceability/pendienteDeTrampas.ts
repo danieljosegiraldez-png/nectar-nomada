@@ -22,9 +22,15 @@ export interface TrampaParaAviso {
   trapNumber: number | null;
   bloque: string | null;
   status: "active" | "removed" | "dead";
-  /** `dia` es campo de día `YYYY-MM-DD` (la revisión se guarda a medianoche UTC). */
-  ultimaRevision: { dia: string; brocaLevel: NivelDeBroca } | null;
-  instaladaEl: string; // día YYYY-MM-DD
+  /**
+   * `dia` es campo de día `YYYY-MM-DD` (la revisión se guarda a medianoche UTC).
+   * `brocaLevel` nulo es una revisión vieja sin lectura: cuenta como visita
+   * —el plazo corre desde su día— y como «no disparó». Descartarla movería el
+   * plazo hacia atrás, a una revisión anterior o a la instalación.
+   */
+  ultimaRevision: { dia: string; brocaLevel: NivelDeBroca | null } | null;
+  /** Día `YYYY-MM-DD` de la observación `installed`; `null` si no la hay. */
+  instaladaEl: string | null;
 }
 
 export interface ReglaParaAviso {
@@ -60,11 +66,12 @@ export function avisosDeTrampas(e: {
     const lectura = t.ultimaRevision?.brocaLevel;
     const disparo = lectura != null && ESCALA.indexOf(lectura) >= disparador;
 
-    // Nunca revisada: el plazo corre desde la instalación.
+    // Nunca revisada: el plazo corre desde la instalación. Sin revisión y sin
+    // instalación registrada no hay desde dónde contar, y no se inventa uno.
     const desde = t.ultimaRevision?.dia ?? t.instaladaEl;
     const plazo = disparo ? regla.alertDays : regla.normalDays;
     // El día exacto del vencimiento todavía no avisa: sólo un retraso > 0.
-    const diasDeRetraso = diasEntre(desde, e.hoy) - plazo;
+    const diasDeRetraso = desde == null ? 0 : diasEntre(desde, e.hoy) - plazo;
     if (diasDeRetraso > 0) {
       avisos.push({ tipo: "trampa_por_revisar", specimenId: t.id, trapNumber: t.trapNumber, diasDeRetraso });
     }
@@ -80,4 +87,33 @@ export function avisosDeTrampas(e: {
     }
   }
   return avisos;
+}
+
+/**
+ * De las trampas que devuelve `getPlotDetail` a la entrada de `avisosDeTrampas`.
+ *
+ * Los dos días salen de campos de día (medianoche UTC), así que su día es
+ * `toISOString().slice(0, 10)`, sin zona. Una revisión sin lectura NO se
+ * descarta: pasa con `brocaLevel: null` (ver `TrampaParaAviso`).
+ */
+export function trampasParaAviso(
+  trampas: readonly {
+    id: string;
+    trapNumber: number | null;
+    bloque: string | null;
+    status: TrampaParaAviso["status"];
+    instaladaEl: Date | null;
+    ultimaRevision: { observedAt: Date; brocaLevel: NivelDeBroca | null } | null;
+  }[],
+): TrampaParaAviso[] {
+  const dia = (d: Date) => d.toISOString().slice(0, 10);
+  return trampas.map((t) => ({
+    id: t.id,
+    trapNumber: t.trapNumber,
+    bloque: t.bloque,
+    status: t.status,
+    instaladaEl: t.instaladaEl == null ? null : dia(t.instaladaEl),
+    ultimaRevision:
+      t.ultimaRevision == null ? null : { dia: dia(t.ultimaRevision.observedAt), brocaLevel: t.ultimaRevision.brocaLevel },
+  }));
 }

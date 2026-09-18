@@ -557,11 +557,32 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     },
     orderBy: { trapNumber: "asc" },
   });
+  // El día de instalación, desde el que corre el plazo mientras la trampa no
+  // tenga revisiones. Lo escribe `createTrap`; una trampa vieja sin esta
+  // observación queda con `instaladaEl: null`, no con un día inventado.
+  const instalaciones = await prisma.specimenObservation.findMany({
+    where: { specimenId: { in: trampasCrudas.map((t) => t.id) }, observationType: "installed" },
+    orderBy: [{ observedAt: "desc" }, { createdAt: "desc" }],
+    select: { specimenId: true, observedAt: true },
+  });
+  const instaladaEl = new Map<string, Date>();
+  for (const i of instalaciones) if (!instaladaEl.has(i.specimenId)) instaladaEl.set(i.specimenId, i.observedAt);
+
+  // La regla de la finca, que es el padre de la parcela —la misma clave que
+  // usan `createTrap` y `saveTrapRule`—. Se lee aquí y no con `getTrapRule`
+  // para que quede detrás de la compuerta del tablero y no exija además la
+  // de la finca. `null` = sin regla, y sin regla no hay avisos ni plazos.
+  const reglaDeTrampas = await prisma.trapRule.findUnique({
+    where: { farmLocationId: location.parentLocation?.id ?? location.id },
+    select: { triggerLevel: true, normalDays: true, alertDays: true, suggestedAction: true },
+  });
+
   const trampas = trampasCrudas.map((t) => ({
     id: t.id,
     trapNumber: t.trapNumber,
     bloque: t.plotBlock?.name ?? null,
     status: t.status,
+    instaladaEl: instaladaEl.get(t.id) ?? null,
     // Sin revisión es `null`, no una lectura de cero (ADR-080).
     ultimaRevision: t.observations[0]
       ? {
@@ -578,6 +599,7 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     cultivarOptions,
     eventosDeProduccion,
     trampas,
+    reglaDeTrampas,
     density: computePlotDensity(cohorts, location.areaHectares),
     yield: computePlotYield(
       harvestContributions.map((c) => ({

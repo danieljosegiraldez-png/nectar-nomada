@@ -55,6 +55,7 @@ import {
 import { recordEnteredProduction, PlantingEventValidationError } from "../../lib/traceability/plantingEvents";
 import { createPlotBlock, PlotBlockValidationError } from "../../lib/traceability/plotBlocks";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
+import { saveTrapRule, TrapRuleValidationError } from "../../lib/traceability/trapRules";
 import {
   updateLocationAttributes,
   LocationAccessError,
@@ -145,6 +146,10 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   // «Revisa la lectura y la fecha» no es verdad de un bloque: el caso real es
   // un nombre repetido, y ése se dice.
   if (error instanceof PlotBlockValidationError) return t("error_block", { detail: error.message });
+  // Cada código de la regla tiene su frase: dice qué campo corregir.
+  if (error instanceof TrapRuleValidationError) {
+    return t(`error_trapRule_${error.message}` as "error_trapRule_suggested_action_required");
+  }
   if (error instanceof FechaInvalidaError) return t("error_datetime", { detail: error.message });
   if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });
   throw error;
@@ -1320,6 +1325,38 @@ export async function recordTrapCheckFormAction(
       notes: emptyToNull(formData.get("notes")),
       provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_REGISTRO_DE_CAMPO),
       dataQuality: emptyToNull(formData.get("dataQuality")) as never,
+    });
+  } catch (error) {
+    revalidarParcela(locationId);
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidarParcela(locationId);
+  return {};
+}
+
+/**
+ * La regla de trampas de la finca — F2 §5. La finca viaja en el formulario
+ * (`farmLocationId`) y `saveTrapRule` comprueba el acceso sobre ella; la
+ * parcela (`locationId`) sólo sirve para revalidar las dos pantallas.
+ */
+export async function saveTrapRuleFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const locationId = String(formData.get("locationId") ?? "");
+
+  try {
+    await saveTrapRule(user.userAccountId, {
+      farmLocationId: String(formData.get("farmLocationId") ?? ""),
+      triggerLevel: String(formData.get("triggerLevel") ?? "") as never,
+      // Vacío o con letras da NaN o 0, y el servicio lo rechaza con su código.
+      normalDays: Number(String(formData.get("normalDays") ?? "").trim() || Number.NaN),
+      alertDays: Number(String(formData.get("alertDays") ?? "").trim() || Number.NaN),
+      suggestedAction: String(formData.get("suggestedAction") ?? ""),
     });
   } catch (error) {
     revalidarParcela(locationId);

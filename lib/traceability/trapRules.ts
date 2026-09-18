@@ -5,6 +5,8 @@ import { requireLocationAttributeAccess } from "./locations";
 
 export class TrapRuleValidationError extends Error {}
 
+const NIVELES: readonly TrapCaptureLevel[] = ["ninguno", "pocos", "algunos", "muchos"];
+
 export interface SaveTrapRuleInput {
   farmLocationId: string;
   triggerLevel: TrapCaptureLevel;
@@ -20,6 +22,9 @@ export interface SaveTrapRuleInput {
  */
 export async function saveTrapRule(userAccountId: string, input: SaveTrapRuleInput) {
   const suggestedAction = input.suggestedAction.trim();
+  // Del formulario llega una cadena: sin esta comprobación un valor fuera de la
+  // escala sería un error de Prisma sin código, y la pantalla se caería.
+  if (!NIVELES.includes(input.triggerLevel)) throw new TrapRuleValidationError("trigger_level_invalid");
   if (!Number.isInteger(input.normalDays) || !Number.isInteger(input.alertDays)) {
     throw new TrapRuleValidationError("days_must_be_whole_numbers");
   }
