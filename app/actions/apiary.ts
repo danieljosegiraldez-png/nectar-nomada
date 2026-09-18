@@ -34,7 +34,8 @@ import { requestApiaryAssetUpload, finalizeApiaryAssetUpload } from "../../lib/a
 import type { RecordInspectionInput } from "../../lib/apiary/inspections";
 import type { RecordColonyEventInput } from "../../lib/apiary/colonyEvents";
 import type { ApiaryAssetParent } from "../../lib/apiary/media";
-import { fechaDeDia, parseLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
+import { fechaDeDia, parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
+import { exigeTipoDeArtefacto, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
 
 const emptyToNull = (value: FormDataEntryValue | null) => {
   const str = String(value ?? "").trim();
@@ -335,6 +336,43 @@ export async function actualizarConfiguracionDeCajaFormAction(formData: FormData
     reason: emptyToNull(formData.get("reason")),
   });
 
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+}
+
+/**
+ * Artefactos de colmena, Tarea 8 — poner un artefacto desde la ficha de la colmena. La hora es
+ * la que se escribe (con el desfase del dispositivo); vacía, ahora. El nodo NO se instala aquí:
+ * tiene identidad y permiso propio (`instalarNodo`).
+ */
+export async function instalarArtefactoFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const hiveId = String(formData.get("hiveId") ?? "");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const kind = exigeTipoDeArtefacto(String(formData.get("kind") ?? ""));
+  const cuenta = emptyToNull(formData.get("count"));
+  await instalarArtefacto(user.userAccountId, {
+    hiveId,
+    kind,
+    count: cuenta === null ? null : Number(cuenta),
+    notes: emptyToNull(formData.get("notes")),
+    installedAt:
+      parseOptionalLocalDateTime(String(formData.get("cuando") ?? ""), String(formData.get(TZ_OFFSET_FIELD) ?? "")) ?? new Date(),
+  });
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+}
+
+/** Artefactos de colmena, Tarea 8 — quitarlo. Un nodo pide su propio permiso dentro del servicio. */
+export async function retirarArtefactoFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const hiveId = String(formData.get("hiveId") ?? "");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  await retirarArtefacto(user.userAccountId, {
+    fittingId: String(formData.get("fittingId") ?? ""),
+    removedAt:
+      parseOptionalLocalDateTime(String(formData.get("cuando") ?? ""), String(formData.get(TZ_OFFSET_FIELD) ?? "")) ?? new Date(),
+  });
   revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
 }
 

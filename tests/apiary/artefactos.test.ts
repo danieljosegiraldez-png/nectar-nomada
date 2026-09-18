@@ -12,7 +12,7 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { ApiaryAccessError, crearApiario, createColony, createHive } from "../../lib/apiary/hives";
 import { recordInspection } from "../../lib/apiary/inspections";
 import { actualizarConfiguracionDeCaja } from "../../lib/apiary/configuracionDeCaja";
-import { artefactosDeColmena, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
+import { artefactosDeColmena, historiaDeArtefactos, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
 
 const RUN = `art-${Date.now()}`;
 const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000);
@@ -304,5 +304,23 @@ describe("el booleano pasa a ser una caché con un solo escritor", () => {
     expect(ev).not.toBeNull();
     expect((ev!.before as { queenExcluder: boolean | null }).queenExcluder).toBeNull();
     expect((ev!.after as { queenExcluder: boolean | null }).queenExcluder).toBe(true);
+  }, 20000);
+});
+
+describe("la historia, para la pantalla de la colmena", () => {
+  it("trae lo puesto Y lo retirado, lo más nuevo primero", async () => {
+    await cajaNueva();
+    const viejo = await instalarArtefacto(operario, { hiveId, kind: "reductor_de_piquera", installedAt: hace(20) });
+    await retirarArtefacto(operario, { fittingId: viejo.id, removedAt: hace(10) });
+    await instalarArtefacto(operario, { hiveId, kind: "excluidor", installedAt: hace(5) });
+    const h = await historiaDeArtefactos(operario, hiveId);
+    expect(h.map((f) => f.kind)).toEqual(["excluidor", "reductor_de_piquera"]);
+    expect(h[1]!.removedAt).not.toBeNull();
+  }, 20000);
+
+  it("quien no ve el apiario no ve su historia — y el control positivo", async () => {
+    await cajaNueva();
+    await expect(historiaDeArtefactos(ajeno, hiveId)).rejects.toThrow(ApiaryAccessError);
+    await expect(historiaDeArtefactos(operario, hiveId)).resolves.toEqual([]);
   }, 20000);
 });

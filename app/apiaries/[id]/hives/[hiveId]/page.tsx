@@ -26,6 +26,10 @@ import { LimpiezaDeCajaForm } from "../../../../components/apiary/LimpiezaDeCaja
 import { LecturaDeRefractometroForm } from "../../../../components/apiary/LecturaDeRefractometroForm";
 import { instrumentosParaMedicion } from "../../../../../lib/equipos/equipos";
 import { limpiezasDeCaja } from "../../../../../lib/apiary/limpiezaDeCaja";
+import { historiaDeArtefactos } from "../../../../../lib/apiary/artefactos";
+import { DECLARABLES_EN_INSPECCION } from "../../../../../lib/apiary/tiposDeArtefacto";
+import { instalarArtefactoFormAction, retirarArtefactoFormAction } from "../../../../actions/apiary";
+import { TimezoneOffsetField } from "../../../../components/TimezoneOffsetField";
 import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
 import { ColonyEventQuickEntry } from "../../../../components/apiary/ColonyEventQuickEntry";
@@ -73,6 +77,11 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
   // no autoriza, y `getHive` —que sí— lanza si no hay permiso de ver. Se usa `hive.id`, el de la
   // caja ya autorizada, no el parámetro crudo de la URL.
   const limpiezas = await limpiezasDeCaja(hive.id);
+  // Artefactos de colmena, Tarea 8. Después de `getHive`, que ya autorizó ver esta caja; y con
+  // su propio `requireApiaryAccess` dentro, que no depende de este orden.
+  const historia = await historiaDeArtefactos(user.userAccountId, hive.id);
+  const ahora = new Date();
+  const puestos = historia.filter((f) => f.installedAt <= ahora && (!f.removedAt || f.removedAt > ahora));
 
   /**
    * Los dos niveles de autoridad, y NO son un escalón del mismo permiso:
@@ -318,6 +327,95 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                 <summary>{t("limpiezaRegistrar")}</summary>
                 <LimpiezaDeCajaForm hiveId={hive.id} apiaryId={apiaryId} />
               </details>
+            ) : null}
+          </section>
+
+          {/* Artefactos de colmena (Tarea 8): qué lleva puesta HOY y desde cuándo, y debajo la
+              historia. Quien no gestiona el apiario lo VE y no lo cambia — y se le dice por qué. */}
+          <section className="nn-section" id="artefactos">
+            <h2>{t("artefactosHeading")}</h2>
+            {puestos.length === 0 ? (
+              <p className="nn-muted">{t("artefactosNingunoPuesto")}</p>
+            ) : (
+              <ul>
+                {puestos.map((f) => (
+                  <li key={f.id}>
+                    <strong>{t(`artefacto_${f.kind}`)}</strong>
+                    {f.count !== null ? ` × ${f.count}` : ""}
+                    {f.hiveNode ? ` · ${f.hiveNode.deviceId}` : ""}
+                    {f.notes ? ` · ${f.notes}` : ""}
+                    {" — "}
+                    {t("artefactoDesde", { fecha: f.installedAt.toISOString().slice(0, 10) })}
+                    {/* Un nodo se retira con su propio permiso: moverlo reasigna sus datos. */}
+                    {(f.kind === "nodo_de_sensores" ? granted.has("hive_node:manage") : puedeGestionar) ? (
+                      <form action={retirarArtefactoFormAction} style={{ display: "inline", marginLeft: "0.5rem" }}>
+                        <input type="hidden" name="hiveId" value={hive.id} />
+                        <input type="hidden" name="apiaryId" value={apiaryId} />
+                        <input type="hidden" name="fittingId" value={f.id} />
+                        <TimezoneOffsetField />
+                        <BotonDeEnvio>{t("artefactoRetirarHoy")}</BotonDeEnvio>
+                      </form>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {puedeGestionar ? (
+              <details>
+                <summary>{t("artefactoPoner")}</summary>
+                <form action={instalarArtefactoFormAction} className="nn-form">
+                  <input type="hidden" name="hiveId" value={hive.id} />
+                  <input type="hidden" name="apiaryId" value={apiaryId} />
+                  <TimezoneOffsetField />
+                  <div className="nn-field">
+                    <label htmlFor="artefacto-kind">{t("artefactoQue")}</label>
+                    <select id="artefacto-kind" name="kind" required defaultValue="">
+                      <option value="" disabled />
+                      {DECLARABLES_EN_INSPECCION.map((k) => (
+                        <option key={k} value={k}>
+                          {t(`artefacto_${k}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="nn-field">
+                    <label htmlFor="artefacto-count">{t("artefactoCuantasAlzas")}</label>
+                    <input id="artefacto-count" name="count" type="number" min={1} step={1} inputMode="numeric" />
+                  </div>
+                  <div className="nn-field">
+                    <label htmlFor="artefacto-notes">{t("artefactoNota")}</label>
+                    <input id="artefacto-notes" name="notes" type="text" />
+                  </div>
+                  <div className="nn-field">
+                    <label htmlFor="artefacto-cuando">{t("artefactoCuando")}</label>
+                    <input id="artefacto-cuando" name="cuando" type="datetime-local" />
+                  </div>
+                  <BotonDeEnvio>{t("artefactoPonerBoton")}</BotonDeEnvio>
+                </form>
+              </details>
+            ) : (
+              <p className="nn-muted">{t("artefactosSinPermiso")}</p>
+            )}
+            {historia.some((f) => f.removedAt) ? (
+              <>
+                <h3>{t("artefactosHistoria")}</h3>
+                <ul>
+                  {historia
+                    .filter((f) => f.removedAt)
+                    .map((f) => (
+                      <li key={f.id}>
+                        {t(`artefacto_${f.kind}`)}
+                        {f.count !== null ? ` × ${f.count}` : ""}
+                        {f.hiveNode ? ` · ${f.hiveNode.deviceId}` : ""}
+                        {" — "}
+                        {t("artefactoDesdeHasta", {
+                          desde: f.installedAt.toISOString().slice(0, 10),
+                          hasta: f.removedAt!.toISOString().slice(0, 10),
+                        })}
+                      </li>
+                    ))}
+                </ul>
+              </>
             ) : null}
           </section>
 

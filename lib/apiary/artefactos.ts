@@ -250,3 +250,16 @@ export async function artefactosDeColmena(userAccountId: string, hiveId: string,
     orderBy: { installedAt: "asc" },
   });
 }
+
+/**
+ * La historia entera de la colmena —lo puesto y lo retirado—, lo más nuevo primero, con el
+ * aparato cuando es un nodo. Tarea 8: la pantalla enseña qué lleva puesto hoy y, debajo, esto.
+ */
+export async function historiaDeArtefactos(userAccountId: string, hiveId: string) {
+  await requireApiaryAccess(userAccountId, "view", [await colmena(hiveId)]);
+  return prisma.hiveFitting.findMany({
+    where: { hiveId },
+    include: { hiveNode: { select: { deviceId: true } } },
+    orderBy: [{ installedAt: "desc" }, { createdAt: "desc" }],
+  });
+}
