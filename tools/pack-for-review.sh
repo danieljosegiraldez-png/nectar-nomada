@@ -46,6 +46,13 @@ SALIDA="${2:-/private/tmp/claude-501/pack-$(date +%Y%m%d-%H%M%S).md}"
 mkdir -p "$(dirname "$SALIDA")"
 
 # Rutas opcionales a partir del tercer argumento. Sin ellas, todo el rango.
+#
+# **`${RUTAS[@]+"${RUTAS[@]}"}` y no `"${RUTAS[@]}"`, a propósito.** En bash 3.2 —el
+# `/bin/bash` de macOS— un array vacío bajo `set -u` cuenta como variable sin definir:
+# la expansión revienta dentro del `$(...)`, el `|| true` se traga el error, y el
+# script anunciaba «no toca ningún archivo» sobre commits que tocaban diecisiete.
+# Pasó desde el #125 (2026-09-01) hasta el 2026-09-18. Lo guarda
+# tests/pack-for-review.test.ts.
 shift 2 2>/dev/null || shift $# 
 RUTAS=("$@")
 if [ ${#RUTAS[@]} -gt 0 ]; then
@@ -54,7 +61,7 @@ else
   ALCANCE="$RANGO_DIFF (todo el rango)"
 fi
 
-TOCADOS=$(git diff --name-only "$RANGO_DIFF" -- "${RUTAS[@]}" | grep -v '^node_modules/' || true)
+TOCADOS=$(git diff --name-only "$RANGO_DIFF" -- ${RUTAS[@]+"${RUTAS[@]}"} | grep -v '^node_modules/' || true)
 if [ -z "$TOCADOS" ]; then
   echo "El rango $RANGO no toca ningún archivo. No hay nada que revisar." >&2
   exit 1
@@ -92,7 +99,7 @@ fi
   echo
   echo "## Medidas"
   echo '```'
-  git diff --stat "$RANGO_DIFF" -- "${RUTAS[@]}"
+  git diff --stat "$RANGO_DIFF" -- ${RUTAS[@]+"${RUTAS[@]}"}
   echo '```'
   echo
   echo "## Mensajes de commit del rango"
@@ -102,7 +109,7 @@ fi
   echo
   echo "## Diff completo del rango (sin extractos)"
   echo '```diff'
-  git diff "$RANGO_DIFF" -- "${RUTAS[@]}"
+  git diff "$RANGO_DIFF" -- ${RUTAS[@]+"${RUTAS[@]}"}
   echo '```'
   echo
   echo "## Texto actual COMPLETO de cada archivo tocado"
