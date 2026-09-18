@@ -6538,6 +6538,19 @@ model Colony {
   apiaryHarvestEvents ApiaryHarvestEvent[]
   assets              Asset[]
 
+  /// Spec 2026-09-18 §3 — la genealogía. La MADRE, sólo cuando la colonia nace de una división
+  /// (`originType = split`) y obligatoria en las nuevas (CHECK NOT VALID: las viejas sin madre se
+  /// quedan sin madre, no se les adivina una). NO ACTION y no RESTRICT: una madre con hijas no se borra, pero la comprobación es al FINAL
+  /// de la sentencia, así que borrar madre e hija juntas en un mismo `deleteMany` no depende del orden.
+  parentColonyId String? @map("parent_colony_id") @db.Uuid
+  parentColony   Colony? @relation("ColonyParent", fields: [parentColonyId], references: [id], onDelete: NoAction)
+  daughters      Colony[] @relation("ColonyParent")
+  /// La RECEPTORA, sólo cuando esta colonia terminó uniéndose a otra (`status = combined`).
+  combinedIntoColonyId String?  @map("combined_into_colony_id") @db.Uuid
+  combinedInto         Colony?  @relation("ColonyCombinedInto", fields: [combinedIntoColonyId], references: [id], onDelete: NoAction)
+  absorbed             Colony[] @relation("ColonyCombinedInto")
+
+  @@index([parentColonyId])
   @@index([hiveId])
   @@index([originSourceValueId])
   @@map("colony")

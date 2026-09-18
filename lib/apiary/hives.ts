@@ -217,10 +217,17 @@ export interface CreateColonyInput {
   dataQuality?: DataQuality | null;
 }
 
+/** Una colonia que no se puede crear así. Spec 2026-09-18 §3. */
+export class ColoniaInvalida extends Error {}
+
 export async function createColony(userAccountId: string, input: CreateColonyInput) {
   const hive = await prisma.hive.findUnique({ where: { id: input.hiveId } });
   if (!hive) throw new ApiaryAccessError("hive_not_found");
   await requireApiaryAccess(userAccountId, "manage", [{ projectId: hive.projectId, locationId: hive.locationId }]);
+  // Una división se hace con `dividirColonia`, que sabe de cuál sale: crearla aquí dejaría una
+  // «división» sin madre, que es justo lo que la genealogía existe para evitar (la base también
+  // la rechaza, `colony_division_con_madre`).
+  if (input.originType === "split") throw new ColoniaInvalida("division_sin_madre");
 
   const colony = await prisma.$transaction(async (tx) => {
     const colony = await tx.colony.create({
@@ -330,6 +337,12 @@ export interface RegistrarFinDeColoniaInput {
    * el día que el dueño dio el vocabulario.
    */
   reason?: string | null;
+  /**
+   * Con cuál se unió, cuando `status = combined` — y sólo entonces. Obligatorio ahí desde el
+   * 2026-09-18 (spec «faenas, división y reinas» §3): una colonia «combinada» sin receptora no
+   * dice con qué se juntó. `unirColonias` es la puerta de la pantalla; ésta es la única que escribe.
+   */
+  combinedIntoColonyId?: string | null;
 }
 
 /**
@@ -361,6 +374,22 @@ export async function registrarFinDeColonia(userAccountId: string, input: Regist
   if (!esEstadoDeFin(input.status)) throw new ColonyEndError(`estado_de_fin_invalido: ${String(input.status)}`);
 
   if (colony.status !== "active") throw new ColonyEndError("colony_already_ended");
+  // La unión dice CON CUÁL (spec 2026-09-18 §3). Todo es `ColonyEndError`, así que la cola de
+  // campo lo trata como rechazo y no lo reintenta.
+  const receptoraId = input.combinedIntoColonyId ?? null;
+  if (input.status === "combined") {
+    if (!receptoraId) throw new ColonyEndError("union_sin_receptora");
+    if (receptoraId === colony.id) throw new ColonyEndError("union_consigo_misma");
+    const receptora = await prisma.colony.findUnique({ where: { id: receptoraId }, include: { hive: true } });
+    if (!receptora) throw new ColonyEndError("receptora_no_encontrada");
+    await requireApiaryAccess(userAccountId, "manage", [{ projectId: receptora.hive.projectId, locationId: receptora.hive.locationId }]);
+    // Unir es juntar las abejas de dos cajas en un mismo sitio; entre apiarios sería un traslado.
+    if (receptora.hive.locationId !== colony.hive.locationId) throw new ColonyEndError("union_entre_apiarios");
+    if (receptora.status !== "active") throw new ColonyEndError("receptora_no_activa");
+    if (input.endedAt < receptora.startedAt) throw new ColonyEndError("union_antes_de_empezar");
+  } else if (receptoraId) {
+    throw new ColonyEndError("receptora_solo_en_union");
+  }
   // Terminar antes de empezar es un problema de reloj, no un registro.
   if (input.endedAt < colony.startedAt) throw new ColonyEndError("ended_before_started");
 
@@ -411,7 +440,7 @@ export async function registrarFinDeColonia(userAccountId: string, input: Regist
   return prisma.$transaction(async (tx) => {
     const { count } = await tx.colony.updateMany({
       where: { id: input.colonyId, status: "active" },
-      data: { status: input.status, endedAt: input.endedAt, endClientDraftId: input.clientDraftId ?? null },
+      data: { status: input.status, endedAt: input.endedAt, endClientDraftId: input.clientDraftId ?? null, combinedIntoColonyId: receptoraId },
     });
     if (count === 0) throw new ColonyEndError("colony_already_ended");
 
