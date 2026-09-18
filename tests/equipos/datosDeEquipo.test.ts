@@ -67,6 +67,25 @@ describe("editarDatosDeEquipo", () => {
     const e = await alta();
     await expect(editarDatosDeEquipo(f.operarioA, e.id, { serialNumber: "X" })).rejects.toThrow();
   });
+  it("editar un solo dato no borra los demás; un null explícito sí borra", async () => {
+    const e = await alta({
+      modelId: modeloComp,
+      serialNumber: "S1",
+      internalCode: `KEEP-${f.run}`,
+      warrantyUntil: new Date("2027-01-01T00:00:00Z"),
+    });
+    await editarDatosDeEquipo(f.jefeA, e.id, { serialNumber: "S2" });
+    const fila = await prisma.equipment.findUniqueOrThrow({ where: { id: e.id } });
+    expect(fila.serialNumber).toBe("S2");
+    expect(fila.modelId).toBe(modeloComp);
+    expect(fila.internalCode).toBe(`KEEP-${f.run}`);
+    expect(fila.warrantyUntil?.toISOString()).toBe("2027-01-01T00:00:00.000Z");
+
+    await editarDatosDeEquipo(f.jefeA, e.id, { warrantyUntil: null });
+    const fila2 = await prisma.equipment.findUniqueOrThrow({ where: { id: e.id } });
+    expect(fila2.warrantyUntil).toBeNull();
+    expect(fila2.serialNumber).toBe("S2");
+  });
 });
 
 describe("puedeSobreEquipo", () => {

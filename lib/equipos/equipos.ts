@@ -173,6 +173,31 @@ function esCodigoDuplicado(e: unknown) {
   return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
 }
 
+/**
+ * Sólo las claves PRESENTES en `datos`, limpias de la misma manera que
+ * `datosDeEquipoLimpios`. Editar sólo lleva al `update` lo que quien llama
+ * quiso tocar: `undefined` es "no toques esto", `null` es "borra esto". Un
+ * `create` legítimamente escribe las cinco claves siempre —por eso
+ * `datosDeEquipoLimpios` no cambia—, pero un `update` con las cinco completas
+ * borraría en silencio lo que nadie pidió tocar.
+ */
+function datosDeEquipoParaEditar(d: DatosDeEquipo) {
+  const t = (v: string | null | undefined) => (v?.trim() ? v.trim() : null);
+  const data: {
+    modelId?: string | null;
+    serialNumber?: string | null;
+    internalCode?: string | null;
+    supplierOrganizationId?: string | null;
+    warrantyUntil?: Date | null;
+  } = {};
+  if (d.modelId !== undefined) data.modelId = d.modelId || null;
+  if (d.serialNumber !== undefined) data.serialNumber = t(d.serialNumber);
+  if (d.internalCode !== undefined) data.internalCode = t(d.internalCode);
+  if (d.supplierOrganizationId !== undefined) data.supplierOrganizationId = d.supplierOrganizationId || null;
+  if (d.warrantyUntil !== undefined) data.warrantyUntil = d.warrantyUntil ?? null;
+  return data;
+}
+
 export async function registrarEquipo(userAccountId: string, input: RegistrarEquipoInput) {
   // Mismo orden que `objetivoDeEquipo`, y por la misma razón: si se dice dónde
   // queda el equipo, el permiso se juzga AHÍ. Sin esto, registrar un
@@ -259,11 +284,13 @@ export async function editarDatosDeEquipo(userAccountId: string, equipmentId: st
   const antes = await prisma.equipment.findUnique({ where: { id: equipmentId } });
   if (!antes) throw new EquipoError("equipment_not_found");
   await exigePermiso(userAccountId, "manage", antes);
-  await comprobarModelo(datos.modelId, antes.organizationId, antes.kind);
-  const limpios = datosDeEquipoLimpios(datos);
+  if (datos.modelId !== undefined) await comprobarModelo(datos.modelId, antes.organizationId, antes.kind);
+  const cambios = datosDeEquipoParaEditar(datos);
   try {
     await prisma.$transaction(async (tx) => {
-      await tx.equipment.update({ where: { id: equipmentId }, data: limpios });
+      await tx.equipment.update({ where: { id: equipmentId }, data: cambios });
+      const after: Record<string, unknown> = { ...cambios };
+      if ("warrantyUntil" in cambios) after.warrantyUntil = cambios.warrantyUntil?.toISOString() ?? null;
       await recordAuditEvent(
         {
           actorUserAccountId: userAccountId,
@@ -278,7 +305,7 @@ export async function editarDatosDeEquipo(userAccountId: string, equipmentId: st
             supplierOrganizationId: antes.supplierOrganizationId,
             warrantyUntil: antes.warrantyUntil?.toISOString() ?? null,
           },
-          after: { ...limpios, warrantyUntil: limpios.warrantyUntil?.toISOString() ?? null },
+          after,
         },
         tx,
       );
