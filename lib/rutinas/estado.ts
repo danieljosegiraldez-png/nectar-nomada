@@ -34,6 +34,8 @@ export function estadoDeRutina(e: {
   hoy: string;
 }): EstadoDeRutina {
   if (!DIA.test(e.hoy)) throw new Error(`hoy_mal_formado:${e.hoy}`);
+  const fechaHoy = new Date(`${e.hoy}T00:00:00Z`);
+  if (isNaN(fechaHoy.getTime()) || aDia(fechaHoy) !== e.hoy) throw new Error(`hoy_mal_formado:${e.hoy}`);
   if (!Number.isInteger(e.intervalDays) || e.intervalDays <= 0) throw new Error(`intervalo_invalido:${e.intervalDays}`);
 
   const validos = e.registros.filter((r) => r.voidedAt === null).map((r) => aDia(r.performedOn)).sort();

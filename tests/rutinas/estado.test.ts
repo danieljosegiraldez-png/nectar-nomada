@@ -77,4 +77,9 @@ describe("estadoDeRutina", () => {
   it("un intervalo no positivo lanza (la base ya lo impide; aquí no se inventa)", () => {
     expect(() => estadoDeRutina({ intervalDays: 0, registros: [], alta: d("2026-09-01"), hoy: "2026-09-18" })).toThrow();
   });
+
+  it("un `hoy` con forma de fecha pero día imposible lanza, en vez de dar NaN", () => {
+    expect(() => estadoDeRutina({ intervalDays: 7, registros: [reg("2026-09-10")], alta: null, hoy: "2026-13-01" })).toThrow();
+    expect(() => estadoDeRutina({ intervalDays: 7, registros: [reg("2026-09-10")], alta: null, hoy: "2026-02-30" })).toThrow();
+  });
 });
