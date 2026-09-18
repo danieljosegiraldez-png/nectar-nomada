@@ -40,6 +40,7 @@ Lleva **su propio ADR** —el siguiente libre al escribirlo; hoy el último es A
 | dónde se anota cada entrega | **en una pantalla de cosecha, con conexión** |
 | meliponarios | **entrada propia en el menú**, junto a apiarios |
 | qué hace la selección | **rechaza para primera calidad, y lo rechazado no se desecha.** Aclaración de Daniel: *«es un rechazo de cereza óptima para proceso, no apta para primera calidad»*. La cereza madura —roja, «uva»— va por un lado; verdes y pintones, juntos o separados; flotadores aparte. **Cada corriente se pesa y sigue su propio proceso**: los flotadores pueden ir directo a cama, o fermentarse, u oxidarse unos días en bolsa y luego a cama |
+| rendimiento: por qué unidad | **por parcela, no por hectárea**, y medible hasta **microparcela, bloque o celda —una planta, `Specimen`—** cuando la cosecha dice que fue de ahí, con esa trazabilidad llegando al lote |
 | qué mide el tablero | **el café de especialidad de primera.** Las otras corrientes se procesan y entran como otra calidad u otro uso; se registran, pero **no cuentan** en los indicadores de primera, que son los del manejo prioritario de la finca y del beneficio |
 
 ## 5. Diseño
@@ -101,7 +102,7 @@ Así que **cada indicador de la sección se calcula dos veces, y sólo uno es el
 
 | indicador | de primera — **el que se enseña primero** | total, de todas las corrientes |
 |---|---|---|
-| rendimiento de la parcela | kg de primera por hectárea | kg de cereza por hectárea, como hoy |
+| rendimiento | **kg de primera por parcela**, y bajando hasta microparcela o planta cuando la cosecha lo declaró (§5.7) | kg de cereza por parcela; el kg/ha de hoy queda como dato secundario |
 | calidad de una cosecha | % que la selección dejó en primera | kilos por corriente |
 | recolector | kg que traería a primera, según su muestra (lo maduro sobre lo muestreado) | kg entregados |
 | eficiencia | kg de primera por hora | kg por hora |
@@ -114,6 +115,27 @@ Así que **cada indicador de la sección se calcula dos veces, y sólo uno es el
 
 **Lo que sí falta en ese vocabulario: «pintón».** Está en `cereza_color`, el de la cosecha, y no en `rechazo_categoria`, el de la selección, aunque Daniel separa verdes y pintones —juntos o por separado—. Ampliarlo toca `docs/beneficio/`, que es normativo, y el beneficio lo trabaja otra sesión: se anota como decisión pendiente, con su palabra ya dicha.
 
+### 5.7 Hasta dónde se puede bajar: parcela, microparcela, planta
+
+Daniel, 2026-09-18: el rendimiento de primera *«por parcela, no por hectárea, y que se pueda medir hasta por microparcela o bloque o celda, siendo un plant specimen; no en cada cosecha, pero sí si se indica en la cosecha que fue específica de tal specimen, o de tal bloque, microparcela o parcela, y si es posible vincular al lote esta trazabilidad»*.
+
+**Los niveles que ya existen — medido sobre `main`:**
+
+| nivel | en el modelo | ¿una cosecha puede apuntar a él hoy? |
+|---|---|---|
+| parcela — y **bloque**: el comentario del esquema la presenta como la granularidad *«Farm/block»* | `Location` tipo `plot` | **sí**, `HarvestEventSource.locationId` |
+| microparcela | `Location` tipo `micro_plot` | **sí**, el mismo campo |
+| siembra (cohorte) | `PlantingCohort` | **sí**, `HarvestEventSource.plantingCohortId` |
+| **celda: una planta** | `Specimen`, con `locationId`, `plantingCohortId`, `gridRow` y `gridPosition` | **no — es el único enlace que falta** |
+
+**Lo que se añade: `specimenId` anulable en `HarvestEventSource`.** Con su regla **en la base**: la planta tiene que estar en la ubicación de esa misma fuente. Una cosecha de «la planta 14 de la fila 3» que dijera venir de otra parcela es un dato contradictorio, y se rechaza al guardar.
+
+**La regla que no se rompe: se baja hasta donde la cosecha lo declaró, nunca se reparte hacia abajo.** Una cosecha anotada a nivel de parcela **no** se divide entre sus microparcelas ni entre sus plantas: la pantalla dice que esa parte no tiene más detalle. Repartirla sería inventar un dato (ADR-080). Por eso el rendimiento de una microparcela dice **cuánto de él viene declarado a ese nivel**, y no aparenta un total que no tiene.
+
+**Y la trazabilidad llega al lote sin nada nuevo:** el lote ya hereda sus fuentes por `HarvestEvent.resultingLotId`, así que al declarar la planta en la cosecha, el lote puede decir de qué plantas vino. El informe del lote enseña **el origen más fino que se declaró**, no más.
+
+**«Bloque» se toma como la parcela**, que es como el esquema presenta ese nivel (*«Farm/block granularity»*). Si Daniel usa «bloque» para un nivel **entre** la parcela y la microparcela, eso es un tipo de ubicación nuevo y una decisión aparte; no se crea sin preguntarlo.
+
 ## 6. Pruebas
 
 - **Permisos, con control positivo:** el capataz ve nombres; un perfil de investigación ve la misma pantalla **sin** nombres, y el control es que sí ve los agregados.
@@ -121,15 +143,16 @@ Así que **cada indicador de la sección se calcula dos veces, y sólo uno es el
 - **La muestra:** conteos que suman más que la muestra se rechazan **en la base**, con una sonda que prueba que lo válido sí entra.
 - **Entregas que no cuadran:** se avisa con la diferencia y el guardado no falla.
 - **Selección de vuelta:** un lote de una cosecha atribuye sus corrientes a esa parcela y día; un lote de dos cosechas **no** reparte y lo dice.
+- **Hasta dónde se baja:** una cosecha declarada por planta cuenta en la planta, su microparcela y su parcela; una declarada por parcela **no** aparece repartida en sus microparcelas ni plantas, y la pantalla lo dice. Una planta de otra ubicación se rechaza **en la base**, con sonda que prueba que la válida sí entra.
 - **Primera frente a otras calidades:** una corriente de otra calidad cuenta en los kilos de la cosecha y **no** en los kilos de primera; el control es que la corriente de primera sí cuenta en los dos.
-- **Flip-tests** con las tres cosas de la casa —sha antes y después, compila, qué prueba cae por su nombre—: tratar horas nulas como cero; conceder el permiso de ver nombres a Research; repartir las corrientes de un lote mezclado; **contar una corriente de otra calidad como primera**.
+- **Flip-tests** con las tres cosas de la casa —sha antes y después, compila, qué prueba cae por su nombre—: tratar horas nulas como cero; conceder el permiso de ver nombres a Research; repartir las corrientes de un lote mezclado; **contar una corriente de otra calidad como primera**; **repartir hacia abajo una cosecha declarada por parcela**.
 - `npm run build` en toda tarea que toque TypeScript; al final `npm run verify`, `bash scripts/ci.sh` y `npm test`.
 
 ## 7. Orden
 
 1. **Menú «Finca» e índice** (§5.1). Independiente; se puede construir ya.
 2. **Recolectores, entregas, el permiso y el ADR** (§5.3, §5.5, §3).
-3. **Rendimiento, eficiencia y calidad**, con la selección de vuelta (§5.2 pantallas 4 y 5, §5.4).
+3. **Rendimiento, eficiencia y calidad**, con la selección de vuelta (§5.2 pantallas 4 y 5, §5.4). Incluye `specimenId` en las fuentes de cosecha, con su migración (§5.7).
 4. **«Meliponarios» con entrada propia.** Toca la página de apiarios, que lleva otra sesión: se coordina antes de tocarla.
 5. Fusiones y despliegues: **decisión de Daniel**.
 
