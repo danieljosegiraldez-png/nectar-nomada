@@ -27,7 +27,7 @@ import { SIN_RECETA } from "../../lib/traceability/lotProcess";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `rep-${Date.now()}`;
-let orgId: string, plotId: string, scopeId: string, plataformaScopeId: string;
+let orgId: string, plotId: string, scopeId: string;
 let gestor: string;
 let loteCompleto: string, loteDesnudo: string;
 let recetaId: string, recetaVersionId: string;
@@ -63,13 +63,12 @@ beforeAll(async () => {
 
   scopeId = (await prisma.scope.create({ data: { scopeType: "location", scopeRefId: plotId } })).id;
   const farm = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+  // Sólo Farm Operator de SU plot, y a propósito sin Platform Admin: con ámbito
+  // de plataforma el reporte ve todos los lotes de la base, y los recuentos de
+  // `faltan` sumaban los procesos que `lotProcess.test.ts` cierra en paralelo
+  // («expected 3 to be 1», intermitente, 2026-09-17). Con este ámbito el reporte
+  // sólo ve lo que este archivo crea.
   await prisma.assignment.create({ data: { userAccountId: gestor, roleProfileId: farm.id, scopeId } });
-  const admin = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Platform Admin" } });
-  const plataforma =
-    (await prisma.scope.findFirst({ where: { scopeType: "platform" } })) ??
-    (await prisma.scope.create({ data: { scopeType: "platform", scopeRefId: null } }));
-  plataformaScopeId = plataforma.id;
-  await prisma.assignment.create({ data: { userAccountId: gestor, roleProfileId: admin.id, scopeId: plataforma.id } });
 
   const lote = async (codigo: string, tipo: "cherry" | "green") =>
     (
@@ -307,7 +306,6 @@ afterAll(async () => {
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: plotId }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: orgId }) });
   void cultivarCatalogoId;
-  void plataformaScopeId;
 });
 
 describe("la cadena entera se puede unir", () => {
@@ -389,8 +387,10 @@ describe("la cadena entera se puede unir", () => {
    */
   it("dice qué eslabón falta, no sólo cuántas filas hay", async () => {
     const r = await reporteDeProceso(gestor);
-    expect(r.faltan.lotesVisibles).toBeGreaterThanOrEqual(2);
-    expect(r.faltan.lotesConProceso).toBeGreaterThanOrEqual(2);
+    // Exactos y no «al menos»: el gestor sólo ve su plot. Si volviera a ver toda
+    // la base, esto cae siempre —hay lotes sembrados— en vez de a veces.
+    expect(r.faltan.lotesVisibles).toBe(2);
+    expect(r.faltan.lotesConProceso).toBe(2);
     // De los dos procesos, uno está cerrado, uno tiene tueste, uno tiene puntaje.
     expect(r.faltan.procesosCerrados).toBe(1);
     expect(r.faltan.procesosConTueste).toBe(1);
