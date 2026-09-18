@@ -15,7 +15,7 @@ idea se pierda cuando la respuesta es «ahora no».
 | [006](006-sin-ci-en-este-repositorio.md) | CI: qué cubre hoy y qué no | Parcialmente hecho · lo que falta necesita base efímera |
 | [007](007-el-inventario-lee-texto-no-programa.md) | El inventario de acceso lee texto, no programa | Nada — trabajo pendiente |
 | [009](009-el-unico-lector-de-auditevent-no-puede-acertar.md) | El único lector de `AuditEvent` en pantalla no puede acertar | Nada — trabajo pendiente |
-| [012](012-pruebas-con-admin-y-lista-con-tope.md) | Pruebas que ven toda la base y afirman sobre una lista con tope | Nada — trabajo pendiente |
+| [012](012-pruebas-con-admin-y-lista-con-tope.md) | Pruebas que ven toda la base y afirman sobre una lista con tope | 2 de 3 hechos · `crearSesion` espera cómo paginar la lista de muestras |
 
 Hecho y retirado de esta lista: **004 · apuntar `nectarnomada.com` al sitio
 público**, resuelto el 2026-08-28, y **008 · un test hermético nuevo no corre en

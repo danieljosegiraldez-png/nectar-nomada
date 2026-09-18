@@ -66,6 +66,8 @@ describe("ADR-145 contra Postgres", () => {
   let loteId: string;
   let apiarioId: string;
   let meliponarioId: string;
+  let lectorId: string | undefined;
+  const lectorScopes: string[] = [];
 
   beforeAll(async () => {
     organizationId = (
@@ -131,6 +133,12 @@ describe("ADR-145 contra Postgres", () => {
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: loteId }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: fincaId }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
+    if (lectorId) {
+      await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: lectorId }) });
+      await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: lectorId }) });
+    }
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: lectorScopes } }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: `TEST MelLector (${RUN_ID})` }) });
     // El ambito de plataforma NO se borra: es compartido y no es mio.
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: userAccountId }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: personId }) });
@@ -163,10 +171,25 @@ describe("ADR-145 contra Postgres", () => {
   });
 
   it("los dos salen en la lista de apiarios", async () => {
-    const { items } = await getApiaryList(userAccountId);
-    const ids = items.map((i) => i.id);
-    expect(ids).toContain(apiarioId);
-    expect(ids).toContain(meliponarioId);
+    // Lee un lector con ámbito SOLO sobre los dos sitios, no el admin que los creó: con ámbito
+    // de plataforma la lista es la de toda la base compartida, cortada en 200 por nombre, y los
+    // propios se salían el día que otros dejaran 200 sitios que ordenan antes
+    // (PENDING_IMPLEMENTATIONS/012). Así además la aserción puede ser exacta.
+    const persona = await prisma.person.create({
+      data: { givenName: "TEST", familyName: "MelLector", displayName: `TEST MelLector (${RUN_ID})`, locale: "es" },
+    });
+    lectorId = (
+      await prisma.userAccount.create({ data: { personId: persona.id, authProvider: "credentials", status: "active" } })
+    ).id;
+    const farm = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+    for (const sitio of [apiarioId, meliponarioId]) {
+      const scope = await prisma.scope.create({ data: { scopeType: "location", scopeRefId: sitio } });
+      lectorScopes.push(scope.id);
+      await prisma.assignment.create({ data: { userAccountId: lectorId, roleProfileId: farm.id, scopeId: scope.id } });
+    }
+
+    const { items } = await getApiaryList(lectorId);
+    expect(items.map((i) => i.id).sort()).toEqual([apiarioId, meliponarioId].sort());
   });
 
   it("NO se puede trasladar de un apiario a un meliponario, ni al reves", async () => {

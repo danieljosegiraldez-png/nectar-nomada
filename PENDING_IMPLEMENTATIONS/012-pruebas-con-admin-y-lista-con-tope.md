@@ -1,6 +1,6 @@
 # 012 · Pruebas que ven toda la base y afirman sobre una lista con tope
 
-**Estado: no empezado.** Encontrado el 2026-09-18 auditando las pruebas que
+**Estado: dos de tres hechos el 2026-09-18** —la fuga de `limpiezaDeCaja` y `meliponario`; queda `crearSesion`, que no se puede arreglar desde la prueba (ver «Arreglo»). Encontrado el 2026-09-18 auditando las pruebas que
 buscan el perfil Platform Admin, después de arreglar `reporteDeProceso.test.ts`
 (PR #395; la causa está en `CLAUDE.md`, «Un admin de plataforma ve la base
 compartida entera»). **Ninguna falla hoy**: son la forma lenta del defecto, y
@@ -30,10 +30,20 @@ asignación. **Crece con cada corrida.** Muestras: 8, lejos del tope.
 
 ## Arreglo
 
-- Las dos aserciones: consultar por id propio, o dar al usuario un ámbito de
-  su propio sitio en vez de plataforma.
-- `limpiezaDeCaja.test.ts`: que su `afterAll` borre todo lo que crea
-  (misma forma que «Una limpieza escrita debajo de las aserciones no corre»).
+- **`limpiezaDeCaja.test.ts` — hecho.** Su `afterAll` borra todo lo que crea.
+  Medido con la base quieta (dos lecturas iguales antes): la versión vieja dejaba
+  **+1 sitio, +10 cajas, +2 personas, +1 organización** por corrida; la nueva
+  **+0**. 10/10 las dos. Los 19 sitios que ya quedaban en la base compartida
+  **no se borraron**: la base es de todas las sesiones.
+- **`meliponario.test.ts` — hecho.** La lista la lee un lector con Farm Operator
+  sólo sobre los dos sitios, y la aserción es exacta. Flip-test: volver a leer con
+  el admin → cae «los dos salen en la lista» con **65 sitios en vez de 2**.
+- **`crearSesion.test.ts` — sin hacer, y no se puede desde la prueba.**
+  `listarMuestrasParaCata` exige `sensory:manage_session`, que sólo existe en
+  ámbito de plataforma: quien la llama **ve todas las muestras siempre**. El tope
+  está en el producto (`take: 500` por código y 200 visibles, en
+  `lib/sensory/sessions.ts`), no en el fixture. Hoy hay 8 muestras. Arreglarlo es
+  decidir cómo pagina esa lista.
 
 ## De paso, sin relación con el admin
 
