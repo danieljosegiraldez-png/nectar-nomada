@@ -81,6 +81,10 @@ export function RevisionDeTrampaForm({
           step="1"
           inputMode="numeric"
           placeholder={t("notRecorded")}
+          // La rueda del ratón sobre un campo numérico con foco lo cambia: desde
+          // vacío, un paso abajo deja 0, y «no se contó» pasa a «cero brocas»
+          // sin que nadie lo vea (recorrido 2026-09-18). Perder el foco lo evita.
+          onWheel={(e) => e.currentTarget.blur()}
         />
       </div>
 
