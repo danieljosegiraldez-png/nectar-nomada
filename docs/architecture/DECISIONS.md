@@ -11301,3 +11301,34 @@ no sabe que envases se vendieron. Devolver a la finca lo asignado y no recibido.
 **La concesión** es un `AssignmentPermissionOverride` de efecto `grant`, que `can()` ya resuelve. La pantalla para que el Farm Manager la dé es el plan 3 de la spec.
 
 **Consecuencias.** Instalaciones, camas, equipos y recetas siguen abiertos al capataz hasta el plan 2 de la misma spec; está dicho en su §4.2.
+
+## ADR-165 -- La condicion del sitio: lista fija, en la version 2 del protocolo de campo
+
+**Contexto.** Era la ultima pregunta del protocolo sin sitio. La v1 la pedia como «una linea» con
+la pista «Hormigas, moho, dosel, agua, cerca», y Daniel pidio vocabularios fijos con «otro, ¿cual?».
+Antes de preguntarle se leyo lo escrito: el Anexo B da los ejemplos (hormigas en cajas vacias, moho,
+dosel, agua, cerca caida) y la guia de Varroa el pasto alto alrededor de los soportes. Lo unico
+ambiguo era «agua», y Daniel lo resolvio: **son dos**, falta (fuente seca o lejos) y exceso
+(encharcamiento).
+
+**Decision.** `SiteCondition[]` en `FieldSession`, con nota para «otro». Se anade **`sin_novedad`**,
+que va sola: sin ella «mire y el sitio esta bien» y «nadie miro» se guardarian igual (ADR-080). Se
+escribe por las dos puertas del clima -- en el sitio (ADR-157) y al cerrar --; al cerrar, **sin
+ninguna casilla marcada no se toca** lo anotado en el sitio, porque las casillas no pueden decir «lo
+de antes». Dos `CHECK` (otro ⇔ nota; sin novedad sola), probados con sondas y control positivo.
+
+**Cambiar la pregunta es una VERSION 2, no una edicion.** Lo dice el propio JSON: *«Cambiar esto
+despues NO es editar aqui: es crear una version 2, para que las respuestas ya dadas sigan
+significando lo mismo.»* `apiario-campo-v2.json` es la v1 con esa pregunta cambiada; la v1 se queda.
+
+**Y el cargador no sabia versionar.** Ponia el numero de version en el identificador del protocolo,
+asi que una v2 habria nacido como un protocolo aparte, sin parentesco. Ahora la identidad es fija
+(`apiario-campo-v1`, como nacio en produccion el 2026-09-16) y la version crece debajo, idempotente por
+protocolo y version. **Su prueba borraba el protocolo entero** si habia creado la version: con la v1
+real en la base compartida, habria borrado la v1 al limpiar la v2. Ahora borra solo lo que creo.
+
+**El guardia de vocabulario solo miraba `enum`**, no `multi_enum`. Extendido, vigila 15 preguntas en
+vez de 12 -- entran `brood_stages`, `purpose` y esta -- y las tres coinciden.
+
+**Pendiente del dueno:** correr `npm run apiary:load-protocol` en produccion despues de fusionar,
+para que exista la v2. Hasta entonces la condicion del sitio se guarda igual: va a columna.

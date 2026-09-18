@@ -63,7 +63,8 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   // cierto del "Clima 7 dias" del Anexo C --un PRONOSTICO--, y falso de esta: el Anexo E
   // pregunta lo que el apicultor VIO estando ahi, y su vocabulario ya estaba en el protocolo.
   weather_observed: { clase: "campo", modelo: "FieldSession", campo: "weatherObserved" },
-  site_condition: { clase: "sin_sitio", nota: "Sin columna propia." },
+  // ADR-165: lista fija desde la v2 del protocolo (era una línea de texto en la v1).
+  site_condition: { clase: "campo", modelo: "FieldSession", campo: "siteConditions" },
   colonies_alive_count: { clase: "campo", modelo: "FieldSession", campo: "coloniesAliveCount" },
   // Ya tiene sitio (ADR-150). La nota anterior decia la razon por la que faltaba --"contar y
   // declarar son datos distintos: el segundo es lo que alguien vio"-- y esa razon es justo la

@@ -3,13 +3,13 @@
  *
  * **La primera prueba es la falsación que el propio informe pidió**
  * (`48_A9_CAPTURA_DE_CAMPO_REPORTE.md` §8): *«intentar describir los 44 ítems
- * de `protocolos/apiario-campo-v1.json` con `ProtocolVariable` más las cuatro
+ * de `protocolos/apiario-campo-v2.json` (la vigente, ADR-165) con `ProtocolVariable` más las cuatro
  * columnas propuestas, y ver cuántos no entran — si son más de cinco, D2 estaba
  * mal»*. Aquí se cuenta, no se estima.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import {
+import { RUTA_DEL_PROTOCOLO_DE_CAMPO,
   cargarProtocoloDeCampo,
   leerProtocoloDeCampo,
   variablesDe,
@@ -26,6 +26,9 @@ let cuentaId: string;
  */
 let loCreoEstaPrueba = false;
 let protocolIdCreado: string | null = null;
+let versionIdCreada: string | null = null;
+const protocolosDePrueba: string[] = [];
+const temporales: string[] = [];
 
 beforeAll(async () => {
   const person = await prisma.person.create({
@@ -38,8 +41,30 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // **Se borra SÓLO lo que esta prueba creó.** Desde ADR-165 el protocolo del dueño puede tener
+  // la v1 cargada y esta prueba crear la v2 debajo: borrar el protocolo entero se llevaría la
+  // v1, que en la base compartida es la de verdad. Si creó una versión, borra esa versión; el
+  // protocolo sólo si también lo creó.
+  if (versionIdCreada) {
+    await prisma.protocolVariable.deleteMany({ where: assertDefinedWhere({ protocolVersionId: versionIdCreada }) });
+    await prisma.protocolVersion.deleteMany({ where: assertDefinedWhere({ id: versionIdCreada }) });
+  }
   if (protocolIdCreado && loCreoEstaPrueba) {
     await prisma.protocol.deleteMany({ where: assertDefinedWhere({ id: protocolIdCreado }) });
+  }
+  // Los directorios de las dos raíces falsas: con reintentos y sin lanzar si fallan.
+  const { rmSync } = await import("node:fs");
+  for (const d of temporales) {
+    try {
+      rmSync(d, { recursive: true, force: true, maxRetries: 3 });
+    } catch {
+      // un temporal que no se pudo borrar no debe tumbar la limpieza de la base, que va detrás
+    }
+  }
+  for (const id of protocolosDePrueba) {
+    await prisma.protocolVariable.deleteMany({ where: assertDefinedWhere({ protocolVersion: { protocolId: id } }) });
+    await prisma.protocolVersion.deleteMany({ where: assertDefinedWhere({ protocolId: id }) });
+    await prisma.protocol.deleteMany({ where: assertDefinedWhere({ id }) });
   }
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: cuentaId }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: cuentaId }) });
@@ -86,9 +111,10 @@ describe("los 44 ítems del dueño caben en ProtocolVariable", () => {
   });
 
   it("se carga como ProtocolVersion, con sus 44 variables y su AuditEvent", async () => {
-    const { version, creado } = await cargarProtocoloDeCampo(cuentaId);
+    const { version, creado, protocoloCreado } = await cargarProtocoloDeCampo(cuentaId);
     protocolIdCreado = version.protocolId;
-    loCreoEstaPrueba = creado;
+    loCreoEstaPrueba = protocoloCreado;
+    if (creado) versionIdCreada = version.id;
 
     // **`creado` no se exige, y la razón importa.** En CI siempre es `true`: el carril con
     // base arranca con un Postgres nuevo. En la copia LOCAL, que todas las sesiones
@@ -108,7 +134,9 @@ describe("los 44 ítems del dueño caben en ProtocolVariable", () => {
     expect(guardadas.length).toBe(44);
     expect(guardadas.filter((v) => v.stage === "field").length).toBe(34);
     expect(guardadas.filter((v) => v.stage === "close").length).toBe(10);
-    expect(guardadas.filter((v) => v.valueType === "multi_enum").length).toBe(3);
+    // Cuatro desde la v2 (ADR-165): la condición del sitio dejó de ser texto libre.
+    expect(guardadas.filter((v) => v.valueType === "multi_enum").length).toBe(4);
+    expect(version.version).toBe(2);
     expect(guardadas.filter((v) => v.valueType === "date").length).toBe(3);
 
     const audit = await prisma.auditEvent.findFirst({
@@ -122,7 +150,38 @@ describe("los 44 ítems del dueño caben en ProtocolVariable", () => {
     const segunda = await cargarProtocoloDeCampo(cuentaId);
     expect(segunda.creado).toBe(false);
 
-    const versiones = await prisma.protocolVersion.count({ where: { protocolId: protocolIdCreado! } });
+    // De ESTA versión hay una sola. El protocolo puede tener más —la v1 del dueño debajo—, y
+    // eso no es duplicar: es versionar.
+    const versiones = await prisma.protocolVersion.count({ where: { protocolId: protocolIdCreado!, version: 2 } });
     expect(versiones).toBe(1);
+  });
+
+  it("UNA VERSIÓN NUEVA SE AÑADE AL MISMO PROTOCOLO, y la anterior no se toca", async () => {
+    // Con un identificador de prueba y dos raíces falsas: una trae el JSON como v1, otra como v2.
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const base = leerProtocoloDeCampo();
+    const raiz = (v: number) => {
+      const d = mkdtempSync(join(tmpdir(), "protocolo-"));
+      temporales.push(d);
+      mkdirSync(join(d, "protocolos"));
+      writeFileSync(join(d, RUTA_DEL_PROTOCOLO_DE_CAMPO), JSON.stringify({ ...base, version: v }));
+      return d;
+    };
+    const identificador = `test-apiario-${RUN_ID}`;
+    const v1 = await cargarProtocoloDeCampo(cuentaId, { raiz: raiz(1), identificador });
+    protocolosDePrueba.push(v1.version.protocolId);
+    const v2 = await cargarProtocoloDeCampo(cuentaId, { raiz: raiz(2), identificador });
+    // Se apunta TAMBIÉN el de la v2: si el cargador la metiera en un protocolo aparte —la
+    // regresión que esta prueba caza—, la limpieza tiene que llevárselo igual. Lo destapó el
+    // flip-test, que dejó uno colgado en la base compartida.
+    if (!protocolosDePrueba.includes(v2.version.protocolId)) protocolosDePrueba.push(v2.version.protocolId);
+    expect([v1.protocoloCreado, v2.protocoloCreado, v2.creado]).toEqual([true, false, true]);
+    expect(v2.version.protocolId).toBe(v1.version.protocolId);
+    const versiones = await prisma.protocolVersion.findMany({ where: { protocolId: v1.version.protocolId }, orderBy: { version: "asc" } });
+    expect(versiones.map((v) => [v.version, v.id])).toEqual([[1, v1.version.id], [2, v2.version.id]]);
+    // La v1 conserva sus variables intactas.
+    expect(await prisma.protocolVariable.count({ where: { protocolVersionId: v1.version.id } })).toBe(44);
   });
 });

@@ -3921,3 +3921,17 @@ caso normal y el apicultor tiene que leer por qué.
 
 **Pendiente:** los productos de tratamiento, que esperan a Daniel — y a leer «el botiquín del apiario»
 (#386), recién fusionado.
+
+### 2026-09-17 · El refractómetro de miel: la lectura va sobre el lote
+
+ADR-160. Daniel corrigió: un refractómetro no mide humedad en general; **el de miel lee Brix y H%**, y
+**el del beneficio es otro aparato** (Brix 0–32 de mosto, sin H%). La primera versión metía tres
+columnas en la cosecha; **se quitaron antes de commitear** porque el esquema ya lo prohibía y Daniel
+lo dijo a mitad: **la miel es un lote**, que se sigue al dividir, filtrar, envasar y muestrear.
+
+`MaterialState.BEE_HONEY`, `InstrumentMeasurementMode.variable`, y `recordMeasurement` que rechaza
+un modo que no lee esa variable y una lectura fuera de su rango. **El Brix 0–40 del café no se
+ensancha**: se abre a 0–100 sólo sobre lotes `honey`. **El H% nunca se calcula desde el Brix.** Una
+lectura por cosecha. La ficha del equipo gana dónde declarar modos: no había ninguna pantalla.
+
+**Hecho después:** procesar y envasar (ADR-161), con la ficha del lote de miel.
