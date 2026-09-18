@@ -98,6 +98,19 @@ describe("regla de trampas de la finca", () => {
     const filas = await prisma.trapRule.findMany({ where: { farmLocationId } });
     expect(filas).toHaveLength(1);
     expect(filas[0]).toMatchObject({ triggerLevel: "muchos", alertDays: 3 });
+
+    // La tabla no guarda updatedBy: quién cambió la regla y desde qué valor lo
+    // dicen los dos eventos de auditoría, el segundo con el `before` anterior.
+    const eventos = await prisma.auditEvent.findMany({
+      where: { entityType: "trap_rule", entityId: filas[0]!.id, operation: "trap_rule.save" },
+    });
+    expect(eventos).toHaveLength(2);
+    const primero = eventos.find((e) => e.before === null);
+    const segundo = eventos.find((e) => e.before !== null);
+    expect(primero?.after).toMatchObject({ alertDays: 7 });
+    expect(segundo?.before).toMatchObject({ alertDays: 7, triggerLevel: "algunos" });
+    expect(segundo?.after).toMatchObject({ alertDays: 3, triggerLevel: "muchos" });
+    expect(segundo?.actorUserAccountId).toBe(userAccountId);
   });
 
   it("escribe la auditoría en la misma transacción", async () => {
@@ -130,9 +143,9 @@ describe("regla de trampas de la finca", () => {
 
     await expect(
       saveTrapRule(usuario.userAccountId, {
-        farmLocationId: parcela.parentLocationId!, ...reglaValida, normalDays: 0, alertDays: 0,
+        farmLocationId: parcela.parentLocationId!, ...reglaValida, normalDays: 0, alertDays: 1,
       }),
-    ).rejects.toThrow(TrapRuleValidationError);
+    ).rejects.toThrow(new TrapRuleValidationError("normal_days_must_be_positive"));
     expect(await prisma.trapRule.count({ where: { farmLocationId: parcela.parentLocationId! } })).toBe(0);
   });
 
@@ -150,7 +163,61 @@ describe("regla de trampas de la finca", () => {
       saveTrapRule(usuario.userAccountId, {
         farmLocationId: parcela.parentLocationId!, ...reglaValida, normalDays: 7, alertDays: 15,
       }),
-    ).rejects.toThrow(TrapRuleValidationError);
+    ).rejects.toThrow(new TrapRuleValidationError("alert_days_exceed_normal_days"));
+    expect(await prisma.trapRule.count({ where: { farmLocationId: parcela.parentLocationId! } })).toBe(0);
+  });
+
+  it("rechaza alertDays <= 0", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    await expect(
+      saveTrapRule(usuario.userAccountId, {
+        farmLocationId: parcela.parentLocationId!, ...reglaValida, normalDays: 15, alertDays: 0,
+      }),
+    ).rejects.toThrow(new TrapRuleValidationError("alert_days_must_be_positive"));
+    expect(await prisma.trapRule.count({ where: { farmLocationId: parcela.parentLocationId! } })).toBe(0);
+  });
+
+  it("rechaza días que no son enteros", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    await expect(
+      saveTrapRule(usuario.userAccountId, {
+        farmLocationId: parcela.parentLocationId!, ...reglaValida, normalDays: 7.5, alertDays: 7,
+      }),
+    ).rejects.toThrow(new TrapRuleValidationError("days_must_be_whole_numbers"));
+    expect(await prisma.trapRule.count({ where: { farmLocationId: parcela.parentLocationId! } })).toBe(0);
+  });
+
+  it("rechaza una acción sugerida vacía tras quitar espacios", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    await expect(
+      saveTrapRule(usuario.userAccountId, {
+        farmLocationId: parcela.parentLocationId!, ...reglaValida, suggestedAction: "   ",
+      }),
+    ).rejects.toThrow(new TrapRuleValidationError("suggested_action_required"));
     expect(await prisma.trapRule.count({ where: { farmLocationId: parcela.parentLocationId! } })).toBe(0);
   });
 
@@ -168,7 +235,7 @@ describe("regla de trampas de la finca", () => {
 
     await expect(
       saveTrapRule(ajeno.userAccountId, { farmLocationId: parcela.parentLocationId!, ...reglaValida }),
-    ).rejects.toThrow(LocationAccessError);
+    ).rejects.toThrow(new LocationAccessError("no_location_attribute_access"));
     expect(await prisma.trapRule.count({ where: { farmLocationId: parcela.parentLocationId! } })).toBe(0);
   });
 
@@ -184,6 +251,8 @@ describe("regla de trampas de la finca", () => {
     locationIds.push(ajeno.locationId);
     organizationIds.push(ajeno.organizationId);
 
-    await expect(getTrapRule(ajeno.userAccountId, parcela.parentLocationId!)).rejects.toThrow(LocationAccessError);
+    await expect(getTrapRule(ajeno.userAccountId, parcela.parentLocationId!)).rejects.toThrow(
+      new LocationAccessError("no_location_attribute_access"),
+    );
   });
 });

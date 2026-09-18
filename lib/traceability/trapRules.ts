@@ -20,12 +20,11 @@ export interface SaveTrapRuleInput {
  */
 export async function saveTrapRule(userAccountId: string, input: SaveTrapRuleInput) {
   const suggestedAction = input.suggestedAction.trim();
-  if (!Number.isInteger(input.normalDays) || input.normalDays <= 0) {
-    throw new TrapRuleValidationError("normal_days_must_be_positive");
+  if (!Number.isInteger(input.normalDays) || !Number.isInteger(input.alertDays)) {
+    throw new TrapRuleValidationError("days_must_be_whole_numbers");
   }
-  if (!Number.isInteger(input.alertDays) || input.alertDays <= 0) {
-    throw new TrapRuleValidationError("alert_days_must_be_positive");
-  }
+  if (input.normalDays <= 0) throw new TrapRuleValidationError("normal_days_must_be_positive");
+  if (input.alertDays <= 0) throw new TrapRuleValidationError("alert_days_must_be_positive");
   // Un aviso que tarda más en volver cuando hay broca no es un aviso.
   if (input.alertDays > input.normalDays) {
     throw new TrapRuleValidationError("alert_days_exceed_normal_days");
