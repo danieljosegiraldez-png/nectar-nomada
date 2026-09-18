@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { buildNavigation, buildSensoryTools, landingDestination, DEFAULT_LANDING, NAV_PERMISSIONS, destinoDeEntrada, rutaDelSitio } from "../lib/navigation";
+import { buildNavigation, buildSensoryTools, landingDestination, DEFAULT_LANDING, NAV_PERMISSIONS, destinoDeEntrada, rutaDelSitio, seAlcanzaDesdeElMenu } from "../lib/navigation";
 
 const hrefs = (granted: string[]) => buildNavigation(new Set(granted)).map((e) => e.href);
 const toolHrefs = (granted: string[]) => buildSensoryTools(new Set(granted)).map((e) => e.href);
@@ -49,14 +49,38 @@ describe("buildNavigation", () => {
 
   it("§8.4 — a farm operator is offered the field work they actually do", () => {
     const nav = hrefs(FARM_OPERATOR);
-    expect(nav).toContain("/lots");
+    // 2026-09-17, decisión de Daniel: el menú dice «Beneficio» y no «Lotes». Los
+    // lotes, las recetas, las instalaciones y los equipos cuelgan de esa sección.
+    // Las rutas NO se mueven todavía: `/lots` sigue existiendo, sólo deja de ser
+    // una entrada del menú.
+    expect(nav).toContain("/beneficio");
+    expect(nav).not.toContain("/lots");
     expect(nav).toContain("/plots");
     expect(nav).toContain("/apiaries");
+  });
+
+  it("la sección Beneficio hereda EXACTAMENTE la regla que tenía Lotes", () => {
+    // Si la regla se ensanchara, alguien vería una sección que después le niega
+    // lo que hay dentro. Si se estrechara, un operario perdería su entrada.
+    const conVer = hrefs(["lot:view"]);
+    const conGestionar = hrefs(["lot:manage"]);
+    const sinNada = hrefs(["sensory:submit_assessment"]);
+    expect(conVer).toContain("/beneficio");
+    expect(conGestionar).toContain("/beneficio");
+    expect(sinNada).not.toContain("/beneficio");
+  });
+
+  it("y el aterrizaje tras entrar NO cambia: el operario sigue cayendo en sus lotes", () => {
+    // El aterrizaje tiene su propia lista (LANDING_PRIORITY) y `/lots` va primero
+    // porque empieza con lo que está en marcha. Renombrar el menú no debe mover
+    // a nadie de donde trabaja cada mañana.
+    expect(landingDestination(new Set(FARM_OPERATOR))).toBe("/lots");
   });
 
   it("§8.5 — a judge sees sensory and not the farm workbench", () => {
     const nav = hrefs(JUDGE);
     expect(nav).toContain("/sensory");
+    expect(nav).not.toContain("/beneficio");
     expect(nav).not.toContain("/lots");
     expect(nav).not.toContain("/apiaries");
     expect(nav).not.toContain("/research");
@@ -172,11 +196,13 @@ describe("landingDestination — ADR-082", () => {
 
   it("does not simply take the first matching nav entry", () => {
     // The distinction that makes this its own list rather than a reuse of NAV:
-    // /partner precedes /lots in the menu, so a viewer holding both would land
-    // in the partner workspace if landing order were menu order. A Platform
-    // Admin holds every key here and belongs on operations.
-    expect(buildNavigation(new Set(PLATFORM_ADMIN)).map((e) => e.href).indexOf("/partner"))
-      .toBeLessThan(buildNavigation(new Set(PLATFORM_ADMIN)).map((e) => e.href).indexOf("/lots"));
+    // /partner precedes the Beneficio section (where /lots now lives) in the
+    // menu, so a viewer holding both would land in the partner workspace if
+    // landing order were menu order. A Platform Admin holds every key here and
+    // belongs on operations.
+    const menu = buildNavigation(new Set(PLATFORM_ADMIN)).map((e) => e.href);
+    expect(menu.indexOf("/partner")).toBeGreaterThanOrEqual(0);
+    expect(menu.indexOf("/partner")).toBeLessThan(menu.indexOf("/beneficio"));
     expect(landing(PLATFORM_ADMIN)).toBe("/lots");
   });
 
@@ -193,14 +219,24 @@ describe("landingDestination — ADR-082", () => {
     expect(landing(["classification:clear_internal"])).toBe(DEFAULT_LANDING);
   });
 
-  it("only ever returns a destination the same viewer is offered in the nav", () => {
+  it("only ever returns a destination the same viewer can get back to from the nav", () => {
     // The invariant that keeps the two lists from drifting: landing somewhere
     // absent from your own menu is how a page becomes unreachable again after
-    // the first navigation.
+    // the first navigation. Since 2026-09-17 "reachable" includes a page that
+    // lives inside a section of the menu — /lots inside Beneficio — and that
+    // relation is data in lib/navigation.ts, not an exception written here.
     for (const granted of [FARM_OPERATOR, PARTNER, RESEARCHER, JUDGE, HEAD_JUDGE, APIARY_RECORDER, PLATFORM_ADMIN, []]) {
       const nav = buildNavigation(new Set(granted)).map((e) => e.href);
-      expect(nav).toContain(landing(granted));
+      expect(seAlcanzaDesdeElMenu(landing(granted), nav)).toBe(true);
     }
+  });
+
+  it("y esa pregunta sabe decir que NO — el control del invariante de arriba", () => {
+    // Sin esto, un `seAlcanzaDesdeElMenu` que devolviera siempre `true` dejaría el
+    // invariante en verde para siempre sin medir nada.
+    expect(seAlcanzaDesdeElMenu("/lots", ["/my-nectar", "/plots"])).toBe(false);      // su sección no está
+    expect(seAlcanzaDesdeElMenu("/admin/users", ["/my-nectar", "/beneficio"])).toBe(false); // no es de ninguna sección
+    expect(seAlcanzaDesdeElMenu("/lots", ["/my-nectar", "/beneficio"])).toBe(true);    // y el caso bueno
   });
 });
 

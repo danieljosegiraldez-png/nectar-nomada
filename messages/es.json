@@ -19,7 +19,8 @@
     "content": "Contenido",
     "recipes": "Recetas",
     "newSession": "Crear sesión de cata",
-    "externalReport": "Informe externo"
+    "externalReport": "Informe externo",
+    "beneficio": "Beneficio"
   },
   "Home": {
     "badge": "Slices 1–2 — Identidad y Descubrimiento",
@@ -2070,5 +2071,21 @@
     "error_padre_invalido": "Un beneficio cuelga de un sitio, no de una parcela ni de otra instalación.",
     "error_tipo_invalido": "Esa ubicación no es un beneficio.",
     "error_no_encontrado": "Ese beneficio ya no existe."
+  },
+  "SeccionBeneficio": {
+    "titulo": "Beneficio",
+    "intro": "Todo lo que pasa en el beneficio, desde que entra la cereza hasta que el café queda listo.",
+    "lotes": "Lotes",
+    "lotesAyuda": "Lo que se está procesando ahora y todo lo que pasó por aquí.",
+    "recetas": "Recetas",
+    "recetasAyuda": "Cómo se hace cada proceso: metas, ritmo de lecturas y cuánto debe durar.",
+    "instalaciones": "Instalaciones de secado",
+    "instalacionesAyuda": "Invernaderos, patios, cuartos de secado y sus camas.",
+    "equipos": "Equipos e instrumentos",
+    "equiposAyuda": "Tanques y máquinas, y si cada instrumento está verificado.",
+    "informe": "Informe de proceso",
+    "informeAyuda": "Cada lote de su proceso a su taza.",
+    "ajustes": "Ajustes del beneficio",
+    "ajustesAyuda": "Dar de alta el beneficio y configurarlo. Sólo para quien lo gestiona."
   }
 }

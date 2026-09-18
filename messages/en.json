@@ -19,7 +19,8 @@
     "content": "Content",
     "recipes": "Recipes",
     "newSession": "Create cupping session",
-    "externalReport": "External report"
+    "externalReport": "External report",
+    "beneficio": "Mill"
   },
   "Home": {
     "badge": "Slices 1–2 — Identity and Discovery",
@@ -2070,5 +2071,21 @@
     "error_padre_invalido": "A mill hangs from a site, not from a plot or another facility.",
     "error_tipo_invalido": "That location is not a mill.",
     "error_no_encontrado": "That mill no longer exists."
+  },
+  "SeccionBeneficio": {
+    "titulo": "Mill",
+    "intro": "Everything that happens at the mill, from the cherry coming in to the coffee being ready.",
+    "lotes": "Lots",
+    "lotesAyuda": "What is being processed now, and everything that has passed through.",
+    "recetas": "Recipes",
+    "recetasAyuda": "How each process is done: targets, reading rhythm and expected duration.",
+    "instalaciones": "Drying facilities",
+    "instalacionesAyuda": "Greenhouses, patios, drying rooms and their beds.",
+    "equipos": "Equipment and instruments",
+    "equiposAyuda": "Tanks and machines, and whether each instrument is verified.",
+    "informe": "Process report",
+    "informeAyuda": "Each lot from its process to its cup.",
+    "ajustes": "Mill settings",
+    "ajustesAyuda": "Register the mill and configure it. Only for whoever manages it."
   }
 }
