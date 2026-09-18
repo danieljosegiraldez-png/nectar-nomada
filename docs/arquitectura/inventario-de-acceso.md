@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**417 operaciones** que tocan la base, en **128 archivos**:
+**419 operaciones** que tocan la base, en **128 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,8 +22,8 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **299** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **37** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **300** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **38** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **63** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
@@ -51,6 +51,23 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > vuelve a imprimir exactamente **354** operaciones en **104** archivos — el mismo
 > reparto de la nota anterior—, y eso es lo esperado: una pantalla que delega toda su
 > autorización en el servicio no suma una fila nueva al inventario.
+
+> **Y el de 387→389, sin archivo nuevo, es el plan 2 de «editar beneficio» (Tarea 4,
+> 2026-09-18).** Dos operaciones más en `lib/traceability/locations.ts`:
+> `exigeEditarBeneficioEn` (sobre una ubicación, sea del tipo que sea) y
+> `exigeEditarBeneficioEnOrganizacion` (en algún lugar de una organización, o en
+> plataforma si no hay ninguna) — las dos **guardia directo**, 274→275. La otra
+> unidad, «acotado por construcción» 34→35, es la propia
+> `exigeEditarBeneficioEnOrganizacion`: recorre las `Location` de la organización y
+> se detiene en la primera donde `can()` acepta, así que no puede devolver una
+> concesión ajena a esa organización. `instalaciones.ts` y `processTargets.ts` pasan
+> a llamar a estas dos guardias, y `equipos.ts` gana `puedeConfigurar` — sin fila
+> propia porque no es una función exportada, sólo una que las seis escrituras de
+> equipos y `sitiosParaRegistrar` ya citaban por su cadena `guardias`/`transitivo`.
+> **Fuera del cambio de cifras:** `lib/inventario/materiales.ts` y `recepcion.ts`
+> siguen comprobando `equipment:manage` directamente y no pasan por
+> `puedeConfigurar` — el módulo de insumos reutiliza el permiso de equipos y este
+> plan no lo toca (§3 de la spec, nota del 2026-09-18).
 
 > **Tareas 8 y 9 (2026-09-16):** el inventario incluye las opciones de inspección y
 > el servicio de instalaciones. Las cifras anteriores se regeneraron con

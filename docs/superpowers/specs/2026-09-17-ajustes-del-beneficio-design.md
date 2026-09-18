@@ -47,6 +47,9 @@ Son 79 rutas declaradas y ninguna es un centro de configuración. Y `CLAUDE.md` 
 | cómo se concede | **por persona**, desde los ajustes de ese beneficio, con razón escrita; auditado y revocable |
 | qué abre | **todo el beneficio**: nombre, atributos, coordenadas, instalaciones, camas, equipos y capacidades |
 | recetas | **detrás del mismo permiso**: crear y publicar. **Usarlas** en un lote sigue siendo operación y sigue abierto al capataz |
+| instalaciones de secado y sus camas | **todas** quedan detrás de `location:edit_beneficio` (plan 2, Task 4 de `docs/superpowers/plans/2026-09-18-editar-beneficio-2.md`), cuelguen de donde cuelguen (del `site` o de un `beneficio`); lo existente no se mueve de padre |
+| recetas, cierre del permiso | `edit_beneficio` en algún lugar de la organización de la receta; una receta **compartida** (sin organización) sólo con alcance de plataforma (plan 2) |
+| equipos | **la misma concesión abre configurarlos** (plan 2): registrar, trasladar, declarar/retirar patrón y declarar modo aceptan `equipment:manage` **o** `edit_beneficio` en el lugar del equipo; sin lugar, sólo `equipment:manage` |
 
 ## 3. El tipo de ubicación
 
@@ -60,6 +63,8 @@ Sigue dos precedentes escritos en el propio esquema:
 **Lo que desbloquea:** un `Equipment` se coloca hoy en un sitio, así que un tanque vive «en Finca Rosina». Con el tipo, vive **en el beneficio de Finca Rosina**, y el tablero puede filtrar por el beneficio sin adivinar.
 
 **Jerarquía permitida**, validada en el servidor como ya hace `crearUbicacionDeSecado`: `beneficio` sólo bajo `site`; `drying_facility` sigue pudiendo colgar del `site` **o del `beneficio`**. Las instalaciones existentes **no se mueven** ni se reasignan hacia atrás: donde están es donde alguien las puso.
+
+**Corregido el 2026-09-18: el código (#377) sólo acepta `site`, y por eso la regla de permisos no depende del padre** (§4.2). `crearUbicacionDeSecado` valida el padre contra `site` únicamente; una `drying_facility` bajo `beneficio` no existe hoy. El plan 2 exige `location:edit_beneficio` sobre el padre exacto que se pase —hoy siempre un `site`— y sigue funcionando igual el día que se acepte `beneficio` como padre, porque la guardia mira la ubicación recibida, no su tipo.
 
 ## 4. Diseño
 
@@ -84,15 +89,18 @@ El par de enlaces es el mismo que la parcela ya usa con «Gestionar parcela».
 
 Las secciones 3, 4 y 5 son **de lectura y enlace**: lo que se edita, se edita en su pantalla. **Pero esas pantallas no tienen hoy la guardia que esta spec necesita**, y la primera versión decía lo contrario. Medido sobre `main` el 2026-09-18 por la auditoría de Codex y comprobado en el código:
 
-| camino | qué exige hoy | por qué no basta |
-|---|---|---|
-| crear y editar instalaciones y camas (`lib/traceability/instalaciones.ts`) | `location:manage_attributes` | el capataz lo tiene |
-| crear, editar y publicar recetas (`lib/traceability/processTargets.ts`) | `manage` sobre un lote | el capataz tiene `lot:manage` |
-| atributos de una ubicación (`updateLocationAttributes`, vía `updatePlotAttributesAction`) | `manage_attributes`, **sin mirar el tipo** | el capataz edita área, altitud y descripción de un beneficio por POST |
-| coordenadas (`confirmarCoordenadasDelSitio`) | lo mismo, vía `requireFieldSessionAccess` | el capataz mueve el beneficio |
-| subdividir (`createMicrolot`) | `manage_attributes`; **copia el tipo del padre** | sobre un beneficio crearía otro beneficio. Hoy ninguna pantalla lo llama |
+| camino | qué exige hoy | por qué no basta | estado (2026-09-18) |
+|---|---|---|---|
+| crear y editar instalaciones y camas (`lib/traceability/instalaciones.ts`) | `location:manage_attributes` | el capataz lo tiene | **cerrada por el plan 2**: exige además `edit_beneficio` sobre el padre (crear) o la propia ubicación (editar) |
+| crear, editar y publicar recetas (`lib/traceability/processTargets.ts`) | `manage` sobre un lote | el capataz tiene `lot:manage` | **cerrada por el plan 2**: exige además `edit_beneficio` en algún lugar de la organización de la receta (plataforma si es compartida) |
+| atributos de una ubicación (`updateLocationAttributes`, vía `updatePlotAttributesAction`) | `manage_attributes`, **sin mirar el tipo** | el capataz edita área, altitud y descripción de un beneficio por POST | cerrada antes, plan 1 (ADR-164) |
+| coordenadas (`confirmarCoordenadasDelSitio`) | lo mismo, vía `requireFieldSessionAccess` | el capataz mueve el beneficio | cerrada antes, plan 1 (ADR-164) |
+| subdividir (`createMicrolot`) | `manage_attributes`; **copia el tipo del padre** | sobre un beneficio crearía otro beneficio. Hoy ninguna pantalla lo llama | cerrada antes, plan 1 (ADR-164) |
+| equipos: registrar, trasladar, declarar/retirar patrón, declarar modo (`lib/equipos/equipos.ts`) | `equipment:manage` | el capataz no lo tiene por defecto, así que ya estaba cerrada — pero sin puerta alterna para quien SÍ gestiona el beneficio | **ya cerrada por `equipment:manage`; la concesión de `edit_beneficio` la abre** también (plan 2) |
 
 Proteger `/beneficio/ajustes` era una regla de navegación. La regla de Daniel es sobre **escrituras**, así que cada uno de esos servicios comprueba el permiso de §4.3 cuando lo que escribe es un beneficio o cuelga de uno. Ocultar el enlace no protege nada.
+
+**Corregido el 2026-09-18, auditoría final de Codex sobre el plan 2:** las filas de arriba dadas por «cerradas» dejaban dos huecos — `updateLocationAttributes`/`confirmarCoordenadasDelSitio` sólo cerraban el tipo `beneficio` y no `drying_facility`/`drying_bed` (ahora las tres cuentan como configuración del beneficio, `TIPOS_DEL_BENEFICIO`, y `createMicrolot` rechaza subdividir una instalación de secado igual que un beneficio), y `exigeEditarBeneficioEnOrganizacion` sólo miraba `Location.organizationId = org` sin bajar por los descendientes que la heredan con el campo nulo (ahora los candidatos incluyen esos descendientes).
 
 ### 4.3 Permisos
 
@@ -176,3 +184,5 @@ La regla en prosa se lee y se razona alrededor; en un test, falla. Y el guardia 
 ## 8. Fuera de alcance
 
 Mover `/equipos`, `/instalaciones` o `/recipes` · un rol nuevo de Processing Manager · reasignar hacia atrás las instalaciones existentes al beneficio · capacidad en m² o litros · configuración de apiario y parcela · avisos empujados, que esperan a `Notification`.
+
+**Diferido, medido el 2026-09-18 (plan 2, Task 4):** `lib/inventario/materiales.ts` (`crearMaterial`) y `lib/inventario/recepcion.ts` (definir el producto, recibir insumos) comprueban `equipment:manage` **directamente**, no por `puedeConfigurar` — el módulo de insumos reutiliza el permiso de equipos y no pasa por él. La concesión de `edit_beneficio` **no** abre estos dos caminos. Queda fuera de este plan; si hace falta, es una decisión de Daniel para el siguiente.

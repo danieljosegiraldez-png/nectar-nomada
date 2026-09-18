@@ -12,11 +12,24 @@
  */
 import { prisma } from "../db";
 import { can } from "../rbac/service";
+import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
-import type { Aspect, ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
+import type { Aspect, LocationType, ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
 
 export class LocationAccessError extends Error {}
+
+/**
+ * Los tipos que son configuración del beneficio a efectos de
+ * `location:edit_beneficio`, decisión de Daniel del 2026-09-18: **todas** las
+ * instalaciones de secado y sus camas cuentan, cuelguen de donde cuelguen —
+ * no sólo el propio `beneficio`. La auditoría final de Codex sobre el plan 2
+ * encontró que `exigeEditarBeneficioSiLoEs` sólo miraba `beneficio`, así que un
+ * capataz con `manage_attributes` en el sitio editaba una `drying_facility` o
+ * `drying_bed` por los caminos genéricos (`updatePlotAttributesAction`,
+ * `confirmarCoordenadasDelSitio`), que no pasan por `exigeEditarBeneficioEn`.
+ */
+const TIPOS_DEL_BENEFICIO = new Set<LocationType>(["beneficio", "drying_facility", "drying_bed"]);
 
 /**
  * La organización a la que pertenece una Location, subiendo por la jerarquía.
@@ -104,15 +117,21 @@ export async function requireLocationAttributeAccess(userAccountId: string, loca
 }
 
 /**
- * «Editar beneficio» (spec #370 §4.3). No hace nada si la ubicación no es un
- * beneficio: parcelas y sitios siguen como estaban. Si lo es, exige
- * `location:edit_beneficio` sobre el propio beneficio.
+ * «Editar beneficio» (spec #370 §4.3). No hace nada si la ubicación no es
+ * configuración del beneficio (`TIPOS_DEL_BENEFICIO`): parcelas y sitios
+ * siguen como estaban. Si lo es, exige `location:edit_beneficio` sobre la
+ * propia ubicación.
  *
  * Existe porque la auditoría de Codex del 2026-09-18 encontró que el capataz
  * —que tiene `manage_attributes` por perfil y lo hereda del sitio— editaba
  * atributos y coordenadas de un beneficio por la acción de parcela, que no
- * miraba el tipo. La regla de Daniel es sobre escrituras, así que vive aquí,
- * en el servicio, y cada camino la llama.
+ * miraba el tipo. Una segunda pasada de esa misma auditoría encontró que la
+ * comprobación seguía dejando fuera `drying_facility`/`drying_bed`: el
+ * capataz podía editarlas por los mismos caminos genéricos, porque
+ * `crearUbicacionDeSecado`/`actualizarUbicacionDeSecado` sí llaman a
+ * `exigeEditarBeneficioEn`, pero `updateLocationAttributes` y
+ * `confirmarCoordenadasDelSitio` sólo llamaban a ésta. La regla de Daniel es
+ * sobre escrituras, así que vive aquí, en el servicio, y cada camino la llama.
  */
 export async function exigeEditarBeneficioSiLoEs(userAccountId: string, locationId: string) {
   const location = await prisma.location.findUnique({
@@ -120,9 +139,89 @@ export async function exigeEditarBeneficioSiLoEs(userAccountId: string, location
     select: { locationType: true, classification: true },
   });
   if (!location) throw new LocationAccessError("location_not_found");
-  if (location.locationType !== "beneficio") return;
+  if (!TIPOS_DEL_BENEFICIO.has(location.locationType)) return;
   const target: ScopeTarget = { scopeType: "location", scopeRefId: locationId };
   if (await can(userAccountId, "edit_beneficio", "location", target, location.classification)) return;
+  throw new LocationAccessError("no_beneficio_edit_access");
+}
+
+/**
+ * `location:edit_beneficio` sobre una ubicación, sea del tipo que sea. Para lo
+ * que es configuración del beneficio aunque no cuelgue de él: las
+ * instalaciones de secado y sus camas cuelgan del sitio (decisión de Daniel
+ * del 2026-09-18: «todas», cuelguen de donde cuelguen). `can()` sube por los
+ * ancestros, así que un Farm Manager asignado en la finca pasa sobre sus hijos.
+ */
+export async function exigeEditarBeneficioEn(userAccountId: string, locationId: string) {
+  const location = await prisma.location.findUnique({ where: { id: locationId }, select: { classification: true } });
+  if (!location) throw new LocationAccessError("location_not_found");
+  const target: ScopeTarget = { scopeType: "location", scopeRefId: locationId };
+  if (await can(userAccountId, "edit_beneficio", "location", target, location.classification)) return;
+  throw new LocationAccessError("no_beneficio_edit_access");
+}
+
+/**
+ * `location:edit_beneficio` en ALGÚN lugar de una organización — para lo que es
+ * de la organización y no de un lugar, como las recetas. Una receta compartida
+ * (`organizationId` nulo) sólo se configura con alcance de plataforma.
+ *
+ * Los candidatos son las Location propias de la organización **más sus
+ * descendientes con `organizationId` nulo** — `resolveOrganizationForLocation`
+ * trata la organización como heredable subiendo por `parentLocationId`, así
+ * que esta guardia tiene que bajar por el mismo camino para no dejar fuera a
+ * quien esté asignado justo en uno de esos hijos. Medido el 2026-09-18 en la
+ * base de pruebas compartida: 8 de 135 `Location` (sitios y parcelas) tienen
+ * `organizationId` nulo bajo un padre que sí lo declara. Sin esto, un capataz
+ * asignado en una de ellas —los permisos sólo descienden, nunca suben— no
+ * podía pasar esta guardia aunque se le concediera el permiso ahí mismo.
+ * Un descendiente que declara SU PROPIA organización (distinta) corta el
+ * camino: ni él ni lo que cuelgue de él entra en la lista.
+ */
+export async function exigeEditarBeneficioEnOrganizacion(userAccountId: string, organizationId: string | null) {
+  if (organizationId === null) {
+    if (
+      await can(
+        userAccountId,
+        "edit_beneficio",
+        "location",
+        { scopeType: "platform", scopeRefId: null },
+        CLASSIFICATION_NOT_APPLICABLE,
+      )
+    )
+      return;
+    throw new LocationAccessError("no_beneficio_edit_access");
+  }
+  const propias = await prisma.location.findMany({ where: { organizationId }, select: { id: true, classification: true } });
+  const lugares = [...propias];
+  let frontera = propias.map((l) => l.id);
+  while (frontera.length > 0) {
+    const hijos = await prisma.location.findMany({
+      where: { parentLocationId: { in: frontera }, organizationId: null },
+      select: { id: true, classification: true },
+    });
+    if (hijos.length === 0) break;
+    lugares.push(...hijos);
+    frontera = hijos.map((h) => h.id);
+  }
+  for (const l of lugares) {
+    if (await can(userAccountId, "edit_beneficio", "location", { scopeType: "location", scopeRefId: l.id }, l.classification)) return;
+  }
+  // Una organización con lotes pero sin ninguna Location propia (los tres
+  // archivos de recetas existentes, con actor Platform Admin, la dejan así)
+  // no tiene ningún lugar contra el que comprobar `can()`: sin este último
+  // intento de plataforma, ni siquiera un Platform Admin podría configurarla
+  // — el mismo respaldo que `scopeTargetsFor` en lots.ts usa para un lote sin
+  // proyecto ni ubicación.
+  if (
+    await can(
+      userAccountId,
+      "edit_beneficio",
+      "location",
+      { scopeType: "platform", scopeRefId: null },
+      CLASSIFICATION_NOT_APPLICABLE,
+    )
+  )
+    return;
   throw new LocationAccessError("no_beneficio_edit_access");
 }
 
@@ -236,7 +335,17 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
   // Un microlote copia el tipo del padre, así que sobre un beneficio crearía
   // OTRO beneficio, saltándose `create_site` y la regla de que un beneficio
   // cuelga de un sitio. Hoy ninguna pantalla lo llama; se cierra igual.
+  //
+  // Lo mismo vale para una instalación de secado o una cama
+  // (`TIPOS_DEL_BENEFICIO` sin `beneficio`): sin este rechazo,
+  // `requireLocationAttributeAccess` sobre el padre bastaba para crear una
+  // NUEVA `drying_facility`/`drying_bed` bajo `manage_attributes`, saltándose
+  // por completo `exigeEditarBeneficioEn` — hallazgo de la auditoría final de
+  // Codex sobre el plan 2.
   if (parent.locationType === "beneficio") throw new LocationValidationError("beneficio_no_se_subdivide");
+  if (parent.locationType === "drying_facility" || parent.locationType === "drying_bed") {
+    throw new LocationValidationError("secado_no_se_subdivide");
+  }
 
   const microlot = await prisma.$transaction(async (tx) => {
     const microlot = await tx.location.create({
