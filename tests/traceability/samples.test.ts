@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceability/quantity";
-import { createSampleFromLot, SampleValidationError } from "../../lib/traceability/samples";
+import { createSampleFromLot, retirarMuestra, SampleValidationError } from "../../lib/traceability/samples";
 import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
@@ -329,5 +329,76 @@ describe("createSampleFromLot — la muestra verde exige almacenamiento (2026-09
     });
 
     expect(sample.materialState).toBe("MUCILAGE_HONEY");
+  });
+});
+
+describe("retirarMuestra", () => {
+  it("marca retiredAt y escribe su AuditEvent en la misma transacción", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-para-retirar`,
+      lotType: "green",
+      organizationId,
+      projectId: projectAId,
+    });
+    const { sample } = await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      sampleCode: `${RUN_ID}-S-retiro-1`,
+      sampleType: "green_coffee",
+      sourceLotId: lot.id,
+      occurredAt: new Date(),
+    });
+
+    const cuando = new Date();
+    const retirada = await retirarMuestra(authorizedUserAccountId, sample.id, cuando, "TEST: motivo de prueba");
+
+    expect(retirada.retiredAt?.toISOString()).toBe(cuando.toISOString());
+
+    const evento = await prisma.auditEvent.findFirst({
+      where: { entityType: "sample", entityId: sample.id, operation: "sample.retire" },
+      orderBy: { occurredAt: "desc" },
+    });
+    expect(evento?.reason).toBe("TEST: motivo de prueba");
+    expect(evento?.actorUserAccountId).toBe(authorizedUserAccountId);
+  });
+
+  it("rechaza retirar dos veces la misma muestra", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-doble-retiro`,
+      lotType: "green",
+      organizationId,
+      projectId: projectAId,
+    });
+    const { sample } = await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      sampleCode: `${RUN_ID}-S-retiro-2`,
+      sampleType: "green_coffee",
+      sourceLotId: lot.id,
+      occurredAt: new Date(),
+    });
+    await retirarMuestra(authorizedUserAccountId, sample.id, new Date(), "TEST: primer retiro");
+
+    await expect(
+      retirarMuestra(authorizedUserAccountId, sample.id, new Date(), "TEST: segundo retiro"),
+    ).rejects.toThrow(SampleValidationError);
+  });
+
+  it("deniega retirar una muestra fuera del ámbito del operador", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-retiro-ajeno`,
+      lotType: "green",
+      organizationId,
+      projectId: projectAId,
+    });
+    const { sample } = await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      sampleCode: `${RUN_ID}-S-retiro-3`,
+      sampleType: "green_coffee",
+      sourceLotId: lot.id,
+      occurredAt: new Date(),
+    });
+
+    await expect(
+      retirarMuestra(wrongProjectUserAccountId, sample.id, new Date(), "TEST: intento ajeno"),
+    ).rejects.toThrow(TraceabilityAccessError);
   });
 });

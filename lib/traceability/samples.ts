@@ -185,6 +185,45 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   });
 }
 
+/**
+ * Retirar una muestra. Con rastro, nunca editada en su sitio ni borrada —
+ * mismo principio que `retirarPatron` en `lib/equipos/equipos.ts`: una vez
+ * que algo se usó (aquí, pudo entrar en una cata o en un reporte), editarlo
+ * en su sitio borra la historia. `motivo` va al `AuditEvent`, no a una
+ * columna nueva de la muestra.
+ */
+export async function retirarMuestra(userAccountId: string, sampleId: string, cuando: Date, motivo: string) {
+  const muestra = await prisma.sample.findUnique({ where: { id: sampleId } });
+  if (!muestra) throw new TraceabilityAccessError("sample_not_found");
+
+  await requireSampleAccess(userAccountId, "manage", [
+    { projectId: muestra.projectId, locationId: muestra.locationId, classification: muestra.classification },
+  ]);
+
+  if (muestra.retiredAt) throw new SampleValidationError("sample_already_retired");
+
+  return prisma.$transaction(async (tx) => {
+    const retirada = await tx.sample.update({
+      where: { id: sampleId },
+      data: { retiredAt: cuando },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        entityType: "sample",
+        entityId: sampleId,
+        operation: "sample.retire",
+        reason: motivo,
+        before: { retiredAt: muestra.retiredAt },
+        after: { retiredAt: cuando.toISOString() },
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+    return retirada;
+  });
+}
+
 // --- External coffee (S1, docs/implementation/32_S1_CAFES_EXTERNOS.md) ---
 
 /**
