@@ -145,6 +145,7 @@ tests/traceability/soilSamples.test.ts
 tests/traceability/storage.test.ts
 tests/traceability/topologiaDeSecado.test.ts
 tests/traceability/v1-vocabulary.test.ts
+tests/traceability/ubicacionesEmparentadas.test.ts
 # @grupo: datos-reales
 # Necesitan datos que no crean ni la semilla ni ellas.
 #

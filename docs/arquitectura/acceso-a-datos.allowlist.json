@@ -206,6 +206,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/ubicacionesEmparentadas.ts",
+      "razon": "Tarea 3 del plan fitosanitario (§3.3) — genealogía de una Location (ascendientes y descendientes) para que la carencia de una intervención alcance a la parcela madre y a sus microparcelas, y no a una hermana. No autoriza nada: quien la llama ya pasó la compuerta. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
       "archivo": "lib/traceability/lots.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
@@ -486,6 +490,10 @@
     {
       "archivo": "lib/traceability/balance.ts",
       "razon": "Cálculo puro de balance de masa. No abre conexión: opera dentro de una transacción que ya abrió un llamador autorizado (lots.ts, fermentation.ts, quantity.ts, todos con requireLotAccess). Recibir el cliente por parámetro es inyección de dependencia, no un atajo — pero lo vuelve invisible a la comprobación de imports, y por eso se inventaría aquí."
+    },
+    {
+      "archivo": "lib/traceability/ubicacionesEmparentadas.ts",
+      "razon": "`ubicacionesEmparentadas` acepta un `Prisma.TransactionClient` OPCIONAL (por defecto el cliente total, ya inventariado arriba) para poder llamarse DENTRO de la transacción de un llamador que registra una cosecha o una intervención y necesita la genealogía de la Location antes de confirmar. No autoriza nada: sólo recorre `parentLocationId` hacia arriba y hacia abajo con el mismo tope de profundidad y guarda de vistos que `conAncestros` (lib/rbac/service.ts)."
     },
     {
       "archivo": "lib/audit.ts",
