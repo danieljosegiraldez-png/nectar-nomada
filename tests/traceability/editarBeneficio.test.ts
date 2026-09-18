@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { PERMISSIONS, ROLE_PROFILES } from "../../lib/rbac/catalog";
 import { LocationAccessError, LocationValidationError, createMicrolot, updateLocationAttributes } from "../../lib/traceability/locations";
+import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadasDelSitio";
+import { actualizarBeneficio } from "../../lib/traceability/beneficios";
 
 /**
  * «Editar beneficio» — spec #370 §4.3. Por defecto el capataz NO edita un
@@ -128,5 +130,38 @@ describe("subdividir un beneficio (createMicrolot)", () => {
     const parc = await hijo(finca.id, "plot");
     const micro = await createMicrolot(jefe, { parentLocationId: parc.id, name: nombre(), subdivisionReason: "other" });
     expect(micro.locationType).toBe("plot");
+  });
+});
+
+describe("coordenadas de un beneficio (confirmarCoordenadasDelSitio)", () => {
+  it("un capataz NO las mueve; un Farm Manager sí", async () => {
+    const finca = await sitio();
+    const ben = await hijo(finca.id, "beneficio");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    await expect(confirmarCoordenadasDelSitio(capataz, { locationId: ben.id, latitude: 8.7, longitude: -82.4 }))
+      .rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    // Control positivo, el mismo camino con quien sí puede.
+    await expect(confirmarCoordenadasDelSitio(jefe, { locationId: ben.id, latitude: 8.7, longitude: -82.4 })).resolves.toBeDefined();
+  });
+
+  it("el capataz sigue declarando coordenadas de una parcela", async () => {
+    const finca = await sitio();
+    const parc = await hijo(finca.id, "plot");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    await expect(confirmarCoordenadasDelSitio(capataz, { locationId: parc.id, latitude: 8.7, longitude: -82.4 })).resolves.toBeDefined();
+  });
+});
+
+describe("renombrar un beneficio (actualizarBeneficio)", () => {
+  it("exige edit_beneficio: el capataz con concesión renombra, sin ella no", async () => {
+    const finca = await sitio();
+    const ben = await hijo(finca.id, "beneficio");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    await expect(actualizarBeneficio(capataz, { locationId: ben.id, name: nombre() }))
+      .rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    await conceder(capataz);
+    const nuevo = nombre();
+    expect((await actualizarBeneficio(capataz, { locationId: ben.id, name: nuevo })).name).toBe(nuevo);
   });
 });
