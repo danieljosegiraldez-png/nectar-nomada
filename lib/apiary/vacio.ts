@@ -76,6 +76,12 @@ export const CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO = [
    * opcional para siempre (botiquín, Tarea 7), y sin él nada se descuenta.
    */
   "treatmentFrascoNinguno",
+  /**
+   * «sin cambio»: en la inspección, este artefacto no se puso ni se quitó. Es LA respuesta
+   * de la visita corriente —«en la inspección sólo se registra la diferencia», Daniel—, no un
+   * hueco a rellenar (artefactos de colmena, Tarea 2).
+   */
+  "cambioSinCambio",
 ] as const satisfies readonly string[];
 
 export type ClaveDeRespuestaQueValeNinguno = (typeof CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO)[number];

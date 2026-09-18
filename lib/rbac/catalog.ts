@@ -69,6 +69,7 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // `apiary:manage` from the Apiary Colony Event Recorder — a competence and
   // authority boundary, not a tier of the same permission.
   { resourceType: "commerce", action: "manage_store", description: "ADR-163. Llevar la tienda: crear variantes de un producto y confirmar la recepción de envases asignados desde un lote envasado — lo único que sube el inventario. Separado de lot:manage a propósito: envasar y asignar es trabajo de campo; recibir en la tienda, no." },
+  { resourceType: "hive_node", action: "manage", description: "Register a sensor node and install, move or remove it on a hive. Deliberately separate from apiary:manage, which every Farm Operator holds: moving a node REASSIGNS its data — May's observations start belonging to another hive (artefactos de colmena spec, §7.1)." },
   { resourceType: "lot", action: "release", description: "Authorize a rested lot for sale. Deliberately separate from lot:manage, which every Farm Operator holds: releasing is a commercial decision, not field work. Does not check the resting age — that is a judgement about the buyer, not the calendar." },
   { resourceType: "lot", action: "override_balance", description: "Accept a lot transformation whose mass balance is outside the organization's tolerance." },
   // §9 de `docs/architecture/EQUIPMENT_AND_READINESS.md`: «No new *machinery*,
@@ -348,6 +349,8 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       "parcels, drying facilities and beds — so one Assignment covers the whole farm.",
     permissions: [
       ["lot", "release"],
+      // Artefactos de colmena §7.1: el gestor registra y MUEVE nodos; el operario no.
+      ["hive_node", "manage"],
       ["lot", "manage"],
       ["lot", "view"],
       ["lot", "export"],

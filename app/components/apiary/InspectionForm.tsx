@@ -1,5 +1,6 @@
 "use client";
 
+import { DECLARABLES_EN_INSPECCION, type TipoDeArtefacto } from "../../../lib/apiary/tiposDeArtefacto";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { queueDraft } from "../../../lib/apiary/offlineQueue";
@@ -83,6 +84,14 @@ export function InspectionForm({
   /** Los ids marcados. Un Set porque la pregunta es «¿está marcada?», no «¿en qué orden?». */
   const [marcadas, setMarcadas] = useState<ReadonlySet<string>>(new Set());
   const [note, setNote] = useState("");
+  /**
+   * Artefactos de colmena, Tarea 2 — **sólo la diferencia**, como pidió Daniel: «en la
+   * inspección sólo se registra la diferencia». Todo empieza en «sin cambio» y lo que se
+   * deja así no se manda.
+   */
+  const [cambiosCaja, setCambiosCaja] = useState<Partial<Record<TipoDeArtefacto, "" | "instalado" | "retirado">>>({});
+  const [alzasPuestas, setAlzasPuestas] = useState("");
+  const [otroCual, setOtroCual] = useState("");
 
   async function submitRoutine() {
     setSaveError(null);
@@ -105,6 +114,16 @@ export function InspectionForm({
 
   async function submitDetails() {
     setSaveError(null);
+    // Un alza marcada sin cuenta la rechazaría el servidor, y con ella la inspección entera:
+    // se dice aquí, antes de guardar, donde todavía se puede corregir.
+    if (cambiosCaja.alza === "instalado" && !(Number.isInteger(Number(alzasPuestas)) && Number(alzasPuestas) > 0)) {
+      setSaveError(t("alzasPuestasFaltan"));
+      return;
+    }
+    if (cambiosCaja.otro === "instalado" && !otroCual.trim()) {
+      setSaveError(t("otroCualFalta"));
+      return;
+    }
     try {
       await queueDraft("inspection", {
         colonyId,
@@ -131,6 +150,16 @@ export function InspectionForm({
         pollenStoresLevel: polenNivel || null,
         pollenNextToBrood: triEstado(polenJuntoACria),
         droneBroodPresent: triEstado(zangano),
+        cambiosDeConfiguracion: DECLARABLES_EN_INSPECCION.flatMap((kind) => {
+          const accion = cambiosCaja[kind];
+          if (!accion) return [];
+          return [{
+            kind,
+            accion,
+            count: kind === "alza" && accion === "instalado" ? Number(alzasPuestas) : null,
+            notes: kind === "otro" ? otroCual.trim() || null : null,
+          }];
+        }),
       });
     } catch {
       setSaveError(t("localSaveFailedError"));
@@ -360,6 +389,40 @@ export function InspectionForm({
               </label>
             ))}
           </fieldset>
+          {/* Plegado y sin nada marcado: una visita en la que no cambió la caja no pregunta nada. */}
+          <details className="nn-field">
+            <summary>{t("cambiosCajaResumen")}</summary>
+            {DECLARABLES_EN_INSPECCION.map((kind) => (
+              <div key={kind} className="nn-field">
+                <label htmlFor={`insp-caja-${kind}-${colonyId}`}>{t(`artefacto_${kind}`)}</label>
+                <select
+                  id={`insp-caja-${kind}-${colonyId}`}
+                  value={cambiosCaja[kind] ?? ""}
+                  onChange={(e) => setCambiosCaja((prev) => ({ ...prev, [kind]: e.target.value as "" | "instalado" | "retirado" }))}
+                >
+                  <option value="">{t("cambioSinCambio")}</option>
+                  <option value="instalado">{t("cambioInstalado")}</option>
+                  {/* «Se quitó el otro» no dice cuál: se retira donde se ve cuál. */}
+                  {kind !== "otro" ? <option value="retirado">{t("cambioRetirado")}</option> : null}
+                </select>
+                {kind === "alza" && cambiosCaja.alza === "instalado" ? (
+                  <input
+                    aria-label={t("alzasPuestasLabel")}
+                    placeholder={t("alzasPuestasLabel")}
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    value={alzasPuestas}
+                    onChange={(e) => setAlzasPuestas(e.target.value)}
+                  />
+                ) : null}
+                {kind === "otro" && cambiosCaja.otro === "instalado" ? (
+                  <input aria-label={t("otroCualLabel")} placeholder={t("otroCualLabel")} value={otroCual} onChange={(e) => setOtroCual(e.target.value)} />
+                ) : null}
+              </div>
+            ))}
+          </details>
           <div className="nn-field">
             <label htmlFor={`insp-pest-${colonyId}`}>{t("pestDiseaseFlagsLabel")}</label>
             <input id={`insp-pest-${colonyId}`} value={pest} onChange={(e) => setPest(e.target.value)} />
