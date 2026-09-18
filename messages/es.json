@@ -1095,7 +1095,6 @@
     "trapsTitle": "Trampas de broca",
     "trapsNone": "No hay trampas registradas en esta parcela.",
     "trapsNumber": "Trampa {n}",
-    "trapsBlock": "Bloque {nombre}",
     "trapsNoBlock": "Sin bloque",
     "trapsLastCheck": "Última revisión: {fecha} · {lectura}",
     "trapsNeverChecked": "Sin revisar desde que se instaló",

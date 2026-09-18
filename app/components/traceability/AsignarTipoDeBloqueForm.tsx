@@ -3,8 +3,8 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { setPlotBlockTypeFormAction, type TraceabilityActionState } from "../../actions/traceability";
+import { TIPOS_DE_BLOQUE } from "../../../lib/traceability/tiposDeBloque";
 
-const TIPOS = ["microparcela", "trampa", "experimental"] as const;
 const initialState: TraceabilityActionState = {};
 
 /**
@@ -30,7 +30,7 @@ export function AsignarTipoDeBloqueForm({
         <div className="nn-field">
           <select name="blockType" required defaultValue="">
             <option value="">{t("blockTypeChoose")}</option>
-            {TIPOS.map((tipo) => (
+            {TIPOS_DE_BLOQUE.map((tipo) => (
               <option key={tipo} value={tipo}>
                 {t(`blockType_${tipo}` as "blockType_microparcela")}
               </option>

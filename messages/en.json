@@ -1095,7 +1095,6 @@
     "trapsTitle": "Coffee berry borer traps",
     "trapsNone": "No traps registered on this plot.",
     "trapsNumber": "Trap {n}",
-    "trapsBlock": "Block {nombre}",
     "trapsNoBlock": "No block",
     "trapsLastCheck": "Last check: {fecha} · {lectura}",
     "trapsNeverChecked": "Not checked since it was installed",

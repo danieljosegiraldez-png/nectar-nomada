@@ -2,10 +2,9 @@ import { Prisma, type PlotBlockType } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLocationAttributeAccess } from "./locations";
+import { TIPOS_DE_BLOQUE } from "./tiposDeBloque";
 
 export class PlotBlockValidationError extends Error {}
-
-const TIPOS_DE_BLOQUE: readonly PlotBlockType[] = ["microparcela", "trampa", "experimental"];
 
 export interface CreatePlotBlockInput {
   locationId: string;

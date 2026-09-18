@@ -4,10 +4,9 @@ import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { createPlotBlockFormAction, type TraceabilityActionState } from "../../actions/traceability";
 import { BotonQueNecesitaConexion } from "./BotonQueNecesitaConexion";
+import { TIPOS_DE_BLOQUE } from "../../../lib/traceability/tiposDeBloque";
 
 const initialState: TraceabilityActionState = {};
-
-const TIPOS = ["microparcela", "trampa", "experimental"] as const;
 
 /** Crear un bloque de la parcela — F2 §3 extendido. Nombre, tipo, descripción y nota; necesita conexión. */
 export function AltaDeBloqueForm({ locationId }: { locationId: string }) {
@@ -27,7 +26,7 @@ export function AltaDeBloqueForm({ locationId }: { locationId: string }) {
         <label htmlFor={`blockType-${locationId}`}>{t("blockTypeLabel")}</label>
         <select id={`blockType-${locationId}`} name="blockType" required defaultValue="">
           <option value="">{t("blockTypeChoose")}</option>
-          {TIPOS.map((tipo) => (
+          {TIPOS_DE_BLOQUE.map((tipo) => (
             <option key={tipo} value={tipo}>
               {t(`blockType_${tipo}` as "blockType_microparcela")}
             </option>
