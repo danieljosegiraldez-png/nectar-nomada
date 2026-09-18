@@ -9,14 +9,28 @@
  *
  * Los tres rulings del controlador (Global Constraints del plan, cambiables
  * por Daniel): (1) un `deny` de administración manda, el Farm Manager no lo
- * sobrescribe; (2) quitar sólo borra una concesión (`grant`), nunca el
- * permiso de serie del perfil; (3) la concesión vale para todo el ámbito de
- * la asignación (no hay un alcance más fino que la propia `Scope`).
+ * sobrescribe; (2) quitar puede borrar CUALQUIER `grant` de este permiso
+ * dentro del ámbito de autoridad del actor — incluso uno que puso la
+ * administración —, nunca el permiso de serie del perfil ni un `deny`
+ * (corregido el 2026-09-18, revisión independiente de Codex: la versión
+ * anterior de esta nota decía «puesto por esta delegación», y no hay columnas
+ * de procedencia que distingan quién concedió cada `grant`); (3) la concesión
+ * vale para todo el ámbito de la asignación (no hay un alcance más fino que
+ * la propia `Scope`).
+ *
+ * **Además de exigir autoridad sobre el beneficio, cada operación exige
+ * autoridad sobre el ÁMBITO DE LA ASIGNACIÓN RECEPTORA** (hallazgo 1,
+ * revisión independiente de Codex, 2026-09-18): esa asignación puede tener un
+ * ámbito más ancho que el beneficio (p. ej. el sitio entero), y sin esta
+ * segunda guardia un Farm Manager con autoridad SÓLO sobre el beneficio podía
+ * conceder o quitar sobre una asignación de todo el sitio — más autoridad de
+ * la que él mismo tiene.
  */
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { exigeEditarBeneficioEn } from "./locations";
-import type { Prisma } from "../../generated/prisma/client";
+import { esAsignacionActiva, activeAssignmentWhere } from "../rbac/service";
+import { Prisma } from "../../generated/prisma/client";
 
 export class ConcesionError extends Error {}
 
@@ -76,17 +90,19 @@ async function cadenaDeAncestros(locationId: string): Promise<string[]> {
   return cadena;
 }
 
-/** Activa, ámbito `location`, y ese ámbito en la cadena de ancestros del
- * beneficio. Cualquier otra cosa (no existe, revocada, ámbito de otro tipo,
- * ámbito de otra rama) es `asignacion_fuera_de_ambito` — el mensaje no
- * distingue el motivo porque para quien concede da igual cuál sea. */
+/** Activa —status Y ventana de validez, el mismo criterio que el resolutor
+ * (`lib/rbac/service.ts`, hallazgo 6)—, ámbito `location`, y ese ámbito en la
+ * cadena de ancestros del beneficio. Cualquier otra cosa (no existe, revocada,
+ * vencida, todavía no vigente, ámbito de otro tipo, ámbito de otra rama) es
+ * `asignacion_fuera_de_ambito` — el mensaje no distingue el motivo porque para
+ * quien concede da igual cuál sea. */
 async function asignacionQueAlcanza(beneficioId: string, assignmentId: string): Promise<AsignacionConPermisos> {
   const asignacion = await prisma.assignment.findUnique({
     where: { id: assignmentId },
     include: ASIGNACION_CON_PERMISOS,
   });
   if (!asignacion) throw new ConcesionError("asignacion_fuera_de_ambito");
-  if (asignacion.status !== "active") throw new ConcesionError("asignacion_fuera_de_ambito");
+  if (!esAsignacionActiva(asignacion)) throw new ConcesionError("asignacion_fuera_de_ambito");
   if (asignacion.scope.scopeType !== "location" || !asignacion.scope.scopeRefId) {
     throw new ConcesionError("asignacion_fuera_de_ambito");
   }
@@ -116,6 +132,67 @@ async function permisoEditarBeneficio() {
   return prisma.permission.findFirstOrThrow({ where: { resourceType: "location", action: "edit_beneficio" } });
 }
 
+/**
+ * Hallazgo 1: además de tener `edit_beneficio` sobre el beneficio, el actor
+ * necesita tenerlo TAMBIÉN sobre el ámbito de la asignación receptora — que
+ * puede ser un ancestro más ancho (p. ej. el sitio entero). `exigeEditarBeneficioEn`
+ * sube por ancestros (`lib/rbac/service.ts`, `conAncestros`), así que un Farm
+ * Manager asignado en el sitio pasa igual sobre una asignación del propio
+ * beneficio — pero no al revés: un Farm Manager asignado SÓLO en el beneficio
+ * no tiene autoridad sobre una asignación del sitio, porque el beneficio no es
+ * ancestro del sitio, es su hijo.
+ */
+async function exigeAutoridadSobreAmbitoReceptor(actorId: string, asignacion: AsignacionConPermisos) {
+  // `asignacionQueAlcanza` ya validó `scope.scopeType === "location" &&
+  // scope.scopeRefId != null` antes de devolver esta fila.
+  await exigeEditarBeneficioEn(actorId, asignacion.scope.scopeRefId as string);
+}
+
+/**
+ * Hallazgo 2: la escritura del `grant` es CONDICIONAL, nunca un `upsert`
+ * incondicional. Si ya hay una fila, el `UPDATE` exige `effect: "grant"` en
+ * su `WHERE` — así que un `deny` puesto entre la lectura de estado (arriba,
+ * fuera de la transacción) y esta escritura no se pisa nunca, porque la
+ * condición no casa y el `count` sale 0. Si no hay ninguna fila, el `INSERT`
+ * puede chocar con el índice único `(assignmentId, permissionId)` si otra
+ * transacción concurrente escribió primero (`P2002`): se relee la fila
+ * ganadora y, si es un `deny`, se rechaza (`quitado_por_administracion`); si
+ * es un `grant` de otro actor, se reintenta UNA vez como `UPDATE` (mismo
+ * camino que arriba: sólo la razón cambia, nunca el `createdBy`).
+ *
+ * Ruling 3: re-conceder sobre un `grant` existente actualiza sólo `reason` —
+ * `createdBy` no se toca, así que el grantor original queda intacto.
+ */
+async function escribirGrant(
+  tx: Prisma.TransactionClient,
+  assignmentId: string,
+  permissionId: string,
+  actorId: string,
+  razon: string,
+) {
+  const actualizados = await tx.assignmentPermissionOverride.updateMany({
+    where: { assignmentId, permissionId, effect: "grant" },
+    data: { reason: razon },
+  });
+  if (actualizados.count > 0) {
+    return tx.assignmentPermissionOverride.findUniqueOrThrow({
+      where: { assignmentId_permissionId: { assignmentId, permissionId } },
+    });
+  }
+  try {
+    return await tx.assignmentPermissionOverride.create({
+      data: { assignmentId, permissionId, effect: "grant", reason: razon, createdBy: actorId },
+    });
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    const existente = await tx.assignmentPermissionOverride.findUniqueOrThrow({
+      where: { assignmentId_permissionId: { assignmentId, permissionId } },
+    });
+    if (existente.effect === "deny") throw new ConcesionError("quitado_por_administracion");
+    return tx.assignmentPermissionOverride.update({ where: { id: existente.id }, data: { reason: razon } });
+  }
+}
+
 export interface ConcederEditarBeneficioInput {
   beneficioId: string;
   assignmentId: string;
@@ -125,8 +202,12 @@ export interface ConcederEditarBeneficioInput {
 /**
  * Concede. Rechaza sobre un perfil que ya lo tiene de serie
  * (`ya_lo_tiene`) o sobre un `deny` de administración (`quitado_por_administracion`,
- * ruling 1 — no se sobrescribe). Sobre una concesión ya existente, actualiza
- * la razón. `upsert` + `AuditEvent` en la misma transacción.
+ * ruling 1 — no se sobrescribe, y la comprobación se repite DENTRO de la
+ * transacción, condicional — hallazgo 2). Sobre una concesión ya existente,
+ * actualiza la razón sin tocar el `createdBy` original (ruling 3).
+ * `AuditEvent` en la misma transacción, con el contexto de autorización
+ * (hallazgo 4): el beneficio desde el que se concedió y el ámbito de la
+ * asignación receptora.
  */
 export async function concederEditarBeneficio(actorId: string, input: ConcederEditarBeneficioInput) {
   await exigeBeneficioEditable(actorId, input.beneficioId);
@@ -135,32 +216,33 @@ export async function concederEditarBeneficio(actorId: string, input: ConcederEd
   if (!razon) throw new ConcesionError("razon_obligatoria");
 
   const asignacion = await asignacionQueAlcanza(input.beneficioId, input.assignmentId);
+  await exigeAutoridadSobreAmbitoReceptor(actorId, asignacion);
   const { estado } = estadoDeAsignacion(asignacion);
   if (estado === "de_serie") throw new ConcesionError("ya_lo_tiene");
   if (estado === "quitado_por_administracion") throw new ConcesionError("quitado_por_administracion");
 
   const permiso = await permisoEditarBeneficio();
+  const ambitoLocationId = asignacion.scope.scopeRefId;
 
-  return prisma.$transaction(async (tx) => {
-    const fila = await tx.assignmentPermissionOverride.upsert({
-      where: { assignmentId_permissionId: { assignmentId: input.assignmentId, permissionId: permiso.id } },
-      create: { assignmentId: input.assignmentId, permissionId: permiso.id, effect: "grant", reason: razon, createdBy: actorId },
-      update: { effect: "grant", reason: razon, createdBy: actorId },
-    });
-    await recordAuditEvent(
-      {
-        actorUserAccountId: actorId,
-        operation: "beneficio.conceder_edicion",
-        entityType: "assignment_permission_override",
-        entityId: fila.id,
-        after: fila,
-        reason: razon,
-        sourceInterface: "traceability.service",
-      },
-      tx,
-    );
-    return fila;
-  });
+  return prisma.$transaction(
+    async (tx) => {
+      const fila = await escribirGrant(tx, input.assignmentId, permiso.id, actorId, razon);
+      await recordAuditEvent(
+        {
+          actorUserAccountId: actorId,
+          operation: "beneficio.conceder_edicion",
+          entityType: "assignment_permission_override",
+          entityId: fila.id,
+          after: { ...fila, contexto: { beneficioId: input.beneficioId, ambitoLocationId } },
+          reason: razon,
+          sourceInterface: "traceability.service",
+        },
+        tx,
+      );
+      return fila;
+    },
+    { isolationLevel: "Serializable" },
+  );
 }
 
 export interface QuitarEditarBeneficioInput {
@@ -168,31 +250,45 @@ export interface QuitarEditarBeneficioInput {
   assignmentId: string;
 }
 
-/** Quita. Sólo borra un `grant` de este permiso en esta asignación (ruling 2
- * — nunca toca el permiso de serie del perfil ni un `deny`); si no hay
- * ninguno, `sin_concesion`. */
+/**
+ * Quita. Puede borrar CUALQUIER `grant` de este permiso en esta asignación
+ * (ruling 3 — incluso uno puesto por la administración, nunca el permiso de
+ * serie del perfil ni un `deny`); si no hay ninguno, `sin_concesion`. El
+ * `DELETE` es condicional (hallazgo 2, `effect: "grant"` en su `WHERE`): si la
+ * fila cambió entre la lectura de arriba y esta escritura (p. ej. la
+ * administración la convirtió en `deny`), el `count` sale 0 y se rechaza en
+ * vez de borrar la fila equivocada.
+ */
 export async function quitarEditarBeneficio(actorId: string, input: QuitarEditarBeneficioInput) {
   await exigeBeneficioEditable(actorId, input.beneficioId);
 
   const asignacion = await asignacionQueAlcanza(input.beneficioId, input.assignmentId);
+  await exigeAutoridadSobreAmbitoReceptor(actorId, asignacion);
   const grant = overrideDeEdicion(asignacion, "grant");
   if (!grant) throw new ConcesionError("sin_concesion");
+  const ambitoLocationId = asignacion.scope.scopeRefId;
 
-  return prisma.$transaction(async (tx) => {
-    await tx.assignmentPermissionOverride.delete({ where: { id: grant.id } });
-    await recordAuditEvent(
-      {
-        actorUserAccountId: actorId,
-        operation: "beneficio.quitar_edicion",
-        entityType: "assignment_permission_override",
-        entityId: grant.id,
-        before: grant,
-        sourceInterface: "traceability.service",
-      },
-      tx,
-    );
-    return grant;
-  });
+  return prisma.$transaction(
+    async (tx) => {
+      const borrados = await tx.assignmentPermissionOverride.deleteMany({
+        where: { id: grant.id, assignmentId: input.assignmentId, permissionId: grant.permissionId, effect: "grant" },
+      });
+      if (borrados.count === 0) throw new ConcesionError("sin_concesion");
+      await recordAuditEvent(
+        {
+          actorUserAccountId: actorId,
+          operation: "beneficio.quitar_edicion",
+          entityType: "assignment_permission_override",
+          entityId: grant.id,
+          before: { ...grant, contexto: { beneficioId: input.beneficioId, ambitoLocationId } },
+          sourceInterface: "traceability.service",
+        },
+        tx,
+      );
+      return grant;
+    },
+    { isolationLevel: "Serializable" },
+  );
 }
 
 /**
@@ -207,7 +303,7 @@ export async function personasDelBeneficio(actorId: string, beneficioId: string)
 
   const cadena = await cadenaDeAncestros(beneficioId);
   const asignaciones = await prisma.assignment.findMany({
-    where: { status: "active", scope: { scopeType: "location", scopeRefId: { in: cadena } } },
+    where: { ...activeAssignmentWhere(), scope: { scopeType: "location", scopeRefId: { in: cadena } } },
     include: { ...ASIGNACION_CON_PERMISOS, userAccount: { include: { person: true } } },
   });
 

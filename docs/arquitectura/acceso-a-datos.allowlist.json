@@ -562,6 +562,10 @@
     {
       "archivo": "lib/commerce/tienda.ts",
       "razon": "ADR-163 — `envasesDelLote` recibe el `tx` de `asignarATienda` para leer el techo de envases DENTRO de la transacción serializable que decide si cabe la asignación; leerlo fuera dejaría la carrera que el aislamiento existe para cerrar. `asignacionesDeLote` le pasa el cliente, que es la misma interfaz."
+    },
+    {
+      "archivo": "lib/traceability/concesiones.ts",
+      "razon": "ADR-166, corrección del 2026-09-18 (hallazgo 2 de la revisión independiente de Codex) — `escribirGrant` recibe el `tx` de `concederEditarBeneficio` para escribir el override CONDICIONALMENTE (UPDATE con WHERE effect:\"grant\", o INSERT con catch de P2002) dentro de la misma transacción serializable que decide si un `deny` de administración manda. Leer y escribir fuera de una única transacción es exactamente la carrera que el hallazgo señaló: el `upsert` anterior escribía `grant` sin condición. No abre su propia conexión ni amplía qué puede consultar: sólo opera sobre `assignment_permission_override`."
     }
   ],
   "operaciones_sin_patron": [

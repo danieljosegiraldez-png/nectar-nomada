@@ -203,6 +203,155 @@ describe("concederEditarBeneficio", () => {
     await expect(concederEditarBeneficio(jefe, { beneficioId: finca.id, assignmentId, reason: "razón" }))
       .rejects.toThrow(new ConcesionError("no_es_beneficio"));
   });
+
+  /**
+   * Hallazgo 1 (revisión independiente de Codex, 2026-09-18): la guardia de
+   * entrada sólo comprobaba autoridad del actor SOBRE EL BENEFICIO, pero la
+   * fila que se toca es el override de la asignación RECEPTORA, cuyo ámbito
+   * puede ser un ancestro más ancho (todo el sitio). Un Farm Manager cuya
+   * única asignación cuelga DEL BENEFICIO pasaba `exigeBeneficioEditable` y
+   * podía conceder sobre una asignación de sitio entero — más autoridad de la
+   * que él mismo tiene.
+   */
+  it("un actor con autoridad SÓLO sobre el beneficio no puede conceder a una asignación de ámbito más ancho (el sitio)", async () => {
+    const finca = await sitio();
+    const ben = await beneficio(finca.id);
+    // Nota del ticket: un Farm Manager asignado en el beneficio necesita un
+    // Scope para esa ubicación — cuenta() lo crea si no existe.
+    const jefeDelBeneficio = await cuenta(ben.id, "Farm Manager");
+    const capatazDelSitio = await cuenta(finca.id, "Farm Operator");
+    const assignmentId = await idDeLaAsignacion(capatazDelSitio);
+
+    await expect(concederEditarBeneficio(jefeDelBeneficio, { beneficioId: ben.id, assignmentId, reason: "razón" }))
+      .rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+
+    // Control positivo: un Farm Manager DEL SITIO (autoridad que sí alcanza el
+    // ámbito de la asignación receptora) puede conceder sobre esa misma fila.
+    const jefeDelSitio = await cuenta(finca.id, "Farm Manager");
+    const resultado = await concederEditarBeneficio(jefeDelSitio, { beneficioId: ben.id, assignmentId, reason: "razón" });
+    expect(resultado).toBeDefined();
+  });
+
+  /**
+   * Hallazgo 3, ruling del controlador: re-conceder sobre una concesión ya
+   * existente sólo actualiza la razón — el `createdBy` original (quién la
+   * concedió primero) no se sobrescribe con quien la renueva.
+   */
+  it("re-conceder sobre una concesión ya existente actualiza sólo la razón, no el createdBy original", async () => {
+    const finca = await sitio();
+    const ben = await beneficio(finca.id);
+    const jefe1 = await cuenta(finca.id, "Farm Manager");
+    const jefe2 = await cuenta(finca.id, "Farm Manager");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const assignmentId = await idDeLaAsignacion(capataz);
+
+    const primera = await concederEditarBeneficio(jefe1, { beneficioId: ben.id, assignmentId, reason: "primera razón" });
+    expect(primera.createdBy).toBe(jefe1);
+
+    const segunda = await concederEditarBeneficio(jefe2, { beneficioId: ben.id, assignmentId, reason: "segunda razón" });
+    expect(segunda.id).toBe(primera.id);
+    expect(segunda.createdBy).toBe(jefe1);
+    expect(segunda.reason).toBe("segunda razón");
+  });
+
+  /**
+   * Hallazgo 4: el `AuditEvent` lleva el contexto desde el que se autorizó —
+   * el beneficio y el ámbito de la asignación receptora — tanto para conceder
+   * como para quitar.
+   */
+  it("el AuditEvent lleva el contexto: beneficioId y el ámbito de la asignación receptora", async () => {
+    const finca = await sitio();
+    const ben = await beneficio(finca.id);
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const assignmentId = await idDeLaAsignacion(capataz);
+    const fila = await concederEditarBeneficio(jefe, { beneficioId: ben.id, assignmentId, reason: "razón" });
+
+    const evento = await prisma.auditEvent.findFirstOrThrow({
+      where: { operation: "beneficio.conceder_edicion", entityType: "assignment_permission_override", entityId: fila.id },
+    });
+    const after = evento.after as { contexto?: { beneficioId?: string; ambitoLocationId?: string } };
+    expect(after.contexto?.beneficioId).toBe(ben.id);
+    expect(after.contexto?.ambitoLocationId).toBe(finca.id);
+
+    await quitarEditarBeneficio(jefe, { beneficioId: ben.id, assignmentId });
+    const eventoQuitar = await prisma.auditEvent.findFirstOrThrow({
+      where: { operation: "beneficio.quitar_edicion", entityType: "assignment_permission_override", entityId: fila.id },
+    });
+    const before = eventoQuitar.before as { contexto?: { beneficioId?: string; ambitoLocationId?: string } };
+    expect(before.contexto?.beneficioId).toBe(ben.id);
+    expect(before.contexto?.ambitoLocationId).toBe(finca.id);
+  });
+
+  /**
+   * Hallazgo 6: el criterio de "asignación activa" no es sólo `status ===
+   * "active"` — el resolutor (lib/rbac/service.ts, getResolvedAssignments)
+   * también exige estar dentro de la ventana [validFrom, validTo). Antes del
+   * fix, una asignación con `status: "active"` pero fuera de su ventana
+   * pasaba `asignacionQueAlcanza` igual.
+   */
+  describe("hallazgo 6: la ventana de validez, no sólo status", () => {
+    it("validTo en el pasado: asignacion_fuera_de_ambito, y ausente de personasDelBeneficio", async () => {
+      const finca = await sitio();
+      const ben = await beneficio(finca.id);
+      const jefe = await cuenta(finca.id, "Farm Manager");
+      const capataz = await cuenta(finca.id, "Farm Operator");
+      const assignmentId = await idDeLaAsignacion(capataz);
+      await prisma.assignment.update({ where: { id: assignmentId }, data: { validTo: new Date(Date.now() - 60_000) } });
+
+      await expect(concederEditarBeneficio(jefe, { beneficioId: ben.id, assignmentId, reason: "razón" }))
+        .rejects.toThrow(new ConcesionError("asignacion_fuera_de_ambito"));
+
+      const personas = await personasDelBeneficio(jefe, ben.id);
+      expect(personas.find((p) => p.assignmentId === assignmentId)).toBeUndefined();
+    });
+
+    it("validFrom en el futuro: asignacion_fuera_de_ambito, y ausente de personasDelBeneficio", async () => {
+      const finca = await sitio();
+      const ben = await beneficio(finca.id);
+      const jefe = await cuenta(finca.id, "Farm Manager");
+      const capataz = await cuenta(finca.id, "Farm Operator");
+      const assignmentId = await idDeLaAsignacion(capataz);
+      await prisma.assignment.update({ where: { id: assignmentId }, data: { validFrom: new Date(Date.now() + 86_400_000) } });
+
+      await expect(concederEditarBeneficio(jefe, { beneficioId: ben.id, assignmentId, reason: "razón" }))
+        .rejects.toThrow(new ConcesionError("asignacion_fuera_de_ambito"));
+
+      const personas = await personasDelBeneficio(jefe, ben.id);
+      expect(personas.find((p) => p.assignmentId === assignmentId)).toBeUndefined();
+    });
+  });
+
+  /**
+   * Hallazgo 2: la escritura del `grant` es CONDICIONAL (el `WHERE` exige
+   * `effect: "grant"`), no un `upsert` incondicional. Esto es una prueba
+   * DETERMINISTA de la condición SQL en sí — no simula la concurrencia real
+   * (dos transacciones solapadas), que el informe final documenta aparte como
+   * argumentada y no probada. Prueba que la fila con `effect: "deny"` NO
+   * puede ser tocada por el mismo `UPDATE ... WHERE effect = 'grant'` que
+   * `concederEditarBeneficio` ejecuta dentro de su transacción.
+   */
+  describe("hallazgo 2: la escritura del grant es condicional", () => {
+    it("el UPDATE con guardia effect:'grant' no toca una fila con effect:'deny'", async () => {
+      const finca = await sitio();
+      const capataz = await cuenta(finca.id, "Farm Operator");
+      const assignmentId = await idDeLaAsignacion(capataz);
+      await ponerDeny(capataz);
+      const permiso = await prisma.permission.findFirstOrThrow({ where: { resourceType: "location", action: "edit_beneficio" } });
+
+      const actualizados = await prisma.assignmentPermissionOverride.updateMany({
+        where: { assignmentId, permissionId: permiso.id, effect: "grant" },
+        data: { reason: "intento de pisar el deny" },
+      });
+      expect(actualizados.count).toBe(0);
+
+      const fila = await prisma.assignmentPermissionOverride.findUniqueOrThrow({
+        where: { assignmentId_permissionId: { assignmentId, permissionId: permiso.id } },
+      });
+      expect(fila.effect).toBe("deny");
+      expect(fila.reason).toBeNull();
+    });
+  });
 });
 
 describe("quitarEditarBeneficio", () => {
@@ -246,6 +395,46 @@ describe("quitarEditarBeneficio", () => {
 
     await expect(quitarEditarBeneficio(jefe, { beneficioId: ben.id, assignmentId }))
       .rejects.toThrow(new ConcesionError("sin_concesion"));
+  });
+
+  /** Hallazgo 1, lado de quitar: la misma escalada de ámbito, en revocar. */
+  it("un actor con autoridad SÓLO sobre el beneficio no puede quitar una concesión de una asignación de ámbito más ancho (el sitio)", async () => {
+    const finca = await sitio();
+    const ben = await beneficio(finca.id);
+    const jefeDelSitio = await cuenta(finca.id, "Farm Manager");
+    const capatazDelSitio = await cuenta(finca.id, "Farm Operator");
+    const assignmentId = await idDeLaAsignacion(capatazDelSitio);
+    await concederEditarBeneficio(jefeDelSitio, { beneficioId: ben.id, assignmentId, reason: "razón" });
+
+    const jefeDelBeneficio = await cuenta(ben.id, "Farm Manager");
+    await expect(quitarEditarBeneficio(jefeDelBeneficio, { beneficioId: ben.id, assignmentId }))
+      .rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+
+    // Control positivo: el jefe del sitio sí puede quitarla.
+    await quitarEditarBeneficio(jefeDelSitio, { beneficioId: ben.id, assignmentId });
+    await expect(exigeEditarBeneficioEn(capatazDelSitio, ben.id)).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+  });
+
+  /**
+   * Ruling 3 (finding 3): quitar puede borrar CUALQUIER `grant` de este
+   * permiso dentro del ámbito de autoridad del actor — incluso uno que puso
+   * la administración (Platform Admin), no sólo uno puesto por esta misma
+   * delegación. No hay columnas de procedencia que lo distingan.
+   */
+  it("quitar borra un grant aunque lo haya puesto otra persona (p. ej. administración), no sólo el de esta delegación", async () => {
+    const finca = await sitio();
+    const ben = await beneficio(finca.id);
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const admin = await cuenta(finca.id, "Farm Manager"); // hace de "otra persona" que concedió
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const assignmentId = await idDeLaAsignacion(capataz);
+
+    // "admin" concede, no "jefe" — el grant existente no es de quien va a quitarlo.
+    const fila = await concederEditarBeneficio(admin, { beneficioId: ben.id, assignmentId, reason: "puesta por otra persona" });
+    expect(fila.createdBy).toBe(admin);
+
+    await quitarEditarBeneficio(jefe, { beneficioId: ben.id, assignmentId });
+    await expect(exigeEditarBeneficioEn(capataz, ben.id)).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
   });
 });
 

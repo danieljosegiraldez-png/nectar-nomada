@@ -24,6 +24,15 @@ export default async function InstalacionPage({ params, searchParams }: {
     return <div><h1>{t("instalaciones")}</h1><p role="alert">{t("error_sin_acceso")}</p><Link href="/instalaciones">{t("volver")}</Link></div>;
   }
   const puedeEditar = await puedeEditarBeneficioEn(user.userAccountId, id);
+  // Hallazgo 5 (revisión independiente de Codex, 2026-09-18): el permiso de
+  // la INSTALACIÓN no es el de cada CAMA — `actualizarUbicacionDeSecado`
+  // comprueba `edit_beneficio` sobre el id de la cama, no el de su padre, así
+  // que reutilizar `puedeEditar` aquí ofrecía un formulario que el servidor
+  // iba a rechazar (o, peor, aceptar sobre una cama que sí concede otra
+  // cosa). Cada cama pregunta por SU PROPIO permiso.
+  const permisosDeCamas = await Promise.all(
+    instalacion.camas.map((c) => puedeEditarBeneficioEn(user.userAccountId, c.id)),
+  );
   return <div>
     <p><Link href="/instalaciones">← {t("volver")}</Link></p>
     <p>{instalacion.sitio?.name ?? t("sitioNoVisible")} → {instalacion.name}</p>
@@ -33,9 +42,9 @@ export default async function InstalacionPage({ params, searchParams }: {
     {puedeEditar && <FormularioUbicacion key={JSON.stringify(instalacion)} tipo="drying_facility" existente={instalacion} />}
     <h2>{t("camas")}</h2>
     {!instalacion.camas.length && <p>{t("sinCamas")}</p>}
-    {instalacion.camas.map((c) => <section key={JSON.stringify(c)}>
+    {instalacion.camas.map((c, i) => <section key={JSON.stringify(c)}>
       <h3>{c.name}</h3>
-      {puedeEditar && <FormularioUbicacion tipo="drying_bed" existente={c} />}
+      {permisosDeCamas[i] && <FormularioUbicacion tipo="drying_bed" existente={c} />}
     </section>)}
     {puedeEditar && <><h2>{t("crearCama")}</h2><FormularioUbicacion tipo="drying_bed" parentLocationId={id} /></>}
     <p><Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link></p>
