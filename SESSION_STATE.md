@@ -38,6 +38,21 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · Las faenas con nombres de manual, la división y la reina (PR #397)
+
+Spec #407 aprobado por Daniel y fusionado; plan `docs/superpowers/plans/2026-09-18-faenas-division-y-reinas.md`,
+seis tareas. **Ocho faenas** en la colmena —revisar · alimentar · tratar · contar varroa · dividir ·
+reinas · unir · cosechar— con nombres de DICTA y SAGARPA; la enjambrazón es un aviso DENTRO de Revisar.
+**Genealogía:** una división nace con su madre y una unión cierra la débil apuntando a la receptora
+(las viejas sin pareja se quedan así: CHECK NOT VALID). **Reina por intervalos** (`Queen`,
+`QueenTenure`), sin marca: una colonia sin reina registrada es «sin registro», nunca huérfana. Al
+dividir se elige con quién se queda la reina. Las puertas viejas («división» en Nueva colonia, «se
+combinó» en el fin) se cerraron. **Sin ver en navegador.**
+
+**La base compartida:** los dos CHECK NOT VALID de la genealogía tumbaban 3 pruebas de `main` en otras
+sesiones; con permiso de Daniel se quitaron de `nectar_test` y esta rama compuerta en `nectar_ci_faena`.
+Vuelven con la migración al fusionar.
+
 ### 2026-09-18 · Artefactos de colmena y el nodo de sensores (PR #405)
 
 Plan `docs/superpowers/plans/2026-09-17-artefactos-de-colmena.md`, ocho tareas. **La colmena guarda
@@ -116,32 +131,6 @@ temporal (antes cae, después 6/6) y flip de la mutación (volver a poner el adm
 Auditadas las otras 21 pruebas que buscan Platform Admin: **ninguna con el defecto hoy**, dos con su
 forma lenta — ver `PENDING_IMPLEMENTATIONS/012`. Lección en `CLAUDE.md`, «Un admin de plataforma ve la
 base compartida entera».
-
-### 2026-09-18 · El botiquín: vencimiento, custodia, descuento y aviso
-
-Nueve tareas del plan `docs/superpowers/plans/2026-09-17-botiquin.md`, en un PR. El producto lleva
-una vez fabricante, principio activo, registro, carencia, con cuánto aviso, almacenamiento y
-advertencias; el frasco, en cada compra, vencimiento, presentación y factura. **Botado y perdido**
-restan y exigen motivo (`CHECK` en la base). **Custodia** = sitio + persona, en intervalos sin hueco
-ni solape. Foto de la etiqueta sobre el frasco. **Aplicar un tratamiento descuenta del frasco** en la
-misma transacción; vencido se aplica y queda marcado. `/inventario/recibir`, y la lista con «Vence»
-y «Dónde está».
-
-**Decisiones de la ejecución que el plan no traía, para que Daniel las vea:**
-- **El aviso NO va en `/start`**: esa ruta sólo redirige (ADR-082). Va en `/lots`, `/apiaries` y la
-  ficha del apiario, a quien tiene `lot:manage` donde ESTÁ el frasco.
-- **Descontar exige `lot:manage` sobre el frasco.** Kenis (sólo eventos de colonia) registra el
-  tratamiento sin frasco. El manejo en lote no acepta frasco todavía.
-- **FK de evidencia en RESTRICT** (foto y tratamiento), como fijó la revisión del 2026-09-01; la
-  primera versión copió SET NULL de padres anteriores y la deriva de migraciones lo cazó.
-- **Completar un producto sólo rellena huecos**; corregir lo ya declarado no tiene pantalla.
-
-**Migraciones fuera de orden:** tres del botiquín (`20260918000000`–`020000`) tienen fecha anterior a
-`20260918023857_limpieza_de_caja`, ya en producción. Son de tablas independientes; `migrate deploy`
-aplica las pendientes, pero **leer el log del despliegue** y confirmar que nombra las seis.
-
-**Sin verificar en navegador** —hace falta sesión—. **La cifra del router chocó por cuarta vez:** la
-rama decía 83 y, rebasada sobre `/finca`, se midió 84.
 
 ## 3. Bloqueado, y en qué
 
