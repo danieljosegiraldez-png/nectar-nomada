@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "../../lib/auth/session";
 import { BeneficioError, actualizarBeneficio, crearBeneficio } from "../../lib/traceability/beneficios";
+import { ConcesionError, concederEditarBeneficio, quitarEditarBeneficio } from "../../lib/traceability/concesiones";
 import { LocationAccessError } from "../../lib/traceability/locations";
 
 export type BeneficioFormState = { error?: string };
@@ -30,4 +31,43 @@ export async function guardarBeneficioFormAction(_state: BeneficioFormState, for
   }
   revalidatePath("/beneficio/ajustes");
   redirect("/beneficio/ajustes?ok=guardado");
+}
+
+export type ConcesionFormState = { error?: string };
+
+/** Traduce `ConcesionError`/`LocationAccessError` al mismo mensaje, porque las
+ * dos son «este mensaje explica por qué no se pudo» para quien mira el
+ * formulario: la pantalla no distingue de qué clase vino el rechazo. */
+function mensajeDeConcesion(error: unknown): string {
+  if (error instanceof ConcesionError || error instanceof LocationAccessError) return error.message;
+  throw error;
+}
+
+export async function concederEdicionFormAction(_state: ConcesionFormState, form: FormData): Promise<ConcesionFormState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  try {
+    const beneficioId = String(form.get("beneficioId") ?? "");
+    const assignmentId = String(form.get("assignmentId") ?? "");
+    const reason = String(form.get("reason") ?? "");
+    await concederEditarBeneficio(user.userAccountId, { beneficioId, assignmentId, reason });
+  } catch (error) {
+    return { error: mensajeDeConcesion(error) };
+  }
+  revalidatePath("/beneficio/ajustes");
+  redirect("/beneficio/ajustes?ok=concesion");
+}
+
+export async function quitarEdicionFormAction(_state: ConcesionFormState, form: FormData): Promise<ConcesionFormState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  try {
+    const beneficioId = String(form.get("beneficioId") ?? "");
+    const assignmentId = String(form.get("assignmentId") ?? "");
+    await quitarEditarBeneficio(user.userAccountId, { beneficioId, assignmentId });
+  } catch (error) {
+    return { error: mensajeDeConcesion(error) };
+  }
+  revalidatePath("/beneficio/ajustes");
+  redirect("/beneficio/ajustes?ok=concesion");
 }

@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import { LocationAccessError, exigeEditarBeneficioEn } from "../../lib/traceability/locations";
+import {
+  LocationAccessError,
+  exigeEditarBeneficioEn,
+  puedeEditarBeneficioEn,
+  puedeEditarBeneficioEnOrganizacion,
+} from "../../lib/traceability/locations";
+import { listarBeneficios } from "../../lib/traceability/beneficios";
 import {
   ConcesionError,
   personasDelBeneficio,
@@ -268,5 +274,83 @@ describe("personasDelBeneficio", () => {
     const finca2 = await sitio();
     const jefeDeOtraFinca = await cuenta(finca2.id, "Farm Manager");
     await expect(personasDelBeneficio(jefeDeOtraFinca, ben.id)).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+  });
+});
+
+/**
+ * Plan 3, Task 2 — los booleanos que envuelven las mismas guardias del
+ * servidor, para que una pantalla pueda preguntar sin duplicar la regla.
+ */
+describe("puedeEditarBeneficioEn", () => {
+  it("true para Farm Manager (de serie), false para un capataz, true con concesión", async () => {
+    const finca = await sitio();
+    const ben = await beneficio(finca.id);
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const assignmentId = await idDeLaAsignacion(capataz);
+
+    expect(await puedeEditarBeneficioEn(jefe, ben.id)).toBe(true);
+    expect(await puedeEditarBeneficioEn(capataz, ben.id)).toBe(false);
+
+    await concederEditarBeneficio(jefe, { beneficioId: ben.id, assignmentId, reason: "cubre la temporada" });
+    expect(await puedeEditarBeneficioEn(capataz, ben.id)).toBe(true);
+  });
+
+  it("relanza cualquier otro error: una ubicación que no existe no es 'false'", async () => {
+    await expect(puedeEditarBeneficioEn(randomUUID(), randomUUID())).rejects.toThrow(
+      new LocationAccessError("location_not_found"),
+    );
+  });
+});
+
+describe("puedeEditarBeneficioEnOrganizacion", () => {
+  const orgIds: string[] = [];
+  afterEach(async () => {
+    await prisma.location.updateMany({ where: { organizationId: { in: orgIds } }, data: { organizationId: null } });
+    await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
+    orgIds.length = 0;
+  });
+
+  it("true para Farm Manager (de serie), false para un capataz, true con concesión", async () => {
+    const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
+    orgIds.push(org.id);
+    const finca = await prisma.location.create({
+      data: { name: nombre(), locationType: "site", classification: "internal", organizationId: org.id },
+    });
+    names.push(finca.name);
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const assignmentId = await idDeLaAsignacion(capataz);
+
+    expect(await puedeEditarBeneficioEnOrganizacion(jefe, org.id)).toBe(true);
+    expect(await puedeEditarBeneficioEnOrganizacion(capataz, org.id)).toBe(false);
+
+    const ben = await beneficio(finca.id);
+    await concederEditarBeneficio(jefe, { beneficioId: ben.id, assignmentId, reason: "cubre la temporada" });
+    expect(await puedeEditarBeneficioEnOrganizacion(capataz, org.id)).toBe(true);
+  });
+});
+
+describe("listarBeneficios: puedeEditar", () => {
+  it("el capataz lo ve con puedeEditar: false; con concesión, true", async () => {
+    const finca = await sitio();
+    const ben = await beneficio(finca.id);
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const assignmentId = await idDeLaAsignacion(capataz);
+
+    const antes = await listarBeneficios(capataz);
+    const filaAntes = antes.find((b) => b.id === ben.id);
+    expect(filaAntes?.puedeEditar).toBe(false);
+
+    await concederEditarBeneficio(jefe, { beneficioId: ben.id, assignmentId, reason: "cubre la temporada" });
+
+    const despues = await listarBeneficios(capataz);
+    const filaDespues = despues.find((b) => b.id === ben.id);
+    expect(filaDespues?.puedeEditar).toBe(true);
+
+    // Control positivo: el Farm Manager lo ve editable de serie, sin concesión.
+    const paraJefe = await listarBeneficios(jefe);
+    expect(paraJefe.find((b) => b.id === ben.id)?.puedeEditar).toBe(true);
   });
 });
