@@ -5,10 +5,23 @@
  * `platform` y el perfil «Platform Admin» — cubre cualquier permiso,
  * incluido `location:manage_attributes`, así que sirve para cualquier
  * prueba de servicio que sólo necesite pasar la compuerta de RBAC sin
- * probar la propia compuerta. `crearParcela` da una `Location` de tipo
- * `plot` bajo una `Organization` de tipo `farm`, ambas `internal` (el valor
- * por defecto del esquema), que es la clasificación que
- * `requireLocationAttributeAccess` exige clarificar.
+ * probar la propia compuerta.
+ *
+ * `crearFinca` da una `Location` de tipo `site` (la finca) bajo una
+ * `Organization` de tipo `farm`, ambas `internal` (el valor por defecto del
+ * esquema). `crearParcela` da una `Location` de tipo `plot`, colgada de una
+ * finca vía `parentLocationId` — la misma jerarquía que usan los datos
+ * reales (ver `tests/traceability/lots.test.ts`, "a plot Location inherits
+ * its parent site's organizationId through parentLocationId"). Sin
+ * argumento crea su propia finca nueva; con una finca ya creada (de
+ * `crearFinca()` o de otra `crearParcela()`), cuelga de ELLA — así dos
+ * parcelas pueden compartir finca, que es lo que exige probar la
+ * numeración correlativa de trampas por finca (Tarea 3).
+ *
+ * La parcela devuelve `organizationId` puesto (heredado de la finca), no
+ * `null` como en el dato real de producción — a propósito, para no romper
+ * `tests/traceability/plotBlocks.test.ts`, que ya lo usa para su propia
+ * limpieza.
  *
  * `crearUsuarioSinAcceso` es el caso de rechazo: un Farm Operator con
  * ámbito de ubicación, pero escoplado a SU PROPIA parcela, distinta de la
@@ -49,13 +62,27 @@ export async function crearUsuarioConAcceso() {
   return { userAccountId: cuenta.id, personId: persona.id, scopeId: scope.id };
 }
 
-export async function crearParcela() {
-  const run = marca("parcela");
+export async function crearFinca() {
+  const run = marca("finca");
   const organizacion = await prisma.organization.create({
     data: { name: `TEST Finca (${run})`, organizationType: "farm", status: "approved" },
   });
   return prisma.location.create({
-    data: { name: `TEST Parcela (${run})`, locationType: "plot", organizationId: organizacion.id, status: "approved" },
+    data: { name: `TEST Finca (${run})`, locationType: "site", organizationId: organizacion.id, status: "approved" },
+  });
+}
+
+export async function crearParcela(finca?: Awaited<ReturnType<typeof crearFinca>>) {
+  const run = marca("parcela");
+  const base = finca ?? (await crearFinca());
+  return prisma.location.create({
+    data: {
+      name: `TEST Parcela (${run})`,
+      locationType: "plot",
+      parentLocationId: base.id,
+      organizationId: base.organizationId,
+      status: "approved",
+    },
   });
 }
 

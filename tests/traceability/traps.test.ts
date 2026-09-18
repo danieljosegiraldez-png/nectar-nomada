@@ -9,18 +9,25 @@
  * `polinizacion.test.ts` en CLAUDE.md sobre limpiezas que no llegan a correr).
  *
  * `crearParcela()` (tests/helpers/traceability.ts) cuelga la parcela de una
- * finca vía `Organization.organizationType: "farm"` + `Location.organizationId`
- * — no vía `Location.parentLocationId`, que queda `null`. Así que, por el
- * fallback de `createTrap` (`location.parentLocationId ?? input.locationId`),
- * una parcela sin padre ES su propia finca a efectos de numeración. Para
- * probar que dos parcelas DISTINTAS comparten numeración cuando cuelgan de la
- * misma finca, la segunda parcela se crea a mano con `parentLocationId` puesto
- * a la primera, en vez de con el helper (que no acepta parámetros).
+ * finca de VERDAD: crea (o reutiliza) una `Location` de tipo `site` y hace
+ * `parentLocationId` de la parcela apuntar a ella — la misma jerarquía que
+ * `tests/traceability/lots.test.ts` usa para sitio→parcela. Cada llamada a
+ * `crearParcela()` sin argumento crea su PROPIA finca nueva (dos parcelas de
+ * llamadas distintas NO comparten finca); para compartirla hay que pasar la
+ * misma finca (de `crearFinca()`) a las dos llamadas — así se prueba en
+ * "sigue la numeración de la finca aunque la parcela sea otra", con dos
+ * parcelas HERMANAS bajo la misma finca, sin construir nada a mano con
+ * `prisma.location.create`.
+ *
+ * Como `crearParcela()` crea dos filas de `Location` por llamada (la finca Y
+ * la parcela) cuando no se le pasa una finca existente, cada `it` que la usa
+ * sin argumento encola AMBOS ids —`parcela.id` y `parcela.parentLocationId`—
+ * en `locationIds`, o la finca queda huérfana tras el `afterEach`.
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { createTrap, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
 import { prisma } from "../../lib/db";
-import { crearUsuarioConAcceso, crearParcela, crearUsuarioSinAcceso } from "../helpers/traceability";
+import { crearUsuarioConAcceso, crearParcela, crearFinca, crearUsuarioSinAcceso } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 let userAccountIds: string[] = [];
@@ -55,9 +62,15 @@ describe("alta de trampa", () => {
     scopeIds.push(usuario.scopeId);
     const { userAccountId } = usuario;
 
-    const parcela = await crearParcela(); // sin padre: es su propia finca
-    locationIds.push(parcela.id);
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
+
+    // La parcela cuelga de una finca (Location de tipo site) que NO es ella
+    // misma — si esto no se cumple, la aserción de abajo sobre
+    // `farmLocationId` no estaría probando la jerarquía real.
+    expect(parcela.parentLocationId).not.toBeNull();
+    expect(parcela.parentLocationId).not.toBe(parcela.id);
 
     const a = await createTrap(userAccountId, {
       locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
@@ -67,7 +80,7 @@ describe("alta de trampa", () => {
     });
     expect(a.trapNumber).toBe(1);
     expect(b.trapNumber).toBe(2);
-    expect(a.farmLocationId).toBe(parcela.id);
+    expect(a.farmLocationId).toBe(parcela.parentLocationId);
   });
 
   it("sigue la numeración de la finca aunque la parcela sea otra", async () => {
@@ -77,23 +90,20 @@ describe("alta de trampa", () => {
     scopeIds.push(usuario.scopeId);
     const { userAccountId } = usuario;
 
-    const uno = await crearParcela();
-    locationIds.push(uno.id);
-    organizationIds.push(uno.organizationId!);
+    const finca = await crearFinca();
+    locationIds.push(finca.id);
+    organizationIds.push(finca.organizationId!);
 
-    // Otra parcela de la MISMA finca: cuelga de `uno` vía parentLocationId,
-    // que es como dos parcelas comparten finca en la jerarquía real de
-    // `Location` (ver lots.test.ts). `crearParcela()` no acepta parámetros,
-    // así que aquí se construye a mano en vez de forzar el helper.
-    const otra = await prisma.location.create({
-      data: { name: `TEST Otra Parcela (${Date.now()})`, locationType: "plot", parentLocationId: uno.id, status: "approved" },
-    });
-    locationIds.push(otra.id);
+    // Dos parcelas HERMANAS bajo la misma finca, las dos con el helper —
+    // nada de `prisma.location.create` a mano.
+    const uno = await crearParcela(finca);
+    const otra = await crearParcela(finca);
+    locationIds.push(uno.id, otra.id);
 
     await createTrap(userAccountId, { locationId: uno.id, installedAt: new Date(), provenanceClass: "direct_observation" });
     const segunda = await createTrap(userAccountId, { locationId: otra.id, installedAt: new Date(), provenanceClass: "direct_observation" });
     expect(segunda.trapNumber).toBe(2);
-    expect(segunda.farmLocationId).toBe(uno.id);
+    expect(segunda.farmLocationId).toBe(finca.id);
   });
 
   it("deja la trampa activa y con su observación de instalación", async () => {
@@ -104,7 +114,7 @@ describe("alta de trampa", () => {
     const { userAccountId } = usuario;
 
     const parcela = await crearParcela();
-    locationIds.push(parcela.id);
+    locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
 
     const trampa = await createTrap(userAccountId, {
@@ -125,7 +135,7 @@ describe("alta de trampa", () => {
     const { userAccountId } = usuario;
 
     const parcela = await crearParcela();
-    locationIds.push(parcela.id);
+    locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
 
     const manana = new Date(Date.now() + 86_400_000);
@@ -142,10 +152,10 @@ describe("alta de trampa", () => {
     const { userAccountId } = usuario;
 
     const parcela = await crearParcela();
-    locationIds.push(parcela.id);
+    locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
     const otra = await crearParcela();
-    locationIds.push(otra.id);
+    locationIds.push(otra.id, otra.parentLocationId!);
     organizationIds.push(otra.organizationId!);
 
     const { createPlotBlock } = await import("../../lib/traceability/plotBlocks");
@@ -158,7 +168,7 @@ describe("alta de trampa", () => {
 
   it("rechaza a un usuario sin acceso a specimen en esa parcela", async () => {
     const parcela = await crearParcela();
-    locationIds.push(parcela.id);
+    locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
 
     const ajeno = await crearUsuarioSinAcceso();

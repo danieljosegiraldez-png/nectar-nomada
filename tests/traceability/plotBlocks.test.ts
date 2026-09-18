@@ -46,7 +46,7 @@ describe("bloques de una parcela", () => {
     const { userAccountId } = usuario;
 
     const parcela = await crearParcela();
-    locationIds.push(parcela.id);
+    locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
 
     const bloque = await createPlotBlock(userAccountId, { locationId: parcela.id, name: "Norte" });
@@ -63,7 +63,7 @@ describe("bloques de una parcela", () => {
     const { userAccountId } = usuario;
 
     const parcela = await crearParcela();
-    locationIds.push(parcela.id);
+    locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
 
     const bloque = await createPlotBlock(userAccountId, { locationId: parcela.id, name: "Alto" });
@@ -81,7 +81,7 @@ describe("bloques de una parcela", () => {
     const { userAccountId } = usuario;
 
     const parcela = await crearParcela();
-    locationIds.push(parcela.id);
+    locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
 
     await expect(createPlotBlock(userAccountId, { locationId: parcela.id, name: "   " })).rejects.toThrow(
@@ -97,7 +97,7 @@ describe("bloques de una parcela", () => {
     const { userAccountId } = usuario;
 
     const parcela = await crearParcela();
-    locationIds.push(parcela.id);
+    locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
 
     await createPlotBlock(userAccountId, { locationId: parcela.id, name: "Bajo" });
@@ -108,7 +108,7 @@ describe("bloques de una parcela", () => {
 
   it("createPlotBlock rechaza a un usuario sin acceso a esa parcela", async () => {
     const parcela = await crearParcela();
-    locationIds.push(parcela.id);
+    locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
 
     const ajeno = await crearUsuarioSinAcceso();
@@ -125,7 +125,7 @@ describe("bloques de una parcela", () => {
 
   it("listPlotBlocks rechaza a un usuario sin acceso a esa parcela", async () => {
     const parcela = await crearParcela();
-    locationIds.push(parcela.id);
+    locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
 
     const ajeno = await crearUsuarioSinAcceso();
