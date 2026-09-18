@@ -50,7 +50,7 @@ function nombre() { const n = `TEST-EDB-${randomUUID()}`; names.push(n); return 
 async function sitio() {
   return prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal" } });
 }
-async function hijo(parentLocationId: string, locationType: "beneficio" | "plot") {
+async function hijo(parentLocationId: string, locationType: "beneficio" | "plot" | "drying_facility" | "drying_bed") {
   return prisma.location.create({ data: { name: nombre(), locationType, classification: "internal", parentLocationId } });
 }
 async function cuenta(locationId: string, perfil: "Farm Manager" | "Farm Operator") {
@@ -170,6 +170,46 @@ describe("subdividir un beneficio (createMicrolot)", () => {
     const parc = await hijo(finca.id, "plot");
     const micro = await createMicrolot(jefe, { parentLocationId: parc.id, name: nombre(), subdivisionReason: "other" });
     expect(micro.locationType).toBe("plot");
+  });
+
+  it("se rechaza también para una instalación de secado, para un Farm Manager", async () => {
+    const finca = await sitio();
+    const inst = await hijo(finca.id, "drying_facility");
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    await expect(createMicrolot(jefe, { parentLocationId: inst.id, name: nombre(), subdivisionReason: "other" }))
+      .rejects.toThrow(new LocationValidationError("secado_no_se_subdivide"));
+    // Control positivo: el mismo Farm Manager subdivide una parcela.
+    const parc = await hijo(finca.id, "plot");
+    const micro = await createMicrolot(jefe, { parentLocationId: parc.id, name: nombre(), subdivisionReason: "other" });
+    expect(micro.locationType).toBe("plot");
+  });
+});
+
+describe("instalaciones de secado por los caminos genéricos (updateLocationAttributes, confirmarCoordenadasDelSitio)", () => {
+  it("un capataz NO edita atributos de una drying_facility por updateLocationAttributes; con la concesión, sí", async () => {
+    const finca = await sitio();
+    const inst = await hijo(finca.id, "drying_facility");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    await expect(updateLocationAttributes(capataz, { locationId: inst.id, description: "cambio" }))
+      .rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    // Control positivo: el mismo capataz SÍ edita una parcela del mismo sitio.
+    const parc = await hijo(finca.id, "plot");
+    await expect(updateLocationAttributes(capataz, { locationId: parc.id, description: "cambio" })).resolves.toBeDefined();
+    await conceder(capataz);
+    await expect(updateLocationAttributes(capataz, { locationId: inst.id, description: "cambio" })).resolves.toBeDefined();
+  });
+
+  it("un capataz NO mueve las coordenadas de una drying_facility por confirmarCoordenadasDelSitio; con la concesión, sí", async () => {
+    const finca = await sitio();
+    const inst = await hijo(finca.id, "drying_facility");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    await expect(confirmarCoordenadasDelSitio(capataz, { locationId: inst.id, latitude: 8.7, longitude: -82.4 }))
+      .rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    // Control positivo: el mismo capataz sigue declarando coordenadas de una parcela.
+    const parc = await hijo(finca.id, "plot");
+    await expect(confirmarCoordenadasDelSitio(capataz, { locationId: parc.id, latitude: 8.7, longitude: -82.4 })).resolves.toBeDefined();
+    await conceder(capataz);
+    await expect(confirmarCoordenadasDelSitio(capataz, { locationId: inst.id, latitude: 8.7, longitude: -82.4 })).resolves.toBeDefined();
   });
 });
 
@@ -337,6 +377,72 @@ describe("exigeEditarBeneficioEnOrganizacion (guardia compartida por las recetas
     // plataforma.
     const admin = await cuentaPlatformAdmin();
     await expect(exigeEditarBeneficioEnOrganizacion(admin, null)).resolves.toBeUndefined();
+  });
+
+  /**
+   * Hallazgo de la auditoría final de Codex: `resolveOrganizationForLocation`
+   * (arriba, en este mismo archivo) trata la organización como heredable
+   * subiendo por `parentLocationId`, pero esta guardia sólo miraba
+   * `Location.organizationId = org` directamente — dejando fuera a cualquier
+   * descendiente que la herede con el campo nulo. Medido el 2026-09-18: 8 de
+   * 135 `Location` de la base de pruebas compartida están así.
+   */
+  it("un capataz asignado en una parcela con organización heredada (organizationId nulo) SÍ cuenta, con la concesión ahí", async () => {
+    const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
+    orgIds.push(org.id);
+    const finca = await prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal", organizationId: org.id } });
+    // `hijo()` nunca pasa `organizationId`: la parcela nace con el campo nulo
+    // y hereda la de `finca` sólo por jerarquía, exactamente el caso medido.
+    const parcela = await hijo(finca.id, "plot");
+    const capataz = await cuenta(parcela.id, "Farm Operator");
+    await expect(exigeEditarBeneficioEnOrganizacion(capataz, org.id)).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    await conceder(capataz);
+    await expect(exigeEditarBeneficioEnOrganizacion(capataz, org.id)).resolves.toBeUndefined();
+  });
+});
+
+describe("recetas: la organización heredada también cuenta (createRecipeWithVersion)", () => {
+  const orgIds: string[] = [];
+  const lotIds: string[] = [];
+  const recetaNombres: string[] = [];
+  afterEach(async () => {
+    const recetas = await prisma.processRecipe.findMany({ where: { name: { in: recetaNombres } }, select: { id: true } });
+    await prisma.auditEvent.deleteMany({ where: { entityId: { in: recetas.map((r) => r.id) } } });
+    await prisma.processRecipe.deleteMany({ where: { name: { in: recetaNombres } } });
+    await prisma.lot.deleteMany({ where: { id: { in: lotIds } } });
+    // La finca y la parcela de la organización las borra el afterEach general
+    // (por nombre); aquí se suelta antes su organización.
+    await prisma.location.updateMany({ where: { organizationId: { in: orgIds } }, data: { organizationId: null } });
+    await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
+    orgIds.length = 0; lotIds.length = 0; recetaNombres.length = 0;
+  });
+
+  const unTarget = [{ variable: "ph", moment: "final" as const, unit: "pH", targetValue: 3.8 }];
+  const receta = (organizationId: string | null) => {
+    const name = nombre(); recetaNombres.push(name);
+    return { name, organizationId, targets: unTarget };
+  };
+
+  /** Finca con organización propia y una parcela hija SIN organización propia
+   *  (la hereda por jerarquía) — el caso medido el 2026-09-18. El lote vive
+   *  en la parcela, para que `requireLotAccess` pase con el capataz asignado
+   *  ahí mismo, sin depender de ningún lote ajeno de la base compartida. */
+  async function fincaConParcelaHeredadaYLote() {
+    const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
+    orgIds.push(org.id);
+    const finca = await prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal", organizationId: org.id } });
+    const parcela = await hijo(finca.id, "plot");
+    const lot = await prisma.lot.create({ data: { lotCode: nombre(), lotType: "cherry", organizationId: org.id, locationId: parcela.id, classification: "internal" } });
+    lotIds.push(lot.id);
+    return { org, parcela };
+  }
+
+  it("un capataz asignado en la parcela heredada crea una receta de la organización sólo con la concesión ahí", async () => {
+    const { org, parcela } = await fincaConParcelaHeredadaYLote();
+    const capataz = await cuenta(parcela.id, "Farm Operator");
+    await expect(createRecipeWithVersion(capataz, receta(org.id))).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    await conceder(capataz);
+    await expect(createRecipeWithVersion(capataz, receta(org.id))).resolves.toBeDefined();
   });
 });
 

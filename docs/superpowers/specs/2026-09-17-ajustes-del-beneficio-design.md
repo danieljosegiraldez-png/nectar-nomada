@@ -100,6 +100,8 @@ Las secciones 3, 4 y 5 son **de lectura y enlace**: lo que se edita, se edita en
 
 Proteger `/beneficio/ajustes` era una regla de navegación. La regla de Daniel es sobre **escrituras**, así que cada uno de esos servicios comprueba el permiso de §4.3 cuando lo que escribe es un beneficio o cuelga de uno. Ocultar el enlace no protege nada.
 
+**Corregido el 2026-09-18, auditoría final de Codex sobre el plan 2:** las filas de arriba dadas por «cerradas» dejaban dos huecos — `updateLocationAttributes`/`confirmarCoordenadasDelSitio` sólo cerraban el tipo `beneficio` y no `drying_facility`/`drying_bed` (ahora las tres cuentan como configuración del beneficio, `TIPOS_DEL_BENEFICIO`, y `createMicrolot` rechaza subdividir una instalación de secado igual que un beneficio), y `exigeEditarBeneficioEnOrganizacion` sólo miraba `Location.organizationId = org` sin bajar por los descendientes que la heredan con el campo nulo (ahora los candidatos incluyen esos descendientes).
+
 ### 4.3 Permisos
 
 | acción | dueño | Farm Manager | Farm Operator (capataz) |
