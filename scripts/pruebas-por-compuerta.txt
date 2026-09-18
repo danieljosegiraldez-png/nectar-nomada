@@ -105,6 +105,7 @@ tests/inventario/custodia.test.ts
 tests/inventario/etiqueta.test.ts
 tests/apiary/tratamiento-descuenta.test.ts
 tests/inventario/avisos.test.ts
+tests/inventario/recepcion.test.ts
 tests/traceability/e2e.test.ts
 tests/traceability/entradaEnProduccion.test.ts
 tests/traceability/export.test.ts

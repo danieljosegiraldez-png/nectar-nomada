@@ -23,6 +23,9 @@ export interface FrascoParaTratar {
   readonly carenciaDelProducto: number | null;
   /** YYYY-MM-DD, o nulo si el frasco no tiene fecha. */
   readonly vence: string | null;
+  /** Las advertencias del producto: se enseñan antes del botón de aplicar. */
+  readonly storageConditions: string | null;
+  readonly safetyNotes: string | null;
 }
 
 export async function frascosParaTratar(userAccountId: string): Promise<FrascoParaTratar[]> {
@@ -33,7 +36,7 @@ export async function frascosParaTratar(userAccountId: string): Promise<FrascoPa
       batchLabel: true,
       locationId: true,
       expiresAt: true,
-      material: { select: { name: true, defaultUnit: true, defaultWithdrawalDays: true } },
+      material: { select: { name: true, defaultUnit: true, defaultWithdrawalDays: true, storageConditions: true, safetyNotes: true } },
       events: { select: { unit: true }, take: 1, orderBy: { occurredAt: "asc" } },
     },
     orderBy: [{ expiresAt: { sort: "asc", nulls: "last" } }, { receivedAt: "asc" }],
@@ -52,6 +55,8 @@ export async function frascosParaTratar(userAccountId: string): Promise<FrascoPa
       unidad: l.events[0]?.unit ?? l.material.defaultUnit,
       carenciaDelProducto: l.material.defaultWithdrawalDays,
       vence: l.expiresAt ? l.expiresAt.toISOString().slice(0, 10) : null,
+      storageConditions: l.material.storageConditions,
+      safetyNotes: l.material.safetyNotes,
     });
   }
   return visibles;

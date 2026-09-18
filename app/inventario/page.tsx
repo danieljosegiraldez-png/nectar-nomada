@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
@@ -23,7 +24,7 @@ export const dynamic = "force-dynamic";
  * Cada lote se filtra por el ámbito de quien mira; lo que no puede ver no
  * aparece.
  */
-export default async function InventarioPage() {
+export default async function InventarioPage({ searchParams }: { searchParams: Promise<{ ok?: string }> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
@@ -32,6 +33,7 @@ export default async function InventarioPage() {
     listarInventario(user.userAccountId),
   ]);
 
+  const { ok } = await searchParams;
   const porCuadrar = materiales.flatMap((m) => m.lotes).filter((l) => l.requiereReconciliacion).length;
   const sinContar = materiales.flatMap((m) => m.lotes).filter((l) => !l.recorded).length;
 
@@ -39,6 +41,10 @@ export default async function InventarioPage() {
     <main className="nn-page">
       <h1>{t("title")}</h1>
       <p className="nn-muted">{t("intro")}</p>
+      {ok === "recibido" ? <p className="nn-alerta">{t("recibidoOk")}</p> : null}
+      <p>
+        <Link href="/inventario/recibir">{t("recibirEnlace")}</Link>
+      </p>
 
       {/* Lo que hay que atender, arriba y con número. Si no hay nada, se DICE —
           una sección vacía que desaparece no distingue «todo en orden» de «no
@@ -65,6 +71,8 @@ export default async function InventarioPage() {
                   <th>{t("colRecibido")}</th>
                   <th>{t("colQueda")}</th>
                   <th>{t("colEstado")}</th>
+                  <th>{t("colVence")}</th>
+                  <th>{t("colCustodia")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -81,6 +89,23 @@ export default async function InventarioPage() {
                         : !l.recorded
                           ? t("estadoSinContar")
                           : t("estadoContado")}
+                    </td>
+                    {/* Con palabras. «Sin fecha» no es «vigente»: lo desconocido no se vuelve bueno. */}
+                    <td>
+                      {l.vencimiento.estado === "SIN_FECHA"
+                        ? t("venceSinFecha")
+                        : l.vencimiento.estado === "VIGENTE"
+                          ? t("venceVigente")
+                          : l.vencimiento.estado === "VENCIDO"
+                            ? t("avisoVencido", { dias: l.vencimiento.dias })
+                            : t("avisoPorVencer", { dias: l.vencimiento.dias })}
+                    </td>
+                    <td>
+                      {l.custodia
+                        ? l.custodia.responsable
+                          ? t("custodiaConResponsable", { sitio: l.custodia.sitio, responsable: l.custodia.responsable })
+                          : l.custodia.sitio
+                        : t("custodiaDondeSeRecibio")}
                     </td>
                   </tr>
                 ))}

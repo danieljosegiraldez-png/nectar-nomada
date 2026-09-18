@@ -460,6 +460,10 @@
     {
       "archivo": "lib/inventario/avisos.ts",
       "razon": "Aviso del botiquin (vencido o por vencer). Filtra CADA frasco con lot:manage sobre donde ESTA —su custodia vigente, o donde se recibio; plataforma si no tiene ninguna—, asi que nadie ve el botiquin de un sitio que no atiende. Sólo lectura."
+    },
+    {
+      "archivo": "lib/inventario/recepcion.ts",
+      "razon": "Recepcion del botiquin. Las opciones filtran CADA sitio con lot:manage y dicen si ademas tiene equipment:manage; los productos salen sólo de las fincas de esos sitios. completarProducto exige equipment:manage sobre un sitio de la MISMA finca que el producto, sólo rellena huecos y escribe con su AuditEvent y el ANTES en una transaccion."
     }
   ],
   "reciben_transaccion": [

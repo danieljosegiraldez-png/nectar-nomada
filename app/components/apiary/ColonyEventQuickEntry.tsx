@@ -359,6 +359,14 @@ export function ColonyEventQuickEntry({
               <input id={`treat-dose-unit-${colonyId}`} value={treatmentDoseUnit} onChange={(e) => setTreatmentDoseUnit(e.target.value)} />
             </div>
           </div>
+          {/* Botiquín, Tarea 9 — las advertencias del producto, justo antes de aplicar:
+              es el momento en que alguien tiene el frasco en la mano. */}
+          {frasco && (frasco.storageConditions || frasco.safetyNotes) ? (
+            <div className="nn-alerta nn-alerta-aviso">
+              {frasco.safetyNotes ? <p><strong>{t("treatmentFrascoAdvertencias")}:</strong> {frasco.safetyNotes}</p> : null}
+              {frasco.storageConditions ? <p><strong>{t("treatmentFrascoAlmacenamiento")}:</strong> {frasco.storageConditions}</p> : null}
+            </div>
+          ) : null}
           <button type="button" className="nn-button" onClick={() => void logTreatment()} disabled={!treatmentBatchLabel.trim() || !carenciaPuesta || treatmentTarget === ""}>
             {t("logTreatmentButton")}
           </button>

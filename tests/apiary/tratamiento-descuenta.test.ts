@@ -81,7 +81,7 @@ describe("aplicar un tratamiento descuenta del frasco", () => {
     await prisma.assignment.create({ data: { userAccountId: soloColmenaId, roleProfileId: perfil.id, scopeId: scopeIds[0]! } });
     materialId = (await crearMaterial(userAccountId, {
       locationId, organizationId, name: `Apivar ${RUN_ID}`, defaultUnit: "tira",
-      isVeterinaryMedicine: true, defaultWithdrawalDays: 42,
+      isVeterinaryMedicine: true, defaultWithdrawalDays: 42, safetyNotes: "Usar guantes",
     })).id;
     const hive = await createHive(userAccountId, { projectId, locationId, identifier: `T-${RUN_ID.slice(-4)}` });
     colonyId = (await createColony(userAccountId, {
@@ -187,7 +187,7 @@ describe("aplicar un tratamiento descuenta del frasco", () => {
     const l = await frasco({ expiresAt: new Date("2027-05-31T00:00:00Z") });
     const mios = await frascosParaTratar(userAccountId);
     const este = mios.find((f) => f.id === l.id);
-    expect(este).toMatchObject({ producto: `Apivar ${RUN_ID}`, unidad: "tira", carenciaDelProducto: 42, vence: "2027-05-31" });
+    expect(este).toMatchObject({ producto: `Apivar ${RUN_ID}`, unidad: "tira", carenciaDelProducto: 42, vence: "2027-05-31", safetyNotes: "Usar guantes" });
     expect((await frascosParaTratar(soloColmenaId)).map((f) => f.id)).not.toContain(l.id);
   }, 20000);
 });

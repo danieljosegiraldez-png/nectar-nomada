@@ -12,6 +12,8 @@
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { saldoDeEventos } from "./existencias";
+import { estadoDeVencimiento, type EstadoDeVencimiento } from "./vencimiento";
+import { diaDeHoy } from "../time/diaDeHoy";
 
 export interface LoteEnLista {
   readonly id: string;
@@ -21,6 +23,10 @@ export interface LoteEnLista {
   readonly unit: string | null;
   readonly recorded: boolean;
   readonly requiereReconciliacion: boolean;
+  /** Botiquín, Tarea 9: el vencimiento, contado en el día del sitio donde está. */
+  readonly vencimiento: EstadoDeVencimiento;
+  /** Dónde está y quién responde: su custodia vigente. Nulo si nunca se movió. */
+  readonly custodia: { readonly sitio: string; readonly responsable: string | null } | null;
 }
 
 export interface MaterialEnLista {
@@ -44,8 +50,17 @@ export async function listarInventario(userAccountId: string): Promise<MaterialE
       batchLabel: true,
       receivedAt: true,
       locationId: true,
-      material: { select: { id: true, name: true, defaultUnit: true } },
+      expiresAt: true,
+      location: { select: { timezone: true } },
+      material: { select: { id: true, name: true, defaultUnit: true, avisarDiasAntes: true } },
       events: { select: { eventType: true, quantity: true, unit: true } },
+      custodies: {
+        where: { hasta: null },
+        select: {
+          location: { select: { name: true, timezone: true } },
+          responsiblePerson: { select: { displayName: true } },
+        },
+      },
     },
   });
 
@@ -58,7 +73,10 @@ export async function listarInventario(userAccountId: string): Promise<MaterialE
     if (!(await can(userAccountId, "view", "lot", objetivo, "internal"))) continue;
 
     const saldo = saldoDeEventos(lote.events);
-    const entrada = porMaterial.get(lote.material.id) ?? { ...lote.material, lotes: [] };
+    const { avisarDiasAntes, ...material } = lote.material;
+    const entrada = porMaterial.get(material.id) ?? { ...material, lotes: [] };
+    const vigente = lote.custodies[0] ?? null;
+    const zona = vigente?.location.timezone ?? lote.location?.timezone ?? null;
     entrada.lotes.push({
       id: lote.id,
       batchLabel: lote.batchLabel,
@@ -67,6 +85,10 @@ export async function listarInventario(userAccountId: string): Promise<MaterialE
       unit: saldo.unit,
       recorded: saldo.recorded,
       requiereReconciliacion: saldo.requiereReconciliacion,
+      vencimiento: estadoDeVencimiento({ expiresAt: lote.expiresAt, avisarDiasAntes, hoy: diaDeHoy(new Date(), zona) }),
+      custodia: vigente
+        ? { sitio: vigente.location.name, responsable: vigente.responsiblePerson?.displayName ?? null }
+        : null,
     });
     porMaterial.set(lote.material.id, entrada);
   }
