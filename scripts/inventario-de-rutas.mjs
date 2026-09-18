@@ -99,7 +99,9 @@ const entradas = archivos
   .filter((f) => EXT_VALIDAS.test(f))
   .map((f) => ({ archivo: f, ruta: rutaDe(f), tipo: /\/route\./.test(f) ? "handler" : "página" }));
 
-const CLASES = ["publica-discover", "publica-sin-datos", "flujo-auth", "firma", "requiere-sesion"];
+// `secreto-de-ruta` (2026-09-18, artefactos de colmena T7): una máquina que se autentica con un
+// secreto portador compartido —la ruta de Notehub—, ni sesión ni firma. No se disfraza de `firma`.
+const CLASES = ["publica-discover", "publica-sin-datos", "flujo-auth", "firma", "secreto-de-ruta", "requiere-sesion"];
 const VERBOS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const porRuta = new Map(entradas.map((e) => [e.ruta, e.archivo]));
 
@@ -187,6 +189,11 @@ for (const e of entradas) {
     case "firma":
       if (!/signature|constructEvent/i.test(src))
         fallo(`DISCREPA: ${e.ruta} se declara \`firma\` pero no verifica ninguna (${e.archivo}).`);
+      break;
+    case "secreto-de-ruta":
+      // Léxico, como `firma`: la ruta tiene que delegar en quien verifica el secreto.
+      if (!/atenderIngesta|verificarSecretoDeRuta|timingSafeEqual/.test(src))
+        fallo(`DISCREPA: ${e.ruta} se declara \`secreto-de-ruta\` pero no verifica ningún secreto (${e.archivo}).`);
       break;
     case "flujo-auth":
       break;
