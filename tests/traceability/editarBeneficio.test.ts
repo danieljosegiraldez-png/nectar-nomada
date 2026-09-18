@@ -7,7 +7,7 @@ import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadas
 import { actualizarBeneficio } from "../../lib/traceability/beneficios";
 import { actualizarUbicacionDeSecado, crearUbicacionDeSecado } from "../../lib/traceability/instalaciones";
 import { createRecipeVersion, createRecipeWithVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
-import { EquipoError, informarCondicion, registrarEquipo } from "../../lib/equipos/equipos";
+import { EquipoError, informarCondicion, registrarEquipo, sitiosParaRegistrar } from "../../lib/equipos/equipos";
 
 /**
  * «Editar beneficio» — spec #370 §4.3. Por defecto el capataz NO edita un
@@ -421,5 +421,31 @@ describe("equipos: la concesión de editar beneficio abre configurarlos (Daniel,
     });
     conditionReportIds.push(informe.id);
     expect(informe.condition).toBe("operational");
+  });
+
+  // Fix round 1: `sitiosParaRegistrar` alimenta tanto el selector de
+  // `app/equipos/nuevo/page.tsx` como la re-validación de
+  // `registrarEquipoFormAction` (app/actions/equipos.ts, `sitio_no_gestionable`
+  // si el sitio elegido no aparece en esta lista). Usaba `can(..., "manage", ...)`
+  // a secas: un capataz con la concesión pasaba `registrarEquipo` pero nunca
+  // veía su propia finca en la lista, y el formulario la rechazaba igual.
+  it("sitiosParaRegistrar: el capataz sin concesión no ve su finca; con la concesión, sí; control: el Farm Manager la ve", async () => {
+    const org = await organizacion();
+    const finca = await prisma.location.create({
+      data: { name: nombre(), locationType: "site", classification: "internal", organizationId: org.id },
+    });
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const jefe = await cuenta(finca.id, "Farm Manager");
+
+    const sinConcesion = await sitiosParaRegistrar(capataz);
+    expect(sinConcesion.map((s) => s.id)).not.toContain(finca.id);
+
+    await conceder(capataz);
+    const conConcesion = await sitiosParaRegistrar(capataz);
+    expect(conConcesion.map((s) => s.id)).toContain(finca.id);
+
+    // Control positivo: el Farm Manager de esa misma finca la ve sin concesión.
+    const delJefe = await sitiosParaRegistrar(jefe);
+    expect(delJefe.map((s) => s.id)).toContain(finca.id);
   });
 });

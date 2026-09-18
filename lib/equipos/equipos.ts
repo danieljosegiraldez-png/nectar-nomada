@@ -742,7 +742,7 @@ export async function sitiosParaRegistrar(userAccountId: string) {
   const permitidos = [];
   for (const s of sitios) {
     if (!s.organizationId) continue;
-    const ok = await can(userAccountId, "manage", "equipment", { scopeType: "location", scopeRefId: s.id }, "internal");
+    const ok = await puedeConfigurar(userAccountId, { scopeType: "location", scopeRefId: s.id }, "internal");
     if (ok) permitidos.push({ id: s.id, name: s.name, organizationId: s.organizationId });
   }
   return permitidos;
