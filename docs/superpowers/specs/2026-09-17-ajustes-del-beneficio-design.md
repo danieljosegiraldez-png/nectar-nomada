@@ -115,7 +115,7 @@ Proteger `/beneficio/ajustes` era una regla de navegación. La regla de Daniel e
 
 **Un segundo permiso, «editar beneficio»** (nombre exacto a contrastar con `docs/beneficio/03_public_api.md` y `lib/rbac/catalog.ts` en el plan), de serie para **Platform Admin y Farm Manager** y **excluido de Farm Operator a propósito**. Va aparte de `location:create_site` porque son dos autoridades distintas: conceder a un capataz que edite no le da crear beneficios nuevos. Hoy `actualizarBeneficio` exige `create_site`; pasa a exigir el permiso nuevo.
 
-**Cómo se concede — construido, plan 3, ADR-166 (2026-09-18).** El repositorio ya tiene concesiones por persona —`AssignmentPermissionOverride`, con razón obligatoria para un `grant` impuesta por un `CHECK` en la base—, pero **hoy sólo las escribe quien tiene `platform:manage_permissions`**, o sea el Platform Admin (`requirePermissionAdmin` en `lib/rbac/admin.ts`). La sección de ajustes añade una **delegación estrecha**, en `lib/traceability/concesiones.ts` (`concederEditarBeneficio`, `quitarEditarBeneficio`, `personasDelBeneficio`), con la pantalla en `app/beneficio/ajustes/Concesiones.tsx`:
+**Cómo se concede — construido, plan 3, ADR-168 (2026-09-18).** El repositorio ya tiene concesiones por persona —`AssignmentPermissionOverride`, con razón obligatoria para un `grant` impuesta por un `CHECK` en la base—, pero **hoy sólo las escribe quien tiene `platform:manage_permissions`**, o sea el Platform Admin (`requirePermissionAdmin` en `lib/rbac/admin.ts`). La sección de ajustes añade una **delegación estrecha**, en `lib/traceability/concesiones.ts` (`concederEditarBeneficio`, `quitarEditarBeneficio`, `personasDelBeneficio`), con la pantalla en `app/beneficio/ajustes/Concesiones.tsx`:
 
 - quien concede tiene «editar beneficio» sobre ese beneficio;
 - sólo puede conceder o quitar **ese** permiso, nunca otro — no es una puerta a `manage_permissions`;
@@ -184,7 +184,7 @@ La regla en prosa se lee y se razona alrededor; en un test, falla. Y el guardia 
 2. **El tipo `beneficio` y su alta** (migración de enum, permiso nuevo, pantalla de alta). **Hecho: #377, fusionado el 2026-09-17.**
 3. **«Editar beneficio» y los caminos de §4.2 cerrados**, con la delegación estrecha. Va **antes** que el resto de ajustes, porque corrige lo ya fusionado: hoy el capataz edita un beneficio sin que nadie se lo haya concedido.
 4. **Ajustes con las cinco secciones y las capacidades**, después del tablero, porque las capacidades sólo tienen sentido cuando hay dónde leerlas (#363).
-5. **ADR nuevo** para «editar beneficio» y su delegación. El tipo y `create_site` ya quedaron en ADR-156 (#377); la delegación estrecha del plan 3 quedó en **ADR-166**, escrito en la rama `conceder-beneficio`, pendiente de fusión.
+5. **ADR nuevo** para «editar beneficio» y su delegación. El tipo y `create_site` ya quedaron en ADR-156 (#377); la delegación estrecha del plan 3 quedó en **ADR-168**, escrito en la rama `conceder-beneficio`, pendiente de fusión.
 6. Fusiones y despliegues: **decisión de Daniel**.
 
 ## 8. Fuera de alcance
