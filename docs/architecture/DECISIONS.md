@@ -11287,3 +11287,17 @@ y borrar una cuenta habria borrado quien firmo una recepcion.
 **Lo que NO entra.** Vender descuenta de la variante (ya existia) pero no del lote: el libro del lote
 no sabe que envases se vendieron. Devolver a la finca lo asignado y no recibido. Y la pagina
 `/tienda` no se ha visto en un navegador: hace falta sesion.
+
+## ADR-164 — «Editar beneficio»: un permiso que se concede, no uno que se hereda
+
+**Fecha:** 2026-09-18 · **Estado:** aceptado · **Spec:** #370 §4.3
+
+**Contexto.** La auditoría de Codex del 2026-09-18 sobre #377 encontró que el capataz (Farm Operator) editaba un beneficio por caminos que no pasaban por `beneficios.ts`: la acción de atributos de parcela (`updateLocationAttributes`, que no miraba el tipo), la de coordenadas (`confirmarCoordenadasDelSitio`) y, latente, `createMicrolot`, que sobre un beneficio crearía otro. Todos exigían sólo `manage_attributes`, que el capataz tiene y hereda del sitio.
+
+**Decisión de Daniel.** *«El capataz puede editar un beneficio si en configuración el Farm Manager/owner le da ese permiso; por defecto NO.»*
+
+**Decisión.** `location:edit_beneficio`, de serie para Farm Manager y Platform Admin, excluido de Farm Operator. Una sola guardia, `exigeEditarBeneficioSiLoEs` en `lib/traceability/locations.ts`, llamada desde cada escritura; no hace nada si la ubicación no es un beneficio. `actualizarBeneficio` pasa de `create_site` a este permiso, porque `create_site` no se puede conceder a un capataz sin darle también crear. `createMicrolot` rechaza un padre beneficio para todos.
+
+**La concesión** es un `AssignmentPermissionOverride` de efecto `grant`, que `can()` ya resuelve. La pantalla para que el Farm Manager la dé es el plan 3 de la spec.
+
+**Consecuencias.** Instalaciones, camas, equipos y recetas siguen abiertos al capataz hasta el plan 2 de la misma spec; está dicho en su §4.2.
