@@ -29,6 +29,7 @@ tests/notificaciones/canales.test.ts
 tests/equipos/equipos.test.ts
 tests/equipos/marcasDeRevision.test.ts
 tests/equipos/esquemaDeCatalogo.test.ts
+tests/catalogos/propiedad.test.ts
 tests/apiary/alcanceDelAlimento.test.ts
 tests/apiary/bitacora.test.ts
 tests/apiary/cierreDeEvento.test.ts
