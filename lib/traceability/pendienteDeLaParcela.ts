@@ -1,4 +1,5 @@
 import type { EstadoDeProduccion } from "./estadoDeProduccion";
+import { avisosDeTrampas, type ReglaParaAviso, type TrampaParaAviso } from "./pendienteDeTrampas";
 
 /**
  * Lo pendiente de una parcela — tablero de parcela, spec §4.
@@ -28,6 +29,10 @@ export interface EntradaDePendiente {
   /** `sampledAt` es campo de día (medianoche UTC); `resultados` = nº de Measurement. */
   muestrasDeSuelo: readonly { sampledAt: Date; resultados: number }[];
   muestrasFoliares: readonly { sampledAt: Date; resultados: number }[];
+  /** Trampas de broca de la parcela; ver `avisosDeTrampas`. */
+  trampas: readonly TrampaParaAviso[];
+  /** La regla de la finca. `null` = sin regla, y sin regla no hay avisos de trampas. */
+  regla: ReglaParaAviso | null;
 }
 
 export type Aviso =
@@ -37,7 +42,9 @@ export type Aviso =
   | { tipo: "sin_area" }
   | { tipo: "area_no_valida" }
   | { tipo: "siembras_sin_conteo"; n: number }
-  | { tipo: "siembras_sin_marcar"; n: number };
+  | { tipo: "siembras_sin_marcar"; n: number }
+  | { tipo: "trampa_por_revisar"; specimenId: string; trapNumber: number | null; diasDeRetraso: number }
+  | { tipo: "trampa_con_lectura_alta"; specimenId: string; trapNumber: number | null; lectura: string; accion: string };
 
 /** Mismo día y mes del año siguiente; un 29 de febrero vence el 28. */
 export function venceElMuestreo(ultimoDia: string): string {
@@ -77,6 +84,8 @@ export function pendienteDeLaParcela(e: EntradaDePendiente): { tocaHacer: Aviso[
     tocaHacer.push({ tipo: "muestras_sin_resultado", suelo: sueloSinResultado, foliar: foliarSinResultado });
   }
 
+  tocaHacer.push(...avisosDeTrampas({ hoy: e.hoy, trampas: e.trampas, regla: e.regla }));
+
   if (e.areaHectares == null) faltaUnDato.push({ tipo: "sin_area" });
   // `!(x > 0)` y no `x <= 0`: con `NaN` la segunda es falsa y lo dejaría pasar.
   else if (!(e.areaHectares > 0)) faltaUnDato.push({ tipo: "area_no_valida" });
@@ -103,5 +112,8 @@ export function enlaceDelAviso(aviso: Aviso, locationId: string): string {
     case "siembras_sin_conteo":
     case "siembras_sin_marcar":
       return `/plots/${locationId}/ajustes#siembras`;
+    case "trampa_por_revisar":
+    case "trampa_con_lectura_alta":
+      return `/plots/${locationId}#trampas`;
   }
 }

@@ -72,6 +72,11 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
     jornadas,
     muestrasDeSuelo: muestras.soil.map((m) => ({ sampledAt: m.sampledAt, resultados: m.measurements.length })),
     muestrasFoliares: muestras.foliar.map((m) => ({ sampledAt: m.sampledAt, resultados: m.measurements.length })),
+    // Trampas de broca: los datos reales (y la regla de la finca, que
+    // `getPlotDetail` aún no devuelve) los conecta la Tarea 9. Con `regla: null`
+    // no sale ningún aviso de trampas, que es lo correcto sin regla.
+    trampas: [],
+    regla: null,
   });
   const ultimoAnio = rendimiento.status === "ok" ? rendimiento.years[0] : undefined;
 
@@ -106,6 +111,12 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         return t("plotDashboardAlertNoCount", { n: aviso.n });
       case "siembras_sin_marcar":
         return t("plotDashboardAlertUnmarked", { n: aviso.n });
+      case "trampa_por_revisar":
+      case "trampa_con_lectura_alta":
+        // Inalcanzable mientras la entrada lleve `regla: null`. Sus textos
+        // (`trapsDueAlert`, `trapsHighAlert`) los añade la Tarea 9; lanzar es
+        // mejor que pintar un aviso sin texto.
+        throw new Error(`aviso ${aviso.tipo} sin texto todavía: lo conecta la Tarea 9`);
     }
   };
 
