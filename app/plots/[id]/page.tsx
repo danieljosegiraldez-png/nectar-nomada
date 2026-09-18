@@ -50,7 +50,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
     throw error;
   }
 
-  const { location, cohorts, density, organizationName, eventosDeProduccion } = detail;
+  const { location, cohorts, density, organizationName, eventosDeProduccion, trampas } = detail;
   const rendimiento = detail.yield;
   const [jornadas, { people, selfPersonId }, calicatas] = await Promise.all([
     listFieldSessions(user.userAccountId, id),
@@ -483,7 +483,9 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         <h3>{t("landPhotosHeading")}</h3>
         <p className="nn-muted">{t("landPhotosIntro")}</p>
         <FotosDe
-          assets={fotos.filter((f) => f.soilProfileId == null && f.biocharBatchId == null)}
+          assets={fotos.filter(
+            (f) => f.soilProfileId == null && f.biocharBatchId == null && f.specimenObservationId == null,
+          )}
           etiqueta={t}
         />
         <LandPhotoUploadForm
@@ -599,6 +601,48 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
           <summary>{t("samplesFoliarAdd")}</summary>
           <FoliarSampleForm locationId={location.id} />
         </details>
+      </details>
+
+      {/* Igual que #condiciones y #muestras: el `id` dentro del <details>. */}
+      <details className="nn-section">
+        <summary style={{ fontSize: "1.25rem", fontWeight: 600 }}>{t("trapsTitle")}</summary>
+        <p className="nn-detail-meta" id="trampas">
+          <Link href={`/plots/${location.id}/ajustes#trampas`}>{t("trapsManageLink")}</Link>
+        </p>
+        {trampas.length === 0 ? (
+          <p className="nn-muted">{t("trapsNone")}</p>
+        ) : (
+          <ul className="nn-detail-meta">
+            {trampas.map((trampa) => (
+              <li key={trampa.id}>
+                <strong>
+                  {trampa.trapNumber != null ? t("trapsNumber", { n: trampa.trapNumber }) : t("notRecorded")}
+                </strong>
+                {" · "}
+                {trampa.bloque ? t("trapsBlock", { nombre: trampa.bloque }) : t("trapsNoBlock")}
+                <br />
+                {/* Sin revisión se dice así, no con una lectura de cero (ADR-080).
+                    `observedAt` es un día a las 00:00Z, como `sampledAt`. */}
+                {trampa.ultimaRevision ? (
+                  <>
+                    {t("trapsLastCheck", {
+                      fecha: trampa.ultimaRevision.observedAt.toISOString().slice(0, 10),
+                      lectura: trampa.ultimaRevision.brocaLevel
+                        ? t(`trapsLevel_${trampa.ultimaRevision.brocaLevel}`)
+                        : t("notRecorded"),
+                    })}
+                    <FotosDe
+                      assets={fotos.filter((f) => f.specimenObservationId === trampa.ultimaRevision?.id)}
+                      etiqueta={t}
+                    />
+                  </>
+                ) : (
+                  <span className="nn-muted">{t("trapsNeverChecked")}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </details>
     </div>
   );

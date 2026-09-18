@@ -538,11 +538,46 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
         ],
   );
 
+  // Las trampas de broca de la parcela, con su última revisión. Detrás de la
+  // misma compuerta que el resto del tablero. `createdAt` desempata dos
+  // revisiones del mismo día: `observedAt` es un día a las 00:00Z.
+  const trampasCrudas = await prisma.specimen.findMany({
+    where: { locationId, specimenType: "trap" },
+    select: {
+      id: true,
+      trapNumber: true,
+      status: true,
+      plotBlock: { select: { name: true } },
+      observations: {
+        where: { observationType: "trap_check" },
+        orderBy: [{ observedAt: "desc" }, { createdAt: "desc" }],
+        take: 1,
+        select: { id: true, observedAt: true, brocaLevel: true },
+      },
+    },
+    orderBy: { trapNumber: "asc" },
+  });
+  const trampas = trampasCrudas.map((t) => ({
+    id: t.id,
+    trapNumber: t.trapNumber,
+    bloque: t.plotBlock?.name ?? null,
+    status: t.status,
+    // Sin revisión es `null`, no una lectura de cero (ADR-080).
+    ultimaRevision: t.observations[0]
+      ? {
+          id: t.observations[0].id,
+          observedAt: t.observations[0].observedAt,
+          brocaLevel: t.observations[0].brocaLevel,
+        }
+      : null,
+  }));
+
   return {
     location,
     cohorts,
     cultivarOptions,
     eventosDeProduccion,
+    trampas,
     density: computePlotDensity(cohorts, location.areaHectares),
     yield: computePlotYield(
       harvestContributions.map((c) => ({

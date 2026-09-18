@@ -53,6 +53,8 @@ import {
   PlantingCohortValidationError,
 } from "../../lib/traceability/plantingCohorts";
 import { recordEnteredProduction, PlantingEventValidationError } from "../../lib/traceability/plantingEvents";
+import { createPlotBlock, PlotBlockValidationError } from "../../lib/traceability/plotBlocks";
+import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
 import {
   updateLocationAttributes,
   LocationAccessError,
@@ -136,6 +138,13 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof SoilProfileValidationError) return t("error_soil_profile", { detail: error.message });
   if (error instanceof SampleValidationError) return t("error_sample", { detail: error.message });
   if (error instanceof LandMediaValidationError) return t("error_land_media", { detail: error.message });
+  // La escala o la fecha: el mensaje dice qué revisar, y el código crudo no
+  // aporta al operario de campo nada que ese mensaje no diga.
+  if (error instanceof TrapValidationError) return t("error_trap");
+  if (error instanceof TrapAccessError) return t("error_access", { detail: error.message });
+  // «Revisa la lectura y la fecha» no es verdad de un bloque: el caso real es
+  // un nombre repetido, y ése se dice.
+  if (error instanceof PlotBlockValidationError) return t("error_block", { detail: error.message });
   if (error instanceof FechaInvalidaError) return t("error_datetime", { detail: error.message });
   if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });
   throw error;
@@ -1207,6 +1216,117 @@ export async function recordEnteredProductionFormAction(
 
   revalidatePath(`/plots/${locationId}`);
   revalidatePath(`/plots/${locationId}/ajustes`);
+  return {};
+}
+
+// --- Trampas de broca (F2 §3–§4) ----------------------------------------
+
+/** El estado del alta de trampa: además del error, el número que asignó el
+ *  sistema, para que el operario lo rotule en la botella. */
+export interface TrapActionState extends TraceabilityActionState {
+  trapNumber?: number;
+}
+
+/**
+ * Las tres acciones revalidan tablero y ajustes **también cuando fallan**: el
+ * fallo puede deberse a que otro operario cambió la parcela entretanto (un
+ * bloque con ese nombre, una trampa más), y la pantalla debe enseñarlo.
+ * `locationId` del POST sólo decide qué ruta se refresca; la autorización la
+ * hace el servicio sobre el id que de verdad escribe.
+ */
+function revalidarParcela(locationId: string) {
+  if (!locationId) return;
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+}
+
+export async function createPlotBlockFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const locationId = String(formData.get("locationId") ?? "");
+
+  try {
+    await createPlotBlock(user.userAccountId, {
+      locationId,
+      name: String(formData.get("name") ?? ""),
+      notes: emptyToNull(formData.get("notes")),
+    });
+  } catch (error) {
+    revalidarParcela(locationId);
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidarParcela(locationId);
+  return {};
+}
+
+export async function createTrapFormAction(
+  _prevState: TrapActionState,
+  formData: FormData,
+): Promise<TrapActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const locationId = String(formData.get("locationId") ?? "");
+
+  let trapNumber: number | null;
+  try {
+    const trampa = await createTrap(user.userAccountId, {
+      locationId,
+      plotBlockId: emptyToNull(formData.get("plotBlockId")),
+      installedAt: fechaDeDiaRequerida(formData, "installedAt"),
+      notes: emptyToNull(formData.get("notes")),
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_REGISTRO_DE_CAMPO),
+      dataQuality: emptyToNull(formData.get("dataQuality")) as never,
+    });
+    trapNumber = trampa.trapNumber;
+  } catch (error) {
+    revalidarParcela(locationId);
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidarParcela(locationId);
+  return trapNumber == null ? {} : { trapNumber };
+}
+
+export async function recordTrapCheckFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const locationId = String(formData.get("locationId") ?? "");
+
+  try {
+    // Sin número tecleado es `null`: nadie contó. Nunca un 0 (ADR-080).
+    const conteo = emptyToNullNumber(formData.get("captureCount"));
+    const otros = booleanoDeTresEstados(formData.get("otherInsects"));
+    await recordTrapCheck(user.userAccountId, {
+      specimenId: String(formData.get("specimenId") ?? ""),
+      observedAt: fechaDeDiaRequerida(formData, "observedAt"),
+      brocaLevel: String(formData.get("brocaLevel") ?? "") as never,
+      captureCount: conteo,
+      otherInsects: otros,
+      // La nota de cuáles sólo tiene sentido si hubo otros insectos.
+      otherInsectsNote: otros ? emptyToNull(formData.get("otherInsectsNote")) : null,
+      cleaned: formData.get("cleaned") === "on",
+      liquidChanged: formData.get("liquidChanged") === "on",
+      lureRecharged: formData.get("lureRecharged") === "on",
+      notes: emptyToNull(formData.get("notes")),
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_REGISTRO_DE_CAMPO),
+      dataQuality: emptyToNull(formData.get("dataQuality")) as never,
+    });
+  } catch (error) {
+    revalidarParcela(locationId);
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidarParcela(locationId);
   return {};
 }
 

@@ -195,6 +195,9 @@ export async function listLandAssets(userAccountId: string, locationId: string) 
       createdAt: true,
       biocharBatchId: true,
       soilProfileId: true,
+      // Sin él, la foto de la tela de una revisión aparecía también entre las
+      // fotos generales de la parcela, que filtran por los otros dos padres.
+      specimenObservationId: true,
     },
   });
   return Promise.all(
