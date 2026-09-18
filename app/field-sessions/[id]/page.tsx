@@ -13,7 +13,10 @@ import { leerReporteDeVisita } from "../../../lib/traceability/reporteDeVisita";
 import { resumenDeVisita } from "../../../lib/apiary/bitacora";
 import { pendientesDeLaVisita } from "../../../lib/apiary/pendienteDeLaVisita";
 import { FieldSyncControls } from "../../components/traceability/FieldSyncControls";
-import { mostrarInstante } from "../../../lib/time/mostrarInstante";
+import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
+import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEmparentadas";
+import { intervencionesVigentes } from "../../../lib/traceability/intervenciones";
+import { reentradaDeIntervencion } from "../../../lib/traceability/carenciaDeIntervencion";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +83,35 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
   ]);
 
   const enCurso = session.endedAt == null;
+
+  // Spec §3.5 — avisa, no impide: sólo mientras la jornada sigue abierta, y para
+  // las intervenciones emparentadas con el sitio de la jornada (misma regla que
+  // la cosecha, spec §3.3). Cierra sola cuando `re.estado` deja de ser
+  // "vigente"/"desconocida", sin botón ni confirmación.
+  const avisosDeReentrada: { key: string; texto: string }[] = [];
+  if (enCurso) {
+    const intervenciones = await intervencionesVigentes(await ubicacionesEmparentadas(session.locationId));
+    for (const i of intervenciones) {
+      const re = reentradaDeIntervencion(i, new Date());
+      if (re.estado === "vigente") {
+        avisosDeReentrada.push({
+          key: i.id,
+          // "hora" es sólo la hora del límite: reutiliza `mostrarInstante` en
+          // vez de duplicar aquí el respaldo de zona horaria.
+          texto: t("fieldSessionReentryWarning", {
+            hora: mostrarInstante(re.libreDesde, session.location.timezone).split(" ")[1] ?? "",
+            tipo: i.kind,
+            fecha: mostrarFecha(i.occurredAt, session.location.timezone),
+          }),
+        });
+      } else if (re.estado === "desconocida") {
+        avisosDeReentrada.push({
+          key: i.id,
+          texto: t("fieldSessionReentryUnknown", { tipo: i.kind, fecha: mostrarFecha(i.occurredAt, session.location.timezone) }),
+        });
+      }
+    }
+  }
 
   return (
     <div>
@@ -174,6 +206,14 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
 
       {enCurso ? (
         <>
+          {/* Spec §3.5 — avisa y no impide: sin botón, sin confirmación, antes de
+              cualquier formulario. */}
+          {avisosDeReentrada.map((a) => (
+            <p key={a.key} className="nn-alerta nn-alerta-aviso">
+              {a.texto}
+            </p>
+          ))}
+
           <section className="nn-section">
             <h2>{t("fieldEventAddHeading")}</h2>
             <FieldEventForm

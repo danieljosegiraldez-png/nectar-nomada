@@ -20,6 +20,8 @@ import { estadosPorCohorte } from "../../../lib/traceability/estadoDeProduccion"
 import { cifrasDelLote } from "../../../lib/traceability/cifrasDelLote";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
 import { pendienteDeLaParcela, enlaceDelAviso, type Aviso } from "../../../lib/traceability/pendienteDeLaParcela";
+import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEmparentadas";
+import { intervencionesVigentes } from "../../../lib/traceability/intervenciones";
 
 export const dynamic = "force-dynamic";
 
@@ -59,18 +61,24 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
   ]);
   const muestras = await listSamplesForLocation(user.userAccountId, id);
   const fotos = await listLandAssets(user.userAccountId, id);
+  // La parcela ve también las intervenciones de su microparcela y de su parcela
+  // madre — igual que la cosecha, spec §3.3.
+  const intervenciones = await intervencionesVigentes(await ubicacionesEmparentadas(id));
 
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
   const cifras = cifrasDelLote(activas, estados);
+  const ahora = new Date();
   const pendiente = pendienteDeLaParcela({
-    hoy: diaDeHoy(new Date(), location.timezone),
+    hoy: diaDeHoy(ahora, location.timezone),
     areaHectares: location.areaHectares == null ? null : Number(location.areaHectares),
     cohortesActivas: activas,
     estados,
     jornadas,
     muestrasDeSuelo: muestras.soil.map((m) => ({ sampledAt: m.sampledAt, resultados: m.measurements.length })),
     muestrasFoliares: muestras.foliar.map((m) => ({ sampledAt: m.sampledAt, resultados: m.measurements.length })),
+    ahora,
+    intervenciones,
   });
   const ultimoAnio = rendimiento.status === "ok" ? rendimiento.years[0] : undefined;
 
@@ -105,6 +113,18 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         return t("plotDashboardAlertNoCount", { n: aviso.n });
       case "siembras_sin_marcar":
         return t("plotDashboardAlertUnmarked", { n: aviso.n });
+      case "reentrada_vigente":
+        return t("plotDashboardAlertReentry", { hasta: mostrarInstante(aviso.hasta, location.timezone) });
+      case "carencia_vigente":
+        return t("plotDashboardAlertWithdrawal", { fecha: mostrarFecha(aviso.hasta, location.timezone), dias: aviso.dias });
+      case "carencia_no_declarada":
+        return t("plotDashboardAlertWithdrawalUnknown", {
+          fecha: aviso.alMenosHasta == null ? t("notRecorded") : mostrarFecha(aviso.alMenosHasta, location.timezone),
+        });
+      case "reentrada_no_declarada":
+        return t("plotDashboardAlertReentryUnknown", {
+          fecha: aviso.alMenosHasta == null ? t("notRecorded") : mostrarFecha(aviso.alMenosHasta, location.timezone),
+        });
     }
   };
 

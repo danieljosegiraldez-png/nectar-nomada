@@ -11,6 +11,7 @@ import {
   type EntradaDePendiente,
 } from "../../lib/traceability/pendienteDeLaParcela";
 import type { EstadoDeProduccion } from "../../lib/traceability/estadoDeProduccion";
+import type { IntervencionParaCarencia } from "../../lib/traceability/carenciaDeIntervencion";
 
 const base = (over: Partial<EntradaDePendiente> = {}): EntradaDePendiente => ({
   hoy: "2026-09-16",
@@ -23,8 +24,13 @@ const base = (over: Partial<EntradaDePendiente> = {}): EntradaDePendiente => ({
   jornadas: [],
   muestrasDeSuelo: [{ sampledAt: new Date("2026-03-01T00:00:00Z"), resultados: 1 }],
   muestrasFoliares: [{ sampledAt: new Date("2026-03-01T00:00:00Z"), resultados: 1 }],
+  ahora: new Date("2026-09-16T15:00:00Z"),
+  intervenciones: [],
   ...over,
 });
+
+const aplic = (lineas: IntervencionParaCarencia["lineas"], occurredAt = new Date("2026-09-16T10:00:00Z")): IntervencionParaCarencia =>
+  ({ id: "i1", kind: "aplicacion", occurredAt, lineas });
 
 describe("venceElMuestreo", () => {
   it("vence el mismo día y mes del año siguiente", () => {
@@ -125,6 +131,29 @@ describe("pendienteDeLaParcela", () => {
     expect(pendienteDeLaParcela(base({ areaHectares: 0 })).faltaUnDato).toEqual([{ tipo: "area_no_valida" }]);
     expect(pendienteDeLaParcela(base({ areaHectares: -2 })).faltaUnDato).toEqual([{ tipo: "area_no_valida" }]);
     expect(pendienteDeLaParcela(base({ areaHectares: Number.NaN })).faltaUnDato).toEqual([{ tipo: "area_no_valida" }]);
+  });
+
+  it("reentrada y carencia vigentes: dos avisos en «toca hacer»", () => {
+    const r = pendienteDeLaParcela(base({ intervenciones: [aplic([{ withdrawalDays: 7, reentryHours: 12 }])] }));
+    expect(r.tocaHacer).toEqual([
+      { tipo: "reentrada_vigente", interventionId: "i1", hasta: new Date("2026-09-16T22:00:00Z") },
+      { tipo: "carencia_vigente", interventionId: "i1", hasta: new Date("2026-09-23T10:00:00Z"), dias: 7 },
+    ]);
+  });
+  it("no declaradas: van a «falta un dato», NUNCA desaparecen", () => {
+    const r = pendienteDeLaParcela(base({ ahora: new Date("2030-01-01T00:00:00Z"), intervenciones: [aplic([{ withdrawalDays: null, reentryHours: null }])] }));
+    expect(r.faltaUnDato).toEqual(expect.arrayContaining([
+      { tipo: "carencia_no_declarada", interventionId: "i1", alMenosHasta: null },
+      { tipo: "reentrada_no_declarada", interventionId: "i1", alMenosHasta: null },
+    ]));
+  });
+  it("cumplidas: nada", () => {
+    const r = pendienteDeLaParcela(base({ ahora: new Date("2026-10-30T00:00:00Z"), intervenciones: [aplic([{ withdrawalDays: 7, reentryHours: 12 }])] }));
+    expect(r.tocaHacer).toEqual([]);
+  });
+  it("manejo cultural: nada", () => {
+    const r = pendienteDeLaParcela(base({ intervenciones: [{ id: "c", kind: "manejo_cultural", occurredAt: new Date("2026-09-16T10:00:00Z"), lineas: [] }] }));
+    expect(r).toEqual({ tocaHacer: [], faltaUnDato: [] });
   });
 });
 

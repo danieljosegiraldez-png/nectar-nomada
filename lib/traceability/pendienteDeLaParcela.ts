@@ -1,4 +1,5 @@
 import type { EstadoDeProduccion } from "./estadoDeProduccion";
+import { carenciaDeIntervencion, reentradaDeIntervencion, type IntervencionParaCarencia } from "./carenciaDeIntervencion";
 
 /**
  * Lo pendiente de una parcela — tablero de parcela, spec §4.
@@ -28,6 +29,10 @@ export interface EntradaDePendiente {
   /** `sampledAt` es campo de día (medianoche UTC); `resultados` = nº de Measurement. */
   muestrasDeSuelo: readonly { sampledAt: Date; resultados: number }[];
   muestrasFoliares: readonly { sampledAt: Date; resultados: number }[];
+  /** El instante contra el que se mide la reentrada (spec §3.5) y la carencia. */
+  ahora: Date;
+  /** Ya reducidas por `ubicacionesEmparentadas` + `intervencionesVigentes`, spec §3.3/§4.1. */
+  intervenciones: readonly IntervencionParaCarencia[];
 }
 
 export type Aviso =
@@ -37,7 +42,11 @@ export type Aviso =
   | { tipo: "sin_area" }
   | { tipo: "area_no_valida" }
   | { tipo: "siembras_sin_conteo"; n: number }
-  | { tipo: "siembras_sin_marcar"; n: number };
+  | { tipo: "siembras_sin_marcar"; n: number }
+  | { tipo: "reentrada_vigente"; interventionId: string; hasta: Date }
+  | { tipo: "carencia_vigente"; interventionId: string; hasta: Date; dias: number }
+  | { tipo: "carencia_no_declarada"; interventionId: string; alMenosHasta: Date | null }
+  | { tipo: "reentrada_no_declarada"; interventionId: string; alMenosHasta: Date | null };
 
 /** Mismo día y mes del año siguiente; un 29 de febrero vence el 28. */
 export function venceElMuestreo(ultimoDia: string): string {
@@ -87,6 +96,15 @@ export function pendienteDeLaParcela(e: EntradaDePendiente): { tocaHacer: Aviso[
   const sinMarcar = e.cohortesActivas.filter((c) => e.estados.get(c.id)?.estado !== "en_produccion").length;
   if (sinMarcar > 0) faltaUnDato.push({ tipo: "siembras_sin_marcar", n: sinMarcar });
 
+  for (const i of e.intervenciones) {
+    const re = reentradaDeIntervencion(i, e.ahora);
+    if (re.estado === "vigente") tocaHacer.push({ tipo: "reentrada_vigente", interventionId: i.id, hasta: re.libreDesde });
+    if (re.estado === "desconocida") faltaUnDato.push({ tipo: "reentrada_no_declarada", interventionId: i.id, alMenosHasta: re.alMenosHasta });
+    const ca = carenciaDeIntervencion(i, e.ahora);
+    if (ca.estado === "conocida") tocaHacer.push({ tipo: "carencia_vigente", interventionId: i.id, hasta: ca.libreDesde, dias: ca.diasQueFaltan });
+    if (ca.estado === "desconocida") faltaUnDato.push({ tipo: "carencia_no_declarada", interventionId: i.id, alMenosHasta: ca.alMenosHasta });
+  }
+
   return { tocaHacer, faltaUnDato };
 }
 
@@ -103,5 +121,10 @@ export function enlaceDelAviso(aviso: Aviso, locationId: string): string {
     case "siembras_sin_conteo":
     case "siembras_sin_marcar":
       return `/plots/${locationId}/ajustes#siembras`;
+    case "reentrada_vigente":
+    case "carencia_vigente":
+    case "carencia_no_declarada":
+    case "reentrada_no_declarada":
+      return `/plots/${locationId}/manejo/${aviso.interventionId}`;
   }
 }
