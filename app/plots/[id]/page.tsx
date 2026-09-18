@@ -569,10 +569,10 @@ export default async function PlotDetailPage({
       </section>
       ) : null}
 
-      {/* M1: igual que #condiciones. `enlaceDelAviso` enlaza a #muestras. */}
-      <details className="nn-section">
-        <summary style={{ fontSize: "1.25rem", fontWeight: 600 }}>{t("labSamplesHeading")}</summary>
-        <p className="nn-muted" id="muestras">{t("samplesIntro")}</p>
+      {pestana === "muestras" ? (
+      <section className="nn-section">
+        <h2>{t("labSamplesHeading")}</h2>
+        <p className="nn-muted">{t("samplesIntro")}</p>
 
         <h3>{t("samplesSoilHeading")}</h3>
         {muestras.soil.length === 0 ? (
@@ -652,7 +652,8 @@ export default async function PlotDetailPage({
           <summary>{t("samplesFoliarAdd")}</summary>
           <FoliarSampleForm locationId={location.id} />
         </details>
-      </details>
+      </section>
+      ) : null}
 
       {pestana === "trampas" ? (
         <section className="nn-section">

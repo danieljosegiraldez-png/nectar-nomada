@@ -105,7 +105,7 @@ export function enlaceDelAviso(aviso: Aviso, locationId: string): string {
       return `/field-sessions/${aviso.fieldSessionId}`;
     case "muestreo_vencido":
     case "muestras_sin_resultado":
-      return `/plots/${locationId}#muestras`;
+      return `/plots/${locationId}?pestana=muestras`;
     case "sin_area":
     case "area_no_valida":
       return `/plots/${locationId}/ajustes#areaHectares`;
