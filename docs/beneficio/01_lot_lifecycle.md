@@ -37,6 +37,14 @@ DEPULPING ─▶ CASCARA_BATCH ─▶ CASCARA_STABILIZING ─▶ CASCARA_DRYING 
 2. Toda transición registra `transitioned_at`, `operator_id` y, cuando la ordena un motor, la `assessment_id` que la justificó.
 3. **Ninguna transición automática puede ordenar una acción destructiva.** Un `TERMINATION_READY` de Brix o un `OVER_FERMENTED_CRITICAL` de pH *recomiendan*; el paso a `WASHING` siempre lo confirma una persona. El sistema es asesor, no autónomo.
 4. Una transición hacia atrás está prohibida. Un error de etapa se corrige con `REJECTED` + lote nuevo, o con un evento de corrección que supersede.
+
+   > **Decisión de Daniel, 2026-09-18: excepción a esta regla.** Un paso de
+   > `DRYING` de vuelta a una fase anterior —infusión, coinfusión,
+   > cofermentación, o reingreso al propio mosto todavía activo— y la
+   > posterior vuelta a `DRYING` es una **transición legítima de receta**, no
+   > un error de etapa. No se corrige con `REJECTED` ni con un evento de
+   > corrección: es un flujo esperado del proceso. Diseño en
+   > `docs/superpowers/specs/2026-09-18-muestra-verde-tras-proceso-design.md`.
 5. Un motor solo evalúa lecturas cuyo `measured_at` cae dentro de la ventana del estado correspondiente. Una lectura de pH tomada durante `DRYING` es un error de captura, no un dato de fermentación.
 
 ## 3. Aplicabilidad de los motores
