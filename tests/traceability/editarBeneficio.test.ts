@@ -6,6 +6,7 @@ import { LocationAccessError, LocationValidationError, createMicrolot, updateLoc
 import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadasDelSitio";
 import { actualizarBeneficio } from "../../lib/traceability/beneficios";
 import { actualizarUbicacionDeSecado, crearUbicacionDeSecado } from "../../lib/traceability/instalaciones";
+import { createRecipeVersion, createRecipeWithVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
 
 /**
  * «Editar beneficio» — spec #370 §4.3. Por defecto el capataz NO edita un
@@ -213,5 +214,104 @@ describe("instalaciones y camas (crearUbicacionDeSecado, actualizarUbicacionDeSe
     await expect(actualizarUbicacionDeSecado(capataz, { locationId: inst.id, name: nombre() })).resolves.toBeDefined();
     const cama = await crearUbicacionDeSecado(capataz, { name: nombre(), parentLocationId: inst.id, locationType: "drying_bed" });
     expect(cama.locationType).toBe("drying_bed");
+  });
+});
+
+describe("recetas (crear, editar, publicar)", () => {
+  const orgIds: string[] = [];
+  const lotIds: string[] = [];
+  const recetaNombres: string[] = [];
+  afterEach(async () => {
+    const recetas = await prisma.processRecipe.findMany({ where: { name: { in: recetaNombres } }, select: { id: true } });
+    await prisma.auditEvent.deleteMany({ where: { entityId: { in: recetas.map((r) => r.id) } } });
+    await prisma.processRecipe.deleteMany({ where: { name: { in: recetaNombres } } });
+    await prisma.lot.deleteMany({ where: { id: { in: lotIds } } });
+    // La finca de la organización la borra el afterEach general (por nombre); aquí se suelta antes su organización.
+    await prisma.location.updateMany({ where: { organizationId: { in: orgIds } }, data: { organizationId: null } });
+    await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
+    orgIds.length = 0; lotIds.length = 0; recetaNombres.length = 0;
+  });
+
+  /** Una organización con su finca y un lote en ella: el capataz de la finca gestiona ese lote. */
+  async function fincaConLote() {
+    const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
+    orgIds.push(org.id);
+    const finca = await prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal", organizationId: org.id } });
+    const lot = await prisma.lot.create({ data: { lotCode: nombre(), lotType: "cherry", organizationId: org.id, locationId: finca.id, classification: "internal" } });
+    lotIds.push(lot.id);
+    return { org, finca };
+  }
+  // `targets: []` no pasa `validateTargets` (`at_least_one_target_required`,
+  // un ProcessTargetError) antes de llegar a la guardia bajo prueba, así que
+  // se usa el mínimo válido: el mismo objetivo de humo que
+  // tests/traceability/recipeAuthoring.test.ts.
+  const unTarget = [{ variable: "ph", moment: "final" as const, unit: "pH", targetValue: 3.8 }];
+  const receta = (organizationId: string | null) => {
+    const name = nombre(); recetaNombres.push(name);
+    return { name, organizationId, targets: unTarget };
+  };
+
+  /** Concede a una cuenta YA existente una asignación Farm Manager adicional
+   *  sobre otro ámbito, sin crear una cuenta nueva. Reutiliza el Scope si ya
+   *  existe, igual que `cuenta()`. */
+  async function tambienGestiona(userAccountId: string, scopeType: "location" | "project", scopeRefId: string) {
+    const roleProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Manager" } });
+    const existente = await prisma.scope.findFirst({ where: { scopeType, scopeRefId } });
+    const scope = existente ?? await prisma.scope.create({ data: { id: randomUUID(), scopeType, scopeRefId } });
+    if (!existente) scopeIds.push(scope.id);
+    await prisma.assignment.create({ data: { userAccountId, scopeId: scope.id, roleProfileId: roleProfile.id } });
+  }
+
+  it("un capataz NO crea una receta de su organización; un Farm Manager sí", async () => {
+    const { org, finca } = await fincaConLote();
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    await expect(createRecipeWithVersion(capataz, receta(org.id))).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    await expect(createRecipeWithVersion(jefe, receta(org.id))).resolves.toBeDefined();
+  });
+
+  it("un capataz NO edita ni publica; con la concesión, sí", async () => {
+    const { org, finca } = await fincaConLote();
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    // `createRecipeWithVersion` devuelve el `ProcessRecipe` directamente
+    // (con sus versiones incluidas), no envuelto — `creada.id` es el id de
+    // la receta, no de una versión.
+    const original = receta(org.id);
+    const creada = await createRecipeWithVersion(jefe, original);
+    await expect(updateRecipeMetadata(capataz, creada.id, { name: nombre() })).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    await conceder(capataz);
+    // Vuelve a poner el nombre rastreado (`original.name`, no el `nombre()`
+    // suelto de la línea de arriba) para que el `afterEach` de este describe
+    // la encuentre por nombre.
+    await expect(updateRecipeMetadata(capataz, creada.id, { name: original.name })).resolves.toBeDefined();
+  });
+
+  it("un capataz NO publica una versión nueva; con la concesión, sí", async () => {
+    const { org, finca } = await fincaConLote();
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const creada = await createRecipeWithVersion(jefe, receta(org.id));
+    await expect(createRecipeVersion(capataz, creada.id, unTarget)).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    await conceder(capataz);
+    await expect(createRecipeVersion(capataz, creada.id, unTarget)).resolves.toBeDefined();
+  });
+
+  it("una receta compartida (sin organización) no la crea un Farm Manager de finca", async () => {
+    const { finca } = await fincaConLote();
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    // Para `organizationId: null`, `createRecipeWithVersion` busca el gate de
+    // `requireLotAccess` en CUALQUIER lote de la base compartida (línea ~330
+    // de processTargets.ts) — no en uno del jefe. Sin dársela, el jefe cae
+    // antes de llegar a la guardia bajo prueba, con `no_lot_access` de
+    // `requireLotAccess`, no con `no_beneficio_edit_access`. Se le concede la
+    // MISMA asignación (Farm Manager, ámbito de ubicación) sobre el lugar de
+    // ese lote arbitrario — nunca ámbito de plataforma, que es justo lo que
+    // el guardia bajo prueba exige y lo que este jefe no tiene.
+    const cualquierLote = await prisma.lot.findFirst({ where: {} });
+    if (cualquierLote?.locationId) await tambienGestiona(jefe, "location", cualquierLote.locationId);
+    else if (cualquierLote?.projectId) await tambienGestiona(jefe, "project", cualquierLote.projectId);
+    await expect(createRecipeWithVersion(jefe, receta(null)))
+      .rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
   });
 });

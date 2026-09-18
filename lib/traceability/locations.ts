@@ -12,6 +12,7 @@
  */
 import { prisma } from "../db";
 import { can } from "../rbac/service";
+import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Aspect, ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
@@ -148,13 +149,38 @@ export async function exigeEditarBeneficioEn(userAccountId: string, locationId: 
  */
 export async function exigeEditarBeneficioEnOrganizacion(userAccountId: string, organizationId: string | null) {
   if (organizationId === null) {
-    if (await can(userAccountId, "edit_beneficio", "location", { scopeType: "platform", scopeRefId: null }, "internal")) return;
+    if (
+      await can(
+        userAccountId,
+        "edit_beneficio",
+        "location",
+        { scopeType: "platform", scopeRefId: null },
+        CLASSIFICATION_NOT_APPLICABLE,
+      )
+    )
+      return;
     throw new LocationAccessError("no_beneficio_edit_access");
   }
   const lugares = await prisma.location.findMany({ where: { organizationId }, select: { id: true, classification: true } });
   for (const l of lugares) {
     if (await can(userAccountId, "edit_beneficio", "location", { scopeType: "location", scopeRefId: l.id }, l.classification)) return;
   }
+  // Una organización con lotes pero sin ninguna Location propia (los tres
+  // archivos de recetas existentes, con actor Platform Admin, la dejan así)
+  // no tiene ningún lugar contra el que comprobar `can()`: sin este último
+  // intento de plataforma, ni siquiera un Platform Admin podría configurarla
+  // — el mismo respaldo que `scopeTargetsFor` en lots.ts usa para un lote sin
+  // proyecto ni ubicación.
+  if (
+    await can(
+      userAccountId,
+      "edit_beneficio",
+      "location",
+      { scopeType: "platform", scopeRefId: null },
+      CLASSIFICATION_NOT_APPLICABLE,
+    )
+  )
+    return;
   throw new LocationAccessError("no_beneficio_edit_access");
 }
 
