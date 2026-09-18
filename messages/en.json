@@ -1330,7 +1330,8 @@
     "transformationType_packaging": "Packaging",
     "honeyProcessButton": "Process honey",
     "honeyPackagingButton": "Package",
-    "honeySplitButton": "Split"
+    "honeySplitButton": "Split",
+    "transformationType_hulling": "Hulling"
   },
   "Apiary": {
     "badge": "Apiary",
