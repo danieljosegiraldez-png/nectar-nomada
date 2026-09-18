@@ -840,7 +840,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
   `estadoDeTrampa`)
 
 **Interfaces:**
-- Produce: `type EstadoDeTrampa = "sin_regla" | "al_dia" | "toca_revisar" | "lectura_alta"`.
+- Produce: `type EstadoDeTrampa = "retirada" | "sin_regla" | "al_dia" | "toca_revisar" | "lectura_alta"`.
 - Produce: `estadoDeTrampa(e: { hoy: string; trampa: TrampaParaAviso; regla: ReglaParaAviso |
   null }): { estado: EstadoDeTrampa; diasDeRetraso: number | null }` — pura.
 - Consume: `TrampaParaAviso`, `ReglaParaAviso`, la constante privada `ESCALA` y la función
@@ -893,11 +893,15 @@ describe("estadoDeTrampa", () => {
     expect(estadoDeTrampa({ hoy: "2026-09-18", trampa, regla }).estado).toBe("lectura_alta");
   });
 
-  it("una trampa retirada no reporta estado accionable", () => {
+  it("una trampa retirada dice que está retirada, no que falta la regla (ADR-080)", () => {
     expect(
       estadoDeTrampa({ hoy: "2026-09-18", trampa: { ...trampaBase, status: "removed" }, regla })
         .estado,
-    ).toBe("sin_regla");
+    ).toBe("retirada");
+    expect(
+      estadoDeTrampa({ hoy: "2026-09-18", trampa: { ...trampaBase, status: "removed" }, regla: null })
+        .estado,
+    ).toBe("retirada");
   });
 });
 ```
@@ -910,24 +914,24 @@ Expected: FAIL — `estadoDeTrampa` no existe.
 - [ ] **Paso 3: Implementar en `lib/traceability/pendienteDeTrampas.ts`**
 
 ```typescript
-export type EstadoDeTrampa = "sin_regla" | "al_dia" | "toca_revisar" | "lectura_alta";
+export type EstadoDeTrampa = "retirada" | "sin_regla" | "al_dia" | "toca_revisar" | "lectura_alta";
 
 /**
  * El estado de UNA trampa, para una tabla o una tarjeta — no la lista de avisos que
  * produce `avisosDeTrampas`. Repite su rama de disparo/plazo a propósito: ver la nota
  * de la Tarea 3 del plan de vistas de finca y parcela sobre por qué no se comparte.
  *
- * Una trampa retirada o muerta, o sin regla, no tiene estado accionable: `sin_regla`
- * cubre los dos casos porque ninguno tiene nada que un operario deba hacer hoy.
+ * Una trampa que no está activa es `retirada`, y una activa sin regla es `sin_regla`:
+ * son razones distintas y la pantalla dice la verdadera (ADR-080), aunque ninguna de las
+ * dos tenga plazo. Ruling del controlador, 2026-09-18.
  */
 export function estadoDeTrampa(e: {
   hoy: string;
   trampa: TrampaParaAviso;
   regla: ReglaParaAviso | null;
 }): { estado: EstadoDeTrampa; diasDeRetraso: number | null } {
-  if (e.trampa.status !== "active" || e.regla == null) {
-    return { estado: "sin_regla", diasDeRetraso: null };
-  }
+  if (e.trampa.status !== "active") return { estado: "retirada", diasDeRetraso: null };
+  if (e.regla == null) return { estado: "sin_regla", diasDeRetraso: null };
   const disparador = ESCALA.indexOf(e.regla.triggerLevel);
   const revisionVigente =
     e.trampa.ultimaRevision != null &&
@@ -1087,6 +1091,7 @@ En `messages/es.json`:
 "trapsColumnLastReading": "Última lectura",
 "trapsColumnStatus": "Estado",
 "trapEstado_sin_regla": "Sin regla",
+"trapEstado_retirada": "Retirada",
 "trapEstado_al_dia": "Al día",
 "trapEstado_toca_revisar": "Toca revisar",
 "trapEstado_lectura_alta": "Lectura alta",
@@ -1102,6 +1107,7 @@ En `messages/en.json`:
 "trapsColumnLastReading": "Last reading",
 "trapsColumnStatus": "Status",
 "trapEstado_sin_regla": "No rule",
+"trapEstado_retirada": "Removed",
 "trapEstado_al_dia": "Up to date",
 "trapEstado_toca_revisar": "Due for a check",
 "trapEstado_lectura_alta": "High reading",
@@ -3320,8 +3326,7 @@ revisión a la que esta foto se refiere», y son la misma cadena vista desde dos
    `getFincasConTrampas` — si hay exactamente una finca accesible, entra directo; si hay más,
    ofrece un selector por `?finca=`; si hay ninguna, `notFound()`. Mismo patrón que el apiario
    único de `lib/navigation.ts`.
-5. **El `blockType` de una trampa retirada/muerta, para el estado.** `estadoDeTrampa` devuelve
-   `sin_regla` para cualquier trampa que no esté `active`, aunque haya regla: no hay nada
-   accionable que reportar para una trampa que ya no se revisa, y confundir eso con «sin regla
-   configurada» sería impreciso pero no falso en la pantalla (ninguna de las dos muestra una
-   fecha ni un plazo).
+5. **Una trampa retirada, para el estado.** Ruling del controlador (2026-09-18), que corrige la
+   primera versión de este plan: `estadoDeTrampa` devuelve `retirada` para una trampa que no está
+   `active`, y `sin_regla` sólo para una activa sin regla. Mostrar «sin regla» en una trampa
+   retirada daría una razón falsa (ADR-080).
