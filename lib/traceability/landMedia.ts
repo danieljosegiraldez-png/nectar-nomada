@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
 import { objectStorageProvider } from "../integrations/storage";
 import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
+import { requireTrapAccess } from "./traps";
 import { recordAuditEvent } from "../audit";
 import type { ClassificationLevel, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -118,6 +119,14 @@ async function exigirPadreDeEsaLocation(parent: LandAssetParent, locationId: str
 
 export async function finalizeLandAssetUpload(userAccountId: string, input: FinalizeLandAssetUploadInput) {
   await requireLocationAttributeAccess(userAccountId, input.locationId);
+  // F5 fix-final — colgar una foto de una revisión de trampa es tocar un
+  // Specimen, gateado igual que `createTrap`/`recordTrapCheck`
+  // (`requireTrapAccess`, `specimen:manage`). Sin esto, `location:manage_
+  // attributes` bastaba para adjuntar evidencia a una revisión que ese mismo
+  // usuario no podía leer si le quitaban el permiso de specimen.
+  if (input.parent.kind === "trapCheck") {
+    await requireTrapAccess(userAccountId, input.locationId);
+  }
 
   // La clave tiene que estar bajo el prefijo de ESTE bloque. Sin esto, un
   // llamador podría registrar como suyo un objeto subido bajo otro bloque.

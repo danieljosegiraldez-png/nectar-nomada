@@ -17,6 +17,8 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
+import { can } from "../rbac/service";
+import type { ScopeTarget } from "../rbac/types";
 import type { EventoDeProduccion } from "./estadoDeProduccion";
 import type {
   DataQuality,
@@ -473,6 +475,9 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
       aspect: true,
       soilType: true,
       description: true,
+      // F5 fix-final — para decidir si la sección de trampas se incluye
+      // (`specimen:view` sobre esta Location), no para mostrarla.
+      classification: true,
       organization: { select: { name: true } },
       parentLocation: { select: { id: true, name: true, organization: { select: { name: true } } } },
     },
@@ -538,30 +543,71 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
         ],
   );
 
-  // Las trampas de broca de la parcela, con su última revisión. Detrás de la
-  // misma compuerta que el resto del tablero. `createdAt` desempata dos
-  // revisiones del mismo día: `observedAt` es un día a las 00:00Z.
-  const trampasCrudas = await prisma.specimen.findMany({
-    where: { locationId, specimenType: "trap" },
-    select: {
-      id: true,
-      trapNumber: true,
-      status: true,
-      plotBlock: { select: { name: true } },
-      observations: {
-        where: { observationType: "trap_check" },
-        orderBy: [{ observedAt: "desc" }, { createdAt: "desc" }],
-        take: 1,
-        select: { id: true, observedAt: true, brocaLevel: true },
-      },
-    },
-    orderBy: { trapNumber: "asc" },
-  });
-  // El día de instalación, desde el que corre el plazo mientras la trampa no
-  // tenga revisiones. Lo escribe `createTrap`; una trampa vieja sin esta
-  // observación queda con `instaladaEl: null`, no con un día inventado.
+  // F5 fix-final — la sección de trampas es un Specimen, así que exige
+  // `specimen:view` sobre esta Location además de la compuerta del tablero de
+  // arriba (`location:manage_attributes`). Antes bastaba con esa última: un
+  // usuario al que se le quitara `specimen:view` seguía leyendo las
+  // revisiones de trampa en este mismo tablero. Sin el permiso, la sección
+  // entera se omite (trampas y regla), en vez de devolverla vacía por
+  // casualidad.
+  const puedeVerTrampas = await can(
+    userAccountId,
+    "view",
+    "specimen",
+    { scopeType: "location", scopeRefId: locationId } as ScopeTarget,
+    location.classification,
+  );
+
+  // Las trampas de broca de la parcela, con TODAS sus revisiones —F2
+  // fix-final: antes sólo se traía `{id, observedAt, brocaLevel}` de la
+  // última, así que el conteo, otros insectos y el mantenimiento se
+  // guardaban y no se volvían a leer en ningún sitio. La lista completa (no
+  // sólo la última) es además lo que necesita F6: el selector de a qué
+  // revisión cuelga una foto. `createdAt` desempata dos revisiones del mismo
+  // día: `observedAt` es un día a las 00:00Z.
+  const trampasCrudas = puedeVerTrampas
+    ? await prisma.specimen.findMany({
+        where: { locationId, specimenType: "trap" },
+        select: {
+          id: true,
+          trapNumber: true,
+          status: true,
+          plotBlock: { select: { name: true } },
+          observations: {
+            where: { observationType: "trap_check" },
+            orderBy: [{ observedAt: "desc" }, { createdAt: "desc" }],
+            select: {
+              id: true,
+              observedAt: true,
+              brocaLevel: true,
+              captureCount: true,
+              otherInsects: true,
+              otherInsectsNote: true,
+              cleaned: true,
+              liquidChanged: true,
+              lureRecharged: true,
+              observer: { select: { displayName: true } },
+            },
+          },
+        },
+        orderBy: { trapNumber: "asc" },
+      })
+    : [];
+  // F7 fix-final — el día de instalación O REINSTALACIÓN más reciente, desde
+  // el que corre el plazo mientras la trampa no tenga revisiones
+  // POSTERIORES. Antes sólo miraba `installed`, así que una trampa retirada
+  // y reinstalada seguía contando el plazo desde su primerísima instalación;
+  // `avisosDeTrampas` (pendienteDeTrampas.ts) ignora ahora cualquier
+  // revisión anterior a este día, así que lo que aquí importa es que sea la
+  // fecha de la ACTIVACIÓN vigente, no la primera. Lo escriben `createTrap`
+  // (`installed`) y `recordSpecimenObservation` (`reinstalled`); una trampa
+  // sin ninguna de las dos queda con `instaladaEl: null`, no con un día
+  // inventado.
   const instalaciones = await prisma.specimenObservation.findMany({
-    where: { specimenId: { in: trampasCrudas.map((t) => t.id) }, observationType: "installed" },
+    where: {
+      specimenId: { in: trampasCrudas.map((t) => t.id) },
+      observationType: { in: ["installed", "reinstalled"] },
+    },
     orderBy: [{ observedAt: "desc" }, { createdAt: "desc" }],
     select: { specimenId: true, observedAt: true },
   });
@@ -572,26 +618,43 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
   // usan `createTrap` y `saveTrapRule`—. Se lee aquí y no con `getTrapRule`
   // para que quede detrás de la compuerta del tablero y no exija además la
   // de la finca. `null` = sin regla, y sin regla no hay avisos ni plazos.
-  const reglaDeTrampas = await prisma.trapRule.findUnique({
-    where: { farmLocationId: location.parentLocation?.id ?? location.id },
-    select: { triggerLevel: true, normalDays: true, alertDays: true, suggestedAction: true },
-  });
+  const reglaDeTrampas = puedeVerTrampas
+    ? await prisma.trapRule.findUnique({
+        where: { farmLocationId: location.parentLocation?.id ?? location.id },
+        select: { triggerLevel: true, normalDays: true, alertDays: true, suggestedAction: true },
+      })
+    : null;
 
-  const trampas = trampasCrudas.map((t) => ({
-    id: t.id,
-    trapNumber: t.trapNumber,
-    bloque: t.plotBlock?.name ?? null,
-    status: t.status,
-    instaladaEl: instaladaEl.get(t.id) ?? null,
-    // Sin revisión es `null`, no una lectura de cero (ADR-080).
-    ultimaRevision: t.observations[0]
-      ? {
-          id: t.observations[0].id,
-          observedAt: t.observations[0].observedAt,
-          brocaLevel: t.observations[0].brocaLevel,
-        }
-      : null,
-  }));
+  const trampas = trampasCrudas.map((t) => {
+    const revisiones = t.observations;
+    const ultima = revisiones[0];
+    return {
+      id: t.id,
+      trapNumber: t.trapNumber,
+      bloque: t.plotBlock?.name ?? null,
+      status: t.status,
+      instaladaEl: instaladaEl.get(t.id) ?? null,
+      // Sin revisión es `null`, no una lectura de cero (ADR-080).
+      ultimaRevision: ultima
+        ? {
+            id: ultima.id,
+            observedAt: ultima.observedAt,
+            brocaLevel: ultima.brocaLevel,
+            captureCount: ultima.captureCount,
+            otherInsects: ultima.otherInsects,
+            otherInsectsNote: ultima.otherInsectsNote,
+            cleaned: ultima.cleaned,
+            liquidChanged: ultima.liquidChanged,
+            lureRecharged: ultima.lureRecharged,
+            observerName: ultima.observer?.displayName ?? null,
+          }
+        : null,
+      // F6 fix-final — todas las revisiones (fecha + lectura), para que el
+      // formulario de foto pueda elegir a cuál cuelga en vez de asumir
+      // siempre la última.
+      revisiones: revisiones.map((r) => ({ id: r.id, observedAt: r.observedAt, brocaLevel: r.brocaLevel })),
+    };
+  });
 
   return {
     location,

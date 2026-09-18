@@ -27,9 +27,17 @@ export interface TrampaParaAviso {
    * `brocaLevel` nulo es una revisión vieja sin lectura: cuenta como visita
    * —el plazo corre desde su día— y como «no disparó». Descartarla movería el
    * plazo hacia atrás, a una revisión anterior o a la instalación.
+   *
+   * **F7 fix-final**: si `dia` es ANTERIOR a `instaladaEl`, `avisosDeTrampas`
+   * la trata como si no existiera — es de un ciclo cerrado por un retiro y
+   * reinstalación posteriores, y ni cuenta como visita ni puede disparar.
    */
   ultimaRevision: { dia: string; brocaLevel: NivelDeBroca | null } | null;
-  /** Día `YYYY-MM-DD` de la observación `installed`; `null` si no la hay. */
+  /**
+   * Día `YYYY-MM-DD` de la última observación `installed` O `reinstalled`
+   * (lo que sea más reciente); `null` si no hay ninguna. Es la fecha de la
+   * activación VIGENTE, no necesariamente la primera vez que se instaló.
+   */
   instaladaEl: string | null;
 }
 
@@ -63,12 +71,24 @@ export function avisosDeTrampas(e: {
     // Una retirada o muerta no se revisa.
     if (t.status !== "active") continue;
 
-    const lectura = t.ultimaRevision?.brocaLevel;
+    // F7 fix-final — una revisión de ANTES de la última instalación/
+    // reinstalación es de un ciclo cerrado: ni cuenta como visita ni puede
+    // disparar nada. Sin esto, retirar una trampa con una lectura alta y
+    // reinstalarla meses después seguía proponiendo la acción de esa lectura
+    // vieja, y el plazo corría desde ella en vez de desde la reinstalación.
+    // Comparación de cadenas `YYYY-MM-DD`, válida porque son ISO.
+    const revisionVigente =
+      t.ultimaRevision != null && (t.instaladaEl == null || t.ultimaRevision.dia >= t.instaladaEl)
+        ? t.ultimaRevision
+        : null;
+
+    const lectura = revisionVigente?.brocaLevel;
     const disparo = lectura != null && ESCALA.indexOf(lectura) >= disparador;
 
-    // Nunca revisada: el plazo corre desde la instalación. Sin revisión y sin
+    // Nunca revisada (o la única revisión es de antes de reinstalar): el
+    // plazo corre desde la instalación/reinstalación. Sin eso y sin
     // instalación registrada no hay desde dónde contar, y no se inventa uno.
-    const desde = t.ultimaRevision?.dia ?? t.instaladaEl;
+    const desde = revisionVigente?.dia ?? t.instaladaEl;
     const plazo = disparo ? regla.alertDays : regla.normalDays;
     // El día exacto del vencimiento todavía no avisa: sólo un retraso > 0.
     const diasDeRetraso = desde == null ? 0 : diasEntre(desde, e.hoy) - plazo;

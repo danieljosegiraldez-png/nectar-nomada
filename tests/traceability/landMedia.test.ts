@@ -24,7 +24,7 @@ import {
 } from "../../lib/traceability/landMedia";
 import { createSoilProfile } from "../../lib/traceability/soilProfiles";
 import { createBiocharBatch } from "../../lib/traceability/biocharBatches";
-import { createTrap, recordTrapCheck } from "../../lib/traceability/traps";
+import { createTrap, recordTrapCheck, TrapAccessError } from "../../lib/traceability/traps";
 import { crearUsuarioConAcceso, crearParcela } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
@@ -345,5 +345,51 @@ describe("la foto de una revisión de trampa", () => {
         provenanceClass: "direct_observation",
       }),
     ).rejects.toThrow(LandMediaValidationError);
+  });
+
+  // F5 fix-final — antes esta vía sólo exigía `location:manage_attributes`
+  // (la primera línea de `finalizeLandAssetUpload`). Alguien con la parcela
+  // pero sin `specimen:manage` podía colgar evidencia en una revisión que ni
+  // siquiera podía crear. Mismo mecanismo de `deny` que
+  // `tests/rbac/ajustesDePermiso.test.ts`, para probar el guardia nuevo con
+  // acceso real a la parcela y no con la ausencia total de asignación.
+  it("rechaza colgar la foto de una revisión sin `specimen:manage`", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation",
+    });
+
+    const assignment = await prisma.assignment.findFirstOrThrow({ where: { userAccountId } });
+    const permisoSpecimenManage = await prisma.permission.findFirstOrThrow({
+      where: { resourceType: "specimen", action: "manage" },
+    });
+    await prisma.assignmentPermissionOverride.create({
+      data: { assignmentId: assignment.id, permissionId: permisoSpecimenManage.id, effect: "deny" },
+    });
+
+    await expect(
+      finalizeLandAssetUpload(userAccountId, {
+        locationId: parcela.id,
+        storageKey: `nectar-originals/land/${parcela.id}/${RUN_ID}-sin-permiso.jpg`,
+        mimeType: "image/jpeg",
+        sizeBytes: 1234,
+        originalFilename: "sin-permiso.jpg",
+        parent: { kind: "trapCheck", specimenObservationId: revision.id },
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(TrapAccessError);
   });
 });

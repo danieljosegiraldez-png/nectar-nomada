@@ -140,6 +140,10 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof SoilProfileValidationError) return t("error_soil_profile", { detail: error.message });
   if (error instanceof SampleValidationError) return t("error_sample", { detail: error.message });
   if (error instanceof LandMediaValidationError) return t("error_land_media", { detail: error.message });
+  // F4 fix-final — «revisa la lectura y la fecha» no es verdad de una trampa
+  // retirada: el caso real es que no se puede revisar en absoluto, y ése se
+  // dice, con su propia clave.
+  if (error instanceof TrapValidationError && error.message === "trap_retired") return t("error_trap_retired");
   // La escala o la fecha: el mensaje dice qué revisar, y el código crudo no
   // aporta al operario de campo nada que ese mensaje no diga.
   if (error instanceof TrapValidationError) return t("error_trap");
@@ -1318,11 +1322,18 @@ export async function recordTrapCheckFormAction(
       brocaLevel: String(formData.get("brocaLevel") ?? "") as never,
       captureCount: conteo,
       otherInsects: otros,
-      // La nota de cuáles sólo tiene sentido si hubo otros insectos.
-      otherInsectsNote: otros ? emptyToNull(formData.get("otherInsectsNote")) : null,
-      cleaned: formData.get("cleaned") === "on",
-      liquidChanged: formData.get("liquidChanged") === "on",
-      lureRecharged: formData.get("lureRecharged") === "on",
+      // F8 fix-final — la nota se guarda salvo cuando "otros" es
+      // explícitamente NO: antes se descartaba también con "sin registrar",
+      // así que escribir una nota y dejar el selector sin tocar la borraba en
+      // silencio.
+      otherInsectsNote: otros === false ? null : emptyToNull(formData.get("otherInsectsNote")),
+      // F1 fix-final (ADR-080) — tri-estado, como `otherInsects`: una casilla
+      // sin marcar no distingue "no se hizo" de "no se preguntó".
+      cleaned: booleanoDeTresEstados(formData.get("cleaned")),
+      liquidChanged: booleanoDeTresEstados(formData.get("liquidChanged")),
+      lureRecharged: booleanoDeTresEstados(formData.get("lureRecharged")),
+      // F3 fix-final (spec §4.6) — quién estuvo en el campo.
+      observerPersonId: emptyToNull(formData.get("observerPersonId")),
       notes: emptyToNull(formData.get("notes")),
       provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_REGISTRO_DE_CAMPO),
       dataQuality: emptyToNull(formData.get("dataQuality")) as never,

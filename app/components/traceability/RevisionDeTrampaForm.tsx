@@ -6,6 +6,7 @@ import { recordTrapCheckFormAction, type TraceabilityActionState } from "../../a
 import { PROCEDENCIA_DE_REGISTRO_DE_CAMPO } from "../../../lib/traceability/procedencia";
 import { BotonQueNecesitaConexion } from "./BotonQueNecesitaConexion";
 import { TriStateField } from "./TriStateField";
+import type { PersonOption } from "./FieldSessionForms";
 
 // Misma lista local que `MarcarEnProduccionForm.tsx`.
 const DATA_QUALITIES = ["verified", "provisional", "unconfirmed", "not_tested"] as const;
@@ -21,15 +22,32 @@ const initialState: TraceabilityActionState = {};
  * preseleccionada se guardaría aunque nadie mirara la tela. El número exacto es
  * opcional y vacío significa «no se contó», nunca 0 (ADR-080).
  *
- * «Otros insectos» es un sí/no/sin registrar y no una casilla: una casilla sin
- * marcar guardaría «no había», que es una afirmación (ver `TriStateField`).
- * El mantenimiento sí es casilla: la columna no admite «sin registrar» y lo no
- * marcado es lo no hecho.
+ * «Otros insectos» y el mantenimiento (F1 fix-final, ADR-080) son los tres un
+ * sí/no/sin registrar y no una casilla: una casilla sin marcar guardaría
+ * «no se hizo», que es una afirmación distinta de «nadie lo preguntó» (ver
+ * `TriStateField`).
+ *
+ * `people`/`selfPersonId` (F3 fix-final, spec §4.6) son las mismas props que
+ * ya reciben `FieldSessionStartForm` y `LandPhotoUploadForm` en esta misma
+ * pantalla (`app/plots/[id]/page.tsx`), de `getObserverCandidates`.
  */
-export function RevisionDeTrampaForm({ locationId, specimenId }: { locationId: string; specimenId: string }) {
+export function RevisionDeTrampaForm({
+  locationId,
+  specimenId,
+  people,
+  selfPersonId,
+}: {
+  locationId: string;
+  specimenId: string;
+  people: ReadonlyArray<PersonOption>;
+  selfPersonId: string | null;
+}) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(recordTrapCheckFormAction, initialState);
   const id = (campo: string) => `${campo}-${specimenId}`;
+  // Igual que `photographedByLabel` en `LandPhotoUploadForm`: opcional, y el
+  // valor inicial se normaliza contra la lista en vez de suponerlo.
+  const propioEsElegible = people.some((p) => p.id === selfPersonId);
 
   return (
     <form action={formAction} className="nn-form">
@@ -72,16 +90,24 @@ export function RevisionDeTrampaForm({ locationId, specimenId }: { locationId: s
         <input id={id("otherInsectsNote")} type="text" name="otherInsectsNote" placeholder={t("notRecorded")} />
       </div>
 
+      <TriStateField id={id("cleaned")} name="cleaned" label={t("trapCheckCleaned")} />
+      <TriStateField id={id("liquidChanged")} name="liquidChanged" label={t("trapCheckLiquid")} />
+      <TriStateField id={id("lureRecharged")} name="lureRecharged" label={t("trapCheckLure")} />
+
       <div className="nn-field">
-        <label>
-          <input type="checkbox" name="cleaned" /> {t("trapCheckCleaned")}
-        </label>
-        <label>
-          <input type="checkbox" name="liquidChanged" /> {t("trapCheckLiquid")}
-        </label>
-        <label>
-          <input type="checkbox" name="lureRecharged" /> {t("trapCheckLure")}
-        </label>
+        <label htmlFor={id("observerPersonId")}>{t("trapCheckObserverLabel")}</label>
+        <select
+          id={id("observerPersonId")}
+          name="observerPersonId"
+          defaultValue={propioEsElegible ? (selfPersonId as string) : ""}
+        >
+          <option value="">{t("notRecorded")}</option>
+          {people.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.id === selfPersonId ? t("observerSelfOption", { name: p.displayName }) : p.displayName}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="nn-field">

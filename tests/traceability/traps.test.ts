@@ -26,7 +26,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
-import { createSpecimen } from "../../lib/traceability/specimens";
+import { createSpecimen, recordSpecimenObservation } from "../../lib/traceability/specimens";
 import { getPlotDetail } from "../../lib/traceability/plantingCohorts";
 import { saveTrapRule } from "../../lib/traceability/trapRules";
 import { prisma } from "../../lib/db";
@@ -217,7 +217,35 @@ describe("revisión de trampa", () => {
     expect(revision.captureCount).toBeNull();      // nadie contó: NO se inventa un 0
     expect(revision.otherInsectsNote).toBe("avispas");
     expect(revision.cleaned).toBe(true);
-    expect(revision.lureRecharged).toBe(false);
+    // F1 fix-final (ADR-080) — `lureRecharged` no se preguntó en este envío:
+    // `null` ("no se preguntó"), nunca `false` ("se preguntó y no se hizo").
+    expect(revision.lureRecharged).toBeNull();
+  });
+
+  // F1 fix-final — control positivo del caso de arriba: un `false` explícito
+  // SÍ se guarda como `false`, para que la prueba de arriba no pase sólo
+  // porque el campo quedó vacío por descuido.
+  it("guarda un `false` explícito de mantenimiento, y lo distingue de sin registrar", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"), brocaLevel: "pocos",
+      cleaned: false, liquidChanged: null, provenanceClass: "direct_observation",
+    });
+    expect(revision.cleaned).toBe(false);       // se preguntó: no se hizo
+    expect(revision.liquidChanged).toBeNull();  // no se preguntó
+    expect(revision.lureRecharged).toBeNull();  // ni se mencionó en el envío
   });
 
   it("acepta el número exacto cuando alguien contó", async () => {
@@ -336,6 +364,87 @@ describe("revisión de trampa", () => {
       brocaLevel: "pocos", provenanceClass: "direct_observation",
     })).rejects.toThrow(TrapValidationError);
   });
+
+  // F4 fix-final — antes esto sólo lo impedía la pantalla (el formulario se
+  // oculta si `status !== "active"`); nada en el servicio rechazaba un POST
+  // directo con el `specimenId` de una trampa retirada.
+  it("rechaza revisar una trampa retirada", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    await recordSpecimenObservation(userAccountId, {
+      specimenId: trampa.id, observationType: "removed", observedAt: new Date("2026-09-10"),
+      provenanceClass: "direct_observation",
+    });
+
+    await expect(recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation",
+    })).rejects.toThrow(TrapValidationError);
+  });
+
+  // F9 fix-final — la misma regla que ya cubría `installedAt`
+  // ("rechaza una fecha de instalación en el futuro"), ahora también para
+  // `observedAt`.
+  it("rechaza una fecha de revisión en el futuro", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const manana = new Date(Date.now() + 86_400_000);
+    await expect(recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: manana, brocaLevel: "pocos", provenanceClass: "direct_observation",
+    })).rejects.toThrow(TrapValidationError);
+  });
+
+  // F3 fix-final (spec §4.6) — "quién observó", cableado igual que
+  // `startFieldSession` (fieldSessions.ts): se guarda, y un id que no
+  // corresponde a ninguna Person no se guarda en silencio como si observara.
+  it("guarda quién observó, y rechaza una persona que no existe", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId, personId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"), brocaLevel: "pocos",
+      observerPersonId: personId, provenanceClass: "direct_observation",
+    });
+    expect(revision.observerPersonId).toBe(personId);
+
+    await expect(recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-16"), brocaLevel: "pocos",
+      observerPersonId: "00000000-0000-0000-0000-000000000000", provenanceClass: "direct_observation",
+    })).rejects.toThrow(TrapValidationError);
+  });
 });
 
 describe("getPlotDetail — lo que necesitan los avisos de trampas", () => {
@@ -374,5 +483,146 @@ describe("getPlotDetail — lo que necesitan los avisos de trampas", () => {
     expect(detalle.trampas[0]!.instaladaEl?.toISOString().slice(0, 10)).toBe("2026-09-02");
     expect(detalle.trampas[0]!.ultimaRevision).toMatchObject({ brocaLevel: "muchos" });
     expect(detalle.trampas[0]!.ultimaRevision?.observedAt.toISOString().slice(0, 10)).toBe("2026-09-15");
+  });
+
+  // F2 fix-final — lo que se escribía y nunca se volvía a leer: el conteo,
+  // otros insectos, el mantenimiento y quién observó. Antes el `select` de
+  // `getPlotDetail` sólo traía `{id, observedAt, brocaLevel}`.
+  it("trae el conteo, otros insectos, el mantenimiento y quién observó de la última revisión", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId, personId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"), brocaLevel: "muchos",
+      captureCount: 47, otherInsects: true, otherInsectsNote: "hormigas",
+      cleaned: true, liquidChanged: true, lureRecharged: false,
+      observerPersonId: personId, provenanceClass: "direct_observation",
+    });
+
+    const persona = await prisma.person.findUniqueOrThrow({ where: { id: personId } });
+    const detalle = await getPlotDetail(userAccountId, parcela.id);
+    expect(detalle.trampas[0]!.ultimaRevision).toMatchObject({
+      captureCount: 47,
+      otherInsects: true,
+      otherInsectsNote: "hormigas",
+      cleaned: true,
+      liquidChanged: true,
+      lureRecharged: false,
+      observerName: persona.displayName,
+    });
+  });
+
+  // F6 fix-final — la lista COMPLETA de revisiones (no sólo la última), para
+  // que el formulario de foto pueda elegir a cuál cuelga.
+  it("trae todas las revisiones de la trampa, no sólo la última", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-05"), brocaLevel: "pocos",
+      provenanceClass: "direct_observation",
+    });
+    await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"), brocaLevel: "muchos",
+      provenanceClass: "direct_observation",
+    });
+
+    const detalle = await getPlotDetail(userAccountId, parcela.id);
+    expect(detalle.trampas[0]!.revisiones).toHaveLength(2);
+    expect(detalle.trampas[0]!.revisiones.map((r) => r.observedAt.toISOString().slice(0, 10))).toEqual([
+      "2026-09-15", "2026-09-05",
+    ]);
+  });
+
+  // F7 fix-final — el día de instalación tiene que ser el de la
+  // REINSTALACIÓN más reciente, no el de la primera instalación. Sin esto,
+  // una trampa retirada y reinstalada meses después seguía contando el plazo
+  // desde su primerísima instalación.
+  it("el día de instalación es el de la reinstalación más reciente", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-01-01"), provenanceClass: "direct_observation",
+    });
+    await recordSpecimenObservation(userAccountId, {
+      specimenId: trampa.id, observationType: "removed", observedAt: new Date("2026-01-02"),
+      provenanceClass: "direct_observation",
+    });
+    await recordSpecimenObservation(userAccountId, {
+      specimenId: trampa.id, observationType: "reinstalled", observedAt: new Date("2026-09-18"),
+      provenanceClass: "direct_observation",
+    });
+
+    const detalle = await getPlotDetail(userAccountId, parcela.id);
+    expect(detalle.trampas[0]!.instaladaEl?.toISOString().slice(0, 10)).toBe("2026-09-18");
+  });
+
+  // F5 fix-final — `location:manage_attributes` ya NO basta para leer las
+  // trampas: hace falta `specimen:view` sobre esa misma Location. Se
+  // reutiliza la cuenta Platform Admin de `crearUsuarioConAcceso` y se le
+  // QUITA ese permiso con un `deny` (mismo mecanismo que
+  // `tests/rbac/ajustesDePermiso.test.ts`), en vez de construir un perfil sin
+  // acceso real: así se prueba el guardia nuevo, no la ausencia total de
+  // asignación.
+  it("sin `specimen:view` la sección de trampas no se incluye", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+
+    // Control positivo: con el permiso completo, la trampa SÍ aparece.
+    expect((await getPlotDetail(userAccountId, parcela.id)).trampas).toHaveLength(1);
+
+    const assignment = await prisma.assignment.findFirstOrThrow({ where: { userAccountId } });
+    const permisoSpecimenView = await prisma.permission.findFirstOrThrow({
+      where: { resourceType: "specimen", action: "view" },
+    });
+    await prisma.assignmentPermissionOverride.create({
+      data: { assignmentId: assignment.id, permissionId: permisoSpecimenView.id, effect: "deny" },
+    });
+
+    const detalle = await getPlotDetail(userAccountId, parcela.id);
+    expect(detalle.trampas).toEqual([]);
+    expect(detalle.reglaDeTrampas).toBeNull();
+    // La compuerta del resto del tablero (`location:manage_attributes`) sigue
+    // viva: no es un rechazo entero, sólo se omite la sección de trampas.
+    expect(detalle.location.id).toBe(parcela.id);
   });
 });

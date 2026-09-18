@@ -642,6 +642,35 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
                       : t("notRecorded"),
                   })}
                 </p>
+                {/* F2 fix-final — lo que se guardaba y nunca se volvía a
+                    mostrar: conteo, otros insectos, mantenimiento y quién
+                    observó. Un `null` se muestra como «sin registrar», nunca
+                    como 0 ni «no» (ADR-080). */}
+                <p className="nn-detail-meta">
+                  {t("trapsCaptureCount", {
+                    n: trampa.ultimaRevision.captureCount != null ? String(trampa.ultimaRevision.captureCount) : t("notRecorded"),
+                  })}
+                </p>
+                <p className="nn-detail-meta">
+                  {t("trapsOtherInsects", {
+                    estado:
+                      trampa.ultimaRevision.otherInsects === true
+                        ? trampa.ultimaRevision.otherInsectsNote
+                          ? `${t("triStateYes")} — ${trampa.ultimaRevision.otherInsectsNote}`
+                          : t("triStateYes")
+                        : estadoTri(trampa.ultimaRevision.otherInsects, t),
+                  })}
+                </p>
+                <p className="nn-detail-meta">
+                  {t("trapsMaintenance", {
+                    limpieza: estadoTri(trampa.ultimaRevision.cleaned, t),
+                    liquido: estadoTri(trampa.ultimaRevision.liquidChanged, t),
+                    atrayente: estadoTri(trampa.ultimaRevision.lureRecharged, t),
+                  })}
+                </p>
+                <p className="nn-detail-meta">
+                  {t("trapsObserver", { nombre: trampa.ultimaRevision.observerName ?? t("notRecorded") })}
+                </p>
                 <FotosDe
                   assets={fotos.filter((f) => f.specimenObservationId === trampa.ultimaRevision?.id)}
                   etiqueta={t}
@@ -656,11 +685,17 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             {trampa.status === "active" ? (
               <details>
                 <summary>{t("trapCheckTitle")}</summary>
-                <RevisionDeTrampaForm locationId={location.id} specimenId={trampa.id} />
+                <RevisionDeTrampaForm
+                  locationId={location.id}
+                  specimenId={trampa.id}
+                  people={people}
+                  selfPersonId={selfPersonId}
+                />
               </details>
             ) : null}
-            {/* La foto de la tela cuelga de la ÚLTIMA revisión: se registra la
-                visita y a continuación se sube su foto. */}
+            {/* F6 fix-final — antes la foto se colgaba SIEMPRE de la última
+                revisión; ahora el operario elige de entre todas las de esta
+                trampa (la última sigue preseleccionada). */}
             {trampa.status === "active" && trampa.ultimaRevision ? (
               <details>
                 <summary>
@@ -674,6 +709,12 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
                   parent={{ kind: "trapCheck", specimenObservationId: trampa.ultimaRevision.id }}
                   observers={people}
                   selfPersonId={selfPersonId}
+                  revisionOptions={trampa.revisiones.map((r) => ({
+                    id: r.id,
+                    label: `${r.observedAt.toISOString().slice(0, 10)} · ${
+                      r.brocaLevel ? t(`trapsLevel_${r.brocaLevel}`) : t("notRecorded")
+                    }`,
+                  }))}
                 />
               </details>
             ) : null}
@@ -749,6 +790,16 @@ function ResultadosDeLaboratorio({
  * sección ausente se ven igual, y el Paso 4 pide una foto por perfil — que
  * falte tiene que verse.
  */
+/**
+ * F2 fix-final — un booleano de mantenimiento como texto, sin confundir
+ * `null` («sin registrar») con `false` («se preguntó y no se hizo»), que es
+ * justo la distinción que la migración 20260918100000 dejó de inventar
+ * (ADR-080).
+ */
+function estadoTri(v: boolean | null, t: (clave: string) => string): string {
+  return v === true ? t("triStateYes") : v === false ? t("triStateNo") : t("notRecorded");
+}
+
 function FotosDe({
   assets,
   etiqueta,

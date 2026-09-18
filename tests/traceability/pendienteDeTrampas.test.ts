@@ -54,6 +54,19 @@ describe("avisos de trampas", () => {
     const t = activa({ status: "removed", ultimaRevision: { dia: "2026-01-01", brocaLevel: "muchos" } });
     expect(avisosDeTrampas({ hoy: "2026-09-17", trampas: [t], regla: REGLA })).toEqual([]);
   });
+
+  // F7 fix-final — escenario de Codex: instalada el 1 de enero, retirada el 2
+  // de enero, reinstalada el 18 de septiembre. Sin el arreglo, la lectura alta
+  // de antes del retiro seguía proponiendo "aplicar Bralic" y el plazo corría
+  // desde el 1 de enero, así que una trampa reinstalada HOY aparecía vencida
+  // por meses el mismo día que se puso de nuevo en el suelo.
+  it("el plazo corre desde la reinstalación, e ignora una lectura alta de antes del retiro", () => {
+    const t = activa({
+      instaladaEl: "2026-09-18", // la reinstalación, no la instalación original (1 de enero)
+      ultimaRevision: { dia: "2026-01-01", brocaLevel: "muchos" },
+    });
+    expect(avisosDeTrampas({ hoy: "2026-09-18", trampas: [t], regla: REGLA })).toEqual([]);
+  });
 });
 
 describe("entrada de los avisos desde getPlotDetail", () => {

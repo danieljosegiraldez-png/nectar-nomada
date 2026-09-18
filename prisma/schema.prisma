@@ -6071,9 +6071,16 @@ model SpecimenObservation {
   otherInsectsNote String?  @map("other_insects_note")
 
   // El mantenimiento va DENTRO de la revisión: en campo es una sola visita.
-  cleaned        Boolean @default(false)
-  liquidChanged  Boolean @default(false) @map("liquid_changed")
-  lureRecharged  Boolean @default(false) @map("lure_recharged")
+  //
+  // F1 fix-final (ADR-080) — `Boolean?`, sin `default`. La migración
+  // 20260917210000 los creó `NOT NULL DEFAULT false`, así que una revisión
+  // vieja sin esta pregunta afirmaba «no se hizo» en vez de «no se preguntó».
+  // La migración 20260918100000 quita el NOT NULL/DEFAULT y limpia el dato
+  // inventado; el tri-estado vive ahora en el formulario con `TriStateField`,
+  // igual que `otherInsects`.
+  cleaned        Boolean?
+  liquidChanged  Boolean? @map("liquid_changed")
+  lureRecharged  Boolean? @map("lure_recharged")
 
   notes String?
 
