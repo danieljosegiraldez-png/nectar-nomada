@@ -50,7 +50,10 @@ export default async function BeneficioPage() {
       href: "/beneficio/ajustes",
       titulo: t("ajustes"),
       ayuda: t("ajustesAyuda"),
-      // Los mismos dos permisos que exige el servicio de ajustes.
+      // Los mismos dos permisos que exige el servicio de ajustes, pero preguntados
+      // en CUALQUIER asignación, no juntos sobre el mismo sitio como hace el
+      // servicio. Pueden divergir con overrides por asignación; si divergen, la
+      // pantalla de ajustes responde 404 y ése es el respaldo.
       visible: granted.has("location:manage_attributes") && granted.has("location:create_site"),
     },
   ].filter((d) => d.visible);

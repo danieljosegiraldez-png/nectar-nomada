@@ -81,10 +81,14 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
         ) : null}
         {granted.has("sample:manage") && <Link href="/inspecciones/nueva">{secado("inspeccionTitulo")}</Link>}
         {granted.has("location:manage_attributes") && <Link href="/instalaciones">{secado("instalaciones")}</Link>}
-        {/* Mismo criterio de visibilidad que `sitiosParaBeneficio`: sin los dos
-            permisos, la pantalla no ofrece nada que crear ni renombrar. No es
-            una regla de visibilidad nueva — es la misma, expresada con
-            `permissionKeysAnywhere` como ya hace el enlace de instalaciones. */}
+        {/* Pregunta MÁS ANCHA que la del servicio, a propósito, como el enlace de
+            instalaciones: `permissionKeysAnywhere` junta los permisos de TODAS las
+            asignaciones, y `sitiosParaBeneficio` exige los dos juntos sobre el MISMO
+            sitio. Con los perfiles de serie coinciden —Farm Manager trae los dos—,
+            pero un override por asignación que los reparta entre sitios distintos
+            enseñaría este enlace a alguien que después recibe 404. Ése es el respaldo:
+            el enlace ofrece, la pantalla autoriza. (Corregido el 2026-09-17: antes
+            decía «es la misma regla», y no lo es.) */}
         {granted.has("location:manage_attributes") && granted.has("location:create_site") && (
           <Link href="/beneficio/ajustes">{t("beneficioAjustesLink")}</Link>
         )}
