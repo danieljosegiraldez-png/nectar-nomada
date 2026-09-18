@@ -25,7 +25,7 @@
  * en `locationIds`, o la finca queda huérfana tras el `afterEach`.
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { createTrap, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
+import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
 import { prisma } from "../../lib/db";
 import { crearUsuarioConAcceso, crearParcela, crearFinca, crearUsuarioSinAcceso } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -180,6 +180,132 @@ describe("alta de trampa", () => {
 
     await expect(createTrap(ajeno.userAccountId, {
       locationId: parcela.id, installedAt: new Date(), provenanceClass: "direct_observation",
+    })).rejects.toThrow(TrapAccessError);
+  });
+});
+
+describe("revisión de trampa", () => {
+  it("guarda la lectura, el mantenimiento y los otros insectos", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id,
+      observedAt: new Date("2026-09-15"),
+      brocaLevel: "algunos",
+      otherInsects: true,
+      otherInsectsNote: "avispas",
+      cleaned: true,
+      liquidChanged: true,
+      provenanceClass: "direct_observation",
+    });
+    expect(revision.brocaLevel).toBe("algunos");
+    expect(revision.captureCount).toBeNull();      // nadie contó: NO se inventa un 0
+    expect(revision.otherInsectsNote).toBe("avispas");
+    expect(revision.cleaned).toBe(true);
+    expect(revision.lureRecharged).toBe(false);
+  });
+
+  it("acepta el número exacto cuando alguien contó", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "muchos", captureCount: 47, provenanceClass: "direct_observation",
+    });
+    expect(revision.captureCount).toBe(47);
+  });
+
+  it("exige la lectura de la escala", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    await expect(recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: undefined as never, provenanceClass: "direct_observation",
+    })).rejects.toThrow(TrapValidationError);
+  });
+
+  it("no deja la revisión sin su fila de auditoría", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "ninguno", provenanceClass: "direct_observation",
+    });
+    const evento = await prisma.auditEvent.findFirst({
+      where: { entityType: "specimen_observation", entityId: revision.id },
+    });
+    expect(evento).not.toBeNull();
+  });
+
+  it("rechaza a un usuario sin acceso a specimen en esa parcela", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+
+    const ajeno = await crearUsuarioSinAcceso();
+    userAccountIds.push(ajeno.userAccountId);
+    personIds.push(ajeno.personId);
+    scopeIds.push(ajeno.scopeId);
+    locationIds.push(ajeno.locationId);
+    organizationIds.push(ajeno.organizationId);
+
+    await expect(recordTrapCheck(ajeno.userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation",
     })).rejects.toThrow(TrapAccessError);
   });
 });

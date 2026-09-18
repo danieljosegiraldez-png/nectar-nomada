@@ -1,5 +1,5 @@
 import { Prisma } from "../../generated/prisma/client";
-import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
+import type { DataQuality, ProvenanceClass, TrapCaptureLevel } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
@@ -118,4 +118,74 @@ export async function createTrap(userAccountId: string, input: CreateTrapInput) 
     }
   }
   throw new TrapValidationError("trap_number_race");
+}
+
+export interface RecordTrapCheckInput {
+  specimenId: string;
+  observedAt: Date;
+  brocaLevel: TrapCaptureLevel;
+  captureCount?: number | null;
+  otherInsects?: boolean | null;
+  otherInsectsNote?: string | null;
+  cleaned?: boolean;
+  liquidChanged?: boolean;
+  lureRecharged?: boolean;
+  notes?: string | null;
+  provenanceClass: ProvenanceClass;
+  dataQuality?: DataQuality | null;
+}
+
+const NIVELES: readonly TrapCaptureLevel[] = ["ninguno", "pocos", "algunos", "muchos"];
+
+/** F2 §4 — una visita, un registro: lectura + otros insectos + mantenimiento. */
+export async function recordTrapCheck(userAccountId: string, input: RecordTrapCheckInput) {
+  if (!input.brocaLevel || !NIVELES.includes(input.brocaLevel)) {
+    throw new TrapValidationError("broca_level_required");
+  }
+  if (Number.isNaN(input.observedAt.getTime())) throw new TrapValidationError("observed_at_invalid");
+  if (input.observedAt.getTime() > Date.now()) throw new TrapValidationError("observed_at_in_future");
+  if (input.captureCount != null && (!Number.isInteger(input.captureCount) || input.captureCount < 0)) {
+    throw new TrapValidationError("capture_count_invalid");
+  }
+
+  const trampa = await prisma.specimen.findUnique({
+    where: { id: input.specimenId },
+    select: { id: true, locationId: true, specimenType: true },
+  });
+  if (!trampa) throw new TrapAccessError("trap_not_found");
+  if (trampa.specimenType !== "trap") throw new TrapValidationError("not_a_trap");
+  await requireTrapAccess(userAccountId, trampa.locationId);
+
+  return prisma.$transaction(async (tx) => {
+    const revision = await tx.specimenObservation.create({
+      data: {
+        specimenId: trampa.id,
+        observationType: "trap_check",
+        observedAt: input.observedAt,
+        brocaLevel: input.brocaLevel,
+        captureCount: input.captureCount ?? null,
+        otherInsects: input.otherInsects ?? null,
+        otherInsectsNote: input.otherInsectsNote ?? null,
+        cleaned: input.cleaned ?? false,
+        liquidChanged: input.liquidChanged ?? false,
+        lureRecharged: input.lureRecharged ?? false,
+        notes: input.notes ?? null,
+        provenanceClass: input.provenanceClass,
+        dataQuality: input.dataQuality ?? null,
+        createdBy: userAccountId,
+      },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "specimen_observation.trap_check",
+        entityType: "specimen_observation",
+        entityId: revision.id,
+        after: revision,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+    return revision;
+  });
 }
