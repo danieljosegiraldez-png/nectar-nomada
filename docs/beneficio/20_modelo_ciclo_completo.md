@@ -75,7 +75,7 @@ Una muestra es un **hijo de tipo `SAMPLE`**: su masa sale del lote y se contabil
 
 **Congelación del estado.** Una muestra guarda una **instantánea** del estado del lote al momento de extraerla, no una referencia viva. Si el lote sigue secando, la muestra no cambia con él.
 
-**Decisión de Daniel, 2026-09-18: una muestra de café verde sólo es válida si el lote ya terminó su proceso y/o receta de proceso, y está en secado o almacenamiento** — respetando las reglas de duración que existan para esa fase. No aplica a `PROCESS` (pH, °Bx), que se toma legítimamente a mitad de proceso. Diseño y preguntas abiertas en `docs/superpowers/specs/2026-09-18-muestra-verde-tras-proceso-design.md`.
+**Decisión de Daniel, 2026-09-18: una muestra de café verde sólo es válida si el lote ya terminó su proceso (cierre manual, uno o varios tratamientos) y llegó a almacenamiento** —secado y almacenamiento son dos fases secuenciales; el secado puede volver a una fase anterior (infusión/cofermentación) y reanudarse, pero sólo al llegar a la humedad óptima se pasa a almacenamiento—. **Bloquea, no avisa**, y sin permiso de anulación. No aplica a `PROCESS` (pH, °Bx), que se toma legítimamente a mitad de proceso. Diseño completo en `docs/superpowers/specs/2026-09-18-muestra-verde-tras-proceso-design.md`.
 
 ---
 
