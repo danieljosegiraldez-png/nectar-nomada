@@ -55,8 +55,27 @@ describe("buildNavigation", () => {
     // una entrada del menú.
     expect(nav).toContain("/beneficio");
     expect(nav).not.toContain("/lots");
-    expect(nav).toContain("/plots");
+    // 2026-09-18, también decisión de Daniel: «Parcelas» pasa a ser la sección
+    // «Finca» —parcelas, cosecha, recolectores, rendimiento—, con la misma forma
+    // que Beneficio. `/plots` sigue existiendo, dentro de la sección.
+    expect(nav).toContain("/finca");
+    expect(nav).not.toContain("/plots");
     expect(nav).toContain("/apiaries");
+  });
+
+  it("la sección Finca hereda EXACTAMENTE la regla que tenía Parcelas", () => {
+    // Cada uno de los tres permisos que abrían Parcelas abre Finca por sí solo, y
+    // un perfil que no tenía ninguno sigue sin verla.
+    for (const permiso of ["location:manage_attributes", "lot:view", "lot:manage"]) {
+      expect(hrefs([permiso])).toContain("/finca");
+    }
+    expect(hrefs(["sensory:submit_assessment"])).not.toContain("/finca");
+  });
+
+  it("las parcelas se alcanzan desde Finca, y no desde Beneficio", () => {
+    // El dato de DENTRO_DE_SECCION, con su control: la sección equivocada no vale.
+    expect(seAlcanzaDesdeElMenu("/plots", ["/my-nectar", "/finca"])).toBe(true);
+    expect(seAlcanzaDesdeElMenu("/plots", ["/my-nectar", "/beneficio"])).toBe(false);
   });
 
   it("la sección Beneficio hereda EXACTAMENTE la regla que tenía Lotes", () => {
