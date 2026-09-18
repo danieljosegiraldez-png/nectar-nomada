@@ -1,6 +1,6 @@
 # Tablero del beneficio — diseño
 
-**Fecha:** 2026-09-16 · **Camino:** arquitectónico · **Estado:** aprobado por partes en conversación, pendiente de revisión escrita · **Medido sobre:** `origin/main` = `d77db66`
+**Fecha:** 2026-09-16 · **Camino:** arquitectónico · **Estado:** aprobado por partes en conversación, pendiente de revisión escrita · **Medido sobre:** `origin/main` = `d77db66`; **ampliado el 2026-09-18** con la vista del encargado de procesos (§2, §4.5)
 
 **Alcance.** Es la **primera pieza** de una capa de decisión para quien dirige la finca y el beneficio. Las demás se nombran sólo para dejarles sitio:
 
@@ -35,6 +35,8 @@ Tampoco hay ninguna pantalla por rol: `CLAUDE.md` §47 pide tableros por rol y n
 | cuándo una desviación de balance está abierta | **mientras no tenga ninguna `CorrectiveAction`** |
 | insumos e instrumentos | **instrumentos ya** (el dato existe); **insumos, pieza propia** |
 | ritmo de receta (2026-09-17) | **entra en este tablero**. Una **lectura debida sube el lote a «Aviso»**; **ir tarde sólo ordena** dentro de su grupo, porque una fase larga puede ser deliberada |
+| para quién se diseña la vista (2026-09-18) | **el encargado de procesos**, y que le sea útil **visualmente**; cubre toda la línea: *«recibir cosecha y hacer flotación, selección, implementar y monitorear proceso y dar de alta a secado y almacenamiento»* |
+| celular | **sí, con el orden de §4.5**: las tres piezas juntas no caben a lo ancho de un teléfono; en pantalla ancha, sí |
 
 ## 3. Lo que ya existe y se reutiliza — no se reescribe
 
@@ -64,7 +66,7 @@ Medido antes de diseñar, porque dos de estas cosas no estaban en el borrador de
   - camas `drying_bed` con su `DryingRun` abierta;
   - instrumentos vía `listarEquipos`, quedándose con `kind = instrument`;
   - desviaciones de las transformaciones de esos lotes **sin `CorrectiveAction`**.
-- **`app/beneficio/page.tsx`** *(nuevo)*. Componente de servidor, sin gráficas. Se declara en `scripts/rutas-declaradas.mjs` y las cifras de `docs/arquitectura/inventario-de-acceso.md` se recalculan con `node scripts/inventario-de-acceso.mjs`.
+- **`app/beneficio/page.tsx`** *(nuevo)*. Componente de servidor; la única gráfica es la curva de §4.5, en SVG del servidor. Se declara en `scripts/rutas-declaradas.mjs` y las cifras de `docs/arquitectura/inventario-de-acceso.md` se recalculan con `node scripts/inventario-de-acceso.mjs`.
 
 ### 4.2 La cola de atención
 
@@ -113,6 +115,29 @@ Cada fila: lote y fase · tanque o cama · hace cuánto la última lectura · el
 
 Bloque corto: los instrumentos del sitio en `REVISION_VENCIDA`, `VERIFICACION_FALLIDA` o `SIN_VERIFICACION`. Un equipo que no es instrumento no aparece. Mismos estados que ya usa el veredicto del lote, así que el tablero y la ficha dicen lo mismo del mismo potenciómetro.
 
+### 4.5 La vista: tres piezas, y cómo se acomodan al celular
+
+**Decisión de Daniel del 2026-09-18**, con dos bocetos vistos en la conversación. La cola de §4.2 sigue siendo el corazón; se le añaden dos piezas visuales:
+
+1. **La línea por etapas** — recepción → flotación → selección → proceso → secado → almacén, con **cuánto hay** en cada una y **qué pide decisión**. Responde «dónde se atasca hoy». Una etapa sólo se colorea cuando algo en ella pide atención.
+2. **«¿Puedo recibir?»** — la ocupación de §4.3, y **cuándo se libera** la próxima unidad según la duración declarada de su receta (`expectedHours`). Sin duración declarada dice «sin duración declarada», **nunca una hora inventada**.
+3. **La curva de un lote contra la banda de su receta** — pH, Brix o humedad en el tiempo, con la banda `minValue`–`maxValue` de su `ProcessTarget` y el objetivo. **La banda sale de un dato**, no de un dibujo: sin `ProcessTarget` para esa variable no se pinta banda y se dice. Debajo, **qué hacer y qué pasa si se espera** — la rúbrica 22.
+
+**Cómo se acomodan**, en la misma página:
+
+| ancho | orden |
+|---|---|
+| **celular** | la línea en **dos filas de tres**; debajo **«qué hacer ahora»** (la cola de §4.2, una fila por acción con la razón debajo); debajo **«¿puedo recibir?»** reducido a dos números y cuándo se libera el próximo tanque. **La curva sólo al tocar un lote**, a lo ancho del teléfono |
+| **pantalla ancha** | las tres juntas, con el mapa de tanques y camas completo |
+
+**Por qué no las tres juntas en el celular:** a unos 375 px, seis etapas en fila dejan unos 55 px por etapa —se leen números, no etiquetas—, y la curva comprimida pierde la banda que la hace útil.
+
+**Gráficas sin librería.** Medido sobre `main` el 2026-09-18: el proyecto **no trae ninguna** librería de gráficas y **ninguna** pantalla dibuja un SVG. La curva es un SVG del servidor, sin JavaScript en el cliente; añadir una librería sería una decisión aparte, y esta pieza no la necesita.
+
+**Lo que falta medir antes del plan:** la selección existe en el modelo (`lib/traceability/selection.ts`), pero **no se ha comprobado** que la recepción y la flotación se registren como etapas propias. Si no lo están, esas dos columnas de la línea dicen «sin registro de esta etapa» en vez de un cero.
+
+**El secado por bandeja** —dónde está cada bandeja, su humedad, cuándo toca voltear— tiene su propia spec (`2026-09-18-secado-por-bandeja-y-su-receta-design.md`). Cuando exista, «voltear debido» y «humedad debida» por bandeja entran en la cola de §4.2 como una lectura debida más.
+
 ## 5. Lo que este diseño encontró y no arregla — se señala
 
 - **`disponibilidadDeRecipientes` toma `fermentationRuns[0]`.** Si un tanque tiene dos corridas abiertas, se queda con una en silencio. El tablero enseña el conflicto (§4.3), pero esa función la usa también `app/equipos`; cambiarla es decisión aparte.
@@ -135,6 +160,15 @@ Bloque corto: los instrumentos del sitio en `REVISION_VENCIDA`, `VERIFICACION_FA
 - lote que va tarde sin lecturas debidas → **no** cambia de grupo, pero ordena por encima de uno en hora;
 - `demora: null` y `demora: false` → mismo puntaje y **texto distinto**;
 - un lote cuyo ritmo lanza `RitmoError` → «Sin veredicto» con el código, y el resto del tablero se pinta.
+
+**La vista de §4.5:**
+
+- curva de una variable **sin** `ProcessTarget` → se pinta la curva y **no** la banda, y se dice; el control es la misma variable **con** `ProcessTarget`, que sí pinta su banda;
+- «se libera en» con `expectedHours` nulo → «sin duración declarada», nunca una hora;
+- una etapa de la línea sin registro propio → «sin registro de esta etapa», nunca `0`;
+- el celular: la curva no está en la vista del tablero y sí en la del lote tocado.
+
+Flip-test añadido: **pintar la banda con valores por defecto cuando falta el `ProcessTarget`** → debe caer una prueba.
 
 **`entradaDelLote.ts`, con base (grupo `base-sembrada`):** el control positivo es que **la ficha del lote pinta el mismo veredicto antes y después** de mover el código. `tests/beneficio/desde-el-lote.test.ts` y `todo-estado-tiene-texto.test.ts` siguen en verde.
 
@@ -159,4 +193,4 @@ Bloque corto: los instrumentos del sitio en `REVISION_VENCIDA`, `VERIFICACION_FA
 
 ## 8. Fuera de alcance
 
-Insumos y existencias · la deuda histórica de lecturas de toda una fase, que es pregunta de informe y no de cola (lo explica `LecturaDebida.debidas`) · cuándo estará listo para vender · rendimiento y pérdidas por etapa · vista del dueño · costos · pronóstico · gráficas · un rol nuevo de Processing Manager.
+Insumos y existencias · la deuda histórica de lecturas de toda una fase, que es pregunta de informe y no de cola (lo explica `LecturaDebida.debidas`) · cuándo estará listo para vender · rendimiento y pérdidas por etapa · vista del dueño · costos · pronóstico · gráficas **más allá de la curva de §4.5** · una librería de gráficas · un rol nuevo de Processing Manager.
