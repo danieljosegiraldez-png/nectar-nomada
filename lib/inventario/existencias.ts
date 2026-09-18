@@ -112,7 +112,7 @@ interface MovimientoInput {
 async function registrarMovimiento(
   userAccountId: string,
   input: MovimientoInput,
-  eventType: "consumed" | "waste" | "adjustment_increase" | "adjustment_decrease",
+  eventType: "consumed" | "waste" | "lost" | "adjustment_increase" | "adjustment_decrease",
 ) {
   const unit = input.unit.trim();
   if (!unit) throw new ExistenciasError("unit_required");
@@ -181,9 +181,24 @@ export async function registrarConteo(userAccountId: string, input: MovimientoIn
   return registrarMovimiento(userAccountId, input, "adjustment_increase");
 }
 
-/** Se echó a perder. Sale del saldo igual que un consumo, pero no es lo mismo. */
+/**
+ * Se botó: se sabe dónde terminó. **Exige motivo** —«vencido», «dañado»—, aquí
+ * con una frase legible y en la base con `cse_baja_exige_motivo`. Un
+ * medicamento que desaparece del saldo sin decir por qué no se puede auditar.
+ */
 export async function registrarMerma(userAccountId: string, input: MovimientoInput) {
+  if (!input.reason?.trim()) throw new ExistenciasError("botar exige motivo: «vencido», «dañado»…");
   return registrarMovimiento(userAccountId, input, "waste");
+}
+
+/**
+ * **Se perdió — y perder no es botar.** Un frasco perdido puede estar en alguna
+ * parte, y con un medicamento eso es un asunto de seguridad. Exige motivo, igual
+ * que botar. Resta del saldo; el sentido lo pone el tipo, no el signo.
+ */
+export async function registrarPerdida(userAccountId: string, input: MovimientoInput) {
+  if (!input.reason?.trim()) throw new ExistenciasError("perder exige motivo: dónde se vio por última vez");
+  return registrarMovimiento(userAccountId, input, "lost");
 }
 
 export interface ReconciliarInput extends MovimientoInput {

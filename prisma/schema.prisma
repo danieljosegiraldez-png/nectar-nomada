@@ -8579,9 +8579,14 @@ model ConsumableStockEvent {
 enum ConsumableStockEventType {
   received
   consumed
+  /// Se botó: se sabe dónde terminó. Exige motivo («vencido», «dañado»).
   waste
   adjustment_increase
   adjustment_decrease
+  /// **Se perdió — y perder no es botar.** Un frasco perdido puede estar en
+  /// alguna parte, y con un medicamento eso es un asunto de seguridad. Exige
+  /// motivo. Resta del saldo igual que `waste`; el sentido lo pone el tipo.
+  lost
 
   @@schema("traceability")
 }
