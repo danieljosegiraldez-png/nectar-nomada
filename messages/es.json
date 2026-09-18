@@ -339,7 +339,16 @@
     "error_sample_not_found": "Esa muestra ya no existe.",
     "error_person_not_found": "Esa persona ya no existe.",
     "error_unknown_attribute": "El protocolo no tiene el atributo «{attribute}». O el informe es de otro estándar, o falta el atributo en el protocolo.",
-    "error_duplicate_attribute": "El atributo «{attribute}» viene dos veces."
+    "error_duplicate_attribute": "El atributo «{attribute}» viene dos veces.",
+    "sampleSearchLabel": "Buscar muestras",
+    "sampleSearchPlaceholder": "Código de muestra, batch o finca",
+    "sampleSearchButton": "Buscar",
+    "sampleSearching": "Buscando…",
+    "sampleSearchNoResults": "Ninguna muestra que alcances coincide con «{texto}».",
+    "sampleSearchMore": "Se muestran {n}; hay más. Busca por código, batch o finca para afinar.",
+    "sampleSelectedTitle": "Seleccionadas ({n})",
+    "sampleSelectedNone": "Todavía ninguna. Marca muestras en los resultados; puedes buscar varias veces.",
+    "sampleRemove": "Quitar"
   },
   "Partner": {
     "badge": "Espacio de Socios",

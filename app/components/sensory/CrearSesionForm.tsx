@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { crearSesionDeCataAction, type SensoryActionState } from "../../actions/sensory";
+import { SelectorDeMuestras } from "./SelectorDeMuestras";
 
 const initialState: SensoryActionState = {};
 
@@ -17,9 +18,18 @@ interface Opcion {
  * **Las muestras se eligen con casillas, no con un `<select multiple>`.** En un
  * móvil, en una mesa de cata, ahí es donde se pierden las selecciones — y el
  * orden en que se marcan decide qué código ciego (A, B, C) le toca a cada una,
- * así que perder una no es perder una fila: es correr todas las demás.
+ * así que perder una no es perder una fila: es correr todas las demás. Las
+ * casillas y la búsqueda viven en `SelectorDeMuestras`.
  */
-export function CrearSesionForm({ protocolos, muestras }: { protocolos: Opcion[]; muestras: Opcion[] }) {
+export function CrearSesionForm({
+  protocolos,
+  muestras,
+  hayMas,
+}: {
+  protocolos: Opcion[];
+  muestras: Opcion[];
+  hayMas: boolean;
+}) {
   const [state, formAction, pending] = useActionState(crearSesionDeCataAction, initialState);
   const t = useTranslations("Sensory");
 
@@ -76,15 +86,7 @@ export function CrearSesionForm({ protocolos, muestras }: { protocolos: Opcion[]
         <input id="cs-preparation" name="preparationMethod" type="text" />
       </div>
 
-      <fieldset className="nn-field" style={{ border: 0, padding: 0, margin: 0 }}>
-        <legend>{t("sessionSamplesLabel")}</legend>
-        <p className="nn-muted">{t("sessionSamplesHelp")}</p>
-        {muestras.map((m) => (
-          <label key={m.id} style={{ display: "block" }}>
-            <input type="checkbox" name="muestras" value={m.id} /> {m.label}
-          </label>
-        ))}
-      </fieldset>
+      <SelectorDeMuestras iniciales={muestras} hayMasInicial={hayMas} />
 
       {state.error ? (
         <p className="nn-error" role="alert">

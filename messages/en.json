@@ -339,7 +339,16 @@
     "error_sample_not_found": "That sample no longer exists.",
     "error_person_not_found": "That person no longer exists.",
     "error_unknown_attribute": "The protocol has no attribute “{attribute}”. Either the report follows another standard, or the attribute is missing from the protocol.",
-    "error_duplicate_attribute": "Attribute “{attribute}” appears twice."
+    "error_duplicate_attribute": "Attribute “{attribute}” appears twice.",
+    "sampleSearchLabel": "Search samples",
+    "sampleSearchPlaceholder": "Sample code, batch or farm",
+    "sampleSearchButton": "Search",
+    "sampleSearching": "Searching…",
+    "sampleSearchNoResults": "No sample you can reach matches “{texto}”.",
+    "sampleSearchMore": "Showing {n}; there are more. Search by code, batch or farm to narrow it down.",
+    "sampleSelectedTitle": "Selected ({n})",
+    "sampleSelectedNone": "None yet. Tick samples in the results; you can search several times.",
+    "sampleRemove": "Remove"
   },
   "Partner": {
     "badge": "Partner Workspace",
