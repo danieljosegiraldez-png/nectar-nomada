@@ -111,7 +111,13 @@ describe("recibir un producto fitosanitario", () => {
   }, 20000);
 
   it("la de medicamentos no cambia: sigue sin enseñar fitosanitarios", async () => {
+    // Control positivo: sin él, un filtro roto que devolviera la lista VACÍA
+    // pasaría igual esta prueba — «no aparece Fito» también es cierto cuando
+    // no aparece nada.
+    const m = await crearMaterial(gestorId, { locationId: bodega, organizationId, name: `Med ${RUN_ID}`, defaultUnit: "tira", isVeterinaryMedicine: true });
     const o = await opcionesDeRecepcion(gestorId, "medicamento");
     expect(o.productos.some((p) => p.name.startsWith("Fito"))).toBe(false);
+    expect(o.productos.length).toBeGreaterThan(0);
+    expect(o.productos.map((p) => p.id)).toContain(m.id);
   }, 20000);
 });
