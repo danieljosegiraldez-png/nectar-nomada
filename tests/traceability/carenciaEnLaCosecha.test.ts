@@ -210,7 +210,13 @@ describe("la marca de carencia al cosechar", () => {
     });
     correccionDeEnMicro = correccion.id;
 
-    const { harvestEvent } = await recordHarvestEvent(gestor, cosecha({ locationId: micro, harvestedAt: new Date("2026-09-25T15:00:00Z") }));
+    // 2026-09-15, y NO el 2026-09-25 de test4: a los 25 el ORIGINAL (10 días)
+    // ya está cumplido por sí mismo, así que quitar el filtro `correcciones:
+    // { none: {} }` no cambiaría nada observable — el flip-test lo demostró
+    // en rojo. A los 15 el original todavía estaría en carencia (faltan 5) si
+    // no se excluyera por estar corregido, así que la prueba sí distingue
+    // «se excluye por corrección» de «ya se cumplió por fecha».
+    const { harvestEvent } = await recordHarvestEvent(gestor, cosecha({ locationId: micro, harvestedAt: new Date("2026-09-15T15:00:00Z") }));
     const ids = (await prisma.harvestWithdrawalFlag.findMany({ where: { harvestEventId: harvestEvent.id } })).map((m) => m.interventionId);
     expect(ids).toContain(correccionDeEnMicro);
     expect(ids).not.toContain(enMicro);
