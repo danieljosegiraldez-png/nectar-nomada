@@ -8514,6 +8514,21 @@ model ConsumableLot {
   locationId String?   @map("location_id") @db.Uuid
   location   Location? @relation("ConsumableLotLocation", fields: [locationId], references: [id])
   supplier   String?
+
+  /// **Lo que se escribe en CADA compra** — botiquín, Tarea 2. Del frasco y no
+  /// del producto: dos frascos del mismo Apivar vencen distinto y vienen de
+  /// facturas distintas.
+  ///
+  /// Vencimiento. **Nulo = «sin fecha», nunca «vigente»**: lo desconocido no se
+  /// convierte en bueno. Lo exige la NOM-064-ZOO-2000. Un frasco ya vencido al
+  /// recibirlo se acepta igual — puede ser una compra vieja registrada hoy.
+  expiresAt        DateTime? @map("expires_at")
+  /// «Proveedor con dirección», literal del Reglamento (UE) 2019/6 art. 108.
+  supplierAddress  String?   @map("supplier_address")
+  /// La «evidencia de adquisición» del mismo artículo: la factura.
+  invoiceReference String?   @map("invoice_reference")
+  /// «Sobre de 10 tiras», «frasco de 500 ml». Tres frascos no son «tres».
+  presentation     String?
   notes      String?
 
   events ConsumableStockEvent[]
