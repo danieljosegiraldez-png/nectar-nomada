@@ -22,7 +22,8 @@
  */
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { ApiaryAccessError, requireApiaryAccess } from "./hives";
+import { ApiaryAccessError, requireApiaryAccess, requireHiveNodeAccess } from "./hives";
+import { instalarNodo } from "./nodos";
 import type { HiveFitting, HiveFittingKind, Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { TIPOS_DE_ARTEFACTO as TIPOS, type TipoDeArtefacto } from "./tiposDeArtefacto";
 
@@ -114,6 +115,8 @@ export interface AbrirIntervalo {
   readonly installedAt: Date;
   readonly provenanceClass: ProvenanceClass;
   readonly installedInspectionId?: string | null;
+  /** Sólo `nodo_de_sensores`: el aparato. Lo pone `instalarNodo`, que exige su permiso. */
+  readonly hiveNodeId?: string | null;
 }
 
 /**
@@ -134,6 +137,7 @@ export const abrirIntervaloEn = (userAccountId: string, d: AbrirIntervalo) => as
       installedAt: d.installedAt,
       provenanceClass: d.provenanceClass,
       installedInspectionId: d.installedInspectionId ?? null,
+      hiveNodeId: d.hiveNodeId ?? null,
       createdBy: userAccountId,
     },
   });
@@ -200,9 +204,23 @@ export interface InstalarArtefactoInput {
   readonly notes?: string | null;
   /** Lo que se vio al poner el artefacto. Se puede declarar otra (p. ej. `original_record` al pasar un cuaderno). */
   readonly provenanceClass?: ProvenanceClass;
+  /** Sólo `nodo_de_sensores`, y obligatorio ahí: CUÁL aparato. */
+  readonly hiveNodeId?: string | null;
 }
 
 export async function instalarArtefacto(userAccountId: string, input: InstalarArtefactoInput) {
+  // El nodo tiene su propia puerta —identidad, permiso `hive_node:manage`, sin solapes—. Pasar
+  // por aquí no la salta: se le entrega a ella.
+  if (input.kind === "nodo_de_sensores") {
+    if (!input.hiveNodeId) throw new ArtefactoInvalido("nodo_sin_aparato");
+    return instalarNodo(userAccountId, {
+      hiveId: input.hiveId,
+      hiveNodeId: input.hiveNodeId,
+      installedAt: input.installedAt,
+      notes: input.notes,
+      provenanceClass: input.provenanceClass,
+    });
+  }
   await requireApiaryAccess(userAccountId, "manage", [await colmena(input.hiveId)]);
   const v = validarArtefacto(input);
   return prisma.$transaction(
@@ -218,7 +236,9 @@ export async function instalarArtefacto(userAccountId: string, input: InstalarAr
 export async function retirarArtefacto(userAccountId: string, input: { readonly fittingId: string; readonly removedAt: Date }) {
   const antes = await prisma.hiveFitting.findUnique({ where: { id: input.fittingId } });
   if (!antes) throw new ArtefactoInvalido("artefacto_no_encontrado");
-  await requireApiaryAccess(userAccountId, "manage", [await colmena(antes.hiveId)]);
+  // Retirar un nodo es la mitad de moverlo: reasigna sus datos, así que pide su permiso.
+  if (antes.kind === "nodo_de_sensores") await requireHiveNodeAccess(userAccountId, [await colmena(antes.hiveId)]);
+  else await requireApiaryAccess(userAccountId, "manage", [await colmena(antes.hiveId)]);
   return prisma.$transaction(cerrarIntervaloEn(userAccountId, antes, input.removedAt));
 }
 

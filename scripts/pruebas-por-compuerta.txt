@@ -44,6 +44,7 @@ tests/apiary/valoracionDeInspeccion.test.ts
 tests/apiary/vitalesEnSitio.test.ts
 tests/apiary/limpiezaDeCaja.test.ts
 tests/apiary/artefactos.test.ts
+tests/apiary/nodo.test.ts
 tests/apiary/refractometroDeMiel.test.ts
 tests/apiary/mielDelLote.test.ts
 tests/apiary/cosechasSinSaldo.test.ts

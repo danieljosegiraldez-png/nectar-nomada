@@ -234,6 +234,7 @@ model UserAccount {
   colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
   hiveCleaningsCreated HiveCleaning[] @relation("HiveCleaningCreatedBy")
   hiveFittingsCreated  HiveFitting[]  @relation("HiveFittingCreatedBy")
+  hiveNodesCreated     HiveNode[]     @relation("HiveNodeCreatedBy")
   varroaCountsCreated               VarroaCount[]                @relation("VarroaCountCreatedBy")
   organizationMembershipsCreated    OrganizationMembership[]     @relation("OrganizationMembershipCreatedBy")
   plantingEventsCreated             PlantingEvent[]              @relation("PlantingEventCreatedBy")
@@ -1008,6 +1009,7 @@ model Organization {
 
   equipment Equipment[] @relation("EquipmentOwner")
 
+  hiveNodes HiveNode[]
   @@map("organization")
   @@schema("core")
   lotTransformationsPerformed LotTransformation[] @relation("LotTransformationPerformedBy")
@@ -8773,6 +8775,11 @@ model HiveFitting {
   /// Nulo = sigue puesta. **No** se rellena con «hoy» al leer.
   removedAt   DateTime? @map("removed_at")
 
+  /// El aparato, cuando `kind` es `nodo_de_sensores` — y sólo entonces (CHECK). Lo que distingue
+  /// a un artefacto con identidad de uno sin ella. RESTRICT: un nodo con historia no se borra.
+  hiveNodeId String?   @map("hive_node_id") @db.Uuid
+  hiveNode   HiveNode? @relation(fields: [hiveNodeId], references: [id], onDelete: Restrict)
+
   /// La inspección donde se declaró el cambio, si vino de una — la mitad de la instrucción
   /// de Daniel: «en la inspección sólo se registra la diferencia». RESTRICT: es evidencia.
   installedInspectionId String?     @map("installed_inspection_id") @db.Uuid
@@ -8806,5 +8813,35 @@ enum HiveFittingKind {
   nodo_de_sensores
   otro
 
+  @@schema("apiary")
+}
+
+/// El nodo de sensores, el aparato — spec «artefactos de colmena» §B. Tiene número de serie,
+/// firmware y configuración, y SE MUEVE de colmena: su asignación es un `HiveFitting` de
+/// `kind = nodo_de_sensores` que apunta aquí. No hay dos tablas de intervalos.
+model HiveNode {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// El `device_id` que manda el propio aparato: «rp2040-0011223344556677». Único: es la
+  /// identidad del REGISTRO, contra la que se contrasta lo que llegue (nunca al revés).
+  deviceId        String  @unique @map("device_id")
+  hardware        String?
+  firmware        String?
+  configurationId String? @map("configuration_id")
+
+  /// De quién es. Sale del sitio donde se registra; un nodo no se instala en otra finca.
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  lifecycleStatus EquipmentLifecycle @default(active) @map("lifecycle_status")
+
+  fittings HiveFitting[]
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("HiveNodeCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([organizationId])
+  @@map("hive_node")
   @@schema("apiary")
 }
