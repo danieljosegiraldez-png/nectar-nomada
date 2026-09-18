@@ -12,6 +12,7 @@ import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { TODAS, crearFinca, crearParcela, idsBajoLaFinca, listarFincas, organizacionesSinTerreno, resolverFinca, type Finca } from "../../lib/traceability/fincas";
 import { createMicrolot } from "../../lib/traceability/locations";
+import { recordHarvestEvent } from "../../lib/traceability/harvest";
 
 const RUN = `fin-${Date.now()}`;
 const personas: string[] = [];
@@ -242,4 +243,31 @@ describe("crear parcelas", () => {
       /nombre_repetido/,
     );
   }, 20000);
+});
+
+describe("la cosecha va sobre una parcela", () => {
+  const base = () => ({ organizationId: A.org, harvestedAt: new Date(), provenanceClass: "direct_observation" as const });
+
+  it("sobre una microparcela se registra; sobre el sitio de la finca o un beneficio, el servicio la rechaza", async () => {
+    const beneficio = await prisma.location.create({
+      data: { name: `Beneficio (${RUN})`, locationType: "beneficio", parentLocationId: A.site, classification: "internal" },
+    });
+    ubicaciones.push(beneficio.id);
+    const { lot, harvestEvent } = await recordHarvestEvent(admin, { ...base(), lotCode: `TEST-${RUN}-M1`, locationId: M1 });
+    try {
+      expect(harvestEvent.locationId).toBe(M1);
+      await expect(recordHarvestEvent(admin, { ...base(), lotCode: `TEST-${RUN}-SITIO`, locationId: A.site })).rejects.toThrow(
+        /la_cosecha_va_sobre_una_parcela/,
+      );
+      await expect(recordHarvestEvent(admin, { ...base(), lotCode: `TEST-${RUN}-BEN`, locationId: beneficio.id })).rejects.toThrow(
+        /la_cosecha_va_sobre_una_parcela/,
+      );
+      expect(await prisma.lot.count({ where: { lotCode: { in: [`TEST-${RUN}-SITIO`, `TEST-${RUN}-BEN`] } } })).toBe(0);
+    } finally {
+      await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: [lot.id, harvestEvent.id] } }) });
+      await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: lot.id }) });
+      await prisma.harvestEvent.deleteMany({ where: assertDefinedWhere({ id: harvestEvent.id }) });
+      await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: lot.id }) });
+    }
+  }, 30000);
 });
