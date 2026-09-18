@@ -24,6 +24,7 @@ let managerA: string;
 let operarioA: string;
 let A: { org: string; site: string };
 let B: { org: string; site: string };
+let C: { org: string; site: string };
 let P1: string;
 let M1: string;
 let Q1: string;
@@ -66,11 +67,19 @@ async function plot(nombre: string, parentLocationId: string, extra: Record<stri
 beforeAll(async () => {
   A = await finca("A");
   B = await finca("B");
+  C = await finca("C");
   P1 = await plot("P1", A.site);
   M1 = await plot("M1", P1, { subdivisionReason: "shade" });
   Q1 = await plot("Q1", B.site);
   admin = await cuenta("Platform Admin", { scopeType: "platform", scopeRefId: null });
   managerA = await cuenta("Farm Manager", { scopeType: "location", scopeRefId: A.site });
+  // Dos fincas, A y C, y no B: con UNA sola, `resolverFinca` la elige sin mirar la cookie, y la
+  // prueba de la cookie ajena no ejercería nada (lo destapó el flip-test del 2026-09-18).
+  const fm = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Manager" } });
+  const scopeC = (await prisma.scope.findFirst({ where: { scopeType: "location", scopeRefId: C.site } }))
+    ?? (await prisma.scope.create({ data: { id: randomUUID(), scopeType: "location", scopeRefId: C.site } }));
+  if (!scopes.includes(scopeC.id)) scopes.push(scopeC.id);
+  await prisma.assignment.create({ data: { userAccountId: managerA, scopeId: scopeC.id, roleProfileId: fm.id } });
   operarioA = await cuenta("Farm Operator", { scopeType: "location", scopeRefId: A.site });
 }, 30000);
 
@@ -108,9 +117,9 @@ afterAll(async () => {
 }, 30000);
 
 describe("qué fincas ve cada uno", () => {
-  it("el Farm Manager de A ve A y no B; el admin ve las dos (control positivo)", async () => {
+  it("el Farm Manager de A y C ve A y C y no B; el admin ve las tres (control positivo)", async () => {
     const deManager = (await listarFincas(managerA)).map((f) => f.siteId);
-    expect(deManager).toContain(A.site);
+    expect(deManager).toEqual(expect.arrayContaining([A.site, C.site]));
     expect(deManager).not.toContain(B.site);
     const deAdmin = (await listarFincas(admin)).map((f) => f.siteId);
     expect(deAdmin).toEqual(expect.arrayContaining([A.site, B.site]));
@@ -142,7 +151,9 @@ describe("qué finca queda elegida", () => {
 
   it("una cookie con una finca ajena no se acepta: la cookie sólo acota lo autorizado", async () => {
     const fincasDeA = await listarFincas(managerA);
-    expect(resolverFinca(fincasDeA, B.site).elegida?.siteId).not.toBe(B.site);
+    // Fila patrón: con una sola finca esto no probaría nada.
+    expect(fincasDeA.length, "el manager necesita dos fincas para que la cookie cuente").toBeGreaterThanOrEqual(2);
+    expect(resolverFinca(fincasDeA, B.site)).toEqual({ elegida: null, todas: false, debeElegir: true });
     // Control positivo: la misma cookie SÍ elige B para quien la ve.
     expect(resolverFinca(await listarFincas(admin), B.site).elegida?.siteId).toBe(B.site);
   }, 20000);
