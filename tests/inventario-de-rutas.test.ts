@@ -112,7 +112,8 @@ describe("el inventario del router", () => {
     // «hay que cuadrarlo». Filtra cada lote por su ubicación.
     //
     // TERCERA vez el mismo día que dos sesiones suben esta cifra al mismo
-    // número con pantallas distintas. Se midió sobre el árbol resuelto.
+    // número con pantallas distintas. Se midió sobre el árbol resuelto:
+    // 72 páginas y 10 handlers.
     expect(salida).toContain("82 entradas");
     expect(codigo, salida).toBe(0);
   });
