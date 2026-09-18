@@ -22,6 +22,7 @@ import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { scopeTargetsFor, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
+import { faseDelLote } from "../beneficio/reposo";
 import type { ClassificationLevel } from "../rbac/types";
 import type { DataQuality, HarvestWindowPrecision, ProvenanceClass, MaterialState, SamplingRole, SamplingZone, SampleKind } from "../../generated/prisma/client";
 
@@ -38,6 +39,45 @@ async function requireSampleAccess(
     }
   }
   throw new TraceabilityAccessError("no_sample_access");
+}
+
+/**
+ * La fase actual del lote —fermentación, secado o reposo— leída de sus
+ * corridas reales, nunca de un campo que el lote no tiene: "current stage is
+ * always derived by querying this lot's LotTransformation history" (comentario
+ * de `prisma/schema.prisma` sobre `Lot.status`). Misma consulta que
+ * `app/lots/[id]/page.tsx` ya hace para pintar la ficha del lote, resuelta
+ * aquí para UN lote — no para el listado de operaciones activas de toda la
+ * cuenta que ya expone `getActiveOperations`.
+ */
+async function faseActualDeLote(lotId: string) {
+  const transformaciones = await prisma.lotTransformation.findMany({
+    where: { OR: [{ inputs: { some: { lotId } } }, { outputs: { some: { lotId } } }] },
+    select: { fermentationRunId: true, dryingRunId: true },
+  });
+  const fermentationRunIds = [...new Set(transformaciones.map((t) => t.fermentationRunId).filter((id): id is string => id != null))];
+  const dryingRunIds = [...new Set(transformaciones.map((t) => t.dryingRunId).filter((id): id is string => id != null))];
+
+  const [fermentationRuns, dryingRuns] = await Promise.all([
+    fermentationRunIds.length
+      ? prisma.fermentationRun.findMany({ where: { id: { in: fermentationRunIds } }, select: { startedAt: true, endedAt: true } })
+      : Promise.resolve([]),
+    dryingRunIds.length
+      ? prisma.dryingRun.findMany({ where: { id: { in: dryingRunIds } }, select: { startedAt: true, endedAt: true, endedOutcome: true } })
+      : Promise.resolve([]),
+  ]);
+
+  const fermentacionAbierta = fermentationRuns.find((r) => r.endedAt === null) ?? null;
+  const secadoAbierto = dryingRuns.find((r) => r.endedAt === null) ?? null;
+  const secadosTerminados = dryingRuns
+    .flatMap((r) => (r.endedAt === null ? [] : [{ endedAt: r.endedAt, endedOutcome: r.endedOutcome }]))
+    .sort((x, y) => y.endedAt.getTime() - x.endedAt.getTime());
+
+  return faseDelLote({
+    fermentacionAbierta,
+    secadoAbierto,
+    ultimoSecadoTerminado: secadosTerminados[0] ?? null,
+  });
 }
 
 export interface CreateSampleFromLotInput {
@@ -71,6 +111,18 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   if (!sourceLot) throw new TraceabilityAccessError("lot_not_found");
 
   await requireSampleAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
+
+  // Decisión de Daniel, 2026-09-18 (docs/superpowers/specs/2026-09-18-muestra-verde-tras-proceso-design.md
+  // §3-4): una muestra de café VERDE sólo es válida si el lote ya llegó a
+  // almacenamiento — secado terminado con humedad objetivo, la fase "reposo"
+  // que `faseDelLote` ya calcula. Bloquea, sin permiso de anulación: una
+  // muestra tomada antes es de humedad o de proceso, no verde.
+  if (input.materialState === "GREEN") {
+    const fase = await faseActualDeLote(input.sourceLotId);
+    if (fase?.tipo !== "reposo") {
+      throw new SampleValidationError("green_sample_before_reposo");
+    }
+  }
 
   const provenanceClass = input.provenanceClass;
 
