@@ -29,7 +29,9 @@
 import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
-import type { HoneyType } from "../../generated/prisma/client";
+import type { HoneyType, ProvenanceClass } from "../../generated/prisma/client";
+import { recordMeasurement } from "../traceability/measurements";
+import { fueraDeRango } from "../equipos/modos";
 
 /** Una entrada que el cierre rechaza. */
 export class CierreDeCosechaInvalido extends Error {}
@@ -116,6 +118,103 @@ export async function completarCierreDeCosecha(userAccountId: string, input: Com
   return { cosecha: despues, esCorreccion: corrige };
 }
 
+/**
+ * Las dos escalas que un refractometro de miel puede leer, y la variable canonica de cada una.
+ * `moisture` es la escala H% del aparato: el agua, no un calculo desde el Brix.
+ */
+export const ESCALAS_DE_MIEL = { brix: { variable: "brix", unidad: "Bx" }, agua: { variable: "moisture", unidad: "%" } } as const;
+
+export interface LecturaDeRefractometroInput {
+  apiaryHarvestEventId: string;
+  /** El DIA de la lectura (medianoche UTC, `fechaDeDia`). */
+  occurredAt: Date;
+  /** Lo que marco la escala de Brix. `null` = esa escala no se leyo. */
+  brix?: number | null;
+  /** Lo que marco la escala H%. `null` = no se leyo — **nunca se deriva del Brix**. */
+  aguaPct?: number | null;
+  /** Con que refractometro. Opcional: sin el, la lectura se guarda igual (ADR-080). */
+  instrumentId?: string | null;
+  provenanceClass: ProvenanceClass;
+  claveDeEnvio?: string | null;
+}
+
+/**
+ * La lectura del refractometro de miel de una cosecha -- ADR-160.
+ *
+ * **Va sobre el LOTE, no sobre la cosecha.** La miel es un `Lot` (A3), y el lote es lo que
+ * sigue a la miel cuando se divide, se filtra, se guarda, se envasa y se muestrea hasta la
+ * cata. Una columna en la cosecha se quedaria atras en la primera division.
+ *
+ * **Una lectura por cosecha** (Daniel, 2026-09-17): si el lote ya tiene una de esa escala,
+ * se rechaza — lo que toca entonces es CORREGIR la que hay (`correctMeasurement`), que
+ * conserva la original, no apilar una segunda que compita con ella.
+ *
+ * **Con instrumento, se comprueba ANTES de escribir nada** que ese aparato tenga un modo
+ * sobre miel para cada escala leida y que el numero caiga en su rango. Asi una lectura de
+ * dos escalas no queda escrita a medias por un error que se podia ver de antemano.
+ */
+export async function registrarLecturaDeRefractometro(userAccountId: string, input: LecturaDeRefractometroInput) {
+  const cosecha = await prisma.apiaryHarvestEvent.findUnique({
+    where: { id: input.apiaryHarvestEventId },
+    include: { colony: { include: { hive: true } } },
+  });
+  if (!cosecha) throw new ApiaryAccessError("apiary_harvest_not_found");
+  await requireApiaryAccess(userAccountId, "manage", [
+    { projectId: cosecha.colony.hive.projectId, locationId: cosecha.colony.hive.locationId },
+  ]);
+
+  const leidas = (
+    [
+      ["brix", input.brix],
+      ["agua", input.aguaPct],
+    ] as const
+  ).filter(([, v]) => v != null) as (readonly ["brix" | "agua", number])[];
+  if (leidas.length === 0) throw new CierreDeCosechaInvalido("lectura_vacia");
+  for (const [, v] of leidas) if (!Number.isFinite(v)) throw new CierreDeCosechaInvalido("lectura_no_numerica");
+
+  const previas = await prisma.measurement.findMany({
+    where: { lotId: cosecha.resultingLotId, variable: { in: leidas.map(([e]) => ESCALAS_DE_MIEL[e].variable) } },
+    select: { variable: true },
+  });
+  if (previas.length > 0) throw new CierreDeCosechaInvalido(`ya_hay_lectura:${previas[0]!.variable}`);
+
+  const modoPorEscala = new Map<string, string>();
+  if (input.instrumentId) {
+    const modos = await prisma.instrumentMeasurementMode.findMany({
+      where: { equipmentId: input.instrumentId, retiredAt: null, materialState: "BEE_HONEY" },
+    });
+    for (const [escala, valor] of leidas) {
+      const { variable } = ESCALAS_DE_MIEL[escala];
+      const modo = modos.find((m) => m.variable === variable);
+      if (!modo) throw new CierreDeCosechaInvalido(`el_instrumento_no_lee:${escala}`);
+      const rango = { ...modo, rangeMin: modo.rangeMin == null ? null : Number(modo.rangeMin), rangeMax: modo.rangeMax == null ? null : Number(modo.rangeMax) };
+      if (fueraDeRango(rango, valor)) throw new CierreDeCosechaInvalido(`fuera_del_rango:${escala}`);
+      modoPorEscala.set(escala, modo.id);
+    }
+  }
+
+  const creadas = [];
+  for (const [escala, valor] of leidas) {
+    const { variable, unidad } = ESCALAS_DE_MIEL[escala];
+    creadas.push(
+      await recordMeasurement(userAccountId, {
+        lotId: cosecha.resultingLotId,
+        variable,
+        value: valor,
+        unit: unidad,
+        occurredAt: input.occurredAt,
+        instrumentId: input.instrumentId ?? null,
+        instrumentModeId: modoPorEscala.get(escala) ?? null,
+        provenanceClass: input.provenanceClass,
+        sourceReference: `apiary_harvest_event:${cosecha.id}`,
+        // Una clave POR ESCALA: si la segunda falla y se reintenta, la primera no se duplica.
+        claveDeEnvio: input.claveDeEnvio ? `${input.claveDeEnvio}:${escala}` : null,
+      }),
+    );
+  }
+  return creadas;
+}
+
 export interface HumedadDeMiel {
   measurementId: string;
   /** Valor canónico, en por ciento. */
@@ -164,6 +263,8 @@ export interface CosechaDeColonia {
   withinWithdrawalDays: number | null;
   /** Las lecturas de humedad del lote, de la más reciente a la más vieja. */
   humedad: HumedadDeMiel[];
+  /** Las lecturas de Brix del lote (ADR-160). Misma forma que la humedad. */
+  brix: HumedadDeMiel[];
 }
 
 /**
@@ -193,15 +294,18 @@ export async function cosechasDeColonia(colonyId: string): Promise<CosechaDeColo
   });
   // Una consulta por lote y no una por cosecha: `in` sobre los lotes, y se reparte.
   const humedades = await prisma.measurement.findMany({
-    where: { lotId: { in: cosechas.map((c) => c.resultingLotId) }, variable: "moisture" },
+    where: { lotId: { in: cosechas.map((c) => c.resultingLotId) }, variable: { in: ["moisture", "brix"] } },
     orderBy: { occurredAt: "desc" },
-    select: { id: true, lotId: true, value: true, unit: true, occurredAt: true },
+    select: { id: true, lotId: true, variable: true, value: true, unit: true, occurredAt: true },
   });
+  const deLaCosecha = (c: { resultingLotId: string }, variable: string) =>
+    humedades
+      .filter((m) => m.lotId === c.resultingLotId && m.variable === variable)
+      .map((m) => ({ measurementId: m.id, valor: Number(m.value), unidad: m.unit, measuredAt: m.occurredAt }));
   return cosechas.map((c) => ({
     ...c,
     extractedWeightKg: c.extractedWeightKg === null ? null : Number(c.extractedWeightKg),
-    humedad: humedades
-      .filter((m) => m.lotId === c.resultingLotId)
-      .map((m) => ({ measurementId: m.id, valor: Number(m.value), unidad: m.unit, measuredAt: m.occurredAt })),
+    humedad: deLaCosecha(c, "moisture"),
+    brix: deLaCosecha(c, "brix"),
   }));
 }

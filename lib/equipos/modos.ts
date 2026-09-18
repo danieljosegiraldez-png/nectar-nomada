@@ -5,6 +5,8 @@ export interface ModoDeMedicion {
   readonly id: string;
   readonly label: string;
   readonly materialState: MaterialState;
+  /** Que lee el modo (ADR-160). `null`/ausente = no declarado, que no es «cualquiera». */
+  readonly variable?: string | null;
   readonly rangeMin: number | null;
   readonly rangeMax: number | null;
 }

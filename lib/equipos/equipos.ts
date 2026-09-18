@@ -629,6 +629,7 @@ export async function instrumentoParaVerificar(userAccountId: string, equipmentI
     where: { id: equipmentId },
     include: {
       checkRequirements: { where: { retiredAt: null }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }] },
+      modes: { where: { retiredAt: null }, orderBy: [{ displayOrder: "asc" }, { label: "asc" }] },
       checks: {
         orderBy: { occurredAt: "desc" },
         take: 10,
@@ -751,7 +752,7 @@ export async function instrumentosParaMedicion(userAccountId: string) {
   for (const equipo of equipos) {
     if (!await can(userAccountId, "view", "equipment", await objetivoDeEquipo(equipo), equipo.classification)) continue;
     visibles.push({ id: equipo.id, name: equipo.name, modos: equipo.modes.map((m) => ({
-      id: m.id, label: m.label, materialState: m.materialState,
+      id: m.id, label: m.label, materialState: m.materialState, variable: m.variable,
       rangeMin: m.rangeMin == null ? null : Number(m.rangeMin),
       rangeMax: m.rangeMax == null ? null : Number(m.rangeMax),
     })) });

@@ -11128,3 +11128,59 @@ inventario, y ADR-125, porque la opcion vacia «sin registrar» llevaba texto si
 **Lo que NO entra.** Los productos de tratamiento: esperan a que Daniel diga cuales usa, y hay un
 plan recien fusionado -- «el botiquin del apiario» (#386) -- que hay que leer antes, porque puede
 tocar lo mismo.
+
+## ADR-160 -- El refractometro de miel: su lectura va sobre el LOTE, y el aparato dice que lee
+
+**Contexto.** Daniel corrigio una confusion mia: un refractometro **no mide humedad en general**.
+El de cafe mide Brix del mosto; la humedad del grano la da un medidor de humedad de grano; y el
+refractometro **de miel** lee dos escalas -- Brix y H% (agua). Y «el refractometro del beneficio es
+diferente al de mieles»: los rangos de Brix son otros (0-32 para mosto y jugos, 58-92 para miel) y
+la escala H% solo existe en los de miel. Pidio: una lectura por cosecha, el refractometro como
+INSTRUMENTO con su modo, y la miel como material. Respuesta: **«si, construyelo asi»**.
+
+**La primera version ponia tres columnas en `ApiaryHarvestEvent`, y se quito antes de commitear.**
+El propio esquema ya lo prohibia en un comentario del 2026-09-14 -- «la humedad NO esta aqui a
+proposito» -- y a mitad del trabajo Daniel lo dijo con otras palabras: **la miel es un lote**, y hay
+que seguirla cuando se divide, se filtra, se guarda, se envasa y se muestrea hasta la cata. Una
+columna en la cosecha se queda atras en la primera division. `Measurement` ya tenia `lotId`,
+`instrumentId` e `instrumentModeId`; la miel ya era un `Lot` (A3). Faltaban tres cosas pequenas.
+
+**Decision.**
+
+1. **`MaterialState.BEE_HONEY`** -- miel de ABEJA. No confundir con `MUCILAGE_HONEY`, que es el
+   proceso *honey* del cafe. Hasta hoy el enum solo conocia estados del cafe, y el modo de un
+   refractometro de miel no tenia sobre que declararse.
+2. **`InstrumentMeasurementMode.variable`** -- QUE lee el modo, del mismo vocabulario que
+   `Measurement.variable` (`isKnownVariable`), no de una lista propia. Un refractometro de miel son
+   **dos modos**: `brix` 58-90 y `moisture` 12-27 sobre `BEE_HONEY`. Anulable: los modos que ya
+   existian no la declaraban (ADR-080). `CHECK` de no vacia en la base.
+3. **`recordMeasurement`**: (a) un modo que declara variable no firma otra -- el modo H% no produce
+   un Brix; (b) **fuera del rango del modo se rechaza**: el aparato no puede marcar ese numero, asi
+   que no es una lectura; (c) sobre un lote de miel el material se INFIERE del tipo de lote, sin
+   crear una muestra para declararlo -- y un modo de cafe usado sobre miel levanta su marca
+   `mode_material_mismatch`.
+
+**El limite del Brix no se ensancha para todos.** El registro lo tiene en 0-40 porque su sujeto es
+el mosto: ahi un 180 es un 18 mal tecleado. Con ese limite ninguna miel entraria nunca. Se abre al
+limite fisico (0-100) **solo sobre un lote `honey`** (`LIMITES_SOBRE_MIEL`), y lo que acota de
+verdad es el rango del modo. La prueba de control mete el mismo 81 sobre un lote de cereza y sigue
+fuera.
+
+**`registrarLecturaDeRefractometro`** es la puerta desde la cosecha: una o dos escalas, con o sin
+aparato. **El H% nunca se calcula desde el Brix** y se guarda como leido -- la tabla de Chataway lo
+permitiria, y seria un valor calculado vestido de medido. **Una lectura por cosecha**: la segunda de
+la misma escala se rechaza; si esta mal, se corrige la que hay (`correctMeasurement` conserva la
+original). Con aparato, **todo se valida ANTES de escribir**: una lectura de dos escalas con una
+fuera de rango no deja escrita la otra a medias. Cada escala lleva su propia clave de envio, asi que
+un reintento no duplica.
+
+**`moisture_pct` sale de «sin sitio».** Va como `tabla: Measurement` sobre el lote de la cosecha. La
+lista de items del protocolo sin sitio baja de DOS a UNA: queda `site_condition`.
+
+**La ficha del equipo no tenia donde declarar modos** -- `declararModoDeInstrumento` existia sin
+ninguna pantalla que lo llamara. Ahora la tiene, con material y variable como listas cerradas.
+
+**Lo que NO entra, y es lo siguiente que pide el mensaje de Daniel.** La maquinaria del lote ya
+divide (`split`), fusiona (`merge`/`blend`), cambia de etapa, extrae muestras, guarda
+(`StorageAssignment`) y llega a la cata por `Sample`. **Lo que no tiene nombre todavia es filtrar y
+envasar miel**, ni una pantalla del lote de miel que recorra esa cadena. Es la rebanada siguiente.

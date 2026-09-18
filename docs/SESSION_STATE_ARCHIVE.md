@@ -3833,3 +3833,26 @@ una hora después, arreglando esa misma trampa.
 
 Los cinco flip-tests de la rebanada repiten **las mutaciones exactas de Codex**.
 
+### 2026-09-17 · Los vitales de campo se anotan en el sitio, y queda dicho que fue allí
+
+ADR-157, y el hallazgo es sobre mi propio trabajo. El protocolo marca clima, colonias vivas y cajas
+presentes como **`stage: field`** —cosas que se VEN estando ahí— y **las tres se capturaban sólo en
+el formulario de cierre**, que se rellena en casa. Dos las puse yo el día anterior siguiendo a las
+que ya estaban, sin comprobar que estuvieran bien.
+
+**Daniel contestó una tercera opción, mejor que las dos que le llevé:** «se debería poder hacer
+durante la visita o al cierre, a veces en sitio y si solo un apicultor es difícil maniobrar y ser
+eficiente de entrar y salir y estresar menos a las abejas».
+
+**Así que no se restringe: se registra cuál de las dos pasó.** `fieldVitalsOnSiteAt`, y una puerta
+nueva disponible mientras la visita está abierta. Sin la marca, una cifra vista con el guante puesto
+y una reconstruida de memoria son la misma fila, las dos `original_record`.
+
+**La marca describe el valor ACTUAL:** el cierre la limpia si reescribe alguno de los tres. Su
+prueba lleva el control de que un cierre que NO los toca la deja intacta.
+
+**Lo que la puerta afirma es una sola cosa —que la visita seguía abierta—** y no comprueba GPS a
+propósito: las coordenadas son del arranque, y exigirlas dejaría sin registrar una visita bajo dosel
+cerrado, que es donde están las abejas.
+
+**Y un flip-test volvió a destapar una prueba mía que no discriminaba** — la tercera en dos días.

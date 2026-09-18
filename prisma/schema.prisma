@@ -1166,6 +1166,10 @@ enum MaterialState {
   /// ya terminó de transformar (Daniel, 2026-09-15). Existe porque el estado es
   /// real, no porque se pueda medir en una cama.
   GREEN
+  /// MIEL DE ABEJA (ADR-160). **No confundir con `MUCILAGE_HONEY`**, que es el proceso
+  /// *honey* del CAFE, no miel de abeja. Existe para que un refractometro de miel pueda
+  /// declarar sobre que mide: hasta hoy este enum solo conocia estados del cafe.
+  BEE_HONEY
 
   @@schema("core")
 }
@@ -5013,6 +5017,16 @@ model InstrumentMeasurementMode {
 
   label         String
   materialState MaterialState @map("material_state")
+  /// QUE lee este modo -- ADR-160. Del MISMO vocabulario que `Measurement.variable`
+  /// (`lib/traceability/units.ts`), no de uno propio: dos listas para lo mismo derivan.
+  ///
+  /// **Rango de Brix y escala H% son propiedades DISTINTAS** (Daniel, 2026-09-17). Un
+  /// refractometro de miel son DOS modos del mismo aparato: `brix` 58-90 y `moisture`
+  /// 12-27 sobre `BEE_HONEY`. Uno de jarabe de 45-82 es solo un modo `brix`, sin humedad.
+  ///
+  /// Anulable: los modos que ya existian no la declaraban, y rellenarla supondria que
+  /// variable leian (ADR-080). El servicio la valida con `isKnownVariable`.
+  variable      String?       @map("variable")
   rangeMin      Decimal?      @map("range_min") @db.Decimal(12, 4)
   rangeMax      Decimal?      @map("range_max") @db.Decimal(12, 4)
   /// Desfase que una persona aplicó a esta escala. Cambia el número que el
