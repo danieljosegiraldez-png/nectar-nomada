@@ -44,6 +44,7 @@ import { getHarvestSourceContext } from "../../../lib/traceability/plantingCohor
 import { HarvestSourcesForm } from "../../components/traceability/HarvestSourcesForm";
 import type { LabourEntry } from "../../../generated/prisma/client";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
+import { EnvasarMielForm, ProcesarMielForm } from "../../components/apiary/PasosDeMielForm";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   if (!user) redirect("/login");
 
   const t = await getTranslations("Traceability");
+  const tMiel = await getTranslations("Apiary");
 
   let detail;
   try {
@@ -93,6 +95,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
     sensoryLinkage,
     harvestEvent,
     receivingEvent,
+    origenApicola,
     assets,
     labourEntries,
     materialConsumptionEntries,
@@ -251,6 +254,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   // has already been selected is a *different* lot (the accepted output), so
   // this does not need to ask whether sorting already happened.
   const canSelect = lot.lotType === "cherry" && !activeFermentation && !activeDrying;
+  // ADR-161 — un lote de MIEL no fermenta, no se seca ni tiene proceso de café: se procesa y se
+  // envasa. Ofrecerle los botones del café era invitar a registrar algo que no existe.
+  const esMiel = lot.lotType === "honey";
   const selectionCatalogs = canSelect ? await getSelectionCatalogs() : null;
   // Los códigos que ya cuelgan de este batch, para que la pantalla sugiera el
   // siguiente libre y no uno que abortaría la transacción.
@@ -283,7 +289,13 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
     // Selección is an anchor to the form already in its own section, not a
     // second route to it — the same treatment `measurement` gets above.
     ...(canSelect ? [{ action: "selection" as const, href: "#seleccion", label: t("recordSelectionButton") }] : []),
-    ...(!activeFermentation && !activeDrying
+    ...(esMiel
+      ? ([
+          { action: "honey_process", href: "#procesar-miel", label: t("honeyProcessButton") },
+          { action: "packaging", href: "#envasar-miel", label: t("honeyPackagingButton") },
+        ] as const)
+      : []),
+    ...(!esMiel && !activeFermentation && !activeDrying
       ? ([
           { action: "fermentation", href: `/lots/${lot.id}/fermentation/new`, label: t("startFermentationButton") },
           { action: "drying", href: `/lots/${lot.id}/drying/new`, label: t("startDryingButton") },
@@ -297,7 +309,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       : []),
     // El proceso va ANTES de bodega a propósito: es lo que hay que haber hecho
     // para que bodega deje pasar el lote (`exigeSecadoTerminado`).
-    { action: "process", href: `/lots/${lot.id}/process`, label: t("viewProcessButton") },
+    ...(esMiel ? [] : [{ action: "process" as const, href: `/lots/${lot.id}/process`, label: t("viewProcessButton") }]),
     { action: "storage", href: `/lots/${lot.id}/storage/new`, label: t("moveStorageButton") },
     { action: "sample", href: `/lots/${lot.id}/samples/new`, label: t("createSampleButton") },
     { action: "report", href: `/lots/${lot.id}/report`, label: t("viewReportButton") },
@@ -400,6 +412,68 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               perfiles={perfilesDisponibles}
               actual={perfilElegido?.recipeVersionId ?? null}
             />
+          ) : null}
+        </section>
+      ) : null}
+
+      {/* ADR-161 — la miel: de qué cosecha viene (subiendo por la genealogía, así que un frasco
+          también lo sabe), qué pasos se le hicieron, y los dos pasos que se le pueden hacer. */}
+      {esMiel ? (
+        <section className="nn-section">
+          <h2>{tMiel("mielOrigenTitulo")}</h2>
+          {origenApicola.length === 0 ? (
+            <p className="nn-vital-sin-registro">{tMiel("mielOrigenNinguno")}</p>
+          ) : (
+            <ul>
+              {origenApicola.map((o) => (
+                <li key={o.id}>
+                  {o.occurredAt.toISOString().slice(0, 10)} · {tMiel("mielOrigenCaja")}{" "}
+                  <Link href={`/apiaries/${o.colony.hive.location.id}/hives/${o.colony.hive.id}`}>
+                    {o.colony.hive.identifier}
+                  </Link>{" "}
+                  · {o.colony.hive.location.name}
+                  {o.resultingLotId !== lot.id ? (
+                    <>
+                      {" "}
+                      · {tMiel("mielOrigenLote")}{" "}
+                      <Link href={`/lots/${o.resultingLotId}`} className="nn-code">
+                        {lineage.lotCodesById.get(o.resultingLotId) ?? o.resultingLotId.slice(0, 8)}
+                      </Link>
+                    </>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <h3>{tMiel("mielPasosTitulo")}</h3>
+          {transformations.filter((tr) => tr.transformationType === "honey_processing" || tr.transformationType === "packaging").length === 0 ? (
+            <p className="nn-muted">{tMiel("mielPasosNinguno")}</p>
+          ) : (
+            <ul>
+              {transformations
+                .filter((tr) => tr.transformationType === "honey_processing" || tr.transformationType === "packaging")
+                .map((tr) => (
+                  <li key={tr.id}>
+                    {tr.occurredAt.toISOString().slice(0, 10)} ·{" "}
+                    {t(`transformationType_${tr.transformationType}` as "transformationType_split")}
+                    {tr.transformationType === "honey_processing"
+                      ? `: ${tr.honeyProcessActs
+                          .map((a) => (a === "otro" ? tr.honeyProcessOtherNote ?? tMiel("mielActo_otro") : tMiel(`mielActo_${a}`)))
+                          .join(", ")}`
+                      : `: ${tMiel("mielEnvasesFila", { cuantos: tr.packageCount ?? 0, gramos: String(tr.packageNetMassG ?? "?") })}`}
+                  </li>
+                ))}
+            </ul>
+          )}
+
+          {puedeRegistrar ? (
+            <>
+              <h3 id="procesar-miel">{tMiel("mielProcesarTitulo")}</h3>
+              <ProcesarMielForm lotId={lot.id} />
+              <h3 id="envasar-miel">{tMiel("mielEnvasarTitulo")}</h3>
+              <EnvasarMielForm lotId={lot.id} />
+            </>
           ) : null}
         </section>
       ) : null}

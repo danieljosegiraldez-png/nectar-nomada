@@ -3098,6 +3098,17 @@ model Lot {
   @@schema("traceability")
 }
 
+/// ADR-161 -- los actos de procesar miel. Vocabulario fijo con «otro, ¿cual?» (Daniel).
+enum HoneyProcessAct {
+  colado
+  filtrado
+  decantacion_maduracion
+  homogenizado
+  otro
+
+  @@schema("traceability")
+}
+
 enum LotTransformationType {
   split
   merge
@@ -3121,6 +3132,14 @@ enum LotTransformationType {
   /// vendido en pergamino nunca se trilla, así que ninguna etapa posterior
   /// puede exigirla.
   hulling
+
+  /// ADR-161 -- procesar MIEL despues de extraerla: colar, filtrar, decantar/madurar,
+  /// homogenizar. Los actos van en `honeyProcessActs`. Conserva masa: miel que sale +
+  /// merma declarada (cera, residuos) = miel que entra.
+  honey_processing
+  /// ADR-161 -- envasar. Dice cuantos envases y de que masa neta (`packageCount`,
+  /// `packageNetMassG`). Conserva masa igual que el proceso.
+  packaging
 
   @@schema("traceability")
 }
@@ -3202,6 +3221,15 @@ model LotTransformation {
   selectionMethodValueId String?               @map("selection_method_value_id") @db.Uuid
   selectionMethodValue   VariableCatalogValue? @relation("LotTransformationSelectionMethod", fields: [selectionMethodValueId], references: [id])
   equipmentNote          String?               @map("equipment_note")
+
+  /// ADR-161. Solo en `honey_processing` (CHECK en la base): al menos un acto, y «otro»
+  /// dice cual. Un arreglo porque un proceso cuela Y decanta.
+  honeyProcessActs      HoneyProcessAct[] @map("honey_process_acts")
+  honeyProcessOtherNote String?           @map("honey_process_other_note")
+  /// ADR-161. Solo en `packaging` (CHECK en la base): cuantos envases y de que masa neta
+  /// cada uno, como los declara quien envasa.
+  packageCount    Int?     @map("package_count")
+  packageNetMassG Decimal? @map("package_net_mass_g") @db.Decimal(10, 2)
 
   declaredLossQuantity Decimal? @map("declared_loss_quantity") @db.Decimal(10, 3)
   declaredLossUnit     String?  @map("declared_loss_unit")

@@ -133,6 +133,11 @@ const CONSERVING_TYPES: ReadonlySet<LotTransformationType> = new Set([
   // material. Si esto saliera de aquí, cada trilla pasaría con un hueco del
   // ~18 %, que es la cascarilla, leído como rendimiento normal.
   "hulling",
+  // ADR-161. Procesar y envasar miel conservan: la miel que sale más la merma declarada
+  // (cera y residuos al colar; lo que queda en el tanque al envasar) suman la que entró.
+  // Un hueco aquí es miel que nadie sabe dónde está, no un rendimiento.
+  "honey_processing",
+  "packaging",
 ] as const);
 
 /** Whether a difference between input and output mass is suspicious for this type. */

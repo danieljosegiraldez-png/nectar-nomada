@@ -99,6 +99,29 @@ export async function completarCierreDeCosecha(userAccountId: string, input: Com
         ...(tocaPeso ? { extractedWeightKg } : {}),
       },
     });
+    // ADR-161 — el peso de la extracción entra en el LIBRO del lote. Antes sólo entraba si se
+    // escribía al cosechar; completado aquí, que es lo normal (se pesa al extraer), el lote de
+    // miel quedaba sin saldo y nada de lo que se le haga después podía cuadrar su balance.
+    // Completar abona lo pesado; corregir asienta sólo la diferencia, y el asiento original
+    // se queda. Borrar el peso no asienta nada: «ya no se sabe» no es miel que salió.
+    if (tocaPeso && extractedWeightKg !== null) {
+      const antes = cosecha.extractedWeightKg === null ? null : Number(cosecha.extractedWeightKg);
+      const delta = antes === null ? extractedWeightKg : extractedWeightKg - antes;
+      if (delta !== 0) {
+        await tx.quantityEvent.create({
+          data: {
+            lotId: cosecha.resultingLotId,
+            eventType: antes === null ? "received" : delta > 0 ? "adjustment_increase" : "adjustment_decrease",
+            quantity: Math.abs(delta),
+            unit: "kg",
+            occurredAt: cosecha.occurredAt,
+            createdBy: userAccountId,
+            provenanceClass: cosecha.provenanceClass,
+            sourceReference: `apiary_harvest_event:${cosecha.id}`,
+          },
+        });
+      }
+    }
     await recordAuditEvent(
       {
         actorUserAccountId: userAccountId,
