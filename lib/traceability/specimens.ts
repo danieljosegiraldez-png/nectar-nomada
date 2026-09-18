@@ -26,6 +26,7 @@ import type {
   SpecimenObservationType,
   SpecimenSector,
   SpecimenType,
+  TrapCaptureLevel,
 } from "../../generated/prisma/client";
 
 export class SpecimenAccessError extends Error {}
@@ -130,14 +131,21 @@ export interface RecordSpecimenObservationInput {
   // value/unit pair wasn't asked for and would be inventing structure
   // ahead of a second numeric observation type actually needing one).
   captureCount?: number | null;
+  // F2 §4 — la lectura en escala. Obligatoria en un trap_check (ver abajo);
+  // el número (captureCount) sólo si alguien contó.
+  brocaLevel?: TrapCaptureLevel | null;
   notes?: string | null;
   provenanceClass: ProvenanceClass;
   dataQuality?: DataQuality | null;
 }
 
 export async function recordSpecimenObservation(userAccountId: string, input: RecordSpecimenObservationInput) {
-  if (input.observationType === "trap_check" && input.captureCount == null) {
-    throw new SpecimenValidationError("capture_count_required_for_trap_check");
+  // F2 §4 invierte la regla anterior: la ESCALA es obligatoria y el número
+  // opcional. La vía completa de una revisión es `recordTrapCheck`
+  // (lib/traceability/traps.ts); aquí sólo queda el mínimo para que una
+  // observación suelta no entre sin lectura.
+  if (input.observationType === "trap_check" && input.brocaLevel == null) {
+    throw new SpecimenValidationError("broca_level_required_for_trap_check");
   }
 
   const specimen = await prisma.specimen.findUnique({ where: { id: input.specimenId } });
@@ -154,6 +162,7 @@ export async function recordSpecimenObservation(userAccountId: string, input: Re
         observedAt: input.observedAt,
         observerPersonId: input.observerPersonId ?? null,
         captureCount: input.captureCount ?? null,
+        brocaLevel: input.brocaLevel ?? null,
         notes: input.notes ?? null,
         provenanceClass: input.provenanceClass,
         dataQuality: input.dataQuality ?? null,

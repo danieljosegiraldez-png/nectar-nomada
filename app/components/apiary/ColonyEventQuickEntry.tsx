@@ -1,5 +1,6 @@
 "use client";
 
+import { seccionAbierta, type Faena } from "../../../lib/apiary/faena";
 import type { FrascoParaTratar } from "../../../lib/inventario/frascosParaTratar";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
@@ -25,11 +26,14 @@ export function ColonyEventQuickEntry({
   colonyId,
   selfPersonId,
   frascos = [],
+  faena = null,
 }: {
   colonyId: string;
   selfPersonId: string | null;
   /** Botiquín, Tarea 7 — los frascos que quien mira puede descontar. Vacío: sin selector. */
   frascos?: readonly FrascoParaTratar[];
+  /** Spec 2026-09-17 §A — a qué se vino. Pliega los bloques que no son de esa faena. */
+  faena?: Faena | null;
 }) {
   const t = useTranslations("Apiary");
 
@@ -196,8 +200,10 @@ export function ColonyEventQuickEntry({
         </p>
       ) : null}
       <div className="nn-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-        <div className="nn-form" style={{ margin: 0 }}>
-          <h4>{t("logFeedingHeading")}</h4>
+        <details className="nn-form" style={{ margin: 0 }} id="faena-alimentar" open={seccionAbierta(faena, "alimentar")}>
+          <summary>
+            <h4 style={{ display: "inline" }}>{t("logFeedingHeading")}</h4>
+          </summary>
           <div className="nn-field">
             <label htmlFor={`feed-material-kind-${colonyId}`}>{t("feedingMaterialLabel")}</label>
             <select
@@ -275,10 +281,12 @@ export function ColonyEventQuickEntry({
             {t("logFeedingButton")}
           </button>
           {feedingSaved ? <p className="nn-muted">{t("savedLocally")}</p> : null}
-        </div>
+        </details>
 
-        <div className="nn-form" style={{ margin: 0 }}>
-          <h4>{t("logTreatmentHeading")}</h4>
+        <details className="nn-form" style={{ margin: 0 }} id="faena-tratar" open={seccionAbierta(faena, "tratar")}>
+          <summary>
+            <h4 style={{ display: "inline" }}>{t("logTreatmentHeading")}</h4>
+          </summary>
           {frascos.length > 0 ? (
             <div className="nn-field">
               <label htmlFor={`treat-frasco-${colonyId}`}>{t("treatmentFrascoLabel")}</label>
@@ -371,10 +379,12 @@ export function ColonyEventQuickEntry({
             {t("logTreatmentButton")}
           </button>
           {treatmentSaved ? <p className="nn-muted">{t("savedLocally")}</p> : null}
-        </div>
+        </details>
 
-        <div className="nn-form" style={{ margin: 0 }}>
-          <h4>{t("logObservationHeading")}</h4>
+        <details className="nn-form" style={{ margin: 0 }} open={seccionAbierta(faena, "revisar")}>
+          <summary>
+            <h4 style={{ display: "inline" }}>{t("logObservationHeading")}</h4>
+          </summary>
           <div className="nn-field">
             <label htmlFor={`obs-note-${colonyId}`}>{t("noteLabel")}</label>
             <textarea id={`obs-note-${colonyId}`} value={observationNote} onChange={(e) => setObservationNote(e.target.value)} rows={2} />
@@ -383,7 +393,7 @@ export function ColonyEventQuickEntry({
             {t("logObservationButton")}
           </button>
           {observationSaved ? <p className="nn-muted">{t("savedLocally")}</p> : null}
-        </div>
+        </details>
       </div>
     </div>
   );

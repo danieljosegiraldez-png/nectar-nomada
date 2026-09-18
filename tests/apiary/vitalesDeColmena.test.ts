@@ -117,7 +117,7 @@ describe("Anexo E §3 — los vitales de cada caja, contra Postgres", () => {
     cajaVacia = h3.id;
     const c3 = await createColony(userAccountId, {
       hiveId: h3.id,
-      originType: "split",
+      originType: "purchased", // era "split": las divisiones ahora nacen con dividirColonia (spec 2026-09-18 §3); el origen no importa aquí
       startedAt: new Date("2026-03-01T11:00:00Z"),
       provenanceClass: "direct_observation",
     });

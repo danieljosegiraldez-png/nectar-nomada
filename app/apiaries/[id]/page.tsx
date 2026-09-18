@@ -33,6 +33,8 @@ import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 import { FieldSessionStartForm } from "../../components/traceability/FieldSessionForms";
 import { mostrarInstante } from "../../../lib/time/mostrarInstante";
+import { cosechasSinSaldo } from "../../../lib/apiary/cosechasSinSaldo";
+import { AsentarPesoForm } from "../../components/apiary/AsentarPesoForm";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +55,8 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   // `getApiaryDetail` ya autorizó este sitio; esto lee hechos del id concedido.
   const polinizacion = await densidadDePolinizacion(id);
   const coordenadas = await coordenadasPropuestas(id);
+  // ADR-166 — cosechas pesadas antes de ADR-161 cuyo lote quedó sin saldo. Mismo id concedido.
+  const sinSaldo = await cosechasSinSaldo(id);
 
   // Ventana MÓVIL de doce meses, no año natural: el dueño la eligió así el
   // 2026-09-11 porque el repositorio no define ninguna temporada, y un año
@@ -118,6 +122,26 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           historial» ni el «[Registrar evento] al alcance del pulgar» que el §3 también pide.
           Eso es ergonomía que se juzga con el guante puesto, y mover una sección con una
           razón escrita no es lo mismo que rediseñar la pantalla a ciegas. */}
+      {/* ADR-166 — sólo aparece cuando hay algo que asentar: una sección vacía sería ruido. */}
+      {sinSaldo.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("sinSaldoHeading")}</h2>
+          <p className="nn-muted">{t("sinSaldoIntro")}</p>
+          <ul>
+            {sinSaldo.map((c) => (
+              <li key={c.id} style={{ marginBottom: "0.5rem" }}>
+                {c.occurredAt.toISOString().slice(0, 10)} · {t("sinSaldoCaja")}{" "}
+                <Link href={`/apiaries/${id}/hives/${c.hiveId}`}>{c.hiveIdentifier}</Link> · {t("sinSaldoLote")}{" "}
+                <Link href={`/lots/${c.lotId}`} className="nn-code">
+                  {c.lotCode}
+                </Link>{" "}
+                · <AsentarPesoForm apiaryHarvestEventId={c.id} apiaryId={id} kg={c.extractedWeightKg} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="nn-section">
         <h2>{t("hivesHeading")}</h2>
         {/* **Dónde está la inspección.** Esta línea existe porque el dueño no

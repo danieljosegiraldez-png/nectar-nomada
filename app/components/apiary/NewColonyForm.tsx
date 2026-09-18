@@ -4,7 +4,8 @@ import { useTranslations } from "next-intl";
 import { createColonyFormAction } from "../../actions/apiary";
 import { BotonDeEnvio } from "../BotonDeEnvio";
 
-const ORIGIN_TYPES = ["purchased", "captured", "split", "other"] as const;
+// Sin "split": una división se registra con Dividir, que sabe de cuál sale (spec 2026-09-18 §3).
+const ORIGIN_TYPES = ["purchased", "captured", "other"] as const;
 
 export interface OrigenDeColonia {
   id: string;

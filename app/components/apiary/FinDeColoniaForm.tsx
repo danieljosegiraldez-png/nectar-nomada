@@ -109,8 +109,10 @@ export function FinDeColoniaForm({ colonyId, causas }: { colonyId: string; causa
           <option value="" disabled />
           <option value="dead">{t("colonyStatus_dead")}</option>
           <option value="absconded">{t("colonyStatus_absconded")}</option>
-          <option value="combined">{t("colonyStatus_combined")}</option>
         </select>
+        {/* Spec 2026-09-18 §3: «se combinó» se registra con Unir, que dice CON CUÁL. Por aquí
+            quedaría una colonia combinada sin receptora, y el servicio ya la rechaza. */}
+        <p className="nn-muted">{t("colonyEndCombinarEnUnir")}</p>
       </div>
 
       <div className="nn-field">

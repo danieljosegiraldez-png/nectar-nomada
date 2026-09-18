@@ -3935,3 +3935,29 @@ ensancha**: se abre a 0–100 sólo sobre lotes `honey`. **El H% nunca se calcul
 lectura por cosecha. La ficha del equipo gana dónde declarar modos: no había ninguna pantalla.
 
 **Hecho después:** procesar y envasar (ADR-161), con la ficha del lote de miel.
+
+### 2026-09-18 · El botiquín: vencimiento, custodia, descuento y aviso
+
+Nueve tareas del plan `docs/superpowers/plans/2026-09-17-botiquin.md`, en un PR. El producto lleva
+una vez fabricante, principio activo, registro, carencia, con cuánto aviso, almacenamiento y
+advertencias; el frasco, en cada compra, vencimiento, presentación y factura. **Botado y perdido**
+restan y exigen motivo (`CHECK` en la base). **Custodia** = sitio + persona, en intervalos sin hueco
+ni solape. Foto de la etiqueta sobre el frasco. **Aplicar un tratamiento descuenta del frasco** en la
+misma transacción; vencido se aplica y queda marcado. `/inventario/recibir`, y la lista con «Vence»
+y «Dónde está».
+
+**Decisiones de la ejecución que el plan no traía, para que Daniel las vea:**
+- **El aviso NO va en `/start`**: esa ruta sólo redirige (ADR-082). Va en `/lots`, `/apiaries` y la
+  ficha del apiario, a quien tiene `lot:manage` donde ESTÁ el frasco.
+- **Descontar exige `lot:manage` sobre el frasco.** Kenis (sólo eventos de colonia) registra el
+  tratamiento sin frasco. El manejo en lote no acepta frasco todavía.
+- **FK de evidencia en RESTRICT** (foto y tratamiento), como fijó la revisión del 2026-09-01; la
+  primera versión copió SET NULL de padres anteriores y la deriva de migraciones lo cazó.
+- **Completar un producto sólo rellena huecos**; corregir lo ya declarado no tiene pantalla.
+
+**Migraciones fuera de orden:** tres del botiquín (`20260918000000`–`020000`) tienen fecha anterior a
+`20260918023857_limpieza_de_caja`, ya en producción. Son de tablas independientes; `migrate deploy`
+aplica las pendientes, pero **leer el log del despliegue** y confirmar que nombra las seis.
+
+**Sin verificar en navegador** —hace falta sesión—. **La cifra del router chocó por cuarta vez:** la
+rama decía 83 y, rebasada sobre `/finca`, se midió 84.
