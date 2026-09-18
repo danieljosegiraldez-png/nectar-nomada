@@ -295,3 +295,71 @@ describe("tools/pack-for-review.sh: rutas con espacios", () => {
     expect(vecinos).toContain("export const otro = 2;");
   });
 });
+
+/**
+ * Rutas con tildes: git las entrecomilla y el script las tomaba al pie de la letra.
+ *
+ * Con `core.quotePath` en su valor por defecto, `git diff --name-only` escribe
+ * `docs/año nuevo.md` como `"docs/a\303\261o nuevo.md"`, con comillas y octales. Esa
+ * cadena no es una ruta: `git cat-file` no la encontraba en la punta y la sección del
+ * texto completo decía **«borrado en este rango»** de un archivo que el rango añadía
+ * entero — el mismo rótulo falso que el #391, por otra puerta. En `main` hay un archivo
+ * así (el documento de arquitectura «NÉCTAR NÓMADA — Commerce…»).
+ */
+describe("tools/pack-for-review.sh: rutas con tildes", () => {
+  const dir5 = mkdtempSync(join(tmpdir(), "pack-tildes-"));
+  const git5 = (args: string[]) => execFileSync("git", args, { cwd: dir5, encoding: "utf8" });
+
+  afterAll(() => {
+    for (let i = 0; i < 5; i++) {
+      try {
+        rmSync(dir5, { recursive: true, force: true });
+        return;
+      } catch {
+        /* reintento */
+      }
+    }
+  });
+
+  git5(["init", "-q"]);
+  git5(["config", "user.email", "prueba@example.invalid"]);
+  git5(["config", "user.name", "Prueba"]);
+  // Explícito, por si la máquina que corre la prueba lo tiene apagado en su config global:
+  // sin esto la prueba pasaría sin el arreglo.
+  git5(["config", "core.quotePath", "true"]);
+  mkdirSync(join(dir5, "tools"), { recursive: true });
+  mkdirSync(join(dir5, "lib"), { recursive: true });
+  copyFileSync(join(raizRepo, "tools/pack-for-review.sh"), join(dir5, "tools/pack-for-review.sh"));
+  writeFileSync(join(dir5, "lib/año.ts"), "export const año = 2026;\n");
+  git5(["add", "tools/pack-for-review.sh", "lib/año.ts"]);
+  git5(["commit", "-q", "-m", "base"]);
+  mkdirSync(join(dir5, "docs"), { recursive: true });
+  mkdirSync(join(dir5, "app"), { recursive: true });
+  writeFileSync(join(dir5, "docs/año nuevo.md"), "uno\ndos\n");
+  writeFileSync(join(dir5, "app/usa.ts"), 'import { año } from "../lib/año";\n');
+  git5(["add", "docs/año nuevo.md", "app/usa.ts"]);
+  git5(["commit", "-q", "-m", "rutas con tilde"]);
+
+  const salida = join(dir5, "paquete.md");
+  const r = spawnSync(BASH, ["tools/pack-for-review.sh", "HEAD~1..HEAD", salida], { cwd: dir5, encoding: "utf8" });
+  const paquete = r.status === 0 ? readFileSync(salida, "utf8") : "";
+  const textoCompleto = (paquete.split(/^## Texto /m)[1] ?? "").split(/^## Un salto de imports/m)[0];
+  const vecinos = paquete.split(/^## Un salto de imports/m)[1] ?? "";
+
+  it("el empaquetador termina bien", () => {
+    expect({ status: r.status, stderr: r.stderr }).toMatchObject({ status: 0 });
+  });
+
+  it("un archivo con tilde que el rango añade sale entero, no como borrado", () => {
+    expect(textoCompleto).toContain("### docs/año nuevo.md  (2 líneas)");
+    expect(textoCompleto).not.toContain("borrado en este rango");
+    expect(textoCompleto).not.toContain("\\303");
+  });
+
+  // Control, no guardia: los vecinos se resuelven con `ls-tree -z`, que nunca
+  // entrecomilla, así que esto ya pasaba antes del arreglo. Está para que el arreglo
+  // no lo rompa.
+  it("control: un vecino con tilde sale entero", () => {
+    expect(vecinos).toContain("### lib/año.ts  (1 líneas)");
+  });
+});
