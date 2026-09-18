@@ -1095,7 +1095,7 @@
     "error_sample": "Could not save the sample: {detail}",
     "labSamplesHeading": "Laboratory samples",
     "landPhotosHeading": "Photographs",
-    "landPhotosIntro": "General photos of the plot, alongside those attached to a soil pit.",
+    "landPhotosIntro": "General photos of the plot and of trap checks. Each soil pit's photos are in the Conditions tab.",
     "landPhotosNone": "No photographs.",
     "landPhotosTrapHeading": "Trap check photos",
     "landPhotosTrapLabel": "Trap {n} · check from {fecha}",

@@ -1095,7 +1095,7 @@
     "error_sample": "No se pudo guardar la muestra: {detail}",
     "labSamplesHeading": "Muestras al laboratorio",
     "landPhotosHeading": "Fotografías",
-    "landPhotosIntro": "Fotos generales de la parcela, además de las que cuelgan de una calicata.",
+    "landPhotosIntro": "Fotos generales de la parcela y de las revisiones de trampa. Las de cada calicata están en la pestaña Condiciones.",
     "landPhotosNone": "Sin fotografías.",
     "landPhotosTrapHeading": "Fotos de revisiones de trampa",
     "landPhotosTrapLabel": "Trampa {n} · revisión del {fecha}",
