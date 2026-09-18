@@ -234,3 +234,64 @@ describe("tools/pack-for-review.sh: vecinos y base desde la punta", () => {
     expect(paquete).toContain(`base:   ${baseComun}`);
   });
 });
+
+/**
+ * Rutas con espacios en «Un salto de imports».
+ *
+ * Las dos vueltas de esa sección eran `for f in $TOCADOS` y `for f in $VECINOS`, y
+ * bash parte por palabras: `app/con espacio.ts` se volvía `app/con` y `espacio.ts`,
+ * que no existen. Un archivo tocado con espacio no aportaba vecinos, sin decirlo; y un
+ * VECINO con espacio reventaba el script entero bajo `set -e` al pedir `git show` de
+ * un fragmento. Una prueba por cada vuelta: el importador con espacio, y el vecino con
+ * espacio importado desde un archivo sin él.
+ */
+describe("tools/pack-for-review.sh: rutas con espacios", () => {
+  const dir4 = mkdtempSync(join(tmpdir(), "pack-espacios-"));
+  const git4 = (args: string[]) => execFileSync("git", args, { cwd: dir4, encoding: "utf8" });
+
+  afterAll(() => {
+    for (let i = 0; i < 5; i++) {
+      try {
+        rmSync(dir4, { recursive: true, force: true });
+        return;
+      } catch {
+        /* reintento */
+      }
+    }
+  });
+
+  git4(["init", "-q"]);
+  git4(["config", "user.email", "prueba@example.invalid"]);
+  git4(["config", "user.name", "Prueba"]);
+  mkdirSync(join(dir4, "tools"), { recursive: true });
+  mkdirSync(join(dir4, "lib"), { recursive: true });
+  copyFileSync(join(raizRepo, "tools/pack-for-review.sh"), join(dir4, "tools/pack-for-review.sh"));
+  writeFileSync(join(dir4, "lib/a.ts"), "export const a = 1;\n");
+  writeFileSync(join(dir4, "lib/otro vecino.ts"), "export const otro = 2;\n");
+  git4(["add", "tools/pack-for-review.sh", "lib/a.ts", "lib/otro vecino.ts"]);
+  git4(["commit", "-q", "-m", "base"]);
+  mkdirSync(join(dir4, "app"), { recursive: true });
+  writeFileSync(join(dir4, "app/con espacio.ts"), 'import { a } from "../lib/a";\n');
+  writeFileSync(join(dir4, "app/normal.ts"), 'import { otro } from "../lib/otro vecino";\n');
+  git4(["add", "app/con espacio.ts", "app/normal.ts"]);
+  git4(["commit", "-q", "-m", "dos importadores"]);
+
+  const salida = join(dir4, "paquete.md");
+  const r = spawnSync(BASH, ["tools/pack-for-review.sh", "HEAD~1..HEAD", salida], { cwd: dir4, encoding: "utf8" });
+  const paquete = r.status === 0 ? readFileSync(salida, "utf8") : "";
+  const vecinos = paquete.split(/^## Un salto de imports/m)[1] ?? "";
+
+  it("el empaquetador termina bien", () => {
+    expect({ status: r.status, stderr: r.stderr }).toMatchObject({ status: 0 });
+  });
+
+  it("un archivo tocado con espacio en la ruta aporta sus vecinos", () => {
+    expect(paquete).toContain("### app/con espacio.ts  (1 líneas)");
+    expect(vecinos).toContain("### lib/a.ts  (1 líneas)");
+  });
+
+  it("un vecino con espacio en la ruta sale entero", () => {
+    expect(vecinos).toContain("### lib/otro vecino.ts  (1 líneas)");
+    expect(vecinos).toContain("export const otro = 2;");
+  });
+});
