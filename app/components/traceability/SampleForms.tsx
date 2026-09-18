@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -104,14 +105,14 @@ export function SoilSampleForm({ locationId }: { locationId: string }) {
 
       <div className="nn-field">
         <label htmlFor="depthTopCm">{t("sampleDepthLabel")}</label>
-        <input id="depthTopCm" type="number" name="depthTopCm" step="1" min="0" placeholder={t("sampleDepthTopPlaceholder")} aria-label={t("sampleDepthTopPlaceholder")} />
-        <input id="depthBottomCm" type="number" name="depthBottomCm" step="1" min="0" placeholder={t("sampleDepthBottomPlaceholder")} aria-label={t("sampleDepthBottomPlaceholder")} />
+        <CampoNumerico id="depthTopCm" name="depthTopCm" step="1" min="0" placeholder={t("sampleDepthTopPlaceholder")} aria-label={t("sampleDepthTopPlaceholder")} />
+        <CampoNumerico id="depthBottomCm" name="depthBottomCm" step="1" min="0" placeholder={t("sampleDepthBottomPlaceholder")} aria-label={t("sampleDepthBottomPlaceholder")} />
         <p className="nn-muted">{t("sampleDepthHelp")}</p>
       </div>
 
       <div className="nn-field">
         <label htmlFor="subSampleCount">{t("sampleSubSamplesLabel")}</label>
-        <input id="subSampleCount" type="number" name="subSampleCount" step="1" min="1" placeholder={t("notRecorded")} />
+        <CampoNumerico id="subSampleCount" name="subSampleCount" step="1" min="1" placeholder={t("notRecorded")} />
         <p className="nn-muted">{t("sampleSubSamplesHelp")}</p>
       </div>
 
@@ -210,7 +211,7 @@ export function FoliarSampleForm({ locationId }: { locationId: string }) {
 
       <div className="nn-field">
         <label htmlFor="leafPairPosition">{t("sampleLeafPairLabel")}</label>
-        <input id="leafPairPosition" type="number" name="leafPairPosition" step="1" min="1" placeholder={t("notRecorded")} />
+        <CampoNumerico id="leafPairPosition" name="leafPairPosition" step="1" min="1" placeholder={t("notRecorded")} />
         <p className="nn-muted">{t("sampleLeafPairHelp")}</p>
       </div>
 
@@ -238,7 +239,7 @@ export function FoliarSampleForm({ locationId }: { locationId: string }) {
 
       <div className="nn-field">
         <label htmlFor="treeAgeYears">{t("sampleTreeAgeLabel")}</label>
-        <input id="treeAgeYears" type="number" name="treeAgeYears" step="1" min="0" placeholder={t("notRecorded")} />
+        <CampoNumerico id="treeAgeYears" name="treeAgeYears" step="1" min="0" placeholder={t("notRecorded")} />
       </div>
 
       <div className="nn-field">

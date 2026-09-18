@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordSelectionFormAction } from "../../actions/traceability";
@@ -118,10 +119,9 @@ export function SelectionForm({
 
       <div className="nn-field">
         <label htmlFor="sel-input">{t("selectionInputQuantityLabel", { unit })}</label>
-        <input
+        <CampoNumerico
           id="sel-input"
           name="inputQuantity"
-          type="number"
           step="0.001"
           min="0"
           required
@@ -164,10 +164,9 @@ export function SelectionForm({
         </div>
         <div className="nn-field">
           <label htmlFor="sel-acc-qty">{t("selectionAcceptedQuantityLabel", { unit })}</label>
-          <input
+          <CampoNumerico
             id="sel-acc-qty"
             name="acceptedQuantity"
-            type="number"
             step="0.001"
             min="0"
             required
@@ -208,10 +207,9 @@ export function SelectionForm({
             </div>
             <div className="nn-field" style={{ marginBottom: 0 }}>
               <label htmlFor={`sel-rej-qty-${row.key}`}>{unit}</label>
-              <input
+              <CampoNumerico
                 id={`sel-rej-qty-${row.key}`}
                 name={`rejectedQuantity.${i}`}
-                type="number"
                 step="0.001"
                 min="0"
                 value={row.quantity}
@@ -228,10 +226,9 @@ export function SelectionForm({
 
       <div className="nn-field">
         <label htmlFor="sel-loss">{t("selectionDeclaredLossLabel", { unit })}</label>
-        <input
+        <CampoNumerico
           id="sel-loss"
           name="declaredLossQuantity"
-          type="number"
           step="0.001"
           min="0"
           value={declaredLoss}

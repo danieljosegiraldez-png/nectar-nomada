@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordLabMeasurementAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -84,9 +85,8 @@ export function LabMeasurementForm({
 
       <div className="nn-field">
         <label htmlFor={`value-${sujetoId}`}>{t("biocharValueLabel")}</label>
-        <input
+        <CampoNumerico
           id={`value-${sujetoId}`}
-          type="number"
           name="value"
           step="any"
           required

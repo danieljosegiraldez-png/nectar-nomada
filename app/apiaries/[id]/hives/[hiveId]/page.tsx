@@ -1,3 +1,4 @@
+import { CampoNumerico } from "../../../../components/CampoNumerico";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -302,15 +303,15 @@ export default async function HiveDetailPage({
               <div style={{ display: "flex", gap: "0.5rem" }}>
                 <div className="nn-field" style={{ flex: 1 }}>
                   <label htmlFor="caja-camaras">{t("broodBoxesLabel")}</label>
-                  <input id="caja-camaras" name="broodBoxes" type="number" min={0} step={1} inputMode="numeric" defaultValue={hive.broodBoxes ?? ""} />
+                  <CampoNumerico id="caja-camaras" name="broodBoxes" min={0} step={1} inputMode="numeric" defaultValue={hive.broodBoxes ?? ""} />
                 </div>
                 <div className="nn-field" style={{ flex: 1 }}>
                   <label htmlFor="caja-alzas">{t("supersLabel")}</label>
-                  <input id="caja-alzas" name="supers" type="number" min={0} step={1} inputMode="numeric" defaultValue={hive.supers ?? ""} />
+                  <CampoNumerico id="caja-alzas" name="supers" min={0} step={1} inputMode="numeric" defaultValue={hive.supers ?? ""} />
                 </div>
                 <div className="nn-field" style={{ flex: 1 }}>
                   <label htmlFor="caja-cuadros">{t("framesPerBoxLabel")}</label>
-                  <input id="caja-cuadros" name="framesPerBox" type="number" min={1} step={1} inputMode="numeric" defaultValue={hive.framesPerBox ?? ""} />
+                  <CampoNumerico id="caja-cuadros" name="framesPerBox" min={1} step={1} inputMode="numeric" defaultValue={hive.framesPerBox ?? ""} />
                 </div>
               </div>
               <div className="nn-field">
@@ -443,7 +444,7 @@ export default async function HiveDetailPage({
                   </div>
                   <div className="nn-field">
                     <label htmlFor="artefacto-count">{t("artefactoCuantasAlzas")}</label>
-                    <input id="artefacto-count" name="count" type="number" min={1} step={1} inputMode="numeric" />
+                    <CampoNumerico id="artefacto-count" name="count" min={1} step={1} inputMode="numeric" />
                   </div>
                   <div className="nn-field">
                     <label htmlFor="artefacto-notes">{t("artefactoNota")}</label>
@@ -941,10 +942,9 @@ export default async function HiveDetailPage({
                         </div>
                         <div className="nn-field">
                           <label htmlFor={`peso-${c.id}`}>{t("extractedWeightLabel")}</label>
-                          <input
+                          <CampoNumerico
                             id={`peso-${c.id}`}
                             name="extractedWeightKg"
-                            type="number"
                             min={0}
                             step="0.001"
                             inputMode="decimal"

@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useState } from "react";
 import { reconciliarCosecha } from "../../../lib/traceability/reconciliacionDeCosecha";
 import { useTranslations } from "next-intl";
@@ -134,9 +135,8 @@ export function HarvestSourcesForm({
             ) : null}
 
             <label htmlFor={`sourceWeight.${i}`}>{t("sourceWeightLabel")}</label>
-            <input
+            <CampoNumerico
               id={`sourceWeight.${i}`}
-              type="number"
               name={`sourceWeight.${i}`}
               step="0.001"
               min="0"

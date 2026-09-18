@@ -1,5 +1,6 @@
 "use client";
 
+import { soltarFocoConLaRueda } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { createTreatmentBatchAction, type ResearchActionState } from "../../actions/research";
@@ -154,6 +155,7 @@ export function TreatmentBatchForm({
             <input
               name={`vv_value_${i}`}
               type={variable.valueType === "numeric" ? "number" : "text"}
+              onWheel={soltarFocoConLaRueda}
               step={variable.valueType === "numeric" ? "any" : undefined}
               style={{ flex: 1 }}
             />

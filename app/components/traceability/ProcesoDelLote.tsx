@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -53,10 +54,9 @@ export function AbrirProcesoForm({
 
       <div className="nn-field">
         <label htmlFor="p-target">{t("processTargetMoistureLabel")}</label>
-        <input
+        <CampoNumerico
           id="p-target"
           name="targetMoisturePct"
-          type="number"
           inputMode="decimal"
           step="0.1"
           min="0.1"
@@ -235,10 +235,9 @@ export function CambiarObjetivoForm({ lotProcessId, lotId, actual }: { lotProces
       <input type="hidden" name="lotId" value={lotId} />
       <div className="nn-field">
         <label htmlFor="o-target">{t("processNewTargetLabel")}</label>
-        <input
+        <CampoNumerico
           id="o-target"
           name="targetMoisturePct"
-          type="number"
           inputMode="decimal"
           step="0.1"
           min="0.1"

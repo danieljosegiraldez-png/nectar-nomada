@@ -4,6 +4,7 @@
  * Los tres formularios de la tienda (ADR-163): asignar envases desde un lote, confirmar la
  * recepción, y crear una variante. Sin `prisma`: todo llega por props desde la página.
  */
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { asignarATiendaAction, confirmarRecepcionAction, crearVarianteAction } from "../../actions/tienda";
@@ -59,7 +60,7 @@ export function AsignarATiendaForm({ lotId, variantes, libres }: { lotId: string
       </div>
       <div className="nn-field">
         <label htmlFor="asignar-envases">{t("envasesAAsignar", { libres })}</label>
-        <input id="asignar-envases" name="unitsAssigned" type="number" min={1} max={libres} step={1} inputMode="numeric" required />
+        <CampoNumerico id="asignar-envases" name="unitsAssigned" min={1} max={libres} step={1} inputMode="numeric" required />
       </div>
       <p className="nn-muted">{t("asignarAyuda")}</p>
       <Resultado estado={estado} ok={t("asignado")} />
@@ -84,7 +85,7 @@ export function ConfirmarRecepcionForm({ allocationId, asignados }: { allocation
       <div className="nn-field">
         <label htmlFor={id("rec-cuantos")}>{t("envasesRecibidos")}</label>
         {/* Sin valor por defecto: precargar lo asignado confirmaría lo que nadie contó. */}
-        <input id={id("rec-cuantos")} name="unitsReceived" type="number" min={0} max={asignados} step={1} inputMode="numeric" required />
+        <CampoNumerico id={id("rec-cuantos")} name="unitsReceived" min={0} max={asignados} step={1} inputMode="numeric" required />
       </div>
       <div className="nn-field">
         <label htmlFor={id("rec-nota")}>{t("notaFaltante")}</label>
@@ -115,7 +116,7 @@ export function NuevaVarianteForm({ productId }: { productId: string }) {
       </div>
       <div className="nn-field">
         <label htmlFor={id("var-precio")}>{t("variantePrecio")}</label>
-        <input id={id("var-precio")} name="priceAmount" type="number" min={0} step="0.01" inputMode="decimal" required />
+        <CampoNumerico id={id("var-precio")} name="priceAmount" min={0} step="0.01" inputMode="decimal" required />
       </div>
       <Resultado estado={estado} ok={t("varianteCreada")} />
       <button type="submit" disabled={pending}>

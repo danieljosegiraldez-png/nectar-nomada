@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "./CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { addToCartAction, type CartActionState } from "../actions/cart";
@@ -43,7 +44,7 @@ export function AddToCartForm({ variants }: { variants: VariantOption[] }) {
 
       <div className="nn-field">
         <label htmlFor="quantity">{t("quantityLabel")}</label>
-        <input id="quantity" name="quantity" type="number" inputMode="numeric" min={1} defaultValue={1} required />
+        <CampoNumerico id="quantity" name="quantity" inputMode="numeric" min={1} defaultValue={1} required />
       </div>
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}

@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { recordHarvestAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -102,11 +103,11 @@ export function HarvestForm({
       </div>
       <div className="nn-field">
         <label htmlFor="h-cherryWeightKg">{t("cherryWeightLabel")}</label>
-        <input id="h-cherryWeightKg" name="cherryWeightKg" type="number" inputMode="decimal" step="0.001" />
+        <CampoNumerico id="h-cherryWeightKg" name="cherryWeightKg" inputMode="decimal" step="0.001" />
       </div>
       <div className="nn-field">
         <label htmlFor="h-brix">{t("brixLabel")}</label>
-        <input id="h-brix" name="brix" type="number" inputMode="decimal" step="0.01" />
+        <CampoNumerico id="h-brix" name="brix" inputMode="decimal" step="0.01" />
       </div>
       <div className="nn-field">
         <label htmlFor="h-cherryColor">{t("cherryColorLabel")}</label>

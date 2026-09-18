@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { aplicarManejoEnLoteFormAction } from "../../actions/apiary";
@@ -138,7 +139,7 @@ export function ManejoEnLoteForm({ apiaryId, colmenas, hoy }: { apiaryId: string
           ) : null}
           <div className="nn-field">
             <label htmlFor="lote-cantidad">{t("feedingQuantityLabel")}</label>
-            <input id="lote-cantidad" name="feedingQuantity" type="number" step="0.001" min="0" inputMode="decimal" />
+            <CampoNumerico id="lote-cantidad" name="feedingQuantity" step="0.001" min="0" inputMode="decimal" />
           </div>
           <div className="nn-field">
             <label htmlFor="lote-unidad">{t("unitLabel")}</label>
@@ -198,11 +199,11 @@ export function ManejoEnLoteForm({ apiaryId, colmenas, hoy }: { apiaryId: string
           <div className="nn-field">
             <label htmlFor="lote-carencia">{t("treatmentWithdrawalDaysLabel")}</label>
             {/* Obligatoria, y cero es legítimo: hay productos sin carencia. */}
-            <input id="lote-carencia" name="treatmentWithdrawalDays" type="number" step="1" min="0" required />
+            <CampoNumerico id="lote-carencia" name="treatmentWithdrawalDays" step="1" min="0" required />
           </div>
           <div className="nn-field">
             <label htmlFor="lote-dosis">{t("treatmentDoseLabel")}</label>
-            <input id="lote-dosis" name="treatmentDose" type="number" step="0.001" min="0" inputMode="decimal" />
+            <CampoNumerico id="lote-dosis" name="treatmentDose" step="0.001" min="0" inputMode="decimal" />
           </div>
           <div className="nn-field">
             <label htmlFor="lote-dosis-unidad">{t("unitLabel")}</label>
