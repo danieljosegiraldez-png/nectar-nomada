@@ -443,6 +443,7 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       { value: "tarea_completada" },
       { value: "incidencia", definition: "Algo que salió mal o requiere atención — plaga, daño, equipo averiado." },
       { value: "movimiento_material", definition: "Material que cambió de lugar o de estado. El linaje vive en LotTransformation." },
+      { value: "manejo_fitosanitario", definition: "Una intervención contra una plaga en la parcela. Lo que se hizo vive en PlotIntervention." },
       { value: "otro", definition: "Siempre acompañado de nota libre. La regla de F1 §1: una lista tipada siempre necesita dónde poner lo que no encaja." },
     ],
   },
