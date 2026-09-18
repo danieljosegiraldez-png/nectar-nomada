@@ -78,6 +78,10 @@
       "razon": "Módulo de dominio: la genealogía de la colonia (spec 2026-09-18 §3). Dividir exige `requireApiaryAccess` manage sobre la caja de la madre Y sobre la de destino ANTES de escribir, comprueba dentro de la transacción que el destino no tenga colonia activa, y escribe la hija con su AuditEvent en la MISMA transacción. Unir delega en `registrarFinDeColonia`, el único escritor del fin. Leer la línea exige view."
     },
     {
+      "archivo": "lib/apiary/reinas.ts",
+      "razon": "Módulo de dominio: la reina de la colonia por intervalos (spec 2026-09-18 §4). Introducir, cambiar y cerrar exigen `requireApiaryAccess` manage sobre la caja de la colonia ANTES de escribir (y view sobre la colonia de origen si la reina se crió aquí), comprueban la tenencia vigente dentro de la transacción y escriben la tenencia con su AuditEvent en la MISMA transacción. Leer la reina, su historia y su estado exige view."
+    },
+    {
       "archivo": "lib/apiary/limpiezaDeCaja.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. `registrarLimpiezaDeCaja` exige `requireApiaryAccess` sobre la caja ANTES de escribir, y comprueba DENTRO de la transacción que ninguna colonia ocupara la caja el día entero —la regla que no puede ser un CHECK porque cruza a `colony`—. Escritura y AuditEvent en la MISMA transacción."
     },
