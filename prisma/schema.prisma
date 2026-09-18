@@ -8435,6 +8435,33 @@ model ConsumableMaterial {
 
   notes String?
 
+  /// **Lo que un medicamento tiene y un saco de gallinaza no** — botiquín,
+  /// Tarea 1. Todo del PRODUCTO, escrito una vez: el Apivar de un laboratorio
+  /// es el mismo en todos los frascos, y pedirlo en cada compra hace que se
+  /// escriba distinto cada vez — el mismo problema que el material en texto
+  /// libre tenía antes de esta tabla.
+  ///
+  /// Marca el material como medicamento veterinario: separa el botiquín de la
+  /// bodega, y sólo aquí se piden los campos de abajo.
+  isVeterinaryMedicine  Boolean @default(false) @map("is_veterinary_medicine")
+  /// La casa farmacéutica o la marca.
+  manufacturer          String?
+  /// Para la carencia y para la alergia manda el principio, no la marca: dos
+  /// marcas pueden llevar el mismo.
+  activeIngredient      String? @map("active_ingredient")
+  sanitaryRegistration  String? @map("sanitary_registration")
+  /// **«Aunque sea cero»**, Reglamento (UE) 2019/6. Nulo = sin declarar; 0 =
+  /// declarado cero. Son afirmaciones distintas y no se confunden. CHECK ≥ 0.
+  defaultWithdrawalDays Int?    @map("default_withdrawal_days")
+  /// El «almacenamiento seguro» que Daniel pidió: «refrigerado 2–8 °C».
+  storageConditions     String? @map("storage_conditions")
+  /// Advertencias de seguridad. **Van aquí y no en la persona**: decisión de
+  /// Daniel, porque la alergia de un trabajador es dato de salud (spec §B.2).
+  safetyNotes           String? @map("safety_notes")
+  /// Días de antelación del aviso de vencimiento. Nulo = no avisar de que VA a
+  /// vencer; lo VENCIDO avisa siempre (plan del botiquín, decisión 1). CHECK ≥ 0.
+  avisarDiasAntes       Int?    @map("avisar_dias_antes")
+
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
   creator   UserAccount? @relation("ConsumableMaterialCreatedBy", fields: [createdBy], references: [id])
