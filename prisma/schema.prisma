@@ -141,6 +141,7 @@ model Person {
 
   @@map("person")
   @@schema("core")
+  consumableCustodiesResponsible ConsumableCustody[] @relation("ConsumableCustodyResponsible")
 }
 
 enum UserAccountStatus {
@@ -295,6 +296,7 @@ model UserAccount {
   consumableMaterialsCreated ConsumableMaterial[] @relation("ConsumableMaterialCreatedBy")
   consumableLotsCreated ConsumableLot[] @relation("ConsumableLotCreatedBy")
   consumableStockEventsCreated ConsumableStockEvent[] @relation("ConsumableStockEventCreatedBy")
+  consumableCustodiesCreated ConsumableCustody[] @relation("ConsumableCustodyCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -904,6 +906,7 @@ model Location {
   lotTransformationsPerformedHere LotTransformation[] @relation("LotTransformationPerformedAt")
   byproductBatchesProduced ByproductBatch[] @relation("ByproductBatchProducedAt")
   consumableLots ConsumableLot[] @relation("ConsumableLotLocation")
+  consumableCustodies ConsumableCustody[] @relation("ConsumableCustodyLocation")
 }
 
 enum DryingRoomLightExposure {
@@ -8542,6 +8545,7 @@ model ConsumableLot {
   @@map("consumable_lot")
   @@schema("traceability")
   consumptionEntries MaterialConsumptionEntry[]
+  custodies ConsumableCustody[]
 }
 
 /// El libro mayor de las existencias: **sólo se añade**. Nada actualiza una
@@ -8588,5 +8592,48 @@ enum ConsumableStockEventType {
   /// motivo. Resta del saldo igual que `waste`; el sentido lo pone el tipo.
   lost
 
+  @@schema("traceability")
+}
+
+/// **Dónde está un frasco y quién responde por él**, con intervalo —
+/// botiquín, Tarea 5.
+///
+/// Dos preguntas distintas, y las dos son de Daniel: «¿dónde está el Apivar?» y
+/// «¿quién lo tiene?». El equipo y el medicamento pueden estar bajo distinto
+/// custodio o lugar. Es la figura de `StorageAssignment`, que está atada al
+/// lote de café y por eso no sirve tal cual.
+///
+/// **Nunca dos abiertas del mismo lote**: lo impone un índice único PARCIAL
+/// —`(consumable_lot_id) WHERE hasta IS NULL`— escrito a mano en la migración,
+/// porque Prisma no sabe expresarlo. No se declara aquí por la misma razón que el
+/// índice funcional del material: declararlo mal haría que el esquema pidiera
+/// algo que las migraciones no crean, y el guardia de deriva lo caza.
+model ConsumableCustody {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  consumableLotId String        @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot @relation(fields: [consumableLotId], references: [id])
+
+  /// Dónde está. Requerido: una custodia sin sitio no contesta nada.
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation("ConsumableCustodyLocation", fields: [locationId], references: [id])
+
+  /// Quién responde. Anulable: el sitio basta. Es una PERSONA y no una cuenta,
+  /// como `operatorPersonId`: quien guarda el frasco a menudo no tiene cuenta.
+  responsiblePersonId String? @map("responsible_person_id") @db.Uuid
+  responsiblePerson   Person? @relation("ConsumableCustodyResponsible", fields: [responsiblePersonId], references: [id])
+
+  desde DateTime
+  /// Nulo = es la vigente.
+  hasta DateTime?
+
+  notes String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ConsumableCustodyCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([consumableLotId, desde])
+  @@map("consumable_custody")
   @@schema("traceability")
 }

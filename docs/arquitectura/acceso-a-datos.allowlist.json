@@ -444,6 +444,10 @@
     {
       "archivo": "lib/inventario/lista.ts",
       "razon": "Lista del inventario. Filtra CADA LOTE por su propio ambito —su ubicacion, que es el ancla de RBAC— con lot:view, igual que listarEquipos filtra cada equipo. Un lote sin ubicacion cae a plataforma: lo desconocido se cierra."
+    },
+    {
+      "archivo": "lib/inventario/custodia.ts",
+      "razon": "Custodia de un frasco (donde esta y quien responde). Mover exige lot:manage sobre el sitio de DESTINO; leer la vigente, lot:view sobre donde esta. Cierra la anterior y abre la nueva en una transaccion, con su AuditEvent y el ANTES."
     }
   ],
   "reciben_transaccion": [
