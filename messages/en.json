@@ -2093,5 +2093,20 @@
     "informeAyuda": "Each lot from its process to its cup.",
     "ajustes": "Mill settings",
     "ajustesAyuda": "Register the mill and configure it. Only for whoever manages it."
+  },
+  "Inventario": {
+    "title": "Inventory",
+    "intro": "Which materials there are, in which lots, and how much is left. The balance comes from what was recorded: what came in minus what was used.",
+    "porCuadrar": "{n, plural, one {# lot has} other {# lots have}} more used than received. It needs reconciling.",
+    "sinContar": "{n, plural, one {# lot arrived} other {# lots arrived}} unweighed. Nobody knows yet how much there is.",
+    "todoEnOrden": "Everything balances.",
+    "vacio": "No materials recorded, or you have access to none.",
+    "colLote": "Lot",
+    "colRecibido": "Received",
+    "colQueda": "Left",
+    "colEstado": "Status",
+    "estadoPorCuadrar": "needs reconciling",
+    "estadoSinContar": "never counted",
+    "estadoContado": "counted"
   }
 }

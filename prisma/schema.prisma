@@ -901,6 +901,7 @@ model Location {
   @@schema("core")
   lotTransformationsPerformedHere LotTransformation[] @relation("LotTransformationPerformedAt")
   byproductBatchesProduced ByproductBatch[] @relation("ByproductBatchProducedAt")
+  consumableLots ConsumableLot[] @relation("ConsumableLotLocation")
 }
 
 enum DryingRoomLightExposure {
@@ -8386,6 +8387,18 @@ model ConsumableLot {
   batchLabel String @map("batch_label")
 
   receivedAt DateTime @map("received_at")
+
+  /// **Dónde se recibió, y es el ancla de RBAC.** Sin esto una lista no tiene
+  /// contra qué filtrar: el material se creaba con un sitio para juzgar el
+  /// permiso, pero no se guardaba — y una pantalla de inventario no sabría qué
+  /// enseñar a quién. Mismo papel que `BiocharBatch.producedAtLocationId`, cuyo
+  /// comentario lo llama así.
+  ///
+  /// Anulable: los lotes anteriores no lo tienen. Uno sin ubicación cae al
+  /// ámbito de plataforma — sólo lo ve quien manda en toda la plataforma. Que
+  /// lo desconocido se cierre en vez de abrirse es a propósito.
+  locationId String?   @map("location_id") @db.Uuid
+  location   Location? @relation("ConsumableLotLocation", fields: [locationId], references: [id])
   supplier   String?
   notes      String?
 

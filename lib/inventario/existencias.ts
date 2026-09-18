@@ -69,30 +69,34 @@ export async function existencias(
     select: { eventType: true, quantity: true, unit: true },
   });
 
-  // **`recorded` antes que el número.** Sin ningún evento, devolver cero sería
-  // afirmar algo que nadie ha afirmado.
+  return saldoDeEventos(eventos);
+}
+
+/**
+ * **La ÚNICA derivación del saldo.** La usan `existencias()` y la lista del
+ * inventario: dos derivaciones del mismo número acaban discrepando, y el día que
+ * lo hacen nadie sabe cuál manda. Pura a propósito — sin base y sin permisos—
+ * para que se pueda llamar con eventos ya leídos.
+ */
+export function saldoDeEventos(
+  eventos: ReadonlyArray<{ eventType: string; quantity: Prisma.Decimal; unit: string }>,
+): Existencias {
+  // `recorded` antes que el número: sin eventos, «cero» sería afirmar algo que
+  // nadie ha afirmado.
   if (eventos.length === 0) {
     return { quantity: new Prisma.Decimal(0), unit: null, recorded: false, requiereReconciliacion: false };
   }
-
   // No se convierte entre unidades: la finca compra en sacos y en quintales, y
   // una conversión inventada aquí sumaría cosas que no se pueden sumar.
   const unidades = new Set(eventos.map((e) => e.unit));
   if (unidades.size > 1) {
     throw new ExistenciasError(`unidades mezcladas en el lote: ${[...unidades].join(", ")}`);
   }
-
   const suma = eventos.reduce(
     (acc, e) => (SUMAN.has(e.eventType) ? acc.add(e.quantity) : acc.sub(e.quantity)),
     new Prisma.Decimal(0),
   );
-
-  return {
-    quantity: suma,
-    unit: eventos[0]!.unit,
-    recorded: true,
-    requiereReconciliacion: suma.lessThan(0),
-  };
+  return { quantity: suma, unit: eventos[0]!.unit, recorded: true, requiereReconciliacion: suma.lessThan(0) };
 }
 
 interface MovimientoInput {

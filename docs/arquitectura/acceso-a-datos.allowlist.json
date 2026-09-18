@@ -436,6 +436,10 @@
     {
       "archivo": "lib/inventario/existencias.ts",
       "razon": "Saldo DERIVADO de un lote de material y los movimientos que lo mueven. No guarda saldo en ninguna columna: lo recalcula del libro mayor, copiando la forma de `computeLotBalance` incluido su `recorded` (ADR-080). Autoriza con `lot:manage` juzgado donde se declare el sitio."
+    },
+    {
+      "archivo": "lib/inventario/lista.ts",
+      "razon": "Lista del inventario. Filtra CADA LOTE por su propio ambito —su ubicacion, que es el ancla de RBAC— con lot:view, igual que listarEquipos filtra cada equipo. Un lote sin ubicacion cae a plataforma: lo desconocido se cierra."
     }
   ],
   "reciben_transaccion": [

@@ -2093,5 +2093,20 @@
     "informeAyuda": "Cada lote de su proceso a su taza.",
     "ajustes": "Ajustes del beneficio",
     "ajustesAyuda": "Dar de alta el beneficio y configurarlo. Sólo para quien lo gestiona."
+  },
+  "Inventario": {
+    "title": "Inventario",
+    "intro": "Qué materiales hay, en qué lotes y cuánto queda. El saldo sale de lo que se registró: lo que entró menos lo que se gastó.",
+    "porCuadrar": "{n, plural, one {# lote tiene} other {# lotes tienen}} más gastado que recibido. Hay que cuadrarlo.",
+    "sinContar": "{n, plural, one {# lote llegó} other {# lotes llegaron}} sin pesar. Nadie sabe todavía cuánto hay.",
+    "todoEnOrden": "Todo cuadra.",
+    "vacio": "No hay materiales registrados, o no tienes acceso a ninguno.",
+    "colLote": "Lote",
+    "colRecibido": "Recibido",
+    "colQueda": "Queda",
+    "colEstado": "Estado",
+    "estadoPorCuadrar": "hay que cuadrarlo",
+    "estadoSinContar": "nunca contado",
+    "estadoContado": "contado"
   }
 }

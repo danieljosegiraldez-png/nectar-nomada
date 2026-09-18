@@ -72,6 +72,9 @@ export async function recibirLote(userAccountId: string, input: RecibirLoteInput
           materialId: input.materialId,
           batchLabel,
           receivedAt: occurredAt,
+          // El ancla de RBAC. Sin ella la lista no sabría a quién enseñar el
+          // lote; con `null` cae a plataforma, que es cerrarse, no abrirse.
+          locationId: input.locationId ?? null,
           supplier: input.supplier ?? null,
           notes: input.notes ?? null,
           createdBy: userAccountId,

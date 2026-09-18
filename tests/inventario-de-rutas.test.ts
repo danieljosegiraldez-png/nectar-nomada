@@ -107,7 +107,13 @@ describe("el inventario del router", () => {
     // 80 → 81 el mismo día: /beneficio, el índice de la sección que sustituye a
     // «Lotes» en el menú. Medido con scripts/inventario-de-rutas.mjs: 71 páginas
     // y 10 handlers.
-    expect(salida).toContain("81 entradas");
+    // 81 → 82 el mismo día: /inventario — el inventario de materiales, con el
+    // saldo DERIVADO y los dos estados que no se confunden: «nunca contado» y
+    // «hay que cuadrarlo». Filtra cada lote por su ubicación.
+    //
+    // TERCERA vez el mismo día que dos sesiones suben esta cifra al mismo
+    // número con pantallas distintas. Se midió sobre el árbol resuelto.
+    expect(salida).toContain("82 entradas");
     expect(codigo, salida).toBe(0);
   });
 
