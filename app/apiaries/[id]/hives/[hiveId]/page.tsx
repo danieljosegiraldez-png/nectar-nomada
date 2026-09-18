@@ -38,14 +38,23 @@ import { ConteoDeVarroaForm } from "../../../../components/apiary/ConteoDeVarroa
 import { HarvestForm } from "../../../../components/apiary/HarvestForm";
 import { ApiaryPhotoUploadForm } from "../../../../components/apiary/ApiaryPhotoUploadForm";
 import type { Asset } from "../../../../../generated/prisma/client";
+import { FAENAS, faenaDe, seccionAbierta } from "../../../../../lib/apiary/faena";
 
 export const dynamic = "force-dynamic";
 
-export default async function HiveDetailPage({ params }: { params: Promise<{ id: string; hiveId: string }> }) {
+export default async function HiveDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string; hiveId: string }>;
+  searchParams: Promise<{ faena?: string | string[] }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const { id: apiaryId, hiveId } = await params;
+  // Spec 2026-09-17 §A — «¿a qué vienes hoy?». Navegación, no dato: no se guarda.
+  const faena = faenaDe((await searchParams).faena);
   const t = await getTranslations("Apiary");
   /**
    * **Qué puede hacer de verdad quien está mirando.**
@@ -185,6 +194,30 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
         </section>
       ) : (
         <>
+          {/* La fila de faenas. Elegir una abre su sección y pliega las demás —plegadas,
+              no ocultas—; sin elegir, la pantalla de siempre. El ancla lleva a la sección. */}
+          <nav className="nn-section" aria-label={t("faenaPregunta")}>
+            <p>
+              <strong>{t("faenaPregunta")}</strong>{" "}
+              {FAENAS.map((f) => (
+                <span key={f}>
+                  <Link
+                    href={`/apiaries/${apiaryId}/hives/${hiveId}?faena=${f}#faena-${f}`}
+                    aria-current={faena === f ? "page" : undefined}
+                    style={faena === f ? { fontWeight: 700 } : undefined}
+                  >
+                    {t(`faena_${f}`)}
+                  </Link>
+                  {" · "}
+                </span>
+              ))}
+              <Link href={`/apiaries/${apiaryId}/hives/${hiveId}`} aria-current={faena === null ? "page" : undefined}>
+                {t("faenaTodo")}
+              </Link>
+            </p>
+            {faena ? <p className="nn-muted">{t("faenaAyuda")}</p> : null}
+          </nav>
+
           <section className="nn-section">
             <h2>{t("colonyHeading")}</h2>
             <p className="nn-detail-meta">
@@ -419,8 +452,11 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
             ) : null}
           </section>
 
-          <section className="nn-section">
-            <h2>{t("inspectionHeading")}</h2>
+          <section className="nn-section" id="faena-revisar">
+            <details open={seccionAbierta(faena, "revisar")}>
+              <summary>
+                <h2 style={{ display: "inline" }}>{t("inspectionHeading")}</h2>
+              </summary>
             {/* **Se dice por qué, no se esconde a secas.** Un formulario que
                 desaparece sin explicación se lee como una pantalla rota. Misma
                 doctrina que las limitaciones del veredicto: la falta se declara. */}
@@ -429,12 +465,13 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
             ) : (
               <p className="nn-muted">{t("sinPermisoInspeccion")}</p>
             )}
+            </details>
           </section>
 
           <section className="nn-section">
             <h2>{t("colonyEventHeading")}</h2>
             {puedeRegistrarEventos ? (
-              <ColonyEventQuickEntry colonyId={colony.id} selfPersonId={selfPersonId} frascos={frascos} />
+              <ColonyEventQuickEntry colonyId={colony.id} selfPersonId={selfPersonId} frascos={frascos} faena={faena} />
             ) : (
               <p className="nn-muted">{t("sinPermisoEvento")}</p>
             )}
@@ -443,8 +480,11 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
           {/* A9.6 — varroa: el conteo y su serie. La serie va junta con el
               formulario porque la decisión que se toma al contar es comparar con
               el conteo anterior, y tenerla en otra pantalla obliga a recordarla. */}
-          <section className="nn-section">
-            <h2>{t("varroaHeading")}</h2>
+          <section className="nn-section" id="faena-varroa">
+            <details open={seccionAbierta(faena, "varroa")}>
+              <summary>
+                <h2 style={{ display: "inline" }}>{t("varroaHeading")}</h2>
+              </summary>
             {puedeGestionar ? (
               <ConteoDeVarroaForm colonyId={colony.id} selfPersonId={selfPersonId} tratamientos={tratamientos} />
             ) : (
@@ -469,10 +509,14 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                 ))}
               </ul>
             )}
+            </details>
           </section>
 
-          <section className="nn-section">
-            <h2>{t("harvestHeading")}</h2>
+          <section className="nn-section" id="faena-cosechar">
+            <details open={seccionAbierta(faena, "cosechar")}>
+              <summary>
+                <h2 style={{ display: "inline" }}>{t("harvestHeading")}</h2>
+              </summary>
             {puedeGestionar ? <HarvestForm colonyId={colony.id} /> : <p className="nn-muted">{t("sinPermisoGestion")}</p>}
 
             {/* Las cosechas, con su cierre. Cada una lleva su formulario porque el tipo
@@ -577,6 +621,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                 </ul>
               </>
             ) : null}
+            </details>
           </section>
 
           <section className="nn-section">
