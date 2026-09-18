@@ -328,10 +328,14 @@ describe("el fin de una colonia", () => {
     // irresoluble: la colonia está viva, no es recuperable y se combina. Sin el
     // estado `combined` se quedaba `active` para siempre inflando el conteo.
     const c = await nuevaColonia(14);
+    // Desde el 2026-09-18 una unión dice CON CUÁL (spec «faenas, división y reinas» §3). La
+    // receptora se crea ANTES de contar: sigue activa, así que el conteo baja sólo en una.
+    const receptora = await nuevaColonia(1414);
     const antes = (await vitalesDeSitios([locationId], AHORA)).get(locationId)!.coloniasActivas;
     const despues = await registrarFinDeColonia(userAccountId, {
       colonyId: c.id,
       status: "combined",
+      combinedIntoColonyId: receptora.id,
       endedAt: AHORA,
       causas: [{ causeValueId: idDe("Problema de reina irresoluble"), provenanceClass: "direct_observation" }],
     });

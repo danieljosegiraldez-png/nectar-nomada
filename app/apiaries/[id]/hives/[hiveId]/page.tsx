@@ -2,7 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
-import { getHive } from "../../../../../lib/apiary/hives";
+import { getApiaryDetail, getHive } from "../../../../../lib/apiary/hives";
+import { lineaDeColonia } from "../../../../../lib/apiary/genealogia";
+import { dividirColoniaFormAction, unirColoniasFormAction } from "../../../../actions/apiary";
+import { cambiarReinaFormAction, cerrarTenenciaFormAction, introducirReinaFormAction } from "../../../../actions/apiary";
+import { estadoDeReina, FINES_DE_TENENCIA, historiaDeReinas, ORIGENES_DE_REINA } from "../../../../../lib/apiary/reinas";
 import { permissionKeysAnywhere } from "../../../../../lib/rbac/service";
 import { origenesDeColonia } from "../../../../../lib/apiary/origenDeColonia";
 import { sinRegistrar } from "../../../../../lib/apiary/vacio";
@@ -18,6 +22,7 @@ import { METODOS_DE_ALIMENTACION } from "../../../../../lib/apiary/alimentacion"
 import { leerEnmiendas } from "../../../../../lib/traceability/enmiendas";
 import { actualizarConfiguracionDeCajaFormAction } from "../../../../actions/apiary";
 import { BotonDeEnvio } from "../../../../components/BotonDeEnvio";
+import { TimezoneOffsetField } from "../../../../components/TimezoneOffsetField";
 import { cosechasDeColonia, TIPOS_DE_MIEL } from "../../../../../lib/apiary/cierreDeCosecha";
 import { completarCierreDeCosechaFormAction } from "../../../../actions/apiary";
 import { NewColonyForm } from "../../../../components/apiary/NewColonyForm";
@@ -29,7 +34,6 @@ import { limpiezasDeCaja } from "../../../../../lib/apiary/limpiezaDeCaja";
 import { historiaDeArtefactos } from "../../../../../lib/apiary/artefactos";
 import { DECLARABLES_EN_INSPECCION } from "../../../../../lib/apiary/tiposDeArtefacto";
 import { instalarArtefactoFormAction, retirarArtefactoFormAction } from "../../../../actions/apiary";
-import { TimezoneOffsetField } from "../../../../components/TimezoneOffsetField";
 import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
 import { ColonyEventQuickEntry } from "../../../../components/apiary/ColonyEventQuickEntry";
@@ -38,14 +42,24 @@ import { ConteoDeVarroaForm } from "../../../../components/apiary/ConteoDeVarroa
 import { HarvestForm } from "../../../../components/apiary/HarvestForm";
 import { ApiaryPhotoUploadForm } from "../../../../components/apiary/ApiaryPhotoUploadForm";
 import type { Asset } from "../../../../../generated/prisma/client";
+import { FAENAS, faenaDe, seccionAbierta } from "../../../../../lib/apiary/faena";
+import { avisosDeEnjambrazon } from "../../../../../lib/apiary/avisoDeEnjambrazon";
 
 export const dynamic = "force-dynamic";
 
-export default async function HiveDetailPage({ params }: { params: Promise<{ id: string; hiveId: string }> }) {
+export default async function HiveDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string; hiveId: string }>;
+  searchParams: Promise<{ faena?: string | string[] }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const { id: apiaryId, hiveId } = await params;
+  // Spec 2026-09-17 §A — «¿a qué vienes hoy?». Navegación, no dato: no se guarda.
+  const faena = faenaDe((await searchParams).faena);
   const t = await getTranslations("Apiary");
   /**
    * **Qué puede hacer de verdad quien está mirando.**
@@ -127,6 +141,31 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
   // A9 · Anexo B §5 — las cosechas no se listaban en ninguna parte, así que ni el tipo
   // de miel ni el peso ni la humedad tenían dónde verse.
   const cosechas = colony ? await cosechasDeColonia(colony.id) : [];
+  // Spec 2026-09-18: la enjambrazón se descubre REVISANDO. El mismo cálculo y la misma ventana
+  // de 60 días que la ficha del apiario (`app/apiaries/[id]/page.tsx`), no uno nuevo. Después de
+  // `getHive`, que ya autorizó ver esta caja.
+  // Spec 2026-09-18 §3 — la línea de la colonia, y las cajas del apiario para dividir y unir.
+  // Después de `getHive`; cada lectura autoriza por su cuenta.
+  const linea = colony ? await lineaDeColonia(user.userAccountId, colony.id) : null;
+  const cajasDelApiario = colony && puedeGestionar ? (await getApiaryDetail(user.userAccountId, hive.locationId)).hives : [];
+  const cajasLibres = cajasDelApiario.filter((h) => h.id !== hive.id && !h.colonies.some((c) => c.status === "active"));
+  const receptoras = cajasDelApiario.flatMap((h) =>
+    h.colonies.filter((c) => c.status === "active" && c.id !== colony?.id).map((c) => ({ colonyId: c.id, identifier: h.identifier })),
+  );
+  // Spec 2026-09-18 §4 — la reina. Después de `getHive`; cada lectura autoriza por su cuenta.
+  const [estadoReina, historiaReinas] = colony
+    ? await Promise.all([estadoDeReina(user.userAccountId, colony.id), historiaDeReinas(user.userAccountId, colony.id)])
+    : [null, []];
+  // «Criada aquí»: cualquier colonia activa del apiario, esta incluida.
+  const coloniasDeOrigen = cajasDelApiario.flatMap((h) =>
+    h.colonies.filter((c) => c.status === "active").map((c) => ({ colonyId: c.id, identifier: h.identifier })),
+  );
+  const ahoraEnjambrazon = new Date();
+  const avisoDeEnjambrazon = colony
+    ? ((
+        await avisosDeEnjambrazon(hive.locationId, new Date(ahoraEnjambrazon.getTime() - 60 * 24 * 60 * 60 * 1000), ahoraEnjambrazon)
+      ).find((a) => a.colonyId === colony.id) ?? null)
+    : null;
   // ADR-160: sólo los aparatos con algún modo sobre MIEL DE ABEJA. El refractómetro del
   // beneficio lee mosto de café y no es el de mieles. La lista ya viene autorizada.
   const refractometrosDeMiel =
@@ -185,6 +224,30 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
         </section>
       ) : (
         <>
+          {/* La fila de faenas. Elegir una abre su sección y pliega las demás —plegadas,
+              no ocultas—; sin elegir, la pantalla de siempre. El ancla lleva a la sección. */}
+          <nav className="nn-section" aria-label={t("faenaPregunta")}>
+            <p>
+              <strong>{t("faenaPregunta")}</strong>{" "}
+              {FAENAS.map((f) => (
+                <span key={f}>
+                  <Link
+                    href={`/apiaries/${apiaryId}/hives/${hiveId}?faena=${f}#faena-${f}`}
+                    aria-current={faena === f ? "page" : undefined}
+                    style={faena === f ? { fontWeight: 700 } : undefined}
+                  >
+                    {t(`faena_${f}`)}
+                  </Link>
+                  {" · "}
+                </span>
+              ))}
+              <Link href={`/apiaries/${apiaryId}/hives/${hiveId}`} aria-current={faena === null ? "page" : undefined}>
+                {t("faenaTodo")}
+              </Link>
+            </p>
+            {faena ? <p className="nn-muted">{t("faenaAyuda")}</p> : null}
+          </nav>
+
           <section className="nn-section">
             <h2>{t("colonyHeading")}</h2>
             <p className="nn-detail-meta">
@@ -419,8 +482,20 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
             ) : null}
           </section>
 
-          <section className="nn-section">
-            <h2>{t("inspectionHeading")}</h2>
+          <section className="nn-section" id="faena-revisar">
+            <details open={seccionAbierta(faena, "revisar")}>
+              <summary>
+                <h2 style={{ display: "inline" }}>{t("inspectionHeading")}</h2>
+              </summary>
+            {avisoDeEnjambrazon ? (
+              <p className="nn-alerta nn-alerta-aviso">
+                {t("enjambrazonAviso", {
+                  tipo: t(`queenCell_${avisoDeEnjambrazon.kind}`),
+                  fecha: avisoDeEnjambrazon.occurredAt.toISOString().slice(0, 10),
+                })}{" "}
+                <Link href={`/apiaries/${apiaryId}/hives/${hiveId}?faena=dividir#faena-dividir`}>{t("enjambrazonDividir")}</Link>
+              </p>
+            ) : null}
             {/* **Se dice por qué, no se esconde a secas.** Un formulario que
                 desaparece sin explicación se lee como una pantalla rota. Misma
                 doctrina que las limitaciones del veredicto: la falta se declara. */}
@@ -429,12 +504,13 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
             ) : (
               <p className="nn-muted">{t("sinPermisoInspeccion")}</p>
             )}
+            </details>
           </section>
 
           <section className="nn-section">
             <h2>{t("colonyEventHeading")}</h2>
             {puedeRegistrarEventos ? (
-              <ColonyEventQuickEntry colonyId={colony.id} selfPersonId={selfPersonId} frascos={frascos} />
+              <ColonyEventQuickEntry colonyId={colony.id} selfPersonId={selfPersonId} frascos={frascos} faena={faena} />
             ) : (
               <p className="nn-muted">{t("sinPermisoEvento")}</p>
             )}
@@ -443,8 +519,11 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
           {/* A9.6 — varroa: el conteo y su serie. La serie va junta con el
               formulario porque la decisión que se toma al contar es comparar con
               el conteo anterior, y tenerla en otra pantalla obliga a recordarla. */}
-          <section className="nn-section">
-            <h2>{t("varroaHeading")}</h2>
+          <section className="nn-section" id="faena-varroa">
+            <details open={seccionAbierta(faena, "varroa")}>
+              <summary>
+                <h2 style={{ display: "inline" }}>{t("varroaHeading")}</h2>
+              </summary>
             {puedeGestionar ? (
               <ConteoDeVarroaForm colonyId={colony.id} selfPersonId={selfPersonId} tratamientos={tratamientos} />
             ) : (
@@ -469,10 +548,316 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                 ))}
               </ul>
             )}
+            </details>
           </section>
 
-          <section className="nn-section">
-            <h2>{t("harvestHeading")}</h2>
+          <section className="nn-section" id="faena-dividir">
+            <details open={seccionAbierta(faena, "dividir")}>
+              <summary>
+                <h2 style={{ display: "inline" }}>{t("faena_dividir")}</h2>
+              </summary>
+              {linea && (linea.madre || linea.hijas.length > 0) ? (
+                <p>
+                  {linea.madre ? (
+                    <>
+                      {t("lineaMadre")}{" "}
+                      <Link href={`/apiaries/${linea.madre.hive.locationId}/hives/${linea.madre.hive.id}`}>{linea.madre.hive.identifier}</Link>
+                      {". "}
+                    </>
+                  ) : null}
+                  {linea.hijas.length > 0 ? (
+                    <>
+                      {t("lineaHijas")}{" "}
+                      {linea.hijas.map((h, i) => (
+                        <span key={h.id}>
+                          {i > 0 ? ", " : ""}
+                          <Link href={`/apiaries/${h.hive.locationId}/hives/${h.hive.id}`}>{h.hive.identifier}</Link>
+                        </span>
+                      ))}
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+              {/* La guía de DICTA, citada, como guía: no se valida (spec §1 — ninguna cifra entra). */}
+              <p className="nn-muted">{t("dividirGuia")}</p>
+              {puedeGestionar && colony.status === "active" ? (
+                <form action={dividirColoniaFormAction} className="nn-form">
+                  <input type="hidden" name="apiaryId" value={apiaryId} />
+                  <input type="hidden" name="hiveId" value={hive.id} />
+                  <input type="hidden" name="locationId" value={hive.locationId} />
+                  <input type="hidden" name="madreColonyId" value={colony.id} />
+                  <TimezoneOffsetField />
+                  <div className="nn-field">
+                    <label htmlFor="dividir-destino">{t("dividirDestino")}</label>
+                    <select id="dividir-destino" name="destinoHiveId" required defaultValue="">
+                      <option value="" disabled />
+                      {cajasLibres.map((h) => (
+                        <option key={h.id} value={h.id}>
+                          {h.identifier}
+                        </option>
+                      ))}
+                      <option value="__nueva__">{t("dividirCajaNueva")}</option>
+                    </select>
+                  </div>
+                  <div className="nn-field">
+                    <label htmlFor="dividir-nueva">{t("dividirNuevoIdentificador")}</label>
+                    <input id="dividir-nueva" name="nuevoIdentificador" type="text" />
+                  </div>
+                  <div className="nn-field">
+                    <label htmlFor="dividir-cuando">{t("faenaCuando")}</label>
+                    <input id="dividir-cuando" name="cuando" type="datetime-local" />
+                  </div>
+                  <div className="nn-field">
+                    <label htmlFor="dividir-nota">{t("dividirNota")}</label>
+                    <input id="dividir-nota" name="nota" type="text" />
+                  </div>
+                  {/* Sólo si hay reina registrada: sin ella no hay nada que mover, y no se inventa. */}
+                  {estadoReina?.estado === "CON_REINA" ? (
+                    <div className="nn-field">
+                      <label htmlFor="dividir-reina">{t("dividirReinaVa")}</label>
+                      <select id="dividir-reina" name="reinaVa" defaultValue="madre">
+                        <option value="madre">{t("dividirReinaVaMadre")}</option>
+                        <option value="hija">{t("dividirReinaVaHija")}</option>
+                      </select>
+                    </div>
+                  ) : null}
+                  <BotonDeEnvio>{t("dividirBoton")}</BotonDeEnvio>
+                </form>
+              ) : (
+                <p className="nn-muted">{t("sinPermisoGestion")}</p>
+              )}
+            </details>
+          </section>
+
+          <section className="nn-section" id="faena-reinas">
+            <details open={seccionAbierta(faena, "reinas")}>
+              <summary>
+                <h2 style={{ display: "inline" }}>{t("faena_reinas")}</h2>
+              </summary>
+              {estadoReina ? (
+                <p>
+                  {estadoReina.estado === "CON_REINA"
+                    ? t("reinaEstadoCon", { fecha: estadoReina.desde.toISOString().slice(0, 10) })
+                    : estadoReina.estado === "HUERFANA"
+                      ? t("reinaEstadoHuerfana", { fecha: estadoReina.desde.toISOString().slice(0, 10) })
+                      : t("reinaEstadoSinRegistro")}
+                </p>
+              ) : null}
+              {historiaReinas.length > 0 ? (
+                <>
+                  <h3>{t("reinasHistoria")}</h3>
+                  <ul>
+                    {historiaReinas.map((r) => (
+                      <li key={r.id}>
+                        {r.hasta
+                          ? t("reinaTenencia", {
+                              origen: t(`reinaOrigen_${r.queen.origin}`),
+                              desde: r.desde.toISOString().slice(0, 10),
+                              hasta: r.hasta.toISOString().slice(0, 10),
+                            })
+                          : t("reinaTenenciaAbierta", { origen: t(`reinaOrigen_${r.queen.origin}`), desde: r.desde.toISOString().slice(0, 10) })}
+                        {r.fin ? ` · ${t(`reinaFin_${r.fin}`)}` : ""}
+                        {r.finNota ? ` — ${r.finNota}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+              {puedeGestionar && colony.status === "active" ? (
+                estadoReina?.estado === "CON_REINA" ? (
+                  <>
+                    <h3>{t("reinaCambiar")}</h3>
+                    <form action={cambiarReinaFormAction} className="nn-form">
+                    <input type="hidden" name="apiaryId" value={apiaryId} />
+                    <input type="hidden" name="hiveId" value={hive.id} />
+                    <input type="hidden" name="colonyId" value={colony.id} />
+                    <TimezoneOffsetField />
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-fin">{t("reinaFin")}</label>
+                      <select id="cambiar-fin" name="fin" required defaultValue="">
+                        <option value="" disabled />
+                        {FINES_DE_TENENCIA.map((f) => (
+                          <option key={f} value={f}>
+                            {t(`reinaFin_${f}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-finnota">{t("reinaFinNota")}</label>
+                      <input id="cambiar-finnota" name="finNota" type="text" />
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-nueva-origen">{t("reinaOrigen")}</label>
+                      <select id="cambiar-nueva-origen" name="origen" required defaultValue="">
+                        <option value="" disabled />
+                        {ORIGENES_DE_REINA.map((o) => (
+                          <option key={o} value={o}>
+                            {t(`reinaOrigen_${o}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-nueva-madre">{t("reinaOrigenColonia")}</label>
+                      <select id="cambiar-nueva-madre" name="origenColonyId" defaultValue="">
+                        <option value="" />
+                        {coloniasDeOrigen.map((c) => (
+                          <option key={c.colonyId} value={c.colonyId}>
+                            {c.identifier}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-nueva-notas">{t("reinaNotas")}</label>
+                      <input id="cambiar-nueva-notas" name="notas" type="text" />
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-cuando">{t("faenaCuando")}</label>
+                      <input id="cambiar-cuando" name="cuando" type="datetime-local" />
+                    </div>
+                      <BotonDeEnvio>{t("reinaCambiarBoton")}</BotonDeEnvio>
+                    </form>
+                    <h3>{t("reinaCerrar")}</h3>
+                    <form action={cerrarTenenciaFormAction} className="nn-form">
+                    <input type="hidden" name="apiaryId" value={apiaryId} />
+                    <input type="hidden" name="hiveId" value={hive.id} />
+                    <input type="hidden" name="colonyId" value={colony.id} />
+                    <TimezoneOffsetField />
+                    <div className="nn-field">
+                      <label htmlFor="cerrar-fin">{t("reinaFin")}</label>
+                      <select id="cerrar-fin" name="fin" required defaultValue="">
+                        <option value="" disabled />
+                        {FINES_DE_TENENCIA.map((f) => (
+                          <option key={f} value={f}>
+                            {t(`reinaFin_${f}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cerrar-finnota">{t("reinaFinNota")}</label>
+                      <input id="cerrar-finnota" name="finNota" type="text" />
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cerrar-cuando">{t("faenaCuando")}</label>
+                      <input id="cerrar-cuando" name="cuando" type="datetime-local" />
+                    </div>
+                      <BotonDeEnvio>{t("reinaCerrarBoton")}</BotonDeEnvio>
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <h3>{t("reinaIntroducir")}</h3>
+                    <form action={introducirReinaFormAction} className="nn-form">
+                    <input type="hidden" name="apiaryId" value={apiaryId} />
+                    <input type="hidden" name="hiveId" value={hive.id} />
+                    <input type="hidden" name="colonyId" value={colony.id} />
+                    <TimezoneOffsetField />
+                    <div className="nn-field">
+                      <label htmlFor="introducir-origen">{t("reinaOrigen")}</label>
+                      <select id="introducir-origen" name="origen" required defaultValue="">
+                        <option value="" disabled />
+                        {ORIGENES_DE_REINA.map((o) => (
+                          <option key={o} value={o}>
+                            {t(`reinaOrigen_${o}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="introducir-madre">{t("reinaOrigenColonia")}</label>
+                      <select id="introducir-madre" name="origenColonyId" defaultValue="">
+                        <option value="" />
+                        {coloniasDeOrigen.map((c) => (
+                          <option key={c.colonyId} value={c.colonyId}>
+                            {c.identifier}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="introducir-notas">{t("reinaNotas")}</label>
+                      <input id="introducir-notas" name="notas" type="text" />
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="introducir-cuando">{t("faenaCuando")}</label>
+                      <input id="introducir-cuando" name="cuando" type="datetime-local" />
+                    </div>
+                      <BotonDeEnvio>{t("reinaIntroducirBoton")}</BotonDeEnvio>
+                    </form>
+                  </>
+                )
+              ) : (
+                <p className="nn-muted">{t("sinPermisoGestion")}</p>
+              )}
+            </details>
+          </section>
+
+          <section className="nn-section" id="faena-unir">
+            <details open={seccionAbierta(faena, "unir")}>
+              <summary>
+                <h2 style={{ display: "inline" }}>{t("faena_unir")}</h2>
+              </summary>
+              <p className="nn-muted">{t("unirGuia")}</p>
+              {puedeGestionar && colony.status === "active" ? (
+                receptoras.length === 0 ? (
+                  <p className="nn-muted">{t("unirSinReceptoras")}</p>
+                ) : (
+                  <form action={unirColoniasFormAction} className="nn-form">
+                    <input type="hidden" name="apiaryId" value={apiaryId} />
+                    <input type="hidden" name="hiveId" value={hive.id} />
+                    <input type="hidden" name="debilColonyId" value={colony.id} />
+                    <TimezoneOffsetField />
+                    <div className="nn-field">
+                      <label htmlFor="unir-receptora">{t("unirReceptora")}</label>
+                      <select id="unir-receptora" name="receptoraColonyId" required defaultValue="">
+                        <option value="" disabled />
+                        {receptoras.map((r) => (
+                          <option key={r.colonyId} value={r.colonyId}>
+                            {r.identifier}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="unir-cuando">{t("faenaCuando")}</label>
+                      <input id="unir-cuando" name="cuando" type="datetime-local" />
+                    </div>
+                    {/* Por qué se unió: el mismo catálogo y la misma firmeza que el fin de colonia. */}
+                    <fieldset className="nn-field">
+                      <legend>{t("colonyEndCausesLegend")}</legend>
+                      {causas.map((c) => (
+                        <div key={c.id} className="nn-field">
+                          <label htmlFor={`unir-causa-${c.id}`}>{c.value}</label>
+                          <select id={`unir-causa-${c.id}`} name={`causa_${c.id}`} defaultValue="">
+                            <option value="">{t("colonyEndCauseNo")}</option>
+                            <option value="hypothesis">{t("colonyEndCause_hypothesis")}</option>
+                            <option value="conclusion">{t("colonyEndCause_conclusion")}</option>
+                            <option value="direct_observation">{t("colonyEndCause_direct_observation")}</option>
+                          </select>
+                        </div>
+                      ))}
+                    </fieldset>
+                    <div className="nn-field">
+                      <label htmlFor="unir-razon">{t("colonyEndReasonLabel")}</label>
+                      <input id="unir-razon" name="reason" type="text" />
+                    </div>
+                    <BotonDeEnvio>{t("unirBoton")}</BotonDeEnvio>
+                  </form>
+                )
+              ) : (
+                <p className="nn-muted">{t("sinPermisoGestion")}</p>
+              )}
+            </details>
+          </section>
+
+          <section className="nn-section" id="faena-cosechar">
+            <details open={seccionAbierta(faena, "cosechar")}>
+              <summary>
+                <h2 style={{ display: "inline" }}>{t("harvestHeading")}</h2>
+              </summary>
             {puedeGestionar ? <HarvestForm colonyId={colony.id} /> : <p className="nn-muted">{t("sinPermisoGestion")}</p>}
 
             {/* Las cosechas, con su cierre. Cada una lleva su formulario porque el tipo
@@ -577,6 +962,7 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                 </ul>
               </>
             ) : null}
+            </details>
           </section>
 
           <section className="nn-section">

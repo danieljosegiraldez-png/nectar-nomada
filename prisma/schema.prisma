@@ -232,6 +232,8 @@ model UserAccount {
   inspectionsCreated                Inspection[]                 @relation("InspectionCreatedBy")
   apiaryHarvestEventsCreated        ApiaryHarvestEvent[]         @relation("ApiaryHarvestEventCreatedBy")
   colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
+  queensCreated                     Queen[]                      @relation("QueenCreatedBy")
+  queenTenuresCreated               QueenTenure[]                @relation("QueenTenureCreatedBy")
   hiveCleaningsCreated HiveCleaning[] @relation("HiveCleaningCreatedBy")
   hiveFittingsCreated  HiveFitting[]  @relation("HiveFittingCreatedBy")
   hiveNodesCreated     HiveNode[]     @relation("HiveNodeCreatedBy")
@@ -6538,9 +6540,93 @@ model Colony {
   apiaryHarvestEvents ApiaryHarvestEvent[]
   assets              Asset[]
 
+  /// Spec 2026-09-18 §3 — la genealogía. La MADRE, sólo cuando la colonia nace de una división
+  /// (`originType = split`) y obligatoria en las nuevas (CHECK NOT VALID: las viejas sin madre se
+  /// quedan sin madre, no se les adivina una). NO ACTION y no RESTRICT: una madre con hijas no se borra, pero la comprobación es al FINAL
+  /// de la sentencia, así que borrar madre e hija juntas en un mismo `deleteMany` no depende del orden.
+  parentColonyId String? @map("parent_colony_id") @db.Uuid
+  parentColony   Colony? @relation("ColonyParent", fields: [parentColonyId], references: [id], onDelete: NoAction)
+  daughters      Colony[] @relation("ColonyParent")
+  /// La RECEPTORA, sólo cuando esta colonia terminó uniéndose a otra (`status = combined`).
+  combinedIntoColonyId String?  @map("combined_into_colony_id") @db.Uuid
+  combinedInto         Colony?  @relation("ColonyCombinedInto", fields: [combinedIntoColonyId], references: [id], onDelete: NoAction)
+  absorbed             Colony[] @relation("ColonyCombinedInto")
+  /// Spec 2026-09-18 §4 — las reinas que ha tenido (por intervalos) y las que se criaron aquí.
+  queenTenures QueenTenure[]
+  queensRaised Queen[]       @relation("QueenOriginColony")
+
+  @@index([parentColonyId])
   @@index([hiveId])
   @@index([originSourceValueId])
   @@map("colony")
+  @@schema("apiary")
+}
+
+/// Spec 2026-09-18 §4 — de dónde salió una reina. Nombres de SAGARPA («crianza», «cambio»,
+/// «introducción de reinas»). Sin marca: Daniel, «no marcamos las reinas».
+enum QueenOrigin {
+  criada_aqui
+  comprada
+  natural
+  de_enjambre
+  otro
+
+  @@schema("apiary")
+}
+
+/// Cómo terminó la estancia de una reina en una colonia.
+enum QueenTenureEnd {
+  cambiada
+  muerta
+  perdida
+  enjambro
+  otro
+
+  @@schema("apiary")
+}
+
+/// Una reina. Sólo existe si alguien la registró: una colonia sin ninguna no es «huérfana», es
+/// «sin registro» (ADR-080). Dónde estuvo y cuándo vive en `QueenTenure`.
+model Queen {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  origin          QueenOrigin
+  /// La colonia donde se crió, cuando `origin = criada_aqui` — y sólo entonces (CHECK).
+  originColonyId  String?         @map("origin_colony_id") @db.Uuid
+  originColony    Colony?         @relation("QueenOriginColony", fields: [originColonyId], references: [id], onDelete: Restrict)
+  /// Obligatoria si `origin = otro` (CHECK).
+  notes           String?
+  tenures         QueenTenure[]
+  provenanceClass ProvenanceClass @map("provenance_class")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  createdBy       String?         @map("created_by") @db.Uuid
+  creator         UserAccount?    @relation("QueenCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([originColonyId])
+  @@map("queen")
+  @@schema("apiary")
+}
+
+/// La reina de una colonia, por intervalos: cerrado a la izquierda, abierto a la derecha. Una
+/// abierta por colonia y una abierta por reina (índices parciales únicos en la migración).
+model QueenTenure {
+  id        String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  queenId   String          @map("queen_id") @db.Uuid
+  queen     Queen           @relation(fields: [queenId], references: [id], onDelete: Restrict)
+  colonyId  String          @map("colony_id") @db.Uuid
+  colony    Colony          @relation(fields: [colonyId], references: [id], onDelete: Restrict)
+  desde     DateTime
+  hasta     DateTime?
+  /// Presente si y sólo si `hasta` lo está (CHECK).
+  fin       QueenTenureEnd?
+  /// Obligatoria si `fin = otro` (CHECK).
+  finNota   String?         @map("fin_nota")
+  createdAt DateTime        @default(now()) @map("created_at")
+  createdBy String?         @map("created_by") @db.Uuid
+  creator   UserAccount?    @relation("QueenTenureCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([colonyId, desde])
+  @@index([queenId])
+  @@map("queen_tenure")
   @@schema("apiary")
 }
 

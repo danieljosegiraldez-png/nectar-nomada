@@ -36,6 +36,8 @@ import type { RecordColonyEventInput } from "../../lib/apiary/colonyEvents";
 import type { ApiaryAssetParent } from "../../lib/apiary/media";
 import { fechaDeDia, parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
 import { exigeTipoDeArtefacto, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
+import { dividirColonia, unirColonias } from "../../lib/apiary/genealogia";
+import { cambiarReina, cerrarTenencia, exigeFinDeTenencia, exigeOrigenDeReina, introducirReina } from "../../lib/apiary/reinas";
 
 const emptyToNull = (value: FormDataEntryValue | null) => {
   const str = String(value ?? "").trim();
@@ -774,4 +776,115 @@ export async function asentarPesoDeCosechaAction(
   }
   revalidatePath(`/apiaries/${apiaryId}`);
   return { ok: true };
+}
+
+/** Cuándo, escrito con el desfase del dispositivo; vacío = ahora. */
+function cuandoDe(formData: FormData): Date {
+  return parseOptionalLocalDateTime(String(formData.get("cuando") ?? ""), String(formData.get(TZ_OFFSET_FIELD) ?? "")) ?? new Date();
+}
+
+/**
+ * Spec 2026-09-18 §3 — dividir. El destino es una caja del apiario sin colonia activa, o una caja
+ * NUEVA que se crea aquí mismo con su identificador (lo normal en el patio: se arma el núcleo en
+ * una caja que todavía no estaba registrada).
+ */
+export async function dividirColoniaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const hiveId = String(formData.get("hiveId") ?? "");
+  let destinoHiveId = String(formData.get("destinoHiveId") ?? "");
+  if (destinoHiveId === "__nueva__") {
+    const nueva = await createHive(user.userAccountId, {
+      identifier: String(formData.get("nuevoIdentificador") ?? "").trim(),
+      locationId: String(formData.get("locationId") ?? ""),
+    });
+    destinoHiveId = nueva.id;
+  }
+  await dividirColonia(user.userAccountId, {
+    madreColonyId: String(formData.get("madreColonyId") ?? ""),
+    destinoHiveId,
+    occurredAt: cuandoDe(formData),
+    nota: emptyToNull(formData.get("nota")),
+    reinaVa: formData.get("reinaVa") === "hija" ? "hija" : "madre",
+  });
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+  revalidatePath(`/apiaries/${apiaryId}`);
+}
+
+/**
+ * Spec 2026-09-18 §3 — unir. Las causas van como en el fin de colonia: una elección por causa del
+ * catálogo, con cuán firme es; las que se dejan en «—» no se mandan.
+ */
+export async function unirColoniasFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const hiveId = String(formData.get("hiveId") ?? "");
+  const causas = [...formData.entries()]
+    .filter(([k, v]) => k.startsWith("causa_") && String(v) !== "")
+    .map(([k, v]) => ({ causeValueId: k.slice("causa_".length), provenanceClass: exigeClaseDeCausa(String(v)) }));
+  await unirColonias(user.userAccountId, {
+    debilColonyId: String(formData.get("debilColonyId") ?? ""),
+    receptoraColonyId: String(formData.get("receptoraColonyId") ?? ""),
+    occurredAt: cuandoDe(formData),
+    causas,
+    reason: emptyToNull(formData.get("reason")),
+  });
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+  revalidatePath(`/apiaries/${apiaryId}`);
+}
+
+/** Spec 2026-09-18 §4 — la reina nueva, tal como llega de un formulario. */
+function reinaNuevaDe(formData: FormData) {
+  return {
+    origen: exigeOrigenDeReina(String(formData.get("origen") ?? "")),
+    origenColonyId: emptyToNull(formData.get("origenColonyId")),
+    notas: emptyToNull(formData.get("notas")),
+  };
+}
+
+function revalidarColmena(formData: FormData) {
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  revalidatePath(`/apiaries/${apiaryId}/hives/${String(formData.get("hiveId") ?? "")}`);
+  revalidatePath(`/apiaries/${apiaryId}`);
+}
+
+/** Registrar la reina de una colonia que no tiene ninguna abierta. */
+export async function introducirReinaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await introducirReina(user.userAccountId, {
+    colonyId: String(formData.get("colonyId") ?? ""),
+    ...reinaNuevaDe(formData),
+    desde: cuandoDe(formData),
+  });
+  revalidarColmena(formData);
+}
+
+/** Cambiar la reina: cierra la vigente con su fin y abre la nueva en el mismo instante. */
+export async function cambiarReinaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await cambiarReina(user.userAccountId, {
+    colonyId: String(formData.get("colonyId") ?? ""),
+    nueva: reinaNuevaDe(formData),
+    cuando: cuandoDe(formData),
+    finDeLaVieja: exigeFinDeTenencia(String(formData.get("fin") ?? "")),
+    finNota: emptyToNull(formData.get("finNota")),
+  });
+  revalidarColmena(formData);
+}
+
+/** La reina vigente terminó y no hay otra todavía: la colonia queda huérfana. */
+export async function cerrarTenenciaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await cerrarTenencia(user.userAccountId, {
+    colonyId: String(formData.get("colonyId") ?? ""),
+    cuando: cuandoDe(formData),
+    fin: exigeFinDeTenencia(String(formData.get("fin") ?? "")),
+    finNota: emptyToNull(formData.get("finNota")),
+  });
+  revalidarColmena(formData);
 }
