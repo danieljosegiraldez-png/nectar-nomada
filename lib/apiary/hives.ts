@@ -19,7 +19,7 @@ import { classificationForTarget, loadScopeClassifications } from "../rbac/scope
 import { recordAuditEvent } from "../audit";
 import { DEFAULT_NEW_RECORD_CLASSIFICATION } from "../traceability/lots";
 import type { ScopeTarget } from "../rbac/types";
-import type { ColonyOriginType, ColonyStatus, DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
+import type { ClassificationLevel, ColonyOriginType, ColonyStatus, DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { CATALOGO_DE_CAUSA_DE_PERDIDA, esClaseDeCausa, type ClaseDeCausa } from "./causaDePerdida";
 
 export class ApiaryAccessError extends Error {}
@@ -38,6 +38,34 @@ export async function requireApiaryAccess(
   action: "manage" | "view",
   candidates: ReadonlyArray<{ projectId?: string | null; locationId?: string | null }>,
 ) {
+  const puede = (t: ScopeTarget, c: ClassificationLevel) => can(userAccountId, action, "apiary", t, c);
+  if (!(await algunAmbitoDeColmena(candidates, puede))) throw new ApiaryAccessError("no_apiary_access");
+}
+
+/**
+ * Artefactos de colmena, Tarea 4 — registrar, instalar, mover o retirar un nodo de sensores.
+ * Mismo ámbito y misma clasificación que el apiario, con su propio permiso: mover un nodo
+ * reasigna sus datos, y todo `Farm Operator` tiene `apiary:manage` (spec §7.1).
+ */
+export async function requireHiveNodeAccess(
+  userAccountId: string,
+  candidates: ReadonlyArray<{ projectId?: string | null; locationId?: string | null }>,
+) {
+  const puede = (t: ScopeTarget, c: ClassificationLevel) => can(userAccountId, "manage", "hive_node", t, c);
+  if (!(await algunAmbitoDeColmena(candidates, puede))) {
+    throw new ApiaryAccessError("no_hive_node_access");
+  }
+}
+
+/**
+ * ¿Pasa `puede` en alguno de los ámbitos de la colmena? Cada puerta le pasa su propia llamada a
+ * `can` con el recurso ESCRITO —`"apiary"`, `"hive_node"`—: así lo ve el inventario de permisos
+ * (`tests/rbac/permissionCoverage.test.ts`), que no sigue un recurso guardado en una variable.
+ */
+async function algunAmbitoDeColmena(
+  candidates: ReadonlyArray<{ projectId?: string | null; locationId?: string | null }>,
+  puede: (target: ScopeTarget, classification: ClassificationLevel) => Promise<boolean>,
+) {
   // A Hive and a Colony carry no classification; the Location the hives stand
   // at, and the Project the work belongs to, do (ADR-069).
   const classifications = await loadScopeClassifications(candidates);
@@ -46,10 +74,10 @@ export async function requireApiaryAccess(
     for (const target of apiaryScopeTargetsFor(candidate)) {
       const classification = classificationForTarget(target, classifications);
       if (classification === null) continue;
-      if (await can(userAccountId, action, "apiary", target, classification)) return;
+      if (await puede(target, classification)) return true;
     }
   }
-  throw new ApiaryAccessError("no_apiary_access");
+  return false;
 }
 
 /**

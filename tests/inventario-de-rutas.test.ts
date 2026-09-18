@@ -122,7 +122,11 @@ describe("el inventario del router", () => {
     // sobre el árbol resuelto: 74 páginas y 10 handlers.
     // 84 → 85 el 2026-09-18: /tienda — la tienda por dentro, recepciones y variantes (ADR-163).
     // 75 páginas y 10 handlers, medido sobre el árbol de la rama.
-    expect(salida).toContain("85 entradas");
+    // 85 → 86 el 2026-09-18: /api/v1/ingest/notehub, el primer handler de clase
+    // `secreto-de-ruta` — lo que mandan los nodos de sensores. QUINTA vez que dos
+    // sesiones suben la cifra al mismo número; medido sobre el árbol resuelto:
+    // 75 páginas y 11 handlers.
+    expect(salida).toContain("86 entradas");
     expect(codigo, salida).toBe(0);
   });
 
@@ -185,6 +189,17 @@ export default async function P() {
     const { codigo, salida } = correr(args);
     expect(codigo).toBe(1);
     expect(salida).toContain("DISCREPA");
+  });
+
+  it("atrapa una ruta de `secreto-de-ruta` que no verifica ningún secreto — y deja pasar la que sí", () => {
+    // El control de la clase nueva (artefactos T7): sin él, declararla no costaría nada.
+    const sin = correr(mundo("secreto-sin-verificar", { "/": "export default function P() { return null; }" },
+      `export const RUTAS = { "/": { clase: "secreto-de-ruta", razon: "x" } };`));
+    expect(sin.codigo).toBe(1);
+    expect(sin.salida).toContain("DISCREPA");
+    const con = correr(mundo("secreto-verificado", { "/": "import { atenderIngesta } from 'x'; export default function P() { return atenderIngesta; }" },
+      `export const RUTAS = { "/": { clase: "secreto-de-ruta", razon: "x" } };`));
+    expect(con.codigo, con.salida).toBe(0);
   });
 
   // Los tripwires que la revisión de la compuerta 5 señaló sin flip-test.

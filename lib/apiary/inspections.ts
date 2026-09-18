@@ -13,6 +13,7 @@ import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
 import { ligarAVisitaAbierta } from "../traceability/visitaAbierta";
+import { abrirIntervaloEn, ArtefactoInvalido, cerrarAbiertosEn, exigeTipoDeArtefacto, validarArtefacto } from "./artefactos";
 import { CATALOGO_DE_IRREGULARIDAD } from "./irregularidades";
 import { exigeCeldasReales, exigeEnteroContado, exigeEtapasDeCria, exigeNivelDeReserva, exigePoblacion } from "./estadoDeColonia";
 import type {
@@ -35,7 +36,20 @@ export class InspectionValidationError extends Error {}
 async function resolveColonyScope(colonyId: string) {
   const colony = await prisma.colony.findUnique({ where: { id: colonyId }, include: { hive: true } });
   if (!colony) throw new ApiaryAccessError("colony_not_found");
-  return { projectId: colony.hive.projectId, locationId: colony.hive.locationId };
+  return { projectId: colony.hive.projectId, locationId: colony.hive.locationId, hiveId: colony.hive.id };
+}
+
+/**
+ * Un cambio en la caja declarado en la inspección — artefactos de colmena, Tarea 2. **Sólo la
+ * diferencia**, como pidió Daniel: una inspección sin cambios no manda ninguno y no toca nada.
+ * `kind` llega como cadena (formulario, cola de campo) y se valida en `validarArtefacto`.
+ */
+export interface CambioDeConfiguracion {
+  kind: string;
+  accion: "instalado" | "retirado" | string;
+  /** Sólo alzas, al instalar. */
+  count?: number | null;
+  notes?: string | null;
 }
 
 export interface RecordInspectionInput {
@@ -81,6 +95,8 @@ export interface RecordInspectionInput {
   // duplicate row: checked server-side before insert, per §0's own
   // idempotent-sync finding.
   clientDraftId?: string | null;
+  /** Lo que cambió en la caja en esta visita. Ausente o vacío = nada cambió. */
+  cambiosDeConfiguracion?: readonly CambioDeConfiguracion[] | null;
 }
 
 /**
@@ -131,6 +147,21 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
   const pollenStoresLevel =
     input.pollenStoresLevel == null || input.pollenStoresLevel === "" ? null : exigeNivelDeReserva(input.pollenStoresLevel);
 
+  // Los cambios de la caja se validan ANTES de la transacción: un cambio inválido rechaza la
+  // inspección entera en vez de guardarla a medias.
+  const cambios = (input.cambiosDeConfiguracion ?? []).map((c) => {
+    if (c.accion !== "instalado" && c.accion !== "retirado") throw new ArtefactoInvalido("accion_desconocida");
+    // El nodo tiene identidad y permiso propio (spec §7.1): se instala por su pantalla, donde se
+    // dice CUÁL aparato, no con un toque en la inspección.
+    if (c.kind === "nodo_de_sensores") throw new ArtefactoInvalido("nodo_por_su_pantalla");
+    // «Se quitó el otro» no dice CUÁL: puede haber varios puestos. Se retira donde se ve cuál.
+    if (c.kind === "otro" && c.accion === "retirado") throw new ArtefactoInvalido("otro_se_retira_por_su_pantalla");
+    // Retirar sólo necesita saber QUÉ se quitó; la cuenta y la nota son de la instalación.
+    return c.accion === "instalado"
+      ? { accion: "instalado" as const, ...validarArtefacto(c) }
+      : { accion: "retirado" as const, kind: exigeTipoDeArtefacto(c.kind), count: null, notes: null };
+  });
+
   const inspection = await prisma.$transaction(async (tx) => {
     const inspection = await tx.inspection.create({
       data: {
@@ -178,6 +209,25 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
       },
       tx,
     );
+
+    // Artefactos, Tarea 2 — la diferencia declarada abre o cierra intervalos EN LA FECHA DE LA
+    // INSPECCIÓN y atados a ella. Dentro de la MISMA transacción: una inspección guardada con un
+    // intervalo perdido sería una configuración fantasma.
+    for (const c of cambios) {
+      if (c.accion === "instalado") {
+        await abrirIntervaloEn(userAccountId, {
+          hiveId: scope.hiveId,
+          kind: c.kind,
+          count: c.count,
+          notes: c.notes,
+          installedAt: inspection.occurredAt,
+          provenanceClass,
+          installedInspectionId: inspection.id,
+        })(tx);
+      } else {
+        await cerrarAbiertosEn(userAccountId, scope.hiveId, c.kind, inspection.occurredAt, inspection.id)(tx);
+      }
+    }
 
     // A9.2 — si hay una visita abierta en este sitio por esta persona, la
     // inspección entra en ella. Dentro de la MISMA transacción: un vínculo que

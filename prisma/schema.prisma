@@ -233,6 +233,10 @@ model UserAccount {
   apiaryHarvestEventsCreated        ApiaryHarvestEvent[]         @relation("ApiaryHarvestEventCreatedBy")
   colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
   hiveCleaningsCreated HiveCleaning[] @relation("HiveCleaningCreatedBy")
+  hiveFittingsCreated  HiveFitting[]  @relation("HiveFittingCreatedBy")
+  hiveNodesCreated     HiveNode[]     @relation("HiveNodeCreatedBy")
+  nodeCalibrationsCreated NodeCalibration[] @relation("NodeCalibrationCreatedBy")
+  nodeDerivedReadingsCreated NodeDerivedReading[] @relation("NodeDerivedReadingCreatedBy")
   varroaCountsCreated               VarroaCount[]                @relation("VarroaCountCreatedBy")
   organizationMembershipsCreated    OrganizationMembership[]     @relation("OrganizationMembershipCreatedBy")
   plantingEventsCreated             PlantingEvent[]              @relation("PlantingEventCreatedBy")
@@ -904,6 +908,7 @@ model Location {
   materialConsumptionEntries  MaterialConsumptionEntry[]
   processingStages            ProcessingStage[]
 
+  nodeCalibrations NodeCalibration[]
   @@index([parentLocationId])
   @@index([organizationId])
   equipmentTransfersFrom EquipmentTransfer[] @relation("EquipmentTransferFrom")
@@ -1012,6 +1017,7 @@ model Organization {
 
   equipment Equipment[] @relation("EquipmentOwner")
 
+  hiveNodes HiveNode[]
   @@map("organization")
   @@schema("core")
   lotTransformationsPerformed LotTransformation[] @relation("LotTransformationPerformedBy")
@@ -6284,6 +6290,8 @@ model Hive {
   assets     Asset[]
   placements HivePlacement[]
   cleanings  HiveCleaning[]
+  fittings   HiveFitting[]
+  nodeObservations NodeObservation[]
 
   @@unique([locationId, identifier])
   @@index([locationId])
@@ -6778,6 +6786,9 @@ model Inspection {
   /// A9.1 — el otro lado de la FK que `FieldEvent` gana para agrupar
   /// el trabajo de apiario dentro de una jornada.
   fieldEvents FieldEvent[]
+
+  fittingsInstalled HiveFitting[] @relation("HiveFittingInstalledIn")
+  fittingsRemoved   HiveFitting[] @relation("HiveFittingRemovedIn")
 
   @@index([colonyId])
   @@map("inspection")
@@ -8847,4 +8858,241 @@ model StoreAllocation {
   @@index([receivedAt])
   @@map("store_allocation")
   @@schema("commerce")
+}
+
+/// Qué lleva puesta una colmena, y DESDE CUÁNDO — spec 2026-09-17 «artefactos de colmena» §A.
+///
+/// Un booleano en `Hive` contesta «¿lleva excluidor hoy?»; esto contesta «¿lo llevaba el 3 de
+/// mayo?», que es la pregunta que la ingestión de telemetría tiene que poder hacer — un nodo que
+/// se movió de colmena tiene datos viejos que pertenecen a la colmena anterior.
+///
+/// Intervalo cerrado a la izquierda y abierto a la derecha: retirado el día 10, el día 10 ya no
+/// estaba. Las reglas viven también en la base (CHECK), no sólo en el servicio.
+model HiveFitting {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  hiveId String @map("hive_id") @db.Uuid
+  hive   Hive   @relation(fields: [hiveId], references: [id])
+
+  kind HiveFittingKind
+
+  /// Sólo para `alza`, y obligatoria ahí: dos o tres, no una fila por alza. Nadie las numera en
+  /// el patio, y una identidad que el campo no puede sostener es una columna que se rellena mal.
+  count Int?
+
+  installedAt DateTime  @map("installed_at")
+  /// Nulo = sigue puesta. **No** se rellena con «hoy» al leer.
+  removedAt   DateTime? @map("removed_at")
+
+  /// El aparato, cuando `kind` es `nodo_de_sensores` — y sólo entonces (CHECK). Lo que distingue
+  /// a un artefacto con identidad de uno sin ella. RESTRICT: un nodo con historia no se borra.
+  hiveNodeId String?   @map("hive_node_id") @db.Uuid
+  hiveNode   HiveNode? @relation(fields: [hiveNodeId], references: [id], onDelete: Restrict)
+
+  /// La inspección donde se declaró el cambio, si vino de una — la mitad de la instrucción
+  /// de Daniel: «en la inspección sólo se registra la diferencia». RESTRICT: es evidencia.
+  installedInspectionId String?     @map("installed_inspection_id") @db.Uuid
+  installedInspection   Inspection? @relation("HiveFittingInstalledIn", fields: [installedInspectionId], references: [id], onDelete: Restrict)
+  removedInspectionId   String?     @map("removed_inspection_id") @db.Uuid
+  removedInspection     Inspection? @relation("HiveFittingRemovedIn", fields: [removedInspectionId], references: [id], onDelete: Restrict)
+
+  /// El «cuál» de `otro`, y lo que no cabe en el vocabulario.
+  notes String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("HiveFittingCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([hiveId, installedAt])
+  @@map("hive_fitting")
+  @@schema("apiary")
+}
+
+/// Vocabulario cerrado con escape, la regla que Daniel dio para la alimentación: «que no sea
+/// campo libre, que sean variables». Con `otro` y su nota — un vocabulario sin escape enseña a
+/// mentir en la casilla más cercana.
+enum HiveFittingKind {
+  excluidor
+  reductor_de_piquera
+  piso_ventilado
+  alimentador
+  alza
+  nodo_de_sensores
+  otro
+
+  @@schema("apiary")
+}
+
+/// El nodo de sensores, el aparato — spec «artefactos de colmena» §B. Tiene número de serie,
+/// firmware y configuración, y SE MUEVE de colmena: su asignación es un `HiveFitting` de
+/// `kind = nodo_de_sensores` que apunta aquí. No hay dos tablas de intervalos.
+model HiveNode {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// El `device_id` que manda el propio aparato: «rp2040-0011223344556677». Único: es la
+  /// identidad del REGISTRO, contra la que se contrasta lo que llegue (nunca al revés).
+  deviceId        String  @unique @map("device_id")
+  /// El UID del Notecard que la ruta de Notehub trae VERIFICADO. Es la identidad con la que
+  /// se autentica una observación; el `device_id` del cuerpo sólo se contrasta con ella.
+  /// Nulo mientras el nodo no tenga módem: sus datos llegan por USB, no por la ruta.
+  notecardUid     String? @unique @map("notecard_uid")
+  hardware        String?
+  firmware        String?
+  configurationId String? @map("configuration_id")
+
+  /// De quién es. Sale del sitio donde se registra; un nodo no se instala en otra finca.
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  lifecycleStatus EquipmentLifecycle @default(active) @map("lifecycle_status")
+
+  fittings     HiveFitting[]
+  observations NodeObservation[]
+  calibrations NodeCalibration[]
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("HiveNodeCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([organizationId])
+  @@map("hive_node")
+  @@schema("apiary")
+}
+
+/// Lo que mandó un nodo, TAL COMO LLEGÓ — spec «artefactos de colmena» §B.3. **Inmutable**: un
+/// disparador de la base rechaza cualquier UPDATE. Recalibrar produce una lectura derivada nueva
+/// (`NodeDerivedReading`), nunca toca esto.
+///
+/// No es `Measurement`: ésa es la medición humana, una variable y un valor. Esto son
+/// observaciones anidadas con crudos, fallos y muestras perdidas, muchas veces al día.
+model NodeObservation {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// La identidad del evento según el aparato. `(deviceId, epoch, seq)` es único: eso da la
+  /// idempotencia que el paquete exige — un acuse perdido produce un duplicado.
+  deviceId String @map("device_id")
+  epoch    String
+  seq      Int
+  eventId  String @map("event_id")
+
+  /// El aparato del REGISTRO que la ruta autenticó — no el que dice el cuerpo.
+  hiveNodeId String   @map("hive_node_id") @db.Uuid
+  hiveNode   HiveNode @relation(fields: [hiveNodeId], references: [id], onDelete: Restrict)
+
+  /// Los TRES tiempos, separados a propósito. `observedAt` nulo es DESCONOCIDO y no se rellena
+  /// con `receivedAt`: el paquete lo prohíbe con esas palabras.
+  observedAt  DateTime? @map("observed_at")
+  receivedAt  DateTime  @default(now()) @map("received_at")
+  timeQuality String    @map("time_quality")
+
+  /// A qué colmena pertenecía EN EL MOMENTO de medirse. Nulo cuando no se pudo resolver —sin
+  /// hora, o sin nodo instalado entonces— y entonces se dice, no se adivina.
+  hiveId String? @map("hive_id") @db.Uuid
+  hive   Hive?   @relation(fields: [hiveId], references: [id], onDelete: Restrict)
+
+  /// El cuerpo entero, sin tocar, y su huella canónica: con ella se distingue el duplicado
+  /// exacto del «mismo id, otro contenido».
+  payload     Json
+  payloadHash String @map("payload_hash")
+
+  faults        Json
+  missedSamples Int @map("missed_samples")
+
+  conflicts       NodeObservationConflict[]
+  derivedReadings NodeDerivedReading[]
+
+  @@unique([deviceId, epoch, seq])
+  @@index([hiveId, observedAt])
+  @@index([hiveNodeId, receivedAt])
+  @@map("node_observation")
+  @@schema("apiary")
+}
+
+/// La cuarentena: un evento con el MISMO id que uno ya guardado y OTRO contenido. No pisa al
+/// primero ni se descarta — se guarda para que una persona decida (paquete: «409 en
+/// cuarentena»).
+model NodeObservationConflict {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  deviceId String @map("device_id")
+  epoch    String
+  seq      Int
+
+  existingObservationId String          @map("existing_observation_id") @db.Uuid
+  existingObservation   NodeObservation @relation(fields: [existingObservationId], references: [id], onDelete: Restrict)
+
+  payload     Json
+  payloadHash String   @map("payload_hash")
+  receivedAt  DateTime @default(now()) @map("received_at")
+
+  @@index([deviceId, epoch, seq])
+  @@map("node_observation_conflict")
+  @@schema("apiary")
+}
+
+/// Una calibración de la báscula de un nodo — artefactos de colmena, Tarea 6. La fórmula es la del
+/// firmware del paquete (`calibration.py`): counts = offset + counts_per_kg × kg. **Inmutable**
+/// (disparador): recalibrar es un registro NUEVO con otro `calibrationId`, y las lecturas viejas
+/// siguen apuntando a la suya — «recalibrar después no muta la evidencia original».
+model NodeCalibration {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  hiveNodeId String   @map("hive_node_id") @db.Uuid
+  hiveNode   HiveNode @relation(fields: [hiveNodeId], references: [id], onDelete: Restrict)
+
+  /// El `calibrationID` que el procedimiento del paquete exige único, y que el nodo reporta.
+  calibrationId String @map("calibration_id")
+
+  offset      Float
+  countsPerKg Float  @map("counts_per_kg")
+  /// El residuo del ajuste, si se conoce. El paquete rechaza > 0.2 kg al calibrar.
+  residualKg  Float? @map("residual_kg")
+
+  /// Dónde se calibró: de ahí sale el permiso (`hive_node:manage`).
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id])
+
+  performedAt DateTime @map("performed_at")
+
+  readings NodeDerivedReading[]
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("NodeCalibrationCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([hiveNodeId, calibrationId])
+  @@map("node_calibration")
+  @@schema("apiary")
+}
+
+/// Lo INTERPRETADO a partir de una observación cruda: los kilos que salen de las cuentas, con el
+/// algoritmo, su versión y la calibración usada. Se puede recalcular sin tocar lo crudo; varias
+/// versiones conviven. Un sensor sin lectura da `value` nulo con su limitación, nunca un cero.
+model NodeDerivedReading {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  observationId String          @map("observation_id") @db.Uuid
+  observation   NodeObservation @relation(fields: [observationId], references: [id], onDelete: Restrict)
+
+  variable         String
+  value            Float?
+  unit             String
+  algorithm        String
+  algorithmVersion Int    @map("algorithm_version")
+
+  calibrationId String          @map("calibration_id") @db.Uuid
+  calibration   NodeCalibration @relation(fields: [calibrationId], references: [id], onDelete: Restrict)
+
+  /// Lo que limita la lectura, dicho: `SENSOR_EN_FALLO`, `VENTANA_INESTABLE`, `FUERA_DE_RANGO`.
+  limitations String[]
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("NodeDerivedReadingCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([observationId, variable, algorithm, algorithmVersion, calibrationId])
+  @@map("node_derived_reading")
+  @@schema("apiary")
 }

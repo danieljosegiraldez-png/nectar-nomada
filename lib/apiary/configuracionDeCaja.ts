@@ -24,6 +24,8 @@ import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
 import { exigeMetodoDeAlimentacion } from "./alimentacion";
+import { abrirIntervaloEn, cerrarAbiertosEn } from "./artefactos";
+import type { HiveFittingKind } from "../../generated/prisma/client";
 
 /** Una entrada que el servicio rechaza. */
 export class ConfiguracionInvalida extends Error {}
@@ -91,15 +93,39 @@ export async function actualizarConfiguracionDeCaja(userAccountId: string, input
     ...(broodBoxes !== undefined ? { broodBoxes } : {}),
     ...(supers !== undefined ? { supers } : {}),
     ...(framesPerBox !== undefined ? { framesPerBox } : {}),
-    ...(input.queenExcluder !== undefined ? { queenExcluder: input.queenExcluder } : {}),
     ...(feederType !== undefined ? { feederType } : {}),
-    ...(input.entranceReducer !== undefined ? { entranceReducer: input.entranceReducer } : {}),
-    ...(input.screenedBottomBoard !== undefined ? { screenedBottomBoard: input.screenedBottomBoard } : {}),
   };
+
+  // **Los tres sí/no ya no se escriben aquí** (artefactos de colmena, Tarea 3): su verdad es el
+  // intervalo, y la foto en `Hive` la escribe sólo `artefactos.ts`. Marcar «sí» es instalar HOY;
+  // «no», retirar hoy lo que estuviera puesto. Nulo —«no sé»— no cambia nada: no retira un
+  // excluidor que nadie ha visto quitar.
+  const intervalos: { kind: HiveFittingKind; puesto: boolean }[] = [];
+  for (const [kind, valor] of [
+    ["excluidor", input.queenExcluder],
+    ["reductor_de_piquera", input.entranceReducer],
+    ["piso_ventilado", input.screenedBottomBoard],
+  ] as const) {
+    if (valor === true || valor === false) intervalos.push({ kind, puesto: valor });
+  }
+
   // Un `update` vacío escribiría un `AuditEvent` que dice que no pasó nada.
-  if (Object.keys(cambios).length === 0) throw new ConfiguracionInvalida("nada_que_cambiar");
+  if (Object.keys(cambios).length === 0 && intervalos.length === 0) throw new ConfiguracionInvalida("nada_que_cambiar");
 
   return prisma.$transaction(async (tx) => {
+    const ahora = new Date();
+    for (const { kind, puesto } of intervalos) {
+      const abierto = (await tx.hiveFitting.count({ where: { hiveId: input.hiveId, kind, removedAt: null } })) > 0;
+      if (puesto && !abierto) {
+        await abrirIntervaloEn(userAccountId, {
+          hiveId: input.hiveId, kind, count: null, notes: null, installedAt: ahora, provenanceClass: "direct_observation",
+        })(tx);
+      } else if (!puesto) {
+        await cerrarAbiertosEn(userAccountId, input.hiveId, kind, ahora)(tx);
+      }
+    }
+    if (Object.keys(cambios).length === 0) return tx.hive.findUniqueOrThrow({ where: { id: input.hiveId } });
+
     const despues = await tx.hive.update({ where: { id: input.hiveId }, data: cambios });
     await recordAuditEvent(
       {

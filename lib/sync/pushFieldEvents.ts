@@ -14,6 +14,7 @@ import { exigeMetodoDeVarroa, registrarConteoDeVarroa, VarroaValidationError } f
 import { EstadoDeColoniaInvalido } from "../apiary/estadoDeColonia";
 import { AlimentacionInvalida } from "../apiary/alimentacion";
 import { TratamientoInvalido } from "../apiary/objetivoDelTratamiento";
+import { ArtefactoInvalido } from "../apiary/artefactos";
 import { createSoilSample, createFoliarSample, SampleValidationError } from "../traceability/soilSamples";
 import { createSoilProfile, SoilProfileValidationError } from "../traceability/soilProfiles";
 import { createPlantingCohort, PlantingCohortValidationError } from "../traceability/plantingCohorts";
@@ -125,6 +126,8 @@ export type MutacionDeInspeccion = {
    * el hueco que esta cola existe para cerrar.
    */
   irregularidades?: readonly string[];
+  /** Artefactos de colmena, Tarea 2: lo que cambió en la caja. Viaja por la cola. */
+  cambiosDeConfiguracion?: readonly { kind: string; accion: string; count?: number | null; notes?: string | null }[] | null;
   note?: string | null;
 
   // --- Anexo B §2.2, estado de la colonia. Viajan como CADENAS porque así salen
@@ -355,6 +358,7 @@ async function aplicarMutacionDeApiario(
             temperamentNote: m.temperamentNote ?? null,
             pestDiseaseFlags: m.pestDiseaseFlags ?? null,
             irregularidades: m.irregularidades ?? [],
+            cambiosDeConfiguracion: m.cambiosDeConfiguracion ?? null,
             note: m.note ?? null,
             // Anexo B §2.2 — se pasan tal cual llegan; el servicio los valida.
             population: m.population ?? null,
@@ -405,7 +409,10 @@ async function aplicarMutacionDeApiario(
       // entero y dejaría la cola bloqueada — el defecto de ADR-116, otra vez.
       error instanceof EstadoDeColoniaInvalido ||
       error instanceof AlimentacionInvalida ||
-      error instanceof TratamientoInvalido
+      error instanceof TratamientoInvalido ||
+      // Artefactos, Tarea 2: un cambio de caja inválido es un dato malo, no un corte; sin esta
+      // línea el borrador se reintentaría para siempre.
+      error instanceof ArtefactoInvalido
     ) {
       return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
     }
