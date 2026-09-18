@@ -126,7 +126,11 @@ describe("el inventario del router", () => {
     // `secreto-de-ruta` — lo que mandan los nodos de sensores. QUINTA vez que dos
     // sesiones suben la cifra al mismo número; medido sobre el árbol resuelto:
     // 75 páginas y 11 handlers.
-    expect(salida).toContain("86 entradas");
+    // 86 → 89 el 2026-09-18 (Tarea 6): /plots/[id]/jornada/nueva,
+    // /plots/[id]/muestras/nueva y /plots/[id]/suelo/nuevo — los tres
+    // formularios de captura que salieron del tablero de parcela. 78 páginas
+    // y 11 handlers, medido sobre el árbol de la rama.
+    expect(salida).toContain("89 entradas");
     expect(codigo, salida).toBe(0);
   });
 

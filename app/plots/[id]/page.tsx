@@ -5,17 +5,14 @@ import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getPlotDetail } from "../../../lib/traceability/plantingCohorts";
 import { LocationAccessError } from "../../../lib/traceability/locations";
-import { SoilProfileForm } from "../../components/traceability/SoilProfileForm";
 import { LandPhotoUploadForm } from "../../components/traceability/LandPhotoUploadForm";
 import { listLandAssets } from "../../../lib/traceability/landMedia";
-import { SoilSampleForm, FoliarSampleForm } from "../../components/traceability/SampleForms";
 import { LabMeasurementForm } from "../../components/traceability/LabMeasurementForm";
 import { listVariableDefinitions } from "../../../lib/traceability/units";
 import { listSamplesForLocation, camposDeProtocoloQueFaltan } from "../../../lib/traceability/soilSamples";
 import { listSoilProfilesForLocation, computeAnaerobicSignals } from "../../../lib/traceability/soilProfiles";
 import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
-import { FieldSessionStartForm } from "../../components/traceability/FieldSessionForms";
 import { estadosPorCohorte } from "../../../lib/traceability/estadoDeProduccion";
 import { cifrasDelLote } from "../../../lib/traceability/cifrasDelLote";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
@@ -404,14 +401,14 @@ export default async function PlotDetailPage({
             ) : null}
           </>
         )}
-        <details>
-          <summary>{t("fieldSessionStartSummary")}</summary>
-          <FieldSessionStartForm
-            locationId={location.id}
-            people={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
-            selfPersonId={selfPersonId}
-          />
-        </details>
+        <p>
+          <Link href={`/plots/${location.id}/jornada/nueva`} className="nn-button">
+            {t("fieldSessionStartSummary")}
+          </Link>{" "}
+          <Link href="/finca/trampas/ronda" className="nn-button">
+            {t("trapsGoToRoundLink")}
+          </Link>
+        </p>
       </section>
         </>
       ) : null}
@@ -530,27 +527,11 @@ export default async function PlotDetailPage({
         {/* Las fotos generales del terreno viven en la pestaña Fotos (Tarea
             5b) — sólo las de cada calicata, ligadas a su perfil, se quedan
             aquí como parte de su descripción. */}
-        <details>
-          <summary>{t("soilDescribeHeading")}</summary>
-          <SoilProfileForm
-            locationId={location.id}
-            values={{
-              describedAt: null,
-              pitDepthCm: null,
-              rootingDepthCm: null,
-              rootDistribution: null,
-              mottling: null,
-              greyColours: null,
-              rootChannelConcretions: null,
-              sourSmell: null,
-              impedingLayerDepthCm: null,
-              impedingLayerNote: null,
-              provenanceClass: "",
-              dataQuality: null,
-              notes: null,
-            }}
-          />
-        </details>
+        <p>
+          <Link href={`/plots/${location.id}/suelo/nuevo`} className="nn-button">
+            {t("soilDescribeHeading")}
+          </Link>
+        </p>
       </section>
       ) : null}
 
@@ -590,10 +571,6 @@ export default async function PlotDetailPage({
             </article>
           ))
         )}
-        <details>
-          <summary>{t("samplesSoilAdd")}</summary>
-          <SoilSampleForm locationId={location.id} />
-        </details>
 
         <h3>{t("samplesFoliarHeading")}</h3>
         {muestras.foliar.length === 0 ? (
@@ -633,10 +610,11 @@ export default async function PlotDetailPage({
             );
           })
         )}
-        <details>
-          <summary>{t("samplesFoliarAdd")}</summary>
-          <FoliarSampleForm locationId={location.id} />
-        </details>
+        <p>
+          <Link href={`/plots/${location.id}/muestras/nueva`} className="nn-button">
+            {t("samplesAddButton")}
+          </Link>
+        </p>
       </section>
       ) : null}
 

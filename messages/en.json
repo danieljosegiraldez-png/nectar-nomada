@@ -1045,6 +1045,7 @@
     "samplesAddResult": "Record a result",
     "samplesSoilAdd": "Record a soil sample",
     "samplesFoliarAdd": "Record a foliar sample",
+    "samplesAddButton": "Add a sample",
     "sampleSampledAtLabel": "Collection date",
     "sampleTreatmentPlotLabel": "Treatment plot",
     "sampleTreatmentPlotHelp": "Free text for now: the trial layout (T0–T4) is Step 8 and sampling happens before it.",

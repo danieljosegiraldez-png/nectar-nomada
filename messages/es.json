@@ -1045,6 +1045,7 @@
     "samplesAddResult": "Registrar un resultado",
     "samplesSoilAdd": "Registrar una muestra de suelo",
     "samplesFoliarAdd": "Registrar una muestra foliar",
+    "samplesAddButton": "Añadir muestra",
     "sampleSampledAtLabel": "Fecha de recogida",
     "sampleTreatmentPlotLabel": "Parcela de tratamiento",
     "sampleTreatmentPlotHelp": "Texto por ahora: el diseño del ensayo (T0–T4) es el Paso 8 y el muestreo ocurre antes.",
