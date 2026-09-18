@@ -38,6 +38,29 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-17 · Reposo, trilla, inventario — y una sesión que no leyó este archivo
+
+**Fusionado:** #366 (reposo, trilla y subproductos: el café ya no se pierde entre secado y venta),
+#368 y #371 (la inspección estaba construida dentro de la colmena y no se veía; y los formularios
+respetan el permiso — Kenis ve su entrada de eventos y no una inspección que no puede enviar), #372,
+#375 y #376 (specs de artefactos de colmena, nodo Smart Hive, inventario y análisis del contrato de
+investigación). **Abierto:** #382, inventario con existencias — el saldo se deriva y «nunca contado»
+no es «cero».
+
+**Lo que hay que saber, y es la lección:** esta sesión arrancó en `~`, trabajó de resúmenes de su
+propia memoria y **no leyó este archivo en ningún momento**. Le pidió a Daniel tres veces el correo
+de Bob cuando Bob ya había entrado — la misma forma exacta que la nota de `apiary:load-protocol` de
+abajo describe. Lo destapó `auditar-cableado`, no la sesión. **Leer esto al arrancar no es un
+trámite: es la única fuente de lo que ya pasó.**
+
+**Y un error con daño a otras sesiones, revertido:** renombró `apiñada` a `apinada` en la base de
+pruebas compartida creyéndola derivada; iba POR DELANTE de git —otra sesión había aplicado
+`vocabulario_del_dueno` antes de fusionarla—. La base compartida puede ir por delante de git.
+
+**Diseños esperando a Daniel:** el botiquín (vencimiento, casa farmacéutica, custodia, aviso en
+`/start`) en `docs/superpowers/specs/2026-09-17-faena-de-colmena-y-botiquin-design.md`, y la «faena»
+—preguntar a qué vas antes de enseñar seis formularios—.
+
 ### 2026-09-17 · El material de soporte, guardado entero y verificable
 
 ADR-158. Daniel: «deberías tener más documentación y material de soporte guardado, revisar todo».
@@ -181,12 +204,13 @@ enum tenga diez valores y las pantallas ofrezcan cinco, y si
 puede afirmar cada pantalla— y sigue sin tomarse.
 
 
-- **Dar acceso a alguien más que Daniel y José** — bloqueado en P-C. Medido el
-  2026-08-29: 13 de 14 cuentas siguen en `invited` sin clave. Bob y Sherry
-  tienen 10 Assignments cada uno y Chris 2 — 22 en total que resuelven bien y
-  no llegan a nadie, porque ninguna de las tres Personas tiene correo.
-  ADR-083 ya arregló el callback que rechazaba `invited`: la puerta funciona,
-  falta a quién darle la llave.
+- **Dar acceso a alguien más que Daniel y José** — **Bob Huerbsch YA ENTRÓ**: lo
+  dijo Daniel el 2026-09-17. **No se verificó contra la base y no se puede** —
+  leer producción está prohibido—; es la palabra del dueño, y basta. Queda
+  **Kenis Abdiel Rodríguez Núñez** (`rodriguezkenis907@gmail.com`, perfil `Apiary
+  Colony Event Recorder` sobre los dos apiarios de Finca Rosina: guion
+  `data:kenis-apicultor`). Sherry y Chris siguen sin correo. **Antes de pedirle a
+  Daniel que corra algo, buscarlo aquí.**
 - **La protección de `main`, tal como quedó** — no es un bloqueo, es la
   configuración viva. Exige los dos checks de compuerta —el pesado y el
   ligero—, prohíbe force-push y borrar la rama. **Sin revisiones exigidas a
