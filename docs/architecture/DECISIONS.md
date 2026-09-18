@@ -11356,3 +11356,21 @@ asiento que ADR-161 escribe al cerrar. **No se teclea ningun numero**: se asient
 hay UNA cosecha real, y tiene saldo: se peso al cosechar. **Segun ese respaldo, ninguna cosecha
 esta afectada.** Esto es una red para las que pudiera haber en produccion desde entonces, no el
 arreglo de un dano medido.
+
+## ADR-167 — «Editar beneficio», plan 2: instalaciones, recetas y equipos
+
+**Fecha:** 2026-09-18 · **Estado:** aceptado · **Spec:** #370 §2, §4.2, §4.3 · **Plan:** `docs/superpowers/plans/2026-09-18-editar-beneficio-2.md`
+
+**Contexto.** ADR-164 cerró la ficha, los atributos y las coordenadas de un beneficio detrás de `location:edit_beneficio`, pero dejó dicho en su propio §4.2 que instalaciones de secado, camas, recetas y equipos seguían abiertos al capataz. Este plan cierra esos tres caminos.
+
+**Tres decisiones de Daniel, 2026-09-18:**
+
+1. **Instalaciones y camas: todas**, cuelguen de donde cuelguen. Hoy `crearUbicacionDeSecado` sólo acepta una `drying_facility` bajo un `site` (el código de #377 nunca llegó a aceptar `beneficio` como padre, aunque la spec original lo previera) — así que la guardia nueva no distingue por tipo de padre: exige `edit_beneficio` sobre el padre exacto que se pase, sea cual sea.
+2. **Recetas: `edit_beneficio` en algún lugar de la organización de la receta.** Una receta compartida (`organizationId` nulo) sólo se configura con alcance de plataforma — no basta con gestionar el lote de una finca cualquiera. La comprobación de `lot:manage` que ya tenían crear/editar/publicar se queda intacta; ésta se suma.
+3. **Equipos: la misma concesión abre configurarlos.** Registrar, trasladar, declarar/retirar patrón y declarar modo aceptan `equipment:manage` **o** `edit_beneficio` en el lugar del equipo. Sin lugar (proyecto o plataforma), sólo `equipment:manage` — no hay beneficio sobre el que resolver la concesión.
+
+**Decisión técnica.** Dos guardias nuevas en `lib/traceability/locations.ts`: `exigeEditarBeneficioEn(userAccountId, locationId)` (el permiso sobre una ubicación, sea del tipo que sea; distinta de `exigeEditarBeneficioSiLoEs` de ADR-164, que sólo actúa si la ubicación **es** un beneficio) y `exigeEditarBeneficioEnOrganizacion(userAccountId, organizationId)` (en algún lugar de la organización, o en plataforma si `organizationId` es nulo o la organización no tiene ninguna `Location` propia — el caso de las organizaciones-sólo-con-lotes que ya usan `recipeAuthoring.test.ts` y `recipeVersions.test.ts`). `instalaciones.ts` llama a la primera desde crear (sobre el padre) y editar (sobre la propia ubicación); `processTargets.ts` llama a la segunda desde `createRecipeWithVersion`, `updateRecipeMetadata` y `createRecipeVersion`, después de la comprobación de `lot:manage` que ya tenían. En `lib/equipos/equipos.ts`, `puedeConfigurar` sustituye al `can(..., "manage", "equipment", ...)` suelto en `registrarEquipo`, `exigePermiso("manage")`, `puedeGestionarEquipo` y `sitiosParaRegistrar` (esta última alimenta el selector de sitios del formulario de alta; sin el cambio, la concesión abría `registrarEquipo` pero el capataz nunca veía su propia finca en la lista).
+
+**Qué sigue abierto.** La pantalla para que el Farm Manager conceda o quite `edit_beneficio` por persona es el plan 3 de la spec — hasta entonces, la concesión sólo se escribe a mano en la base (`AssignmentPermissionOverride`) o por quien tiene `platform:manage_permissions`. Y lo que este plan deja fuera a propósito: `lib/inventario/materiales.ts` y `lib/inventario/recepcion.ts` comprueban `equipment:manage` directamente y no pasan por `puedeConfigurar` — el módulo de insumos reutiliza el permiso de equipos sin que la concesión de `edit_beneficio` lo abra.
+
+**Consecuencias.** Con ADR-164, la lista de §4.2 de la spec queda cerrada por completo: ficha, atributos, coordenadas, instalaciones, camas, recetas y equipos exigen todos `edit_beneficio` (equipos, además, `equipment:manage` como alternativa que ya tenía). Sólo falta la pantalla de concesión.
