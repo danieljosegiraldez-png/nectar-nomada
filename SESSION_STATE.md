@@ -38,6 +38,12 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · Dividir un lote de miel
+
+ADR-162. `split` ya existía y conserva masa; faltaba la pantalla. De dos a seis partes, cada una un
+lote nuevo que sabe de qué caja viene; lo no repartido se queda. Lo que entra se deduce (partes +
+merma) **sumado en gramos enteros**, para no asentar el resto de coma flotante de 0,1 + 0,2.
+
 ### 2026-09-18 · Procesar y envasar miel: dos pasos del lote
 
 ADR-161. Daniel eligió «proceso + envasado». `honey_processing` (actos fijos: colado, filtrado,

@@ -11231,3 +11231,22 @@ nieto del lote de la cosecha, y sin esto no diria de que caja salio.
 la pantalla no), enlazar un lote envasado a un `Product` de la tienda, y una etiqueta con el
 recorrido. Y visto de paso, sin tocarlo: `transformationType_hulling` **no tiene traduccion**, asi
 que la linea de tiempo de un lote trillado ensena la clave cruda.
+
+## ADR-162 -- Dividir un lote de miel desde su ficha
+
+**Contexto.** Lo tercero de la lista de Daniel -- «cuando se divide o se reparte» -- tras procesar y
+envasar (ADR-161). El tipo `split` existia desde el principio y conserva masa; lo que faltaba era
+una pantalla. No hace falta ningun nombre nuevo, asi que no hubo que preguntar.
+
+**Decision.** `dividirMiel`: de dos a seis partes en kilos, cada una un lote NUEVO de miel, hermano
+de las otras, con codigo derivado (`MIEL-1-A`, `-B`...) y la misma genealogia hacia arriba -- cada
+parte sabe de que caja viene. Lo que no se reparte se queda en el lote de origen.
+
+**Aqui SI se deduce lo que entra**: la suma de las partes mas la merma. Dividir no transforma la
+miel, solo la reparte, asi que no hay una tercera pesada que pedir (al procesar, en cambio, entra y
+sale una cantidad distinta y las dos se piden). Si la suma pasa de lo que el lote tiene, el libro lo
+rechaza. **La suma se hace en gramos enteros**: 0,1 + 0,2 en coma flotante es 0,30000000000000004,
+y ese resto se habria asentado en el libro.
+
+**Seis casillas y no una lista dinamica**: una lista que crece necesita JavaScript en un telefono
+de campo; seis vacias no. Para mas partes se divide dos veces, que ademas deja la genealogia honesta.

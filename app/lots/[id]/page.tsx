@@ -44,7 +44,7 @@ import { getHarvestSourceContext } from "../../../lib/traceability/plantingCohor
 import { HarvestSourcesForm } from "../../components/traceability/HarvestSourcesForm";
 import type { LabourEntry } from "../../../generated/prisma/client";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
-import { EnvasarMielForm, ProcesarMielForm } from "../../components/apiary/PasosDeMielForm";
+import { DividirMielForm, EnvasarMielForm, ProcesarMielForm } from "../../components/apiary/PasosDeMielForm";
 
 export const dynamic = "force-dynamic";
 
@@ -293,6 +293,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
       ? ([
           { action: "honey_process", href: "#procesar-miel", label: t("honeyProcessButton") },
           { action: "packaging", href: "#envasar-miel", label: t("honeyPackagingButton") },
+          { action: "split", href: "#dividir-miel", label: t("honeySplitButton") },
         ] as const)
       : []),
     ...(!esMiel && !activeFermentation && !activeDrying
@@ -447,12 +448,12 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           )}
 
           <h3>{tMiel("mielPasosTitulo")}</h3>
-          {transformations.filter((tr) => tr.transformationType === "honey_processing" || tr.transformationType === "packaging").length === 0 ? (
+          {transformations.filter((tr) => ["honey_processing", "packaging", "split"].includes(tr.transformationType)).length === 0 ? (
             <p className="nn-muted">{tMiel("mielPasosNinguno")}</p>
           ) : (
             <ul>
               {transformations
-                .filter((tr) => tr.transformationType === "honey_processing" || tr.transformationType === "packaging")
+                .filter((tr) => ["honey_processing", "packaging", "split"].includes(tr.transformationType))
                 .map((tr) => (
                   <li key={tr.id}>
                     {tr.occurredAt.toISOString().slice(0, 10)} ·{" "}
@@ -461,7 +462,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                       ? `: ${tr.honeyProcessActs
                           .map((a) => (a === "otro" ? tr.honeyProcessOtherNote ?? tMiel("mielActo_otro") : tMiel(`mielActo_${a}`)))
                           .join(", ")}`
-                      : `: ${tMiel("mielEnvasesFila", { cuantos: tr.packageCount ?? 0, gramos: String(tr.packageNetMassG ?? "?") })}`}
+                      : tr.transformationType === "split"
+                        ? ""
+                        : `: ${tMiel("mielEnvasesFila", { cuantos: tr.packageCount ?? 0, gramos: String(tr.packageNetMassG ?? "?") })}`}
                   </li>
                 ))}
             </ul>
@@ -473,6 +476,8 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               <ProcesarMielForm lotId={lot.id} />
               <h3 id="envasar-miel">{tMiel("mielEnvasarTitulo")}</h3>
               <EnvasarMielForm lotId={lot.id} />
+              <h3 id="dividir-miel">{tMiel("mielDividirTitulo")}</h3>
+              <DividirMielForm lotId={lot.id} />
             </>
           ) : null}
         </section>
