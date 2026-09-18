@@ -524,6 +524,10 @@
     {
       "archivo": "lib/apiary/cosechasSinSaldo.ts",
       "razon": "Módulo de dominio (ADR-166). `asentarPesoDeCosecha` exige `requireApiaryAccess(\"manage\")` sobre la caja de la cosecha antes de escribir, y dentro de una transacción `Serializable` vuelve a comprobar que el lote no tenga asientos, para no asentar dos veces. Escritura y AuditEvent en la MISMA transacción."
+    },
+    {
+      "archivo": "lib/catalogos/propiedad.ts",
+      "razon": "Contrato común de los catálogos de referencia (spec de catálogos §2.5). Decide quién crea, edita y ve una entrada: compartida sólo con el permiso en ámbito de plataforma; propia, con el permiso juzgado en un sitio de esa organización, que se deriva del sitio y no del formulario. Sólo LEE sitios para resolver el ámbito; no escribe nada."
     }
   ],
   "reciben_transaccion": [
