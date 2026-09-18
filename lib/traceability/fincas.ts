@@ -86,6 +86,12 @@ export function resolverFinca(
   return { elegida: null, todas: false, debeElegir: fincas.length > 1 };
 }
 
+/** Lo que necesita una página: las fincas de quien mira y cuál queda elegida según su cookie. */
+export async function fincaDeLaPagina(userAccountId: string, cookie: string | undefined) {
+  const fincas = await listarFincas(userAccountId);
+  return { fincas, ...resolverFinca(fincas, cookie) };
+}
+
 /** El sitio de la finca y todo lo que cuelga de él, a cualquier profundidad. */
 export function idsBajoLaFinca(ubicaciones: readonly { id: string; parentLocationId: string | null }[], siteId: string): Set<string> {
   const hijos = new Map<string, string[]>();
@@ -109,7 +115,7 @@ export class FincaError extends Error {}
 
 const PLATAFORMA = { scopeType: "platform", scopeRefId: null } as const;
 
-async function puedeCrearFincas(userAccountId: string) {
+export async function puedeCrearFincas(userAccountId: string) {
   return can(userAccountId, "create_farm", "organization", PLATAFORMA, CLASSIFICATION_NOT_APPLICABLE);
 }
 
@@ -183,6 +189,17 @@ export async function organizacionesSinTerreno(userAccountId: string) {
   return orgs;
 }
 
+/** ¿Puede crear parcelas en esta finca? La misma pregunta que hace `crearParcela`, sin escribir. */
+export async function puedeCrearParcelaEn(userAccountId: string, siteId: string) {
+  const sitio = await prisma.location.findUnique({ where: { id: siteId }, select: { id: true, classification: true } });
+  if (!sitio) return false;
+  const target = { scopeType: "location" as const, scopeRefId: sitio.id };
+  return (
+    (await can(userAccountId, "manage_attributes", "location", target, sitio.classification)) &&
+    (await can(userAccountId, "create_site", "location", target, sitio.classification))
+  );
+}
+
 /**
  * Una parcela nueva en una finca. Exige, sobre el SITIO de la finca, `manage_attributes` y
  * `create_site`: los mismos dos permisos que crear un beneficio, así que el Farm Manager de esa
@@ -230,4 +247,22 @@ export async function crearParcela(userAccountId: string, input: { siteId: strin
     );
     return parcela;
   });
+}
+
+/**
+ * Las parcelas en el orden en que se eligen para cosechar: cada parcela, y justo debajo sus
+ * microparcelas, con el nombre sangrado. Una microparcela es un `plot` cuyo padre es otro `plot`
+ * de la misma lista; si su parcela no está en la lista, sale sola, al nivel de las demás.
+ */
+export function ordenarParcelas<T extends { id: string; name: string; parentLocationId: string | null }>(parcelas: readonly T[]): T[] {
+  const ids = new Set(parcelas.map((p) => p.id));
+  const esMicro = (p: T) => p.parentLocationId !== null && ids.has(p.parentLocationId);
+  const salida: T[] = [];
+  for (const p of sortByName(parcelas.filter((x) => !esMicro(x)), (x) => x.name)) {
+    salida.push(p);
+    for (const m of sortByName(parcelas.filter((x) => x.parentLocationId === p.id), (x) => x.name)) {
+      salida.push({ ...m, name: `— ${m.name}` });
+    }
+  }
+  return salida;
 }

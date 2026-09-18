@@ -92,6 +92,8 @@ export const RUTAS = {
   "/my-nectar": { clase: "requiere-sesion", razon: "Espacio del titular. Único prefijo que además gatea `proxy.ts`." },
   "/partner": { clase: "requiere-sesion", razon: "Espacio de socios, por asignación." },
   "/partner/[projectId]": { clase: "requiere-sesion", razon: "Espacio de socios, por asignación." },
+  "/fincas": { clase: "requiere-sesion", razon: "Elegir la finca (spec fincas y parcelas §3.1): lista las de `listarFincas`, que parte de `getManageableContext`; elegir sólo guarda una cookie que acota, nunca autoriza." },
+  "/fincas/nueva": { clase: "requiere-sesion", razon: "Dar de alta una finca (spec fincas y parcelas §3.2): 404 sin `organization:create_farm`, que sólo tiene el administrador de plataforma; la acción lo vuelve a exigir." },
   "/finca": { clase: "requiere-sesion", razon: "Índice de la sección Finca, sin formularios: exige location:manage_attributes, lot:view o lot:manage, la misma regla que su entrada del menú, y cada enlace sólo se ofrece a quien puede usar su destino." },
   "/plots": { clase: "requiere-sesion", razon: "Parcelas de finca." },
   "/plots/[id]": { clase: "requiere-sesion", razon: "Lo sembrado en una parcela." },

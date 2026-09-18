@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
-import { TODAS, crearFinca, crearParcela, idsBajoLaFinca, listarFincas, organizacionesSinTerreno, resolverFinca, type Finca } from "../../lib/traceability/fincas";
+import { TODAS, crearFinca, crearParcela, idsBajoLaFinca, ordenarParcelas, listarFincas, organizacionesSinTerreno, resolverFinca, type Finca } from "../../lib/traceability/fincas";
 import { createMicrolot } from "../../lib/traceability/locations";
 import { recordHarvestEvent } from "../../lib/traceability/harvest";
 
@@ -270,4 +270,19 @@ describe("la cosecha va sobre una parcela", () => {
       await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: lot.id }) });
     }
   }, 30000);
+});
+
+describe("el orden para elegir parcela", () => {
+  it("cada microparcela justo debajo de su parcela, sangrada; en orden natural", () => {
+    const orden = ordenarParcelas([
+      { id: "p10", name: "Lote 10", parentLocationId: "sitio" },
+      { id: "m", name: "Sombra", parentLocationId: "p2" },
+      { id: "p2", name: "Lote 2", parentLocationId: "sitio" },
+    ]);
+    expect(orden.map((p) => p.name)).toEqual(["Lote 2", "— Sombra", "Lote 10"]);
+  });
+
+  it("una microparcela cuya parcela no está en la lista sale sola, sin sangría", () => {
+    expect(ordenarParcelas([{ id: "m", name: "Sombra", parentLocationId: "fuera" }]).map((p) => p.name)).toEqual(["Sombra"]);
+  });
 });

@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { getManageableContext } from "../../lib/traceability/lots";
+import { cookies } from "next/headers";
+import { COOKIE_FINCA, fincaDeLaPagina, idsBajoLaFinca } from "../../lib/traceability/fincas";
+import { FincaElegida } from "../components/traceability/FincaElegida";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +14,12 @@ export default async function PlotsPage() {
   if (!user) redirect("/login");
 
   const t = await getTranslations("Traceability");
-  const { plotLocations } = await getManageableContext(user.userAccountId);
+  const finca = await fincaDeLaPagina(user.userAccountId, (await cookies()).get(COOKIE_FINCA)?.value);
+  if (finca.debeElegir) redirect("/fincas?volver=/plots");
+  const contexto = await getManageableContext(user.userAccountId);
+  // La finca elegida ACOTA lo que ya estaba autorizado; nunca añade.
+  const bajo = finca.elegida ? idsBajoLaFinca(contexto.locations, finca.elegida.siteId) : null;
+  const plotLocations = bajo ? contexto.plotLocations.filter((p) => bajo.has(p.id)) : contexto.plotLocations;
 
   /**
    * Qué condiciones tiene registradas una parcela. Se calcula una vez y se usa
@@ -40,6 +48,7 @@ export default async function PlotsPage() {
     <div>
       <span className="nn-badge">{t("badge")}</span>
       <h1>{t("plotsTitle")}</h1>
+      <FincaElegida elegida={finca.elegida} hayVarias={finca.fincas.length > 1} volver="/plots" />
       <p className="nn-muted">{t("plotsIntro")}</p>
 
       {/* El biochar se produce en la finca y se aplica al terreno, así que se
