@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireFieldSessionAccess } from "./jornadaDeCampo";
+import { exigeEditarBeneficioSiLoEs } from "./locations";
 
 /**
  * Un sitio aprende dónde está de las visitas que se abrieron en él.
@@ -172,6 +173,10 @@ export interface ConfirmarCoordenadasInput {
  */
 export async function confirmarCoordenadasDelSitio(userAccountId: string, input: ConfirmarCoordenadasInput) {
   await requireFieldSessionAccess(userAccountId, input.locationId);
+
+  // Mover un beneficio es editarlo (spec #370 §4.3): `requireFieldSessionAccess`
+  // sólo exige `manage_attributes`, que el capataz tiene.
+  await exigeEditarBeneficioSiLoEs(userAccountId, input.locationId);
 
   // Los rangos del sistema de referencia, no una opinión. Un dedo de más en un
   // formulario manda un apiario al océano y nadie lo nota hasta ver el mapa.

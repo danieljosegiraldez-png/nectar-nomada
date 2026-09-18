@@ -103,6 +103,29 @@ export async function requireLocationAttributeAccess(userAccountId: string, loca
   throw new LocationAccessError("no_location_attribute_access");
 }
 
+/**
+ * «Editar beneficio» (spec #370 §4.3). No hace nada si la ubicación no es un
+ * beneficio: parcelas y sitios siguen como estaban. Si lo es, exige
+ * `location:edit_beneficio` sobre el propio beneficio.
+ *
+ * Existe porque la auditoría de Codex del 2026-09-18 encontró que el capataz
+ * —que tiene `manage_attributes` por perfil y lo hereda del sitio— editaba
+ * atributos y coordenadas de un beneficio por la acción de parcela, que no
+ * miraba el tipo. La regla de Daniel es sobre escrituras, así que vive aquí,
+ * en el servicio, y cada camino la llama.
+ */
+export async function exigeEditarBeneficioSiLoEs(userAccountId: string, locationId: string) {
+  const location = await prisma.location.findUnique({
+    where: { id: locationId },
+    select: { locationType: true, classification: true },
+  });
+  if (!location) throw new LocationAccessError("location_not_found");
+  if (location.locationType !== "beneficio") return;
+  const target: ScopeTarget = { scopeType: "location", scopeRefId: locationId };
+  if (await can(userAccountId, "edit_beneficio", "location", target, location.classification)) return;
+  throw new LocationAccessError("no_beneficio_edit_access");
+}
+
 export interface UpdateLocationAttributesInput {
   locationId: string;
   sunExposure?: SunExposure | null;
@@ -136,6 +159,7 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
   if (!existing) throw new LocationAccessError("location_not_found");
 
   await requireLocationAttributeAccess(userAccountId, input.locationId);
+  await exigeEditarBeneficioSiLoEs(userAccountId, input.locationId);
 
   const nextMin = input.altitudeMinM !== undefined ? input.altitudeMinM : existing.altitudeMinM;
   const nextMax = input.altitudeMaxM !== undefined ? input.altitudeMaxM : existing.altitudeMaxM;
@@ -208,6 +232,11 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
   if (!parent) throw new LocationAccessError("parent_location_not_found");
 
   await requireLocationAttributeAccess(userAccountId, input.parentLocationId);
+
+  // Un microlote copia el tipo del padre, así que sobre un beneficio crearía
+  // OTRO beneficio, saltándose `create_site` y la regla de que un beneficio
+  // cuelga de un sitio. Hoy ninguna pantalla lo llama; se cierra igual.
+  if (parent.locationType === "beneficio") throw new LocationValidationError("beneficio_no_se_subdivide");
 
   const microlot = await prisma.$transaction(async (tx) => {
     const microlot = await tx.location.create({
