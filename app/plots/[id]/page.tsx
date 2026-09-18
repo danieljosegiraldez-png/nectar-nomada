@@ -23,6 +23,7 @@ import { diaDeHoy } from "../../../lib/time/diaDeHoy";
 import { pendienteDeLaParcela, enlaceDelAviso, type Aviso } from "../../../lib/traceability/pendienteDeLaParcela";
 import { trampasParaAviso } from "../../../lib/traceability/pendienteDeTrampas";
 import { claveDeTituloDeBloque } from "../../../lib/traceability/plotBlocks";
+import { pestanaValida, PESTANAS_DE_PARCELA, type PestanaDeParcela } from "./pestanas";
 
 export const dynamic = "force-dynamic";
 
@@ -36,8 +37,16 @@ export const dynamic = "force-dynamic";
  * registrado. Todo bloque de Finca Rosina tiene siembras y no área, así que la
  * densidad no se puede calcular, y eso sale con su motivo, no en blanco.
  */
-export default async function PlotDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PlotDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ pestana?: string }>;
+}) {
   const { id } = await params;
+  const { pestana: pestanaCruda } = await searchParams;
+  const pestana = pestanaValida(pestanaCruda);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
@@ -138,6 +147,30 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         </Link>
       </p>
 
+      <p className="nn-detail-meta">
+        {pendiente.tocaHacer.length + pendiente.faltaUnDato.length === 0
+          ? t("plotDashboardPendingNone")
+          : t("plotDashboardPendingLine", {
+              tocaHacer: pendiente.tocaHacer.length,
+              faltaUnDato: pendiente.faltaUnDato.length,
+            })}
+      </p>
+
+      <nav className="nn-tabs" aria-label={t("plotDashboardTabsLabel")}>
+        {PESTANAS_DE_PARCELA.map((p) => (
+          <Link
+            key={p}
+            href={`/plots/${location.id}?pestana=${p}`}
+            aria-current={p === pestana ? "page" : undefined}
+            className={p === pestana ? "nn-tab nn-tab-activa" : "nn-tab"}
+          >
+            {t(`plotDashboardTab_${p}` as "plotDashboardTab_resumen")}
+          </Link>
+        ))}
+      </nav>
+
+      {pestana === "resumen" ? (
+        <>
       <section className="nn-section">
         <h2>{t("plotDashboardStatusHeading")}</h2>
         <div className="nn-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
@@ -377,6 +410,8 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
           />
         </details>
       </section>
+        </>
+      ) : null}
 
       {/* M1: el `id` va DENTRO del <details>. El navegador sólo abre un
           <details> al navegar a un fragmento cuando el destino está dentro de
