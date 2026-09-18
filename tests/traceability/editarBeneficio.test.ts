@@ -5,6 +5,7 @@ import { PERMISSIONS, ROLE_PROFILES } from "../../lib/rbac/catalog";
 import { LocationAccessError, LocationValidationError, createMicrolot, updateLocationAttributes } from "../../lib/traceability/locations";
 import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadasDelSitio";
 import { actualizarBeneficio } from "../../lib/traceability/beneficios";
+import { actualizarUbicacionDeSecado, crearUbicacionDeSecado } from "../../lib/traceability/instalaciones";
 
 /**
  * «Editar beneficio» — spec #370 §4.3. Por defecto el capataz NO edita un
@@ -80,6 +81,9 @@ afterEach(async () => {
   const rows = await prisma.location.findMany({ where: { name: { in: names } }, select: { id: true } });
   const ids = rows.map((r) => r.id);
   await prisma.auditEvent.deleteMany({ where: { entityType: "location", entityId: { in: ids } } });
+  // Nietos (camas bajo instalación): primero, para que ninguno quede con el padre en null.
+  const hijos = await prisma.location.findMany({ where: { parentLocationId: { in: ids } }, select: { id: true } });
+  await prisma.location.deleteMany({ where: { parentLocationId: { in: hijos.map((h) => h.id) } } });
   // Hijos primero, para que ninguno quede con el padre en null (SET NULL).
   await prisma.location.deleteMany({ where: { parentLocationId: { in: ids } } });
   await prisma.location.deleteMany({ where: { id: { in: ids } } });
@@ -181,5 +185,33 @@ describe("renombrar un beneficio (actualizarBeneficio)", () => {
     await conceder(capataz);
     const nuevo = nombre();
     expect((await actualizarBeneficio(capataz, { locationId: ben.id, name: nuevo })).name).toBe(nuevo);
+  });
+});
+
+describe("instalaciones y camas (crearUbicacionDeSecado, actualizarUbicacionDeSecado)", () => {
+  it("un capataz NO crea una instalación en su sitio; un Farm Manager sí", async () => {
+    const finca = await sitio();
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    await expect(crearUbicacionDeSecado(capataz, { name: nombre(), parentLocationId: finca.id, locationType: "drying_facility" }))
+      .rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    // Control positivo: el mismo camino con quien sí puede.
+    const inst = await crearUbicacionDeSecado(jefe, { name: nombre(), parentLocationId: finca.id, locationType: "drying_facility" });
+    expect(inst.locationType).toBe("drying_facility");
+  });
+
+  it("un capataz NO edita ni crea camas; con la concesión, sí", async () => {
+    const finca = await sitio();
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const inst = await crearUbicacionDeSecado(jefe, { name: nombre(), parentLocationId: finca.id, locationType: "drying_facility" });
+    await expect(actualizarUbicacionDeSecado(capataz, { locationId: inst.id, name: nombre() }))
+      .rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    await expect(crearUbicacionDeSecado(capataz, { name: nombre(), parentLocationId: inst.id, locationType: "drying_bed" }))
+      .rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
+    await conceder(capataz);
+    await expect(actualizarUbicacionDeSecado(capataz, { locationId: inst.id, name: nombre() })).resolves.toBeDefined();
+    const cama = await crearUbicacionDeSecado(capataz, { name: nombre(), parentLocationId: inst.id, locationType: "drying_bed" });
+    expect(cama.locationType).toBe("drying_bed");
   });
 });

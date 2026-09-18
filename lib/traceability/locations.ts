@@ -126,6 +126,38 @@ export async function exigeEditarBeneficioSiLoEs(userAccountId: string, location
   throw new LocationAccessError("no_beneficio_edit_access");
 }
 
+/**
+ * `location:edit_beneficio` sobre una ubicación, sea del tipo que sea. Para lo
+ * que es configuración del beneficio aunque no cuelgue de él: las
+ * instalaciones de secado y sus camas cuelgan del sitio (decisión de Daniel
+ * del 2026-09-18: «todas», cuelguen de donde cuelguen). `can()` sube por los
+ * ancestros, así que un Farm Manager asignado en la finca pasa sobre sus hijos.
+ */
+export async function exigeEditarBeneficioEn(userAccountId: string, locationId: string) {
+  const location = await prisma.location.findUnique({ where: { id: locationId }, select: { classification: true } });
+  if (!location) throw new LocationAccessError("location_not_found");
+  const target: ScopeTarget = { scopeType: "location", scopeRefId: locationId };
+  if (await can(userAccountId, "edit_beneficio", "location", target, location.classification)) return;
+  throw new LocationAccessError("no_beneficio_edit_access");
+}
+
+/**
+ * `location:edit_beneficio` en ALGÚN lugar de una organización — para lo que es
+ * de la organización y no de un lugar, como las recetas. Una receta compartida
+ * (`organizationId` nulo) sólo se configura con alcance de plataforma.
+ */
+export async function exigeEditarBeneficioEnOrganizacion(userAccountId: string, organizationId: string | null) {
+  if (organizationId === null) {
+    if (await can(userAccountId, "edit_beneficio", "location", { scopeType: "platform", scopeRefId: null }, "internal")) return;
+    throw new LocationAccessError("no_beneficio_edit_access");
+  }
+  const lugares = await prisma.location.findMany({ where: { organizationId }, select: { id: true, classification: true } });
+  for (const l of lugares) {
+    if (await can(userAccountId, "edit_beneficio", "location", { scopeType: "location", scopeRefId: l.id }, l.classification)) return;
+  }
+  throw new LocationAccessError("no_beneficio_edit_access");
+}
+
 export interface UpdateLocationAttributesInput {
   locationId: string;
   sunExposure?: SunExposure | null;

@@ -14,13 +14,13 @@ function id(ids: string[]) { const value = randomUUID(); ids.push(value); return
 async function sitio() {
   return prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal" } });
 }
-async function cuenta(locationId?: string) {
+async function cuenta(locationId?: string, perfil: "Farm Manager" | "Farm Operator" = "Farm Manager") {
   const personId = id(personIds);
   await prisma.person.create({ data: { id: personId, givenName: "TEST", familyName: "Instalaciones", displayName: personId } });
   const userAccountId = id(accountIds);
   await prisma.userAccount.create({ data: { id: userAccountId, personId, status: "active", authProvider: "credentials" } });
   if (locationId) {
-    const profile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+    const profile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: perfil } });
     // `Scope` es único por (tipo, referencia): dos cuentas sobre el MISMO sitio
     // comparten ámbito. Crearlo a ciegas rompía la prueba que necesita dos
     // actores sobre el mismo sitio — uno con el permiso y otro sin él.
