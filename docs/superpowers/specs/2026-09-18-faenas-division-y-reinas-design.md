@@ -36,11 +36,10 @@ antibióticos (oxitetraciclina, sulfatiazol) **no** se citan aquí como recomend
 
 | Faena (en pantalla) | Término de las fuentes | Qué abre | ¿Existe hoy? |
 |---|---|---|---|
-| **Revisar** | «revisión de colmenas» [D] · «revisión básica» [S] | la inspección | sí |
+| **Revisar** | «revisión de colmenas» [D] · «revisión básica» [S] · y dentro, «revisión de enjambrazón» [S] | la inspección; si se anotan **celdas reales**, avisa del riesgo de enjambrazón y ofrece *Dividir* como remedio | sí; el aviso y el paso a *Dividir*, no |
 | **Alimentar** | «alimentación artificial» [D][S] · «alimentación de sostén» [S] | alimentación | sí |
 | **Tratar** | «plagas y enfermedades» [D] · «prevención de enfermedades» [S] | tratamiento (con frasco del botiquín) | sí |
 | **Contar varroa** | «varroa» [D] | conteo de varroa | sí |
-| **Enjambrazón** | «prevención y control de la enjambrazón» [D] · «revisión de enjambrazón» [S] | la inspección en su parte de **celdas reales**, y el paso a *Dividir* | casi: las celdas ya se registran |
 | **Dividir** | «multiplicación por división / por núcleo» [D] · «división artificial de una colmena» [S] | crear la colonia hija **sabiendo de cuál sale** | **no** — §3 |
 | **Reinas** | «crianza de reinas», «cambio de reinas», «introducción de reinas» [S] | la reina de esta colonia y su historia | **no** — §4 |
 | **Unir** | «unión de colmenas» [D] · «unión de colonias» [S] | terminar esta colonia **uniéndola a otra** | a medias — §3 |
@@ -52,6 +51,11 @@ con origen *capturada*, que ya existe (`ColonyOriginType.captured`).
 
 **El orden** sigue el de [S] («trabajos a realizar»): revisar primero, cosechar al final. Cambiarlo
 es editar la lista `FAENAS`.
+
+**La enjambrazón no tiene fila propia — decisión de Daniel, 2026-09-18.** Las dos fuentes la separan
+(«prevención y control de la enjambrazón» [D], «revisión de enjambrazón» [S]), pero en el patio se
+descubre revisando: al anotar celdas reales, *Revisar* avisa y ofrece *Dividir*, que es el remedio
+que [D] da para una colmena abarrotada. Ocho faenas, no nueve.
 
 ## 3. La genealogía de la colonia — lo que falta para dividir y unir
 
@@ -79,7 +83,8 @@ se cambia, o se muere, y la pregunta es «¿qué reina tenía esta colonia en ma
 
 - **`Queen`** — la reina: **origen** (vocabulario cerrado con escape: *criada aquí*, *comprada*,
   *natural* —la que la colonia hizo sola—, *de enjambre*, *otro* con nota), la **colonia de donde
-  salió** cuando se crió aquí, **marca** (color y/o año, si se marcó — nulo si no), notas.
+  salió** cuando se crió aquí, y notas. **Sin marca**: Daniel, 2026-09-18, «no marcamos las
+  reinas». Si algún día se marcan, se añade.
 - **`QueenTenure`** — el intervalo reina↔colonia: desde, hasta (nulo = sigue), y **cómo terminó**
   (*cambiada*, *muerta*, *perdida*, *enjambró*, *otro*). Una reina puede tener más de un intervalo
   (enjaulada y metida en otra colonia: «introducción de reinas» [S]); una colonia tiene **como mucho
@@ -101,7 +106,7 @@ las faenas que sí puede, y las demás con su razón, que es el molde del 2026-0
 
 ## 6. Lo que se construye, en orden
 
-1. **La fila con los nueve nombres** (navegación pura, sobre #397). Las faenas sin modelo todavía
+1. **La fila con los ocho nombres** (navegación pura, sobre #397). Las faenas sin modelo todavía
    —Dividir, Reinas, Unir— aparecen **con su razón** («llega con la genealogía») en vez de ocultas.
 2. **Genealogía** (§3): columnas, CHECK, acciones Dividir y Unir.
 3. **Reinas** (§4): `Queen`, `QueenTenure`, cambio de reina, la lectura «huérfana».
@@ -109,10 +114,7 @@ las faenas que sí puede, y las demás con su razón, que es el molde del 2026-0
 Cada paso con su plan, sus pruebas contra Postgres y sus flip-tests, como el botiquín y los
 artefactos.
 
-## 7. Decisiones abiertas — de Daniel
+## 7. Decisiones — cerradas por Daniel el 2026-09-18
 
-1. **¿Marca de reina con el código internacional de colores por año** (blanco/amarillo/rojo/verde/
-   azul por terminación 1-6/2-7/…)? Ninguna de las dos fuentes leídas lo trae; si lo usan en Cerro
-   Azul, se añade como vocabulario; si no, la marca es texto libre.
-2. **¿La faena «Enjambrazón» merece fila propia** o basta con que *Revisar* resalte las celdas
-   reales? Las dos fuentes la separan del resto.
+1. **Marca de reina: no.** «No marcamos las reinas.» `Queen` no lleva campo de marca.
+2. **Enjambrazón: dentro de *Revisar*,** no como faena propia (ver §2). La fila queda en ocho.
