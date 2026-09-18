@@ -104,8 +104,10 @@ describe("el inventario del router", () => {
     // parcela (siembras, condiciones y calicatas), separada del tablero.
     // 79 → 80 el 2026-09-17: /beneficio/ajustes — el alta y la edición del
     // beneficio como Location, separado de su operación.
-    // Medido con scripts/inventario-de-rutas.mjs: 70 páginas y 10 handlers.
-    expect(salida).toContain("80 entradas");
+    // 80 → 81 el mismo día: /beneficio, el índice de la sección que sustituye a
+    // «Lotes» en el menú. Medido con scripts/inventario-de-rutas.mjs: 71 páginas
+    // y 10 handlers.
+    expect(salida).toContain("81 entradas");
     expect(codigo, salida).toBe(0);
   });
 
