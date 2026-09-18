@@ -6953,6 +6953,17 @@ model ColonyEvent {
   treatmentBatchLabel String?         @map("treatment_batch_label")
   treatmentDose       Decimal?        @map("treatment_dose") @db.Decimal(10, 3)
   treatmentDoseUnit   String?         @map("treatment_dose_unit")
+  /// El frasco del botiquín del que salió la dosis. Opcional para siempre: un
+  /// tratamiento es un registro legalmente exigido y no depende del inventario.
+  /// Cuando está, `recordColonyEvent` descuenta la dosis en la misma transacción.
+  /// RESTRICT como toda evidencia desde el 2026-09-01: no se borra el frasco de
+  /// un tratamiento aplicado.
+  consumableLotId     String?         @map("consumable_lot_id") @db.Uuid
+  consumableLot       ConsumableLot?  @relation(fields: [consumableLotId], references: [id], onDelete: Restrict)
+  /// ¿El frasco estaba vencido el día de la aplicación? Nulo = sin frasco, o
+  /// frasco sin fecha: lo desconocido no se convierte en «vigente». Avisa, no
+  /// bloquea — se guarda para que el registro legal lo diga.
+  treatmentLotExpiredAtApplication Boolean? @map("treatment_lot_expired_at_application")
   /// Contra qué. **Obligatorio en la capa de servicio cuando `eventType =
   /// treatment`**, como el lote y la carencia: el Anexo B §4 lo marca así y dice
   /// por qué —sin él no se puede agrupar la eficacia por objetivo—. Anulable en la
@@ -8553,6 +8564,7 @@ model ConsumableLot {
   consumptionEntries MaterialConsumptionEntry[]
   custodies ConsumableCustody[]
   assets Asset[]
+  colonyEvents ColonyEvent[]
 }
 
 /// El libro mayor de las existencias: **sólo se añade**. Nada actualiza una

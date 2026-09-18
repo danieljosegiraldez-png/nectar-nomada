@@ -103,6 +103,7 @@ tests/inventario/consumo-descuenta.test.ts
 tests/inventario/lista.test.ts
 tests/inventario/custodia.test.ts
 tests/inventario/etiqueta.test.ts
+tests/apiary/tratamiento-descuenta.test.ts
 tests/traceability/e2e.test.ts
 tests/traceability/entradaEnProduccion.test.ts
 tests/traceability/export.test.ts
