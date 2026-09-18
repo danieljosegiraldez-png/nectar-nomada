@@ -191,6 +191,76 @@ describe("los vitales anotados en sitio", () => {
     expect(fila.probableCause).toBe("sequía");
   });
 
+  it("ADR-165 — LA CONDICIÓN DEL SITIO se anota en el sitio, varias a la vez, y estampa la marca", async () => {
+    const id = await visitaAbierta();
+    await registrarVitalesEnSitio(userAccountId, {
+      fieldSessionId: id, siteConditions: ["pasto_alto", "hormigas", "otro"], siteConditionOtherNote: " panal silvestre cerca ",
+    });
+    const fila = await prisma.fieldSession.findUniqueOrThrow({ where: { id } });
+    // En el orden del protocolo, no en el que llegaron; y la nota recortada.
+    expect([fila.siteConditions, fila.siteConditionOtherNote]).toEqual([["hormigas", "pasto_alto", "otro"], "panal silvestre cerca"]);
+    expect(fila.fieldVitalsOnSiteAt).not.toBeNull();
+  });
+
+  it("ADR-165 — CERRAR SIN MARCAR NINGUNA no borra lo anotado en el sitio", async () => {
+    // Las casillas no pueden decir «lo de antes». Por eso la acción manda `undefined` sin marcas,
+    // y el servicio no toca la columna: borrar lo que se vio con el guante puesto por no volver a
+    // marcarlo en casa sería perderlo.
+    const id = await visitaAbierta();
+    await registrarVitalesEnSitio(userAccountId, { fieldSessionId: id, siteConditions: ["encharcamiento"] });
+    await prisma.fieldSession.update({ where: { id }, data: { endedAt: new Date("2026-09-17T12:00:00Z") } });
+    await completarVisita(userAccountId, { fieldSessionId: id, probableCause: "lluvias" });
+    const fila = await prisma.fieldSession.findUniqueOrThrow({ where: { id } });
+    expect(fila.siteConditions).toEqual(["encharcamiento"]);
+    expect(fila.fieldVitalsOnSiteAt).not.toBeNull();
+  });
+
+  it("ADR-165 — CORREGIRLA AL CERRAR la reescribe y LIMPIA la marca, como los otros vitales", async () => {
+    const id = await visitaAbierta();
+    await registrarVitalesEnSitio(userAccountId, { fieldSessionId: id, siteConditions: ["encharcamiento"] });
+    await prisma.fieldSession.update({ where: { id }, data: { endedAt: new Date("2026-09-17T12:00:00Z") } });
+    await completarVisita(userAccountId, { fieldSessionId: id, siteConditions: ["sin_novedad"] });
+    const fila = await prisma.fieldSession.findUniqueOrThrow({ where: { id } });
+    expect([fila.siteConditions, fila.fieldVitalsOnSiteAt]).toEqual([["sin_novedad"], null]);
+  });
+
+  it("ADR-165 — lo que se contradice se rechaza, y no se escribe nada", async () => {
+    const id = await visitaAbierta();
+    await expect(
+      registrarVitalesEnSitio(userAccountId, { fieldSessionId: id, siteConditions: ["sin_novedad", "hormigas"] }),
+    ).rejects.toThrow(/sin_novedad_va_sola/);
+    await expect(registrarVitalesEnSitio(userAccountId, { fieldSessionId: id, siteConditions: ["otro"] })).rejects.toThrow(
+      /otro_sin_decir_cual/,
+    );
+    const fila = await prisma.fieldSession.findUniqueOrThrow({ where: { id } });
+    expect([fila.siteConditions, fila.fieldVitalsOnSiteAt]).toEqual([[], null]);
+  });
+
+  it("ADR-165 — LAS REGLAS VIVEN EN LA BASE: cada CHECK rechaza lo suyo, y lo válido entra", async () => {
+    const id = await visitaAbierta();
+    async function sonda(conds: string, nota: string | null): Promise<string> {
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe(
+            `UPDATE traceability.field_session SET site_conditions = ARRAY[${conds}]::traceability."SiteCondition"[],
+               site_condition_other_note = ${nota === null ? "NULL" : `'${nota}'`} WHERE id = '${id}'`,
+          );
+          throw new Error("DESHACER");
+        });
+      } catch (e) {
+        const m = (e as Error).message;
+        if (m.includes("DESHACER")) return "entra";
+        return m.match(/field_session_[a-z_]+/)?.[0] ?? m.slice(0, 120);
+      }
+      return "?";
+    }
+    expect(await sonda("'hormigas','pasto_alto'", null)).toBe("entra");
+    expect(await sonda("'otro'", "panal")).toBe("entra");
+    expect(await sonda("'sin_novedad','hormigas'", null)).toBe("field_session_sin_novedad_va_sola");
+    expect(await sonda("'otro'", null)).toBe("field_session_otra_condicion_dice_cual");
+    expect(await sonda("'hormigas'", "huérfana")).toBe("field_session_otra_condicion_dice_cual");
+  });
+
   it("escribe su AuditEvent en la misma transacción, con el ANTES", async () => {
     const id = await visitaAbierta();
     await registrarVitalesEnSitio(userAccountId, { fieldSessionId: id, hivesPresentCount: 9 });

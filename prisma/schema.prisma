@@ -4539,6 +4539,9 @@ model FieldSession {
   /// Clima OBSERVADO al visitar — Anexo E, etapa de campo (ADR-152). Lo que alguien vio,
   /// no un pronostico: el «Clima 7 dias» del Anexo C sigue siendo capa externa sin proveedor.
   weatherObserved   WeatherObserved? @map("weather_observed")
+  /// ADR-165 -- varias a la vez (hormigas Y pasto alto). Vacio = sin registrar (ADR-080).
+  siteConditions         SiteCondition[] @map("site_conditions")
+  siteConditionOtherNote String?         @map("site_condition_other_note")
   /// CUANDO se anotaron los vitales de campo --clima, colonias, cajas-- ESTANDO EN EL SITIO.
   ///
   /// **Existe porque el dueno pidio poder hacerlo de las dos formas** (2026-09-17): «se deberia
@@ -6852,6 +6855,23 @@ enum ColonyEventType {
 /// ninguno. No hay `otro`: el protocolo no lo declara, y el sitio donde se anade un quinto
 /// --«neblina», por ejemplo, que en Cerro Azul no es raro-- es `protocolos/apiario-campo-v1.json`
 /// mas su migracion, no este archivo por su cuenta.
+/// ADR-165 -- la condicion del SITIO, no de una caja. Vocabulario del protocolo v2, elegido por
+/// Daniel el 2026-09-18 sobre los ejemplos del Anexo B y la guia de Varroa. «agua» son DOS:
+/// falta y exceso. `sin_novedad` es la respuesta «mire y esta bien», que no es «nadie miro».
+enum SiteCondition {
+  hormigas
+  moho_humedad
+  pasto_alto
+  cerca_caida
+  dosel_cerrado
+  fuente_de_agua_seca
+  encharcamiento
+  sin_novedad
+  otro
+
+  @@schema("traceability")
+}
+
 enum WeatherObserved {
   despejado
   nublado

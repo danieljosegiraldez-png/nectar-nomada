@@ -1392,7 +1392,24 @@
     "transformationType_packaging": "Packaging",
     "honeyProcessButton": "Process honey",
     "honeyPackagingButton": "Package",
-    "honeySplitButton": "Split"
+    "honeySplitButton": "Split",
+    "transformationType_hulling": "Hulling",
+    "visitSiteConditionLabel": "Site condition",
+    "visitSiteConditionHelp": "What belongs to the site, not to a hive. Tick all you see; «nothing to report» goes alone.",
+    "visitSiteConditionOtherLabel": "If you ticked «other», which?",
+    "siteCondition_hormigas": "Ants",
+    "siteCondition_moho_humedad": "Mould / damp",
+    "siteCondition_pasto_alto": "Tall grass / undergrowth",
+    "siteCondition_cerca_caida": "Fence down",
+    "siteCondition_dosel_cerrado": "Closed canopy (too much shade)",
+    "siteCondition_fuente_de_agua_seca": "Water source dry or far",
+    "siteCondition_encharcamiento": "Waterlogging / standing water",
+    "siteCondition_sin_novedad": "Nothing to report",
+    "siteCondition_otro": "Other",
+    "error_condicion_condicion_desconocida": "Unknown site condition: {value}.",
+    "error_condicion_sin_novedad_va_sola": "«Nothing to report» cannot go with another condition.",
+    "error_condicion_otro_sin_decir_cual": "You ticked «other» in site condition: say which.",
+    "error_condicion_nota_sin_otro": "You wrote which «other» site condition, but did not tick it."
   },
   "Apiary": {
     "badge": "Apiary",
@@ -1867,7 +1884,16 @@
     "mielMermaDividir": "Loss while splitting (kg)",
     "mielDividirGuardar": "Save split",
     "mielError_dividir_exige_dos_partes": "At least two parts are needed to split.",
-    "mielError_parte_cero": "A part cannot be zero kilos: leave it empty."
+    "mielError_parte_cero": "A part cannot be zero kilos: leave it empty.",
+    "sinSaldoHeading": "Weighed harvests without a balance",
+    "sinSaldoIntro": "These harvests have their weight written, but their honey lot does not have it in the ledger: they were weighed at close before 18 September, when that weight was not yet posted. Without a balance, processing, packaging or splitting the lot has nothing to reconcile against. The button posts the weight already written, with nothing to type.",
+    "sinSaldoCaja": "hive",
+    "sinSaldoLote": "lot",
+    "sinSaldoAsentar": "Post {kg} kg",
+    "sinSaldoAsentado": "Posted.",
+    "sinSaldoError_cosecha_sin_peso": "This harvest has no weight written: complete it in its close.",
+    "sinSaldoError_el_lote_ya_tiene_saldo": "The lot already has entries: nothing is posted on top, so it is not counted twice.",
+    "sinSaldoError_sin_permiso": "You are not allowed to post in this apiary."
   },
   "Research": {
     "badge": "Research OS",

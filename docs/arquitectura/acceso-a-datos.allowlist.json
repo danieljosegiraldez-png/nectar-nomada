@@ -484,6 +484,10 @@
     {
       "archivo": "lib/commerce/tienda.ts",
       "razon": "Módulo de dominio (ADR-163): de un lote envasado a la tienda. `asignarATienda` exige `requireLotAccess(\"manage\")` antes de leer nada del lote; `confirmarRecepcion`, `crearVariante` y `tiendaParaGestionar` exigen `commerce:manage_store`. Escritura y AuditEvent en la MISMA transacción; la asignación en `Serializable` para que dos a la vez no pasen juntas del techo de envases."
+    },
+    {
+      "archivo": "lib/apiary/cosechasSinSaldo.ts",
+      "razon": "Módulo de dominio (ADR-166). `asentarPesoDeCosecha` exige `requireApiaryAccess(\"manage\")` sobre la caja de la cosecha antes de escribir, y dentro de una transacción `Serializable` vuelve a comprobar que el lote no tenga asientos, para no asentar dos veces. Escritura y AuditEvent en la MISMA transacción."
     }
   ],
   "reciben_transaccion": [
@@ -915,6 +919,12 @@
       "archivo": "lib/commerce/tienda.ts",
       "operacion": "variantesParaAsignar",
       "razon": "No recibe principal y devuelve catálogo: nombre de producto, nombre de variante y SKU de las variantes activas, lo mismo que la ficha pública de cada producto ya enseña. Su único llamador es la ficha del lote, sólo cuando quien mira puede gestionar ese lote y le quedan envases sin asignar.",
+      "verificado": "2026-09-18"
+    },
+    {
+      "archivo": "lib/apiary/cosechasSinSaldo.ts",
+      "operacion": "cosechasSinSaldo",
+      "razon": "No recibe principal. Su único llamador es la ficha del apiario (`app/apiaries/[id]/page.tsx`), que la invoca DESPUÉS del `Promise.all` donde `getApiaryDetail` autoriza —y LANZA sin permiso—, con el id del apiario ya concedido. Filtra por ese apiario: no ve cosechas de otros sitios.",
       "verificado": "2026-09-18"
     }
   ]

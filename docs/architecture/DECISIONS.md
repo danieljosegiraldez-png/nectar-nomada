@@ -11287,3 +11287,72 @@ y borrar una cuenta habria borrado quien firmo una recepcion.
 **Lo que NO entra.** Vender descuenta de la variante (ya existia) pero no del lote: el libro del lote
 no sabe que envases se vendieron. Devolver a la finca lo asignado y no recibido. Y la pagina
 `/tienda` no se ha visto en un navegador: hace falta sesion.
+
+## ADR-164 — «Editar beneficio»: un permiso que se concede, no uno que se hereda
+
+**Fecha:** 2026-09-18 · **Estado:** aceptado · **Spec:** #370 §4.3
+
+**Contexto.** La auditoría de Codex del 2026-09-18 sobre #377 encontró que el capataz (Farm Operator) editaba un beneficio por caminos que no pasaban por `beneficios.ts`: la acción de atributos de parcela (`updateLocationAttributes`, que no miraba el tipo), la de coordenadas (`confirmarCoordenadasDelSitio`) y, latente, `createMicrolot`, que sobre un beneficio crearía otro. Todos exigían sólo `manage_attributes`, que el capataz tiene y hereda del sitio.
+
+**Decisión de Daniel.** *«El capataz puede editar un beneficio si en configuración el Farm Manager/owner le da ese permiso; por defecto NO.»*
+
+**Decisión.** `location:edit_beneficio`, de serie para Farm Manager y Platform Admin, excluido de Farm Operator. Una sola guardia, `exigeEditarBeneficioSiLoEs` en `lib/traceability/locations.ts`, llamada desde cada escritura; no hace nada si la ubicación no es un beneficio. `actualizarBeneficio` pasa de `create_site` a este permiso, porque `create_site` no se puede conceder a un capataz sin darle también crear. `createMicrolot` rechaza un padre beneficio para todos.
+
+**La concesión** es un `AssignmentPermissionOverride` de efecto `grant`, que `can()` ya resuelve. La pantalla para que el Farm Manager la dé es el plan 3 de la spec.
+
+**Consecuencias.** Instalaciones, camas, equipos y recetas siguen abiertos al capataz hasta el plan 2 de la misma spec; está dicho en su §4.2.
+
+## ADR-165 -- La condicion del sitio: lista fija, en la version 2 del protocolo de campo
+
+**Contexto.** Era la ultima pregunta del protocolo sin sitio. La v1 la pedia como «una linea» con
+la pista «Hormigas, moho, dosel, agua, cerca», y Daniel pidio vocabularios fijos con «otro, ¿cual?».
+Antes de preguntarle se leyo lo escrito: el Anexo B da los ejemplos (hormigas en cajas vacias, moho,
+dosel, agua, cerca caida) y la guia de Varroa el pasto alto alrededor de los soportes. Lo unico
+ambiguo era «agua», y Daniel lo resolvio: **son dos**, falta (fuente seca o lejos) y exceso
+(encharcamiento).
+
+**Decision.** `SiteCondition[]` en `FieldSession`, con nota para «otro». Se anade **`sin_novedad`**,
+que va sola: sin ella «mire y el sitio esta bien» y «nadie miro» se guardarian igual (ADR-080). Se
+escribe por las dos puertas del clima -- en el sitio (ADR-157) y al cerrar --; al cerrar, **sin
+ninguna casilla marcada no se toca** lo anotado en el sitio, porque las casillas no pueden decir «lo
+de antes». Dos `CHECK` (otro ⇔ nota; sin novedad sola), probados con sondas y control positivo.
+
+**Cambiar la pregunta es una VERSION 2, no una edicion.** Lo dice el propio JSON: *«Cambiar esto
+despues NO es editar aqui: es crear una version 2, para que las respuestas ya dadas sigan
+significando lo mismo.»* `apiario-campo-v2.json` es la v1 con esa pregunta cambiada; la v1 se queda.
+
+**Y el cargador no sabia versionar.** Ponia el numero de version en el identificador del protocolo,
+asi que una v2 habria nacido como un protocolo aparte, sin parentesco. Ahora la identidad es fija
+(`apiario-campo-v1`, como nacio en produccion el 2026-09-16) y la version crece debajo, idempotente por
+protocolo y version. **Su prueba borraba el protocolo entero** si habia creado la version: con la v1
+real en la base compartida, habria borrado la v1 al limpiar la v2. Ahora borra solo lo que creo.
+
+**El guardia de vocabulario solo miraba `enum`**, no `multi_enum`. Extendido, vigila 15 preguntas en
+vez de 12 -- entran `brood_stages`, `purpose` y esta -- y las tres coinciden.
+
+**Pendiente del dueno:** correr `npm run apiary:load-protocol` en produccion despues de fusionar,
+para que exista la v2. Hasta entonces la condicion del sitio se guarda igual: va a columna.
+
+## ADR-166 -- Las cosechas pesadas sin saldo: se asientan desde la ficha del apiario
+
+**Contexto.** ADR-161 arreglo que el peso escrito en el cierre de una cosecha entre en el libro del
+lote; antes solo entraba si se escribia AL COSECHAR. Las cosechas cerradas antes de ese arreglo
+pueden tener el peso en la fila y el lote de miel sin ningun asiento, y entonces procesar, envasar
+o dividir ese lote no tiene contra que cuadrar. Daniel eligio arreglarlo asi entre cuatro opciones.
+
+**Decision.** La ficha del apiario lista las cosechas con peso escrito y lote SIN NINGUN asiento, y
+un boton asienta ese peso: `received`, con la fecha de la cosecha y su procedencia, igual que el
+asiento que ADR-161 escribe al cerrar. **No se teclea ningun numero**: se asienta el que ya esta.
+
+- **Lo hace Daniel desde la aplicacion, no un script.** Esta sesion no escribe en produccion, y
+  cada asiento queda con quien y cuando, que un script por lotes no diria.
+- **«Sin saldo» es NINGUN asiento**, de ningun tipo. Un lote con cualquier asiento ya tiene
+  historia y sumarle el peso podria contarlo dos veces: no se ofrece, y el servicio lo rechaza.
+- La comprobacion se repite dentro de una transaccion `Serializable`: dos pulsaciones a la vez no
+  asientan dos veces.
+- La seccion solo aparece cuando hay algo que asentar.
+
+**Medido antes de fusionar, y dicho sin adornos:** en la copia local —un respaldo de produccion—
+hay UNA cosecha real, y tiene saldo: se peso al cosechar. **Segun ese respaldo, ninguna cosecha
+esta afectada.** Esto es una red para las que pudiera haber en produccion desde entonces, no el
+arreglo de un dano medido.

@@ -2,7 +2,7 @@
  * Cargar la lista de chequeo de campo del apiario en la base.
  *
  * **Por qué existe (2026-09-11).** `lib/apiary/protocoloDeCampo.ts` sabe leer
- * `protocolos/apiario-campo-v1.json` —11 KB de actividades del apicultor, ya
+ * `protocolos/apiario-campo-v2.json` —11 KB de actividades del apicultor, ya
  * escritas— y darlas de alta como una `ProtocolVersion` de Research OS. Medido:
  * **sólo lo llamaban las pruebas**. Ni un script, ni una pantalla. Así que el
  * protocolo que A9.4 puso como el sitio donde el dueño cambia qué se pregunta
@@ -50,7 +50,7 @@ async function main() {
     protocolo = leerProtocoloDeCampo();
   } catch (error) {
     fail(
-      "No se pudo leer `protocolos/apiario-campo-v1.json`.",
+      "No se pudo leer `protocolos/apiario-campo-v2.json`.",
       (error as Error).message,
       "",
       "Corre esto desde la raíz del proyecto.",

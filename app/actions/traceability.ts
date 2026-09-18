@@ -1,5 +1,6 @@
 "use server";
 
+import { CondicionDelSitioInvalida } from "../../lib/apiary/condicionDelSitio";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
@@ -119,6 +120,10 @@ export interface TraceabilityActionState {
 // copy — functional and honest beats a polished translation catalog for
 // every possible internal error code.
 function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: unknown): string {
+  if (error instanceof CondicionDelSitioInvalida) {
+    const [clave, ...resto] = error.message.split(":");
+    return t(`error_condicion_${clave}` as "error_condicion_otro_sin_decir_cual", { value: resto.join(":") });
+  }
   if (error instanceof ProcedenciaInvalida) {
     // `provenance_not_offered:ai_suggestion` trae el valor pegado con dos
     // puntos, como los errores de atributo del informe externo.
@@ -2266,6 +2271,11 @@ export async function completarVisitaAction(
       // ese cero es un dato distinto de no haber contado (ADR-080).
       hivesPresentCount: cajasCrudas === "" ? null : Number(cajasCrudas),
       weatherObserved: climaCrudo === "" ? null : climaCrudo,
+      // Sin ninguna casilla marcada NO se toca: las casillas no pueden decir «lo de antes», y
+      // borrar lo que se anotó en el sitio por no volver a marcarlo al cerrar sería perderlo.
+      ...(formData.getAll("siteConditions").length === 0
+        ? {}
+        : { siteConditions: formData.getAll("siteConditions").map(String), siteConditionOtherNote: emptyToNull(formData.get("siteConditionOtherNote")) }),
       notes: emptyToNull(formData.get("notes")),
       // Las tres de casa (`stage: close`). El vacío es `null` —«no se anotó»— y NO cero: una
       // visita sin viáticos anotados no es una visita que costó cero.
@@ -2310,6 +2320,8 @@ export async function vitalesEnSitioAction(
       weatherObserved: clima === "" ? undefined : clima,
       coloniesAliveCount: colonias === "" ? undefined : Number(colonias),
       hivesPresentCount: cajas === "" ? undefined : Number(cajas),
+      siteConditions: formData.getAll("siteConditions").map(String),
+      siteConditionOtherNote: emptyToNull(formData.get("siteConditionOtherNote")),
     });
   } catch (error) {
     return { error: friendlyError(t, error) };

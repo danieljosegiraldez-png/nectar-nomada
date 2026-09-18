@@ -1,0 +1,595 @@
+{
+  "_lee_esto_antes": [
+    "BORRADOR DE CONTENIDO, NO DE ESQUEMA. Estas son las listas de chequeo de campo",
+    "que el dueño propone para el módulo apícola. DONDE se guardan --columnas,",
+    "protocolo versionado reutilizando un motor existente, o motor nuevo-- es la",
+    "decision D2 de docs/implementation/48_A9_CAPTURA_DE_CAMPO_PROMPT.md y NO esta",
+    "tomada. Ya existen dos motores de protocolo versionado en el repositorio.",
+    "Este archivo aporta el contenido; el informe de alcance decide el continente.",
+    "Vive en un archivo versionado a propósito: qué se le pregunta a alguien que",
+    "está de pie al sol, con guantes y sin señal, es una decisión del dueño, y así",
+    "se lee en el diff antes de tocar producción.",
+    "Regla de corte, aplicable a cada item nuevo: si se puede escribir en el carro,",
+    "'stage' es 'close', no 'field'.",
+    "Cambiar esto después NO es editar aquí: es crear una version 2, para que las",
+    "respuestas ya dadas sigan significando lo mismo. Mismo principio que",
+    "cafe-cva-adaptado.json.",
+    "Los items marcados 'coversExistingColumn' NO crean fila de respuesta: escriben",
+    "en la columna que ya tiene Inspection o ColonyEvent. El protocolo sólo declara",
+    "cómo se muestran y en qué orden."
+  ],
+  "domain": "apiary",
+  "name": "Captura de campo — apiario Néctar Nómada v1",
+  "description": "Listas de chequeo por actividad para la captura en campo y el cierre posterior. Ver docs/implementation/48_A9_CAPTURA_EN_DOS_ETAPAS.md y su Anexo A.",
+  "version": 2,
+  "status": "draft_contenido_sin_esquema_decidido",
+  "locale": "es",
+  "activities": [
+    {
+      "activityType": "visit",
+      "label": "Visita al sitio",
+      "items": [
+        {
+          "key": "purpose",
+          "label": "Propósito",
+          "valueType": "multi_enum",
+          "options": [
+            "inspeccion",
+            "alimentacion",
+            "tratamiento",
+            "cosecha",
+            "montaje",
+            "diagnostico"
+          ],
+          "stage": "field",
+          "required": true,
+          "order": 1
+        },
+        {
+          "key": "weather_observed",
+          "label": "Clima observado",
+          "valueType": "enum",
+          "options": [
+            "despejado",
+            "nublado",
+            "viento",
+            "lluvia"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 2
+        },
+        {
+          "key": "site_condition",
+          "label": "Condición del sitio",
+          "valueType": "multi_enum",
+          "options": [
+            "hormigas",
+            "moho_humedad",
+            "pasto_alto",
+            "cerca_caida",
+            "dosel_cerrado",
+            "fuente_de_agua_seca",
+            "encharcamiento",
+            "sin_novedad",
+            "otro"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 3,
+          "hint": "Lo que es del sitio y no de una caja. Varias a la vez. «Sin novedad» va sola; «otro» dice cuál."
+        },
+        {
+          "key": "colonies_alive_count",
+          "label": "Colonias vivas contadas",
+          "valueType": "integer",
+          "stage": "field",
+          "required": true,
+          "order": 4,
+          "hint": "Se pregunta al salir del sitio, no al entrar."
+        },
+        {
+          "key": "hives_present_count",
+          "label": "Cajas presentes",
+          "valueType": "integer",
+          "stage": "field",
+          "required": false,
+          "order": 5
+        },
+        {
+          "key": "travel_cost_usd",
+          "label": "Viáticos y transporte",
+          "valueType": "decimal",
+          "unit": "USD",
+          "stage": "close",
+          "required": false,
+          "order": 6
+        },
+        {
+          "key": "next_visit_due_at",
+          "label": "Próxima visita",
+          "valueType": "date",
+          "stage": "close",
+          "required": true,
+          "order": 7
+        },
+        {
+          "key": "probable_cause",
+          "label": "Causa probable",
+          "valueType": "long_text",
+          "stage": "close",
+          "required": false,
+          "order": 8,
+          "provenance": "interpretation"
+        },
+        {
+          "key": "recommendation",
+          "label": "Recomendación al cliente",
+          "valueType": "long_text",
+          "stage": "close",
+          "required": false,
+          "order": 9,
+          "provenance": "interpretation"
+        }
+      ]
+    },
+    {
+      "activityType": "inspection",
+      "label": "Inspección de colonia",
+      "items": [
+        {
+          "key": "outcome",
+          "label": "Resultado",
+          "valueType": "enum",
+          "options": [
+            "nothing_unusual",
+            "issue_observed"
+          ],
+          "stage": "field",
+          "required": true,
+          "order": 1,
+          "coversExistingColumn": "Inspection.outcome"
+        },
+        {
+          "key": "queen_sighted",
+          "label": "Reina vista",
+          "valueType": "enum",
+          "options": [
+            "vista",
+            "no_vista",
+            "no_se_busco"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 2,
+          "coversExistingColumn": "Inspection.queenSighted"
+        },
+        {
+          "key": "brood_pattern",
+          "label": "Patrón de cría",
+          "valueType": "enum",
+          "options": [
+            "compacto",
+            "salteado",
+            "apretado",
+            "promedio",
+            "nulo"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 3,
+          "coversExistingColumn": "Inspection.broodPatternNote"
+        },
+        {
+          "key": "brood_stages",
+          "label": "Etapa de cría presente",
+          "valueType": "multi_enum",
+          "options": [
+            "huevo",
+            "larva",
+            "operculada",
+            "pupa"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 4,
+          "hint": "Huevo presente = reina ponedora hace menos de tres días, sin buscarla."
+        },
+        {
+          "key": "population",
+          "label": "Población",
+          "valueType": "enum",
+          "options": [
+            "baja",
+            "normal",
+            "apiñada"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 5
+        },
+        {
+          "key": "frames_covered",
+          "label": "Cuadros cubiertos de abeja",
+          "valueType": "integer",
+          "stage": "field",
+          "required": false,
+          "order": 6
+        },
+        {
+          "key": "queen_cells",
+          "label": "Celdas reales",
+          "valueType": "enum",
+          "options": [
+            "no_hay",
+            "emergencia",
+            "enjambrazon",
+            "reemplazo"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 7
+        },
+        {
+          "key": "queen_cells_count",
+          "label": "Cuántas celdas",
+          "valueType": "integer",
+          "stage": "field",
+          "required": false,
+          "order": 8,
+          "showWhen": "queen_cells != no_hay"
+        },
+        {
+          "key": "honey_stores",
+          "label": "Reservas de miel",
+          "valueType": "enum",
+          "options": [
+            "alta",
+            "media",
+            "baja",
+            "junto_a_cria"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 9,
+          "coversExistingColumn": "Inspection.storesLevel"
+        },
+        {
+          "key": "pollen_stores",
+          "label": "Reservas de polen",
+          "valueType": "enum",
+          "options": [
+            "alta",
+            "media",
+            "baja",
+            "junto_a_cria"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 10
+        },
+        {
+          "key": "temperament",
+          "label": "Temperamento",
+          "valueType": "enum",
+          "options": [
+            "mansa",
+            "normal",
+            "defensiva"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 11,
+          "coversExistingColumn": "Inspection.temperamentNote"
+        },
+        {
+          "key": "irregularities",
+          "label": "Irregularidades",
+          "valueType": "multi_enum",
+          "options": [
+            "varroa",
+            "polilla_cera",
+            "escarabajo_colmena",
+            "hormigas",
+            "moho",
+            "cria_calva",
+            "loque",
+            "alas_deformadas",
+            "olor_anormal",
+            "disenteria",
+            "obrera_ponedora",
+            "saqueo",
+            "hambre",
+            "otro"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 12,
+          "coversExistingColumn": "Inspection.pestDiseaseFlags"
+        },
+        {
+          "key": "varroa_method",
+          "label": "Método de conteo de varroa",
+          "valueType": "enum",
+          "options": [
+            "alcohol",
+            "azucar",
+            "bandeja",
+            "otro"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 13
+        },
+        {
+          "key": "varroa_bees_sampled",
+          "label": "Abejas de muestra",
+          "valueType": "integer",
+          "stage": "field",
+          "required": false,
+          "order": 14,
+          "requiredWith": "varroa_method"
+        },
+        {
+          "key": "varroa_mites_counted",
+          "label": "Ácaros contados",
+          "valueType": "integer",
+          "stage": "field",
+          "required": false,
+          "order": 15,
+          "requiredWith": "varroa_method"
+        },
+        {
+          "key": "note",
+          "label": "Nota",
+          "valueType": "short_text",
+          "stage": "field",
+          "required": false,
+          "order": 16,
+          "hint": "Una línea. La descripción larga va en el cierre.",
+          "coversExistingColumn": "Inspection.note"
+        },
+        {
+          "key": "assessment",
+          "label": "Valoración",
+          "valueType": "long_text",
+          "stage": "close",
+          "required": false,
+          "order": 17,
+          "provenance": "interpretation"
+        }
+      ]
+    },
+    {
+      "activityType": "feeding",
+      "label": "Alimentación",
+      "items": [
+        {
+          "key": "material",
+          "label": "Material",
+          "valueType": "enum",
+          "options": [
+            "azucar_morena",
+            "azucar_blanca",
+            "melaza",
+            "miel_de_abeja",
+            "miel_de_cana",
+            "jarabe_1_1",
+            "jarabe_2_1",
+            "sustituto_polen",
+            "torta",
+            "otro"
+          ],
+          "stage": "field",
+          "required": true,
+          "order": 1,
+          "prefillLastUsed": true,
+          "coversExistingColumn": "ColonyEvent.feedingMaterial"
+        },
+        {
+          "key": "quantity",
+          "label": "Cantidad",
+          "valueType": "decimal",
+          "stage": "field",
+          "required": true,
+          "order": 2,
+          "prefillLastUsed": true,
+          "coversExistingColumn": "ColonyEvent.feedingQuantity"
+        },
+        {
+          "key": "unit",
+          "label": "Unidad",
+          "valueType": "enum",
+          "options": [
+            "L",
+            "kg",
+            "g",
+            "ml"
+          ],
+          "stage": "field",
+          "required": true,
+          "order": 3,
+          "prefillLastUsed": true,
+          "coversExistingColumn": "ColonyEvent.feedingUnit"
+        },
+        {
+          "key": "method",
+          "label": "Método",
+          "valueType": "enum",
+          "options": [
+            "bolsa_sobre_cabezales",
+            "alimentador_entrada",
+            "alimentador_division",
+            "otro"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 4,
+          "prefillLastUsed": true
+        },
+        {
+          "key": "coverage_until",
+          "label": "Alcanza hasta",
+          "valueType": "date",
+          "stage": "field",
+          "required": true,
+          "order": 5,
+          "hint": "Estimado por quien alimenta. Es lo que dispara el aviso antes de que se acabe."
+        }
+      ]
+    },
+    {
+      "activityType": "treatment",
+      "label": "Aplicación fitosanitaria",
+      "items": [
+        {
+          "key": "product",
+          "label": "Producto",
+          "valueType": "short_text",
+          "stage": "field",
+          "required": true,
+          "order": 1,
+          "coversExistingColumn": "ColonyEvent.treatmentProduct"
+        },
+        {
+          "key": "batch_label",
+          "label": "Lote del producto",
+          "valueType": "short_text",
+          "stage": "field",
+          "required": true,
+          "order": 2,
+          "coversExistingColumn": "ColonyEvent.treatmentBatchLabel"
+        },
+        {
+          "key": "dose",
+          "label": "Dosis",
+          "valueType": "decimal",
+          "stage": "field",
+          "required": true,
+          "order": 3,
+          "coversExistingColumn": "ColonyEvent.treatmentDose"
+        },
+        {
+          "key": "dose_unit",
+          "label": "Unidad de dosis",
+          "valueType": "short_text",
+          "stage": "field",
+          "required": true,
+          "order": 4,
+          "coversExistingColumn": "ColonyEvent.treatmentDoseUnit"
+        },
+        {
+          "key": "target",
+          "label": "Objetivo",
+          "valueType": "enum",
+          "options": [
+            "varroa",
+            "polilla_cera",
+            "escarabajo_colmena",
+            "hormigas",
+            "otro"
+          ],
+          "stage": "field",
+          "required": true,
+          "order": 5
+        },
+        {
+          "key": "route",
+          "label": "Vía",
+          "valueType": "enum",
+          "options": [
+            "tira",
+            "goteo",
+            "espolvoreo",
+            "vaporizacion",
+            "cebo",
+            "otro"
+          ],
+          "stage": "field",
+          "required": false,
+          "order": 6
+        },
+        {
+          "key": "withdrawal_days",
+          "label": "Período de carencia (días)",
+          "valueType": "integer",
+          "stage": "field",
+          "required": true,
+          "order": 7,
+          "hint": "Bloquea la cosecha mientras esté vigente."
+        },
+        {
+          "key": "removal_date",
+          "label": "Fecha de retiro",
+          "valueType": "date",
+          "stage": "close",
+          "required": false,
+          "order": 8
+        },
+        {
+          "key": "efficacy_note",
+          "label": "Eficacia observada",
+          "valueType": "long_text",
+          "stage": "close",
+          "required": false,
+          "order": 9
+        }
+      ]
+    },
+    {
+      "activityType": "harvest",
+      "label": "Cosecha",
+      "items": [
+        {
+          "key": "frames_harvested",
+          "label": "Cuadros cosechados",
+          "valueType": "integer",
+          "stage": "field",
+          "required": false,
+          "order": 1,
+          "coversExistingColumn": "ApiaryHarvestEvent.framesHarvested"
+        },
+        {
+          "key": "extracted_weight_kg",
+          "label": "Peso extraído (kg)",
+          "valueType": "decimal",
+          "stage": "close",
+          "required": false,
+          "order": 2,
+          "hint": "Se pesa en la extracción, no en el apiario.",
+          "coversExistingColumn": "ApiaryHarvestEvent.extractedWeightKg"
+        },
+        {
+          "key": "honey_type",
+          "label": "Tipo de miel",
+          "valueType": "enum",
+          "options": [
+            "multifloral",
+            "monofloral_declarada",
+            "mielato"
+          ],
+          "stage": "close",
+          "required": false,
+          "order": 3
+        },
+        {
+          "key": "moisture_pct",
+          "label": "Humedad (%)",
+          "valueType": "decimal",
+          "stage": "close",
+          "required": false,
+          "order": 4
+        }
+      ]
+    }
+  ],
+  "_aplazado_a10": [
+    "Manejo de reina (origen, marca y año, introducción, aceptación, reemplazo),",
+    "división con vínculo a colonia madre, y captura de enjambre con lugar.",
+    "No están aquí porque el esquema todavía no los sostiene: el origen de una",
+    "colonia es hoy un hecho plano y 'split' no apunta a la colonia madre.",
+    "Consecuencia mientras tanto: Toabré tiene desde septiembre de 2026 dos",
+    "orígenes genéticos distintos —Santa Fe, Veraguas y Parita, Chitré— y el",
+    "sistema no puede sostener la comparación."
+  ]
+}

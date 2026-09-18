@@ -18,6 +18,7 @@
  * blocker `Task.assignedToUserAccountId` still has (P2 §1, not built here).
  */
 import { prisma } from "../db";
+import { normalizarCondicionDelSitio } from "../apiary/condicionDelSitio";
 import { exigeClimaObservado } from "../apiary/climaObservado";
 import { recordAuditEvent } from "../audit";
 import { resumenDeVisita } from "../apiary/bitacora";
@@ -189,6 +190,12 @@ export interface CerrarVisitaInput {
    */
   weatherObserved?: string | null;
   /**
+   * La condición del sitio — ADR-165, protocolo v2. Llega CRUDA del formulario y la valida
+   * `normalizarCondicionDelSitio`. `undefined` no toca la columna; una lista vacía la vacía.
+   */
+  siteConditions?: readonly unknown[];
+  siteConditionOtherNote?: string | null;
+  /**
    * Viáticos y transporte, en dólares. `stage: close` del protocolo, así que ésta es su
    * puerta: se anota en casa.
    *
@@ -255,6 +262,12 @@ export async function completarVisita(userAccountId: string, input: CerrarVisita
     throw new FieldSessionValidationError("edit_window_expired");
   }
 
+  // Se valida ANTES de abrir la transacción: un «otro» sin decir cuál no debe llegar a escribir.
+  const condicion =
+    input.siteConditions === undefined
+      ? undefined
+      : normalizarCondicionDelSitio(input.siteConditions, input.siteConditionOtherNote) ?? { conditions: [], otherNote: null };
+
   const completedAt = existing.completedAt ?? new Date();
   const editWindowExpiresAt =
     existing.editWindowExpiresAt ?? new Date(completedAt.getTime() + HORAS_DE_VENTANA_DE_CIERRE * 3600_000);
@@ -273,6 +286,9 @@ export async function completarVisita(userAccountId: string, input: CerrarVisita
         ...(input.weatherObserved === undefined
           ? {}
           : { weatherObserved: exigeClimaObservado(input.weatherObserved) }),
+        ...(condicion === undefined
+          ? {}
+          : { siteConditions: condicion.conditions, siteConditionOtherNote: condicion.otherNote }),
         // **Y si el cierre reescribe ALGUNO de esos tres, la marca de «anotado en sitio» se
         // limpia** (ADR-157). `fieldVitalsOnSiteAt` describe la procedencia del valor que hay
         // AHORA, no un histórico: una cifra corregida desde casa ya no es la que se vio con el
@@ -280,7 +296,8 @@ export async function completarVisita(userAccountId: string, input: CerrarVisita
         // completo vive en el `AuditEvent`, que es su sitio.
         ...(input.coloniesAliveCount === undefined &&
         input.hivesPresentCount === undefined &&
-        input.weatherObserved === undefined
+        input.weatherObserved === undefined &&
+        condicion === undefined
           ? {}
           : { fieldVitalsOnSiteAt: null }),
         // Las tres de `stage: close`. `undefined` no toca la columna —quien completa dos

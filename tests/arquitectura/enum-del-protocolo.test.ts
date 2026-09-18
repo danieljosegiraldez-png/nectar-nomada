@@ -3,7 +3,7 @@
  *
  * **El incidente es una ausencia, y por eso hay que medirla para verla.** Medido el 2026-09-17:
  * `feedingMethod` lleva **desde A9.4** con sus cuatro opciones escritas **dos veces** —en
- * `protocolos/apiario-campo-v1.json` y en `enum FeedingMethod`— y **nada comprobaba que
+ * `protocolos/apiario-campo-v2.json` y en `enum FeedingMethod`— y **nada comprobaba que
  * coincidieran**. Coincidían por haberlas escrito bien a mano, no porque algo lo exigiera.
  *
  * **Por qué eso es deriva esperando a ocurrir.** El protocolo es el sitio donde el dueño cambia
@@ -36,7 +36,7 @@ import { MAPA_DEL_PROTOCOLO } from "../../lib/apiary/mapaDelProtocolo";
 
 const RAIZ = process.cwd();
 const ESQUEMA = readFileSync(join(RAIZ, "prisma/schema.prisma"), "utf8");
-const PROTOCOLO = JSON.parse(readFileSync(join(RAIZ, "protocolos/apiario-campo-v1.json"), "utf8"));
+const PROTOCOLO = JSON.parse(readFileSync(join(RAIZ, "protocolos/apiario-campo-v2.json"), "utf8"));
 
 export interface ItemDelProtocolo {
   key: string;
@@ -126,7 +126,7 @@ export function compararVocabularios(
   let comprobados = 0;
 
   for (const item of items) {
-    if (item.valueType !== "enum") continue;
+    if (item.valueType !== "enum" && item.valueType !== "multi_enum") continue;
     const destino = MAPA_DEL_PROTOCOLO[item.key as keyof typeof MAPA_DEL_PROTOCOLO];
     if (!destino || destino.clase !== "campo") continue;
 
@@ -197,7 +197,7 @@ describe("el protocolo y el esquema declaran el mismo vocabulario", () => {
     // todo lo demás sin vigilancia y las pruebas en verde. Ahora la cobertura se declara.
     const cubiertas = new Set<string>();
     for (const item of items) {
-      if (item.valueType !== "enum") continue;
+      if (item.valueType !== "enum" && item.valueType !== "multi_enum") continue;
       const destino = MAPA_DEL_PROTOCOLO[item.key as keyof typeof MAPA_DEL_PROTOCOLO];
       if (!destino || destino.clase !== "campo") continue;
       if (valoresDelEnum(tipoDelCampo(destino.modelo, destino.campo) ?? "") !== null) cubiertas.add(item.key);
@@ -205,7 +205,12 @@ describe("el protocolo y el esquema declaran el mismo vocabulario", () => {
     // **DOCE, y ese número es en sí un hallazgo.** El detector viejo comprobaba CINCO: su
     // `continue` sobre `!item.options` se saltaba las otras siete en silencio. Al cerrar ese
     // agujero la cobertura real subió de 5 a 12, y las doce coinciden salvo las dos heredadas.
+    // **Y QUINCE desde el 2026-09-18 (ADR-165).** El detector sólo miraba `enum`; las preguntas
+    // de varias respuestas (`multi_enum`) quedaban fuera aunque fueran a un enum del esquema. Al
+    // incluirlas entraron tres —`brood_stages`, `purpose` y la nueva `site_condition`— y las tres
+    // coinciden: ninguna divergencia escondida, pero hasta hoy nada lo comprobaba.
     expect([...cubiertas].sort()).toEqual([
+      "brood_stages",
       "honey_stores",
       "honey_type",
       "material",
@@ -213,8 +218,10 @@ describe("el protocolo y el esquema declaran el mismo vocabulario", () => {
       "outcome",
       "pollen_stores",
       "population",
+      "purpose",
       "queen_cells",
       "route",
+      "site_condition",
       "target",
       "varroa_method",
       "weather_observed",

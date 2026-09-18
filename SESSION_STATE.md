@@ -38,6 +38,22 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · Cosechas pesadas sin saldo, asentables desde la ficha del apiario
+
+ADR-166. Las cosechas cerradas antes de ADR-161 pueden tener el peso en la fila y el lote sin asiento.
+La ficha del apiario las lista y un botón asienta el peso ya escrito (sin teclear nada), con su
+auditoría; sólo si el lote no tiene NINGÚN asiento. **Medido en la copia local: ninguna afectada**
+—la única cosecha real se pesó al cosechar—. Es una red, no el arreglo de un daño visto.
+
+### 2026-09-18 · La condición del sitio: lista fija, en la versión 2 del protocolo
+
+ADR-165. Era la última pregunta del protocolo sin sitio. Daniel eligió el vocabulario (hormigas,
+moho, pasto alto, cerca caída, dosel cerrado, «agua» partida en falta y exceso, otro ¿cuál?) y se
+añadió **«sin novedad»**, que va sola. Cambiar la pregunta **es una v2** (lo dice el propio JSON):
+`apiario-campo-v2.json`, y el cargador ahora añade versiones al MISMO protocolo. **Hay que correr
+`npm run apiary:load-protocol` en producción** para que exista la v2. El guardia de vocabulario
+pasa a mirar también `multi_enum`: 12 → 15 preguntas vigiladas, sin divergencias.
+
 ### 2026-09-18 · De la miel envasada a la tienda: asignar y recibir
 
 ADR-163. Daniel: trazabilidad + inventario, pero **no todo va a la tienda**. Dos actos: asignar
@@ -73,8 +89,7 @@ desviación, no como rechazo. Cuatro `CHECK`; **una sonda encontró un fallo en 
 libro del lote, así que la miel pesada al extraer no tenía saldo. La ficha del lote de miel ya no
 ofrece botones del café y dice de qué caja viene, también para un frasco.
 
-**Pendiente:** dividir miel desde la pantalla, enlazar el envasado a un producto, y la traducción
-que le falta a `transformationType_hulling` (vista, sin tocar).
+**Hecho después:** dividir (ADR-162), la tienda (ADR-163) y la traducción de la trilla (#411).
 
 ### 2026-09-18 · `reporteDeProceso.test.ts` dejó de fallar a veces (PR #395)
 
@@ -114,21 +129,6 @@ aplica las pendientes, pero **leer el log del despliegue** y confirmar que nombr
 
 **Sin verificar en navegador** —hace falta sesión—. **La cifra del router chocó por cuarta vez:** la
 rama decía 83 y, rebasada sobre `/finca`, se midió 84.
-
-### 2026-09-17 · El refractómetro de miel: la lectura va sobre el lote
-
-ADR-160. Daniel corrigió: un refractómetro no mide humedad en general; **el de miel lee Brix y H%**, y
-**el del beneficio es otro aparato** (Brix 0–32 de mosto, sin H%). La primera versión metía tres
-columnas en la cosecha; **se quitaron antes de commitear** porque el esquema ya lo prohibía y Daniel
-lo dijo a mitad: **la miel es un lote**, que se sigue al dividir, filtrar, envasar y muestrear.
-
-`MaterialState.BEE_HONEY`, `InstrumentMeasurementMode.variable`, y `recordMeasurement` que rechaza
-un modo que no lee esa variable y una lectura fuera de su rango. **El Brix 0–40 del café no se
-ensancha**: se abre a 0–100 sólo sobre lotes `honey`. **El H% nunca se calcula desde el Brix.** Una
-lectura por cosecha. La ficha del equipo gana dónde declarar modos: no había ninguna pantalla.
-
-**Pendiente:** filtrar y envasar miel no tienen nombre en la cadena del lote, ni hay pantalla del
-lote de miel. Es lo siguiente.
 
 ## 3. Bloqueado, y en qué
 
@@ -267,7 +267,10 @@ puede afirmar cada pantalla— y sigue sin tomarse.
   no se ha ejecutado. La herramienta quedó lista el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **`npm run apiary:load-protocol` YA SE CORRIÓ — 2026-09-16, lo confirmó Daniel.**
+- **LA V2 DEL PROTOCOLO FALTA CARGARLA (ADR-165, 2026-09-18).** Después de fusionar, Daniel corre
+  `npm run apiary:load-protocol` otra vez: añade la versión 2 al mismo protocolo. Hasta entonces
+  producción tiene sólo la v1, y la condición del sitio se guarda igual —va a columna—.
+- **`npm run apiary:load-protocol` (v1) YA SE CORRIÓ — 2026-09-16, lo confirmó Daniel.**
   `apiario-campo-v1` está en producción, así que las pantallas de captura de campo
   tienen qué preguntar. **Se anota justamente porque no estaba anotado:** ese día
   se le pidió correrlo como «lo único que falta» sacándolo de la memoria de una

@@ -1392,7 +1392,24 @@
     "transformationType_packaging": "Envasado",
     "honeyProcessButton": "Procesar miel",
     "honeyPackagingButton": "Envasar",
-    "honeySplitButton": "Dividir"
+    "honeySplitButton": "Dividir",
+    "transformationType_hulling": "Trilla",
+    "visitSiteConditionLabel": "Condición del sitio",
+    "visitSiteConditionHelp": "Lo que es del sitio y no de una caja. Marca todas las que veas; «sin novedad» va sola.",
+    "visitSiteConditionOtherLabel": "Si marcaste «otro», ¿cuál?",
+    "siteCondition_hormigas": "Hormigas",
+    "siteCondition_moho_humedad": "Moho / humedad",
+    "siteCondition_pasto_alto": "Pasto alto / sotobosque",
+    "siteCondition_cerca_caida": "Cerca caída",
+    "siteCondition_dosel_cerrado": "Dosel cerrado (demasiada sombra)",
+    "siteCondition_fuente_de_agua_seca": "Fuente de agua seca o lejos",
+    "siteCondition_encharcamiento": "Encharcamiento / agua estancada",
+    "siteCondition_sin_novedad": "Sin novedad",
+    "siteCondition_otro": "Otro",
+    "error_condicion_condicion_desconocida": "Condición del sitio desconocida: {value}.",
+    "error_condicion_sin_novedad_va_sola": "«Sin novedad» no puede ir junto a otra condición.",
+    "error_condicion_otro_sin_decir_cual": "Marcaste «otro» en la condición del sitio: di cuál.",
+    "error_condicion_nota_sin_otro": "Escribiste cuál es el «otro» de la condición del sitio, pero no lo marcaste."
   },
   "Apiary": {
     "badge": "Apiario",
@@ -1867,7 +1884,16 @@
     "mielMermaDividir": "Merma al repartir (kg)",
     "mielDividirGuardar": "Guardar división",
     "mielError_dividir_exige_dos_partes": "Hacen falta al menos dos partes para dividir.",
-    "mielError_parte_cero": "Una parte no puede ser de cero kilos: déjala vacía."
+    "mielError_parte_cero": "Una parte no puede ser de cero kilos: déjala vacía.",
+    "sinSaldoHeading": "Cosechas pesadas sin saldo",
+    "sinSaldoIntro": "Estas cosechas tienen el peso escrito, pero su lote de miel no lo tiene en el libro: se pesaron en el cierre antes del 18 de septiembre, cuando ese peso todavía no se asentaba. Sin saldo, procesar, envasar o dividir el lote no tiene contra qué cuadrar. El botón asienta el peso que ya está escrito, sin teclear nada.",
+    "sinSaldoCaja": "caja",
+    "sinSaldoLote": "lote",
+    "sinSaldoAsentar": "Asentar {kg} kg",
+    "sinSaldoAsentado": "Asentado.",
+    "sinSaldoError_cosecha_sin_peso": "Esta cosecha no tiene peso escrito: complétalo en su cierre.",
+    "sinSaldoError_el_lote_ya_tiene_saldo": "El lote ya tiene asientos: no se asienta encima para no contarlo dos veces.",
+    "sinSaldoError_sin_permiso": "No tienes permiso para asentar en este apiario."
   },
   "Research": {
     "badge": "Research OS",
