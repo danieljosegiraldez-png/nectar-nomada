@@ -58,19 +58,21 @@ Cada una vuelve al tablero, a la pestaña de donde se salió. Los formularios en
 
 **En el móvil**, la misma vista con las pestañas desplazables en horizontal. No hay una versión aparte: el registro en el campo vive en la ronda (§4).
 
-## 4. Vista de finca (`/farms/[id]`)
+## 4. Vista de finca: dentro de la sección `/finca`
 
-### 4.1 En el ordenador
+**Corregido el 2026-09-18, antes del plan.** `main` ya tiene la sección Finca (`docs/superpowers/specs/2026-09-18-seccion-finca-design.md`, PR #388): un menú «Finca» con el índice `/finca`. Una ruta propia `/farms/[id]` la duplicaría. Por eso la vista de finca de este diseño vive **dentro** de esa sección:
 
-**Cabecera:** nombre de la finca y una línea de pendientes de toda la finca.
+- la tabla de lotes es la pantalla «Parcelas» que la sección ya tiene;
+- las trampas se suman como pantallas nuevas de la sección;
+- la dueña de la sección confirmó que no tiene nada en curso ahí.
 
-| pestaña | contenido |
-|---|---|
-| **Lotes** (por defecto) | tabla con una fila por lote: plantas, área (o «sin área»), trampas con aviso, pendientes. Cada fila enlaza al tablero de su parcela |
-| **Trampas** | todas las trampas de la finca, con número, lote, bloque y su tipo, última revisión, lectura y estado. Filtros «toca revisar» y «lectura alta». También muestra la regla de la finca con un enlace para cambiarla |
-| **Fotos** | las de toda la finca, por fecha |
+### 4.1 En el ordenador: `/finca/trampas`
 
-### 4.2 La ronda de trampas (`/farms/[id]/ronda`), pensada para el móvil
+Todas las trampas de la finca, con número, lote, bloque y su tipo, última revisión, lectura y estado. Filtros «toca revisar» y «lectura alta». También muestra la regla de la finca, con un enlace para cambiarla.
+
+Se llega desde el índice `/finca`, con su patrón de enlaces: el enlace sólo aparece a quien puede usarlo. Las fotos de toda la finca quedan para una fase posterior.
+
+### 4.2 La ronda de trampas (`/finca/trampas/ronda`), pensada para el móvil
 
 - **Lista de tarjetas grandes, una por trampa activa.** Primero van las que tocan revisar (vencidas y luego las de hoy), después el resto, y dentro de cada grupo por número.
 - **Cada tarjeta muestra:**
