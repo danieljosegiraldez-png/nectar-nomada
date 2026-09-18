@@ -3901,3 +3901,23 @@ pruebas compartida creyéndola derivada; iba POR DELANTE de git —otra sesión 
 **Diseño esperando a Daniel:** la «faena» —preguntar a qué vas antes de enseñar seis
 formularios—, §A de `docs/superpowers/specs/2026-09-17-faena-de-colmena-y-botiquin-design.md`. El
 botiquín, §B del mismo spec, ya se ejecutó: ver 2026-09-18.
+
+### 2026-09-17 · La limpieza se registra sobre la caja
+
+ADR-159. Decisión de Daniel: «1, sobre la caja». **Ningún evento del apiario colgaba de la caja**
+—todos de la colonia—, y la limpieza no puede: una caja vacía se desinfecta antes de recibir otra.
+`HiveCleaning`, con los actos como arreglo y dos vocabularios fijos sacados del manual de Varroa
+—**sólo los nombres, no sus cifras**—.
+
+**Las reglas viven también en la base:** tres `CHECK` probados contra Postgres, 7 de 7, el primero
+del repositorio sobre un arreglo de enum.
+
+**La caja vacía es por día entero, no por instante.** La colonia muere el 10 y la caja se limpia el
+10; la caja se limpia el 10 y entra colonia nueva ese día: las dos pasan. Su flip-test lo demuestra —
+volver al instante tumba las dos. Renovar cera es la excepción: se hace con la colonia dentro.
+
+**La primera acción del apiario que devuelve el error en vez de lanzarlo**, porque ésta rechaza en un
+caso normal y el apicultor tiene que leer por qué.
+
+**Pendiente:** los productos de tratamiento, que esperan a Daniel — y a leer «el botiquín del apiario»
+(#386), recién fusionado.

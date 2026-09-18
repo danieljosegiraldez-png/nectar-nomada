@@ -11250,3 +11250,40 @@ y ese resto se habria asentado en el libro.
 
 **Seis casillas y no una lista dinamica**: una lista que crece necesita JavaScript en un telefono
 de campo; seis vacias no. Para mas partes se divide dos veces, que ademas deja la genealogia honesta.
+
+## ADR-163 -- De un lote de miel envasado a la tienda: asignar y recibir
+
+**Contexto.** El informe del apiario dejo la miel donde se deja el cafe: un lote con resultado de
+cata, no un articulo de la tienda (ADR-039). No habia ningun enlace lote→producto, ni para el
+cafe. Se le preguntaron tres formas a Daniel y eligio **trazabilidad + inventario**, con una
+precision que cambio el diseno: *«no siempre todo va a tienda Nectar Nomada, solo si se define o
+asigna post envasado»*, y *«ya en tienda uno puede confirmar recepcion»*.
+
+**Decision -- dos actos, y solo el segundo toca la tienda.**
+
+1. **Asignar** (`asignarATienda`): quien trabaja el lote, con `lot:manage`, asigna N envases de un
+   lote ENVASADO a una variante del producto. **No mueve el inventario.** El techo es el numero de
+   envases que salio del envasado, restando lo ya asignado; la transaccion es `Serializable` para
+   que dos asignaciones a la vez no pasen juntas del techo.
+2. **Recibir** (`confirmarRecepcion`): en la tienda, con `commerce:manage_store`, se dice cuantos
+   llegaron. **Solo esto sube el inventario.** Menos de lo asignado exige motivo; cero es valido
+   (se rompio todo). Una asignacion se recibe una vez: la actualizacion lleva `receivedAt: null` en
+   su condicion, asi que dos confirmaciones simultaneas no suman dos veces. Una variante sin
+   inventario llevado empieza a contarse con lo recibido.
+
+**Un permiso nuevo, `commerce:manage_store`**, que hoy solo tiene el administrador de plataforma. No
+existia NINGUN permiso de tienda. Separado de `lot:manage` a proposito, como `lot:release`
+(liberacion del lote): envasar y asignar es trabajo de campo; decidir lo que se ofrece a la venta, no.
+
+**Tampoco habia donde crear una variante**: los productos se sembraban y no tenian ninguna. Sin
+«Miel multifloral 500 g» no hay a que asignar, asi que `/tienda` las crea -- nombre, SKU y precio,
+que da quien lleva la tienda --. Nace sin inventario llevado: un 0 escrito diria que se conto.
+
+**Cuatro `CHECK`**: asignados positivos; la recepcion va entera (quien, cuando, cuantos) o no va;
+recibidos entre 0 y lo asignado; faltante con motivo. Probados con sondas y su control positivo.
+**Las claves hacia las personas son `RESTRICT`**: Prisma habria puesto `SET NULL` en quien recibio,
+y borrar una cuenta habria borrado quien firmo una recepcion.
+
+**Lo que NO entra.** Vender descuenta de la variante (ya existia) pero no del lote: el libro del lote
+no sabe que envases se vendieron. Devolver a la finca lo asignado y no recibido. Y la pagina
+`/tienda` no se ha visto en un navegador: hace falta sesion.
