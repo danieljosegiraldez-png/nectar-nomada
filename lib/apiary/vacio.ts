@@ -52,6 +52,9 @@ export const CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO = [
   "colonyEndCauseNo",
   /** «Ninguno»: el apiario no pertenece a ningún proyecto. `projectId` es anulable. */
   "noProjectOption",
+  /** «— sin registrar —»: la razón de la limpieza no se anotó (ADR-080). La razón es opcional,
+   *  y el vacío es exactamente eso: no se sabe, que no es ninguna de las razones. */
+  "limpiezaRazonSinRegistrar",
   /**
    * «Sin lugar declarado»: el sitio de abejas no cuelga de ninguna finca ni parcela.
    *

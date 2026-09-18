@@ -74,6 +74,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/apiary/limpiezaDeCaja.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. `registrarLimpiezaDeCaja` exige `requireApiaryAccess` sobre la caja ANTES de escribir, y comprueba DENTRO de la transacción que ninguna colonia ocupara la caja el día entero —la regla que no puede ser un CHECK porque cruza a `colony`—. Escritura y AuditEvent en la MISMA transacción."
+    },
+    {
       "archivo": "lib/apiary/vitalesEnSitio.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Exige `requireApiaryAccess` sobre el sitio de la visita ANTES de escribir, y sólo acepta mientras la visita está ABIERTA — que es exactamente lo que la marca `fieldVitalsOnSiteAt` afirma, ni más. Escritura y AuditEvent con su `before` en la MISMA transacción."
     },
@@ -850,6 +854,12 @@
       "operacion": "pendientesDeLaVisita",
       "razon": "Recibe un fieldSessionId que su llamador -la pantalla de la jornada- ya obtuvo de getFieldSessionTimeline, que autoriza con requireFieldSessionAccess. No pide principal a proposito: un lector que pide principal parece una compuerta y termina usandose como tal. Lee la jornada, sus eventos y las cajas del sitio; no escribe.",
       "verificado": "2026-09-15"
+    },
+    {
+      "archivo": "lib/apiary/limpiezaDeCaja.ts",
+      "operacion": "limpiezasDeCaja",
+      "razon": "No recibe principal, misma disciplina que `vitalesDeSitios`. Su único llamador es la ficha de la colmena, que la invoca DESPUÉS del `Promise.all` donde `getHive` autoriza —y `getHive` LANZA si no hay permiso de ver—, y le pasa `hive.id`, el de la caja ya autorizada, no el parámetro crudo de la URL.",
+      "verificado": "2026-09-17"
     }
   ]
 }

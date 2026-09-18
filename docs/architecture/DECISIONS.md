@@ -11077,3 +11077,54 @@ ampliada fueron nombres de esquemas de autenticacion OpenAPI, no valores.
 que ya declara la ficha), los `.zip` (redundantes, comprobado archivo por archivo) y `.DS_Store`.
 **Ni una sola cifra de estos documentos pasa al software**: los vocabularios de tratamiento y de
 limpieza se proponen a partir del de Varroa, pero los decide Daniel.
+
+## ADR-159 -- La limpieza se registra sobre la CAJA, no sobre la colonia
+
+**Contexto.** Daniel pidio vocabularios fijos para la limpieza fitosanitaria, y el manual de
+Varroa (ADR-158) trajo los procedimientos. La pregunta de diseno era donde cuelga: la limpieza
+-- raspar, flamear, hervir en sosa -- se le hace al MATERIAL, no a una colonia. Se le llevaron
+tres opciones y eligio: **«1, sobre la caja»**.
+
+**Medido antes de construir:** de `Hive` colgaban solo `Colony`, `HivePlacement` y `Asset`.
+**Ningun evento del apiario colgaba de la caja**: todos lo hacen de la colonia. Asi que la
+limpieza necesita su propia tabla, y no por gusto: una caja vacia se desinfecta ANTES de recibir
+otra colonia, y en ese momento no hay colonia de la que colgarla.
+
+**Decision -- `HiveCleaning`,** con los actos como **arreglo** -- una limpieza raspa y DESPUES
+flamea -- y dos vocabularios fijos con «otro, ¿cual?»: los actos y la razon.
+
+**Los nombres salen del manual de Varroa, que es borrador, y se toman SOLO los nombres.** La
+concentracion de la sosa, los minutos de inmersion o las 48 h al sol no son el valor por defecto
+de nada (ADR-158). Y **faltan dos actos del manual a proposito**: desbrozar es del SITIO y
+desinfectar la herramienta es del OPERARIO; ninguno se le hace a una caja.
+
+**Las reglas viven TAMBIEN en la base.** Tres `CHECK` --al menos un acto; «otro» dice cual;
+razon «otra» dice cual-- probados contra Postgres con su control positivo, **7 de 7**, dentro
+de transacciones que se deshacen. Es el primer `CHECK` del repositorio sobre un **arreglo de
+enum**. Cada rechazo lo atribuye la base a la restriccion concreta, no a un error generico.
+
+**La regla que no puede ser `CHECK` -- la caja vacia -- es por DIA ENTERO, no por instante.** La
+limpieza es un dia, y con dias hay dos transiciones que son lo normal: la colonia muere el 10 y
+la caja se limpia el 10; la caja se limpia el 10 y ese dia entra una colonia nueva. Una regla por
+instante las rechazaria segun la hora. **Su flip-test lo demuestra: volver al instante tumba las
+dos pruebas del mismo dia.** Se rechaza solo si una colonia ocupo la caja el dia entero.
+
+**La ocupacion sale del intervalo `[startedAt, endedAt)`, no del `status`.** El `status` es el de
+HOY: una colonia hoy muerta pudo estar viva en la fecha que se pregunta. Esto se apoya en que una
+colonia no activa lleva `endedAt` -- medido: 34 colonias, las 16 fugadas con fecha de fin, **cero**
+no activas sin ella --, y la prueba «limpiar despues de la muerte se acepta» lo vigila.
+
+**Renovar cera es la excepcion**, porque se hace CON la colonia dentro. Y «otro» tampoco exige caja
+vacia: no se sabe que es, y bloquearlo seria decidir por el apicultor.
+
+**La primera accion del apiario que DEVUELVE el error en vez de lanzarlo.** Sus hermanas casi nunca
+fallan; esta rechaza en un caso normal -- «esa caja tenia colonia ese dia» -- y el apicultor tiene
+que leer por que, no ver una pagina de error.
+
+**Cinco guardias de la casa pararon este cambio, los cinco con razon:** el inventario de acceso, la
+lectura sin principal -- que obligo a escribir QUIEN la autoriza y DESDE CUANDO --, las cifras del
+inventario, y ADR-125, porque la opcion vacia «sin registrar» llevaba texto sin estar declarada.
+
+**Lo que NO entra.** Los productos de tratamiento: esperan a que Daniel diga cuales usa, y hay un
+plan recien fusionado -- «el botiquin del apiario» (#386) -- que hay que leer antes, porque puede
+tocar lo mismo.

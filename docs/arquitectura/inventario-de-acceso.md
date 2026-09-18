@@ -13,17 +13,15 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-17
 
-**364 operaciones** que tocan la base, en **110 archivos**:
-<!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
+**366 operaciones** que tocan la base, en **111 archivos**:<!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
      la compuerta falla y dice cuál. Todo el trabajo del 2026-08-31 empezó por
      una discrepancia de uno entre este documento y la medición. -->
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **254** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo || **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **58** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
-| **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
+| **255** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo || **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **59** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama || **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
 
@@ -100,6 +98,12 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > `listAssignmentPermissions`, `setPermissionOverride` y `clearPermissionOverride` exigen
 > `platform:manage_users` antes de leer o escribir nada. Ninguna es acotada por construcción:
 > tocan la asignación de otra persona, así que el guardia tiene que ser explícito.
+
+> **Y el de 364→366 son las dos de la limpieza de la caja (ADR-159).** `registrarLimpiezaDeCaja`
+> sube **guardia directo**: exige `requireApiaryAccess` sobre la caja antes de escribir.
+> `limpiezasDeCaja` **no recibe principal** y va en `dependen_del_llamador`: su único llamador es
+> la ficha de la colmena, que la invoca DESPUÉS de que `getHive` autorice —y `getHive` lanza si
+> no hay permiso—, pasándole el id de la caja ya autorizada.
 
 > **Y el de 355→356 es `registrarVitalesEnSitio` (ADR-157).** Vive en
 > `lib/apiary/vitalesEnSitio.ts` y sube la fila de **guardia directo**: exige
