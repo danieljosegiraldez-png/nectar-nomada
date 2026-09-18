@@ -95,6 +95,8 @@ export const RUTAS = {
   "/plots": { clase: "requiere-sesion", razon: "Parcelas de finca." },
   "/plots/[id]": { clase: "requiere-sesion", razon: "Lo sembrado en una parcela." },
   "/plots/[id]/ajustes": { clase: "requiere-sesion", razon: "Gestionar una parcela: siembras, condiciones y calicatas." },
+  "/plots/[id]/manejo/nuevo": { clase: "requiere-sesion", razon: "Registrar un manejo fitosanitario de la parcela." },
+  "/plots/[id]/manejo/[interventionId]": { clase: "requiere-sesion", razon: "Detalle y corrección de una intervención fitosanitaria." },
   "/biochar": { clase: "requiere-sesion", razon: "Lotes de biochar producidos en la finca." },
   "/biochar/[id]": { clase: "requiere-sesion", razon: "Un lote de biochar y su registro de quema." },
   "/field-sessions/[id]": { clase: "requiere-sesion", razon: "Una jornada de campo y su hilo de eventos." },

@@ -3,7 +3,11 @@ import { inspeccionesParaMedicion } from "../../../lib/traceability/measurements
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { mostrarInstante } from "../../../lib/time/mostrarInstante";
+import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
+import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEmparentadas";
+import { intervencionesVigentes } from "../../../lib/traceability/intervenciones";
+import { carenciaDeIntervencion } from "../../../lib/traceability/carenciaDeIntervencion";
+import type { PlotInterventionTarget } from "../../../generated/prisma/client";
 import { getCurrentUser } from "../../../lib/auth/session";
 import {
   getLotDetail,
@@ -146,6 +150,28 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
     ? await puedeGestionarAtributosDeUbicacion(user.userAccountId, harvestEvent.locationId)
     : false;
 
+  // La marca de carencia al cosechar — Tarea 8 fitosanitaria, spec §3.4.
+  // `harvestEvent.marcasDeCarencia` (ya en `detail`) es la FOTO de lo que el
+  // sistema sabía al cosechar; aquí se recalcula HOY con el mismo cálculo que
+  // `recordHarvestEvent` hizo entonces, para poder decir si una corrección
+  // posterior lo cambió. Nunca se sobreescribe la foto: sólo se compara.
+  const calculoDeCarenciaHoy: { interventionId: string; diasQueFaltaban: number | null }[] = harvestEvent
+    ? (
+        await intervencionesVigentes(await ubicacionesEmparentadas(harvestEvent.locationId), { hasta: harvestEvent.harvestedAt })
+      ).reduce<{ interventionId: string; diasQueFaltaban: number | null }[]>((marcas, i) => {
+        const c = carenciaDeIntervencion(i, harvestEvent.harvestedAt);
+        if (c.estado === "conocida") marcas.push({ interventionId: i.id, diasQueFaltaban: c.diasQueFaltan });
+        else if (c.estado === "desconocida") marcas.push({ interventionId: i.id, diasQueFaltaban: null });
+        return marcas;
+      }, [])
+    : [];
+  const ordenarMarcas = (xs: readonly { interventionId: string; diasQueFaltaban: number | null }[]) =>
+    [...xs].sort((a, b) => a.interventionId.localeCompare(b.interventionId));
+  const carenciaDeHoyCoincideConLaFoto = harvestEvent
+    ? JSON.stringify(ordenarMarcas(harvestEvent.marcasDeCarencia.map((m) => ({ interventionId: m.interventionId, diasQueFaltaban: m.diasQueFaltaban })))) ===
+      JSON.stringify(ordenarMarcas(calculoDeCarenciaHoy))
+    : true;
+
   // Qué mediciones han sido superadas por una corrección. Se calcula de la
   // lista que ya se cargó, sin otra consulta.
   const supersededMeasurementIds = new Set(
@@ -164,6 +190,25 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
    * de la finca es mejor que mostrar UTC, y no hay una tercera opción honesta.
    */
   const cuando = (date: Date) => mostrarInstante(date, lot.location?.timezone);
+  const cuandoDia = (date: Date) => mostrarFecha(date, lot.location?.timezone ?? null);
+
+  // Como `manejoKind_` en las otras pantallas: un `Record` explícito para que
+  // un valor del enum sin traducción no compile.
+  const textoDeObjetivoDeManejo: Record<PlotInterventionTarget, string> = {
+    arana_roja: t("manejoTarget_arana_roja"),
+    broca: t("manejoTarget_broca"),
+    minador_hoja: t("manejoTarget_minador_hoja"),
+    cochinillas: t("manejoTarget_cochinillas"),
+    nematodos: t("manejoTarget_nematodos"),
+    jobotos: t("manejoTarget_jobotos"),
+    roya: t("manejoTarget_roya"),
+    ojo_de_gallo: t("manejoTarget_ojo_de_gallo"),
+    mancha_de_hierro: t("manejoTarget_mancha_de_hierro"),
+    antracnosis: t("manejoTarget_antracnosis"),
+    llaga_macana: t("manejoTarget_llaga_macana"),
+    chasparria: t("manejoTarget_chasparria"),
+    otro: t("manejoTarget_otro"),
+  };
   const labourEntryLine = (entry: LabourEntry) =>
     t("labourEntryLine", { workers: entry.workerCount, hours: entry.hours.toString(), date: cuando(entry.occurredAt) }) +
     (entry.taskNote ? ` — ${entry.taskNote}` : "");
@@ -531,6 +576,40 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         <section className="nn-section">
           <h2>{t("harvestInfoHeading")}</h2>
           <p className="nn-muted">{t("harvestOccurredAtLabel", { date: cuando(harvestEvent.harvestedAt) })}</p>
+
+          {harvestEvent.marcasDeCarencia.length > 0 ? (
+            <div className="nn-card">
+              <h3>{t("harvestWithdrawalHeading")}</h3>
+              <ul className="nn-detail-meta">
+                {harvestEvent.marcasDeCarencia.map((m) => (
+                  <li key={m.id}>
+                    {m.diasQueFaltaban != null ? t("harvestWithdrawalKnown", { n: m.diasQueFaltaban }) : t("harvestWithdrawalUnknown")}
+                    {" — "}
+                    <Link href={`/plots/${m.intervention.locationId}/manejo/${m.intervention.id}`}>
+                      {cuandoDia(m.intervention.occurredAt)} · {textoDeObjetivoDeManejo[m.intervention.target]}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {!carenciaDeHoyCoincideConLaFoto ? (
+                <p className="nn-muted">
+                  {t("harvestWithdrawalRecalculated", {
+                    detalle:
+                      calculoDeCarenciaHoy.length === 0
+                        ? t("harvestWithdrawalRecalculatedNone")
+                        : calculoDeCarenciaHoy
+                            .map((m) =>
+                              m.diasQueFaltaban != null
+                                ? t("harvestWithdrawalKnown", { n: m.diasQueFaltaban })
+                                : t("harvestWithdrawalUnknown"),
+                            )
+                            .join("; "),
+                  })}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           {labourEntries.filter((le) => le.harvestEventId === harvestEvent.id).length > 0 ? (
             <ul>
               {labourEntries

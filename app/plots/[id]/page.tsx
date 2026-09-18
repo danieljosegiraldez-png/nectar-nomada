@@ -21,7 +21,8 @@ import { cifrasDelLote } from "../../../lib/traceability/cifrasDelLote";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
 import { pendienteDeLaParcela, enlaceDelAviso, type Aviso } from "../../../lib/traceability/pendienteDeLaParcela";
 import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEmparentadas";
-import { intervencionesVigentes } from "../../../lib/traceability/intervenciones";
+import { intervencionesVigentes, listarIntervenciones } from "../../../lib/traceability/intervenciones";
+import type { PlotInterventionKind, PlotInterventionTarget } from "../../../generated/prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,10 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
   // La parcela ve también las intervenciones de su microparcela y de su parcela
   // madre — igual que la cosecha, spec §3.3.
   const intervenciones = await intervencionesVigentes(await ubicacionesEmparentadas(id));
+  // Las de ESTA parcela, con nombre de producto — Tarea 8, spec §5. A
+  // diferencia de la lista de arriba (para avisos), aquí sólo importan las
+  // propias: es el historial de manejo de la parcela, no de sus emparentadas.
+  const manejosVigentes = (await listarIntervenciones(user.userAccountId, id)).filter((i) => i.correcciones.length === 0);
 
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
@@ -126,6 +131,30 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
           fecha: aviso.alMenosHasta == null ? t("notRecorded") : mostrarFecha(aviso.alMenosHasta, location.timezone),
         });
     }
+  };
+
+  // Tarea 8, spec §5 — como `manejoKind_`: un `Record` explícito, no una
+  // clave calculada, para que un valor nuevo del enum sin traducción no
+  // compile en vez de fallar en silencio al renderizar.
+  const textoDeTipoDeManejo: Record<PlotInterventionKind, string> = {
+    aplicacion: t("manejoKind_aplicacion"),
+    liberacion: t("manejoKind_liberacion"),
+    manejo_cultural: t("manejoKind_manejo_cultural"),
+  };
+  const textoDeObjetivoDeManejo: Record<PlotInterventionTarget, string> = {
+    arana_roja: t("manejoTarget_arana_roja"),
+    broca: t("manejoTarget_broca"),
+    minador_hoja: t("manejoTarget_minador_hoja"),
+    cochinillas: t("manejoTarget_cochinillas"),
+    nematodos: t("manejoTarget_nematodos"),
+    jobotos: t("manejoTarget_jobotos"),
+    roya: t("manejoTarget_roya"),
+    ojo_de_gallo: t("manejoTarget_ojo_de_gallo"),
+    mancha_de_hierro: t("manejoTarget_mancha_de_hierro"),
+    antracnosis: t("manejoTarget_antracnosis"),
+    llaga_macana: t("manejoTarget_llaga_macana"),
+    chasparria: t("manejoTarget_chasparria"),
+    otro: t("manejoTarget_otro"),
   };
 
   return (
@@ -354,6 +383,29 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             ) : null}
           </>
         )}
+      </section>
+
+      <section className="nn-section">
+        <h2>{t("plotDashboardManejoHeading")}</h2>
+        {manejosVigentes.length === 0 ? (
+          <p className="nn-muted">{t("plotDashboardManejoNone")}</p>
+        ) : (
+          <ul className="nn-detail-meta">
+            {manejosVigentes.slice(0, 5).map((i) => (
+              <li key={i.id}>
+                <Link href={`/plots/${location.id}/manejo/${i.id}`}>
+                  {mostrarFecha(i.occurredAt, location.timezone)} · {textoDeTipoDeManejo[i.kind]} · {textoDeObjetivoDeManejo[i.target]}
+                  {i.lineas.length > 0 ? ` · ${i.lineas.map((l) => l.material.name).join(", ")}` : ""}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p>
+          <Link href={`/plots/${location.id}/manejo/nuevo`} className="nn-button">
+            {t("plotDashboardManejoRegisterButton")}
+          </Link>
+        </p>
       </section>
 
       <section className="nn-section">

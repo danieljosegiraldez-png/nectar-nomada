@@ -120,7 +120,10 @@ describe("el inventario del router", () => {
     // botiquín. CUARTA vez que dos sesiones suben la cifra al mismo número con
     // pantallas distintas: la rama decía 83 y, rebasada sobre /finca, se MIDIÓ
     // sobre el árbol resuelto: 74 páginas y 10 handlers.
-    expect(salida).toContain("84 entradas");
+    // 84 → 86 el 2026-09-18 (Tarea 8 fitosanitaria): dos páginas nuevas,
+    // `/plots/[id]/manejo/nuevo` y `/plots/[id]/manejo/[interventionId]` — 76
+    // páginas y 10 handlers.
+    expect(salida).toContain("86 entradas");
     expect(codigo, salida).toBe(0);
   });
 
