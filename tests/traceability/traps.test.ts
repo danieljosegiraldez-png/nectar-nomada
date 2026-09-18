@@ -26,6 +26,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
+import { createSpecimen } from "../../lib/traceability/specimens";
 import { prisma } from "../../lib/db";
 import { crearUsuarioConAcceso, crearParcela, crearFinca, crearUsuarioSinAcceso } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -307,5 +308,29 @@ describe("revisión de trampa", () => {
       specimenId: trampa.id, observedAt: new Date("2026-09-15"),
       brocaLevel: "pocos", provenanceClass: "direct_observation",
     })).rejects.toThrow(TrapAccessError);
+  });
+
+  it("rechaza revisar un Specimen que no es una trampa", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const planta = await createSpecimen(userAccountId, {
+      locationId: parcela.id,
+      specimenType: "plant",
+      commonName: "TEST Planta",
+      provenanceClass: "direct_observation",
+    });
+
+    await expect(recordTrapCheck(userAccountId, {
+      specimenId: planta.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation",
+    })).rejects.toThrow(TrapValidationError);
   });
 });
