@@ -22,6 +22,7 @@
 tests/derivaDeMigraciones.test.ts
 tests/limpiarAuditDePruebas.test.ts
 tests/traceability/beneficios.test.ts
+tests/traceability/editarBeneficio.test.ts
 tests/apiary/ambitoVacioApiarios.test.ts
 tests/notificaciones/canales.test.ts
 tests/equipos/equipos.test.ts

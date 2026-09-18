@@ -125,6 +125,14 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // de plataforma porque parte de ninguna ubicación.
   { resourceType: "location", action: "create_site", description: "Crear una ubicación nueva bajo un sitio que ya se gestiona — hoy, un beneficio." },
 
+  // Decisión de Daniel, 2026-09-18 (spec #370 §4.3): el capataz edita un
+  // beneficio SÓLO si se le concede; por defecto no. Va aparte de
+  // `create_site` porque son dos autoridades: conceder a un capataz que edite
+  // no le da crear beneficios nuevos. Y aparte de `manage_attributes`, que el
+  // operario sí tiene y que es justo lo que hasta hoy le dejaba editar el
+  // beneficio por la acción de atributos y la de coordenadas.
+  { resourceType: "location", action: "edit_beneficio", description: "Editar un beneficio: su ficha, atributos y coordenadas. De serie para Farm Manager; a un Farm Operator sólo por concesión." },
+
   // F1 §3/§5 — a Specimen is a standing land asset (a tracked tree, or a
   // broca trap modeled as a Specimen per direct product-owner decision),
   // not a Lot in the processing-chain sense — same reasoning A1 used to
@@ -353,6 +361,8 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       ["location", "manage_attributes"],
       // El jefe de beneficio da de alta su beneficio; el operario no.
       ["location", "create_site"],
+      // …y lo edita. El operario no, salvo concesión por persona.
+      ["location", "edit_beneficio"],
       ["specimen", "manage"],
       ["specimen", "view"],
       ["project", "manage_operations"],
