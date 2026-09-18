@@ -55,13 +55,26 @@ interface ProtocoloDelJson {
   domain: string;
   name: string;
   description?: string;
-  version: string;
+  version: string | number;
   locale?: string;
   activities: Array<{ activityType: string; label: string; items: ItemDelJson[] }>;
 }
 
+/**
+ * El archivo de la versión VIGENTE del protocolo de campo. Las anteriores se quedan en el
+ * repositorio: son lo que significan las respuestas ya dadas (ADR-165).
+ */
+export const RUTA_DEL_PROTOCOLO_DE_CAMPO = "protocolos/apiario-campo-v2.json";
+
+/**
+ * La identidad del protocolo en la base. **Se llama `-v1` porque así nació** en producción el
+ * 2026-09-16, y cambiarla haría que el cargador no encontrara el protocolo ya cargado y creara
+ * otro. Las versiones viven en `ProtocolVersion`, no en este nombre.
+ */
+export const IDENTIFICADOR_DEL_PROTOCOLO_DE_CAMPO = "apiario-campo-v1";
+
 export function leerProtocoloDeCampo(raiz = process.cwd()): ProtocoloDelJson {
-  const ruta = join(raiz, "protocolos/apiario-campo-v1.json");
+  const ruta = join(raiz, RUTA_DEL_PROTOCOLO_DE_CAMPO);
   return JSON.parse(readFileSync(ruta, "utf8")) as ProtocoloDelJson;
 }
 
@@ -104,24 +117,35 @@ export function variablesDe(protocolo: ProtocoloDelJson) {
 /**
  * Carga el protocolo del disco como `Protocol` + `ProtocolVersion` + variables.
  *
- * **Idempotente por `externalIdentifier`.** Correrlo dos veces no crea dos
- * protocolos ni duplica variables: el segundo devuelve la versión que ya
- * existe. Un cargador que duplica en silencio es peor que uno que falla.
+ * **Idempotente por protocolo Y versión.** Correrlo dos veces no crea dos protocolos ni duplica
+ * variables: si esa versión ya está, la devuelve. Un cargador que duplica en silencio es peor
+ * que uno que falla.
+ *
+ * **Una versión nueva del JSON es una versión nueva del MISMO protocolo** (ADR-165). Antes el
+ * número de versión iba dentro del identificador, así que una v2 habría nacido como un
+ * protocolo aparte, sin parentesco con la v1. Ahora la identidad es fija y la versión crece
+ * debajo; la anterior no se toca, porque es lo que significan las respuestas ya dadas.
  */
 export async function cargarProtocoloDeCampo(
   userAccountId: string | null,
-  opciones: { raiz?: string } = {},
+  /**
+   * `identificador` existe para las pruebas: cargar versiones de un protocolo de prueba sin
+   * tocar el del dueño, que en la base compartida puede estar cargado de verdad.
+   */
+  opciones: { raiz?: string; identificador?: string } = {},
 ) {
   const protocolo = leerProtocoloDeCampo(opciones.raiz);
-  const identificador = `apiario-campo-v${protocolo.version}`;
+  const identificador = opciones.identificador ?? IDENTIFICADOR_DEL_PROTOCOLO_DE_CAMPO;
+  const numero = Number(protocolo.version);
+  if (!Number.isInteger(numero) || numero < 1) throw new ProtocoloDeCampoError(`version_invalida:${protocolo.version}`);
   const variables = variablesDe(protocolo);
 
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const yaEsta = await tx.protocol.findUnique({
       where: { externalIdentifier: identificador },
-      include: { versions: { orderBy: { version: "desc" }, take: 1 } },
+      include: { versions: { where: { version: numero }, take: 1 } },
     });
-    if (yaEsta?.versions[0]) return { protocolo: yaEsta, version: yaEsta.versions[0], creado: false };
+    if (yaEsta?.versions[0]) return { protocolo: yaEsta, version: yaEsta.versions[0], creado: false, protocoloCreado: false };
 
     const creado =
       yaEsta ??
@@ -138,9 +162,9 @@ export async function cargarProtocoloDeCampo(
     const version = await tx.protocolVersion.create({
       data: {
         protocolId: creado.id,
-        version: Number(protocolo.version),
+        version: numero,
         status: "draft",
-        notes: `Cargado desde protocolos/apiario-campo-v1.json — ${variables.length} ítems en ${protocolo.activities.length} actividades.`,
+        notes: `Cargado desde ${RUTA_DEL_PROTOCOLO_DE_CAMPO} — ${variables.length} ítems en ${protocolo.activities.length} actividades.`,
         createdBy: userAccountId,
         variables: { create: variables },
       },
@@ -160,6 +184,8 @@ export async function cargarProtocoloDeCampo(
       tx,
     );
 
-    return { protocolo: creado, version, creado: true };
+    // `protocoloCreado` separado de `creado`: añadir la v2 a un protocolo que ya existía crea una
+    // VERSIÓN, no un protocolo, y quien limpie después tiene que saber cuál de las dos borra.
+    return { protocolo: creado, version, creado: true, protocoloCreado: !yaEsta };
   });
 }

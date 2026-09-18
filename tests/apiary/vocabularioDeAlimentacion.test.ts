@@ -54,7 +54,7 @@ describe("el vocabulario que el dueño dictó", () => {
     // La prueba de arriba se compara con una lista escrita aquí — o sea, conmigo mismo. Ésta lo
     // compara con el artefacto del dueño, que es lo que impide que vuelvan a separarse.
     const protocolo = JSON.parse(
-      readFileSync(join(process.cwd(), "protocolos/apiario-campo-v1.json"), "utf8"),
+      readFileSync(join(process.cwd(), "protocolos/apiario-campo-v2.json"), "utf8"),
     );
     const items = (protocolo.activities ?? []).flatMap((a: { items?: unknown[] }) => a.items ?? []);
     const material = items.find((i: { key: string }) => i.key === "material") as { options?: string[] } | undefined;

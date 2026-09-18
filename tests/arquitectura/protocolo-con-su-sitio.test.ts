@@ -29,7 +29,7 @@ interface ItemDelJson {
   required?: boolean;
 }
 
-const protocolo = JSON.parse(readFileSync("protocolos/apiario-campo-v1.json", "utf8")) as {
+const protocolo = JSON.parse(readFileSync("protocolos/apiario-campo-v2.json", "utf8")) as {
   activities: { activityType: string; items: ItemDelJson[] }[];
 };
 const ITEMS = protocolo.activities.flatMap((a) => a.items.map((i) => ({ ...i, actividad: a.activityType })));
@@ -180,7 +180,9 @@ describe("el protocolo de campo y el esquema hablan el mismo idioma", () => {
         // refractometro de miel, y vive como `Measurement` sobre el `Lot` de la cosecha -- no en
         // una columna, porque el lote es lo que sigue a la miel al dividirse o envasarse. La
         // lista baja de DOS a UNA.
-        "site_condition",
+        // `site_condition` salio de esta lista el 2026-09-18 (ADR-165): la v2 del protocolo la hace
+        // una lista fija, y vive en `FieldSession.siteConditions`. La lista baja de UNA a CERO:
+        // todas las preguntas del protocolo tienen donde guardarse.
         // `weather_observed` salio de esta lista el 2026-09-17 (ADR-152), y NO porque se
         // construyera un proveedor de clima: porque la nota que lo daba por hueco confundia el
         // «Clima 7 dias» del Anexo C --un pronostico externo, que sigue sin proveedor-- con la
