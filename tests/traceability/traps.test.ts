@@ -148,6 +148,46 @@ describe("alta de trampa", () => {
     })).rejects.toThrow(TrapValidationError);
   });
 
+  // F9 fix-final — el escenario exacto del hallazgo: a las 20:00 en Panamá
+  // (UTC−5) ya son las 01:00 UTC del día siguiente. Comparar por INSTANTE
+  // (el código viejo) dejaba pasar un `installedAt` de "mañana en UTC" porque
+  // su medianoche (00:00) no es posterior al "ahora" (01:00). Comparar por
+  // DÍA en la zona de la finca lo rechaza: en Panamá, a esa hora, sigue
+  // siendo el día anterior. `ahora` se inyecta para que la prueba no dependa
+  // de en qué hora UTC corra.
+  it("rechaza un día que en la zona de la finca sigue siendo mañana, aunque en UTC ya rodó", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+    await prisma.location.update({ where: { id: parcela.id }, data: { timezone: "America/Panama" } });
+
+    // "Ahora": 2026-09-18T01:00Z = 2026-09-17 20:00 en Panamá.
+    const ahora = new Date("2026-09-18T01:00:00Z");
+    // El operario escribe "18 de septiembre" — ya es esa fecha en UTC, pero
+    // en Panamá todavía es el 17: sigue siendo mañana.
+    await expect(createTrap(
+      userAccountId,
+      { locationId: parcela.id, installedAt: new Date("2026-09-18"), provenanceClass: "direct_observation" },
+      ahora,
+    )).rejects.toThrow(TrapValidationError);
+
+    // Control positivo: la fecha de HOY en Panamá (17 de septiembre) sí pasa,
+    // a la misma hora "ahora" — si esto también fallara, el guardia estaría
+    // rechazando de más y la prueba de arriba no probaría nada.
+    const trampa = await createTrap(
+      userAccountId,
+      { locationId: parcela.id, installedAt: new Date("2026-09-17"), provenanceClass: "direct_observation" },
+      ahora,
+    );
+    expect(trampa.id).toBeTruthy();
+  });
+
   it("rechaza un bloque de otra parcela", async () => {
     const usuario = await crearUsuarioConAcceso();
     userAccountIds.push(usuario.userAccountId);

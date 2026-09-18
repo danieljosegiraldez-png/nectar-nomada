@@ -51,8 +51,8 @@ export async function requireTrapAccess(userAccountId: string, locationId: strin
  * estos campos de día (medianoche UTC), así que es el respaldo neutral, no
  * uno inventado.
  */
-function diaEnElFuturo(dia: Date, timezone: string | null): boolean {
-  return dia.toISOString().slice(0, 10) > diaDeHoy(new Date(), timezone ?? "UTC");
+function diaEnElFuturo(dia: Date, timezone: string | null, ahora: Date): boolean {
+  return dia.toISOString().slice(0, 10) > diaDeHoy(ahora, timezone ?? "UTC");
 }
 
 export interface CreateTrapInput {
@@ -74,13 +74,18 @@ export interface CreateTrapInput {
  *
  * `createSpecimen` no se reutiliza: necesita el número correlativo y la
  * finca, que esa función no conoce.
+ *
+ * `ahora` (F9 fix-final) es inyectable, mismo patrón que
+ * `recordEnteredProduction` (plantingEvents.ts): sin eso, probar el
+ * guardia de futuro contra una zona horaria concreta dependería de en qué
+ * hora UTC corra la prueba.
  */
-export async function createTrap(userAccountId: string, input: CreateTrapInput) {
+export async function createTrap(userAccountId: string, input: CreateTrapInput, ahora: Date = new Date()) {
   if (Number.isNaN(input.installedAt.getTime())) throw new TrapValidationError("installed_at_invalid");
 
   const location = await requireTrapAccess(userAccountId, input.locationId);
   // F9 — necesita la zona de la Location, así que va después de leerla.
-  if (diaEnElFuturo(input.installedAt, location.timezone)) {
+  if (diaEnElFuturo(input.installedAt, location.timezone, ahora)) {
     throw new TrapValidationError("installed_at_in_future");
   }
   const farmLocationId = location.parentLocationId ?? input.locationId;
@@ -174,8 +179,16 @@ export interface RecordTrapCheckInput {
 
 const NIVELES: readonly TrapCaptureLevel[] = ["ninguno", "pocos", "algunos", "muchos"];
 
-/** F2 §4 — una visita, un registro: lectura + otros insectos + mantenimiento. */
-export async function recordTrapCheck(userAccountId: string, input: RecordTrapCheckInput) {
+/**
+ * F2 §4 — una visita, un registro: lectura + otros insectos + mantenimiento.
+ *
+ * `ahora` (F9 fix-final) es inyectable — ver el docstring de `createTrap`.
+ */
+export async function recordTrapCheck(
+  userAccountId: string,
+  input: RecordTrapCheckInput,
+  ahora: Date = new Date(),
+) {
   if (!input.brocaLevel || !NIVELES.includes(input.brocaLevel)) {
     throw new TrapValidationError("broca_level_required");
   }
@@ -199,7 +212,7 @@ export async function recordTrapCheck(userAccountId: string, input: RecordTrapCh
 
   const location = await requireTrapAccess(userAccountId, trampa.locationId);
   // F9 — necesita la zona de la Location, así que va después de leerla.
-  if (diaEnElFuturo(input.observedAt, location.timezone)) {
+  if (diaEnElFuturo(input.observedAt, location.timezone, ahora)) {
     throw new TrapValidationError("observed_at_in_future");
   }
 
