@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AvisosDeBotiquin } from "../components/inventario/AvisosDeBotiquin";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { getActiveOperations, getLotList, type LotListFilters } from "../../lib/traceability/lots";
@@ -50,6 +51,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
       <span className="nn-badge">{t("badge")}</span>
       <h1>{t("lotsTitle")}</h1>
       <p className="nn-muted">{t("lotsIntro")}</p>
+      <AvisosDeBotiquin userAccountId={user.userAccountId} />
       <p style={{ marginTop: "1rem", display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
         {/* Crear un lote exige `lot:manage` —lo pide el servicio de cosecha—, y
             este botón se pintaba a todo el mundo mientras el enlace a Recetas,

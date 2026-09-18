@@ -2180,6 +2180,12 @@
     "ajustesAyuda": "Register the mill and configure it. Only for whoever manages it."
   },
   "Inventario": {
+    "avisosTitulo": "Medicine kit: expired or expiring containers",
+    "avisoVencido": "{dias, plural, =0 {expires today} one {expired 1 day ago} other {expired # days ago}}",
+    "avisoPorVencer": "{dias, plural, one {expires in 1 day} other {expires in # days}}",
+    "avisoEnSitio": "at {sitio}",
+    "avisosPie": "An expired container can still be applied and the record is flagged; decide whether to discard, return or use it.",
+    "avisosVerInventario": "See the inventory",
     "title": "Inventory",
     "intro": "Which materials there are, in which lots, and how much is left. The balance comes from what was recorded: what came in minus what was used.",
     "porCuadrar": "{n, plural, one {# lot has} other {# lots have}} more used than received. It needs reconciling.",

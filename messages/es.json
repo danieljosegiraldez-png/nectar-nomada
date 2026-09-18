@@ -2180,6 +2180,12 @@
     "ajustesAyuda": "Dar de alta el beneficio y configurarlo. Sólo para quien lo gestiona."
   },
   "Inventario": {
+    "avisosTitulo": "Botiquín: frascos vencidos o por vencer",
+    "avisoVencido": "{dias, plural, =0 {vence hoy} one {vencido hace 1 día} other {vencido hace # días}}",
+    "avisoPorVencer": "{dias, plural, one {vence en 1 día} other {vence en # días}}",
+    "avisoEnSitio": "en {sitio}",
+    "avisosPie": "Un frasco vencido se puede aplicar igual y el registro queda marcado; decide si se bota, se devuelve o se usa.",
+    "avisosVerInventario": "Ver el inventario",
     "title": "Inventario",
     "intro": "Qué materiales hay, en qué lotes y cuánto queda. El saldo sale de lo que se registró: lo que entró menos lo que se gastó.",
     "porCuadrar": "{n, plural, one {# lote tiene} other {# lotes tienen}} más gastado que recibido. Hay que cuadrarlo.",

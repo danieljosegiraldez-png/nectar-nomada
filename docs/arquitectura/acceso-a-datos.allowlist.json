@@ -456,6 +456,10 @@
     {
       "archivo": "lib/inventario/frascosParaTratar.ts",
       "razon": "Selector de frasco del formulario de tratamiento. Filtra CADA frasco con lot:manage sobre su sitio (plataforma si no tiene) —la misma compuerta con la que recordColonyEvent descuenta—, asi que sólo ofrece lo que quien mira puede usar. Sólo lectura."
+    },
+    {
+      "archivo": "lib/inventario/avisos.ts",
+      "razon": "Aviso del botiquin (vencido o por vencer). Filtra CADA frasco con lot:manage sobre donde ESTA —su custodia vigente, o donde se recibio; plataforma si no tiene ninguna—, asi que nadie ve el botiquin de un sitio que no atiende. Sólo lectura."
     }
   ],
   "reciben_transaccion": [
