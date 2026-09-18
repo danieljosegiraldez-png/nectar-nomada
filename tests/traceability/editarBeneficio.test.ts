@@ -117,6 +117,24 @@ describe("atributos de un beneficio (updateLocationAttributes)", () => {
     await conceder(capataz);
     await expect(updateLocationAttributes(capataz, { locationId: ben.id, description: "cambio" })).resolves.toBeDefined();
   });
+
+  it("un Farm Manager asignado en OTRO sitio no edita un beneficio de éste", async () => {
+    const finca1 = await sitio();
+    const finca2 = await sitio();
+    const ben = await hijo(finca1.id, "beneficio");
+    const jefeDeOtroSitio = await cuenta(finca2.id, "Farm Manager");
+    // `updateLocationAttributes` llama primero a `requireLocationAttributeAccess`
+    // y sólo después a `exigeEditarBeneficioSiLoEs`. Sin ninguna asignación
+    // sobre finca1, la primera guardia ya rechaza: el mensaje observado es
+    // `no_location_attribute_access`, no `no_beneficio_edit_access`.
+    await expect(updateLocationAttributes(jefeDeOtroSitio, { locationId: ben.id, description: "cambio" }))
+      .rejects.toThrow(new LocationAccessError("no_location_attribute_access"));
+    // Control positivo: el mismo Farm Manager SÍ edita un beneficio de SU
+    // propio sitio. Sin esto, el rechazo de arriba se cumpliría igual con una
+    // cuenta sin ningún acceso en ninguna parte.
+    const benPropio = await hijo(finca2.id, "beneficio");
+    await expect(updateLocationAttributes(jefeDeOtroSitio, { locationId: benPropio.id, description: "cambio" })).resolves.toBeDefined();
+  });
 });
 
 describe("subdividir un beneficio (createMicrolot)", () => {

@@ -34,8 +34,9 @@ async function exigePoderCrearBajo(userAccountId: string, parentLocationId: stri
 // El límite de 120 caracteres y la no-vacuidad viven sólo aquí, en TypeScript:
 // `Location.name` es una columna sin longitud máxima ni restricción de unicidad
 // en la base de datos, así que dos beneficios bajo el mismo sitio pueden
-// compartir nombre. No se añade una constraint — toda escritura de un
-// beneficio pasa por este servicio, y es donde se exige.
+// compartir nombre. No se añade una constraint — el nombre sólo se escribe
+// aquí. La autorización para editar cualquier beneficio, en cambio, es la
+// guardia compartida `exigeEditarBeneficioSiLoEs` en locations.ts.
 function exigeNombre(name: string) {
   const limpio = name.trim();
   if (!limpio || limpio.length > 120) throw new BeneficioError("datos_invalidos");
