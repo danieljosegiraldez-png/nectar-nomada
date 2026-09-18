@@ -17,7 +17,7 @@ Daniel, 2026-09-18 (sus palabras, con erratas de teclado corregidas): *«finca o
 | la cosecha | `HarvestEvent`: `locationId`, `harvestedAt`, `cherryWeightKg`, Brix, madurez, defectos y limpieza por catálogo, `resultingLotId`; `HarvestEventSource` la reparte entre parcelas | **se registra desde `/lots/new`**, en la sección de lotes, no en la finca |
 | rendimiento | `computePlotYield` en `lib/traceability/plantingCohorts.ts`, en la ficha de parcela | kg por hectárea y año; **sin mano de obra ni recolector** |
 | mano de obra | `LabourEntry`: `workerCount`, `hours`, colgada de una cosecha, un proceso o una ubicación | **por cuadrilla, sin nombres, a propósito** — ver §3 |
-| la selección | `lib/traceability/selection.ts`, rechazos por catálogo `rechazo_categoria` | rastreable a la parcela vía `getLotLineage` / `getLotReport`, **sólo de lote a parcela**: nada lo lleva de vuelta a la ficha de la parcela |
+| la selección | `lib/traceability/selection.ts`: una salida aceptada y otras corrientes, **cada una un lote de verdad** que sigue su propio proceso; catálogo `rechazo_categoria` | rastreable a la parcela vía `getLotLineage` / `getLotReport`, **sólo de lote a parcela**: nada lo lleva de vuelta a la ficha de la parcela. «Rechazo» significa **rechazado para primera calidad**, no desechado: esas corrientes siguen procesándose como otra calidad — ver §5.6 |
 | quién recolectó | — | **no existe en ninguna tabla**: `operatorPersonId` de la cosecha es quien la **registró** |
 
 ## 3. La decisión que se revierte, y por qué
@@ -39,6 +39,8 @@ Lleva **su propio ADR** —el siguiente libre al escribirlo; hoy el último es A
 | de dónde sale la calidad de cada persona | **al recibir, por persona** —kilos y una muestra—; **la selección del beneficio vuelve por parcela y día** |
 | dónde se anota cada entrega | **en una pantalla de cosecha, con conexión** |
 | meliponarios | **entrada propia en el menú**, junto a apiarios |
+| qué hace la selección | **rechaza para primera calidad, y lo rechazado no se desecha.** Aclaración de Daniel: *«es un rechazo de cereza óptima para proceso, no apta para primera calidad»*. La cereza madura —roja, «uva»— va por un lado; verdes y pintones, juntos o separados; flotadores aparte. **Cada corriente se pesa y sigue su propio proceso**: los flotadores pueden ir directo a cama, o fermentarse, u oxidarse unos días en bolsa y luego a cama |
+| qué mide el tablero | **el café de especialidad de primera.** Las otras corrientes se procesan y entran como otra calidad u otro uso; se registran, pero **no cuentan** en los indicadores de primera, que son los del manejo prioritario de la finca y del beneficio |
 
 ## 5. Diseño
 
@@ -70,7 +72,7 @@ El aterrizaje tras iniciar sesión **no cambia**. Y `/plots` entra en `DENTRO_DE
 | `cherryWeightKg` | lo que entregó |
 | `horas` | **anulable**: si falta, se dice «sin dato» y **no se calcula eficiencia** para esa persona. Nunca cero |
 | `muestraTamano` | cuántas cerezas se revisaron |
-| conteos por categoría | con el **mismo vocabulario que la selección** (`rechazo_categoria`: `cereza_verde`, `sobremadura`, `cereza_seca`, `broca`, `danada`, `materia_extrana`…), para que lo que dice el acopio y lo que dice el beneficio se puedan comparar |
+| conteos por clase | con el vocabulario de madurez que la cosecha **ya usa**, `cereza_color` —`verde`, `verde_amarillo`, `pinton`, `rojo`, `rojo_intenso`, `sobremaduro`—, más flotadores y materia extraña. Así la muestra del acopio habla el mismo idioma que la cosecha y que la selección |
 | `provenanceClass`, `createdBy` | como el resto |
 
 **Reglas que viven en la base, no sólo en TypeScript** (`CHECK` en la migración): kilos y horas no negativos; la suma de los conteos no pasa del tamaño de la muestra.
@@ -79,9 +81,9 @@ El aterrizaje tras iniciar sesión **no cambia**. Y `/plots` entra en `DENTRO_DE
 
 ### 5.4 La selección vuelve a la finca
 
-No hace falta modelo nuevo. Un lector que, para cada cosecha de una parcela, sigue `resultingLotId` hacia delante hasta sus selecciones, y suma lo rechazado por categoría. Es el camino que `getLotLineage` ya recorre **al revés**. Resultado: «Lote 3, cosecha del 12 de octubre: 18 % verde, 4 % broca».
+No hace falta modelo nuevo. Un lector que, para cada cosecha de una parcela, sigue `resultingLotId` hacia delante hasta sus selecciones, y suma **cuánto salió en cada corriente**. Es el camino que `getLotLineage` ya recorre **al revés**. Resultado: «Lote 3, cosecha del 12 de octubre: 71 % de primera; el resto, verde y pintón juntos, y flotadores». Las cifras del ejemplo son ilustrativas.
 
-**Cuando un lote junta varias cosechas**, lo rechazado **no se reparte a ciegas** entre ellas: se dice que ese lote mezcla N cosechas y se enseña al nivel del lote. Repartirlo sería inventar un dato (ADR-080).
+**Cuando un lote junta varias cosechas**, lo separado **no se reparte a ciegas** entre ellas: se dice que ese lote mezcla N cosechas y se enseña al nivel del lote. Repartirlo sería inventar un dato (ADR-080).
 
 ### 5.5 Permisos
 
@@ -91,14 +93,36 @@ Un permiso nuevo para ver los datos con nombre. Se concede a **Platform Admin, F
 
 **Quien no lo tenga ve la eficiencia y la calidad agregadas por cuadrilla y parcela**, nunca por persona.
 
+### 5.6 Lo que importa: café de primera
+
+Daniel, 2026-09-18: lo que la selección separa *«se procesa y entra como otra calidad o uso; no se mide en el dashboard como café de especialidad de primera, que es lo que nos importa para el manejo prioritario y óptimo en la finca y en el beneficio»*.
+
+Así que **cada indicador de la sección se calcula dos veces, y sólo uno es el protagonista**:
+
+| indicador | de primera — **el que se enseña primero** | total, de todas las corrientes |
+|---|---|---|
+| rendimiento de la parcela | kg de primera por hectárea | kg de cereza por hectárea, como hoy |
+| calidad de una cosecha | % que la selección dejó en primera | kilos por corriente |
+| recolector | kg que traería a primera, según su muestra (lo maduro sobre lo muestreado) | kg entregados |
+| eficiencia | kg de primera por hora | kg por hora |
+
+**Recoger verde o pintón es exactamente lo que baja la columna de primera**, y por eso es el indicador que el capataz y el Farm Manager necesitan para corregir la recolección. Y los flotadores dicen algo de la **finca** —broca, grano vano, sobremadura— más que del recolector.
+
+**Qué corriente es «de primera» no se deduce del nombre.** Hoy la selección tiene una salida «aceptada» y otras corrientes con categoría; el plan decide si «primera» es exactamente la aceptada o si hace falta marcarla, y **en ningún caso se infiere de un nombre de lote**.
+
+**El nombre `rechazo_categoria` es correcto y se queda.** La primera versión de esta sección proponía renombrarlo; Daniel aclaró que sí es un rechazo —de primera calidad— y que lo rechazado sigue su proceso como otra calidad u otro uso.
+
+**Lo que sí falta en ese vocabulario: «pintón».** Está en `cereza_color`, el de la cosecha, y no en `rechazo_categoria`, el de la selección, aunque Daniel separa verdes y pintones —juntos o por separado—. Ampliarlo toca `docs/beneficio/`, que es normativo, y el beneficio lo trabaja otra sesión: se anota como decisión pendiente, con su palabra ya dicha.
+
 ## 6. Pruebas
 
 - **Permisos, con control positivo:** el capataz ve nombres; un perfil de investigación ve la misma pantalla **sin** nombres, y el control es que sí ve los agregados.
 - **Horas que faltan:** la persona aparece con «sin dato» y fuera de la media de eficiencia, no como cero.
 - **La muestra:** conteos que suman más que la muestra se rechazan **en la base**, con una sonda que prueba que lo válido sí entra.
 - **Entregas que no cuadran:** se avisa con la diferencia y el guardado no falla.
-- **Selección de vuelta:** un lote de una cosecha atribuye sus rechazos a esa parcela y día; un lote de dos cosechas **no** reparte y lo dice.
-- **Flip-tests** con las tres cosas de la casa —sha antes y después, compila, qué prueba cae por su nombre—: tratar horas nulas como cero; conceder `harvest:view_pickers` a Research; repartir los rechazos de un lote mezclado.
+- **Selección de vuelta:** un lote de una cosecha atribuye sus corrientes a esa parcela y día; un lote de dos cosechas **no** reparte y lo dice.
+- **Primera frente a otras calidades:** una corriente de otra calidad cuenta en los kilos de la cosecha y **no** en los kilos de primera; el control es que la corriente de primera sí cuenta en los dos.
+- **Flip-tests** con las tres cosas de la casa —sha antes y después, compila, qué prueba cae por su nombre—: tratar horas nulas como cero; conceder el permiso de ver nombres a Research; repartir las corrientes de un lote mezclado; **contar una corriente de otra calidad como primera**.
 - `npm run build` en toda tarea que toque TypeScript; al final `npm run verify`, `bash scripts/ci.sh` y `npm test`.
 
 ## 7. Orden
