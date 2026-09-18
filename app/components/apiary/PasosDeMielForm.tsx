@@ -14,7 +14,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
-import { envasarMielAction, procesarMielAction } from "../../actions/apiary";
+import { dividirMielAction, envasarMielAction, procesarMielAction } from "../../actions/apiary";
 import { ACTOS_DE_PROCESO_DE_MIEL } from "../../../lib/apiary/vocabularioDeMiel";
 
 type Estado = { error?: string; ok?: boolean; nuevoLoteId?: string; nuevoLoteCodigo?: string };
@@ -117,6 +117,38 @@ export function EnvasarMielForm({ lotId }: { lotId: string }) {
       <Resultado estado={estado} />
       <button type="submit" disabled={pending}>
         {t("mielEnvasarGuardar")}
+      </button>
+    </form>
+  );
+}
+
+/** Cuántas casillas de parte se ofrecen. Las vacías no cuentan; para más, se divide dos veces. */
+const PARTES_OFRECIDAS = 6;
+
+export function DividirMielForm({ lotId }: { lotId: string }) {
+  const [estado, accion, pending] = useActionState(dividirMielAction, inicial);
+  const t = useTranslations("Apiary");
+  return (
+    <form action={accion} className="nn-form" style={{ maxWidth: 460 }}>
+      <input type="hidden" name="lotId" value={lotId} />
+      <div className="nn-field">
+        <label htmlFor="dividir-dia">{t("mielDia")}</label>
+        <input id="dividir-dia" name="occurredAt" type="date" required />
+      </div>
+      <p className="nn-muted">{t("mielDividirAyuda")}</p>
+      {Array.from({ length: PARTES_OFRECIDAS }, (_, i) => (
+        <div className="nn-field" key={i}>
+          <label htmlFor={`dividir-parte-${i}`}>{t("mielParte", { n: i + 1 })}</label>
+          <input id={`dividir-parte-${i}`} name="parteKg" type="number" min={0} step="0.001" inputMode="decimal" required={i < 2} />
+        </div>
+      ))}
+      <div className="nn-field">
+        <label htmlFor="dividir-merma">{t("mielMermaDividir")}</label>
+        <input id="dividir-merma" name="lossKg" type="number" min={0} step="0.001" inputMode="decimal" />
+      </div>
+      <Resultado estado={estado} />
+      <button type="submit" disabled={pending}>
+        {t("mielDividirGuardar")}
       </button>
     </form>
   );

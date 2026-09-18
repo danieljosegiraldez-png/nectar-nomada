@@ -1320,7 +1320,8 @@
     "transformationType_honey_processing": "Proceso de miel",
     "transformationType_packaging": "Envasado",
     "honeyProcessButton": "Procesar miel",
-    "honeyPackagingButton": "Envasar"
+    "honeyPackagingButton": "Envasar",
+    "honeySplitButton": "Dividir"
   },
   "Apiary": {
     "badge": "Apiario",
@@ -1788,7 +1789,14 @@
     "mielError_envases_invalidos": "El número de envases tiene que ser un entero mayor que cero.",
     "mielError_masa_neta_invalida": "La masa neta de cada envase tiene que ser mayor que cero.",
     "mielError_balance": "El lote no lo permite: {detalle}",
-    "mielError_sin_permiso": "No tienes permiso para trabajar este lote."
+    "mielError_sin_permiso": "No tienes permiso para trabajar este lote.",
+    "mielDividirTitulo": "Dividir",
+    "mielDividirAyuda": "Escribe los kilos de cada parte: cada una será un lote nuevo. Lo que no repartas se queda en este lote. Hacen falta al menos dos partes.",
+    "mielParte": "Parte {n} (kg)",
+    "mielMermaDividir": "Merma al repartir (kg)",
+    "mielDividirGuardar": "Guardar división",
+    "mielError_dividir_exige_dos_partes": "Hacen falta al menos dos partes para dividir.",
+    "mielError_parte_cero": "Una parte no puede ser de cero kilos: déjala vacía."
   },
   "Research": {
     "badge": "Research OS",

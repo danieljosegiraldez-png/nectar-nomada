@@ -1320,7 +1320,8 @@
     "transformationType_honey_processing": "Honey processing",
     "transformationType_packaging": "Packaging",
     "honeyProcessButton": "Process honey",
-    "honeyPackagingButton": "Package"
+    "honeyPackagingButton": "Package",
+    "honeySplitButton": "Split"
   },
   "Apiary": {
     "badge": "Apiary",
@@ -1788,7 +1789,14 @@
     "mielError_envases_invalidos": "The number of containers must be a whole number above zero.",
     "mielError_masa_neta_invalida": "Each container's net mass must be above zero.",
     "mielError_balance": "The lot does not allow it: {detalle}",
-    "mielError_sin_permiso": "You are not allowed to work this lot."
+    "mielError_sin_permiso": "You are not allowed to work this lot.",
+    "mielDividirTitulo": "Split",
+    "mielDividirAyuda": "Write the kilos of each part: each becomes a new lot. What you do not share out stays in this lot. At least two parts are needed.",
+    "mielParte": "Part {n} (kg)",
+    "mielMermaDividir": "Loss while splitting (kg)",
+    "mielDividirGuardar": "Save split",
+    "mielError_dividir_exige_dos_partes": "At least two parts are needed to split.",
+    "mielError_parte_cero": "A part cannot be zero kilos: leave it empty."
   },
   "Research": {
     "badge": "Research OS",

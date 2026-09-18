@@ -22,7 +22,7 @@ import { completarCierreDeCosecha, registrarLecturaDeRefractometro, CierreDeCose
 import { MeasurementValidationError } from "../../lib/traceability/measurements";
 import { UnitValidationError } from "../../lib/traceability/units";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
-import { envasarMiel, procesarMiel } from "../../lib/apiary/mielDelLote";
+import { dividirMiel, envasarMiel, procesarMiel } from "../../lib/apiary/mielDelLote";
 import { MielInvalida } from "../../lib/apiary/vocabularioDeMiel";
 import { MassBalanceError } from "../../lib/traceability/balance";
 import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
@@ -686,6 +686,29 @@ export async function envasarMielAction(_prev: EstadoDeMiel, formData: FormData)
     });
     revalidatePath(`/lots/${lotId}`);
     return { ok: true, nuevoLoteId: r.lote.id, nuevoLoteCodigo: r.lote.lotCode };
+  } catch (error) {
+    return rechazoDeMiel(error);
+  }
+}
+
+/** ADR-162 — dividir un lote de miel en partes. Cada parte es un lote nuevo. */
+export async function dividirMielAction(_prev: EstadoDeMiel, formData: FormData): Promise<EstadoDeMiel> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Apiary");
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    const dia = fechaDeDia(String(formData.get("occurredAt") ?? ""), "occurredAt");
+    if (!dia) return { error: t("mielError_falta_la_fecha") };
+    const r = await dividirMiel(user.userAccountId, {
+      lotId,
+      occurredAt: dia,
+      partesKg: formData.getAll("parteKg").map((v) => String(v)),
+      lossKg: String(formData.get("lossKg") ?? ""),
+      provenanceClass: "measured_fact",
+    });
+    revalidatePath(`/lots/${lotId}`);
+    return { ok: true, nuevoLoteId: r.lotes[0]!.id, nuevoLoteCodigo: r.lotes.map((l) => l.lotCode).join(", ") };
   } catch (error) {
     return rechazoDeMiel(error);
   }

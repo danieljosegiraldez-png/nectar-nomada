@@ -29,15 +29,15 @@ interface Comun {
   notes?: string | null;
 }
 
-/** Autoriza, comprueba que el lote es miel, y deriva el código del lote que sale. */
-async function loteDeMiel(userAccountId: string, lotId: string) {
+/** Autoriza, comprueba que el lote es miel, y deriva los códigos de los lotes que salen. */
+async function loteDeMiel(userAccountId: string, lotId: string, cuantos = 1) {
   const lote = await prisma.lot.findUnique({ where: { id: lotId } });
   if (!lote) throw new TraceabilityAccessError("lot_not_found");
   // Autorizar ANTES de decir nada del lote: ni siquiera si es miel.
   await requireLotAccess(userAccountId, "manage", [lote]);
   if (lote.lotType !== "honey") throw new MielInvalida("el_lote_no_es_miel");
-  const [codigo] = codigosDerivados(lote.lotCode, 1, await codigosYaDerivadosDe(lote.id));
-  return { lote, codigo: codigo! };
+  const codigos = codigosDerivados(lote.lotCode, cuantos, await codigosYaDerivadosDe(lote.id));
+  return { lote, codigo: codigos[0]!, codigos };
 }
 
 function entrada(input: Comun) {
@@ -115,4 +115,42 @@ export async function envasarMiel(userAccountId: string, input: EnvasarMielInput
     packageNetMassG: netoG,
   });
   return { transformation: r.transformation, lote: r.outputLots[0]!, envasadoKg, reconciliation: r.reconciliation };
+}
+
+export interface DividirMielInput extends Omit<Comun, "inputKg"> {
+  /** Los kilos de cada parte, en orden. Un hueco vacío no es una parte. */
+  partesKg: readonly (number | string | null)[];
+}
+
+/**
+ * Dividir un lote de miel en partes -- ADR-162. Cubetas, un tanque que se reparte, lo que va a
+ * dos destinos distintos. Cada parte es un lote NUEVO, hermano de los otros, con la misma
+ * genealogía hacia arriba.
+ *
+ * **Lo que entra es la suma de las partes más la merma**, y aquí sí se deduce: dividir no
+ * transforma la miel, sólo la reparte, así que no hay una tercera pesada que pedir. Si esa suma
+ * pasa de lo que el lote tiene, el libro lo rechaza (`input_exceeds_available`). Lo que no se
+ * reparte se queda en el lote de origen.
+ */
+export async function dividirMiel(userAccountId: string, input: DividirMielInput) {
+  const partes = input.partesKg.map((p, i) => kilos(p, `parte_${i + 1}`)).filter((p): p is number => p !== null);
+  if (partes.length < 2) throw new MielInvalida("dividir_exige_dos_partes");
+  if (partes.some((p) => p === 0)) throw new MielInvalida("parte_cero");
+  const lossKg = kilos(input.lossKg ?? null, "merma");
+  const { lote, codigos } = await loteDeMiel(userAccountId, input.lotId, partes.length);
+  // En gramos enteros para que 0,1 + 0,2 no sume 0,30000000000000004 contra el libro.
+  const entraKg = Math.round([...partes, lossKg ?? 0].reduce((a, b) => a + b * 1000, 0)) / 1000;
+
+  const r = await recordTransformation(userAccountId, {
+    transformationType: "split",
+    occurredAt: input.occurredAt,
+    provenanceClass: input.provenanceClass,
+    notes: input.notes ?? null,
+    inputs: [{ lotId: lote.id, quantity: entraKg, unit: "kg" }],
+    outputs: partes.map((kg, i) => ({ lotCode: codigos[i]!, lotType: "honey" as const, quantity: kg, unit: "kg" })),
+    declaredLossQuantity: lossKg,
+    declaredLossUnit: lossKg === null ? null : "kg",
+    declaredLossReason: lossKg === null ? null : "merma_al_dividir_miel",
+  });
+  return { transformation: r.transformation, lotes: r.outputLots, entraKg };
 }

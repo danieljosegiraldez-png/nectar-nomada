@@ -12,7 +12,7 @@ import { prisma } from "../../lib/db";
 import { createHive, createColony } from "../../lib/apiary/hives";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { completarCierreDeCosecha } from "../../lib/apiary/cierreDeCosecha";
-import { envasarMiel, procesarMiel } from "../../lib/apiary/mielDelLote";
+import { dividirMiel, envasarMiel, procesarMiel } from "../../lib/apiary/mielDelLote";
 import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 import { getLotDetail } from "../../lib/traceability/lots";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -210,6 +210,39 @@ describe("los pasos de un lote de miel", () => {
       procesarMiel(otroUserAccountId, { lotId: lot.id, occurredAt: DIA, acts: ["colado"], inputKg: 1, outputKg: 1, provenanceClass: "measured_fact" }),
     ).rejects.toThrow(/no_lot_access/);
     expect(await prisma.lotTransformationInput.count({ where: { lotId: lot.id } })).toBe(0);
+  });
+
+  it("DIVIDIR: cada parte es un lote nuevo, lo no repartido se queda, y el libro cuadra", async () => {
+    const { lot, harvestEvent } = await cosechaCerrada(30);
+    const r = await dividirMiel(userAccountId, {
+      lotId: lot.id, occurredAt: DIA, partesKg: ["12", "", "10", null], lossKg: 0.5, provenanceClass: "measured_fact",
+    });
+    expect(r.entraKg).toBe(22.5);
+    expect(r.lotes.map((l) => [l.lotCode, l.lotType])).toEqual([[`${lot.lotCode}-A`, "honey"], [`${lot.lotCode}-B`, "honey"]]);
+    expect(await Promise.all(r.lotes.map((l) => saldo(l.id)))).toEqual([12, 10]);
+    expect(await saldo(lot.id)).toBe(7.5);
+    const t = await prisma.lotTransformation.findUniqueOrThrow({ where: { id: r.transformation.id } });
+    expect([t.transformationType, Number(t.unexplainedQuantity ?? 0)]).toEqual(["split", 0]);
+    // Y cada parte sabe de qué caja viene.
+    const detalle = await getLotDetail(userAccountId, r.lotes[1]!.id);
+    expect(detalle.origenApicola.map((o) => o.id)).toEqual([harvestEvent.id]);
+  });
+
+  it("DIVIDIR suma en gramos: 0,1 + 0,2 no deja un hueco de coma flotante en el libro", async () => {
+    const { lot } = await cosechaCerrada(1);
+    const r = await dividirMiel(userAccountId, { lotId: lot.id, occurredAt: DIA, partesKg: [0.1, 0.2], provenanceClass: "measured_fact" });
+    expect(r.entraKg).toBe(0.3);
+    expect(await saldo(lot.id)).toBe(0.7);
+    expect(await prisma.deviation.count({ where: { lotTransformationId: r.transformation.id } })).toBe(0);
+  });
+
+  it("DIVIDIR exige dos partes, ninguna de cero, y no más de lo que hay", async () => {
+    const { lot } = await cosechaCerrada(10);
+    const base = { lotId: lot.id, occurredAt: DIA, provenanceClass: "measured_fact" as const };
+    await expect(dividirMiel(userAccountId, { ...base, partesKg: ["5", ""] })).rejects.toThrow(/dividir_exige_dos_partes/);
+    await expect(dividirMiel(userAccountId, { ...base, partesKg: ["5", "0"] })).rejects.toThrow(/parte_cero/);
+    await expect(dividirMiel(userAccountId, { ...base, partesKg: ["6", "5"] })).rejects.toThrow(/input_exceeds_available/);
+    expect(await saldo(lot.id)).toBe(10);
   });
 
   it("LAS REGLAS VIVEN EN LA BASE: cada CHECK rechaza lo suyo, y lo válido entra", async () => {
