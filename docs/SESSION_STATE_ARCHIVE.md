@@ -3878,3 +3878,26 @@ Meliponini se contradice consigo mismo. ANSA es de Tucumán: géneros iguales, e
 
 **P-F pasa de tres guías a cinco**, y su texto se corrigió. Ninguna cifra de estos documentos entra
 al software: los vocabularios de tratamiento y limpieza los decide Daniel.
+
+### 2026-09-17 · Reposo, trilla, inventario — y una sesión que no leyó este archivo
+
+**Fusionado:** #366 (reposo, trilla y subproductos: el café ya no se pierde entre secado y venta),
+#368 y #371 (la inspección estaba construida dentro de la colmena y no se veía; y los formularios
+respetan el permiso — Kenis ve su entrada de eventos y no una inspección que no puede enviar), #372,
+#375 y #376 (specs de artefactos de colmena, nodo Smart Hive, inventario y análisis del contrato de
+investigación). **Fusionado después:** #382, inventario con existencias — el saldo se deriva y «nunca contado»
+no es «cero».
+
+**Lo que hay que saber, y es la lección:** esta sesión arrancó en `~`, trabajó de resúmenes de su
+propia memoria y **no leyó este archivo en ningún momento**. Le pidió a Daniel tres veces el correo
+de Bob cuando Bob ya había entrado — la misma forma exacta que la nota de `apiary:load-protocol` de
+abajo describe. Lo destapó `auditar-cableado`, no la sesión. **Leer esto al arrancar no es un
+trámite: es la única fuente de lo que ya pasó.**
+
+**Y un error con daño a otras sesiones, revertido:** renombró `apiñada` a `apinada` en la base de
+pruebas compartida creyéndola derivada; iba POR DELANTE de git —otra sesión había aplicado
+`vocabulario_del_dueno` antes de fusionarla—. La base compartida puede ir por delante de git.
+
+**Diseño esperando a Daniel:** la «faena» —preguntar a qué vas antes de enseñar seis
+formularios—, §A de `docs/superpowers/specs/2026-09-17-faena-de-colmena-y-botiquin-design.md`. El
+botiquín, §B del mismo spec, ya se ejecutó: ver 2026-09-18.
