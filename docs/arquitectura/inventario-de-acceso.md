@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-17
 
-**352 operaciones** que tocan la base, en **104 archivos**:
+**353 operaciones** que tocan la base, en **105 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,7 +22,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **242** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **243** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **58** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -78,6 +78,12 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > `createPlotBlock` y `listPlotBlocks` (Tarea 2 de trampas de broca) suben la fila de
 > **guardia directo**: las dos llaman a `requireLocationAttributeAccess` antes de tocar
 > `PlotBlock`, la misma compuerta de «configurar la parcela» que usa `locations.ts`.
+
+> **Y el de 352→353, con un archivo nuevo, es `lib/traceability/traps.ts`.**
+> `createTrap` (Tarea 3 de trampas de broca) sube la fila de **guardia directo**: llama a
+> `can(..., "manage", "specimen", ...)` en su propio `requireTrapAccess`, la compuerta de
+> `specimens.ts` — no la de la parcela, porque dar de alta una trampa es gestionar un
+> `Specimen`, no configurar la parcela.
 
 > **Y el de 342→345 son los tres ajustes de permiso por asignación (ADR-146).** Viven en
 > `lib/rbac/admin.ts`, que ya estaba inventariado, y suben la fila de **guardia directo**:
