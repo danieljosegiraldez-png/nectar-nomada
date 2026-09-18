@@ -38,6 +38,32 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · El botiquín: vencimiento, custodia, descuento y aviso
+
+Nueve tareas del plan `docs/superpowers/plans/2026-09-17-botiquin.md`, en un PR. El producto lleva
+una vez fabricante, principio activo, registro, carencia, con cuánto aviso, almacenamiento y
+advertencias; el frasco, en cada compra, vencimiento, presentación y factura. **Botado y perdido**
+restan y exigen motivo (`CHECK` en la base). **Custodia** = sitio + persona, en intervalos sin hueco
+ni solape. Foto de la etiqueta sobre el frasco. **Aplicar un tratamiento descuenta del frasco** en la
+misma transacción; vencido se aplica y queda marcado. `/inventario/recibir`, y la lista con «Vence»
+y «Dónde está».
+
+**Decisiones de la ejecución que el plan no traía, para que Daniel las vea:**
+- **El aviso NO va en `/start`**: esa ruta sólo redirige (ADR-082). Va en `/lots`, `/apiaries` y la
+  ficha del apiario, a quien tiene `lot:manage` donde ESTÁ el frasco.
+- **Descontar exige `lot:manage` sobre el frasco.** Kenis (sólo eventos de colonia) registra el
+  tratamiento sin frasco. El manejo en lote no acepta frasco todavía.
+- **FK de evidencia en RESTRICT** (foto y tratamiento), como fijó la revisión del 2026-09-01; la
+  primera versión copió SET NULL de padres anteriores y la deriva de migraciones lo cazó.
+- **Completar un producto sólo rellena huecos**; corregir lo ya declarado no tiene pantalla.
+
+**Migraciones fuera de orden:** tres del botiquín (`20260918000000`–`020000`) tienen fecha anterior a
+`20260918023857_limpieza_de_caja`, ya en producción. Son de tablas independientes; `migrate deploy`
+aplica las pendientes, pero **leer el log del despliegue** y confirmar que nombra las seis.
+
+**Sin verificar en navegador** —hace falta sesión—. **La cifra del router chocó por cuarta vez:** la
+rama decía 83 y, rebasada sobre `/finca`, se midió 84.
+
 ### 2026-09-17 · El refractómetro de miel: la lectura va sobre el lote
 
 ADR-160. Daniel corrigió: un refractómetro no mide humedad en general; **el de miel lee Brix y H%**, y
@@ -79,7 +105,7 @@ caso normal y el apicultor tiene que leer por qué.
 #368 y #371 (la inspección estaba construida dentro de la colmena y no se veía; y los formularios
 respetan el permiso — Kenis ve su entrada de eventos y no una inspección que no puede enviar), #372,
 #375 y #376 (specs de artefactos de colmena, nodo Smart Hive, inventario y análisis del contrato de
-investigación). **Abierto:** #382, inventario con existencias — el saldo se deriva y «nunca contado»
+investigación). **Fusionado después:** #382, inventario con existencias — el saldo se deriva y «nunca contado»
 no es «cero».
 
 **Lo que hay que saber, y es la lección:** esta sesión arrancó en `~`, trabajó de resúmenes de su
@@ -92,31 +118,9 @@ trámite: es la única fuente de lo que ya pasó.**
 pruebas compartida creyéndola derivada; iba POR DELANTE de git —otra sesión había aplicado
 `vocabulario_del_dueno` antes de fusionarla—. La base compartida puede ir por delante de git.
 
-**Diseños esperando a Daniel:** el botiquín (vencimiento, casa farmacéutica, custodia, aviso en
-`/start`) en `docs/superpowers/specs/2026-09-17-faena-de-colmena-y-botiquin-design.md`, y la «faena»
-—preguntar a qué vas antes de enseñar seis formularios—.
-
-### 2026-09-17 · El material de soporte, guardado entero y verificable
-
-ADR-158. Daniel: «deberías tener más documentación y material de soporte guardado, revisar todo».
-**Tenía razón:** medido por contenido, el repositorio guardaba sólo las cuatro fuentes de Cerro Azul.
-El grave era el **paquete Q1–Q49**: sus 49 decisiones vivían sólo en una carpeta de Documentos, y el
-repositorio tenía únicamente mis análisis que lo citan.
-
-**Ahora está todo, en dos clases que no se mezclan:** los **registros** —Q1–Q49, smart-hive, y
-**trece decisiones de Daniel en sus palabras literales**, sacadas de la transcripción con su línea—
-en `docs/architecture/`; el **conocimiento con cifras** —Varroa y Meliponini como **borrador**, ANSA
-como **referencia externa**— en `docs/dominio/`. Índice: `FUENTES_INDICE.md`.
-
-**«Verbatim» ya no es una promesa:** `fuentes-verbatim.test.ts` verifica cada copia en cada corrida,
-smart-hive contra **su propio** manifiesto.
-
-**Lo que encontró el contraste:** el manual de Varroa es de **clima templado**, y el **ácido fórmico
-es de seguridad** en el trópico —el propio texto dice que por encima de 27 °C mata a la reina—.
-Meliponini se contradice consigo mismo. ANSA es de Tucumán: géneros iguales, especies no.
-
-**P-F pasa de tres guías a cinco**, y su texto se corrigió. Ninguna cifra de estos documentos entra
-al software: los vocabularios de tratamiento y limpieza los decide Daniel.
+**Diseño esperando a Daniel:** la «faena» —preguntar a qué vas antes de enseñar seis
+formularios—, §A de `docs/superpowers/specs/2026-09-17-faena-de-colmena-y-botiquin-design.md`. El
+botiquín, §B del mismo spec, ya se ejecutó: ver 2026-09-18.
 
 ## 3. Bloqueado, y en qué
 

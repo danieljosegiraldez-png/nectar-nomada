@@ -3856,3 +3856,25 @@ propósito: las coordenadas son del arranque, y exigirlas dejaría sin registrar
 cerrado, que es donde están las abejas.
 
 **Y un flip-test volvió a destapar una prueba mía que no discriminaba** — la tercera en dos días.
+
+### 2026-09-17 · El material de soporte, guardado entero y verificable
+
+ADR-158. Daniel: «deberías tener más documentación y material de soporte guardado, revisar todo».
+**Tenía razón:** medido por contenido, el repositorio guardaba sólo las cuatro fuentes de Cerro Azul.
+El grave era el **paquete Q1–Q49**: sus 49 decisiones vivían sólo en una carpeta de Documentos, y el
+repositorio tenía únicamente mis análisis que lo citan.
+
+**Ahora está todo, en dos clases que no se mezclan:** los **registros** —Q1–Q49, smart-hive, y
+**trece decisiones de Daniel en sus palabras literales**, sacadas de la transcripción con su línea—
+en `docs/architecture/`; el **conocimiento con cifras** —Varroa y Meliponini como **borrador**, ANSA
+como **referencia externa**— en `docs/dominio/`. Índice: `FUENTES_INDICE.md`.
+
+**«Verbatim» ya no es una promesa:** `fuentes-verbatim.test.ts` verifica cada copia en cada corrida,
+smart-hive contra **su propio** manifiesto.
+
+**Lo que encontró el contraste:** el manual de Varroa es de **clima templado**, y el **ácido fórmico
+es de seguridad** en el trópico —el propio texto dice que por encima de 27 °C mata a la reina—.
+Meliponini se contradice consigo mismo. ANSA es de Tucumán: géneros iguales, especies no.
+
+**P-F pasa de tres guías a cinco**, y su texto se corrigió. Ninguna cifra de estos documentos entra
+al software: los vocabularios de tratamiento y limpieza los decide Daniel.
