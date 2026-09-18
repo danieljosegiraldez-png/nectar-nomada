@@ -3,7 +3,13 @@
  * `base-sembrada`; la corre el carril hermético de `scripts/ci.sh`.
  */
 import { describe, expect, it } from "vitest";
-import { avisosDeTrampas, trampasParaAviso } from "../../lib/traceability/pendienteDeTrampas";
+import {
+  avisosDeTrampas,
+  estadoDeTrampa,
+  trampasParaAviso,
+  type ReglaParaAviso,
+  type TrampaParaAviso,
+} from "../../lib/traceability/pendienteDeTrampas";
 
 const REGLA = { triggerLevel: "algunos" as const, normalDays: 14, alertDays: 7, suggestedAction: "aplicar Bralic" };
 const activa = (extra: Partial<Parameters<typeof avisosDeTrampas>[0]["trampas"][number]> = {}) => ({
@@ -105,5 +111,52 @@ describe("entrada de los avisos desde getPlotDetail", () => {
     const trampas = trampasParaAviso([{ ...cruda(null), instaladaEl: null }]);
     expect(trampas[0]!.instaladaEl).toBeNull();
     expect(avisosDeTrampas({ hoy: "2026-12-31", trampas, regla: REGLA })).toEqual([]);
+  });
+});
+
+describe("estadoDeTrampa", () => {
+  const trampaBase: TrampaParaAviso = {
+    id: "t1", trapNumber: 1, bloque: null, status: "active",
+    ultimaRevision: null, instaladaEl: "2026-09-01",
+  };
+  const regla: ReglaParaAviso = {
+    triggerLevel: "algunos", normalDays: 15, alertDays: 7, suggestedAction: "aplicar cebo",
+  };
+
+  it("sin regla, el estado es sin_regla", () => {
+    expect(estadoDeTrampa({ hoy: "2026-09-18", trampa: trampaBase, regla: null }).estado).toBe(
+      "sin_regla",
+    );
+  });
+
+  it("dentro del plazo normal, al_dia", () => {
+    expect(
+      estadoDeTrampa({ hoy: "2026-09-10", trampa: trampaBase, regla }).estado,
+    ).toBe("al_dia");
+  });
+
+  it("pasado el plazo normal sin revisión, toca_revisar", () => {
+    const r = estadoDeTrampa({ hoy: "2026-09-20", trampa: trampaBase, regla });
+    expect(r.estado).toBe("toca_revisar");
+    expect(r.diasDeRetraso).toBeGreaterThan(0);
+  });
+
+  it("una lectura que dispara es lectura_alta, aunque esté dentro del plazo", () => {
+    const trampa: TrampaParaAviso = {
+      ...trampaBase,
+      ultimaRevision: { dia: "2026-09-17", brocaLevel: "muchos" },
+    };
+    expect(estadoDeTrampa({ hoy: "2026-09-18", trampa, regla }).estado).toBe("lectura_alta");
+  });
+
+  it("una trampa retirada dice que está retirada, no que falta la regla (ADR-080)", () => {
+    expect(
+      estadoDeTrampa({ hoy: "2026-09-18", trampa: { ...trampaBase, status: "removed" }, regla })
+        .estado,
+    ).toBe("retirada");
+    expect(
+      estadoDeTrampa({ hoy: "2026-09-18", trampa: { ...trampaBase, status: "removed" }, regla: null })
+        .estado,
+    ).toBe("retirada");
   });
 });

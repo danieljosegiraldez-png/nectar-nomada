@@ -16,14 +16,14 @@ import { listSoilProfilesForLocation, computeAnaerobicSignals } from "../../../l
 import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 import { FieldSessionStartForm } from "../../components/traceability/FieldSessionForms";
-import { RevisionDeTrampaForm } from "../../components/traceability/RevisionDeTrampaForm";
 import { estadosPorCohorte } from "../../../lib/traceability/estadoDeProduccion";
 import { cifrasDelLote } from "../../../lib/traceability/cifrasDelLote";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
 import { pendienteDeLaParcela, enlaceDelAviso, type Aviso } from "../../../lib/traceability/pendienteDeLaParcela";
-import { trampasParaAviso } from "../../../lib/traceability/pendienteDeTrampas";
-import { claveDeTituloDeBloque } from "../../../lib/traceability/plotBlocks";
-import { pestanaValida, PESTANAS_DE_PARCELA, type PestanaDeParcela } from "./pestanas";
+import { estadoDeTrampa, trampasParaAviso } from "../../../lib/traceability/pendienteDeTrampas";
+import { claveDeTituloDeBloque, listPlotBlocks } from "../../../lib/traceability/plotBlocks";
+import { TIPOS_DE_BLOQUE } from "../../../lib/traceability/tiposDeBloque";
+import { pestanaValida, PESTANAS_DE_PARCELA } from "./pestanas";
 
 export const dynamic = "force-dynamic";
 
@@ -64,10 +64,11 @@ export default async function PlotDetailPage({
 
   const { location, cohorts, density, organizationName, eventosDeProduccion, trampas, reglaDeTrampas } = detail;
   const rendimiento = detail.yield;
-  const [jornadas, { people, selfPersonId }, calicatas] = await Promise.all([
+  const [jornadas, { people, selfPersonId }, calicatas, bloquesDeLaParcela] = await Promise.all([
     listFieldSessions(user.userAccountId, id),
     getObserverCandidates(user.userAccountId),
     listSoilProfilesForLocation(user.userAccountId, id),
+    listPlotBlocks(user.userAccountId, id),
   ]);
   const muestras = await listSamplesForLocation(user.userAccountId, id);
   const fotos = await listLandAssets(user.userAccountId, id);
@@ -75,8 +76,9 @@ export default async function PlotDetailPage({
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
   const cifras = cifrasDelLote(activas, estados);
+  const hoy = diaDeHoy(new Date(), location.timezone);
   const pendiente = pendienteDeLaParcela({
-    hoy: diaDeHoy(new Date(), location.timezone),
+    hoy,
     areaHectares: location.areaHectares == null ? null : Number(location.areaHectares),
     cohortesActivas: activas,
     estados,
@@ -652,117 +654,93 @@ export default async function PlotDetailPage({
         </details>
       </details>
 
-      {/* Igual que #condiciones y #muestras: el `id` dentro del <details>. */}
-      <details className="nn-section">
-        <summary style={{ fontSize: "1.25rem", fontWeight: 600 }}>{t("trapsTitle")}</summary>
-        <p className="nn-detail-meta" id="trampas">
-          <Link href={`/plots/${location.id}/ajustes#trampas`}>{t("trapsManageLink")}</Link>
-        </p>
-        {trampas.length === 0 ? <p className="nn-muted">{t("trapsNone")}</p> : null}
-        {trampas.map((trampa) => (
-          <article key={trampa.id} className="nn-card">
-            <h4>
-              {trampa.trapNumber != null ? t("trapsNumber", { n: trampa.trapNumber }) : t("notRecorded")}
-              {" · "}
-              {trampa.bloque ? (
-                claveDeTituloDeBloque(trampa.bloque.blockType) != null
-                  ? t(claveDeTituloDeBloque(trampa.bloque.blockType)!, { name: trampa.bloque.name })
-                  : trampa.bloque.name
-              ) : (
-                t("trapsNoBlock")
-              )}
-            </h4>
-            {/* Sin revisión se dice así, no con una lectura de cero (ADR-080).
-                `observedAt` es un día a las 00:00Z, como `sampledAt`. */}
-            {trampa.ultimaRevision ? (
-              <>
-                <p className="nn-detail-meta">
-                  {t("trapsLastCheck", {
-                    fecha: trampa.ultimaRevision.observedAt.toISOString().slice(0, 10),
-                    lectura: trampa.ultimaRevision.brocaLevel
-                      ? t(`trapsLevel_${trampa.ultimaRevision.brocaLevel}`)
-                      : t("notRecorded"),
-                  })}
-                </p>
-                {/* F2 fix-final — lo que se guardaba y nunca se volvía a
-                    mostrar: conteo, otros insectos, mantenimiento y quién
-                    observó. Un `null` se muestra como «sin registrar», nunca
-                    como 0 ni «no» (ADR-080). */}
-                <p className="nn-detail-meta">
-                  {t("trapsCaptureCount", {
-                    n: trampa.ultimaRevision.captureCount != null ? String(trampa.ultimaRevision.captureCount) : t("notRecorded"),
-                  })}
-                </p>
-                <p className="nn-detail-meta">
-                  {t("trapsOtherInsects", {
-                    estado:
-                      trampa.ultimaRevision.otherInsects === true
-                        ? trampa.ultimaRevision.otherInsectsNote
-                          ? `${t("triStateYes")} — ${trampa.ultimaRevision.otherInsectsNote}`
-                          : t("triStateYes")
-                        : estadoTri(trampa.ultimaRevision.otherInsects, t),
-                  })}
-                </p>
-                <p className="nn-detail-meta">
-                  {t("trapsMaintenance", {
-                    limpieza: estadoTri(trampa.ultimaRevision.cleaned, t),
-                    liquido: estadoTri(trampa.ultimaRevision.liquidChanged, t),
-                    atrayente: estadoTri(trampa.ultimaRevision.lureRecharged, t),
-                  })}
-                </p>
-                <p className="nn-detail-meta">
-                  {t("trapsObserver", { nombre: trampa.ultimaRevision.observerName ?? t("notRecorded") })}
-                </p>
-                <FotosDe
-                  assets={fotos.filter((f) => f.specimenObservationId === trampa.ultimaRevision?.id)}
-                  etiqueta={t}
-                />
-              </>
-            ) : (
-              <p className="nn-muted">{t("trapsNeverChecked")}</p>
-            )}
-            {/* La revisión es trabajo de campo, así que vive aquí y no en
-                ajustes (ver el docstring de `ajustes/page.tsx`). Sólo en las
-                trampas activas: una retirada no se revisa. */}
-            {trampa.status === "active" ? (
-              <details>
-                <summary>{t("trapCheckTitle")}</summary>
-                <RevisionDeTrampaForm
-                  locationId={location.id}
-                  specimenId={trampa.id}
-                  people={people}
-                  selfPersonId={selfPersonId}
-                />
-              </details>
-            ) : null}
-            {/* F6 fix-final — antes la foto se colgaba SIEMPRE de la última
-                revisión; ahora el operario elige de entre todas las de esta
-                trampa (la última sigue preseleccionada). */}
-            {trampa.status === "active" && trampa.ultimaRevision ? (
-              <details>
-                <summary>
-                  {t("trapCheckPhotosTitle", {
-                    fecha: trampa.ultimaRevision.observedAt.toISOString().slice(0, 10),
-                  })}
-                </summary>
-                <p className="nn-muted">{t("trapCheckPhotosIntro")}</p>
-                <LandPhotoUploadForm
-                  locationId={location.id}
-                  parent={{ kind: "trapCheck", specimenObservationId: trampa.ultimaRevision.id }}
-                  observers={people}
-                  selfPersonId={selfPersonId}
-                  revisionOptions={trampa.revisiones.map((r) => ({
-                    id: r.id,
-                    label: `${r.observedAt.toISOString().slice(0, 10)} · ${
-                      r.brocaLevel ? t(`trapsLevel_${r.brocaLevel}`) : t("notRecorded")
-                    }`,
-                  }))}
-                />
-              </details>
-            ) : null}
-          </article>
-        ))}
-      </details>
+      {pestana === "trampas" ? (
+        <section className="nn-section">
+          <h2>{t("trapsTitle")}</h2>
+          <p>
+            <Link href="/finca/trampas/ronda" className="nn-button">{t("trapsGoToRoundLink")}</Link>
+            {" "}
+            <Link href={`/plots/${location.id}/ajustes#trampas`} className="nn-button">
+              {t("trapsManageLink")}
+            </Link>
+          </p>
+
+          {trampas.length === 0 ? (
+            <p className="nn-muted">{t("trapsNone")}</p>
+          ) : (
+            <table className="nn-table">
+              <thead>
+                <tr>
+                  <th>{t("trapsNumber", { n: "" })}</th>
+                  <th>{t("trapsColumnBlock")}</th>
+                  <th>{t("trapsColumnLastCheck")}</th>
+                  <th>{t("trapsColumnLastReading")}</th>
+                  <th>{t("trapsColumnStatus")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trampas.map((trampa) => {
+                  const { estado } = estadoDeTrampa({
+                    hoy,
+                    trampa: trampasParaAviso([trampa])[0]!,
+                    regla: reglaDeTrampas,
+                  });
+                  const claveBloque = trampa.bloque ? claveDeTituloDeBloque(trampa.bloque.blockType) : null;
+                  return (
+                    <tr key={trampa.id}>
+                      <td>{trampa.trapNumber ?? t("notRecorded")}</td>
+                      <td>
+                        {trampa.bloque
+                          ? claveBloque
+                            ? t(claveBloque, { name: trampa.bloque.name })
+                            : trampa.bloque.name
+                          : t("trapsNoBlock")}
+                      </td>
+                      <td>
+                        {trampa.ultimaRevision
+                          ? trampa.ultimaRevision.observedAt.toISOString().slice(0, 10)
+                          : t("trapsNeverChecked")}
+                      </td>
+                      <td>
+                        {trampa.ultimaRevision?.brocaLevel
+                          ? t(`trapsLevel_${trampa.ultimaRevision.brocaLevel}`)
+                          : t("notRecorded")}
+                      </td>
+                      <td>{t(`trapEstado_${estado}` as "trapEstado_al_dia")}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+
+          <h3>{t("blocksTitle")}</h3>
+          {TIPOS_DE_BLOQUE.map((tipo) => {
+            const deEsteTipo = bloquesDeLaParcela.filter((b) => b.blockType === tipo);
+            if (deEsteTipo.length === 0) return null;
+            return (
+              <div key={tipo}>
+                <h4>{t(`blockType_${tipo}` as "blockType_microparcela")}</h4>
+                <ul className="nn-detail-meta">
+                  {deEsteTipo.map((b) => (
+                    <li key={b.id}>{b.name}{b.description ? ` — ${b.description}` : ""}</li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+          {bloquesDeLaParcela.some((b) => b.blockType == null) ? (
+            <div>
+              <h4>{t("blockTypeUnassignedHeading")}</h4>
+              <ul className="nn-detail-meta">
+                {bloquesDeLaParcela.filter((b) => b.blockType == null).map((b) => (
+                  <li key={b.id}>{b.name}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -832,16 +810,6 @@ function ResultadosDeLaboratorio({
  * sección ausente se ven igual, y el Paso 4 pide una foto por perfil — que
  * falte tiene que verse.
  */
-/**
- * F2 fix-final — un booleano de mantenimiento como texto, sin confundir
- * `null` («sin registrar») con `false` («se preguntó y no se hizo»), que es
- * justo la distinción que la migración 20260918100000 dejó de inventar
- * (ADR-080).
- */
-function estadoTri(v: boolean | null, t: (clave: string) => string): string {
-  return v === true ? t("triStateYes") : v === false ? t("triStateNo") : t("notRecorded");
-}
-
 function FotosDe({
   assets,
   etiqueta,
