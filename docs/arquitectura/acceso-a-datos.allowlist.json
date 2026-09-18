@@ -448,6 +448,10 @@
     {
       "archivo": "lib/inventario/custodia.ts",
       "razon": "Custodia de un frasco (donde esta y quien responde). Mover exige lot:manage sobre el sitio de DESTINO; leer la vigente, lot:view sobre donde esta. Cierra la anterior y abre la nueva en una transaccion, con su AuditEvent y el ANTES."
+    },
+    {
+      "archivo": "lib/inventario/etiqueta.ts",
+      "razon": "Foto de la etiqueta del frasco. Pedir y finalizar exigen lot:manage sobre el sitio del frasco (plataforma si no tiene); finalizar exige ademas que la clave sea de la carpeta de ESE frasco, y crea el Asset con su AuditEvent en una transaccion."
     }
   ],
   "reciben_transaccion": [

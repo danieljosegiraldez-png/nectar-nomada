@@ -1961,6 +1961,12 @@ model Asset {
   treatmentBatch    TreatmentBatch?  @relation(fields: [treatmentBatchId], references: [id])
   processingStageId String?          @map("processing_stage_id") @db.Uuid
   processingStage   ProcessingStage? @relation(fields: [processingStageId], references: [id])
+  /// **La foto de la etiqueta de un frasco** — botiquín, Tarea 6. El `ANEXO_G`
+  /// saca de la norma argentina (SENASA obliga a conservar los troqueles) su
+  /// conclusión de diseño: «guardar foto de la etiqueta como adjunto». Una
+  /// columna más por padre, el molde que ya siguen las diecinueve de arriba.
+  consumableLotId String?        @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot? @relation(fields: [consumableLotId], references: [id], onDelete: Restrict)
 
   // T12.5: required, no default — same reasoning as ADR-038 (T9.5): a
   // photograph is a fact-bearing record, and a silent default would
@@ -8546,6 +8552,7 @@ model ConsumableLot {
   @@schema("traceability")
   consumptionEntries MaterialConsumptionEntry[]
   custodies ConsumableCustody[]
+  assets Asset[]
 }
 
 /// El libro mayor de las existencias: **sólo se añade**. Nada actualiza una
