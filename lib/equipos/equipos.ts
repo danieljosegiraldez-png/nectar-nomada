@@ -74,13 +74,31 @@ async function objetivoDeEquipo(equipo: { id: string; projectId: string | null }
   return { scopeType: "platform", scopeRefId: null } as const;
 }
 
+/**
+ * Configurar un equipo: `equipment:manage`, o —si el equipo está en un lugar—
+ * `location:edit_beneficio` ahí (spec #370 §4.3: la concesión abre todo el
+ * beneficio, equipos incluidos). Sin lugar, sólo `equipment:manage`.
+ */
+async function puedeConfigurar(
+  userAccountId: string,
+  objetivo: Awaited<ReturnType<typeof objetivoDeEquipo>>,
+  clasificacion: ClassificationLevel,
+) {
+  if (await can(userAccountId, "manage", "equipment", objetivo, clasificacion)) return true;
+  return objetivo.scopeType === "location"
+    && (await can(userAccountId, "edit_beneficio", "location", objetivo, clasificacion));
+}
+
 async function exigePermiso(
   userAccountId: string,
   accion: "view" | "manage" | "report_condition",
   equipo: { id: string; projectId: string | null; classification: ClassificationLevel },
 ) {
   const objetivo = await objetivoDeEquipo(equipo);
-  const ok = await can(userAccountId, accion, "equipment", objetivo, equipo.classification);
+  const ok =
+    accion === "manage"
+      ? await puedeConfigurar(userAccountId, objetivo, equipo.classification)
+      : await can(userAccountId, accion, "equipment", objetivo, equipo.classification);
   if (!ok) throw new EquipoError("forbidden");
 }
 
@@ -126,7 +144,7 @@ export async function registrarEquipo(userAccountId: string, input: RegistrarEqu
       ? ({ scopeType: "project", scopeRefId: input.projectId } as const)
       : ({ scopeType: "platform", scopeRefId: null } as const);
   const clasificacion = input.classification ?? "internal";
-  if (!(await can(userAccountId, "manage", "equipment", objetivo, clasificacion))) {
+  if (!(await puedeConfigurar(userAccountId, objetivo, clasificacion))) {
     throw new EquipoError("forbidden");
   }
   if (input.name.trim().length === 0) throw new EquipoError("name_required");
@@ -738,7 +756,7 @@ export async function puedeGestionarEquipo(userAccountId: string, equipmentId: s
   });
   if (!equipo) return false;
   const objetivo = await objetivoDeEquipo(equipo);
-  return can(userAccountId, "manage", "equipment", objetivo, equipo.classification);
+  return puedeConfigurar(userAccountId, objetivo, equipo.classification);
 }
 
 /** Instrumentos visibles y modos vigentes; las escalas conservan el label del aparato. */

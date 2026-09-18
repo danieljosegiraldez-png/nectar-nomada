@@ -7,6 +7,7 @@ import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadas
 import { actualizarBeneficio } from "../../lib/traceability/beneficios";
 import { actualizarUbicacionDeSecado, crearUbicacionDeSecado } from "../../lib/traceability/instalaciones";
 import { createRecipeVersion, createRecipeWithVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
+import { EquipoError, informarCondicion, registrarEquipo } from "../../lib/equipos/equipos";
 
 /**
  * «Editar beneficio» — spec #370 §4.3. Por defecto el capataz NO edita un
@@ -336,5 +337,89 @@ describe("exigeEditarBeneficioEnOrganizacion (guardia compartida por las recetas
     // plataforma.
     const admin = await cuentaPlatformAdmin();
     await expect(exigeEditarBeneficioEnOrganizacion(admin, null)).resolves.toBeUndefined();
+  });
+});
+
+describe("equipos: la concesión de editar beneficio abre configurarlos (Daniel, 2026-09-18)", () => {
+  const orgIds: string[] = [];
+  const equipmentIds: string[] = [];
+  const conditionReportIds: string[] = [];
+  afterEach(async () => {
+    await prisma.auditEvent.deleteMany({ where: { entityType: "equipment_condition_report", entityId: { in: conditionReportIds } } });
+    await prisma.auditEvent.deleteMany({ where: { entityType: "equipment", entityId: { in: equipmentIds } } });
+    // Borrar el equipo se lleva sus EquipmentTransfer y EquipmentConditionReport
+    // (`onDelete: Cascade` en el esquema, sobre `equipmentId`).
+    await prisma.equipment.deleteMany({ where: { id: { in: equipmentIds } } });
+    await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
+    orgIds.length = 0; equipmentIds.length = 0; conditionReportIds.length = 0;
+  });
+
+  async function organizacion() {
+    const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
+    orgIds.push(org.id);
+    return org;
+  }
+
+  it("un capataz sin concesión no registra un equipo en su finca; un Farm Manager sí", async () => {
+    const org = await organizacion();
+    const finca = await sitio();
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    await expect(
+      registrarEquipo(capataz, {
+        name: nombre(),
+        kind: "vessel",
+        organizationId: org.id,
+        provenanceClass: "original_record",
+        initialLocationId: finca.id,
+      }),
+    ).rejects.toThrow(new EquipoError("forbidden"));
+    // Control positivo: el mismo camino con un Farm Manager de la misma finca.
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const equipo = await registrarEquipo(jefe, {
+      name: nombre(),
+      kind: "vessel",
+      organizationId: org.id,
+      provenanceClass: "original_record",
+      initialLocationId: finca.id,
+    });
+    equipmentIds.push(equipo.id);
+  });
+
+  it("el mismo capataz, con la concesión, sí lo registra", async () => {
+    const org = await organizacion();
+    const finca = await sitio();
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    await conceder(capataz);
+    const equipo = await registrarEquipo(capataz, {
+      name: nombre(),
+      kind: "vessel",
+      organizationId: org.id,
+      provenanceClass: "original_record",
+      initialLocationId: finca.id,
+    });
+    equipmentIds.push(equipo.id);
+    expect(equipo.name).toBeDefined();
+  });
+
+  it("operar sigue abierto: el capataz sin concesión informa la condición de un equipo que registró el Farm Manager", async () => {
+    const org = await organizacion();
+    const finca = await sitio();
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const equipo = await registrarEquipo(jefe, {
+      name: nombre(),
+      kind: "vessel",
+      organizationId: org.id,
+      provenanceClass: "original_record",
+      initialLocationId: finca.id,
+    });
+    equipmentIds.push(equipo.id);
+    const informe = await informarCondicion(capataz, {
+      equipmentId: equipo.id,
+      condition: "operational",
+      occurredAt: new Date(),
+    });
+    conditionReportIds.push(informe.id);
+    expect(informe.condition).toBe("operational");
   });
 });
