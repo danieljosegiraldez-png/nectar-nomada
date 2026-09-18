@@ -27,9 +27,19 @@ export const CAMPOS_DEL_PRODUCTO = [
   "avisarDiasAntes",
   "storageConditions",
   "safetyNotes",
+  "defaultReentryHours",
 ] as const;
 export type CampoDelProducto = (typeof CAMPOS_DEL_PRODUCTO)[number];
-const NUMERICOS: ReadonlySet<CampoDelProducto> = new Set(["defaultWithdrawalDays", "avisarDiasAntes"]);
+const NUMERICOS: ReadonlySet<CampoDelProducto> = new Set(["defaultWithdrawalDays", "avisarDiasAntes", "defaultReentryHours"]);
+
+/** Medicamento de botiquín o producto de manejo fitosanitario. */
+export type ClaseDeProducto = "medicamento" | "fitosanitario";
+
+/** Qué campos del producto se piden según su clase. La reentrada no significa
+ *  nada para un medicamento de colmena. */
+export function camposDe(clase: ClaseDeProducto): readonly CampoDelProducto[] {
+  return clase === "fitosanitario" ? CAMPOS_DEL_PRODUCTO : CAMPOS_DEL_PRODUCTO.filter((c) => c !== "defaultReentryHours");
+}
 
 export interface ProductoParaRecibir {
   readonly id: string;
@@ -46,7 +56,7 @@ export interface OpcionesDeRecepcion {
   readonly productos: readonly ProductoParaRecibir[];
 }
 
-export async function opcionesDeRecepcion(userAccountId: string): Promise<OpcionesDeRecepcion> {
+export async function opcionesDeRecepcion(userAccountId: string, clase: ClaseDeProducto): Promise<OpcionesDeRecepcion> {
   const candidatos = await prisma.location.findMany({
     where: { organizationId: { not: null } },
     select: { id: true, name: true, organizationId: true },
@@ -69,19 +79,23 @@ export async function opcionesDeRecepcion(userAccountId: string): Promise<Opcion
   const materiales = organizaciones.length === 0
     ? []
     : await prisma.consumableMaterial.findMany({
-        where: { organizationId: { in: organizaciones }, isVeterinaryMedicine: true },
+        where: {
+          organizationId: { in: organizaciones },
+          ...(clase === "fitosanitario" ? { isPlantProtection: true } : { isVeterinaryMedicine: true }),
+        },
         orderBy: { name: "asc" },
       });
 
+  const camposDeLaClase = camposDe(clase);
   const productos = materiales.map((m) => {
-    const campos = Object.fromEntries(CAMPOS_DEL_PRODUCTO.map((c) => [c, m[c] ?? null])) as ProductoParaRecibir["campos"];
+    const campos = Object.fromEntries(camposDeLaClase.map((c) => [c, m[c] ?? null])) as ProductoParaRecibir["campos"];
     return {
       id: m.id,
       name: m.name,
       defaultUnit: m.defaultUnit,
       organizationId: m.organizationId,
       campos,
-      faltan: CAMPOS_DEL_PRODUCTO.filter((c) => campos[c] == null),
+      faltan: camposDeLaClase.filter((c) => campos[c] == null),
     };
   });
   return { sitios, productos };

@@ -35,6 +35,14 @@ export interface CrearMaterialInput {
   readonly safetyNotes?: string | null;
   readonly avisarDiasAntes?: number | null;
   /**
+   * **Los campos del producto como manejo fitosanitario** — aplicaciones
+   * fitosanitarias, Tarea 1. Gemelos de los de arriba: separan lo que se
+   * ofrece al registrar una intervención del aserrín y la gallinaza.
+   */
+  readonly isPlantProtection?: boolean;
+  /** Horas de reentrada por defecto. Nulo = no declarada; 0 = declarada cero. */
+  readonly defaultReentryHours?: number | null;
+  /**
    * Dónde se juzga el permiso. Mismo criterio que `registrarEquipo`, y por la
    * misma razón que dice su comentario: si se declara el sitio, el permiso se
    * juzga AHÍ — sin esto, dar de alta «gallinaza» para tu propia finca exigiría
@@ -58,6 +66,7 @@ export async function crearMaterial(userAccountId: string, input: CrearMaterialI
   for (const [campo, valor] of [
     ["defaultWithdrawalDays", input.defaultWithdrawalDays],
     ["avisarDiasAntes", input.avisarDiasAntes],
+    ["defaultReentryHours", input.defaultReentryHours],
   ] as const) {
     if (valor != null && (!Number.isInteger(valor) || valor < 0)) {
       throw new MaterialValidationError(`${campo} inválido: ${valor}. Cero es válido; negativo no.`);
@@ -100,6 +109,8 @@ export async function crearMaterial(userAccountId: string, input: CrearMaterialI
           storageConditions: input.storageConditions?.trim() || null,
           safetyNotes: input.safetyNotes?.trim() || null,
           avisarDiasAntes: input.avisarDiasAntes ?? null,
+          isPlantProtection: input.isPlantProtection ?? false,
+          defaultReentryHours: input.defaultReentryHours ?? null,
           createdBy: userAccountId,
         },
       });
