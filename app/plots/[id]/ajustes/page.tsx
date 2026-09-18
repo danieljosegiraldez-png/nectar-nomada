@@ -12,11 +12,8 @@ import { PlotAttributesForm } from "../../../components/traceability/PlotAttribu
 import { SoilProfileForm } from "../../../components/traceability/SoilProfileForm";
 import { MarcarEnProduccionForm } from "../../../components/traceability/MarcarEnProduccionForm";
 import { listPlotBlocks } from "../../../../lib/traceability/plotBlocks";
-import { getObserverCandidates } from "../../../../lib/traceability/lots";
 import { AltaDeBloqueForm } from "../../../components/traceability/AltaDeBloqueForm";
 import { AltaDeTrampaForm } from "../../../components/traceability/AltaDeTrampaForm";
-import { RevisionDeTrampaForm } from "../../../components/traceability/RevisionDeTrampaForm";
-import { LandPhotoUploadForm } from "../../../components/traceability/LandPhotoUploadForm";
 
 export const dynamic = "force-dynamic";
 
@@ -46,10 +43,9 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   const { location, cohorts, cultivarOptions, eventosDeProduccion, trampas } = detail;
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
-  const [calicatas, bloques, { people, selfPersonId }] = await Promise.all([
+  const [calicatas, bloques] = await Promise.all([
     listSoilProfilesForLocation(user.userAccountId, id),
     listPlotBlocks(user.userAccountId, id),
-    getObserverCandidates(user.userAccountId),
   ]);
 
   return (
@@ -212,49 +208,19 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
       <section className="nn-section" id="trampas">
         <h2>{t("trapsTitle")}</h2>
         {trampas.length === 0 ? <p className="nn-muted">{t("trapsNone")}</p> : null}
-        {trampas.map((trampa) => (
-          <article key={trampa.id} className="nn-card">
-            <h3>
-              {trampa.trapNumber != null ? t("trapsNumber", { n: trampa.trapNumber }) : t("notRecorded")}
-              {" · "}
-              {trampa.bloque ? t("trapsBlock", { nombre: trampa.bloque }) : t("trapsNoBlock")}
-            </h3>
-            <p className="nn-detail-meta">
-              {trampa.ultimaRevision ? (
-                t("trapsLastCheck", {
-                  fecha: trampa.ultimaRevision.observedAt.toISOString().slice(0, 10),
-                  lectura: trampa.ultimaRevision.brocaLevel
-                    ? t(`trapsLevel_${trampa.ultimaRevision.brocaLevel}`)
-                    : t("notRecorded"),
-                })
-              ) : (
-                <span className="nn-muted">{t("trapsNeverChecked")}</span>
-              )}
-            </p>
-            <details>
-              <summary>{t("trapCheckTitle")}</summary>
-              <RevisionDeTrampaForm locationId={location.id} specimenId={trampa.id} />
-            </details>
-            {/* La foto de la tela cuelga de la ÚLTIMA revisión: se registra la
-                visita y a continuación se sube su foto. */}
-            {trampa.ultimaRevision ? (
-              <details>
-                <summary>
-                  {t("trapCheckPhotosTitle", {
-                    fecha: trampa.ultimaRevision.observedAt.toISOString().slice(0, 10),
-                  })}
-                </summary>
-                <p className="nn-muted">{t("trapCheckPhotosIntro")}</p>
-                <LandPhotoUploadForm
-                  locationId={location.id}
-                  parent={{ kind: "trapCheck", specimenObservationId: trampa.ultimaRevision.id }}
-                  observers={people}
-                  selfPersonId={selfPersonId}
-                />
-              </details>
-            ) : null}
-          </article>
-        ))}
+        {/* Aquí sólo la configuración: qué trampas hay y en qué bloque. La
+            revisión y su foto son trabajo de campo y viven en el tablero. */}
+        {trampas.length > 0 ? (
+          <ul className="nn-detail-meta">
+            {trampas.map((trampa) => (
+              <li key={trampa.id}>
+                {trampa.trapNumber != null ? t("trapsNumber", { n: trampa.trapNumber }) : t("notRecorded")}
+                {" · "}
+                {trampa.bloque ? t("trapsBlock", { nombre: trampa.bloque }) : t("trapsNoBlock")}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <details>
           <summary>{t("trapNewTitle")}</summary>
           <AltaDeTrampaForm locationId={location.id} bloques={bloques.map((b) => ({ id: b.id, name: b.name }))} />

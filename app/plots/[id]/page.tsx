@@ -16,6 +16,7 @@ import { listSoilProfilesForLocation, computeAnaerobicSignals } from "../../../l
 import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 import { FieldSessionStartForm } from "../../components/traceability/FieldSessionForms";
+import { RevisionDeTrampaForm } from "../../components/traceability/RevisionDeTrampaForm";
 import { estadosPorCohorte } from "../../../lib/traceability/estadoDeProduccion";
 import { cifrasDelLote } from "../../../lib/traceability/cifrasDelLote";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
@@ -609,40 +610,63 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         <p className="nn-detail-meta" id="trampas">
           <Link href={`/plots/${location.id}/ajustes#trampas`}>{t("trapsManageLink")}</Link>
         </p>
-        {trampas.length === 0 ? (
-          <p className="nn-muted">{t("trapsNone")}</p>
-        ) : (
-          <ul className="nn-detail-meta">
-            {trampas.map((trampa) => (
-              <li key={trampa.id}>
-                <strong>
-                  {trampa.trapNumber != null ? t("trapsNumber", { n: trampa.trapNumber }) : t("notRecorded")}
-                </strong>
-                {" · "}
-                {trampa.bloque ? t("trapsBlock", { nombre: trampa.bloque }) : t("trapsNoBlock")}
-                <br />
-                {/* Sin revisión se dice así, no con una lectura de cero (ADR-080).
-                    `observedAt` es un día a las 00:00Z, como `sampledAt`. */}
-                {trampa.ultimaRevision ? (
-                  <>
-                    {t("trapsLastCheck", {
-                      fecha: trampa.ultimaRevision.observedAt.toISOString().slice(0, 10),
-                      lectura: trampa.ultimaRevision.brocaLevel
-                        ? t(`trapsLevel_${trampa.ultimaRevision.brocaLevel}`)
-                        : t("notRecorded"),
-                    })}
-                    <FotosDe
-                      assets={fotos.filter((f) => f.specimenObservationId === trampa.ultimaRevision?.id)}
-                      etiqueta={t}
-                    />
-                  </>
-                ) : (
-                  <span className="nn-muted">{t("trapsNeverChecked")}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+        {trampas.length === 0 ? <p className="nn-muted">{t("trapsNone")}</p> : null}
+        {trampas.map((trampa) => (
+          <article key={trampa.id} className="nn-card">
+            <h4>
+              {trampa.trapNumber != null ? t("trapsNumber", { n: trampa.trapNumber }) : t("notRecorded")}
+              {" · "}
+              {trampa.bloque ? t("trapsBlock", { nombre: trampa.bloque }) : t("trapsNoBlock")}
+            </h4>
+            {/* Sin revisión se dice así, no con una lectura de cero (ADR-080).
+                `observedAt` es un día a las 00:00Z, como `sampledAt`. */}
+            {trampa.ultimaRevision ? (
+              <>
+                <p className="nn-detail-meta">
+                  {t("trapsLastCheck", {
+                    fecha: trampa.ultimaRevision.observedAt.toISOString().slice(0, 10),
+                    lectura: trampa.ultimaRevision.brocaLevel
+                      ? t(`trapsLevel_${trampa.ultimaRevision.brocaLevel}`)
+                      : t("notRecorded"),
+                  })}
+                </p>
+                <FotosDe
+                  assets={fotos.filter((f) => f.specimenObservationId === trampa.ultimaRevision?.id)}
+                  etiqueta={t}
+                />
+              </>
+            ) : (
+              <p className="nn-muted">{t("trapsNeverChecked")}</p>
+            )}
+            {/* La revisión es trabajo de campo, así que vive aquí y no en
+                ajustes (ver el docstring de `ajustes/page.tsx`). Sólo en las
+                trampas activas: una retirada no se revisa. */}
+            {trampa.status === "active" ? (
+              <details>
+                <summary>{t("trapCheckTitle")}</summary>
+                <RevisionDeTrampaForm locationId={location.id} specimenId={trampa.id} />
+              </details>
+            ) : null}
+            {/* La foto de la tela cuelga de la ÚLTIMA revisión: se registra la
+                visita y a continuación se sube su foto. */}
+            {trampa.status === "active" && trampa.ultimaRevision ? (
+              <details>
+                <summary>
+                  {t("trapCheckPhotosTitle", {
+                    fecha: trampa.ultimaRevision.observedAt.toISOString().slice(0, 10),
+                  })}
+                </summary>
+                <p className="nn-muted">{t("trapCheckPhotosIntro")}</p>
+                <LandPhotoUploadForm
+                  locationId={location.id}
+                  parent={{ kind: "trapCheck", specimenObservationId: trampa.ultimaRevision.id }}
+                  observers={people}
+                  selfPersonId={selfPersonId}
+                />
+              </details>
+            ) : null}
+          </article>
+        ))}
       </details>
     </div>
   );

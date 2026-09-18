@@ -1116,7 +1116,7 @@
     "blockNewSave": "Crear el bloque",
     "trapCheckPhotosTitle": "Fotos de la tela, última revisión ({fecha})",
     "trapCheckPhotosIntro": "Una foto de la tela en cada revisión: es lo que permite volver a mirar la lectura.",
-    "trapsManageLink": "Registrar trampas y revisiones",
+    "trapsManageLink": "Dar de alta trampas y bloques",
     "error_block": "No se pudo crear el bloque: {detail}",
     "recordRoastButton": "Registrar tueste",
     "recordRoastIntro": "Se anota cuando el tueste ya ha terminado. Sólo hacen falta el código del lote tostado y la hora de inicio; lo demás es opcional.",

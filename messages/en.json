@@ -1116,7 +1116,7 @@
     "blockNewSave": "Create the block",
     "trapCheckPhotosTitle": "Photos of the cloth, last check ({fecha})",
     "trapCheckPhotosIntro": "One photo of the cloth at every check: it is what lets anyone look at the reading again.",
-    "trapsManageLink": "Register traps and checks",
+    "trapsManageLink": "Register traps and blocks",
     "error_block": "Could not create the block: {detail}",
     "recordRoastButton": "Record roast",
     "recordRoastIntro": "Logged once the roast is done. Only the roasted lot code and the start time are required; everything else is optional.",
