@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-17
 
-**354 operaciones** que tocan la base, en **105 archivos**:
+**356 operaciones** que tocan la base, en **106 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,7 +22,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **244** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **246** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **58** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -91,6 +91,12 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > propio `prisma.specimen.findUnique` para confirmar que el `id` recibido es una trampa
 > (`specimenType: "trap"`) y no cualquier otro `Specimen`. No necesita entrada nueva en el
 > allowlist — el archivo ya estaba en la lista desde la fila anterior.
+
+> **Y el de 354→356, con un archivo nuevo, es `lib/traceability/trapRules.ts` (Tarea 7 de
+> trampas de broca).** `saveTrapRule` y `getTrapRule` suben dos veces la fila de **guardia
+> directo**: las dos pasan por `requireLocationAttributeAccess` sobre la finca
+> (`farmLocationId`) antes de tocar `trap_rule` — la compuerta de «configurar la parcela»,
+> la misma de `plotBlocks.ts`. Entrada nueva en el allowlist como módulo de dominio.
 
 > **Y el de 342→345 son los tres ajustes de permiso por asignación (ADR-146).** Viven en
 > `lib/rbac/admin.ts`, que ya estaba inventariado, y suben la fila de **guardia directo**:

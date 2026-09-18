@@ -244,6 +244,7 @@ model UserAccount {
   specimensCreated                  Specimen[]                   @relation("SpecimenCreatedBy")
   specimenObservationsCreated       SpecimenObservation[]        @relation("SpecimenObservationCreatedBy")
   plotBlocksCreados                 PlotBlock[]                  @relation("PlotBlockCreatedBy")
+  trapRulesCreadas                  TrapRule[]                   @relation("TrapRuleCreatedBy")
   externalCoffeeOriginsCreated      ExternalCoffeeOrigin[]       @relation("ExternalCoffeeOriginCreatedBy")
 
   // RO1 (docs/implementation/34_RO1_RESEARCH_OS.md) — one CreatedBy back-
@@ -868,6 +869,7 @@ model Location {
   specimens                   Specimen[]
   specimensDeLaFinca          Specimen[]                 @relation("SpecimenFarm")
   plotBlocks                  PlotBlock[]
+  trapRule                    TrapRule?                  @relation("TrapRuleFarm")
   plantingEvents              PlantingEvent[]
   plantingCohorts             PlantingCohort[]
   fieldSessions               FieldSession[]
@@ -8277,5 +8279,29 @@ enum ByproductDestination {
   DISPOSAL
   SALE
 
+  @@schema("traceability")
+}
+
+/// F2 §5 — lo que el encargado de finca fija para sus trampas. **Sin regla no hay
+/// avisos ni plazos**: el sistema no trae ningún valor por defecto, ni siquiera el
+/// quincenal de la guía de Anacafé.
+model TrapRule {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  farmLocationId String           @unique @map("farm_location_id") @db.Uuid
+  farmLocation   Location         @relation("TrapRuleFarm", fields: [farmLocationId], references: [id])
+  /// La lectura a partir de la cual se dispara el aviso (ese nivel o peor).
+  triggerLevel   TrapCaptureLevel @map("trigger_level")
+  /// Días entre revisiones en situación normal y cuando la lectura disparó.
+  normalDays     Int              @map("normal_days")
+  alertDays      Int              @map("alert_days")
+  /// Texto libre: «aplicar repelente Bralic». Los productos son de la finca y el
+  /// catálogo fitosanitario es la pieza 3.
+  suggestedAction String          @map("suggested_action")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("TrapRuleCreatedBy", fields: [createdBy], references: [id])
+
+  @@map("trap_rule")
   @@schema("traceability")
 }
