@@ -77,7 +77,11 @@ fi
   echo "repo:   $(git remote get-url origin 2>/dev/null || echo 'sin remoto')"
   echo "rama:   $(git branch --show-current)"
   echo "HEAD:   $(git rev-parse HEAD)"
-  echo "base:   $(git merge-base HEAD "${RANGO%%..*}" 2>/dev/null || echo n/d)"
+  # `punta` y `base` son las del RANGO, no las del checkout: con `main..otra-rama`
+  # desde `main`, la base común con HEAD es la propia punta de `main`, y el revisor
+  # leía una base que no era la del cambio que juzga.
+  echo "punta:  $(git rev-parse "$PUNTA" 2>/dev/null || echo n/d) ($PUNTA)"
+  echo "base:   $(git merge-base "$PUNTA" "$BASE" 2>/dev/null || echo n/d)"
   echo "sucio:  $(git status --porcelain | wc -l | tr -d ' ') archivo(s) sin commitear"
   echo "diff:   $ALCANCE"
   echo "        (tres puntos: desde la base común)"
@@ -138,39 +142,54 @@ fi
   # (967 líneas) venía tres veces y `traceability.ts` (1.575) dos. La causa es
   # que el candidato se arma como `"$d/$m"` —`app/actions/../../lib/.../lots.ts`—
   # y `sort -u` compara TEXTO: el mismo archivo alcanzado desde dos importadores
-  # son dos cadenas distintas. El `sed` de arriba colapsa `//` y `./`, pero no
-  # resuelve `..`, así que la deduplicación nunca llegó a ocurrir.
+  # son dos cadenas distintas. Un `sed` colapsaba `//` y `./`, pero no
+  # resolvía `..`, así que la deduplicación nunca llegó a ocurrir.
   #
   # Importa porque este script existe para que el paquete quepa: su propia
   # cabecera cuenta que 8.255 líneas colgaron una revisión.
-  normaliza() { python3 -c 'import os,sys
+  #
+  # **Y todo desde `$PUNTA`, no del disco** —imports, existencia de cada candidato
+  # y texto—, por lo mismo que la sección de arriba: con otra punta que HEAD, los
+  # archivos que la rama añade no aportaban vecinos y los vecinos salían en la
+  # versión del checkout. Por eso se normaliza ANTES de mirar si existe: `git
+  # cat-file` no resuelve `a/../b`, el disco sí lo hacía.
+  resuelve_en_punta() { python3 -c 'import os,subprocess,sys
+blobs = set(subprocess.run(["git", "ls-tree", "-r", "-z", "--name-only", sys.argv[1]],
+                           capture_output=True, check=True).stdout.decode().split("\0"))
 for l in sys.stdin:
     l = l.strip()
-    if l: print(os.path.normpath(l))'; }
+    if not l: continue
+    c = os.path.normpath(l)
+    for ext in (".ts", ".tsx", ".mjs", ".js", "/index.ts", "/index.tsx", ""):
+        if c + ext in blobs:
+            print(c + ext)
+            break' "$PUNTA"; }
 
   # Un salto de imports. Sin criterio: lo que importan los archivos tocados.
+  #
+  # Las dos vueltas de aquí abajo van con `while read`, como la del texto completo:
+  # con `for f in $X` una ruta con espacio se partía, el importador no aportaba
+  # vecinos sin decirlo, y un vecino con espacio tumbaba el script con un 128.
   VECINOS=$(
-    for f in $TOCADOS; do
-      [ -f "$f" ] || continue
+    printf '%s\n' "$TOCADOS" | while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      git cat-file -e "$PUNTA:$f" 2>/dev/null || continue
       d=$(dirname "$f")
-      grep -ohE 'from "(@/|\.\.?/)[^"]+"' "$f" 2>/dev/null | sed 's/from "//; s/"$//' | while read -r m; do
-        if [ "${m#@/}" != "$m" ]; then c="${m#@/}"; else c="$d/$m"; fi
-        for ext in .ts .tsx .mjs .js /index.ts /index.tsx ""; do
-          if [ -f "$c$ext" ]; then printf '%s\n' "$c$ext"; break; fi
-        done
+      git show "$PUNTA:$f" | grep -oE 'from "(@/|\.\.?/)[^"]+"' | sed 's/from "//; s/"$//' | while read -r m; do
+        if [ "${m#@/}" != "$m" ]; then printf '%s\n' "${m#@/}"; else printf '%s\n' "$d/$m"; fi
       done || true
-    done | sed 's|//|/|g; s|^\./||' | normaliza | sort -u
+    done | resuelve_en_punta | sort -u
   )
   VECINOS=$(comm -23 <(printf '%s\n' "$VECINOS" | sort -u) <(printf '%s\n' "$TOCADOS" | sort -u) 2>/dev/null || printf '%s\n' "$VECINOS")
   if [ -n "$(printf '%s' "$VECINOS" | tr -d '[:space:]')" ]; then
     echo
     echo "## Un salto de imports (texto completo, sin recortar)"
-    for f in $VECINOS; do
-      [ -f "$f" ] || continue
+    printf '%s\n' "$VECINOS" | while IFS= read -r f; do
+      [ -n "$f" ] || continue
       echo
-      echo "### $f  ($(wc -l < "$f" | tr -d ' ') líneas)"
+      echo "### $f  ($(git show "$PUNTA:$f" | wc -l | tr -d ' ') líneas)"
       echo '```'
-      cat "$f"
+      git show "$PUNTA:$f"
       echo '```'
     done
   fi
