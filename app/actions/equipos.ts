@@ -14,6 +14,8 @@ import {
   type ContrasteObservado,
 } from "../../lib/equipos/equipos";
 import { TZ_OFFSET_FIELD, parseLocalDateTime } from "../../lib/time/localDateTime";
+import { declararModoDeInstrumento } from "../../lib/equipos/modosDeInstrumento";
+import type { MaterialState } from "../../generated/prisma/client";
 
 /**
  * Verificar un instrumento contra sus patrones.
@@ -140,4 +142,34 @@ export async function declararPatronFormAction(formData: FormData): Promise<void
 
   revalidatePath(`/equipos/${equipmentId}`);
   redirect(`/equipos/${equipmentId}?ok=patron`);
+}
+
+/**
+ * ADR-160 — declarar un MODO de un instrumento: sobre qué material, qué variable, y en qué
+ * rango lee. Un refractómetro de miel son dos modos (Brix 58–90 y H% 12–27 sobre miel).
+ *
+ * **Un rango vacío es «no declarado», nunca cero.** Un mínimo leído como 0 afirmaría que el
+ * aparato lee desde 0 °Bx, que en uno de mieles es falso.
+ */
+export async function declararModoFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const equipmentId = String(formData.get("equipmentId") ?? "");
+  const numero = (clave: string) => {
+    const v = String(formData.get(clave) ?? "").trim();
+    return v === "" ? null : Number(v);
+  };
+  const variable = String(formData.get("variable") ?? "").trim();
+  await declararModoDeInstrumento(user.userAccountId, {
+    equipmentId,
+    label: String(formData.get("label") ?? ""),
+    materialState: String(formData.get("materialState") ?? "") as MaterialState,
+    variable: variable === "" ? null : variable,
+    rangeMin: numero("rangeMin"),
+    rangeMax: numero("rangeMax"),
+  });
+
+  revalidatePath(`/equipos/${equipmentId}`);
+  redirect(`/equipos/${equipmentId}?ok=modo`);
 }

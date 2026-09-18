@@ -23,6 +23,8 @@ import { completarCierreDeCosechaFormAction } from "../../../../actions/apiary";
 import { NewColonyForm } from "../../../../components/apiary/NewColonyForm";
 import { Ayuda } from "../../../../components/apiary/Ayuda";
 import { LimpiezaDeCajaForm } from "../../../../components/apiary/LimpiezaDeCajaForm";
+import { LecturaDeRefractometroForm } from "../../../../components/apiary/LecturaDeRefractometroForm";
+import { instrumentosParaMedicion } from "../../../../../lib/equipos/equipos";
 import { limpiezasDeCaja } from "../../../../../lib/apiary/limpiezaDeCaja";
 import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
@@ -112,6 +114,20 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
   // A9 · Anexo B §5 — las cosechas no se listaban en ninguna parte, así que ni el tipo
   // de miel ni el peso ni la humedad tenían dónde verse.
   const cosechas = colony ? await cosechasDeColonia(colony.id) : [];
+  // ADR-160: sólo los aparatos con algún modo sobre MIEL DE ABEJA. El refractómetro del
+  // beneficio lee mosto de café y no es el de mieles. La lista ya viene autorizada.
+  const refractometrosDeMiel =
+    cosechas.length === 0
+      ? []
+      : (await instrumentosParaMedicion(user.userAccountId))
+          .map((i) => ({
+            id: i.id,
+            name: i.name,
+            escalas: i.modos
+              .filter((m) => m.materialState === "BEE_HONEY" && (m.variable === "brix" || m.variable === "moisture"))
+              .map((m) => `${m.variable === "brix" ? "°Bx" : "H%"} ${m.rangeMin ?? "?"}–${m.rangeMax ?? "?"}`),
+          }))
+          .filter((i) => i.escalas.length > 0);
 
   const revalidationPath = `/apiaries/${apiaryId}/hives/${hiveId}`;
 
@@ -396,6 +412,30 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                               )
                               .join(" · ")}
                       </p>
+
+                      {/* El Brix, junto a la humedad: las dos escalas del refractómetro de miel. */}
+                      <p className={c.brix.length === 0 ? "nn-vital-sin-registro" : undefined}>
+                        {c.brix.length === 0
+                          ? t("brixSinMedir")
+                          : c.brix
+                              .map((m) => t("brixFila", { valor: m.valor, fecha: m.measuredAt.toISOString().slice(0, 10) }))
+                              .join(" · ")}
+                      </p>
+
+                      {/* Una lectura por cosecha (Daniel, 2026-09-17): el formulario sólo aparece
+                          mientras falte alguna de las dos escalas. Después se CORRIGE, no se apila. */}
+                      {c.brix.length === 0 || c.humedad.length === 0 ? (
+                        <details>
+                          <summary>{t("refractometroTitulo")}</summary>
+                          <LecturaDeRefractometroForm
+                            apiaryHarvestEventId={c.id}
+                            hiveId={hiveId}
+                            apiaryId={apiaryId}
+                            instrumentos={refractometrosDeMiel}
+                            claveDeEnvio={crypto.randomUUID()}
+                          />
+                        </details>
+                      ) : null}
 
                       <form action={completarCierreDeCosechaFormAction} className="nn-form" style={{ margin: 0 }}>
                         <input type="hidden" name="apiaryHarvestEventId" value={c.id} />

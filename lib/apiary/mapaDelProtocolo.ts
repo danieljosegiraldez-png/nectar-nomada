@@ -122,7 +122,13 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   frames_harvested: { clase: "campo", modelo: "ApiaryHarvestEvent", campo: "framesHarvested" },
   extracted_weight_kg: { clase: "campo", modelo: "ApiaryHarvestEvent", campo: "extractedWeightKg" },
   honey_type: { clase: "campo", modelo: "ApiaryHarvestEvent", campo: "honeyType" },
-  moisture_pct: { clase: "sin_sitio", nota: "La humedad de la miel, `stage: close`. El Anexo E §4 la marca «si se midio»." },
+  // ADR-160: la escala H% del refractometro de miel, como `Measurement` (variable `moisture`)
+  // sobre el `Lot` que la cosecha produce -- no una columna: el lote es lo que sigue a la miel.
+  moisture_pct: {
+    clase: "tabla",
+    modelo: "Measurement",
+    nota: "variable `moisture` sobre el Lot de miel de la cosecha (`resultingLotId`), con su instrumento y modo. `registrarLecturaDeRefractometro`.",
+  },
 };
 
 /** Los items que hoy no tienen donde guardarse. La lista corta que decide el proximo trabajo. */

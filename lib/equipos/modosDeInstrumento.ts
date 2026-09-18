@@ -2,6 +2,7 @@ import type { MaterialState } from "../../generated/prisma/client";
 import { recordAuditEvent } from "../audit";
 import { prisma } from "../db";
 import { EquipoError, puedeGestionarEquipo } from "./equipos";
+import { isKnownVariable } from "../traceability/units";
 
 /** Declara el nombre literal de la escala del aparato y su procedencia de calibración. */
 export async function declararModoDeInstrumento(
@@ -10,6 +11,11 @@ export async function declararModoDeInstrumento(
     equipmentId: string;
     label: string;
     materialState: MaterialState;
+    /**
+     * QUE lee este modo (ADR-160), del mismo vocabulario que `Measurement.variable`.
+     * Un refractometro de miel son dos modos: `brix` y `moisture`. Sin declarar = `null`.
+     */
+    variable?: string | null;
     rangeMin?: number | null;
     rangeMax?: number | null;
     calibrationOffset?: number | null;
@@ -21,6 +27,7 @@ export async function declararModoDeInstrumento(
   const equipo = await prisma.equipment.findUniqueOrThrow({ where: { id: input.equipmentId } });
   if (equipo.kind !== "instrument") throw new EquipoError("solo_los_instrumentos_tienen_modos");
   if (!input.label.trim()) throw new EquipoError("label_required");
+  if (input.variable != null && !isKnownVariable(input.variable)) throw new EquipoError("variable_desconocida");
   for (const valor of [input.rangeMin, input.rangeMax, input.calibrationOffset]) {
     if (valor != null && !Number.isFinite(valor)) throw new EquipoError("valor_no_finito");
   }

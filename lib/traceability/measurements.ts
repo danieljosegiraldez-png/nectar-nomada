@@ -33,13 +33,14 @@ import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { requireLocationAttributeAccess } from "./locations";
 import type { ClassificationLevel } from "../rbac/types";
 import {
+  LIMITES_SOBRE_MIEL,
   normalizeToCanonical,
   variablePerteneceAlPanel,
   type DominioDeVariable,
   type MeasurementVariable,
 } from "./units";
 import { recordAuditEvent } from "../audit";
-import { hayDesajuste } from "../equipos/modos";
+import { fueraDeRango, hayDesajuste } from "../equipos/modos";
 import { materialNoEsDeSecado } from "./avisoDeModo";
 import { instrumentosParaMedicion } from "../equipos/equipos";
 import type { MaterialState, SamplingRole, SamplingZone, SampleKind, ProvenanceClass } from "../../generated/prisma/client";
@@ -267,7 +268,14 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
   if (input.sampleId && (input.materialState || input.samplingEventId || input.samplingRole || input.samplingZone || input.sampleKind)) {
     throw new MeasurementValidationError("existing_sample_is_immutable");
   }
-  const normalized = normalizeToCanonical(input.variable, input.value, input.unit);
+  // ADR-160: sobre un lote de MIEL el Brix se lee a 58-90, fuera del limite del cafe.
+  const tipoDeLote = input.lotId
+    ? (await prisma.lot.findUnique({ where: { id: input.lotId }, select: { lotType: true } }))?.lotType ?? null
+    : null;
+  const normalized = normalizeToCanonical(
+    input.variable, input.value, input.unit,
+    tipoDeLote === "honey" ? LIMITES_SOBRE_MIEL[input.variable] : undefined,
+  );
 
   // Escritura y auditoría en la MISMA transacción. Lo pidió la revisión
   // independiente del 2026-09-01 con un argumento que no era el de siempre:
@@ -284,6 +292,16 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
   const modo = input.instrumentModeId ? await tx.instrumentMeasurementMode.findUnique({ where: { id: input.instrumentModeId } }) : null;
   if (input.instrumentModeId && (!modo || modo.equipmentId !== input.instrumentId || modo.retiredAt)) {
     throw new MeasurementValidationError("instrument_mode_not_available");
+  }
+  // ADR-160. Un modo que declara QUE lee no puede firmar otra variable: el modo H% de un
+  // refractometro de miel no produce un Brix. Sin declarar (`null`) no se acusa: ADR-080.
+  if (modo?.variable && modo.variable !== input.variable) {
+    throw new MeasurementValidationError(`instrument_mode_variable_mismatch:${modo.variable}:${input.variable}`);
+  }
+  // Fuera del rango de su escala el aparato no da numero: no es una lectura, es un error
+  // de captura. Es el unico limite que acota el Brix de la miel (ver LIMITES_SOBRE_MIEL).
+  if (modo && fueraDeRango({ ...modo, rangeMin: modo.rangeMin == null ? null : Number(modo.rangeMin), rangeMax: modo.rangeMax == null ? null : Number(modo.rangeMax) }, normalized.value)) {
+    throw new MeasurementValidationError("fuera_del_rango_del_modo");
   }
   if (input.samplingEventId) {
     const evento = await tx.samplingEvent.findUnique({ where: { id: input.samplingEventId } });
@@ -308,7 +326,12 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
     await recordAuditEvent({ actorUserAccountId: userAccountId, operation: "sample.create",
       entityType: "sample", entityId: muestra.id, after: muestra, sourceInterface: "traceability.service" }, tx);
   }
-  const material = input.materialState ?? (sampleId ? (await tx.sample.findUniqueOrThrow({ where: { id: sampleId } })).materialState : null);
+  // Un lote de miel no necesita que nadie declare su material: la miel ES su tipo de lote
+  // (A3). Sin esto, un modo de cafe usado sobre miel no levantaria ninguna marca.
+  const material =
+    input.materialState ??
+    (sampleId ? (await tx.sample.findUniqueOrThrow({ where: { id: sampleId } })).materialState : null) ??
+    (lot?.lotType === "honey" ? "BEE_HONEY" : null);
   const creada = await tx.measurement.create({
     data: {
       variable: input.variable,

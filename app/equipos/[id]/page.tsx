@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import {
+  declararModoFormAction,
   declararPatronFormAction,
   informarCondicionFormAction,
   verificarInstrumentoFormAction,
@@ -13,6 +14,11 @@ import { getCurrentUser } from "../../../lib/auth/session";
 import { EquipoError, instrumentoParaVerificar, puedeGestionarEquipo } from "../../../lib/equipos/equipos";
 
 export const dynamic = "force-dynamic";
+
+/** Los materiales sobre los que un modo puede leer. `BEE_HONEY` es miel de ABEJA (ADR-160). */
+const MATERIALES_DE_MODO = ["CHERRY", "MUCILAGE_HONEY", "PARCHMENT", "GREEN", "BEE_HONEY"] as const;
+/** Las variables que un instrumento de mano suele leer. Del vocabulario de `units.ts`. */
+const VARIABLES_DE_MODO = ["brix", "moisture", "ph", "temperature", "relative_humidity", "water_activity"] as const;
 
 /**
  * Un equipo: su estado, y el acto de verificarlo.
@@ -74,6 +80,11 @@ export default async function EquipoPage({
       {sp.ok === "patron" ? (
         <p className="nn-ok" role="status">
           {t("okPatron")}
+        </p>
+      ) : null}
+      {sp.ok === "modo" ? (
+        <p className="nn-ok" role="status">
+          {t("okModo")}
         </p>
       ) : null}
       {sp.ok === "condicion" ? (
@@ -180,6 +191,75 @@ export default async function EquipoPage({
             <p className="nn-muted">{t("campoToleranciaAyuda")}</p>
             <BotonDeEnvio>{t("botonDeclararPatron")}</BotonDeEnvio>
           </form>
+        </section>
+      ) : null}
+
+      {esInstrumento ? (
+        <section style={{ marginTop: "1.5rem" }}>
+          <h2>{t("modosTitulo")}</h2>
+          <p className="nn-muted">{t("modosIntro")}</p>
+          {equipo.modes.length === 0 ? (
+            <p className="nn-muted">{t("sinModos")}</p>
+          ) : (
+            <ul>
+              {equipo.modes.map((m) => (
+                <li key={m.id}>
+                  <strong>{m.label}</strong> — {t(`material_${m.materialState}`)}
+                  {" · "}
+                  {m.variable ? t(`variable_${m.variable}` as "variable_brix") : t("variableSinDeclarar")}
+                  {" · "}
+                  {m.rangeMin != null || m.rangeMax != null
+                    ? `${m.rangeMin != null ? String(m.rangeMin) : "?"}–${m.rangeMax != null ? String(m.rangeMax) : "?"}`
+                    : t("rangoSinDeclarar")}
+                </li>
+              ))}
+            </ul>
+          )}
+          {puedeGestionar ? (
+            <form action={declararModoFormAction}>
+              <input type="hidden" name="equipmentId" value={equipo.id} />
+              <label>
+                {t("campoEtiqueta")}
+                <input type="text" name="label" required maxLength={80} placeholder={t("campoModoEjemplo")} />
+              </label>
+              <label>
+                {t("campoMaterial")}
+                <select name="materialState" required defaultValue="">
+                  <option value="" disabled>
+                    {t("elegir")}
+                  </option>
+                  {MATERIALES_DE_MODO.map((mt) => (
+                    <option key={mt} value={mt}>
+                      {t(`material_${mt}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t("campoVariable")}
+                <select name="variable" required defaultValue="">
+                  <option value="" disabled>
+                    {t("elegir")}
+                  </option>
+                  {VARIABLES_DE_MODO.map((v) => (
+                    <option key={v} value={v}>
+                      {t(`variable_${v}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t("campoRangoMin")}
+                <input type="number" step="any" name="rangeMin" />
+              </label>
+              <label>
+                {t("campoRangoMax")}
+                <input type="number" step="any" name="rangeMax" />
+              </label>
+              <p className="nn-muted">{t("campoRangoAyuda")}</p>
+              <BotonDeEnvio>{t("botonDeclararModo")}</BotonDeEnvio>
+            </form>
+          ) : null}
         </section>
       ) : null}
 

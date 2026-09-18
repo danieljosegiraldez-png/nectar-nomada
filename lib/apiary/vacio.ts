@@ -64,6 +64,12 @@ export const CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO = [
    * dentro del sistema, y declararle una inventada sería peor que dejarlo suelto (ADR-145).
    */
   "sitioPadreNinguno",
+  /**
+   * «— sin decir —»: no se dijo con qué refractómetro se leyó la miel (ADR-160). El aparato es
+   * opcional a propósito —bloquear la lectura por no nombrarlo perdería el dato—, y el vacío
+   * es exactamente eso: no se sabe, que no es ninguno de los aparatos de la lista.
+   */
+  "refractometroAparatoSinDecir",
 ] as const satisfies readonly string[];
 
 export type ClaveDeRespuestaQueValeNinguno = (typeof CLAVES_DE_RESPUESTA_QUE_VALE_NINGUNO)[number];

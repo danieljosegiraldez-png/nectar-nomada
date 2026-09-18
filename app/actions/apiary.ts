@@ -18,7 +18,10 @@ import { trasladarColmenas } from "../../lib/apiary/traslado";
 import { altaDeColmenasEnLote } from "../../lib/apiary/altaEnLote";
 import { registrarLimpiezaDeCaja, LimpiezaInvalida } from "../../lib/apiary/limpiezaDeCaja";
 import { registrarConsultaAVecinos } from "../../lib/apiary/consultaAVecinos";
-import { completarCierreDeCosecha } from "../../lib/apiary/cierreDeCosecha";
+import { completarCierreDeCosecha, registrarLecturaDeRefractometro, CierreDeCosechaInvalido } from "../../lib/apiary/cierreDeCosecha";
+import { MeasurementValidationError } from "../../lib/traceability/measurements";
+import { UnitValidationError } from "../../lib/traceability/units";
+import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { recordInspection } from "../../lib/apiary/inspections";
@@ -553,6 +556,61 @@ export async function registrarLimpiezaDeCajaAction(
       return { error: t(`limpiezaError_${codigo!.trim()}` as "limpiezaError_sin_actos", { valor: resto.join(":").trim() }) };
     }
     if (error instanceof ApiaryAccessError) return { error: t("limpiezaError_sin_permiso") };
+    throw error;
+  }
+
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+  return { ok: true };
+}
+
+/**
+ * ADR-160 — la lectura del refractómetro de miel de una cosecha, sobre su LOTE.
+ *
+ * Devuelve el error en vez de lanzarlo, como la limpieza: «fuera del rango del aparato» o «ya
+ * hay una lectura» son casos normales que el apicultor tiene que leer, no una página de error.
+ *
+ * **Un campo vacío es una escala que no se leyó**, nunca un cero: un Brix de 0 en miel no
+ * existe, y leerlo como cero guardaría una medición que nadie hizo.
+ */
+export async function registrarLecturaDeRefractometroAction(
+  _prev: { error?: string; ok?: boolean },
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Apiary");
+
+  const hiveId = String(formData.get("hiveId") ?? "");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const numero = (clave: string) => {
+    const v = String(formData.get(clave) ?? "").trim();
+    return v === "" ? null : Number(v);
+  };
+
+  try {
+    const dia = fechaDeDia(String(formData.get("occurredAt") ?? ""), "occurredAt");
+    if (!dia) return { error: t("refractometroError_falta_la_fecha") };
+    const instrumentId = String(formData.get("instrumentId") ?? "").trim() || null;
+    await registrarLecturaDeRefractometro(user.userAccountId, {
+      apiaryHarvestEventId: String(formData.get("apiaryHarvestEventId") ?? ""),
+      occurredAt: dia,
+      brix: numero("brix"),
+      aguaPct: numero("aguaPct"),
+      instrumentId,
+      provenanceClass: "measured_fact",
+      claveDeEnvio: String(formData.get("claveDeEnvio") ?? "").trim() || null,
+    });
+  } catch (error) {
+    if (error instanceof CierreDeCosechaInvalido) {
+      const [codigo, ...resto] = error.message.split(":");
+      return { error: t(`refractometroError_${codigo!.trim()}` as "refractometroError_lectura_vacia", { valor: resto.join(":").trim() }) };
+    }
+    if (error instanceof MeasurementValidationError || error instanceof UnitValidationError) {
+      return { error: t("refractometroError_invalida", { detalle: error.message }) };
+    }
+    if (error instanceof ApiaryAccessError || error instanceof TraceabilityAccessError) {
+      return { error: t("refractometroError_sin_permiso") };
+    }
     throw error;
   }
 
