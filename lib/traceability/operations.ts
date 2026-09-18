@@ -196,6 +196,14 @@ export interface RecordMaterialConsumptionEntryInput {
   provenanceClass: ProvenanceClass;
   dataQuality?: DataQuality | null;
   notes?: string | null;
+  /**
+   * **De qué lote salió**, cuando se sabe. Enlazarlo DESCUENTA existencias en
+   * la misma transacción que guarda el consumo.
+   *
+   * Opcional para siempre: obligar a elegir lote convertiría una anotación de
+   * diez segundos en un trámite, y lo que no se anota no existe.
+   */
+  consumableLotId?: string | null;
 }
 
 function consumptionParentData(parent: MaterialConsumptionParent) {
@@ -256,6 +264,7 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
         data: {
           materialName: input.materialName.trim(),
           batchLabel: input.batchLabel.trim(),
+          consumableLotId: input.consumableLotId ?? null,
           quantity: input.quantity ?? null,
           unit: input.unit ?? null,
           occurredAt: input.occurredAt ?? new Date(),
@@ -267,6 +276,38 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
           ...consumptionParentData(input.parent),
         },
       });
+
+      // **El descuento, en la MISMA transacción.** Un consumo guardado sin su
+      // descuento sería material gastado que el inventario nunca vio, y el
+      // saldo mentiría desde ese momento.
+      //
+      // Sin cantidad no se descuenta y la fila se guarda igual: «se usó aserrín
+      // de este saco» sin pesar dice DE QUÉ LOTE salió aunque no cuánto, e
+      // inventar un descuento sería peor que no descontar nada.
+      if (input.consumableLotId && input.quantity != null) {
+        const unidad = (input.unit ?? "").trim();
+        if (!unidad) throw new MaterialConsumptionValidationError("unidad requerida para descontar del lote");
+        const previo = await tx.consumableStockEvent.findFirst({
+          where: { consumableLotId: input.consumableLotId },
+          select: { unit: true },
+        });
+        if (previo && previo.unit !== unidad) {
+          throw new MaterialConsumptionValidationError(
+            `unidad distinta: el lote va en ${previo.unit} y el consumo viene en ${unidad}`,
+          );
+        }
+        await tx.consumableStockEvent.create({
+          data: {
+            consumableLotId: input.consumableLotId,
+            eventType: "consumed",
+            quantity: input.quantity,
+            unit: unidad,
+            occurredAt: input.occurredAt ?? new Date(),
+            provenanceClass: input.provenanceClass,
+            createdBy: userAccountId,
+          },
+        });
+      }
 
       // C1 §3: evidentiary write (carries provenanceClass).
       await recordAuditEvent(

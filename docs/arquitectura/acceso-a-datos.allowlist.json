@@ -424,6 +424,22 @@
     {
       "archivo": "lib/traceability/beneficios.ts",
       "razon": "Tarea 2 del plan de alta de beneficio — crea y renombra el beneficio (LocationType nuevo) bajo un sitio. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. A diferencia de instalaciones.ts, crear exige DOS permisos sobre el padre —`location:manage_attributes` y `location:create_site`—, porque dar de alta un lugar nuevo es una autoridad más estrecha que administrar el árbol de uno existente y es justo la que un Farm Operator no tiene. Escritura y AuditEvent en la MISMA transacción, tanto al crear como al renombrar."
+    },
+    {
+      "archivo": "lib/inventario/materiales.ts",
+      "razon": "Catalogo de materiales consumibles. Autoriza con `equipment:manage` juzgado donde se declare el sitio —mismo criterio que `registrarEquipo`— y escribe la fila con su AuditEvent en la misma transaccion."
+    },
+    {
+      "archivo": "lib/inventario/lotes.ts",
+      "razon": "Lotes de material consumible y su libro mayor. Autoriza con `lot:manage` juzgado donde se declare el sitio —recibir es faena, no gestion— y escribe el lote, su evento de entrada y el AuditEvent en una sola transaccion."
+    },
+    {
+      "archivo": "lib/inventario/existencias.ts",
+      "razon": "Saldo DERIVADO de un lote de material y los movimientos que lo mueven. No guarda saldo en ninguna columna: lo recalcula del libro mayor, copiando la forma de `computeLotBalance` incluido su `recorded` (ADR-080). Autoriza con `lot:manage` juzgado donde se declare el sitio."
+    },
+    {
+      "archivo": "lib/inventario/lista.ts",
+      "razon": "Lista del inventario. Filtra CADA LOTE por su propio ambito —su ubicacion, que es el ancla de RBAC— con lot:view, igual que listarEquipos filtra cada equipo. Un lote sin ubicacion cae a plataforma: lo desconocido se cierra."
     }
   ],
   "reciben_transaccion": [

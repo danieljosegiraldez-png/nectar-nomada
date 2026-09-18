@@ -290,6 +290,9 @@ model UserAccount {
   @@map("user_account")
   @@schema("core")
   byproductBatchesCreated ByproductBatch[] @relation("ByproductBatchCreatedBy")
+  consumableMaterialsCreated ConsumableMaterial[] @relation("ConsumableMaterialCreatedBy")
+  consumableLotsCreated ConsumableLot[] @relation("ConsumableLotCreatedBy")
+  consumableStockEventsCreated ConsumableStockEvent[] @relation("ConsumableStockEventCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -898,6 +901,7 @@ model Location {
   @@schema("core")
   lotTransformationsPerformedHere LotTransformation[] @relation("LotTransformationPerformedAt")
   byproductBatchesProduced ByproductBatch[] @relation("ByproductBatchProducedAt")
+  consumableLots ConsumableLot[] @relation("ConsumableLotLocation")
 }
 
 enum DryingRoomLightExposure {
@@ -999,6 +1003,7 @@ model Organization {
   @@schema("core")
   lotTransformationsPerformed LotTransformation[] @relation("LotTransformationPerformedBy")
   byproductBatches ByproductBatch[] @relation("ByproductBatchOwner")
+  consumableMaterials ConsumableMaterial[] @relation("ConsumableMaterialOwner")
 }
 
 enum MembershipStatus {
@@ -4335,6 +4340,18 @@ model MaterialConsumptionEntry {
 
   materialName String   @map("material_name")
   batchLabel   String   @map("batch_label")
+
+  /// **De qué lote salió**, cuando se sabe. Enlazarlo DESCUENTA existencias.
+  ///
+  /// Anulable para siempre, y no por comodidad: las filas anteriores al
+  /// 2026-09-17 llevan el material en texto libre y no se pueden reasignar sin
+  /// adivinar. Y obligar a elegir lote convertiría una anotación de diez
+  /// segundos en un trámite — y lo que no se anota no existe.
+  ///
+  /// `batchLabel` se queda: es lo que dice el saco, y sigue valiendo cuando
+  /// nadie ha dado de alta el lote en el sistema.
+  consumableLotId String?        @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot? @relation(fields: [consumableLotId], references: [id])
   quantity     Decimal? @db.Decimal(10, 3)
   unit         String?
 
@@ -8299,6 +8316,143 @@ enum ByproductDestination {
   BIOCHAR
   DISPOSAL
   SALE
+
+  @@schema("traceability")
+}
+
+/// Qué es la cosa que se gasta: aserrín, gallinaza, melaza, hojarasca.
+///
+/// **Sin esto no hay existencias, y ésa es toda la razón de esta tabla.** Hasta
+/// el 2026-09-17 el material vivía como TEXTO LIBRE en
+/// `MaterialConsumptionEntry.materialName`, y no se puede sumar lo que se
+/// escribe distinto cada vez: «aserrín», «aserrin» y «aserrín para el ahumador»
+/// son tres materiales para una base de datos.
+///
+/// **No es un `VariableCatalogValue`.** Esa maquinaria guarda ETIQUETAS de un
+/// vocabulario —un cultivar, una forma de alimentar—; un material tiene unidad,
+/// categoría y existencias. Meterlo ahí haría que un valor de catálogo
+/// significara dos cosas según quién lo lea.
+model ConsumableMaterial {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  name     String
+  category String?
+
+  /// La unidad en la que la finca lo compra y lo gasta: saco, quintal, galón.
+  /// **No se normaliza a kilos al guardar** — el operario teclea la unidad en
+  /// la que trabaja, y convertir al escribir pierde el dato original.
+  defaultUnit String @map("default_unit")
+
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation("ConsumableMaterialOwner", fields: [organizationId], references: [id])
+
+  notes String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ConsumableMaterialCreatedBy", fields: [createdBy], references: [id])
+
+  /// **La unicidad NO se declara aquí, y es deliberado.** El índice real es
+  /// FUNCIONAL —`(organization_id, lower(btrim(name)))`, migración
+  /// `20260917201000`— porque «Aserrín» y «aserrin» son el mismo material y un
+  /// único exacto los dejaría pasar, que es justo el problema que esta tabla
+  /// existe para resolver.
+  ///
+  /// Prisma no sabe expresar índices funcionales. Declarar aquí el exacto haría
+  /// que el esquema PIDIERA un índice que las migraciones no crean — y el
+  /// guardia `derivaDeMigraciones` lo caza, como cazó este mismo error el
+  /// 2026-09-17. La restricción vive en la base; la prueba que la comprueba va
+  /// contra Postgres.
+  @@map("consumable_material")
+  @@schema("traceability")
+  lots ConsumableLot[]
+}
+
+/// Lo que entró una vez: 28 quintales de gallinaza del 1 de julio, con su
+/// etiqueta de lote.
+///
+/// **No lleva saldo.** El saldo se deriva del libro mayor al leer, igual que
+/// `computeLotBalance` lo hace con el café. Un número guardado y un libro mayor
+/// dejan de cuadrar en silencio, y entonces nadie sabe cuál manda.
+///
+/// Dos lotes del mismo material NO se mezclan: dos sacos de gallinaza de
+/// proveedores distintos no son intercambiables el día que uno sale malo.
+model ConsumableLot {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  materialId String             @map("material_id") @db.Uuid
+  material   ConsumableMaterial @relation(fields: [materialId], references: [id])
+
+  /// Lo que dice el saco o la factura. Es del proveedor, no nuestro.
+  batchLabel String @map("batch_label")
+
+  receivedAt DateTime @map("received_at")
+
+  /// **Dónde se recibió, y es el ancla de RBAC.** Sin esto una lista no tiene
+  /// contra qué filtrar: el material se creaba con un sitio para juzgar el
+  /// permiso, pero no se guardaba — y una pantalla de inventario no sabría qué
+  /// enseñar a quién. Mismo papel que `BiocharBatch.producedAtLocationId`, cuyo
+  /// comentario lo llama así.
+  ///
+  /// Anulable: los lotes anteriores no lo tienen. Uno sin ubicación cae al
+  /// ámbito de plataforma — sólo lo ve quien manda en toda la plataforma. Que
+  /// lo desconocido se cierre en vez de abrirse es a propósito.
+  locationId String?   @map("location_id") @db.Uuid
+  location   Location? @relation("ConsumableLotLocation", fields: [locationId], references: [id])
+  supplier   String?
+  notes      String?
+
+  events ConsumableStockEvent[]
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ConsumableLotCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([materialId, batchLabel])
+  @@index([materialId])
+  @@map("consumable_lot")
+  @@schema("traceability")
+  consumptionEntries MaterialConsumptionEntry[]
+}
+
+/// El libro mayor de las existencias: **sólo se añade**. Nada actualiza una
+/// fila; corregir es otro evento con su razón.
+///
+/// Misma forma que `QuantityEvent`, que lleva el café — y por la misma razón:
+/// la historia de cómo se llegó al número es tan interesante como el número.
+model ConsumableStockEvent {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  consumableLotId String        @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot @relation(fields: [consumableLotId], references: [id])
+
+  eventType ConsumableStockEventType @map("event_type")
+  quantity  Decimal                  @db.Decimal(10, 3)
+  unit      String
+  occurredAt DateTime                @map("occurred_at")
+
+  /// Obligatoria en los ajustes, por CHECK de la base y no por la interfaz:
+  /// cuadrar un descuadre es una afirmación sobre lo que pasó, y una afirmación
+  /// sin razón no se puede auditar.
+  reason String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("ConsumableStockEventCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([consumableLotId, occurredAt])
+  @@map("consumable_stock_event")
+  @@schema("traceability")
+}
+
+enum ConsumableStockEventType {
+  received
+  consumed
+  waste
+  adjustment_increase
+  adjustment_decrease
 
   @@schema("traceability")
 }

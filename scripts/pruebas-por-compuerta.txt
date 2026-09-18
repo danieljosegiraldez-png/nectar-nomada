@@ -93,6 +93,12 @@ tests/traceability/drying.test.ts
 tests/traceability/liberacion-del-lote.test.ts
 tests/traceability/subproductos.test.ts
 tests/traceability/venta-temprana.test.ts
+tests/inventario/materiales.test.ts
+tests/inventario/lotes.test.ts
+tests/inventario/existencias.test.ts
+tests/inventario/negativo.test.ts
+tests/inventario/consumo-descuenta.test.ts
+tests/inventario/lista.test.ts
 tests/traceability/e2e.test.ts
 tests/traceability/entradaEnProduccion.test.ts
 tests/traceability/export.test.ts
