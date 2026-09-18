@@ -19,7 +19,7 @@
  */
 import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
-import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
+import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION, TraceabilityAccessError } from "./lots";
 import { ubicacionesEmparentadas } from "./ubicacionesEmparentadas";
 import { estadoDeVencimiento } from "../inventario/vencimiento";
 import { diaDeHoy } from "../time/diaDeHoy";
@@ -34,7 +34,6 @@ import type {
 } from "../../generated/prisma/client";
 
 export class IntervencionValidationError extends Error {}
-export class IntervencionAccessError extends Error {}
 
 export interface LineaInput {
   readonly materialId: string;
@@ -364,21 +363,30 @@ export async function corregirIntervencion(
 
   validarPura(input.nueva);
 
+  // Ronda 1: «no existe» y «no tienes permiso» son indistinguibles para quien
+  // no tiene permiso — decisión del controlador. Si la fila no existe no hay
+  // locationId contra el que juzgar, así que se lanza el MISMO error que
+  // `requireLotAccess` lanzaría, en vez de uno propio que delataría la
+  // existencia del id a quien lo prueba sin acceso.
   const original = await prisma.plotIntervention.findUnique({
     where: { id: input.interventionId },
     include: { correcciones: { select: { id: true }, take: 1 } },
   });
-  if (!original) throw new IntervencionValidationError("no existe la intervención a corregir");
+  if (!original) throw new TraceabilityAccessError("no_lot_access");
+
+  await requireLotAccess(userAccountId, "manage", [
+    { locationId: original.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION },
+  ]);
+
+  // «Ya tiene corrección» va DESPUÉS del permiso: es un error de negocio, no
+  // uno de acceso, y sólo se revela a quien ya demostró tener permiso sobre
+  // la parcela.
   if (original.correcciones.length > 0) {
     throw new IntervencionValidationError("esta intervención ya tiene una corrección: no se corrige lo corregido");
   }
 
   const parcela = await resolverParcela(original.locationId);
   if (!parcela) throw new IntervencionValidationError("no_es_parcela");
-
-  await requireLotAccess(userAccountId, "manage", [
-    { locationId: original.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION },
-  ]);
 
   await validarReferencias(parcela, input.nueva);
 
