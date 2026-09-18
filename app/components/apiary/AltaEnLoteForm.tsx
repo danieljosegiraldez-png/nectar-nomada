@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { altaDeColmenasEnLoteFormAction } from "../../actions/apiary";
@@ -74,10 +75,9 @@ export function AltaEnLoteForm({
       <div style={{ display: "flex", gap: "0.5rem" }}>
         <div className="nn-field" style={{ flex: 1 }}>
           <label htmlFor="lote-desde">{t("loteDesdeLabel")}</label>
-          <input
+          <CampoNumerico
             id="lote-desde"
             name="desde"
-            type="number"
             min="1"
             inputMode="numeric"
             value={desde}
@@ -87,10 +87,9 @@ export function AltaEnLoteForm({
         </div>
         <div className="nn-field" style={{ flex: 1 }}>
           <label htmlFor="lote-cuantas">{t("loteCuantasLabel")}</label>
-          <input
+          <CampoNumerico
             id="lote-cuantas"
             name="cuantas"
-            type="number"
             min="1"
             max={MAXIMO_POR_LOTE}
             inputMode="numeric"

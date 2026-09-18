@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -82,11 +83,11 @@ function CamposDeCoordenadas({ prefijo }: { prefijo: string }) {
       </button>
       {estado === "no_disponible" ? <p className="nn-muted">{t("coordinatesUnavailable")}</p> : null}
       <label htmlFor={`${prefijo}-latitude`}>{t("latitudeLabel")}</label>
-      <input id={`${prefijo}-latitude`} type="number" name="latitude" step="any" inputMode="decimal" placeholder={t("notRecorded")} />
+      <CampoNumerico id={`${prefijo}-latitude`} name="latitude" step="any" inputMode="decimal" placeholder={t("notRecorded")} />
       <label htmlFor={`${prefijo}-longitude`}>{t("longitudeLabel")}</label>
-      <input id={`${prefijo}-longitude`} type="number" name="longitude" step="any" inputMode="decimal" placeholder={t("notRecorded")} />
+      <CampoNumerico id={`${prefijo}-longitude`} name="longitude" step="any" inputMode="decimal" placeholder={t("notRecorded")} />
       <label htmlFor={`${prefijo}-accuracyM`}>{t("accuracyLabel")}</label>
-      <input id={`${prefijo}-accuracyM`} type="number" name="accuracyM" step="1" min="0" inputMode="numeric" placeholder={t("notRecorded")} />
+      <CampoNumerico id={`${prefijo}-accuracyM`} name="accuracyM" step="1" min="0" inputMode="numeric" placeholder={t("notRecorded")} />
     </fieldset>
   );
 }

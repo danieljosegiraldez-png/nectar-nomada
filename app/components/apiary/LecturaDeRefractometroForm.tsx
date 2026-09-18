@@ -10,6 +10,7 @@
  * Sólo se ofrecen los aparatos que tienen algún modo sobre MIEL DE ABEJA: el refractómetro
  * del beneficio, que lee mosto de café, no es el de mieles (Daniel, 2026-09-17).
  */
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { registrarLecturaDeRefractometroAction } from "../../actions/apiary";
@@ -53,11 +54,11 @@ export function LecturaDeRefractometroForm({
       </div>
       <div className="nn-field">
         <label htmlFor={id("refr-brix")}>{t("refractometroBrix")}</label>
-        <input id={id("refr-brix")} name="brix" type="number" step="0.1" min={0} max={100} inputMode="decimal" />
+        <CampoNumerico id={id("refr-brix")} name="brix" step="0.1" min={0} max={100} inputMode="decimal" />
       </div>
       <div className="nn-field">
         <label htmlFor={id("refr-agua")}>{t("refractometroAgua")}</label>
-        <input id={id("refr-agua")} name="aguaPct" type="number" step="0.1" min={0} max={100} inputMode="decimal" />
+        <CampoNumerico id={id("refr-agua")} name="aguaPct" step="0.1" min={0} max={100} inputMode="decimal" />
       </div>
       <p className="nn-muted">{t("refractometroAyuda")}</p>
       <div className="nn-field">

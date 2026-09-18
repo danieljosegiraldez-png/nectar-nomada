@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { seccionAbierta, type Faena } from "../../../lib/apiary/faena";
 import type { FrascoParaTratar } from "../../../lib/inventario/frascosParaTratar";
 import { useState } from "react";
@@ -236,7 +237,7 @@ export function ColonyEventQuickEntry({
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <div className="nn-field" style={{ flex: 1 }}>
               <label htmlFor={`feed-qty-${colonyId}`}>{t("feedingQuantityLabel")}</label>
-              <input id={`feed-qty-${colonyId}`} type="number" inputMode="decimal" value={feedingQuantity} onChange={(e) => setFeedingQuantity(e.target.value)} />
+              <CampoNumerico id={`feed-qty-${colonyId}`} inputMode="decimal" value={feedingQuantity} onChange={(e) => setFeedingQuantity(e.target.value)} />
             </div>
             <div className="nn-field" style={{ flex: 1 }}>
               <label htmlFor={`feed-unit-${colonyId}`}>{t("unitLabel")}</label>
@@ -316,9 +317,8 @@ export function ColonyEventQuickEntry({
               hueco. */}
           <div className="nn-field">
             <label htmlFor={`treat-withdrawal-${colonyId}`}>{t("treatmentWithdrawalDaysLabel")}</label>
-            <input
+            <CampoNumerico
               id={`treat-withdrawal-${colonyId}`}
-              type="number"
               min={0}
               step={1}
               inputMode="numeric"
@@ -360,7 +360,7 @@ export function ColonyEventQuickEntry({
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <div className="nn-field" style={{ flex: 1 }}>
               <label htmlFor={`treat-dose-${colonyId}`}>{t("treatmentDoseLabel")}</label>
-              <input id={`treat-dose-${colonyId}`} type="number" inputMode="decimal" value={treatmentDose} onChange={(e) => setTreatmentDose(e.target.value)} />
+              <CampoNumerico id={`treat-dose-${colonyId}`} inputMode="decimal" value={treatmentDose} onChange={(e) => setTreatmentDose(e.target.value)} />
             </div>
             <div className="nn-field" style={{ flex: 1 }}>
               <label htmlFor={`treat-dose-unit-${colonyId}`}>{t("unitLabel")}</label>

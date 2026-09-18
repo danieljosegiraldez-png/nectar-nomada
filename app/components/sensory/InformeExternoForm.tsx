@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { registrarInformeExternoAction, type SensoryActionState } from "../../actions/sensory";
@@ -113,10 +114,9 @@ export function InformeExternoForm({
               {a.name}
               {a.section ? ` · ${a.section}` : ""} ({a.min}–{a.max})
             </label>
-            <input
+            <CampoNumerico
               id={`ie-attr-${a.id}`}
               name={`attr_${a.id}`}
-              type="number"
               inputMode="decimal"
               step="0.25"
               min={a.min}
@@ -130,11 +130,11 @@ export function InformeExternoForm({
         <>
           <div className="nn-field">
             <label htmlFor="ie-nonuniform">{t("nonUniformCupsLabel")}</label>
-            <input id="ie-nonuniform" name="tazasNoUniformes" type="number" min="0" max="5" step="1" />
+            <CampoNumerico id="ie-nonuniform" name="tazasNoUniformes" min="0" max="5" step="1" />
           </div>
           <div className="nn-field">
             <label htmlFor="ie-defective">{t("defectiveCupsLabel")}</label>
-            <input id="ie-defective" name="tazasDefectuosas" type="number" min="0" max="5" step="1" />
+            <CampoNumerico id="ie-defective" name="tazasDefectuosas" min="0" max="5" step="1" />
             <p className="nn-muted">{t("externalReportCupsHelp")}</p>
           </div>
         </>
@@ -145,7 +145,7 @@ export function InformeExternoForm({
       ) : (
         <div className="nn-field">
           <label htmlFor="ie-overall">{t("externalReportOverallLabel")}</label>
-          <input id="ie-overall" name="overallScore" type="number" inputMode="decimal" step="0.25" />
+          <CampoNumerico id="ie-overall" name="overallScore" inputMode="decimal" step="0.25" />
         </div>
       )}
 

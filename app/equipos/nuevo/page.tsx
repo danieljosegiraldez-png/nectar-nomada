@@ -1,3 +1,4 @@
+import { CampoNumerico } from "../../components/CampoNumerico";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -79,7 +80,7 @@ export default async function EquipoNuevoPage() {
 
         <label>
           {t("campoAviso")}
-          <input type="number" name="checkAdvisoryHours" min={1} step={1} />
+          <CampoNumerico name="checkAdvisoryHours" min={1} step={1} />
         </label>
         <p className="nn-muted">{t("campoAvisoAyuda")}</p>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { recordRoastSessionAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -91,11 +92,11 @@ export function RoastSessionForm({ lotId, perfiles }: { lotId: string; perfiles:
       </div>
       <div className="nn-field">
         <label htmlFor="r-chargeWeightKg">{t("roastChargeWeightLabel")}</label>
-        <input id="r-chargeWeightKg" name="chargeWeightKg" type="number" inputMode="decimal" step="0.001" />
+        <CampoNumerico id="r-chargeWeightKg" name="chargeWeightKg" inputMode="decimal" step="0.001" />
       </div>
       <div className="nn-field">
         <label htmlFor="r-dischargeWeightKg">{t("roastDischargeWeightLabel")}</label>
-        <input id="r-dischargeWeightKg" name="dischargeWeightKg" type="number" inputMode="decimal" step="0.001" />
+        <CampoNumerico id="r-dischargeWeightKg" name="dischargeWeightKg" inputMode="decimal" step="0.001" />
       </div>
       <div className="nn-field">
         <label htmlFor="r-firstCrackAt">{t("roastFirstCrackLabel")}</label>

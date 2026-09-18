@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico, soltarFocoConLaRueda } from "../CampoNumerico";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
@@ -104,6 +105,7 @@ export function RecibirMedicamentoForm({
               ) : (
                 <input
                   type={NUMERICOS.has(c) ? "number" : "text"}
+                  onWheel={soltarFocoConLaRueda}
                   name={`p_${c}`}
                   {...(NUMERICOS.has(c) ? { min: 0, step: 1, inputMode: "numeric" as const } : {})}
                 />
@@ -127,7 +129,7 @@ export function RecibirMedicamentoForm({
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <label style={{ flex: 1 }}>
             {t("campoCantidad")}
-            <input type="number" name="quantity" min={0} step="any" inputMode="decimal" />
+            <CampoNumerico name="quantity" min={0} step="any" inputMode="decimal" />
           </label>
           <label style={{ flex: 1 }}>
             {t("campoUnidad")}

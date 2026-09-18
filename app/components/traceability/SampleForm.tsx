@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { createSampleAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -23,7 +24,7 @@ export function SampleForm({ lotId }: { lotId: string }) {
       </div>
       <div className="nn-field">
         <label htmlFor="sm-quantity">{t("quantityLabel")}</label>
-        <input id="sm-quantity" name="quantity" type="number" inputMode="decimal" step="0.001" />
+        <CampoNumerico id="sm-quantity" name="quantity" inputMode="decimal" step="0.001" />
       </div>
       <div className="nn-field">
         <label htmlFor="sm-unit">{t("unitLabel")}</label>

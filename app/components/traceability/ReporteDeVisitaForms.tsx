@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 // Del módulo PURO: importar `fieldSessions.ts` arrastraría `prisma` al navegador.
@@ -91,7 +92,7 @@ export function PublicarEnlaceForm({ fieldSessionId }: { fieldSessionId: string 
       <input type="hidden" name="fieldSessionId" value={fieldSessionId} />
       <div className="nn-field">
         <label htmlFor="dias">{t("reportLinkDaysLabel")}</label>
-        <input id="dias" name="diasDeVigencia" type="number" inputMode="numeric" min="1" max="365" step="1" />
+        <CampoNumerico id="dias" name="diasDeVigencia" inputMode="numeric" min="1" max="365" step="1" />
         <p className="nn-muted">{t("reportLinkDaysHelp")}</p>
       </div>
 
@@ -220,7 +221,7 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
 
       <div className="nn-field">
         <label htmlFor="cv-colonies">{t("visitColoniesAliveLabel")}</label>
-        <input id="cv-colonies" name="coloniesAliveCount" type="number" inputMode="numeric" min="0" step="1" />
+        <CampoNumerico id="cv-colonies" name="coloniesAliveCount" inputMode="numeric" min="0" step="1" />
         <p className="nn-muted">{t("visitColoniesAliveHelp")}</p>
       </div>
 
@@ -229,7 +230,7 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
           y esa diferencia es el dato: una caja que se fue sin registrarse, o un recuento malo. */}
       <div className="nn-field">
         <label htmlFor="cv-hives">{t("visitHivesPresentLabel")}</label>
-        <input id="cv-hives" name="hivesPresentCount" type="number" inputMode="numeric" min="0" step="1" />
+        <CampoNumerico id="cv-hives" name="hivesPresentCount" inputMode="numeric" min="0" step="1" />
         <p className="nn-muted">{t("visitHivesPresentHelp")}</p>
       </div>
 
@@ -264,7 +265,7 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
           existiera. */}
       <div className="nn-field">
         <label htmlFor="cv-costo">{t("visitTravelCostLabel")}</label>
-        <input id="cv-costo" name="travelCostUsd" type="number" inputMode="decimal" min="0" step="0.01" />
+        <CampoNumerico id="cv-costo" name="travelCostUsd" inputMode="decimal" min="0" step="0.01" />
       </div>
 
       <div className="nn-field">
@@ -332,12 +333,12 @@ export function VitalesEnSitioForm({ fieldSessionId }: { fieldSessionId: string 
 
       <div className="nn-field">
         <label htmlFor="vs-colonias">{t("visitColoniesAliveLabel")}</label>
-        <input id="vs-colonias" name="coloniesAliveCount" type="number" inputMode="numeric" min="0" step="1" />
+        <CampoNumerico id="vs-colonias" name="coloniesAliveCount" inputMode="numeric" min="0" step="1" />
       </div>
 
       <div className="nn-field">
         <label htmlFor="vs-cajas">{t("visitHivesPresentLabel")}</label>
-        <input id="vs-cajas" name="hivesPresentCount" type="number" inputMode="numeric" min="0" step="1" />
+        <CampoNumerico id="vs-cajas" name="hivesPresentCount" inputMode="numeric" min="0" step="1" />
         <p className="nn-muted">{t("visitHivesPresentHelp")}</p>
       </div>
 

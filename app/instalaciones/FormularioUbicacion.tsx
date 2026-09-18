@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../components/CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { guardarInstalacionFormAction } from "../actions/instalaciones";
@@ -30,7 +31,7 @@ export function FormularioUbicacion({ tipo, padres, parentLocationId, existente 
         <option value="">{t("noDeclarado")}</option>
         {AMBIENTES_DE_SECADO.map((a) => <option key={a} value={a}>{t(`ambiente_${a}`)}</option>)}
       </select></label>
-      : <label>{t("rack")}<input name="rackLevel" type="number" min={1} max={2147483647} step={1} defaultValue={existente?.rackLevel ?? ""} /><span className="nn-muted">{t("rackAyuda")}</span></label>}
+      : <label>{t("rack")}<CampoNumerico name="rackLevel" min={1} max={2147483647} step={1} defaultValue={existente?.rackLevel ?? ""} /><span className="nn-muted">{t("rackAyuda")}</span></label>}
     <BotonDeEnvio>{t(existente ? "guardar" : tipo === "drying_facility" ? "crearInstalacion" : "crearCama")}</BotonDeEnvio>
   </form>;
 }

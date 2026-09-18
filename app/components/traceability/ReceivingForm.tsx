@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { recordReceivingAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -76,7 +77,7 @@ export function ReceivingForm({
       </div>
       <div className="nn-field">
         <label htmlFor="r-cherryWeightKg">{t("cherryWeightLabel")}</label>
-        <input id="r-cherryWeightKg" name="cherryWeightKg" type="number" inputMode="decimal" step="0.001" />
+        <CampoNumerico id="r-cherryWeightKg" name="cherryWeightKg" inputMode="decimal" step="0.001" />
       </div>
       <div className="nn-field">
         <label htmlFor="r-condition">{t("conditionLabel")}</label>

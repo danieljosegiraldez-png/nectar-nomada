@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { updatePlotAttributesAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -72,9 +73,8 @@ export function PlotAttributesForm({
 
       <div className="nn-field">
         <label htmlFor="areaHectares">{t("areaLabel")}</label>
-        <input
+        <CampoNumerico
           id="areaHectares"
-          type="number"
           name="areaHectares"
           step="0.0001"
           min="0"
@@ -86,9 +86,8 @@ export function PlotAttributesForm({
 
       <div className="nn-field">
         <label htmlFor="plantSpacingMeters">{t("spacingLabel")}</label>
-        <input
+        <CampoNumerico
           id="plantSpacingMeters"
-          type="number"
           name="plantSpacingMeters"
           step="0.01"
           min="0"
@@ -100,9 +99,8 @@ export function PlotAttributesForm({
 
       <div className="nn-field">
         <label htmlFor="altitudeMinM">{t("altitudeMinLabel")}</label>
-        <input
+        <CampoNumerico
           id="altitudeMinM"
-          type="number"
           name="altitudeMinM"
           step="1"
           inputMode="numeric"
@@ -113,9 +111,8 @@ export function PlotAttributesForm({
 
       <div className="nn-field">
         <label htmlFor="altitudeMaxM">{t("altitudeMaxLabel")}</label>
-        <input
+        <CampoNumerico
           id="altitudeMaxM"
-          type="number"
           name="altitudeMaxM"
           step="1"
           inputMode="numeric"

@@ -1,3 +1,4 @@
+import { CampoNumerico } from "../../components/CampoNumerico";
 import { instrumentosParaMedicion } from "../../../lib/equipos/equipos";
 import { inspeccionesParaMedicion } from "../../../lib/traceability/measurements";
 import Link from "next/link";
@@ -852,7 +853,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               </div>
               <div className="nn-field">
                 <label htmlFor="ferm-output-quantity">{t("quantityLabel")}</label>
-                <input id="ferm-output-quantity" name="quantity" type="number" inputMode="decimal" step="0.001" />
+                <CampoNumerico id="ferm-output-quantity" name="quantity" inputMode="decimal" step="0.001" />
               </div>
               <div className="nn-field">
                 <label htmlFor="ferm-output-unit">{t("unitLabel")}</label>
@@ -951,7 +952,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               </div>
               <div className="nn-field">
                 <label htmlFor="dry-output-quantity">{t("quantityLabel")}</label>
-                <input id="dry-output-quantity" name="quantity" type="number" inputMode="decimal" step="0.001" />
+                <CampoNumerico id="dry-output-quantity" name="quantity" inputMode="decimal" step="0.001" />
               </div>
               <div className="nn-field">
                 <label htmlFor="dry-output-unit">{t("unitLabel")}</label>

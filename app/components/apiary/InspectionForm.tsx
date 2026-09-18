@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { DECLARABLES_EN_INSPECCION, type TipoDeArtefacto } from "../../../lib/apiary/tiposDeArtefacto";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
@@ -240,9 +241,8 @@ export function InspectionForm({
           </div>
           <div className="nn-field">
             <label htmlFor={`insp-cuadros-${colonyId}`}>{t("beeCoveredFramesLabel")}</label>
-            <input
+            <CampoNumerico
               id={`insp-cuadros-${colonyId}`}
-              type="number"
               inputMode="numeric"
               min={0}
               step={1}
@@ -288,9 +288,8 @@ export function InspectionForm({
           {celdas !== "" && celdas !== "no_hay" ? (
             <div className="nn-field">
               <label htmlFor={`insp-celdas-n-${colonyId}`}>{t("queenCellsCountLabel")}</label>
-              <input
+              <CampoNumerico
                 id={`insp-celdas-n-${colonyId}`}
-                type="number"
                 inputMode="numeric"
                 min={0}
                 step={1}
