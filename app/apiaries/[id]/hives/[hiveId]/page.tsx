@@ -34,7 +34,6 @@ import { limpiezasDeCaja } from "../../../../../lib/apiary/limpiezaDeCaja";
 import { historiaDeArtefactos } from "../../../../../lib/apiary/artefactos";
 import { DECLARABLES_EN_INSPECCION } from "../../../../../lib/apiary/tiposDeArtefacto";
 import { instalarArtefactoFormAction, retirarArtefactoFormAction } from "../../../../actions/apiary";
-import { TimezoneOffsetField } from "../../../../components/TimezoneOffsetField";
 import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
 import { ColonyEventQuickEntry } from "../../../../components/apiary/ColonyEventQuickEntry";
