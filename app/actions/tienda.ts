@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { getCurrentUser } from "../../lib/auth/session";
-import { asignarATienda, confirmarRecepcion, crearVariante, TiendaInvalida, TiendaSinPermiso } from "../../lib/commerce/tienda";
+import { asignarATienda, confirmarRecepcion, crearVariante, despacharPedido, TiendaInvalida, TiendaSinPermiso } from "../../lib/commerce/tienda";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { fechaDeDia } from "../../lib/time/localDateTime";
 
@@ -80,6 +80,31 @@ export async function crearVarianteAction(_prev: Estado, formData: FormData): Pr
       sku: String(formData.get("sku") ?? ""),
       priceAmount: String(formData.get("priceAmount") ?? ""),
     });
+  } catch (error) {
+    return rechazo(error);
+  }
+  revalidatePath("/tienda");
+  return { ok: true };
+}
+
+/**
+ * ADR-169 — despachar un pedido diciendo de qué lote sale cada frasco. Los campos llegan como
+ * `u:<artículo>:<lote>`; uno vacío es cero frascos de ese lote.
+ */
+export async function despacharPedidoAction(_prev: Estado, formData: FormData): Promise<Estado> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Tienda");
+  try {
+    const dia = fechaDeDia(String(formData.get("despachadoEn") ?? ""), "despachadoEn");
+    if (!dia) return { error: t("error_falta_la_fecha") };
+    const filas = [...formData.entries()]
+      .filter(([k]) => k.startsWith("u:"))
+      .map(([k, v]) => {
+        const [, orderItemId, lotId] = k.split(":");
+        return { orderItemId: orderItemId!, lotId: lotId!, units: String(v) };
+      });
+    await despacharPedido(user.userAccountId, { orderId: String(formData.get("orderId") ?? ""), despachadoEn: dia, filas });
   } catch (error) {
     return rechazo(error);
   }

@@ -38,6 +38,13 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · El despacho dice de qué lote sale cada frasco
+
+ADR-169. Daniel: «lo elige quien despacha». **El despacho no existía** —nada ponía un pedido en
+`fulfilled`— y hay cero pedidos en la copia local. `/tienda` lista los pagados; por artículo se dice
+cuántos frascos salen de cada lote recibido, la suma tiene que dar lo pedido, y los kilos salen del
+libro del lote (`transfer_out`). Falta que el cliente lo vea en «Mis pedidos».
+
 ### 2026-09-18 · La muestra verde sólo en almacenamiento, y la 111 retirada (PR #419)
 
 Spec #408 (con las 5 respuestas de Daniel) y plan #414, aprobados y fusionados. **Bloquea** en
@@ -223,9 +230,9 @@ puede afirmar cada pantalla— y sigue sin tomarse.
   no se ha ejecutado. La herramienta quedó lista el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **LA V2 DEL PROTOCOLO FALTA CARGARLA (ADR-165, 2026-09-18).** Después de fusionar, Daniel corre
-  `npm run apiary:load-protocol` otra vez: añade la versión 2 al mismo protocolo. Hasta entonces
-  producción tiene sólo la v1, y la condición del sitio se guarda igual —va a columna—.
+- **La v2 del protocolo YA ESTÁ CARGADA en producción — 2026-09-18, lo confirmó Daniel.** La
+  vista previa dice «versión(es) 1, 2» y que la 2 ya está (con el guion arreglado en #422: el
+  viejo buscaba el identificador por versión y habría dicho «NO está»).
 - **`npm run apiary:load-protocol` (v1) YA SE CORRIÓ — 2026-09-16, lo confirmó Daniel.**
   `apiario-campo-v1` está en producción, así que las pantallas de captura de campo
   tienen qué preguntar. **Se anota justamente porque no estaba anotado:** ese día

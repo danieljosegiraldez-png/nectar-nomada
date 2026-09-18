@@ -2555,6 +2555,23 @@
     "error_precio_invalido": "The price must be above zero.",
     "error_producto_no_encontrado": "That product does not exist.",
     "error_sku_repetido": "A variant with that SKU already exists.",
-    "error_sin_permiso": "You are not allowed to do this."
+    "error_sin_permiso": "You are not allowed to do this.",
+    "despachoTitulo": "Orders to dispatch",
+    "despachoIntro": "Paid orders. Say which lot each jar comes from: each item must add up to what was ordered, and the kilos come out of that lot's ledger.",
+    "sinPedidos": "No paid orders to dispatch.",
+    "diaDespacho": "Dispatch day",
+    "articuloFila": "{cuantos} × {producto} — {variante}",
+    "sinLotesParaArticulo": "No lots received at the store have jars of this variant.",
+    "quedan": "{n} left",
+    "despacharGuardar": "Dispatch",
+    "despachado": "Dispatched: the order is served and the lots are debited.",
+    "error_frascos_invalidos": "Jars must be a whole number, zero or more.",
+    "error_pedido_no_encontrado": "That order does not exist.",
+    "error_pedido_no_despachable": "The order is not paid (it is {valor}): it is not dispatched.",
+    "error_no_cuadra": "What comes out of the lots does not match the order ({valor}).",
+    "error_articulo_ajeno": "An item does not belong to this order.",
+    "error_lote_sin_tantos": "Only {valor} jars of that lot are left at the store.",
+    "error_lote_no_envasado": "That lot did not come from packaging: the weight of each jar is unknown.",
+    "error_libro_sin_saldo": "That lot's ledger does not hold that much honey: check its balance before dispatching."
   }
 }

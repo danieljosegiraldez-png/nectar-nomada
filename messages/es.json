@@ -2555,6 +2555,23 @@
     "error_precio_invalido": "El precio tiene que ser mayor que cero.",
     "error_producto_no_encontrado": "Ese producto no existe.",
     "error_sku_repetido": "Ya hay una variante con ese SKU.",
-    "error_sin_permiso": "No tienes permiso para esto."
+    "error_sin_permiso": "No tienes permiso para esto.",
+    "despachoTitulo": "Pedidos por despachar",
+    "despachoIntro": "Pedidos pagados. Di de qué lote sale cada frasco: la suma de cada artículo tiene que dar lo pedido, y los kilos salen del libro de ese lote.",
+    "sinPedidos": "No hay pedidos pagados por despachar.",
+    "diaDespacho": "Día del despacho",
+    "articuloFila": "{cuantos} × {producto} — {variante}",
+    "sinLotesParaArticulo": "No hay lotes recibidos en la tienda con frascos de esta variante.",
+    "quedan": "quedan {n}",
+    "despacharGuardar": "Despachar",
+    "despachado": "Despachado: el pedido está servido y los lotes descontados.",
+    "error_frascos_invalidos": "Los frascos tienen que ser un entero, cero o más.",
+    "error_pedido_no_encontrado": "Ese pedido no existe.",
+    "error_pedido_no_despachable": "El pedido no está pagado (está {valor}): no se despacha.",
+    "error_no_cuadra": "Lo que sale de los lotes no cuadra con lo pedido ({valor}).",
+    "error_articulo_ajeno": "Un artículo no es de este pedido.",
+    "error_lote_sin_tantos": "De ese lote sólo quedan {valor} frascos en la tienda.",
+    "error_lote_no_envasado": "Ese lote no salió de un envasado: no se sabe cuánto pesa cada frasco.",
+    "error_libro_sin_saldo": "El libro de ese lote no tiene tanta miel: revisa su saldo antes de despachar."
   }
 }

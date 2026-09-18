@@ -7,7 +7,7 @@
 import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
-import { asignarATiendaAction, confirmarRecepcionAction, crearVarianteAction } from "../../actions/tienda";
+import { asignarATiendaAction, confirmarRecepcionAction, crearVarianteAction, despacharPedidoAction } from "../../actions/tienda";
 
 type Estado = { error?: string; ok?: boolean };
 const inicial: Estado = {};
@@ -121,6 +121,52 @@ export function NuevaVarianteForm({ productId }: { productId: string }) {
       <Resultado estado={estado} ok={t("varianteCreada")} />
       <button type="submit" disabled={pending}>
         {t("varianteGuardar")}
+      </button>
+    </form>
+  );
+}
+
+export interface ArticuloPorDespachar {
+  id: string;
+  quantity: number;
+  productVariant: { sku: string; variantName: string | null; product: { name: string } };
+  lotes: { lotId: string; lotCode: string; disponibles: number }[];
+}
+
+/**
+ * Despachar un pedido (ADR-169): por cada artículo, cuántos frascos salen de cada lote. La suma
+ * tiene que dar lo pedido; lo comprueba el servicio y lo dice si no cuadra.
+ */
+export function DespacharPedidoForm({ orderId, articulos }: { orderId: string; articulos: ArticuloPorDespachar[] }) {
+  const [estado, accion, pending] = useActionState(despacharPedidoAction, inicial);
+  const t = useTranslations("Tienda");
+  return (
+    <form action={accion} className="nn-form" style={{ margin: "0.5rem 0 0", maxWidth: 520 }}>
+      <input type="hidden" name="orderId" value={orderId} />
+      <div className="nn-field">
+        <label htmlFor={`desp-dia-${orderId}`}>{t("diaDespacho")}</label>
+        <input id={`desp-dia-${orderId}`} name="despachadoEn" type="date" required />
+      </div>
+      {articulos.map((a) => (
+        <fieldset key={a.id} className="nn-field">
+          <legend>
+            {t("articuloFila", { cuantos: a.quantity, producto: a.productVariant.product.name, variante: a.productVariant.variantName ?? a.productVariant.sku })}
+          </legend>
+          {a.lotes.length === 0 ? (
+            <p className="nn-error">{t("sinLotesParaArticulo")}</p>
+          ) : (
+            a.lotes.map((l) => (
+              <label key={l.lotId} style={{ display: "block", padding: "0.25rem 0" }}>
+                <span className="nn-code">{l.lotCode}</span> ({t("quedan", { n: l.disponibles })}){" "}
+                <CampoNumerico name={`u:${a.id}:${l.lotId}`} min={0} max={l.disponibles} step={1} inputMode="numeric" style={{ width: "5rem" }} />
+              </label>
+            ))
+          )}
+        </fieldset>
+      ))}
+      <Resultado estado={estado} ok={t("despachado")} />
+      <button type="submit" disabled={pending}>
+        {t("despacharGuardar")}
       </button>
     </form>
   );

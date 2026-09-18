@@ -308,6 +308,8 @@ model UserAccount {
   /// ADR-163
   storeAllocationsAssigned StoreAllocation[] @relation("StoreAllocationAssignedBy")
   storeAllocationsReceived StoreAllocation[] @relation("StoreAllocationReceivedBy")
+  /// ADR-169
+  orderItemLotsDispatched OrderItemLot[] @relation("OrderItemLotDispatchedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -1697,6 +1699,8 @@ model OrderItem {
   quantity         Int
   unitPriceAmount  Decimal        @map("unit_price_amount") @db.Decimal(10, 2)
   currency         String
+  /// ADR-169 — de qué lotes salieron sus frascos, dicho por quien despachó.
+  lotes OrderItemLot[]
 
   @@index([orderId])
   @@map("order_item")
@@ -3127,6 +3131,8 @@ model Lot {
   @@schema("traceability")
   /// ADR-163
   storeAllocations StoreAllocation[] @relation("StoreAllocationLot")
+  /// ADR-169
+  orderItemLots OrderItemLot[] @relation("OrderItemLotLot")
 }
 
 /// ADR-161 -- los actos de procesar miel. Vocabulario fijo con «otro, ¿cual?» (Daniel).
@@ -3389,6 +3395,8 @@ model QuantityEvent {
   @@index([transformationId])
   @@map("quantity_event")
   @@schema("traceability")
+  /// ADR-169
+  orderItemLot OrderItemLot? @relation("OrderItemLotQuantity")
 }
 
 enum MeasurementSourceType {
@@ -9187,4 +9195,27 @@ model NodeDerivedReading {
   @@unique([observationId, variable, algorithm, algorithmVersion, calibrationId])
   @@map("node_derived_reading")
   @@schema("apiary")
+}
+
+/// ADR-169 -- de que lote salio cada frasco vendido. Lo dice quien despacha (Daniel eligio eso
+/// frente a descontar automaticamente del mas antiguo): un articulo puede salir de varios lotes.
+model OrderItemLot {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderItemId  String      @map("order_item_id") @db.Uuid
+  orderItem    OrderItem   @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  lotId        String      @map("lot_id") @db.Uuid
+  lot          Lot         @relation("OrderItemLotLot", fields: [lotId], references: [id], onDelete: Restrict)
+  units        Int
+  /// El asiento del libro del lote: los kilos de esos frascos salen de su saldo.
+  quantityEventId String   @unique @map("quantity_event_id") @db.Uuid
+  quantityEvent   QuantityEvent @relation("OrderItemLotQuantity", fields: [quantityEventId], references: [id], onDelete: Restrict)
+  dispatchedAt DateTime    @map("dispatched_at")
+  dispatchedBy String      @map("dispatched_by") @db.Uuid
+  dispatcher   UserAccount @relation("OrderItemLotDispatchedBy", fields: [dispatchedBy], references: [id], onDelete: Restrict)
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  @@unique([orderItemId, lotId])
+  @@index([lotId])
+  @@map("order_item_lot")
+  @@schema("commerce")
 }

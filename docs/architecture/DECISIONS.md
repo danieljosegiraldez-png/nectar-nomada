@@ -11405,3 +11405,28 @@ Razón obligatoria (recortada, no vacía) al conceder; `AuditEvent` (`beneficio.
 4. **Contexto de auditoría.** `after`/`before` del `AuditEvent` llevan ahora `contexto: { beneficioId, ambitoLocationId }` — desde qué beneficio se autorizó y el ámbito de la asignación receptora.
 5. **Camas con su propio permiso.** `/instalaciones/[id]` gateaba el formulario de CADA cama con el permiso de la INSTALACIÓN. Ahora evalúa `puedeEditarBeneficioEn(user, cama.id)` por cama; el permiso de la instalación sigue gobernando su propio formulario y «crear cama».
 6. **Criterio de asignación activa.** `concesiones.ts` trataba `status === "active"` como el criterio completo; el resolutor (`lib/rbac/service.ts`) también exige `validFrom <= ahora` y (`validTo` nulo o `> ahora`). `asignacionQueAlcanza` y `personasDelBeneficio` usan ahora `esAsignacionActiva`/`activeAssignmentWhere`, exportados de `lib/rbac/service.ts` para que el criterio no se repita a medias.
+
+## ADR-169 -- El despacho dice de que lote sale cada frasco, y la venta baja el libro del lote
+
+**Contexto.** ADR-163 llevo la miel envasada hasta el inventario de la tienda, pero una venta solo
+bajaba ese inventario: el lote no se enteraba, y la trazabilidad se cortaba en el estante. Se le
+pregunto a Daniel de que lote sale un frasco vendido; eligio **«lo elige quien despacha»**, frente a
+descontar automaticamente del mas antiguo.
+
+**Lo que habia debajo:** el despacho no existia. Nada en el codigo ponia un pedido en `fulfilled`;
+el pago lo dejaba en `paid` y ahi se quedaba. Y en la copia local hay CERO pedidos.
+
+**Decision.** `/tienda` lista los pedidos pagados. Por cada articulo, quien despacha dice cuantos
+frascos salen de cada lote, entre los lotes con frascos de esa variante **recibidos** en la tienda
+y no despachados ya. Al despachar, en una transaccion `Serializable`:
+
+- lo que sale de los lotes tiene que sumar **exactamente** lo pedido, articulo por articulo;
+- de un lote no sale mas de lo que queda en el estante (recibido menos despachado); **lo asignado y
+  no recibido no cuenta**: no esta en el estante;
+- cada fila queda en `OrderItemLot` (articulo, lote, frascos, quien, cuando);
+- **los kilos de esos frascos salen del libro del lote** como `transfer_out` con referencia al
+  pedido: frascos x masa neta del envasado. Si el libro no tiene tanta miel, se rechaza;
+- el pedido pasa a `fulfilled`, con su AuditEvent.
+
+**Lo que NO entra.** Que el cliente vea en «Mis pedidos» de que lote salio su frasco: el dato ya
+esta, falta la pantalla. Y devoluciones: un pedido despachado no se deshace aqui.

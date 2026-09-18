@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**422 operaciones** que tocan la base, en **129 archivos**:
+**424 operaciones** que tocan la base, en **129 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,7 +22,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **303** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **305** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **38** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **63** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -208,6 +208,10 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > `lib/apiary/cosechasSinSaldo.ts`: `asentarPesoDeCosecha` sube **guardia directo**
 > (`requireApiaryAccess("manage")`) y `cosechasSinSaldo` **depende del llamador**: sólo la llama
 > la ficha del apiario después de que `getApiaryDetail` autorice.
+
+> **Y dos más, en `lib/commerce/tienda.ts`, son el despacho (ADR-169).** `pedidosPorDespachar` y
+> `despacharPedido` suben **guardia directo**: los dos exigen `commerce:manage_store` antes de
+> leer nada.
 
 > **Y el de 355→356 es `registrarVitalesEnSitio` (ADR-157).** Vive en
 > `lib/apiary/vitalesEnSitio.ts` y sube la fila de **guardia directo**: exige
