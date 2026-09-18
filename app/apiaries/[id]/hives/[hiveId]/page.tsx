@@ -39,6 +39,7 @@ import { HarvestForm } from "../../../../components/apiary/HarvestForm";
 import { ApiaryPhotoUploadForm } from "../../../../components/apiary/ApiaryPhotoUploadForm";
 import type { Asset } from "../../../../../generated/prisma/client";
 import { FAENAS, faenaDe, seccionAbierta } from "../../../../../lib/apiary/faena";
+import { avisosDeEnjambrazon } from "../../../../../lib/apiary/avisoDeEnjambrazon";
 
 export const dynamic = "force-dynamic";
 
@@ -136,6 +137,15 @@ export default async function HiveDetailPage({
   // A9 · Anexo B §5 — las cosechas no se listaban en ninguna parte, así que ni el tipo
   // de miel ni el peso ni la humedad tenían dónde verse.
   const cosechas = colony ? await cosechasDeColonia(colony.id) : [];
+  // Spec 2026-09-18: la enjambrazón se descubre REVISANDO. El mismo cálculo y la misma ventana
+  // de 60 días que la ficha del apiario (`app/apiaries/[id]/page.tsx`), no uno nuevo. Después de
+  // `getHive`, que ya autorizó ver esta caja.
+  const ahoraEnjambrazon = new Date();
+  const avisoDeEnjambrazon = colony
+    ? ((
+        await avisosDeEnjambrazon(hive.locationId, new Date(ahoraEnjambrazon.getTime() - 60 * 24 * 60 * 60 * 1000), ahoraEnjambrazon)
+      ).find((a) => a.colonyId === colony.id) ?? null)
+    : null;
   // ADR-160: sólo los aparatos con algún modo sobre MIEL DE ABEJA. El refractómetro del
   // beneficio lee mosto de café y no es el de mieles. La lista ya viene autorizada.
   const refractometrosDeMiel =
@@ -457,6 +467,15 @@ export default async function HiveDetailPage({
               <summary>
                 <h2 style={{ display: "inline" }}>{t("inspectionHeading")}</h2>
               </summary>
+            {avisoDeEnjambrazon ? (
+              <p className="nn-alerta nn-alerta-aviso">
+                {t("enjambrazonAviso", {
+                  tipo: t(`queenCell_${avisoDeEnjambrazon.kind}`),
+                  fecha: avisoDeEnjambrazon.occurredAt.toISOString().slice(0, 10),
+                })}{" "}
+                <Link href={`/apiaries/${apiaryId}/hives/${hiveId}?faena=dividir#faena-dividir`}>{t("enjambrazonDividir")}</Link>
+              </p>
+            ) : null}
             {/* **Se dice por qué, no se esconde a secas.** Un formulario que
                 desaparece sin explicación se lee como una pantalla rota. Misma
                 doctrina que las limitaciones del veredicto: la falta se declara. */}
@@ -509,6 +528,33 @@ export default async function HiveDetailPage({
                 ))}
               </ul>
             )}
+            </details>
+          </section>
+
+          <section className="nn-section" id="faena-dividir">
+            <details open={seccionAbierta(faena, "dividir")}>
+              <summary>
+                <h2 style={{ display: "inline" }}>{t("faena_dividir")}</h2>
+              </summary>
+              <p className="nn-muted">{t("dividirPronto")}</p>
+            </details>
+          </section>
+
+          <section className="nn-section" id="faena-reinas">
+            <details open={seccionAbierta(faena, "reinas")}>
+              <summary>
+                <h2 style={{ display: "inline" }}>{t("faena_reinas")}</h2>
+              </summary>
+              <p className="nn-muted">{t("reinasPronto")}</p>
+            </details>
+          </section>
+
+          <section className="nn-section" id="faena-unir">
+            <details open={seccionAbierta(faena, "unir")}>
+              <summary>
+                <h2 style={{ display: "inline" }}>{t("faena_unir")}</h2>
+              </summary>
+              <p className="nn-muted">{t("unirPronto")}</p>
             </details>
           </section>
 

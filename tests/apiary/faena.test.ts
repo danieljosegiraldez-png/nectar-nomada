@@ -27,7 +27,9 @@ describe("la faena de colmena", () => {
     expect(faenaDe(["tratar", "revisar"])).toBe("tratar");
   });
 
-  it("las cinco del spec, en su orden", () => {
-    expect(FAENAS).toEqual(["revisar", "alimentar", "tratar", "varroa", "cosechar"]);
+  it("las ocho de los manuales, en su orden", () => {
+    // Spec 2026-09-18: nombres de DICTA (Honduras, 2019) y SAGARPA (México); orden de los
+    // «trabajos a realizar» de SAGARPA. La enjambrazón va dentro de revisar (Daniel).
+    expect(FAENAS).toEqual(["revisar", "alimentar", "tratar", "varroa", "dividir", "reinas", "unir", "cosechar"]);
   });
 });

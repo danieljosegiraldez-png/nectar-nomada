@@ -12,7 +12,10 @@
  * Pura, sin base: la pantalla de la colmena y el formulario de eventos (cliente)
  * la usan igual.
  */
-export const FAENAS = ["revisar", "alimentar", "tratar", "varroa", "cosechar"] as const;
+// Spec 2026-09-18 (faenas, división y reinas): los nombres salen de dos manuales oficiales para
+// abeja africanizada —DICTA, Honduras 2019, y SAGARPA, México— y el orden de los «trabajos a
+// realizar» de SAGARPA. La enjambrazón no tiene fila: se descubre revisando (Daniel, 2026-09-18).
+export const FAENAS = ["revisar", "alimentar", "tratar", "varroa", "dividir", "reinas", "unir", "cosechar"] as const;
 export type Faena = (typeof FAENAS)[number];
 
 /** Lo que llega de la URL. Un valor desconocido es «sin faena», no un error. */
