@@ -36,7 +36,8 @@ const prefijoDe = (locationId: string) => `nectar-originals/land/${locationId}/`
 export type LandAssetParent =
   | { kind: "location" }
   | { kind: "biocharBatch"; biocharBatchId: string }
-  | { kind: "soilProfile"; soilProfileId: string };
+  | { kind: "soilProfile"; soilProfileId: string }
+  | { kind: "trapCheck"; specimenObservationId: string };
 
 export interface RequestLandAssetUploadInput {
   locationId: string;
@@ -100,6 +101,17 @@ async function exigirPadreDeEsaLocation(parent: LandAssetParent, locationId: str
       throw new LandMediaValidationError("parent_belongs_to_another_location");
     }
     return { soilProfileId: parent.soilProfileId };
+  }
+  if (parent.kind === "trapCheck") {
+    const revision = await prisma.specimenObservation.findUnique({
+      where: { id: parent.specimenObservationId },
+      select: { specimen: { select: { locationId: true } } },
+    });
+    if (!revision) throw new LocationAccessError("trap_check_not_found");
+    if (revision.specimen.locationId !== locationId) {
+      throw new LandMediaValidationError("trap_check_not_in_location");
+    }
+    return { specimenObservationId: parent.specimenObservationId };
   }
   return {};
 }
