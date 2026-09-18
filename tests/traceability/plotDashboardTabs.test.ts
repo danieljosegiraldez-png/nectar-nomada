@@ -6,6 +6,10 @@ describe("pestanaValida", () => {
     for (const p of PESTANAS_DE_PARCELA) expect(pestanaValida(p)).toBe(p);
   });
 
+  it("incluye fotos, en el orden resumen/trampas/condiciones/muestras/fotos", () => {
+    expect(PESTANAS_DE_PARCELA).toEqual(["resumen", "trampas", "condiciones", "muestras", "fotos"]);
+  });
+
   it("cae a resumen ante cualquier otra cosa", () => {
     expect(pestanaValida(undefined)).toBe("resumen");
     expect(pestanaValida("")).toBe("resumen");

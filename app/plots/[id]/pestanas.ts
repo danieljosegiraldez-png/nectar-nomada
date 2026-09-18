@@ -3,7 +3,7 @@
  * enlaces de los avisos llevan directo a ella y desaparecen los plegables con `id`
  * dentro que el navegador no siempre abre al navegar a un fragmento.
  */
-export const PESTANAS_DE_PARCELA = ["resumen", "trampas", "condiciones", "muestras"] as const;
+export const PESTANAS_DE_PARCELA = ["resumen", "trampas", "condiciones", "muestras", "fotos"] as const;
 export type PestanaDeParcela = (typeof PESTANAS_DE_PARCELA)[number];
 
 export function pestanaValida(valor: string | undefined): PestanaDeParcela {

@@ -527,24 +527,9 @@ export default async function PlotDetailPage({
           })
         )}
 
-        {/* Sigue disponible aunque ya haya perfiles: volver a describir el
-            mismo bloque dentro de tres años NO es corregir el de hoy. §14 pide
-            repetir el muestreo justamente para ver el cambio. */}
-        <h3>{t("landPhotosHeading")}</h3>
-        <p className="nn-muted">{t("landPhotosIntro")}</p>
-        <FotosDe
-          assets={fotos.filter(
-            (f) => f.soilProfileId == null && f.biocharBatchId == null && f.specimenObservationId == null,
-          )}
-          etiqueta={t}
-        />
-        <LandPhotoUploadForm
-          locationId={location.id}
-          parent={{ kind: "location" }}
-          observers={people}
-          selfPersonId={selfPersonId}
-        />
-
+        {/* Las fotos generales del terreno viven en la pestaña Fotos (Tarea
+            5b) — sólo las de cada calicata, ligadas a su perfil, se quedan
+            aquí como parte de su descripción. */}
         <details>
           <summary>{t("soilDescribeHeading")}</summary>
           <SoilProfileForm
@@ -653,6 +638,34 @@ export default async function PlotDetailPage({
           <FoliarSampleForm locationId={location.id} />
         </details>
       </section>
+      ) : null}
+
+      {pestana === "fotos" ? (
+        <section className="nn-section">
+          <h2>{t("landPhotosHeading")}</h2>
+          <p className="nn-muted">{t("landPhotosIntro")}</p>
+          <FotosDe
+            assets={fotos.filter(
+              (f) => f.soilProfileId == null && f.biocharBatchId == null && f.specimenObservationId == null,
+            )}
+            etiqueta={t}
+          />
+          <LandPhotoUploadForm
+            locationId={location.id}
+            parent={{ kind: "location" }}
+            observers={people}
+            selfPersonId={selfPersonId}
+          />
+
+          {/* Spec §3: las fotos de las revisiones de trampa también se ven
+              aquí, rotuladas — no sólo la galería general de la parcela. */}
+          {fotos.some((f) => f.specimenObservationId != null) ? (
+            <>
+              <h3>{t("landPhotosTrapHeading")}</h3>
+              <FotosDeTrampas assets={fotos.filter((f) => f.specimenObservationId != null)} etiqueta={t} />
+            </>
+          ) : null}
+        </section>
       ) : null}
 
       {pestana === "trampas" ? (
@@ -855,6 +868,48 @@ function FotosDe({
         // acceso restringido.
         // eslint-disable-next-line @next/next/no-img-element
         <img key={a.id} src={a.url} alt={a.originalFilename ?? ""} style={{ width: "100%", borderRadius: 4 }} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Las fotos que cuelgan de una revisión de trampa, cada una con su rótulo —
+ * pestaña Fotos, Tarea 5b (spec §3): «Trampa N · revisión del <día>», para que
+ * se distingan de las fotos generales de la parcela sin abrir cada una.
+ *
+ * `observedAt` es un campo de DÍA (medianoche UTC, como el resto de la
+ * pantalla): se lee con `toISOString().slice(0, 10)`, nunca con la zona del
+ * sitio — igual que `revision.observedAt` en la tabla de trampas.
+ */
+function FotosDeTrampas({
+  assets,
+  etiqueta,
+}: {
+  assets: {
+    id: string;
+    url: string;
+    originalFilename: string | null;
+    specimenObservation: { observedAt: Date; specimen: { trapNumber: number | null } } | null;
+  }[];
+  etiqueta: (clave: string, valores?: Record<string, string | number | Date>) => string;
+}) {
+  if (assets.length === 0) return null;
+  return (
+    <div className="nn-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
+      {assets.map((a) => (
+        <figure key={a.id} style={{ margin: 0 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={a.url} alt={a.originalFilename ?? ""} style={{ width: "100%", borderRadius: 4 }} />
+          <figcaption className="nn-detail-meta">
+            {a.specimenObservation
+              ? etiqueta("landPhotosTrapLabel", {
+                  n: a.specimenObservation.specimen.trapNumber ?? etiqueta("notRecorded"),
+                  fecha: a.specimenObservation.observedAt.toISOString().slice(0, 10),
+                })
+              : null}
+          </figcaption>
+        </figure>
       ))}
     </div>
   );

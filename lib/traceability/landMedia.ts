@@ -207,6 +207,16 @@ export async function listLandAssets(userAccountId: string, locationId: string) 
       // Sin él, la foto de la tela de una revisión aparecía también entre las
       // fotos generales de la parcela, que filtran por los otros dos padres.
       specimenObservationId: true,
+      // Pestaña Fotos (Tarea 5b): rotular «Trampa N · revisión del <día>»
+      // necesita el número de trampa y el día de la revisión. Misma
+      // compuerta de acceso de arriba — no es una operación nueva, sólo más
+      // columnas de la misma consulta ya autorizada.
+      specimenObservation: {
+        select: {
+          observedAt: true,
+          specimen: { select: { trapNumber: true } },
+        },
+      },
     },
   });
   return Promise.all(
