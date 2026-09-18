@@ -11332,3 +11332,27 @@ vez de 12 -- entran `brood_stages`, `purpose` y esta -- y las tres coinciden.
 
 **Pendiente del dueno:** correr `npm run apiary:load-protocol` en produccion despues de fusionar,
 para que exista la v2. Hasta entonces la condicion del sitio se guarda igual: va a columna.
+
+## ADR-166 -- Las cosechas pesadas sin saldo: se asientan desde la ficha del apiario
+
+**Contexto.** ADR-161 arreglo que el peso escrito en el cierre de una cosecha entre en el libro del
+lote; antes solo entraba si se escribia AL COSECHAR. Las cosechas cerradas antes de ese arreglo
+pueden tener el peso en la fila y el lote de miel sin ningun asiento, y entonces procesar, envasar
+o dividir ese lote no tiene contra que cuadrar. Daniel eligio arreglarlo asi entre cuatro opciones.
+
+**Decision.** La ficha del apiario lista las cosechas con peso escrito y lote SIN NINGUN asiento, y
+un boton asienta ese peso: `received`, con la fecha de la cosecha y su procedencia, igual que el
+asiento que ADR-161 escribe al cerrar. **No se teclea ningun numero**: se asienta el que ya esta.
+
+- **Lo hace Daniel desde la aplicacion, no un script.** Esta sesion no escribe en produccion, y
+  cada asiento queda con quien y cuando, que un script por lotes no diria.
+- **«Sin saldo» es NINGUN asiento**, de ningun tipo. Un lote con cualquier asiento ya tiene
+  historia y sumarle el peso podria contarlo dos veces: no se ofrece, y el servicio lo rechaza.
+- La comprobacion se repite dentro de una transaccion `Serializable`: dos pulsaciones a la vez no
+  asientan dos veces.
+- La seccion solo aparece cuando hay algo que asentar.
+
+**Medido antes de fusionar, y dicho sin adornos:** en la copia local —un respaldo de produccion—
+hay UNA cosecha real, y tiene saldo: se peso al cosechar. **Segun ese respaldo, ninguna cosecha
+esta afectada.** Esto es una red para las que pudiera haber en produccion desde entonces, no el
+arreglo de un dano medido.

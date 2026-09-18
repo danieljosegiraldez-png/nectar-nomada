@@ -1822,7 +1822,16 @@
     "mielMermaDividir": "Loss while splitting (kg)",
     "mielDividirGuardar": "Save split",
     "mielError_dividir_exige_dos_partes": "At least two parts are needed to split.",
-    "mielError_parte_cero": "A part cannot be zero kilos: leave it empty."
+    "mielError_parte_cero": "A part cannot be zero kilos: leave it empty.",
+    "sinSaldoHeading": "Weighed harvests without a balance",
+    "sinSaldoIntro": "These harvests have their weight written, but their honey lot does not have it in the ledger: they were weighed at close before 18 September, when that weight was not yet posted. Without a balance, processing, packaging or splitting the lot has nothing to reconcile against. The button posts the weight already written, with nothing to type.",
+    "sinSaldoCaja": "hive",
+    "sinSaldoLote": "lot",
+    "sinSaldoAsentar": "Post {kg} kg",
+    "sinSaldoAsentado": "Posted.",
+    "sinSaldoError_cosecha_sin_peso": "This harvest has no weight written: complete it in its close.",
+    "sinSaldoError_el_lote_ya_tiene_saldo": "The lot already has entries: nothing is posted on top, so it is not counted twice.",
+    "sinSaldoError_sin_permiso": "You are not allowed to post in this apiary."
   },
   "Research": {
     "badge": "Research OS",
