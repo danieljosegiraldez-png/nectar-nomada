@@ -74,6 +74,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/apiary/vitalesEnSitio.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Exige `requireApiaryAccess` sobre el sitio de la visita ANTES de escribir, y sólo acepta mientras la visita está ABIERTA — que es exactamente lo que la marca `fieldVitalsOnSiteAt` afirma, ni más. Escritura y AuditEvent con su `before` en la MISMA transacción."
+    },
+    {
       "archivo": "lib/apiary/valoracionDeInspeccion.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Exige `requireApiaryAccess` resuelto por la colmena de la colonia ANTES de escribir, y aplica las reglas de plazo de la VISITA —`locked` y `editWindowExpiresAt`, distinguidas entre sí— en vez de inventarle un cierre a `Inspection`, que no tiene ninguno. Escritura y AuditEvent con su `before` en la MISMA transacción."
     },

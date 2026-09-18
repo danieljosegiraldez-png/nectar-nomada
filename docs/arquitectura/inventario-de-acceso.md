@@ -13,8 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-17
 
-**355 operaciones** que tocan la base, en **105 archivos**:
-
+**356 operaciones** que tocan la base, en **106 archivos**:
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
      la compuerta falla y dice cuál. Todo el trabajo del 2026-08-31 empezó por
@@ -22,8 +21,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **245** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **246** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo || **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **58** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
@@ -97,6 +95,13 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > `listAssignmentPermissions`, `setPermissionOverride` y `clearPermissionOverride` exigen
 > `platform:manage_users` antes de leer o escribir nada. Ninguna es acotada por construcción:
 > tocan la asignación de otra persona, así que el guardia tiene que ser explícito.
+
+> **Y el de 355→356 es `registrarVitalesEnSitio` (ADR-157).** Vive en
+> `lib/apiary/vitalesEnSitio.ts` y sube la fila de **guardia directo**: exige
+> `requireApiaryAccess` sobre el sitio de la visita antes de escribir. Su puerta afirma **una
+> sola cosa** —que la visita seguía abierta— y a propósito no comprueba GPS: las coordenadas de
+> `startLatitude` son del arranque, no de ahora, y exigirlo dejaría sin registrar una visita bajo
+> dosel cerrado, que es justo donde están las abejas.
 
 > **Y el de 350→351 es `registrarValoracionDeInspeccion` (ADR-154).** Vive en
 > `lib/apiary/valoracionDeInspeccion.ts` y sube la fila de **guardia directo**: exige

@@ -273,6 +273,16 @@ export async function completarVisita(userAccountId: string, input: CerrarVisita
         ...(input.weatherObserved === undefined
           ? {}
           : { weatherObserved: exigeClimaObservado(input.weatherObserved) }),
+        // **Y si el cierre reescribe ALGUNO de esos tres, la marca de «anotado en sitio» se
+        // limpia** (ADR-157). `fieldVitalsOnSiteAt` describe la procedencia del valor que hay
+        // AHORA, no un histórico: una cifra corregida desde casa ya no es la que se vio con el
+        // guante puesto, y dejar la marca haría que la fila afirmara algo falso. El histórico
+        // completo vive en el `AuditEvent`, que es su sitio.
+        ...(input.coloniesAliveCount === undefined &&
+        input.hivesPresentCount === undefined &&
+        input.weatherObserved === undefined
+          ? {}
+          : { fieldVitalsOnSiteAt: null }),
         // Las tres de `stage: close`. `undefined` no toca la columna —quien completa dos
         // veces sin rellenarlas no las borra—; `null` sí la limpia, que es cómo se deshace
         // un valor puesto por error.
