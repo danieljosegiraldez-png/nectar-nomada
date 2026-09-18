@@ -10,8 +10,9 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { createPlotBlock, listPlotBlocks, PlotBlockValidationError } from "../../lib/traceability/plotBlocks";
+import { LocationAccessError } from "../../lib/traceability/locations";
 import { prisma } from "../../lib/db";
-import { crearUsuarioConAcceso, crearParcela } from "../helpers/traceability";
+import { crearUsuarioConAcceso, crearParcela, crearUsuarioSinAcceso } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 let userAccountIds: string[] = [];
@@ -103,5 +104,37 @@ describe("bloques de una parcela", () => {
     await expect(createPlotBlock(userAccountId, { locationId: parcela.id, name: "Bajo" })).rejects.toThrow(
       PlotBlockValidationError,
     );
+  });
+
+  it("createPlotBlock rechaza a un usuario sin acceso a esa parcela", async () => {
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id);
+    organizationIds.push(parcela.organizationId!);
+
+    const ajeno = await crearUsuarioSinAcceso();
+    userAccountIds.push(ajeno.userAccountId);
+    personIds.push(ajeno.personId);
+    scopeIds.push(ajeno.scopeId);
+    locationIds.push(ajeno.locationId);
+    organizationIds.push(ajeno.organizationId);
+
+    await expect(createPlotBlock(ajeno.userAccountId, { locationId: parcela.id, name: "Sur" })).rejects.toThrow(
+      LocationAccessError,
+    );
+  });
+
+  it("listPlotBlocks rechaza a un usuario sin acceso a esa parcela", async () => {
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id);
+    organizationIds.push(parcela.organizationId!);
+
+    const ajeno = await crearUsuarioSinAcceso();
+    userAccountIds.push(ajeno.userAccountId);
+    personIds.push(ajeno.personId);
+    scopeIds.push(ajeno.scopeId);
+    locationIds.push(ajeno.locationId);
+    organizationIds.push(ajeno.organizationId);
+
+    await expect(listPlotBlocks(ajeno.userAccountId, parcela.id)).rejects.toThrow(LocationAccessError);
   });
 });

@@ -10,6 +10,14 @@
  * por defecto del esquema), que es la clasificación que
  * `requireLocationAttributeAccess` exige clarificar.
  *
+ * `crearUsuarioSinAcceso` es el caso de rechazo: un Farm Operator con
+ * ámbito de ubicación, pero escoplado a SU PROPIA parcela, distinta de la
+ * que la prueba va a usar — el mismo patrón que `assignFarmOperator` +
+ * `otroPlotId` en `tests/traceability/entradaEnProduccion.test.ts`, para que
+ * un `locationId` cableado mal (u otro descuido de autorización) tenga algo
+ * real que rechazar, en vez de que la comprobación pase por no haber
+ * ninguna asignación en absoluto.
+ *
  * Cada llamada devuelve el registro completo (no sólo el id que el
  * llamador vaya a usar) para que la prueba pueda encolar los ids en su
  * propia limpieza — la limpieza vive en el archivo de la prueba, en un
@@ -49,4 +57,32 @@ export async function crearParcela() {
   return prisma.location.create({
     data: { name: `TEST Parcela (${run})`, locationType: "plot", organizationId: organizacion.id, status: "approved" },
   });
+}
+
+export async function crearUsuarioSinAcceso() {
+  const run = marca("sin-acceso");
+  const persona = await prisma.person.create({
+    data: { givenName: "TEST", familyName: "SinAcceso", displayName: `TEST SinAcceso (${run})`, locale: "es" },
+  });
+  const cuenta = await prisma.userAccount.create({
+    data: { personId: persona.id, authProvider: "credentials", status: "active" },
+  });
+  const organizacion = await prisma.organization.create({
+    data: { name: `TEST Finca Ajena (${run})`, organizationType: "farm", status: "approved" },
+  });
+  const parcelaAjena = await prisma.location.create({
+    data: { name: `TEST Parcela Ajena (${run})`, locationType: "plot", organizationId: organizacion.id, status: "approved" },
+  });
+  const perfil = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+  const scope = await prisma.scope.create({ data: { scopeType: "location", scopeRefId: parcelaAjena.id } });
+  await prisma.assignment.create({
+    data: { userAccountId: cuenta.id, roleProfileId: perfil.id, scopeId: scope.id },
+  });
+  return {
+    userAccountId: cuenta.id,
+    personId: persona.id,
+    scopeId: scope.id,
+    locationId: parcelaAjena.id,
+    organizationId: organizacion.id,
+  };
 }
