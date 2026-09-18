@@ -36,6 +36,7 @@ import type { RecordColonyEventInput } from "../../lib/apiary/colonyEvents";
 import type { ApiaryAssetParent } from "../../lib/apiary/media";
 import { fechaDeDia, parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
 import { exigeTipoDeArtefacto, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
+import { dividirColonia, unirColonias } from "../../lib/apiary/genealogia";
 
 const emptyToNull = (value: FormDataEntryValue | null) => {
   const str = String(value ?? "").trim();
@@ -774,4 +775,60 @@ export async function asentarPesoDeCosechaAction(
   }
   revalidatePath(`/apiaries/${apiaryId}`);
   return { ok: true };
+}
+
+/** Cuándo, escrito con el desfase del dispositivo; vacío = ahora. */
+function cuandoDe(formData: FormData): Date {
+  return parseOptionalLocalDateTime(String(formData.get("cuando") ?? ""), String(formData.get(TZ_OFFSET_FIELD) ?? "")) ?? new Date();
+}
+
+/**
+ * Spec 2026-09-18 §3 — dividir. El destino es una caja del apiario sin colonia activa, o una caja
+ * NUEVA que se crea aquí mismo con su identificador (lo normal en el patio: se arma el núcleo en
+ * una caja que todavía no estaba registrada).
+ */
+export async function dividirColoniaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const hiveId = String(formData.get("hiveId") ?? "");
+  let destinoHiveId = String(formData.get("destinoHiveId") ?? "");
+  if (destinoHiveId === "__nueva__") {
+    const nueva = await createHive(user.userAccountId, {
+      identifier: String(formData.get("nuevoIdentificador") ?? "").trim(),
+      locationId: String(formData.get("locationId") ?? ""),
+    });
+    destinoHiveId = nueva.id;
+  }
+  await dividirColonia(user.userAccountId, {
+    madreColonyId: String(formData.get("madreColonyId") ?? ""),
+    destinoHiveId,
+    occurredAt: cuandoDe(formData),
+    nota: emptyToNull(formData.get("nota")),
+  });
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+  revalidatePath(`/apiaries/${apiaryId}`);
+}
+
+/**
+ * Spec 2026-09-18 §3 — unir. Las causas van como en el fin de colonia: una elección por causa del
+ * catálogo, con cuán firme es; las que se dejan en «—» no se mandan.
+ */
+export async function unirColoniasFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const hiveId = String(formData.get("hiveId") ?? "");
+  const causas = [...formData.entries()]
+    .filter(([k, v]) => k.startsWith("causa_") && String(v) !== "")
+    .map(([k, v]) => ({ causeValueId: k.slice("causa_".length), provenanceClass: exigeClaseDeCausa(String(v)) }));
+  await unirColonias(user.userAccountId, {
+    debilColonyId: String(formData.get("debilColonyId") ?? ""),
+    receptoraColonyId: String(formData.get("receptoraColonyId") ?? ""),
+    occurredAt: cuandoDe(formData),
+    causas,
+    reason: emptyToNull(formData.get("reason")),
+  });
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+  revalidatePath(`/apiaries/${apiaryId}`);
 }

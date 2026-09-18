@@ -2,7 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
-import { getHive } from "../../../../../lib/apiary/hives";
+import { getApiaryDetail, getHive } from "../../../../../lib/apiary/hives";
+import { lineaDeColonia } from "../../../../../lib/apiary/genealogia";
+import { dividirColoniaFormAction, unirColoniasFormAction } from "../../../../actions/apiary";
 import { permissionKeysAnywhere } from "../../../../../lib/rbac/service";
 import { origenesDeColonia } from "../../../../../lib/apiary/origenDeColonia";
 import { sinRegistrar } from "../../../../../lib/apiary/vacio";
@@ -18,6 +20,7 @@ import { METODOS_DE_ALIMENTACION } from "../../../../../lib/apiary/alimentacion"
 import { leerEnmiendas } from "../../../../../lib/traceability/enmiendas";
 import { actualizarConfiguracionDeCajaFormAction } from "../../../../actions/apiary";
 import { BotonDeEnvio } from "../../../../components/BotonDeEnvio";
+import { TimezoneOffsetField } from "../../../../components/TimezoneOffsetField";
 import { cosechasDeColonia, TIPOS_DE_MIEL } from "../../../../../lib/apiary/cierreDeCosecha";
 import { completarCierreDeCosechaFormAction } from "../../../../actions/apiary";
 import { NewColonyForm } from "../../../../components/apiary/NewColonyForm";
@@ -140,6 +143,14 @@ export default async function HiveDetailPage({
   // Spec 2026-09-18: la enjambrazón se descubre REVISANDO. El mismo cálculo y la misma ventana
   // de 60 días que la ficha del apiario (`app/apiaries/[id]/page.tsx`), no uno nuevo. Después de
   // `getHive`, que ya autorizó ver esta caja.
+  // Spec 2026-09-18 §3 — la línea de la colonia, y las cajas del apiario para dividir y unir.
+  // Después de `getHive`; cada lectura autoriza por su cuenta.
+  const linea = colony ? await lineaDeColonia(user.userAccountId, colony.id) : null;
+  const cajasDelApiario = colony && puedeGestionar ? (await getApiaryDetail(user.userAccountId, hive.locationId)).hives : [];
+  const cajasLibres = cajasDelApiario.filter((h) => h.id !== hive.id && !h.colonies.some((c) => c.status === "active"));
+  const receptoras = cajasDelApiario.flatMap((h) =>
+    h.colonies.filter((c) => c.status === "active" && c.id !== colony?.id).map((c) => ({ colonyId: c.id, identifier: h.identifier })),
+  );
   const ahoraEnjambrazon = new Date();
   const avisoDeEnjambrazon = colony
     ? ((
@@ -536,7 +547,66 @@ export default async function HiveDetailPage({
               <summary>
                 <h2 style={{ display: "inline" }}>{t("faena_dividir")}</h2>
               </summary>
-              <p className="nn-muted">{t("dividirPronto")}</p>
+              {linea && (linea.madre || linea.hijas.length > 0) ? (
+                <p>
+                  {linea.madre ? (
+                    <>
+                      {t("lineaMadre")}{" "}
+                      <Link href={`/apiaries/${linea.madre.hive.locationId}/hives/${linea.madre.hive.id}`}>{linea.madre.hive.identifier}</Link>
+                      {". "}
+                    </>
+                  ) : null}
+                  {linea.hijas.length > 0 ? (
+                    <>
+                      {t("lineaHijas")}{" "}
+                      {linea.hijas.map((h, i) => (
+                        <span key={h.id}>
+                          {i > 0 ? ", " : ""}
+                          <Link href={`/apiaries/${h.hive.locationId}/hives/${h.hive.id}`}>{h.hive.identifier}</Link>
+                        </span>
+                      ))}
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+              {/* La guía de DICTA, citada, como guía: no se valida (spec §1 — ninguna cifra entra). */}
+              <p className="nn-muted">{t("dividirGuia")}</p>
+              {puedeGestionar && colony.status === "active" ? (
+                <form action={dividirColoniaFormAction} className="nn-form">
+                  <input type="hidden" name="apiaryId" value={apiaryId} />
+                  <input type="hidden" name="hiveId" value={hive.id} />
+                  <input type="hidden" name="locationId" value={hive.locationId} />
+                  <input type="hidden" name="madreColonyId" value={colony.id} />
+                  <TimezoneOffsetField />
+                  <div className="nn-field">
+                    <label htmlFor="dividir-destino">{t("dividirDestino")}</label>
+                    <select id="dividir-destino" name="destinoHiveId" required defaultValue="">
+                      <option value="" disabled />
+                      {cajasLibres.map((h) => (
+                        <option key={h.id} value={h.id}>
+                          {h.identifier}
+                        </option>
+                      ))}
+                      <option value="__nueva__">{t("dividirCajaNueva")}</option>
+                    </select>
+                  </div>
+                  <div className="nn-field">
+                    <label htmlFor="dividir-nueva">{t("dividirNuevoIdentificador")}</label>
+                    <input id="dividir-nueva" name="nuevoIdentificador" type="text" />
+                  </div>
+                  <div className="nn-field">
+                    <label htmlFor="dividir-cuando">{t("faenaCuando")}</label>
+                    <input id="dividir-cuando" name="cuando" type="datetime-local" />
+                  </div>
+                  <div className="nn-field">
+                    <label htmlFor="dividir-nota">{t("dividirNota")}</label>
+                    <input id="dividir-nota" name="nota" type="text" />
+                  </div>
+                  <BotonDeEnvio>{t("dividirBoton")}</BotonDeEnvio>
+                </form>
+              ) : (
+                <p className="nn-muted">{t("sinPermisoGestion")}</p>
+              )}
             </details>
           </section>
 
@@ -554,7 +624,56 @@ export default async function HiveDetailPage({
               <summary>
                 <h2 style={{ display: "inline" }}>{t("faena_unir")}</h2>
               </summary>
-              <p className="nn-muted">{t("unirPronto")}</p>
+              <p className="nn-muted">{t("unirGuia")}</p>
+              {puedeGestionar && colony.status === "active" ? (
+                receptoras.length === 0 ? (
+                  <p className="nn-muted">{t("unirSinReceptoras")}</p>
+                ) : (
+                  <form action={unirColoniasFormAction} className="nn-form">
+                    <input type="hidden" name="apiaryId" value={apiaryId} />
+                    <input type="hidden" name="hiveId" value={hive.id} />
+                    <input type="hidden" name="debilColonyId" value={colony.id} />
+                    <TimezoneOffsetField />
+                    <div className="nn-field">
+                      <label htmlFor="unir-receptora">{t("unirReceptora")}</label>
+                      <select id="unir-receptora" name="receptoraColonyId" required defaultValue="">
+                        <option value="" disabled />
+                        {receptoras.map((r) => (
+                          <option key={r.colonyId} value={r.colonyId}>
+                            {r.identifier}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="unir-cuando">{t("faenaCuando")}</label>
+                      <input id="unir-cuando" name="cuando" type="datetime-local" />
+                    </div>
+                    {/* Por qué se unió: el mismo catálogo y la misma firmeza que el fin de colonia. */}
+                    <fieldset className="nn-field">
+                      <legend>{t("colonyEndCausesLegend")}</legend>
+                      {causas.map((c) => (
+                        <div key={c.id} className="nn-field">
+                          <label htmlFor={`unir-causa-${c.id}`}>{c.value}</label>
+                          <select id={`unir-causa-${c.id}`} name={`causa_${c.id}`} defaultValue="">
+                            <option value="">{t("colonyEndCauseNo")}</option>
+                            <option value="hypothesis">{t("colonyEndCause_hypothesis")}</option>
+                            <option value="conclusion">{t("colonyEndCause_conclusion")}</option>
+                            <option value="direct_observation">{t("colonyEndCause_direct_observation")}</option>
+                          </select>
+                        </div>
+                      ))}
+                    </fieldset>
+                    <div className="nn-field">
+                      <label htmlFor="unir-razon">{t("colonyEndReasonLabel")}</label>
+                      <input id="unir-razon" name="reason" type="text" />
+                    </div>
+                    <BotonDeEnvio>{t("unirBoton")}</BotonDeEnvio>
+                  </form>
+                )
+              ) : (
+                <p className="nn-muted">{t("sinPermisoGestion")}</p>
+              )}
             </details>
           </section>
 
