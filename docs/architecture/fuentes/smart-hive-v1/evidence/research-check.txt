@@ -1,0 +1,11 @@
+PASS rejection: dangling study
+PASS rejection: dangling inventory
+PASS rejection: dangling method
+PASS rejection: missing provenance
+PASS rejection: negative quantity
+PASS rejection: boolean quantity
+PASS rejection: duplicate ID
+PASS rejection: unexpected property
+PASS rejection: invalid date
+PASS: unknown quantity remains null; 40 studies, 8 methods, 34 items; standalone catalogues match bundle.
+Scope: delivered schema keyword subset, dates, identifiers and foreign keys. No general JSON Schema conformance claim, source re-analysis, UI test or field validation.

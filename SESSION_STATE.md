@@ -26,7 +26,7 @@ flip-test el 2026-08-28, en ambas direcciones.
 | P-B | A qué proyecto apunta el dominio de marca — **cerrada el 2026-08-28** | Decisión de Daniel. Se deja la fila porque vuelve a abrirse sola si el dominio volviera a este proyecto | `curl -s -L https://www.nectarnomada.com/ \| grep -q 'href="/login"'` |
 | P-C | Quiénes reciben correo y, con él, acceso | Casi nadie en la base tiene correo; sin correo no hay contraseña. Hoy solo Daniel y José. Quién entra no lo decide el sistema | `! grep -qi "correos de las personas" docs/architecture/DECISIONS.md` |
 | P-D | Nombres y roles de la **familia Huerbsch** — **cerrada el 2026-08-29** | La premisa era falsa: sí están en la base desde A7 — Bob (copropietario), Sherry (copropietaria) y Chris (representante familiar), con membresías reales. Faltaba el ADR, que es lo único que la prueba mira. Ver ADR-106 | `! grep -qi "huerbsch registrada" docs/architecture/DECISIONS.md` |
-| P-F | Revisar las tres guías de `docs/dominio/` — pH, Brix y subproductos | Las redactó un modelo a partir de indicaciones suyas y **nadie las ha repasado**. Traen umbrales con pinta de norma y frases como «PELIGRO: lave el café de inmediato». Qué respalda él y qué no, no lo decide el sistema | `grep -lq "^  estado    : borrador"` sobre los `.md` de la carpeta; carpeta ausente sale **2**, no cerrada |
+| P-F | Revisar las **cinco** guías de `docs/dominio/` — pH, Brix, subproductos y, desde el 2026-09-17, **Varroa** y **Meliponini** (ADR-158) | Las redactó un modelo a partir de indicaciones suyas y **nadie las ha repasado**. Traen umbrales con pinta de norma y frases como «PELIGRO: lave el café de inmediato». Qué respalda él y qué no, no lo decide el sistema | `grep -lq "^  estado    : borrador"` sobre los `.md` de la carpeta; carpeta ausente sale **2**, no cerrada |
 | P-E | Destino de backup fuera de la máquina | *Cerrada hoy* — `NN_BACKUP_DIR` está en `~/.zshrc`. Se deja en la tabla porque vuelve a abrirse sola si alguien lo quita, y porque una tabla donde todo dice «abierta» no demuestra que el mecanismo discrimine | `! grep -q "NN_BACKUP_DIR" "$HOME/.zshrc"` |
 
 **P-C y P-D no cambian ningún artefacto por sí solas.** Su veredicto aterriza
@@ -37,6 +37,28 @@ de «hecho y sin rastro».
 ---
 
 ## 2. Lo que se entregó — más nuevo primero
+
+### 2026-09-17 · El material de soporte, guardado entero y verificable
+
+ADR-158. Daniel: «deberías tener más documentación y material de soporte guardado, revisar todo».
+**Tenía razón:** medido por contenido, el repositorio guardaba sólo las cuatro fuentes de Cerro Azul.
+El grave era el **paquete Q1–Q49**: sus 49 decisiones vivían sólo en una carpeta de Documentos, y el
+repositorio tenía únicamente mis análisis que lo citan.
+
+**Ahora está todo, en dos clases que no se mezclan:** los **registros** —Q1–Q49, smart-hive, y
+**trece decisiones de Daniel en sus palabras literales**, sacadas de la transcripción con su línea—
+en `docs/architecture/`; el **conocimiento con cifras** —Varroa y Meliponini como **borrador**, ANSA
+como **referencia externa**— en `docs/dominio/`. Índice: `FUENTES_INDICE.md`.
+
+**«Verbatim» ya no es una promesa:** `fuentes-verbatim.test.ts` verifica cada copia en cada corrida,
+smart-hive contra **su propio** manifiesto.
+
+**Lo que encontró el contraste:** el manual de Varroa es de **clima templado**, y el **ácido fórmico
+es de seguridad** en el trópico —el propio texto dice que por encima de 27 °C mata a la reina—.
+Meliponini se contradice consigo mismo. ANSA es de Tucumán: géneros iguales, especies no.
+
+**P-F pasa de tres guías a cinco**, y su texto se corrigió. Ninguna cifra de estos documentos entra
+al software: los vocabularios de tratamiento y limpieza los decide Daniel.
 
 ### 2026-09-17 · Los vitales de campo se anotan en el sitio, y queda dicho que fue allí
 
@@ -86,28 +108,6 @@ el `Serializable` no tenía guardia ninguno. Reincidí en la trampa que Codex me
 una hora después, arreglando esa misma trampa.
 
 Los cinco flip-tests de la rebanada repiten **las mutaciones exactas de Codex**.
-
-### 2026-09-17 · La valoración del técnico, por el cierre de la visita
-
-ADR-154. El Anexo E pide «Valoración» y el mapa la daba por sin sitio con la razón escrita: «`note`
-es la nota de campo; mezclarlas perdería cuál se escribió con el guante puesto». Son dos columnas
-porque son **dos momentos**. Y es el **único** campo de etapa cierre de la inspección: los otros
-dieciséis son de campo.
-
-**La decisión: no se le inventa un cierre a la inspección.** `Inspection` no tiene ni `completedAt`
-ni ventana; `FieldSession` sí, con sus reglas ya distinguidas entre sí. Así que la puerta es la
-visita, y el enlace ya existía —`FieldEvent` une sesión e inspección—.
-
-**Una inspección sin visita se acepta y el servicio lo dice** (`sin_visita`): negarlo dejaría esa
-valoración sin poder escribirse nunca. **El audit lleva el ANTES**, porque saber desde qué se cambió
-una lectura del técnico es parte de poder sostenerla.
-
-**Un desajuste declarado y NO arreglado:** el protocolo marca esta pregunta `interpretation` y la
-fila está estampada `direct_observation`. **Ya pasaba con `probableCause` y `recommendation`, y
-ADR-142 no lo dijo.** Son los tres únicos items con procedencia declarada. Arreglarlo bien exige
-decidir si una interpretación merece fila propia, y eso es pieza aparte.
-
-**Los huecos del protocolo bajan de tres a dos:** `site_condition` y `moisture_pct`.
 
 
 ## 3. Bloqueado, y en qué

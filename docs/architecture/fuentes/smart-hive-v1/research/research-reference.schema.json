@@ -1,0 +1,276 @@
+{
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "status": {
+      "const": "reference_data_not_field_observations"
+    },
+    "checked_on": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "studies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/study"
+      }
+    },
+    "methods": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/method"
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item"
+      }
+    }
+  },
+  "required": [
+    "version",
+    "status",
+    "checked_on",
+    "studies",
+    "methods",
+    "items"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Nectar Nomada research reference import v1",
+  "$defs": {
+    "study": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "citation_label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "year": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "crop": {
+          "type": "string",
+          "minLength": 1
+        },
+        "record_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "doi": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "access_scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked_on": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_locator": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reported_design": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reported_results": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reported_analysis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project_interpretation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exact_equipment_part_numbers": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "full_replication_extraction_complete": {
+          "const": false
+        }
+      },
+      "required": [
+        "id",
+        "citation_label",
+        "year",
+        "title",
+        "crop",
+        "record_type",
+        "source_url",
+        "doi",
+        "access_scope",
+        "checked_on",
+        "source_locator",
+        "reported_design",
+        "reported_results",
+        "reported_analysis",
+        "project_interpretation",
+        "exact_equipment_part_numbers",
+        "full_replication_extraction_complete"
+      ],
+      "additionalProperties": false
+    },
+    "method": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "study_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "prerequisites": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_records": {
+          "type": "string",
+          "minLength": 1
+        },
+        "interpretation_guard": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inventory_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "status": {
+          "const": "proposed_local_workflow"
+        },
+        "crop_specific_sop_required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "study_ids",
+        "prerequisites",
+        "required_records",
+        "interpretation_guard",
+        "inventory_ids",
+        "status",
+        "crop_specific_sop_required"
+      ],
+      "additionalProperties": false
+    },
+    "item": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minimum_specification": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pilot_quantity": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scaling_rule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "method_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "stage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "manufacturer_part_number": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "supplier_quote_status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "category",
+        "minimum_specification",
+        "pilot_quantity",
+        "unit",
+        "scaling_rule",
+        "method_ids",
+        "stage",
+        "manufacturer_part_number",
+        "supplier_quote_status",
+        "notes"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

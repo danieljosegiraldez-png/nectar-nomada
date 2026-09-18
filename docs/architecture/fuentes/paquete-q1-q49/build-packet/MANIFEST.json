@@ -1,0 +1,85 @@
+{
+  "release": "1.0",
+  "prepared": "2026-09-16",
+  "application_repository_inspected": false,
+  "application_tests_executed": false,
+  "decision_questions": 49,
+  "acceptance_scenarios": 40,
+  "discovery_turns": 63,
+  "prior_turns": 69,
+  "truncated_prior_assistant_messages": 10,
+  "validation": [
+    "Decision headings Q01–Q49 complete and ordered",
+    "Scenario headings AT01–AT40 complete and ordered",
+    "Authored local file and transcript anchors resolve",
+    "Prior-source truncation gaps marked",
+    "Selected material arithmetic fixtures verified"
+  ],
+  "files": [
+    {
+      "path": "NECTAR_NOMADA_CLAUDE_BUILD_PACKET.md",
+      "bytes": 185703,
+      "sha256": "7795bf803dce0a727da394acf7f0d80e2a821b1c9c758ce33dc95975c82f6cd4"
+    },
+    {
+      "path": "nectar-nomada-build-packet/00-START-HERE.md",
+      "bytes": 5947,
+      "sha256": "9f1141235f7afa8b1d680a8a27848bee0d1d7b954b1089cfabc1f630eab46cbe"
+    },
+    {
+      "path": "nectar-nomada-build-packet/01-TECHNICAL-BUILD-PACKET.md",
+      "bytes": 62308,
+      "sha256": "ea2524eec83dc68c0b6285e1ab83a3018ca8dc5087bd0bb9f36b441726f08c19"
+    },
+    {
+      "path": "nectar-nomada-build-packet/02-DECISION-REGISTER-Q01-Q49.md",
+      "bytes": 31117,
+      "sha256": "6d726e54ea07afd900e8f776ce48eb430ffbe28401cc76d9c54e6e06b8fbae11"
+    },
+    {
+      "path": "nectar-nomada-build-packet/03-RESEARCH-AND-PROTOCOL-LIBRARY.md",
+      "bytes": 21350,
+      "sha256": "a04d787246ed196b90035e4207df2bed7e45982ef30b8b506a1e59194b4c7b7b"
+    },
+    {
+      "path": "nectar-nomada-build-packet/04-ACCEPTANCE-AND-ADVERSARIAL-SCENARIOS.md",
+      "bytes": 19672,
+      "sha256": "a3d8bc45f71e93aa065c21d378083eae4da1db8eaad72d2b003239cf8a274416"
+    },
+    {
+      "path": "nectar-nomada-build-packet/05-CURRENT-STATE-AUDIT-AND-MIGRATION.md",
+      "bytes": 11240,
+      "sha256": "f56ada1819fbc68e3fce6018c568860c7b2bc3aa904c0819680e9575c13fac00"
+    },
+    {
+      "path": "nectar-nomada-build-packet/06-CLAUDE-CODE-MASTER-PROMPT.md",
+      "bytes": 8716,
+      "sha256": "75fc188895086c59b98300b9d02175e73e024c6edf8cafec0c3c711835e2777a"
+    },
+    {
+      "path": "nectar-nomada-build-packet/07-CODEX-ADVERSARIAL-VERIFICATION-PROMPT.md",
+      "bytes": 7777,
+      "sha256": "8827e2e8ec82cc3129932bbdde81c052d59d9176aa4ea1637473d82053c03aaa"
+    },
+    {
+      "path": "nectar-nomada-build-packet/08-PRIOR-CONTEXT-AND-CONTINUITY.md",
+      "bytes": 14780,
+      "sha256": "35077740c96905933655045147841ba46e4207ca4fbd49de4c02db411fde2913"
+    },
+    {
+      "path": "nectar-nomada-build-packet/09-DISCOVERY-SOURCE-TRANSCRIPT.md",
+      "bytes": 215471,
+      "sha256": "3175a643773958f2e7c36cb0c5f333194f2092a87684dc5be55b420548e42cdb"
+    },
+    {
+      "path": "nectar-nomada-build-packet/10-PRIOR-FARM-SOURCE.md",
+      "bytes": 159245,
+      "sha256": "e7fdc0eea32f8cdbb6c97cf864afe0c709d45084a4d7b730fc84f02d2b37d641"
+    },
+    {
+      "path": "nectar-nomada-build-packet/10-PRIOR-PLATFORM-SOURCE.md",
+      "bytes": 517618,
+      "sha256": "e669f189a616795d0e0d777a92f971682f2bdbba0db30f9d53859e42a3065834"
+    }
+  ]
+}

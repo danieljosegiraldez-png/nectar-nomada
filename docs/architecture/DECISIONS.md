@@ -11005,3 +11005,75 @@ Es la tercera vez en dos dias, y las tres las dijo el flip-test.
 **Lo que NO entra.** `purpose` es el cuarto `stage: field` y se queda donde esta: «que se fue a
 hacer» se sabe **antes** de llegar, asi que no es una observacion del sitio y la marca no diria
 nada sobre ella.
+
+## ADR-158 -- El material de soporte se guarda entero, verificable, y separado entre registro y conocimiento
+
+**Contexto.** Daniel, el 2026-09-17: *«deberias tener mas documentacion y material de soporte
+guardado, revisar todo»*. Antes lo habia pedido con otras palabras: *«no quiero que se pierda que
+fue mucha investigacion y preparacion... servira mas alla del build como data de referencia»*.
+
+**Tenia razon, y se midio -- buscando por CONTENIDO, con control positivo.** De todo lo entregado en
+septiembre, el repositorio guardaba **solo las cuatro fuentes de Cerro Azul** (ADR-146):
+
+| material | en el repositorio |
+|---|---|
+| paquete Meliponini y su seeder | nada |
+| libro de ANSA (Gennari, INTA) | nada, ni citado |
+| **paquete Q1-Q49** -- las 49 decisiones de descubrimiento | solo dos analisis mios que lo CITAN |
+| paquete smart-hive-v1 -- 68 archivos | una mencion en un plan |
+| manual de Varroa del 2026-09-17 | nada |
+| **trece decisiones de Daniel dichas en la conversacion** | solo en la transcripcion |
+
+El caso grave es el de Q1-Q49: **si se perdia la carpeta de Codex, de las 49 decisiones del dueno
+quedaba solo el resumen de quien construyo.** Es exactamente lo que no debe pasar.
+
+**Decision 1 -- dos clases, en dos sitios, y no se mezclan.**
+
+- **Registros** -- lo que se dijo o decidio -- a `docs/architecture/`: `FUENTE_DECISIONES_DEL_DUENO_2026-09.md`,
+  `fuentes/paquete-q1-q49/`, `fuentes/smart-hive-v1/`.
+- **Conocimiento con cifras** -- umbrales, dosis, medidas -- a `docs/dominio/`, con su `estado`
+  declarado: Varroa y Meliponini como **borrador**, ANSA como **referencia externa**.
+
+No es de estilo: `material-de-dominio-declarado` existe porque *«una matriz sin su rotulo es
+indistinguible de un umbral que el dueno respalda, y el codigo se apoya en los dos por igual»*. El
+manual de Varroa tiene exactamente esa forma -- dosis, umbrales del 3 % y 5 %, «estrictamente
+obligatorio» -- y ninguna fuente citada.
+
+**Decision 2 -- «verbatim» deja de ser una promesa.** `tests/arquitectura/fuentes-verbatim.test.ts`
+verifica cada copia en cada corrida: smart-hive contra **su propio** `MANIFEST.sha256` -- hecho por
+quien lo produjo, mejor juez que uno propio --, Q1-Q49 contra uno generado sobre la copia tras
+comprobarla identica al original, y los documentos con cabecera contra el sha que declaran. Lleva
+cuatro controles que **alteran copias a proposito**, porque un verificador que solo se prueba contra
+copias buenas no se ha probado.
+
+**Lo que el contraste encontro, y va en las cabeceras, no en un resumen aparte:**
+
+- **El manual de Varroa esta escrito para clima TEMPLADO.** Habla de invernada y de aplicar a
+  5-12 C. En Cerro Azul no hay invierno. **El acido formico es un asunto de SEGURIDAD**: el propio
+  texto dice que por encima de 27 C mata a la reina, y en el tropico 27 C se superan buena parte del
+  dia. El oxalico depende de un bloqueo de cria invernal que alli no ocurre. Los umbrales de
+  tratamiento estan anclados a estaciones que no existen.
+- **Meliponini no es fiable todavia:** tres especies uno, cuatro el otro, cinco segun Daniel; y de
+  las tres que comparten, **dos discrepan entre si** en medidas de caja y alcance de vuelo.
+- **ANSA es la unica fuente publicada del lote, pero es de Tucuman.** Sus especies son argentinas
+  -- *T. fiebrigi*, *S. jujuyensis* --: los generos coinciden con los de Daniel y las especies no.
+  Se guarda la **ficha**, extraida del propio PDF, no el libro, que es obra publicada.
+
+**Y las trece decisiones de Daniel, en sus palabras literales**, extraidas de la transcripcion por
+programa, cada una con su linea y con **lo que produjo** -- o en que esta bloqueada. Seis habian
+llegado como mensajes enviados mientras se trabajaba, que la herramienta entrega incrustados en la
+salida de otra orden: **la primera busqueda solo encontro siete**, porque miraba los mensajes aparte.
+No faltaban; estaban en otro sitio.
+
+**P-F pasa de tres guias a cinco.** Su prueba no cambia -- ya miraba la carpeta entera -- pero su
+texto decia «tres» y se corrigio, porque una instruccion vieja es peor que ninguna.
+
+**Seguridad, comprobada antes de copiar.** Ningun `CLAUDE.md` en los paquetes -- se cargaria en cada
+sesion --. Ningun secreto: el detector se probo en tres formas, y la primera version **no cubria el
+caso JSON**, donde una comilla separa la clave de los dos puntos. Las ocho coincidencias de la version
+ampliada fueron nombres de esquemas de autenticacion OpenAPI, no valores.
+
+**Lo que NO entra.** El PDF de ANSA (obra publicada: si Daniel quiere versionarlo, se anade con el sha
+que ya declara la ficha), los `.zip` (redundantes, comprobado archivo por archivo) y `.DS_Store`.
+**Ni una sola cifra de estos documentos pasa al software**: los vocabularios de tratamiento y de
+limpieza se proponen a partir del de Varroa, pero los decide Daniel.

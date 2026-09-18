@@ -1,0 +1,170 @@
+# seeder.js
+/**
+ * Néctar Nómada - Production Catalog Seeder Script
+ * Designed to minimize tokens and development friction for Claude Code.
+ * 
+ * Target Database Schema Compatibility: PostgreSQL / MongoDB / SQLite via Prisma, TypeORM, or native drivers.
+ * Includes complete taxonomy matrices, optimal nesting dimensions, and phorid management protocols.
+ */
+
+const meliponiniCatalogData = [
+  {
+    id: "sp_tet_ang",
+    scientificName: "Tetragonisca angustula",
+    localNames: ["Angelita", "Mariquita", "Yateí"],
+    genus: "Tetragonisca",
+    distributionPanama: ["Panamá Centro", "Panamá Oeste", "Coclé", "Chiriquí", "Veraguas"],
+    morphology: {
+      bodyLengthMm: 4.5,
+      coloration: "Light amber/yellow legs, slender black and brown thorax.",
+      distinctFeatures: "Constructs soft, porous white/light-yellow wax entrance tubes."
+    },
+    ecology: {
+      flightRangeMeters: 500,
+      nestingHabit: "Cavities, opportunistic (block walls, meters, tree hollows)",
+      canopyLevel: "Understory to Mid-canopy"
+    },
+    meliponicultureSpecs: {
+      optimalBoxType: "INPA Modular",
+      boxDimensionsCm: { width: 12, length: 12, height: 7 },
+      annualYieldLiters: { min: 0.5, max: 1.5 },
+      honeyMoisturePct: { min: 25, max: 30 },
+      temperament: "Docile / Highly manageable"
+    },
+    managementProtocols: {
+      multiplicationMethod: "INPA Modular Split (1 Parent + 1 Daughter box framework)",
+      phoridRiskLevel: "CRITICAL (First 7 days post-split)",
+      sealingRequirement: "100% joints taped with masking tape immediately",
+      feedingSchedule: "Internal micro-feeder with 1:1 sugar syrup + syrup matrix after day 4 only if completely sealed."
+    }
+  },
+  {
+    id: "sp_mel_pan",
+    scientificName: "Melipona panamensis",
+    localNames: ["Melipona de Panamá", "Boca de Sapo"],
+    genus: "Melipona",
+    distributionPanama: ["Chiriquí (Boquete)", "Coclé (El Valle)", "Colón", "Darién"],
+    morphology: {
+      bodyLengthMm: 9.5,
+      coloration: "Robust build, dark brown abdomen with subtle golden/amber bands.",
+      distinctFeatures: "Large mandibles, highly distinctive fanning behavior at nest entrance."
+    },
+    ecology: {
+      flightRangeMeters: 1500,
+      nestingHabit: "Exclusively large pre-existing hollows in mature hardwood trees",
+      canopyLevel: "Upper Canopy / Primary Forest Dominant"
+    },
+    meliponicultureSpecs: {
+      optimalBoxType: "INPA Large / Horizontal Sieve",
+      boxDimensionsCm: { width: 20, length: 20, height: 10 },
+      annualYieldLiters: { min: 3.0, max: 5.0 },
+      honeyMoisturePct: { min: 28, max: 35 },
+      temperament: "Timid but highly defensive (mass flight targeting eyes/face without stinging)"
+    },
+    managementProtocols: {
+      multiplicationMethod: "Minimum 4-disc configuration transfer with royal cell validation",
+      phoridRiskLevel: "Medium-High (Stronger physical defense but large wax surface attractive)",
+      sealingRequirement: "Heavy clay or perimeter tape application",
+      feedingSchedule: "Pots simulation via cerumen enrichment, raw honey-pollen blend inside internal capsule."
+    }
+  },
+  {
+    id: "sp_sca_pec",
+    scientificName: "Scaptotrigona pectoralis",
+    localNames: ["Soncuano", "Abeja del Futuro"],
+    genus: "Scaptotrigona",
+    distributionPanama: ["Herrera", "Los Santos", "Veraguas", "Chiriquí", "Panamá Oeste"],
+    morphology: {
+      bodyLengthMm: 6.0,
+      coloration: "Shiny jet-black body, smoky dark wings.",
+      distinctFeatures: "Emits a strong formic/citric chemical warning odor when colony is breached."
+    },
+    ecology: {
+      flightRangeMeters: 1000,
+      nestingHabit: "Thick trunks, lower tree bases, highly resilient to secondary forests",
+      canopyLevel: "Mid-canopy / Open Agricultural Fields"
+    },
+    meliponicultureSpecs: {
+      optimalBoxType: "INPA Medium / AF Framework",
+      boxDimensionsCm: { width: 16, length: 16, height: 9 },
+      annualYieldLiters: { min: 2.5, max: 4.5 },
+      honeyMoisturePct: { min: 26, max: 32 },
+      temperament: "Aggressive biting / Hair entanglement collective defense mechanism"
+    },
+    managementProtocols: {
+      multiplicationMethod: "Induction by horizontal split or progressive module relocation",
+      phoridRiskLevel: "Medium (Highly aggressive workers actively execute phorids at entrance)",
+      sealingRequirement: "Standard masking tape application over joints",
+      feedingSchedule: "External specialized syrup traps + internal stimulation during dry season shortages."
+    }
+  },
+  {
+    id: "sp_nan_per",
+    scientificName: "Nannotrigona perilampoides",
+    localNames: ["Trompeta", "Cucu Real Chiquito"],
+    genus: "Nannotrigona",
+    distributionPanama: ["Panamá Centro", "Chiriquí", "Coclé", "Colón"],
+    morphology: {
+      bodyLengthMm: 3.5,
+      coloration: "Dull black, rugged pitted thorax, pale markings on scutellum.",
+      distinctFeatures: "Constructs long, narrow, rigid wax entry pipe with micro-perforations."
+    },
+    ecology: {
+      flightRangeMeters: 300,
+      nestingHabit: "Small wall crevices, narrow structural gaps, tiny hollow branches",
+      canopyLevel: "Understory / Adapted to Urban Real Estate"
+    },
+    meliponicultureSpecs: {
+      optimalBoxType: "Mini Modular Box",
+      boxDimensionsCm: { width: 10, length: 10, height: 6 },
+      annualYieldLiters: { min: 0.1, max: 0.4 },
+      honeyMoisturePct: { min: 24, max: 28 },
+      temperament: "Extremely shy / Retreats immediately inside tube upon disturbance"
+    },
+    managementProtocols: {
+      multiplicationMethod: "Exclusively by total structural colony relocation or minimal brood cluster lift",
+      phoridRiskLevel: "Low-Medium (Small target area but thin entrance wall vulnerable to intrusion)",
+      sealingRequirement: "Precision perimeter sealing",
+      feedingSchedule: "Microscopic droplets of 1:1 honey water solution inside internal corner pots."
+    }
+  }
+];
+
+async function seedMeliponiniCatalog(databaseClient) {
+  console.log("🚀 Starting Néctar Nómada Meliponini Catalog Seeding...");
+  
+  try {
+    // Example abstraction for Knex, Prisma, or Mongoose execution
+    for (const species of meliponiniCatalogData) {
+      console.log(`Inserting taxonomy payload for: ${species.scientificName}`);
+      
+      // Replace with your ORM syntax: e.g., await databaseClient.species.upsert({ ... })
+      await databaseClient("species_catalog")
+        .insert({
+          id: species.id,
+          scientific_name: species.scientificName,
+          local_names: JSON.stringify(species.localNames),
+          genus: species.genus,
+          distribution_panama: JSON.stringify(species.distributionPanama),
+          morphology: JSON.stringify(species.morphology),
+          ecology: JSON.stringify(species.ecology),
+          meliponiculture_specs: JSON.stringify(species.meliponicultureSpecs),
+          management_protocols: JSON.stringify(species.managementProtocols),
+          created_at: new Date(),
+          updated_at: new Date()
+        })
+        .onConflict("id")
+        .merge();
+    }
+    
+    console.log("✅ Meliponini Catalog seed completed successfully.");
+  } catch (error) {
+    console.error("❌ Seeding execution failure:", error);
+    throw error;
+  }
+}
+
+module.exports = {
+  meliponiniCatalogData,
+  seedMeliponiniCatalog
+};

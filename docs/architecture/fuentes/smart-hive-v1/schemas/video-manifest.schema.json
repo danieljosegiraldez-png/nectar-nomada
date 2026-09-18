@@ -1,0 +1,231 @@
+{
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "nn.microparcel.video/1"
+    },
+    "clip_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "experiment_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "block_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "microparcel_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "plant_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "minItems": 0,
+      "maxItems": 100
+    },
+    "colony_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "node_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "camera_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "view": {
+      "enum": [
+        "entrance",
+        "flower",
+        "phenology"
+      ]
+    },
+    "stage": {
+      "enum": [
+        "baseline",
+        "flowering",
+        "fruit_set",
+        "fruiting",
+        "ripening",
+        "postharvest"
+      ]
+    },
+    "schedule_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "scheduled_start_utc": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "actual_start_utc": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "duration_s": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 1800
+    },
+    "clock_uncertainty_ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "fps": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 240
+    },
+    "bitrate_bps": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "bytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "storage_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "quality_flags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "minItems": 0,
+      "maxItems": 32
+    },
+    "annotation_version": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "model_version": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "branch_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "treatment": {
+      "enum": [
+        "open",
+        "pollinator_exclusion",
+        "sham_bag",
+        "other",
+        "not_applicable"
+      ]
+    },
+    "protocol_version": {
+      "type": "string"
+    },
+    "flower_count_visible": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "usable_observation_seconds": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "schema",
+    "clip_id",
+    "experiment_id",
+    "block_id",
+    "microparcel_id",
+    "plant_ids",
+    "colony_id",
+    "node_id",
+    "camera_id",
+    "view",
+    "stage",
+    "schedule_version",
+    "scheduled_start_utc",
+    "actual_start_utc",
+    "duration_s",
+    "clock_uncertainty_ms",
+    "width",
+    "height",
+    "fps",
+    "bitrate_bps",
+    "sha256",
+    "bytes",
+    "storage_key",
+    "quality_flags",
+    "annotation_version",
+    "model_version"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
