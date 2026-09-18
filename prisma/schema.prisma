@@ -120,6 +120,7 @@ model Person {
   materialConsumptionEntriesOperated MaterialConsumptionEntry[]    @relation("MaterialConsumptionEntryOperator")
   inspectionsOperated                Inspection[]                  @relation("InspectionOperator")
   colonyEventsOperated               ColonyEvent[]                 @relation("ColonyEventOperator")
+  hiveCleaningsOperated HiveCleaning[] @relation("HiveCleaningOperator")
   apiaryHarvestEventsOperated        ApiaryHarvestEvent[]          @relation("ApiaryHarvestEventOperator")
   varroaCountsOperated               VarroaCount[]                 @relation("VarroaCountOperator")
   organizationMemberships            OrganizationMembership[]
@@ -230,6 +231,7 @@ model UserAccount {
   inspectionsCreated                Inspection[]                 @relation("InspectionCreatedBy")
   apiaryHarvestEventsCreated        ApiaryHarvestEvent[]         @relation("ApiaryHarvestEventCreatedBy")
   colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
+  hiveCleaningsCreated HiveCleaning[] @relation("HiveCleaningCreatedBy")
   varroaCountsCreated               VarroaCount[]                @relation("VarroaCountCreatedBy")
   organizationMembershipsCreated    OrganizationMembership[]     @relation("OrganizationMembershipCreatedBy")
   plantingEventsCreated             PlantingEvent[]              @relation("PlantingEventCreatedBy")
@@ -6139,11 +6141,82 @@ model Hive {
   colonies   Colony[]
   assets     Asset[]
   placements HivePlacement[]
+  cleanings  HiveCleaning[]
 
   @@unique([locationId, identifier])
   @@index([locationId])
   @@index([projectId])
   @@map("hive")
+  @@schema("apiary")
+}
+
+/// Lo que se le hizo a la CAJA al limpiarla (ADR-159). Varios a la vez en una misma limpieza:
+/// el metodo termico es raspar y DESPUES flamear; el quimico es sumergir, aclarar y secar.
+///
+/// **Los nombres salen de `docs/dominio/varroa-inspeccion-desinfeccion.md`**, que es borrador.
+/// Se toman los NOMBRES de los procedimientos, no sus cifras: la concentracion de la sosa, los
+/// minutos de inmersion o las 48 h al sol NO son valores por defecto de nada, porque ese
+/// documento no esta revisado (ADR-158).
+///
+/// **Faltan dos actos del manual A PROPOSITO:** desbrozar el terreno es del SITIO y desinfectar
+/// la herramienta es del OPERARIO. Ninguno se le hace a una caja, y meterlos aqui les daria un
+/// sujeto falso.
+enum HiveCleaningAct {
+  raspado
+  flameado
+  inmersion_sosa
+  aclarado
+  secado_al_sol
+  renovacion_de_cera
+  otro
+
+  @@schema("apiary")
+}
+
+/// Por que se limpio la caja. Del mismo manual: el material se higieniza «cuando queda vacio
+/// debido a bajas, fusion de colonias o renovacion programada», y con metodo quimico
+/// obligatorio «ante sospechas o brotes confirmados» de enfermedad.
+///
+/// Importa para bioseguridad: una caja limpiada tras una sospecha de loque y una limpiada por
+/// rutina no son el mismo registro, aunque los actos coincidan.
+enum HiveCleaningReason {
+  baja_de_colonia
+  fusion_de_colonias
+  renovacion_programada
+  sospecha_de_enfermedad
+  otro
+
+  @@schema("apiary")
+}
+
+/// Una limpieza de la CAJA -- el hardware --, no de una colonia (ADR-159).
+///
+/// **Por que cuelga de `Hive` y no de `Colony`, que es donde cuelga todo lo demas.** Decision
+/// del dueno el 2026-09-17: «1, sobre la caja». Una caja vacia se desinfecta ANTES de recibir
+/// otra colonia, y en ese momento no hay colonia de la que colgarla. Registrarla sobre la
+/// colonia la haria imposible justo en el caso para el que existe.
+model HiveCleaning {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hiveId           String               @map("hive_id") @db.Uuid
+  hive             Hive                 @relation(fields: [hiveId], references: [id], onDelete: Restrict)
+  occurredAt       DateTime             @map("occurred_at")
+  /// Arreglo y no columna, como `FieldSession.purposes`: una limpieza hace varios actos.
+  acts             HiveCleaningAct[]    @map("acts")
+  /// El «cual» de `otro`. Obligatorio cuando `acts` incluye `otro` (ADR-125).
+  actOtherNote     String?              @map("act_other_note")
+  reason           HiveCleaningReason?  @map("reason")
+  reasonOtherNote  String?              @map("reason_other_note")
+  notes            String?
+  operatorPersonId String?              @map("operator_person_id") @db.Uuid
+  operator         Person?              @relation("HiveCleaningOperator", fields: [operatorPersonId], references: [id])
+  provenanceClass  ProvenanceClass      @map("provenance_class")
+  dataQuality      DataQuality?         @map("data_quality")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  createdBy        String?              @map("created_by") @db.Uuid
+  creator          UserAccount?         @relation("HiveCleaningCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([hiveId])
+  @@map("hive_cleaning")
   @@schema("apiary")
 }
 

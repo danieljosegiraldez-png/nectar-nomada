@@ -38,6 +38,26 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-17 · La limpieza se registra sobre la caja
+
+ADR-159. Decisión de Daniel: «1, sobre la caja». **Ningún evento del apiario colgaba de la caja**
+—todos de la colonia—, y la limpieza no puede: una caja vacía se desinfecta antes de recibir otra.
+`HiveCleaning`, con los actos como arreglo y dos vocabularios fijos sacados del manual de Varroa
+—**sólo los nombres, no sus cifras**—.
+
+**Las reglas viven también en la base:** tres `CHECK` probados contra Postgres, 7 de 7, el primero
+del repositorio sobre un arreglo de enum.
+
+**La caja vacía es por día entero, no por instante.** La colonia muere el 10 y la caja se limpia el
+10; la caja se limpia el 10 y entra colonia nueva ese día: las dos pasan. Su flip-test lo demuestra —
+volver al instante tumba las dos. Renovar cera es la excepción: se hace con la colonia dentro.
+
+**La primera acción del apiario que devuelve el error en vez de lanzarlo**, porque ésta rechaza en un
+caso normal y el apicultor tiene que leer por qué.
+
+**Pendiente:** los productos de tratamiento, que esperan a Daniel — y a leer «el botiquín del apiario»
+(#386), recién fusionado.
+
 ### 2026-09-17 · Reposo, trilla, inventario — y una sesión que no leyó este archivo
 
 **Fusionado:** #366 (reposo, trilla y subproductos: el café ya no se pierde entre secado y venta),
@@ -106,31 +126,6 @@ propósito: las coordenadas son del arranque, y exigirlas dejaría sin registrar
 cerrado, que es donde están las abejas.
 
 **Y un flip-test volvió a destapar una prueba mía que no discriminaba** — la tercera en dos días.
-
-### 2026-09-17 · Codex revisó el día: tres guardias pasaban por razones equivocadas
-
-ADR-155. El segundo asiento no encontró un fallo de producto: encontró **guardias en verde que no
-vigilaban lo que decían**, y lo demostró **mutando**, no opinando. Tres mutaciones dejaban 4/4 en
-verde.
-
-**La causa de la más grave era estructural:** el detector leía sus entradas del módulo, así que
-**no se podía llamar con entrada hostil**. Ahora las recibe por parámetro. Es la regla de la casa
-—«el guardia es el que llama a la función con la entrada hostil»— aplicada a un detector.
-
-**Y al cerrar el agujero del `continue`, la cobertura real era de CINCO preguntas, no doce.** Se
-saltaban siete en silencio; las siete coinciden, así que no había deuda escondida — había
-vigilancia que no existía.
-
-**En el servicio:** `take: 1` presuponía una invariante que el esquema no garantiza, y la
-observación de Codex fue mejor que el arreglo obvio — **`orderBy` sólo volvería determinista la
-arbitrariedad**. Manda la visita más restrictiva. Y el `before` del audit pasa a `Serializable`.
-
-**Lo que más vale: dos de mis propias pruebas eran adorno, y lo dijo su flip-test.** La de «manda
-la más restrictiva» afirmaba en su comentario estar montada al revés de lo cómodo **y era falso**;
-el `Serializable` no tenía guardia ninguno. Reincidí en la trampa que Codex me acababa de enseñar,
-una hora después, arreglando esa misma trampa.
-
-Los cinco flip-tests de la rebanada repiten **las mutaciones exactas de Codex**.
 
 
 ## 3. Bloqueado, y en qué

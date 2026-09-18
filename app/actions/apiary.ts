@@ -16,6 +16,7 @@ import { completarCierreDeTratamiento } from "../../lib/apiary/cierreDeEvento";
 import { actualizarConfiguracionDeCaja } from "../../lib/apiary/configuracionDeCaja";
 import { trasladarColmenas } from "../../lib/apiary/traslado";
 import { altaDeColmenasEnLote } from "../../lib/apiary/altaEnLote";
+import { registrarLimpiezaDeCaja, LimpiezaInvalida } from "../../lib/apiary/limpiezaDeCaja";
 import { registrarConsultaAVecinos } from "../../lib/apiary/consultaAVecinos";
 import { completarCierreDeCosecha } from "../../lib/apiary/cierreDeCosecha";
 import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
@@ -502,4 +503,59 @@ export async function registrarConsultaAVecinosFormAction(formData: FormData): P
   });
 
   revalidatePath(`/apiaries/${locationId}`);
+}
+
+
+/**
+ * La limpieza de la CAJA (ADR-159). **La primera acción del apiario que DEVUELVE el error en vez de
+ * lanzarlo**, y no es capricho: sus hermanas casi nunca fallan, pero ésta rechaza en un caso
+ * NORMAL —«esa caja tenía colonia ese día»— y el apicultor tiene que leer por qué, no ver una
+ * página de error. Misma forma que `TraceabilityActionState`.
+ *
+ * Sólo se exporta esta función `async`: en un archivo `"use server"` una clase o una constante
+ * exportada rompe el módulo entero (`CLAUDE.md`, «no todo rojo de Vercel es la cuota»).
+ */
+export async function registrarLimpiezaDeCajaAction(
+  _prev: { error?: string; ok?: boolean },
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Apiary");
+
+  const hiveId = String(formData.get("hiveId") ?? "");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const texto = (clave: string) => {
+    const v = String(formData.get(clave) ?? "").trim();
+    return v === "" ? null : v;
+  };
+
+  try {
+    // **La fecha es obligatoria y no se rellena con «hoy».** Un día por defecto afirmaría una fecha
+    // que nadie dio — y «hoy» en UTC es mañana en Panamá desde las siete de la tarde.
+    const dia = fechaDeDia(String(formData.get("occurredAt") ?? ""), "occurredAt");
+    if (!dia) return { error: t("limpiezaError_falta_la_fecha") };
+
+    await registrarLimpiezaDeCaja(user.userAccountId, {
+      hiveId,
+      occurredAt: dia,
+      acts: formData.getAll("acts").map((v) => String(v)),
+      actOtherNote: texto("actOtherNote"),
+      reason: texto("reason"),
+      reasonOtherNote: texto("reasonOtherNote"),
+      notes: texto("notes"),
+      provenanceClass: "original_record",
+    });
+  } catch (error) {
+    if (error instanceof LimpiezaInvalida) {
+      // `acto_desconocido: xyz` trae el valor detrás de los dos puntos.
+      const [codigo, ...resto] = error.message.split(":");
+      return { error: t(`limpiezaError_${codigo!.trim()}` as "limpiezaError_sin_actos", { valor: resto.join(":").trim() }) };
+    }
+    if (error instanceof ApiaryAccessError) return { error: t("limpiezaError_sin_permiso") };
+    throw error;
+  }
+
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+  return { ok: true };
 }

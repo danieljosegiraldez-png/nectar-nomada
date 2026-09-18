@@ -22,6 +22,8 @@ import { cosechasDeColonia, TIPOS_DE_MIEL } from "../../../../../lib/apiary/cier
 import { completarCierreDeCosechaFormAction } from "../../../../actions/apiary";
 import { NewColonyForm } from "../../../../components/apiary/NewColonyForm";
 import { Ayuda } from "../../../../components/apiary/Ayuda";
+import { LimpiezaDeCajaForm } from "../../../../components/apiary/LimpiezaDeCajaForm";
+import { limpiezasDeCaja } from "../../../../../lib/apiary/limpiezaDeCaja";
 import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
 import { ColonyEventQuickEntry } from "../../../../components/apiary/ColonyEventQuickEntry";
@@ -64,6 +66,10 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
     irregularidadesOfrecidas(),
     permissionKeysAnywhere(user.userAccountId),
   ]);
+  // Las limpiezas de la CAJA (ADR-159). DESPUÉS del `Promise.all`, no dentro: `limpiezasDeCaja`
+  // no autoriza, y `getHive` —que sí— lanza si no hay permiso de ver. Se usa `hive.id`, el de la
+  // caja ya autorizada, no el parámetro crudo de la URL.
+  const limpiezas = await limpiezasDeCaja(hive.id);
 
   /**
    * Los dos niveles de autoridad, y NO son un escalón del mismo permiso:
@@ -263,6 +269,36 @@ export default async function HiveDetailPage({ params }: { params: Promise<{ id:
                 ))}
               </ul>
             )}
+          </section>
+
+          {/* ADR-159 — la limpieza de la CAJA. Va junto a su configuración porque las dos son de la
+              caja, no de la colonia: una caja vacía se desinfecta ANTES de recibir otra. */}
+          <section className="nn-section">
+            <h2>{t("limpiezaHeading")}</h2>
+            <Ayuda resumen={t("ayudaResumen")}>{t("limpiezaAyuda")}</Ayuda>
+            {limpiezas.length === 0 ? (
+              <p className="nn-muted">{t("limpiezaNinguna")}</p>
+            ) : (
+              <ul>
+                {limpiezas.map((l) => (
+                  <li key={l.id}>
+                    {/* Un DÍA: se muestra tal cual, sin convertir a la zona del sitio, que lo movería un
+                        día atrás (la trampa de los campos de día del CLAUDE.md). */}
+                    <strong>{l.occurredAt.toISOString().slice(0, 10)}</strong>
+                    {" — "}
+                    {l.acts.map((a) => (a === "otro" && l.actOtherNote ? l.actOtherNote : t(`limpiezaActo_${a}`))).join(", ")}
+                    {l.reason ? ` · ${l.reason === "otro" && l.reasonOtherNote ? l.reasonOtherNote : t(`limpiezaRazon_${l.reason}`)}` : null}
+                    {l.notes ? <span className="nn-muted"> · {l.notes}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {puedeGestionar ? (
+              <details>
+                <summary>{t("limpiezaRegistrar")}</summary>
+                <LimpiezaDeCajaForm hiveId={hive.id} apiaryId={apiaryId} />
+              </details>
+            ) : null}
           </section>
 
           <section className="nn-section">
