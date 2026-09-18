@@ -4339,6 +4339,18 @@ model MaterialConsumptionEntry {
 
   materialName String   @map("material_name")
   batchLabel   String   @map("batch_label")
+
+  /// **De qué lote salió**, cuando se sabe. Enlazarlo DESCUENTA existencias.
+  ///
+  /// Anulable para siempre, y no por comodidad: las filas anteriores al
+  /// 2026-09-17 llevan el material en texto libre y no se pueden reasignar sin
+  /// adivinar. Y obligar a elegir lote convertiría una anotación de diez
+  /// segundos en un trámite — y lo que no se anota no existe.
+  ///
+  /// `batchLabel` se queda: es lo que dice el saco, y sigue valiendo cuando
+  /// nadie ha dado de alta el lote en el sistema.
+  consumableLotId String?        @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot? @relation(fields: [consumableLotId], references: [id])
   quantity     Decimal? @db.Decimal(10, 3)
   unit         String?
 
@@ -8387,6 +8399,7 @@ model ConsumableLot {
   @@index([materialId])
   @@map("consumable_lot")
   @@schema("traceability")
+  consumptionEntries MaterialConsumptionEntry[]
 }
 
 /// El libro mayor de las existencias: **sólo se añade**. Nada actualiza una
