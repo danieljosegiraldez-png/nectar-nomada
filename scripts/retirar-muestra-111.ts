@@ -33,13 +33,13 @@ async function main() {
   const candidatas = await prisma.sample.findMany({
     where: { sampleCode: SAMPLE_CODE, sourceLot: { lotCode: LOT_CODE } },
   });
-  if (candidatas.length !== 1) {
+  const [muestra] = candidatas;
+  if (candidatas.length !== 1 || !muestra) {
     // Cero o varias es un mundo distinto del que se decidió: no se adivina.
     console.error(`Se esperaba exactamente 1 muestra ${SAMPLE_CODE} del lote ${LOT_CODE}; hay ${candidatas.length}. No se toca nada.`);
     process.exitCode = 2;
     return;
   }
-  const muestra = candidatas[0];
   if (muestra.retiredAt) {
     console.log(`La muestra ${SAMPLE_CODE} ya está retirada desde ${muestra.retiredAt.toISOString()} — nada que hacer.`);
     return;
