@@ -142,8 +142,10 @@ describe("enlaceDelAviso", () => {
   });
 
   // Tarea 8 de trampas: los avisos de `avisosDeTrampas` entran en «toca hacer»
-  // y enlazan a la sección de trampas del tablero.
-  it("los avisos de trampas entran en «toca hacer» y enlazan a #trampas", () => {
+  // y enlazan a la pestaña de trampas del tablero. Desde la Tarea 3 de este
+  // lote, Trampas es una pestaña (`?pestana=trampas`), no un `<details
+  // id="trampas">` — el `#trampas` viejo ya no existe en el DOM.
+  it("los avisos de trampas entran en «toca hacer» y enlazan a ?pestana=trampas", () => {
     const r = pendienteDeLaParcela(
       base({
         hoy: "2026-09-17",
@@ -157,6 +159,6 @@ describe("enlaceDelAviso", () => {
       { tipo: "trampa_por_revisar", specimenId: "t1", trapNumber: 7, diasDeRetraso: 9 },
       { tipo: "trampa_con_lectura_alta", specimenId: "t1", trapNumber: 7, lectura: "muchos", accion: "aplicar Bralic" },
     ]);
-    for (const aviso of r.tocaHacer) expect(enlaceDelAviso(aviso, "L")).toBe("/plots/L#trampas");
+    for (const aviso of r.tocaHacer) expect(enlaceDelAviso(aviso, "L")).toBe("/plots/L?pestana=trampas");
   });
 });

@@ -114,6 +114,6 @@ export function enlaceDelAviso(aviso: Aviso, locationId: string): string {
       return `/plots/${locationId}/ajustes#siembras`;
     case "trampa_por_revisar":
     case "trampa_con_lectura_alta":
-      return `/plots/${locationId}#trampas`;
+      return `/plots/${locationId}?pestana=trampas`;
   }
 }
