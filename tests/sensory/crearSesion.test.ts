@@ -21,12 +21,13 @@ import {
   SesionDeCataError,
 } from "../../lib/sensory/sessions";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { retirarMuestra } from "../../lib/traceability/samples";
 
 const RUN = `cata-${Date.now()}`;
 let orgId: string, plotId: string, scopeId: string;
 let gestor: string, sinPermiso: string;
 let versionOk: string, versionSinAtributos: string, versionArchivada: string;
-let m1: string, m2: string;
+let m1: string, m2: string, m3: string, m3Code: string;
 
 async function cuenta(label: string) {
   const p = await prisma.person.create({
@@ -93,6 +94,20 @@ beforeAll(async () => {
     })).id;
   m1 = await muestra("M1");
   m2 = await muestra("M2");
+
+  m3Code = `M3-${RUN}`;
+  m3 = (await prisma.sample.create({
+    data: {
+      sampleCode: m3Code,
+      sampleType: "green",
+      organizationId: orgId,
+      locationId: plotId,
+      status: "approved",
+      classification: "internal",
+      createdBy: gestor,
+    },
+  })).id;
+  await retirarMuestra(gestor, m3, new Date(), "TEST: retirada para la prueba de exclusión");
 });
 
 afterAll(async () => {
@@ -198,6 +213,22 @@ describe("crear una sesión de cata", () => {
    * acceso de lectura a muestras, o montar la cata es trabajo de quien tiene
    * `sample:manage` y entonces el permiso que la gobierna debería ser otro.
    */
+
+  it("no ofrece una muestra retirada en el listado para cata", async () => {
+    const listado = await listarMuestrasParaCata(gestor);
+    expect(listado.map((m) => m.id)).not.toContain(m3);
+  });
+
+  it("no la encuentra tampoco por búsqueda", async () => {
+    const resultado = await buscarMuestrasParaCata(gestor, m3Code);
+    expect(resultado.muestras.map((m) => m.id)).not.toContain(m3);
+  });
+
+  it("rechaza crear una sesión que incluya una muestra retirada, aunque se pida por id", async () => {
+    await expect(
+      crearSesionDeCata(gestor, { name: `Cata retirada ${RUN}`, protocolVersionId: versionOk, muestras: [m1, m3] }),
+    ).rejects.toThrow(SesionDeCataError);
+  });
 });
 
 /**

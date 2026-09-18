@@ -117,7 +117,7 @@ async function muestrasVisibles(userAccountId: string, where: Prisma.SampleWhere
   const visibles = [];
   for (let saltar = 0; visibles.length <= limite; saltar += TANDA) {
     const tanda = await prisma.sample.findMany({
-      where,
+      where: { ...where, retiredAt: null },
       select: {
         id: true,
         sampleCode: true,
@@ -247,8 +247,11 @@ export async function crearSesionDeCata(userAccountId: string, input: CrearSesio
   // que quedaba fuera se rechazaba aquí como ajena.
   const pedidas = await prisma.sample.findMany({
     where: { id: { in: input.muestras } },
-    select: { id: true, projectId: true, locationId: true, classification: true },
+    select: { id: true, projectId: true, locationId: true, classification: true, retiredAt: true },
   });
+  const retiradas = pedidas.filter((m) => m.retiredAt !== null);
+  if (retiradas.length > 0) throw new SesionDeCataError("sample_retired");
+
   const alcanzables = new Set<string>();
   for (const m of pedidas) if (await puedeVerMuestra(userAccountId, m)) alcanzables.add(m.id);
   const ajenas = input.muestras.filter((id) => !alcanzables.has(id));
