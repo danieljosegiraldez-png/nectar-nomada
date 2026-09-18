@@ -13,6 +13,7 @@ import { prisma } from "../../lib/db";
 import {
   registrarIntervencion,
   corregirIntervencion,
+  productosFitosanitarios,
   IntervencionValidationError,
   type RegistrarIntervencionInput,
 } from "../../lib/traceability/intervenciones";
@@ -398,5 +399,30 @@ describe("registrar y corregir una intervención fitosanitaria", () => {
         nueva: base(),
       }),
     ).rejects.toBeInstanceOf(TraceabilityAccessError);
+  });
+});
+
+describe("productosFitosanitarios — Tarea 8, spec §5", () => {
+  it("sin permiso sobre la parcela: acceso denegado", async () => {
+    await expect(productosFitosanitarios(sinPermiso, parcela)).rejects.toBeInstanceOf(TraceabilityAccessError);
+  });
+
+  it("con permiso: sólo los materiales isPlantProtection de la misma organización, con sus lotes", async () => {
+    const productos = await productosFitosanitarios(operador, parcela);
+    const ids = productos.map((p) => p.id);
+
+    // Control positivo: `fito` y `fito2` SÍ son isPlantProtection de esta organización.
+    expect(ids).toContain(fito);
+    expect(ids).toContain(fito2);
+    // `aserrin` es de la misma organización pero NO es fitosanitario.
+    expect(ids).not.toContain(aserrin);
+    // `fitoOtraOrg` es fitosanitario pero de OTRA organización.
+    expect(ids).not.toContain(fitoOtraOrg);
+
+    const fitoEntry = productos.find((p) => p.id === fito)!;
+    expect(fitoEntry.defaultWithdrawalDays).toBe(14);
+    const loteIds = fitoEntry.lotes.map((l) => l.id);
+    expect(loteIds).toContain(lote);
+    expect(loteIds).toContain(loteVencido);
   });
 });

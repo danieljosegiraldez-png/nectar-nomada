@@ -852,7 +852,17 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
       { entityType: "harvest_event", entityId: lotId },
     ]),
     // T12.5: the originating HarvestEvent, if this lot came from one.
-    prisma.harvestEvent.findUnique({ where: { resultingLotId: lotId } }),
+    // Tarea 8 fitosanitaria (spec §3.4) añade `marcasDeCarencia`: la foto de
+    // qué intervenciones seguían en carencia al cosechar, con lo mínimo de
+    // cada una para enlazarla y rotularla — nunca se recalcula desde aquí.
+    prisma.harvestEvent.findUnique({
+      where: { resultingLotId: lotId },
+      include: {
+        marcasDeCarencia: {
+          include: { intervention: { select: { id: true, occurredAt: true, target: true, locationId: true } } },
+        },
+      },
+    }),
     // T12.6: the originating ReceivingEvent, if this lot came from one
     // instead — needed so labour can attach to Receiving specifically
     // (unlike T12.5's photos, which attach receiving-stage media via

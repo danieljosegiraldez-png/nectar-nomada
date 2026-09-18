@@ -480,6 +480,7 @@ export type IntervencionListada = Prisma.PlotInterventionGetPayload<{
     lineas: {
       include: {
         material: { select: { name: true; defaultWithdrawalDays: true; defaultReentryHours: true; safetyNotes: true } };
+        consumableLot: { select: { batchLabel: true } };
       };
     };
     areas: { include: { specimen: { select: { commonName: true } } } };
@@ -502,6 +503,7 @@ export async function listarIntervenciones(userAccountId: string, locationId: st
       lineas: {
         include: {
           material: { select: { name: true, defaultWithdrawalDays: true, defaultReentryHours: true, safetyNotes: true } },
+          consumableLot: { select: { batchLabel: true } },
         },
       },
       areas: { include: { specimen: { select: { commonName: true } } } },
@@ -510,4 +512,50 @@ export async function listarIntervenciones(userAccountId: string, locationId: st
     },
     orderBy: { occurredAt: "desc" },
   });
+}
+
+export interface MaterialFitosanitario {
+  readonly id: string;
+  readonly name: string;
+  readonly defaultWithdrawalDays: number | null;
+  readonly defaultReentryHours: number | null;
+  readonly safetyNotes: string | null;
+  readonly storageConditions: string | null;
+  readonly lotes: readonly { readonly id: string; readonly batchLabel: string; readonly expiresAt: Date | null }[];
+}
+
+/**
+ * Los productos de manejo fitosanitario de la organización de una parcela —
+ * Tarea 8, spec §5. El formulario de intervención sólo ofrece éstos: nunca un
+ * material cualquiera del botiquín o la bodega.
+ */
+export async function productosFitosanitarios(userAccountId: string, locationId: string): Promise<MaterialFitosanitario[]> {
+  await requireLotAccess(userAccountId, "view", [{ locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+
+  const parcela = await resolverParcela(locationId);
+  if (!parcela?.organizationId) return [];
+
+  const materiales = await prisma.consumableMaterial.findMany({
+    where: { organizationId: parcela.organizationId, isPlantProtection: true },
+    select: {
+      id: true,
+      name: true,
+      defaultWithdrawalDays: true,
+      defaultReentryHours: true,
+      safetyNotes: true,
+      storageConditions: true,
+      lots: { select: { id: true, batchLabel: true, expiresAt: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return materiales.map((m) => ({
+    id: m.id,
+    name: m.name,
+    defaultWithdrawalDays: m.defaultWithdrawalDays,
+    defaultReentryHours: m.defaultReentryHours,
+    safetyNotes: m.safetyNotes,
+    storageConditions: m.storageConditions,
+    lotes: m.lots,
+  }));
 }
