@@ -6,6 +6,7 @@ import { montarFixtures, type Fixtures } from "../helpers/fixturesDeCatalogo";
 
 let f: Fixtures;
 let modeloComp: string, modeloDeB: string, modeloVaso: string, modeloRetirado: string;
+let proveedor: string;
 
 const alta = (extra: Record<string, unknown> = {}) =>
   registrarEquipo(f.jefeA, {
@@ -26,6 +27,11 @@ beforeAll(async () => {
   modeloVaso = (await m({ tipo: "propio", locationId: f.sitioA }, "vessel", "vaso")).id;
   modeloRetirado = (await m({ tipo: "propio", locationId: f.sitioA }, "instrument", "retirado")).id;
   await retirarModelo(f.admin, modeloRetirado, new Date());
+  proveedor = (
+    await prisma.organization.create({
+      data: { organizationType: "supplier", name: `TEST proveedor ${f.run}`, status: "approved", classification: "internal" },
+    })
+  ).id;
 });
 
 afterAll(async () => {
@@ -33,6 +39,7 @@ afterAll(async () => {
   await prisma.equipmentTransfer.deleteMany({ where: { equipmentId: { in: eqs.map((e) => e.id) } } });
   await prisma.equipment.deleteMany({ where: { organizationId: f.orgA } });
   await prisma.equipmentModel.deleteMany({ where: { manufacturer: `D ${f.run}` } });
+  await prisma.organization.delete({ where: { id: proveedor } });
   await f.limpiar();
 });
 
@@ -72,6 +79,7 @@ describe("editarDatosDeEquipo", () => {
       modelId: modeloComp,
       serialNumber: "S1",
       internalCode: `KEEP-${f.run}`,
+      supplierOrganizationId: proveedor,
       warrantyUntil: new Date("2027-01-01T00:00:00Z"),
     });
     await editarDatosDeEquipo(f.jefeA, e.id, { serialNumber: "S2" });
@@ -79,12 +87,14 @@ describe("editarDatosDeEquipo", () => {
     expect(fila.serialNumber).toBe("S2");
     expect(fila.modelId).toBe(modeloComp);
     expect(fila.internalCode).toBe(`KEEP-${f.run}`);
+    expect(fila.supplierOrganizationId).toBe(proveedor);
     expect(fila.warrantyUntil?.toISOString()).toBe("2027-01-01T00:00:00.000Z");
 
     await editarDatosDeEquipo(f.jefeA, e.id, { warrantyUntil: null });
     const fila2 = await prisma.equipment.findUniqueOrThrow({ where: { id: e.id } });
     expect(fila2.warrantyUntil).toBeNull();
     expect(fila2.serialNumber).toBe("S2");
+    expect(fila2.supplierOrganizationId).toBe(proveedor);
   });
 });
 
