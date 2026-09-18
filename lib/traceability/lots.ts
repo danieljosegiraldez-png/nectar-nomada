@@ -27,7 +27,7 @@ import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { settleMassBalance } from "./balance";
 import { validarMasaDeSubproducto } from "./subproductos";
-import type { ByproductDestination, ByproductType } from "../../generated/prisma/client";
+import type { ByproductDestination, ByproductType, HoneyProcessAct } from "../../generated/prisma/client";
 import { leerEnmiendas } from "./enmiendas";
 
 export class TraceabilityAccessError extends Error {}
@@ -145,7 +145,10 @@ export interface RecordTransformationInput {
     // La trilla. Va aquí Y en el enum de Prisma: esta unión se mantiene a mano,
     // así que añadir el valor al esquema NO la actualiza, y sin esta línea
     // ninguna llamada podría registrar una trilla aunque la base la aceptara.
-    | "hulling";
+    | "hulling"
+    // ADR-161 — procesar y envasar miel. Misma regla: el enum de Prisma NO actualiza esta unión.
+    | "honey_processing"
+    | "packaging";
   occurredAt: Date;
   operatorPersonId?: string | null;
   notes?: string | null;
@@ -180,6 +183,12 @@ export interface RecordTransformationInput {
   // P3 §1 — only meaningful for transformationType `selection`.
   selectionMethodValueId?: string | null;
   equipmentNote?: string | null;
+  /** ADR-161 — sólo en `honey_processing`; la base lo exige con un CHECK. */
+  honeyProcessActs?: HoneyProcessAct[];
+  honeyProcessOtherNote?: string | null;
+  /** ADR-161 — sólo en `packaging`; la base lo exige con un CHECK. */
+  packageCount?: number | null;
+  packageNetMassG?: number | null;
   /**
    * P0 (§4, §6) — accept a transformation that does not reconcile within the
    * organization's tolerance. Requires `lot:override_balance`, which Farm
@@ -296,6 +305,10 @@ export async function recordTransformation(userAccountId: string, input: RecordT
         sourceReference: input.sourceReference ?? null,
         selectionMethodValueId: input.selectionMethodValueId ?? null,
         equipmentNote: input.equipmentNote ?? null,
+        honeyProcessActs: input.honeyProcessActs ?? [],
+        honeyProcessOtherNote: input.honeyProcessOtherNote ?? null,
+        packageCount: input.packageCount ?? null,
+        packageNetMassG: input.packageNetMassG ?? null,
         // Custodia: quién la hizo, dónde, y cuándo salió y volvió el material.
         // Nulos cuando la hizo la propia organización en su propio patio, que
         // es una de las tres formas reales de trillar (§B.1).
@@ -906,9 +919,32 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     }),
   ]);
 
+  // ADR-161 — de qué cosechas viene una MIEL, subiendo por la genealogía. Un frasco envasado
+  // no es el lote de la cosecha: es su nieto, y sin esto su ficha no diría de qué colonia ni de
+  // qué apiario salió. Varias si hubo fusión. Ya autorizado arriba: es la genealogía de ESTE lote.
+  const origenApicola =
+    lot.lotType === "honey"
+      ? await prisma.apiaryHarvestEvent.findMany({
+          where: { resultingLotId: { in: [lotId, ...lineage.ancestorLotIds] } },
+          orderBy: { occurredAt: "asc" },
+          select: {
+            id: true,
+            occurredAt: true,
+            resultingLotId: true,
+            colony: {
+              select: {
+                id: true,
+                hive: { select: { id: true, identifier: true, location: { select: { id: true, name: true } } } },
+              },
+            },
+          },
+        })
+      : [];
+
   return {
     lot,
     lineage,
+    origenApicola,
     transformations,
     quantityEvents,
     measurements,

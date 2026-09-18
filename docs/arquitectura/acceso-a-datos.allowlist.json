@@ -78,6 +78,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. `registrarLimpiezaDeCaja` exige `requireApiaryAccess` sobre la caja ANTES de escribir, y comprueba DENTRO de la transacción que ninguna colonia ocupara la caja el día entero —la regla que no puede ser un CHECK porque cruza a `colony`—. Escritura y AuditEvent en la MISMA transacción."
     },
     {
+      "archivo": "lib/apiary/mielDelLote.ts",
+      "razon": "Módulo de dominio (ADR-161): procesar y envasar un lote de miel. Su única lectura propia es el lote, y `requireLotAccess(\"manage\")` se exige ANTES de decir nada de él —ni siquiera si es miel—. La escritura la hace `recordTransformation`, que vuelve a autorizar contra el lote de entrada y escribe transformación, libro de cantidades y balance en una sola transacción."
+    },
+    {
       "archivo": "lib/apiary/vitalesEnSitio.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Exige `requireApiaryAccess` sobre el sitio de la visita ANTES de escribir, y sólo acepta mientras la visita está ABIERTA — que es exactamente lo que la marca `fieldVitalsOnSiteAt` afirma, ni más. Escritura y AuditEvent con su `before` en la MISMA transacción."
     },
@@ -476,6 +480,10 @@
     {
       "archivo": "lib/inventario/recepcion.ts",
       "razon": "Recepcion del botiquin. Las opciones filtran CADA sitio con lot:manage y dicen si ademas tiene equipment:manage; los productos salen sólo de las fincas de esos sitios. completarProducto exige equipment:manage sobre un sitio de la MISMA finca que el producto, sólo rellena huecos y escribe con su AuditEvent y el ANTES en una transaccion."
+    },
+    {
+      "archivo": "lib/commerce/tienda.ts",
+      "razon": "Módulo de dominio (ADR-163): de un lote envasado a la tienda. `asignarATienda` exige `requireLotAccess(\"manage\")` antes de leer nada del lote; `confirmarRecepcion`, `crearVariante` y `tiendaParaGestionar` exigen `commerce:manage_store`. Escritura y AuditEvent en la MISMA transacción; la asignación en `Serializable` para que dos a la vez no pasen juntas del techo de envases."
     }
   ],
   "reciben_transaccion": [
@@ -514,6 +522,10 @@
     {
       "archivo": "lib/apiary/hives.ts",
       "razon": "`crearColocacionInicial` recibe el `tx` del llamador en vez de abrir el suyo porque la colmena y su colocación son UN hecho: una colmena guardada sin la fila que dice dónde está es exactamente el estado que ADR-135 viene a impedir, y medido el 2026-09-15 eran 10 de 29 colmenas reales. Escribe una sola fila en `apiary.hive_placement` y no consulta nada: no puede leer de más aunque reciba el cliente entero. Sus tres llamadores son `createHive` —que autoriza con requireApiaryAccess(\"manage\") antes de abrir la transaccion— y los guiones de datos, que corren con la base delante."
+    },
+    {
+      "archivo": "lib/commerce/tienda.ts",
+      "razon": "ADR-163 — `envasesDelLote` recibe el `tx` de `asignarATienda` para leer el techo de envases DENTRO de la transacción serializable que decide si cabe la asignación; leerlo fuera dejaría la carrera que el aislamiento existe para cerrar. `asignacionesDeLote` le pasa el cliente, que es la misma interfaz."
     }
   ],
   "operaciones_sin_patron": [
@@ -892,6 +904,18 @@
       "operacion": "limpiezasDeCaja",
       "razon": "No recibe principal, misma disciplina que `vitalesDeSitios`. Su único llamador es la ficha de la colmena, que la invoca DESPUÉS del `Promise.all` donde `getHive` autoriza —y `getHive` LANZA si no hay permiso de ver—, y le pasa `hive.id`, el de la caja ya autorizada, no el parámetro crudo de la URL.",
       "verificado": "2026-09-17"
+    },
+    {
+      "archivo": "lib/commerce/tienda.ts",
+      "operacion": "asignacionesDeLote",
+      "razon": "No recibe principal. Su único llamador es la ficha del lote (`app/lots/[id]/page.tsx`), que la invoca DESPUÉS de `getLotDetail` —que exige `requireLotAccess(\"view\")` y LANZA sin permiso— y le pasa `lot.id`, el del lote ya autorizado.",
+      "verificado": "2026-09-18"
+    },
+    {
+      "archivo": "lib/commerce/tienda.ts",
+      "operacion": "variantesParaAsignar",
+      "razon": "No recibe principal y devuelve catálogo: nombre de producto, nombre de variante y SKU de las variantes activas, lo mismo que la ficha pública de cada producto ya enseña. Su único llamador es la ficha del lote, sólo cuando quien mira puede gestionar ese lote y le quedan envases sin asignar.",
+      "verificado": "2026-09-18"
     }
   ]
 }

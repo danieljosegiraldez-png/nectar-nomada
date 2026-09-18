@@ -22,6 +22,9 @@ import { completarCierreDeCosecha, registrarLecturaDeRefractometro, CierreDeCose
 import { MeasurementValidationError } from "../../lib/traceability/measurements";
 import { UnitValidationError } from "../../lib/traceability/units";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { dividirMiel, envasarMiel, procesarMiel } from "../../lib/apiary/mielDelLote";
+import { MielInvalida } from "../../lib/apiary/vocabularioDeMiel";
+import { MassBalanceError } from "../../lib/traceability/balance";
 import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { recordInspection } from "../../lib/apiary/inspections";
@@ -616,4 +619,97 @@ export async function registrarLecturaDeRefractometroAction(
 
   revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
   return { ok: true };
+}
+
+type EstadoDeMiel = { error?: string; ok?: boolean; nuevoLoteId?: string; nuevoLoteCodigo?: string };
+
+/** Traduce los rechazos de los pasos de la miel; lo que no es de aquí se relanza. */
+async function rechazoDeMiel(error: unknown): Promise<EstadoDeMiel> {
+  const t = await getTranslations("Apiary");
+  if (error instanceof MielInvalida) {
+    const [codigo, ...resto] = error.message.split(":");
+    return { error: t(`mielError_${codigo!.trim()}` as "mielError_sin_actos", { valor: resto.join(":").trim() }) };
+  }
+  if (error instanceof MassBalanceError) return { error: t("mielError_balance", { detalle: error.message }) };
+  if (error instanceof TraceabilityAccessError) return { error: t("mielError_sin_permiso") };
+  throw error;
+}
+
+/**
+ * ADR-161 — procesar un lote de miel: colar, filtrar, decantar/madurar, homogenizar.
+ *
+ * Devuelve el error en vez de lanzarlo: «no quedan tantos kilos en el lote» es un caso normal que
+ * quien procesa tiene que leer. **La fecha es de DÍA** y no se rellena con «hoy».
+ */
+export async function procesarMielAction(_prev: EstadoDeMiel, formData: FormData): Promise<EstadoDeMiel> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Apiary");
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    const dia = fechaDeDia(String(formData.get("occurredAt") ?? ""), "occurredAt");
+    if (!dia) return { error: t("mielError_falta_la_fecha") };
+    const r = await procesarMiel(user.userAccountId, {
+      lotId,
+      occurredAt: dia,
+      acts: formData.getAll("acts").map((v) => String(v)),
+      otherNote: String(formData.get("otherNote") ?? ""),
+      inputKg: String(formData.get("inputKg") ?? ""),
+      outputKg: String(formData.get("outputKg") ?? ""),
+      lossKg: String(formData.get("lossKg") ?? ""),
+      provenanceClass: "measured_fact",
+    });
+    revalidatePath(`/lots/${lotId}`);
+    return { ok: true, nuevoLoteId: r.lote.id, nuevoLoteCodigo: r.lote.lotCode };
+  } catch (error) {
+    return rechazoDeMiel(error);
+  }
+}
+
+/** ADR-161 — envasar un lote de miel: cuántos envases y de qué masa neta. */
+export async function envasarMielAction(_prev: EstadoDeMiel, formData: FormData): Promise<EstadoDeMiel> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Apiary");
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    const dia = fechaDeDia(String(formData.get("occurredAt") ?? ""), "occurredAt");
+    if (!dia) return { error: t("mielError_falta_la_fecha") };
+    const r = await envasarMiel(user.userAccountId, {
+      lotId,
+      occurredAt: dia,
+      inputKg: String(formData.get("inputKg") ?? ""),
+      lossKg: String(formData.get("lossKg") ?? ""),
+      packageCount: String(formData.get("packageCount") ?? ""),
+      packageNetMassG: String(formData.get("packageNetMassG") ?? ""),
+      provenanceClass: "measured_fact",
+    });
+    revalidatePath(`/lots/${lotId}`);
+    return { ok: true, nuevoLoteId: r.lote.id, nuevoLoteCodigo: r.lote.lotCode };
+  } catch (error) {
+    return rechazoDeMiel(error);
+  }
+}
+
+/** ADR-162 — dividir un lote de miel en partes. Cada parte es un lote nuevo. */
+export async function dividirMielAction(_prev: EstadoDeMiel, formData: FormData): Promise<EstadoDeMiel> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Apiary");
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    const dia = fechaDeDia(String(formData.get("occurredAt") ?? ""), "occurredAt");
+    if (!dia) return { error: t("mielError_falta_la_fecha") };
+    const r = await dividirMiel(user.userAccountId, {
+      lotId,
+      occurredAt: dia,
+      partesKg: formData.getAll("parteKg").map((v) => String(v)),
+      lossKg: String(formData.get("lossKg") ?? ""),
+      provenanceClass: "measured_fact",
+    });
+    revalidatePath(`/lots/${lotId}`);
+    return { ok: true, nuevoLoteId: r.lotes[0]!.id, nuevoLoteCodigo: r.lotes.map((l) => l.lotCode).join(", ") };
+  } catch (error) {
+    return rechazoDeMiel(error);
+  }
 }

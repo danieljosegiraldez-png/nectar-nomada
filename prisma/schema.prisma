@@ -299,6 +299,9 @@ model UserAccount {
   consumableLotsCreated ConsumableLot[] @relation("ConsumableLotCreatedBy")
   consumableStockEventsCreated ConsumableStockEvent[] @relation("ConsumableStockEventCreatedBy")
   consumableCustodiesCreated ConsumableCustody[] @relation("ConsumableCustodyCreatedBy")
+  /// ADR-163
+  storeAllocationsAssigned StoreAllocation[] @relation("StoreAllocationAssignedBy")
+  storeAllocationsReceived StoreAllocation[] @relation("StoreAllocationReceivedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -1584,6 +1587,8 @@ model ProductVariant {
 
   cartItems  CartItem[]
   orderItems OrderItem[]
+  /// ADR-163 — lo que llega de un lote envasado. Sólo lo RECIBIDO suma al inventario.
+  storeAllocations StoreAllocation[]
 
   @@index([productId])
   @@map("product_variant")
@@ -3106,6 +3111,19 @@ model Lot {
   @@index([rejectionCategoryValueId])
   @@map("lot")
   @@schema("traceability")
+  /// ADR-163
+  storeAllocations StoreAllocation[] @relation("StoreAllocationLot")
+}
+
+/// ADR-161 -- los actos de procesar miel. Vocabulario fijo con «otro, ¿cual?» (Daniel).
+enum HoneyProcessAct {
+  colado
+  filtrado
+  decantacion_maduracion
+  homogenizado
+  otro
+
+  @@schema("traceability")
 }
 
 enum LotTransformationType {
@@ -3131,6 +3149,14 @@ enum LotTransformationType {
   /// vendido en pergamino nunca se trilla, así que ninguna etapa posterior
   /// puede exigirla.
   hulling
+
+  /// ADR-161 -- procesar MIEL despues de extraerla: colar, filtrar, decantar/madurar,
+  /// homogenizar. Los actos van en `honeyProcessActs`. Conserva masa: miel que sale +
+  /// merma declarada (cera, residuos) = miel que entra.
+  honey_processing
+  /// ADR-161 -- envasar. Dice cuantos envases y de que masa neta (`packageCount`,
+  /// `packageNetMassG`). Conserva masa igual que el proceso.
+  packaging
 
   @@schema("traceability")
 }
@@ -3212,6 +3238,15 @@ model LotTransformation {
   selectionMethodValueId String?               @map("selection_method_value_id") @db.Uuid
   selectionMethodValue   VariableCatalogValue? @relation("LotTransformationSelectionMethod", fields: [selectionMethodValueId], references: [id])
   equipmentNote          String?               @map("equipment_note")
+
+  /// ADR-161. Solo en `honey_processing` (CHECK en la base): al menos un acto, y «otro»
+  /// dice cual. Un arreglo porque un proceso cuela Y decanta.
+  honeyProcessActs      HoneyProcessAct[] @map("honey_process_acts")
+  honeyProcessOtherNote String?           @map("honey_process_other_note")
+  /// ADR-161. Solo en `packaging` (CHECK en la base): cuantos envases y de que masa neta
+  /// cada uno, como los declara quien envasa.
+  packageCount    Int?     @map("package_count")
+  packageNetMassG Decimal? @map("package_net_mass_g") @db.Decimal(10, 2)
 
   declaredLossQuantity Decimal? @map("declared_loss_quantity") @db.Decimal(10, 3)
   declaredLossUnit     String?  @map("declared_loss_unit")
@@ -8760,4 +8795,36 @@ model ConsumableCustody {
   @@index([consumableLotId, desde])
   @@map("consumable_custody")
   @@schema("traceability")
+}
+
+/// ADR-163 -- envases de un lote envasado asignados a la tienda, y su recepcion.
+///
+/// **Dos actos y no uno** (Daniel, 2026-09-18): no todo lo envasado va a la tienda de Nectar
+/// Nomada. Despues de envasar se ASIGNA una cantidad a una variante; en la tienda alguien
+/// CONFIRMA lo que llego, y solo entonces sube el inventario. Asignar no toca la tienda.
+model StoreAllocation {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// El lote ENVASADO del que salen los envases (sale de una transformacion `packaging`).
+  lotId            String         @map("lot_id") @db.Uuid
+  lot              Lot            @relation("StoreAllocationLot", fields: [lotId], references: [id], onDelete: Restrict)
+  productVariantId String         @map("product_variant_id") @db.Uuid
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  unitsAssigned    Int            @map("units_assigned")
+  /// El DIA en que se asigno (medianoche UTC).
+  assignedAt       DateTime       @map("assigned_at")
+  assignedBy       String         @map("assigned_by") @db.Uuid
+  assigner         UserAccount    @relation("StoreAllocationAssignedBy", fields: [assignedBy], references: [id], onDelete: Restrict)
+  /// La recepcion: las tres van juntas o ninguna (CHECK). Menos de lo asignado exige nota.
+  receivedAt       DateTime?      @map("received_at")
+  receivedBy       String?        @map("received_by") @db.Uuid
+  receiver         UserAccount?   @relation("StoreAllocationReceivedBy", fields: [receivedBy], references: [id], onDelete: Restrict)
+  unitsReceived    Int?           @map("units_received")
+  receiptNote      String?        @map("receipt_note")
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  @@index([lotId])
+  @@index([productVariantId])
+  @@index([receivedAt])
+  @@map("store_allocation")
+  @@schema("commerce")
 }

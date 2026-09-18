@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**383 operaciones** que tocan la base, en **119 archivos**:
+**393 operaciones** que tocan la base, en **121 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,9 +22,9 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **272** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **280** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **59** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **61** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
@@ -158,6 +158,21 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > medición pasa además por `recordMeasurement`, que vuelve a autorizar contra el lote.
 > `cosechasDeColonia` sigue en `dependen_del_llamador` sin cambio de cifra: ahora lee también
 > el Brix, pero es la misma consulta sobre los mismos lotes ya autorizados.
+
+> **Y dos más, con un archivo nuevo, son los pasos de la miel (ADR-161).**
+> `lib/apiary/mielDelLote.ts` lee el lote DESPUÉS de `requireLotAccess("manage")` —ni siquiera
+> dice si es miel antes de autorizar— y escribe por `recordTransformation`, que vuelve a
+> autorizar. La otra es `getLotDetail`, ya inventariado: busca la cosecha de origen de una miel
+> subiendo por la genealogía, dentro de la lectura que ya exigió `requireLotAccess("view")`.
+
+> **Y el de 378→379 es `dividirMiel` (ADR-162)**, en el mismo archivo: pasa por `loteDeMiel`, que
+> autoriza con `requireLotAccess("manage")` antes de leer nada, y escribe por `recordTransformation`.
+
+> **Y seis más, con un archivo nuevo, son la tienda (ADR-163).** `lib/commerce/tienda.ts`
+> aporta cuatro de **guardia directo** —`asignarATienda` con `requireLotAccess("manage")`;
+> `confirmarRecepcion`, `crearVariante` y `tiendaParaGestionar` con `commerce:manage_store`— y
+> dos que **dependen del llamador**: `asignacionesDeLote` y `variantesParaAsignar`, que sólo llama
+> la ficha del lote después de que `getLotDetail` autorice. 4 + 2 = 6.
 
 > **Y el de 355→356 es `registrarVitalesEnSitio` (ADR-157).** Vive en
 > `lib/apiary/vitalesEnSitio.ts` y sube la fila de **guardia directo**: exige

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { listarProtocolosParaCata, listarMuestrasParaCata, SesionDeCataError } from "../../../lib/sensory/sessions";
+import { listarProtocolosParaCata, buscarMuestrasParaCata, SesionDeCataError } from "../../../lib/sensory/sessions";
+import { etiquetaDeMuestra } from "../../../lib/sensory/muestraEnCata";
 import { CrearSesionForm } from "../../components/sensory/CrearSesionForm";
 
 export const dynamic = "force-dynamic";
@@ -25,22 +26,17 @@ export default async function NuevaSesionPage() {
   // rechazar — la lente de los formularios que ofrecen lo que el servicio niega.
   let protocolos: { id: string; label: string }[];
   let muestras: { id: string; label: string }[];
+  let hayMas: boolean;
   try {
     const [ps, ms] = await Promise.all([
       listarProtocolosParaCata(user.userAccountId),
-      listarMuestrasParaCata(user.userAccountId),
+      // Las primeras, sin texto: la pantalla empieza igual que antes y el
+      // buscador trae el resto (ver `SelectorDeMuestras`).
+      buscarMuestrasParaCata(user.userAccountId, ""),
     ]);
     protocolos = ps;
-    // **Qué café es, no sólo qué código tiene.** Antes decía «111 · green_coffee»
-    // y con eso nadie sabe cuál de sus cafés está a punto de catar. El orden va
-    // de lo que identifica a lo que matiza: batch, finca, grado del proceso, y
-    // al final el tipo y la descripción.
-    muestras = ms.map((m) => ({
-      id: m.id,
-      label: [m.sampleCode, m.lotCode, m.organizationName, m.processGrade, m.sampleType, m.description]
-        .filter(Boolean)
-        .join(" · "),
-    }));
+    muestras = ms.muestras.map((m) => ({ id: m.id, label: etiquetaDeMuestra(m) }));
+    hayMas = ms.hayMas;
   } catch (error) {
     if (error instanceof SesionDeCataError) redirect("/sensory");
     throw error;
@@ -61,7 +57,7 @@ export default async function NuevaSesionPage() {
       ) : muestras.length === 0 ? (
         <p className="nn-muted">{t("noSamplesAvailable")}</p>
       ) : (
-        <CrearSesionForm protocolos={protocolos} muestras={muestras} />
+        <CrearSesionForm protocolos={protocolos} muestras={muestras} hayMas={hayMas} />
       )}
     </div>
   );

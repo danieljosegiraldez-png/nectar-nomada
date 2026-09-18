@@ -11184,3 +11184,106 @@ ninguna pantalla que lo llamara. Ahora la tiene, con material y variable como li
 divide (`split`), fusiona (`merge`/`blend`), cambia de etapa, extrae muestras, guarda
 (`StorageAssignment`) y llega a la cata por `Sample`. **Lo que no tiene nombre todavia es filtrar y
 envasar miel**, ni una pantalla del lote de miel que recorra esa cadena. Es la rebanada siguiente.
+
+## ADR-161 -- Procesar y envasar miel: dos pasos del lote, con sus nombres
+
+**Contexto.** Daniel: la miel es un lote, y hay que seguirla cuando se divide, filtra, guarda,
+envasa y muestrea hasta la cata. La maquinaria del lote ya dividia, fusionaba, guardaba y sacaba
+muestras; **filtrar y envasar no tenian nombre**, y el contrato del beneficio manda parar y
+preguntar antes de inventar uno. Se le llevaron tres formas y eligio: **«Proceso + envasado»**.
+
+**Decision.**
+
+1. **Dos tipos de `LotTransformation`: `honey_processing` y `packaging`.** Cada uno crea un lote
+   NUEVO de miel con codigo derivado del padre (`MIEL-1` → `MIEL-1-A`), asi que la genealogia
+   entera -- cosecha, colonia, caja -- llega sin copiar nada hasta la muestra y la cata.
+2. **Los actos del proceso son un vocabulario fijo con «otro, ¿cual?»**: colado, filtrado,
+   decantacion/maduracion, homogenizado. Un arreglo, porque un proceso cuela Y decanta.
+3. **El envasado dice cuantos envases y de que masa neta.** La masa del lote envasado es
+   `envases × masa neta`, **y se dice que es un calculo**: dos numeros declarados multiplicados,
+   no una tercera pesada. Si no cuadra con lo que entro, la diferencia sale en el balance, que es
+   donde tiene que salir, en vez de esconderse en un numero tecleado para que cuadre.
+4. **Los dos CONSERVAN masa** (`balance.ts`), como la seleccion y la trilla: lo que sale mas la
+   merma declarada (cera y residuos; lo que queda en el tanque) suma lo que entro. Un hueco es miel
+   que nadie sabe donde esta, no un rendimiento. **Lo que no cuadra no se rechaza: queda como
+   desviacion** -- la miel ya se proceso, y negarse a registrarlo no la devuelve al tanque.
+5. **Tomar parte del lote es lo normal** (se cuelan 20 kg de un tanque de 30), asi que los kilos
+   que entran son obligatorios: no se deducen.
+
+**Las reglas viven TAMBIEN en la base:** cuatro `CHECK`, probados con sondas dentro de
+transacciones que se deshacen y su control positivo. **Una sonda encontro un fallo real en la
+primera version:** la igualdad «es envasado ⇔ lleva envases y masa» dejaba que un paso que NO es
+envasado llevara un numero de envases sin masa. Se reescribio con `CASE`. Se compara
+`transformation_type::text`: un valor de enum recien anadido no se puede usar en la misma
+transaccion que lo crea.
+
+**Un hueco que habia debajo: el peso del cierre no entraba en el libro.** Una cosecha pesada al
+cosechar abonaba su lote; una pesada en el cierre de extraccion -- que es lo normal, se pesa al
+extraer -- lo dejaba **sin saldo**, y nada de lo que se le hiciera despues podia cuadrar. Ahora
+completar el peso en el cierre abona lo pesado, y corregirlo asienta SOLO la diferencia
+(`adjustment_increase`/`decrease`), dejando el asiento original. Borrar el peso no asienta nada.
+
+**La ficha del lote de miel deja de ofrecer los botones del cafe** (fermentar, secar, proceso) y
+ofrece los dos pasos. Ensena **de donde viene**, subiendo por la genealogia: un frasco envasado es
+nieto del lote de la cosecha, y sin esto no diria de que caja salio.
+
+**Lo que NO entra.** Dividir un lote de miel en varios desde la pantalla (el tipo `split` existe,
+la pantalla no), enlazar un lote envasado a un `Product` de la tienda, y una etiqueta con el
+recorrido. Y visto de paso, sin tocarlo: `transformationType_hulling` **no tiene traduccion**, asi
+que la linea de tiempo de un lote trillado ensena la clave cruda.
+
+## ADR-162 -- Dividir un lote de miel desde su ficha
+
+**Contexto.** Lo tercero de la lista de Daniel -- «cuando se divide o se reparte» -- tras procesar y
+envasar (ADR-161). El tipo `split` existia desde el principio y conserva masa; lo que faltaba era
+una pantalla. No hace falta ningun nombre nuevo, asi que no hubo que preguntar.
+
+**Decision.** `dividirMiel`: de dos a seis partes en kilos, cada una un lote NUEVO de miel, hermano
+de las otras, con codigo derivado (`MIEL-1-A`, `-B`...) y la misma genealogia hacia arriba -- cada
+parte sabe de que caja viene. Lo que no se reparte se queda en el lote de origen.
+
+**Aqui SI se deduce lo que entra**: la suma de las partes mas la merma. Dividir no transforma la
+miel, solo la reparte, asi que no hay una tercera pesada que pedir (al procesar, en cambio, entra y
+sale una cantidad distinta y las dos se piden). Si la suma pasa de lo que el lote tiene, el libro lo
+rechaza. **La suma se hace en gramos enteros**: 0,1 + 0,2 en coma flotante es 0,30000000000000004,
+y ese resto se habria asentado en el libro.
+
+**Seis casillas y no una lista dinamica**: una lista que crece necesita JavaScript en un telefono
+de campo; seis vacias no. Para mas partes se divide dos veces, que ademas deja la genealogia honesta.
+
+## ADR-163 -- De un lote de miel envasado a la tienda: asignar y recibir
+
+**Contexto.** El informe del apiario dejo la miel donde se deja el cafe: un lote con resultado de
+cata, no un articulo de la tienda (ADR-039). No habia ningun enlace lote→producto, ni para el
+cafe. Se le preguntaron tres formas a Daniel y eligio **trazabilidad + inventario**, con una
+precision que cambio el diseno: *«no siempre todo va a tienda Nectar Nomada, solo si se define o
+asigna post envasado»*, y *«ya en tienda uno puede confirmar recepcion»*.
+
+**Decision -- dos actos, y solo el segundo toca la tienda.**
+
+1. **Asignar** (`asignarATienda`): quien trabaja el lote, con `lot:manage`, asigna N envases de un
+   lote ENVASADO a una variante del producto. **No mueve el inventario.** El techo es el numero de
+   envases que salio del envasado, restando lo ya asignado; la transaccion es `Serializable` para
+   que dos asignaciones a la vez no pasen juntas del techo.
+2. **Recibir** (`confirmarRecepcion`): en la tienda, con `commerce:manage_store`, se dice cuantos
+   llegaron. **Solo esto sube el inventario.** Menos de lo asignado exige motivo; cero es valido
+   (se rompio todo). Una asignacion se recibe una vez: la actualizacion lleva `receivedAt: null` en
+   su condicion, asi que dos confirmaciones simultaneas no suman dos veces. Una variante sin
+   inventario llevado empieza a contarse con lo recibido.
+
+**Un permiso nuevo, `commerce:manage_store`**, que hoy solo tiene el administrador de plataforma. No
+existia NINGUN permiso de tienda. Separado de `lot:manage` a proposito, como `lot:release`
+(liberacion del lote): envasar y asignar es trabajo de campo; decidir lo que se ofrece a la venta, no.
+
+**Tampoco habia donde crear una variante**: los productos se sembraban y no tenian ninguna. Sin
+«Miel multifloral 500 g» no hay a que asignar, asi que `/tienda` las crea -- nombre, SKU y precio,
+que da quien lleva la tienda --. Nace sin inventario llevado: un 0 escrito diria que se conto.
+
+**Cuatro `CHECK`**: asignados positivos; la recepcion va entera (quien, cuando, cuantos) o no va;
+recibidos entre 0 y lo asignado; faltante con motivo. Probados con sondas y su control positivo.
+**Las claves hacia las personas son `RESTRICT`**: Prisma habria puesto `SET NULL` en quien recibio,
+y borrar una cuenta habria borrado quien firmo una recepcion.
+
+**Lo que NO entra.** Vender descuenta de la variante (ya existia) pero no del lote: el libro del lote
+no sabe que envases se vendieron. Devolver a la finca lo asignado y no recibido. Y la pagina
+`/tienda` no se ha visto en un navegador: hace falta sesion.

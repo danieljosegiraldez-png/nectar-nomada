@@ -68,10 +68,31 @@ describe("la limpieza de la caja", () => {
     }
   });
 
+  // Borra TODO lo que la corrida crea, no sólo las colonias: hasta el 2026-09-18 dejaba en la
+  // base compartida su apiario, sus diez cajas, dos personas y la organización en cada corrida
+  // — 18 apiarios acumulados, que empujaban hacia el tope de `getApiaryList` a meliponario.test.ts
+  // (PENDING_IMPLEMENTATIONS/012). Mismo orden que altaEnLote.test.ts.
   afterAll(async () => {
-    for (const hiveId of cajas) {
-      await prisma.colony.deleteMany({ where: assertDefinedWhere({ hiveId }) });
+    const colonias = await prisma.colony.findMany({
+      where: assertDefinedWhere({ hive: { locationId: apiarioId } }),
+      select: { id: true },
+    });
+    if (colonias.length) {
+      await prisma.auditEvent.deleteMany({
+        where: assertDefinedWhere({ entityType: "colony", entityId: { in: colonias.map((c) => c.id) } }),
+      });
+      await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: { in: colonias.map((c) => c.id) } }) });
     }
+    await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hive: { locationId: apiarioId } }) });
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "hive", entityId: { in: cajas } }) });
+    await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId: apiarioId }) });
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "location", entityId: apiarioId }) });
+    await prisma.location.deleteMany({ where: assertDefinedWhere({ id: apiarioId }) });
+    // El ámbito de plataforma NO se borra: es compartido y no es mío.
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [userAccountId, otroUserAccountId] } }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN } }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
   });
 
   it("LO QUE EL DUEÑO PIDIÓ: una caja vacía se limpia, y el registro cuelga DE LA CAJA", async () => {
