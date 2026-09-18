@@ -405,10 +405,9 @@ export function InspectionForm({
                   {kind !== "otro" ? <option value="retirado">{t("cambioRetirado")}</option> : null}
                 </select>
                 {kind === "alza" && cambiosCaja.alza === "instalado" ? (
-                  <input
+                  <CampoNumerico
                     aria-label={t("alzasPuestasLabel")}
                     placeholder={t("alzasPuestasLabel")}
-                    type="number"
                     min={1}
                     step={1}
                     inputMode="numeric"

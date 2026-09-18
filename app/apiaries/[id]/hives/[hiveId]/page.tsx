@@ -444,7 +444,7 @@ export default async function HiveDetailPage({
                   </div>
                   <div className="nn-field">
                     <label htmlFor="artefacto-count">{t("artefactoCuantasAlzas")}</label>
-                    <input id="artefacto-count" name="count" type="number" min={1} step={1} inputMode="numeric" />
+                    <CampoNumerico id="artefacto-count" name="count" min={1} step={1} inputMode="numeric" />
                   </div>
                   <div className="nn-field">
                     <label htmlFor="artefacto-notes">{t("artefactoNota")}</label>
