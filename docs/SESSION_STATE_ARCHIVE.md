@@ -3961,3 +3961,73 @@ aplica las pendientes, pero **leer el log del despliegue** y confirmar que nombr
 
 **Sin verificar en navegador** —hace falta sesión—. **La cifra del router chocó por cuarta vez:** la
 rama decía 83 y, rebasada sobre `/finca`, se midió 84.
+
+**Archivados: 2026-09-18**, con el estado en      396/400 líneas — al 99 %. Se movieron las
+siete entradas más viejas de §2 del 2026-09-18, todas de trabajo ya fusionado. §3
+(«Bloqueado») no se tocó: sigue dirigiendo el trabajo.
+
+### 2026-09-18 · `reporteDeProceso.test.ts` dejó de fallar a veces (PR #395)
+
+Fallaba intermitente en el carril con base (`expected 3 to be 1`) y pasaba sola. **El gestor del
+fixture era Platform Admin**, así que el reporte contaba toda la base, incluidos los procesos que
+`lotProcess.test.ts` cierra en paralelo. Ahora es Farm Operator de su plot, y los recuentos de lotes
+son exactos para que la prueba afirme su propio aislamiento. Reproducido con un contaminante
+temporal (antes cae, después 6/6) y flip de la mutación (volver a poner el admin → `56 ≠ 2`).
+**Sin reproducir:** el fallo de «agrupa por grado»; se atribuye a la misma causa, sin medirlo.
+
+Auditadas las otras 21 pruebas que buscan Platform Admin: **ninguna con el defecto hoy**, dos con su
+forma lenta — ver `PENDING_IMPLEMENTATIONS/012`. Lección en `CLAUDE.md`, «Un admin de plataforma ve la
+base compartida entera».
+
+### 2026-09-18 · Procesar y envasar miel: dos pasos del lote
+
+ADR-161. Daniel eligió «proceso + envasado». `honey_processing` (actos fijos: colado, filtrado,
+decantación/maduración, homogenizado, otro ¿cuál?) y `packaging` (envases × masa neta, dicho como
+cálculo). Cada paso crea un lote nuevo; los dos **conservan masa** y lo que no cuadra queda como
+desviación, no como rechazo. Cuatro `CHECK`; **una sonda encontró un fallo en la primera versión**.
+
+**Hueco de debajo, arreglado:** el peso completado en el cierre de extracción no entraba en el
+libro del lote, así que la miel pesada al extraer no tenía saldo. La ficha del lote de miel ya no
+ofrece botones del café y dice de qué caja viene, también para un frasco.
+
+**Hecho después:** dividir (ADR-162), la tienda (ADR-163) y la traducción de la trilla (#411).
+
+### 2026-09-18 · Dividir un lote de miel
+
+ADR-162. `split` ya existía y conserva masa; faltaba la pantalla. De dos a seis partes, cada una un
+lote nuevo que sabe de qué caja viene; lo no repartido se queda. Lo que entra se deduce (partes +
+merma) **sumado en gramos enteros**, para no asentar el resto de coma flotante de 0,1 + 0,2.
+
+### 2026-09-18 · Buscar y combinar muestras al montar una cata
+
+Decisión de Daniel: «un cupping se debe poder … hacer búsquedas y seleccionar varias muestras y a veces
+no vienen mismo lugar, lote, finca, parcela». «Nueva cata» busca por código de muestra, batch o finca,
+y **la selección sobrevive a cada búsqueda**. El orden de selección decide el código ciego, y la
+pantalla enseña la letra — el texto de ayuda ya lo prometía y **no era verdad**: el orden era el de la
+pantalla. **Y un defecto de camino:** `crearSesionDeCata` comprobaba las muestras contra la lista que
+corta en 200, así que pasadas las 200 rechazaba una muestra propia. Ahora comprueba cada una por id.
+Flips de las dos cosas. **Sin verificar en navegador** —hace falta sesión—. Cierra
+`PENDING_IMPLEMENTATIONS/012`.
+
+### 2026-09-18 · De la miel envasada a la tienda: asignar y recibir
+
+ADR-163. Daniel: trazabilidad + inventario, pero **no todo va a la tienda**. Dos actos: asignar
+envases de un lote envasado a una variante (`lot:manage`, no toca inventario) y confirmar la
+recepción en `/tienda` (`commerce:manage_store`, permiso NUEVO, sólo admin), que es lo único que sube
+el inventario. `/tienda` también crea variantes: no había dónde. **Sin ver en navegador.**
+
+### 2026-09-18 · La condición del sitio: lista fija, en la versión 2 del protocolo
+
+ADR-165. Era la última pregunta del protocolo sin sitio. Daniel eligió el vocabulario (hormigas,
+moho, pasto alto, cerca caída, dosel cerrado, «agua» partida en falta y exceso, otro ¿cuál?) y se
+añadió **«sin novedad»**, que va sola. Cambiar la pregunta **es una v2** (lo dice el propio JSON):
+`apiario-campo-v2.json`, y el cargador ahora añade versiones al MISMO protocolo. **Hay que correr
+`npm run apiary:load-protocol` en producción** para que exista la v2. El guardia de vocabulario
+pasa a mirar también `multi_enum`: 12 → 15 preguntas vigiladas, sin divergencias.
+
+### 2026-09-18 · Cosechas pesadas sin saldo, asentables desde la ficha del apiario
+
+ADR-166. Las cosechas cerradas antes de ADR-161 pueden tener el peso en la fila y el lote sin asiento.
+La ficha del apiario las lista y un botón asienta el peso ya escrito (sin teclear nada), con su
+auditoría; sólo si el lote no tiene NINGÚN asiento. **Medido en la copia local: ninguna afectada**
+—la única cosecha real se pesó al cosechar—. Es una red, no el arreglo de un daño visto.
