@@ -115,12 +115,18 @@ Proteger `/beneficio/ajustes` era una regla de navegación. La regla de Daniel e
 
 **Un segundo permiso, «editar beneficio»** (nombre exacto a contrastar con `docs/beneficio/03_public_api.md` y `lib/rbac/catalog.ts` en el plan), de serie para **Platform Admin y Farm Manager** y **excluido de Farm Operator a propósito**. Va aparte de `location:create_site` porque son dos autoridades distintas: conceder a un capataz que edite no le da crear beneficios nuevos. Hoy `actualizarBeneficio` exige `create_site`; pasa a exigir el permiso nuevo.
 
-**Cómo se concede.** El repositorio ya tiene concesiones por persona —`AssignmentPermissionOverride`, con razón obligatoria para un `grant` impuesta por un `CHECK` en la base—, pero **hoy sólo las escribe quien tiene `platform:manage_permissions`**, o sea el Platform Admin (`requirePermissionAdmin` en `lib/rbac/admin.ts`). La sección de ajustes añade una **delegación estrecha**:
+**Cómo se concede — construido, plan 3, ADR-166 (2026-09-18).** El repositorio ya tiene concesiones por persona —`AssignmentPermissionOverride`, con razón obligatoria para un `grant` impuesta por un `CHECK` en la base—, pero **hoy sólo las escribe quien tiene `platform:manage_permissions`**, o sea el Platform Admin (`requirePermissionAdmin` en `lib/rbac/admin.ts`). La sección de ajustes añade una **delegación estrecha**, en `lib/traceability/concesiones.ts` (`concederEditarBeneficio`, `quitarEditarBeneficio`, `personasDelBeneficio`), con la pantalla en `app/beneficio/ajustes/Concesiones.tsx`:
 
 - quien concede tiene «editar beneficio» sobre ese beneficio;
 - sólo puede conceder o quitar **ese** permiso, nunca otro — no es una puerta a `manage_permissions`;
 - la persona que lo recibe tiene una asignación cuyo ámbito alcanza ese beneficio;
 - razón obligatoria, `AuditEvent` en la misma transacción, y se puede quitar.
+
+**Tres rulings del controlador, decididos al construir (cambiables por Daniel):**
+
+1. **Un `deny` de administración manda**: si `platform:manage_permissions` ya puso un `deny` de `location:edit_beneficio` sobre esa asignación, el Farm Manager no lo sobrescribe — conceder se rechaza con `quitado_por_administracion` y el `deny` queda intacto.
+2. **Quitar sólo borra una concesión** (un `grant` de este mismo permiso puesto por esta delegación), nunca el permiso de serie del perfil ni el `deny` de administración.
+3. **La concesión vale para todo el ámbito de la asignación** de quien la recibe, no para un beneficio más fino: si su asignación cubre la finca entera y la finca tiene dos beneficios, la concesión abre los dos. La pantalla lo dice con una línea fija al lado de cada persona.
 
 **Un límite, dicho ya:** la concesión cuelga de la **asignación** del capataz. Si su asignación cubre la finca entera y la finca tiene dos beneficios, la concesión vale para los dos. Hoy hay un beneficio por finca y no cambia nada; si llega un segundo, se decide entonces si hace falta una concesión por beneficio.
 
@@ -178,7 +184,7 @@ La regla en prosa se lee y se razona alrededor; en un test, falla. Y el guardia 
 2. **El tipo `beneficio` y su alta** (migración de enum, permiso nuevo, pantalla de alta). **Hecho: #377, fusionado el 2026-09-17.**
 3. **«Editar beneficio» y los caminos de §4.2 cerrados**, con la delegación estrecha. Va **antes** que el resto de ajustes, porque corrige lo ya fusionado: hoy el capataz edita un beneficio sin que nadie se lo haya concedido.
 4. **Ajustes con las cinco secciones y las capacidades**, después del tablero, porque las capacidades sólo tienen sentido cuando hay dónde leerlas (#363).
-5. **ADR nuevo** para «editar beneficio» y su delegación. El tipo y `create_site` ya quedaron en ADR-156 (#377); el número del nuevo se toma al escribirlo, no ahora.
+5. **ADR nuevo** para «editar beneficio» y su delegación. El tipo y `create_site` ya quedaron en ADR-156 (#377); la delegación estrecha del plan 3 quedó en **ADR-166**, escrito en la rama `conceder-beneficio`, pendiente de fusión.
 6. Fusiones y despliegues: **decisión de Daniel**.
 
 ## 8. Fuera de alcance

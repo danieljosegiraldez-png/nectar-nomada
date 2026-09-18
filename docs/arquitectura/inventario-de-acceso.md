@@ -34,6 +34,19 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > vale para el árbol combinado**. Las de arriba son las que imprime
 > `node scripts/inventario-de-acceso.mjs` sobre la fusión: **382 en 119**.
 
+> **Y el de 419→422, con un archivo nuevo, es el plan 3 de «editar beneficio»
+> (Tarea 4, ADR-168, 2026-09-18): conceder y quitar desde `/beneficio/ajustes`.**
+> `lib/traceability/concesiones.ts` aporta **tres** operaciones y las tres
+> llevan **guardia directo**, 300→303: `concederEditarBeneficio`,
+> `quitarEditarBeneficio` y `personasDelBeneficio` empiezan las tres por
+> `exigeEditarBeneficioEn` (ADR-167) sobre el propio beneficio, antes de leer o
+> escribir nada. 3 = 3: si la cuenta no cerrara con la fila de «guardia
+> directo», alguna se habría colado sin esa guardia. Las pantallas y acciones
+> de servidor (`app/actions/beneficios.ts`, `app/beneficio/ajustes/Concesiones.tsx`,
+> `sitiosParaCrearInstalacion` en `instalaciones.ts`) no suman fila propia: sólo
+> llaman a operaciones ya inventariadas o a los booleanos `puedeEditarBeneficioEn`/
+> `puedeEditarBeneficioEnOrganizacion`, que no tocan la base por su cuenta.
+
 > **Y el de 350→354, con un archivo nuevo, es el servicio de beneficio (Tarea 2 del
 > plan de alta de beneficio).** `lib/traceability/beneficios.ts` aporta **cuatro**
 > operaciones y las cuatro llevan **guardia directo**: `sitiosParaBeneficio`,
