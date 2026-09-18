@@ -166,8 +166,13 @@ for l in sys.stdin:
             break' "$PUNTA"; }
 
   # Un salto de imports. Sin criterio: lo que importan los archivos tocados.
+  #
+  # Las dos vueltas de aquí abajo van con `while read`, como la del texto completo:
+  # con `for f in $X` una ruta con espacio se partía, el importador no aportaba
+  # vecinos sin decirlo, y un vecino con espacio tumbaba el script con un 128.
   VECINOS=$(
-    for f in $TOCADOS; do
+    printf '%s\n' "$TOCADOS" | while IFS= read -r f; do
+      [ -n "$f" ] || continue
       git cat-file -e "$PUNTA:$f" 2>/dev/null || continue
       d=$(dirname "$f")
       git show "$PUNTA:$f" | grep -oE 'from "(@/|\.\.?/)[^"]+"' | sed 's/from "//; s/"$//' | while read -r m; do
@@ -179,7 +184,8 @@ for l in sys.stdin:
   if [ -n "$(printf '%s' "$VECINOS" | tr -d '[:space:]')" ]; then
     echo
     echo "## Un salto de imports (texto completo, sin recortar)"
-    for f in $VECINOS; do
+    printf '%s\n' "$VECINOS" | while IFS= read -r f; do
+      [ -n "$f" ] || continue
       echo
       echo "### $f  ($(git show "$PUNTA:$f" | wc -l | tr -d ' ') líneas)"
       echo '```'
