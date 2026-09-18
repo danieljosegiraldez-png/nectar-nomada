@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**419 operaciones** que tocan la base, en **128 archivos**:
+**422 operaciones** que tocan la base, en **129 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,7 +22,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **300** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **303** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **38** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **63** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -33,6 +33,19 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > traían cifras propias —356/106 la rama, 376/116 `main`— y **ninguna de las dos
 > vale para el árbol combinado**. Las de arriba son las que imprime
 > `node scripts/inventario-de-acceso.mjs` sobre la fusión: **382 en 119**.
+
+> **Y el de 419→422, con un archivo nuevo, es el plan 3 de «editar beneficio»
+> (Tarea 4, ADR-168, 2026-09-18): conceder y quitar desde `/beneficio/ajustes`.**
+> `lib/traceability/concesiones.ts` aporta **tres** operaciones y las tres
+> llevan **guardia directo**, 300→303: `concederEditarBeneficio`,
+> `quitarEditarBeneficio` y `personasDelBeneficio` empiezan las tres por
+> `exigeEditarBeneficioEn` (ADR-167) sobre el propio beneficio, antes de leer o
+> escribir nada. 3 = 3: si la cuenta no cerrara con la fila de «guardia
+> directo», alguna se habría colado sin esa guardia. Las pantallas y acciones
+> de servidor (`app/actions/beneficios.ts`, `app/beneficio/ajustes/Concesiones.tsx`,
+> `sitiosParaCrearInstalacion` en `instalaciones.ts`) no suman fila propia: sólo
+> llaman a operaciones ya inventariadas o a los booleanos `puedeEditarBeneficioEn`/
+> `puedeEditarBeneficioEnOrganizacion`, que no tocan la base por su cuenta.
 
 > **Y el de 350→354, con un archivo nuevo, es el servicio de beneficio (Tarea 2 del
 > plan de alta de beneficio).** `lib/traceability/beneficios.ts` aporta **cuatro**

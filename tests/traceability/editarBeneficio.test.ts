@@ -5,7 +5,7 @@ import { PERMISSIONS, ROLE_PROFILES } from "../../lib/rbac/catalog";
 import { LocationAccessError, LocationValidationError, createMicrolot, exigeEditarBeneficioEnOrganizacion, updateLocationAttributes } from "../../lib/traceability/locations";
 import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadasDelSitio";
 import { actualizarBeneficio } from "../../lib/traceability/beneficios";
-import { actualizarUbicacionDeSecado, crearUbicacionDeSecado } from "../../lib/traceability/instalaciones";
+import { actualizarUbicacionDeSecado, crearUbicacionDeSecado, sitiosParaCrearInstalacion } from "../../lib/traceability/instalaciones";
 import { createRecipeVersion, createRecipeWithVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
 import { EquipoError, informarCondicion, registrarEquipo, sitiosParaRegistrar } from "../../lib/equipos/equipos";
 
@@ -271,6 +271,27 @@ describe("instalaciones y camas (crearUbicacionDeSecado, actualizarUbicacionDeSe
     await expect(actualizarUbicacionDeSecado(capataz, { locationId: inst.id, name: nombre() })).resolves.toBeDefined();
     const cama = await crearUbicacionDeSecado(capataz, { name: nombre(), parentLocationId: inst.id, locationType: "drying_bed" });
     expect(cama.locationType).toBe("drying_bed");
+  });
+});
+
+describe("sitiosParaCrearInstalacion (Task 3, plan 3): sólo sitios donde además se puede editar el beneficio", () => {
+  it("un capataz sin concesión no ve su sitio (lista vacía, no lanza); con la concesión, sí; un Farm Manager lo ve sin concesión", async () => {
+    const finca = await sitio();
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    const jefe = await cuenta(finca.id, "Farm Manager");
+
+    // Control: `sitiosParaInstalaciones` SÍ ve el sitio (tiene manage_attributes
+    // de perfil) — la resta la hace `puedeEditarBeneficioEn`, no la lectura de base.
+    const { sitiosParaInstalaciones } = await import("../../lib/traceability/instalaciones");
+    expect((await sitiosParaInstalaciones(capataz)).map((s) => s.id)).toContain(finca.id);
+
+    expect(await sitiosParaCrearInstalacion(capataz)).toEqual([]);
+
+    await conceder(capataz);
+    expect((await sitiosParaCrearInstalacion(capataz)).map((s) => s.id)).toContain(finca.id);
+
+    // Control positivo: el Farm Manager lo ve sin ninguna concesión.
+    expect((await sitiosParaCrearInstalacion(jefe)).map((s) => s.id)).toContain(finca.id);
   });
 });
 

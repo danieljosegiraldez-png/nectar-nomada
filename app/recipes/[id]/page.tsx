@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
+import { puedeEditarBeneficioEnOrganizacion } from "../../../lib/traceability/locations";
 import { getRecipeForEditor, ProcessTargetError } from "../../../lib/traceability/processTargets";
 import { listVariableDefinitions } from "../../../lib/traceability/units";
 import { RecipeMetadataForm } from "../../components/traceability/RecipeMetadataForm";
@@ -29,7 +30,11 @@ export default async function RecipeDetailPage({
     throw error;
   }
 
-  const [t, query] = await Promise.all([getTranslations("Traceability"), searchParams]);
+  const [t, query, puedeEditar] = await Promise.all([
+    getTranslations("Traceability"),
+    searchParams,
+    puedeEditarBeneficioEnOrganizacion(user.userAccountId, recipe.organizationId),
+  ]);
   const variables = listVariableDefinitions("proceso_de_cafe");
 
   const current = recipe.versions[0];
@@ -60,25 +65,37 @@ export default async function RecipeDetailPage({
 
       <section className="nn-section">
         <h2>{t("recipeMetadataHeading")}</h2>
-        {/* Only the label. Targets are what runs were operated against, so
-            changing those is a new version and never an edit (ADR-102). */}
-        <p className="nn-muted">{t("recipeMetadataIntro")}</p>
-        <RecipeMetadataForm
-          recipeId={recipe.id}
-          name={recipe.name}
-          description={recipe.description ?? ""}
-        />
+        {puedeEditar ? (
+          <>
+            {/* Only the label. Targets are what runs were operated against, so
+                changing those is a new version and never an edit (ADR-102). */}
+            <p className="nn-muted">{t("recipeMetadataIntro")}</p>
+            <RecipeMetadataForm
+              recipeId={recipe.id}
+              name={recipe.name}
+              description={recipe.description ?? ""}
+            />
+          </>
+        ) : (
+          <p className="nn-muted" role="alert">{t("recipeSinPermisoEditar")}</p>
+        )}
       </section>
 
       <section className="nn-section">
         <h2>{t("recipeNewVersionHeading")}</h2>
-        <p className="nn-muted">{t("recipeNewVersionIntro")}</p>
-        <RecipeVersionForm
-          recipeId={recipe.id}
-          variables={variables}
-          initialTargets={initialTargets}
-          expectedHours={current?.expectedHours ?? null}
-        />
+        {puedeEditar ? (
+          <>
+            <p className="nn-muted">{t("recipeNewVersionIntro")}</p>
+            <RecipeVersionForm
+              recipeId={recipe.id}
+              variables={variables}
+              initialTargets={initialTargets}
+              expectedHours={current?.expectedHours ?? null}
+            />
+          </>
+        ) : (
+          <p className="nn-muted" role="alert">{t("recipeSinPermisoEditar")}</p>
+        )}
       </section>
 
       <section className="nn-section">

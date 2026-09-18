@@ -161,6 +161,23 @@ export async function exigeEditarBeneficioEn(userAccountId: string, locationId: 
 }
 
 /**
+ * La versión que pregunta en vez de exigir, para que una pantalla (ajustes,
+ * recetas, instalaciones) decida si ofrece un formulario sin duplicar la
+ * regla del servidor. Misma comprobación que la escritura, y sólo se traga la
+ * negativa concreta de este permiso — cualquier otro error (una ubicación que
+ * no existe) se relanza, porque eso no es «no puede editar», es un id malo.
+ */
+export async function puedeEditarBeneficioEn(userAccountId: string, locationId: string): Promise<boolean> {
+  try {
+    await exigeEditarBeneficioEn(userAccountId, locationId);
+    return true;
+  } catch (error) {
+    if (error instanceof LocationAccessError && error.message === "no_beneficio_edit_access") return false;
+    throw error;
+  }
+}
+
+/**
  * `location:edit_beneficio` en ALGÚN lugar de una organización — para lo que es
  * de la organización y no de un lugar, como las recetas. Una receta compartida
  * (`organizationId` nulo) sólo se configura con alcance de plataforma.
@@ -223,6 +240,18 @@ export async function exigeEditarBeneficioEnOrganizacion(userAccountId: string, 
   )
     return;
   throw new LocationAccessError("no_beneficio_edit_access");
+}
+
+/** La versión que pregunta, hermana de `puedeEditarBeneficioEn` — para las
+ * pantallas de recetas, que preguntan por organización en vez de por lugar. */
+export async function puedeEditarBeneficioEnOrganizacion(userAccountId: string, organizationId: string | null): Promise<boolean> {
+  try {
+    await exigeEditarBeneficioEnOrganizacion(userAccountId, organizationId);
+    return true;
+  } catch (error) {
+    if (error instanceof LocationAccessError && error.message === "no_beneficio_edit_access") return false;
+    throw error;
+  }
 }
 
 export interface UpdateLocationAttributesInput {

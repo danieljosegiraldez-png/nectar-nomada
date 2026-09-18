@@ -470,6 +470,10 @@
       "razon": "Tarea 2 del plan de alta de beneficio — crea y renombra el beneficio (LocationType nuevo) bajo un sitio. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. A diferencia de instalaciones.ts, crear exige DOS permisos sobre el padre —`location:manage_attributes` y `location:create_site`—, porque dar de alta un lugar nuevo es una autoridad más estrecha que administrar el árbol de uno existente y es justo la que un Farm Operator no tiene. Escritura y AuditEvent en la MISMA transacción, tanto al crear como al renombrar."
     },
     {
+      "archivo": "lib/traceability/concesiones.ts",
+      "razon": "Plan 3 de «editar beneficio» (ADR-168) — conceder y quitar `location:edit_beneficio` desde /beneficio/ajustes. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Delegación estrecha sobre `AssignmentPermissionOverride`: sólo ese permiso, sólo quien lo tiene sobre ese beneficio (`exigeEditarBeneficioEn`), y sólo hacia una asignación cuyo ámbito alcanza el beneficio. Escritura y AuditEvent en la MISMA transacción, tanto al conceder como al quitar."
+    },
+    {
       "archivo": "lib/inventario/materiales.ts",
       "razon": "Catalogo de materiales consumibles. Autoriza con `equipment:manage` juzgado donde se declare el sitio —mismo criterio que `registrarEquipo`— y escribe la fila con su AuditEvent en la misma transaccion."
     },
@@ -558,6 +562,10 @@
     {
       "archivo": "lib/commerce/tienda.ts",
       "razon": "ADR-163 — `envasesDelLote` recibe el `tx` de `asignarATienda` para leer el techo de envases DENTRO de la transacción serializable que decide si cabe la asignación; leerlo fuera dejaría la carrera que el aislamiento existe para cerrar. `asignacionesDeLote` le pasa el cliente, que es la misma interfaz."
+    },
+    {
+      "archivo": "lib/traceability/concesiones.ts",
+      "razon": "ADR-168, corrección del 2026-09-18 (hallazgo 2 de la revisión independiente de Codex) — `escribirGrant` recibe el `tx` de `concederEditarBeneficio` para escribir el override CONDICIONALMENTE (UPDATE con WHERE effect:\"grant\", o INSERT con catch de P2002) dentro de la misma transacción serializable que decide si un `deny` de administración manda. Leer y escribir fuera de una única transacción es exactamente la carrera que el hallazgo señaló: el `upsert` anterior escribía `grant` sin condición. No abre su propia conexión ni amplía qué puede consultar: sólo opera sobre `assignment_permission_override`."
     }
   ],
   "operaciones_sin_patron": [

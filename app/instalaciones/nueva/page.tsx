@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { sitiosParaInstalaciones } from "../../../lib/traceability/instalaciones";
+import { sitiosParaCrearInstalacion } from "../../../lib/traceability/instalaciones";
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { FormularioUbicacion } from "../FormularioUbicacion";
 
@@ -12,10 +12,13 @@ export default async function NuevaInstalacionPage() {
   if (!user) redirect("/login");
   const t = await getTranslations("Secado");
   let sitios;
-  try { sitios = await sitiosParaInstalaciones(user.userAccountId); }
+  try { sitios = await sitiosParaCrearInstalacion(user.userAccountId); }
   catch (error) {
     if (!(error instanceof LocationAccessError)) throw error;
     return <div><h1>{t("crearInstalacion")}</h1><p role="alert">{t("error_sin_acceso")}</p><Link href="/instalaciones">{t("volver")}</Link></div>;
+  }
+  if (sitios.length === 0) {
+    return <div><h1>{t("crearInstalacion")}</h1><p role="alert">{t("sinPermisoEditar")}</p><Link href="/instalaciones">{t("volver")}</Link></div>;
   }
   return <div>
     <p><Link href="/instalaciones">← {t("volver")}</Link></p>
