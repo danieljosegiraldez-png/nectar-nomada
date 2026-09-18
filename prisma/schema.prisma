@@ -233,6 +233,7 @@ model UserAccount {
   apiaryHarvestEventsCreated        ApiaryHarvestEvent[]         @relation("ApiaryHarvestEventCreatedBy")
   colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
   hiveCleaningsCreated HiveCleaning[] @relation("HiveCleaningCreatedBy")
+  hiveFittingsCreated  HiveFitting[]  @relation("HiveFittingCreatedBy")
   varroaCountsCreated               VarroaCount[]                @relation("VarroaCountCreatedBy")
   organizationMembershipsCreated    OrganizationMembership[]     @relation("OrganizationMembershipCreatedBy")
   plantingEventsCreated             PlantingEvent[]              @relation("PlantingEventCreatedBy")
@@ -6203,6 +6204,7 @@ model Hive {
   assets     Asset[]
   placements HivePlacement[]
   cleanings  HiveCleaning[]
+  fittings   HiveFitting[]
 
   @@unique([locationId, identifier])
   @@index([locationId])
@@ -8742,4 +8744,57 @@ model StoreAllocation {
   @@index([receivedAt])
   @@map("store_allocation")
   @@schema("commerce")
+}
+
+/// Qué lleva puesta una colmena, y DESDE CUÁNDO — spec 2026-09-17 «artefactos de colmena» §A.
+///
+/// Un booleano en `Hive` contesta «¿lleva excluidor hoy?»; esto contesta «¿lo llevaba el 3 de
+/// mayo?», que es la pregunta que la ingestión de telemetría tiene que poder hacer — un nodo que
+/// se movió de colmena tiene datos viejos que pertenecen a la colmena anterior.
+///
+/// Intervalo cerrado a la izquierda y abierto a la derecha: retirado el día 10, el día 10 ya no
+/// estaba. Las reglas viven también en la base (CHECK), no sólo en el servicio.
+model HiveFitting {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  hiveId String @map("hive_id") @db.Uuid
+  hive   Hive   @relation(fields: [hiveId], references: [id])
+
+  kind HiveFittingKind
+
+  /// Sólo para `alza`, y obligatoria ahí: dos o tres, no una fila por alza. Nadie las numera en
+  /// el patio, y una identidad que el campo no puede sostener es una columna que se rellena mal.
+  count Int?
+
+  installedAt DateTime  @map("installed_at")
+  /// Nulo = sigue puesta. **No** se rellena con «hoy» al leer.
+  removedAt   DateTime? @map("removed_at")
+
+  /// El «cuál» de `otro`, y lo que no cabe en el vocabulario.
+  notes String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("HiveFittingCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([hiveId, installedAt])
+  @@map("hive_fitting")
+  @@schema("apiary")
+}
+
+/// Vocabulario cerrado con escape, la regla que Daniel dio para la alimentación: «que no sea
+/// campo libre, que sean variables». Con `otro` y su nota — un vocabulario sin escape enseña a
+/// mentir en la casilla más cercana.
+enum HiveFittingKind {
+  excluidor
+  reductor_de_piquera
+  piso_ventilado
+  alimentador
+  alza
+  nodo_de_sensores
+  otro
+
+  @@schema("apiary")
 }
