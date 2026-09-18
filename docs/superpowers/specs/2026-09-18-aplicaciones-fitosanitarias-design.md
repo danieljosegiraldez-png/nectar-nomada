@@ -31,7 +31,7 @@ el producto, con su procedencia.
 | 6 | Trampas | **La regla enlaza al producto y el aviso se da por atendido** |
 | 7 | Producto sin carencia declarada | **Se guarda, y queda «no declarada»**. Nunca se lee como libre |
 | 8 | Enfoque | **A: entidad propia sobre el catálogo que ya existe** |
-| 9 | Contra qué (objetivo) | **Vocabulario cerrado que da Daniel**. Este spec no inventa la lista (§8) |
+| 9 | Contra qué (objetivo) | **Vocabulario cerrado que da Daniel**: doce objetivos más `otro`, elegidos por él (§2.5) |
 
 **Un cambio respecto de lo que vio en el chat**, y hay que decirlo: al presentar
 el enfoque A dije que la línea que descuenta escribiría también un
@@ -86,7 +86,7 @@ trampas de broca) se tomó **sólo la forma** de las cosas, y ninguna cifra:
 |---|---|---|
 | `locationId` | FK `Location` | la parcela. Obligatorio |
 | `kind` | enum `PlotInterventionKind`: `aplicacion` · `liberacion` · `manejo_cultural` | obligatorio |
-| `target` | enum `PlotInterventionTarget` | **vocabulario de Daniel, con `otro`** (§8). Obligatorio: sin él no se puede preguntar «qué funcionó contra la broca». Es la misma razón que dio el Anexo B §4 para `TreatmentTarget` |
+| `target` | enum `PlotInterventionTarget` | **vocabulario de Daniel, con `otro`** (§2.5). Obligatorio: sin él no se puede preguntar «qué funcionó contra la broca». Es la misma razón que dio el Anexo B §4 para `TreatmentTarget` |
 | `targetNote` | texto | el «¿cuál?» de `otro` |
 | `method` | enum `PlotInterventionMethod`: `follaje` · `tronco` · `suelo` · `riego` · `cebo` · `liberacion` · `manual` · `otro` | opcional. Son las formas que nombran las guías, sin sus cifras |
 | `mixVolume`, `mixUnit` | decimal, texto | opcionales. El volumen total del caldo: lo que permite leer después «tanto producto en tanta agua» |
@@ -162,6 +162,37 @@ sanitario y las advertencias **ya existen**.
 
 Dar de alta un producto sigue siendo `crearMaterial`, con `equipment:manage`:
 definir qué es «Bralic» es un acto de gestión, no de faena.
+
+### 2.5 `PlotInterventionTarget` — la lista de Daniel
+
+Decisión de Daniel del 2026-09-18. **Araña roja** la dio él de entrada. Luego
+preguntó qué más había en Panamá o Costa Rica: se buscó, se le llevaron
+candidatas con su fuente y **eligió las once**. Ninguna entró sin que la
+marcara él.
+
+| Valor | En pantalla | De dónde salió |
+|---|---|---|
+| `arana_roja` | araña roja | Daniel. **No aparece** en la lista de plagas del ICAFE ni en las fuentes panameñas consultadas; está porque es de su finca |
+| `broca` | broca | guía técnica del ICAFE (Costa Rica); MIDA la señala como plaga de importancia en Panamá |
+| `minador_hoja` | minador de la hoja | citado en Chiriquí y en manuales de la región (boletín Cedicafé, enero de 2019) |
+| `cochinillas` | cochinillas | guía técnica del ICAFE |
+| `nematodos` | nematodos | guía técnica del ICAFE |
+| `jobotos` | jobotos | guía técnica del ICAFE («jobotos o abejones de mayo») |
+| `roya` | roya | guía técnica del ICAFE, y toda la región |
+| `ojo_de_gallo` | ojo de gallo | guía técnica del ICAFE |
+| `mancha_de_hierro` | mancha de hierro | manuales de la región |
+| `antracnosis` | antracnosis | guía técnica del ICAFE, de paso |
+| `llaga_macana` | llaga macana | guía técnica del ICAFE |
+| `chasparria` | chasparria | guía técnica del ICAFE, de paso |
+| `otro` | otro | con `targetNote` obligatoria |
+
+**Son nombres, no conocimiento.** De esas fuentes no entra ninguna cifra, dosis
+ni producto: la guía del ICAFE cita fungicidas con dosis, y nada de eso llega al
+software.
+
+**Crecer la lista es una migración de una línea**, como cualquier enum del
+dueño. Mientras tanto, lo que no esté entra como `otro` con su nota, y no se
+pierde.
 
 ---
 
@@ -355,7 +386,8 @@ una funciona sola**:
    `suggestedMaterialId`, el botón «Registrar aplicación» en el aviso de trampa y
    el aviso atendido.
 
-**Antes del plan:** la lista de objetivos de Daniel (§8, punto 1).
+**La lista de objetivos ya está** (§2.5): no queda nada de Daniel que bloquee el
+plan.
 
 ---
 
@@ -394,9 +426,7 @@ hostil directamente.
 
 ## 8. Decisiones abiertas — de Daniel
 
-1. **La lista de objetivos** (`PlotInterventionTarget`): contra qué se aplica en
-   la finca. Tiene que estar antes del plan. Lleva `otro` con su nota, como todos
-   los vocabularios del dueño.
+1. ~~La lista de objetivos~~ — **cerrada el 2026-09-18**, en §2.5.
 2. **Si la línea de aplicación escribe también un `MaterialConsumptionEntry`.**
    Ver el cambio al principio: aquí se sigue el precedente del botiquín, que no
    lo escribe.
