@@ -85,3 +85,78 @@ describe("tools/pack-for-review.sh", () => {
     expect(paquete).not.toContain("+cambio");
   });
 });
+
+/**
+ * El texto completo sale de la PUNTA del rango, no del árbol de trabajo.
+ *
+ * **El fallo que esto guarda, medido el 2026-09-17.** Empaquetando las specs #363,
+ * #365, #370 y #387 con `origin/main..origin/spec/…` desde un checkout de `main`, las
+ * cuatro salieron como **«borrado en este rango»** aunque el diff las añadía enteras:
+ * la sección del texto completo miraba el disco, y en el disco de `main` no estaban.
+ * Y un archivo que sí estaba pero distinto salía con la versión de `main`, no con la
+ * revisada. Es el uso que documenta la propia cabecera: `866339f..main`.
+ *
+ * El control es el caso contrario: un archivo borrado DE VERDAD en el rango tiene que
+ * seguir diciéndolo.
+ */
+describe("tools/pack-for-review.sh con la punta del rango fuera del árbol", () => {
+  const dir2 = mkdtempSync(join(tmpdir(), "pack-punta-"));
+  const git2 = (args: string[]) => execFileSync("git", args, { cwd: dir2, encoding: "utf8" });
+
+  afterAll(() => {
+    for (let i = 0; i < 5; i++) {
+      try {
+        rmSync(dir2, { recursive: true, force: true });
+        return;
+      } catch {
+        /* reintento */
+      }
+    }
+  });
+
+  git2(["init", "-q"]);
+  git2(["config", "user.email", "prueba@example.invalid"]);
+  git2(["config", "user.name", "Prueba"]);
+  mkdirSync(join(dir2, "tools"), { recursive: true });
+  copyFileSync(join(raizRepo, "tools/pack-for-review.sh"), join(dir2, "tools/pack-for-review.sh"));
+  writeFileSync(join(dir2, "viejo.txt"), "se va\n");
+  writeFileSync(join(dir2, "comun.txt"), "linea de la base\n");
+  git2(["add", "tools/pack-for-review.sh", "viejo.txt", "comun.txt"]);
+  git2(["commit", "-q", "-m", "base"]);
+  const base = git2(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  git2(["checkout", "-q", "-b", "rama"]);
+  writeFileSync(join(dir2, "nuevo.txt"), "uno\ndos\ntres\n");
+  writeFileSync(join(dir2, "comun.txt"), "linea de la base\nlinea de la rama\n");
+  git2(["rm", "-q", "viejo.txt"]);
+  git2(["add", "nuevo.txt", "comun.txt"]);
+  git2(["commit", "-q", "-m", "la rama a revisar"]);
+  // Se empaqueta desde la base: ni nuevo.txt ni la línea de la rama están en el disco.
+  git2(["checkout", "-q", base]);
+
+  const salida = join(dir2, "paquete.md");
+  const r = spawnSync(BASH, ["tools/pack-for-review.sh", `${base}..rama`, salida], { cwd: dir2, encoding: "utf8" });
+  const paquete = r.status === 0 ? readFileSync(salida, "utf8") : "";
+  // Sólo la sección del texto completo: el diff de más arriba también contiene las líneas.
+  const textoCompleto = paquete.split(/^## Texto /m)[1] ?? "";
+
+  it("el empaquetador termina bien y la sección del texto completo existe", () => {
+    // Con el stderr al lado, para que un fallo diga por qué.
+    expect({ status: r.status, stderr: r.stderr }).toMatchObject({ status: 0 });
+    expect(textoCompleto.length).toBeGreaterThan(0);
+  });
+
+  it("un archivo que la rama AÑADE sale entero, no como borrado", () => {
+    expect(textoCompleto).toContain("### nuevo.txt  (3 líneas)");
+    expect(textoCompleto).toContain("uno\ndos\ntres\n");
+    expect(textoCompleto).not.toContain("### nuevo.txt — borrado en este rango");
+  });
+
+  it("un archivo que la rama MODIFICA sale en su versión de la punta", () => {
+    expect(textoCompleto).toContain("### comun.txt  (2 líneas)");
+    expect(textoCompleto).toContain("linea de la rama");
+  });
+
+  it("control: un archivo borrado de verdad en el rango sigue diciéndolo", () => {
+    expect(textoCompleto).toContain("### viejo.txt — borrado en este rango");
+  });
+});

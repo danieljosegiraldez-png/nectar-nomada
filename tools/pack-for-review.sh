@@ -112,16 +112,22 @@ fi
   git diff "$RANGO_DIFF" -- ${RUTAS[@]+"${RUTAS[@]}"}
   echo '```'
   echo
-  echo "## Texto actual COMPLETO de cada archivo tocado"
+  echo "## Texto COMPLETO de cada archivo tocado, en la punta del rango ($PUNTA)"
   # `while read` y no `for f in $TOCADOS`: la separación por palabras rompe
   # cualquier ruta con espacios, y el paquete saldría incompleto sin decirlo.
+  #
+  # **De `$PUNTA`, no del disco.** Hasta el 2026-09-17 esto leía el árbol de
+  # trabajo, que sólo coincide con el rango cuando la punta es HEAD. Empaquetando
+  # las specs #363/#365/#370/#387 con `origin/main..origin/spec/…` desde `main`,
+  # las cuatro salieron «borrado en este rango» aunque el diff las añadía enteras.
+  # Lo guarda tests/pack-for-review.test.ts.
   printf '%s\n' "$TOCADOS" | while IFS= read -r f; do
     [ -n "$f" ] || continue
-    [ -f "$f" ] || { echo; echo "### $f — borrado en este rango"; continue; }
+    git cat-file -e "$PUNTA:$f" 2>/dev/null || { echo; echo "### $f — borrado en este rango"; continue; }
     echo
-    echo "### $f  ($(wc -l < "$f" | tr -d ' ') líneas)"
+    echo "### $f  ($(git show "$PUNTA:$f" | wc -l | tr -d ' ') líneas)"
     echo '```'
-    cat "$f"
+    git show "$PUNTA:$f"
     echo '```'
   done
 
