@@ -36,6 +36,12 @@ export interface DividirColoniaInput {
   readonly destinoHiveId: string;
   readonly occurredAt: Date;
   readonly nota?: string | null;
+  /**
+   * Con quién se queda la reina registrada de la madre. `"hija"` la pasa a la división en la misma
+   * transacción y la madre queda huérfana; `"madre"` u omitido no mueve nada. Sin reina registrada
+   * en la madre no se inventa ninguna (spec §4).
+   */
+  readonly reinaVa?: "madre" | "hija";
 }
 
 export async function dividirColonia(userAccountId: string, input: DividirColoniaInput) {
@@ -79,6 +85,31 @@ export async function dividirColonia(userAccountId: string, input: DividirColoni
       },
       tx,
     );
+    if (input.reinaVa === "hija") {
+      const vigente = await tx.queenTenure.findFirst({ where: { colonyId: madre.id, hasta: null } });
+      if (vigente) {
+        if (input.occurredAt <= vigente.desde) throw new GenealogiaInvalida("division_antes_de_la_reina");
+        const cerrada = await tx.queenTenure.update({
+          where: { id: vigente.id },
+          data: { hasta: input.occurredAt, fin: "otro", finNota: "pasó a la división" },
+        });
+        const abierta = await tx.queenTenure.create({
+          data: { queenId: vigente.queenId, colonyId: hija.id, desde: input.occurredAt, createdBy: userAccountId },
+        });
+        await recordAuditEvent(
+          {
+            actorUserAccountId: userAccountId,
+            operation: "queen.move",
+            entityType: "queen_tenure",
+            entityId: abierta.id,
+            before: vigente,
+            after: { cerrada, abierta },
+            sourceInterface: "apiary.service",
+          },
+          tx,
+        );
+      }
+    }
     return hija;
   });
 }

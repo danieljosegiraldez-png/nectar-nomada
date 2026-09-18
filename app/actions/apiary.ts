@@ -37,6 +37,7 @@ import type { ApiaryAssetParent } from "../../lib/apiary/media";
 import { fechaDeDia, parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
 import { exigeTipoDeArtefacto, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
 import { dividirColonia, unirColonias } from "../../lib/apiary/genealogia";
+import { cambiarReina, cerrarTenencia, exigeFinDeTenencia, exigeOrigenDeReina, introducirReina } from "../../lib/apiary/reinas";
 
 const emptyToNull = (value: FormDataEntryValue | null) => {
   const str = String(value ?? "").trim();
@@ -805,6 +806,7 @@ export async function dividirColoniaFormAction(formData: FormData): Promise<void
     destinoHiveId,
     occurredAt: cuandoDe(formData),
     nota: emptyToNull(formData.get("nota")),
+    reinaVa: formData.get("reinaVa") === "hija" ? "hija" : "madre",
   });
   revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
   revalidatePath(`/apiaries/${apiaryId}`);
@@ -831,4 +833,58 @@ export async function unirColoniasFormAction(formData: FormData): Promise<void> 
   });
   revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
   revalidatePath(`/apiaries/${apiaryId}`);
+}
+
+/** Spec 2026-09-18 §4 — la reina nueva, tal como llega de un formulario. */
+function reinaNuevaDe(formData: FormData) {
+  return {
+    origen: exigeOrigenDeReina(String(formData.get("origen") ?? "")),
+    origenColonyId: emptyToNull(formData.get("origenColonyId")),
+    notas: emptyToNull(formData.get("notas")),
+  };
+}
+
+function revalidarColmena(formData: FormData) {
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  revalidatePath(`/apiaries/${apiaryId}/hives/${String(formData.get("hiveId") ?? "")}`);
+  revalidatePath(`/apiaries/${apiaryId}`);
+}
+
+/** Registrar la reina de una colonia que no tiene ninguna abierta. */
+export async function introducirReinaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await introducirReina(user.userAccountId, {
+    colonyId: String(formData.get("colonyId") ?? ""),
+    ...reinaNuevaDe(formData),
+    desde: cuandoDe(formData),
+  });
+  revalidarColmena(formData);
+}
+
+/** Cambiar la reina: cierra la vigente con su fin y abre la nueva en el mismo instante. */
+export async function cambiarReinaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await cambiarReina(user.userAccountId, {
+    colonyId: String(formData.get("colonyId") ?? ""),
+    nueva: reinaNuevaDe(formData),
+    cuando: cuandoDe(formData),
+    finDeLaVieja: exigeFinDeTenencia(String(formData.get("fin") ?? "")),
+    finNota: emptyToNull(formData.get("finNota")),
+  });
+  revalidarColmena(formData);
+}
+
+/** La reina vigente terminó y no hay otra todavía: la colonia queda huérfana. */
+export async function cerrarTenenciaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  await cerrarTenencia(user.userAccountId, {
+    colonyId: String(formData.get("colonyId") ?? ""),
+    cuando: cuandoDe(formData),
+    fin: exigeFinDeTenencia(String(formData.get("fin") ?? "")),
+    finNota: emptyToNull(formData.get("finNota")),
+  });
+  revalidarColmena(formData);
 }

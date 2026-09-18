@@ -75,7 +75,7 @@
     },
     {
       "archivo": "lib/apiary/genealogia.ts",
-      "razon": "Módulo de dominio: la genealogía de la colonia (spec 2026-09-18 §3). Dividir exige `requireApiaryAccess` manage sobre la caja de la madre Y sobre la de destino ANTES de escribir, comprueba dentro de la transacción que el destino no tenga colonia activa, y escribe la hija con su AuditEvent en la MISMA transacción. Unir delega en `registrarFinDeColonia`, el único escritor del fin. Leer la línea exige view."
+      "razon": "Módulo de dominio: la genealogía de la colonia (spec 2026-09-18 §3). Dividir exige `requireApiaryAccess` manage sobre la caja de la madre Y sobre la de destino ANTES de escribir, comprueba dentro de la transacción que el destino no tenga colonia activa, y escribe la hija con su AuditEvent en la MISMA transacción. Si la reina registrada va a la hija, cierra la tenencia de la madre y abre la de la hija en esa misma transacción, con su AuditEvent. Unir delega en `registrarFinDeColonia`, el único escritor del fin. Leer la línea exige view."
     },
     {
       "archivo": "lib/apiary/reinas.ts",

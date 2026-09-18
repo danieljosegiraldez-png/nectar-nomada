@@ -21,6 +21,22 @@ import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 
 export class ReinaInvalida extends Error {}
 
+/** Los orígenes, en el orden en que se ofrecen. `satisfies` hace que el compilador avise si el enum crece. */
+export const ORIGENES_DE_REINA = ["criada_aqui", "comprada", "natural", "de_enjambre", "otro"] as const satisfies readonly QueenOrigin[];
+export const FINES_DE_TENENCIA = ["cambiada", "muerta", "perdida", "enjambro", "otro"] as const satisfies readonly QueenTenureEnd[];
+
+/** Lo que llega de un formulario, contra el vocabulario: un valor desconocido se rechaza, no se adivina. */
+export function exigeOrigenDeReina(v: string): QueenOrigin {
+  const o = ORIGENES_DE_REINA.find((x) => x === v);
+  if (!o) throw new ReinaInvalida("origen_invalido");
+  return o;
+}
+export function exigeFinDeTenencia(v: string): QueenTenureEnd {
+  const f = FINES_DE_TENENCIA.find((x) => x === v);
+  if (!f) throw new ReinaInvalida("fin_invalido");
+  return f;
+}
+
 async function coloniaConCaja(colonyId: string) {
   const c = await prisma.colony.findUnique({
     where: { id: colonyId },

@@ -5,6 +5,8 @@ import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getApiaryDetail, getHive } from "../../../../../lib/apiary/hives";
 import { lineaDeColonia } from "../../../../../lib/apiary/genealogia";
 import { dividirColoniaFormAction, unirColoniasFormAction } from "../../../../actions/apiary";
+import { cambiarReinaFormAction, cerrarTenenciaFormAction, introducirReinaFormAction } from "../../../../actions/apiary";
+import { estadoDeReina, FINES_DE_TENENCIA, historiaDeReinas, ORIGENES_DE_REINA } from "../../../../../lib/apiary/reinas";
 import { permissionKeysAnywhere } from "../../../../../lib/rbac/service";
 import { origenesDeColonia } from "../../../../../lib/apiary/origenDeColonia";
 import { sinRegistrar } from "../../../../../lib/apiary/vacio";
@@ -150,6 +152,14 @@ export default async function HiveDetailPage({
   const cajasLibres = cajasDelApiario.filter((h) => h.id !== hive.id && !h.colonies.some((c) => c.status === "active"));
   const receptoras = cajasDelApiario.flatMap((h) =>
     h.colonies.filter((c) => c.status === "active" && c.id !== colony?.id).map((c) => ({ colonyId: c.id, identifier: h.identifier })),
+  );
+  // Spec 2026-09-18 §4 — la reina. Después de `getHive`; cada lectura autoriza por su cuenta.
+  const [estadoReina, historiaReinas] = colony
+    ? await Promise.all([estadoDeReina(user.userAccountId, colony.id), historiaDeReinas(user.userAccountId, colony.id)])
+    : [null, []];
+  // «Criada aquí»: cualquier colonia activa del apiario, esta incluida.
+  const coloniasDeOrigen = cajasDelApiario.flatMap((h) =>
+    h.colonies.filter((c) => c.status === "active").map((c) => ({ colonyId: c.id, identifier: h.identifier })),
   );
   const ahoraEnjambrazon = new Date();
   const avisoDeEnjambrazon = colony
@@ -602,6 +612,16 @@ export default async function HiveDetailPage({
                     <label htmlFor="dividir-nota">{t("dividirNota")}</label>
                     <input id="dividir-nota" name="nota" type="text" />
                   </div>
+                  {/* Sólo si hay reina registrada: sin ella no hay nada que mover, y no se inventa. */}
+                  {estadoReina?.estado === "CON_REINA" ? (
+                    <div className="nn-field">
+                      <label htmlFor="dividir-reina">{t("dividirReinaVa")}</label>
+                      <select id="dividir-reina" name="reinaVa" defaultValue="madre">
+                        <option value="madre">{t("dividirReinaVaMadre")}</option>
+                        <option value="hija">{t("dividirReinaVaHija")}</option>
+                      </select>
+                    </div>
+                  ) : null}
                   <BotonDeEnvio>{t("dividirBoton")}</BotonDeEnvio>
                 </form>
               ) : (
@@ -615,7 +635,164 @@ export default async function HiveDetailPage({
               <summary>
                 <h2 style={{ display: "inline" }}>{t("faena_reinas")}</h2>
               </summary>
-              <p className="nn-muted">{t("reinasPronto")}</p>
+              {estadoReina ? (
+                <p>
+                  {estadoReina.estado === "CON_REINA"
+                    ? t("reinaEstadoCon", { fecha: estadoReina.desde.toISOString().slice(0, 10) })
+                    : estadoReina.estado === "HUERFANA"
+                      ? t("reinaEstadoHuerfana", { fecha: estadoReina.desde.toISOString().slice(0, 10) })
+                      : t("reinaEstadoSinRegistro")}
+                </p>
+              ) : null}
+              {historiaReinas.length > 0 ? (
+                <>
+                  <h3>{t("reinasHistoria")}</h3>
+                  <ul>
+                    {historiaReinas.map((r) => (
+                      <li key={r.id}>
+                        {r.hasta
+                          ? t("reinaTenencia", {
+                              origen: t(`reinaOrigen_${r.queen.origin}`),
+                              desde: r.desde.toISOString().slice(0, 10),
+                              hasta: r.hasta.toISOString().slice(0, 10),
+                            })
+                          : t("reinaTenenciaAbierta", { origen: t(`reinaOrigen_${r.queen.origin}`), desde: r.desde.toISOString().slice(0, 10) })}
+                        {r.fin ? ` · ${t(`reinaFin_${r.fin}`)}` : ""}
+                        {r.finNota ? ` — ${r.finNota}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+              {puedeGestionar && colony.status === "active" ? (
+                estadoReina?.estado === "CON_REINA" ? (
+                  <>
+                    <h3>{t("reinaCambiar")}</h3>
+                    <form action={cambiarReinaFormAction} className="nn-form">
+                    <input type="hidden" name="apiaryId" value={apiaryId} />
+                    <input type="hidden" name="hiveId" value={hive.id} />
+                    <input type="hidden" name="colonyId" value={colony.id} />
+                    <TimezoneOffsetField />
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-fin">{t("reinaFin")}</label>
+                      <select id="cambiar-fin" name="fin" required defaultValue="">
+                        <option value="" disabled />
+                        {FINES_DE_TENENCIA.map((f) => (
+                          <option key={f} value={f}>
+                            {t(`reinaFin_${f}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-finnota">{t("reinaFinNota")}</label>
+                      <input id="cambiar-finnota" name="finNota" type="text" />
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-nueva-origen">{t("reinaOrigen")}</label>
+                      <select id="cambiar-nueva-origen" name="origen" required defaultValue="">
+                        <option value="" disabled />
+                        {ORIGENES_DE_REINA.map((o) => (
+                          <option key={o} value={o}>
+                            {t(`reinaOrigen_${o}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-nueva-madre">{t("reinaOrigenColonia")}</label>
+                      <select id="cambiar-nueva-madre" name="origenColonyId" defaultValue="">
+                        <option value="" />
+                        {coloniasDeOrigen.map((c) => (
+                          <option key={c.colonyId} value={c.colonyId}>
+                            {c.identifier}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-nueva-notas">{t("reinaNotas")}</label>
+                      <input id="cambiar-nueva-notas" name="notas" type="text" />
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-cuando">{t("faenaCuando")}</label>
+                      <input id="cambiar-cuando" name="cuando" type="datetime-local" />
+                    </div>
+                      <BotonDeEnvio>{t("reinaCambiarBoton")}</BotonDeEnvio>
+                    </form>
+                    <h3>{t("reinaCerrar")}</h3>
+                    <form action={cerrarTenenciaFormAction} className="nn-form">
+                    <input type="hidden" name="apiaryId" value={apiaryId} />
+                    <input type="hidden" name="hiveId" value={hive.id} />
+                    <input type="hidden" name="colonyId" value={colony.id} />
+                    <TimezoneOffsetField />
+                    <div className="nn-field">
+                      <label htmlFor="cerrar-fin">{t("reinaFin")}</label>
+                      <select id="cerrar-fin" name="fin" required defaultValue="">
+                        <option value="" disabled />
+                        {FINES_DE_TENENCIA.map((f) => (
+                          <option key={f} value={f}>
+                            {t(`reinaFin_${f}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cerrar-finnota">{t("reinaFinNota")}</label>
+                      <input id="cerrar-finnota" name="finNota" type="text" />
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cerrar-cuando">{t("faenaCuando")}</label>
+                      <input id="cerrar-cuando" name="cuando" type="datetime-local" />
+                    </div>
+                      <BotonDeEnvio>{t("reinaCerrarBoton")}</BotonDeEnvio>
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <h3>{t("reinaIntroducir")}</h3>
+                    <form action={introducirReinaFormAction} className="nn-form">
+                    <input type="hidden" name="apiaryId" value={apiaryId} />
+                    <input type="hidden" name="hiveId" value={hive.id} />
+                    <input type="hidden" name="colonyId" value={colony.id} />
+                    <TimezoneOffsetField />
+                    <div className="nn-field">
+                      <label htmlFor="introducir-origen">{t("reinaOrigen")}</label>
+                      <select id="introducir-origen" name="origen" required defaultValue="">
+                        <option value="" disabled />
+                        {ORIGENES_DE_REINA.map((o) => (
+                          <option key={o} value={o}>
+                            {t(`reinaOrigen_${o}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="introducir-madre">{t("reinaOrigenColonia")}</label>
+                      <select id="introducir-madre" name="origenColonyId" defaultValue="">
+                        <option value="" />
+                        {coloniasDeOrigen.map((c) => (
+                          <option key={c.colonyId} value={c.colonyId}>
+                            {c.identifier}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="introducir-notas">{t("reinaNotas")}</label>
+                      <input id="introducir-notas" name="notas" type="text" />
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="introducir-cuando">{t("faenaCuando")}</label>
+                      <input id="introducir-cuando" name="cuando" type="datetime-local" />
+                    </div>
+                      <BotonDeEnvio>{t("reinaIntroducirBoton")}</BotonDeEnvio>
+                    </form>
+                  </>
+                )
+              ) : (
+                <p className="nn-muted">{t("sinPermisoGestion")}</p>
+              )}
             </details>
           </section>
 

@@ -11,6 +11,7 @@ import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { ApiaryAccessError, ColonyEndError, crearApiario, createColony, createHive, registrarFinDeColonia } from "../../lib/apiary/hives";
 import { dividirColonia, lineaDeColonia, unirColonias } from "../../lib/apiary/genealogia";
+import { estadoDeReina, introducirReina, reinaDeColonia } from "../../lib/apiary/reinas";
 
 const RUN = `gen-${Date.now()}`;
 const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000);
@@ -66,6 +67,12 @@ afterEach(async () => {
   // las colonias a las que ninguna otra apunta.
   let quedan = (await prisma.colony.findMany({ where: assertDefinedWhere({ hiveId: { in: cajas } }), select: { id: true } })).map((c) => c.id);
   if (quedan.length) await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: quedan } }) });
+  // Las reinas antes que las colonias: sus tenencias apuntan a ellas.
+  const tenencias = await prisma.queenTenure.findMany({ where: assertDefinedWhere({ colonyId: { in: quedan } }), select: { id: true, queenId: true } });
+  const reinas = [...new Set(tenencias.map((t) => t.queenId))];
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: tenencias.map((t) => t.id) } }) });
+  await prisma.queenTenure.deleteMany({ where: assertDefinedWhere({ queenId: { in: reinas } }) });
+  await prisma.queen.deleteMany({ where: assertDefinedWhere({ id: { in: reinas } }) });
   for (let vuelta = 0; quedan.length && vuelta < 20; vuelta++) {
     const apuntadas = new Set(
       (
@@ -179,6 +186,33 @@ describe("unir", () => {
     );
     await registrarFinDeColonia(adminId, { colonyId: b.id, status: "dead", endedAt: hace(2) });
     await expect(unirColonias(operario, { debilColonyId: a.id, receptoraColonyId: b.id, occurredAt: hace(1) })).rejects.toThrow(/receptora_no_activa/);
+  }, 20000);
+});
+
+describe("la reina en la división", () => {
+  it("con reinaVa 'hija', la reina vigente pasa a la hija en la misma transacción, y la madre queda huérfana", async () => {
+    const madre = await colonia();
+    const { reina } = await introducirReina(operario, { colonyId: madre.id, origen: "comprada", desde: hace(10) });
+    const hija = await dividirColonia(operario, { madreColonyId: madre.id, destinoHiveId: await caja(), occurredAt: hace(1), reinaVa: "hija" });
+    expect((await reinaDeColonia(operario, hija.id))?.id).toBe(reina.id);
+    const enLaMadre = await estadoDeReina(operario, madre.id);
+    expect(enLaMadre.estado).toBe("HUERFANA");
+    expect(enLaMadre.desde?.getTime()).toBe(hija.startedAt.getTime());
+  }, 20000);
+
+  it("con reinaVa 'madre' la reina se queda, y la hija empieza sin reina registrada", async () => {
+    const madre = await colonia();
+    const { reina } = await introducirReina(operario, { colonyId: madre.id, origen: "comprada", desde: hace(10) });
+    const hija = await dividirColonia(operario, { madreColonyId: madre.id, destinoHiveId: await caja(), occurredAt: hace(1), reinaVa: "madre" });
+    expect((await reinaDeColonia(operario, madre.id))?.id).toBe(reina.id);
+    expect((await estadoDeReina(operario, hija.id)).estado).toBe("SIN_REGISTRO");
+  }, 20000);
+
+  it("sin reina registrada en la madre, reinaVa 'hija' no inventa ninguna", async () => {
+    const madre = await colonia();
+    const hija = await dividirColonia(operario, { madreColonyId: madre.id, destinoHiveId: await caja(), occurredAt: hace(1), reinaVa: "hija" });
+    expect((await estadoDeReina(operario, hija.id)).estado).toBe("SIN_REGISTRO");
+    expect((await estadoDeReina(operario, madre.id)).estado).toBe("SIN_REGISTRO");
   }, 20000);
 });
 
