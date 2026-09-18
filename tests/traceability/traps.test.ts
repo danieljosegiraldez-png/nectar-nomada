@@ -203,7 +203,11 @@ describe("alta de trampa", () => {
     organizationIds.push(otra.organizationId!);
 
     const { createPlotBlock } = await import("../../lib/traceability/plotBlocks");
-    const ajeno = await createPlotBlock(userAccountId, { locationId: otra.id, name: "Norte" });
+    const ajeno = await createPlotBlock(userAccountId, {
+      locationId: otra.id,
+      name: "Norte",
+      blockType: "microparcela",
+    });
 
     await expect(createTrap(userAccountId, {
       locationId: parcela.id, plotBlockId: ajeno.id, installedAt: new Date(), provenanceClass: "direct_observation",

@@ -572,7 +572,7 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
           id: true,
           trapNumber: true,
           status: true,
-          plotBlock: { select: { name: true } },
+          plotBlock: { select: { name: true, blockType: true } },
           observations: {
             where: { observationType: "trap_check" },
             orderBy: [{ observedAt: "desc" }, { createdAt: "desc" }],
@@ -631,7 +631,7 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     return {
       id: t.id,
       trapNumber: t.trapNumber,
-      bloque: t.plotBlock?.name ?? null,
+      bloque: t.plotBlock ? { name: t.plotBlock.name, blockType: t.plotBlock.blockType } : null,
       status: t.status,
       instaladaEl: instaladaEl.get(t.id) ?? null,
       // Sin revisión es `null`, no una lectura de cero (ADR-080).

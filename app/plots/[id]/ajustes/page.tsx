@@ -11,8 +11,9 @@ import { PlantingCohortForm } from "../../../components/traceability/PlantingCoh
 import { PlotAttributesForm } from "../../../components/traceability/PlotAttributesForm";
 import { SoilProfileForm } from "../../../components/traceability/SoilProfileForm";
 import { MarcarEnProduccionForm } from "../../../components/traceability/MarcarEnProduccionForm";
-import { listPlotBlocks } from "../../../../lib/traceability/plotBlocks";
+import { listPlotBlocks, claveDeTituloDeBloque } from "../../../../lib/traceability/plotBlocks";
 import { AltaDeBloqueForm } from "../../../components/traceability/AltaDeBloqueForm";
+import { AsignarTipoDeBloqueForm } from "../../../components/traceability/AsignarTipoDeBloqueForm";
 import { AltaDeTrampaForm } from "../../../components/traceability/AltaDeTrampaForm";
 import { ReglaDeTrampasForm } from "../../../components/traceability/ReglaDeTrampasForm";
 
@@ -193,9 +194,15 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
         ) : (
           <ul className="nn-detail-meta">
             {bloques.map((b) => (
-              <li key={b.id}>
-                {b.name}
+              <li key={b.id} className="nn-card">
+                <strong>
+                  {claveDeTituloDeBloque(b.blockType) ? t(claveDeTituloDeBloque(b.blockType)!, { name: b.name }) : b.name}
+                </strong>
                 {b.notes ? <span className="nn-muted"> · {b.notes}</span> : null}
+                {b.description ? <p className="nn-muted">{b.description}</p> : null}
+                {b.blockType == null ? (
+                  <AsignarTipoDeBloqueForm locationId={location.id} plotBlockId={b.id} />
+                ) : null}
               </li>
             ))}
           </ul>
@@ -217,7 +224,13 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
               <li key={trampa.id}>
                 {trampa.trapNumber != null ? t("trapsNumber", { n: trampa.trapNumber }) : t("notRecorded")}
                 {" · "}
-                {trampa.bloque ? t("trapsBlock", { nombre: trampa.bloque }) : t("trapsNoBlock")}
+                {trampa.bloque ? (
+                  claveDeTituloDeBloque(trampa.bloque.blockType) != null
+                    ? t(claveDeTituloDeBloque(trampa.bloque.blockType)!, { name: trampa.bloque.name })
+                    : trampa.bloque.name
+                ) : (
+                  t("trapsNoBlock")
+                )}
               </li>
             ))}
           </ul>

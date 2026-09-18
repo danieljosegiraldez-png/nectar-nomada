@@ -7,7 +7,7 @@ import { avisosDeTrampas, trampasParaAviso } from "../../lib/traceability/pendie
 
 const REGLA = { triggerLevel: "algunos" as const, normalDays: 14, alertDays: 7, suggestedAction: "aplicar Bralic" };
 const activa = (extra: Partial<Parameters<typeof avisosDeTrampas>[0]["trampas"][number]> = {}) => ({
-  id: "t1", trapNumber: 7, bloque: "Norte", status: "active" as const,
+  id: "t1", trapNumber: 7, bloque: { name: "Norte", blockType: null }, status: "active" as const,
   ultimaRevision: null, instaladaEl: "2026-09-01", ...extra,
 });
 
@@ -72,14 +72,14 @@ describe("avisos de trampas", () => {
 describe("entrada de los avisos desde getPlotDetail", () => {
   // `observedAt` es un campo de día: medianoche UTC.
   const cruda = (ultimaRevision: { observedAt: Date; brocaLevel: "muchos" | null } | null) => ({
-    id: "t1", trapNumber: 7, bloque: "Norte", status: "active" as const,
+    id: "t1", trapNumber: 7, bloque: { name: "Norte", blockType: null }, status: "active" as const,
     instaladaEl: new Date("2026-09-01T00:00:00Z"), ultimaRevision,
   });
 
   it("convierte los dos días a YYYY-MM-DD", () => {
     const [t] = trampasParaAviso([cruda({ observedAt: new Date("2026-09-10T00:00:00Z"), brocaLevel: "muchos" })]);
     expect(t).toEqual({
-      id: "t1", trapNumber: 7, bloque: "Norte", status: "active",
+      id: "t1", trapNumber: 7, bloque: { name: "Norte", blockType: null }, status: "active",
       instaladaEl: "2026-09-01", ultimaRevision: { dia: "2026-09-10", brocaLevel: "muchos" },
     });
   });

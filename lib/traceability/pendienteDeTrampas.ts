@@ -1,4 +1,5 @@
 import type { Aviso } from "./pendienteDeLaParcela";
+import type { PlotBlockType } from "../../generated/prisma/client";
 
 /**
  * Los avisos de las trampas de broca — spec de trampas §6.
@@ -20,7 +21,7 @@ const ESCALA: readonly NivelDeBroca[] = ["ninguno", "pocos", "algunos", "muchos"
 export interface TrampaParaAviso {
   id: string;
   trapNumber: number | null;
-  bloque: string | null;
+  bloque: { name: string; blockType: PlotBlockType | null } | null;
   status: "active" | "removed" | "dead";
   /**
    * `dia` es campo de día `YYYY-MM-DD` (la revisión se guarda a medianoche UTC).
@@ -120,7 +121,7 @@ export function trampasParaAviso(
   trampas: readonly {
     id: string;
     trapNumber: number | null;
-    bloque: string | null;
+    bloque: { name: string; blockType: PlotBlockType | null } | null;
     status: TrampaParaAviso["status"];
     instaladaEl: Date | null;
     ultimaRevision: { observedAt: Date; brocaLevel: NivelDeBroca | null } | null;

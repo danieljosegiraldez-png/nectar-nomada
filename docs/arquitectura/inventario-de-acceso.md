@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**416 operaciones** que tocan la base, en **128 archivos**:
+**417 operaciones** que tocan la base, en **128 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,19 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **298** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **299** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **37** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **63** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
+
+> **El de 416→417, sin archivos nuevos, es `setPlotBlockType` (Tarea 1 de vistas de
+> finca y parcela).** Vive en `lib/traceability/plotBlocks.ts`, que ya estaba
+> inventariado por `createPlotBlock` y `listPlotBlocks`. Sube la fila de **guardia
+> directo**: llama a `requireLocationAttributeAccess` sobre la parcela del bloque
+> —leída primero con `findUnique`, nunca confiando en el `locationId` del formulario—
+> antes de escribir el tipo o la descripción.
 
 > **Fusión de `origin/main` en `trampas-broca` (2026-09-18).** Los dos lados
 > traían cifras propias —356/106 la rama, 376/116 `main`— y **ninguna de las dos

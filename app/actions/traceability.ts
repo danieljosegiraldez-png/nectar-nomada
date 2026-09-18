@@ -55,7 +55,7 @@ import {
   PlantingCohortValidationError,
 } from "../../lib/traceability/plantingCohorts";
 import { recordEnteredProduction, PlantingEventValidationError } from "../../lib/traceability/plantingEvents";
-import { createPlotBlock, PlotBlockValidationError } from "../../lib/traceability/plotBlocks";
+import { createPlotBlock, setPlotBlockType, PlotBlockValidationError } from "../../lib/traceability/plotBlocks";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
 import { saveTrapRule, TrapRuleValidationError } from "../../lib/traceability/trapRules";
 import {
@@ -1268,7 +1268,33 @@ export async function createPlotBlockFormAction(
     await createPlotBlock(user.userAccountId, {
       locationId,
       name: String(formData.get("name") ?? ""),
+      blockType: String(formData.get("blockType") ?? "") as never,
+      description: emptyToNull(formData.get("description")),
       notes: emptyToNull(formData.get("notes")),
+    });
+  } catch (error) {
+    revalidarParcela(locationId);
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidarParcela(locationId);
+  return {};
+}
+
+export async function setPlotBlockTypeFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const locationId = String(formData.get("locationId") ?? "");
+
+  try {
+    await setPlotBlockType(user.userAccountId, {
+      plotBlockId: String(formData.get("plotBlockId") ?? ""),
+      blockType: String(formData.get("blockType") ?? "") as never,
+      description: emptyToNull(formData.get("description")),
     });
   } catch (error) {
     revalidarParcela(locationId);

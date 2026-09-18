@@ -22,6 +22,7 @@ import { cifrasDelLote } from "../../../lib/traceability/cifrasDelLote";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
 import { pendienteDeLaParcela, enlaceDelAviso, type Aviso } from "../../../lib/traceability/pendienteDeLaParcela";
 import { trampasParaAviso } from "../../../lib/traceability/pendienteDeTrampas";
+import { claveDeTituloDeBloque } from "../../../lib/traceability/plotBlocks";
 
 export const dynamic = "force-dynamic";
 
@@ -628,7 +629,13 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             <h4>
               {trampa.trapNumber != null ? t("trapsNumber", { n: trampa.trapNumber }) : t("notRecorded")}
               {" · "}
-              {trampa.bloque ? t("trapsBlock", { nombre: trampa.bloque }) : t("trapsNoBlock")}
+              {trampa.bloque ? (
+                claveDeTituloDeBloque(trampa.bloque.blockType) != null
+                  ? t(claveDeTituloDeBloque(trampa.bloque.blockType)!, { name: trampa.bloque.name })
+                  : trampa.bloque.name
+              ) : (
+                t("trapsNoBlock")
+              )}
             </h4>
             {/* Sin revisión se dice así, no con una lectura de cero (ADR-080).
                 `observedAt` es un día a las 00:00Z, como `sampledAt`. */}
