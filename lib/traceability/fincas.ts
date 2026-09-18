@@ -19,6 +19,7 @@ import { can } from "../rbac/service";
 import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 import { sortByName } from "../naturalOrder";
 import { getManageableContext } from "./lots";
+import { LocationAccessError, nombreLibreBajo, requireLocationAttributeAccess } from "./locations";
 
 export const COOKIE_FINCA = "finca";
 /** El valor de la cookie cuando se eligió «ver todas». Borrarla haría que cada página volviera a preguntar. */
@@ -180,4 +181,53 @@ export async function organizacionesSinTerreno(userAccountId: string) {
     orderBy: { name: "asc" },
   });
   return orgs;
+}
+
+/**
+ * Una parcela nueva en una finca. Exige, sobre el SITIO de la finca, `manage_attributes` y
+ * `create_site`: los mismos dos permisos que crear un beneficio, así que el Farm Manager de esa
+ * finca puede, el Farm Operator no, y el Farm Manager de otra finca tampoco. Lo demás de la
+ * parcela —sol, sombra, altitud, suelo…— se completa en su ficha de ajustes.
+ */
+export async function crearParcela(userAccountId: string, input: { siteId: string; nombre: string; areaHectareas?: number | null }) {
+  await requireLocationAttributeAccess(userAccountId, input.siteId);
+  const sitio = await prisma.location.findUniqueOrThrow({
+    where: { id: input.siteId },
+    select: { id: true, locationType: true, organizationId: true, classification: true, timezone: true },
+  });
+  if (!(await can(userAccountId, "create_site", "location", { scopeType: "location", scopeRefId: sitio.id }, sitio.classification))) {
+    throw new LocationAccessError("no_location_create_access");
+  }
+  if (sitio.locationType !== "site") throw new FincaError("padre_no_es_una_finca");
+  const nombre = exigeNombre(input.nombre);
+  const area = input.areaHectareas ?? null;
+  if (area !== null && !(Number.isFinite(area) && area > 0)) throw new FincaError("area_invalida");
+
+  return prisma.$transaction(async (tx) => {
+    if (!(await nombreLibreBajo(tx, sitio.id, nombre))) throw new FincaError("nombre_repetido");
+    const parcela = await tx.location.create({
+      data: {
+        name: nombre,
+        locationType: "plot",
+        parentLocationId: sitio.id,
+        organizationId: sitio.organizationId,
+        classification: sitio.classification,
+        timezone: sitio.timezone,
+        areaHectares: area,
+        createdBy: userAccountId,
+      },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "location.create_plot",
+        entityType: "location",
+        entityId: parcela.id,
+        after: parcela,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+    return parcela;
+  });
 }

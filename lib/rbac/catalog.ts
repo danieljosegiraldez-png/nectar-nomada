@@ -129,7 +129,7 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // ningún perfil acotado lo lista; Platform Admin lo recibe por tener el catálogo entero.
   { resourceType: "organization", action: "create_farm", description: "Dar de alta una finca: la organización y su terreno. Sólo en ámbito de plataforma." },
 
-  { resourceType: "location", action: "create_site", description: "Crear una ubicación nueva bajo un sitio que ya se gestiona — hoy, un beneficio." },
+  { resourceType: "location", action: "create_site", description: "Crear una ubicación nueva bajo un sitio que ya se gestiona: un beneficio, una instalación o una parcela." },
 
   // Decisión de Daniel, 2026-09-18 (spec #370 §4.3): el capataz edita un
   // beneficio SÓLO si se le concede; por defecto no. Va aparte de

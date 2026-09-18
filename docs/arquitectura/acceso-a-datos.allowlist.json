@@ -524,6 +524,10 @@
   ],
   "reciben_transaccion": [
     {
+      "archivo": "lib/traceability/locations.ts",
+      "razon": "Spec fincas y parcelas §3.3: `nombreLibreBajo(tx, padre, nombre)` recibe el `tx` de quien crea —`createMicrolot` aquí mismo y `crearParcela` en fincas.ts— para mirar los hermanos DENTRO de la transacción que va a crear la fila. Sólo lee nombres de los hijos de un padre sobre el que quien llama ya pasó `requireLocationAttributeAccess`; no escribe nada."
+    },
+    {
       "archivo": "lib/apiary/artefactos.ts",
       "razon": "Artefactos de colmena: el UNICO escritor de los intervalos y de la foto en Hive. `abrirIntervaloEn`, `cerrarIntervaloEn` y `cerrarAbiertosEn` devuelven un cierre que recibe el `tx` de quien llama —la inspeccion, el formulario de la caja, la propia pantalla— para que el intervalo, la foto y sus AuditEvent se confirmen en LA MISMA transaccion que la escritura que los declara. Quien llama ya autorizo con requireApiaryAccess; los ayudantes solo tocan hive_fitting y hive de la colmena que reciben."
     },

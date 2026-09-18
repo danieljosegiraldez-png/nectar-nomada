@@ -10,7 +10,8 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
-import { TODAS, crearFinca, idsBajoLaFinca, listarFincas, organizacionesSinTerreno, resolverFinca, type Finca } from "../../lib/traceability/fincas";
+import { TODAS, crearFinca, crearParcela, idsBajoLaFinca, listarFincas, organizacionesSinTerreno, resolverFinca, type Finca } from "../../lib/traceability/fincas";
+import { createMicrolot } from "../../lib/traceability/locations";
 
 const RUN = `fin-${Date.now()}`;
 const personas: string[] = [];
@@ -212,4 +213,33 @@ describe("crear una finca", () => {
   }, 20000);
 });
 
-export { operarioA };
+describe("crear parcelas", () => {
+  it("el Farm Manager de A crea una parcela en A, con su AuditEvent", async () => {
+    const p = await crearParcela(managerA, { siteId: A.site, nombre: `Lote 7 (${RUN})`, areaHectareas: 1.5 });
+    expect(p.locationType).toBe("plot");
+    expect(p.parentLocationId).toBe(A.site);
+    expect(Number(p.areaHectares)).toBe(1.5);
+    expect(await prisma.auditEvent.findFirst({ where: { entityId: p.id, operation: "location.create_plot" } })).not.toBeNull();
+  }, 20000);
+
+  it("el mismo nombre en la misma finca se rechaza, sin distinguir mayúsculas ni espacios; en otra finca, no", async () => {
+    await crearParcela(managerA, { siteId: A.site, nombre: `Repetida (${RUN})` });
+    await expect(crearParcela(managerA, { siteId: A.site, nombre: `  repetida (${RUN}) ` })).rejects.toThrow(/nombre_repetido/);
+    // Control positivo: en otra finca el mismo nombre SÍ se crea.
+    const enB = await crearParcela(admin, { siteId: B.site, nombre: `Repetida (${RUN})` });
+    expect(enB.parentLocationId).toBe(B.site);
+  }, 20000);
+
+  it("el Farm Manager de A no crea en B, y el Farm Operator de A no crea en A", async () => {
+    await expect(crearParcela(managerA, { siteId: B.site, nombre: `Ajena (${RUN})` })).rejects.toThrow();
+    await expect(crearParcela(operarioA, { siteId: A.site, nombre: `Del operario (${RUN})` })).rejects.toThrow(/no_location_create_access/);
+    expect(await prisma.location.count({ where: { name: { in: [`Ajena (${RUN})`, `Del operario (${RUN})`] } } })).toBe(0);
+  }, 20000);
+
+  it("una microparcela tampoco repite nombre dentro de su parcela", async () => {
+    await createMicrolot(managerA, { parentLocationId: P1, name: `Sombra (${RUN})`, subdivisionReason: "shade" });
+    await expect(createMicrolot(managerA, { parentLocationId: P1, name: `SOMBRA (${RUN})`, subdivisionReason: "shade" })).rejects.toThrow(
+      /nombre_repetido/,
+    );
+  }, 20000);
+});
