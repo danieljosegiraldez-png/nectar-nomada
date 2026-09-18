@@ -160,3 +160,77 @@ describe("tools/pack-for-review.sh con la punta del rango fuera del árbol", () 
     expect(textoCompleto).toContain("### viejo.txt — borrado en este rango");
   });
 });
+
+/**
+ * Los vecinos de import y la línea `base:` también salen de la PUNTA.
+ *
+ * Mismo defecto que el de arriba, en las otras dos secciones que lo tenían: «Un salto
+ * de imports» leía los imports y los vecinos del disco, y `base:` calculaba la base
+ * común con HEAD. Aquí `main` avanza después de que la rama sale —cambia `lib/a.ts` y
+ * borra `lib/c.ts`—, y se empaqueta `main..rama` desde `main`: en el disco ni está el
+ * archivo que importa ni el vecino borrado, y el otro vecino tiene el texto de `main`.
+ * Un import es relativo con `..` y el otro con el alias `@/`, que son las dos formas
+ * que el script resuelve.
+ */
+describe("tools/pack-for-review.sh: vecinos y base desde la punta", () => {
+  const dir3 = mkdtempSync(join(tmpdir(), "pack-vecinos-"));
+  const git3 = (args: string[]) => execFileSync("git", args, { cwd: dir3, encoding: "utf8" });
+
+  afterAll(() => {
+    for (let i = 0; i < 5; i++) {
+      try {
+        rmSync(dir3, { recursive: true, force: true });
+        return;
+      } catch {
+        /* reintento */
+      }
+    }
+  });
+
+  git3(["init", "-q"]);
+  git3(["config", "user.email", "prueba@example.invalid"]);
+  git3(["config", "user.name", "Prueba"]);
+  mkdirSync(join(dir3, "tools"), { recursive: true });
+  mkdirSync(join(dir3, "lib"), { recursive: true });
+  copyFileSync(join(raizRepo, "tools/pack-for-review.sh"), join(dir3, "tools/pack-for-review.sh"));
+  writeFileSync(join(dir3, "lib/a.ts"), "export const a = 'de la base';\n");
+  writeFileSync(join(dir3, "lib/c.ts"), "export const c = 1;\n");
+  git3(["add", "tools/pack-for-review.sh", "lib/a.ts", "lib/c.ts"]);
+  git3(["commit", "-q", "-m", "base"]);
+  const principal = git3(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  const baseComun = git3(["rev-parse", "HEAD"]).trim();
+  git3(["checkout", "-q", "-b", "rama"]);
+  mkdirSync(join(dir3, "app"), { recursive: true });
+  writeFileSync(join(dir3, "app/nuevo.ts"), 'import { a } from "../lib/a";\nimport { c } from "@/lib/c";\n');
+  git3(["add", "app/nuevo.ts"]);
+  git3(["commit", "-q", "-m", "la rama importa a y c"]);
+  git3(["checkout", "-q", principal]);
+  writeFileSync(join(dir3, "lib/a.ts"), "export const a = 'de main';\n");
+  git3(["rm", "-q", "lib/c.ts"]);
+  git3(["add", "lib/a.ts"]);
+  git3(["commit", "-q", "-m", "main avanza"]);
+
+  const salida = join(dir3, "paquete.md");
+  const r = spawnSync(BASH, ["tools/pack-for-review.sh", `${principal}..rama`, salida], { cwd: dir3, encoding: "utf8" });
+  const paquete = r.status === 0 ? readFileSync(salida, "utf8") : "";
+  const vecinos = paquete.split(/^## Un salto de imports/m)[1] ?? "";
+
+  it("el empaquetador termina bien", () => {
+    expect({ status: r.status, stderr: r.stderr }).toMatchObject({ status: 0 });
+  });
+
+  it("un vecino que la punta tiene y el disco no sale entero", () => {
+    expect(vecinos).toContain("### lib/c.ts  (1 líneas)");
+    expect(vecinos).toContain("export const c = 1;");
+  });
+
+  it("un vecino que difiere sale en su versión de la punta", () => {
+    expect(vecinos).toContain("### lib/a.ts  (1 líneas)");
+    expect(vecinos).toContain("'de la base'");
+    expect(vecinos).not.toContain("'de main'");
+  });
+
+  it("`base:` es la base común de la punta con la base del rango, no la de HEAD", () => {
+    expect(paquete).toContain(`base:   ${baseComun}`);
+  });
+});
