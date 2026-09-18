@@ -118,6 +118,9 @@ tests/inventario/recepcion.test.ts
 tests/traceability/e2e.test.ts
 tests/traceability/entradaEnProduccion.test.ts
 tests/traceability/export.test.ts
+tests/traceability/plotBlocks.test.ts
+tests/traceability/traps.test.ts
+tests/traceability/trapRules.test.ts
 tests/traceability/f1.test.ts
 tests/traceability/fermentation.test.ts
 tests/traceability/fieldSessions.test.ts

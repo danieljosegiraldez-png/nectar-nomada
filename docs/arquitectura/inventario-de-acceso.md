@@ -13,17 +13,26 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**401 operaciones** que tocan la base, en **123 archivos**:<!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
+**408 operaciones** que tocan la base, en **126 archivos**:
+
+<!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
      la compuerta falla y dice cuál. Todo el trabajo del 2026-08-31 empezó por
      una discrepancia de uno entre este documento y la medición. -->
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **283** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo || **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **63** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama || **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
+| **290** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **37** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **63** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
+
+> **Fusión de `origin/main` en `trampas-broca` (2026-09-18).** Los dos lados
+> traían cifras propias —356/106 la rama, 376/116 `main`— y **ninguna de las dos
+> vale para el árbol combinado**. Las de arriba son las que imprime
+> `node scripts/inventario-de-acceso.mjs` sobre la fusión: **382 en 119**.
 
 > **Y el de 350→354, con un archivo nuevo, es el servicio de beneficio (Tarea 2 del
 > plan de alta de beneficio).** `lib/traceability/beneficios.ts` aporta **cuatro**
@@ -92,6 +101,44 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > entrada propia en el allowlist. Las tres suben la fila de **guardia directo**:
 > `crearSubproducto` autoriza contra los lotes de ENTRADA de la transformación,
 > porque quien no puede tocar ese lote no puede declarar lo que salió de él.
+
+> **Y el de 350→352, con un archivo nuevo, es `lib/traceability/plotBlocks.ts`.**
+> `createPlotBlock` y `listPlotBlocks` (Tarea 2 de trampas de broca) suben la fila de
+> **guardia directo**: las dos llaman a `requireLocationAttributeAccess` antes de tocar
+> `PlotBlock`, la misma compuerta de «configurar la parcela» que usa `locations.ts`.
+
+> **Y el de 352→353, con un archivo nuevo, es `lib/traceability/traps.ts`.**
+> `createTrap` (Tarea 3 de trampas de broca) sube la fila de **guardia directo**: llama a
+> `can(..., "manage", "specimen", ...)` en su propio `requireTrapAccess`, la compuerta de
+> `specimens.ts` — no la de la parcela, porque dar de alta una trampa es gestionar un
+> `Specimen`, no configurar la parcela.
+
+> **Y el de 353→354, sin archivo nuevo, es `recordTrapCheck` en el mismo
+> `lib/traceability/traps.ts` (Tarea 4 de trampas de broca).** Sube otra vez la fila de
+> **guardia directo**: pasa por el mismo `requireTrapAccess` que `createTrap`, después de su
+> propio `prisma.specimen.findUnique` para confirmar que el `id` recibido es una trampa
+> (`specimenType: "trap"`) y no cualquier otro `Specimen`. No necesita entrada nueva en el
+> allowlist — el archivo ya estaba en la lista desde la fila anterior.
+
+> **Y el de 354→356, con un archivo nuevo, es `lib/traceability/trapRules.ts` (Tarea 7 de
+> trampas de broca).** `saveTrapRule` y `getTrapRule` suben dos veces la fila de **guardia
+> directo**: las dos pasan por `requireLocationAttributeAccess` sobre la finca
+> (`farmLocationId`) antes de tocar `trap_rule` — la compuerta de «configurar la parcela»,
+> la misma de `plotBlocks.ts`. Entrada nueva en el allowlist como módulo de dominio.
+
+> **Y el de 382→383, sin archivo nuevo, es exportar `requireTrapAccess` (ronda de arreglos
+> finales de trampas de broca, F5).** No cambia ningún permiso: sigue siendo exactamente
+> `can(..., "manage", "specimen", ...)`, sin tocar. Lo que cambia es que
+> `lib/traceability/landMedia.ts` ahora la LLAMA — antes, colgar la foto de una revisión de
+> trampa sólo exigía `location:manage_attributes` (la compuerta genérica de la parcela), así
+> que a alguien con la parcela pero sin `specimen:manage` le bastaba para adjuntar evidencia
+> a una revisión que ni siquiera podía crear. Como `requireTrapAccess` no era `export`, el
+> inventario no la veía como operación propia; al exportarla para reutilizarla, la cuenta la
+> recoge por primera vez — aunque llevaba autorizando `createTrap`/`recordTrapCheck` desde la
+> Tarea 3. `getPlotDetail` (`lib/traceability/plantingCohorts.ts`) recibió el mismo tipo de
+> arreglo —ahora exige además `specimen:view` antes de incluir la sección de trampas— pero no
+> sube la cuenta: ya era **guardia directo** por `requireLocationAttributeAccess`, y añadir un
+> segundo `can(...)` dentro de una función ya contada no crea una fila nueva.
 
 > **Y el de 342→345 son los tres ajustes de permiso por asignación (ADR-146).** Viven en
 > `lib/rbac/admin.ts`, que ya estaba inventariado, y suben la fila de **guardia directo**:

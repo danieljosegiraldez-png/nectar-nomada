@@ -250,6 +250,8 @@ model UserAccount {
   harvestEventSourcesCreated        HarvestEventSource[]         @relation("HarvestEventSourceCreatedBy")
   specimensCreated                  Specimen[]                   @relation("SpecimenCreatedBy")
   specimenObservationsCreated       SpecimenObservation[]        @relation("SpecimenObservationCreatedBy")
+  plotBlocksCreados                 PlotBlock[]                  @relation("PlotBlockCreatedBy")
+  trapRulesCreadas                  TrapRule[]                   @relation("TrapRuleCreatedBy")
   externalCoffeeOriginsCreated      ExternalCoffeeOrigin[]       @relation("ExternalCoffeeOriginCreatedBy")
 
   // RO1 (docs/implementation/34_RO1_RESEARCH_OS.md) — one CreatedBy back-
@@ -889,6 +891,9 @@ model Location {
   hivePlacements              HivePlacement[]
   neighbourConsultations      NeighbourConsultation[]
   specimens                   Specimen[]
+  specimensDeLaFinca          Specimen[]                 @relation("SpecimenFarm")
+  plotBlocks                  PlotBlock[]
+  trapRule                    TrapRule?                  @relation("TrapRuleFarm")
   plantingEvents              PlantingEvent[]
   plantingCohorts             PlantingCohort[]
   fieldSessions               FieldSession[]
@@ -1946,6 +1951,10 @@ model Asset {
   soilProfileId     String?          @map("soil_profile_id") @db.Uuid
   soilProfile       SoilProfile?     @relation(fields: [soilProfileId], references: [id], onDelete: Restrict)
 
+  // F2 §4 — la foto de la tela pertenece a ESA revisión, no a la trampa entera.
+  specimenObservationId String?              @map("specimen_observation_id") @db.Uuid
+  specimenObservation   SpecimenObservation? @relation(fields: [specimenObservationId], references: [id])
+
   // A6 (22_APIARY_V1_SCOPING_REPORT.md — Photo attachment): same "specific
   // nullable FK per parent, not polymorphic" convention as the six
   // Traceability FKs above (ADR-020 decision 8). A honeyBatchId is
@@ -2013,6 +2022,7 @@ model Asset {
   @@index([processingStageId])
   @@index([biocharBatchId])
   @@index([soilProfileId])
+  @@index([specimenObservationId])
   equipmentConditionEvidence EquipmentConditionReport[] @relation("EquipmentConditionEvidence")
 
   @@map("asset")
@@ -5989,6 +5999,19 @@ model Specimen {
   // product owner's own wording, not a number with a given unit.
   densityNote  String?         @map("density_note")
 
+  // F2 §3 — el bloque donde está la trampa. Nullable: `sectorSimple` sigue valiendo
+  // y una trampa puede no pertenecer a ningún bloque.
+  plotBlockId String?    @map("plot_block_id") @db.Uuid
+  plotBlock   PlotBlock? @relation(fields: [plotBlockId], references: [id])
+
+  // F2 §4 — el número que va rotulado en la botella. Lo genera el sistema,
+  // correlativo por finca. `farmLocationId` se rellena al crear con
+  // `location.parentLocationId ?? location.id`: los lotes de Finca Rosina tienen
+  // `organization_id` NULL, así que la finca es el padre en la jerarquía.
+  farmLocationId String?   @map("farm_location_id") @db.Uuid
+  farmLocation   Location? @relation("SpecimenFarm", fields: [farmLocationId], references: [id])
+  trapNumber     Int?      @map("trap_number")
+
   notes String?
 
   // Colony (A2) already established this exact precedent: an origin/
@@ -6003,9 +6026,44 @@ model Specimen {
   observations SpecimenObservation[]
   assets       Asset[]
 
+  @@unique([farmLocationId, trapNumber])
   @@index([locationId])
   @@index([plantingCohortId])
   @@map("specimen")
+  @@schema("traceability")
+}
+
+/// Lo que el operador ve en la tela, F2 §4: la escala manda y el número es opcional.
+/// No se convierte a número por debajo — una escala no es un conteo.
+enum TrapCaptureLevel {
+  ninguno
+  pocos
+  algunos
+  muchos
+
+  @@schema("traceability")
+}
+
+/// Subdivisión con nombre de una parcela — «bloque», término aprobado por el dueño
+/// (F2 §3). Es una ZONA, no una lista de plantas: sirve para saber en qué parte del
+/// lote está cada trampa y comparar bloques a lo largo del tiempo. Opcional en los
+/// dos sentidos: una parcela puede no tener bloques y una trampa puede no tener bloque.
+model PlotBlock {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id])
+  name       String
+  notes      String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("PlotBlockCreatedBy", fields: [createdBy], references: [id])
+
+  specimens Specimen[]
+
+  @@unique([locationId, name])
+  @@index([locationId])
+  @@map("plot_block")
   @@schema("traceability")
 }
 
@@ -6046,6 +6104,28 @@ model SpecimenObservation {
   // ahead of a second numeric observation type actually needing one.
   captureCount Int? @map("capture_count")
 
+  // F2 §4 — la lectura tal como se hace en campo. Obligatoria en un `trap_check`
+  // (lo valida el servicio, no el esquema: la misma tabla guarda floraciones y
+  // material cosechado, que no tienen lectura).
+  brocaLevel TrapCaptureLevel? @map("broca_level")
+
+  // «si es broca u otro». Sin catálogo de especies: nadie lo mantendría hoy, y la
+  // nota con la foto conservan el hecho (F2 §8).
+  otherInsects     Boolean? @map("other_insects")
+  otherInsectsNote String?  @map("other_insects_note")
+
+  // El mantenimiento va DENTRO de la revisión: en campo es una sola visita.
+  //
+  // F1 fix-final (ADR-080) — `Boolean?`, sin `default`. La migración
+  // 20260917210000 los creó `NOT NULL DEFAULT false`, así que una revisión
+  // vieja sin esta pregunta afirmaba «no se hizo» en vez de «no se preguntó».
+  // La migración 20260918100000 quita el NOT NULL/DEFAULT y limpia el dato
+  // inventado; el tri-estado vive ahora en el formulario con `TriStateField`,
+  // igual que `otherInsects`.
+  cleaned        Boolean?
+  liquidChanged  Boolean? @map("liquid_changed")
+  lureRecharged  Boolean? @map("lure_recharged")
+
   notes String?
 
   provenanceClass ProvenanceClass @map("provenance_class")
@@ -6056,6 +6136,7 @@ model SpecimenObservation {
   creator   UserAccount? @relation("SpecimenObservationCreatedBy", fields: [createdBy], references: [id])
 
   fieldEvents FieldEvent[]
+  assets      Asset[]
 
   @@index([specimenId])
   @@map("specimen_observation")
@@ -8490,6 +8571,30 @@ enum ByproductDestination {
   DISPOSAL
   SALE
 
+  @@schema("traceability")
+}
+
+/// F2 §5 — lo que el encargado de finca fija para sus trampas. **Sin regla no hay
+/// avisos ni plazos**: el sistema no trae ningún valor por defecto, ni siquiera el
+/// quincenal de la guía de Anacafé.
+model TrapRule {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  farmLocationId String           @unique @map("farm_location_id") @db.Uuid
+  farmLocation   Location         @relation("TrapRuleFarm", fields: [farmLocationId], references: [id])
+  /// La lectura a partir de la cual se dispara el aviso (ese nivel o peor).
+  triggerLevel   TrapCaptureLevel @map("trigger_level")
+  /// Días entre revisiones en situación normal y cuando la lectura disparó.
+  normalDays     Int              @map("normal_days")
+  alertDays      Int              @map("alert_days")
+  /// Texto libre: «aplicar repelente Bralic». Los productos son de la finca y el
+  /// catálogo fitosanitario es la pieza 3.
+  suggestedAction String          @map("suggested_action")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("TrapRuleCreatedBy", fields: [createdBy], references: [id])
+
+  @@map("trap_rule")
   @@schema("traceability")
 }
 

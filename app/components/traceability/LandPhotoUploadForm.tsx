@@ -14,6 +14,12 @@ interface ObserverOption {
   displayName: string;
 }
 
+/** F6 fix-final — una revisión de la MISMA trampa a la que puede colgarse la foto. */
+export interface RevisionOption {
+  id: string;
+  label: string;
+}
+
 /**
  * Subir una fotografía de la tierra: del bloque, del retorte, de un perfil.
  *
@@ -27,21 +33,35 @@ interface ObserverOption {
  * El navegador sube el archivo **directo a R2**: los bytes no pasan por el
  * servidor de Next. La fila `Asset` se crea sólo cuando el PUT ha respondido
  * bien, así que una subida abandonada no deja una fila apuntando a nada.
+ *
+ * `revisionOptions` (F6 fix-final) es sólo para `parent.kind === "trapCheck"`:
+ * antes la foto se colgaba SIEMPRE de la última revisión de la trampa, así que
+ * registrar una visita atrasada (con una revisión más reciente ya guardada)
+ * colgaba su foto en la revisión equivocada. Con la lista, el operario elige;
+ * `parent` sigue trayendo la última como valor inicial. El servidor ya valida
+ * que la revisión pertenezca a esta parcela (`exigirPadreDeEsaLocation` en
+ * `landMedia.ts`) — eso no cambia.
  */
 export function LandPhotoUploadForm({
   locationId,
   parent,
   observers,
   selfPersonId,
+  revisionOptions,
 }: {
   locationId: string;
   parent: LandAssetParent;
   observers: ObserverOption[];
   selfPersonId: string | null;
+  revisionOptions?: RevisionOption[];
 }) {
   const t = useTranslations("Traceability");
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const hayRevisiones = parent.kind === "trapCheck" && (revisionOptions?.length ?? 0) > 0;
+  const [revisionId, setRevisionId] = useState(
+    parent.kind === "trapCheck" ? parent.specimenObservationId : "",
+  );
   // **El valor inicial se normaliza contra la lista, no se supone.**
   // `getObserverCandidates` sólo devuelve personas activas, pero incluye la
   // propia aunque no lo esté. Con `useState(selfPersonId ?? "")` el estado
@@ -84,13 +104,18 @@ export function LandPhotoUploadForm({
       return;
     }
 
+    // F6 — con opciones de revisión, la que el operario eligió manda sobre la
+    // que llegó por props (la última, preseleccionada).
+    const parentEfectivo: LandAssetParent =
+      parent.kind === "trapCheck" && revisionId ? { kind: "trapCheck", specimenObservationId: revisionId } : parent;
+
     const finalized = await finalizeLandAssetUploadAction(
       locationId,
       requested.storageKey,
       contentType,
       file.size,
       file.name,
-      parent,
+      parentEfectivo,
       creatorPersonId || null,
     );
 
@@ -110,6 +135,22 @@ export function LandPhotoUploadForm({
       <div className="nn-field" style={{ flexDirection: "row", alignItems: "center", gap: "0.5rem" }}>
         <input ref={inputRef} type="file" accept="image/*" aria-label={t("photoUploadLabel")} />
       </div>
+      {hayRevisiones ? (
+        <div className="nn-field">
+          <label htmlFor={`${idDelCampo}-revision`}>{t("trapCheckPhotosRevisionLabel")}</label>
+          <select
+            id={`${idDelCampo}-revision`}
+            value={revisionId}
+            onChange={(e) => setRevisionId(e.target.value)}
+          >
+            {revisionOptions!.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
       {observers.length > 0 ? (
         <div className="nn-field">
           <label htmlFor={idDelCampo}>{t("photographedByLabel")}</label>

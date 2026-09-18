@@ -23,6 +23,8 @@ const base = (over: Partial<EntradaDePendiente> = {}): EntradaDePendiente => ({
   jornadas: [],
   muestrasDeSuelo: [{ sampledAt: new Date("2026-03-01T00:00:00Z"), resultados: 1 }],
   muestrasFoliares: [{ sampledAt: new Date("2026-03-01T00:00:00Z"), resultados: 1 }],
+  trampas: [],
+  regla: null,
   ...over,
 });
 
@@ -137,5 +139,24 @@ describe("enlaceDelAviso", () => {
     expect(enlaceDelAviso({ tipo: "area_no_valida" }, "L")).toBe("/plots/L/ajustes#areaHectares");
     expect(enlaceDelAviso({ tipo: "siembras_sin_conteo", n: 1 }, "L")).toBe("/plots/L/ajustes#siembras");
     expect(enlaceDelAviso({ tipo: "siembras_sin_marcar", n: 1 }, "L")).toBe("/plots/L/ajustes#siembras");
+  });
+
+  // Tarea 8 de trampas: los avisos de `avisosDeTrampas` entran en «toca hacer»
+  // y enlazan a la sección de trampas del tablero.
+  it("los avisos de trampas entran en «toca hacer» y enlazan a #trampas", () => {
+    const r = pendienteDeLaParcela(
+      base({
+        hoy: "2026-09-17",
+        trampas: [
+          { id: "t1", trapNumber: 7, bloque: null, status: "active", instaladaEl: "2026-08-01", ultimaRevision: { dia: "2026-09-01", brocaLevel: "muchos" } },
+        ],
+        regla: { triggerLevel: "algunos", normalDays: 14, alertDays: 7, suggestedAction: "aplicar Bralic" },
+      }),
+    );
+    expect(r.tocaHacer).toEqual([
+      { tipo: "trampa_por_revisar", specimenId: "t1", trapNumber: 7, diasDeRetraso: 9 },
+      { tipo: "trampa_con_lectura_alta", specimenId: "t1", trapNumber: 7, lectura: "muchos", accion: "aplicar Bralic" },
+    ]);
+    for (const aviso of r.tocaHacer) expect(enlaceDelAviso(aviso, "L")).toBe("/plots/L#trampas");
   });
 });
