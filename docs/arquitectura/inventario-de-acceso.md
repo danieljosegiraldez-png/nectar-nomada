@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**417 operaciones** que tocan la base, en **128 archivos**:
+**419 operaciones** que tocan la base, en **129 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,22 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **299** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **301** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **37** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **63** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
+
+> **Y el de 417→419, con un archivo nuevo, es `lib/traceability/fincaTrampas.ts` (Tarea 7 de
+> vistas de finca y parcela).** `getFincasConTrampas` y `getFincaTrampas` suben dos veces la
+> fila de **guardia directo**: las dos recorren los lotes de la finca y llaman a
+> `puedeVerTrampasDelLote` (`can(..., "view"/"manage", "specimen", ...)`) lote por lote —la
+> misma comprobación que ya usa `requireTrapAccess` en `traps.ts`, sólo que agregada sobre
+> varios lotes en vez de uno—. `getFincaTrampas` lanza `FincaTrapAccessError` si ningún lote de
+> la finca es accesible, en vez de devolver una lista vacía que se leería como «sin trampas»
+> (spec §6). 2 = 2: si la cuenta no cerrara con la fila de «guardia directo», alguna de las dos
+> habría quedado sin comprobar el ámbito lote por lote.
 
 > **El de 416→417, sin archivos nuevos, es `setPlotBlockType` (Tarea 1 de vistas de
 > finca y parcela).** Vive en `lib/traceability/plotBlocks.ts`, que ya estaba
