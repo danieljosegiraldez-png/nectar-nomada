@@ -1086,6 +1086,7 @@
     "variable_exchangeable_magnesium": "Exchangeable magnesium",
     "variable_sulphur": "Sulphur (S)",
     "error_sample": "Could not save the sample: {detail}",
+    "error_sample_green_before_reposo": "The sample declares green coffee, but the lot has not yet reached storage: drying has not finished at the target moisture. It cannot be recorded as a green sample until then.",
     "labSamplesHeading": "Laboratory samples",
     "landPhotosHeading": "Photographs",
     "landPhotosIntro": "General photos of the plot, alongside those attached to a soil pit.",

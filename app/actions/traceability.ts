@@ -94,7 +94,7 @@ import {
   createFoliarSample,
   SampleValidationError,
 } from "../../lib/traceability/soilSamples";
-import { createSampleFromLot } from "../../lib/traceability/samples";
+import { createSampleFromLot, SampleValidationError as SampleFromLotValidationError } from "../../lib/traceability/samples";
 import { requestLotAssetUpload, finalizeLotAssetUpload, type LotAssetParent } from "../../lib/traceability/media";
 import {
   requestLandAssetUpload,
@@ -143,6 +143,10 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof FieldSessionValidationError) return t("error_field_session", { detail: error.message });
   if (error instanceof BiocharBatchValidationError) return t("error_biochar", { detail: error.message });
   if (error instanceof SoilProfileValidationError) return t("error_soil_profile", { detail: error.message });
+  if (error instanceof SampleFromLotValidationError && error.message === "green_sample_before_reposo") {
+    return t("error_sample_green_before_reposo");
+  }
+  if (error instanceof SampleFromLotValidationError) return t("error_sample", { detail: error.message });
   if (error instanceof SampleValidationError) return t("error_sample", { detail: error.message });
   if (error instanceof LandMediaValidationError) return t("error_land_media", { detail: error.message });
   // F4 fix-final — «revisa la lectura y la fecha» no es verdad de una trampa
@@ -617,6 +621,7 @@ export async function createSampleAction(
     await createSampleFromLot(user.userAccountId, {
       sampleCode: String(formData.get("sampleCode") ?? ""),
       sampleType: String(formData.get("sampleType") ?? ""),
+      materialState: emptyToNull(formData.get("materialState")) as import("../../generated/prisma/client").MaterialState | null,
       sourceLotId: lotId,
       quantity: emptyToNullNumber(formData.get("quantity")),
       unit: emptyToNull(formData.get("unit")),
