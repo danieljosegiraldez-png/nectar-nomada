@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
-import { TODAS, idsBajoLaFinca, listarFincas, resolverFinca, type Finca } from "../../lib/traceability/fincas";
+import { TODAS, crearFinca, idsBajoLaFinca, listarFincas, organizacionesSinTerreno, resolverFinca, type Finca } from "../../lib/traceability/fincas";
 
 const RUN = `fin-${Date.now()}`;
 const personas: string[] = [];
@@ -166,6 +166,49 @@ describe("qué cuelga de una finca", () => {
     expect([...bajoA]).toEqual(expect.arrayContaining([A.site, P1, M1]));
     expect(bajoA.has(Q1)).toBe(false);
     expect(bajoA.has(B.site)).toBe(false);
+  }, 20000);
+});
+
+
+describe("crear una finca", () => {
+  it("el admin la crea: organización, terreno y AuditEvent", async () => {
+    const { organization, site } = await crearFinca(admin, { nombre: `TEST Finca Nueva (${RUN})`, tipo: "estate" });
+    organizaciones.push(organization.id);
+    ubicaciones.push(site.id);
+    expect(organization.organizationType).toBe("estate");
+    expect(site.locationType).toBe("site");
+    expect(site.organizationId).toBe(organization.id);
+    const ev = await prisma.auditEvent.findFirst({ where: { entityId: site.id, operation: "location.create_farm" } });
+    expect(ev).not.toBeNull();
+    // Y aparece en su lista de fincas.
+    expect((await listarFincas(admin)).map((f) => f.siteId)).toContain(site.id);
+  }, 20000);
+
+  it("el Farm Manager de una finca no crea fincas", async () => {
+    await expect(crearFinca(managerA, { nombre: `TEST No (${RUN})`, tipo: "farm" })).rejects.toThrow(/sin_permiso/);
+    expect(await prisma.organization.count({ where: { name: `TEST No (${RUN})` } })).toBe(0);
+  }, 20000);
+
+  it("a una organización de finca sin terreno se le crea sólo el terreno, y una sola vez", async () => {
+    const sola = await prisma.organization.create({
+      data: { organizationType: "estate", name: `TEST Sin Terreno (${RUN})`, status: "approved", classification: "internal" },
+    });
+    organizaciones.push(sola.id);
+    expect((await organizacionesSinTerreno(admin)).map((o) => o.id)).toContain(sola.id);
+    expect(await organizacionesSinTerreno(managerA)).toEqual([]);
+
+    const { organization, site } = await crearFinca(admin, { organizationId: sola.id });
+    ubicaciones.push(site.id);
+    expect(organization.id).toBe(sola.id);
+    expect(site.name).toBe(sola.name);
+    expect((await organizacionesSinTerreno(admin)).map((o) => o.id)).not.toContain(sola.id);
+    await expect(crearFinca(admin, { organizationId: sola.id })).rejects.toThrow(/ya_tiene_terreno/);
+  }, 20000);
+
+  it("un nombre inválido se rechaza antes de escribir nada", async () => {
+    const largo = `TEST Larga (${RUN}) ${"x".repeat(120)}`;
+    await expect(crearFinca(admin, { nombre: largo, tipo: "farm" })).rejects.toThrow(/nombre_invalido/);
+    expect(await prisma.organization.count({ where: { name: { startsWith: `TEST Larga (${RUN})` } } })).toBe(0);
   }, 20000);
 });
 

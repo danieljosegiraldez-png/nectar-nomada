@@ -14,6 +14,9 @@
  * cookie con el sitio de otra finca se ignora y se vuelve a preguntar.
  */
 import { prisma } from "../db";
+import { recordAuditEvent } from "../audit";
+import { can } from "../rbac/service";
+import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 import { sortByName } from "../naturalOrder";
 import { getManageableContext } from "./lots";
 
@@ -99,4 +102,82 @@ export function idsBajoLaFinca(ubicaciones: readonly { id: string; parentLocatio
     }
   }
   return dentro;
+}
+
+export class FincaError extends Error {}
+
+const PLATAFORMA = { scopeType: "platform", scopeRefId: null } as const;
+
+async function puedeCrearFincas(userAccountId: string) {
+  return can(userAccountId, "create_farm", "organization", PLATAFORMA, CLASSIFICATION_NOT_APPLICABLE);
+}
+
+function exigeNombre(nombre: string) {
+  const limpio = nombre.trim();
+  if (!limpio || limpio.length > 120) throw new FincaError("nombre_invalido");
+  return limpio;
+}
+
+export type CrearFincaInput =
+  | { readonly nombre: string; readonly tipo: "farm" | "estate"; readonly descripcion?: string | null }
+  | { readonly organizationId: string };
+
+/**
+ * Dar de alta una finca: la organización y su terreno (`site`), en una transacción con su
+ * AuditEvent. Con `organizationId`, sólo el terreno de una organización de finca que no lo tiene
+ * — el caso de Kiva Estate, que el seed creó sin sitio. **Sólo el administrador de plataforma**
+ * (Daniel, 2026-09-18): crear una organización no es trabajo de una finca.
+ */
+export async function crearFinca(userAccountId: string, input: CrearFincaInput) {
+  if (!(await puedeCrearFincas(userAccountId))) throw new FincaError("sin_permiso");
+
+  let existente: { id: string; name: string } | null = null;
+  if ("organizationId" in input) {
+    const org = await prisma.organization.findUnique({ where: { id: input.organizationId } });
+    if (!org || !esTipoDeFinca(org.organizationType)) throw new FincaError("organizacion_no_es_finca");
+    if (await prisma.location.count({ where: { organizationId: org.id, locationType: "site" } })) throw new FincaError("ya_tiene_terreno");
+    existente = { id: org.id, name: org.name };
+  }
+  const nombre = exigeNombre(existente ? existente.name : (input as { nombre: string }).nombre);
+
+  return prisma.$transaction(async (tx) => {
+    const organization = existente
+      ? await tx.organization.findUniqueOrThrow({ where: { id: existente.id } })
+      : await tx.organization.create({
+          data: {
+            organizationType: (input as { tipo: "farm" | "estate" }).tipo,
+            name: nombre,
+            description: (input as { descripcion?: string | null }).descripcion?.trim() || null,
+            status: "approved",
+            classification: "internal",
+            createdBy: userAccountId,
+          },
+        });
+    const site = await tx.location.create({
+      data: { name: nombre, locationType: "site", organizationId: organization.id, status: "approved", classification: "internal", createdBy: userAccountId },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "location.create_farm",
+        entityType: "location",
+        entityId: site.id,
+        after: { organization, site, organizacionNueva: !existente },
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+    return { organization, site };
+  });
+}
+
+/** Las organizaciones de finca sin terreno. Sólo para quien puede crear fincas; para los demás, vacío. */
+export async function organizacionesSinTerreno(userAccountId: string) {
+  if (!(await puedeCrearFincas(userAccountId))) return [];
+  const orgs = await prisma.organization.findMany({
+    where: { organizationType: { in: [...TIPOS_DE_FINCA] }, locations: { none: { locationType: "site" } } },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+  return orgs;
 }
