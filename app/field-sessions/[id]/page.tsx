@@ -8,7 +8,7 @@ import { FieldSessionValidationError } from "../../../lib/traceability/fieldSess
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 import { getFieldEventKinds } from "../../../lib/traceability/fieldSessionCatalog";
 import { FieldEventForm, FieldSessionEndForm } from "../../components/traceability/FieldSessionForms";
-import { EmitirReporteForm, CompletarVisitaForm } from "../../components/traceability/ReporteDeVisitaForms";
+import { EmitirReporteForm, CompletarVisitaForm, VitalesEnSitioForm } from "../../components/traceability/ReporteDeVisitaForms";
 import { leerReporteDeVisita } from "../../../lib/traceability/reporteDeVisita";
 import { resumenDeVisita } from "../../../lib/apiary/bitacora";
 import { pendientesDeLaVisita } from "../../../lib/apiary/pendienteDeLaVisita";
@@ -186,6 +186,21 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
                 una pantalla aparte: quien anota sin señal es quien tiene que
                 ver que lo suyo sigue sin enviarse. */}
             <FieldSyncControls />
+          </section>
+
+          {/* ADR-157 — los vitales de campo, anotados ESTANDO AQUÍ. Van ANTES de «terminar la
+              visita» a propósito: se ven al llegar y al recorrer, no al irse. Y salen sólo mientras
+              la visita está abierta, porque eso es justo lo que la marca afirma. */}
+          <section className="nn-section">
+            <h2>{t("vitalesEnSitioHeading")}</h2>
+            <p className="nn-muted">
+              {session.fieldVitalsOnSiteAt
+                ? t("vitalesEnSitioMarca", {
+                    fecha: cuando(session.fieldVitalsOnSiteAt, session.location.timezone),
+                  })
+                : t("vitalesEnSitioSinMarca")}
+            </p>
+            <VitalesEnSitioForm fieldSessionId={session.id} />
           </section>
 
           <section className="nn-section">

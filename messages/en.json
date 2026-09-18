@@ -1308,7 +1308,13 @@
     "weatherObserved_despejado": "Clear",
     "weatherObserved_nublado": "Cloudy",
     "weatherObserved_viento": "Windy",
-    "weatherObserved_lluvia": "Rain"
+    "weatherObserved_lluvia": "Rain",
+    "vitalesEnSitioHelp": "Note it here if you are seeing it now. Anything left blank is not touched.",
+    "vitalesEnSitioSinTocar": "— leave as is —",
+    "vitalesEnSitioSubmit": "Note on site",
+    "vitalesEnSitioHeading": "Note while you are here",
+    "vitalesEnSitioMarca": "Noted on site on {fecha}",
+    "vitalesEnSitioSinMarca": "Not noted on site — will be filled at close"
   },
   "Apiary": {
     "badge": "Apiary",
