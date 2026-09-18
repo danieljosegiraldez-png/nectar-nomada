@@ -50,6 +50,7 @@ tests/sensores/ingesta.test.ts
 tests/sensores/derivar.test.ts
 tests/sensores/ruta-de-ingesta.test.ts
 tests/apiary/genealogia.test.ts
+tests/traceability/fincas.test.ts
 tests/apiary/reinas.test.ts
 tests/apiary/refractometroDeMiel.test.ts
 tests/apiary/mielDelLote.test.ts
