@@ -82,6 +82,10 @@
       "razon": "Módulo de dominio (ADR-161): procesar y envasar un lote de miel. Su única lectura propia es el lote, y `requireLotAccess(\"manage\")` se exige ANTES de decir nada de él —ni siquiera si es miel—. La escritura la hace `recordTransformation`, que vuelve a autorizar contra el lote de entrada y escribe transformación, libro de cantidades y balance en una sola transacción."
     },
     {
+      "archivo": "lib/sensores/derivar.ts",
+      "razon": "Calibraciones y lecturas derivadas de nodos. Registrar una calibracion y derivar una lectura exigen `requireHiveNodeAccess` (hive_node:manage) sobre el sitio de la calibracion ANTES de escribir; la calibracion tiene que ser del mismo nodo que la observacion. No toca el crudo (inmutable por disparador). Escritura y AuditEvent en la MISMA transaccion."
+    },
+    {
       "archivo": "lib/sensores/ingesta.ts",
       "razon": "Ingestion de observaciones de nodos de sensores. NO la llama una persona: la llama una ruta autenticada (POST /v1/ingest/notehub), asi que no hay principal que pasar a `can`. La autorizacion es el REGISTRO: el `notecard_uid` que la ruta trae verificado tiene que ser de un HiveNode activo, y el device_id del cuerpo tiene que casar con el suyo. Solo inserta en node_observation (inmutable por disparador) o en su cuarentena; nunca actualiza."
     },
