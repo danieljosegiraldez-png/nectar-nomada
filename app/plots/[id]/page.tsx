@@ -416,13 +416,11 @@ export default async function PlotDetailPage({
         </>
       ) : null}
 
-      {/* M1: el `id` va DENTRO del <details>. El navegador sólo abre un
-          <details> al navegar a un fragmento cuando el destino está dentro de
-          él; en el propio <details> cerrado, el enlace no lo abre. */}
-      <details className="nn-section">
-        <summary style={{ fontSize: "1.25rem", fontWeight: 600 }}>{t("plotDashboardConditionsHeading")}</summary>
+      {pestana === "condiciones" ? (
+      <section className="nn-section">
+        <h2>{t("plotDashboardConditionsHeading")}</h2>
 
-        <h3 id="condiciones">{t("groundConditionsHeading")}</h3>
+        <h3>{t("groundConditionsHeading")}</h3>
         <dl className="nn-detail-meta">
           <p>{t("areaLabel")}: {location.areaHectares?.toString() ?? <span className="nn-muted">{t("notRecorded")}</span>}</p>
           <p>{t("spacingLabel")}: {location.plantSpacingMeters?.toString() ?? <span className="nn-muted">{t("notRecorded")}</span>}</p>
@@ -568,7 +566,8 @@ export default async function PlotDetailPage({
             }}
           />
         </details>
-      </details>
+      </section>
+      ) : null}
 
       {/* M1: igual que #condiciones. `enlaceDelAviso` enlaza a #muestras. */}
       <details className="nn-section">
