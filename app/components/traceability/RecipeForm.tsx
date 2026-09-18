@@ -42,9 +42,13 @@ interface TargetRow {
 export function RecipeForm({
   organizations,
   variables,
+  permiteCompartida,
 }: {
   organizations: { id: string; name: string }[];
   variables: VariableChoice[];
+  /** Ofrece la opción de receta compartida (`organizationId` nulo) sólo si el
+   *  servidor la va a aceptar (Task 3, plan 3): `puedeEditarBeneficioEnOrganizacion(user, null)`. */
+  permiteCompartida?: boolean;
 }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(createRecipeAction, initialState);
@@ -76,6 +80,7 @@ export function RecipeForm({
       <div className="nn-field">
         <label htmlFor="recipe-org">{t("recipeOrganizationLabel")}</label>
         <select id="recipe-org" name="organizationId" defaultValue={organizations[0]?.id ?? ""}>
+          {permiteCompartida && <option value="">{t("recipeSharedOption")}</option>}
           {organizations.map((o) => (
             <option key={o.id} value={o.id}>{o.name}</option>
           ))}
