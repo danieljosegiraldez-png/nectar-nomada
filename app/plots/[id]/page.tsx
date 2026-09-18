@@ -23,6 +23,7 @@ import { pendienteDeLaParcela, enlaceDelAviso, type Aviso } from "../../../lib/t
 import { estadoDeTrampa, trampasParaAviso } from "../../../lib/traceability/pendienteDeTrampas";
 import { claveDeTituloDeBloque, listPlotBlocks } from "../../../lib/traceability/plotBlocks";
 import { TIPOS_DE_BLOQUE } from "../../../lib/traceability/tiposDeBloque";
+import { claveTriState } from "../../../lib/traceability/claveTriState";
 import { pestanaValida, PESTANAS_DE_PARCELA } from "./pestanas";
 
 export const dynamic = "force-dynamic";
@@ -686,7 +687,8 @@ export default async function PlotDetailPage({
                     regla: reglaDeTrampas,
                   });
                   const claveBloque = trampa.bloque ? claveDeTituloDeBloque(trampa.bloque.blockType) : null;
-                  return (
+                  const revision = trampa.ultimaRevision;
+                  return [
                     <tr key={trampa.id}>
                       <td>{trampa.trapNumber ?? t("notRecorded")}</td>
                       <td>
@@ -697,18 +699,45 @@ export default async function PlotDetailPage({
                           : t("trapsNoBlock")}
                       </td>
                       <td>
-                        {trampa.ultimaRevision
-                          ? trampa.ultimaRevision.observedAt.toISOString().slice(0, 10)
-                          : t("trapsNeverChecked")}
+                        {revision ? revision.observedAt.toISOString().slice(0, 10) : t("trapsNeverChecked")}
                       </td>
-                      <td>
-                        {trampa.ultimaRevision?.brocaLevel
-                          ? t(`trapsLevel_${trampa.ultimaRevision.brocaLevel}`)
-                          : t("notRecorded")}
-                      </td>
+                      <td>{revision?.brocaLevel ? t(`trapsLevel_${revision.brocaLevel}`) : t("notRecorded")}</td>
                       <td>{t(`trapEstado_${estado}` as "trapEstado_al_dia")}</td>
-                    </tr>
-                  );
+                    </tr>,
+                    // F2 fix-final (PR #413) — lo que la última revisión guardó y
+                    // nunca vuelve a mostrarse en ningún otro sitio: conteo, otros
+                    // insectos, mantenimiento y quién observó. Fix round 1 de la
+                    // revisión de esta tarea: la pestaña se quedó sólo con fecha y
+                    // nivel de lectura, y esto es lo que faltaba. Sin revisión no
+                    // se añade nada (ADR-080: no hay de qué hablar). Las fotos NO
+                    // son parte de este arreglo — las trae la pestaña Fotos.
+                    revision ? (
+                      <tr key={`${trampa.id}-detalle`}>
+                        <td colSpan={5} className="nn-detail-meta">
+                          {revision.captureCount != null
+                            ? t("trapsCaptureCount", { n: String(revision.captureCount) })
+                            : t("trapsCaptureCountNone")}
+                          {" · "}
+                          {t("trapsOtherInsects", {
+                            estado:
+                              revision.otherInsects === true
+                                ? revision.otherInsectsNote
+                                  ? `${t("triStateYes")} — ${revision.otherInsectsNote}`
+                                  : t("triStateYes")
+                                : t(claveTriState(revision.otherInsects)),
+                          })}
+                          {" · "}
+                          {t("trapsMaintenance", {
+                            limpieza: t(claveTriState(revision.cleaned)),
+                            liquido: t(claveTriState(revision.liquidChanged)),
+                            atrayente: t(claveTriState(revision.lureRecharged)),
+                          })}
+                          {" · "}
+                          {t("trapsObserver", { nombre: revision.observerName ?? t("notRecorded") })}
+                        </td>
+                      </tr>
+                    ) : null,
+                  ];
                 })}
               </tbody>
             </table>

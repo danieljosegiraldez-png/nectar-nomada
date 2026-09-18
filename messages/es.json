@@ -1129,6 +1129,7 @@
     "trapCheckObserverLabel": "Quién revisó (opcional)",
     "trapCheckPhotosRevisionLabel": "A qué revisión pertenece esta foto",
     "trapsCaptureCount": "Conteo: {n}",
+    "trapsCaptureCountNone": "No se contó",
     "trapsOtherInsects": "Otros insectos: {estado}",
     "trapsMaintenance": "Mantenimiento — limpieza: {limpieza} · líquido: {liquido} · atrayente: {atrayente}",
     "trapsObserver": "Observó: {nombre}",

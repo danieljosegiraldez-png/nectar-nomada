@@ -1129,6 +1129,7 @@
     "trapCheckObserverLabel": "Who checked it (optional)",
     "trapCheckPhotosRevisionLabel": "Which check this photo belongs to",
     "trapsCaptureCount": "Count: {n}",
+    "trapsCaptureCountNone": "Not counted",
     "trapsOtherInsects": "Other insects: {estado}",
     "trapsMaintenance": "Maintenance — cleaned: {limpieza} · liquid: {liquido} · lure: {atrayente}",
     "trapsObserver": "Checked by: {nombre}",
