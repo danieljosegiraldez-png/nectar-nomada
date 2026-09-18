@@ -27,7 +27,11 @@ const mensajes = (idioma: string) =>
 const es = mensajes("es");
 const en = mensajes("en");
 
-// Los seis mensajes declarados en `ConcesionError` (lib/traceability/concesiones.ts).
+// Los siete mensajes declarados en `ConcesionError` (lib/traceability/concesiones.ts).
+// El séptimo, "conflicto_concurrente", lo añadió la ronda 2 de la revisión
+// independiente (hallazgo A, 2026-09-18): `reintentarUnaVezAnteConflicto`
+// lo lanza cuando dos intentos seguidos chocan con un conflicto de
+// concurrencia (P2002/P2034) que releer el estado no resuelve.
 const MENSAJES_DE_CONCESION_ERROR = [
   "razon_obligatoria",
   "asignacion_fuera_de_ambito",
@@ -35,6 +39,7 @@ const MENSAJES_DE_CONCESION_ERROR = [
   "quitado_por_administracion",
   "sin_concesion",
   "no_es_beneficio",
+  "conflicto_concurrente",
 ];
 
 // Los únicos dos mensajes que `exigeEditarBeneficioEn` puede lanzar — la

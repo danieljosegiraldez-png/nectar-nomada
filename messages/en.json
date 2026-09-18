@@ -2411,13 +2411,15 @@
     "conceder": "Grant",
     "quitar": "Remove",
     "concesionAlcance": "The grant applies to that person's entire assignment scope.",
+    "gestionadoEnOtroAmbito": "Managed from a wider scope; edit it from there.",
     "error_razon_obligatoria": "A reason is required to grant.",
     "error_asignacion_fuera_de_ambito": "That assignment does not reach this mill.",
     "error_ya_lo_tiene": "They already have it by default from their profile; there is nothing to grant.",
     "error_quitado_por_administracion": "Administration removed it; it cannot be overridden from here.",
     "error_sin_concesion": "There is no grant to remove.",
     "error_no_es_beneficio": "That location is not a mill.",
-    "error_no_beneficio_edit_access": "You do not have permission to grant or remove editing on this mill."
+    "error_no_beneficio_edit_access": "You do not have permission to grant or remove editing on this mill.",
+    "error_conflicto_concurrente": "Someone else changed this at the same time. Please try again."
   },
   "SeccionBeneficio": {
     "titulo": "Mill",

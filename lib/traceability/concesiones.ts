@@ -25,10 +25,20 @@
  * segunda guardia un Farm Manager con autoridad SÓLO sobre el beneficio podía
  * conceder o quitar sobre una asignación de todo el sitio — más autoridad de
  * la que él mismo tiene.
+ *
+ * **Ronda 2 de la revisión (2026-09-18), dos correcciones más:**
+ * (A) el `catch` de `P2002` DENTRO de la transacción no podía funcionar
+ * —Postgres aborta la transacción entera al primer error de restricción, así
+ * que la relectura de «quién ganó» corría sobre una transacción ya muerta—, y
+ * un conflicto de serialización (`P2034`) no se reintentaba nunca. Ver
+ * `reintentarUnaVezAnteConflicto`. (B) `personasDelBeneficio` listaba
+ * asignaciones de ámbito ANCESTRO sin comprobar si el actor tiene autoridad
+ * sobre ESE ámbito — la pantalla podía ofrecer conceder/quitar sobre una fila
+ * que el servidor iba a rechazar por el hallazgo 1. Ver `puedeGestionar`.
  */
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { exigeEditarBeneficioEn } from "./locations";
+import { exigeEditarBeneficioEn, puedeEditarBeneficioEn } from "./locations";
 import { esAsignacionActiva, activeAssignmentWhere } from "../rbac/service";
 import { Prisma } from "../../generated/prisma/client";
 
@@ -43,6 +53,13 @@ export type PersonaDelBeneficio = {
   ambito: string;
   estado: EstadoDeConcesion;
   razon: string | null;
+  /** Hallazgo B (ronda 2): si el ACTOR que pidió la lista tiene autoridad
+   * sobre el ámbito de ESTA asignación — no sobre el beneficio, que ya se
+   * comprobó para poder llamar a `personasDelBeneficio` en absoluto. Falso
+   * cuando el ámbito es un ancestro más ancho (el sitio) que el actor no
+   * gestiona; la pantalla usa esto para no ofrecer un formulario que el
+   * servidor va a rechazar. */
+  puedeGestionar: boolean;
 };
 
 type AsignacionConPermisos = Prisma.AssignmentGetPayload<{
@@ -149,16 +166,22 @@ async function exigeAutoridadSobreAmbitoReceptor(actorId: string, asignacion: As
 }
 
 /**
- * Hallazgo 2: la escritura del `grant` es CONDICIONAL, nunca un `upsert`
- * incondicional. Si ya hay una fila, el `UPDATE` exige `effect: "grant"` en
- * su `WHERE` — así que un `deny` puesto entre la lectura de estado (arriba,
- * fuera de la transacción) y esta escritura no se pisa nunca, porque la
+ * Hallazgo 2 (ronda 1) + hallazgo A (ronda 2): la escritura del `grant` es
+ * CONDICIONAL, nunca un `upsert` incondicional. Si ya hay una fila, el
+ * `UPDATE` exige `effect: "grant"` en su `WHERE` — así que un `deny` puesto
+ * entre la lectura de estado y esta escritura no se pisa nunca, porque la
  * condición no casa y el `count` sale 0. Si no hay ninguna fila, el `INSERT`
  * puede chocar con el índice único `(assignmentId, permissionId)` si otra
- * transacción concurrente escribió primero (`P2002`): se relee la fila
- * ganadora y, si es un `deny`, se rechaza (`quitado_por_administracion`); si
- * es un `grant` de otro actor, se reintenta UNA vez como `UPDATE` (mismo
- * camino que arriba: sólo la razón cambia, nunca el `createdBy`).
+ * transacción concurrente escribió primero (`P2002`).
+ *
+ * **Ronda 2: ya NO hay `catch` aquí dentro.** La primera versión atrapaba el
+ * `P2002` y releía «quién ganó» en la MISMA transacción — pero Postgres
+ * aborta la transacción entera al primer error de restricción; cualquier
+ * consulta posterior en esa misma transacción también falla (no hay
+ * `SAVEPOINT`), así que esa relectura no podía funcionar nunca. El error se
+ * deja subir sin atrapar: `reintentarUnaVezAnteConflicto`, en el llamador,
+ * lo atrapa FUERA de la transacción muerta y reintenta la operación entera en
+ * una transacción nueva, releyendo el estado desde cero.
  *
  * Ruling 3: re-conceder sobre un `grant` existente actualiza sólo `reason` —
  * `createdBy` no se toca, así que el grantor original queda intacto.
@@ -179,17 +202,55 @@ async function escribirGrant(
       where: { assignmentId_permissionId: { assignmentId, permissionId } },
     });
   }
+  // Sin `try/catch`: un `P2002` aquí sube tal cual, a través de
+  // `prisma.$transaction` (que hace rollback y relanza el mismo error), hasta
+  // `reintentarUnaVezAnteConflicto`.
+  return tx.assignmentPermissionOverride.create({
+    data: { assignmentId, permissionId, effect: "grant", reason: razon, createdBy: actorId },
+  });
+}
+
+/** `P2002` (choque de índice único) o `P2034` (conflicto de serialización de
+ * `isolationLevel: "Serializable"`) — los dos códigos con los que Postgres
+ * dice «esta transacción no pudo completarse por otra que corrió al mismo
+ * tiempo», nunca «la operación en sí está mal». */
+function esConflictoDeConcurrencia(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034");
+}
+
+/**
+ * Hallazgo A (ronda 2, revisión independiente de Codex, 2026-09-18).
+ *
+ * Reintenta la OPERACIÓN ENTERA —no sólo la escritura— una vez, ante un
+ * conflicto de concurrencia. Esto importa: la operación vuelve a LEER el
+ * estado desde cero, así que si el primer intento chocó porque llegó un
+ * `deny` de administración mientras tanto, el reintento lo VE y responde con
+ * el motivo de negocio correcto (`quitado_por_administracion`), no con un
+ * error de bajo nivel de Postgres que el usuario no puede interpretar. Si el
+ * conflicto era un `grant` idéntico de otro actor, el reintento lo encuentra
+ * como fila existente y actualiza la razón.
+ *
+ * Si el SEGUNDO intento también choca, es un conflicto genuino y sostenido —
+ * no uno que una relectura pueda resolver — y se rechaza con
+ * `ConcesionError("conflicto_concurrente")` en vez de dejar subir el error
+ * crudo de Prisma.
+ *
+ * Genérica y exportada a propósito: es lo que permite probarla con una
+ * operación de mentira, sin base de datos, en vez de fabricar una carrera
+ * real contra Postgres (ver el informe final — la carrera real está
+ * argumentada, no reproducida de forma determinista).
+ */
+export async function reintentarUnaVezAnteConflicto<T>(operacion: () => Promise<T>): Promise<T> {
   try {
-    return await tx.assignmentPermissionOverride.create({
-      data: { assignmentId, permissionId, effect: "grant", reason: razon, createdBy: actorId },
-    });
-  } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-    const existente = await tx.assignmentPermissionOverride.findUniqueOrThrow({
-      where: { assignmentId_permissionId: { assignmentId, permissionId } },
-    });
-    if (existente.effect === "deny") throw new ConcesionError("quitado_por_administracion");
-    return tx.assignmentPermissionOverride.update({ where: { id: existente.id }, data: { reason: razon } });
+    return await operacion();
+  } catch (primerError) {
+    if (!esConflictoDeConcurrencia(primerError)) throw primerError;
+    try {
+      return await operacion();
+    } catch (segundoError) {
+      if (!esConflictoDeConcurrencia(segundoError)) throw segundoError;
+      throw new ConcesionError("conflicto_concurrente");
+    }
   }
 }
 
@@ -201,13 +262,20 @@ export interface ConcederEditarBeneficioInput {
 
 /**
  * Concede. Rechaza sobre un perfil que ya lo tiene de serie
- * (`ya_lo_tiene`) o sobre un `deny` de administración (`quitado_por_administracion`,
- * ruling 1 — no se sobrescribe, y la comprobación se repite DENTRO de la
- * transacción, condicional — hallazgo 2). Sobre una concesión ya existente,
- * actualiza la razón sin tocar el `createdBy` original (ruling 3).
- * `AuditEvent` en la misma transacción, con el contexto de autorización
- * (hallazgo 4): el beneficio desde el que se concedió y el ámbito de la
- * asignación receptora.
+ * (`ya_lo_tiene`) o sobre un `deny` de administración
+ * (`quitado_por_administracion`, ruling 1 — no se sobrescribe). Sobre una
+ * concesión ya existente, actualiza la razón sin tocar el `createdBy`
+ * original (ruling 3). `AuditEvent` en la misma transacción, con el contexto
+ * de autorización (hallazgo 4): el beneficio desde el que se concedió y el
+ * ámbito de la asignación receptora.
+ *
+ * La comprobación de autoridad sobre el beneficio y sobre el ámbito receptor
+ * (hallazgo 1) se hace UNA vez, antes del reintento: ninguna de las dos
+ * cambia entre intentos (el ámbito de una asignación es fijo). Lo que SÍ se
+ * relee en cada intento (hallazgo A, ronda 2) es el ESTADO de la concesión
+ * —`asignacionQueAlcanza` de nuevo, con sus `overrides` frescos—, porque eso
+ * es justo lo que puede haber cambiado por la carrera que
+ * `reintentarUnaVezAnteConflicto` está resolviendo.
  */
 export async function concederEditarBeneficio(actorId: string, input: ConcederEditarBeneficioInput) {
   await exigeBeneficioEditable(actorId, input.beneficioId);
@@ -215,34 +283,38 @@ export async function concederEditarBeneficio(actorId: string, input: ConcederEd
   const razon = input.reason.trim();
   if (!razon) throw new ConcesionError("razon_obligatoria");
 
-  const asignacion = await asignacionQueAlcanza(input.beneficioId, input.assignmentId);
-  await exigeAutoridadSobreAmbitoReceptor(actorId, asignacion);
-  const { estado } = estadoDeAsignacion(asignacion);
-  if (estado === "de_serie") throw new ConcesionError("ya_lo_tiene");
-  if (estado === "quitado_por_administracion") throw new ConcesionError("quitado_por_administracion");
+  const primeraLectura = await asignacionQueAlcanza(input.beneficioId, input.assignmentId);
+  await exigeAutoridadSobreAmbitoReceptor(actorId, primeraLectura);
 
   const permiso = await permisoEditarBeneficio();
-  const ambitoLocationId = asignacion.scope.scopeRefId;
 
-  return prisma.$transaction(
-    async (tx) => {
-      const fila = await escribirGrant(tx, input.assignmentId, permiso.id, actorId, razon);
-      await recordAuditEvent(
-        {
-          actorUserAccountId: actorId,
-          operation: "beneficio.conceder_edicion",
-          entityType: "assignment_permission_override",
-          entityId: fila.id,
-          after: { ...fila, contexto: { beneficioId: input.beneficioId, ambitoLocationId } },
-          reason: razon,
-          sourceInterface: "traceability.service",
-        },
-        tx,
-      );
-      return fila;
-    },
-    { isolationLevel: "Serializable" },
-  );
+  return reintentarUnaVezAnteConflicto(async () => {
+    const asignacion = await asignacionQueAlcanza(input.beneficioId, input.assignmentId);
+    const { estado } = estadoDeAsignacion(asignacion);
+    if (estado === "de_serie") throw new ConcesionError("ya_lo_tiene");
+    if (estado === "quitado_por_administracion") throw new ConcesionError("quitado_por_administracion");
+    const ambitoLocationId = asignacion.scope.scopeRefId;
+
+    return prisma.$transaction(
+      async (tx) => {
+        const fila = await escribirGrant(tx, input.assignmentId, permiso.id, actorId, razon);
+        await recordAuditEvent(
+          {
+            actorUserAccountId: actorId,
+            operation: "beneficio.conceder_edicion",
+            entityType: "assignment_permission_override",
+            entityId: fila.id,
+            after: { ...fila, contexto: { beneficioId: input.beneficioId, ambitoLocationId } },
+            reason: razon,
+            sourceInterface: "traceability.service",
+          },
+          tx,
+        );
+        return fila;
+      },
+      { isolationLevel: "Serializable" },
+    );
+  });
 }
 
 export interface QuitarEditarBeneficioInput {
@@ -255,40 +327,46 @@ export interface QuitarEditarBeneficioInput {
  * (ruling 3 — incluso uno puesto por la administración, nunca el permiso de
  * serie del perfil ni un `deny`); si no hay ninguno, `sin_concesion`. El
  * `DELETE` es condicional (hallazgo 2, `effect: "grant"` en su `WHERE`): si la
- * fila cambió entre la lectura de arriba y esta escritura (p. ej. la
- * administración la convirtió en `deny`), el `count` sale 0 y se rechaza en
- * vez de borrar la fila equivocada.
+ * fila cambió entre la lectura y esta escritura (p. ej. la administración la
+ * convirtió en `deny`), el `count` sale 0 y se rechaza en vez de borrar la
+ * fila equivocada. Reintenta la operación entera una vez ante un conflicto de
+ * concurrencia (hallazgo A, ronda 2), releyendo el estado en cada intento —
+ * mismo mecanismo que `concederEditarBeneficio`.
  */
 export async function quitarEditarBeneficio(actorId: string, input: QuitarEditarBeneficioInput) {
   await exigeBeneficioEditable(actorId, input.beneficioId);
 
-  const asignacion = await asignacionQueAlcanza(input.beneficioId, input.assignmentId);
-  await exigeAutoridadSobreAmbitoReceptor(actorId, asignacion);
-  const grant = overrideDeEdicion(asignacion, "grant");
-  if (!grant) throw new ConcesionError("sin_concesion");
-  const ambitoLocationId = asignacion.scope.scopeRefId;
+  const primeraLectura = await asignacionQueAlcanza(input.beneficioId, input.assignmentId);
+  await exigeAutoridadSobreAmbitoReceptor(actorId, primeraLectura);
 
-  return prisma.$transaction(
-    async (tx) => {
-      const borrados = await tx.assignmentPermissionOverride.deleteMany({
-        where: { id: grant.id, assignmentId: input.assignmentId, permissionId: grant.permissionId, effect: "grant" },
-      });
-      if (borrados.count === 0) throw new ConcesionError("sin_concesion");
-      await recordAuditEvent(
-        {
-          actorUserAccountId: actorId,
-          operation: "beneficio.quitar_edicion",
-          entityType: "assignment_permission_override",
-          entityId: grant.id,
-          before: { ...grant, contexto: { beneficioId: input.beneficioId, ambitoLocationId } },
-          sourceInterface: "traceability.service",
-        },
-        tx,
-      );
-      return grant;
-    },
-    { isolationLevel: "Serializable" },
-  );
+  return reintentarUnaVezAnteConflicto(async () => {
+    const asignacion = await asignacionQueAlcanza(input.beneficioId, input.assignmentId);
+    const grant = overrideDeEdicion(asignacion, "grant");
+    if (!grant) throw new ConcesionError("sin_concesion");
+    const ambitoLocationId = asignacion.scope.scopeRefId;
+
+    return prisma.$transaction(
+      async (tx) => {
+        const borrados = await tx.assignmentPermissionOverride.deleteMany({
+          where: { id: grant.id, assignmentId: input.assignmentId, permissionId: grant.permissionId, effect: "grant" },
+        });
+        if (borrados.count === 0) throw new ConcesionError("sin_concesion");
+        await recordAuditEvent(
+          {
+            actorUserAccountId: actorId,
+            operation: "beneficio.quitar_edicion",
+            entityType: "assignment_permission_override",
+            entityId: grant.id,
+            before: { ...grant, contexto: { beneficioId: input.beneficioId, ambitoLocationId } },
+            sourceInterface: "traceability.service",
+          },
+          tx,
+        );
+        return grant;
+      },
+      { isolationLevel: "Serializable" },
+    );
+  });
 }
 
 /**
@@ -297,6 +375,15 @@ export async function quitarEditarBeneficio(actorId: string, input: QuitarEditar
  * quien ya tiene `location:edit_beneficio` sobre ese beneficio puede leerla —
  * es la misma guardia que conceder y quitar, no una lectura pública de quién
  * tiene qué.
+ *
+ * **Hallazgo B (ronda 2).** Listar por ámbito ALCANZA más asignaciones de las
+ * que el actor puede GESTIONAR: una fila puede tener ámbito en un ancestro
+ * más ancho (el sitio) que el actor —con autoridad sólo sobre el beneficio—
+ * no gestiona (hallazgo 1). Antes, la pantalla ofrecía conceder/quitar sobre
+ * esa fila igual, y `concederEditarBeneficio`/`quitarEditarBeneficio` la
+ * rechazaban. `puedeGestionar` es exactamente la misma guardia
+ * (`puedeEditarBeneficioEn` sobre `a.scope.scopeRefId`), para que la pantalla
+ * no ofrezca lo que el servidor va a rechazar.
  */
 export async function personasDelBeneficio(actorId: string, beneficioId: string): Promise<PersonaDelBeneficio[]> {
   await exigeBeneficioEditable(actorId, beneficioId);
@@ -311,17 +398,24 @@ export async function personasDelBeneficio(actorId: string, beneficioId: string)
   const lugares = await prisma.location.findMany({ where: { id: { in: locationIds } }, select: { id: true, name: true } });
   const nombreDelLugar = new Map(lugares.map((l) => [l.id, l.name]));
 
-  const filas: PersonaDelBeneficio[] = asignaciones.map((a) => {
-    const { estado, razon } = estadoDeAsignacion(a);
-    return {
-      assignmentId: a.id,
-      persona: a.userAccount.person?.displayName ?? "—",
-      perfil: a.roleProfile.name,
-      ambito: (a.scope.scopeRefId && nombreDelLugar.get(a.scope.scopeRefId)) ?? "—",
-      estado,
-      razon,
-    };
-  });
+  const filas: PersonaDelBeneficio[] = await Promise.all(
+    asignaciones.map(async (a) => {
+      const { estado, razon } = estadoDeAsignacion(a);
+      // La consulta ya filtró `scope.scopeType === "location"` y
+      // `scopeRefId: { in: cadena }` (una lista de strings), así que
+      // `scopeRefId` no puede ser nulo aquí.
+      const puedeGestionar = await puedeEditarBeneficioEn(actorId, a.scope.scopeRefId as string);
+      return {
+        assignmentId: a.id,
+        persona: a.userAccount.person?.displayName ?? "—",
+        perfil: a.roleProfile.name,
+        ambito: (a.scope.scopeRefId && nombreDelLugar.get(a.scope.scopeRefId)) ?? "—",
+        estado,
+        razon,
+        puedeGestionar,
+      };
+    }),
+  );
 
   filas.sort((a, b) => a.persona.localeCompare(b.persona) || a.assignmentId.localeCompare(b.assignmentId));
   return filas;

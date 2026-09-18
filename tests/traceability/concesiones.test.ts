@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
+import { Prisma } from "../../generated/prisma/client";
 import {
   LocationAccessError,
   exigeEditarBeneficioEn,
@@ -11,6 +12,7 @@ import { listarBeneficios } from "../../lib/traceability/beneficios";
 import {
   ConcesionError,
   personasDelBeneficio,
+  reintentarUnaVezAnteConflicto,
   concederEditarBeneficio as concederEditarBeneficioRaw,
   quitarEditarBeneficio as quitarEditarBeneficioRaw,
 } from "../../lib/traceability/concesiones";
@@ -541,5 +543,101 @@ describe("listarBeneficios: puedeEditar", () => {
     // Control positivo: el Farm Manager lo ve editable de serie, sin concesión.
     const paraJefe = await listarBeneficios(jefe);
     expect(paraJefe.find((b) => b.id === ben.id)?.puedeEditar).toBe(true);
+  });
+});
+
+/**
+ * Ronda 2 de la revisión independiente de Codex (2026-09-18), hallazgo A.
+ *
+ * `reintentarUnaVezAnteConflicto` es la parte de la corrección que SÍ se
+ * puede probar de forma determinista, sin base de datos: es una función
+ * genérica que recibe una operación de mentira. La otra mitad —una carrera
+ * real de dos transacciones de Postgres solapadas— está argumentada, no
+ * reproducida aquí; ver el informe final.
+ */
+function errorDeConcurrencia(code: "P2002" | "P2034"): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError(`fingido: ${code}`, { code, clientVersion: "test" });
+}
+
+describe("reintentarUnaVezAnteConflicto", () => {
+  it("P2002 una vez y éxito la segunda: la operación se llama DOS veces y devuelve el resultado del segundo intento", async () => {
+    let llamadas = 0;
+    const resultado = await reintentarUnaVezAnteConflicto(async () => {
+      llamadas += 1;
+      if (llamadas === 1) throw errorDeConcurrencia("P2002");
+      return "segundo intento";
+    });
+    expect(llamadas).toBe(2);
+    expect(resultado).toBe("segundo intento");
+  });
+
+  it("P2034 una vez y éxito la segunda: mismo comportamiento que P2002 (los dos son 'conflicto de concurrencia')", async () => {
+    let llamadas = 0;
+    const resultado = await reintentarUnaVezAnteConflicto(async () => {
+      llamadas += 1;
+      if (llamadas === 1) throw errorDeConcurrencia("P2034");
+      return "ok";
+    });
+    expect(llamadas).toBe(2);
+    expect(resultado).toBe("ok");
+  });
+
+  it("choca las DOS veces: ConcesionError('conflicto_concurrente'), llamada exactamente dos veces (no reintenta indefinidamente)", async () => {
+    let llamadas = 0;
+    await expect(
+      reintentarUnaVezAnteConflicto(async () => {
+        llamadas += 1;
+        throw errorDeConcurrencia("P2002");
+      }),
+    ).rejects.toThrow(new ConcesionError("conflicto_concurrente"));
+    expect(llamadas).toBe(2);
+  });
+
+  it("un error que NO es de concurrencia se relanza tal cual, sin reintentar", async () => {
+    let llamadas = 0;
+    const otroError = new Error("esto no es un conflicto de concurrencia");
+    await expect(
+      reintentarUnaVezAnteConflicto(async () => {
+        llamadas += 1;
+        throw otroError;
+      }),
+    ).rejects.toThrow(otroError);
+    expect(llamadas).toBe(1);
+  });
+
+  it("sin ningún error: se llama UNA sola vez", async () => {
+    let llamadas = 0;
+    const resultado = await reintentarUnaVezAnteConflicto(async () => {
+      llamadas += 1;
+      return "directo";
+    });
+    expect(llamadas).toBe(1);
+    expect(resultado).toBe("directo");
+  });
+});
+
+/**
+ * Ronda 2, hallazgo B: `personasDelBeneficio` listaba asignaciones de ámbito
+ * ancestro (el sitio) sin comprobar si EL ACTOR tiene autoridad sobre ese
+ * ámbito — la misma guardia que el hallazgo 1 le exige a
+ * `concederEditarBeneficio`/`quitarEditarBeneficio`. Sin `puedeGestionar`, la
+ * pantalla ofrecía un formulario que el servidor iba a rechazar.
+ */
+describe("personasDelBeneficio: puedeGestionar (hallazgo B, ronda 2)", () => {
+  it("un Farm Manager DEL BENEFICIO ve a un capataz DEL SITIO con puedeGestionar: false; un Farm Manager DEL SITIO lo ve true", async () => {
+    const finca = await sitio();
+    const ben = await beneficio(finca.id);
+    const jefeDelBeneficio = await cuenta(ben.id, "Farm Manager");
+    const jefeDelSitio = await cuenta(finca.id, "Farm Manager");
+    const capatazDelSitio = await cuenta(finca.id, "Farm Operator");
+    const assignmentIdCapataz = await idDeLaAsignacion(capatazDelSitio);
+
+    const paraJefeDelBeneficio = await personasDelBeneficio(jefeDelBeneficio, ben.id);
+    const filaCapataz = paraJefeDelBeneficio.find((p) => p.assignmentId === assignmentIdCapataz);
+    expect(filaCapataz?.puedeGestionar).toBe(false);
+
+    const paraJefeDelSitio = await personasDelBeneficio(jefeDelSitio, ben.id);
+    const filaCapatazDesdeElSitio = paraJefeDelSitio.find((p) => p.assignmentId === assignmentIdCapataz);
+    expect(filaCapatazDesdeElSitio?.puedeGestionar).toBe(true);
   });
 });

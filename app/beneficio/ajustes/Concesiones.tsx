@@ -21,8 +21,16 @@ export function Concesiones({ beneficioId, personas }: Props) {
     <ul>
       {personas.map((p) => <li key={p.assignmentId}>
         <p>{p.persona} — {p.perfil} — {p.ambito} — {t(`estado_${p.estado}`)}</p>
-        {p.estado === "sin_permiso" && <FormularioConceder beneficioId={beneficioId} assignmentId={p.assignmentId} />}
-        {p.estado === "concedido" && <FormularioQuitar beneficioId={beneficioId} assignmentId={p.assignmentId} razon={p.razon} />}
+        {/* Hallazgo B (ronda 2): `puedeGestionar` es la misma guardia que el
+            servidor exige (hallazgo 1) — sin ella, esta pantalla ofrecía
+            conceder/quitar sobre una asignación de ámbito más ancho (el
+            sitio) que el actor no gestiona, y el servidor lo rechazaba. */}
+        {p.estado === "sin_permiso" && (p.puedeGestionar
+          ? <FormularioConceder beneficioId={beneficioId} assignmentId={p.assignmentId} />
+          : <p className="nn-muted">{t("gestionadoEnOtroAmbito")}</p>)}
+        {p.estado === "concedido" && (p.puedeGestionar
+          ? <FormularioQuitar beneficioId={beneficioId} assignmentId={p.assignmentId} razon={p.razon} />
+          : <p className="nn-muted">{t("gestionadoEnOtroAmbito")}</p>)}
       </li>)}
     </ul>
     <p className="nn-muted">{t("concesionAlcance")}</p>

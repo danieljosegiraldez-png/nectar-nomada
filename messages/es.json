@@ -2411,13 +2411,15 @@
     "conceder": "Conceder",
     "quitar": "Quitar",
     "concesionAlcance": "La concesión vale para todo el ámbito de la asignación de esa persona.",
+    "gestionadoEnOtroAmbito": "Se gestiona desde un ámbito más amplio; edítalo desde ahí.",
     "error_razon_obligatoria": "La razón es obligatoria para conceder.",
     "error_asignacion_fuera_de_ambito": "Esa asignación no alcanza este beneficio.",
     "error_ya_lo_tiene": "Ya lo tiene de serie por su perfil; no hay nada que conceder.",
     "error_quitado_por_administracion": "La administración se lo quitó; no se puede sobrescribir desde aquí.",
     "error_sin_concesion": "No hay ninguna concesión que quitar.",
     "error_no_es_beneficio": "Esa ubicación no es un beneficio.",
-    "error_no_beneficio_edit_access": "No tienes permiso para conceder ni quitar edición en este beneficio."
+    "error_no_beneficio_edit_access": "No tienes permiso para conceder ni quitar edición en este beneficio.",
+    "error_conflicto_concurrente": "Alguien más cambió esto al mismo tiempo. Vuelve a intentarlo."
   },
   "SeccionBeneficio": {
     "titulo": "Beneficio",
