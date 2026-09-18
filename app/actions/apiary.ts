@@ -24,6 +24,7 @@ import { UnitValidationError } from "../../lib/traceability/units";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { dividirMiel, envasarMiel, procesarMiel } from "../../lib/apiary/mielDelLote";
 import { MielInvalida } from "../../lib/apiary/vocabularioDeMiel";
+import { asentarPesoDeCosecha, SaldoDeCosechaInvalido } from "../../lib/apiary/cosechasSinSaldo";
 import { MassBalanceError } from "../../lib/traceability/balance";
 import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
@@ -712,4 +713,27 @@ export async function dividirMielAction(_prev: EstadoDeMiel, formData: FormData)
   } catch (error) {
     return rechazoDeMiel(error);
   }
+}
+
+/**
+ * ADR-166 — asentar en el libro del lote el peso que una cosecha vieja ya tiene escrito. No se
+ * teclea ningún número: se asienta el que está.
+ */
+export async function asentarPesoDeCosechaAction(
+  _prev: { error?: string; ok?: boolean },
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Apiary");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  try {
+    await asentarPesoDeCosecha(user.userAccountId, String(formData.get("apiaryHarvestEventId") ?? ""));
+  } catch (error) {
+    if (error instanceof SaldoDeCosechaInvalido) return { error: t(`sinSaldoError_${error.message}` as "sinSaldoError_cosecha_sin_peso") };
+    if (error instanceof ApiaryAccessError) return { error: t("sinSaldoError_sin_permiso") };
+    throw error;
+  }
+  revalidatePath(`/apiaries/${apiaryId}`);
+  return { ok: true };
 }

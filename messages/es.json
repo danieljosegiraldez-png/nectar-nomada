@@ -1822,7 +1822,16 @@
     "mielMermaDividir": "Merma al repartir (kg)",
     "mielDividirGuardar": "Guardar división",
     "mielError_dividir_exige_dos_partes": "Hacen falta al menos dos partes para dividir.",
-    "mielError_parte_cero": "Una parte no puede ser de cero kilos: déjala vacía."
+    "mielError_parte_cero": "Una parte no puede ser de cero kilos: déjala vacía.",
+    "sinSaldoHeading": "Cosechas pesadas sin saldo",
+    "sinSaldoIntro": "Estas cosechas tienen el peso escrito, pero su lote de miel no lo tiene en el libro: se pesaron en el cierre antes del 18 de septiembre, cuando ese peso todavía no se asentaba. Sin saldo, procesar, envasar o dividir el lote no tiene contra qué cuadrar. El botón asienta el peso que ya está escrito, sin teclear nada.",
+    "sinSaldoCaja": "caja",
+    "sinSaldoLote": "lote",
+    "sinSaldoAsentar": "Asentar {kg} kg",
+    "sinSaldoAsentado": "Asentado.",
+    "sinSaldoError_cosecha_sin_peso": "Esta cosecha no tiene peso escrito: complétalo en su cierre.",
+    "sinSaldoError_el_lote_ya_tiene_saldo": "El lote ya tiene asientos: no se asienta encima para no contarlo dos veces.",
+    "sinSaldoError_sin_permiso": "No tienes permiso para asentar en este apiario."
   },
   "Research": {
     "badge": "Research OS",

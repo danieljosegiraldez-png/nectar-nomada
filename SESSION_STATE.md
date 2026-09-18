@@ -38,6 +38,13 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · Cosechas pesadas sin saldo, asentables desde la ficha del apiario
+
+ADR-166. Las cosechas cerradas antes de ADR-161 pueden tener el peso en la fila y el lote sin asiento.
+La ficha del apiario las lista y un botón asienta el peso ya escrito (sin teclear nada), con su
+auditoría; sólo si el lote no tiene NINGÚN asiento. **Medido en la copia local: ninguna afectada**
+—la única cosecha real se pesó al cosechar—. Es una red, no el arreglo de un daño visto.
+
 ### 2026-09-18 · La condición del sitio: lista fija, en la versión 2 del protocolo
 
 ADR-165. Era la última pregunta del protocolo sin sitio. Daniel eligió el vocabulario (hormigas,
