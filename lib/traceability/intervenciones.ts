@@ -60,6 +60,7 @@ export interface RegistrarIntervencionInput {
   readonly fieldSessionId?: string | null;
   readonly motivoObservationId?: string | null;
   readonly specimenIds?: readonly string[];
+  readonly plotBlockIds?: readonly string[];
   readonly lineas: readonly LineaInput[];
   readonly dataQuality?: DataQuality | null;
   readonly notes?: string | null;
@@ -106,6 +107,40 @@ interface ParcelaResuelta {
   readonly locationType: string;
 }
 
+interface MotivoDeTrampa {
+  readonly observationType: string;
+  readonly locationId: string;
+}
+
+/**
+ * Lo mínimo de una `SpecimenObservation` para juzgar si es un motivo válido —
+ * compartida por `validarReferencias` (guardado) y `motivoValidoParaParcela`
+ * (precarga), ronda final de arreglos, hallazgo 6.
+ */
+async function resolverMotivoDeTrampa(motivoObservationId: string): Promise<MotivoDeTrampa | null> {
+  const motivo = await prisma.specimenObservation.findUnique({
+    where: { id: motivoObservationId },
+    select: { observationType: true, specimen: { select: { locationId: true } } },
+  });
+  return motivo ? { observationType: motivo.observationType, locationId: motivo.specimen.locationId } : null;
+}
+
+/**
+ * El ÚNICO predicado que decide si una observación es un motivo válido para
+ * una parcela — ronda final de arreglos, hallazgo 6. Antes `validarReferencias`
+ * (guardado) y `motivoValidoParaParcela` (precarga) repetían la misma
+ * condición cada una por su cuenta, con `ubicacionesEmparentadas` — que
+ * acepta ascendientes y descendientes: tener acceso a una microparcela no da
+ * acceso a su finca madre, así que una lectura de la madre no puede motivar
+ * ni precargarse en la hija. Exige la MISMA parcela — comparación exacta de
+ * `locationId`, igual que ya exige `validarReferencias` para plantas y
+ * bloques (Tarea 2). Con las dos llamando a esta única función, no pueden
+ * volver a derivar una de la otra.
+ */
+function esMotivoDeTrampaValido(motivo: MotivoDeTrampa | null, locationId: string): boolean {
+  return motivo != null && motivo.observationType === "trap_check" && motivo.locationId === locationId;
+}
+
 /**
  * Paso 4 del brief: cada referencia existe y es de quien dice ser. Corre
  * ANTES de abrir la transacción, con el cliente total — no autoriza nada, sólo
@@ -113,7 +148,10 @@ interface ParcelaResuelta {
  */
 async function validarReferencias(
   parcela: ParcelaResuelta,
-  datos: Pick<RegistrarIntervencionInput, "specimenIds" | "lineas" | "fieldSessionId" | "motivoObservationId">,
+  datos: Pick<
+    RegistrarIntervencionInput,
+    "specimenIds" | "plotBlockIds" | "lineas" | "fieldSessionId" | "motivoObservationId"
+  >,
 ) {
   const specimenIds = datos.specimenIds ?? [];
   if (specimenIds.length > 0) {
@@ -127,6 +165,24 @@ async function validarReferencias(
       if (!especimen) throw new IntervencionValidationError(`no existe la planta ${id}`);
       if (especimen.locationId !== parcela.id) {
         throw new IntervencionValidationError(`la planta ${id} es de otra parcela`);
+      }
+    }
+  }
+
+  // Tarea 2: cada bloque tiene que ser de esta parcela — `locationId` IGUAL,
+  // no basta con estar emparentado (brief, Notas del controlador).
+  const plotBlockIds = datos.plotBlockIds ?? [];
+  if (plotBlockIds.length > 0) {
+    const bloques = await prisma.plotBlock.findMany({
+      where: { id: { in: [...plotBlockIds] } },
+      select: { id: true, locationId: true },
+    });
+    const porId = new Map(bloques.map((b) => [b.id, b]));
+    for (const id of plotBlockIds) {
+      const bloque = porId.get(id);
+      if (!bloque) throw new IntervencionValidationError(`no existe el bloque ${id}`);
+      if (bloque.locationId !== parcela.id) {
+        throw new IntervencionValidationError(`el bloque ${id} es de otra parcela`);
       }
     }
   }
@@ -165,9 +221,8 @@ async function validarReferencias(
   }
 
   if (datos.fieldSessionId || datos.motivoObservationId) {
-    const emparentadas = await ubicacionesEmparentadas(parcela.id);
-
     if (datos.fieldSessionId) {
+      const emparentadas = await ubicacionesEmparentadas(parcela.id);
       const jornada = await prisma.fieldSession.findUnique({
         where: { id: datos.fieldSessionId },
         select: { locationId: true },
@@ -183,16 +238,20 @@ async function validarReferencias(
     // único tipo que trae `captureCount`, spec §4.3) ni que su planta esté
     // emparentada con esta parcela. Sin esto, una intervención de A podía
     // quedar «motivada» por una observación de B.
+    //
+    // Ronda final de arreglos, hallazgo 6: la condición completa —existe, es
+    // `trap_check`, y es de la MISMA parcela, no una emparentada— vive en
+    // `esMotivoDeTrampaValido`, la misma que usa `motivoValidoParaParcela`
+    // para la precarga. La decisión de aceptar o rechazar la toma esa única
+    // función; el `if` de abajo sólo elige QUÉ mensaje mostrar y nunca decide
+    // por su cuenta, así que las dos comprobaciones no pueden derivar.
     if (datos.motivoObservationId) {
-      const motivo = await prisma.specimenObservation.findUnique({
-        where: { id: datos.motivoObservationId },
-        select: { observationType: true, specimen: { select: { locationId: true } } },
-      });
-      if (!motivo) throw new IntervencionValidationError("no existe la observación que motiva la intervención");
-      if (motivo.observationType !== "trap_check") {
-        throw new IntervencionValidationError("la observación que motiva la intervención no es una lectura de trampa");
-      }
-      if (!emparentadas.includes(motivo.specimen.locationId)) {
+      const motivo = await resolverMotivoDeTrampa(datos.motivoObservationId);
+      if (!esMotivoDeTrampaValido(motivo, parcela.id)) {
+        if (!motivo) throw new IntervencionValidationError("no existe la observación que motiva la intervención");
+        if (motivo.observationType !== "trap_check") {
+          throw new IntervencionValidationError("la observación que motiva la intervención no es una lectura de trampa");
+        }
         throw new IntervencionValidationError("la observación que motiva la intervención es de otra parcela");
       }
     }
@@ -220,12 +279,22 @@ async function resolverParcela(locationId: string): Promise<ParcelaResuelta | nu
 }
 
 /**
- * Crea las áreas (plantas) de la intervención. Sin filas = la parcela entera.
+ * Crea las áreas (plantas y bloques) de la intervención. Sin filas = la
+ * parcela entera. Cada fila lleva exactamente una de las dos referencias —
+ * `CHECK` en la base — así que nunca se pasan las dos en la misma llamada.
  */
-async function crearAreas(tx: Prisma.TransactionClient, interventionId: string, specimenIds: readonly string[]) {
+async function crearAreas(
+  tx: Prisma.TransactionClient,
+  interventionId: string,
+  specimenIds: readonly string[],
+  plotBlockIds: readonly string[] = [],
+) {
   const areas = [];
   for (const specimenId of specimenIds) {
     areas.push(await tx.plotInterventionArea.create({ data: { interventionId, specimenId } }));
+  }
+  for (const plotBlockId of plotBlockIds) {
+    areas.push(await tx.plotInterventionArea.create({ data: { interventionId, plotBlockId } }));
   }
   return areas;
 }
@@ -369,7 +438,7 @@ export async function registrarIntervencion(
         },
       });
 
-      const areas = await crearAreas(tx, creada.id, input.specimenIds ?? []);
+      const areas = await crearAreas(tx, creada.id, input.specimenIds ?? [], input.plotBlockIds ?? []);
       const lineas = await crearLineasDeIntervencion(tx, {
         interventionId: creada.id,
         lineas: input.lineas,
@@ -495,7 +564,7 @@ export async function corregirIntervencion(
         throw error;
       });
 
-    const areas = await crearAreas(tx, creada.id, input.nueva.specimenIds ?? []);
+    const areas = await crearAreas(tx, creada.id, input.nueva.specimenIds ?? [], input.nueva.plotBlockIds ?? []);
     // Sin descuento: una corrección no vuelve a gastar producto (Restricciones
     // globales del brief). Un saldo mal descontado se cuadra con
     // `reconciliar` del inventario, que exige su propia razón.
@@ -537,9 +606,16 @@ export async function corregirIntervencion(
 export async function intervencionesVigentes(
   locationIds: readonly string[],
   opciones?: { hasta?: Date; db?: Prisma.TransactionClient },
-): Promise<(IntervencionParaCarencia & { locationId: string; target: PlotInterventionTarget })[]> {
+): Promise<
+  (IntervencionParaCarencia & {
+    locationId: string;
+    target: PlotInterventionTarget;
+    parcelaEntera: boolean;
+    plotBlockIds: string[];
+  })[]
+> {
   const db = opciones?.db ?? prisma;
-  return db.plotIntervention.findMany({
+  const filas = await db.plotIntervention.findMany({
     where: {
       locationId: { in: [...locationIds] },
       correcciones: { none: {} },
@@ -552,8 +628,17 @@ export async function intervencionesVigentes(
       locationId: true,
       target: true,
       lineas: { select: { withdrawalDays: true, reentryHours: true } },
+      areas: { select: { plotBlockId: true } },
     },
   });
+
+  // Tarea 2: sin áreas = parcela entera; los bloques son las áreas cuyo
+  // `plotBlockId` no es nulo (las de planta no cuentan para esta lista).
+  return filas.map(({ areas, ...resto }) => ({
+    ...resto,
+    parcelaEntera: areas.length === 0,
+    plotBlockIds: areas.map((a) => a.plotBlockId).filter((id): id is string => id != null),
+  }));
 }
 
 export type IntervencionListada = Prisma.PlotInterventionGetPayload<{
@@ -564,7 +649,9 @@ export type IntervencionListada = Prisma.PlotInterventionGetPayload<{
         consumableLot: { select: { batchLabel: true } };
       };
     };
-    areas: { include: { specimen: { select: { commonName: true } } } };
+    // Tarea 5 PR B: el bloque de un área trae su nombre — la ficha ya no lo
+    // enseña como «—».
+    areas: { include: { specimen: { select: { commonName: true } }; plotBlock: { select: { name: true } } } };
     operator: { select: { displayName: true } };
     correcciones: { select: { id: true } };
   };
@@ -587,12 +674,106 @@ export async function listarIntervenciones(userAccountId: string, locationId: st
           consumableLot: { select: { batchLabel: true } },
         },
       },
-      areas: { include: { specimen: { select: { commonName: true } } } },
+      areas: { include: { specimen: { select: { commonName: true } }, plotBlock: { select: { name: true } } } },
       operator: { select: { displayName: true } },
       correcciones: { select: { id: true } },
     },
     orderBy: { occurredAt: "desc" },
   });
+}
+
+/**
+ * Los bloques de una parcela, para el formulario de manejo — Tarea 5 PR B,
+ * ronda de arreglos 1 (hallazgo crítico). Antes esas pantallas pedían
+ * `listPlotBlocks` (`plotBlocks.ts`), que exige `location:manage_attributes`
+ * — un permiso DISTINTO del que ya exige leer o corregir una intervención
+ * (`lot:view`/`manage`, arriba). Con un `Assignment` que sólo concede
+ * `lot:manage` por un `grant` más estrecho que el perfil —un patrón que el
+ * propio catálogo de roles describe y usa (`lib/rbac/catalog.ts`, «Farm
+ * Manager»)—, el formulario de corregir no podía ni listar el bloque
+ * original ni conservarlo con un input oculto, y guardar sin tocar nada
+ * borraba el bloque de la intervención en silencio.
+ *
+ * Arreglo de raíz: los bloques de una parcela son un dato DE LA PARCELA para
+ * efectos de manejo, así que se leen con el MISMO permiso que ya exige leer o
+ * escribir sus intervenciones. `listPlotBlocks` y `location:manage_attributes`
+ * siguen siendo el permiso correcto para SU PROPIA pantalla
+ * (`app/plots/[id]/ajustes/page.tsx`, dar de alta un bloque) — esto no la
+ * reemplaza, es una lectura aparte para un consumidor distinto.
+ */
+export async function bloquesDeLaParcela(
+  userAccountId: string,
+  locationId: string,
+): Promise<{ id: string; name: string }[]> {
+  await requireLotAccess(userAccountId, "view", [{ locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+  return prisma.plotBlock.findMany({
+    where: { locationId },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+export interface ContextoDeManejo {
+  readonly id: string;
+  readonly name: string;
+  readonly timezone: string | null;
+}
+
+/**
+ * El nombre y la zona de una parcela, para las pantallas de manejo
+ * (`/plots/[id]/manejo/nuevo` y `/manejo/[interventionId]`) — ronda final de
+ * arreglos, hallazgo 5. Esas dos pantallas pedían `getPlotDetail`
+ * (`plantingCohorts.ts`), que exige `location:manage_attributes`
+ * (`requireLocationAttributeAccess`) para traer TODO el tablero de la
+ * parcela; el arreglo de bloques de arriba (`bloquesDeLaParcela`) quedó
+ * incompleto porque ambas pantallas seguían detrás de ese `notFound()`
+ * ANTES de llegar a `bloquesDeLaParcela`, así que un operario con
+ * `lot:view`/`lot:manage` y SIN `location:manage_attributes` nunca las
+ * alcanzaba.
+ *
+ * Arreglo de raíz, igual que `bloquesDeLaParcela`: una lectura propia,
+ * acotada a lo que estas pantallas pintan (nombre y zona horaria — no el
+ * tablero de cohortes, rendimiento ni condiciones), autorizada con el MISMO
+ * permiso que ya exige leer o escribir las intervenciones de esta parcela.
+ * No sustituye a `getPlotDetail`: el tablero (`/plots/[id]`) sigue exigiendo
+ * `location:manage_attributes`, sin cambios.
+ */
+export async function contextoDeManejo(userAccountId: string, locationId: string): Promise<ContextoDeManejo> {
+  await requireLotAccess(userAccountId, "view", [{ locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+  const location = await prisma.location.findUnique({
+    where: { id: locationId },
+    select: { id: true, name: true, timezone: true },
+  });
+  // `requireLotAccess` ya rechazó un id sin acceso; llegar aquí sin fila
+  // significa que la ubicación desapareció entre las dos consultas.
+  if (!location) throw new TraceabilityAccessError("no_lot_access");
+  return location;
+}
+
+/**
+ * Si `?motivo=` es una lectura de trampa válida para ESTA parcela — Tarea 5
+ * PR B, ronda de arreglos 1 (importante #2). La misma condición que
+ * `validarReferencias` exige al GUARDAR — `esMotivoDeTrampaValido`, ronda
+ * final de arreglos, hallazgo 6: existe, es `trap_check`, y es de la MISMA
+ * parcela, nunca una emparentada — pero aquí decide si la PRECARGA de
+ * `/manejo/nuevo?motivo=` se usa o se ignora, nunca si el registro se
+ * rechaza: eso lo sigue haciendo el servicio al guardar. Un enlace viejo o
+ * copiado a mano con un motivo que ya no aplica pierde la precarga en
+ * silencio, en vez de bloquear el formulario con un error (brief, decisión
+ * del controlador #3, que agrupa `motivo`/`bloque`/`material` bajo la misma
+ * regla).
+ *
+ * No autoriza nada — la propia lectura de la observación no expone nada que
+ * la pantalla no vaya a mostrar ya (el aviso que generó el enlace ya la
+ * nombra).
+ */
+export async function motivoValidoParaParcela(
+  motivoObservationId: string | null | undefined,
+  locationId: string,
+): Promise<string | null> {
+  if (!motivoObservationId) return null;
+  const motivo = await resolverMotivoDeTrampa(motivoObservationId);
+  return esMotivoDeTrampaValido(motivo, locationId) ? motivoObservationId : null;
 }
 
 export interface MaterialFitosanitario {
@@ -639,4 +820,30 @@ export async function productosFitosanitarios(userAccountId: string, locationId:
     storageConditions: m.storageConditions,
     lotes: m.lots,
   }));
+}
+
+/**
+ * `productosFitosanitarios` para una pantalla que ofrece el selector como algo
+ * OPCIONAL (regla de trampas, Tarea 3 ronda 1) — un ámbito de ubicación sólo
+ * alcanza hacia sus descendientes (`lib/rbac/service.ts`), así que alguien con
+ * `location:manage_attributes` asignado exactamente en la parcela (no en la
+ * finca ni en un ancestro) puede entrar al tablero de esa parcela y aun así no
+ * tener `lot:view` sobre la finca. Sin este envoltorio, `productosFitosanitarios`
+ * lanzaba `TraceabilityAccessError` sin capturar y la página entera reventaba
+ * (500) en vez de sólo faltar el selector — el guardado ya fallaba con gracia
+ * antes de esta tarea (`saveTrapRuleFormAction` + `friendlyError`), y esta
+ * función preserva ese mismo trato para la lectura.
+ *
+ * Sólo traga `TraceabilityAccessError`: cualquier otro error se relanza.
+ */
+export async function productosFitosanitariosSiPuede(
+  userAccountId: string,
+  locationId: string,
+): Promise<MaterialFitosanitario[]> {
+  try {
+    return await productosFitosanitarios(userAccountId, locationId);
+  } catch (error) {
+    if (error instanceof TraceabilityAccessError) return [];
+    throw error;
+  }
 }
