@@ -152,7 +152,12 @@ export default async function ManejoDetailPage({
         ) : null}
         <p>
           {t("manejoAreaLabel")}:{" "}
-          {intervencion.areas.length === 0 ? t("manejoAreaWholePlot") : intervencion.areas.map((a) => a.specimen.commonName).join(", ")}
+          {intervencion.areas.length === 0
+            ? t("manejoAreaWholePlot")
+            : // PR B, Tarea 1 (sólo esquema): un área puede ser un bloque y no
+              // traer `specimen`. La UI de bloques es tarea aparte; por ahora
+              // esas áreas se muestran sin nombre, no se ocultan.
+              intervencion.areas.map((a) => a.specimen?.commonName ?? "—").join(", ")}
         </p>
         {intervencion.notes ? (
           <p>
@@ -230,7 +235,12 @@ export default async function ManejoDetailPage({
                 occurredAt: intervencion.occurredAt.toISOString(),
                 operatorPersonId: intervencion.operatorPersonId,
                 motivoObservationId: intervencion.motivoObservationId,
-                specimenIds: intervencion.areas.map((a) => a.specimenId),
+                // PR B, Tarea 1 (sólo esquema): un área de bloque no tiene
+                // `specimenId`. El formulario de corrección sólo maneja
+                // plantas por ahora, así que esas áreas se omiten aquí.
+                specimenIds: intervencion.areas
+                  .map((a) => a.specimenId)
+                  .filter((sid): sid is string => sid != null),
                 notes: intervencion.notes,
                 lineas: intervencion.lineas.map((l) => ({
                   materialId: l.materialId,
