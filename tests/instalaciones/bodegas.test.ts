@@ -45,6 +45,18 @@ describe("crear una bodega", () => {
   it("sin nombre: datos_invalidos", async () => {
     await expect(crearBodega(f.jefeA, { parentLocationId: finca, name: "  " })).rejects.toThrow(new BodegaError("datos_invalidos"));
   });
+  // Ronda 1: un `parentLocationId` que no existe no puede distinguirse, desde
+  // fuera, de uno que existe pero al que no se tiene edit_beneficio — las dos
+  // negativas caen en el MISMO tipo de error, `LocationAccessError`, sin
+  // importar si quien pregunta tiene el permiso en algún otro lado (jefeA) o
+  // en ninguno (ajeno). Si `crearBodega` mirara el padre antes de exigir el
+  // permiso, esto sería un `BodegaError("padre_invalido")` para los dos, y
+  // eso sí sería un oráculo de existencia entre organizaciones.
+  it("un padre que no existe no se distingue de uno sin permiso: LocationAccessError para cualquiera", async () => {
+    const inexistente = "00000000-0000-4000-8000-000000000000";
+    await expect(crearBodega(f.ajeno, { parentLocationId: inexistente, name: `TEST fantasma ${f.run}` })).rejects.toThrow(LocationAccessError);
+    await expect(crearBodega(f.jefeA, { parentLocationId: inexistente, name: `TEST fantasma ${f.run}` })).rejects.toThrow(LocationAccessError);
+  });
 });
 
 describe("ver bodegas", () => {

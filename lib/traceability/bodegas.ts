@@ -38,12 +38,24 @@ export async function padresParaBodega(userAccountId: string) {
   return salida;
 }
 
+/**
+ * `exigeEditarBeneficioEn` PRIMERO, antes de leer el padre — no al revés.
+ *
+ * Hallazgo de la revisión de la Ronda 1: leer el padre antes de comprobar el
+ * permiso dejaba distinguir, desde fuera, «este id no existe» (`BodegaError`)
+ * de «existe, pero no tienes permiso» (`LocationAccessError`) — un oráculo de
+ * existencia entre organizaciones para cualquier llamador, tenga o no
+ * `edit_beneficio` en algún lado. `exigeEditarBeneficioEn` ya funde las dos
+ * negativas en `LocationAccessError` (`location_not_found` y
+ * `no_beneficio_edit_access`, ambas del mismo tipo), así que comprobar el
+ * permiso antes de mirar el padre no revela nada. Mismo orden que
+ * `exigePoderCrearBajo` en beneficios.ts y `crearUbicacionDeSecado`.
+ */
 export async function crearBodega(userAccountId: string, input: { parentLocationId: string; name: string }) {
   const nombre = input.name.trim();
   if (!nombre || nombre.length > 120) throw new BodegaError("datos_invalidos");
-  const padre = await prisma.location.findUnique({ where: { id: input.parentLocationId } });
-  if (!padre) throw new BodegaError("padre_invalido");
-  await exigeEditarBeneficioEn(userAccountId, padre.id);
+  await exigeEditarBeneficioEn(userAccountId, input.parentLocationId);
+  const padre = await prisma.location.findUniqueOrThrow({ where: { id: input.parentLocationId } });
   if (!(PADRES as readonly string[]).includes(padre.locationType)) throw new BodegaError("padre_invalido");
   return prisma.$transaction(async (tx) => {
     const hermanas = await tx.location.findMany({ where: { parentLocationId: padre.id }, select: { name: true } });
