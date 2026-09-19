@@ -38,6 +38,12 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-19 · La cera de la miel es subproducto, no merma (Q28, rebanada 2)
+
+ADR-178. La cera que sale al colar deja de ir en la merma y cuenta como salida del balance; la que
+sale al desopercular se anota por apiario y ventana de fechas, y la ficha dice qué cosechas de ese
+apiario caen dentro. No se eligen colmenas: se desopercula junto. **Sin ver en navegador.**
+
 ### 2026-09-19 · Recepción de cereza en el beneficio (PR #444, pieza 2 de 3)
 
 Spec y plan `docs/superpowers/{specs,plans}/2026-09-19-recepcion-de-cereza-en-beneficio*`. La
@@ -47,6 +53,7 @@ el de finca o el declarado; fuera de tolerancia, nota; nunca bloquea), Brix con 
 **siempre dos personas** (servicio y disparador). `/beneficio/pedidos`: cantidad aquí, calidad en la
 pieza 3. **La recepción es el origen**: de ella saldrán los lotes (pieza 3). `ReceivingEvent`, el
 viejo, sigue hasta entonces. **Sin navegador.**
+
 
 ### 2026-09-19 · La miel se pesa por recipiente (Q28, rebanada 1)
 

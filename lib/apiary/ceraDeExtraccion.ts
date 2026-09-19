@@ -20,13 +20,11 @@ import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { validarMasaDeSubproducto } from "../traceability/subproductos";
 import type { ByproductDestination } from "../../generated/prisma/client";
 
-export class CeraDeExtraccionInvalida extends Error {}
+// La lista de destinos vive en el módulo puro porque la usa el formulario de cliente; se re-exporta
+// aquí para que quien trabaje con esta cera no tenga que saber dónde está.
+export { DESTINOS_DE_CERA_SUBPRODUCTO } from "./vocabularioDeMiel";
 
-/**
- * Los cuatro destinos que Daniel pidió el 2026-09-19: fundirla para lámina propia, venderla,
- * guardarla, u otro uso. `SALE` ya existía para «se vende».
- */
-export const DESTINOS_DE_CERA_DE_EXTRACCION: readonly ByproductDestination[] = ["LAMINA_PROPIA", "SALE", "GUARDADA", "OTRO"];
+export class CeraDeExtraccionInvalida extends Error {}
 
 /** El apiario con su finca, y el permiso ya comprobado. Igual que `fincaDe` en `cera.ts`. */
 async function fincaDelApiario(userAccountId: string, locationId: string, accion: "manage" | "view") {
