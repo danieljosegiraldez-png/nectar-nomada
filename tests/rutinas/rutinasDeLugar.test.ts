@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { prisma } from "../../lib/db";
 import { crearRutina, registrarRealizada, RutinaError, rutinasDeLugar, vencidasPorLugar } from "../../lib/rutinas/rutinas";
-import { rutaDeLugar } from "../../lib/rutinas/lugares";
+import { lugarConRutinasOVacio, rutaDeLugar } from "../../lib/rutinas/lugares";
 import { montarFixtures, type Fixtures } from "../helpers/fixturesDeCatalogo";
 
 let f: Fixtures;
@@ -24,6 +25,16 @@ beforeAll(async () => {
   await loc("cuarto", "drying_facility", L.finca!);
   await loc("cama", "drying_bed", L.cuarto!);
   await loc("bodega", "storage_facility", L.beneficio!);
+  // Cama sin estante de secado (parte 2, drying_rack, aún no existe en el
+  // esquema): cualquier padre que no sea drying_facility dispara
+  // "rutina_en_el_estante", sea cual sea su tipo futuro.
+  await loc("camaSuelta", "drying_bed", L.finca!);
+  // Lugar sin organización (Location.organizationId es opcional; una bodega de
+  // plataforma, no de una finca concreta), para probar que "insumo_ajeno" se
+  // dispara igual cuando no hay organización con la que comparar.
+  L.bodegaSinOrg = (
+    await prisma.location.create({ data: { name: `TEST bodegaSinOrg ${f.run}`, locationType: "storage_facility", parentLocationId: L.finca!, organizationId: null, status: "approved", classification: "internal" } })
+  ).id;
   const mat = await prisma.consumableMaterial.create({ data: { name: `TEST cal ${f.run}`, defaultUnit: "kg", organizationId: f.orgA } });
   material = mat.id;
   loteDeInsumo = (await prisma.consumableLot.create({ data: { materialId: material, batchLabel: `TEST L ${f.run}`, receivedAt: dia("2026-08-01") } })).id;
@@ -41,7 +52,7 @@ afterAll(async () => {
   await prisma.consumableMaterial.deleteMany({ where: { name: { contains: f.run } } });
   await prisma.careRoutineEvent.deleteMany({ where: { id: { in: evs } } });
   await prisma.careRoutine.deleteMany({ where: { id: { in: rs } } });
-  for (const n of ["bodega", "cama", "cuarto", "beneficio", "finca"]) await prisma.location.deleteMany({ where: { id: L[n] } });
+  for (const n of ["bodega", "bodegaSinOrg", "camaSuelta", "cama", "cuarto", "beneficio", "finca"]) await prisma.location.deleteMany({ where: { id: L[n] } });
   await f.limpiar();
 });
 
@@ -107,6 +118,17 @@ describe("el producto", () => {
       registrarRealizada(f.operarioA, { routineId: r.id, performedOn: dia("2026-08-12"), provenanceClass: "original_record", insumos: [{ consumableLotId: loteAjeno, quantity: 1, unit: "kg" }] }),
     ).rejects.toThrow(new RutinaError("insumo_ajeno"));
   });
+  it("un lugar sin organización (organizationId null): cualquier insumo es insumo_ajeno", async () => {
+    const r = await crearRutina(f.admin, { locationId: L.bodegaSinOrg!, kind: "limpieza", intervalDays: 7 });
+    await expect(
+      registrarRealizada(f.admin, {
+        routineId: r.id,
+        performedOn: dia("2026-08-13"),
+        provenanceClass: "original_record",
+        insumos: [{ consumableLotId: loteDeInsumo, quantity: 1, unit: "kg" }],
+      }),
+    ).rejects.toThrow(new RutinaError("insumo_ajeno"));
+  });
 });
 
 describe("el aviso", () => {
@@ -126,6 +148,22 @@ describe("el aviso", () => {
   });
   it("el ajeno no ve las rutinas del lugar", async () => {
     await expect(rutinasDeLugar(f.ajeno, L.beneficio!, "2026-09-10")).rejects.toThrow(new RutinaError("forbidden"));
+  });
+});
+
+describe("lugarConRutinasOVacio: no tumba la página en un lugar sin rutina", () => {
+  it("una finca (site): no lanza, devuelve null en vez de lugar_sin_rutinas", async () => {
+    await expect(lugarConRutinasOVacio(L.finca!)).resolves.toBeNull();
+  });
+  it("una cama sin estante de secado: no lanza, devuelve null en vez de rutina_en_el_estante", async () => {
+    await expect(lugarConRutinasOVacio(L.camaSuelta!)).resolves.toBeNull();
+  });
+  it("un lugar con rutina: sí resuelve el lugar", async () => {
+    const l = await lugarConRutinasOVacio(L.beneficio!);
+    expect(l?.id).toBe(L.beneficio);
+  });
+  it("un id que no existe: relanza (no es 'sin rutinas', es un error del llamador)", async () => {
+    await expect(lugarConRutinasOVacio(randomUUID())).rejects.toThrow(new RutinaError("lugar_no_encontrado"));
   });
 });
 

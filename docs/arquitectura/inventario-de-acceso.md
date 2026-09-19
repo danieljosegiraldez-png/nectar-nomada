@@ -146,17 +146,19 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > llamadores (`detalleDeJornada`, `misEntregas`) ya autorizaron esas entregas antes.
 
 > **Rutinas de lugar (Tarea 4, spec 2026-09-19 §4.2), con un archivo nuevo.**
-> `lib/rutinas/lugares.ts` aporta **cinco** operaciones. Cuatro suben la fila
-> de **guardia directo**, 348→353: `puedeSobreLugar` llama a `can(` directo;
+> `lib/rutinas/lugares.ts` aporta **cuatro** operaciones. Tres suben la fila
+> de **guardia directo**: `puedeSobreLugar` llama a `can(` directo;
 > `insumosDeLugar` y `equiposAqui` se gatean sobre `puedeSobreLugar` antes de
-> consultar; y en `lib/rutinas/rutinas.ts`, ya inventariado, se le suman
-> `rutinasDeLugar` y `vencidasPorLugar` —dos operaciones más de la misma fila,
-> 353 incluye las dos—, que exigen `puedeSobreLugar(…, "view")` antes de leer.
-> La quinta, `lugarParaRutina`, no recibe principal a propósito: lee el lugar
-> ANTES de que `requireRutinaAccess` compruebe el permiso, para distinguir
-> «no admite rutinas» de «prohibido» — mirada a mano y explicada en el
-> allowlist, sube la fila de **depende del llamador**, 63→64. `rutaDeLugar` no
-> toca la base y no cuenta. 469→475, en 138 archivos.
+> consultar. Además, en `lib/rutinas/rutinas.ts`, ya inventariado, se le suman
+> `rutinasDeLugar` y `vencidasPorLugar` —dos operaciones más de **guardia
+> directo**, fuera de la cuenta de `lugares.ts`—, que exigen
+> `puedeSobreLugar(…, "view")` antes de leer. La cuarta operación de
+> `lugares.ts`, `lugarParaRutina`, no recibe principal a propósito: lee el
+> lugar ANTES de que `requireRutinaAccess` compruebe el permiso, para
+> distinguir «no admite rutinas» de «prohibido» — mirada a mano y explicada en
+> el allowlist, y cae en **depende del llamador**. `rutaDeLugar` no toca la
+> base y no cuenta. Cifras exactas de esta fusión, regeneradas al final de la
+> Tarea 8 más abajo.
 
 > **Acciones y la tarjeta (Tarea 5, spec 2026-09-19 §5), sin archivo nuevo.**
 > `app/actions/rutinas.ts` no puede importar `lib/db` directamente (guardia
@@ -168,8 +170,8 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > autorización de la acción la resuelve el servicio (`crearRutina`,
 > `registrarRealizada`, …) por su cuenta, y el `locationId` viene siempre del
 > propio formulario del llamador, nunca de un id adivinado. Sube la fila de
-> **depende del llamador**, 64→65 — mirada a mano y explicada en el allowlist.
-> 475→476, en los mismos 138 archivos.
+> **depende del llamador** — mirada a mano y explicada en el allowlist.
+> Cifras exactas de esta fusión, regeneradas al final de la Tarea 8 más abajo.
 
 > **La bodega (Tarea 2, spec 2026-09-19 §4.1), con un archivo nuevo.**
 > `lib/traceability/bodegas.ts` aporta **cuatro** operaciones y las cuatro

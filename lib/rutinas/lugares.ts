@@ -37,6 +37,26 @@ export async function lugarParaRutina(locationId: string): Promise<LugarConRutin
   return l;
 }
 
+/**
+ * Igual que `lugarParaRutina`, pero para un llamador que sólo quiere pintar
+ * un bloque de rutinas si el lugar las admite (spec 2026-09-19 §6, arreglo de
+ * revisión de Tarea 6): `null` cuando el lugar no lleva rutina propia
+ * —`lugar_sin_rutinas` o `rutina_en_el_estante`—, en vez de propagar el error.
+ * Cualquier otro `RutinaError` (hoy sólo `lugar_no_encontrado`) se relanza: un
+ * id que no existe es un error de programación del llamador, no un lugar sin
+ * rutinas.
+ */
+export async function lugarConRutinasOVacio(locationId: string): Promise<LugarConRutina | null> {
+  try {
+    return await lugarParaRutina(locationId);
+  } catch (e) {
+    if (e instanceof RutinaError && (e.message === "lugar_sin_rutinas" || e.message === "rutina_en_el_estante")) {
+      return null;
+    }
+    throw e;
+  }
+}
+
 /** El lugar mínimo para decidir a dónde vuelve una acción (spec 2026-09-19 §5); `null` si no existe. */
 export async function lugarParaVolver(locationId: string): Promise<{ id: string; locationType: LocationType; parentLocationId: string | null } | null> {
   return prisma.location.findUnique({ where: { id: locationId }, select: { id: true, locationType: true, parentLocationId: true } });

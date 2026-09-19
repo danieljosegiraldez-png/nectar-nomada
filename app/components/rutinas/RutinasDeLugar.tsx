@@ -6,7 +6,7 @@ import { BotonDeEnvio } from "../BotonDeEnvio";
 import { CampoNumerico } from "../CampoNumerico";
 import { TarjetaDeRutina } from "./TarjetaDeRutina";
 import { rutinasDeLugar } from "../../../lib/rutinas/rutinas";
-import { equiposAqui, insumosDeLugar, lugarParaRutina, puedeSobreLugar } from "../../../lib/rutinas/lugares";
+import { equiposAqui, insumosDeLugar, lugarConRutinasOVacio, puedeSobreLugar } from "../../../lib/rutinas/lugares";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
 
@@ -14,16 +14,21 @@ import { diaDeHoy } from "../../../lib/time/diaDeHoy";
  * Rutinas de un lugar y los equipos que hay en él (spec 2026-09-19 §5). Un solo
  * bloque para `/bodegas/[id]`, `/instalaciones/[id]` y `/beneficio`, que así
  * sólo AÑADEN una línea —lo que evita chocar con `secado-2a`—.
+ *
+ * Si el lugar no admite rutina propia (`lugar_sin_rutinas`, o una cama que
+ * cuelga de un `drying_rack`, `rutina_en_el_estante`) no pinta nada: montarlo
+ * en cualquier lugar de `/instalaciones/[id]` no puede tumbar la página
+ * (arreglo de revisión de Tarea 6).
  */
 export async function RutinasDeLugar({ userAccountId, locationId }: { userAccountId: string; locationId: string }) {
   const [t, lugar, puedeVer, puedeGestionar, puedeApuntar] = await Promise.all([
     getTranslations("Equipos"),
-    lugarParaRutina(locationId),
+    lugarConRutinasOVacio(locationId),
     puedeSobreLugar(userAccountId, locationId, "view"),
     puedeSobreLugar(userAccountId, locationId, "manage"),
     puedeSobreLugar(userAccountId, locationId, "report_condition"),
   ]);
-  if (!puedeVer) return null;
+  if (!lugar || !puedeVer) return null;
   const hoy = diaDeHoy(new Date(), lugar.timezone ?? null);
   const [rutinas, insumos, equipos, observadores] = await Promise.all([
     rutinasDeLugar(userAccountId, locationId, hoy),
