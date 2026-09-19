@@ -37,6 +37,7 @@ tests/equipos/esquemaDeCatalogo.test.ts
 tests/equipos/modelos.test.ts
 tests/equipos/documentos.test.ts
 tests/rutinas/rutinas.test.ts
+tests/rutinas/rutinasDeLugar.test.ts
 tests/catalogos/propiedad.test.ts
 tests/apiary/alcanceDelAlimento.test.ts
 tests/apiary/bitacora.test.ts

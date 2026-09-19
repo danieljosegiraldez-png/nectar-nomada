@@ -60,9 +60,9 @@ describe("definir es gestión", () => {
     await crearRutina(f.jefeA, { equipmentId: e.id, kind: "limpieza", intervalDays: 7 });
     await expect(crearRutina(f.jefeA, { equipmentId: e.id, kind: "limpieza", intervalDays: 14 })).rejects.toThrow(new RutinaError("rutina_duplicada"));
   });
-  it("las rutinas de instalación esperan su spec", async () => {
+  it("un sitio (finca) no lleva rutinas: lugar_sin_rutinas", async () => {
     await expect(requireRutinaAccess(f.jefeA, { equipmentId: null, locationId: f.sitioA }, "manage")).rejects.toThrow(
-      new RutinaError("instalaciones_pendiente"),
+      new RutinaError("lugar_sin_rutinas"),
     );
   });
   it("cambiar el intervalo deja antes y después; retirar no borra", async () => {

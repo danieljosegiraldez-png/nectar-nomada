@@ -145,6 +145,19 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > `recepcionDeEntregas` entra como **depende del llamador**: no recibe principal, y sus dos
 > llamadores (`detalleDeJornada`, `misEntregas`) ya autorizaron esas entregas antes.
 
+> **Rutinas de lugar (Tarea 4, spec 2026-09-19 §4.2), con un archivo nuevo.**
+> `lib/rutinas/lugares.ts` aporta **cinco** operaciones. Cuatro suben la fila
+> de **guardia directo**, 348→353: `puedeSobreLugar` llama a `can(` directo;
+> `insumosDeLugar` y `equiposAqui` se gatean sobre `puedeSobreLugar` antes de
+> consultar; y en `lib/rutinas/rutinas.ts`, ya inventariado, se le suman
+> `rutinasDeLugar` y `vencidasPorLugar` —dos operaciones más de la misma fila,
+> 353 incluye las dos—, que exigen `puedeSobreLugar(…, "view")` antes de leer.
+> La quinta, `lugarParaRutina`, no recibe principal a propósito: lee el lugar
+> ANTES de que `requireRutinaAccess` compruebe el permiso, para distinguir
+> «no admite rutinas» de «prohibido» — mirada a mano y explicada en el
+> allowlist, sube la fila de **depende del llamador**, 63→64. `rutaDeLugar` no
+> toca la base y no cuenta. 469→475, en 138 archivos.
+
 > **La bodega (Tarea 2, spec 2026-09-19 §4.1), con un archivo nuevo.**
 > `lib/traceability/bodegas.ts` aporta **cuatro** operaciones y las cuatro
 > llevan **guardia directo**: `crearBodega` y `padresParaBodega`

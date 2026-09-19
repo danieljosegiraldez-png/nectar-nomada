@@ -499,7 +499,11 @@
     },
     {
       "archivo": "lib/rutinas/rutinas.ts",
-      "razon": "Rutinas periódicas de equipo (spec de catálogos §3.4, D1 y D8): definir y anular es gestión (equipment:manage), apuntar lo hecho es faena (equipment:report_condition), siempre vía requireRutinaAccess → puedeSobreEquipo. Toda escritura confirma su AuditEvent en la misma transacción; nada se borra, los registros se anulan con motivo."
+      "razon": "Rutinas periódicas de equipo (spec de catálogos §3.4, D1 y D8): definir y anular es gestión (equipment:manage), apuntar lo hecho es faena (equipment:report_condition), siempre vía requireRutinaAccess → puedeSobreEquipo. Toda escritura confirma su AuditEvent en la misma transacción; nada se borra, los registros se anulan con motivo. Desde la Tarea 4 (spec 2026-09-19 §4.2) `requireRutinaAccess` juzga en el lugar (`lib/rutinas/lugares.ts`) cuando la rutina no es de equipo, y `rutinasDeLugar`/`vencidasPorLugar` exigen `puedeSobreLugar(…, \"view\")` antes de leer."
+    },
+    {
+      "archivo": "lib/rutinas/lugares.ts",
+      "razon": "Qué lugar admite rutinas, a dónde vuelve su pantalla y quién puede qué (spec 2026-09-19 §4.2). Módulo de dominio, hermano de lib/equipos/equipos.ts: gestión = `location:edit_beneficio`, faena = `equipment:report_condition` sobre el lugar, ver = `location:manage_attributes`, todo resuelto con `can(` directo antes de leer o escribir. `lugarParaRutina` es la única excepción, sin principal a propósito, explicada en `dependen_del_llamador`."
     },
     {
       "archivo": "lib/apiary/vitalesDeColmena.ts",
@@ -1212,6 +1216,12 @@
       "archivo": "lib/traceability/veredictoDelLote.ts",
       "operacion": "veredictosDePedidos",
       "razon": "Los veredictos de los lotes de unos pedidos, agrupados, para la pantalla de pedidos. No recibe principal a propósito: los ids de pedido se los da `pedidosDeBeneficio`, que sí exige `lot:view` sobre el beneficio, en la misma página y dos líneas antes.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/rutinas/lugares.ts",
+      "operacion": "lugarParaRutina",
+      "razon": "No recibe principal a propósito (spec 2026-09-19 §4.2, ruling de Tarea 4): lee el lugar ANTES de que `requireRutinaAccess` compruebe `puedeSobreLugar`, así que un lugar que no admite rutinas o que no existe se distingue de uno prohibido. Es aceptable porque el locationId lo trae la propia pantalla del llamador —nunca un id adivinado desde fuera— y no expone nada del lugar salvo su tipo y su padre, que ya son públicos en la navegación. `rutinasDeLugar`, que sí devuelve datos de las rutinas, comprueba `puedeSobreLugar(…, \"view\")` primero y lanza `forbidden` sin distinguir del caso «no existe».",
       "verificado": "2026-09-19"
     }
   ]

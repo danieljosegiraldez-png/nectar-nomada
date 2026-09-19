@@ -3,20 +3,24 @@
  *
  * **Definir** una rutina es gestión (`equipment:manage`); **apuntar** que se hizo es
  * faena (`equipment:report_condition`), igual que informar del estado; **anular**
- * un registro es gestión. Las rutinas de INSTALACIÓN existen en la base pero no en
- * este servicio: sus permisos los fija el spec de instalaciones.
+ * un registro es gestión. Las de LUGAR juzgan en el lugar (`lib/rutinas/lugares.ts`,
+ * spec 2026-09-19 §4.2).
  */
 import { Prisma, type CareRoutineKind, type ProvenanceClass } from "../../generated/prisma/client";
 import { recordAuditEvent } from "../audit";
 import { prisma } from "../db";
 import { puedeSobreEquipo } from "../equipos/equipos";
+import { crearConsumoEnTx } from "../traceability/operations";
 import { diaDeHoy } from "../time/diaDeHoy";
 import { estadoDeRutina, type EstadoDeRutina } from "./estado";
+import { lugarParaRutina, puedeSobreLugar } from "./lugares";
+import { RutinaError } from "./error";
 
-export class RutinaError extends Error {}
+export { RutinaError } from "./error";
 
 export interface NuevaRutina {
-  equipmentId: string;
+  equipmentId?: string | null;
+  locationId?: string | null;
   kind: CareRoutineKind;
   kindNote?: string | null;
   intervalDays: number;
@@ -30,6 +34,7 @@ export interface NuevoRegistro {
   note?: string | null;
   provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
+  insumos?: { consumableLotId: string; quantity?: number | null; unit?: string | null }[];
 }
 
 export async function requireRutinaAccess(
@@ -37,25 +42,32 @@ export async function requireRutinaAccess(
   cosa: { equipmentId: string | null; locationId: string | null },
   accion: "manage" | "report_condition",
 ): Promise<void> {
-  if (cosa.equipmentId === null) throw new RutinaError("instalaciones_pendiente");
-  if (!(await puedeSobreEquipo(userAccountId, cosa.equipmentId, accion))) throw new RutinaError("forbidden");
+  if ((cosa.equipmentId === null) === (cosa.locationId === null)) throw new RutinaError("una_cosa");
+  if (cosa.equipmentId !== null) {
+    if (!(await puedeSobreEquipo(userAccountId, cosa.equipmentId, accion))) throw new RutinaError("forbidden");
+    return;
+  }
+  await lugarParaRutina(cosa.locationId!);
+  if (!(await puedeSobreLugar(userAccountId, cosa.locationId!, accion))) throw new RutinaError("forbidden");
 }
 
 const t = (v: string | null | undefined) => (v?.trim() ? v.trim() : null);
 
 export async function crearRutina(userAccountId: string, r: NuevaRutina): Promise<{ id: string }> {
-  await requireRutinaAccess(userAccountId, { equipmentId: r.equipmentId, locationId: null }, "manage");
+  const equipmentId = r.equipmentId ?? null;
+  const locationId = r.locationId ?? null;
+  await requireRutinaAccess(userAccountId, { equipmentId, locationId }, "manage");
   if (!Number.isInteger(r.intervalDays) || r.intervalDays <= 0) throw new RutinaError("intervalo_positivo");
   const kindNote = t(r.kindNote);
   if (r.kind === "otra" && kindNote === null) throw new RutinaError("otra_con_nota");
   try {
     return await prisma.$transaction(async (tx) => {
       const c = await tx.careRoutine.create({
-        data: { equipmentId: r.equipmentId, kind: r.kind, kindNote, intervalDays: r.intervalDays, instructions: t(r.instructions), createdBy: userAccountId },
+        data: { equipmentId, locationId, kind: r.kind, kindNote, intervalDays: r.intervalDays, instructions: t(r.instructions), createdBy: userAccountId },
         select: { id: true },
       });
       await recordAuditEvent(
-        { actorUserAccountId: userAccountId, entityType: "care_routine", entityId: c.id, operation: "create", sourceInterface: "lib/rutinas/rutinas.ts", after: { equipmentId: r.equipmentId, kind: r.kind, kindNote, intervalDays: r.intervalDays } },
+        { actorUserAccountId: userAccountId, entityType: "care_routine", entityId: c.id, operation: "create", sourceInterface: "lib/rutinas/rutinas.ts", after: { equipmentId, locationId, kind: r.kind, kindNote, intervalDays: r.intervalDays } },
         tx,
       );
       return c;
@@ -106,6 +118,23 @@ export async function registrarRealizada(userAccountId: string, r: NuevoRegistro
   // más adelantada: eso es una fecha futura, se mire desde donde se mire.
   const hoyEnLaZonaMasAdelantada = diaDeHoy(new Date(), "Etc/GMT-14");
   if (r.performedOn.toISOString().slice(0, 10) > hoyEnLaZonaMasAdelantada) throw new RutinaError("fecha_futura");
+
+  const insumos = (r.insumos ?? []).filter((i) => i.consumableLotId);
+  let lotes: { id: string; batchLabel: string; material: { name: string; organizationId: string } }[] = [];
+  if (insumos.length) {
+    const org = ru.locationId
+      ? (await prisma.location.findUniqueOrThrow({ where: { id: ru.locationId }, select: { organizationId: true } })).organizationId
+      : (await prisma.equipment.findUniqueOrThrow({ where: { id: ru.equipmentId! }, select: { organizationId: true } })).organizationId;
+    lotes = await prisma.consumableLot.findMany({
+      where: { id: { in: insumos.map((i) => i.consumableLotId) } },
+      select: { id: true, batchLabel: true, material: { select: { name: true, organizationId: true } } },
+    });
+    for (const i of insumos) {
+      const lote = lotes.find((l) => l.id === i.consumableLotId);
+      if (!lote || lote.material.organizationId !== org) throw new RutinaError("insumo_ajeno");
+    }
+  }
+
   return prisma.$transaction(async (tx) => {
     const ev = await tx.careRoutineEvent.create({
       data: {
@@ -123,6 +152,20 @@ export async function registrarRealizada(userAccountId: string, r: NuevoRegistro
       { actorUserAccountId: userAccountId, entityType: "care_routine_event", entityId: ev.id, operation: "create", sourceInterface: "lib/rutinas/rutinas.ts", after: { routineId: r.routineId, performedOn: r.performedOn.toISOString(), performedByPersonId: r.performedByPersonId ?? null } },
       tx,
     );
+    for (const i of insumos) {
+      const lote = lotes.find((l) => l.id === i.consumableLotId)!;
+      await crearConsumoEnTx(tx, userAccountId, {
+        parent: { kind: "careRoutineEvent", careRoutineEventId: ev.id },
+        materialName: lote.material.name,
+        batchLabel: lote.batchLabel,
+        consumableLotId: lote.id,
+        quantity: i.quantity ?? null,
+        unit: i.unit ?? null,
+        occurredAt: r.performedOn,
+        operatorPersonId: r.performedByPersonId || null,
+        provenanceClass: r.provenanceClass,
+      });
+    }
     return ev;
   });
 }
@@ -156,7 +199,10 @@ export async function rutinasDeEquipo(userAccountId: string, equipmentId: string
       events: {
         orderBy: { performedOn: "desc" },
         take: 20,
-        include: { performedBy: { select: { displayName: true } } },
+        include: {
+          performedBy: { select: { displayName: true } },
+          consumptions: { select: { materialName: true, batchLabel: true, quantity: true, unit: true } },
+        },
       },
     },
   });
@@ -181,7 +227,15 @@ export async function rutinasDeEquipo(userAccountId: string, equipmentId: string
       alta: equipo.acquiredAt,
       hoy,
     }) as EstadoDeRutina,
-    registros: r.events.map((e) => ({ id: e.id, performedOn: e.performedOn, note: e.note, voidedAt: e.voidedAt, voidReason: e.voidReason, performedBy: e.performedBy })),
+    registros: r.events.map((e) => ({
+      id: e.id,
+      performedOn: e.performedOn,
+      note: e.note,
+      voidedAt: e.voidedAt,
+      voidReason: e.voidReason,
+      performedBy: e.performedBy,
+      productos: e.consumptions.map((c) => ({ materialName: c.materialName, batchLabel: c.batchLabel, quantity: c.quantity?.toString() ?? null, unit: c.unit })),
+    })),
   }));
 }
 
@@ -204,6 +258,75 @@ export async function vencidasPorEquipo(userAccountId: string, equipmentIds: rea
     if (!visible.get(r.equipmentId)) continue;
     const e = estadoDeRutina({ intervalDays: r.intervalDays, registros: r.events, alta: r.equipment?.acquiredAt ?? null, hoy });
     if (e.estado === "vencida") salida.set(r.equipmentId, (salida.get(r.equipmentId) ?? 0) + 1);
+  }
+  return salida;
+}
+
+export async function rutinasDeLugar(userAccountId: string, locationId: string, hoy: string): Promise<RutinaConEstado[]> {
+  if (!(await puedeSobreLugar(userAccountId, locationId, "view"))) throw new RutinaError("forbidden");
+  const lugar = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { createdAt: true } });
+  const rutinas = await prisma.careRoutine.findMany({
+    where: { locationId, retiredAt: null },
+    orderBy: [{ kind: "asc" }, { kindNote: "asc" }],
+    include: {
+      events: {
+        orderBy: { performedOn: "desc" },
+        take: 20,
+        include: {
+          performedBy: { select: { displayName: true } },
+          consumptions: { select: { materialName: true, batchLabel: true, quantity: true, unit: true } },
+        },
+      },
+    },
+  });
+  const ultimosValidos = await prisma.careRoutineEvent.groupBy({
+    by: ["routineId"],
+    where: { routineId: { in: rutinas.map((r) => r.id) }, voidedAt: null },
+    _max: { performedOn: true },
+  });
+  const ultimoValido = new Map(ultimosValidos.map((u) => [u.routineId, u._max.performedOn]));
+  return rutinas.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    kindNote: r.kindNote,
+    intervalDays: r.intervalDays,
+    instructions: r.instructions,
+    estado: estadoDeRutina({
+      intervalDays: r.intervalDays,
+      registros: ultimoValido.get(r.id) ? [{ performedOn: ultimoValido.get(r.id)!, voidedAt: null }] : [],
+      alta: lugar.createdAt,
+      hoy,
+    }) as EstadoDeRutina,
+    registros: r.events.map((e) => ({
+      id: e.id,
+      performedOn: e.performedOn,
+      note: e.note,
+      voidedAt: e.voidedAt,
+      voidReason: e.voidReason,
+      performedBy: e.performedBy,
+      productos: e.consumptions.map((c) => ({ materialName: c.materialName, batchLabel: c.batchLabel, quantity: c.quantity?.toString() ?? null, unit: c.unit })),
+    })),
+  }));
+}
+
+/** Para la lista: cuántas rutinas vencidas tiene cada LUGAR visible. */
+export async function vencidasPorLugar(userAccountId: string, locationIds: readonly string[], hoy: string): Promise<Map<string, number>> {
+  const salida = new Map<string, number>();
+  // Misma memoización que `vencidasPorEquipo`: un lugar con varias rutinas
+  // activas no vuelve a resolver su visibilidad por cada una.
+  const visible = new Map<string, boolean>();
+  const rutinas = await prisma.careRoutine.findMany({
+    where: { locationId: { in: [...locationIds] }, retiredAt: null },
+    include: { events: { select: { performedOn: true, voidedAt: true } }, location: { select: { createdAt: true } } },
+  });
+  for (const r of rutinas) {
+    if (!r.locationId) continue;
+    if (!visible.has(r.locationId)) {
+      visible.set(r.locationId, await puedeSobreLugar(userAccountId, r.locationId, "view"));
+    }
+    if (!visible.get(r.locationId)) continue;
+    const e = estadoDeRutina({ intervalDays: r.intervalDays, registros: r.events, alta: r.location?.createdAt ?? null, hoy });
+    if (e.estado === "vencida") salida.set(r.locationId, (salida.get(r.locationId) ?? 0) + 1);
   }
   return salida;
 }
