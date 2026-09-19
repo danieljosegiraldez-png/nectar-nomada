@@ -2828,7 +2828,27 @@
     "estanteAyuda": "Positions are created for you: levels × slots. They are never deleted.",
     "resumenEstante": "{niveles} levels × {puestos} slots = {total} positions",
     "nivel": "Level {n}",
-    "error_estante_no_se_reduce": "A rack cannot shrink: its positions may have history."
+    "error_estante_no_se_reduce": "A rack cannot shrink: its positions may have history.",
+    "bodegas": "Storage"
+  },
+  "Bodegas": {
+    "titulo": "Storage rooms",
+    "intro": "Storage rooms for supplies and product, with their own care routines.",
+    "nueva": "Create storage room",
+    "padre": "Parent farm or mill",
+    "nombre": "Name",
+    "crear": "Create storage room",
+    "padreNoVisible": "Parent without administration access",
+    "sinPermiso": "You don't have permission to create or manage any storage room.",
+    "sinBodegas": "There are no storage rooms visible yet.",
+    "tipo_site": "farm",
+    "tipo_beneficio": "mill",
+    "error_datos_invalidos": "Required data is missing or the name isn't valid.",
+    "error_padre_invalido": "The chosen parent can't have a storage room.",
+    "error_nombre_repetido": "A storage room with that name already exists under the same parent.",
+    "error_sin_acceso": "This account doesn't have permission to create a storage room there.",
+    "creada": "Storage room created.",
+    "soloVencidas": "overdue routines only"
   },
   "AjustesDelBeneficio": {
     "ajustesTitulo": "Mill settings",

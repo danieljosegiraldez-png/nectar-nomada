@@ -24,7 +24,7 @@ export default async function InstalacionesPage() {
     <p><Link href="/lots">← {t("lotes")}</Link></p>
     <h1>{t("instalaciones")}</h1>
     <p>{t("instalacionesIntro")}</p>
-    <p><Link href="/instalaciones/nueva">{t("crearInstalacion")}</Link> · <Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link></p>
+    <p><Link href="/instalaciones/nueva">{t("crearInstalacion")}</Link> · <Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link> · <Link href="/bodegas">{t("bodegas")}</Link></p>
     {!instalaciones.length && <p>{t("sinInstalaciones")}</p>}
     <ul>{instalaciones.map((i) => <li key={i.id}>
       {i.sitio?.name ?? t("sitioNoVisible")} → <Link href={`/instalaciones/${i.id}`}>{i.name}</Link>

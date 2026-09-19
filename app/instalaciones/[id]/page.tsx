@@ -7,6 +7,7 @@ import { LocationAccessError, puedeEditarBeneficioEn } from "../../../lib/tracea
 import { SecadoFormError } from "../../../lib/traceability/secadoForm";
 import { FormularioUbicacion } from "../FormularioUbicacion";
 import { FormularioEstante } from "../FormularioEstante";
+import { RutinasDeLugar } from "../../components/rutinas/RutinasDeLugar";
 
 export const dynamic = "force-dynamic";
 export default async function InstalacionPage({ params, searchParams }: {
@@ -56,6 +57,7 @@ export default async function InstalacionPage({ params, searchParams }: {
       <h3>{c.name}</h3>
       {permisosDeCamas[i] && <FormularioUbicacion tipo="drying_bed" existente={c} />}
     </section>)}
+    {instalacion.camas.map((c) => <RutinasDeLugar key={`r-${c.id}`} userAccountId={user.userAccountId} locationId={c.id} />)}
     {puedeEditar && <><h2>{t("crearCama")}</h2><FormularioUbicacion tipo="drying_bed" parentLocationId={id} /></>}
     <h2>{t("estantes")}</h2>
     {instalacion.estantes.map((estante, i) => {
@@ -90,5 +92,6 @@ export default async function InstalacionPage({ params, searchParams }: {
     })}
     {puedeEditar && <><h2>{t("crearEstante")}</h2><FormularioEstante facilityId={id} /></>}
     <p><Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link></p>
+    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} />
   </div>;
 }
