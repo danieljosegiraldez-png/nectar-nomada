@@ -65,6 +65,7 @@ tests/traceability/entregaDeCosecha-esquema.test.ts
 tests/traceability/jornadasDeCosecha.test.ts
 tests/traceability/entregasDeCosecha.test.ts
 tests/traceability/situacionesDeCampo.test.ts
+tests/traceability/recepcionDeCereza-esquema.test.ts
 tests/apiary/reinas.test.ts
 tests/apiary/refractometroDeMiel.test.ts
 tests/apiary/mielDelLote.test.ts

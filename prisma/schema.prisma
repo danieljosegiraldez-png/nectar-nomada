@@ -930,6 +930,11 @@ model Location {
   jornadasDeCosecha      JornadaDeCosecha[]    @relation("JornadaDeCosechaSitio")
   asignacionesDeCosecha  AsignacionDeJornada[] @relation("AsignacionParcela")
   entregasDeCosecha      EntregaDeCosecha[]    @relation("EntregaParcela")
+  /// Spec recepción de cereza en el beneficio — el beneficio de destino, los pedidos y las recepciones.
+  jornadasConDestino     JornadaDeCosecha[]    @relation("JornadaDestino")
+  pedidosDeCerezaRecibe  PedidoDeCereza[]      @relation("PedidoBeneficio")
+  pedidosDeCerezaFinca   PedidoDeCereza[]      @relation("PedidoFinca")
+  recepcionesDeCereza    RecepcionDeCereza[]   @relation("RecepcionBeneficio")
   @@index([parentLocationId])
   @@index([organizationId])
   equipmentTransfersFrom EquipmentTransfer[] @relation("EquipmentTransferFrom")
@@ -1028,6 +1033,9 @@ model Organization {
   harvestEvents                    HarvestEvent[]
   biocharBatches                   BiocharBatch[]
   receivingEvents                  ReceivingEvent[]
+  /// Spec recepción §3.2–3.3 — un productor de fuera: sus pedidos y sus recepciones.
+  pedidosDeCereza     PedidoDeCereza[]    @relation("PedidoProveedor")
+  recepcionesDeCereza RecepcionDeCereza[] @relation("RecepcionProveedor")
   labourEntriesProvided            LabourEntry[]
   memberships                      OrganizationMembership[]
   plantingEventsSourced            PlantingEvent[]
@@ -2050,6 +2058,9 @@ model Asset {
   /// Spec jornada y entrega de cosecha §3.3 — la foto de una entrega, que no tiene lote.
   entregaDeCosechaId String?           @map("entrega_de_cosecha_id") @db.Uuid
   entregaDeCosecha   EntregaDeCosecha? @relation(fields: [entregaDeCosechaId], references: [id], onDelete: Restrict)
+  /// Spec recepción §3.4 — la foto de una recepción de cereza (o de su rechazo).
+  recepcionDeCerezaId String?            @map("recepcion_de_cereza_id") @db.Uuid
+  recepcionDeCereza   RecepcionDeCereza? @relation(fields: [recepcionDeCerezaId], references: [id], onDelete: Restrict)
   @@index([projectId])
   @@index([locationId])
   @@index([lotId])
@@ -6503,6 +6514,10 @@ model JornadaDeCosecha {
   id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   fincaSiteId  String                @map("finca_site_id") @db.Uuid
   fincaSite    Location              @relation("JornadaDeCosechaSitio", fields: [fincaSiteId], references: [id], onDelete: Restrict)
+  /// Spec recepción §3.1 — el beneficio al que van las entregas del día. Obligatorio al abrir
+  /// (servicio); anulable por las jornadas de antes. Fijo tras la primera recepción (disparador).
+  beneficioId  String?               @map("beneficio_id") @db.Uuid
+  beneficio    Location?             @relation("JornadaDestino", fields: [beneficioId], references: [id], onDelete: Restrict)
   fecha        DateTime              @db.Date
   estado       EstadoDeJornada       @default(abierta)
   nota         String?
@@ -6555,12 +6570,132 @@ model EntregaDeCosecha {
   estado          EstadoDeEntrega  @default(enviada)
   anuladaAt       DateTime?        @map("anulada_at")
   motivoAnulacion String?          @map("motivo_anulacion")
+  recepciones     RecepcionDeCereza[]
   assets          Asset[]
   createdAt       DateTime         @default(now()) @map("created_at")
 
   @@index([jornadaId])
   @@index([recolectorId])
   @@map("entrega_de_cosecha")
+  @@schema("traceability")
+}
+
+/// Spec recepción de cereza en el beneficio §3.3 — lo que el beneficio pide a una fuente.
+enum EstadoDePedido {
+  abierto
+  cerrado
+
+  @@schema("traceability")
+}
+
+/// §3.4 — `anulada` sólo desde `recibida` o `rechazada` (disparador `recepcion_de_cereza_inmutable`).
+enum EstadoDeRecepcion {
+  recibida
+  rechazada
+  anulada
+
+  @@schema("traceability")
+}
+
+/// §3.4 — la comparación de las dos básculas. Nombres de `12_mass_balance_byproducts.md` §2, pero
+/// NO es una compuerta de etapa: nunca bloquea.
+enum ComparacionDePesos {
+  BALANCED
+  DISCREPANCY_FLAGGED
+  GROSS_IMBALANCE
+
+  @@schema("traceability")
+}
+
+/// §3.5 — `SIN_VEREDICTO` no es un estado del contrato: es la ausencia de uno, en el tramo que
+/// `11_brix_kinetics.md` no cubre.
+enum VeredictoBrixDeRecepcion {
+  INTAKE_OPTIMAL
+  INTAKE_UNDERRIPE
+  SIN_VEREDICTO
+  SENSOR_FAULT
+
+  @@schema("traceability")
+}
+
+/// `SamplePoint` de `docs/beneficio/03_public_api.md`, igual que `lib/beneficio/brix.ts`.
+enum PuntoDeMuestreoBrix {
+  TANK_LIQUID_MID
+  TANK_LIQUID_SURFACE
+  MUCILAGE_PRESSED
+  CHERRY_PULP
+  PARCHMENT_BED
+
+  @@schema("traceability")
+}
+
+model PedidoDeCereza {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  beneficioId       String         @map("beneficio_id") @db.Uuid
+  beneficio         Location       @relation("PedidoBeneficio", fields: [beneficioId], references: [id], onDelete: Restrict)
+  fincaSiteId       String?        @map("finca_site_id") @db.Uuid
+  fincaSite         Location?      @relation("PedidoFinca", fields: [fincaSiteId], references: [id], onDelete: Restrict)
+  proveedorId       String?        @map("proveedor_id") @db.Uuid
+  proveedor         Organization?  @relation("PedidoProveedor", fields: [proveedorId], references: [id], onDelete: Restrict)
+  fecha             DateTime       @db.Date
+  kgPedidos         Decimal        @map("kg_pedidos") @db.Decimal(10, 3)
+  margenCantidadPct Decimal        @map("margen_cantidad_pct") @db.Decimal(5, 2)
+  minMaduroPct      Decimal?       @map("min_maduro_pct") @db.Decimal(5, 2)
+  maxVerdePct       Decimal?       @map("max_verde_pct") @db.Decimal(5, 2)
+  maxFlotesPct      Decimal?       @map("max_flotes_pct") @db.Decimal(5, 2)
+  estado            EstadoDePedido @default(abierto)
+  cerradoAt         DateTime?      @map("cerrado_at")
+  notaDeCierre      String?        @map("nota_de_cierre")
+  recepciones       RecepcionDeCereza[]
+  createdAt         DateTime       @default(now()) @map("created_at")
+  createdBy         String?        @map("created_by") @db.Uuid
+
+  @@index([beneficioId, estado])
+  @@map("pedido_de_cereza")
+  @@schema("traceability")
+}
+
+/// Spec recepción §3.4 — el ORIGEN trazable de toda cereza que entra al beneficio, propia o de
+/// fuera. No crea lote: de una recepción salen, en la pieza 3, uno o varios lotes.
+model RecepcionDeCereza {
+  id                  String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  claveDeEnvio        String                    @unique @map("clave_de_envio")
+  beneficioId         String                    @map("beneficio_id") @db.Uuid
+  beneficio           Location                  @relation("RecepcionBeneficio", fields: [beneficioId], references: [id], onDelete: Restrict)
+  entregaId           String?                   @map("entrega_id") @db.Uuid
+  entrega             EntregaDeCosecha?         @relation(fields: [entregaId], references: [id], onDelete: Restrict)
+  proveedorId         String?                   @map("proveedor_id") @db.Uuid
+  proveedor           Organization?             @relation("RecepcionProveedor", fields: [proveedorId], references: [id], onDelete: Restrict)
+  pedidoId            String?                   @map("pedido_id") @db.Uuid
+  pedido              PedidoDeCereza?           @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  recibidaPor         String                    @map("recibida_por") @db.Uuid
+  recibidaAt          DateTime                  @map("recibida_at")
+  brutoKg             Decimal                   @map("bruto_kg") @db.Decimal(10, 3)
+  recipientes         Int
+  taraPorRecipienteKg Decimal                   @map("tara_por_recipiente_kg") @db.Decimal(10, 3)
+  netoKg              Decimal                   @map("neto_kg") @db.Decimal(10, 3)
+  pesoDeclaradoKg     Decimal?                  @map("peso_declarado_kg") @db.Decimal(10, 3)
+  referenciaKg        Decimal?                  @map("referencia_kg") @db.Decimal(10, 3)
+  diferenciaKg        Decimal?                  @map("diferencia_kg") @db.Decimal(10, 3)
+  toleranciaKg        Decimal?                  @map("tolerancia_kg") @db.Decimal(10, 3)
+  comparacion         ComparacionDePesos?
+  politicaDeBalance   Json?                     @map("politica_de_balance")
+  brix                Decimal?                  @db.Decimal(5, 2)
+  puntoDeMuestreo     PuntoDeMuestreoBrix?      @map("punto_de_muestreo")
+  instrumentoId       String?                   @map("instrumento_id") @db.Uuid
+  veredictoBrix       VeredictoBrixDeRecepcion? @map("veredicto_brix")
+  nota                String?
+  estado              EstadoDeRecepcion         @default(recibida)
+  motivoRechazo       String?                   @map("motivo_rechazo")
+  anuladaAt           DateTime?                 @map("anulada_at")
+  anuladaPor          String?                   @map("anulada_por") @db.Uuid
+  motivoAnulacion     String?                   @map("motivo_anulacion")
+  assets              Asset[]
+  createdAt           DateTime                  @default(now()) @map("created_at")
+
+  @@index([beneficioId, recibidaAt])
+  @@index([pedidoId])
+  @@map("recepcion_de_cereza")
   @@schema("traceability")
 }
 
