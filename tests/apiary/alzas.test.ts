@@ -7,6 +7,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { crearApiario, createHive } from "../../lib/apiary/hives";
+import { alzasDelApiario, darDeBajaAlza, ponerAlza, registrarAlza } from "../../lib/apiary/alzas";
+import { cerrarAbiertosEn, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
 
 const RUN = `alz-${Date.now()}`;
 const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000);
@@ -130,5 +132,100 @@ describe("las reglas del alza viven en la base", () => {
        VALUES ('${c2}', 'alza', 1, now(), 'direct_observation', '${s.id}')`,
     );
     expect(r).toMatch(/hive_fitting_alza_abierta_en_una_colmena|Unique constraint|duplicate key/);
+  });
+});
+
+/** La fila de un alza en el listado del apiario, vista por el operario. Si no está, falla aquí. */
+async function filaDe(id: string) {
+  const fila = (await alzasDelApiario(operario, apiarioId)).find((x) => x.id === id);
+  if (!fila) throw new Error(`el alza ${id} no sale en el listado`);
+  return fila;
+}
+
+describe("alzas con marca", () => {
+  const marca = (s: string) => `${s}-${RUN}`;
+
+  it("SE REGISTRA NORMALIZADA, y la misma marca en la misma finca se rechaza con su nombre", async () => {
+    const a = await registrarAlza(operario, { locationId: apiarioId, code: `  ${marca("a7")} ` });
+    expect(a.code).toBe(marca("A7").toUpperCase());
+    expect(a.organizationId).toBe(organizationId);
+    await expect(registrarAlza(operario, { locationId: apiarioId, code: marca("A7") })).rejects.toThrow(/marca_repetida/);
+    await expect(registrarAlza(operario, { locationId: apiarioId, code: "   " })).rejects.toThrow(/marca_requerida/);
+  });
+
+  it("PONERLA abre su intervalo de cuenta 1; QUITARLA lo cierra; y queda la historia", async () => {
+    const hiveId = await caja();
+    const a = await registrarAlza(operario, { locationId: apiarioId, code: marca("P") });
+    const f = await ponerAlza(operario, { hiveId, hiveSuperId: a.id, installedAt: hace(10) });
+    expect([f.kind, f.count, f.hiveSuperId]).toEqual(["alza", 1, a.id]);
+    await retirarArtefacto(operario, { fittingId: f.id, removedAt: hace(2) });
+    const fila = await filaDe(a.id);
+    expect(fila.puestaEn).toBeNull();
+    expect(fila.historia.map((h) => [h.aqui, h.hasta !== null])).toEqual([[true, true]]);
+  });
+
+  it("NO SE PONE EN DOS COLMENAS: ni abierta ni solapando un intervalo ya cerrado", async () => {
+    const [c1, c2] = [await caja(), await caja()];
+    const a = await registrarAlza(operario, { locationId: apiarioId, code: marca("D") });
+    const f = await ponerAlza(operario, { hiveId: c1, hiveSuperId: a.id, installedAt: hace(10) });
+    await expect(ponerAlza(operario, { hiveId: c2, hiveSuperId: a.id, installedAt: hace(5) })).rejects.toThrow(/alza_en_otra_colmena/);
+    await retirarArtefacto(operario, { fittingId: f.id, removedAt: hace(3) });
+    // Cerrada el día -3: ponerla el día -5 en otra caja la tendría en dos sitios esos dos días.
+    await expect(ponerAlza(operario, { hiveId: c2, hiveSuperId: a.id, installedAt: hace(5) })).rejects.toThrow(/alza_en_otra_colmena/);
+    await expect(ponerAlza(operario, { hiveId: c2, hiveSuperId: a.id, installedAt: hace(1) })).resolves.toBeTruthy();
+  });
+
+  it("NO SE PONE una dada de baja, ni una de otra finca, y SIN PERMISO no se toca", async () => {
+    const hiveId = await caja();
+    const baja = await registrarAlza(operario, { locationId: apiarioId, code: marca("B") });
+    await darDeBajaAlza(operario, { hiveSuperId: baja.id, retiredAt: hace(1), reason: "madera podrida" });
+    await expect(ponerAlza(operario, { hiveId, hiveSuperId: baja.id, installedAt: new Date() })).rejects.toThrow(/alza_dada_de_baja/);
+    const ajena = await registrarAlza(adminId, { locationId: apiarioAjeno, code: marca("X") });
+    await expect(ponerAlza(operario, { hiveId, hiveSuperId: ajena.id, installedAt: new Date() })).rejects.toThrow(/alza_de_otra_finca/);
+    await expect(registrarAlza(extrano, { locationId: apiarioId, code: marca("Z") })).rejects.toThrow(/no_apiary_access/);
+    const mia = await registrarAlza(operario, { locationId: apiarioId, code: marca("M") });
+    await expect(ponerAlza(extrano, { hiveId, hiveSuperId: mia.id, installedAt: new Date() })).rejects.toThrow(/no_apiary_access/);
+  });
+
+  it("DAR DE BAJA pide motivo y no se hace con el alza puesta", async () => {
+    const hiveId = await caja();
+    const a = await registrarAlza(operario, { locationId: apiarioId, code: marca("Q") });
+    await expect(darDeBajaAlza(operario, { hiveSuperId: a.id, retiredAt: new Date(), reason: " " })).rejects.toThrow(/baja_sin_motivo/);
+    await ponerAlza(operario, { hiveId, hiveSuperId: a.id, installedAt: hace(3) });
+    await expect(darDeBajaAlza(operario, { hiveSuperId: a.id, retiredAt: new Date(), reason: "rota" })).rejects.toThrow(/alza_puesta/);
+  });
+
+  it("LA INSPECCIÓN QUE QUITA ALZAS NO SE LLEVA LAS MARCADAS: sólo cierra las de cuenta", async () => {
+    const hiveId = await caja();
+    const a = await registrarAlza(operario, { locationId: apiarioId, code: marca("I") });
+    await ponerAlza(operario, { hiveId, hiveSuperId: a.id, installedAt: hace(10) });
+    await instalarArtefacto(operario, { hiveId, kind: "alza", count: 2, installedAt: hace(10) });
+    const cerradas = await prisma.$transaction(cerrarAbiertosEn(operario, hiveId, "alza", hace(1)));
+    expect(cerradas).toBe(1);
+    const abiertas = await prisma.hiveFitting.findMany({ where: { hiveId, removedAt: null } });
+    expect(abiertas.map((f) => f.hiveSuperId)).toEqual([a.id]);
+  });
+
+  it("EL LISTADO NO ENSEÑA la caja de otro apiario: dice que está fuera", async () => {
+    const otroApiario = (await crearApiario(adminId, { name: `TEST Apiario 2 (${RUN})`, organizationId })).id;
+    try {
+      const fuera = await caja(otroApiario);
+      const a = await registrarAlza(operario, { locationId: apiarioId, code: marca("F") });
+      await ponerAlza(adminId, { hiveId: fuera, hiveSuperId: a.id, installedAt: hace(1) });
+      const fila = await filaDe(a.id);
+      expect(fila.puestaEn?.aqui).toBe(false);
+      expect(fila.puestaEn?.hiveId).toBe("");
+      expect(fila.puestaEn?.identifier).toBe("");
+      await expect(alzasDelApiario(extrano, apiarioId)).rejects.toThrow(/no_apiary_access/);
+    } finally {
+      const cajasFuera = (await prisma.hive.findMany({ where: { locationId: otroApiario }, select: { id: true } })).map((h) => h.id);
+      const fits = (await prisma.hiveFitting.findMany({ where: assertDefinedWhere({ hiveId: { in: cajasFuera } }), select: { id: true } })).map((f) => f.id);
+      await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: fits } }) });
+      await prisma.hiveFitting.deleteMany({ where: assertDefinedWhere({ hiveId: { in: cajasFuera } }) });
+      await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hiveId: { in: cajasFuera } }) });
+      await prisma.hive.deleteMany({ where: assertDefinedWhere({ id: { in: cajasFuera } }) });
+      cajas.splice(0, cajas.length, ...cajas.filter((c) => !cajasFuera.includes(c)));
+      await prisma.location.deleteMany({ where: assertDefinedWhere({ id: otroApiario }) });
+    }
   });
 });
