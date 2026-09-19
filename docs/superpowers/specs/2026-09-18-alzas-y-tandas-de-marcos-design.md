@@ -179,7 +179,9 @@ Cada regla lleva su prueba y su flip-test, y cada CHECK su sonda en la base:
    **a los 2 años** aviso suave («revisar esta cera»), **a los 4** aviso fuerte («ya debería
    estar renovada»), **igual para cámara de cría y para alza**, porque no los separó. Los dos
    números viven en una sola constante, para cambiarlos en un sitio.
-2. **Cuándo va la rebanada de las reinas** (§5.4). Sigue abierta.
+2. ~~Cuándo va la rebanada de las reinas~~ — **contestada el 2026-09-19**: justo después de la
+   cera. Y el color es **sólo un apodo**, las reinas no se pintan (Daniel), así que no hay campo
+   «marcada»: se guarda el año de nacimiento y el color se calcula. ADR-175.
 
 ## 8. Orden
 

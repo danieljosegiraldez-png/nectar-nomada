@@ -38,6 +38,12 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-19 · La reina guarda el año en que nació; su color es el apodo
+
+ADR-175. Daniel: el color del año es sólo apodo, las reinas no se pintan. `queen.birth_year` (nulo
+si no se sabe), no posterior a su llegada; la historia de reinas dice «la blanca de 2026». **Sin
+ver en navegador.** Sigue: «marcos negros» en la inspección.
+
 ### 2026-09-18 · Jornada de cosecha y entrega al beneficio (PR #431, pieza 1 de 3)
 
 Daniel: «en finca no se registra cosecha… se asigna personas a cosecha, y esta persona… lleva al
@@ -147,6 +153,13 @@ mata el script cuando falla una función aunque esté a la izquierda de un `||`.
 
 
 ## 3. Bloqueado, y en qué
+
+#### Nodos de sensores: lo que falta cuando haya nodos (de Daniel)
+
+Movido aquí al archivar la entrada de artefactos (PR #405), porque sigue dirigiendo trabajo:
+`NOTEHUB_ROUTE_SECRET` en Vercel y en la ruta de Notehub, y registrar cada nodo con su UID de
+Notecard — registrar y calibrar **no tienen pantalla**. `POST /api/v1/ingest/notehub` sigue
+**cerrada por defecto** hasta entonces.
 
 #### El presupuesto de Actions se agotó y volvió — y `main` ya no tiene compuerta propia
 
