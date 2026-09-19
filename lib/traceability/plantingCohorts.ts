@@ -621,7 +621,13 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
   const reglaDeTrampas = puedeVerTrampas
     ? await prisma.trapRule.findUnique({
         where: { farmLocationId: location.parentLocation?.id ?? location.id },
-        select: { triggerLevel: true, normalDays: true, alertDays: true, suggestedAction: true },
+        select: {
+          triggerLevel: true,
+          normalDays: true,
+          alertDays: true,
+          suggestedAction: true,
+          suggestedMaterial: { select: { id: true, name: true } },
+        },
       })
     : null;
 

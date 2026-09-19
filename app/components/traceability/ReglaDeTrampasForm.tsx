@@ -15,6 +15,7 @@ export interface ReglaActual {
   normalDays: number;
   alertDays: number;
   suggestedAction: string;
+  suggestedMaterial: { id: string; name: string } | null;
 }
 
 /**
@@ -29,10 +30,13 @@ export function ReglaDeTrampasForm({
   locationId,
   farmLocationId,
   regla,
+  productos,
 }: {
   locationId: string;
   farmLocationId: string;
   regla: ReglaActual | null;
+  /** Productos fitosanitarios de la organización de la finca (pieza 3, §5). */
+  productos: readonly { id: string; name: string }[];
 }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(saveTrapRuleFormAction, initialState);
@@ -91,6 +95,22 @@ export function ReglaDeTrampasForm({
           required
           defaultValue={regla?.suggestedAction ?? ""}
         />
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor={id("suggestedMaterialId")}>{t("trapRuleSuggestedMaterial")}</label>
+        <select
+          id={id("suggestedMaterialId")}
+          name="suggestedMaterialId"
+          defaultValue={regla?.suggestedMaterial?.id ?? ""}
+        >
+          <option value="">{t("trapRuleSuggestedMaterialNone")}</option>
+          {productos.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
