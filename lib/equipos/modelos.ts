@@ -16,6 +16,7 @@ import {
   type Dueno,
 } from "../catalogos/propiedad";
 import { prisma } from "../db";
+import { can } from "../rbac/service";
 import { puedeSobreEquipo } from "./equipos";
 
 export class ModeloError extends Error {}
@@ -355,6 +356,27 @@ export async function puedeEditarModelo(userAccountId: string, modelId: string):
   } catch {
     return false;
   }
+}
+
+/**
+ * Los sitios que el alta de un modelo puede ofrecer como dueño: los que pasan
+ * `requireCatalogoAccess` —`equipment:manage` en ESE sitio—, con el nombre de
+ * su organización. No es `sitiosParaRegistrar`: ése acepta también
+ * `location:edit_beneficio`, que abre el registro de equipo pero no el
+ * catálogo, y ofrecería sitios donde el guardado siempre falla.
+ */
+export async function sitiosParaCatalogo(userAccountId: string) {
+  const sitios = await prisma.location.findMany({
+    where: { organizationId: { not: null } },
+    select: { id: true, name: true, organizationId: true, organization: { select: { name: true } } },
+    orderBy: { name: "asc" },
+  });
+  const permitidos = [];
+  for (const s of sitios) {
+    if (!(await can(userAccountId, GESTIONAR.action, GESTIONAR.resourceType, { scopeType: "location", scopeRefId: s.id }, "internal"))) continue;
+    permitidos.push({ id: s.id, name: s.name, organizationId: s.organizationId!, organizationName: s.organization?.name ?? null });
+  }
+  return permitidos;
 }
 
 export async function puedeCrearCompartido(userAccountId: string): Promise<boolean> {

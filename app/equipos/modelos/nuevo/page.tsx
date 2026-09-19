@@ -7,8 +7,7 @@ import { crearModeloFormAction } from "../../../actions/modelos";
 import { BotonDeEnvio } from "../../../components/BotonDeEnvio";
 import { FilasDeEspecificacion } from "../../../components/equipos/FilasDeEspecificacion";
 import { getCurrentUser } from "../../../../lib/auth/session";
-import { puedeCrearCompartido } from "../../../../lib/equipos/modelos";
-import { sitiosParaRegistrar } from "../../../../lib/equipos/equipos";
+import { puedeCrearCompartido, sitiosParaCatalogo } from "../../../../lib/equipos/modelos";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +32,7 @@ export default async function ModeloNuevoPage({
 
   const [t, sitios, compartido, sp] = await Promise.all([
     getTranslations("Equipos"),
-    sitiosParaRegistrar(user.userAccountId),
+    sitiosParaCatalogo(user.userAccountId),
     puedeCrearCompartido(user.userAccountId),
     searchParams,
   ]);

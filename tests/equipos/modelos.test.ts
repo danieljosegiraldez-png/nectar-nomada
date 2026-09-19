@@ -11,9 +11,10 @@ import {
   modelosParaElegir,
   puedeCrearCompartido,
   retirarEspecificacion,
+  sitiosParaCatalogo,
   retirarModelo,
 } from "../../lib/equipos/modelos";
-import { registrarEquipo } from "../../lib/equipos/equipos";
+import { registrarEquipo, sitiosParaRegistrar } from "../../lib/equipos/equipos";
 import { montarFixtures, type Fixtures } from "../helpers/fixturesDeCatalogo";
 
 let f: Fixtures;
@@ -39,6 +40,31 @@ describe("puedeCrearCompartido", () => {
   it("sólo con plataforma", async () => {
     expect(await puedeCrearCompartido(admin)).toBe(true);
     expect(await puedeCrearCompartido(jefeA)).toBe(false);
+  });
+});
+
+describe("sitiosParaCatalogo", () => {
+  it("sólo ofrece sitios donde crear un modelo propio de verdad funciona (equipment:manage)", async () => {
+    expect((await sitiosParaCatalogo(jefeA)).map((s) => s.id)).toContain(sitioA);
+    expect((await sitiosParaCatalogo(jefeA)).map((s) => s.id)).not.toContain(sitioB);
+    expect((await sitiosParaCatalogo(jefeA)).find((s) => s.id === sitioA)?.organizationName).toBe(`TEST A ${RUN}`);
+    // Un operario con la concesión estrecha `location:edit_beneficio` puede
+    // REGISTRAR equipo en su sitio, pero no definir el catálogo: ahí no se ofrece.
+    const asignacion = await prisma.assignment.findFirstOrThrow({ where: { userAccountId: operarioA } });
+    const permiso = await prisma.permission.findFirstOrThrow({ where: { resourceType: "location", action: "edit_beneficio" } });
+    const concesion = await prisma.assignmentPermissionOverride.create({
+      data: { assignmentId: asignacion.id, permissionId: permiso.id, effect: "grant", reason: "prueba de sitiosParaCatalogo", createdBy: admin },
+    });
+    try {
+      // Control positivo: la concesión SÍ abre el registro de equipo en ese sitio.
+      expect((await sitiosParaRegistrar(operarioA)).map((s) => s.id)).toContain(sitioA);
+      expect((await sitiosParaCatalogo(operarioA)).map((s) => s.id)).not.toContain(sitioA);
+      await expect(
+        crearModelo(operarioA, { dueno: { tipo: "propio", locationId: sitioA }, kind: "instrument", manufacturer: `X ${RUN}`, modelName: "concesion", provenanceClass: "original_record" }),
+      ).rejects.toThrow(new CatalogoError("forbidden"));
+    } finally {
+      await prisma.assignmentPermissionOverride.delete({ where: { id: concesion.id } });
+    }
   });
 });
 
