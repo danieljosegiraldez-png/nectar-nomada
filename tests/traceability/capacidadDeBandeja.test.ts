@@ -319,4 +319,32 @@ describe("reglas del pesaje en la base", () => {
     expect((await prisma.dryingTrayType.update({ where: { id: tipoSinPesajes }, data: { organizationId: otraOrg } })).organizationId).toBe(otraOrg);
     expect((await prisma.lot.update({ where: { id: loteSinPesajes }, data: { organizationId: otraOrg } })).organizationId).toBe(otraOrg);
   });
+
+  it("A8: un original se supersede a lo sumo una vez, y la corrección debe ser del mismo tipo de bandeja", async () => {
+    const original = await prisma.dryingTrayWeighing.create({
+      data: { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 8, depthPointsCm: [3, 3, 3], occurredAt: new Date(), provenanceClass: "measured_fact" },
+    });
+    const primeraCorreccion = await prisma.dryingTrayWeighing.create({
+      data: { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 7.9, depthPointsCm: [3, 3, 3], occurredAt: new Date(), provenanceClass: "measured_fact", supersedesId: original.id, correctionReason: "control" },
+    });
+    expect(primeraCorreccion.id).toBeTruthy();
+    // Índice único: un segundo sustituto del MISMO original se rechaza.
+    await expect(prisma.dryingTrayWeighing.create({
+      data: { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 7.8, depthPointsCm: [3, 3, 3], occurredAt: new Date(), provenanceClass: "measured_fact", supersedesId: original.id, correctionReason: "segunda" },
+    })).rejects.toThrow(/Unique constraint failed|drying_tray_weighing_supersedes_unico/);
+
+    // La corrección debe ser del MISMO tipo que el original que dice suplantar.
+    const otroTipo = (await crearTipoDeBandeja(gerente, { organizationId: org, nombre: `otro-tipo ${randomUUID()}`, ancho: 1, largo: 1, unidad: "ft" })).id;
+    tipos.push(otroTipo);
+    const original2 = await prisma.dryingTrayWeighing.create({
+      data: { trayTypeId: tipo4x2, lotId, materialState: "PARCHMENT", netKg: 8, depthPointsCm: [3, 3, 3], occurredAt: new Date(), provenanceClass: "measured_fact" },
+    });
+    await expect(prisma.dryingTrayWeighing.create({
+      data: { trayTypeId: otroTipo, lotId, materialState: "PARCHMENT", netKg: 8, depthPointsCm: [3, 3, 3], occurredAt: new Date(), provenanceClass: "measured_fact", supersedesId: original2.id, correctionReason: "de otro tipo" },
+    })).rejects.toThrow(/mismo tipo de bandeja/);
+    // Control: del MISMO tipo, entra.
+    expect((await prisma.dryingTrayWeighing.create({
+      data: { trayTypeId: tipo4x2, lotId, materialState: "PARCHMENT", netKg: 7.9, depthPointsCm: [3, 3, 3], occurredAt: new Date(), provenanceClass: "measured_fact", supersedesId: original2.id, correctionReason: "del mismo tipo" },
+    })).id).toBeTruthy();
+  });
 });

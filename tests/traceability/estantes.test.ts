@@ -305,6 +305,25 @@ describe("reglas del estante en la base", () => {
     const rackSolo = await prisma.location.create({ data: { name: nombre(), locationType: "drying_rack", parentLocationId: inv.id } });
     expect((await prisma.location.update({ where: { id: rackSolo.id }, data: { locationType: "site" } })).locationType).toBe("site");
   });
+
+  it("A8 (hallazgo P2 de la revisión independiente): una instalación con camas SIN nivel ni puesto no puede convertirse en estante", async () => {
+    const s = await sitio();
+    const inv = await prisma.location.create({ data: { name: nombre(), locationType: "drying_facility", parentLocationId: s.id } });
+    // Camas SUELTAS de la instalación (sin rackLevel/rackSlot): el patrón normal
+    // de una instalación que no es un estante.
+    await prisma.location.create({ data: { name: nombre(), locationType: "drying_bed", parentLocationId: inv.id } });
+    await expect(prisma.location.update({ where: { id: inv.id }, data: { locationType: "drying_rack" } }))
+      .rejects.toThrow(/camas sin nivel ni puesto no puede convertirse en estante/);
+
+    // No hay una instalación "control" con camas YA con nivel y puesto: el
+    // disparador de más arriba («El puesto solo en una posicion de estante»)
+    // ya impide que una cama cuelgue con `rack_slot` de un padre que no sea
+    // `drying_rack` — así que una cama bajo una instalación SIEMPRE tiene
+    // `rack_slot` nulo, y esta regla nueva SIEMPRE la bloquea. El control que sí
+    // existe es el de abajo: sin ninguna cama, no hay nada incompatible.
+    const invVacia = await prisma.location.create({ data: { name: nombre(), locationType: "drying_facility", parentLocationId: inv.id } });
+    expect((await prisma.location.update({ where: { id: invVacia.id }, data: { locationType: "drying_rack" } })).locationType).toBe("drying_rack");
+  });
 });
 
 describe("la inspección de hoy no ofrece posiciones de estante", () => {
