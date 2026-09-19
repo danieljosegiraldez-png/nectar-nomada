@@ -460,38 +460,47 @@ describe("cargar y cerrar a la vez no dejan una corrida incoherente", () => {
   // primera confirme, no hay carrera, y la prueba pasa sin medir nada.
   const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const resultado = (p: PromiseLike<unknown>) => Promise.resolve(p).then(() => null, (e: unknown) => e as Error);
-  const inicio = () => Date.now();
+
+  // Los controles de que HUBO carrera, que la segunda pasada de Codex exigió:
+  //  (a) la primera ya tenía su bloqueo —su sentencia terminó— ANTES de que
+  //      arrancara la segunda (`bloqueadoEn < arranca`);
+  //  (b) la SEGUNDA tardó ella misma casi lo que faltaba del bloqueo. Medir desde
+  //      t0 no vale: eso pasa aunque la segunda no haya esperado nada.
+  async function carrera(primera: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<unknown>, segunda: () => PromiseLike<unknown>) {
+    let bloqueadoEn = 0;
+    const lenta = resultado(prisma.$transaction(async (tx) => {
+      await primera(tx);
+      bloqueadoEn = Date.now();
+      await espera(1500);
+    }, { timeout: 10_000 }));
+    await espera(300);
+    const arranca = Date.now();
+    const error = await resultado(segunda());
+    const tardo = Date.now() - arranca;
+    expect(await lenta).toBeNull();
+    expect(bloqueadoEn).toBeGreaterThan(0);
+    expect(bloqueadoEn).toBeLessThan(arranca);   // (a)
+    expect(tardo).toBeGreaterThanOrEqual(1000);  // (b): 1500 − 300 − margen
+    return error;
+  }
 
   it("carga primero: el cierre espera y lo rechaza", async () => {
     const r = await corrida();
     const b = await equipo("vessel", "carrera-1");
-    const t0 = inicio();
-    const cargarLento = resultado(prisma.$transaction(async (tx) => {
-      await tx.dryingRunTray.create({ data: { dryingRunId: r.id, equipmentId: b.id, desde: new Date("2026-09-01T10:00:00Z"), provenanceClass: "original_record" } });
-      await espera(1500);
-    }, { timeout: 10_000 }));
-    await espera(300);
-    const cerrar = resultado(prisma.dryingRun.update({ where: { id: r.id }, data: { endedAt: new Date("2026-09-02T10:00:00Z") } }));
-    expect(await cargarLento).toBeNull();
-    const error = await cerrar;
-    // Control de que HUBO carrera: el cierre tardó lo que el bloqueo, no volvió al instante.
-    expect(Date.now() - t0).toBeGreaterThanOrEqual(1400);
+    const error = await carrera(
+      (tx) => tx.dryingRunTray.create({ data: { dryingRunId: r.id, equipmentId: b.id, desde: new Date("2026-09-01T10:00:00Z"), provenanceClass: "original_record" } }),
+      () => prisma.dryingRun.update({ where: { id: r.id }, data: { endedAt: new Date("2026-09-02T10:00:00Z") } }),
+    );
     expect(String(error)).toMatch(/bandejas sin bajar/);
   });
 
   it("cierra primero: la carga espera y la rechaza", async () => {
     const r = await corrida();
     const b = await equipo("vessel", "carrera-2");
-    const t0 = inicio();
-    const cerrarLento = resultado(prisma.$transaction(async (tx) => {
-      await tx.dryingRun.update({ where: { id: r.id }, data: { endedAt: new Date("2026-09-02T10:00:00Z") } });
-      await espera(1500);
-    }, { timeout: 10_000 }));
-    await espera(300);
-    const cargarTarde = resultado(cargar(r.id, b.id, "2026-09-01T10:00:00Z"));
-    expect(await cerrarLento).toBeNull();
-    const error = await cargarTarde;
-    expect(Date.now() - t0).toBeGreaterThanOrEqual(1400);
+    const error = await carrera(
+      (tx) => tx.dryingRun.update({ where: { id: r.id }, data: { endedAt: new Date("2026-09-02T10:00:00Z") } }),
+      () => cargar(r.id, b.id, "2026-09-01T10:00:00Z"),
+    );
     expect(String(error)).toMatch(/ya esta cerrado/);
   });
 });
@@ -737,7 +746,8 @@ export interface Posicion { camaId: string; ajena: boolean; cama: string | null;
 export interface BandejaEnCorrida {
   id: string; equipmentId: string; nombre: string; desde: Date; hasta: Date | null;
   posicion: Posicion | null;   // null = nunca se trasladó a una cama
-  conflicto: string[];         // OTRAS bandejas de la organización cuyo último traslado es esta misma cama
+  conflicto: string[];         // nombres de OTRAS bandejas de la organización cuyo último traslado es esta misma cama, que esta persona puede ver
+  conflictoSinAcceso: number;  // las que también están ahí pero esta persona no ve: se cuentan, no se nombran
 }
 export async function cargarBandeja(userAccountId: string, input: { dryingRunId: string; equipmentId: string; desde: Date }): Promise<{ id: string }>;
 export async function bajarBandeja(userAccountId: string, input: { dryingRunTrayId: string; hasta: Date; cierre?: CierreDelSecado | null }): Promise<{ id: string; cerro: boolean }>;
@@ -978,6 +988,28 @@ describe("dónde está cada bandeja", () => {
     expect(filas.flatMap((f) => f.conflicto)).not.toContain(deOtra.name);
   });
 
+  it("una bandeja que esta persona no ve cuenta en el conflicto, pero sin su nombre", async () => {
+    const run = await secado("conflicto-oculto");
+    const p = await posicion(5, 5);
+    const visible = await bandeja("visible-5");
+    await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: visible.id, desde: T("2026-09-01T11:00:00Z") });
+    await trasladar(visible.id, p.id, "2026-09-01T12:00:00Z");
+    const secreta = await bandeja("secreta-5");
+    await prisma.equipment.update({ where: { id: secreta.id }, data: { classification: "trade_secret" } });
+    await trasladar(secreta.id, p.id, "2026-09-01T12:30:00Z");
+    // Control ANTES de afirmar nada: el caso existe sólo si el operador de verdad
+    // no ve `trade_secret`. El catálogo dice que Farm Operator sólo tiene
+    // `clear_partner` y `clear_internal`, y también que la compuerta de
+    // clasificación puede no estar aplicada. Si esto sale `true`, el caso no se
+    // puede construir aquí: se dice en el PR y el flip 9 no cuenta.
+    const { puedeVerEquipo } = await import("../../lib/equipos/equipos");
+    expect(await puedeVerEquipo(operador, secreta)).toBe(false);
+
+    const fila = (await bandejasDeCorrida(operador, run.id)).find((f) => f.equipmentId === visible.id)!;
+    expect(fila.conflicto).not.toContain(secreta.name);
+    expect(fila.conflictoSinAcceso).toBe(1);
+  });
+
   it("disponibles: recipientes activos, de la organización, visibles y libres", async () => {
     const run = await secado("disponibles");
     const libre = await bandeja("libre");
@@ -1077,9 +1109,18 @@ export async function endDryingRun(userAccountId: string, input: EndDryingRunInp
     throw new BandejaError("bandejas_sin_bajar");
   }
 
-  return prisma.$transaction((tx) => cerrarCorridaEnTransaccion(tx, userAccountId, run.id, sourceLot, input));
+  try {
+    return await prisma.$transaction((tx) => cerrarCorridaEnTransaccion(tx, userAccountId, run.id, sourceLot, input));
+  } catch (error) {
+    // Si una bandeja se cargó entre la cuenta de arriba y el cierre, la base lo
+    // rechaza: llega como el mismo código, no como SQL (segunda pasada de Codex).
+    if (error instanceof Error && /bandejas sin bajar/.test(error.message)) throw new BandejaError("bandejas_sin_bajar");
+    throw error;
+  }
 }
 ```
+
+**Riesgo aceptado y escrito:** un `UPDATE` directo de una fila de bandeja, fuera del servicio, bloquea la fila antes que la corrida. `bajarBandeja` bloquea la corrida antes que la fila. Si coincidieran, Postgres detecta el interbloqueo y aborta una de las dos: da un error y no corrompe nada. Hoy ningún camino de la aplicación hace ese `UPDATE` directo, sólo las pruebas y una reparación a mano. Se anota en el ADR.
 
 Comprobar con `npx vitest run tests/traceability/drying.test.ts` que el cierre de siempre sigue igual **antes** de seguir. Es el control de que el movimiento no cambió nada.
 
@@ -1114,6 +1155,7 @@ export interface BandejaEnCorrida {
   id: string; equipmentId: string; nombre: string; desde: Date; hasta: Date | null;
   posicion: Posicion | null;
   conflicto: string[];
+  conflictoSinAcceso: number;
 }
 
 /**
@@ -1140,7 +1182,11 @@ async function corridaConPermiso(userAccountId: string, dryingRunId: string, acc
 function traducirRechazo(error: unknown): unknown {
   if (error instanceof BandejaError) return error;
   const texto = error instanceof Error ? error.message : String(error);
-  if ((error as { code?: string })?.code === "P2002" || /ya lleva otro lote/.test(texto)) return new BandejaError("bandeja_ocupada");
+  // Sólo la unicidad de ESTA tabla es «ocupada»: el cierre reutilizado puede
+  // chocar con otra (p. ej. el código del lote de salida) y no es lo mismo.
+  const p2002DeLaBandeja = (error as { code?: string })?.code === "P2002"
+    && /drying_run_tray|una_abierta_por_bandeja/.test(JSON.stringify((error as { meta?: unknown }).meta ?? {}) + texto);
+  if (p2002DeLaBandeja || /ya lleva otro lote/.test(texto)) return new BandejaError("bandeja_ocupada");
   if (/con cama no lleva bandejas/.test(texto)) return new BandejaError("corrida_con_cama");
   if (/ya esta cerrado/.test(texto)) return new BandejaError("secado_cerrado");
   if (/tipo recipiente/.test(texto)) return new BandejaError("no_es_bandeja");
@@ -1252,33 +1298,42 @@ export async function bandejasDeCorrida(userAccountId: string, dryingRunId: stri
   if (camas.length > 0) {
     const candidatos = await prisma.equipmentTransfer.findMany({
       where: { toLocationId: { in: camas }, equipment: { organizationId: lot.organizationId, kind: "vessel" } },
-      select: { equipmentId: true, equipment: { select: { name: true } } },
+      select: { equipmentId: true, equipment: { select: { id: true, name: true, projectId: true, classification: true } } },
       distinct: ["equipmentId"],
     });
     for (const c of candidatos) {
       const p = await posicionDeBandeja(c.equipmentId, ahora, lot.organizationId);
       if (p && !p.ajena && camas.includes(p.camaId)) {
-        ocupantes.set(p.camaId, [...(ocupantes.get(p.camaId) ?? []), { equipmentId: c.equipmentId, nombre: c.equipment.name }]);
+        // El conflicto se cuenta siempre; el NOMBRE sólo si esta persona ve ese equipo
+        // (segunda pasada de Codex): mismo `can(view)` que en `bandejasDisponibles`.
+        const nombre = (await puedeVerEquipo(userAccountId, c.equipment)) ? c.equipment.name : null;
+        ocupantes.set(p.camaId, [...(ocupantes.get(p.camaId) ?? []), { equipmentId: c.equipmentId, nombre }]);
       }
     }
   }
-  return conPosicion.map(({ f, posicion }) => ({
-    id: f.id, equipmentId: f.equipmentId, nombre: f.equipment.name, desde: f.desde, hasta: f.hasta, posicion,
-    conflicto: f.hasta === null && posicion && !posicion.ajena
-      ? (ocupantes.get(posicion.camaId) ?? []).filter((o) => o.equipmentId !== f.equipmentId).map((o) => o.nombre)
-      : [],
-  }));
+  return conPosicion.map(({ f, posicion }) => {
+    const otros = f.hasta === null && posicion && !posicion.ajena
+      ? (ocupantes.get(posicion.camaId) ?? []).filter((o) => o.equipmentId !== f.equipmentId)
+      : [];
+    return {
+      id: f.id, equipmentId: f.equipmentId, nombre: f.equipment.name, desde: f.desde, hasta: f.hasta, posicion,
+      conflicto: otros.flatMap((o) => (o.nombre === null ? [] : [o.nombre])),
+      conflictoSinAcceso: otros.filter((o) => o.nombre === null).length,
+    };
+  });
 }
 
 export async function bandejasDisponibles(userAccountId: string, dryingRunId: string) {
   const { lot } = await corridaConPermiso(userAccountId, dryingRunId);
+  // SIN `take`: un tope ANTES del filtro de permiso podía devolver una lista vacía
+  // teniendo bandejas visibles más abajo (segunda pasada de Codex). La consulta ya
+  // está acotada a los recipientes libres y activos de UNA organización.
   const filas = await prisma.equipment.findMany({
     where: {
       organizationId: lot.organizationId, kind: "vessel", lifecycleStatus: "active",
       dryingRunTrays: { none: { hasta: null } },
     },
     orderBy: { name: "asc" },
-    take: 200,
   });
   const visibles = [];
   for (const e of filas) if (await puedeVerEquipo(userAccountId, e)) visibles.push({ id: e.id, nombre: e.name });
@@ -1286,7 +1341,7 @@ export async function bandejasDisponibles(userAccountId: string, dryingRunId: st
 }
 ```
 
-**Sobre el `take: 200`:** es la forma lenta de «un admin ve la base entera» (CLAUDE.md). El filtro es la organización del lote, así que sólo corta en una organización con más de 200 recipientes libres. Al implementarlo, se cuenta cuántos hay hoy y el número se escribe en el comentario de la función.
+**Sin tope, a propósito**, y es la forma lenta de «un admin ve la base entera» (CLAUDE.md) vista del otro lado: un tope que se aplica antes del filtro de permiso esconde lo que sí se podía ver. Al implementarlo, se cuentan los recipientes activos de la organización más grande de la base local y el número se escribe en el comentario. Si algún día pasan de unos cientos, la solución es paginar **después** de filtrar, no volver a poner el tope.
 
 - [ ] **Paso 5: comprobar que pasan**
 
@@ -1420,6 +1475,7 @@ type Fila = {
   id: string; nombre: string; desde: string; hasta: string | null;
   posicion: { ajena: boolean; cama: string | null; instalacion: string | null; nivel: number | null; fila: number | null } | null;
   conflicto: string[];
+  conflictoSinAcceso: number;
 };
 type Props = {
   lotId: string; dryingRunId: string; filas: Fila[]; disponibles: { id: string; nombre: string }[]; puedeRegistrar: boolean;
@@ -1442,7 +1498,9 @@ export function BandejasDelSecado({ lotId, dryingRunId, filas, disponibles, pued
     {filas.length === 0 ? <p className="nn-muted">{t("ninguna")}</p> : <ul>
       {filas.map((f) => <li key={f.id}>
         <strong>{f.nombre}</strong> · {donde(f)} · {f.hasta ? t("bajada") : t("cargada")}
-        {f.conflicto.length > 0 && <p role="alert">{t("conflicto", { otras: f.conflicto.join(", ") })}</p>}
+        {f.conflicto.length + f.conflictoSinAcceso > 0 && <p role="alert">{t("conflicto", {
+          otras: [...f.conflicto, ...(f.conflictoSinAcceso > 0 ? [t("conflictoSinAcceso", { n: f.conflictoSinAcceso })] : [])].join(", "),
+        })}</p>}
         {puedeRegistrar && f.hasta === null && (abiertas > 1
           ? <form action={accionBajar} style={{ display: "inline" }}>
             <input type="hidden" name="lotId" value={lotId} />
@@ -1536,6 +1594,7 @@ En `app/lots/[id]/page.tsx`:
     "comoSeMueve": "Mover una bandeja de nivel o fila es un traslado del equipo: queda quién y cuándo.",
     "cierreEspera": "Este secado va en {n} bandejas cargadas. Termina al bajar la última: su formulario pide los datos del cierre.",
     "posicionAjena": "en una cama de otra organización",
+    "conflictoSinAcceso": "{n, plural, one {# bandeja que tu cuenta no puede ver} other {# bandejas que tu cuenta no puede ver}}",
     "ultimaCierra": "Es la última bandeja cargada: al bajarla se cierra el secado del lote. El paso a almacenamiento sigue siendo aparte.",
     "codigoSalida": "Código del lote que sale",
     "tipoSalida": "Tipo del lote que sale",
@@ -1579,6 +1638,7 @@ En `app/lots/[id]/page.tsx`:
     "comoSeMueve": "Moving a tray to another level or row is an equipment move: who and when are recorded.",
     "cierreEspera": "This drying run has {n} trays loaded. It ends when the last one is unloaded: that form asks for the closing data.",
     "posicionAjena": "on a bed of another organization",
+    "conflictoSinAcceso": "{n, plural, one {# tray your account cannot see} other {# trays your account cannot see}}",
     "ultimaCierra": "This is the last loaded tray: unloading it closes the lot's drying. Moving to storage is still a separate step.",
     "codigoSalida": "Code of the outgoing lot",
     "tipoSalida": "Type of the outgoing lot",
@@ -1704,6 +1764,8 @@ Cada uno imprime el sha del archivo antes y después (distintos, o se aborta), s
 6. En `posicionDeBandeja`, quitar `occurredAt: { lte: en }`: debe caer «una bandeja movida dos veces…».
 7. En `cargarBandeja`, quitar la comprobación `puedeVerEquipo`: debe caer «rechaza cada caso inválido…», en `bandeja_sin_acceso`.
 8. En `traducirRechazo`, devolver siempre `error`: debe caer «un rechazo de la BASE llega como código…».
+9. En `bandejasDeCorrida`, poner `nombre = c.equipment.name` sin preguntar por `puedeVerEquipo`: debe caer «una bandeja que esta persona no ve…». **Sólo vale si su control previo salió `false`**; si salió `true`, este flip no cuenta y se dice.
+10. En la prueba de carrera, quitar la espera `await espera(300)`: el control (a) debe fallar, o el (b). Es el flip de la **prueba**, no del código: demuestra que sus controles distinguen una carrera real de una ejecución en serie.
 
 - [ ] **Paso 6: PR**
 
