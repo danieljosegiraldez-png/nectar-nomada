@@ -2,13 +2,13 @@
 
 > **Para quien ejecute este plan:** SUB-SKILL REQUERIDA: usar `superpowers:subagent-driven-development` (recomendado) o `superpowers:executing-plans` para ejecutar tarea por tarea. Los pasos usan checkboxes (`- [ ]`) para llevar la cuenta.
 
-**Objetivo:** dar a la parcela una rejilla (hileras × plantas por hilera, con su origen y sus dos distancias) y hacer que la microparcela se defina como un rango de celdas dentro de esa rejilla — la primera de las tres entregas del spec.
+**Objetivo:** dar a la parcela una rejilla (hileras × plantas por hilera, con su origen y sus dos distancias), hacer que la microparcela se defina como un rango de celdas dentro de esa rejilla, y cerrar el anidamiento de microparcelas a un solo nivel (spec §6.bis) — la primera de las tres entregas del spec.
 
 **Arquitectura:** cuatro columnas nuevas de rejilla y cuatro de rango en `core.location` (nunca una tabla nueva: la microparcela ya es una `Location`, F1 §2, y el rango es un atributo suyo, como su `subdivisionReason`). Las reglas de forma del rango (extremos ≥ 1, desde ≤ hasta) son `CHECK` en la misma fila; que el rango quepa en la rejilla de SU PADRE es una regla entre dos filas, así que vive en un disparador — mismo patrón que `exigir_cama_de_secado` (`20260915230000`). El total de celdas y la comparación contra las plantas registradas son funciones puras, nunca una columna: se calculan al leer.
 
 **Stack:** TypeScript, Next.js (App Router), Prisma, PostgreSQL, vitest, next-intl.
 
-**Spec:** `docs/superpowers/specs/2026-09-19-rejilla-bloques-y-celdas-design.md`. Este plan implementa sólo su §7.1 («la rejilla y la microparcela como rango»); al final hay una sección que dice qué queda para las entregas 2 y 3.
+**Spec:** `docs/superpowers/specs/2026-09-19-rejilla-bloques-y-celdas-design.md`, con las tres decisiones añadidas en el commit `7bef659` (§6, §6.bis, §6.ter). Este plan implementa sólo su §7.1 («la rejilla y la microparcela como rango, y el cierre del anidamiento a un solo nivel»): la rejilla, el rango, y §6.bis. §6 (permisos en dos niveles) y §6.ter (la vista de finca) son de la entrega 2 y no llevan tarea aquí. Al final hay una sección que dice qué queda para las entregas 2 y 3.
 
 **Supuesto sobre la base:** este worktree sale de `origin/main`, y el PR #445 («Parcela en pestañas y ronda de trampas de la finca», rama `vistas-finca-parcela`) todavía no se ha fusionado. Las Tareas 1 a 5 (esquema, funciones puras y servicio) no lo necesitan y se pueden ejecutar ya. Las Tareas 6 y 7 tocan pantallas — `app/plots/[id]/ajustes/page.tsx`, `app/plots/[id]/page.tsx` (pestaña «Trampas y bloques») y `app/plots/[id]/microparcela/nueva/page.tsx` — que el PR #445 reescribe o crea; **cada una lo dice explícitamente y da por hecho que #445 ya está fusionado** cuando se ejecuten.
 
@@ -832,15 +832,16 @@ EOF
 
 ---
 
-## Tarea 4: el rango en `createMicrolot`
+## Tarea 4: el rango en `createMicrolot`, y el cierre del anidamiento a un solo nivel
 
 **Archivos:**
 - Modificar: `lib/traceability/locations.ts`
-- Modificar: `tests/traceability/rejillaDeParcela.test.ts` (añade un `describe`)
+- Modificar: `tests/traceability/rejillaDeParcela.test.ts` (añade un `describe`, y dos `it` más dentro de él)
 
 **Interfaces:**
 - Consume: `validarRango` de `lib/traceability/rejilla.ts` (Tarea 2).
 - Produce: `CreateMicrolotInput` gana `range?: { rowFrom: number; rowTo: number; plantFrom: number; plantTo: number } | null`. `createMicrolot` lo valida y lo persiste. La Tarea 7 (alta de microparcela) llama a esto a través de `crearMicroparcelaAction`.
+- Produce: `puedeSerPadreDeMicroparcela(candidato: { locationType: LocationType; parentLocation: { locationType: LocationType } | null }): boolean` — spec §6.bis, decisión de Daniel del 2026-09-19: una microparcela sólo puede colgar de una parcela que sea ella misma hija de un sitio, nunca de otra microparcela. `createMicrolot` la usa sobre el padre propuesto; las Tareas 6 y 7 la usan sobre la Location que se está viendo, para decidir si ofrecen el enlace «Nueva microparcela» — **la misma función en los tres sitios, para que la regla no se pueda desincronizar entre la pantalla y el servidor.**
 
 - [ ] **Paso 1: escribir las pruebas, en rojo porque `range` no existe en el input**
 
@@ -990,31 +991,159 @@ Y dentro del `data:` de `tx.location.create`, después de `subdivisionReasonNote
 npx vitest run tests/traceability/rejillaDeParcela.test.ts
 ```
 
-- [ ] **Paso 5: flip-test — quitar la validación temprana y ver que la base la sigue cazando, pero con otro mensaje**
+- [ ] **Paso 5: flip-test del rango — quitar la validación temprana y ver que la base la sigue cazando, pero con otro mensaje**
 
 Comentar temporalmente el bloque `if (input.range) { ... throw ... }` de `createMicrolot`. Correr la suite del archivo: la prueba «rechaza un rango que no cabe» debe **seguir cayendo** (ahora por el disparador de la Tarea 1, con `Prisma.PrismaClientKnownRequestError` en vez de `LocationValidationError`) — confirma que la Tarea 1 es la red de verdad y la Tarea 4 sólo da un mensaje mejor. Restaurar el bloque.
 
-- [ ] **Paso 6: typecheck y build**
+### El cierre del anidamiento (spec §6.bis, decisión de Daniel del 2026-09-19)
+
+Hoy `createMicrolot` sólo comprueba que el padre sea una `plot`, y una microparcela **también** es `plot` (copia el tipo de su padre) — así que anidar una microparcela bajo otra no tiene límite. La pantalla de gestión de Microparcela Norte lo hizo evidente, y la decisión de Daniel es un solo nivel: parcela → microparcela, y ahí se acaba. Lo que se crea dentro de una microparcela son bloques (entrega 2), nunca otra microparcela.
+
+- [ ] **Paso 6: escribir las pruebas del cierre, en rojo porque hoy no hay ningún límite**
+
+Añadir, dentro del mismo `describe("el rango en createMicrolot", ...)` del Paso 1 — dos `it` más, justo antes del `});` que ya lo cierra:
+
+```typescript
+  it("crea una microparcela bajo una parcela de verdad (control positivo — nivel permitido)", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const micro = await createMicrolot(usuario.userAccountId, {
+      parentLocationId: parcela.id,
+      name: "TEST Microparcela de primer nivel",
+      subdivisionReason: "altitude",
+    });
+    locationIds.push(micro.id);
+    expect(micro.parentLocationId).toBe(parcela.id);
+  });
+
+  it("rechaza una microparcela bajo otra microparcela (spec §6.bis: un solo nivel)", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const microparcela = await createMicrolot(usuario.userAccountId, {
+      parentLocationId: parcela.id,
+      name: "TEST Microparcela de primer nivel (para anidar bajo ella)",
+      subdivisionReason: "altitude",
+    });
+    locationIds.push(microparcela.id);
+
+    await expect(
+      createMicrolot(usuario.userAccountId, {
+        parentLocationId: microparcela.id,
+        name: "TEST Microparcela anidada",
+        subdivisionReason: "altitude",
+      }),
+    ).rejects.toThrow(LocationValidationError);
+  });
+```
+
+Las cuatro pruebas de los Pasos 1-5 (crear con rango, crear sin rango, rango fuera de rejilla, sin rejilla en el padre) quedan sin tocar y son, tal cual, el control de que el cierre no rompe el caso normal: las cuatro cuelgan de `crearParcela()`, cuyo padre es un sitio de verdad.
+
+- [ ] **Paso 7: correr y comprobar que falla sólo la de anidamiento**
+
+```bash
+npx vitest run tests/traceability/rejillaDeParcela.test.ts
+```
+
+Esperado: «control positivo — nivel permitido» **pasa** (nada cambió todavía para ese caso); «rechaza una microparcela bajo otra microparcela» **falla**, porque hoy `createMicrolot` la deja crear sin protestar.
+
+- [ ] **Paso 8: `puedeSerPadreDeMicroparcela`, y el nuevo rechazo en `createMicrolot`**
+
+En `lib/traceability/locations.ts`, después de la función `nombreLibreBajo` y antes de `export interface CreateMicrolotInput`:
+
+```typescript
+/**
+ * ¿Puede colgar una microparcela nueva de esta Location? Spec §6.bis,
+ * decisión de Daniel del 2026-09-19: un solo nivel — se rechaza
+ * específicamente cuando el candidato es OTRA microparcela, es decir,
+ * cuando su propio padre es también una `plot`. Una `plot` sin padre
+ * registrado (dato legado, sin jerarquía de sitio) no es una microparcela
+ * y sigue permitida: no es el caso que el spec señala, y no hay nada que
+ * decir sobre datos que no tienen la forma que esta regla vigila.
+ *
+ * Única regla, usada tanto por `createMicrolot` (para rechazar el padre
+ * que no califica) como por las dos pantallas que ofrecen «Nueva
+ * microparcela» (Tareas 6 y 7) — para no mostrar ni permitir un
+ * formulario que el servidor va a rechazar igual.
+ */
+export function puedeSerPadreDeMicroparcela(candidato: {
+  locationType: LocationType;
+  parentLocation: { locationType: LocationType } | null;
+}): boolean {
+  if (candidato.locationType !== "plot") return false;
+  return candidato.parentLocation?.locationType !== "plot";
+}
+```
+
+(`LocationType` ya está en el `import type` de la cabecera del archivo — lo usa `TIPOS_DEL_BENEFICIO` — así que no hay que añadir nada ahí.)
+
+Dentro de `createMicrolot`, la línea que busca al padre pasa a traer también el tipo de SU padre:
+
+```typescript
+  const parent = await prisma.location.findUnique({
+    where: { id: input.parentLocationId },
+    include: { parentLocation: { select: { locationType: true } } },
+  });
+```
+
+(sustituye a `const parent = await prisma.location.findUnique({ where: { id: input.parentLocationId } });`. `parent.rowCount`/`parent.plantsPerRow`/`parent.organizationId`, que el resto de la función ya usa, siguen presentes: `include` no le quita nada a la fila, sólo le añade la relación.)
+
+Y, después de las dos comprobaciones de tipo ya existentes (`beneficio_no_se_subdivide` / `secado_no_se_subdivide`) y antes de la comprobación del rango del Paso 3:
+
+```typescript
+  // Spec §6.bis — un solo nivel de microparcela. Va DESPUÉS de las dos
+  // comprobaciones de arriba a propósito: un padre `beneficio` o de secado
+  // ya salió con SU propio mensaje, y éste no se lo pisa.
+  if (!puedeSerPadreDeMicroparcela(parent)) throw new LocationValidationError("microparcela_anidada");
+```
+
+- [ ] **Paso 9: correr, y comprobar que pasan TODAS — incluido el fixture legado de `f1.test.ts`**
+
+```bash
+npx vitest run tests/traceability/rejillaDeParcela.test.ts tests/traceability/f1.test.ts
+```
+
+Esperado: todo en verde. `f1.test.ts` crea su `Location` de prueba con `locationType: "plot"` y **sin** `parentLocationId` (dato legado, sin jerarquía de sitio) y le hace un `createMicrolot` encima en su propio `describe("createMicrolot", ...)` — es exactamente el caso «`plot` sin padre» que el Paso 8 deja pasar a propósito. Si esa suite cae aquí, la regla quedó más estricta de lo que el spec pide (rechazaría también este caso legado) y hay que revisar el Paso 8, no el fixture.
+
+- [ ] **Paso 10: flip-test del cierre — comentar el nuevo rechazo y ver caer sólo la prueba de anidamiento**
+
+Comentar temporalmente la línea `if (!puedeSerPadreDeMicroparcela(parent)) throw ...` del Paso 8. Correr `npx vitest run tests/traceability/rejillaDeParcela.test.ts tests/traceability/f1.test.ts` y comprobar que cae **únicamente** «rechaza una microparcela bajo otra microparcela» — ninguna otra, en ninguno de los dos archivos. Restaurar la línea.
+
+- [ ] **Paso 11: typecheck y build**
 
 ```bash
 npm run typecheck
 npm run build
 ```
 
-- [ ] **Paso 7: commit**
+- [ ] **Paso 12: commit**
 
 ```bash
 git add lib/traceability/locations.ts tests/traceability/rejillaDeParcela.test.ts
 git commit -F- <<'EOF'
-createMicrolot acepta el rango de la microparcela, validado antes de escribir
+createMicrolot: el rango de la microparcela, y el cierre a un solo nivel
 
-CreateMicrolotInput.range es opcional: sin rejilla en la parcela madre,
-"sin rango" es la respuesta honesta. Cuando se manda, validarRango lo
-comprueba antes de la transacción para dar un LocationValidationError legible;
-el disparador de la base (Tarea 1) sigue siendo la red que no depende de
-esta llamada.
+CreateMicrolotInput.range es opcional, validado con validarRango antes de
+la transacción (el disparador de la base de la Tarea 1 sigue siendo la
+red real). Y spec §6.bis, decisión de Daniel del 2026-09-19: una
+microparcela sólo puede colgar de una parcela que sea ella misma hija de
+un sitio, nunca de otra microparcela. puedeSerPadreDeMicroparcela es la
+única regla que lo decide, compartida con las pantallas de alta de
+microparcela (Tareas 6 y 7) para que no se pueda desincronizar de lo que
+el servidor exige.
 
-Spec: docs/superpowers/specs/2026-09-19-rejilla-bloques-y-celdas-design.md §4.2.
+Spec: docs/superpowers/specs/2026-09-19-rejilla-bloques-y-celdas-design.md §4.2, §6.bis.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 EOF
@@ -1030,7 +1159,7 @@ EOF
 
 **Interfaces:**
 - Consume: `compararCeldasConPlantas` de `lib/traceability/rejilla.ts` (Tarea 2).
-- Produce: `getPlotDetail` devuelve, además de lo existente, `location.gridOrigin`, `location.rowCount`, `location.plantsPerRow`, `location.gridRowSpacingMeters`, `location.gridPlantSpacingMeters`, `location.rangeRowFrom`, `location.rangeRowTo`, `location.rangePlantFrom`, `location.rangePlantTo`, y un campo nuevo `gridComparison: ComparacionCeldas`. Las Tareas 6 y 7 leen esto desde `app/plots/[id]/ajustes/page.tsx` y `app/plots/[id]/microparcela/nueva/page.tsx`.
+- Produce: `getPlotDetail` devuelve, además de lo existente, `location.gridOrigin`, `location.rowCount`, `location.plantsPerRow`, `location.gridRowSpacingMeters`, `location.gridPlantSpacingMeters`, `location.rangeRowFrom`, `location.rangeRowTo`, `location.rangePlantFrom`, `location.rangePlantTo`, `location.parentLocation.locationType`, y un campo nuevo `gridComparison: ComparacionCeldas`. Las Tareas 6 y 7 leen esto desde `app/plots/[id]/ajustes/page.tsx` y `app/plots/[id]/microparcela/nueva/page.tsx` — `parentLocation.locationType` en particular es lo que `puedeSerPadreDeMicroparcela` (Tarea 4) necesita para decidir si ofrecen «Nueva microparcela».
 
 - [ ] **Paso 1: escribir la prueba, en rojo porque el campo no existe todavía**
 
@@ -1052,6 +1181,9 @@ describe("getPlotDetail incluye la rejilla y la comparación de celdas", () => {
     const detail = await getPlotDetail(usuario.userAccountId, parcela.id);
     expect(detail.gridComparison.estado).toBe("sin_rejilla");
     expect(detail.location.rowCount).toBeNull();
+    // §6.bis (Tarea 4) decide con esto: el padre de una parcela de verdad
+    // es un sitio, nunca otra `plot`.
+    expect(detail.location.parentLocation?.locationType).toBe("site");
   });
 
   it("con rejilla y sin siembras, compara contra cero plantas conocidas", async () => {
@@ -1106,6 +1238,14 @@ En el `select` del `prisma.location.findUnique` dentro de `getPlotDetail`, despu
       rangePlantTo: true,
 ```
 
+Y, para que las Tareas 6 y 7 puedan decidir con `puedeSerPadreDeMicroparcela` (Tarea 4) si esta Location puede ser madre de una microparcela nueva (spec §6.bis), el `parentLocation` anidado del mismo `select` gana `locationType`:
+
+```typescript
+      parentLocation: { select: { id: true, name: true, locationType: true, organization: { select: { name: true } } } },
+```
+
+(sustituye a `parentLocation: { select: { id: true, name: true, organization: { select: { name: true } } } },`, la única línea que ya tenía `parentLocation` dentro de este `select`.)
+
 Después de `const cohorts = await prisma.plantingCohort.findMany({...});` y antes de `const harvestContributions = ...`:
 
 ```typescript
@@ -1149,10 +1289,13 @@ git add lib/traceability/plantingCohorts.ts tests/traceability/rejillaDeParcela.
 git commit -F- <<'EOF'
 getPlotDetail expone la rejilla, el rango y la comparación de celdas
 
-location.* trae los nueve campos nuevos (rejilla + rango); gridComparison
-es el resultado de compararCeldasConPlantas contra las siembras ACTIVAS
-de la parcela, mismo filtro que computePlotDensity. Detrás de la misma
-compuerta que el resto de getPlotDetail.
+location.* trae los nueve campos nuevos (rejilla + rango) y el locationType
+del padre; gridComparison es el resultado de compararCeldasConPlantas
+contra las siembras ACTIVAS de la parcela, mismo filtro que
+computePlotDensity. Detrás de la misma compuerta que el resto de
+getPlotDetail. El locationType del padre es lo que puedeSerPadreDeMicroparcela
+(Tarea 4) necesita para que las Tareas 6 y 7 decidan si ofrecen «Nueva
+microparcela».
 
 Spec: docs/superpowers/specs/2026-09-19-rejilla-bloques-y-celdas-design.md §5.
 
@@ -1179,8 +1322,10 @@ Si no aparece nada, `git merge origin/main` primero (o avisar y detenerse: sin #
 - Modificar: `messages/es.json`, `messages/en.json`
 
 **Interfaces:**
-- Consume: `updateLocationAttributes` (Tarea 3), `detail.gridComparison` y `detail.location.{gridOrigin,rowCount,plantsPerRow,gridRowSpacingMeters,gridPlantSpacingMeters}` (Tarea 5).
+- Consume: `updateLocationAttributes` (Tarea 3), `detail.gridComparison` y `detail.location.{gridOrigin,rowCount,plantsPerRow,gridRowSpacingMeters,gridPlantSpacingMeters}` (Tarea 5), `puedeSerPadreDeMicroparcela` (Tarea 4).
 - Produce: la acción `actualizarRejillaAction(prevState: TraceabilityActionState, formData: FormData): Promise<TraceabilityActionState>`, y el componente `RejillaForm({ locationId, rejilla, comparacion })`.
+
+**Enmienda de esta sesión (spec §6.bis):** esta tarea también corrige `puedeSubdividir` en la misma pantalla — hoy es `true` para cualquier `plot`, así que el enlace «Nueva microparcela» aparece también en el ajustes de una microparcela, que ya no puede tener hijas. Ver el paso añadido dentro del Paso 3.
 
 No hay paso de vitest en esta tarea (constraint: nada de jsdom, y este repositorio no tiene arnés de render para componentes de servidor). La verificación es typecheck + build + un recorrido manual, como el resto de pantallas de este repositorio que no llevan prueba de UI propia (p. ej. `PlotAttributesForm`).
 
@@ -1377,6 +1522,41 @@ Y una sección nueva, justo después de la sección `id="condiciones"` (`<PlotAt
 
 (`detail` ya está en el alcance de la función — es el mismo objeto del que la página desestructura `location`.)
 
+**Y, en el mismo archivo, cerrar el hueco que abre §6.bis.** Hoy la pantalla decide si ofrece «Nueva microparcela» con:
+
+```typescript
+  // Spec fincas y parcelas §3.3, regla de `main` sin cambios: el enlace se
+  // ofrece sobre cualquier Location `plot` con `manage_attributes` (ya
+  // exigido por `getPlotDetail` arriba, la misma comprobación de
+  // `crearMicroparcelaAction`). Una microparcela creada por `createMicrolot`
+  // ES `plot` —copia el tipo de su padre—, así que esta regla también deja
+  // subdividirla otra vez: el spec no lo prohíbe y `createMicrolot` no tiene
+  // tope de profundidad.
+  const puedeSubdividir = location.locationType === "plot";
+```
+
+que es `true` para CUALQUIER `plot` — incluida una microparcela, que con §6.bis ya no puede tener hijas. El comentario, además, describe una regla que dejó de ser cierta. Reemplazar ese bloque entero por:
+
+```typescript
+  // Spec §6.bis, decisión de Daniel del 2026-09-19: un solo nivel de
+  // microparcela. `puedeSerPadreDeMicroparcela` es la única función que lo
+  // decide (lib/traceability/locations.ts, Tarea 4 del plan de la
+  // rejilla) — la misma que usa `createMicrolot` para rechazar en el
+  // servidor, así que el enlace nunca ofrece lo que el servidor va a
+  // negar. Antes esto era `location.locationType === "plot"`, verdadero
+  // también para una microparcela; por eso el enlace aparecía en su propio
+  // ajustes.
+  const puedeSubdividir = puedeSerPadreDeMicroparcela(location);
+```
+
+Y el `import`, junto al de `listPlotBlocks`:
+
+```typescript
+import { LocationAccessError, puedeSerPadreDeMicroparcela } from "../../../../lib/traceability/locations";
+```
+
+(sustituye a `import { LocationAccessError } from "../../../../lib/traceability/locations";`, la única línea de ese archivo que importa de `locations.ts`.)
+
 - [ ] **Paso 4: las claves de i18n**
 
 En `messages/es.json`, dentro de `"Traceability"`, inmediatamente después de la línea `"plotAttributesIntro": "..."`:
@@ -1433,7 +1613,7 @@ npm run build
 npm run dev:local
 ```
 
-Abrir `/plots/<id>/ajustes` de una parcela con siembras. Comprobar: (a) sin rejilla, la sección dice «sin rejilla»; (b) guardar hileras/plantas por hilera muestra el total calculado y, si no coincide con las plantas registradas, las dos cifras y su diferencia — nunca una corrigiendo a la otra; (c) vaciar un campo y guardar lo deja «Sin registrar», no en cero.
+Abrir `/plots/<id>/ajustes` de una parcela con siembras. Comprobar: (a) sin rejilla, la sección dice «sin rejilla»; (b) guardar hileras/plantas por hilera muestra el total calculado y, si no coincide con las plantas registradas, las dos cifras y su diferencia — nunca una corrigiendo a la otra; (c) vaciar un campo y guardar lo deja «Sin registrar», no en cero; (d) el enlace «Nueva microparcela» aparece en el ajustes de la parcela y NO aparece en el ajustes de una de sus microparcelas (spec §6.bis).
 
 - [ ] **Paso 7: commit**
 
@@ -1446,6 +1626,11 @@ Sección nueva: origen, hileras, plantas por hilera y las dos distancias.
 Al guardar muestra el total de celdas y lo compara con las plantas de las
 siembras activas — dos cifras y su diferencia, nunca una corrigiendo a la
 otra (ADR-080). Asume el PR #445 (parcela en pestañas) ya fusionado.
+
+De paso, spec §6.bis: puedeSubdividir pasa a llamar a
+puedeSerPadreDeMicroparcela en vez de comprobar sólo locationType ===
+"plot", que dejaba ofrecer «Nueva microparcela» también en el ajustes de
+una microparcela.
 
 Spec: docs/superpowers/specs/2026-09-19-rejilla-bloques-y-celdas-design.md §5.
 
@@ -1466,8 +1651,10 @@ EOF
 - Modificar: `messages/es.json`, `messages/en.json`
 
 **Interfaces:**
-- Consume: `createMicrolot` con `range` (Tarea 4), `celdasDelRango` de `lib/traceability/rejilla.ts` (Tarea 2), `detail.location.{rowCount,plantsPerRow}` (Tarea 5).
+- Consume: `createMicrolot` con `range` (Tarea 4), `celdasDelRango` de `lib/traceability/rejilla.ts` (Tarea 2), `detail.location.{rowCount,plantsPerRow}` (Tarea 5), `puedeSerPadreDeMicroparcela` (Tarea 4).
 - Produce: `NuevaMicroparcelaForm` gana la prop `rejilla: { rowCount: number | null; plantsPerRow: number | null }`.
+
+**Enmienda de esta sesión (spec §6.bis):** el comentario de esta pantalla decía explícitamente que anidar no tenía tope («el spec no prohíbe subdividir una microparcela otra vez, y `createMicrolot` no tiene tope de profundidad»), que ya no es cierto. El Paso 3 lo corrige junto con el guardia de acceso, para que visitar la URL a mano en una microparcela dé 404 en vez de un formulario que el servidor va a rechazar.
 
 - [ ] **Paso 1: el formulario**
 
@@ -1617,8 +1804,11 @@ const CODIGOS_CON_MENSAJE = [
   "nombre_invalido", "nombre_repetido", "name_required", "ya_tiene_terreno", "organizacion_no_es_finca",
   "padre_no_es_una_finca", "area_invalida", "tipo_invalido", "motivo_invalido", "otro_sin_nota", "sin_permiso",
   "rango_incompleto", "rango_bounds", "rango_orden", "rango_fuera_de_rejilla", "rango_sin_rejilla",
+  "microparcela_anidada",
 ] as const;
 ```
+
+(el último código es el que `puedeSerPadreDeMicroparcela` deja caer desde `createMicrolot`, Tarea 4 — sin prefijo `rango_`, porque no es un problema del rango sino de dónde cuelga la microparcela.)
 
 Y `crearMicroparcelaAction`, reemplazando la llamada a `createMicrolot`:
 
@@ -1679,6 +1869,32 @@ En `app/plots/[id]/microparcela/nueva/page.tsx`, cambiar la última línea:
       />
 ```
 
+**Y, spec §6.bis: cerrar también el acceso directo por URL.** Hoy el guardia de esta pantalla es:
+
+```typescript
+  if (detail.location.locationType !== "plot") notFound();
+```
+
+precedido por un comentario que ya no dice la verdad («el spec no prohíbe subdividir una microparcela otra vez, y `createMicrolot` no tiene tope de profundidad»). Reemplazar el comentario completo y el guardia por:
+
+```typescript
+  // Spec §6.bis, decisión de Daniel del 2026-09-19: un solo nivel de
+  // microparcela. `puedeSerPadreDeMicroparcela` es la misma función que
+  // decide `puedeSubdividir` en el ajustes de la parcela (Tarea 6) y que
+  // `createMicrolot` usa para rechazar en el servidor — visitar esta URL a
+  // mano sobre una microparcela da 404 en vez de un formulario que el
+  // servidor va a negar igual.
+  if (!puedeSerPadreDeMicroparcela(detail.location)) notFound();
+```
+
+Y el `import`, junto al de `LocationAccessError`:
+
+```typescript
+import { LocationAccessError, puedeSerPadreDeMicroparcela } from "../../../../../lib/traceability/locations";
+```
+
+(sustituye a `import { LocationAccessError } from "../../../../../lib/traceability/locations";`, la única línea de ese archivo que importa de `locations.ts`.)
+
 - [ ] **Paso 4: las claves de i18n**
 
 En `messages/es.json`, dentro de `"Fincas"`, después de `"crearMicroparcelaBoton": "Crear microparcela",` (línea 2829):
@@ -1701,6 +1917,7 @@ Y después de `"error_otro_sin_nota": "Si el motivo es «otro», escribe cuál."
     "error_rango_orden": "El «desde» no puede ser mayor que el «hasta».",
     "error_rango_fuera_de_rejilla": "Ese rango no cabe en la rejilla de la parcela.",
     "error_rango_sin_rejilla": "Esta parcela no tiene rejilla: no se le puede dar un rango.",
+    "error_microparcela_anidada": "Una microparcela no puede crearse dentro de otra microparcela.",
 ```
 
 En `messages/en.json`, mismos puntos de inserción (líneas 2829 y 2846):
@@ -1721,6 +1938,7 @@ En `messages/en.json`, mismos puntos de inserción (líneas 2829 y 2846):
     "error_rango_orden": "The \"from\" cannot be greater than the \"to\".",
     "error_rango_fuera_de_rejilla": "That range does not fit in the plot's grid.",
     "error_rango_sin_rejilla": "This plot has no grid: it cannot be given a range.",
+    "error_microparcela_anidada": "A micro-plot cannot be created inside another micro-plot.",
 ```
 
 - [ ] **Paso 5: typecheck y build**
@@ -1737,7 +1955,7 @@ npm run build
 npm run dev:local
 ```
 
-Abrir `/plots/<id>/microparcela/nueva` de una parcela CON rejilla: comprobar que aparecen las cuatro casillas, que la vista previa de celdas se actualiza al escribir, y que un rango fuera de la rejilla lo rechaza al guardar con el mensaje correcto. Repetir sobre una parcela SIN rejilla: comprobar que sólo aparece el aviso `rangoSinRejilla` y que la microparcela se crea sin rango.
+Abrir `/plots/<id>/microparcela/nueva` de una parcela CON rejilla: comprobar que aparecen las cuatro casillas, que la vista previa de celdas se actualiza al escribir, y que un rango fuera de la rejilla lo rechaza al guardar con el mensaje correcto. Repetir sobre una parcela SIN rejilla: comprobar que sólo aparece el aviso `rangoSinRejilla` y que la microparcela se crea sin rango. Y, spec §6.bis: crear una microparcela, entrar en su propio ajustes, comprobar que NO hay enlace «Nueva microparcela», y visitar a mano `/plots/<idDeLaMicroparcela>/microparcela/nueva` — debe dar 404.
 
 - [ ] **Paso 7: commit**
 
@@ -1751,6 +1969,10 @@ tiene rejilla, con una vista previa de cuántas celdas suma. Sin rejilla en
 la madre, se crea sin rango (ADR-080: no se inventa uno). Asume el PR #445
 (parcela en pestañas) ya fusionado.
 
+De paso, spec §6.bis: el guardia de esta pantalla pasa a usar
+puedeSerPadreDeMicroparcela, y su comentario deja de prometer anidamiento
+sin límite, que ya no es cierto.
+
 Spec: docs/superpowers/specs/2026-09-19-rejilla-bloques-y-celdas-design.md §4.2, §5.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
@@ -1761,14 +1983,16 @@ EOF
 
 ## Qué queda para las entregas 2 y 3
 
-Este plan cubre sólo el spec §7.1. Lo que sigue, para un plan aparte cuando llegue su turno:
+Este plan cubre sólo el spec §7.1 (rejilla, rango, y el cierre de §6.bis). Lo que sigue, para un plan aparte cuando llegue su turno:
 
-**Entrega 2 — bloques por rango, con trampas y su cobertura (spec §4.2 segunda mitad, §4.4, §5).**
+**Entrega 2 — bloques por rango, con trampas y su cobertura (spec §4.2 segunda mitad, §4.4, §5), la separación de permisos en dos niveles (§6), y la vista de finca con lo operativo sumado (§6.ter).**
 - `PlotBlock` gana uno o varios rangos (tabla `PlotBlockRange`, porque un bloque puede tener varios — a diferencia de la microparcela, que tiene uno solo).
 - Al dar de alta un bloque o una microparcela, la pantalla dice con qué otros bloques se solapa (spec §5: "debajo aparecen cuántas celdas suma y con qué otros bloques se solapa").
 - La trampa propone su rango de cobertura a partir de `trapSpacingMeters`/`plantsPerTrap` (que este plan NO agrega a `Location` — son de la entrega 2, no de la 1) y guarda el rango real, no la regla.
 - La pestaña «Trampas y bloques» (`app/plots/[id]/page.tsx`, tras el PR #445) muestra cuántas plantas cubre cada trampa y el rango de cada bloque.
 - La casilla «de seguimiento» de un bloque avisa de cuántas celdas va a crear, antes de crearlas (entra de lleno con la Entrega 3).
+- **§6 — permisos en dos niveles.** «Configurar» (rejilla, microparcelas, bloques, trampas, regla de la finca) se separa de «Registrar» (siembras, revisiones, manejos, muestras, fotos), tocando el catálogo de permisos y los perfiles. Decisión de Daniel: la entrega 1 usa las compuertas de hoy y no amplía el acceso de nadie, así que este plan no la toca.
+- **§6.ter — la vista de finca.** Por parcela y microparcela: plantas, trampas y su estado, qué toca revisar, manejos aplicados y bloques experimentales en marcha, sumado desde las celdas hacia arriba, cada fila con enlace al detalle. Lo productivo (cosecha, rendimiento) queda fuera hasta que exista la cosecha por microparcela de otra sesión; mientras tanto esas columnas no se muestran vacías ni a cero — no se muestran (ADR-080).
 
 **Entrega 3 — celdas materializadas, alcance de las aplicaciones y el biochar con noria, carga y receta (spec §4.3, §4.5, §4.6).**
 - Materializar un bloque de seguimiento: cada celda de su rango pasa a ser un `Specimen` de tipo planta, con su `(hilera, planta)`. Desmarcar el seguimiento no borra las ya creadas.
