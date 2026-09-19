@@ -27,6 +27,7 @@ tests/traceability/concesiones.test.ts
 tests/apiary/ambitoVacioApiarios.test.ts
 tests/notificaciones/canales.test.ts
 tests/equipos/bandejas.test.ts
+tests/traceability/capacidadDeBandeja.test.ts
 tests/equipos/equipos.test.ts
 tests/equipos/datosDeEquipo.test.ts
 tests/equipos/marcasDeRevision.test.ts

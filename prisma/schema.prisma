@@ -147,6 +147,7 @@ model Person {
   @@schema("core")
   consumableCustodiesResponsible ConsumableCustody[] @relation("ConsumableCustodyResponsible")
   plotInterventionsOperadas PlotIntervention[] @relation("PlotInterventionOperator")
+  dryingTrayWeighingsOperated DryingTrayWeighing[] @relation("DryingTrayWeighingOperator")
 }
 
 enum UserAccountStatus {
@@ -323,6 +324,7 @@ model UserAccount {
   orderItemLotsDispatched OrderItemLot[] @relation("OrderItemLotDispatchedBy")
   /// ADR-170
   storeAllocationsCancelled StoreAllocation[] @relation("StoreAllocationCancelledBy")
+  dryingTrayWeighingsCreated DryingTrayWeighing[] @relation("DryingTrayWeighingCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -3196,6 +3198,7 @@ model Lot {
   storeAllocations StoreAllocation[] @relation("StoreAllocationLot")
   /// ADR-169
   orderItemLots OrderItemLot[] @relation("OrderItemLotLot")
+  dryingTrayWeighings DryingTrayWeighing[] @relation("DryingTrayWeighingLot")
 }
 
 /// ADR-161 -- los actos de procesar miel. Vocabulario fijo con «otro, ¿cual?» (Daniel).
@@ -5319,10 +5322,48 @@ model DryingTrayType {
   creator        UserAccount? @relation("DryingTrayTypeCreatedBy", fields: [createdBy], references: [id])
 
   trays Equipment[] @relation("EquipmentTrayType")
+  weighings DryingTrayWeighing[]
 
   @@unique([organizationId, name], map: "drying_tray_type_nombre_unico")
   @@map("drying_tray_type")
   @@schema("core")
+}
+
+/// El pesaje de una bandeja cargada (spec §4.2b; protocolo §7 del plan de secado
+/// 2026-27): de aquí sale cuánto café cabe por tipo de bandeja y estado. Es
+/// measured_fact y no se edita: una corrección es un registro nuevo que supersede.
+model DryingTrayWeighing {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  trayTypeId       String          @map("tray_type_id") @db.Uuid
+  trayType         DryingTrayType  @relation(fields: [trayTypeId], references: [id], onDelete: Restrict)
+  lotId            String          @map("lot_id") @db.Uuid
+  lot              Lot             @relation("DryingTrayWeighingLot", fields: [lotId], references: [id], onDelete: Restrict)
+  materialState    MaterialState   @map("material_state")
+  netKg            Decimal         @map("net_kg") @db.Decimal(10, 3)
+  depthPointsCm    Decimal[]       @map("depth_points_cm") @db.Decimal(5, 1)
+  occurredAt       DateTime        @map("occurred_at")
+  // `createdAt`, no `recordedAt`: ver el comentario de la migración
+  // 20260918191500_pesaje_de_bandeja — es el reloj del SERVIDOR al insertar
+  // (como DryingTrayType.createdAt), nunca el del dispositivo del operador, así
+  // que no dispara ni satisface la regla de columnas de sincronización.
+  createdAt        DateTime        @default(now()) @map("created_at")
+  operatorPersonId String?         @map("operator_person_id") @db.Uuid
+  operator         Person?         @relation("DryingTrayWeighingOperator", fields: [operatorPersonId], references: [id], onDelete: Restrict)
+  provenanceClass  ProvenanceClass @map("provenance_class")
+  supersedesId     String?         @map("supersedes_id") @db.Uuid
+  supersedes       DryingTrayWeighing?  @relation("DryingTrayWeighingSupersedes", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy     DryingTrayWeighing[] @relation("DryingTrayWeighingSupersedes")
+  supersededAt     DateTime?       @map("superseded_at")
+  correctionReason String?         @map("correction_reason")
+  createdBy        String?         @map("created_by") @db.Uuid
+  creator          UserAccount?    @relation("DryingTrayWeighingCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  // Los dos `onDelete: Restrict`, explícitos: sin ellos Prisma supone SetNull en
+  // una relación opcional y el esquema diverge de la migración
+  // (tests/derivaDeMigraciones.test.ts lo caza; segunda pasada de Codex).
+
+  @@index([trayTypeId])
+  @@map("drying_tray_weighing")
+  @@schema("traceability")
 }
 
 model Equipment {

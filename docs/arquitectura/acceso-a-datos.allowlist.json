@@ -568,6 +568,10 @@
     {
       "archivo": "lib/equipos/bandejas.ts",
       "razon": "Tarea 3 del plan de secado por bandeja - tipos de bandeja y bandejas numeradas por finca. Modulo de dominio. crearTipoDeBandeja exige exigeEditarBeneficioEnOrganizacion; registrarBandejas exige puedeConfigurarEn sobre el sitio; tiposDeBandeja y bandejasDeLaFinca son lectura y filtran con equipment:view (directo o heredado via lugaresDeOrganizacion). Escritura, traslado inicial y AuditEvent en la MISMA transaccion."
+    },
+    {
+      "archivo": "lib/traceability/capacidadDeBandeja.ts",
+      "razon": "Tarea 4 del plan de secado por bandeja - el pesaje de bandeja cargada y la capacidad por estado. Modulo de dominio. registrarPesaje exige requireLotAccess(\"manage\") sobre el lote presentado y, al supersederse, tambien sobre el lote del pesaje ORIGINAL; capacidadDeTipo y pesajesDeTipo son lectura y filtran con el mismo permiso que tiposDeBandeja (equipment:view, directo o heredado). pesajesDeTipo ademas exige requireLotAccess(\"view\") por cada fila para decidir si se enseña el lote: una lectura sin acceso se cuenta en ocultos y no se muestra. Escritura y AuditEvent en la MISMA transaccion."
     }
   ],
   "reciben_transaccion": [
@@ -661,6 +665,12 @@
       "archivo": "lib/traceability/biocharBatches.ts",
       "operacion": "listBiocharBatches",
       "razon": "Recibe el principal y filtra por el conjunto de Locations visibles que devuelve getManageableContext, que es la misma visibilidad con la que /plots lista sus parcelas — pero no llama a ningún require*, así que el detector no la reconoce y hace bien en señalarla. Es el filtro de una LISTA, no la frontera: cada lectura de detalle y cada escritura pasan por requireLocationAttributeAccess. Verificado el 2026-09-01."
+    },
+    {
+      "archivo": "lib/traceability/capacidadDeBandeja.ts",
+      "operacion": "capacidadDeTipo",
+      "razon": "No llama a can()/requireXAccess en su propio cuerpo: autoriza delegando ENTERO en tiposDeBandeja(userAccountId, tipo.organizationId) -mismo patron que su propia lectura equipment:view, directo o heredado- y lanza PesajeError si el tipo pedido no aparece en esa lista. pesajesDeTipo hace la misma comprobacion pero SI aparece como guardia directo porque ademas llama a requireLotAccess por cada fila.",
+      "verificado": "2026-09-19"
     }
   ],
   "dependen_del_llamador": [

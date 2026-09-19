@@ -16,6 +16,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 **515 operaciones** que tocan la base, en **145 archivos**:
 **433 operaciones** que tocan la base, en **131 archivos**:
 **439 operaciones** que tocan la base, en **132 archivos**:
+**442 operaciones** que tocan la base, en **133 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -31,11 +32,26 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | **38** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **64** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **316** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **318** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **39** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **65** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+| **6** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, desde el 2026-09-18 `listarFincas()` —que lee sobre `getManageableContext`, quien autoriza—, y desde la Tarea 4 del plan de secado `capacidadDeTipo()`, que delega entera en `tiposDeBandeja()` — las seis miradas a mano y explicadas en el allowlist |
+
+> **Tarea 4 del plan 2a de secado (el pesaje de bandeja cargada y la capacidad
+> por estado, 2026-09-19), con un archivo nuevo.** Partiendo de 439 operaciones
+> en 132 archivos: `lib/traceability/capacidadDeBandeja.ts` aporta **tres**:
+> `registrarPesaje` y `pesajesDeTipo` son **guardia directo** (+2) — la primera
+> llama a `requireLotAccess("manage")` sobre el lote presentado y, al
+> supersederse, también sobre el lote del pesaje ORIGINAL; la segunda llama a
+> `requireLotAccess("view")` por cada fila para decidir si enseña el lote—;
+> `capacidadDeTipo` sale **recibe principal, sin guardia visible** (+1): no
+> llama a `can()`/`requireXAccess` en su propio cuerpo, sino que delega entera
+> en `tiposDeBandeja()` —el mismo permiso de lectura que la lista de tipos— y
+> lanza si el tipo pedido no aparece en lo que esa función devuelve. Total:
+> guardia directo 316 + 2 = **318**; recibe principal sin guardia visible
+> 5 + 1 = **6**; 439 + 3 = **442** operaciones en 132 + 1 = **133** archivos.
 
 > **Manejo fitosanitario, ronda final de arreglos (2026-09-19, hallazgo 5).** Una
 > operación nueva en `lib/traceability/intervenciones.ts`, ya inventariado:
