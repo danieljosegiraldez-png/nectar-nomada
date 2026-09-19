@@ -149,7 +149,7 @@ y no lo intenta.
 - **Los marcos negros se cuentan en la inspección.** Las fuentes latinoamericanas leídas
   (Mishkihue, INTA 2024, Chapingo) juzgan la cera vieja **por el aspecto**, no por la fecha, así
   que el aviso sale de lo que se ve: «marcos negros: N». La edad del color es el dato de apoyo.
-- **El aviso por edad** lo pone un umbral que **decide Daniel** (§7). Las cifras encontradas son
+- **El aviso por edad**: suave a los 2 años, fuerte a los 4 (§7, contestada). Las cifras encontradas son
   2 a 3 años para la cámara de cría (FAO/IZSLT, Italia; «Apicultura y Miel», España). Ninguna
   fuente habla de las alzas, y es probable que el umbral sea distinto para cámara y alza.
 
@@ -174,9 +174,12 @@ Cada regla lleva su prueba y su flip-test, y cada CHECK su sonda en la base:
 
 ## 7. Preguntas que quedan para Daniel
 
-1. **A partir de qué edad es vieja la cera**, y si es la misma para cámara de cría y para alza
-   (§5.3). Mientras no lo diga, la aplicación enseña la edad sin avisar.
-2. **Cuándo va la rebanada de las reinas** (§5.4).
+1. ~~A partir de qué edad es vieja la cera~~ — **contestada el 2026-09-18**: Daniel, *«estamos
+   considerando 2-4 years»*. Se lee así, y es una **interpretación mía** que él puede corregir:
+   **a los 2 años** aviso suave («revisar esta cera»), **a los 4** aviso fuerte («ya debería
+   estar renovada»), **igual para cámara de cría y para alza**, porque no los separó. Los dos
+   números viven en una sola constante, para cambiarlos en un sitio.
+2. **Cuándo va la rebanada de las reinas** (§5.4). Sigue abierta.
 
 ## 8. Orden
 
