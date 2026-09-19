@@ -22,6 +22,7 @@ medición no cuelga de una parcela.
 |---|---|
 | qué instrumentos | **manuales y nodos, los dos**; primero el manual |
 | quién anota una lectura manual | **cualquiera en su jornada**: capataz, Farm Manager o un recolector con cuenta, si el instrumento está en lo que tiene asignado |
+| batería y carga | «incluir tiempo de carga o de batería que se debe revisar o recargar, eso puede variar por instrumento» |
 | cómo | **A**: el instrumento es un equipo; se instala en parcela, microparcela o bloque **por intervalos**; cada lectura es una medición atada a dónde estaba; los nodos usan la misma instalación |
 
 ## 2. Lo que hay hoy (medido sobre `origin/main`)
@@ -113,6 +114,20 @@ medición no cuelga de una parcela.
 - **Un bloque sin instrumento propio no hereda lecturas de otro bloque.** Se muestra «sin
   instrumento aquí», con enlace a los de la parcela.
 
+### 3.5 Batería y carga
+
+- **Cada instrumento o nodo lleva su intervalo** de revisión o recarga, en días, anulable. Varía
+  por instrumento. **Sin intervalo no hay aviso:** no se inventa uno por defecto.
+- **Cada recarga o revisión se registra** con fecha, quién y nota. Es una fila inmutable en la
+  historia del instrumento; se corrige anulando con motivo, como el resto.
+- **Aviso cuando toca:** si desde la última recarga (o desde la instalación, si nunca se
+  recargó) pasó el intervalo, el instrumento sale «le toca revisar o recargar», con los días de
+  atraso, en su sitio y en la jornada de quien lo tiene asignado. Es un aviso visible en la app;
+  sin notificaciones al celular en esta pieza.
+- **Si el nodo informa su batería** en su paquete (voltaje o porcentaje), se muestra como la
+  lectura que es, con su hora. **No sustituye al intervalo:** son dos datos distintos, y ninguno
+  se deduce del otro.
+
 ## 4. Fuera de esto, y lo que le toca a Daniel
 
 - **Un archivo real descargado por USB-C de una consola.** Sin él, la subida por cable no se
@@ -138,5 +153,9 @@ medición no cuelga de una parcela.
 - **Quién:**
   - un recolector anota la del pluviómetro de su parcela asignada, y no la de otra;
   - el capataz, la de cualquiera de la finca.
+- **Batería:**
+  - sin intervalo no hay aviso;
+  - con intervalo de 7 días y la última recarga hace 9, sale con 2 días de atraso;
+  - recargar hoy lo quita (control positivo).
 - **Idempotencia:** la misma observación por la ruta y por el archivo cuenta una. Esta prueba
   se escribe cuando exista el importador.
