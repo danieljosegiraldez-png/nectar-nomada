@@ -11702,3 +11702,69 @@ Los bloques de una parcela se leen para registrar y corregir intervenciones con 
 | El texto `suggestedAction` **sigue obligatorio** | la regla ya lo exige; con producto pasa a ser la nota que se enseña debajo | ninguno: pedir una frase corta |
 | Una trampa **sin revisión vigente** no tiene nada que atender | sin lectura no hay «lectura alta» | ninguno |
 | «Atendido» apaga **sólo** el aviso de lectura alta, no el de revisión vencida | atendido no es resuelto (spec §4.2): la trampa sigue con su plazo | ninguno |
+
+## ADR-175 -- La reina guarda el ano en que nacio; su color es un apodo, no una marca
+
+**Contexto.** Spec `docs/superpowers/specs/2026-09-18-alzas-y-tandas-de-marcos-design.md` §5.4:
+las reinas nacidas un ano llevan el color de ese ano, el mismo que la cera. Pero el modulo de reinas
+(ADR de faenas, 2026-09-18) dice *«no marcamos las reinas»*. Se le pregunto a Daniel el 2026-09-19
+y contesto: **el color es solo un apodo; las reinas no se pintan.**
+
+**Decision.** `queen.birth_year`, nulo si no se sabe (CHECK: nulo o desde 1990). El servicio no
+deja que una reina nazca despues del ano en que llega a la colonia. El color no se guarda: lo
+calcula `colorDelAño` (ADR-173), y la historia de reinas dice «la blanca de 2026». **No hay campo
+«marcada»**, porque no se marcan.
+
+**Lo que NO entra.** Corregir el ano de una reina ya registrada: se registra al introducirla o al
+cambiarla.
+## ADR-176 -- Los marcos negros se cuentan en la inspeccion, y el apiario avisa
+
+**Contexto.** Spec `docs/superpowers/specs/2026-09-18-alzas-y-tandas-de-marcos-design.md` §5.3: las
+fuentes latinoamericanas leidas (Mishkihue, INTA 2024, Chapingo) juzgan la cera vieja **por el
+aspecto**, no por la fecha. La edad del color (ADR-173) es el dato de apoyo; esto es el aviso. Daniel
+aprobo el diseño el 2026-09-19.
+
+**Decision.** `inspection.dark_frames`, opcional: **nulo = no se conto, que no es cero** (CHECK: nulo
+o >= 0). Viaja por la cola sin conexion como los demas campos; una inspeccion encolada antes de este
+campo llega nula. La ficha del apiario, en «Cera por ano», lista las colmenas cuya **ultima
+inspeccion que conto** vio alguno: si despues se contaron cero, no avisa (se renovaron), y una
+inspeccion que no conto no borra el conteo anterior.
+
+**Lo que NO entra.** Relacionar los marcos negros con el año de su color: no se sabe de que ano es
+cada marco negro, y no se inventa.
+
+## ADR-177 -- La miel se pesa por recipiente, y el peso de la cosecha es la suma de sus netos
+
+**Contexto.** Q28 esta decidida en el paquete de Daniel (Fase 1): la cadena de la miel tiene que
+ser trazable con «gross/tare/net». Daniel, el 2026-09-19: se pesa **por recipiente**, cada balde o
+tambor lleno y su peso vacio. Spec `docs/superpowers/specs/2026-09-19-cera-y-pesada-por-recipiente-design.md`
+§3, plan `docs/superpowers/plans/2026-09-19-pesada-por-recipiente.md`.
+
+**Decision.** `harvest_container`: cosecha, etiqueta (unica por cosecha, no en blanco), bruto y
+tara (CHECK: tara >= 0, bruto > tara). El neto no se guarda. **Si la cosecha tiene recipientes, su
+peso es la suma de los netos**: anotar o quitar uno recalcula el peso en una transaccion
+con la cosecha bloqueada y asienta solo la diferencia en el libro del lote, por **el mismo camino** que el
+peso a mano (`asentarPesoDeCosechaEn`, extraido de `completarCierreDeCosecha`). Mientras haya
+recipientes, el peso a mano se rechaza. Sobre un peso escrito a mano, el primer recipiente lo
+sustituye (pesar mejor no es corregir; el peso anterior queda en el `before`). Quitar el ultimo
+recipiente no borra el peso.
+
+**Revision de Codex, tres hallazgos, los tres arreglados con su prueba en rojo primero.**
+1. **La diferencia se calculaba contra el peso escrito, no contra el libro.** Una cosecha antigua con
+   peso pero sin asientos quedaba en -5 kg; borrar el peso y volver a pesar asentaba dos veces (55
+   en vez de 25) — tambien en el camino a mano, que ya existia. Ahora se calcula contra **lo que la
+   cosecha ya aporto**: sus `received` en el lote mas los ajustes etiquetados con ella.
+2. **El cierre a mano leia los recipientes fuera de la transaccion.** Ahora todo lo que cambia el
+   peso toma la fila de la cosecha con `FOR UPDATE` (`bloquearCosechaEn`). Se probo `Serializable`
+   primero: con la lectura del libro abortaba transacciones ajenas que solo compartian la tabla.
+3. **`Number("")` es 0**: una tara o un bruto en blanco entraban como cero kilos. Ahora faltan.
+
+**Segunda vuelta de Codex, dos huecos del arreglo, cerrados igual.** Contar todos los `received`
+exige que **nadie mas** los escriba sobre un lote de cosecha: `recordQuantityEvent` ya no acepta un
+`received` generico ahi (los ajustes si, y sin la etiqueta de la cosecha no cuentan como su peso).
+Y la recuperacion de `cosechasSinSaldo` toma el mismo bloqueo y relee el peso dentro. **Lo que no se
+puede cerrar desde aqui:** un `received` generico que ya exista en produccion sobre un lote de
+cosecha seguiria contando como peso de esa cosecha. En la base local no hay cosechas, asi que no
+se pudo medir; si aparece, se ve como un saldo mayor que el peso.
+
+**Lo que NO entra.** La cera y los operculos (spec §4): su rebanada.

@@ -181,3 +181,70 @@ describe("la reina de la colonia", () => {
     await expect(introducirReina(operario, { colonyId, origen: "comprada", desde: hace(1) })).resolves.toBeTruthy();
   }, 20000);
 });
+
+// Spec 2026-09-18 §5.4, y Daniel el 2026-09-19: el color del año es sólo un APODO de la reina —
+// «no marcamos las reinas» sigue valiendo—. Se guarda el año en que nació, si se sabe; el color
+// lo calcula `colorDelAño`, el mismo que el de la cera de ese año.
+describe("el año en que nació la reina", () => {
+  it("SE GUARDA si se sabe, al introducir y al cambiar; si no se sabe, queda nulo", async () => {
+    const colonyId = await colonia();
+    const { reina: sinAno } = await introducirReina(operario, { colonyId, origen: "comprada", desde: hace(20) });
+    expect(sinAno.birthYear).toBeNull();
+    const año = hace(5).getUTCFullYear();
+    const { reina } = await cambiarReina(operario, { colonyId, nueva: { origen: "natural", añoDeNacimiento: año }, cuando: hace(5), finDeLaVieja: "cambiada" });
+    expect(reina.birthYear).toBe(año);
+  });
+
+  it("NO NACE DESPUÉS DE LLEGAR, ni en un año imposible", async () => {
+    const colonyId = await colonia();
+    const llegada = hace(3);
+    await expect(
+      introducirReina(operario, { colonyId, origen: "comprada", desde: llegada, añoDeNacimiento: llegada.getUTCFullYear() + 1 }),
+    ).rejects.toThrow(/nacio_despues_de_llegar/);
+    await expect(introducirReina(operario, { colonyId, origen: "comprada", desde: llegada, añoDeNacimiento: 1980 })).rejects.toThrow(/ano_de_nacimiento_invalido/);
+    await expect(introducirReina(operario, { colonyId, origen: "comprada", desde: llegada, añoDeNacimiento: 2025.5 })).rejects.toThrow(/ano_de_nacimiento_invalido/);
+    await expect(
+      introducirReina(operario, { colonyId, origen: "comprada", desde: llegada, añoDeNacimiento: llegada.getUTCFullYear() }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("AL CAMBIAR tampoco: la nueva no nace después del día del cambio", async () => {
+    const colonyId = await colonia();
+    await introducirReina(operario, { colonyId, origen: "comprada", desde: hace(20) });
+    const cuando = hace(5);
+    await expect(
+      cambiarReina(operario, { colonyId, nueva: { origen: "natural", añoDeNacimiento: cuando.getUTCFullYear() + 1 }, cuando, finDeLaVieja: "cambiada" }),
+    ).rejects.toThrow(/nacio_despues_de_llegar/);
+  });
+
+  it("EL AÑO ES EL DEL SITIO, NO EL DE UTC: el 31 de diciembre a las 19:00 en Panamá todavía es ese año", async () => {
+    // Codex, revisión del PR #441: en UTC ese instante ya es el año siguiente, y una reina «nacida»
+    // el año que viene pasaba la regla durante las últimas cinco horas del año.
+    await prisma.location.update({ where: { id: apiarioId }, data: { timezone: "America/Panama" } });
+    const nochevieja = new Date("2026-12-31T19:00:00-05:00");
+    expect(nochevieja.getUTCFullYear()).toBe(2027); // el control: el caso sólo existe si UTC ya cambió de año
+    const colonyId = await colonia();
+    await expect(introducirReina(operario, { colonyId, origen: "comprada", desde: nochevieja, añoDeNacimiento: 2027 })).rejects.toThrow(
+      /nacio_despues_de_llegar/,
+    );
+    await expect(introducirReina(operario, { colonyId, origen: "comprada", desde: nochevieja, añoDeNacimiento: 2026 })).resolves.toBeTruthy();
+  });
+
+  it("LA BASE tampoco acepta un año imposible — y lo válido entra", async () => {
+    const sonda = async (año: string) => {
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe(`INSERT INTO apiary.queen (origin, birth_year, provenance_class) VALUES ('comprada', ${año}, 'direct_observation')`);
+          throw new Error("DESHACER");
+        });
+      } catch (e) {
+        const m = (e as Error).message;
+        return m.includes("DESHACER") ? "entra" : (m.match(/queen_[a-z_]+/)?.[0] ?? m.slice(0, 120));
+      }
+      return "?";
+    };
+    expect(await sonda("2026")).toBe("entra");
+    expect(await sonda("NULL")).toBe("entra");
+    expect(await sonda("1980")).toBe("queen_nacimiento_razonable");
+  });
+});

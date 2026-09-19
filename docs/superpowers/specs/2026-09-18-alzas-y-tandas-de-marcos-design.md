@@ -146,7 +146,7 @@ y no lo intenta.
 
 - **La leyenda del año** en la ficha del apiario: cada color con su año, cuántos marcos entraron
   y cuántos siguen en uso (si se anotaron salidas), y su edad.
-- **Los marcos negros se cuentan en la inspección.** Las fuentes latinoamericanas leídas
+- **Los marcos negros se cuentan en la inspección** (hecho: ADR-176, 2026-09-19; manda la última inspección que los contó). Las fuentes latinoamericanas leídas
   (Mishkihue, INTA 2024, Chapingo) juzgan la cera vieja **por el aspecto**, no por la fecha, así
   que el aviso sale de lo que se ve: «marcos negros: N». La edad del color es el dato de apoyo.
 - **El aviso por edad**: suave a los 2 años, fuerte a los 4 (§7, contestada). Las cifras encontradas son
@@ -179,7 +179,9 @@ Cada regla lleva su prueba y su flip-test, y cada CHECK su sonda en la base:
    **a los 2 años** aviso suave («revisar esta cera»), **a los 4** aviso fuerte («ya debería
    estar renovada»), **igual para cámara de cría y para alza**, porque no los separó. Los dos
    números viven en una sola constante, para cambiarlos en un sitio.
-2. **Cuándo va la rebanada de las reinas** (§5.4). Sigue abierta.
+2. ~~Cuándo va la rebanada de las reinas~~ — **contestada el 2026-09-19**: justo después de la
+   cera. Y el color es **sólo un apodo**, las reinas no se pintan (Daniel), así que no hay campo
+   «marcada»: se guarda el año de nacimiento y el color se calcula. ADR-175.
 
 ## 8. Orden
 

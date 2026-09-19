@@ -66,6 +66,8 @@ class BalancePolicy:
 
 Toda masa lleva `weighing_condition` (`DRAINED` / `WET` / `DRY`). Comparar un peso `WET` contra uno `DRAINED` es un error de datos y se marca `INCOMPARABLE_WEIGHING_CONDITION`.
 
+> **Decisión de Daniel, 2026-09-19 — la recepción de cereza no anota la condición.** Entre el peso de finca de una entrega y el peso en la báscula del beneficio (o el declarado por un productor de fuera), la cereza se pesa **siempre fresca, tal cual, en los dos lados**, y las dos pesadas se consideran comparables sin `weighing_condition`. Aplica sólo a esa comparación de básculas (`docs/superpowers/specs/2026-09-19-recepcion-de-cereza-en-beneficio-design.md` §3.4); las masas de las etapas de proceso siguen esta regla tal cual. Si la cereza empezara a llegar en condiciones distintas, se añade el campo.
+
 ## 3. Verificaciones de plausibilidad por rendimiento (nuevo)
 
 El balance solo prueba que los números suman; no que sean ciertos. Estos rangos de la industria detectan errores de pesaje que un balance cuadrado no revela. Todos `[PROVISIONAL]` — calibrar contra la data histórica de cada finca.

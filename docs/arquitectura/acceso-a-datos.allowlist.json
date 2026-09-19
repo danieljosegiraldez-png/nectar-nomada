@@ -18,6 +18,18 @@
   ],
   "importan_cliente_total": [
     {
+      "archivo": "lib/traceability/recepcionesDeCereza.ts",
+      "razon": "Módulo de dominio: la recepción de cereza en el beneficio (spec recepción §3.4). Recibir, rechazar, anular y la foto exigen `requireLotAccess(manage)` sobre ESE beneficio (por `exigeGestionarBeneficio`) ANTES de escribir; listar, `requireLotAccess(view)`. Recibir bloquea con `SELECT … FOR UPDATE` la fila de la entrega y la del pedido dentro de la transacción, y comprueba ahí destino, vigencia y la regla de dos personas; cada escritura lleva su AuditEvent en la misma transacción. Los disparadores de la migración 20260919150000 son la red en la base."
+    },
+    {
+      "archivo": "lib/traceability/proveedoresDeCereza.ts",
+      "razon": "Módulo de dominio: los productores de fuera que traen cereza (spec recepción de cereza §3.2). Dar de alta exige `cherry_supplier:create` en algún ámbito ANTES de escribir, con el AuditEvent en la transacción; listar exige `lot:view` o `lot:manage` en algún ámbito. Un proveedor no tiene ubicación, por eso el permiso se mira con `permissionKeysAnywhere`."
+    },
+    {
+      "archivo": "lib/traceability/pedidosDeCereza.ts",
+      "razon": "Módulo de dominio: los pedidos de cereza del beneficio (spec recepción §3.3). Crear y cerrar exigen `requireLotAccess(manage)` sobre ESE beneficio antes de escribir, con el AuditEvent en la transacción; listar exige `requireLotAccess(view)`. La suma de lo recibido lee sólo recepciones de los pedidos de ese beneficio."
+    },
+    {
       "archivo": "lib/traceability/situacionesDeCampo.ts",
       "razon": "Módulo de dominio: las situaciones de campo del recolector en su jornada de cosecha (spec 2026-09-18 jornada y entrega §3.5). Reportar exige, ANTES de escribir, `field_report:create_own` sobre el sitio de la finca y estar asignado en esa jornada abierta, y sólo sobre lo asignado; la FieldSession, el FieldEvent y sus AuditEvent van en la misma transacción. Compuerta propia a propósito: no pasa por `requireLocationAttributeAccess` porque esa es la autoridad sobre sol, sombra y suelo. La foto de una situación (`pedirSubidaDeFotoDeSituacion`, `confirmarFotoDeSituacion`) pasa por la misma compuerta, re-comprueba al confirmar que la clave esté bajo el prefijo de ESA jornada, y crea Asset, FieldEvent y sus AuditEvent en una transacción. Leer: todo con `field_report:view` sobre la finca; si no, sólo los eventos de la Person de la cuenta."
     },
@@ -118,8 +130,12 @@
       "razon": "Módulo de dominio: el nodo de sensores. Registrar, instalar y mover exigen `requireHiveNodeAccess` (hive_node:manage, que el Farm Operator no tiene) sobre el sitio o la colmena ANTES de escribir; el nodo tiene que ser de la finca de la colmena. Los cruces de intervalos se comprueban dentro de la transaccion y los abiertos los sostiene la base con indices parciales. Escritura y AuditEvent en la MISMA transaccion."
     },
     {
+      "archivo": "lib/apiary/recipientes.ts",
+      "razon": "Módulo de dominio: la pesada por recipiente (spec 2026-09-19 §3). Anotar y quitar exigen `requireApiaryAccess` manage sobre la caja de la cosecha ANTES de escribir, con la fila de la cosecha bloqueada (`bloquearCosechaEn`); el peso de la cosecha y su asiento en el libro del lote van por `asentarPesoDeCosechaEn`, con AuditEvent de recipiente y de cosecha en la MISMA transacción."
+    },
+    {
       "archivo": "lib/apiary/cera.ts",
-      "razon": "Módulo de dominio: la cera con el color de su año (spec 2026-09-18 §5). Anotar exige `requireApiaryAccess` manage sobre el apiario ANTES de escribir; la leyenda, view. La colmena de una entrada tiene que ser de la misma finca. Escritura y AuditEvent en la MISMA transacción. El color no se guarda: lo calcula `colorDelAño`."
+      "razon": "Módulo de dominio: la cera con el color de su año (spec 2026-09-18 §5). Anotar exige `requireApiaryAccess` manage sobre el apiario ANTES de escribir; la leyenda, view. La colmena de una entrada tiene que ser de la misma finca. Escritura y AuditEvent en la MISMA transacción. El color no se guarda: lo calcula `colorDelAño`. `marcosNegrosDelApiario` (ADR-176) exige view sobre el apiario y sólo lee inspecciones de sus cajas."
     },
     {
       "archivo": "lib/apiary/alzas.ts",
@@ -630,6 +646,14 @@
     {
       "archivo": "lib/traceability/concesiones.ts",
       "razon": "ADR-168, corrección del 2026-09-18 (hallazgo 2 de la revisión independiente de Codex) — `escribirGrant` recibe el `tx` de `concederEditarBeneficio` para escribir el override CONDICIONALMENTE (UPDATE con WHERE effect:\"grant\", o INSERT con catch de P2002) dentro de la misma transacción serializable que decide si un `deny` de administración manda. Leer y escribir fuera de una única transacción es exactamente la carrera que el hallazgo señaló: el `upsert` anterior escribía `grant` sin condición. No abre su propia conexión ni amplía qué puede consultar: sólo opera sobre `assignment_permission_override`."
+    },
+    {
+      "archivo": "lib/apiary/cierreDeCosecha.ts",
+      "razon": "Spec 2026-09-19 §3: `asentarPesoDeCosechaEn(tx, cosecha, nuevoKg, usuario)` recibe el `tx` de quien fija el peso de una cosecha —`completarCierreDeCosecha` aquí mismo y `recipientes.ts`— para asentar la diferencia en el libro del lote DENTRO de la transacción que cambia el peso. Sólo crea un QuantityEvent del lote de esa cosecha; los dos llamadores ya comprobaron `apiary:manage` sobre su caja."
+    },
+    {
+      "archivo": "lib/apiary/recipientes.ts",
+      "razon": "Spec 2026-09-19 §3: `recalcularEn(cosecha, usuario, motivo)(tx)` recibe el `tx` de `anotarRecipiente`/`quitarRecipiente` —con la cosecha ya bloqueada por `bloquearCosechaEn`—, que ya comprobaron `apiary:manage` sobre la caja de la cosecha. Suma los netos, fija el peso por `asentarPesoDeCosechaEn` y audita la cosecha en esa misma transacción."
     }
   ],
   "operaciones_sin_patron": [
@@ -660,6 +684,18 @@
     }
   ],
   "dependen_del_llamador": [
+    {
+      "archivo": "lib/traceability/recepcionesDeCereza.ts",
+      "operacion": "recepcionDeEntregas",
+      "razon": "Devuelve la recepción vigente (estado, neto, diferencia, motivo de rechazo) de unas entregas ya elegidas, para que la finca vea lo que recibió el beneficio. No recibe principal: la llaman `detalleDeJornada` (exige `requireLotAccess(view)` sobre la finca) y `misEntregas` (sólo las entregas de la Person de la propia cuenta), que ya autorizaron esas entregas.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/apiary/cierreDeCosecha.ts",
+      "operacion": "bloquearCosechaEn",
+      "razon": "Revisión de Codex de la pesada por recipiente (ADR-177): toma la fila de la cosecha con FOR UPDATE al principio de la transacción que cambia su peso, para que el cierre a mano y anotar/quitar un recipiente sobre la MISMA cosecha no se crucen. No lee ni devuelve datos. Sus cuatro llamadores autorizan ANTES: `completarCierreDeCosecha` (mismo archivo), `anotarRecipiente`/`quitarRecipiente` (recipientes.ts, vía `cosechaGestionable`) y `asentarPesoDeCosecha` (cosechasSinSaldo.ts), los cuatro con `requireApiaryAccess` manage sobre la caja de la cosecha.",
+      "verificado": "2026-09-19"
+    },
     {
       "archivo": "lib/traceability/jornadasDeCosecha.ts",
       "operacion": "origenesDeParcelas",

@@ -89,6 +89,13 @@ export default async function JornadaPage({ params }: { params: Promise<{ id: st
                   {t("fotos", { n: e._count.assets })}
                   {" · "}
                   {e.estado === "anulada" ? t("anuladaMotivo", { motivo: e.motivoAnulacion ?? "" }) : t("enviada")}
+                  {e.recepcion
+                    ? ` · ${
+                        e.recepcion.estado === "rechazada"
+                          ? t("rechazadaEnBeneficio", { motivo: e.recepcion.motivoRechazo ?? "" })
+                          : t("recibidaEnBeneficio", { kg: e.recepcion.netoKg.toFixed(1), dif: (e.recepcion.diferenciaKg ?? 0).toFixed(1) })
+                      }`
+                    : ""}
                 </span>
                 {gestiona && e.estado === "enviada" ? (
                   <>

@@ -37,6 +37,7 @@ import type { ApiaryAssetParent } from "../../lib/apiary/media";
 import { fechaDeDia, parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
 import { exigeTipoDeArtefacto, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
 import { darDeBajaAlza, ponerAlza, registrarAlza } from "../../lib/apiary/alzas";
+import { anotarRecipiente, quitarRecipiente } from "../../lib/apiary/recipientes";
 import { registrarCeraNueva, registrarSalidaDeMarcos } from "../../lib/apiary/cera";
 import type { FrameRemovalReason, WaxDestination, WaxKind } from "../../generated/prisma/client";
 import { dividirColonia, unirColonias } from "../../lib/apiary/genealogia";
@@ -482,10 +483,40 @@ export async function completarCierreDeCosechaFormAction(formData: FormData): Pr
   await completarCierreDeCosecha(user.userAccountId, {
     apiaryHarvestEventId: String(formData.get("apiaryHarvestEventId") ?? ""),
     honeyType: emptyToNull(formData.get("honeyType")),
-    extractedWeightKg: emptyToNull(formData.get("extractedWeightKg")),
+    // Con recipientes el formulario NO manda el campo de peso: ausente es «no se toca», y no
+    // «se borró» — el servicio rechazaría un null como peso escrito a mano (spec 2026-09-19 §3).
+    extractedWeightKg: formData.has("extractedWeightKg") ? emptyToNull(formData.get("extractedWeightKg")) : undefined,
     reason: emptyToNull(formData.get("reason")),
   });
 
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+}
+
+/** Pesada por recipiente (spec 2026-09-19 §3) — anotar un balde o tambor de la extracción. */
+export async function anotarRecipienteFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const hiveId = String(formData.get("hiveId") ?? "");
+  await anotarRecipiente(user.userAccountId, {
+    apiaryHarvestEventId: String(formData.get("apiaryHarvestEventId") ?? ""),
+    label: String(formData.get("label") ?? ""),
+    grossKg: String(formData.get("grossKg") ?? ""),
+    tareKg: String(formData.get("tareKg") ?? ""),
+  });
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+}
+
+/** Quitar un recipiente mal anotado. Pide motivo; el peso se recalcula. */
+export async function quitarRecipienteFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const hiveId = String(formData.get("hiveId") ?? "");
+  await quitarRecipiente(user.userAccountId, {
+    containerId: String(formData.get("containerId") ?? ""),
+    reason: String(formData.get("reason") ?? ""),
+  });
   revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
 }
 
@@ -928,6 +959,8 @@ function reinaNuevaDe(formData: FormData) {
     origen: exigeOrigenDeReina(String(formData.get("origen") ?? "")),
     origenColonyId: emptyToNull(formData.get("origenColonyId")),
     notas: emptyToNull(formData.get("notas")),
+    // Vacío = no se sabe, y queda nulo. El servicio valida el número.
+    añoDeNacimiento: emptyToNull(formData.get("anoDeNacimiento")) === null ? null : Number(formData.get("anoDeNacimiento")),
   };
 }
 

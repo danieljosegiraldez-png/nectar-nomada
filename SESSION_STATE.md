@@ -38,22 +38,43 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-19 · Recepción de cereza en el beneficio (PR #444, pieza 2 de 3)
+
+Spec y plan `docs/superpowers/{specs,plans}/2026-09-19-recepcion-de-cereza-en-beneficio*`. La
+jornada dice a qué beneficio va. `/beneficio/recepcion`: recibir o rechazar cada entrega y la
+cereza de fuera (productor dado de alta como organización), con **doble peso** (bruto − tara contra
+el de finca o el declarado; fuera de tolerancia, nota; nunca bloquea), Brix con punto de muestreo y
+**siempre dos personas** (servicio y disparador). `/beneficio/pedidos`: cantidad aquí, calidad en la
+pieza 3. **La recepción es el origen**: de ella saldrán los lotes (pieza 3). `ReceivingEvent`, el
+viejo, sigue hasta entonces. **Sin navegador.**
+
+### 2026-09-19 · La miel se pesa por recipiente (Q28, rebanada 1)
+
+ADR-177. Cada cosecha puede llevar sus recipientes —bruto y tara, el neto se calcula— y entonces
+su peso es la suma, asentada en el libro del lote por el mismo camino que el peso a mano. Codex
+encontró que ese camino calculaba contra el peso escrito, no contra el libro (y duplicaba al borrar
+y volver a pesar, también a mano): ahora mide lo aportado, y la cosecha se bloquea al pesarla.
+**Sin ver en navegador.** Sigue: la cera de extracción y de colado como subproducto (spec §4).
+
+### 2026-09-19 · Marcos negros en la inspección, y el aviso del apiario
+
+ADR-176. La inspección cuenta «marcos negros (cera vieja)»; vacío = no se contó, no cero. Viaja por
+la cola sin conexión (lo encolado antes llega nulo). «Cera por año» lista las colmenas cuya última
+revisión que contó vio alguno. **Sin ver en navegador.**
+
+### 2026-09-19 · La reina guarda el año en que nació; su color es el apodo
+
+ADR-175. Daniel: el color del año es sólo apodo, las reinas no se pintan. `queen.birth_year` (nulo
+si no se sabe), no posterior a su llegada; la historia de reinas dice «la blanca de 2026». **Sin
+ver en navegador.** Sigue: «marcos negros» en la inspección.
+
 ### 2026-09-18 · Jornada de cosecha y entrega al beneficio (PR #431, pieza 1 de 3)
 
-Daniel: «en finca no se registra cosecha… se asigna personas a cosecha, y esta persona… lleva al
-beneficio». Spec y plan `docs/superpowers/{specs,plans}/2026-09-18-jornada-y-entrega-de-cosecha*`.
-- **`/finca/jornadas`:** abrir una jornada (parcelas × recolectores), recolectores de la finca;
-  la jornada anota entregas (origen parcela/bloque/planta, kg de finca, hora, foto), anula con
-  motivo y se cierra. **Ninguna entrega crea lote**: queda `enviada` (piezas 2 y 3: recepción con
-  doble peso, y lotes).
-- **`/mis-entregas`:** el perfil nuevo **Recolector** anota SU entrega y reporta situaciones o la
-  condición del día (sin mm: eso es de instrumentos) con foto. Las ve el Farm Manager y el capataz;
-  a un compañero, sólo con `field_report:view` concedido en `/admin/users/…/permisos`.
-- **Sin ver en navegador.** Specs aprobados sin construir: condiciones fijas del terreno,
-  instrumentos de campo.
-
-**De Daniel:** dar el perfil Recolector (ámbito: la finca) a cada recolector con cuenta. «Mis
-entregas» no va al menú (decisión suya del 2026-09-19): se entra al iniciar sesión y desde Mi Néctar.
+`/finca/jornadas`: abrir jornada (parcelas × recolectores), anotar entregas (origen, kg de finca,
+foto), anular con motivo, cerrar; **ninguna entrega crea lote**. `/mis-entregas`: el perfil nuevo
+**Recolector** anota SU entrega y reporta situaciones o la condición del día, con foto; lo ven el
+Farm Manager y el capataz, y un compañero sólo con `field_report:view` concedido. **Sin navegador.**
+**De Daniel:** dar el perfil Recolector (ámbito: la finca) a cada recolector con cuenta.
 
 ### 2026-09-18 · La cera con el color de su año
 
@@ -94,38 +115,27 @@ falta entrar con una cuenta. Siguen: la cera por color de año y el año de las 
 propósito de la visita». **Una clase de validación nueva que llegue a una acción necesita su rama
 ahí**, o es un 500. Prueba hermética con flip-test. **Sin ver en navegador.**
 
-### 2026-09-18 · Anular una asignación a tienda que no va a llegar
-
-ADR-170. Una asignación pendiente se anula con motivo y día —desde `/tienda` o desde la ficha del
-lote— y sus envases vuelven a libres. No se borra (quién, cuándo, por qué y AuditEvent); una
-recibida no se anula y una anulada no se recibe. Salió como hueco del flujo de dos actos, no como
-petición de Daniel.
-
-### 2026-09-18 · Fincas y parcelas: elegir la finca, y crearlas desde la app (PR #425)
-
-Daniel: «debería preguntarme qué finca —trabajo con varias— o mostrarme todas» y «no me deja crear
-parcelas». Spec y plan `docs/superpowers/{specs,plans}/2026-09-18-fincas-y-parcelas*`.
-- **Elegir:** `/fincas`. La elección vive en una cookie de sesión que **sólo acota**: una finca
-  ajena se ignora. `/finca`, `/plots` y `/lots/new` preguntan si hay varias y ninguna elegida.
-- **Crear:** finca nueva o terreno de una organización sin él (sólo admin, permiso nuevo
-  `organization:create_farm`); parcela (Farm Manager de esa finca, `create_site`); microparcela
-  (`createMicrolot`, que ya existía sin pantalla). Nombres únicos bajo el mismo padre.
-- **La cosecha sólo sobre `plot`**, lo comprueba el servicio.
-- **Sin ver en navegador.**
-
-**De Daniel:** crear el terreno de **Kiva Estate** desde `/fincas` → «sin terreno». El seed dice que
-es un nombre ficticio (`prisma/seed.ts:168`) y Daniel dice que es real: el comentario queda para que
-él decida.
-
-### 2026-09-18 · El despacho dice de qué lote sale cada frasco
-
-ADR-169. Daniel: «lo elige quien despacha». **El despacho no existía** —nada ponía un pedido en
-`fulfilled`— y hay cero pedidos en la copia local. `/tienda` lista los pagados; por artículo se dice
-cuántos frascos salen de cada lote recibido, la suma tiene que dar lo pedido, y los kilos salen del
-libro del lote (`transfer_out`). Falta que el cliente lo vea en «Mis pedidos».
-
 
 ## 3. Bloqueado, y en qué
+
+#### Kiva Estate: crear su terreno (de Daniel)
+
+Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear el terreno de **Kiva
+Estate** desde `/fincas` → «sin terreno». El seed dice que es un nombre ficticio
+(`prisma/seed.ts:168`) y Daniel dice que es real: el comentario queda para que él decida.
+
+#### «Mis pedidos» no dice de qué lote salió el frasco (espera a Daniel)
+
+Movido aquí al archivar la entrada del despacho por lote (ADR-169): el dato ya se guarda
+(`OrderItemLot`), falta la pantalla del cliente, y **qué del lote se le enseña** —código, apiario,
+cosecha, fotos— lo decide Daniel.
+
+#### Nodos de sensores: lo que falta cuando haya nodos (de Daniel)
+
+Movido aquí al archivar la entrada de artefactos (PR #405), porque sigue dirigiendo trabajo:
+`NOTEHUB_ROUTE_SECRET` en Vercel y en la ruta de Notehub, y registrar cada nodo con su UID de
+Notecard — registrar y calibrar **no tienen pantalla**. `POST /api/v1/ingest/notehub` sigue
+**cerrada por defecto** hasta entonces.
 
 #### El presupuesto de Actions se agotó y volvió — y `main` ya no tiene compuerta propia
 

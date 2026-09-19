@@ -131,6 +131,7 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // entrega y reporta lo que ve en lo que tiene asignado; el servicio exige además que la
   // Person de la cuenta sea el recolector asignado en esa jornada. Ver situaciones de campo es
   // aparte: de serie para Farm Manager y capataz, concedible a quien trabaje esa parcela o lote.
+  { resourceType: "cherry_supplier", action: "create", description: "Dar de alta un productor de fuera que trae cereza al beneficio (spec recepción de cereza §3.2)." },
   { resourceType: "harvest_delivery", action: "create_own", description: "Anotar la entrega propia de cosecha en una jornada donde se está asignado." },
   { resourceType: "field_report", action: "create_own", description: "Reportar situaciones de campo y condiciones del día sobre lo asignado en la jornada propia." },
   { resourceType: "field_report", action: "view", description: "Ver las situaciones de campo que reportan los recolectores en las jornadas de una finca." },
@@ -366,6 +367,8 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       // Artefactos de colmena §7.1: el gestor registra y MUEVE nodos; el operario no.
       ["hive_node", "manage"],
       ["lot", "manage"],
+      // Spec recepción de cereza §3.2: quien recibe da de alta al productor de fuera ahí mismo.
+      ["cherry_supplier", "create"],
       ["lot", "view"],
       ["lot", "export"],
       ["sample", "manage"],
@@ -403,6 +406,8 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
     permissions: [
       ["field_report", "view"],
       ["lot", "manage"],
+      // Spec recepción de cereza §3.2: quien recibe da de alta al productor de fuera ahí mismo.
+      ["cherry_supplier", "create"],
       ["lot", "view"],
       // A producer taking their own records out is the whole point of the
       // export (docs/implementation/README.md's "client/producer export").
