@@ -15,7 +15,7 @@ import { recordTransformation, requireLotAccess, TraceabilityAccessError } from 
 import { codigosDerivados } from "../traceability/codigosDerivados";
 import { codigosYaDerivadosDe } from "../traceability/selection";
 import { kilos, MielInvalida, normalizarActosDeMiel } from "./vocabularioDeMiel";
-import type { ProvenanceClass } from "../../generated/prisma/client";
+import type { ByproductDestination, ProvenanceClass } from "../../generated/prisma/client";
 
 interface Comun {
   lotId: string;
@@ -52,6 +52,14 @@ export interface ProcesarMielInput extends Comun {
   otherNote?: string | null;
   /** Los kilos de miel que salen. Cero es un dato: el proceso no dejó nada utilizable. */
   outputKg: number | string | null;
+  /**
+   * La cera que salió al colar, en kg — spec 2026-09-19 §4.2. **No es merma**: es un subproducto
+   * con su destino, y su masa cuenta como SALIDA en el balance. Contarla como pérdida infla la
+   * merma y esconde la de verdad, que es el número que dice si alguien pesó mal.
+   */
+  ceraKg?: number | string | null;
+  ceraDestino?: ByproductDestination | null;
+  ceraNota?: string | null;
 }
 
 /** Colar, filtrar, decantar/madurar, homogenizar: uno o varios en el mismo paso. */
@@ -61,6 +69,20 @@ export async function procesarMiel(userAccountId: string, input: ProcesarMielInp
   const { inputKg, lossKg } = entrada(input);
   const outputKg = kilos(input.outputKg, "salida");
   if (outputKg === null) throw new MielInvalida("faltan_kilos:salida");
+
+  // Sin cera declarada no se escribe ninguna fila: «no se anotó» no es «no salió cera».
+  const ceraKg = kilos(input.ceraKg ?? null, "cera");
+  let cera: { byproductType: "CERA"; destination: ByproductDestination; massKg: number; producedAtLocationId: string; notes: string | null } | null = null;
+  if (ceraKg !== null) {
+    if (!input.ceraDestino) throw new MielInvalida("cera_sin_destino");
+    const nota = input.ceraNota?.trim() || null;
+    // La base lo exige también (CHECK `byproduct_batch_otro_dice_por_que`); aquí se dice con nombre.
+    if (input.ceraDestino === "OTRO" && !nota) throw new MielInvalida("cera_otro_sin_nota");
+    // El lugar es el del lote —el apiario de la cosecha—: es el ancla de RBAC de la tabla, y sin
+    // él no habría a quién enseñarle esta cera.
+    if (!lote.locationId) throw new MielInvalida("cera_sin_lugar");
+    cera = { byproductType: "CERA", destination: input.ceraDestino, massKg: ceraKg, producedAtLocationId: lote.locationId, notes: nota };
+  }
 
   const r = await recordTransformation(userAccountId, {
     transformationType: "honey_processing",
@@ -74,6 +96,7 @@ export async function procesarMiel(userAccountId: string, input: ProcesarMielInp
     declaredLossReason: lossKg === null ? null : "merma_del_proceso_de_miel",
     honeyProcessActs: acts,
     honeyProcessOtherNote: otherNote,
+    byproducts: cera ? [cera] : undefined,
   });
   return { transformation: r.transformation, lote: r.outputLots[0]!, reconciliation: r.reconciliation };
 }
