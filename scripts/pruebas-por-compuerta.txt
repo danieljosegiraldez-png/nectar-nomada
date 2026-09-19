@@ -60,6 +60,7 @@ tests/sensores/ruta-de-ingesta.test.ts
 tests/apiary/genealogia.test.ts
 tests/traceability/fincas.test.ts
 tests/traceability/entregaDeCosecha-esquema.test.ts
+tests/traceability/jornadasDeCosecha.test.ts
 tests/apiary/reinas.test.ts
 tests/apiary/refractometroDeMiel.test.ts
 tests/apiary/mielDelLote.test.ts
