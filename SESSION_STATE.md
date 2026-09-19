@@ -211,9 +211,8 @@ puede afirmar cada pantalla— y sigue sin tomarse.
   que poder fusionar un arreglo sin desactivar la protección primero. Cerrado el
   2026-09-05; el detalle, en `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **PR B del manejo fitosanitario** — bloqueado en que `PlotBlock` y `TrapRule` existan en `main`. Áreas
-  por bloque, `TrapRule.suggestedMaterialId`, botón «Registrar aplicación» desde el aviso de trampa,
-  aviso atendido. Pieza 2 (#369, diseño+plan fusionado).
+- **PR B del manejo fitosanitario** — construido en la rama `fitosanitarios-pr-b` (plan
+  `docs/superpowers/plans/2026-09-19-aplicaciones-fitosanitarias-pr-b.md`); pendiente de fusionar.
 
 - **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
   y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así
