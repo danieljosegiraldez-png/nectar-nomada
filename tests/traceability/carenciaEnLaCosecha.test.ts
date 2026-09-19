@@ -4,7 +4,7 @@
  * `intervencionesVigentes` y `listarIntervenciones` (lectores nuevos) y su
  * consumo dentro de `recordHarvestEvent`.
  *
- * Árbol: finca (site) → parcela (plot) → micro (micro_plot), y hermana (plot),
+ * Árbol: finca (site) → parcela (plot) → micro (plot hijo), y hermana (plot),
  * hermana de parcela bajo la misma finca. Un ámbito de Farm Manager en la
  * finca alcanza a los tres por herencia de ubicación (`can()`,
  * `lib/rbac/service.ts`).
@@ -70,7 +70,7 @@ beforeAll(async () => {
   micro = (
     await prisma.location.create({
       data: {
-        locationType: "micro_plot",
+        locationType: "plot",
         name: `TEST Micro (${RUN_ID})`,
         organizationId,
         parentLocationId: parcela,
