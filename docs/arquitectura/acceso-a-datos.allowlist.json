@@ -119,7 +119,7 @@
     },
     {
       "archivo": "lib/apiary/recipientes.ts",
-      "razon": "Módulo de dominio: la pesada por recipiente (spec 2026-09-19 §3). Anotar y quitar exigen `requireApiaryAccess` manage sobre la caja de la cosecha ANTES de escribir, en transacción Serializable; el peso de la cosecha y su asiento en el libro del lote van por `asentarPesoDeCosechaEn`, con AuditEvent de recipiente y de cosecha en la MISMA transacción."
+      "razon": "Módulo de dominio: la pesada por recipiente (spec 2026-09-19 §3). Anotar y quitar exigen `requireApiaryAccess` manage sobre la caja de la cosecha ANTES de escribir, con la fila de la cosecha bloqueada (`bloquearCosechaEn`); el peso de la cosecha y su asiento en el libro del lote van por `asentarPesoDeCosechaEn`, con AuditEvent de recipiente y de cosecha en la MISMA transacción."
     },
     {
       "archivo": "lib/apiary/cera.ts",
@@ -641,7 +641,7 @@
     },
     {
       "archivo": "lib/apiary/recipientes.ts",
-      "razon": "Spec 2026-09-19 §3: `recalcularEn(cosecha, usuario, motivo)(tx)` recibe el `tx` Serializable de `anotarRecipiente`/`quitarRecipiente`, que ya comprobaron `apiary:manage` sobre la caja de la cosecha. Suma los netos, fija el peso por `asentarPesoDeCosechaEn` y audita la cosecha en esa misma transacción."
+      "razon": "Spec 2026-09-19 §3: `recalcularEn(cosecha, usuario, motivo)(tx)` recibe el `tx` de `anotarRecipiente`/`quitarRecipiente` —con la cosecha ya bloqueada por `bloquearCosechaEn`—, que ya comprobaron `apiary:manage` sobre la caja de la cosecha. Suma los netos, fija el peso por `asentarPesoDeCosechaEn` y audita la cosecha en esa misma transacción."
     }
   ],
   "operaciones_sin_patron": [
@@ -672,6 +672,12 @@
     }
   ],
   "dependen_del_llamador": [
+    {
+      "archivo": "lib/apiary/cierreDeCosecha.ts",
+      "operacion": "bloquearCosechaEn",
+      "razon": "Revisión de Codex de la pesada por recipiente (ADR-177): toma la fila de la cosecha con FOR UPDATE al principio de la transacción que cambia su peso, para que el cierre a mano y anotar/quitar un recipiente sobre la MISMA cosecha no se crucen. No lee ni devuelve datos. Sus tres llamadores autorizan ANTES: `completarCierreDeCosecha` (mismo archivo), y `anotarRecipiente`/`quitarRecipiente` (recipientes.ts, vía `cosechaGestionable`), los tres con `requireApiaryAccess` manage sobre la caja de la cosecha.",
+      "verificado": "2026-09-19"
+    },
     {
       "archivo": "lib/traceability/jornadasDeCosecha.ts",
       "operacion": "origenesDeParcelas",

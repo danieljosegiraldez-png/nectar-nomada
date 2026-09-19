@@ -46,24 +46,62 @@ export function exigeTipoDeMiel(valor: unknown): HoneyType {
 }
 
 /**
- * El peso de la extracción entra en el LIBRO del lote — ADR-161. Completar abona lo pesado;
- * corregir asienta sólo la diferencia, y el asiento original se queda. Lo usan el cierre a mano y
- * la pesada por recipiente (`recipientes.ts`), para que haya un solo camino al libro. Dentro de la
- * transacción de quien llama; `cosecha.extractedWeightKg` es el valor ANTES de este cambio.
+ * Toma la fila de la cosecha con `FOR UPDATE` al empezar la transacción. Todo lo que cambia su peso
+ * —el cierre a mano, anotar y quitar un recipiente— pasa por aquí, así que dos de ellos sobre la
+ * MISMA cosecha van uno detrás de otro y cada uno lee recipientes y libro ya asentados.
+ *
+ * Revisión de Codex (recipientes): el cierre leía los recipientes fuera de la transacción. Se probó
+ * `Serializable` primero, y con la lectura del libro del lote abortaba transacciones ajenas que sólo
+ * compartían la tabla; el bloqueo de fila serializa lo que debe y nada más.
+ */
+export async function bloquearCosechaEn(tx: Prisma.TransactionClient, apiaryHarvestEventId: string) {
+  await tx.$queryRaw`SELECT id FROM apiary.apiary_harvest_event WHERE id = ${apiaryHarvestEventId}::uuid FOR UPDATE`;
+}
+
+/**
+ * Lo que la cosecha YA APORTÓ al libro de su lote: todos sus «recibido» —en un lote de cosecha sólo
+ * los crean los caminos del peso: cosechar, este cierre y `cosechasSinSaldo`; las transformaciones
+ * usan otros tipos— más los ajustes etiquetados con esta cosecha. Los ajustes de inventario sin
+ * etiqueta no cuentan: no son peso de cosecha.
+ *
+ * Revisión de Codex (recipientes): la diferencia se calculaba contra el PESO ESCRITO, que no siempre
+ * está en el libro. Una cosecha antigua sin asientos daba −5; borrar el peso y volver a pesar, 55.
+ */
+async function aportadoPorLaCosecha(tx: Prisma.TransactionClient, cosecha: { id: string; resultingLotId: string }) {
+  const etiqueta = `apiary_harvest_event:${cosecha.id}`;
+  const asientos = await tx.quantityEvent.findMany({
+    where: {
+      lotId: cosecha.resultingLotId,
+      OR: [{ eventType: "received" }, { eventType: { in: ["adjustment_increase", "adjustment_decrease"] }, sourceReference: etiqueta }],
+    },
+    select: { eventType: true, quantity: true },
+  });
+  const gramos = asientos.reduce(
+    (t, a) => t + (a.eventType === "adjustment_decrease" ? -1 : 1) * Math.round(Number(a.quantity) * 1000),
+    0,
+  );
+  return { kg: gramos / 1000, hayRecibido: asientos.some((a) => a.eventType === "received") };
+}
+
+/**
+ * El peso de la extracción entra en el LIBRO del lote — ADR-161. Asienta la diferencia entre
+ * `nuevoKg` y **lo que la cosecha ya aportó** (no su peso escrito). Lo usan el cierre a mano y la
+ * pesada por recipiente (`recipientes.ts`): un solo camino al libro, dentro de la transacción de
+ * quien llama, que ya bloqueó la cosecha con `bloquearCosechaEn`.
  */
 export async function asentarPesoDeCosechaEn(
   tx: Prisma.TransactionClient,
-  cosecha: { id: string; resultingLotId: string; occurredAt: Date; provenanceClass: ProvenanceClass; extractedWeightKg: Prisma.Decimal | number | null },
+  cosecha: { id: string; resultingLotId: string; occurredAt: Date; provenanceClass: ProvenanceClass },
   nuevoKg: number,
   userAccountId: string,
 ) {
-  const antes = cosecha.extractedWeightKg === null ? null : Number(cosecha.extractedWeightKg);
-  const delta = antes === null ? nuevoKg : nuevoKg - antes;
-  if (delta === 0) return;
+  const aportado = await aportadoPorLaCosecha(tx, cosecha);
+  const delta = Math.round(nuevoKg * 1000) / 1000 - aportado.kg;
+  if (Math.abs(delta) < 0.0005) return;
   await tx.quantityEvent.create({
     data: {
       lotId: cosecha.resultingLotId,
-      eventType: antes === null ? "received" : delta > 0 ? "adjustment_increase" : "adjustment_decrease",
+      eventType: !aportado.hayRecibido && delta > 0 ? "received" : delta > 0 ? "adjustment_increase" : "adjustment_decrease",
       quantity: Math.abs(delta),
       unit: "kg",
       occurredAt: cosecha.occurredAt,
@@ -116,17 +154,20 @@ export async function completarCierreDeCosecha(userAccountId: string, input: Com
     extractedWeightKg = n;
   }
 
-  // Spec 2026-09-19 §3 — con recipientes, el peso ES la suma de sus netos: escribir otro a mano
-  // dejaría dos verdades. El tipo de miel sí se completa.
-  if (tocaPeso && (await prisma.harvestContainer.count({ where: { apiaryHarvestEventId: cosecha.id } })) > 0) {
-    throw new CierreDeCosechaInvalido("peso_lo_dan_los_recipientes");
-  }
+  // Revisión de Codex (recipientes): la cosecha, sus recipientes y lo aportado al libro se leen
+  // DENTRO de la transacción y con la cosecha bloqueada (`bloquearCosechaEn`). Leídos fuera, un
+  // recipiente anotado entre la lectura y la escritura dejaba cosecha, recipientes y libro distintos.
+  const { fila: despues, corrige } = await prisma.$transaction(async (tx) => {
+    await bloquearCosechaEn(tx, cosecha.id);
+    const actual = await tx.apiaryHarvestEvent.findUniqueOrThrow({ where: { id: cosecha.id } });
+    // Spec 2026-09-19 §3 — con recipientes, el peso ES la suma de sus netos: escribir otro a mano
+    // dejaría dos verdades. El tipo de miel sí se completa.
+    if (tocaPeso && (await tx.harvestContainer.count({ where: { apiaryHarvestEventId: cosecha.id } })) > 0) {
+      throw new CierreDeCosechaInvalido("peso_lo_dan_los_recipientes");
+    }
+    const corrige = (tocaTipo && actual.honeyType !== null) || (tocaPeso && actual.extractedWeightKg !== null);
+    if (corrige && !input.reason?.trim()) throw new CierreDeCosechaInvalido("razon_requerida_para_corregir");
 
-  const corrige =
-    (tocaTipo && cosecha.honeyType !== null) || (tocaPeso && cosecha.extractedWeightKg !== null);
-  if (corrige && !input.reason?.trim()) throw new CierreDeCosechaInvalido("razon_requerida_para_corregir");
-
-  const despues = await prisma.$transaction(async (tx) => {
     const fila = await tx.apiaryHarvestEvent.update({
       where: { id: input.apiaryHarvestEventId },
       data: {
@@ -139,21 +180,21 @@ export async function completarCierreDeCosecha(userAccountId: string, input: Com
     // miel quedaba sin saldo y nada de lo que se le haga después podía cuadrar su balance.
     // Completar abona lo pesado; corregir asienta sólo la diferencia, y el asiento original
     // se queda. Borrar el peso no asienta nada: «ya no se sabe» no es miel que salió.
-    if (tocaPeso && extractedWeightKg !== null) await asentarPesoDeCosechaEn(tx, cosecha, extractedWeightKg, userAccountId);
+    if (tocaPeso && extractedWeightKg !== null) await asentarPesoDeCosechaEn(tx, actual, extractedWeightKg, userAccountId);
     await recordAuditEvent(
       {
         actorUserAccountId: userAccountId,
         operation: corrige ? "apiary_harvest.correct" : "apiary_harvest.close",
         entityType: "apiary_harvest_event",
         entityId: fila.id,
-        before: cosecha,
+        before: actual,
         after: fila,
         reason: input.reason?.trim() || undefined,
         sourceInterface: "apiary.close",
       },
       tx,
     );
-    return fila;
+    return { fila, corrige };
   });
 
   return { cosecha: despues, esCorreccion: corrige };

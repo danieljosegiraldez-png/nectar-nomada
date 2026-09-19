@@ -9,14 +9,15 @@
  * - Sobre un peso escrito a mano, el primer recipiente lo sustituye (pesar mejor no es corregir),
  *   con el peso anterior en el `before` del AuditEvent de la cosecha.
  * - Quitar el último recipiente **no borra el peso**: «ya no hay recipientes» no es «no salió miel».
- * - `Serializable`: dos recipientes anotados a la vez sumarían sobre un total viejo.
+ * - La cosecha se bloquea al empezar (`bloquearCosechaEn`): dos recipientes anotados a la vez
+ *   sumarían sobre un total viejo, y un cierre a mano podría colarse entre medias.
  *
  * Permiso: `apiary:manage` sobre la caja de la cosecha.
  */
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
-import { asentarPesoDeCosechaEn } from "./cierreDeCosecha";
+import { asentarPesoDeCosechaEn, bloquearCosechaEn } from "./cierreDeCosecha";
 import type { Prisma } from "../../generated/prisma/client";
 
 export class RecipienteInvalido extends Error {}
@@ -34,9 +35,17 @@ async function cosechaGestionable(userAccountId: string, apiaryHarvestEventId: s
   return cosecha;
 }
 
-function kilos(valor: number, codigo: string) {
-  if (!Number.isFinite(valor)) throw new RecipienteInvalido(codigo);
-  return valor;
+/**
+ * Revisión de Codex (recipientes): `Number("")` es 0, así que una tara o un bruto que faltan
+ * entraban como cero kilos. Un campo vacío es un dato que falta, no un peso; «0» escrito sí vale.
+ */
+function kilos(valor: number | string | null | undefined, codigo: string) {
+  if (valor === null || valor === undefined || (typeof valor === "string" && valor.trim() === "")) {
+    throw new RecipienteInvalido(codigo);
+  }
+  const n = typeof valor === "number" ? valor : Number(valor);
+  if (!Number.isFinite(n)) throw new RecipienteInvalido(codigo);
+  return n;
 }
 
 /**
@@ -72,7 +81,7 @@ const recalcularEn = (apiaryHarvestEventId: string, userAccountId: string, motiv
 
 export async function anotarRecipiente(
   userAccountId: string,
-  input: { apiaryHarvestEventId: string; label: string; grossKg: number; tareKg: number },
+  input: { apiaryHarvestEventId: string; label: string; grossKg: number | string; tareKg: number | string },
 ) {
   const cosecha = await cosechaGestionable(userAccountId, input.apiaryHarvestEventId);
   const label = input.label.trim();
@@ -84,6 +93,7 @@ export async function anotarRecipiente(
   try {
     return await prisma.$transaction(
       async (tx) => {
+        await bloquearCosechaEn(tx, cosecha.id);
         const recipiente = await tx.harvestContainer.create({
           data: { apiaryHarvestEventId: cosecha.id, label, grossKg, tareKg, createdBy: userAccountId },
         });
@@ -101,7 +111,6 @@ export async function anotarRecipiente(
         const totalKg = (await recalcularEn(cosecha.id, userAccountId, null)(tx)) as number;
         return { recipiente, totalKg };
       },
-      { isolationLevel: "Serializable" },
     );
   } catch (error) {
     // El choque de etiqueta lo decide la BASE (índice único): una comprobación previa tendría carrera.
@@ -119,6 +128,7 @@ export async function quitarRecipiente(userAccountId: string, input: { container
 
   return prisma.$transaction(
     async (tx) => {
+      await bloquearCosechaEn(tx, antes.apiaryHarvestEventId);
       await tx.harvestContainer.delete({ where: { id: antes.id } });
       await recordAuditEvent(
         {
@@ -135,6 +145,5 @@ export async function quitarRecipiente(userAccountId: string, input: { container
       const totalKg = await recalcularEn(antes.apiaryHarvestEventId, userAccountId, motivo)(tx);
       return { totalKg };
     },
-    { isolationLevel: "Serializable" },
   );
 }

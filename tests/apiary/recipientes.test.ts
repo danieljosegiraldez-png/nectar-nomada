@@ -178,3 +178,37 @@ describe("la pesada por recipiente", () => {
   });
 });
 
+// Revisión de Codex del PR de recipientes: la diferencia suponía que el peso escrito ya estaba en el
+// libro. Ahora se mide lo que la cosecha APORTÓ de verdad (sus «recibido» y sus ajustes etiquetados).
+describe("el libro cuadra con lo que la cosecha aportó, no con lo que dice su peso escrito (Codex)", () => {
+  it("COSECHA ANTIGUA SIN ASIENTOS: el primer recipiente recibe su neto, no una disminución sobre un libro vacío", async () => {
+    const h = await cosecha();
+    await prisma.apiaryHarvestEvent.update({ where: { id: h.id }, data: { extractedWeightKg: 30 } }); // como antes de ADR-161
+    expect(await saldo(h.resultingLotId)).toBeCloseTo(0, 3); // el control: de verdad no hay asientos
+    await anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b1", grossKg: 26, tareKg: 1 });
+    expect(await saldo(h.resultingLotId)).toBeCloseTo(25, 3);
+  });
+
+  it("BORRAR EL PESO Y VOLVER A PESAR no duplica el libro — ni a mano ni por recipiente", async () => {
+    const a = await cosecha();
+    await completarCierreDeCosecha(operario, { apiaryHarvestEventId: a.id, extractedWeightKg: 30 });
+    await completarCierreDeCosecha(operario, { apiaryHarvestEventId: a.id, extractedWeightKg: null, reason: "mal pesado" });
+    await anotarRecipiente(operario, { apiaryHarvestEventId: a.id, label: "b1", grossKg: 26, tareKg: 1 });
+    expect(await saldo(a.resultingLotId)).toBeCloseTo(25, 3);
+
+    const b = await cosecha();
+    await completarCierreDeCosecha(operario, { apiaryHarvestEventId: b.id, extractedWeightKg: 30 });
+    await completarCierreDeCosecha(operario, { apiaryHarvestEventId: b.id, extractedWeightKg: null, reason: "mal pesado" });
+    await completarCierreDeCosecha(operario, { apiaryHarvestEventId: b.id, extractedWeightKg: 25 });
+    expect(await saldo(b.resultingLotId)).toBeCloseTo(25, 3);
+  });
+
+  it("UNA TARA O UN BRUTO QUE FALTAN no son cero: se rechazan", async () => {
+    const h = await cosecha();
+    await expect(anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b1", grossKg: 26, tareKg: "" })).rejects.toThrow(/pesos_imposibles/);
+    await expect(anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b1", grossKg: "  ", tareKg: 1 })).rejects.toThrow(/pesos_imposibles/);
+    const cero = await anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b1", grossKg: "26", tareKg: "0" });
+    expect(cero.totalKg).toBeCloseTo(26, 3); // el control: un cero ESCRITO sí vale
+  });
+});
+

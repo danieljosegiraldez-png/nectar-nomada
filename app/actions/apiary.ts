@@ -501,8 +501,8 @@ export async function anotarRecipienteFormAction(formData: FormData): Promise<vo
   await anotarRecipiente(user.userAccountId, {
     apiaryHarvestEventId: String(formData.get("apiaryHarvestEventId") ?? ""),
     label: String(formData.get("label") ?? ""),
-    grossKg: Number(formData.get("grossKg") ?? ""),
-    tareKg: Number(formData.get("tareKg") ?? ""),
+    grossKg: String(formData.get("grossKg") ?? ""),
+    tareKg: String(formData.get("tareKg") ?? ""),
   });
   revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
 }

@@ -11712,10 +11712,20 @@ tambor lleno y su peso vacio. Spec `docs/superpowers/specs/2026-09-19-cera-y-pes
 **Decision.** `harvest_container`: cosecha, etiqueta (unica por cosecha, no en blanco), bruto y
 tara (CHECK: tara >= 0, bruto > tara). El neto no se guarda. **Si la cosecha tiene recipientes, su
 peso es la suma de los netos**: anotar o quitar uno recalcula el peso en una transaccion
-`Serializable` y asienta solo la diferencia en el libro del lote, por **el mismo camino** que el
+con la cosecha bloqueada y asienta solo la diferencia en el libro del lote, por **el mismo camino** que el
 peso a mano (`asentarPesoDeCosechaEn`, extraido de `completarCierreDeCosecha`). Mientras haya
 recipientes, el peso a mano se rechaza. Sobre un peso escrito a mano, el primer recipiente lo
 sustituye (pesar mejor no es corregir; el peso anterior queda en el `before`). Quitar el ultimo
 recipiente no borra el peso.
+
+**Revision de Codex, tres hallazgos, los tres arreglados con su prueba en rojo primero.**
+1. **La diferencia se calculaba contra el peso escrito, no contra el libro.** Una cosecha antigua con
+   peso pero sin asientos quedaba en -5 kg; borrar el peso y volver a pesar asentaba dos veces (55
+   en vez de 25) — tambien en el camino a mano, que ya existia. Ahora se calcula contra **lo que la
+   cosecha ya aporto**: sus `received` en el lote mas los ajustes etiquetados con ella.
+2. **El cierre a mano leia los recipientes fuera de la transaccion.** Ahora todo lo que cambia el
+   peso toma la fila de la cosecha con `FOR UPDATE` (`bloquearCosechaEn`). Se probo `Serializable`
+   primero: con la lectura del libro abortaba transacciones ajenas que solo compartian la tabla.
+3. **`Number("")` es 0**: una tara o un bruto en blanco entraban como cero kilos. Ahora faltan.
 
 **Lo que NO entra.** La cera y los operculos (spec §4): su rebanada.
