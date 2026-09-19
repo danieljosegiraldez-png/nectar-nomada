@@ -35,7 +35,7 @@ const CODIGOS = [
   "ya_es_recolector", "persona_no_encontrada", "ya_cerrada", "jornada_cerrada", "no_es_su_entrega", "sin_permiso",
   "peso_invalido", "no_asignado_en_la_jornada", "origen_no_asignado", "motivo_obligatorio", "ya_anulada",
   "sobre_no_asignado", "nota_obligatoria", "event_kind_invalido", "condicion_del_dia_invalido",
-  "tipo_de_archivo_invalido", "clave_invalida", "tamano_invalido",
+  "tipo_de_archivo_invalido", "clave_invalida", "tamano_invalido", "beneficio_no_valido", "destino_fijo", "ya_recibida",
 ] as const;
 
 async function traducir(error: unknown): Promise<JornadaActionState> {
@@ -96,6 +96,7 @@ export async function abrirJornadaAction(_prev: JornadaActionState, formData: Fo
       .map(([locationId, personId]) => ({ locationId, personId }));
     const jornada = await abrirJornada(yo, {
       fincaSiteId: String(formData.get("fincaSiteId") ?? ""),
+      beneficioId: String(formData.get("beneficioId") ?? ""),
       fecha,
       nota: String(formData.get("nota") ?? "") || null,
       asignaciones,

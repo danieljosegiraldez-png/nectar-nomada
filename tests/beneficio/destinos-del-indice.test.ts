@@ -21,6 +21,11 @@ describe("los enlaces del índice del beneficio", () => {
     expect(vistos).toContain("/reports/proceso");
   });
 
+  it("quien entra a la sección ve Recepción y Pedidos; quien no, no llega aquí", () => {
+    expect(hrefs(["lot:view"])).toContain("/beneficio/recepcion");
+    expect(hrefs(["lot:view"])).toContain("/beneficio/pedidos");
+  });
+
   it("quien gestiona lotes sí ve Recetas", () => {
     expect(hrefs(["lot:manage"])).toContain("/recipes");
   });
