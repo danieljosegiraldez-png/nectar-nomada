@@ -6,6 +6,7 @@ import { BandejaConfigError, PIE_EN_CM } from "../../lib/equipos/bandejas";
 import { PesajeError } from "../../lib/traceability/capacidadDeBandeja";
 import { LocationAccessError } from "../../lib/traceability/locations";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { LocalDateTimeError } from "../../lib/time/localDateTime";
 
 /**
  * Hermético: sólo importa módulos puros y lee dos archivos. Nada de esto toca
@@ -55,6 +56,17 @@ describe("mensajeDeBandeja: toda clave que devuelve existe en los dos idiomas", 
 
   it("TraceabilityAccessError colapsa a sin_acceso", () => {
     expect(mensajeDeBandeja(new TraceabilityAccessError("no_lot_access"))).toBe("sin_acceso");
+  });
+
+  // Fix round 1 (hallazgo del revisor): registrarPesajeAction llama a
+  // parseLocalDateTime dentro de su try, y un tzOffsetMinutes ausente o
+  // inválido —JS bloqueado, un POST crudo— lanza LocalDateTimeError. Sin este
+  // caso se relanzaba sin traducir y salía como página de error de Next.js en
+  // vez de un mensaje, en vez de colapsar a la clave que ya existe para
+  // "falta algo o no es válido".
+  it("LocalDateTimeError colapsa a datos_invalidos, no suma una séptima clave", () => {
+    expect(mensajeDeBandeja(new LocalDateTimeError("timezone_offset_missing"))).toBe("datos_invalidos");
+    expect(mensajeDeBandeja(new LocalDateTimeError("datetime_invalid"))).toBe("datos_invalidos");
   });
 
   it("cualquier otro tipo de error se relanza, no se traduce", () => {

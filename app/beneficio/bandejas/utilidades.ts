@@ -2,6 +2,7 @@ import { BandejaConfigError, PIE_EN_CM } from "../../../lib/equipos/bandejas";
 import { PesajeError } from "../../../lib/traceability/capacidadDeBandeja";
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { TraceabilityAccessError } from "../../../lib/traceability/lots";
+import { LocalDateTimeError } from "../../../lib/time/localDateTime";
 
 /**
  * Helpers puros de la pantalla de bandejas: no tocan la base ni la sesión, así
@@ -14,8 +15,9 @@ import { TraceabilityAccessError } from "../../../lib/traceability/lots";
  */
 
 /**
- * `BandejaConfigError`, `PesajeError`, `LocationAccessError` y
- * `TraceabilityAccessError` a su clave `error_<código>` de `Bandejas`.
+ * `BandejaConfigError`, `PesajeError`, `LocationAccessError`,
+ * `TraceabilityAccessError` y `LocalDateTimeError` a su clave `error_<código>`
+ * de `Bandejas`.
  *
  * Sólo hay 6 claves `error_` (contadas al final de la tarea): las cuatro de
  * `BandejaConfigError` y las dos propias de `PesajeError` —su
@@ -24,12 +26,23 @@ import { TraceabilityAccessError } from "../../../lib/traceability/lots";
  * con `no_beneficio_edit_access`, `location_not_found` o `no_lot_access` no
  * puede hacer nada distinto de lo que ya dice `sin_acceso`, así que colapsan
  * ahí en vez de sumar una séptima clave.
+ *
+ * **Fix round 1 (hallazgo del revisor).** `registrarPesajeAction` llama a
+ * `parseLocalDateTime` dentro de su `try`, y esta función no sabía traducir su
+ * `LocalDateTimeError` — un `tzOffsetMinutes` ausente o inválido (JS
+ * bloqueado, un POST crudo) se relanzaba sin traducir y salía de la acción
+ * como página de error de Next.js en vez de un mensaje. Se colapsa a
+ * `datos_invalidos`, la misma clave que ya usan `BandejaConfigError`/
+ * `PesajeError` para «falta algo o no es válido» — es exactamente esa
+ * situación, no una nueva. `app/actions/inspecciones.ts` y
+ * `app/actions/traceability.ts` ya guardan este mismo caso.
  */
 export function mensajeDeBandeja(error: unknown): string {
   if (error instanceof BandejaConfigError) return error.message;
   if (error instanceof PesajeError) return error.message;
   if (error instanceof LocationAccessError) return "sin_acceso";
   if (error instanceof TraceabilityAccessError) return "sin_acceso";
+  if (error instanceof LocalDateTimeError) return "datos_invalidos";
   throw error;
 }
 
