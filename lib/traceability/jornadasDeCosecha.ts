@@ -17,6 +17,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLotAccess } from "./lots";
 import { idsBajoLaFinca } from "./fincas";
+import { can } from "../rbac/service";
 
 export class JornadaError extends Error {}
 
@@ -62,8 +63,35 @@ export async function recolectoresDeFinca(userAccountId: string, fincaSiteId: st
   return filas.map((f) => ({ personId: f.person.id, nombre: f.person.displayName }));
 }
 
+/**
+ * Spec recepción §3.1 — los beneficios a los que puede ir una jornada: los de tipo `beneficio` sobre
+ * los que quien abre tiene `lot:view` (que sube por los ancestros: el capataz de la finca ve el
+ * beneficio que cuelga de su sitio). **No** `listarBeneficios`, que filtra por
+ * `location:manage_attributes`, y un capataz no lo tiene.
+ */
+export async function beneficiosDeDestino(userAccountId: string) {
+  const filas = await prisma.location.findMany({
+    where: { locationType: "beneficio" },
+    select: { id: true, name: true, classification: true },
+    orderBy: { name: "asc" },
+  });
+  const salida: { id: string; name: string }[] = [];
+  for (const f of filas) {
+    if (await can(userAccountId, "view", "lot", { scopeType: "location", scopeRefId: f.id }, f.classification)) salida.push({ id: f.id, name: f.name });
+  }
+  return salida;
+}
+
+async function exigeBeneficioDeDestino(userAccountId: string, beneficioId: string) {
+  const b = beneficioId ? await prisma.location.findUnique({ where: { id: beneficioId }, select: { id: true, locationType: true, classification: true } }) : null;
+  if (!b || b.locationType !== "beneficio") throw new JornadaError("beneficio_no_valido");
+  if (!(await can(userAccountId, "view", "lot", { scopeType: "location", scopeRefId: b.id }, b.classification))) throw new JornadaError("beneficio_no_valido");
+}
+
 export interface AbrirJornadaInput {
   readonly fincaSiteId: string;
+  /** Spec recepción §3.1: el beneficio de destino, obligatorio. */
+  readonly beneficioId: string;
   readonly fecha: Date;
   readonly nota?: string | null;
   readonly asignaciones: readonly { locationId: string; personId: string }[];
@@ -77,6 +105,7 @@ export async function abrirJornada(userAccountId: string, input: AbrirJornadaInp
   await exigeGestionarFinca(userAccountId, input.fincaSiteId);
   if (Number.isNaN(input.fecha.getTime())) throw new JornadaError("fecha_invalida");
   if (!input.asignaciones.length) throw new JornadaError("sin_asignaciones");
+  await exigeBeneficioDeDestino(userAccountId, input.beneficioId);
 
   const arbol = await prisma.location.findMany({ select: { id: true, parentLocationId: true, locationType: true } });
   const bajo = idsBajoLaFinca(arbol, input.fincaSiteId);
@@ -97,6 +126,7 @@ export async function abrirJornada(userAccountId: string, input: AbrirJornadaInp
     const jornada = await tx.jornadaDeCosecha.create({
       data: {
         fincaSiteId: input.fincaSiteId,
+        beneficioId: input.beneficioId,
         fecha: input.fecha,
         nota: input.nota?.trim() || null,
         createdBy: userAccountId,
@@ -123,6 +153,29 @@ export async function cerrarJornada(userAccountId: string, jornadaId: string) {
     const despues = await tx.jornadaDeCosecha.update({ where: { id: jornadaId }, data: { estado: "cerrada", cerradaAt: new Date() } });
     await recordAuditEvent(
       { actorUserAccountId: userAccountId, operation: "harvest_day.close", entityType: "jornada_de_cosecha", entityId: jornadaId, before: antes, after: despues, sourceInterface: "traceability.service" },
+      tx,
+    );
+    return despues;
+  });
+}
+
+/**
+ * Pone o cambia el beneficio de destino. Sólo mientras ninguna entrega de la jornada tenga una
+ * recepción vigente: después queda fijo (y el disparador `jornada_de_cosecha_destino_fijo` es la
+ * red en la base).
+ */
+export async function cambiarDestinoDeJornada(userAccountId: string, input: { jornadaId: string; beneficioId: string }) {
+  const jornada = await prisma.jornadaDeCosecha.findUnique({ where: { id: input.jornadaId } });
+  if (!jornada) throw new JornadaError("jornada_no_encontrada");
+  await exigeGestionarFinca(userAccountId, jornada.fincaSiteId);
+  await exigeBeneficioDeDestino(userAccountId, input.beneficioId);
+  return prisma.$transaction(async (tx) => {
+    const antes = await tx.jornadaDeCosecha.findUniqueOrThrow({ where: { id: input.jornadaId } });
+    const recibida = await tx.recepcionDeCereza.findFirst({ where: { entrega: { jornadaId: antes.id }, estado: { not: "anulada" } }, select: { id: true } });
+    if (recibida) throw new JornadaError("destino_fijo");
+    const despues = await tx.jornadaDeCosecha.update({ where: { id: antes.id }, data: { beneficioId: input.beneficioId } });
+    await recordAuditEvent(
+      { actorUserAccountId: userAccountId, operation: "harvest_day.set_destination", entityType: "jornada_de_cosecha", entityId: antes.id, before: antes, after: despues, sourceInterface: "traceability.service" },
       tx,
     );
     return despues;

@@ -2857,6 +2857,9 @@
     "proximamente": "Coming next: yield and efficiency, and harvest quality with what the mill's selection sends back."
   },
   "Jornadas": {
+    "error_beneficio_no_valido": "Choose the mill this harvest day's cherry goes to.",
+    "error_destino_fijo": "This harvest day already has received deliveries: its mill can no longer change.",
+    "error_ya_recibida": "That delivery was already received at the mill: it can't be voided from the farm.",
     "misEntregasTitulo": "My deliveries",
     "sinJornadaAsignada": "You are not assigned on any open harvest day today. When the foreman assigns you, it shows up here.",
     "jornadaEn": "{finca}, harvest day of {fecha}",

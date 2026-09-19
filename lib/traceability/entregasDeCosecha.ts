@@ -129,6 +129,10 @@ export async function anularEntrega(userAccountId: string, input: { entregaId: s
   return prisma.$transaction(async (tx) => {
     const antes = await tx.entregaDeCosecha.findUniqueOrThrow({ where: { id: input.entregaId } });
     if (antes.estado !== "enviada") throw new EntregaError("ya_anulada");
+    // Spec recepción §3.4: recibida en el beneficio, ya no se anula desde la finca. El disparador
+    // `entrega_de_cosecha_recibida_no_se_anula` es la red en la base.
+    const recibida = await tx.recepcionDeCereza.findFirst({ where: { entregaId: antes.id, estado: { not: "anulada" } }, select: { id: true } });
+    if (recibida) throw new EntregaError("ya_recibida");
     const despues = await tx.entregaDeCosecha.update({ where: { id: antes.id }, data: { estado: "anulada", anuladaAt: new Date(), motivoAnulacion: motivo } });
     await recordAuditEvent(
       { actorUserAccountId: userAccountId, operation: "harvest_delivery.void", entityType: "entrega_de_cosecha", entityId: antes.id, before: antes, after: despues, sourceInterface: "traceability.service" },
