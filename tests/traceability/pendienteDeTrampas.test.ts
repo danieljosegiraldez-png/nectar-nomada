@@ -10,6 +10,7 @@ import {
   proximaRevisionDe,
   trampasFiltradas,
   trampasParaAviso,
+  claveI18nDeRevisionRechazada,
   type EstadoDeTrampa,
   type ReglaParaAviso,
   type TrampaParaAviso,
@@ -326,5 +327,67 @@ describe("proximaRevisionDe", () => {
     };
     const reglaDeCatorce: ReglaParaAviso = { ...regla, normalDays: 14 };
     expect(proximaRevisionDe(trampa, reglaDeCatorce)).toBe("2027-01-08");
+  });
+});
+
+/**
+ * Fix final (re-revisión, "New Breakage") — de la razón de rechazo del
+ * servidor a la clave i18n de la tarjeta. Ruling del controlador: las cinco
+ * categorías nombradas, más un genérico para cualquier código sin reconocer
+ * — nunca un mensaje que insinúe una causa que no se comprobó.
+ */
+describe("claveI18nDeRevisionRechazada", () => {
+  it("sin acceso a la trampa", () => {
+    expect(claveI18nDeRevisionRechazada("no_specimen_access")).toBe("trapCheckRejectedNoAccess");
+  });
+
+  it("sin persona vinculada: reutiliza error_trap_no_observer", () => {
+    expect(claveI18nDeRevisionRechazada("observer_self_missing")).toBe("error_trap_no_observer");
+  });
+
+  it("trampa retirada o no activa: reutiliza error_trap_retired", () => {
+    expect(claveI18nDeRevisionRechazada("trap_retired")).toBe("error_trap_retired");
+    expect(claveI18nDeRevisionRechazada("not_a_trap")).toBe("error_trap_retired");
+  });
+
+  it("la clave ya se usó con otra trampa (A9)", () => {
+    expect(claveI18nDeRevisionRechazada("client_draft_id_used_by_other_specimen")).toBe(
+      "trapCheckRejectedKeyReused",
+    );
+  });
+
+  // Las razones REALES que produce el parseo (A10/A11) y el servicio, cada
+  // una con una forma de sufijo distinta.
+  it.each([
+    "location_id_required",
+    "observed_at_required",
+    "broca_level_required",
+    "specimen_id_required",
+    "observed_at_not_a_day",
+    "observed_at_invalid",
+    "cleaned_not_valid",
+    "liquid_changed_not_valid",
+    "lure_recharged_not_valid",
+    "other_insects_not_valid",
+    "other_insects_note_not_valid",
+    "capture_count_invalid",
+    // La forma con `:valor` que produce `exigeValorEnumerado` — Codex
+    // "un brocaLevel que no existe en el enum", en tests/sync/parcelaSinSenal.test.ts.
+    "brocaLevel_not_valid:un montón",
+  ])("%s es un formato o campo inválido", (razon) => {
+    expect(claveI18nDeRevisionRechazada(razon)).toBe("trapCheckRejectedInvalidField");
+  });
+
+  // EL GUARDIA del genérico: un código que esta función no reconoce —
+  // incluido uno malformado a propósito, para que un futuro código nuevo no
+  // caiga por accidente en una de las categorías específicas.
+  it("un código desconocido cae en el genérico, nunca en un motivo que no se comprobó", () => {
+    expect(claveI18nDeRevisionRechazada("algo-que-nunca-existirá")).toBe("trapCheckRejectedGeneric");
+    expect(claveI18nDeRevisionRechazada(null)).toBe("trapCheckRejectedGeneric");
+    expect(claveI18nDeRevisionRechazada(undefined)).toBe("trapCheckRejectedGeneric");
+    expect(claveI18nDeRevisionRechazada("")).toBe("trapCheckRejectedGeneric");
+    // El rechazo de LOTE entero (aparato revocado, `HTTP 403`) tampoco debe
+    // leerse como uno de los motivos específicos.
+    expect(claveI18nDeRevisionRechazada("HTTP 403")).toBe("trapCheckRejectedGeneric");
   });
 });

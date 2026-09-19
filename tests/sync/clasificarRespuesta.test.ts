@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { clasificarRespuesta, leerJson, construirMutacionDesdeBorrador, type FieldEventDraft } from "../../lib/sync/offlineQueue";
+import {
+  clasificarRespuesta,
+  leerJson,
+  construirMutacionDesdeBorrador,
+  estadoDeBorrador,
+  type FieldEventDraft,
+} from "../../lib/sync/offlineQueue";
 
 /**
  * P4 §4 — la frontera entre «el servidor se negó» y «el servidor no pudo».
@@ -201,5 +207,30 @@ describe("construirMutacionDesdeBorrador: qué clientDraftId viaja por cada borr
     expect(porClaveDeEnvio.size).toBe(2);
     expect(porClaveDeEnvio.get("clave-1")?.id).toBe("draft-a");
     expect(porClaveDeEnvio.get("clave-2")?.id).toBe("draft-b");
+  });
+});
+
+/**
+ * Fix final (re-revisión, "New Breakage") — el estado de UN borrador para
+ * mostrarlo en su tarjeta.
+ *
+ * **EL GUARDIA.** `listFieldEventDrafts()` no filtra por `status`: un
+ * borrador rechazado de forma terminal (`status: "error"`) sigue "existiendo"
+ * igual que uno pendiente. Antes de este arreglo, `RondaDeTrampaForm` sólo
+ * comprobaba «¿sigue en la lista?», así que un rechazo definitivo se leía
+ * como «todavía pendiente, sólo falta señal» para siempre — lo opuesto de la
+ * verdad. `estadoDeBorrador` es la decisión que lo distingue.
+ */
+describe("estadoDeBorrador: pendiente, rechazada o sincronizada", () => {
+  it("ausente (ya no está en la cola) es sincronizada", () => {
+    expect(estadoDeBorrador(null)).toBe("sincronizada");
+  });
+
+  it("status pending es pendiente", () => {
+    expect(estadoDeBorrador({ status: "pending" })).toBe("pendiente");
+  });
+
+  it("status error es rechazada, NUNCA pendiente ni sincronizada", () => {
+    expect(estadoDeBorrador({ status: "error" })).toBe("rechazada");
   });
 });

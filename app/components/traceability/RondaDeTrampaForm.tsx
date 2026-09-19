@@ -1,13 +1,30 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { TriStateField } from "./TriStateField";
-import { queueFieldEvent, syncFieldEvents, listFieldEventDrafts } from "../../../lib/sync/offlineQueue";
+import {
+  queueFieldEvent,
+  syncFieldEvents,
+  listFieldEventDrafts,
+  discardFieldEventDraft,
+  estadoDeBorrador,
+  FIELD_EVENTS_SYNCED_EVENT,
+  type FieldEventDraft,
+  type EstadoDeBorrador,
+} from "../../../lib/sync/offlineQueue";
 import { construirPayloadDeRevisionDeTrampa, generarClaveDeRevision } from "../../../lib/sync/parcelaPayload";
 import { queueTrapPhoto, syncTrapPhotos } from "../../../lib/sync/trapPhotoQueue";
+import { claveI18nDeRevisionRechazada } from "../../../lib/traceability/pendienteDeTrampas";
 
 const NIVELES = ["ninguno", "pocos", "algunos", "muchos"] as const;
+
+/** El `clientDraftId` de un borrador de la ronda, tal como lo guardó
+ * `construirPayloadDeRevisionDeTrampa` en su `payload`. */
+function claveDelBorrador(d: FieldEventDraft): string | null {
+  const v = (d.payload as { clientDraftId?: unknown }).clientDraftId;
+  return typeof v === "string" ? v : null;
+}
 
 /**
  * El formulario corto de la ronda — spec §4.2: seis campos, no diez.
@@ -30,42 +47,41 @@ const NIVELES = ["ninguno", "pocos", "algunos", "muchos"] as const;
  * y desajustaría la hidratación. El campo sigue siendo un `type="date"`
  * editable — sólo cambia de dónde sale el valor por defecto.
  *
- * **Fix final A1+A2 — un solo camino, primero la cola, y SIEMPRE.** Antes
- * había dos caminos: con señal, el navegador hacía el envío nativo del
- * `<form action={formAction}>` hacia `recordRoundTrapCheckFormAction`; sin
- * señal, `alEnviar` interceptaba y encolaba. Eso rompía en dos sitios
- * (revisión final, C1/I3): el `<input type="file">` viajaba DENTRO de ese
- * `<form>`, así que una foto de cámara (varios MB) superaba el límite de
- * 1 MB del cuerpo de una Server Action y la revisión no se guardaba aunque
- * hubiera señal de sobra; y un reintento tras perder el acuse del servidor
- * generaba una clave FRESCA (necesaria para el camino sin señal) que el
- * camino con señal no persistía en ningún sitio, así que un segundo intento
- * creaba una segunda fila.
- *
- * Ahora hay un solo camino: `alEnviar` SIEMPRE hace `preventDefault()` y
- * encola la revisión con `queueFieldEvent` — nunca hay envío nativo del
- * formulario, así que la foto nunca puede viajar en su cuerpo. Si hay
- * señal, se dispara `syncFieldEvents()` enseguida después de encolar (no se
- * espera a que el operario pulse el botón de `FieldSyncControls`). La clave
- * de idempotencia (`generarClaveDeRevision`) es la misma que ve el servidor
- * sin importar si había cobertura al pulsar «Registrar»: un reintento la
- * reutiliza —se fija una vez por intento de guardado real, ver más abajo—,
- * así que el servidor lo deduplica por `clientDraftId` en vez de crear una
- * fila nueva, y un envío que de verdad se pierde queda recuperable en la
- * cola en vez de desaparecer sin dejar rastro.
- *
- * `recordRoundTrapCheckFormAction` quedó sin ningún llamador con este
- * cambio (comprobado con `grep`) y se quitó, junto con su prueba dedicada:
- * la única regla que fijaba —procedencia y observador en el servidor— la
- * sigue fijando `aplicarRevisionDeTrampa`, que es ahora el único sitio por
- * el que pasa CUALQUIER revisión de la ronda, con o sin señal.
+ * **Fix final A1+A2 — un solo camino, primero la cola, y SIEMPRE.** `alEnviar`
+ * SIEMPRE hace `preventDefault()` y encola la revisión con `queueFieldEvent`
+ * — nunca hay envío nativo del formulario, así que la foto nunca puede viajar
+ * en su cuerpo (C1/I3 de la revisión final). La clave de idempotencia
+ * (`generarClaveDeRevision`) es la misma que ve el servidor sin importar si
+ * había cobertura al pulsar «Registrar».
  *
  * **A3 — la foto se intenta encolar ANTES que la revisión.** Si
- * `queueTrapPhoto` falla (cuota de IndexedDB, navegación privada), el
- * formulario NO se limpia y la revisión NO se encola: el operario ve el
- * error y no cree que guardó algo que no guardó. Si la foto se encola bien
- * (o no había foto), la revisión se encola y, si hay señal, las dos colas
- * —revisión y foto— se sincronizan enseguida.
+ * `queueTrapPhoto` falla, ni se limpia el formulario ni se da la revisión
+ * por hecha.
+ *
+ * **Fix final (re-revisión, "New Breakage") — la tarjeta distingue TRES
+ * estados del último borrador de esta trampa, no dos.** Antes,
+ * `pendienteDeEnvio` sólo miraba si el `clientDraftId` seguía en
+ * `listFieldEventDrafts()`: un rechazo TERMINAL del servidor
+ * (`observer_self_missing`, una trampa retirada, la clave de A9 reutilizada
+ * con otra trampa, un campo malformado) deja el borrador en la cola con
+ * `status: "error"` — sigue "existiendo", así que se leía como "todavía
+ * pendiente, sólo falta señal" para siempre, que es lo opuesto de la verdad.
+ *
+ * Los tres estados —`estadoDeBorrador`, en `lib/sync/offlineQueue.ts`— son
+ * `"pendiente"` (en cola, sin confirmar), `"rechazada"` (el servidor la
+ * negó: se muestra el motivo, con un botón «Descartar» que borra ESE
+ * borrador como acción explícita del operario) y `"sincronizada"` (ya no
+ * está en la cola: aplicada o duplicada). Una rechazada NUNCA se lee como
+ * «revisada hoy» (regla 3 del ruling): sólo `"pendiente"` y `"sincronizada"`
+ * usan ese texto.
+ *
+ * **Se reconcilia al montar**, no sólo tras el propio envío: el borrador
+ * sobrevive a un cierre de pestaña (IndexedDB), así que si la página se
+ * recarga con una revisión pendiente o rechazada de ESTA trampa, la tarjeta
+ * tiene que seguir mostrándola — si no, un rechazo real se volvería
+ * invisible en vez de sólo "pendiente para siempre". Y se re-comprueba en
+ * cualquier `FIELD_EVENTS_SYNCED_EVENT` de la página (el botón genérico de
+ * `FieldSyncControls`, no sólo el envío inmediato de este formulario).
  */
 export function RondaDeTrampaForm({
   locationId,
@@ -79,13 +95,8 @@ export function RondaDeTrampaForm({
   const t = useTranslations("Traceability");
   const id = (campo: string) => `ronda-${campo}-${specimenId}`;
 
-  // `encolado`: la revisión quedó guardada en este dispositivo (spec §4.2 —
-  // «revisada hoy»). `pendienteDeEnvio`: sigue sin confirmarse que el
-  // servidor la recibió — arranca en `true` al encolar y pasa a `false` en
-  // cuanto, tras el intento de sincronización con señal, el borrador ya no
-  // está en la cola local.
-  const [encolado, setEncolado] = useState(false);
-  const [pendienteDeEnvio, setPendienteDeEnvio] = useState(false);
+  const [estado, setEstado] = useState<EstadoDeBorrador | null>(null);
+  const [motivoRechazo, setMotivoRechazo] = useState<string | null>(null);
   const [errorLocal, setErrorLocal] = useState(false);
   const [errorFoto, setErrorFoto] = useState(false);
   const [encolando, setEncolando] = useState(false);
@@ -96,6 +107,41 @@ export function RondaDeTrampaForm({
   // El pestillo evita que dos toques de «Registrar» antes de que termine el
   // primer `alEnviar` encolen dos revisiones.
   const yaEncolando = useRef(false);
+  // El id LOCAL (IndexedDB) del borrador que la tarjeta muestra ahora — el
+  // que `discardFieldEventDraft` necesita, distinto del `clientDraftId`.
+  const draftIdRef = useRef<string | null>(null);
+  const claveRef = useRef<string | null>(null);
+
+  const actualizarDesdeBorrador = useCallback((borrador: FieldEventDraft | null) => {
+    draftIdRef.current = borrador?.id ?? null;
+    claveRef.current = borrador ? claveDelBorrador(borrador) : null;
+    setEstado(estadoDeBorrador(borrador));
+    setMotivoRechazo(borrador?.errorMessage ?? null);
+  }, []);
+
+  // Re-lee el borrador de ESTA clave (si ya se envió una vez) o, si aún no se
+  // ha enviado nada en esta sesión del componente, el ÚLTIMO borrador de
+  // ESTA trampa que quede en la cola — para sobrevivir a un remonte/recarga.
+  const recomprobar = useCallback(async () => {
+    try {
+      const drafts = await listFieldEventDrafts();
+      const clave = claveRef.current;
+      const borrador = clave
+        ? drafts.find((d) => claveDelBorrador(d) === clave) ?? null
+        : drafts.filter((d) => (d.payload as { specimenId?: unknown }).specimenId === specimenId).at(-1) ?? null;
+      actualizarDesdeBorrador(borrador);
+    } catch {
+      // IndexedDB no disponible (navegación privada). La tarjeta se queda
+      // como estaba; el error real, si lo hay, ya se vio al encolar.
+    }
+  }, [specimenId, actualizarDesdeBorrador]);
+
+  useEffect(() => {
+    void recomprobar();
+    const alSincronizar = () => void recomprobar();
+    window.addEventListener(FIELD_EVENTS_SYNCED_EVENT, alSincronizar);
+    return () => window.removeEventListener(FIELD_EVENTS_SYNCED_EVENT, alSincronizar);
+  }, [recomprobar]);
 
   const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
     // SIEMPRE: nunca hay envío nativo del formulario — ver el docstring.
@@ -122,41 +168,50 @@ export function RondaDeTrampaForm({
         }
       }
 
-      await queueFieldEvent({
+      const borrador = await queueFieldEvent({
         ...construirPayloadDeRevisionDeTrampa(new FormData(form), specimenId, locationId, clave),
       });
       form.reset();
       setFoto(null);
       setErrorFoto(false);
       setErrorLocal(false);
-      setEncolado(true);
-      setPendienteDeEnvio(true);
+      actualizarDesdeBorrador(borrador);
 
       // A2 — con señal, sincronizar enseguida, no esperar al botón de
-      // `FieldSyncControls`. `syncFieldEvents` avisa por evento a
-      // `SincronizarFotosDeRonda`, que también sincroniza su propia cola de
-      // fotos (A4) — no hace falta duplicar esa llamada aquí.
+      // `FieldSyncControls`. El evento que dispara `syncFieldEvents` también
+      // hace que `recomprobar` corra (vía el listener de arriba); este
+      // `.then` es sólo para no depender de esa vuelta si algo la retrasa.
       if (typeof navigator !== "undefined" && navigator.onLine) {
         void syncFieldEvents()
-          .then(async () => {
-            const siguePendiente = (await listFieldEventDrafts()).some(
-              (d) => (d.payload as { clientDraftId?: unknown }).clientDraftId === clave,
-            );
-            setPendienteDeEnvio(siguePendiente);
-          })
+          .then(() => recomprobar())
           .catch(() => {
             // El fetch no llegó: sigue pendiente, tal cual estaba.
           });
         if (foto) void syncTrapPhotos().catch(() => {});
       }
     } catch {
-      setEncolado(false);
-      setPendienteDeEnvio(false);
+      setEstado(null);
       setErrorLocal(true);
     } finally {
       yaEncolando.current = false;
       setEncolando(false);
     }
+  };
+
+  const descartar = async () => {
+    const draftId = draftIdRef.current;
+    if (draftId) {
+      try {
+        await discardFieldEventDraft(draftId);
+      } catch {
+        // Sin IndexedDB no hay nada que descartar; se deja como estaba.
+        return;
+      }
+    }
+    draftIdRef.current = null;
+    claveRef.current = null;
+    setEstado(null);
+    setMotivoRechazo(null);
   };
 
   return (
@@ -215,10 +270,20 @@ export function RondaDeTrampaForm({
         />
       </div>
 
-      {encolado ? (
+      {/* Regla 3 del ruling — una rechazada NUNCA usa el texto de «revisada
+          hoy»: sólo pendiente y sincronizada lo hacen. */}
+      {estado === "pendiente" || estado === "sincronizada" ? (
         <p className="nn-note" role="status">
-          {t(pendienteDeEnvio ? "trapCheckQueuedPending" : "trapCheckQueuedSynced")}
+          {t(estado === "pendiente" ? "trapCheckQueuedPending" : "trapCheckQueuedSynced")}
         </p>
+      ) : null}
+      {estado === "rechazada" ? (
+        <div className="nn-error" role="alert">
+          <p>{t("trapCheckRejected", { motivo: t(claveI18nDeRevisionRechazada(motivoRechazo)) })}</p>
+          <button type="button" className="nn-button" onClick={descartar}>
+            {t("trapCheckDiscard")}
+          </button>
+        </div>
       ) : null}
       {errorLocal ? (
         <p className="nn-error" role="alert">

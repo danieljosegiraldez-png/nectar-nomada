@@ -289,3 +289,38 @@ export function ordenDeRonda<
     return (a.trapNumber ?? 0) - (b.trapNumber ?? 0);
   });
 }
+
+/**
+ * Fix final (re-revisión, "New Breakage") — de la razón de rechazo que el
+ * servidor devolvió para una revisión de la ronda (la `reason` que
+ * `aplicarRevisionDeTrampa`/`parsearMutaciones.ts` producen, guardada como
+ * `errorMessage` del borrador por `syncFieldEvents`) a la clave i18n que la
+ * tarjeta muestra.
+ *
+ * **Pura, ruling del controlador.** Un `switch`/regex sobre una cadena, sin
+ * ninguna dependencia — se puede probar sin IndexedDB, sin `fetch` y sin la
+ * base. Un código que no se reconoce cae en el genérico
+ * (`trapCheckRejectedGeneric`, «El servidor no aceptó esta revisión»): nunca
+ * un mensaje que insinúe una causa que no se comprobó.
+ *
+ * Las cinco categorías, con sus códigos exactos:
+ * - `no_specimen_access` (de `requireTrapAccess`) → sin acceso.
+ * - `observer_self_missing` (cuenta sin persona vinculada) → reutiliza
+ *   `error_trap_no_observer`, que ya dice exactamente esto.
+ * - `trap_retired` / `not_a_trap` → reutiliza `error_trap_retired`.
+ * - `client_draft_id_used_by_other_specimen` (A9) → clave reutilizada.
+ * - Cualquier razón que termine en `_required`, `_invalid`, `_not_valid`
+ *   (con o sin `:valor`, como `brocaLevel_not_valid:un montón`) o
+ *   `_not_a_day` (A10/A11) → formato o campo inválido. Cubre TODAS las
+ *   razones que `parsearMutaciones.ts` produce para `trap_check` más las que
+ *   `recordTrapCheck`/`exigeValorEnumerado` producen por su cuenta.
+ */
+export function claveI18nDeRevisionRechazada(razon: string | null | undefined): string {
+  const r = razon ?? "";
+  if (r === "no_specimen_access") return "trapCheckRejectedNoAccess";
+  if (r === "observer_self_missing") return "error_trap_no_observer";
+  if (r === "trap_retired" || r === "not_a_trap") return "error_trap_retired";
+  if (r === "client_draft_id_used_by_other_specimen") return "trapCheckRejectedKeyReused";
+  if (/_(required|invalid|not_valid|not_a_day)(:|$)/.test(r)) return "trapCheckRejectedInvalidField";
+  return "trapCheckRejectedGeneric";
+}

@@ -233,6 +233,33 @@ export interface SyncSummary {
  */
 export type DecisionDeRespuesta = "aplicar" | "reintentar" | "rechazar";
 
+/**
+ * Fix final (re-revisión, "New Breakage") — el estado de UN borrador para
+ * mostrarlo en su tarjeta. Pura, misma razón que `clasificarRespuesta`: nada
+ * de IndexedDB aquí, sólo la decisión.
+ *
+ * **El defecto que esto arregla.** `listFieldEventDrafts()` devuelve TODOS
+ * los borradores sin filtrar por `status`: uno rechazado de forma terminal
+ * (`observer_self_missing`, una trampa retirada, la clave de A9 reutilizada
+ * con otra trampa…) sigue existiendo en la cola, porque `syncFieldEvents` lo
+ * re-escribe con `status: "error"` en vez de borrarlo — así el operador
+ * puede verlo y decidir, no para que se reintente solo contra algo que nunca
+ * va a salir bien. `RondaDeTrampaForm` sólo comprobaba «¿sigue existiendo el
+ * borrador?», y la respuesta era «sí» tanto para uno pendiente como para uno
+ * rechazado: un rechazo DEFINITIVO se leía como «todavía pendiente, sólo
+ * falta señal» — lo opuesto de la verdad, porque no se resuelve solo.
+ *
+ * Ausente (`null`) es `"sincronizada"`: el borrador ya no está en la cola,
+ * así que el servidor lo aplicó o lo marcó `duplicate` — las dos formas de
+ * éxito de `syncFieldEvents`, que descarta el borrador en ambas.
+ */
+export type EstadoDeBorrador = "pendiente" | "rechazada" | "sincronizada";
+
+export function estadoDeBorrador(borrador: { status: DraftStatus } | null): EstadoDeBorrador {
+  if (borrador == null) return "sincronizada";
+  return borrador.status === "error" ? "rechazada" : "pendiente";
+}
+
 export function clasificarRespuesta(status: number): DecisionDeRespuesta {
   if (status >= 200 && status < 300) return "aplicar";
   // 5xx es el servidor cayéndose; 408 y 429 son «ahora no, vuelve». Ninguno de
