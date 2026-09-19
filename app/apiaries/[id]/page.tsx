@@ -789,7 +789,8 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
                 <div className="nn-field">
                   <label htmlFor="cera-destino">{t("ceraDestino")}</label>
                   <select id="cera-destino" name="destination" defaultValue="">
-                    <option value="">{t("ceraDestinoSinDecir")}</option>
+                    {/* El vacío no se ofrece como opción (Anexo E §6): sin elegir, no se dice. */}
+                    <option value="" />
                     {DESTINOS_DE_CERA.map((d) => (
                       <option key={d} value={d}>
                         {t(`ceraDestino_${d}`)}
