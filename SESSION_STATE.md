@@ -41,8 +41,10 @@ de «hecho y sin rastro».
 ### 2026-09-19 · La miel se pesa por recipiente (Q28, rebanada 1)
 
 ADR-177. Cada cosecha puede llevar sus recipientes —bruto y tara, el neto se calcula— y entonces
-su peso es la suma, asentada en el libro del lote por el mismo camino que el peso a mano. **Sin
-ver en navegador.** Sigue: la cera de extracción y de colado como subproducto (spec §4).
+su peso es la suma, asentada en el libro del lote por el mismo camino que el peso a mano. Codex
+encontró que ese camino calculaba contra el peso escrito, no contra el libro (y duplicaba al borrar
+y volver a pesar, también a mano): ahora mide lo aportado, y la cosecha se bloquea al pesarla.
+**Sin ver en navegador.** Sigue: la cera de extracción y de colado como subproducto (spec §4).
 
 ### 2026-09-19 · Marcos negros en la inspección, y el aviso del apiario
 
