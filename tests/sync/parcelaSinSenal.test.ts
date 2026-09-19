@@ -349,7 +349,9 @@ describe("el lote reconoce la revisión de la ronda de trampas", () => {
         clientDraftId: "d-trampa",
         locationId: "loc1",
         specimenId: "specimen1",
-        observedAt: "2026-09-18T12:00:00.000Z",
+        // A10 fix-final — un campo de DÍA, `YYYY-MM-DD` exacto: un instante
+        // con hora se rechaza ahora (ver `tests/sync/parsearMutaciones.test.ts`).
+        observedAt: "2026-09-18",
         brocaLevel: "pocos",
       },
     ]);
@@ -359,7 +361,7 @@ describe("el lote reconoce la revisión de la ronda de trampas", () => {
     expect(r.rechazos).toEqual([]);
     expect(r.mutations[0]).toMatchObject({
       kind: "trap_check",
-      observedAt: new Date("2026-09-18T12:00:00.000Z"),
+      observedAt: new Date("2026-09-18T00:00:00.000Z"),
       brocaLevel: "pocos",
     });
   });
@@ -376,8 +378,8 @@ describe("el lote reconoce la revisión de la ronda de trampas", () => {
 
   it("una revisión sin brocaLevel se rechaza sola, no tumba el lote", () => {
     const r = parsearMutaciones([
-      { kind: "trap_check", clientDraftId: "d1", locationId: "loc1", specimenId: "specimen1", observedAt: "2026-09-18T12:00:00.000Z" },
-      { kind: "trap_check", clientDraftId: "d-ok", locationId: "loc1", specimenId: "specimen1", observedAt: "2026-09-18T12:00:00.000Z", brocaLevel: "muchos" },
+      { kind: "trap_check", clientDraftId: "d1", locationId: "loc1", specimenId: "specimen1", observedAt: "2026-09-18" },
+      { kind: "trap_check", clientDraftId: "d-ok", locationId: "loc1", specimenId: "specimen1", observedAt: "2026-09-18", brocaLevel: "muchos" },
     ]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -389,7 +391,7 @@ describe("el lote reconoce la revisión de la ronda de trampas", () => {
 
   it("una revisión sin specimenId se rechaza sola, con su propia razón", () => {
     const r = parsearMutaciones([
-      { kind: "trap_check", clientDraftId: "d1", locationId: "loc1", observedAt: "2026-09-18T12:00:00.000Z", brocaLevel: "pocos" },
+      { kind: "trap_check", clientDraftId: "d1", locationId: "loc1", observedAt: "2026-09-18", brocaLevel: "pocos" },
     ]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -400,7 +402,7 @@ describe("el lote reconoce la revisión de la ronda de trampas", () => {
   // porque hay `clientDraftId` a quien atribuirlo.
   it("una revisión sin locationId se rechaza sola: tiene a quién atribuirse", () => {
     const r = parsearMutaciones([
-      { kind: "trap_check", clientDraftId: "d1", specimenId: "specimen1", observedAt: "2026-09-18T12:00:00.000Z", brocaLevel: "pocos" },
+      { kind: "trap_check", clientDraftId: "d1", specimenId: "specimen1", observedAt: "2026-09-18", brocaLevel: "pocos" },
     ]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -415,7 +417,7 @@ describe("el lote reconoce la revisión de la ronda de trampas", () => {
   // prueba contra la base, más abajo.
   it("acepta la mutación aunque no traiga observerPersonId ni provenanceClass", () => {
     const r = parsearMutaciones([
-      { kind: "trap_check", clientDraftId: "d1", locationId: "loc1", specimenId: "specimen1", observedAt: "2026-09-18T12:00:00.000Z", brocaLevel: "pocos" },
+      { kind: "trap_check", clientDraftId: "d1", locationId: "loc1", specimenId: "specimen1", observedAt: "2026-09-18", brocaLevel: "pocos" },
     ]);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -1088,5 +1090,49 @@ describe("aplicarRevisionDeTrampa deniega el acceso a quien no tiene specimen:ma
       await prisma.location.deleteMany({ where: assertDefinedWhere({ id: ajeno.locationId }) });
       await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: ajeno.organizationId }) });
     }
+  });
+});
+
+/**
+ * A9 fix-final (M2), ruling del controlador — el mismo `clientDraftId`
+ * colisionado con OTRA trampa se rechaza, nunca se lee como «ya se aplicó».
+ * Antes de este arreglo, `aplicarRevisionDeTrampa` buscaba por
+ * `clientDraftId` sin comprobar `specimenId`: un cliente que reenviara la
+ * clave de la trampa A al aplicar una mutación de la trampa B habría
+ * recibido `duplicate` con el id de la fila de A, y el cliente habría
+ * descartado como sincronizado un envío que nunca se guardó bajo esa clave.
+ */
+describe("aplicarRevisionDeTrampa: la misma clave con otra trampa se rechaza, no se confunde con duplicado", () => {
+  it("dos trampas, la misma clave: la segunda es rejected, y B se queda sin fila", async () => {
+    const trampaA = await createTrap(userAccountId, {
+      locationId, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const trampaB = await createTrap(userAccountId, {
+      locationId, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    trampaIds.push(trampaA.id, trampaB.id);
+
+    const clientDraftId = `d-colision-${Date.now()}`;
+    const [primera] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "trap_check", clientDraftId, locationId, specimenId: trampaA.id,
+        observedAt: new Date("2026-09-15"), brocaLevel: "pocos",
+      } satisfies MutacionDeRevisionDeTrampa,
+    ]);
+    expect(primera).toMatchObject({ status: "applied" });
+
+    const [segunda] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "trap_check", clientDraftId, locationId, specimenId: trampaB.id,
+        observedAt: new Date("2026-09-15"), brocaLevel: "pocos",
+      } satisfies MutacionDeRevisionDeTrampa,
+    ]);
+    expect(segunda).toMatchObject({ status: "rejected", reason: "client_draft_id_used_by_other_specimen" });
+
+    expect(
+      await prisma.specimenObservation.count({ where: { specimenId: trampaB.id, observationType: "trap_check" } }),
+    ).toBe(0);
+    // Control: A sigue con su ÚNICA fila, sin que el intento de B la tocara.
+    expect(await prisma.specimenObservation.count({ where: { clientDraftId } })).toBe(1);
   });
 });
