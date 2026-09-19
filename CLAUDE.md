@@ -2925,6 +2925,18 @@ cat .vercel/project.json   # debe decir prj_9EkGhnZZgdgsEOJGsxGNFOd24Bvm
 `vercel link` además escribe un `.env.local` con lo que el proyecto tenga. Está
 gitignorado (`.env*`), pero es un secreto en disco: mirar qué trajo y borrarlo.
 
+### Una clase de validación nueva que llegue a una acción es un 500
+
+**PR #433.** `friendlyError` (`app/actions/traceability.ts`) **relanza toda clase
+que no conoce**, y no conocía `PropositoInvalido`: el formulario mandaba `[]`, el
+servicio lo rechazaba, y abrir una jornada sin propósito reventaba con la pantalla
+de error en vez de decir «Elige al menos un propósito de la visita».
+
+**La regla:** cuando un servicio gana una clase de error de validación, su rama en
+`friendlyError` entra en el mismo cambio. Sin ella el dominio funciona y la
+pantalla miente. Se anota aquí porque la entrada de estado que lo contaba se
+archivó el 2026-09-19 y un log archivado no lo lee nadie.
+
 ### Una prueba puede cerrarse sola por una errata
 
 **Síntoma.** `open-decisions.sh` trataba **cualquier** código distinto de 0 y 2
