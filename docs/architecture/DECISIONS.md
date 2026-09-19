@@ -11672,3 +11672,33 @@ se sigue el precedente para coherencia.
 peligra residuo y cuando. Las intervenciones vigentes se distinguen de las corregidas. Una carencia
 desconocida no desaparece con el tiempo. Crecer la lista de objetivos es una migración de una línea.
 Lo que no esté entra como `otro` con nota.
+
+### Anexo — PR B (2026-09-19)
+
+**Cambios en el esquema y el manejo de áreas.**
+
+- `PlotInterventionArea` gana `plotBlockId` (FK `PlotBlock`). Ahora una intervención puede actuar sobre **bloques** además de plantas. Exactamente uno de `specimenId` o `plotBlockId` por fila (`CHECK num_nonnulls(specimen_id, plot_block_id) = 1`).
+- `TrapRule` gana `suggestedMaterialId` (FK `ConsumableMaterial`, opcional, filtrado a `isPlantProtection`). El texto `suggestedAction` sigue siendo obligatorio y pasa a ser la nota que aparece debajo del nombre del producto en el aviso.
+
+**Los avisos de trampa vigentes (`trampa_con_lectura_alta`).**
+
+El aviso se da por **atendido** cuando existe una intervención vigente (no corregida) posterior a la lectura de la trampa que cubra esa trampa. «Cubrir» significa:
+
+- Una intervención sobre **la misma parcela que la trampa**, **sin importar bloque ni planta** (la intervención puede ser sobre toda la parcela o sobre un bloque específico). No cuenta una intervención sobre la parcela madre si la trampa está en una microparcela.
+- Cualquier tipo de intervención: aplicación, liberación o manejo cultural.
+- La intervención vigente anterior o simultánea a la lectura no atiende (el borde es estricto: `occurredAt > ultimaRevision.observedAt`).
+- Una trampa sin bloque asignado (`plotBlockId` nulo) solo la atiende una intervención sobre toda la parcela (`parcelaEntera: true`).
+- El aviso de **revisión vencida** sigue viéndose aunque el de lectura alta esté atendido; «atendido» se refiere solo a la lectura alta, no a la revisión pendiente.
+
+**Permisos para el manejo.**
+
+Los bloques de una parcela se leen para registrar y corregir intervenciones con `lot:view` (mismo nivel que listar intervenciones vigentes). Con este permiso, quien registra un manejo siempre ve el nombre de los bloques y puede conservarlos al corregir.
+
+**Las cuatro decisiones de este plan.**
+
+| Decisión | Por qué | Coste si es mal |
+|---|---|---|
+| «Cubre» sólo mira intervenciones de **la misma parcela que la trampa** | una intervención en la parcela madre sobre «la parcela entera» es de la madre; si se contara, habría que decidir si baja a todas las microparcelas, y el spec no lo dice | un aviso de más en una microparcela tratada desde la madre: el lado seguro |
+| El texto `suggestedAction` **sigue obligatorio** | la regla ya lo exige; con producto pasa a ser la nota que se enseña debajo | ninguno: pedir una frase corta |
+| Una trampa **sin revisión vigente** no tiene nada que atender | sin lectura no hay «lectura alta» | ninguno |
+| «Atendido» apaga **sólo** el aviso de lectura alta, no el de revisión vencida | atendido no es resuelto (spec §4.2): la trampa sigue con su plazo | ninguno |
