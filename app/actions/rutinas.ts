@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "../../lib/auth/session";
+import { lugarParaVolver, rutaDeLugar } from "../../lib/rutinas/lugares";
 import {
   RutinaError,
   anularRegistro,
@@ -12,14 +13,16 @@ import {
   registrarRealizada,
   retirarRutina,
 } from "../../lib/rutinas/rutinas";
+import { MaterialConsumptionValidationError } from "../../lib/traceability/operations";
 import { fechaDeDia } from "../../lib/time/localDateTime";
 import type { CareRoutineKind, ProvenanceClass } from "../../generated/prisma/client";
 
 /**
- * Rutinas de equipo (Tarea 9, spec §3.4). Misma forma que `app/actions/modelos.ts`:
- * `destino` se calcula dentro del `try`, y `redirect()` se llama UNA sola vez al
- * final, fuera de cualquier `catch` — así su excepción de control (`NEXT_REDIRECT`)
- * nunca se confunde con el error de dominio que el `catch` sí debe atrapar.
+ * Rutinas de equipo o de lugar (Tarea 9, spec §3.4; lugares en spec 2026-09-19 §5).
+ * Misma forma que `app/actions/modelos.ts`: `destino` se calcula dentro del `try`,
+ * y `redirect()` se llama UNA sola vez al final, fuera de cualquier `catch` — así
+ * su excepción de control (`NEXT_REDIRECT`) nunca se confunde con el error de
+ * dominio que el `catch` sí debe atrapar.
  *
  * Sólo se atrapa `RutinaError`: cualquier otra cosa se relanza y revienta con la
  * pantalla de error de siempre, que es lo que se quiere de un fallo que no es de
@@ -33,17 +36,44 @@ function diasOFalla(f: FormData, campo: string): number {
   return Number(texto);
 }
 
+/** A dónde vuelve: la ficha del equipo, o la pantalla del lugar (spec 2026-09-19 §5). */
+async function volverA(f: FormData): Promise<string> {
+  const equipmentId = String(f.get("equipmentId") ?? "");
+  if (equipmentId) return `/equipos/${equipmentId}`;
+  const locationId = String(f.get("locationId") ?? "");
+  const l = await lugarParaVolver(locationId);
+  return l ? rutaDeLugar(l) : "/instalaciones";
+}
+
+/** Filas `insumo_i_lote`, `insumo_i_cantidad`, `insumo_i_unidad`; vacío = sin cantidad, nunca 0. */
+function insumosDelFormulario(f: FormData) {
+  const salida: { consumableLotId: string; quantity: number | null; unit: string | null }[] = [];
+  for (let i = 0; i < 3; i++) {
+    const lote = String(f.get(`insumo_${i}_lote`) ?? "");
+    if (!lote) continue;
+    const texto = String(f.get(`insumo_${i}_cantidad`) ?? "").trim();
+    const quantity = texto === "" ? null : Number(texto);
+    if (quantity !== null && (!Number.isFinite(quantity) || quantity <= 0)) throw new RutinaError("cantidad_invalida");
+    const unit = String(f.get(`insumo_${i}_unidad`) ?? "").trim() || null;
+    if (quantity !== null && unit === null) throw new RutinaError("unidad_obligatoria");
+    salida.push({ consumableLotId: lote, quantity, unit });
+  }
+  return salida;
+}
+
 export async function crearRutinaFormAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const equipmentId = String(formData.get("equipmentId") ?? "");
+  const base = await volverA(formData);
 
   let destino: string;
   try {
     const kindNote = String(formData.get("kindNote") ?? "").trim();
     const instructions = String(formData.get("instructions") ?? "").trim();
     await crearRutina(user.userAccountId, {
-      equipmentId,
+      equipmentId: equipmentId || null,
+      locationId: String(formData.get("locationId") ?? "") || null,
       kind: String(formData.get("kind") ?? "") as CareRoutineKind,
       kindNote: kindNote || null,
       intervalDays: diasOFalla(formData, "intervalDays"),
@@ -51,10 +81,11 @@ export async function crearRutinaFormAction(formData: FormData): Promise<void> {
     });
     revalidatePath(`/equipos/${equipmentId}`);
     revalidatePath("/equipos");
-    destino = `/equipos/${equipmentId}?ok=rutina_creada`;
+    revalidatePath(base);
+    destino = `${base}?ok=rutina_creada`;
   } catch (error) {
     if (!(error instanceof RutinaError)) throw error;
-    destino = `/equipos/${equipmentId}?error=${encodeURIComponent(error.message)}`;
+    destino = `${base}?error=${encodeURIComponent(error.message)}`;
   }
   redirect(destino);
 }
@@ -63,6 +94,7 @@ export async function registrarRealizadaFormAction(formData: FormData): Promise<
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const equipmentId = String(formData.get("equipmentId") ?? "");
+  const base = await volverA(formData);
 
   let destino: string;
   try {
@@ -74,13 +106,20 @@ export async function registrarRealizadaFormAction(formData: FormData): Promise<
       performedByPersonId: String(formData.get("performedByPersonId") ?? "") || null,
       note: String(formData.get("note") ?? "") || null,
       provenanceClass: (String(formData.get("provenanceClass") ?? "") || "original_record") as ProvenanceClass,
+      insumos: insumosDelFormulario(formData),
     });
     revalidatePath(`/equipos/${equipmentId}`);
     revalidatePath("/equipos");
-    destino = `/equipos/${equipmentId}?ok=rutina_registrada`;
+    revalidatePath(base);
+    destino = `${base}?ok=rutina_registrada`;
   } catch (error) {
-    if (!(error instanceof RutinaError)) throw error;
-    destino = `/equipos/${equipmentId}?error=${encodeURIComponent(error.message)}`;
+    if (error instanceof MaterialConsumptionValidationError) {
+      destino = `${base}?error=unidad_distinta`;
+    } else if (error instanceof RutinaError) {
+      destino = `${base}?error=${encodeURIComponent(error.message)}`;
+    } else {
+      throw error;
+    }
   }
   redirect(destino);
 }
@@ -89,6 +128,7 @@ export async function anularRegistroFormAction(formData: FormData): Promise<void
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const equipmentId = String(formData.get("equipmentId") ?? "");
+  const base = await volverA(formData);
 
   let destino: string;
   try {
@@ -99,10 +139,11 @@ export async function anularRegistroFormAction(formData: FormData): Promise<void
     );
     revalidatePath(`/equipos/${equipmentId}`);
     revalidatePath("/equipos");
-    destino = `/equipos/${equipmentId}?ok=rutina_anulada`;
+    revalidatePath(base);
+    destino = `${base}?ok=rutina_anulada`;
   } catch (error) {
     if (!(error instanceof RutinaError)) throw error;
-    destino = `/equipos/${equipmentId}?error=${encodeURIComponent(error.message)}`;
+    destino = `${base}?error=${encodeURIComponent(error.message)}`;
   }
   redirect(destino);
 }
@@ -111,16 +152,18 @@ export async function cambiarIntervaloFormAction(formData: FormData): Promise<vo
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const equipmentId = String(formData.get("equipmentId") ?? "");
+  const base = await volverA(formData);
 
   let destino: string;
   try {
     await cambiarIntervalo(user.userAccountId, String(formData.get("routineId") ?? ""), diasOFalla(formData, "intervalDays"));
     revalidatePath(`/equipos/${equipmentId}`);
     revalidatePath("/equipos");
-    destino = `/equipos/${equipmentId}?ok=datos`;
+    revalidatePath(base);
+    destino = `${base}?ok=datos`;
   } catch (error) {
     if (!(error instanceof RutinaError)) throw error;
-    destino = `/equipos/${equipmentId}?error=${encodeURIComponent(error.message)}`;
+    destino = `${base}?error=${encodeURIComponent(error.message)}`;
   }
   redirect(destino);
 }
@@ -129,16 +172,18 @@ export async function retirarRutinaFormAction(formData: FormData): Promise<void>
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const equipmentId = String(formData.get("equipmentId") ?? "");
+  const base = await volverA(formData);
 
   let destino: string;
   try {
     await retirarRutina(user.userAccountId, String(formData.get("routineId") ?? ""), new Date());
     revalidatePath(`/equipos/${equipmentId}`);
     revalidatePath("/equipos");
-    destino = `/equipos/${equipmentId}?ok=datos`;
+    revalidatePath(base);
+    destino = `${base}?ok=datos`;
   } catch (error) {
     if (!(error instanceof RutinaError)) throw error;
-    destino = `/equipos/${equipmentId}?error=${encodeURIComponent(error.message)}`;
+    destino = `${base}?error=${encodeURIComponent(error.message)}`;
   }
   redirect(destino);
 }

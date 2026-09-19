@@ -158,6 +158,19 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > allowlist, sube la fila de **depende del llamador**, 63→64. `rutaDeLugar` no
 > toca la base y no cuenta. 469→475, en 138 archivos.
 
+> **Acciones y la tarjeta (Tarea 5, spec 2026-09-19 §5), sin archivo nuevo.**
+> `app/actions/rutinas.ts` no puede importar `lib/db` directamente (guardia
+> `no-restricted-imports`, `docs/arquitectura/acceso-a-datos.allowlist.json`), así
+> que `volverA()` —a dónde redirige cada acción, equipo o lugar— pasó a apoyarse
+> en `lugarParaVolver`, nueva en `lib/rutinas/lugares.ts`. No recibe principal a
+> propósito, igual que su vecina `lugarParaRutina`: sólo lee `id`, `locationType`
+> y `parentLocationId` para calcular una ruta, nunca para decidir permiso — la
+> autorización de la acción la resuelve el servicio (`crearRutina`,
+> `registrarRealizada`, …) por su cuenta, y el `locationId` viene siempre del
+> propio formulario del llamador, nunca de un id adivinado. Sube la fila de
+> **depende del llamador**, 64→65 — mirada a mano y explicada en el allowlist.
+> 475→476, en los mismos 138 archivos.
+
 > **La bodega (Tarea 2, spec 2026-09-19 §4.1), con un archivo nuevo.**
 > `lib/traceability/bodegas.ts` aporta **cuatro** operaciones y las cuatro
 > llevan **guardia directo**: `crearBodega` y `padresParaBodega`

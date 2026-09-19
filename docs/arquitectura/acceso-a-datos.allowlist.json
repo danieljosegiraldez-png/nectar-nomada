@@ -1223,6 +1223,12 @@
       "operacion": "lugarParaRutina",
       "razon": "No recibe principal a propósito (spec 2026-09-19 §4.2, ruling de Tarea 4): lee el lugar ANTES de que `requireRutinaAccess` compruebe `puedeSobreLugar`, así que un lugar que no admite rutinas o que no existe se distingue de uno prohibido. Es aceptable porque el locationId lo trae la propia pantalla del llamador —nunca un id adivinado desde fuera— y no expone nada del lugar salvo su tipo y su padre, que ya son públicos en la navegación. `rutinasDeLugar`, que sí devuelve datos de las rutinas, comprueba `puedeSobreLugar(…, \"view\")` primero y lanza `forbidden` sin distinguir del caso «no existe».",
       "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/rutinas/lugares.ts",
+      "operacion": "lugarParaVolver",
+      "razon": "No recibe principal a propósito (spec 2026-09-19 §5, Tarea 5): la usa `volverA()` en `app/actions/rutinas.ts` —que no puede importar `lib/db` directo, guardia `no-restricted-imports`— sólo para calcular a dónde redirige cada acción, equipo o lugar, sea que haya salido bien o mal. Nunca decide permiso: cada servicio (`crearRutina`, `registrarRealizada`, `cambiarIntervalo`, `anularRegistro`, `retirarRutina`) resuelve su propia autorización sobre `routineId`/`locationId` antes o después, independientemente de este cálculo de ruta. El `locationId` viene siempre del campo oculto del propio formulario que la pantalla ya renderizó para ese usuario, nunca de un id adivinado, y sólo expone tipo y padre —públicos en la navegación—, igual que su vecina `lugarParaRutina`.",
+      "verificado": "2026-09-19"
     }
   ]
 }

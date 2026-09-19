@@ -37,6 +37,11 @@ export async function lugarParaRutina(locationId: string): Promise<LugarConRutin
   return l;
 }
 
+/** El lugar mínimo para decidir a dónde vuelve una acción (spec 2026-09-19 §5); `null` si no existe. */
+export async function lugarParaVolver(locationId: string): Promise<{ id: string; locationType: LocationType; parentLocationId: string | null } | null> {
+  return prisma.location.findUnique({ where: { id: locationId }, select: { id: true, locationType: true, parentLocationId: true } });
+}
+
 export function rutaDeLugar(l: { id: string; locationType: LocationType; parentLocationId: string | null }): string {
   switch (l.locationType) {
     case "storage_facility":

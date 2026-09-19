@@ -27,6 +27,7 @@ export function TarjetaDeRutina({
   puedeApuntar,
   camposOcultos,
   personas,
+  insumos,
   t,
 }: {
   rutina: RutinaConEstado;
@@ -34,6 +35,7 @@ export function TarjetaDeRutina({
   puedeApuntar: boolean;
   camposOcultos: Record<string, string>;
   personas: { id: string; name: string }[];
+  insumos?: { id: string; etiqueta: string }[];
   t: T;
 }) {
   const ocultos = (
@@ -89,6 +91,23 @@ export function TarjetaDeRutina({
               <option value="manufacturer_specification">{t("procedencia_manufacturer_specification")}</option>
             </select>
           </label>
+          {insumos?.length ? (
+            <fieldset>
+              <legend>{t("rutinaInsumos")}</legend>
+              {[0, 1, 2].map((i) => (
+                <div key={i} style={{ display: "flex", gap: "0.5rem" }}>
+                  <select name={`insumo_${i}_lote`} defaultValue="">
+                    <option value="">{t("rutinaSinInsumo")}</option>
+                    {insumos.map((x) => (
+                      <option key={x.id} value={x.id}>{x.etiqueta}</option>
+                    ))}
+                  </select>
+                  <CampoNumerico name={`insumo_${i}_cantidad`} min={0} step="any" placeholder={t("rutinaCantidad")} />
+                  <input type="text" name={`insumo_${i}_unidad`} maxLength={20} placeholder={t("rutinaUnidad")} />
+                </div>
+              ))}
+            </fieldset>
+          ) : null}
           <BotonDeEnvio>{t("rutinaRegistrar")}</BotonDeEnvio>
         </form>
       ) : null}
@@ -104,12 +123,22 @@ export function TarjetaDeRutina({
                     {r.performedOn.toISOString().slice(0, 10)}
                     {r.performedBy ? ` — ${r.performedBy.displayName}` : ""}
                     {r.note ? ` — ${r.note}` : ""}
+                    {r.productos.length
+                      ? ` — ${r.productos.map((p) => (p.quantity ? `${p.materialName} ${p.quantity} ${p.unit ?? ""}` : p.materialName)).join(", ")}`
+                      : rutina.kind === "fumigacion"
+                        ? ` — ${t("rutinaProductoSinDeclarar")}`
+                        : ""}
                   </s>
                 ) : (
                   <>
                     {r.performedOn.toISOString().slice(0, 10)}
                     {r.performedBy ? ` — ${r.performedBy.displayName}` : ""}
                     {r.note ? ` — ${r.note}` : ""}
+                    {r.productos.length
+                      ? ` — ${r.productos.map((p) => (p.quantity ? `${p.materialName} ${p.quantity} ${p.unit ?? ""}` : p.materialName)).join(", ")}`
+                      : rutina.kind === "fumigacion"
+                        ? ` — ${t("rutinaProductoSinDeclarar")}`
+                        : ""}
                   </>
                 )}
                 {r.voidedAt ? ` — ${t("rutinaAnulada")}: ${r.voidReason}` : null}

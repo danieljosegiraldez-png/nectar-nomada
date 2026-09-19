@@ -2718,6 +2718,14 @@
     "crearRutinaMantenimiento": "Crear una rutina de mantenimiento con este intervalo",
     "rutinasVencidas": "{n} rutina(s) vencida(s)",
     "soloVencidas": "sólo con rutinas vencidas",
+    "rutinasDeLugarIntro": "Qué se le hace a este lugar y cada cuánto. Avisa cuando toca; no bloquea nada.",
+    "rutinaInsumos": "Productos usados",
+    "rutinaSinInsumo": "—",
+    "rutinaCantidad": "cantidad",
+    "rutinaUnidad": "unidad",
+    "rutinaProductoSinDeclarar": "producto sin declarar",
+    "equiposAqui": "Equipos aquí",
+    "sinEquiposAqui": "Ningún equipo está aquí ahora.",
     "documentosDelEquipo": "De este equipo",
     "documentosHeredados": "Del modelo (heredados)",
     "okRutinaRegistrada": "Registro guardado.",
@@ -2728,7 +2736,11 @@
     "errorFechaFutura": "Esa fecha todavía no ha llegado en ningún lugar del planeta.",
     "errorMotivoObligatorio": "Hace falta un motivo para anular un registro.",
     "errorCodigoInternoDuplicado": "Ya existe un equipo con ese código interno en esta organización.",
-    "errorModeloNoElegible": "Ese modelo no se puede usar en este equipo (tipo distinto, de otra organización, o retirado)."
+    "errorModeloNoElegible": "Ese modelo no se puede usar en este equipo (tipo distinto, de otra organización, o retirado).",
+    "errorLugarSinRutinas": "Este lugar no admite rutinas de cuidado.",
+    "errorInsumoAjeno": "Ese lote de insumo no pertenece a esta organización.",
+    "errorUnidadDistinta": "La unidad no coincide con la del lote.",
+    "errorCantidadInvalida": "La cantidad tiene que ser un número mayor que cero."
   },
   "Secado": {
     "instalaciones": "Instalaciones de secado",

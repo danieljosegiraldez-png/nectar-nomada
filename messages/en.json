@@ -2718,6 +2718,14 @@
     "crearRutinaMantenimiento": "Create a maintenance routine with this interval",
     "rutinasVencidas": "{n} overdue routine(s)",
     "soloVencidas": "overdue routines only",
+    "rutinasDeLugarIntro": "What gets done to this place and how often. It warns when due; it blocks nothing.",
+    "rutinaInsumos": "Products used",
+    "rutinaSinInsumo": "—",
+    "rutinaCantidad": "quantity",
+    "rutinaUnidad": "unit",
+    "rutinaProductoSinDeclarar": "product not declared",
+    "equiposAqui": "Equipment here",
+    "sinEquiposAqui": "No equipment is here right now.",
     "documentosDelEquipo": "This equipment's own",
     "documentosHeredados": "From the model (inherited)",
     "okRutinaRegistrada": "Record saved.",
@@ -2728,7 +2736,11 @@
     "errorFechaFutura": "That date hasn't arrived anywhere on the planet yet.",
     "errorMotivoObligatorio": "A reason is required to void a record.",
     "errorCodigoInternoDuplicado": "Equipment with that internal code already exists in this organization.",
-    "errorModeloNoElegible": "That model can't be used for this equipment (different type, another organization, or retired)."
+    "errorModeloNoElegible": "That model can't be used for this equipment (different type, another organization, or retired).",
+    "errorLugarSinRutinas": "This place doesn't support care routines.",
+    "errorInsumoAjeno": "That consumable lot doesn't belong to this organization.",
+    "errorUnidadDistinta": "The unit doesn't match the lot's unit.",
+    "errorCantidadInvalida": "The quantity must be a number greater than zero."
   },
   "Secado": {
     "instalaciones": "Drying facilities",

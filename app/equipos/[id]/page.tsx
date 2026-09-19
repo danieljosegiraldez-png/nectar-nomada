@@ -164,7 +164,11 @@ export default async function EquipoPage({
                     ? t("errorModeloNoElegible")
                     : codigoError === "forbidden"
                       ? t("errorSinPermiso")
-                      : t("errorModeloGenerico", { codigo: codigoError })}
+                      : codigoError === "unidad_distinta"
+                        ? t("errorUnidadDistinta")
+                        : codigoError === "insumo_ajeno"
+                          ? t("errorInsumoAjeno")
+                          : t("errorModeloGenerico", { codigo: codigoError })}
         </p>
       ) : null}
 
