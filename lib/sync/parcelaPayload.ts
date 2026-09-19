@@ -304,3 +304,30 @@ export function construirPayloadDeRevisionDeTrampa(
     lureRecharged: booleano(fd, "lureRecharged"),
   };
 }
+
+/**
+ * Tarea 11, fix round 2 — una clave FRESCA por ENVÍO, nunca una fija por
+ * montaje.
+ *
+ * **El defecto que esto arregla.** `RondaDeTrampaForm` generaba
+ * `revisionClientDraftId` una sola vez, como prop del servidor al pintar la
+ * página (una tarjeta = una llamada a `crypto.randomUUID()`, hecha en
+ * `app/finca/trampas/ronda/page.tsx`). La tarjeta puede enviarse más de una
+ * vez sin recargar — corregir una lectura y volver a pulsar «Registrar»,
+ * sin señal las dos veces— y las dos revisiones habrían viajado con la
+ * MISMA clave: la segunda choca contra el índice único de
+ * `specimen_observation.client_draft_id`, el servidor la lee como
+ * `duplicate` de la primera, y sus datos de verdad —la segunda lectura, el
+ * mantenimiento que sí se hizo— se pierden en silencio. `alEnviar` llama a
+ * esto en el propio manejador del envío, no en el render, así que cada
+ * intento —el primero y el reintento— tiene la suya.
+ *
+ * **Inyectable, no sólo pura**, por dos motivos: para poder probarla en
+ * Node sin depender de que el entorno de la prueba tenga `crypto.randomUUID`
+ * global, y porque el ruling del controlador pide un flip-test concreto —
+ * sustituir el generador por uno que devuelva una constante— y sin el
+ * parámetro no habría nada que sustituir sin tocar el archivo fuente.
+ */
+export function generarClaveDeRevision(generador: () => string = () => crypto.randomUUID()): string {
+  return generador();
+}

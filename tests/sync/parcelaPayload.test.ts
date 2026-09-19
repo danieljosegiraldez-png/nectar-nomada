@@ -5,6 +5,7 @@ import {
   construirPayloadDePerfilDeSuelo,
   construirPayloadDeSiembra,
   construirPayloadDeRevisionDeTrampa,
+  generarClaveDeRevision,
 } from "../../lib/sync/parcelaPayload";
 import { KINDS_DE_PARCELA } from "../../lib/sync/parsearMutaciones";
 
@@ -394,5 +395,30 @@ describe("construirPayloadDeRevisionDeTrampa", () => {
     );
     expect(p.otherInsects).toBe(true);
     expect(p.otherInsectsNote).toBe("avispas");
+  });
+});
+
+/**
+ * Tarea 11, fix round 2 (re-revisión, hallazgo #1 — riesgo de pérdida de
+ * datos, promovido por el controlador). La clave de idempotencia de la
+ * revisión tiene que ser fresca en CADA envío, no fija por render: dos
+ * envíos sin señal de la MISMA tarjeta con la misma clave chocan contra el
+ * índice único y el segundo se pierde en silencio (`duplicate` del primero).
+ */
+describe("generarClaveDeRevision", () => {
+  it("dos llamadas consecutivas dan claves distintas", () => {
+    const a = generarClaveDeRevision();
+    const b = generarClaveDeRevision();
+    expect(a).not.toBe(b);
+  });
+
+  // Inyectable: el generador se puede sustituir, y lo que se pruebe con un
+  // generador falso tiene que coincidir con lo que ese generador produce —
+  // control de que el parámetro se USA, no se ignora.
+  it("con un generador inyectado, devuelve exactamente lo que ese generador produce", () => {
+    let contador = 0;
+    const generadorDeMentira = () => `clave-${contador++}`;
+    expect(generarClaveDeRevision(generadorDeMentira)).toBe("clave-0");
+    expect(generarClaveDeRevision(generadorDeMentira)).toBe("clave-1");
   });
 });

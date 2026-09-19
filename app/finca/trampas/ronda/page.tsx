@@ -148,12 +148,12 @@ export default async function RondaDeTrampasPage({
               ) : null}
               <details>
                 <summary>{t("trapCheckTitle")}</summary>
-                <RondaDeTrampaForm
-                  locationId={trampa.plotId}
-                  specimenId={trampa.id}
-                  hoy={hoyDeLaFinca}
-                  revisionClientDraftId={crypto.randomUUID()}
-                />
+                {/* Tarea 11, fix round 2 — la clave de idempotencia ya NO es
+                    un prop generado aquí: `RondaDeTrampaForm` la genera en
+                    cada envío (`generarClaveDeRevision`), porque la tarjeta
+                    sigue montada entre envíos y una clave fija por render
+                    colisionaría en un segundo envío sin señal. */}
+                <RondaDeTrampaForm locationId={trampa.plotId} specimenId={trampa.id} hoy={hoyDeLaFinca} />
               </details>
             </article>
           );

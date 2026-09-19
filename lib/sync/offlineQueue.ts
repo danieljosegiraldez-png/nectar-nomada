@@ -28,7 +28,14 @@ const DEVICE_KEY = "nn-field-device-id";
 export type DraftStatus = "pending" | "error";
 
 export interface FieldEventDraft {
-  /** Es también el `clientDraftId` del servidor: la clave de idempotencia. */
+  /**
+   * El id LOCAL del borrador en IndexedDB. Para casi todos los tipos de
+   * mutación es TAMBIÉN el `clientDraftId` que ve el servidor —
+   * `construirMutacionDesdeBorrador`, más abajo, lo usa como respaldo—,
+   * pero no para `trap_check` desde la Tarea 11: ese payload ya trae su
+   * propia clave (`construirPayloadDeRevisionDeTrampa`), y es ÉSA la que
+   * viaja, no `id`. Ver el docstring de `construirMutacionDesdeBorrador`.
+   */
   id: string;
   payload: Record<string, unknown>;
   createdAt: number;

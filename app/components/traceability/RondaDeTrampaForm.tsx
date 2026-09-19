@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { recordRoundTrapCheckFormAction, type TraceabilityActionState } from "../../actions/traceability";
 import { TriStateField } from "./TriStateField";
 import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
-import { construirPayloadDeRevisionDeTrampa } from "../../../lib/sync/parcelaPayload";
+import { construirPayloadDeRevisionDeTrampa, generarClaveDeRevision } from "../../../lib/sync/parcelaPayload";
 
 const NIVELES = ["ninguno", "pocos", "algunos", "muchos"] as const;
 const initialState: TraceabilityActionState = {};
@@ -41,23 +41,28 @@ const initialState: TraceabilityActionState = {};
  * 12 necesita para engancharle la foto a una revisión que el servidor
  * todavía no ha visto.
  *
- * **La genera el servidor al pintar la página** (`crypto.randomUUID()` en
- * `app/finca/trampas/ronda/page.tsx`, una por tarjeta), no el cliente — mismo
- * criterio que `claveDeEnvio` en `MeasurementForm`/`StorageForm`: un
- * `useState`/`useRef` con `crypto.randomUUID()` daría un valor al renderizar
- * en el servidor y otro al hidratar, que es un desajuste de hidratación
- * sobre el valor del campo oculto.
+ * **Tarea 11, fix round 2 — la clave se genera EN EL ENVÍO, no en el
+ * render.** Antes era un prop que el servidor generaba una vez al pintar la
+ * página (una tarjeta = una llamada a `crypto.randomUUID()` en
+ * `app/finca/trampas/ronda/page.tsx`), y ahí estaba el defecto: la tarjeta
+ * sigue montada entre envíos (`<details>` no se desmonta), así que corregir
+ * una lectura y volver a pulsar «Registrar» sin señal las dos veces mandaba
+ * la MISMA clave dos veces — la segunda revisión se pierde en silencio,
+ * leída como `duplicate` de la primera. `alEnviar` llama a
+ * `generarClaveDeRevision()` al principio de cada envío y escribe el
+ * resultado en el `<input>` oculto ANTES de decidir si el camino es con o
+ * sin señal: por eso el campo es `defaultValue=""` (sin controlar) y no
+ * `value={...}` — un campo controlado por React pelearía esa escritura
+ * imperativa en el siguiente render.
  */
 export function RondaDeTrampaForm({
   locationId,
   specimenId,
   hoy,
-  revisionClientDraftId,
 }: {
   locationId: string;
   specimenId: string;
   hoy: string;
-  revisionClientDraftId: string;
 }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(recordRoundTrapCheckFormAction, initialState);
@@ -72,15 +77,23 @@ export function RondaDeTrampaForm({
   const yaEncolando = useRef(false);
 
   const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
-    if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal
+    const form = e.currentTarget;
+    // Fresca en CADA envío — ver el docstring. Queda en el `<input>` oculto
+    // para el camino con señal, y en `clave` para el sin señal, más abajo.
+    // Es el punto donde la Tarea 12 puede engancharse: `clave` es la clave
+    // de ESTE envío en particular, viva mientras dure este `alEnviar`.
+    const clave = generarClaveDeRevision();
+    const campoClave = form.elements.namedItem("revisionClientDraftId");
+    if (campoClave instanceof HTMLInputElement) campoClave.value = clave;
+
+    if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal: el <input> ya lleva `clave`
     e.preventDefault();
     if (yaEncolando.current) return;
     yaEncolando.current = true;
     setEncolando(true);
-    const form = e.currentTarget;
     try {
       await queueFieldEvent({
-        ...construirPayloadDeRevisionDeTrampa(new FormData(form), specimenId, locationId, revisionClientDraftId),
+        ...construirPayloadDeRevisionDeTrampa(new FormData(form), specimenId, locationId, clave),
       });
       form.reset();
       setEncolado(true);
@@ -98,7 +111,9 @@ export function RondaDeTrampaForm({
     <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <input type="hidden" name="locationId" value={locationId} />
       <input type="hidden" name="specimenId" value={specimenId} />
-      <input type="hidden" name="revisionClientDraftId" value={revisionClientDraftId} />
+      {/* Sin controlar a propósito: `alEnviar` escribe el valor real en cada
+          envío, y un `value` controlado por React lo pelearía de vuelta. */}
+      <input type="hidden" name="revisionClientDraftId" defaultValue="" />
 
       <div className="nn-field">
         <label htmlFor={id("observedAt")}>{t("trapCheckDate")}</label>

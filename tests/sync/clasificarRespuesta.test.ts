@@ -167,4 +167,39 @@ describe("construirMutacionDesdeBorrador: qué clientDraftId viaja por cada borr
     const m = construirMutacionDesdeBorrador(d);
     expect(m).toMatchObject({ kind: "trap_check", brocaLevel: "muchos", captureCount: 12 });
   });
+
+  /**
+   * Tarea 11, fix round 2 — dos envíos SIN SEÑAL de la MISMA trampa, cada
+   * uno con su propia clave (la que da `generarClaveDeRevision` en cada
+   * envío, nunca un prop fijo por render — ver `RondaDeTrampaForm.tsx`).
+   *
+   * `porClaveDeEnvio` en `syncFieldEvents` es un `Map`: si los dos
+   * borradores calcularan la MISMA clave, el segundo pisaría al primero en
+   * ese `Map` y uno de los dos se volvería ilocalizable — nunca se
+   * descartaría de la cola aunque el servidor lo hubiera aplicado. Esta
+   * prueba simula exactamente esa construcción (no `syncFieldEvents` en
+   * sí, que necesita `fetch`/IndexedDB) y afirma que las DOS mutaciones
+   * sobreviven en el `Map`, con el mismo `specimenId` pero cada una con la
+   * suya.
+   */
+  it("dos borradores de trap_check de la MISMA trampa, cada uno con su clave, no se pisan", () => {
+    const specimenId = "trampa-compartida";
+    const d1 = borrador(
+      { kind: "trap_check", clientDraftId: "clave-1", specimenId, brocaLevel: "pocos" },
+      "draft-a",
+    );
+    const d2 = borrador(
+      { kind: "trap_check", clientDraftId: "clave-2", specimenId, brocaLevel: "muchos" },
+      "draft-b",
+    );
+    const mutaciones = [d1, d2].map((d) => ({ draft: d, mutacion: construirMutacionDesdeBorrador(d) }));
+    // Control: las dos claves de envío son distintas — si no lo fueran, el
+    // `Map` de abajo las colapsaría en una sola entrada.
+    expect(mutaciones[0]!.mutacion.clientDraftId).not.toBe(mutaciones[1]!.mutacion.clientDraftId);
+
+    const porClaveDeEnvio = new Map(mutaciones.map(({ draft, mutacion }) => [mutacion.clientDraftId, draft]));
+    expect(porClaveDeEnvio.size).toBe(2);
+    expect(porClaveDeEnvio.get("clave-1")?.id).toBe("draft-a");
+    expect(porClaveDeEnvio.get("clave-2")?.id).toBe("draft-b");
+  });
 });
