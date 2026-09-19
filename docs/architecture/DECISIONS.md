@@ -11730,7 +11730,8 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
 5. **Brix: objetivo de receta, pero secundario al pH** «en casi todos los casos relacionados a
    fermentación»: con mucílago se liberan azúcares y la degradación enzimática suelta más sólidos, y la
    lectura «puede ser falsa o misleading». Se mide con **hidrómetro o refractómetro**, configurable por
-   beneficio o receta.
+   beneficio o receta. Una serie **puede mezclar instrumentos, avisando** de que los mezcla; y cada
+   lectura traza **qué instrumento, quién midió y si estaba verificado** en ese momento.
 6. **Brix de cereza para elegir proceso**, según requisitos y capacidades del beneficio: bajo para esa
    cereza → fermentar para dulzores y ésteres; alto → natural o lavado con poca intervención, o
    CryoBloom («para que libere betaglicósidos, más precursores atrapados en la cereza»). **El rango de
@@ -11777,7 +11778,6 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
     trillado a mitad de secado (referencia de Daniel: Graciano Cruz); no se inventa su método.
 
 **Propuestas del agente, NO confirmadas por Daniel** (no se implementan sin su sí):
-- Una serie de Brix no mezcla instrumentos (hidrómetro y refractómetro leen el etanol distinto).
 - Sin historial suficiente, el Brix de una cereza no se califica de bajo o alto.
 
 **Lo que esto NO decide.** Qué **versión** de la receta produjo cada evaluación y cómo se conserva esa
