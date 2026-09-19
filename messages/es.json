@@ -1412,7 +1412,9 @@
     "error_condicion_condicion_desconocida": "Condición del sitio desconocida: {value}.",
     "error_condicion_sin_novedad_va_sola": "«Sin novedad» no puede ir junto a otra condición.",
     "error_condicion_otro_sin_decir_cual": "Marcaste «otro» en la condición del sitio: di cuál.",
-    "error_condicion_nota_sin_otro": "Escribiste cuál es el «otro» de la condición del sitio, pero no lo marcaste."
+    "error_condicion_nota_sin_otro": "Escribiste cuál es el «otro» de la condición del sitio, pero no lo marcaste.",
+    "error_proposito_requerido": "Elige al menos un propósito de la visita.",
+    "error_proposito_desconocido": "Propósito de la visita desconocido: {value}."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",
