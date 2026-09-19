@@ -38,6 +38,16 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-19 · Recepción de cereza en el beneficio (PR #444, pieza 2 de 3)
+
+Spec y plan `docs/superpowers/{specs,plans}/2026-09-19-recepcion-de-cereza-en-beneficio*`. La
+jornada dice a qué beneficio va. `/beneficio/recepcion`: recibir o rechazar cada entrega y la
+cereza de fuera (productor dado de alta como organización), con **doble peso** (bruto − tara contra
+el de finca o el declarado; fuera de tolerancia, nota; nunca bloquea), Brix con punto de muestreo y
+**siempre dos personas** (servicio y disparador). `/beneficio/pedidos`: cantidad aquí, calidad en la
+pieza 3. **La recepción es el origen**: de ella saldrán los lotes (pieza 3). `ReceivingEvent`, el
+viejo, sigue hasta entonces. **Sin navegador.**
+
 ### 2026-09-19 · La miel se pesa por recipiente (Q28, rebanada 1)
 
 ADR-177. Cada cosecha puede llevar sus recipientes —bruto y tara, el neto se calcula— y entonces
@@ -60,20 +70,11 @@ ver en navegador.** Sigue: «marcos negros» en la inspección.
 
 ### 2026-09-18 · Jornada de cosecha y entrega al beneficio (PR #431, pieza 1 de 3)
 
-Daniel: «en finca no se registra cosecha… se asigna personas a cosecha, y esta persona… lleva al
-beneficio». Spec y plan `docs/superpowers/{specs,plans}/2026-09-18-jornada-y-entrega-de-cosecha*`.
-- **`/finca/jornadas`:** abrir una jornada (parcelas × recolectores), recolectores de la finca;
-  la jornada anota entregas (origen parcela/bloque/planta, kg de finca, hora, foto), anula con
-  motivo y se cierra. **Ninguna entrega crea lote**: queda `enviada` (piezas 2 y 3: recepción con
-  doble peso, y lotes).
-- **`/mis-entregas`:** el perfil nuevo **Recolector** anota SU entrega y reporta situaciones o la
-  condición del día (sin mm: eso es de instrumentos) con foto. Las ve el Farm Manager y el capataz;
-  a un compañero, sólo con `field_report:view` concedido en `/admin/users/…/permisos`.
-- **Sin ver en navegador.** Specs aprobados sin construir: condiciones fijas del terreno,
-  instrumentos de campo.
-
-**De Daniel:** dar el perfil Recolector (ámbito: la finca) a cada recolector con cuenta. «Mis
-entregas» no va al menú (decisión suya del 2026-09-19): se entra al iniciar sesión y desde Mi Néctar.
+`/finca/jornadas`: abrir jornada (parcelas × recolectores), anotar entregas (origen, kg de finca,
+foto), anular con motivo, cerrar; **ninguna entrega crea lote**. `/mis-entregas`: el perfil nuevo
+**Recolector** anota SU entrega y reporta situaciones o la condición del día, con foto; lo ven el
+Farm Manager y el capataz, y un compañero sólo con `field_report:view` concedido. **Sin navegador.**
+**De Daniel:** dar el perfil Recolector (ámbito: la finca) a cada recolector con cuenta.
 
 ### 2026-09-18 · La cera con el color de su año
 
@@ -115,12 +116,6 @@ falta entrar con una cuenta. Siguen: la cera por color de año y el año de las 
 propósito de la visita». **Una clase de validación nueva que llegue a una acción necesita su rama
 ahí**, o es un 500. Prueba hermética con flip-test. **Sin ver en navegador.**
 
-### 2026-09-18 · Anular una asignación a tienda que no va a llegar
-
-ADR-170. Una asignación pendiente se anula con motivo y día —desde `/tienda` o desde la ficha del
-lote— y sus envases vuelven a libres. No se borra (quién, cuándo, por qué y AuditEvent); una
-recibida no se anula y una anulada no se recibe. Salió como hueco del flujo de dos actos, no como
-petición de Daniel.
 
 ## 3. Bloqueado, y en qué
 
