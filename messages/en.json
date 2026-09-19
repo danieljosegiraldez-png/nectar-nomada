@@ -2713,7 +2713,17 @@
     "error_fecha_invalida": "The date, time or device timezone is invalid.",
     "error_rack_invalido": "The rack level must be a positive whole number.",
     "error_tipo_invalido": "The location or its attributes do not match the site → facility → bed hierarchy.",
-    "error_sombra_invalida": "The shade level is not on the list, or the note is longer than 300 characters."
+    "error_sombra_invalida": "The shade level is not on the list, or the note is longer than 300 characters.",
+    "estantes": "Racks",
+    "crearEstante": "Add rack",
+    "ampliarEstante": "Expand",
+    "nombreEstante": "Rack name",
+    "niveles": "Levels",
+    "puestos": "Slots per level",
+    "estanteAyuda": "Positions are created for you: levels × slots. They are never deleted.",
+    "resumenEstante": "{niveles} levels × {puestos} slots = {total} positions",
+    "nivel": "Level {n}",
+    "error_estante_no_se_reduce": "A rack cannot shrink: its positions may have history."
   },
   "AjustesDelBeneficio": {
     "ajustesTitulo": "Mill settings",

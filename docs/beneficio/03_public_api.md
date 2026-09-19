@@ -268,3 +268,4 @@ Son de persistencia, no de motor: los motores de §6 no cambian.
 | `DryingEnvironment.floor_tarp` | `core` | en el piso, sobre lona |
 | `LocationType.drying_rack` | `core` | un estante de una instalación de secado |
 | `Location.shadeDescription` | `core.location.shade_description` | qué da la sombra de arriba, en texto libre |
+| `Location.rackSlot` | `core.location.rack_slot` | el puesto dentro del nivel de un estante |

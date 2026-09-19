@@ -2713,7 +2713,17 @@
     "error_fecha_invalida": "La fecha, la hora o la zona horaria del dispositivo no son válidas.",
     "error_rack_invalido": "El nivel de rack debe ser un número entero positivo.",
     "error_tipo_invalido": "La ubicación o sus atributos no corresponden al árbol sitio → instalación → cama.",
-    "error_sombra_invalida": "El grado de sombra no es de la lista, o la nota pasa de 300 caracteres."
+    "error_sombra_invalida": "El grado de sombra no es de la lista, o la nota pasa de 300 caracteres.",
+    "estantes": "Estantes",
+    "crearEstante": "Crear estante",
+    "ampliarEstante": "Ampliar",
+    "nombreEstante": "Nombre del estante",
+    "niveles": "Niveles",
+    "puestos": "Puestos por nivel",
+    "estanteAyuda": "Las posiciones se crean solas: niveles × puestos. Nunca se borran.",
+    "resumenEstante": "{niveles} niveles × {puestos} puestos = {total} posiciones",
+    "nivel": "Nivel {n}",
+    "error_estante_no_se_reduce": "Un estante no se reduce: las posiciones pueden tener historia."
   },
   "AjustesDelBeneficio": {
     "ajustesTitulo": "Ajustes del beneficio",

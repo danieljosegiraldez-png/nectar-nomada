@@ -862,6 +862,9 @@ model Location {
   /// Sólo para `drying_bed`: el nivel del rack en un cuarto de varios niveles.
   /// Anulable, porque una cama de patio no está en ningún rack.
   rackLevel         Int?               @map("rack_level")
+  /// Sólo para una posición de estante (`drying_bed` hija de `drying_rack`): el
+  /// PUESTO dentro del nivel. «Estante 2 · Nivel 4 · Puesto 3» (Daniel, 2026-09-18).
+  rackSlot          Int?               @map("rack_slot")
   /// Instalación o cama de secado: QUÉ da la sombra de arriba —árbol, enredadera,
   /// lona, techo con cierta opacidad—, en texto libre al lado de `shadePercentage`,
   /// nunca en su lugar. Una cama sin la suya se ENSEÑA con la de su instalación,

@@ -29,7 +29,7 @@ export class LocationAccessError extends Error {}
  * `drying_bed` por los caminos genéricos (`updatePlotAttributesAction`,
  * `confirmarCoordenadasDelSitio`), que no pasan por `exigeEditarBeneficioEn`.
  */
-const TIPOS_DEL_BENEFICIO = new Set<LocationType>(["beneficio", "drying_facility", "drying_bed"]);
+const TIPOS_DEL_BENEFICIO = new Set<LocationType>(["beneficio", "drying_facility", "drying_bed", "drying_rack"]);
 
 /**
  * La organización a la que pertenece una Location, subiendo por la jerarquía.
@@ -383,7 +383,7 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
   // por completo `exigeEditarBeneficioEn` — hallazgo de la auditoría final de
   // Codex sobre el plan 2.
   if (parent.locationType === "beneficio") throw new LocationValidationError("beneficio_no_se_subdivide");
-  if (parent.locationType === "drying_facility" || parent.locationType === "drying_bed") {
+  if (parent.locationType === "drying_facility" || parent.locationType === "drying_bed" || parent.locationType === "drying_rack") {
     throw new LocationValidationError("secado_no_se_subdivide");
   }
 
