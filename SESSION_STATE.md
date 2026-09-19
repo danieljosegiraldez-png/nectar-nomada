@@ -131,27 +131,6 @@ ADR-169. Daniel: «lo elige quien despacha». **El despacho no existía** —nad
 cuántos frascos salen de cada lote recibido, la suma tiene que dar lo pedido, y los kilos salen del
 libro del lote (`transfer_out`). Falta que el cliente lo vea en «Mis pedidos».
 
-### 2026-09-18 · La muestra verde sólo en almacenamiento, y la 111 retirada (PR #419)
-
-Spec #408 (con las 5 respuestas de Daniel) y plan #414, aprobados y fusionados. **Bloquea** en
-`createSampleFromLot` una muestra `materialState` verde si el lote no está en almacenamiento; **sin
-permiso de anulación**. «Crear Muestra» pide el estado del material. `retirarMuestra` (columna
-`retiredAt`, migración `20260918180000_muestra_retirada`, `AuditEvent` en la misma transacción);
-«Nueva cata» ni ofrece ni acepta retiradas. **La 111 (lote PE-80) está retirada en producción**, por
-el guion `data:retirar-muestra-111`: ensayo primero, 1 `sample.retire` con motivo, 0 muestras activas.
-Nota a `01_lot_lifecycle` §2 regla 4: volver del secado a una fase anterior es receta, no error.
-**Consecuencia esperada:** hoy ningún lote tiene proceso cerrado ni almacenamiento registrado, así que
-no se puede tomar muestra verde hasta que la captura de campo alimente esas fases. **Sin ver en
-navegador.**
-
-**Tres cosas que se cazaron antes de producción:** el guion buscaba `id: "111"` —es el código; el id es
-un uuid— y habría fallado sin retirar nada; la migración se llamaba `…130000` y habría llegado detrás
-de otras ya aplicadas; y las cifras del inventario de acceso se desfasaron dos veces al avanzar `main`
-(CI prueba el PR fusionado con `main`, no la rama). Y `tools/pack-for-review.sh` (#390, #391, #393,
-#396, #401): lee todo de la punta del rango, rutas con espacios y con tildes; en bash 3.2, `set -e`
-mata el script cuando falla una función aunque esté a la izquierda de un `||`.
-
-
 ## 3. Bloqueado, y en qué
 
 #### Nodos de sensores: lo que falta cuando haya nodos (de Daniel)
