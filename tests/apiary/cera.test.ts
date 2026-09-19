@@ -7,6 +7,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { crearApiario, createHive } from "../../lib/apiary/hives";
+import { colorDelAño } from "../../lib/apiary/colorDelAno";
+import { leyendaDeCera, registrarCeraNueva, registrarSalidaDeMarcos } from "../../lib/apiary/cera";
 
 const RUN = `cer-${Date.now()}`;
 
@@ -117,5 +119,52 @@ describe("las reglas de la cera viven en la base", () => {
     expect(await sonda(salida("1980", "'2026-05-01'", 3, "cera_vieja", null))).toBe("frame_removal_ano_ya_llegado");
     expect(await sonda(salida("2024", "'2026-05-01'", 0, "cera_vieja", null))).toBe("frame_removal_marcos_positivos");
     expect(await sonda(salida("2024", "'2026-05-01'", 3, "otro", null))).toBe("frame_removal_otro_con_nota");
+  });
+});
+
+const dia = (s: string) => new Date(`${s}T00:00:00Z`);
+
+describe("la leyenda de la cera", () => {
+  it("AGRUPA POR AÑO con su color, cuenta lo que entró y salió, y avisa por edad", async () => {
+    await registrarCeraNueva(operario, { locationId: apiarioId, enteredAt: dia("2022-03-01"), frameCount: 20, waxKind: "lamina_comprada" });
+    await registrarCeraNueva(operario, { locationId: apiarioId, enteredAt: dia("2024-06-10"), frameCount: 10, waxKind: "lamina_estampada_propia", destination: "alza" });
+    await registrarCeraNueva(operario, { locationId: apiarioId, enteredAt: dia("2024-09-01"), frameCount: 5, waxKind: "sin_lamina" });
+    await registrarSalidaDeMarcos(operario, { locationId: apiarioId, waxYear: 2022, removedAt: dia("2026-02-01"), frameCount: 8, reason: "cera_vieja" });
+    const filas = await leyendaDeCera(operario, apiarioId, dia("2026-09-18"));
+    expect(filas.map((f) => [f.año, f.color, f.entraron, f.salieron, f.edad, f.aviso])).toEqual([
+      [2026, "blanco", 0, 0, 0, null],
+      [2024, "verde", 15, 0, 2, "revisar"],
+      [2022, "amarillo", 20, 8, 4, "renovar"],
+    ]);
+  });
+
+  it("SALIERON MÁS DE LOS ANOTADOS se dice, no se impide", async () => {
+    await registrarSalidaDeMarcos(operario, { locationId: apiarioId, waxYear: 2021, removedAt: dia("2026-01-10"), frameCount: 6, reason: "danado" });
+    const fila = (await leyendaDeCera(operario, apiarioId, dia("2026-09-18"))).find((f) => f.año === 2021);
+    if (!fila) throw new Error("2021 no sale en la leyenda");
+    expect([fila.entraron, fila.salieron, fila.salieronDeMas, fila.color]).toEqual([0, 6, true, colorDelAño(2021)]);
+  });
+
+  it("CADA FINCA VE SU CERA: lo de otra organización no entra en la leyenda", async () => {
+    await registrarCeraNueva(adminId, { locationId: apiarioAjeno, enteredAt: dia("2023-01-01"), frameCount: 99, waxKind: "lamina_comprada" });
+    const filas = await leyendaDeCera(operario, apiarioId, dia("2026-09-18"));
+    expect(filas.some((f) => f.año === 2023)).toBe(false);
+  });
+
+  it("LAS REGLAS DEL SERVICIO: otro con nota, colmena de la misma finca, permiso, y el año de la salida", async () => {
+    await expect(registrarCeraNueva(operario, { locationId: apiarioId, enteredAt: dia("2026-01-01"), frameCount: 3, waxKind: "otro" })).rejects.toThrow(/otro_sin_nota/);
+    await expect(registrarCeraNueva(operario, { locationId: apiarioId, enteredAt: dia("2026-01-01"), frameCount: 0, waxKind: "lamina_comprada" })).rejects.toThrow(/marcos_invalidos/);
+    const ajena = await caja(apiarioAjeno);
+    await expect(registrarCeraNueva(operario, { locationId: apiarioId, enteredAt: dia("2026-01-01"), frameCount: 3, waxKind: "lamina_comprada", hiveId: ajena })).rejects.toThrow(/colmena_de_otra_finca/);
+    await expect(registrarCeraNueva(extrano, { locationId: apiarioId, enteredAt: dia("2026-01-01"), frameCount: 3, waxKind: "lamina_comprada" })).rejects.toThrow(/no_apiary_access/);
+    await expect(registrarSalidaDeMarcos(operario, { locationId: apiarioId, waxYear: 2027, removedAt: dia("2026-05-01"), frameCount: 2, reason: "cera_vieja" })).rejects.toThrow(/ano_aun_no_llega/);
+    await expect(leyendaDeCera(extrano, apiarioId)).rejects.toThrow(/no_apiary_access/);
+  });
+
+  it("DEJA RASTRO: cada entrada y cada salida con su AuditEvent", async () => {
+    const e = await registrarCeraNueva(operario, { locationId: apiarioId, enteredAt: dia("2026-04-01"), frameCount: 4, waxKind: "lamina_comprada" });
+    const s = await registrarSalidaDeMarcos(operario, { locationId: apiarioId, waxYear: 2026, removedAt: dia("2026-05-01"), frameCount: 1, reason: "enfermedad" });
+    const ops = await prisma.auditEvent.findMany({ where: { entityId: { in: [e.id, s.id] } }, select: { operation: true } });
+    expect(ops.map((o) => o.operation).sort()).toEqual(["frame_removal.create", "new_wax_entry.create"]);
   });
 });

@@ -10,11 +10,11 @@
 export type ColorDeAño = "blanco" | "amarillo" | "rojo" | "verde" | "azul";
 
 /** Por el último dígito del año: 1 y 6 blanco, 2 y 7 amarillo, 3 y 8 rojo, 4 y 9 verde, 5 y 0 azul. */
-const POR_RESTO: readonly ColorDeAño[] = ["azul", "blanco", "amarillo", "rojo", "verde"];
+const POR_RESTO = ["azul", "blanco", "amarillo", "rojo", "verde"] as const satisfies readonly ColorDeAño[];
 
 export function colorDelAño(año: number): ColorDeAño {
   if (!Number.isInteger(año)) throw new RangeError("año_invalido");
-  return POR_RESTO[((año % 5) + 5) % 5];
+  return POR_RESTO[(((año % 5) + 5) % 5) as 0 | 1 | 2 | 3 | 4];
 }
 
 /**
