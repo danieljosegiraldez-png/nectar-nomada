@@ -1,39 +1,39 @@
-# Secado por bandeja, paso 2 — bandejas y posiciones: plan de implementación
-
-> **⚠ EN REVISIÓN — NO EJECUTAR.** La spec cambió el 2026-09-18, en la tercera ronda de Daniel (§2 y §4.1–§4.2b). Hay estantes con posiciones generadas por estante + nivel + puesto, **`rackRow` queda retirado**, y entran los tipos de bandeja, la numeración por finca y la capacidad medida por estado. Este plan se parte en dos:
-> - **2a**: instalaciones, estantes, bandejas y capacidad. Plan nuevo.
-> - **2b**: el lote en sus bandejas. Son sus Tareas 2 a 5, ajustadas a la posición nueva.
->
-> Su Tarea 1 se mueve a 2a. Hasta que los dos estén reescritos, lo de abajo es la versión anterior.
+# Secado por bandeja, paso 2b — el lote en sus bandejas: plan de implementación
 
 > **Para agentes:** SUB-SKILL OBLIGATORIA: usar superpowers:subagent-driven-development (recomendado) o superpowers:executing-plans para ejecutar este plan tarea a tarea. Los pasos usan casillas (`- [ ]`).
 
-**Objetivo:** que un lote en secado pueda repartirse en bandejas —cada una con su posición de nivel y fila, cargada y bajada por separado—, con las reglas en la base y no sólo en TypeScript.
+**Objetivo:** que un lote en secado se reparta en bandejas numeradas:
+- cargadas y bajadas por separado;
+- movidas de posición por quien las trabaja;
+- con el secado cerrándose al bajar la última.
 
-**Arquitectura:** dos migraciones. La primera añade los dos ambientes y la fila (`rackRow`). La segunda crea `DryingRunTray` con sus reglas: índice único parcial, un disparador por regla que mira otra tabla y un `CHECK` para lo de una sola fila. Encima, un servicio nuevo `lib/traceability/bandejas.ts`: cargar, bajar (la última cierra el secado), listar con posición y conflicto. `endDryingRun` gana una guarda y cede su cuerpo a `cerrarCorridaEnTransaccion`, que reutiliza bajar la última. La pantalla del lote enseña las bandejas y los dos formularios. **La posición no es una columna nueva:** es el último `EquipmentTransfer` de la bandeja hacia una `drying_bed` (spec §4.2).
+Las reglas van en la base, no sólo en TypeScript.
+
+**Depende del plan 2a** (`docs/superpowers/plans/2026-09-18-secado-2a-estantes-y-bandejas.md`), que tiene que estar fusionado antes: los estantes y sus posiciones (`drying_rack`, `rackLevel`, `rackSlot`), las bandejas numeradas (`trayTypeId`, `trayNumber`), `puedeVerEquipo` y `puedeConfigurarEn`.
+
+**Arquitectura:**
+- Una migración crea `DryingRunTray` con sus reglas: índice único parcial, disparadores y `CHECK`.
+- Encima, un servicio nuevo, `lib/traceability/bandejasDelSecado.ts`: cargar, bajar (la última cierra el secado), mover, y listar con posición y conflicto.
+- `endDryingRun` gana una guarda y cede su cuerpo a `cerrarCorridaEnTransaccion`.
+- **La posición no es una columna:** es el último `EquipmentTransfer` de la bandeja hacia una posición de estante (spec §4.2).
 
 **Stack:** Next.js 16 App Router con Server Actions · Prisma 7.9 sobre Postgres · next-intl · vitest 4.
 
-**Spec:** `docs/superpowers/specs/2026-09-18-secado-por-bandeja-y-su-receta-design.md`, §2, §4.1–§4.3, §5 y §7. Paso 2 de su §6.
+**Spec:** `docs/superpowers/specs/2026-09-18-secado-por-bandeja-y-su-receta-design.md`, §2, §4.2, §4.3, §5 y §7. Paso **2b** de su §6.
 
 ## Restricciones globales
 
-- **Nombres aprobados por Daniel el 2026-09-18**, porque `docs/beneficio/03_public_api.md` no declara ninguno de secado (medido: el archivo sólo trae contratos de motores y estados; cero modelos de instalación, cama o bandeja):
-  - ambientes: `african_bed_outdoor` (cama africana a la intemperie) y `floor_tarp` (piso con lona);
-  - la fila: `rackRow` / `rack_row`;
-  - la tabla: `DryingRunTray` / `traceability.drying_run_tray`, con `desde` y `hasta` como dice la tabla de §4.3.
-  - la nota de sombra: `shadeDescription` / `shade_description`, al lado de `shadePercentage`, que ya existe. La pidió Daniel el mismo día, después de ver el plan, con la sombra en la instalación **y** en la cama;
-  - **Ningún otro nombre nuevo de dominio** sin preguntar.
+- **Nombres:** todos los de este plan están aprobados por Daniel el 2026-09-18. `DryingRunTray` / `traceability.drying_run_tray`, con `desde` y `hasta`, es el único nuevo aquí. Se declara en `docs/beneficio/03_public_api.md` §11 **en el mismo commit** (`00_reglas_del_modulo` §7.6). **Ningún otro nombre nuevo sin preguntar.**
 - **Decisiones de Daniel que este plan aplica** (spec §2):
-  - un lote se reparte en varias bandejas y **cada bandeja lleva un solo lote a la vez**;
-  - el secado **termina bandeja a bandeja**: el lote termina cuando baja la última, y el paso a almacenamiento sigue siendo manual. **Aplicado así:** bajar la última bandeja **cierra el secado en la misma transacción**, con `endedAt = hasta`, pidiendo los datos de cierre que ya pide `endDryingRun`. Con dos pasos habría un secado con todas las bandejas abajo que sigue «secando» (hallazgo 10 de la revisión de Codex del plan);
-  - **una bandeja por posición**: dos a la vez en la misma posición se **enseñan como conflicto**, no se bloquean ni se reparte nada;
-  - la bandeja se identifica por **número y QR**. **El QR no entra en este plan** (ver «Fuera»).
-- **Nivel y fila, en la base:** `> 0`. La spec dice «no negativos», pero `location_rack_level_positivo` ya exige `> 0` para el nivel, y una fila 0 no existe igual que un nivel 0. Se usa la misma regla para las dos.
-- **§7 de la spec, resuelto aquí y enseñado antes de construir:** al bajar una bandeja se guarda **sólo `hasta`**, sin humedad. La humedad con la que baja es una **inspección de esa bandeja**, que llega en el paso 3 (`SamplingEvent.trayEquipmentId`). Guardarla también aquí sería el mismo hecho en dos sitios. Bajar **no afirma** que la bandeja llegó a meta: `TARGET_REACHED` exige humedad **y** actividad de agua (`13_drying_moisture.md`), y eso lo juzga el motor, no un botón.
+  - un lote se reparte en varias bandejas, y **cada bandeja lleva un solo lote a la vez**;
+  - el secado **termina bandeja a bandeja**: bajar la última **cierra el secado en la misma transacción**, con `endedAt = hasta`, y pide los datos de cierre que ya pide `endDryingRun`. El paso a almacenamiento sigue siendo manual;
+  - **una bandeja por posición**: dos a la vez se enseñan como **conflicto**, sin bloquear;
+  - la posición es **estante + nivel + puesto**.
+- **Decisión de este plan, que se enseña a Daniel en el PR:** mueve una bandeja quien gestiona el lote que lleva cargado, o quien configura equipos en el destino (Tarea 2, paso 4b).
+- **§7 de la spec, resuelto aquí:** al bajar una bandeja se guarda **sólo `hasta`**. La humedad con la que baja es una inspección de esa bandeja, que es el paso 3. Bajar **no afirma** que llegó a meta: `TARGET_REACHED` exige humedad **y** actividad de agua (`13_drying_moisture.md`).
 - **Reglas de la casa:**
   - una regla que mira otra tabla va por **disparador**, con la misma forma que `traceability.exigir_cama_de_secado`;
-  - cada regla lleva su **sonda con control positivo**, es decir, lo válido sí entra;
+  - cada regla, con su **sonda y su control positivo**;
   - toda prueba con base va declarada en `scripts/pruebas-por-compuerta.txt`, grupo `base-sembrada`;
   - `npm run build` en toda tarea que toque TypeScript;
   - `git commit -F <archivo>` y nunca `git add -A`;
@@ -46,380 +46,45 @@
 
 ## Fuera de este plan
 
-- **El QR de la bandeja.** La spec dice que sigue el diseño de los envases de insumos (#365); va con su propio plan. Aquí la bandeja se reconoce por su nombre (`Equipment.name`, «Bandeja 12»).
-- **La humedad y los volteos por bandeja.** Son el paso 3.
-- **Mover una bandeja de nivel o fila.** Ya existe: es `trasladarEquipo` (`lib/equipos/equipos.ts`), con su permiso de equipos. Este plan sólo **lee** esa cadena.
-- **Asignar la cama a una corrida sin bandejas** (`DryingRun.dryingBedLocationId`). Hoy ningún servicio la escribe (medido: sólo las pruebas). La regla «cama **o** bandejas» se pone en la base igualmente, porque es la que protege la verdad de dónde está el lote.
+- **Lo que hace el 2a:** estantes, posiciones, tipos de bandeja, el registro numerado, el pesaje y la capacidad, los ambientes y la sombra.
+- **El QR de la bandeja**, que va con su propio plan.
+- **La humedad y los volteos por bandeja**, que son el paso 3.
+- **Asignar cama a una corrida sin bandejas** (`DryingRun.dryingBedLocationId`). Hoy ningún servicio la escribe. La regla «cama **o** bandejas» se pone en la base igualmente.
 
 ## Mapa de archivos
 
 | archivo | qué |
 |---|---|
-| `prisma/migrations/20260918190000_ambientes_y_fila_de_secado/migration.sql` | T1: dos valores de `DryingEnvironment`, `rack_row` y su `CHECK` |
-| `prisma/migrations/20260918191000_bandejas_de_la_corrida/migration.sql` | T2: tabla `drying_run_tray` y sus reglas |
-| `prisma/schema.prisma` | T1 y T2 |
-| `lib/traceability/secadoForm.ts`, `lib/traceability/instalaciones.ts` | T1: `rackRow` en lectura, validación, alta, edición y detalle |
-| `app/instalaciones/FormularioUbicacion.tsx`, `app/instalaciones/page.tsx` | T1: el campo y su lectura |
-| `lib/traceability/bandejaError.ts` | T3: el error y sus códigos, aparte para no importar en círculo |
-| `lib/traceability/bandejas.ts` | T3: servicio nuevo |
-| `lib/traceability/drying.ts` | T3: la guarda de `endDryingRun` y `cerrarCorridaEnTransaccion` |
-| `lib/equipos/equipos.ts` | T3: `puedeVerEquipo` exportada |
-| `app/actions/bandejas.ts` | T4: dos acciones de servidor |
-| `app/components/traceability/BandejasDelSecado.tsx` | T4: componente cliente |
-| `app/lots/[id]/page.tsx` | T4: lo monta y oculta el cierre con bandejas abiertas |
-| `messages/es.json`, `messages/en.json` | T1 y T4 |
-| `tests/traceability/bandejasEnLaBase.test.ts` | T2: sondas de la base |
-| `tests/traceability/bandejas.test.ts` | T3: servicio |
-| `tests/traceability/secadoForm.test.ts`, `tests/traceability/instalaciones.test.ts`, `tests/traceability/topologiaDeSecado.test.ts` | T1 |
-| `scripts/pruebas-por-compuerta.txt` | T2 y T3: dos rutas en `base-sembrada` |
-| `docs/architecture/DECISIONS.md`, `docs/arquitectura/inventario-de-acceso.md`, spec | T5 |
+| `prisma/migrations/20260918192000_bandejas_de_la_corrida/migration.sql` | T1: tabla `drying_run_tray` y sus reglas |
+| `prisma/schema.prisma` | T1 |
+| `lib/traceability/bandejaError.ts` | T2: el error y sus códigos, aparte para no importar en círculo |
+| `lib/traceability/bandejasDelSecado.ts` | T2: cargar, bajar, mover, listar |
+| `lib/traceability/drying.ts` | T2: la guarda de `endDryingRun` y `cerrarCorridaEnTransaccion` |
+| `app/actions/bandejasDelSecado.ts` | T3: acciones de servidor |
+| `app/components/traceability/BandejasDelSecado.tsx` | T3: componente cliente |
+| `app/lots/[id]/page.tsx` | T3: lo monta y oculta el cierre con bandejas cargadas |
+| `messages/es.json`, `messages/en.json` | T3: espacio `BandejasDelSecado` |
+| `docs/beneficio/03_public_api.md` | T1: la fila de `DryingRunTray` en §11 |
+| `tests/traceability/bandejasEnLaBase.test.ts` | T1: sondas de la base |
+| `tests/traceability/bandejasDelSecado.test.ts` | T2: servicio |
+| `scripts/pruebas-por-compuerta.txt` | T1 y T2 |
+| `docs/architecture/DECISIONS.md`, `docs/arquitectura/inventario-de-acceso.md`, spec | T4 |
+
+**En la Tarea 1, además de su migración:** `docs/beneficio/03_public_api.md` §11 gana la fila `| DryingRunTray | traceability.drying_run_tray | qué bandejas lleva el secado de un lote, desde y hasta |`, y se añade al `git add` de su commit.
 
 ---
 
-### Tarea 1: dos ambientes nuevos y la fila del estante
+### Tarea 1: `DryingRunTray` y sus reglas en la base
 
 **Archivos:**
-- Crear: `prisma/migrations/20260918190000_ambientes_y_fila_de_secado/migration.sql`
-- Modificar: `prisma/schema.prisma` (enum `DryingEnvironment` hacia la línea 722; `Location.rackLevel` hacia la 843)
-- Modificar: `lib/traceability/secadoForm.ts` (`leerUbicacionDeSecado`)
-- Modificar: `lib/traceability/instalaciones.ts` (`Datos`, `validar`, `crearUbicacionDeSecado`, `actualizarUbicacionDeSecado`, `detalleInstalacion`)
-- Modificar: `app/instalaciones/FormularioUbicacion.tsx`, `app/instalaciones/page.tsx`
-- Modificar: `messages/es.json`, `messages/en.json` (espacio `Secado`)
-- Pruebas: `tests/traceability/secadoForm.test.ts`, `tests/traceability/instalaciones.test.ts`, `tests/traceability/topologiaDeSecado.test.ts`
-
-**Interfaces:**
-- Produce `Location.rackRow: number | null` y `DryingEnvironment` con `african_bed_outdoor` y `floor_tarp`.
-- `leerUbicacionDeSecado(form)` devuelve además `rackRow: number | null`, y lanza `SecadoFormError("fila_invalida")`.
-- `detalleInstalacion(...).camas[]` gana `rackRow`.
-- **La sombra de arriba** (decisión de Daniel, 2026-09-18, añadida al plan después de su revisión):
-  - `Location.shadeDescription: string | null` es nueva;
-  - `Location.shadePercentage` es la columna que **ya existe** y ya usan las parcelas, con la escala `pct_20 … pct_90`. Se reutiliza, y no se inventa otra escala.
-  - Van **en la instalación y en la cama**: la instalación dice su sombra general, y una cama la suya si es distinta.
-  - `leerUbicacionDeSecado` devuelve además `shadePercentage` y `shadeDescription`, y lanza `SecadoFormError("sombra_invalida")`.
-  - `detalleInstalacion` devuelve la sombra de la instalación y la de cada cama.
-  - **No se hereda en la base:** una cama sin sombra propia se enseña con la de su instalación y **marcada como de la instalación**, sin copiar el valor.
-
-- [ ] **Paso 1: las pruebas que fallan**
-
-En `tests/traceability/secadoForm.test.ts`, al lado de la prueba del rack:
-
-```ts
-  it("una fila vacía queda nula, una positiva queda declarada y una inválida falla", () => {
-    const form = new FormData(); form.set("name", "Cama A");
-    expect(leerUbicacionDeSecado(form).rackRow).toBeNull();
-    form.set("rackRow", "3"); expect(leerUbicacionDeSecado(form).rackRow).toBe(3);
-    for (const value of ["0", "-1", "1.5", "NaN", "2147483648"]) {
-      form.set("rackRow", value); expect(() => leerUbicacionDeSecado(form)).toThrow("fila_invalida");
-    }
-  });
-  it("la sombra: grado de la escala de las parcelas y nota libre; vacías quedan nulas", () => {
-    const form = new FormData(); form.set("name", "Cama bajo la guaba");
-    expect(leerUbicacionDeSecado(form)).toMatchObject({ shadePercentage: null, shadeDescription: null });
-    form.set("shadePercentage", "pct_50"); form.set("shadeDescription", "  Árbol de guaba, copa rala  ");
-    expect(leerUbicacionDeSecado(form)).toMatchObject({ shadePercentage: "pct_50", shadeDescription: "Árbol de guaba, copa rala" });
-    form.set("shadePercentage", "pct_45"); expect(() => leerUbicacionDeSecado(form)).toThrow("sombra_invalida");
-    form.set("shadePercentage", ""); form.set("shadeDescription", "x".repeat(301));
-    expect(() => leerUbicacionDeSecado(form)).toThrow("sombra_invalida");
-  });
-  it("acepta los dos ambientes nuevos", () => {
-    const form = new FormData(); form.set("name", "Patio");
-    for (const a of ["african_bed_outdoor", "floor_tarp"]) {
-      form.set("dryingEnvironment", a); expect(leerUbicacionDeSecado(form).dryingEnvironment).toBe(a);
-    }
-  });
-```
-
-Añadir `"fila_invalida"` a la lista de la prueba de claves de mensaje de ese mismo archivo (hacia la línea 74).
-
-En `tests/traceability/instalaciones.test.ts`, dentro de «valida los tipos de padre y el nivel de rack…», después del bucle del nivel:
-
-```ts
-    for (const rackRow of [0, -1, 1.5]) {
-      await expect(crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: facility.id, locationType: "drying_bed", rackRow })).rejects.toThrow("fila_invalida");
-    }
-    const conFila = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: facility.id, locationType: "drying_bed", rackLevel: 2, rackRow: 4 });
-    expect(conFila).toMatchObject({ rackLevel: 2, rackRow: 4 });
-    expect((await actualizarUbicacionDeSecado(actor, { locationId: conFila.id, name: conFila.name, rackLevel: 2, rackRow: 5 })).rackRow).toBe(5);
-    // Una instalación no tiene fila: la fila es de la posición.
-    await expect(crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: parent.id, locationType: "drying_facility", rackRow: 1 })).rejects.toThrow("tipo_invalido");
-
-    // La sombra va en las dos: la instalación la general, la cama la suya si difiere.
-    const patio = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: parent.id, locationType: "drying_facility",
-      dryingEnvironment: "african_bed_outdoor", shadePercentage: "pct_30", shadeDescription: "Lona negra a dos metros" });
-    const bajoArbol = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: patio.id, locationType: "drying_bed",
-      shadePercentage: "pct_70", shadeDescription: "Bajo el árbol de guaba" });
-    const alSol = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: patio.id, locationType: "drying_bed" });
-    const detalle = await detalleInstalacion(actor, patio.id);
-    expect(detalle).toMatchObject({ shadePercentage: "pct_30", shadeDescription: "Lona negra a dos metros" });
-    expect(detalle.camas.find((c) => c.id === bajoArbol.id)).toMatchObject({ shadePercentage: "pct_70", shadeDescription: "Bajo el árbol de guaba" });
-    // No se copia la de la instalación: la cama sin sombra propia la tiene nula en la base.
-    expect(detalle.camas.find((c) => c.id === alSol.id)).toMatchObject({ shadePercentage: null, shadeDescription: null });
-    expect((await actualizarUbicacionDeSecado(actor, { locationId: alSol.id, name: alSol.name, shadePercentage: "pct_20", shadeDescription: null })).shadePercentage).toBe("pct_20");
-```
-
-En `tests/traceability/topologiaDeSecado.test.ts`, una sonda nueva con su control positivo:
-
-```ts
-  it("la base rechaza una fila 0 y acepta una fila 1 (control positivo)", async () => {
-    const sitio = await prisma.location.findFirstOrThrow({ where: { locationType: "site" } });
-    const inv = await prisma.location.create({ data: { name: "TEST Inv fila", locationType: "drying_facility", parentLocationId: sitio.id } });
-    try {
-      await expect(prisma.location.create({ data: { name: "TEST Cama fila 0", locationType: "drying_bed", parentLocationId: inv.id, rackRow: 0 } }))
-        .rejects.toThrow(/location_rack_row_positivo/);
-      const ok = await prisma.location.create({ data: { name: "TEST Cama fila 1", locationType: "drying_bed", parentLocationId: inv.id, rackRow: 1 } });
-      expect(ok.rackRow).toBe(1);
-      await prisma.location.delete({ where: { id: ok.id } });
-    } finally {
-      await prisma.location.deleteMany({ where: { parentLocationId: inv.id } });
-      await prisma.location.delete({ where: { id: inv.id } });
-    }
-  });
-```
-
-- [ ] **Paso 2: comprobar que fallan**
-
-Correr `npx vitest run tests/traceability/secadoForm.test.ts tests/traceability/instalaciones.test.ts tests/traceability/topologiaDeSecado.test.ts` con las variables de la base.
-Esperado: FALLAN por `rackRow` desconocido y porque `leerUbicacionDeSecado` no devuelve `rackRow`.
-
-- [ ] **Paso 3: la migración y el esquema**
-
-`prisma/migrations/20260918190000_ambientes_y_fila_de_secado/migration.sql`:
-
-```sql
--- Paso 2 del spec de secado por bandeja (§4.1, §4.2). Nombres aprobados por
--- Daniel el 2026-09-18: 03_public_api.md no declara ninguno de secado.
---
--- `ADD VALUE` corre dentro de la transacción mientras el valor no se USE aquí
--- (mismo comentario que 20260915220000_topologia_de_secado).
-ALTER TYPE "core"."DryingEnvironment" ADD VALUE 'african_bed_outdoor';
-ALTER TYPE "core"."DryingEnvironment" ADD VALUE 'floor_tarp';
-
--- La fila del estante, al lado del nivel. Anulable por la misma razón: una
--- cama de patio no está en ningún estante.
-ALTER TABLE "core"."location" ADD COLUMN "rack_row" INTEGER;
-
--- Una fila 0 o negativa no existe, igual que un nivel (location_rack_level_positivo).
-ALTER TABLE "core"."location"
-  ADD CONSTRAINT "location_rack_row_positivo"
-    CHECK ("rack_row" IS NULL OR "rack_row" > 0);
-
--- La sombra de arriba de una instalación o una cama de secado (Daniel,
--- 2026-09-18): QUÉ la da —un árbol, una enredadera, una lona, un techo con
--- cierta opacidad—, en texto libre al lado del grado. El grado es la columna
--- `shade_percentage` que ya existe y ya usan las parcelas: no se crea otra escala.
-ALTER TABLE "core"."location" ADD COLUMN "shade_description" TEXT;
-```
-
-En `prisma/schema.prisma`, dentro de `enum DryingEnvironment`, después de `mechanical_dryer`:
-
-```prisma
-  /// Cama elevada afuera, a la intemperie. Sin bandejas: el lote está en la cama.
-  african_bed_outdoor
-  /// En el piso, sobre lona. Sin bandejas.
-  floor_tarp
-```
-
-y debajo de `rackLevel`:
-
-```prisma
-  /// Sólo para `drying_bed`: la fila del estante, al lado del nivel. Una posición
-  /// de invernadero o cuarto es nivel + fila; lleva una bandeja a la vez (spec
-  /// de secado por bandeja §4.2, decisión de Daniel del 2026-09-18).
-  rackRow           Int?               @map("rack_row")
-  /// Instalación o cama de secado: QUÉ da la sombra de arriba —árbol, enredadera,
-  /// lona, techo con cierta opacidad—, en texto libre al lado de `shadePercentage`,
-  /// nunca en su lugar. Una cama sin la suya se ENSEÑA con la de su instalación,
-  /// marcada como tal; no se copia aquí.
-  shadeDescription  String?            @map("shade_description")
-```
-
-Correr `npx prisma migrate deploy` y después `npm run prisma:generate`. Leer que imprime `20260918190000_ambientes_y_fila_de_secado`.
-
-- [ ] **Paso 4: el código**
-
-En `lib/traceability/secadoForm.ts`, dentro de `leerUbicacionDeSecado`, después del bloque de `rackLevel`:
-
-```ts
-  const fila = texto(form, "rackRow");
-  const rackRow = fila ? Number(fila) : null;
-  if (rackRow !== null && (!Number.isInteger(rackRow) || rackRow < 1 || rackRow > 2147483647)) {
-    throw new SecadoFormError("fila_invalida");
-  }
-```
-
-y añadir `rackRow,` al objeto devuelto.
-
-En `lib/traceability/instalaciones.ts`:
-
-```ts
-type Datos = { name: string; dryingEnvironment?: DryingEnvironment | null; rackLevel?: number | null; rackRow?: number | null };
-```
-
-Dentro de `validar`, en la rama `drying_facility`, añadir `if (input.rackRow != null) throw new SecadoFormError("tipo_invalido");`. En la rama `drying_bed`, añadir:
-
-```ts
-    if (input.rackRow != null && (!Number.isInteger(input.rackRow) || input.rackRow < 1 || input.rackRow > 2147483647)) throw new SecadoFormError("fila_invalida");
-```
-
-Además:
-- en el `data` de `crearUbicacionDeSecado` y de `actualizarUbicacionDeSecado`, añadir `rackRow: input.rackRow ?? null`;
-- en `detalleInstalacion`, usar `orderBy: [{ rackLevel: "asc" }, { rackRow: "asc" }, { name: "asc" }]` y `camas.push({ id: bed.id, name: bed.name, rackLevel: bed.rackLevel, rackRow: bed.rackRow })`.
-
-En `app/instalaciones/FormularioUbicacion.tsx`:
-- el tipo `existente` gana `rackRow?: number | null`;
-- la rama de cama pasa a ser un fragmento con los dos campos:
-
-```tsx
-      : <>
-        <label>{t("rack")}<CampoNumerico name="rackLevel" min={1} max={2147483647} step={1} defaultValue={existente?.rackLevel ?? ""} /><span className="nn-muted">{t("rackAyuda")}</span></label>
-        <label>{t("fila")}<CampoNumerico name="rackRow" min={1} max={2147483647} step={1} defaultValue={existente?.rackRow ?? ""} /><span className="nn-muted">{t("filaAyuda")}</span></label>
-      </>}
-```
-
-En `app/instalaciones/page.tsx`, la línea de la cama:
-
-```tsx
-<li key={c.id}>{c.name} · {c.rackLevel == null ? t("rackNoDeclarado") : t("rackValor", { nivel: c.rackLevel })}{c.rackRow == null ? "" : ` · ${t("filaValor", { fila: c.rackRow })}`}</li>
-```
-
-En `messages/es.json`, espacio `Secado`:
-
-```json
-    "fila": "Fila del estante (opcional)",
-    "filaAyuda": "Con el nivel, dice la posición de una bandeja. Vacío conserva el dato como no declarado.",
-    "filaValor": "fila {fila}",
-    "ambiente_african_bed_outdoor": "Cama africana a la intemperie",
-    "ambiente_floor_tarp": "Piso con lona",
-    "error_fila_invalida": "La fila debe ser un número entero positivo.",
-```
-
-En `messages/en.json`, las mismas claves:
-
-```json
-    "fila": "Shelf row (optional)",
-    "filaAyuda": "Together with the level, it gives a tray's position. Leave empty to keep it undeclared.",
-    "filaValor": "row {fila}",
-    "ambiente_african_bed_outdoor": "African raised bed, outdoors",
-    "ambiente_floor_tarp": "Floor on tarp",
-    "error_fila_invalida": "The row must be a positive whole number.",
-```
-
-- [ ] **Paso 4b: la sombra de arriba**
-
-En `lib/traceability/secadoForm.ts`:
-- el import: `import { DryingEnvironment, ShadePercentageBracket } from "../../generated/prisma/client";`, con la misma forma que ya importa `DryingEnvironment`;
-- la constante: `export const GRADOS_DE_SOMBRA = Object.values(ShadePercentageBracket);`
-- dentro de `leerUbicacionDeSecado`, antes del `return`:
-
-```ts
-  // La sombra de arriba (Daniel, 2026-09-18): el grado es la escala que ya usan
-  // las parcelas; la nota dice QUÉ la da. Vacías quedan nulas: no declarado.
-  const grado = texto(form, "shadePercentage");
-  if (grado && !(GRADOS_DE_SOMBRA as string[]).includes(grado)) throw new SecadoFormError("sombra_invalida");
-  const shadeDescription = texto(form, "shadeDescription") || null;
-  if (shadeDescription && shadeDescription.length > 300) throw new SecadoFormError("sombra_invalida");
-```
-
-y añadir `shadePercentage: (grado || null) as ShadePercentageBracket | null, shadeDescription,` al objeto devuelto. `texto()` ya recorta los espacios; comprobarlo leyendo su definición, y si no los recorta, usar `.trim()` aquí.
-
-En `lib/traceability/instalaciones.ts`:
-- `Datos` gana `shadePercentage?: ShadePercentageBracket | null; shadeDescription?: string | null`.
-- En `validar`, **para los dos tipos**:
-
-```ts
-  if (input.shadePercentage != null && !GRADOS_DE_SOMBRA.includes(input.shadePercentage)) throw new SecadoFormError("sombra_invalida");
-  if (input.shadeDescription != null && input.shadeDescription.trim().length > 300) throw new SecadoFormError("sombra_invalida");
-```
-
-- En el `data` de crear y de actualizar: `shadePercentage: input.shadePercentage ?? null, shadeDescription: input.shadeDescription?.trim() || null`.
-- `detalleInstalacion` devuelve también `shadePercentage: row.shadePercentage, shadeDescription: row.shadeDescription`, y cada cama `shadePercentage: bed.shadePercentage, shadeDescription: bed.shadeDescription`.
-
-En `app/instalaciones/FormularioUbicacion.tsx`, **para los dos tipos**, después del ambiente o de la fila:
-
-```tsx
-    <label>{t("sombra")}<select name="shadePercentage" defaultValue={existente?.shadePercentage ?? ""}>
-      <option value="">{t("noDeclarado")}</option>
-      {GRADOS_DE_SOMBRA.map((g) => <option key={g} value={g}>{t(`sombra_${g}`)}</option>)}
-    </select></label>
-    <label>{t("sombraNota")}<input name="shadeDescription" maxLength={300} defaultValue={existente?.shadeDescription ?? ""} />
-      <span className="nn-muted">{t(tipo === "drying_bed" ? "sombraAyudaCama" : "sombraAyuda")}</span></label>
-```
-
-El tipo `existente` gana `shadePercentage?: string | null; shadeDescription?: string | null`.
-
-En `app/instalaciones/page.tsx`:
-- la instalación enseña su sombra: `{i.shadePercentage || i.shadeDescription ? t("sombraValor", { grado: i.shadePercentage ? t(`sombra_${i.shadePercentage}`) : t("noDeclarado"), nota: i.shadeDescription ?? "" }) : null}`;
-- cada cama enseña **la suya** si la tiene; si no, la de la instalación **con la etiqueta `sombraDeLaInstalacion`**, nunca como si fuera propia.
-
-**Qué no se hace:**
-- **No se restringe la sombra a los ambientes de intemperie.** Un invernadero también puede llevar malla de sombra, y Daniel no pidió excluirlo.
-- **No se calcula nada** con la sombra, ni se la relaciona con la velocidad de secado. Es un dato declarado.
-
-Mensajes, espacio `Secado`, en `messages/es.json`:
-
-```json
-    "sombra": "Sombra de arriba (opcional)",
-    "sombraNota": "Qué da la sombra (opcional)",
-    "sombraAyuda": "Árbol, enredadera, lona, techo con cierta opacidad… Vale para toda la instalación.",
-    "sombraAyudaCama": "Sólo si esta cama tiene una sombra distinta a la de su instalación.",
-    "sombraValor": "Sombra {grado} {nota}",
-    "sombraDeLaInstalacion": "sombra de la instalación",
-    "sombra_pct_20": "20 %", "sombra_pct_30": "30 %", "sombra_pct_50": "50 %", "sombra_pct_70": "70 %", "sombra_pct_90": "90 %",
-    "error_sombra_invalida": "El grado de sombra no es de la lista, o la nota pasa de 300 caracteres.",
-```
-
-y en `messages/en.json`:
-
-```json
-    "sombra": "Overhead shade (optional)",
-    "sombraNota": "What gives the shade (optional)",
-    "sombraAyuda": "Tree, vine, tarp, a roof with some opacity… Applies to the whole facility.",
-    "sombraAyudaCama": "Only if this bed has a different shade from its facility.",
-    "sombraValor": "Shade {grado} {nota}",
-    "sombraDeLaInstalacion": "facility shade",
-    "sombra_pct_20": "20 %", "sombra_pct_30": "30 %", "sombra_pct_50": "50 %", "sombra_pct_70": "70 %", "sombra_pct_90": "90 %",
-    "error_sombra_invalida": "The shade level is not on the list, or the note is longer than 300 characters.",
-```
-
-Añadir `"sombra_invalida"` a la lista de la prueba de claves de mensaje de `tests/traceability/secadoForm.test.ts`.
-
-- [ ] **Paso 5: comprobar que pasan**
-
-Correr las tres pruebas del paso 2 → PASAN. Después `npm run build` → sale 0.
-
-- [ ] **Paso 6: commit**
-
-```bash
-git add prisma/migrations/20260918190000_ambientes_y_fila_de_secado/migration.sql
-git add prisma/schema.prisma
-git add lib/traceability/secadoForm.ts
-git add lib/traceability/instalaciones.ts
-git add app/instalaciones/FormularioUbicacion.tsx
-git add app/instalaciones/page.tsx
-git add messages/es.json
-git add messages/en.json
-git add tests/traceability/secadoForm.test.ts
-git add tests/traceability/instalaciones.test.ts
-git add tests/traceability/topologiaDeSecado.test.ts
-git diff --cached --stat   # 11 archivos; si salen más, parar
-git commit -F <archivo-con-el-mensaje>
-```
-
-Mensaje: `feat(secado): cama africana, piso con lona y la fila del estante`.
-
----
-
-### Tarea 2: `DryingRunTray` y sus reglas en la base
-
-**Archivos:**
-- Crear: `prisma/migrations/20260918191000_bandejas_de_la_corrida/migration.sql`
+- Crear: `prisma/migrations/20260918192000_bandejas_de_la_corrida/migration.sql`
 - Modificar: `prisma/schema.prisma` (modelo nuevo; relaciones inversas en `DryingRun`, `Equipment` y `UserAccount`)
 - Crear: `tests/traceability/bandejasEnLaBase.test.ts`
 - Modificar: `scripts/pruebas-por-compuerta.txt` (grupo `base-sembrada`, junto a `tests/traceability/topologiaDeSecado.test.ts`)
 
 **Interfaces:**
 - Produce `prisma.dryingRunTray` con `{ id, dryingRunId, equipmentId, desde, hasta, provenanceClass, createdAt, createdBy }`.
-- Produce los mensajes de error de la base, que T3 y las pruebas buscan por regex. Van **sin tildes**, para no depender de la codificación del cliente:
+- Produce los mensajes de error de la base, que T2 y las pruebas buscan por regex. Van **sin tildes**, para no depender de la codificación del cliente:
 
 | regla | texto |
 |---|---|
@@ -640,7 +305,7 @@ Añadir `tests/traceability/bandejasEnLaBase.test.ts` a `scripts/pruebas-por-com
 
 - [ ] **Paso 3: la migración**
 
-`prisma/migrations/20260918191000_bandejas_de_la_corrida/migration.sql`:
+`prisma/migrations/20260918192000_bandejas_de_la_corrida/migration.sql`:
 
 ```sql
 -- Paso 2 del spec de secado por bandeja (§4.3). Qué bandejas lleva el secado de
@@ -819,12 +484,12 @@ Relaciones inversas:
 
 `npx vitest run tests/traceability/bandejasEnLaBase.test.ts` → 11/11. Después `npm run build` → 0.
 
-**Las dos pruebas de carrera tienen que fallar por la razón correcta si se quita el bloqueo.** Es el flip 1b de la Tarea 5. Si en la base compartida salen intermitentes por carga, se sube la espera a 3 s. **No** se marcan como `skip`.
+**Las dos pruebas de carrera tienen que fallar por la razón correcta si se quita el bloqueo.** Es el flip 1b de la Tarea 4. Si en la base compartida salen intermitentes por carga, se sube la espera a 3 s. **No** se marcan como `skip`.
 
 - [ ] **Paso 6: commit**
 
 ```bash
-git add prisma/migrations/20260918191000_bandejas_de_la_corrida/migration.sql
+git add prisma/migrations/20260918192000_bandejas_de_la_corrida/migration.sql
 git add prisma/schema.prisma
 git add tests/traceability/bandejasEnLaBase.test.ts
 git add scripts/pruebas-por-compuerta.txt
@@ -836,18 +501,18 @@ Mensaje: `feat(secado): DryingRunTray — el lote en sus bandejas, con sus regla
 
 ---
 
-### Tarea 3: el servicio de bandejas, el cierre con la última y la guarda del cierre
+### Tarea 2: el servicio de bandejas, el cierre con la última y la guarda del cierre
 
 **Archivos:**
 - Crear: `lib/traceability/bandejaError.ts` (el error, aparte, para que `drying.ts` y `bandejas.ts` no se importen en círculo)
-- Crear: `lib/traceability/bandejas.ts`
+- Crear: `lib/traceability/bandejasDelSecado.ts`
 - Modificar: `lib/traceability/drying.ts` (`endDryingRun` y una función nueva `cerrarCorridaEnTransaccion`)
-- Modificar: `lib/equipos/equipos.ts` (una función exportada nueva, `puedeVerEquipo`)
-- Crear: `tests/traceability/bandejas.test.ts`
+- Nada en `lib/equipos/equipos.ts`: `puedeVerEquipo` ya existe desde el plan 2a
+- Crear: `tests/traceability/bandejasDelSecado.test.ts`
 - Modificar: `scripts/pruebas-por-compuerta.txt` (grupo `base-sembrada`)
 
 **Interfaces:**
-- Consume `prisma.dryingRunTray` (T2), `Location.rackRow` (T1) y `requireLotAccess` (`lib/traceability/lots`).
+- Consume `prisma.dryingRunTray` (T1), `Location.rackSlot` y `drying_rack` (plan 2a) y `requireLotAccess` (`lib/traceability/lots`).
 - Produce:
 
 ```ts
@@ -856,7 +521,7 @@ export type CodigoBandeja =
   | "corrida_no_encontrada" | "bandeja_no_encontrada" | "secado_cerrado" | "corrida_con_cama"
   | "no_es_bandeja" | "bandeja_de_otra_organizacion" | "bandeja_sin_acceso" | "bandeja_retirada"
   | "bandeja_ocupada" | "fecha_antes_del_secado" | "fecha_antes_de_cargar" | "ya_bajada"
-  | "la_ultima_cierra_el_secado" | "quedan_otras_bandejas" | "bandejas_sin_bajar";
+  | "la_ultima_cierra_el_secado" | "quedan_otras_bandejas" | "bandejas_sin_bajar" | "posicion_invalida";
 export class BandejaError extends Error { readonly codigo: CodigoBandeja }
 
 // lib/traceability/drying.ts
@@ -864,11 +529,11 @@ export type CierreDelSecado = Omit<EndDryingRunInput, "dryingRunId" | "endedAt">
 export async function cerrarCorridaEnTransaccion(tx, userAccountId: string, dryingRunId: string, sourceLot: Lot, input: EndDryingRunInput)
   : Promise<{ run; transformation; outputLot; reconciliation }>;
 
-// lib/equipos/equipos.ts
+// lib/equipos/equipos.ts — ya existe, del plan 2a
 export async function puedeVerEquipo(userAccountId: string, equipo: { id: string; projectId: string | null; classification: ClassificationLevel }): Promise<boolean>;
 
-// lib/traceability/bandejas.ts
-export interface Posicion { camaId: string; ajena: boolean; cama: string | null; instalacion: string | null; nivel: number | null; fila: number | null }
+// lib/traceability/bandejasDelSecado.ts
+export interface Posicion { camaId: string; ajena: boolean; cama: string | null; instalacion: string | null; estante: string | null; nivel: number | null; puesto: number | null }
 export interface BandejaEnCorrida {
   id: string; equipmentId: string; nombre: string; desde: Date; hasta: Date | null;
   posicion: Posicion | null;   // null = nunca se trasladó a una cama
@@ -890,14 +555,14 @@ export async function posicionDeBandeja(equipmentId: string, en: Date, organizat
 
 - [ ] **Paso 1: las pruebas que fallan**
 
-`tests/traceability/bandejas.test.ts`. **El operador tiene su permiso por UBICACIÓN, en un sitio de prueba propio, y no por proyecto.** Una bandeja trasladada a una cama se autoriza por esa ubicación (`objetivoDeEquipo`), así que un operador asignado a un proyecto dejaría de verla en cuanto se moviera.
+`tests/traceability/bandejasDelSecado.test.ts`. **El operador tiene su permiso por UBICACIÓN, en un sitio de prueba propio, y no por proyecto.** Una bandeja trasladada a una cama se autoriza por esa ubicación (`objetivoDeEquipo`), así que un operador asignado a un proyecto dejaría de verla en cuanto se moviera.
 
 ```ts
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { endDryingRun, startDryingRun } from "../../lib/traceability/drying";
-import { bajarBandeja, bandejasDeCorrida, bandejasDisponibles, cargarBandeja, posicionDeBandeja } from "../../lib/traceability/bandejas";
+import { bajarBandeja, bandejasDeCorrida, bandejasDisponibles, cargarBandeja, posicionDeBandeja } from "../../lib/traceability/bandejasDelSecado";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
@@ -908,7 +573,7 @@ let operador: string; let ajeno: string;
 const equipos: string[] = []; const ubicaciones: string[] = []; // hijos antes que padres
 const cierre = (codigo: string) => ({ outputLotCode: `${RUN_ID}-${codigo}-verde`, outputLotType: "green" as const, provenanceClass: "original_record" as const });
 
-async function ubicacion(data: { name: string; locationType: "site" | "drying_facility" | "drying_bed"; organizationId: string; parentLocationId?: string; rackLevel?: number; rackRow?: number }) {
+async function ubicacion(data: { name: string; locationType: "site" | "drying_facility" | "drying_rack" | "drying_bed"; organizationId: string; parentLocationId?: string; rackLevel?: number; rackSlot?: number }) {
   const l = await prisma.location.create({ data: { ...data, name: `${data.name} (${RUN_ID})` } });
   ubicaciones.unshift(l.id); return l;
 }
@@ -933,9 +598,10 @@ async function bandeja(n: string, o: { organizationId?: string; kind?: "vessel" 
   await trasladar(e.id, o.alta ?? sitio, "2026-08-01T00:00:00Z");
   return e;
 }
-async function posicion(nivel: number, fila: number, organizationId = org, padre = sitio) {
-  const inv = await ubicacion({ name: `TEST Cuarto N${nivel}F${fila}`, locationType: "drying_facility", organizationId, parentLocationId: padre });
-  return ubicacion({ name: `TEST N${nivel}F${fila}`, locationType: "drying_bed", organizationId, parentLocationId: inv.id, rackLevel: nivel, rackRow: fila });
+async function posicion(nivel: number, puesto: number, organizationId = org, padre = sitio) {
+  const inv = await ubicacion({ name: `TEST Cuarto N${nivel}P${puesto}`, locationType: "drying_facility", organizationId, parentLocationId: padre });
+  const estante = await ubicacion({ name: `TEST Estante N${nivel}P${puesto}`, locationType: "drying_rack", organizationId, parentLocationId: inv.id });
+  return ubicacion({ name: `N${nivel} · P${puesto} (${RUN_ID})`, locationType: "drying_bed", organizationId, parentLocationId: estante.id, rackLevel: nivel, rackSlot: puesto });
 }
 async function secado(codigo: string) {
   const lot = await createLot(operador, { lotCode: `${RUN_ID}-${codigo}`, lotType: "drying", organizationId: org, locationId: sitio });
@@ -1080,8 +746,8 @@ describe("dónde está cada bandeja", () => {
     await trasladar(b.id, p1.id, "2026-09-01T12:00:00Z");
     await trasladar(b.id, p2.id, "2026-09-03T12:00:00Z");
     expect(await posicionDeBandeja(b.id, T("2026-08-15T00:00:00Z"), org)).toBeNull(); // en el sitio, no en una cama
-    expect(await posicionDeBandeja(b.id, T("2026-09-02T00:00:00Z"), org)).toMatchObject({ camaId: p1.id, ajena: false, nivel: 1, fila: 1 });
-    expect(await posicionDeBandeja(b.id, T("2026-09-04T00:00:00Z"), org)).toMatchObject({ camaId: p2.id, ajena: false, nivel: 3, fila: 2 });
+    expect(await posicionDeBandeja(b.id, T("2026-09-02T00:00:00Z"), org)).toMatchObject({ camaId: p1.id, ajena: false, nivel: 1, puesto: 1 });
+    expect(await posicionDeBandeja(b.id, T("2026-09-04T00:00:00Z"), org)).toMatchObject({ camaId: p2.id, ajena: false, nivel: 3, puesto: 2 });
   });
 
   it("una cama de otra organización no dice su nombre", async () => {
@@ -1089,7 +755,7 @@ describe("dónde está cada bandeja", () => {
     const b = await bandeja("en-cama-ajena");
     await trasladar(b.id, ajenaCama.id, "2026-09-01T12:00:00Z");
     expect(await posicionDeBandeja(b.id, T("2026-09-02T00:00:00Z"), org))
-      .toEqual({ camaId: ajenaCama.id, ajena: true, cama: null, instalacion: null, nivel: null, fila: null });
+      .toEqual({ camaId: ajenaCama.id, ajena: true, cama: null, instalacion: null, estante: null, nivel: null, puesto: null });
   });
 
   it("conflicto = otro recipiente de la organización registrado en la misma cama, cargado o no", async () => {
@@ -1110,7 +776,7 @@ describe("dónde está cada bandeja", () => {
     expect(por(a.id).conflicto.sort()).toEqual([b.name, vacia.name].sort());
     expect(por(b.id).conflicto.sort()).toEqual([a.name, vacia.name].sort());
     expect(por(c.id)).toMatchObject({ conflicto: [] });      // sola en su posición real: sin conflicto
-    expect(por(c.id).posicion).toMatchObject({ camaId: sola.id, nivel: 2, fila: 3 });
+    expect(por(c.id).posicion).toMatchObject({ camaId: sola.id, nivel: 2, puesto: 3 });
     expect(filas.flatMap((f) => f.conflicto)).not.toContain(deOtra.name);
   });
 
@@ -1154,11 +820,11 @@ describe("dónde está cada bandeja", () => {
 });
 ```
 
-Añadir `tests/traceability/bandejas.test.ts` al grupo `base-sembrada`, debajo de `bandejasEnLaBase.test.ts`.
+Añadir `tests/traceability/bandejasDelSecado.test.ts` al grupo `base-sembrada`, debajo de `bandejasEnLaBase.test.ts`.
 
 - [ ] **Paso 2: comprobar que fallan**
 
-`npx vitest run tests/traceability/bandejas.test.ts` → FALLA: el módulo `lib/traceability/bandejas` no existe.
+`npx vitest run tests/traceability/bandejasDelSecado.test.ts` → FALLA: el módulo `lib/traceability/bandejasDelSecado` no existe.
 
 - [ ] **Paso 3: el error, el permiso de equipos y el cierre reutilizable**
 
@@ -1170,28 +836,14 @@ export type CodigoBandeja =
   | "corrida_no_encontrada" | "bandeja_no_encontrada" | "secado_cerrado" | "corrida_con_cama"
   | "no_es_bandeja" | "bandeja_de_otra_organizacion" | "bandeja_sin_acceso" | "bandeja_retirada"
   | "bandeja_ocupada" | "fecha_antes_del_secado" | "fecha_antes_de_cargar" | "ya_bajada"
-  | "la_ultima_cierra_el_secado" | "quedan_otras_bandejas" | "bandejas_sin_bajar";
+  | "la_ultima_cierra_el_secado" | "quedan_otras_bandejas" | "bandejas_sin_bajar" | "posicion_invalida";
 
 export class BandejaError extends Error {
   constructor(readonly codigo: CodigoBandeja) { super(codigo); this.name = "BandejaError"; }
 }
 ```
 
-En `lib/equipos/equipos.ts`, debajo de `puedeGestionarEquipo`:
-
-```ts
-/**
- * ¿Puede esta persona ver este equipo? El mismo `can(view)` que ya usan
- * `disponibilidadDeRecipientes` e `instrumentosParaMedicion`. Lo pide cargar una
- * bandeja de secado: gestionar el lote no da derecho sobre cualquier equipo.
- */
-export async function puedeVerEquipo(
-  userAccountId: string,
-  equipo: { id: string; projectId: string | null; classification: ClassificationLevel },
-): Promise<boolean> {
-  return can(userAccountId, "view", "equipment", await objetivoDeEquipo(equipo), equipo.classification);
-}
-```
+`puedeVerEquipo` **ya existe**: la añadió el plan 2a en `lib/equipos/equipos.ts`. Se importa, no se vuelve a escribir. Si al ejecutar este plan no estuviera, el 2a no se completó, y se para.
 
 En `lib/traceability/drying.ts`:
 - los imports: `import { BandejaError } from "./bandejaError";` y añadir `Lot` al `import type` del cliente generado;
@@ -1202,7 +854,7 @@ export type CierreDelSecado = Omit<EndDryingRunInput, "dryingRunId" | "endedAt">
 
 /**
  * El cierre de un secado dentro de una transacción ajena: lo usan `endDryingRun`
- * y bajar la última bandeja (`lib/traceability/bandejas.ts`), que cierra en la
+ * y bajar la última bandeja (`lib/traceability/bandejasDelSecado.ts`), que cierra en la
  * MISMA transacción en que la baja. El permiso lo exige quien llama.
  */
 export async function cerrarCorridaEnTransaccion(
@@ -1252,7 +904,7 @@ Comprobar con `npx vitest run tests/traceability/drying.test.ts` que el cierre d
 
 - [ ] **Paso 4: el servicio**
 
-`lib/traceability/bandejas.ts`:
+`lib/traceability/bandejasDelSecado.ts`:
 
 ```ts
 /**
@@ -1276,7 +928,7 @@ import { BandejaError } from "./bandejaError";
 
 export { BandejaError } from "./bandejaError";
 
-export interface Posicion { camaId: string; ajena: boolean; cama: string | null; instalacion: string | null; nivel: number | null; fila: number | null }
+export interface Posicion { camaId: string; ajena: boolean; cama: string | null; instalacion: string | null; estante: string | null; nivel: number | null; puesto: number | null }
 export interface BandejaEnCorrida {
   id: string; equipmentId: string; nombre: string; desde: Date; hasta: Date | null;
   posicion: Posicion | null;
@@ -1394,14 +1046,23 @@ export async function posicionDeBandeja(equipmentId: string, en: Date, organizat
   const t = await prisma.equipmentTransfer.findFirst({
     where: { equipmentId, occurredAt: { lte: en } },
     orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
-    include: { toLocation: { include: { parentLocation: true } } },
+    include: { toLocation: { include: { parentLocation: { include: { parentLocation: true } } } } },
   });
   const cama = t?.toLocation;
   if (!cama || cama.locationType !== "drying_bed") return null;
   if (cama.organizationId !== organizationId) {
-    return { camaId: cama.id, ajena: true, cama: null, instalacion: null, nivel: null, fila: null };
+    return { camaId: cama.id, ajena: true, cama: null, instalacion: null, estante: null, nivel: null, puesto: null };
   }
-  return { camaId: cama.id, ajena: false, cama: cama.name, instalacion: cama.parentLocation?.name ?? null, nivel: cama.rackLevel, fila: cama.rackRow };
+  // Una posición cuelga de un ESTANTE, y el estante de la instalación (plan 2a).
+  // Una cama suelta —cama africana, piso con lona— cuelga directo de la instalación.
+  const padre = cama.parentLocation;
+  const enEstante = padre?.locationType === "drying_rack";
+  return {
+    camaId: cama.id, ajena: false, cama: cama.name,
+    instalacion: (enEstante ? padre?.parentLocation?.name : padre?.name) ?? null,
+    estante: enEstante ? padre!.name : null,
+    nivel: cama.rackLevel, puesto: cama.rackSlot,
+  };
 }
 
 export async function bandejasDeCorrida(userAccountId: string, dryingRunId: string): Promise<BandejaEnCorrida[]> {
@@ -1469,21 +1130,134 @@ export async function bandejasDisponibles(userAccountId: string, dryingRunId: st
 
 **Sin tope, a propósito**, y es la forma lenta de «un admin ve la base entera» (CLAUDE.md) vista del otro lado: un tope que se aplica antes del filtro de permiso esconde lo que sí se podía ver. Al implementarlo, se cuentan los recipientes activos de la organización más grande de la base local y el número se escribe en el comentario. Si algún día pasan de unos cientos, la solución es paginar **después** de filtrar, no volver a poner el tope.
 
+- [ ] **Paso 4b: mover una bandeja de posición**
+
+**Por qué hace falta aquí y no basta `trasladarEquipo`:** `trasladarEquipo` exige configurar equipos (`equipment:manage` o `edit_beneficio`), y el **capataz no lo tiene**. Quien voltea y cambia las bandejas de nivel cada día no podría registrarlo. **Decisión de este plan, enseñada a Daniel en el PR:** puede mover una bandeja
+- quien **gestiona el lote que la bandeja lleva cargado** —el mismo permiso que cargarla y bajarla—,
+- o quien puede configurar equipos en la **posición de destino**.
+
+Una bandeja vacía sólo la mueve quien configura: no hay lote que dé el permiso.
+
+Interfaces, en `lib/traceability/bandejasDelSecado.ts`:
+
+```ts
+export async function moverBandeja(userAccountId: string, input: { equipmentId: string; posicionId: string; occurredAt: Date }): Promise<{ id: string }>;
+export async function posicionesParaMover(userAccountId: string, dryingRunId: string): Promise<{ id: string; instalacion: string | null; estante: string | null; nivel: number; puesto: number; ocupadaPor: string | null }[]>;
+```
+
+`CodigoBandeja` gana `"posicion_invalida"`, así que los mensajes pasan de 16 a **17** claves `error_`.
+
+La prueba, en `tests/traceability/bandejasDelSecado.test.ts`:
+
+```ts
+describe("mover una bandeja", () => {
+  it("quien gestiona el lote cargado la mueve; queda el traslado con su hora; una vacía no; otra organización no", async () => {
+    const run = await secado("mover");
+    const [p1, p2] = [await posicion(1, 6), await posicion(2, 6)];
+    const b = await bandeja("mover");
+    await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: b.id, desde: T("2026-09-01T11:00:00Z") });
+    await moverBandeja(operador, { equipmentId: b.id, posicionId: p1.id, occurredAt: T("2026-09-01T12:00:00Z") });
+    await moverBandeja(operador, { equipmentId: b.id, posicionId: p2.id, occurredAt: T("2026-09-02T12:00:00Z") });
+    expect(await posicionDeBandeja(b.id, T("2026-09-03T00:00:00Z"), org)).toMatchObject({ camaId: p2.id, nivel: 2, puesto: 6 });
+    const t = await prisma.equipmentTransfer.findFirstOrThrow({ where: { equipmentId: b.id, toLocationId: p2.id } });
+    expect(t.fromLocationId).toBe(p1.id); // de dónde venía, no nulo
+
+    const vacia = await bandeja("vacia-mover");
+    await expect(moverBandeja(operador, { equipmentId: vacia.id, posicionId: p1.id, occurredAt: T("2026-09-02T12:00:00Z") })).rejects.toThrow("bandeja_sin_acceso");
+    const deOtra = await posicion(3, 6, otraOrg, sitioDeOtraOrg);
+    await expect(moverBandeja(operador, { equipmentId: b.id, posicionId: deOtra.id, occurredAt: T("2026-09-02T13:00:00Z") })).rejects.toThrow("posicion_invalida");
+    await expect(moverBandeja(ajeno, { equipmentId: b.id, posicionId: p1.id, occurredAt: T("2026-09-02T13:00:00Z") })).rejects.toThrow("bandeja_sin_acceso");
+  });
+
+  it("posicionesParaMover dice qué posición está ocupada y por qué bandeja", async () => {
+    const run = await secado("posiciones");
+    const p = await posicion(4, 6);
+    const b = await bandeja("ocupa-4-6");
+    await trasladar(b.id, p.id, "2026-09-01T12:00:00Z");
+    const opciones = await posicionesParaMover(operador, run.id);
+    expect(opciones.find((o) => o.id === p.id)).toMatchObject({ ocupadaPor: b.name });
+    expect(opciones.find((o) => o.id === p.id)).toMatchObject({ nivel: 4, puesto: 6 });
+  });
+});
+```
+
+El código:
+
+```ts
+export async function moverBandeja(userAccountId: string, input: { equipmentId: string; posicionId: string; occurredAt: Date }) {
+  const equipo = await prisma.equipment.findUnique({ where: { id: input.equipmentId } });
+  if (!equipo || equipo.kind !== "vessel") throw new BandejaError("no_es_bandeja");
+  const destino = await prisma.location.findUnique({ where: { id: input.posicionId } });
+  if (!destino || destino.locationType !== "drying_bed" || destino.organizationId !== equipo.organizationId) throw new BandejaError("posicion_invalida");
+
+  let permitido = false;
+  const abierta = await prisma.dryingRunTray.findFirst({ where: { equipmentId: equipo.id, hasta: null } });
+  if (abierta) {
+    try { await corridaConPermiso(userAccountId, abierta.dryingRunId); permitido = true; }
+    catch (error) { if (!(error instanceof TraceabilityAccessError)) throw error; }
+  }
+  if (!permitido && !(await puedeConfigurarEn(userAccountId, destino.id))) throw new BandejaError("bandeja_sin_acceso");
+
+  const ultimo = await prisma.equipmentTransfer.findFirst({
+    where: { equipmentId: equipo.id }, orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }], select: { toLocationId: true },
+  });
+  return prisma.$transaction(async (tx) => {
+    const t = await tx.equipmentTransfer.create({ data: {
+      equipmentId: equipo.id, fromLocationId: ultimo?.toLocationId ?? null, toLocationId: destino.id,
+      occurredAt: input.occurredAt, createdBy: userAccountId,
+    } });
+    await recordAuditEvent({ actorUserAccountId: userAccountId, entityType: "equipment_transfer", entityId: t.id,
+      operation: "drying_tray.move", sourceInterface: "traceability.service",
+      after: { equipmentId: equipo.id, fromLocationId: t.fromLocationId, toLocationId: destino.id } }, tx);
+    return { id: t.id };
+  });
+}
+
+export async function posicionesParaMover(userAccountId: string, dryingRunId: string) {
+  const { lot } = await corridaConPermiso(userAccountId, dryingRunId);
+  const posiciones = await prisma.location.findMany({
+    where: { organizationId: lot.organizationId, locationType: "drying_bed", parentLocation: { locationType: "drying_rack" } },
+    include: { parentLocation: { include: { parentLocation: true } } },
+    orderBy: [{ parentLocationId: "asc" }, { rackLevel: "asc" }, { rackSlot: "asc" }],
+  });
+  // Quién ocupa cada posición: el último traslado de cada recipiente de la organización.
+  const ultimos = await prisma.equipmentTransfer.findMany({
+    where: { equipment: { organizationId: lot.organizationId, kind: "vessel" } },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+    select: { equipmentId: true, toLocationId: true, equipment: { select: { name: true } } },
+  });
+  const visto = new Set<string>(); const ocupante = new Map<string, string>();
+  for (const u of ultimos) {
+    if (visto.has(u.equipmentId)) continue;
+    visto.add(u.equipmentId);
+    ocupante.set(u.toLocationId, u.equipment.name);
+  }
+  return posiciones.map((p) => ({
+    id: p.id,
+    // Sin texto en español aquí (00_conventions): la pantalla compone la etiqueta con su clave i18n.
+    instalacion: p.parentLocation?.parentLocation?.name ?? null, estante: p.parentLocation?.name ?? null,
+    nivel: p.rackLevel!, puesto: p.rackSlot!,
+    ocupadaPor: ocupante.get(p.id) ?? null,
+  }));
+}
+```
+
+- el import: `puedeConfigurarEn`, de `../equipos/equipos` (plan 2a).
+
 - [ ] **Paso 5: comprobar que pasan**
 
-- `npx vitest run tests/traceability/bandejas.test.ts tests/traceability/drying.test.ts tests/equipos/equipos.test.ts` → las tres en verde. `drying.test.ts` es el control del cierre sin bandejas; `equipos.test.ts`, el de que `equipos.ts` no cambió de comportamiento.
+- `npx vitest run tests/traceability/bandejasDelSecado.test.ts tests/traceability/drying.test.ts tests/equipos/equipos.test.ts` → las tres en verde. `drying.test.ts` es el control del cierre sin bandejas; `equipos.test.ts`, el de que `equipos.ts` no cambió de comportamiento.
 - `npm run build` → 0.
 
 - [ ] **Paso 6: commit**
 
 ```bash
 git add lib/traceability/bandejaError.ts
-git add lib/traceability/bandejas.ts
+git add lib/traceability/bandejasDelSecado.ts
 git add lib/traceability/drying.ts
-git add lib/equipos/equipos.ts
-git add tests/traceability/bandejas.test.ts
+git add tests/traceability/bandejasDelSecado.test.ts
 git add scripts/pruebas-por-compuerta.txt
-git diff --cached --stat   # 6 archivos
+git diff --cached --stat   # 5 archivos
 git commit -F <archivo>
 ```
 
@@ -1491,17 +1265,17 @@ Mensaje: `feat(secado): cargar y bajar bandejas; bajar la última cierra el seca
 
 ---
 
-### Tarea 4: las bandejas en la ficha del lote
+### Tarea 3: las bandejas en la ficha del lote
 
 **Archivos:**
-- Crear: `app/actions/bandejas.ts`
+- Crear: `app/actions/bandejasDelSecado.ts`
 - Crear: `app/components/traceability/BandejasDelSecado.tsx`
 - Modificar: `app/lots/[id]/page.tsx` (tarjeta `activeDrying`, hacia la línea 909)
-- Modificar: `messages/es.json`, `messages/en.json` (espacio nuevo `Bandejas`)
+- Modificar: `messages/es.json`, `messages/en.json` (espacio nuevo `BandejasDelSecado`)
 - Probar: `tests/arquitectura/use-server-solo-async.test.ts` (ya existe; debe seguir en verde), y `npm run build`
 
 **Interfaces:**
-- Consume `cargarBandeja`, `bajarBandeja` (con su `cierre` para la última), `bandejasDeCorrida`, `bandejasDisponibles`, `BandejaError` y `BandejaEnCorrida` (T3).
+- Consume `cargarBandeja`, `bajarBandeja` (con su `cierre` para la última), `bandejasDeCorrida`, `bandejasDisponibles`, `BandejaError` y `BandejaEnCorrida` (T2).
 - Produce:
   - `cargarBandejaAction(prev, formData): Promise<{ error?: string }>`;
   - `bajarBandejaAction(prev, formData): Promise<{ error?: string }>`;
@@ -1509,7 +1283,7 @@ Mensaje: `feat(secado): cargar y bajar bandejas; bajar la última cierra el seca
 
 - [ ] **Paso 1: las acciones de servidor**
 
-`app/actions/bandejas.ts`:
+`app/actions/bandejasDelSecado.ts`:
 
 ```ts
 "use server";
@@ -1517,7 +1291,7 @@ Mensaje: `feat(secado): cargar y bajar bandejas; bajar la última cierra el seca
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "../../lib/auth/session";
-import { bajarBandeja, BandejaError, cargarBandeja } from "../../lib/traceability/bandejas";
+import { bajarBandeja, BandejaError, cargarBandeja } from "../../lib/traceability/bandejasDelSecado";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 
 type Estado = { error?: string };
@@ -1594,12 +1368,12 @@ La ruta `../../lib/auth/session` es la que usa `app/actions/traceability.ts` (co
 
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
-import { bajarBandejaAction, cargarBandejaAction } from "../../actions/bandejas";
+import { bajarBandejaAction, cargarBandejaAction } from "../../actions/bandejasDelSecado";
 import { BotonDeEnvio } from "../BotonDeEnvio";
 
 type Fila = {
   id: string; nombre: string; desde: string; hasta: string | null;
-  posicion: { ajena: boolean; cama: string | null; instalacion: string | null; nivel: number | null; fila: number | null } | null;
+  posicion: { ajena: boolean; cama: string | null; instalacion: string | null; estante: string | null; nivel: number | null; puesto: number | null } | null;
   conflicto: string[];
   conflictoSinAcceso: number;
 };
@@ -1610,7 +1384,7 @@ type Props = {
 };
 
 export function BandejasDelSecado({ lotId, dryingRunId, filas, disponibles, puedeRegistrar, tiposDeSalida }: Props) {
-  const t = useTranslations("Bandejas");
+  const t = useTranslations("BandejasDelSecado");
   const [cargar, accionCargar] = useActionState(cargarBandejaAction, {});
   const [bajar, accionBajar] = useActionState(bajarBandejaAction, {});
   const abiertas = filas.filter((f) => f.hasta === null).length;
@@ -1618,7 +1392,9 @@ export function BandejasDelSecado({ lotId, dryingRunId, filas, disponibles, pued
     ? t("sinPosicion")
     : f.posicion.ajena
       ? t("posicionAjena")
-      : t("posicion", { instalacion: f.posicion.instalacion ?? "—", cama: f.posicion.cama ?? "—", nivel: f.posicion.nivel ?? "—", fila: f.posicion.fila ?? "—" });
+      : f.posicion.estante
+        ? t("posicion", { instalacion: f.posicion.instalacion ?? "—", estante: f.posicion.estante, nivel: f.posicion.nivel ?? "—", puesto: f.posicion.puesto ?? "—" })
+        : t("posicionCama", { instalacion: f.posicion.instalacion ?? "—", cama: f.posicion.cama ?? "—" });
   return <section>
     <h4>{t("titulo", { abiertas, total: filas.length })}</h4>
     {filas.length === 0 ? <p className="nn-muted">{t("ninguna")}</p> : <ul>
@@ -1672,7 +1448,7 @@ export function BandejasDelSecado({ lotId, dryingRunId, filas, disponibles, pued
 - [ ] **Paso 3: montarlo en la ficha del lote**
 
 En `app/lots/[id]/page.tsx`:
-- los imports: `bandejasDeCorrida` y `bandejasDisponibles` de `../../../lib/traceability/bandejas`, y el componente;
+- los imports: `bandejasDeCorrida` y `bandejasDisponibles` de `../../../lib/traceability/bandejasDelSecado`, y el componente;
 - junto a `inspeccionesDeMedicion`, hacia la línea 181:
 
 ```tsx
@@ -1696,19 +1472,50 @@ En `app/lots/[id]/page.tsx`:
             />
 ```
 
-- el formulario `endDryingFormAction` se envuelve para que, con bandejas sin bajar, se enseñe en su lugar un párrafo: `{bandejasSinBajar > 0 ? <p className="nn-muted">{tb("cierreEspera", { n: bandejasSinBajar })}</p> : <form …>…</form>}`, con `const tb = await getTranslations("Bandejas");`.
+- el formulario `endDryingFormAction` se envuelve para que, con bandejas sin bajar, se enseñe en su lugar un párrafo: `{bandejasSinBajar > 0 ? <p className="nn-muted">{tb("cierreEspera", { n: bandejasSinBajar })}</p> : <form …>…</form>}`, con `const tb = await getTranslations("BandejasDelSecado");`.
 
 **`puedeRegistrar`** está definida en la línea 118 (`await puedeGestionarLote(user.userAccountId, lot)`), antes de la 181, así que el cálculo de las bandejas va donde se dijo.
 
+- [ ] **Paso 3b: mover una bandeja desde la ficha**
+
+- `app/actions/bandejasDelSecado.ts` gana `moverBandejaAction(prev, formData)`. Llama a `moverBandeja` con `equipmentId`, `posicionId` y `occurredAt: new Date()`, y devuelve `{ error?: string }`, igual que las otras dos.
+- La página añade `const posiciones = activeDrying && puedeRegistrar ? await posicionesParaMover(user.userAccountId, activeDrying.id) : [];` y se lo pasa al componente.
+- `BandejasDelSecado` gana la prop `posiciones: { id: string; instalacion: string | null; estante: string | null; nivel: number; puesto: number; ocupadaPor: string | null }[]`. Por cada bandeja **cargada**, un formulario compacto:
+
+```tsx
+          <form action={accionMover} style={{ display: "inline-flex", gap: "0.25rem" }}>
+            <input type="hidden" name="lotId" value={lotId} />
+            <input type="hidden" name="equipmentId" value={f.equipmentId} />
+            <select name="posicionId" required defaultValue="">
+              <option value="" disabled>{t("moverA")}</option>
+              {posiciones.map((p) => <option key={p.id} value={p.id}>
+                {t("posicion", { instalacion: p.instalacion ?? "—", estante: p.estante ?? "—", nivel: p.nivel, puesto: p.puesto })}
+                {p.ocupadaPor ? ` — ${t("ocupadaPor", { bandeja: p.ocupadaPor })}` : ""}
+              </option>)}
+            </select>
+            <BotonDeEnvio className="nn-button">{t("mover")}</BotonDeEnvio>
+          </form>
+```
+
+  Con `const [mover, accionMover] = useActionState(moverBandejaAction, {});` y `{mover.error && <p role="alert">{t(`error_${mover.error}`)}</p>}`.
+
+  **Una posición ocupada se ofrece igual, marcada.** Moverla ahí crea el conflicto que la lista ya enseña. Bloquearlo sería decidir por el operario, y la spec dice que el conflicto se enseña sin bloquear.
+- Mensajes nuevos en `BandejasDelSecado`, en español / inglés:
+  - `"moverA"`: «Mover a…» / «Move to…»
+  - `"mover"`: «Mover» / «Move»
+  - `"ocupadaPor"`: «ocupada por {bandeja}» / «taken by {bandeja}»
+  - `"error_posicion_invalida"`: «Esa posición no es de esta finca.» / «That position is not on this farm.»
+
 - [ ] **Paso 4: los mensajes**
 
-`messages/es.json`, espacio nuevo `"Bandejas"`:
+`messages/es.json`, espacio nuevo `"BandejasDelSecado"`:
 
 ```json
-  "Bandejas": {
+  "BandejasDelSecado": {
     "titulo": "Bandejas: {abiertas} cargadas de {total}",
     "ninguna": "Este secado todavía no lleva bandejas. Un lote en cama africana o en lona no las usa.",
-    "posicion": "{instalacion}, {cama} — nivel {nivel}, fila {fila}",
+    "posicion": "{instalacion} · {estante} · nivel {nivel} · puesto {puesto}",
+    "posicionCama": "{instalacion} · {cama}",
     "sinPosicion": "sin posición registrada",
     "cargada": "cargada",
     "bajada": "bajada",
@@ -1749,10 +1556,11 @@ En `app/lots/[id]/page.tsx`:
 `messages/en.json`, las mismas claves:
 
 ```json
-  "Bandejas": {
+  "BandejasDelSecado": {
     "titulo": "Trays: {abiertas} loaded of {total}",
     "ninguna": "This drying run has no trays yet. A lot on an African bed or on tarp does not use them.",
-    "posicion": "{instalacion}, {cama} — level {nivel}, row {fila}",
+    "posicion": "{instalacion} · {estante} · level {nivel} · slot {puesto}",
+    "posicionCama": "{instalacion} · {cama}",
     "sinPosicion": "no position recorded",
     "cargada": "loaded",
     "bajada": "unloaded",
@@ -1790,7 +1598,7 @@ En `app/lots/[id]/page.tsx`:
   },
 ```
 
-**Cada código de `CodigoBandeja` tiene su `error_…`**, más `error_sin_acceso`: 15 + 1 = **16**. Al terminar, contar las claves `error_` de `Bandejas` en los dos idiomas: 16 y 16. Si sale otro número, falta un código o sobra una clave, y la pantalla enseñaría la clave cruda.
+**Cada código de `CodigoBandeja` tiene su `error_…`**, más `error_sin_acceso`: 16 + 1 = **17**. Al terminar, contar las claves `error_` de `BandejasDelSecado` en los dos idiomas: 17 y 17. Si sale otro número, falta un código o sobra una clave, y la pantalla enseñaría la clave cruda.
 
 - [ ] **Paso 5: compuertas de la tarea**
 
@@ -1810,7 +1618,7 @@ Se verifica con `read_page`, no leyendo el código.
 - [ ] **Paso 6: commit**
 
 ```bash
-git add app/actions/bandejas.ts
+git add app/actions/bandejasDelSecado.ts
 git add app/components/traceability/BandejasDelSecado.tsx
 git add 'app/lots/[id]/page.tsx'
 git add messages/es.json
@@ -1823,7 +1631,7 @@ Mensaje: `feat(secado): las bandejas del lote en su ficha — cargar, bajar y ve
 
 ---
 
-### Tarea 5: ADR, inventario, compuerta completa y flip-tests
+### Tarea 4: ADR, inventario, compuerta completa y flip-tests
 
 **Archivos:**
 - Modificar: `docs/architecture/DECISIONS.md`
@@ -1843,7 +1651,7 @@ Contenido:
 
 - [ ] **Paso 2: el inventario**
 
-`node scripts/inventario-de-acceso.mjs` y copiar sus cifras al documento. Las operaciones nuevas de `lib/traceability/bandejas.ts` son de «guardia directo», porque todas pasan por `corridaConPermiso` antes de tocar la base, **salvo** `posicionDeBandeja`, que no recibe principal. Esa tiene que salir en «depende del llamador», y su llamador, `bandejasDeCorrida`, sí tiene guardia. Si el script la pone en otra fila, se mira a mano y se explica en el allowlist.
+`node scripts/inventario-de-acceso.mjs` y copiar sus cifras al documento. Las operaciones nuevas de `lib/traceability/bandejasDelSecado.ts` son de «guardia directo», porque todas pasan por `corridaConPermiso` antes de tocar la base, **salvo** `posicionDeBandeja`, que no recibe principal. Esa tiene que salir en «depende del llamador», y su llamador, `bandejasDeCorrida`, sí tiene guardia. Si el script la pone en otra fila, se mira a mano y se explica en el allowlist.
 
 - [ ] **Paso 3: la spec**
 
@@ -1892,6 +1700,7 @@ Cada uno imprime el sha del archivo antes y después (distintos, o se aborta), s
 8. En `traducirRechazo`, devolver siempre `error`: debe caer «un rechazo de la BASE llega como código…».
 9. En `bandejasDeCorrida`, poner `nombre = c.equipment.name` sin preguntar por `puedeVerEquipo`: debe caer «una bandeja que esta persona no ve…». **Sólo vale si su control previo salió `false`**; si salió `true`, este flip no cuenta y se dice.
 10. En la prueba de carrera, quitar la espera `await espera(300)`: el control (a) debe fallar, o el (b). Es el flip de la **prueba**, no del código: demuestra que sus controles distinguen una carrera real de una ejecución en serie.
+11. En `moverBandeja`, quitar la rama del permiso por lote (dejar sólo `puedeConfigurarEn`): debe caer «quien gestiona el lote cargado la mueve…» en su primer `moverBandeja`, con `bandeja_sin_acceso`.
 
 - [ ] **Paso 6: PR**
 
