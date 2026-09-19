@@ -11735,7 +11735,8 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
 6. **Brix de cereza para elegir proceso**, según requisitos y capacidades del beneficio: bajo para esa
    cereza → fermentar para dulzores y ésteres; alto → natural o lavado con poca intervención, o
    CryoBloom («para que libere betaglicósidos, más precursores atrapados en la cereza»). **El rango de
-   cada cereza se aprende del historial**; no se inventa un estándar.
+   cada cereza se aprende del historial**; no se inventa un estándar, y **mientras no haya historial la
+   herramienta enseña el número sin calificarlo** de alto ni de bajo.
 7. **Primera lectura** = al recibir, en selección, antes de procesar, sobre **mucílago o pulpa
    exprimida sin agua**. pH muy bajo ahí = «no apto para primera», fuera del 99 % de los procesos:
    debe tener uno o dos tratamientos propios —**secado directo** o **un rescate con intención de sabor**,
@@ -11776,9 +11777,6 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
     secar y reposar con temperatura y abanico ajustables «sin ser muy rápido y volatilizar». Terminada
     por humedad, con tacto y sensorial opcionales. Es **secundaria al café**. Queda abierto estudiar el
     trillado a mitad de secado (referencia de Daniel: Graciano Cruz); no se inventa su método.
-
-**Propuestas del agente, NO confirmadas por Daniel** (no se implementan sin su sí):
-- Sin historial suficiente, el Brix de una cereza no se califica de bajo o alto.
 
 **Lo que esto NO decide.** Qué **versión** de la receta produjo cada evaluación y cómo se conserva esa
 relación al editarla —sin ello un veredicto histórico no se puede reproducir—. Los números de cada receta (los pone Daniel). La implementación en los
