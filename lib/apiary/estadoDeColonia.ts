@@ -84,7 +84,10 @@ export function exigeEtapasDeCria(valores: readonly unknown[] | null | undefined
  * sería una regla sin fuente que rechazaría una colmena grande de verdad.
  */
 export function exigeEnteroContado(valor: unknown, campo: string): number | null {
-  if (valor === null || valor === undefined || valor === "") return null;
+  // Un blanco de espacios es «no se contó», no cero: `Number("  ")` da 0, un conteo que nadie hizo
+  // (Codex, revisión del PR #443). Y sólo número o cadena: `Number(true)` da 1.
+  if (valor === null || valor === undefined || (typeof valor === "string" && valor.trim() === "")) return null;
+  if (typeof valor !== "number" && typeof valor !== "string") throw new EstadoDeColoniaInvalido(`${campo}_invalido`);
   const n = typeof valor === "number" ? valor : Number(valor);
   if (!Number.isInteger(n) || n < 0) throw new EstadoDeColoniaInvalido(`${campo}_invalido`);
   return n;

@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-19
 
-**494 operaciones** que tocan la base, en **141 archivos**:
+**495 operaciones** que tocan la base, en **141 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,16 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **371** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **372** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **39** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **65** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+
+> **Marcos negros (ADR-176, 2026-09-19).** Una operación nueva en `lib/apiary/cera.ts`,
+> `marcosNegrosDelApiario`, que sube la fila de **guardia directo**, 366→367 tras rebasar sobre reinas y fitosanitarios: llama a
+> `requireApiaryAccess` view sobre el apiario antes de leer. 489→490; el archivo ya estaba contado.
 
 > **La cera con el color de su año (ADR-173, 2026-09-18).** Un archivo nuevo, `lib/apiary/cera.ts`,
 > con tres operaciones —`registrarCeraNueva`, `registrarSalidaDeMarcos` y `leyendaDeCera`— que

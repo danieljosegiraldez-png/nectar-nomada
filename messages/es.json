@@ -2207,7 +2207,13 @@
     "reinaColor_amarillo": "amarilla",
     "reinaColor_rojo": "roja",
     "reinaColor_verde": "verde",
-    "reinaColor_azul": "azul"
+    "reinaColor_azul": "azul",
+    "darkFramesLabel": "Marcos negros (cera vieja)",
+    "darkFramesEnInspeccion": "{n, plural, one {# marco negro} other {# marcos negros}}",
+    "marcosNegrosHeading": "Marcos negros en las colmenas",
+    "marcosNegrosIntro": "De la última inspección que los contó en cada colmena. La cera vieja se juzga por el aspecto: estos son los marcos que toca renovar.",
+    "marcosNegrosFila": "{n, plural, one {# marco negro} other {# marcos negros}} el {fecha}",
+    "marcosNegrosColoniaAnterior": "contados en una colonia anterior de esta caja"
   },
   "Research": {
     "badge": "Research OS",
@@ -2896,8 +2902,6 @@
     "intro": "Todo lo de la finca hasta la cosecha: las parcelas, lo que se hace antes de cosechar, y la cosecha.",
     "parcelas": "Parcelas",
     "parcelasAyuda": "Qué hay sembrado, cómo está cada lote de terreno y qué le falta.",
-    "cosecha": "Registrar una cosecha",
-    "cosechaAyuda": "Cuánto se cosechó, de qué parcela y cómo venía la cereza.",
     "fincaTrapsLink": "Trampas",
     "fincaTrapsLinkAyuda": "Cuántas hay, cómo están y cuándo tocan revisar.",
     "jornadas": "Jornadas de cosecha",

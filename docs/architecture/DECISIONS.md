@@ -11686,3 +11686,18 @@ calcula `colorDelAño` (ADR-173), y la historia de reinas dice «la blanca de 20
 
 **Lo que NO entra.** Corregir el ano de una reina ya registrada: se registra al introducirla o al
 cambiarla.
+## ADR-176 -- Los marcos negros se cuentan en la inspeccion, y el apiario avisa
+
+**Contexto.** Spec `docs/superpowers/specs/2026-09-18-alzas-y-tandas-de-marcos-design.md` §5.3: las
+fuentes latinoamericanas leidas (Mishkihue, INTA 2024, Chapingo) juzgan la cera vieja **por el
+aspecto**, no por la fecha. La edad del color (ADR-173) es el dato de apoyo; esto es el aviso. Daniel
+aprobo el diseño el 2026-09-19.
+
+**Decision.** `inspection.dark_frames`, opcional: **nulo = no se conto, que no es cero** (CHECK: nulo
+o >= 0). Viaja por la cola sin conexion como los demas campos; una inspeccion encolada antes de este
+campo llega nula. La ficha del apiario, en «Cera por ano», lista las colmenas cuya **ultima
+inspeccion que conto** vio alguno: si despues se contaron cero, no avisa (se renovaron), y una
+inspeccion que no conto no borra el conteo anterior.
+
+**Lo que NO entra.** Relacionar los marcos negros con el año de su color: no se sabe de que ano es
+cada marco negro, y no se inventa.

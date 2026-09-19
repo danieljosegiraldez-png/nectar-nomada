@@ -73,6 +73,7 @@ export function InspectionForm({
   // servicio las recibe como `null`: ninguna se rellena sola.
   const [poblacion, setPoblacion] = useState("");
   const [cuadros, setCuadros] = useState("");
+  const [marcosNegros, setMarcosNegros] = useState("");
   const [etapas, setEtapas] = useState<ReadonlySet<string>>(new Set());
   const [celdas, setCeldas] = useState("");
   const [celdasCuantas, setCeldasCuantas] = useState("");
@@ -143,6 +144,8 @@ export function InspectionForm({
         // es la frontera, y un desplegable manipulado no debe poder escribir.
         population: poblacion || null,
         beeCoveredFrames: cuadros === "" ? null : cuadros,
+        // Vacío = no se contó, que no es cero (spec 2026-09-18 §5.3).
+        darkFrames: marcosNegros === "" ? null : marcosNegros,
         broodStages: [...etapas],
         queenCellKind: celdas || null,
         queenCellCount: celdasCuantas === "" ? null : celdasCuantas,
@@ -174,6 +177,7 @@ export function InspectionForm({
     setTemperament("");
     setPoblacion("");
     setCuadros("");
+    setMarcosNegros("");
     setEtapas(new Set());
     setCeldas("");
     setCeldasCuantas("");
@@ -248,6 +252,17 @@ export function InspectionForm({
               step={1}
               value={cuadros}
               onChange={(e) => setCuadros(e.target.value)}
+            />
+          </div>
+          <div className="nn-field">
+            <label htmlFor={`insp-marcos-negros-${colonyId}`}>{t("darkFramesLabel")}</label>
+            <CampoNumerico
+              id={`insp-marcos-negros-${colonyId}`}
+              inputMode="numeric"
+              min={0}
+              step={1}
+              value={marcosNegros}
+              onChange={(e) => setMarcosNegros(e.target.value)}
             />
           </div>
           {/* Varias a la vez: es un conjunto, no una elección. */}

@@ -2207,7 +2207,13 @@
     "reinaColor_amarillo": "yellow",
     "reinaColor_rojo": "red",
     "reinaColor_verde": "green",
-    "reinaColor_azul": "blue"
+    "reinaColor_azul": "blue",
+    "darkFramesLabel": "Dark frames (old wax)",
+    "darkFramesEnInspeccion": "{n, plural, one {# dark frame} other {# dark frames}}",
+    "marcosNegrosHeading": "Dark frames in the hives",
+    "marcosNegrosIntro": "From the last inspection that counted them in each hive. Old wax is judged by how it looks: these are the frames due for renewal.",
+    "marcosNegrosFila": "{n, plural, one {# dark frame} other {# dark frames}} on {fecha}",
+    "marcosNegrosColoniaAnterior": "counted in an earlier colony of this hive"
   },
   "Research": {
     "badge": "Research OS",
@@ -2896,8 +2902,6 @@
     "intro": "Everything on the farm up to the harvest: the plots, the work before harvesting, and the harvest itself.",
     "parcelas": "Plots",
     "parcelasAyuda": "What is planted, how each plot is doing, and what it is missing.",
-    "cosecha": "Record a harvest",
-    "cosechaAyuda": "How much was harvested, from which plot, and what the cherry was like.",
     "fincaTrapsLink": "Traps",
     "fincaTrapsLinkAyuda": "How many there are, their status, and when they're due.",
     "jornadas": "Harvest days",

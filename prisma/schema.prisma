@@ -7323,6 +7323,9 @@ model Inspection {
   /// Cuadros cubiertos de abeja: la medida **cuantitativa** de fuerza, y la
   /// única comparable entre visitas y entre sitios.
   beeCoveredFrames Int?              @map("bee_covered_frames")
+  /// Marcos con la cera vieja o negra, contados en esta inspección — spec 2026-09-18 §5.3: la cera
+  /// vieja se juzga por el aspecto. Nulo = no se contó, que NO es cero. CHECK `inspection_marcos_negros_contados`.
+  darkFrames       Int?              @map("dark_frames")
   /// Las etapas de cría presentes, como conjunto. Lista escalar y no tabla
   /// puente —a diferencia de `InspectionIrregularity`— porque el conjunto lo
   /// cierra la biología: no crece por semilla, así que el precedente P1 no

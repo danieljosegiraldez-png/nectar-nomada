@@ -1056,6 +1056,7 @@ export default async function HiveDetailPage({
                           );
                         })()
                       : null}
+                    {insp.darkFrames !== null ? ` · ${t("darkFramesEnInspeccion", { n: insp.darkFrames })}` : null}
                     <ApiaryPhotoUploadForm
                       parent={{ kind: "inspection", inspectionId: insp.id }}
                       revalidationPath={revalidationPath}

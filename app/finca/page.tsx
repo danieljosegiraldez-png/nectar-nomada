@@ -24,6 +24,10 @@ export const dynamic = "force-dynamic";
  * línea, sin enlace, porque un enlace a una pantalla que no existe es un 404 con
  * buena cara.
  *
+ * **«Registrar una cosecha» ya no está aquí** (decisión de Daniel, 2026-09-19): «en finca no se
+ * registra cosecha». La finca abre jornadas y anota entregas; el lote de cereza se sigue creando a
+ * mano desde Beneficio → Lotes (`/lots/new`) hasta que la pieza 3 lo haga nacer de la recepción.
+ *
  * **Cada enlace sólo aparece si quien mira puede usarlo**, con la misma pregunta
  * ancha que ya hace la navegación. La autorización de verdad sigue en cada destino.
  */
@@ -45,8 +49,6 @@ export default async function FincaPage() {
   const tf = await getTranslations("Fincas");
   const destinos = [
     { href: "/plots", titulo: t("parcelas"), ayuda: t("parcelasAyuda"), visible: true },
-    // `recordHarvestEvent` exige `lot:manage` (lib/traceability/harvest.ts).
-    { href: "/lots/new", titulo: t("cosecha"), ayuda: t("cosechaAyuda"), visible: granted.has("lot:manage") },
     {
       href: "/finca/trampas",
       titulo: t("fincaTrapsLink"),
