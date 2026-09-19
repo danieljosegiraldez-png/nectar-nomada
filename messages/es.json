@@ -2153,7 +2153,17 @@
     "marcosNegrosHeading": "Marcos negros en las colmenas",
     "marcosNegrosIntro": "De la última inspección que los contó en cada colmena. La cera vieja se juzga por el aspecto: estos son los marcos que toca renovar.",
     "marcosNegrosFila": "{n, plural, one {# marco negro} other {# marcos negros}} el {fecha}",
-    "marcosNegrosColoniaAnterior": "contados en una colonia anterior de esta caja"
+    "marcosNegrosColoniaAnterior": "contados en una colonia anterior de esta caja",
+    "recipientesHeading": "Recipientes",
+    "recipienteFila": "{label}: {bruto} − {tara} = {neto} kg",
+    "recipientesTotal": "Total: {kg} kg — es el peso de la cosecha",
+    "recipienteEtiqueta": "¿Cuál? (balde 3, tambor A…)",
+    "recipienteBruto": "Lleno (kg)",
+    "recipienteTara": "Vacío (kg)",
+    "recipienteGuardar": "Añadir recipiente",
+    "recipienteQuitar": "Quitar",
+    "recipienteMotivo": "¿Por qué se quita?",
+    "pesoLoDanLosRecipientes": "El peso de esta cosecha lo dan sus recipientes."
   },
   "Research": {
     "badge": "Research OS",

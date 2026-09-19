@@ -38,6 +38,14 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-19 · La miel se pesa por recipiente (Q28, rebanada 1)
+
+ADR-177. Cada cosecha puede llevar sus recipientes —bruto y tara, el neto se calcula— y entonces
+su peso es la suma, asentada en el libro del lote por el mismo camino que el peso a mano. Codex
+encontró que ese camino calculaba contra el peso escrito, no contra el libro (y duplicaba al borrar
+y volver a pesar, también a mano): ahora mide lo aportado, y la cosecha se bloquea al pesarla.
+**Sin ver en navegador.** Sigue: la cera de extracción y de colado como subproducto (spec §4).
+
 ### 2026-09-19 · Marcos negros en la inspección, y el aviso del apiario
 
 ADR-176. La inspección cuenta «marcos negros (cera vieja)»; vacío = no se contó, no cero. Viaja por
@@ -114,30 +122,19 @@ lote— y sus envases vuelven a libres. No se borra (quién, cuándo, por qué y
 recibida no se anula y una anulada no se recibe. Salió como hueco del flujo de dos actos, no como
 petición de Daniel.
 
-### 2026-09-18 · Fincas y parcelas: elegir la finca, y crearlas desde la app (PR #425)
-
-Daniel: «debería preguntarme qué finca —trabajo con varias— o mostrarme todas» y «no me deja crear
-parcelas». Spec y plan `docs/superpowers/{specs,plans}/2026-09-18-fincas-y-parcelas*`.
-- **Elegir:** `/fincas`. La elección vive en una cookie de sesión que **sólo acota**: una finca
-  ajena se ignora. `/finca`, `/plots` y `/lots/new` preguntan si hay varias y ninguna elegida.
-- **Crear:** finca nueva o terreno de una organización sin él (sólo admin, permiso nuevo
-  `organization:create_farm`); parcela (Farm Manager de esa finca, `create_site`); microparcela
-  (`createMicrolot`, que ya existía sin pantalla). Nombres únicos bajo el mismo padre.
-- **La cosecha sólo sobre `plot`**, lo comprueba el servicio.
-- **Sin ver en navegador.**
-
-**De Daniel:** crear el terreno de **Kiva Estate** desde `/fincas` → «sin terreno». El seed dice que
-es un nombre ficticio (`prisma/seed.ts:168`) y Daniel dice que es real: el comentario queda para que
-él decida.
-
-### 2026-09-18 · El despacho dice de qué lote sale cada frasco
-
-ADR-169. Daniel: «lo elige quien despacha». **El despacho no existía** —nada ponía un pedido en
-`fulfilled`— y hay cero pedidos en la copia local. `/tienda` lista los pagados; por artículo se dice
-cuántos frascos salen de cada lote recibido, la suma tiene que dar lo pedido, y los kilos salen del
-libro del lote (`transfer_out`). Falta que el cliente lo vea en «Mis pedidos».
-
 ## 3. Bloqueado, y en qué
+
+#### Kiva Estate: crear su terreno (de Daniel)
+
+Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear el terreno de **Kiva
+Estate** desde `/fincas` → «sin terreno». El seed dice que es un nombre ficticio
+(`prisma/seed.ts:168`) y Daniel dice que es real: el comentario queda para que él decida.
+
+#### «Mis pedidos» no dice de qué lote salió el frasco (espera a Daniel)
+
+Movido aquí al archivar la entrada del despacho por lote (ADR-169): el dato ya se guarda
+(`OrderItemLot`), falta la pantalla del cliente, y **qué del lote se le enseña** —código, apiario,
+cosecha, fotos— lo decide Daniel.
 
 #### Nodos de sensores: lo que falta cuando haya nodos (de Daniel)
 
