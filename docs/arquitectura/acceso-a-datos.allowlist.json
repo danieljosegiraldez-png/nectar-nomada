@@ -645,6 +645,12 @@
   ],
   "dependen_del_llamador": [
     {
+      "archivo": "lib/traceability/jornadasDeCosecha.ts",
+      "operacion": "origenesDeParcelas",
+      "razon": "Lee los bloques y las plantas activas de unas parcelas para ofrecerlos como origen de una entrega o de un reporte. No recibe principal: su llamador ya autorizó esas parcelas. Llamador de produccion: `detalleDeJornada` (mismo archivo), que exige `requireLotAccess(view)` sobre el sitio de la finca ANTES de llamarla, con las parcelas asignadas de ESA jornada.",
+      "verificado": "2026-09-18"
+    },
+    {
       "archivo": "lib/sensores/ingesta.ts",
       "operacion": "ingerirObservacion",
       "razon": "No recibe principal porque no la llama una persona: la llama la ruta de ingesta de Notehub (Tarea 7 del plan de artefactos), que autentica su secreto de ruta ANTES de llamarla. La autorizacion de aqui dentro es el REGISTRO —el notecard_uid verificado tiene que ser de un HiveNode activo y el device_id del cuerpo tiene que casar—, no un usuario. Su unico llamador de produccion es `atenderIngesta` (lib/sensores/rutaDeIngesta.ts), detras de app/api/v1/ingest/notehub, que rechaza con 401 toda peticion sin el secreto de ruta —y a todas si el secreto no esta configurado—.",

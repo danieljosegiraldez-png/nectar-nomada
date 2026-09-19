@@ -94,6 +94,8 @@ export const RUTAS = {
   "/partner/[projectId]": { clase: "requiere-sesion", razon: "Espacio de socios, por asignación." },
   "/fincas": { clase: "requiere-sesion", razon: "Elegir la finca (spec fincas y parcelas §3.1): lista las de `listarFincas`, que parte de `getManageableContext`; elegir sólo guarda una cookie que acota, nunca autoriza." },
   "/fincas/nueva": { clase: "requiere-sesion", razon: "Dar de alta una finca (spec fincas y parcelas §3.2): 404 sin `organization:create_farm`, que sólo tiene el administrador de plataforma; la acción lo vuelve a exigir." },
+  "/finca/jornadas": { clase: "requiere-sesion", razon: "Jornadas de cosecha de la finca elegida (spec jornada y entrega §3.6): 404 sin lot:view o lot:manage; `jornadasDeFinca` exige lot:view sobre ESA finca, y abrir o añadir recolectores lo vuelve a exigir el servicio con lot:manage." },
+  "/finca/jornadas/[id]": { clase: "requiere-sesion", razon: "Una jornada de cosecha: `detalleDeJornada` exige lot:view sobre su finca y da 404 si no; anotar, anular y cerrar los vuelve a autorizar cada servicio." },
   "/finca": { clase: "requiere-sesion", razon: "Índice de la sección Finca, sin formularios: exige location:manage_attributes, lot:view o lot:manage, la misma regla que su entrada del menú, y cada enlace sólo se ofrece a quien puede usar su destino." },
   "/plots": { clase: "requiere-sesion", razon: "Parcelas de finca." },
   "/plots/[id]": { clase: "requiere-sesion", razon: "Lo sembrado en una parcela." },

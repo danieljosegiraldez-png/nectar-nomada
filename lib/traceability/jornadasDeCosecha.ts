@@ -140,9 +140,33 @@ export async function jornadasDeFinca(userAccountId: string, fincaSiteId: string
   });
 }
 
-/** Una jornada con sus asignaciones y sus entregas. */
+/**
+ * Lo que se puede elegir como origen dentro de unas parcelas: sus bloques y sus plantas activas.
+ * **No autoriza:** quien llama ya comprobó que puede ver esas parcelas (la jornada, o lo
+ * asignado a la propia cuenta).
+ */
+export async function origenesDeParcelas(parcelaIds: readonly string[]) {
+  const [bloques, plantas] = await Promise.all([
+    prisma.plotBlock.findMany({ where: { locationId: { in: [...parcelaIds] } }, select: { id: true, name: true, locationId: true }, orderBy: { name: "asc" } }),
+    prisma.specimen.findMany({
+      where: { status: "active", OR: [{ locationId: { in: [...parcelaIds] } }, { plotBlock: { locationId: { in: [...parcelaIds] } } }] },
+      select: { id: true, commonName: true, gridRow: true, gridPosition: true, locationId: true, plotBlock: { select: { locationId: true } } },
+      orderBy: [{ commonName: "asc" }, { gridRow: "asc" }, { gridPosition: "asc" }],
+    }),
+  ]);
+  return {
+    bloques,
+    plantas: plantas.map((p) => ({
+      id: p.id,
+      nombre: p.gridRow != null ? `${p.commonName} (${p.gridRow}-${p.gridPosition ?? "?"})` : p.commonName,
+      parcelaId: p.plotBlock?.locationId ?? p.locationId,
+    })),
+  };
+}
+
+/** Una jornada con sus asignaciones, sus entregas y los orígenes que admite. */
 export async function detalleDeJornada(userAccountId: string, jornadaId: string) {
-  const jornada = await prisma.jornadaDeCosecha.findUnique({ where: { id: jornadaId } });
+  const jornada = await prisma.jornadaDeCosecha.findUnique({ where: { id: jornadaId }, include: { fincaSite: { select: { name: true, timezone: true } } } });
   if (!jornada) throw new JornadaError("jornada_no_encontrada");
   const sitio = await sitioDeFinca(jornada.fincaSiteId);
   await requireLotAccess(userAccountId, "view", [{ locationId: sitio.id, classification: sitio.classification }]);
@@ -155,6 +179,7 @@ export async function detalleDeJornada(userAccountId: string, jornadaId: string)
       where: { jornadaId },
       orderBy: { enviadaAt: "asc" },
       include: {
+        _count: { select: { assets: true } },
         recolector: { select: { id: true, displayName: true } },
         location: { select: { id: true, name: true } },
         plotBlock: { select: { id: true, name: true } },
@@ -162,5 +187,14 @@ export async function detalleDeJornada(userAccountId: string, jornadaId: string)
       },
     }),
   ]);
-  return { jornada, asignaciones, entregas };
+  const [origenes, cuentas] = await Promise.all([
+    origenesDeParcelas([...new Set(asignaciones.map((a) => a.location.id))]),
+    prisma.userAccount.findMany({
+      where: { id: { in: [...new Set(entregas.map((e) => e.anotadaPor))] } },
+      select: { id: true, person: { select: { displayName: true } } },
+    }),
+  ]);
+  // `anotadaPor` es una cuenta sin relación en el esquema: el nombre se resuelve aquí.
+  const anotadores = new Map(cuentas.map((c) => [c.id, c.person.displayName]));
+  return { jornada, asignaciones, entregas: entregas.map((e) => ({ ...e, anotadaPorNombre: anotadores.get(e.anotadaPor) ?? null })), origenes };
 }
