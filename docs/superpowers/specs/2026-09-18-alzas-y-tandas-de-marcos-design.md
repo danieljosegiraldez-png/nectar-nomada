@@ -146,7 +146,7 @@ y no lo intenta.
 
 - **La leyenda del año** en la ficha del apiario: cada color con su año, cuántos marcos entraron
   y cuántos siguen en uso (si se anotaron salidas), y su edad.
-- **Los marcos negros se cuentan en la inspección.** Las fuentes latinoamericanas leídas
+- **Los marcos negros se cuentan en la inspección** (hecho: ADR-176, 2026-09-19; manda la última inspección que los contó). Las fuentes latinoamericanas leídas
   (Mishkihue, INTA 2024, Chapingo) juzgan la cera vieja **por el aspecto**, no por la fecha, así
   que el aviso sale de lo que se ve: «marcos negros: N». La edad del color es el dato de apoyo.
 - **El aviso por edad**: suave a los 2 años, fuerte a los 4 (§7, contestada). Las cifras encontradas son

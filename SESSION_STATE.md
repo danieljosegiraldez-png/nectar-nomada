@@ -38,6 +38,12 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-19 · Marcos negros en la inspección, y el aviso del apiario
+
+ADR-176. La inspección cuenta «marcos negros (cera vieja)»; vacío = no se contó, no cero. Viaja por
+la cola sin conexión (lo encolado antes llega nulo). «Cera por año» lista las colmenas cuya última
+revisión que contó vio alguno. **Sin ver en navegador.**
+
 ### 2026-09-19 · La reina guarda el año en que nació; su color es el apodo
 
 ADR-175. Daniel: el color del año es sólo apodo, las reinas no se pintan. `queen.birth_year` (nulo
