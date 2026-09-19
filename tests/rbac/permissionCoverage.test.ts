@@ -35,7 +35,6 @@ const UNENFORCED: Record<string, string> = {
   // Spec jornada y entrega de cosecha: el catálogo los trae en la Tarea 2 y los usan las Tareas 3
   // (entrega propia) y 4 (situaciones de campo). Cada tarea quita su línea al usarlo; si alguna
   // queda aquí al cerrar el plan, es que no se construyó.
-  "harvest_delivery:create_own": "Tarea 3 del plan de jornada y entrega: anotarEntrega lo comprueba. Se quita de aquí al construirla.",
   "field_report:create_own": "Tarea 4 del plan de jornada y entrega: reportarSituacion lo comprueba. Se quita de aquí al construirla.",
   "field_report:view": "Tarea 4 del plan de jornada y entrega: situacionesDeJornada lo comprueba. Se quita de aquí al construirla.",
   "project:view": "/projects is public discovery with no gate. A permissioned project surface — distinct from the partner workspace — does not exist yet.",

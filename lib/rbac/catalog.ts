@@ -447,6 +447,10 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
     permissions: [
       ["harvest_delivery", "create_own"],
       ["field_report", "create_own"],
+      // Mismo arreglo que ADR-063/069 para los perfiles estrechos: las fincas son `internal`,
+      // y sin esto el recolector tiene sus dos permisos y no alcanza ninguna. Da la clearance
+      // para llegar a su finca, no más permisos: la frontera real son los dos de arriba.
+      ["classification", "clear_internal"],
     ],
   },
   {

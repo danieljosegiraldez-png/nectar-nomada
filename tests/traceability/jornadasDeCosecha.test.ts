@@ -93,7 +93,7 @@ describe("los permisos nuevos", () => {
     expect(clave("field_report", "create_own")).toBe(true);
     expect(clave("field_report", "view")).toBe(true);
     const recolector = ROLE_PROFILES.find((p) => p.name === "Recolector")!;
-    expect(recolector.permissions.map(([r, a]) => `${r}:${a}`).sort()).toEqual(["field_report:create_own", "harvest_delivery:create_own"]);
+    expect(recolector.permissions.map(([r, a]) => `${r}:${a}`).sort()).toEqual(["classification:clear_internal", "field_report:create_own", "harvest_delivery:create_own"]);
     // Control del mismo lector: el capataz sí ve situaciones de campo, y lot:manage sigue ahí.
     const fo = ROLE_PROFILES.find((p) => p.name === "Farm Operator")!;
     expect(fo.permissions.some(([r, a]) => r === "field_report" && a === "view")).toBe(true);
