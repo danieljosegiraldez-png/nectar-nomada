@@ -16,6 +16,7 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { permissionKeysAnywhere } from "../rbac/service";
+import { Prisma } from "../../generated/prisma/client";
 
 export class ProveedorError extends Error {}
 
@@ -23,6 +24,17 @@ export async function crearProveedorDeCereza(userAccountId: string, input: { nom
   if (!(await permissionKeysAnywhere(userAccountId)).has("cherry_supplier:create")) throw new ProveedorError("sin_permiso");
   const nombre = input.nombre.trim().replace(/\s+/g, " ");
   if (!nombre || nombre.length > 120) throw new ProveedorError("nombre_invalido");
+  try {
+    return await crear(userAccountId, nombre, input.lugar);
+  } catch (error) {
+    // Dos altas a la vez del mismo nombre: la segunda choca con `organization_productor_nombre_unico`
+    // (revisión de Codex, hallazgo 4).
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new ProveedorError("proveedor_repetido");
+    throw error;
+  }
+}
+
+async function crear(userAccountId: string, nombre: string, lugar: string | null | undefined) {
   return prisma.$transaction(async (tx) => {
     const repetido = await tx.organization.findFirst({
       where: { organizationType: "producer", name: { equals: nombre, mode: "insensitive" } },
@@ -33,7 +45,7 @@ export async function crearProveedorDeCereza(userAccountId: string, input: { nom
       data: {
         organizationType: "producer",
         name: nombre,
-        description: input.lugar?.trim() || null,
+        description: lugar?.trim() || null,
         status: "approved",
         classification: "internal",
         createdBy: userAccountId,

@@ -173,6 +173,15 @@ ALTER TABLE "traceability"."pedido_de_cereza" ADD CONSTRAINT "pedido_de_cereza_c
 ALTER TABLE "traceability"."pedido_de_cereza" ADD CONSTRAINT "pedido_de_cereza_cierre"
   CHECK (("estado" = 'cerrado') = ("cerrado_at" IS NOT NULL));
 
+-- Un productor de fuera se da de alta una vez: nombre único entre los `producer`, sin distinguir
+-- mayúsculas ni espacios de los bordes. El servicio lo mira antes; esto es la red ante dos altas
+-- simultáneas (revisión de Codex, hallazgo 4). Mismo patrón que los tres índices únicos de nombres
+-- que ya hay (`lower(btrim(...))`), con su misma limitación, medida el 2026-09-19: con la colación
+-- `C` de la base, `lower('Ñ')` no da 'ñ', así que «DOÑA» y «Doña» no chocan. ICU lo resolvería,
+-- pero ninguna migración depende de ICU y no se añade esa dependencia por esto.
+CREATE UNIQUE INDEX "organization_productor_nombre_unico" ON "core"."organization" (lower(btrim("name")))
+  WHERE "organization_type" = 'producer';
+
 -- Una entrega se recibe una vez; anulada la recepción, puede recibirse otra.
 CREATE UNIQUE INDEX "recepcion_de_cereza_entrega_vigente" ON "traceability"."recepcion_de_cereza"("entrega_id")
   WHERE "entrega_id" IS NOT NULL AND "estado" <> 'anulada';
@@ -229,6 +238,12 @@ BEGIN
       OLD."comparacion", OLD."politica_de_balance", OLD."brix", OLD."punto_de_muestreo", OLD."instrumento_id",
       OLD."veredicto_brix", OLD."nota", OLD."motivo_rechazo", OLD."created_at") THEN
     RAISE EXCEPTION 'recepcion_de_cereza_inmutable: una recepción no se edita; se anula con motivo';
+  END IF;
+  -- Una anulación consumada tampoco se reescribe: quién anuló, cuándo y por qué quedan fijos
+  -- (revisión de Codex, hallazgo 2).
+  IF OLD."estado" = 'anulada' AND (NEW."estado", NEW."anulada_at", NEW."anulada_por", NEW."motivo_anulacion")
+     IS DISTINCT FROM (OLD."estado", OLD."anulada_at", OLD."anulada_por", OLD."motivo_anulacion") THEN
+    RAISE EXCEPTION 'recepcion_de_cereza_inmutable: una recepción anulada no se vuelve a tocar';
   END IF;
   IF NEW."estado" IS DISTINCT FROM OLD."estado" AND NOT (OLD."estado" IN ('recibida', 'rechazada') AND NEW."estado" = 'anulada') THEN
     RAISE EXCEPTION 'recepcion_de_cereza_inmutable: el estado sólo pasa de recibida o rechazada a anulada';

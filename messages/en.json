@@ -2861,6 +2861,7 @@
     "proximamente": "Coming next: yield and efficiency, and harvest quality with what the mill's selection sends back."
   },
   "Recepcion": {
+    "error_brix_invalido": "The Brix must be a number.",
     "titulo": "Cherry reception",
     "pedidosTitulo": "Cherry orders",
     "volver": "← Mill",

@@ -33,7 +33,7 @@ const CODIGOS = [
   "peso_declarado_invalido", "pedido_no_valido", "nota_obligatoria", "recepcion_no_encontrada", "ya_anulada",
   "clave_invalida", "tamano_invalido", "beneficio_no_valido", "kg_invalidos", "margen_invalido", "fuente_no_valida",
   "min_maduro_invalido", "max_verde_invalido", "max_flotes_invalido", "pedido_no_encontrado", "ya_cerrado",
-  "sin_permiso", "nombre_invalido", "proveedor_repetido",
+  "sin_permiso", "nombre_invalido", "proveedor_repetido", "brix_invalido",
 ] as const;
 
 async function traducir(error: unknown): Promise<RecepcionActionState> {

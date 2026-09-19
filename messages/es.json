@@ -2861,6 +2861,7 @@
     "proximamente": "Llegan después: rendimiento y eficiencia, y la calidad de la cosecha con lo que devuelve la selección del beneficio."
   },
   "Recepcion": {
+    "error_brix_invalido": "El Brix tiene que ser un número.",
     "titulo": "Recepción de cereza",
     "pedidosTitulo": "Pedidos de cereza",
     "volver": "← Beneficio",

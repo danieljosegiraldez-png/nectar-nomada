@@ -9,9 +9,9 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
-import { abrirJornada, agregarRecolector } from "../../lib/traceability/jornadasDeCosecha";
+import { abrirJornada, agregarRecolector, cambiarDestinoDeJornada } from "../../lib/traceability/jornadasDeCosecha";
 import { anotarEntrega } from "../../lib/traceability/entregasDeCosecha";
-import { crearPedido } from "../../lib/traceability/pedidosDeCereza";
+import { cerrarPedido, crearPedido } from "../../lib/traceability/pedidosDeCereza";
 import { anularRecepcion, pendientesDeBeneficio, recibirCereza, type RecibirCerezaInput } from "../../lib/traceability/recepcionesDeCereza";
 
 const RUN = `recep-${Date.now()}`;
@@ -24,6 +24,7 @@ const hoy = new Date(new Date().toISOString().slice(0, 10));
 let finca: string;
 let parcela: string;
 let beneficio: string;
+let beneficio2: string;
 let otraFinca: string;
 let otroBeneficio: string;
 let jornada: string;
@@ -65,6 +66,7 @@ beforeAll(async () => {
   finca = await loc("Finca", "site", { organizationId: await org("farm", "Finca") });
   parcela = await loc("Parcela", "plot", { parentLocationId: finca });
   beneficio = await loc("Beneficio", "beneficio", { parentLocationId: finca });
+  beneficio2 = await loc("Beneficio 2", "beneficio", { parentLocationId: finca });
   otraFinca = await loc("Otra finca", "site", { organizationId: await org("farm", "Otra finca") });
   otroBeneficio = await loc("Otro beneficio", "beneficio", { parentLocationId: otraFinca });
   proveedor = await org("producer", "Don Pedro");
@@ -86,9 +88,9 @@ beforeAll(async () => {
 }, 30000);
 
 afterAll(async () => {
-  const jornadas = [jornada, jornadaAjena];
+  const jornadas = (await prisma.jornadaDeCosecha.findMany({ where: { fincaSiteId: finca }, select: { id: true } })).map((j) => j.id);
   const entregas = (await prisma.entregaDeCosecha.findMany({ where: { jornadaId: { in: jornadas } }, select: { id: true } })).map((e) => e.id);
-  const recepciones = (await prisma.recepcionDeCereza.findMany({ where: { beneficioId: { in: [beneficio, otroBeneficio] } }, select: { id: true } })).map((r) => r.id);
+  const recepciones = (await prisma.recepcionDeCereza.findMany({ where: { beneficioId: { in: [beneficio, beneficio2, otroBeneficio] } }, select: { id: true } })).map((r) => r.id);
   const pedidos = (await prisma.pedidoDeCereza.findMany({ where: { beneficioId: beneficio }, select: { id: true } })).map((p) => p.id);
   const recolectores = (await prisma.fincaRecolector.findMany({ where: { fincaSiteId: finca }, select: { id: true } })).map((r) => r.id);
   await prisma.recepcionDeCereza.deleteMany({ where: assertDefinedWhere({ id: { in: recepciones } }) });
@@ -101,7 +103,7 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [parcela, beneficio, otroBeneficio] } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [parcela, beneficio, beneficio2, otroBeneficio] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [finca, otraFinca] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: orgs } }) });
@@ -143,6 +145,19 @@ describe("recibir una entrega de la finca", () => {
     await expect(recibir(cuentaRecolector, e)).rejects.toThrow();
   }, 20000);
 
+  it("el recolector que ADEMÁS gestiona el beneficio tampoco recibe su entrega: misma_persona", async () => {
+    // Revisión de Codex, hallazgo 10: sin `lot:manage`, el recolector caía por permiso y la regla
+    // de dos personas del servicio quedaba sin probar.
+    const scope = await prisma.scope.findFirstOrThrow({ where: { scopeType: "location", scopeRefId: finca } });
+    const fo = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+    const extra = await prisma.assignment.create({ data: { userAccountId: cuentaRecolector, scopeId: scope.id, roleProfileId: fo.id } });
+    try {
+      await expect(recibir(cuentaRecolector, await entrega())).rejects.toThrow(/misma_persona/);
+    } finally {
+      await prisma.assignment.delete({ where: { id: extra.id } });
+    }
+  }, 20000);
+
   it("una entrega con destino a OTRO beneficio, mandada por id, no se recibe aquí", async () => {
     const e = await entrega(20, jornadaAjena);
     await expect(recibir(receptor, e)).rejects.toThrow(/otro_destino/);
@@ -172,6 +187,32 @@ describe("recibir una entrega de la finca", () => {
     expect(await prisma.recepcionDeCereza.count({ where: { claveDeEnvio: clave } })).toBe(1);
   }, 20000);
 
+  it("el mismo envío dos veces A LA VEZ devuelve la misma recepción, no «ya recibida»", async () => {
+    const e = await entrega();
+    const clave = randomUUID();
+    const [a, b] = await Promise.all([recibir(receptor, e, { claveDeEnvio: clave }), recibir(receptor, e, { claveDeEnvio: clave })]);
+    expect(b.id).toBe(a.id);
+    expect(await prisma.recepcionDeCereza.count({ where: { claveDeEnvio: clave } })).toBe(1);
+  }, 20000);
+
+  it("un reintento con la clave de otro no sirve a quien no gestiona ese beneficio", async () => {
+    const e = await entrega();
+    const clave = randomUUID();
+    await recibir(receptor, e, { claveDeEnvio: clave });
+    await expect(recibir(managerOtra, e, { claveDeEnvio: clave })).rejects.toThrow();
+  }, 20000);
+
+  it("recibir y cambiar el destino a la vez: si queda recibida, el destino es el de la recepción", async () => {
+    const j = await abrirJornada(capataz, { fincaSiteId: finca, beneficioId: beneficio, fecha: hoy, asignaciones: [{ locationId: parcela, personId: recolector }] });
+    const e = (await anotarEntrega(capataz, { jornadaId: j.id, recolectorPersonId: recolector, origen: { locationId: parcela }, pesoFincaKg: 20, enviadaAt: new Date() })).id;
+    await Promise.allSettled([recibir(receptor, e), cambiarDestinoDeJornada(capataz, { jornadaId: j.id, beneficioId: beneficio2 })]);
+    const vigente = await prisma.recepcionDeCereza.findFirst({ where: { entregaId: e, estado: { not: "anulada" } } });
+    const final = await prisma.jornadaDeCosecha.findUniqueOrThrow({ where: { id: j.id } });
+    // Revisión de Codex, hallazgo 1: nunca una recepción en A con la jornada ya en B.
+    if (vigente) expect(final.beneficioId).toBe(vigente.beneficioId);
+    else expect(final.beneficioId).toBe(beneficio2);
+  }, 20000);
+
   it("dos recibos simultáneos de la misma entrega: exactamente uno entra", async () => {
     const e = await entrega();
     const resultados = await Promise.allSettled([recibir(receptor, e), recibir(receptor, e)]);
@@ -184,6 +225,11 @@ describe("recibir una entrega de la finca", () => {
     expect(r.veredictoBrix).toBe("INTAKE_OPTIMAL");
     const f = await recibir(receptor, await entrega(), { brix: { valor: 35, puntoDeMuestreo: "CHERRY_PULP" } });
     expect(f.veredictoBrix).toBe("SENSOR_FAULT");
+    // Revisión de Codex, hallazgo 9: se evalúa lo que se guarda. 17,999 se guarda 18,00: óptimo.
+    const borde = await recibir(receptor, await entrega(), { brix: { valor: 17.999, puntoDeMuestreo: "CHERRY_PULP" } });
+    expect(Number(borde.brix)).toBe(18);
+    expect(borde.veredictoBrix).toBe("INTAKE_OPTIMAL");
+    await expect(recibir(receptor, await entrega(), { brix: { valor: Number.NaN, puntoDeMuestreo: "CHERRY_PULP" } })).rejects.toThrow(/brix_invalido/);
   }, 20000);
 
   it("rechazar exige motivo; rechazada, su estado lo dice", async () => {
@@ -191,6 +237,18 @@ describe("recibir una entrega de la finca", () => {
     await expect(recibir(receptor, e, { rechazo: { motivo: " " } })).rejects.toThrow(/motivo_obligatorio/);
     const r = await recibir(receptor, e, { rechazo: { motivo: "fermentada" } });
     expect(r.estado).toBe("rechazada");
+  }, 20000);
+
+  it("dos anulaciones a la vez: una entra, la otra ve «ya anulada», y la firma no se reescribe", async () => {
+    const r = await recibir(receptor, await entrega());
+    const res = await Promise.allSettled([
+      anularRecepcion(receptor, { recepcionId: r.id, motivo: "primera" }),
+      anularRecepcion(receptor, { recepcionId: r.id, motivo: "segunda" }),
+    ]);
+    expect(res.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+    const ganadora = (res.find((x) => x.status === "fulfilled") as PromiseFulfilledResult<{ motivoAnulacion: string | null }>).value;
+    const fila = await prisma.recepcionDeCereza.findUniqueOrThrow({ where: { id: r.id } });
+    expect(fila.motivoAnulacion).toBe(ganadora.motivoAnulacion);
   }, 20000);
 
   it("anular devuelve la entrega a pendiente; quien la anotó no puede anularla", async () => {
@@ -219,6 +277,13 @@ describe("la cereza de fuera y el pedido", () => {
     await expect(recibir(receptor, e2, { pedidoId: pedido.id, brutoKg: 220, recipientes: 0, taraPorRecipienteKg: 0 })).rejects.toThrow(/nota_obligatoria/);
     const r2 = await recibir(receptor, e2, { pedidoId: pedido.id, brutoKg: 220, recipientes: 0, taraPorRecipienteKg: 0, nota: "vino de más" });
     expect(r2.pedidoId).toBe(pedido.id);
+  }, 20000);
+
+  it("dos cierres a la vez del mismo pedido: uno entra, el otro ve «ya cerrado»", async () => {
+    const p = await crearPedido(receptor, { beneficioId: beneficio, fuente: { proveedorId: proveedor }, fecha: hoy, kgPedidos: 100, margenCantidadPct: 100 });
+    const res = await Promise.allSettled([cerrarPedido(receptor, { pedidoId: p.id }), cerrarPedido(receptor, { pedidoId: p.id })]);
+    expect(res.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+    expect(res.filter((x) => x.status === "rejected").map((x) => String((x as PromiseRejectedResult).reason))).toEqual([expect.stringMatching(/ya_cerrado/)]);
   }, 20000);
 
   it("un pedido de otra fuente no se puede elegir", async () => {

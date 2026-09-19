@@ -59,7 +59,12 @@ export async function recibirCereza(userAccountId: string, input: RecibirCerezaI
   const clave = input.claveDeEnvio.trim();
   if (!clave) throw new RecepcionError("clave_de_envio_obligatoria");
   const ya = await prisma.recepcionDeCereza.findUnique({ where: { claveDeEnvio: clave } });
-  if (ya) return ya;
+  if (ya) {
+    // El reintento se autoriza contra la recepción GUARDADA, no contra la que se pide: la clave
+    // identifica el acto, no sustituye al permiso (revisión de Codex, hallazgo 3).
+    await exigeGestionarBeneficio(userAccountId, ya.beneficioId);
+    return ya;
+  }
 
   // 2. Quien recibe gestiona ESTE beneficio.
   await exigeGestionarBeneficio(userAccountId, input.beneficioId);
@@ -74,7 +79,11 @@ export async function recibirCereza(userAccountId: string, input: RecibirCerezaI
     throw error;
   }
   if (input.brix && !PUNTOS.includes(input.brix.puntoDeMuestreo)) throw new RecepcionError("punto_de_muestreo_obligatorio");
-  const veredictoBrix = input.brix ? evaluarBrixDeRecepcion(input.brix.valor) : null;
+  if (input.brix && !Number.isFinite(input.brix.valor)) throw new RecepcionError("brix_invalido");
+  // Se evalúa el valor que se va a GUARDAR (`Decimal(5,2)`): 17,999 se guarda 18,00 y tiene que
+  // salir óptimo, no sin veredicto (revisión de Codex, hallazgo 9).
+  const brix = input.brix ? Math.round(input.brix.valor * 100) / 100 : null;
+  const veredictoBrix = brix == null ? null : evaluarBrixDeRecepcion(brix);
   const nota = input.nota?.trim() || null;
   const motivoRechazo = input.rechazo ? input.rechazo.motivo.trim() : null;
   if (input.rechazo && !motivoRechazo) throw new RecepcionError("motivo_obligatorio");
@@ -90,13 +99,25 @@ export async function recibirCereza(userAccountId: string, input: RecibirCerezaI
         // La fila de la entrega queda bloqueada hasta el final: dos receptores a la vez esperan, y
         // el segundo ve la recepción del primero.
         await tx.$queryRaw`SELECT "id" FROM "traceability"."entrega_de_cosecha" WHERE "id" = ${input.origen.entregaId}::uuid FOR UPDATE`;
+        // Otro envío con la MISMA clave pudo ganar el bloqueo mientras se esperaba: entonces lo que
+        // corresponde es devolver el suyo, no «ya recibida» (revisión de Codex, hallazgo 5).
+        const mismoEnvio = await tx.recepcionDeCereza.findUnique({ where: { claveDeEnvio: clave } });
+        if (mismoEnvio) {
+          if (mismoEnvio.beneficioId !== input.beneficioId) await exigeGestionarBeneficio(userAccountId, mismoEnvio.beneficioId);
+          return mismoEnvio;
+        }
         const entrega = await tx.entregaDeCosecha.findUnique({
           where: { id: input.origen.entregaId },
-          include: { jornada: { select: { beneficioId: true, fincaSiteId: true } } },
+          include: { jornada: { select: { id: true, beneficioId: true, fincaSiteId: true } } },
         });
         if (!entrega) throw new RecepcionError("entrega_no_encontrada");
+        // La jornada también, y DESPUÉS de la entrega (el mismo orden que cambiar el destino): así
+        // el destino que se compara no puede cambiar antes de que esta recepción exista
+        // (revisión de Codex, hallazgo 1).
+        await tx.$queryRaw`SELECT "id" FROM "traceability"."jornada_de_cosecha" WHERE "id" = ${entrega.jornada.id}::uuid FOR UPDATE`;
+        const destino = await tx.jornadaDeCosecha.findUniqueOrThrow({ where: { id: entrega.jornada.id }, select: { beneficioId: true } });
         if (entrega.estado !== "enviada") throw new RecepcionError("entrega_no_enviada");
-        if (entrega.jornada.beneficioId !== input.beneficioId) throw new RecepcionError("otro_destino");
+        if (destino.beneficioId !== input.beneficioId) throw new RecepcionError("otro_destino");
         const vigente = await tx.recepcionDeCereza.findFirst({ where: { entregaId: entrega.id, estado: { not: "anulada" } }, select: { id: true } });
         if (vigente) throw new RecepcionError("ya_recibida");
         if (entrega.anotadaPor === userAccountId || entrega.recolectorId === persona) throw new RecepcionError("misma_persona");
@@ -153,7 +174,7 @@ export async function recibirCereza(userAccountId: string, input: RecibirCerezaI
           toleranciaKg: comparacion?.toleranciaKg ?? null,
           comparacion: comparacion?.estado ?? null,
           politicaDeBalance: comparacion ? { ...comparacion.politica } : undefined,
-          brix: input.brix ? input.brix.valor : null,
+          brix,
           puntoDeMuestreo: input.brix ? input.brix.puntoDeMuestreo : null,
           instrumentoId: input.brix?.instrumentoId ?? null,
           veredictoBrix,
@@ -180,7 +201,10 @@ export async function recibirCereza(userAccountId: string, input: RecibirCerezaI
     // la del primero, que es lo que habría devuelto de llegar un poco después.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const existente = await prisma.recepcionDeCereza.findUnique({ where: { claveDeEnvio: clave } });
-      if (existente) return existente;
+      if (existente) {
+        await exigeGestionarBeneficio(userAccountId, existente.beneficioId);
+        return existente;
+      }
     }
     throw error;
   }
@@ -199,6 +223,8 @@ export async function anularRecepcion(userAccountId: string, input: { recepcionI
   if (!motivo) throw new RecepcionError("motivo_obligatorio");
   const persona = await personaDe(userAccountId);
   return prisma.$transaction(async (tx) => {
+    // Dos anulaciones a la vez: la segunda espera y ve la primera (revisión de Codex, hallazgo 2).
+    await tx.$queryRaw`SELECT "id" FROM "traceability"."recepcion_de_cereza" WHERE "id" = ${recepcion.id}::uuid FOR UPDATE`;
     const antes = await tx.recepcionDeCereza.findUniqueOrThrow({ where: { id: recepcion.id } });
     if (antes.estado === "anulada") throw new RecepcionError("ya_anulada");
     if (antes.entregaId) {

@@ -55,7 +55,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const pedidos = (await prisma.pedidoDeCereza.findMany({ where: { beneficioId: beneficio }, select: { id: true } })).map((p) => p.id);
-  const proveedores = (await prisma.organization.findMany({ where: { organizationType: "producer", name: { contains: RUN } }, select: { id: true } })).map((o) => o.id);
+  const proveedores = (await prisma.organization.findMany({ where: { organizationType: "producer", name: { contains: RUN, mode: "insensitive" } }, select: { id: true } })).map((o) => o.id);
   await prisma.recepcionDeCereza.deleteMany({ where: assertDefinedWhere({ beneficioId: beneficio }) });
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: [...pedidos, ...proveedores] } }) });
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: cuentas } }) });
@@ -76,6 +76,16 @@ describe("el proveedor de fuera", () => {
     expect(p.organizationType).toBe("producer");
     expect(p.description).toBe("Boquete");
     await expect(crearProveedorDeCereza(operador, { nombre: `don pedro ${RUN}` })).rejects.toThrow(/proveedor_repetido/);
+  }, 20000);
+
+  it("dos altas a la vez del mismo nombre: una entra, la otra es proveedor_repetido", async () => {
+    // Revisión de Codex, hallazgo 4: la consulta previa no basta; el índice único es la red.
+    // Nombre ASCII a propósito: lo que se prueba es la carrera. Las mayúsculas acentuadas no se
+    // pliegan con la colación C (ver el comentario del índice en la migración).
+    const nombre = `Dona Rosa ${RUN}`;
+    const res = await Promise.allSettled([crearProveedorDeCereza(operador, { nombre }), crearProveedorDeCereza(operador, { nombre: nombre.toUpperCase() })]);
+    expect(res.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+    expect(String((res.find((x) => x.status === "rejected") as PromiseRejectedResult).reason)).toMatch(/proveedor_repetido/);
   }, 20000);
 
   it("el Recolector no da de alta proveedores", async () => {
@@ -106,6 +116,10 @@ describe("el pedido", () => {
     expect(c.exceso).toBe(true);
     expect(cantidadDelPedido(500, 505, 2).exceso).toBe(false);
     expect(cantidadDelPedido(500, 300, 2).falta).toBe(true);
+    // Revisión de Codex, hallazgo 8: el borde exacto. En coma flotante 100 × 1,13 = 112,999…
+    expect(cantidadDelPedido(100, 113, 13).exceso).toBe(false);
+    expect(cantidadDelPedido(100, 113.001, 13).exceso).toBe(true);
+    expect(cantidadDelPedido(100, 87, 13).falta).toBe(false);
   });
 
   it("cerrar con 300 de 500 exige nota; con nota, se cierra; la lista dice lo recibido", async () => {

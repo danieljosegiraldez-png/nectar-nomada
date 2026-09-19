@@ -167,6 +167,9 @@ describe("dos personas, en la base", () => {
       data: { estado: "anulada", anuladaAt: new Date(), anuladaPor: receptor, motivoAnulacion: "pesada en otra báscula" },
     });
     expect(anulada.estado).toBe("anulada");
+    await expect(prisma.recepcionDeCereza.update({ where: { id: r.id }, data: { motivoAnulacion: "otra razón" } })).rejects.toThrow(
+      /recepcion_de_cereza_inmutable/,
+    );
   }, 20000);
 
   it("quien anotó la entrega tampoco la anula", async () => {

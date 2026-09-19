@@ -42,14 +42,18 @@ export async function exigeVerBeneficio(userAccountId: string, beneficioId: stri
  * margen admiten de 490 a 510 sin nota.
  */
 export function cantidadDelPedido(kgPedidos: number, recibidoKg: number, margenPct: number) {
-  const diferenciaKg = Math.round((recibidoKg - kgPedidos) * 1000) / 1000;
-  const diferenciaPct = diferenciaKg / kgPedidos;
-  const margen = margenPct / 100;
+  // En enteros —gramos y centésimas de punto, la resolución de las columnas— para que el borde sea
+  // exacto: en coma flotante, 100 × (1 + 13/100) da 112,99999999999999 y 113 kg salían «exceso»
+  // (revisión de Codex, hallazgo 8).
+  const pedidoG = Math.round(kgPedidos * 1000);
+  const recibidoG = Math.round(recibidoKg * 1000);
+  const margenBp = Math.round(margenPct * 100);
+  const diferenciaKg = (recibidoG - pedidoG) / 1000;
   return {
     diferenciaKg,
-    diferenciaPct,
-    exceso: recibidoKg > kgPedidos * (1 + margen),
-    falta: recibidoKg < kgPedidos * (1 - margen),
+    diferenciaPct: (recibidoG - pedidoG) / pedidoG,
+    exceso: recibidoG * 10_000 > pedidoG * (10_000 + margenBp),
+    falta: recibidoG * 10_000 < pedidoG * (10_000 - margenBp),
   };
 }
 
@@ -122,6 +126,8 @@ export async function cerrarPedido(userAccountId: string, input: { pedidoId: str
   await exigeGestionarBeneficio(userAccountId, pedido.beneficioId);
   const nota = input.nota?.trim() || null;
   return prisma.$transaction(async (tx) => {
+    // Dos cierres a la vez: el segundo espera y ve «cerrado» (revisión de Codex, hallazgo 6).
+    await tx.$queryRaw`SELECT "id" FROM "traceability"."pedido_de_cereza" WHERE "id" = ${pedido.id}::uuid FOR UPDATE`;
     const antes = await tx.pedidoDeCereza.findUniqueOrThrow({ where: { id: pedido.id } });
     if (antes.estado !== "abierto") throw new PedidoError("ya_cerrado");
     const suma = await tx.recepcionDeCereza.aggregate({ where: { pedidoId: antes.id, estado: "recibida" }, _sum: { netoKg: true } });

@@ -171,6 +171,8 @@ export async function cambiarDestinoDeJornada(userAccountId: string, input: { jo
   await exigeGestionarFinca(userAccountId, jornada.fincaSiteId);
   await exigeBeneficioDeDestino(userAccountId, input.beneficioId);
   return prisma.$transaction(async (tx) => {
+    // La misma fila que bloquea `recibirCereza` antes de comparar el destino: uno espera al otro.
+    await tx.$queryRaw`SELECT "id" FROM "traceability"."jornada_de_cosecha" WHERE "id" = ${input.jornadaId}::uuid FOR UPDATE`;
     const antes = await tx.jornadaDeCosecha.findUniqueOrThrow({ where: { id: input.jornadaId } });
     const recibida = await tx.recepcionDeCereza.findFirst({ where: { entrega: { jornadaId: antes.id }, estado: { not: "anulada" } }, select: { id: true } });
     if (recibida) throw new JornadaError("destino_fijo");
