@@ -9,7 +9,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { abrirJornada, agregarRecolector } from "../../lib/traceability/jornadasDeCosecha";
-import { reportarCondicionDelDia, reportarSituacion, situacionesDeJornada } from "../../lib/traceability/situacionesDeCampo";
+import {
+  confirmarFotoDeSituacion,
+  pedirSubidaDeFotoDeSituacion,
+  reportarCondicionDelDia,
+  reportarSituacion,
+  situacionesDeJornada,
+} from "../../lib/traceability/situacionesDeCampo";
 import { requireLocationAttributeAccess } from "../../lib/traceability/locations";
 
 const RUN = `sit-${Date.now()}`;
@@ -87,12 +93,15 @@ beforeAll(async () => {
 afterAll(async () => {
   const jornadas = (await prisma.jornadaDeCosecha.findMany({ where: { fincaSiteId: finca }, select: { id: true } })).map((j) => j.id);
   const sesiones = (await prisma.fieldSession.findMany({ where: { jornadaDeCosechaId: { in: jornadas } }, select: { id: true } })).map((s) => s.id);
-  const eventos = (await prisma.fieldEvent.findMany({ where: { fieldSessionId: { in: sesiones } }, select: { id: true } })).map((e) => e.id);
+  const filas = await prisma.fieldEvent.findMany({ where: { fieldSessionId: { in: sesiones } }, select: { id: true, assetId: true } });
+  const eventos = filas.map((e) => e.id);
+  const assets = filas.map((e) => e.assetId).filter((a): a is string => !!a);
   const recolectores = (await prisma.fincaRecolector.findMany({ where: { fincaSiteId: finca }, select: { id: true } })).map((r) => r.id);
-  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: [...jornadas, ...sesiones, ...eventos, ...recolectores] } }) });
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: [...jornadas, ...sesiones, ...eventos, ...recolectores, ...assets] } }) });
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: cuentas } }) });
   await prisma.fieldEvent.deleteMany({ where: assertDefinedWhere({ id: { in: eventos } }) });
   await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: sesiones } }) });
+  await prisma.asset.deleteMany({ where: assertDefinedWhere({ id: { in: assets } }) });
   await prisma.jornadaDeCosecha.deleteMany({ where: assertDefinedWhere({ id: { in: jornadas } }) });
   await prisma.fincaRecolector.deleteMany({ where: assertDefinedWhere({ id: { in: recolectores } }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
@@ -165,5 +174,38 @@ describe("quién lo ve", () => {
     });
     const vistas = await situacionesDeJornada(cuentaC, jornada);
     expect(vistas.some((e) => e.notes === "broca en el bloque")).toBe(true);
+  }, 20000);
+});
+
+describe("la foto de una situación", () => {
+  it("confirmarla crea un FieldEvent de tipo foto con su Asset, sobre lo asignado", async () => {
+    const storageKey = `nectar-originals/field/jornadas/${jornada}/TEST-${RUN}.jpg`;
+    const e = await confirmarFotoDeSituacion(cuentaA, {
+      jornadaId: jornada, sobre: { plotBlockId: bloque }, storageKey, mimeType: "image/jpeg", sizeBytes: 1234, originalFilename: "broca.jpg", nota: "TEST foto", ocurridaAt: new Date(),
+    });
+    expect(e.assetId).not.toBeNull();
+    expect(e.plotBlockId).toBe(bloque);
+    const asset = await prisma.asset.findUniqueOrThrow({ where: { id: e.assetId! } });
+    expect(asset.storageKey).toBe(storageKey);
+    const tipo = await prisma.variableCatalogValue.findUniqueOrThrow({ where: { id: e.eventKindValueId } });
+    expect(tipo.value).toBe("foto");
+  }, 20000);
+
+  it("una clave fuera de la jornada, o sobre algo no asignado, se rechaza", async () => {
+    const base = { jornadaId: jornada, mimeType: "image/jpeg", sizeBytes: 10, originalFilename: "x.jpg", ocurridaAt: new Date() };
+    await expect(confirmarFotoDeSituacion(cuentaA, { ...base, sobre: { locationId: parcela }, storageKey: `nectar-originals/field/otra/TEST-${RUN}.jpg` })).rejects.toThrow(
+      /clave_invalida/,
+    );
+    await expect(
+      confirmarFotoDeSituacion(cuentaA, { ...base, sobre: { locationId: otraParcela }, storageKey: `nectar-originals/field/jornadas/${jornada}/TEST-${RUN}-2.jpg` }),
+    ).rejects.toThrow(/sobre_no_asignado/);
+  }, 20000);
+
+  it("pedir la subida exige un medio y la compuerta del recolector", async () => {
+    await expect(pedirSubidaDeFotoDeSituacion(cuentaA, { jornadaId: jornada, originalFilename: "x.pdf", contentType: "application/pdf" })).rejects.toThrow(
+      /tipo_de_archivo_invalido/,
+    );
+    // El Farm Manager ve las situaciones pero no reporta como recolector: no tiene field_report:create_own.
+    await expect(pedirSubidaDeFotoDeSituacion(manager, { jornadaId: jornada, originalFilename: "x.jpg", contentType: "image/jpeg" })).rejects.toThrow(/sin_permiso/);
   }, 20000);
 });

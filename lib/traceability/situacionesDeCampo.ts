@@ -14,10 +14,13 @@
  * - **Quién lo ve:** quien lo reportó, lo suyo; con `field_report:view` sobre la finca (Farm
  *   Manager, capataz, o a quien se le conceda), todo lo de la jornada; nadie más.
  */
+import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
+import { objectStorageProvider } from "../integrations/storage";
 import { recordAuditEvent } from "../audit";
 import { can } from "../rbac/service";
 import { parcelaDeOrigen, type OrigenDeEntrega } from "./entregasDeCosecha";
+import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export class SituacionError extends Error {}
 
@@ -50,6 +53,7 @@ async function grabarEvento(
   userAccountId: string,
   ctx: { jornadaId: string; personId: string; parcela: string },
   data: { eventKindValueId: string; ocurridaAt: Date; nota: string | null; plotBlockId?: string; specimenId?: string; condicionDelDiaValueId?: string },
+  foto?: { storageKey: string; mimeType: string; sizeBytes: number; originalFilename: string; provenanceClass: ProvenanceClass },
 ) {
   return prisma.$transaction(async (tx) => {
     // Reusa la FieldSession abierta de esta persona en esta parcela y jornada, o abre una.
@@ -72,8 +76,34 @@ async function grabarEvento(
         tx,
       );
     }
+    // La foto es un FieldEvent que apunta a su Asset (lib/sync/fieldMedia.ts): Asset, evento y sus
+    // AuditEvent en UNA transacción, para que no quede un medio sin evento ni un evento sin medio.
+    const asset = foto
+      ? await tx.asset.create({
+          data: {
+            assetType: foto.mimeType.startsWith("video/") ? "video" : "photo",
+            storageKey: foto.storageKey,
+            storageBucket: BUCKET,
+            mimeType: foto.mimeType,
+            sizeBytes: foto.sizeBytes,
+            originalFilename: foto.originalFilename,
+            creatorPersonId: ctx.personId,
+            status: "approved",
+            classification: "internal",
+            createdBy: userAccountId,
+            provenanceClass: foto.provenanceClass,
+          },
+        })
+      : null;
+    if (asset) {
+      await recordAuditEvent(
+        { actorUserAccountId: userAccountId, operation: "asset.create", entityType: "asset", entityId: asset.id, after: asset, sourceInterface: "traceability.service" },
+        tx,
+      );
+    }
     const evento = await tx.fieldEvent.create({
       data: {
+        assetId: asset?.id ?? null,
         fieldSessionId: sesion.id,
         eventKindValueId: data.eventKindValueId,
         occurredAt: data.ocurridaAt,
@@ -158,6 +188,70 @@ export async function reportarCondicionDelDia(userAccountId: string, input: Repo
   );
 }
 
+const BUCKET = "nectar-originals";
+const prefijoDeJornada = (jornadaId: string) => `nectar-originals/field/jornadas/${jornadaId}/`;
+
+/** Qué tipo de evento es un medio, por su MIME. Lo demás no se acepta. */
+function tipoDeMedio(mime: string) {
+  if (mime.startsWith("image/")) return "foto";
+  if (mime.startsWith("video/")) return "video";
+  throw new SituacionError("tipo_de_archivo_invalido");
+}
+
+/**
+ * Foto de una situación, paso 1: la URL de subida directa. Misma compuerta que reportar. La clave
+ * la acuña el servidor bajo el prefijo de la jornada; al confirmar se vuelve a comprobar.
+ */
+export async function pedirSubidaDeFotoDeSituacion(userAccountId: string, input: { jornadaId: string; originalFilename: string; contentType: string }) {
+  tipoDeMedio(input.contentType);
+  await exigeReportarEnJornada(userAccountId, input.jornadaId);
+  const ext = input.originalFilename.includes(".") ? input.originalFilename.split(".").pop() : undefined;
+  const storageKey = `${prefijoDeJornada(input.jornadaId)}${randomUUID()}${ext ? `.${ext}` : ""}`;
+  const { uploadUrl } = await objectStorageProvider.putObject({ key: storageKey, contentType: input.contentType });
+  return { uploadUrl, storageKey };
+}
+
+export interface ConfirmarFotoDeSituacionInput {
+  readonly jornadaId: string;
+  readonly sobre: OrigenDeEntrega;
+  readonly storageKey: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+  readonly originalFilename: string;
+  readonly nota?: string | null;
+  readonly ocurridaAt: Date;
+}
+
+/**
+ * Foto de una situación, paso 2: con la subida hecha, un `FieldEvent` de tipo foto (o video) que
+ * apunta a su `Asset`, sobre lo asignado. No pasa por `lib/sync/fieldMedia.ts` porque aquel exige
+ * `location:manage_attributes`, que el recolector no tiene ni debe tener.
+ */
+export async function confirmarFotoDeSituacion(userAccountId: string, input: ConfirmarFotoDeSituacionInput) {
+  const { personId, asignadas } = await exigeReportarEnJornada(userAccountId, input.jornadaId);
+  if (!input.storageKey.startsWith(prefijoDeJornada(input.jornadaId))) throw new SituacionError("clave_invalida");
+  if (!(input.sizeBytes > 0)) throw new SituacionError("tamano_invalido");
+  if (Number.isNaN(input.ocurridaAt.getTime())) throw new SituacionError("fecha_invalida");
+  const parcela = await parcelaDeOrigen(prisma, input.sobre);
+  if (!parcela || !asignadas.has(parcela)) throw new SituacionError("sobre_no_asignado");
+  const kind = await prisma.variableCatalogValue.findFirstOrThrow({
+    where: { value: tipoDeMedio(input.mimeType), catalog: { key: "event_kind" } },
+    select: { id: true, aliasOfId: true },
+  });
+  return grabarEvento(
+    userAccountId,
+    { jornadaId: input.jornadaId, personId, parcela },
+    {
+      eventKindValueId: kind.aliasOfId ?? kind.id,
+      ocurridaAt: input.ocurridaAt,
+      nota: input.nota?.trim() || null,
+      plotBlockId: "plotBlockId" in input.sobre ? input.sobre.plotBlockId : undefined,
+      specimenId: "specimenId" in input.sobre ? input.sobre.specimenId : undefined,
+    },
+    { storageKey: input.storageKey, mimeType: input.mimeType, sizeBytes: input.sizeBytes, originalFilename: input.originalFilename, provenanceClass: "original_record" },
+  );
+}
+
 /** Lo reportado en una jornada: todo, con `field_report:view` sobre la finca; si no, sólo lo propio. */
 export async function situacionesDeJornada(userAccountId: string, jornadaId: string) {
   const jornada = await prisma.jornadaDeCosecha.findUnique({
@@ -178,6 +272,7 @@ export async function situacionesDeJornada(userAccountId: string, jornadaId: str
       fieldSession: { select: { location: { select: { id: true, name: true } } } },
       plotBlock: { select: { id: true, name: true } },
       specimen: { select: { id: true, commonName: true } },
+      asset: { select: { id: true, mimeType: true } },
     },
   });
 }
