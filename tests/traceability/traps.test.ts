@@ -519,6 +519,52 @@ describe("revisión de trampa", () => {
     });
     expect(total).toBe(1);
   });
+
+  /**
+   * A9 fix-final (M2) — el mismo `clientDraftId` usado con OTRA trampa no se
+   * lee como «ya se aplicó, con éxito»: eso descartaría en silencio un envío
+   * que en realidad nunca se guardó bajo esa clave. Antes de este arreglo,
+   * el `findUnique` por `clientDraftId` no comprobaba `specimenId` y esta
+   * llamada habría devuelto la fila de la PRIMERA trampa.
+   */
+  it("el mismo clientDraftId con OTRA trampa se rechaza, nunca se lee como duplicado", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampaA = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const trampaB = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const clientDraftId = crypto.randomUUID();
+    await recordTrapCheck(userAccountId, {
+      specimenId: trampaA.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId,
+    });
+
+    await expect(
+      recordTrapCheck(userAccountId, {
+        specimenId: trampaB.id, observedAt: new Date("2026-09-15"),
+        brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId,
+      }),
+    ).rejects.toThrow(TrapValidationError);
+
+    // Control: la trampa B sigue sin ninguna revisión — el rechazo no
+    // escribió nada a medias, y no se le atribuyó la fila de A.
+    expect(
+      await prisma.specimenObservation.count({
+        where: { specimenId: trampaB.id, observationType: "trap_check" },
+      }),
+    ).toBe(0);
+  });
 });
 
 describe("getPlotDetail — lo que necesitan los avisos de trampas", () => {

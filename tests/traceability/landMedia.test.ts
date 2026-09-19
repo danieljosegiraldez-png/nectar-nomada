@@ -38,7 +38,11 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
  * distintas de las dos concesiones del perfil. */
 async function crearOperadorDeParcela(
   locationId: string,
-  denegar?: { resourceType: string; action: string },
+  // A8 fix-final — un solo objeto sigue funcionando (los tres llamadores de
+  // la Tarea 12 no cambian); un ARRAY es lo que necesita A8 para negar
+  // `specimen:view` Y `specimen:manage` a la vez, porque `listLandAssets`
+  // ahora acepta cualquiera de los dos.
+  denegar?: { resourceType: string; action: string } | { resourceType: string; action: string }[],
 ) {
   const persona = await prisma.person.create({
     data: {
@@ -65,10 +69,12 @@ async function crearOperadorDeParcela(
     data: { userAccountId: cuenta.id, roleProfileId: perfil.id, scopeId: scope.id },
   });
   if (denegar) {
-    const permiso = await prisma.permission.findFirstOrThrow({ where: denegar });
-    await prisma.assignmentPermissionOverride.create({
-      data: { assignmentId: assignment.id, permissionId: permiso.id, effect: "deny" },
-    });
+    for (const uno of Array.isArray(denegar) ? denegar : [denegar]) {
+      const permiso = await prisma.permission.findFirstOrThrow({ where: uno });
+      await prisma.assignmentPermissionOverride.create({
+        data: { assignmentId: assignment.id, permissionId: permiso.id, effect: "deny" },
+      });
+    }
   }
   return { userAccountId: cuenta.id, personId: persona.id, scopeId: scope.id };
 }
@@ -290,6 +296,100 @@ describe("listLandAssets", () => {
     // El camino feliz pide URL firmadas a R2 y no se puede ejercitar sin
     // credenciales; el rechazo corre antes de tocar el almacenamiento.
     await expect(listLandAssets(userAId, locationBId)).rejects.toThrow(LocationAccessError);
+  });
+});
+
+/**
+ * A8 fix-final (M1), ruling del controlador. Sin `specimen:view`/`manage`,
+ * las filas con `specimenObservationId` se filtran ANTES de pedir ninguna
+ * URL firmada — por eso se puede comprobar el camino feliz de este caso sin
+ * credenciales de R2: con la única foto de la parcela filtrada, la lista
+ * queda vacía y `Promise.all([].map(...))` no llama a nada.
+ *
+ * El caso CON permiso no puede afirmar el contenido de la lista sin
+ * credenciales (`getSignedUrl` también las exige), pero SÍ puede afirmar que
+ * lo intentó: si tirara, es porque llegó a firmar — la prueba de que no se
+ * filtró. Es el mismo patrón que ya usa este archivo para
+ * `requestTrampaPhotoUpload` sin credenciales.
+ */
+describe("listLandAssets: la foto de revisión de trampa exige specimen:view/manage (A8)", () => {
+  const userAccountIds: string[] = [];
+  const personIds: string[] = [];
+  const scopeIds: string[] = [];
+  const locationIds: string[] = [];
+  const organizationIds: string[] = [];
+  const assetIdsLocal: string[] = [];
+
+  afterAll(async () => {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: userAccountIds } }) });
+    await prisma.asset.deleteMany({ where: assertDefinedWhere({ id: { in: assetIdsLocal } }) });
+    await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
+    await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
+    await prisma.assignmentPermissionOverride.deleteMany({
+      where: assertDefinedWhere({ assignment: { userAccountId: { in: userAccountIds } } }),
+    });
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
+    await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizationIds } }) });
+  });
+
+  async function fincaConFotoDeRevision() {
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const dueno = await crearUsuarioConAcceso();
+    userAccountIds.push(dueno.userAccountId);
+    personIds.push(dueno.personId);
+    scopeIds.push(dueno.scopeId);
+
+    const trampa = await createTrap(dueno.userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revision = await recordTrapCheck(dueno.userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId: crypto.randomUUID(),
+    });
+    const storageKey = claveDeFotoDeTrampa(parcela.id, crypto.randomUUID(), "tela.jpg");
+    const asset = await finalizeTrampaPhotoPorBorrador(dueno.userAccountId, {
+      locationId: parcela.id, storageKey, mimeType: "image/jpeg", sizeBytes: 1024,
+      originalFilename: "tela.jpg", revisionClientDraftId: revision.clientDraftId!, provenanceClass: "direct_observation",
+    });
+    assetIdsLocal.push(asset.id);
+    return parcela;
+  }
+
+  it("sin specimen:view NI specimen:manage, la lista sale vacía — no se firma nada", async () => {
+    const parcela = await fincaConFotoDeRevision();
+
+    const sinTrampas = await crearOperadorDeParcela(parcela.id, [
+      { resourceType: "specimen", action: "view" },
+      { resourceType: "specimen", action: "manage" },
+    ]);
+    userAccountIds.push(sinTrampas.userAccountId);
+    personIds.push(sinTrampas.personId);
+    scopeIds.push(sinTrampas.scopeId);
+
+    const lista = await listLandAssets(sinTrampas.userAccountId, parcela.id);
+    expect(lista).toEqual([]);
+  });
+
+  it("con specimen:view (sin manage), SÍ intenta incluirla — llega a pedir la URL", async () => {
+    const parcela = await fincaConFotoDeRevision();
+
+    const soloVer = await crearOperadorDeParcela(parcela.id, { resourceType: "specimen", action: "manage" });
+    userAccountIds.push(soloVer.userAccountId);
+    personIds.push(soloVer.personId);
+    scopeIds.push(soloVer.scopeId);
+
+    // El caso anterior demuestra que sin NINGÚN permiso de trampas la lista
+    // sale vacía sin tocar el proveedor. Que ÉSTE tire (por falta de
+    // credenciales de R2, no por el filtro) es la prueba de que la fila SÍ
+    // se intentó incluir.
+    await expect(listLandAssets(soloVer.userAccountId, parcela.id)).rejects.toThrow();
   });
 });
 
@@ -626,6 +726,204 @@ describe("claveDeFotoDeTrampa: determinista por foto, no al azar (fix round 1)",
   it("queda bajo el prefijo de ESA parcela", () => {
     const clave = claveDeFotoDeTrampa("loc-1", "foto-abc", "tela.jpg");
     expect(clave.startsWith("nectar-originals/land/loc-1/")).toBe(true);
+  });
+});
+
+/**
+ * A5 fix-final (I6), ruling del controlador — la autoría de la foto de la
+ * ronda ya no acepta ningún `creatorPersonId` del llamador: siempre la
+ * persona de la cuenta de sesión. TypeScript ya lo impide en tiempo de
+ * compilación (el campo salió de `FinalizeTrampaPhotoInput`); esta prueba
+ * comprueba además el comportamiento en TIEMPO DE EJECUCIÓN, forzando el
+ * campo con un `as never` — exactamente como llegaría desde un cliente que
+ * no pasa por el tipo (una llamada RPC directa a la Server Action, o un
+ * `fetch` a mano).
+ */
+describe("finalizeTrampaPhotoPorBorrador: la autoría es SIEMPRE la de la sesión (A5)", () => {
+  const userAccountIds: string[] = [];
+  const personIds: string[] = [];
+  const scopeIds: string[] = [];
+  const locationIds: string[] = [];
+  const organizationIds: string[] = [];
+  const assetIdsLocal: string[] = [];
+
+  afterAll(async () => {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: userAccountIds } }) });
+    await prisma.asset.deleteMany({ where: assertDefinedWhere({ id: { in: assetIdsLocal } }) });
+    await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
+    await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
+    await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizationIds } }) });
+  });
+
+  it("un creatorPersonId forjado (fuera del tipo) se ignora: queda la persona de la sesión", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId: crypto.randomUUID(),
+    });
+
+    const otraPersona = await prisma.person.create({
+      data: { givenName: "TEST", familyName: "Foto forjada", displayName: `TEST Foto forjada (${RUN_ID})`, locale: "es" },
+    });
+    personIds.push(otraPersona.id);
+
+    const storageKey = claveDeFotoDeTrampa(parcela.id, crypto.randomUUID(), "tela.jpg");
+    const asset = await finalizeTrampaPhotoPorBorrador(userAccountId, {
+      locationId: parcela.id,
+      storageKey,
+      mimeType: "image/jpeg",
+      sizeBytes: 1024,
+      originalFilename: "tela.jpg",
+      revisionClientDraftId: revision.clientDraftId!,
+      provenanceClass: "direct_observation",
+      // No existe en `FinalizeTrampaPhotoInput`: viaja igual, como lo haría
+      // un payload hostil que el tipo no puede impedir en tiempo de ejecución.
+      ...({ creatorPersonId: otraPersona.id } as Record<string, unknown>),
+    } as never);
+    assetIdsLocal.push(asset.id);
+
+    expect(asset.creatorPersonId).toBe(usuario.personId);
+    expect(asset.creatorPersonId).not.toBe(otraPersona.id);
+  });
+});
+
+/**
+ * A6 fix-final (I2), ruling del controlador — antes de firmar el PUT,
+ * `requestTrampaPhotoUpload` comprueba si la `storageKey` derivada ya tiene
+ * un `Asset`. Sólo se firma de nuevo cuando es de la MISMA revisión (el
+ * reintento legítimo); si es de otra, se rechaza SIN firmar — antes de este
+ * arreglo, el PUT se firmaba siempre y la comprobación de pertenencia sólo
+ * llegaba después, en `finalizeTrampaPhotoPorBorrador`, cuando los bytes del
+ * bucket ya se habían sobrescrito.
+ */
+describe("requestTrampaPhotoUpload: la clave ya usada por OTRA revisión se rechaza antes de firmar (A6)", () => {
+  const userAccountIds: string[] = [];
+  const personIds: string[] = [];
+  const scopeIds: string[] = [];
+  const locationIds: string[] = [];
+  const organizationIds: string[] = [];
+  const assetIdsLocal: string[] = [];
+
+  afterAll(async () => {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: userAccountIds } }) });
+    await prisma.asset.deleteMany({ where: assertDefinedWhere({ id: { in: assetIdsLocal } }) });
+    await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
+    await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
+    await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizationIds } }) });
+  });
+
+  it("una storageKey ya finalizada bajo OTRA revisión rechaza la petición de URL", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampaA = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const trampaB = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revisionA = await recordTrapCheck(userAccountId, {
+      specimenId: trampaA.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId: crypto.randomUUID(),
+    });
+    const revisionB = await recordTrapCheck(userAccountId, {
+      specimenId: trampaB.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId: crypto.randomUUID(),
+    });
+
+    // La foto de A ya se finalizó bajo su propia clave.
+    const photoClientDraftId = crypto.randomUUID();
+    const storageKey = claveDeFotoDeTrampa(parcela.id, photoClientDraftId, "tela.jpg");
+    const assetDeA = await finalizeTrampaPhotoPorBorrador(userAccountId, {
+      locationId: parcela.id, storageKey, mimeType: "image/jpeg", sizeBytes: 1024,
+      originalFilename: "tela.jpg", revisionClientDraftId: revisionA.clientDraftId!, provenanceClass: "direct_observation",
+    });
+    assetIdsLocal.push(assetDeA.id);
+
+    // Alguien reutiliza el MISMO photoClientDraftId, pero declarando que es
+    // para la revisión B: `requestTrampaPhotoUpload` deriva la MISMA clave
+    // (determinista) y tiene que rechazar antes de firmar el PUT.
+    await expect(
+      requestTrampaPhotoUpload(userAccountId, {
+        locationId: parcela.id, originalFilename: "tela.jpg", contentType: "image/jpeg",
+        photoClientDraftId, revisionClientDraftId: revisionB.clientDraftId!,
+      }),
+    ).rejects.toThrow(LandMediaValidationError);
+
+    // Control: el Asset de A sigue intacto, con SU revisión.
+    const intacto = await prisma.asset.findUniqueOrThrow({ where: { storageKey } });
+    expect(intacto.specimenObservationId).toBe(revisionA.id);
+    expect(intacto.specimenObservationId).not.toBe(revisionB.id);
+  });
+
+  it("la MISMA revisión reintentando su propia foto SÍ recibe una URL (no se rechaza)", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId: crypto.randomUUID(),
+    });
+
+    const photoClientDraftId = crypto.randomUUID();
+    const storageKey = claveDeFotoDeTrampa(parcela.id, photoClientDraftId, "tela.jpg");
+    const asset = await finalizeTrampaPhotoPorBorrador(userAccountId, {
+      locationId: parcela.id, storageKey, mimeType: "image/jpeg", sizeBytes: 1024,
+      originalFilename: "tela.jpg", revisionClientDraftId: revision.clientDraftId!, provenanceClass: "direct_observation",
+    });
+    assetIdsLocal.push(asset.id);
+
+    // El acuse se perdió: el cliente vuelve a pedir la URL para la MISMA foto,
+    // de la MISMA revisión. No debe rechazarse.
+    let rechazado = false;
+    try {
+      await requestTrampaPhotoUpload(userAccountId, {
+        locationId: parcela.id, originalFilename: "tela.jpg", contentType: "image/jpeg",
+        photoClientDraftId, revisionClientDraftId: revision.clientDraftId!,
+      });
+    } catch (error) {
+      rechazado = error instanceof LandMediaValidationError;
+    }
+    expect(rechazado).toBe(false);
   });
 });
 
