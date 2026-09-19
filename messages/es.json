@@ -2147,7 +2147,12 @@
     "reinaColor_amarillo": "amarilla",
     "reinaColor_rojo": "roja",
     "reinaColor_verde": "verde",
-    "reinaColor_azul": "azul"
+    "reinaColor_azul": "azul",
+    "darkFramesLabel": "Marcos negros (cera vieja)",
+    "darkFramesEnInspeccion": "{n, plural, one {# marco negro} other {# marcos negros}}",
+    "marcosNegrosHeading": "Marcos negros en las colmenas",
+    "marcosNegrosIntro": "De la última inspección que los contó en cada colmena. La cera vieja se juzga por el aspecto: estos son los marcos que toca renovar.",
+    "marcosNegrosFila": "{n, plural, one {# marco negro} other {# marcos negros}} el {fecha}"
   },
   "Research": {
     "badge": "Research OS",

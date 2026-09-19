@@ -20,7 +20,7 @@ import {
   registrarSalidaDeMarcosFormAction,
 } from "../../actions/apiary";
 import { alzasDelApiario } from "../../../lib/apiary/alzas";
-import { DESTINOS_DE_CERA, leyendaDeCera, MOTIVOS_DE_SALIDA, TIPOS_DE_CERA } from "../../../lib/apiary/cera";
+import { DESTINOS_DE_CERA, leyendaDeCera, marcosNegrosDelApiario, MOTIVOS_DE_SALIDA, TIPOS_DE_CERA } from "../../../lib/apiary/cera";
 import { colorDelAño } from "../../../lib/apiary/colorDelAno";
 import { CampoNumerico } from "../../components/CampoNumerico";
 import { permissionKeysAnywhere } from "../../../lib/rbac/service";
@@ -74,6 +74,8 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   const alzas = await alzasDelApiario(user.userAccountId, id);
   // Cera con el color de su año (spec §5.3). El primer renglón es siempre el año en curso.
   const cera = await leyendaDeCera(user.userAccountId, id);
+  // El aviso por aspecto (spec §5.3): la última inspección que contó marcos negros, por colmena.
+  const marcosNegros = await marcosNegrosDelApiario(user.userAccountId, id);
   const añoEnCurso = cera[0]?.año ?? new Date().getUTCFullYear();
   const puedeGestionarAlzas = (await permissionKeysAnywhere(user.userAccountId)).has("apiary:manage");
 
@@ -761,6 +763,21 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
             ))}
           </tbody>
         </table>
+        {marcosNegros.length > 0 ? (
+          <>
+            <h3>{t("marcosNegrosHeading")}</h3>
+            <p className="nn-muted">{t("marcosNegrosIntro")}</p>
+            <ul>
+              {marcosNegros.map((m) => (
+                <li key={m.hiveId}>
+                  <Link href={`/apiaries/${id}/hives/${m.hiveId}`}>{m.identifier}</Link>
+                  {": "}
+                  {t("marcosNegrosFila", { n: m.marcos, fecha: m.fecha.toISOString().slice(0, 10) })}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
         {puedeGestionarAlzas ? (
           <>
             <details>
