@@ -291,9 +291,10 @@ cuesta lo mismo que hoy. Los números van con `CampoNumerico` (#418), los envío
   - el disparador rechaza un modelo propio de otra organización y acepta uno compartido;
   - los CHECK de capacidad, material `otro` sin nota y rango invertido;
   - una rutina con equipo **y** sitio, o con ninguno, se rechaza; dos rutinas activas del
-    mismo tipo sobre la misma cosa chocan, y una retirada no cuenta; una rutina de sitio se
-    crea y se registra por el servicio (aunque su pantalla llegue con el spec de
-    instalaciones);
+    mismo tipo sobre la misma cosa chocan, y una retirada no cuenta; **corregido en la Tarea
+    10 (ADR-171):** la base admite una rutina de sitio, y lo prueban las pruebas de esquema
+    (XOR, unicidad parcial); el servicio la rechaza con `RutinaError("instalaciones_pendiente")`
+    hasta el spec de instalaciones;
   - un registro anulado sin motivo se rechaza, y anulado deja de contar como «último»;
   - permisos: crear un modelo propio en el sitio de otra organización → prohibido; crear
     uno compartido sin ámbito de plataforma → prohibido; la organización del modelo es la

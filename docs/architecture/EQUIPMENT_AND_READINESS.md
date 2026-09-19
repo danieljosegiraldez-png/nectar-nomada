@@ -426,6 +426,9 @@ asset accounting, technician scheduling. Not a CMMS. Not a LIMS. Facilities,
 buildings and vehicles are out, and are a plausible later extension of
 `Equipment` rather than a new concept.
 
+**Ampliado el 2026-09-19 (ADR-171):** rutinas por calendario que avisan, sobre
+equipos e instalaciones; lo demás de esta lista sigue fuera.
+
 ---
 
 ## 11. Decisions requiring product-owner input
