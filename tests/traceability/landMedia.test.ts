@@ -605,6 +605,121 @@ describe("finalizeTrampaPhotoPorBorrador: engancha por clientDraftId, nunca a ot
   });
 });
 
+// Fix round 1 (Tarea 12), ruling del controlador — un reintento con acuse
+// perdido no puede duplicar el `Asset`. La clave la deriva
+// `claveDeFotoDeTrampa` (en `landMedia.ts`) del `clientDraftId` de la FOTO
+// misma, así que aquí se construye a mano —igual que hace
+// `requestTrampaPhotoUpload` internamente— para simular exactamente el
+// reintento: la misma llamada, dos veces, con la misma clave.
+describe("finalizeTrampaPhotoPorBorrador es idempotente por storageKey (fix round 1)", () => {
+  const userAccountIds: string[] = [];
+  const personIds: string[] = [];
+  const scopeIds: string[] = [];
+  const locationIds: string[] = [];
+  const organizationIds: string[] = [];
+  const assetIdsLocal: string[] = [];
+
+  afterAll(async () => {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: userAccountIds } }) });
+    await prisma.asset.deleteMany({ where: assertDefinedWhere({ id: { in: assetIdsLocal } }) });
+    await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
+    await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
+    await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizationIds } }) });
+  });
+
+  it("finalizar la misma foto dos veces deja exactamente UN Asset, y la segunda también sale bien", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revisionClientDraftId = crypto.randomUUID();
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId: revisionClientDraftId,
+    });
+
+    // La misma clave que `requestTrampaPhotoUpload` calcularía para esta
+    // foto — se repite a propósito en las dos llamadas, simulando el
+    // reintento con la URL YA pedida (o vuelta a pedir: la clave es la misma).
+    const photoClientDraftId = crypto.randomUUID();
+    const storageKey = `nectar-originals/land/${parcela.id}/foto-${photoClientDraftId}.jpg`;
+
+    const primero = await finalizeTrampaPhotoPorBorrador(userAccountId, {
+      locationId: parcela.id, storageKey, mimeType: "image/jpeg", sizeBytes: 1024,
+      originalFilename: "tela.jpg", revisionClientDraftId, provenanceClass: "direct_observation",
+    });
+    assetIdsLocal.push(primero.id);
+
+    const segundo = await finalizeTrampaPhotoPorBorrador(userAccountId, {
+      locationId: parcela.id, storageKey, mimeType: "image/jpeg", sizeBytes: 1024,
+      originalFilename: "tela.jpg", revisionClientDraftId, provenanceClass: "direct_observation",
+    });
+
+    // La aserción que importa: CONTAR, no sólo comprobar que no lanzó.
+    expect(segundo.id).toBe(primero.id);
+    const filas = await prisma.asset.count({ where: { storageKey } });
+    expect(filas).toBe(1);
+    expect(primero.specimenObservationId).toBe(revision.id);
+  });
+
+  it("una foto DISTINTA de la misma revisión crea su propia fila", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revisionClientDraftId = crypto.randomUUID();
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId: revisionClientDraftId,
+    });
+
+    const claveA = `nectar-originals/land/${parcela.id}/foto-${crypto.randomUUID()}.jpg`;
+    const claveB = `nectar-originals/land/${parcela.id}/foto-${crypto.randomUUID()}.jpg`;
+
+    const assetA = await finalizeTrampaPhotoPorBorrador(userAccountId, {
+      locationId: parcela.id, storageKey: claveA, mimeType: "image/jpeg", sizeBytes: 1024,
+      originalFilename: "tela-a.jpg", revisionClientDraftId, provenanceClass: "direct_observation",
+    });
+    assetIdsLocal.push(assetA.id);
+    const assetB = await finalizeTrampaPhotoPorBorrador(userAccountId, {
+      locationId: parcela.id, storageKey: claveB, mimeType: "image/jpeg", sizeBytes: 1024,
+      originalFilename: "tela-b.jpg", revisionClientDraftId, provenanceClass: "direct_observation",
+    });
+    assetIdsLocal.push(assetB.id);
+
+    expect(assetA.id).not.toBe(assetB.id);
+    expect(assetA.specimenObservationId).toBe(revision.id);
+    expect(assetB.specimenObservationId).toBe(revision.id);
+    const filas = await prisma.asset.count({
+      where: { specimenObservationId: revision.id },
+    });
+    expect(filas).toBe(2);
+  });
+});
+
 // Ruling P2 del controlador (Tarea 12) — la foto de una revisión de trampa se
 // autoriza con `requireTrapAccess` (specimen:manage), nunca con
 // `location:manage_attributes`. `crearOperadorDeParcela` (arriba) da un Farm
@@ -660,6 +775,7 @@ describe("permiso de la foto de trampa: TRAP, no location:manage_attributes (rul
     try {
       await requestTrampaPhotoUpload(operador.userAccountId, {
         locationId: parcela.id, originalFilename: "tela.jpg", contentType: "image/jpeg",
+        photoClientDraftId: crypto.randomUUID(),
       });
     } catch (error) {
       rechazoDeAcceso = error instanceof TrapAccessError;
@@ -707,6 +823,7 @@ describe("permiso de la foto de trampa: TRAP, no location:manage_attributes (rul
     await expect(
       requestTrampaPhotoUpload(ajeno.userAccountId, {
         locationId: parcela.id, originalFilename: "tela.jpg", contentType: "image/jpeg",
+        photoClientDraftId: crypto.randomUUID(),
       }),
     ).rejects.toThrow(TrapAccessError);
 
@@ -749,6 +866,7 @@ describe("permiso de la foto de trampa: TRAP, no location:manage_attributes (rul
     await expect(
       requestTrampaPhotoUpload(soloAtributos.userAccountId, {
         locationId: parcela.id, originalFilename: "tela.jpg", contentType: "image/jpeg",
+        photoClientDraftId: crypto.randomUUID(),
       }),
     ).rejects.toThrow(TrapAccessError);
 

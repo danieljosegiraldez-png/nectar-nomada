@@ -2088,13 +2088,22 @@ export async function requestTrampaPhotoUploadAction(
   locationId: string,
   originalFilename: string,
   contentType: string,
+  // Fix round 1 (Tarea 12) — el clientDraftId de la FOTO, del que
+  // `requestTrampaPhotoUpload` deriva la clave. Es lo que hace que un
+  // reintento con acuse perdido calcule la MISMA clave en vez de una nueva.
+  photoClientDraftId: string,
 ): Promise<{ uploadUrl: string; storageKey: string } | { error: string }> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const t = await getTranslations("Traceability");
   try {
-    return await requestTrampaPhotoUpload(user.userAccountId, { locationId, originalFilename, contentType });
+    return await requestTrampaPhotoUpload(user.userAccountId, {
+      locationId,
+      originalFilename,
+      contentType,
+      photoClientDraftId,
+    });
   } catch (error) {
     if (error instanceof TrapAccessError) return { error: t("error_access", { detail: error.message }) };
     if (error instanceof Error) return { error: error.message };

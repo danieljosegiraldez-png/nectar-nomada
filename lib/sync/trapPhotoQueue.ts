@@ -128,7 +128,17 @@ export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
   let rejected = 0;
   for (const foto of fotos) {
     try {
-      const paso1 = await requestTrampaPhotoUploadAction(foto.locationId, foto.originalFilename, foto.contentType);
+      // Fix round 1 (Tarea 12) — `foto.id` es el clientDraftId de ESTA foto,
+      // el mismo en cada reintento (se generó una vez, en `queueTrapPhoto`,
+      // y vive en IndexedDB): con él, `requestTrampaPhotoUploadAction`
+      // deriva SIEMPRE la misma clave para esta foto, y un acuse perdido ya
+      // no crea un segundo `Asset`.
+      const paso1 = await requestTrampaPhotoUploadAction(
+        foto.locationId,
+        foto.originalFilename,
+        foto.contentType,
+        foto.id,
+      );
       if ("error" in paso1) {
         await write((s) => s.put({ ...foto, status: "error", errorMessage: paso1.error }));
         rejected++;

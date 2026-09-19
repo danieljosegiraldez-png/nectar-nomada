@@ -24,7 +24,7 @@ import { objectStorageProvider } from "../integrations/storage";
 import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
 import { requireTrapAccess } from "./traps";
 import { recordAuditEvent } from "../audit";
-import type { ClassificationLevel, ProvenanceClass } from "../../generated/prisma/client";
+import { Prisma, type ClassificationLevel, type ProvenanceClass } from "../../generated/prisma/client";
 
 export class LandMediaValidationError extends Error {}
 
@@ -46,18 +46,57 @@ export interface RequestLandAssetUploadInput {
   contentType: string;
 }
 
-/** La clave y el PUT firmado, compartidos por las dos compuertas de abajo. */
+/** El PUT firmado, compartido por las dos compuertas de abajo. La clave la
+ * decide cada una por su cuenta: al azar aquí, determinista para la foto de
+ * trampa (ver `requestTrampaPhotoUpload`). */
+async function firmarSubida(storageKey: string, contentType: string) {
+  const { uploadUrl } = await objectStorageProvider.putObject({ key: storageKey, contentType });
+  return { uploadUrl, storageKey };
+}
+
 async function crearUrlDeSubida(input: RequestLandAssetUploadInput) {
   const ext = input.originalFilename.includes(".") ? input.originalFilename.split(".").pop() : undefined;
   const storageKey = `${prefijoDe(input.locationId)}${randomUUID()}${ext ? `.${ext}` : ""}`;
-
-  const { uploadUrl } = await objectStorageProvider.putObject({ key: storageKey, contentType: input.contentType });
-  return { uploadUrl, storageKey };
+  return firmarSubida(storageKey, input.contentType);
 }
 
 export async function requestLandAssetUpload(userAccountId: string, input: RequestLandAssetUploadInput) {
   await requireLocationAttributeAccess(userAccountId, input.locationId);
   return crearUrlDeSubida(input);
+}
+
+export interface RequestTrampaPhotoUploadInput extends RequestLandAssetUploadInput {
+  /** El clientDraftId de la FOTO — no el de la revisión. Fix round 1 (Tarea
+   * 12): distinto en cada foto de la ronda, pero el MISMO en cada reintento
+   * de la MISMA foto (`queueTrapPhoto` lo genera una vez y lo guarda en
+   * IndexedDB), que es justo lo que hace falta para derivar de él una clave
+   * estable. */
+  photoClientDraftId: string;
+}
+
+/**
+ * La clave de la foto de una revisión de trampa: un prefijo fijo más el
+ * `clientDraftId` de la FOTO más su extensión — nunca un valor al azar.
+ *
+ * **Fix round 1 (Tarea 12), ruling del controlador.** Antes esta función
+ * generaba una clave nueva (`randomUUID()`) en cada llamada, así que un acuse
+ * perdido —el servidor crea el `Asset` y la respuesta no llega— hacía que
+ * `syncTrapPhotos` pidiera OTRA URL, subiera OTRO objeto y llamara a
+ * `finalizeTrampaPhotoPorBorrador` con una clave distinta, que no colisiona
+ * con nada: segundo `Asset` sobre la misma revisión. Derivar la clave del
+ * `clientDraftId` de la foto hace que el reintento calcule la MISMA clave,
+ * y `Asset.storageKey` (único desde antes, sin migración) es lo que deja a
+ * `finalizeTrampaPhotoPorBorrador` reconocer el reintento y no duplicar.
+ *
+ * Sigue siendo «inadivinable»: el `clientDraftId` de la foto es un
+ * `crypto.randomUUID()` generado en `queueTrapPhoto`, así que la clave entera
+ * sigue siendo, en la práctica, un UUID bajo el prefijo del bloque — la regla
+ * de siempre (`prefijoDe`), sólo que ahora el UUID lo aporta el cliente en vez
+ * de generarlo el servidor en cada intento.
+ */
+function claveDeFotoDeTrampa(locationId: string, photoClientDraftId: string, originalFilename: string): string {
+  const ext = originalFilename.includes(".") ? originalFilename.split(".").pop() : undefined;
+  return `${prefijoDe(locationId)}foto-${photoClientDraftId}${ext ? `.${ext}` : ""}`;
 }
 
 /**
@@ -70,9 +109,10 @@ export async function requestLandAssetUpload(userAccountId: string, input: Reque
  * `requestLandAssetUpload`, sin cambios: esta función es sólo para la foto de
  * trampa, y por eso vive aparte en vez de añadirle un parámetro a aquélla.
  */
-export async function requestTrampaPhotoUpload(userAccountId: string, input: RequestLandAssetUploadInput) {
+export async function requestTrampaPhotoUpload(userAccountId: string, input: RequestTrampaPhotoUploadInput) {
   await requireTrapAccess(userAccountId, input.locationId);
-  return crearUrlDeSubida(input);
+  const storageKey = claveDeFotoDeTrampa(input.locationId, input.photoClientDraftId, input.originalFilename);
+  return firmarSubida(storageKey, input.contentType);
 }
 
 export interface FinalizeLandAssetUploadInput {
@@ -143,6 +183,19 @@ export async function finalizeLandAssetUpload(userAccountId: string, input: Fina
   // (`requireTrapAccess`, `specimen:manage`). Sin esto, `location:manage_
   // attributes` bastaba para adjuntar evidencia a una revisión que ese mismo
   // usuario no podía leer si le quitaban el permiso de specimen.
+  //
+  // **Fix round 1 (Tarea 12), ruling del controlador — a propósito el AND, y
+  // a propósito distinto de `finalizeTrampaPhotoPorBorrador`.** La revisión
+  // del plan (task-12-review.md) señaló que este camino general exige
+  // `location:manage_attributes` SIEMPRE, más `requireTrapAccess` para un
+  // padre `trapCheck` — literalmente el AND que la ruling P2 excluye para la
+  // foto de la ronda. Es intencional: `LandPhotoUploadForm`
+  // (`/plots/[id]/fotos/nueva`) es la pantalla de atributos de la parcela, y
+  // ya exige `location:manage_attributes` para llegar ahí — es MÁS estricta,
+  // nunca más laxa, así que no hay agujero que cerrar. Los dos caminos
+  // conviven con reglas distintas a propósito: éste para quien administra la
+  // parcela desde el escritorio, `finalizeTrampaPhotoPorBorrador` para quien
+  // registra la ronda en el teléfono y sólo tiene permiso de trampa.
   if (input.parent.kind === "trapCheck") {
     await requireTrapAccess(userAccountId, input.locationId);
   }
@@ -238,10 +291,23 @@ export interface FinalizeTrampaPhotoInput {
  * exige un `specimenObservationId` real — la comprobación equivalente para
  * «pertenece a esa Location» va debajo, una vez resuelta la revisión.
  *
- * Sin deduplicar por `clientDraftId` de la foto misma —a diferencia de
- * `finalizeFieldMedia`—: hereda la misma laguna que ya tiene
- * `finalizeLandAssetUpload`, y cerrarla aquí sería una tarea distinta sobre un
- * archivo que esta rama no reescribe.
+ * **Fix round 1 (Tarea 12) — idempotente por `storageKey`, SIN migración.**
+ * La revisión del plan lo trazó de punta a punta: si el `Asset` se crea pero
+ * la respuesta se pierde (la red se cae justo después del commit), el
+ * cliente nunca marca la foto como enviada y `syncTrapPhotos` la reintenta
+ * — antes de este fix, con una clave NUEVA cada vez
+ * (`requestTrampaPhotoUpload` llamaba a `randomUUID()`), así que el
+ * reintento creaba un SEGUNDO `Asset` sobre la misma revisión. Ahora la
+ * clave se deriva del `clientDraftId` de la FOTO (`claveDeFotoDeTrampa`,
+ * más arriba), así que un reintento pide y finaliza la MISMA clave, y
+ * `Asset.storageKey` — único desde antes, sin migración nueva — es lo que
+ * permite reconocerlo: se busca primero por esa clave, y si ya existe se
+ * devuelve ESE `Asset` (marcado como ya aplicado) en vez de crear otro. El
+ * `catch` de `P2002` cubre la carrera de dos llamadas casi simultáneas para
+ * la misma foto, que pueden pasar la comprobación de arriba a la vez. Las
+ * dos ramas verifican que el `Asset` encontrado sea de ESTA revisión —si no,
+ * es una clave ajena reutilizada por error, y se rechaza en vez de devolver
+ * una foto que no es la suya.
  */
 export async function finalizeTrampaPhotoPorBorrador(userAccountId: string, input: FinalizeTrampaPhotoInput) {
   await requireTrapAccess(userAccountId, input.locationId);
@@ -258,46 +324,73 @@ export async function finalizeTrampaPhotoPorBorrador(userAccountId: string, inpu
     throw new LandMediaValidationError("trap_check_not_in_location");
   }
 
+  // Reintento con acuse perdido: la MISMA clave ya tiene un Asset. Se
+  // devuelve ese, no se crea otro — y se comprueba que sea de ESTA revisión
+  // antes de darlo por bueno.
+  const existente = await prisma.asset.findUnique({ where: { storageKey: input.storageKey } });
+  if (existente) {
+    if (existente.specimenObservationId !== revision.id) {
+      throw new LandMediaValidationError("storage_key_belongs_to_another_revision");
+    }
+    return existente;
+  }
+
   const userAccount = await prisma.userAccount.findUniqueOrThrow({
     where: { id: userAccountId },
     select: { personId: true },
   });
 
-  return prisma.$transaction(async (tx) => {
-    const asset = await tx.asset.create({
-      data: {
-        assetType: input.mimeType.startsWith("image/")
-          ? "photo"
-          : input.mimeType.startsWith("video/")
-            ? "video"
-            : "document",
-        storageKey: input.storageKey,
-        storageBucket: BUCKET,
-        mimeType: input.mimeType,
-        sizeBytes: input.sizeBytes,
-        originalFilename: input.originalFilename,
-        creatorPersonId: input.creatorPersonId ?? userAccount.personId,
-        status: "approved",
-        classification: DEFAULT_CLASSIFICATION,
-        createdBy: userAccountId,
-        provenanceClass: input.provenanceClass,
-        locationId: input.locationId,
-        specimenObservationId: revision.id,
-      },
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const asset = await tx.asset.create({
+        data: {
+          assetType: input.mimeType.startsWith("image/")
+            ? "photo"
+            : input.mimeType.startsWith("video/")
+              ? "video"
+              : "document",
+          storageKey: input.storageKey,
+          storageBucket: BUCKET,
+          mimeType: input.mimeType,
+          sizeBytes: input.sizeBytes,
+          originalFilename: input.originalFilename,
+          creatorPersonId: input.creatorPersonId ?? userAccount.personId,
+          status: "approved",
+          classification: DEFAULT_CLASSIFICATION,
+          createdBy: userAccountId,
+          provenanceClass: input.provenanceClass,
+          locationId: input.locationId,
+          specimenObservationId: revision.id,
+        },
+      });
+      await recordAuditEvent(
+        {
+          actorUserAccountId: userAccountId,
+          operation: "asset.create",
+          entityType: "asset",
+          entityId: asset.id,
+          after: asset,
+          sourceInterface: "traceability.service",
+        },
+        tx,
+      );
+      return asset;
     });
-    await recordAuditEvent(
-      {
-        actorUserAccountId: userAccountId,
-        operation: "asset.create",
-        entityType: "asset",
-        entityId: asset.id,
-        after: asset,
-        sourceInterface: "traceability.service",
-      },
-      tx,
-    );
-    return asset;
-  });
+  } catch (error) {
+    // La carrera: dos llamadas casi simultáneas para la MISMA foto (doble
+    // tap, dos pestañas) pasaron la comprobación de arriba a la vez.
+    // `storageKey` es UNIQUE en la base, así que la segunda `create` revienta
+    // con P2002 — se relee en vez de propagar el error, y el resultado es el
+    // Asset que SÍ se creó, no uno nuevo.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const ganador = await prisma.asset.findUniqueOrThrow({ where: { storageKey: input.storageKey } });
+      if (ganador.specimenObservationId !== revision.id) {
+        throw new LandMediaValidationError("storage_key_belongs_to_another_revision");
+      }
+      return ganador;
+    }
+    throw error;
+  }
 }
 
 /**
