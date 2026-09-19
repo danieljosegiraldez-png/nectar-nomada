@@ -429,6 +429,10 @@ buildings and vehicles are out, and are a plausible later extension of
 **Ampliado el 2026-09-19 (ADR-172):** rutinas por calendario que avisan, sobre
 equipos e instalaciones; lo demás de esta lista sigue fuera.
 
+**Ampliado otra vez el 2026-09-19 (ADR-177):** la misma rutina por calendario
+cuelga también de un lugar sin equipo detrás —beneficio, instalación de secado
+o bodega—, con el producto que se usó cada vez enlazado como un consumo más.
+
 ---
 
 ## 11. Decisions requiring product-owner input

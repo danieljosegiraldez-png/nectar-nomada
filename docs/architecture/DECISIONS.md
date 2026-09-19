@@ -11963,3 +11963,125 @@ motores, que es trabajo aparte con su diseño. Las guías de Varroa y Meliponini
 
 **Consecuencias.** Los normativos `00` §8, `10`, `11`, `12` §5 y `13` quedan anotados donde contradicen
 esto: **manda Daniel**. `02` §3 se anota con su decisión del 2026-09-14 (verificación por contraste
+
+## ADR-177 — Rutinas de lugar y la bodega
+
+**Contexto.** Spec `docs/superpowers/specs/2026-09-19-rutinas-de-instalaciones-y-bodega-design.md`.
+D8 del spec de catálogos (ADR-172) decidió que la misma rutina periódica —limpieza, fumigación,
+mantenimiento— cuelga de un equipo **o** de un lugar; ese ADR sólo construyó el camino del equipo.
+`CareRoutine` ya admitía `locationId` en la base (`equipmentId` XOR `locationId`, CHECK e índices
+parciales); el servicio lo rechazaba con `RutinaError("instalaciones_pendiente")`. Y faltaba un
+lugar: Daniel pidió una bodega, «de un beneficio o de una finca», separada de las instalaciones de
+secado que reescribe en paralelo la rama `secado-2a`.
+
+**Decisión — la bodega es un `storage_facility`, con su padre exigido en la base.**
+
+Tipo nuevo en `LocationType`. Su padre sólo puede ser `beneficio` o `site` (`plot` no vale: una
+bodega no cuelga de una parcela). Igual que con la instalación de secado, la regla vive en el
+servicio (`lib/traceability/bodegas.ts`, archivo propio en vez de generalizar
+`crearUbicacionDeSecado`, porque `secado-2a` está reescribiendo ese archivo al mismo tiempo y un
+archivo propio deja el choque en una línea) **y en un disparador sobre `core.location`**
+(`location_bodega_padre`, migración `20260919200500_bodega_y_rutinas_de_lugar`): un `INSERT` o
+`UPDATE` que deje un `storage_facility` sin padre, o con un padre que no sea `beneficio` ni `site`,
+lo rechaza con `bodega_padre_invalido` — un importador o SQL directo tampoco pueden saltárselo.
+Crearla exige `location:edit_beneficio` sobre el padre, el mismo permiso que una instalación de
+secado, y entra en `TIPOS_DEL_BENEFICIO`: editar sus atributos por los caminos genéricos exige el
+mismo permiso que una instalación. `createMicrolot` rechaza también un padre `storage_facility`, la
+misma razón que `beneficio_no_se_subdivide` — copiaría el tipo saltándose su permiso.
+
+**Decisión — qué lugares llevan rutina, y por qué una posición dentro de un estante no.**
+
+`lib/rutinas/lugares.ts` (`lugarParaRutina`) sólo admite `beneficio`, `drying_facility`,
+`storage_facility` y `drying_bed`. Una cama **sin** estante (su padre es una `drying_facility`)
+lleva su propia rutina; el resto —incluida cualquier `site`, `plot` o lo que sea— es
+`RutinaError("lugar_sin_rutinas")`. La distinción que sí importa está dentro de las camas: hoy toda
+cama cuelga de una instalación, así que la comprobación de estante nunca dispara — pero el `if`
+sobre el tipo del padre ya está escrito, no por adivinar el futuro sino porque la Parte 2
+(`drying_rack`, en la rama `secado-2a`) va a colgar posiciones de un estante, y **una posición dentro
+de un estante no lleva rutina propia**: la rutina es del estante entero, no de cada hueco —
+`RutinaError("rutina_en_el_estante")`, que manda al estante. Escribirlo ahora, aunque hoy nunca se
+dispare, es lo que evita que `secado-2a` tenga que volver a tocar este archivo para el caso que ya
+sabíamos que iba a llegar.
+
+**Y `RutinasDeLugar` (el componente de `/instalaciones/[id]`, `/bodegas/[id]` y `/beneficio`) no
+puede asumir que todo lugar admite rutina.** La revisión de la Tarea 6 lo encontró como riesgo antes
+de que `secado-2a` aterrizara camas bajo un `drying_rack`: si el componente llama a `lugarParaRutina`
+sin atrapar el error, una sola cama sin rutina tumbaría la ficha entera de la instalación. Se
+resolvió con `lugarConRutinasOVacio(locationId)`, exportada de `lugares.ts`: atrapa
+`lugar_sin_rutinas` y `rutina_en_el_estante` y devuelve `null` —el componente entonces no pinta
+nada—, y relanza cualquier otro `RutinaError` (hoy sólo `lugar_no_encontrado`, que sigue siendo un
+error de programación del llamador, no «este lugar no tiene rutina»).
+
+**Decisión — permisos, con la misma división que en equipos.** Definir, editar el intervalo, retirar
+y anular una rutina es **gestión**: `location:edit_beneficio` juzgado en el lugar, lo mismo que ya
+abre configurar el beneficio. Apuntar que se hizo es **faena**: `equipment:report_condition`
+juzgado en el lugar — el mismo permiso, con el mismo nombre de equipo, que ya usa apuntar la rutina
+de un equipo. **No se inventa un permiso nuevo.** Su nombre dice «equipo» porque nació ahí, pero lo
+que describe es la faena de cuidar algo periódicamente, y ya lo tienen Farm Manager y Farm Operator;
+inventar `location:report_condition` habría exigido tocar cada perfil de rol para dar exactamente el
+mismo acceso que ya tienen.
+
+**Decisión — el insumo es un consumo más, con `careRoutineEventId` por `crearConsumoEnTx`.**
+`MaterialConsumptionEntry` gana `careRoutineEventId`, anulable, FK a `CareRoutineEvent` con
+`RESTRICT`, y `MaterialConsumptionParent` gana la variante `careRoutineEvent` — el `switch`
+exhaustivo de `consumptionParentData` (Tarea 3) obliga a tratarla, así que olvidarla no compila.
+Apuntar una rutina con productos crea el `CareRoutineEvent` y **un consumo por producto en la misma
+transacción**, cada uno por `crearConsumoEnTx(tx, userAccountId, input)` — la función que la Tarea 3
+extrajo de `recordMaterialConsumptionEntry` para que un llamador que ya tiene una transacción abierta
+(aquí, `registrarRealizada`) no tenga que abrir una segunda. Si un producto falla —unidad distinta de
+la del lote, por ejemplo— no queda **nada**: ni el `CareRoutineEvent`, ni el primer consumo que sí
+había pasado. El insumo tiene que ser de la organización del lugar (o del equipo, por el camino que
+ya existía); de otra, `RutinaError("insumo_ajeno")` — y esto vale igual cuando el lugar **no tiene**
+organización (`Location.organizationId` nulo): sin organización con la que comparar, cualquier
+insumo se rechaza, nunca se acepta por comparación vacía.
+
+**Y porque `crearConsumoEnTx` recibe la transacción de quien la llama, en vez de abrir la suya, el
+guardia de atomicidad necesitaba un lado nuevo.** `tests/arquitectura/audit-atomico.test.ts` ya
+vigilaba que toda función nombrada con un parámetro `tx` audite dentro de esa transacción; la
+revisión de la Tarea 3 encontró que eso no bastaba para una función así, **exportada y llamada desde
+otros archivos**: un llamador que le pasara `prisma` en vez de `tx` rompería la atomicidad sin que
+nada lo dijera. La rama nueva del guardia recorre `lib/` y `app/` y falla si alguna llamada a una
+función de esa lista no le pasa `tx` como primer argumento literal — con sus límites de firma
+anotados en el propio test: el análisis es sintáctico, no de tipos.
+
+**Decisión — el CHECK de un solo padre, medido antes de escribirse.** La regla «un consumo tiene un
+padre, no dos» vivía sólo en prosa desde la migración `20260917180000_consumo_por_jornada`. Antes de
+escribir el `CHECK` que la hace valer en la base, se midió producción: el backup de 2026-09-14
+restaurado en una base aparte dio `material_consumption_entry` con **0 filas con más de un padre**.
+Con la medición en cero y `consumptionParentData` escribiendo siempre un solo padre, el `CHECK` no
+puede reventar nada que ya exista; una fila futura que lo violara —un defecto nuevo, no una regresión
+de datos viejos— haría fallar `migrate deploy` en Vercel sin tocar producción, que es el costo que se
+acepta a cambio de que la base, y no sólo el servicio, sea quien lo impida:
+
+```sql
+ALTER TABLE "traceability"."material_consumption_entry" ADD CONSTRAINT "material_consumption_entry_un_padre"
+  CHECK (num_nonnulls("fermentation_run_id", "drying_run_id", "location_id", "field_session_id", "care_routine_event_id") <= 1);
+```
+
+**Decisión — anular una vez no deshace sus consumos.** `anularRegistro` sólo marca el
+`CareRoutineEvent` (`voidedAt`, `voidReason`); no toca `MaterialConsumptionEntry` ni
+`ConsumableStockEvent`. El descuento del inventario ya ocurrió cuando se apuntó la rutina, y
+deshacerlo sería editar el inventario por un camino distinto al de siempre — cuadrar un saldo
+después de anotar de más es la reconciliación que ya existe para cualquier consumo, no un caso
+especial de rutinas. La ficha enseña los consumos junto al evento anulado, sin ocultarlos.
+
+**Pantallas.** `/bodegas` lista las bodegas con su aviso de vencidas, como `/equipos`; `/bodegas/nueva`
+la crea; `/bodegas/[id]` es su ficha. `/instalaciones/[id]`, `/bodegas/[id]` y `/beneficio` comparten
+un solo componente, `RutinasDeLugar`, para las rutinas del lugar y los equipos que hay en él. El
+formulario de `StorageAssignment` agrupa bodegas primero y el resto en «Otros lugares» — nada deja de
+ser elegible.
+
+**Alternatives considered.** Generalizar `crearUbicacionDeSecado` para que también sirviera de alta
+a una bodega: se descartó porque `secado-2a` reescribe ese archivo en paralelo y un archivo compartido
+habría chocado en cada rebase; un archivo propio (`bodegas.ts`) deja el choque, si lo hay, en una
+línea de import. Inventar un permiso `location:report_condition` en vez de reutilizar
+`equipment:report_condition`: se descartó porque habría exigido tocar cada perfil de rol para dar
+exactamente el mismo acceso que Farm Manager y Farm Operator ya tienen.
+
+**Consequences.** Una rutina ya no depende de que exista un `Equipment`: un beneficio, una instalación
+de secado o una bodega pueden llevar su propia fumigación o limpieza, con el producto que se usó cada
+vez trazado como cualquier otro consumo. La bodega es la primera ubicación cuyo tipo de padre se
+valida en la base, no sólo en el servicio. `RutinasDeLugar` puede montarse en cualquier lugar sin
+comprobar antes si admite rutina. La Parte 2 (`drying_rack`, cuando `secado-2a` la traiga) sólo
+necesita que una posición cuelgue de un `drying_rack` en vez de una `drying_facility`: el
+`RutinaError("rutina_en_el_estante")` que la distingue ya existe.
