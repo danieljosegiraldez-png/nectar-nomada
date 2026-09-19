@@ -8,6 +8,7 @@ import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { crearApiario, createColony, createHive } from "../../lib/apiary/hives";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
+import { anotarCeraDeExtraccion, ceraDeExtraccionDelApiario } from "../../lib/apiary/ceraDeExtraccion";
 
 const RUN = `cerax-${Date.now()}`;
 const dia = (s: string) => new Date(`${s}T00:00:00Z`);
@@ -133,5 +134,55 @@ describe("las reglas de la cera viven en la base", () => {
     // Los dos controles: el apiario con su ventana entra, y «otro uso» CON nota también.
     expect(await sonda(fila(", window_start, window_end", `, '2026-05-03', '2026-05-05'`))).toBe("entra");
     expect(await sonda(fila(", window_start, window_end, notes", `, '2026-05-03', '2026-05-05', 'para cambalache'`, "OTRO"))).toBe("entra");
+  });
+});
+
+// Spec §4.3 — la cera del desopercular no sale de un lote: se desopercula junto. Su origen es el
+// apiario y una ventana, y al leerla se dice qué cosechas de ESE apiario caen dentro, sin afirmar
+// que la cera salga de ellas.
+describe("la cera de la extracción", () => {
+  const ventana = { windowStart: dia("2026-05-03"), windowEnd: dia("2026-05-05") };
+
+  it("SE ANOTA CON SU VENTANA y sin transformación; y dice qué cosechas de ESE apiario caen dentro", async () => {
+    const dentro = await cosechaEn(dia("2026-05-04"));
+    await cosechaEn(dia("2026-05-09")); // fuera de la ventana
+    await cosechaEn(dia("2026-05-04"), apiarioAjeno); // otro apiario, mismo día
+    const fila = await anotarCeraDeExtraccion(operario, { apiaryLocationId: apiarioId, massKg: 7.5, destination: "GUARDADA", ...ventana });
+    expect(fila.transformationId).toBeNull();
+
+    const leidas = await ceraDeExtraccionDelApiario(operario, apiarioId);
+    expect(leidas).toHaveLength(1);
+    expect(leidas[0]!.massKg).toBeCloseTo(7.5, 3);
+    expect(leidas[0]!.cosechas.map((c) => c.id)).toEqual([dentro.id]); // ni la de otro día ni la de otro apiario
+  });
+
+  it("LA VENTANA INCLUYE SUS DOS EXTREMOS: una cosecha del primer día cuenta, y una del día anterior no", async () => {
+    const primerDia = await cosechaEn(dia("2026-05-03"));
+    const ultimoDia = await cosechaEn(dia("2026-05-05"));
+    await cosechaEn(dia("2026-05-02"));
+    await anotarCeraDeExtraccion(operario, { apiaryLocationId: apiarioId, massKg: 2, destination: "SALE", ...ventana });
+    const [leida] = await ceraDeExtraccionDelApiario(operario, apiarioId);
+    expect(leida!.cosechas.map((c) => c.id).sort()).toEqual([primerDia.id, ultimoDia.id].sort());
+  });
+
+  it("REGLAS: masa negativa, ventana al revés, OTRO sin nota, y sin permiso no", async () => {
+    const base = { apiaryLocationId: apiarioId, destination: "GUARDADA" as const, ...ventana };
+    await expect(anotarCeraDeExtraccion(operario, { ...base, massKg: -1 })).rejects.toThrow(/masa inválida/);
+    await expect(anotarCeraDeExtraccion(operario, { ...base, massKg: "" })).rejects.toThrow(/masa inválida/);
+    await expect(anotarCeraDeExtraccion(operario, { ...base, massKg: 3, windowStart: dia("2026-05-06") })).rejects.toThrow(/ventana_al_reves/);
+    await expect(anotarCeraDeExtraccion(operario, { ...base, massKg: 3, destination: "OTRO" })).rejects.toThrow(/otro_sin_nota/);
+    await expect(anotarCeraDeExtraccion(extrano, { ...base, massKg: 3 })).rejects.toThrow(/no_apiary_access/);
+    expect(await prisma.byproductBatch.count({ where: { producedAtLocationId: apiarioId } })).toBe(0); // nada entró
+  });
+
+  it("CERO KILOS ES UN DATO: se desoperculó y no se recogió cera aprovechable", async () => {
+    const fila = await anotarCeraDeExtraccion(operario, { apiaryLocationId: apiarioId, massKg: 0, destination: "GUARDADA", ...ventana });
+    expect(Number(fila.massKg)).toBe(0);
+  });
+
+  it("QUIEN NO PUEDE VER EL APIARIO no lee su cera", async () => {
+    await anotarCeraDeExtraccion(operario, { apiaryLocationId: apiarioId, massKg: 4, destination: "LAMINA_PROPIA", ...ventana });
+    await expect(ceraDeExtraccionDelApiario(extrano, apiarioId)).rejects.toThrow(/no_apiary_access/);
+    expect(await ceraDeExtraccionDelApiario(operario, apiarioId)).toHaveLength(1); // el control
   });
 });
