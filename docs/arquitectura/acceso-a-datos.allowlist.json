@@ -572,6 +572,10 @@
     {
       "archivo": "lib/traceability/capacidadDeBandeja.ts",
       "razon": "Tarea 4 del plan de secado por bandeja - el pesaje de bandeja cargada y la capacidad por estado. Modulo de dominio. registrarPesaje exige requireLotAccess(\"manage\") sobre el lote presentado y, al supersederse, tambien sobre el lote del pesaje ORIGINAL; capacidadDeTipo y pesajesDeTipo son lectura y filtran con el mismo permiso que tiposDeBandeja (equipment:view, directo o heredado). pesajesDeTipo ademas exige requireLotAccess(\"view\") por cada fila para decidir si se enseña el lote: una lectura sin acceso se cuenta en ocultos y no se muestra. Escritura y AuditEvent en la MISMA transaccion."
+    },
+    {
+      "archivo": "lib/beneficio/vistaDeBandejas.ts",
+      "razon": "Tarea 5 del plan de secado por bandeja - el modelo de vista de /beneficio/bandejas. No autoriza nada por su cuenta: compone tiposDeBandeja, bandejasDeLaFinca, capacidadDeTipo, pesajesDeTipo, puedeEditarBeneficioEnOrganizacion, puedeConfigurarEn, sitiosParaRegistrar y resolveLotVisibility/lotWhereFromVisibility, que ya filtran por su propio permiso. Sus dos consultas directas son de lectura: prisma.organization.findMany (sin filtro; la organizacion sólo se enseña si alguna de las funciones de arriba dice que hay algo que ver en ella) y prisma.lot.findMany, acotada por el where de lotWhereFromVisibility(resolveLotVisibility(userAccountId, \"manage\")). Vive en lib/ y no en app/beneficio/bandejas/page.tsx porque app/** no puede importar lib/db directamente."
     }
   ],
   "reciben_transaccion": [

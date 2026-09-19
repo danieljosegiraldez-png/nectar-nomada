@@ -20,6 +20,7 @@ export function destinosDelBeneficio(granted: Set<string>) {
     { href: "/reports/proceso", clave: "informe", visible: true },
     { href: "/instalaciones", clave: "instalaciones", visible: granted.has("location:manage_attributes") },
     { href: "/equipos", clave: "equipos", visible: granted.has("equipment:view") },
+    { href: "/beneficio/bandejas", clave: "bandejas", visible: granted.has("equipment:view") },
     {
       href: "/beneficio/ajustes",
       clave: "ajustes",

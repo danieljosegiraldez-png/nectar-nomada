@@ -148,7 +148,10 @@ describe("el inventario del router", () => {
     // sobre el árbol fusionado: 85 páginas y 11 handlers.
     // 96 → 98 el mismo día: /beneficio/recepcion y /beneficio/pedidos (spec recepción de cereza).
     // Medido: 87 páginas y 11 handlers.
-    expect(salida).toContain("98 entradas");
+    // 98 → 99 al rebasar `secado-2a` (2026-09-19): /beneficio/bandejas (Tarea 5 del
+    // plan 2a de secado). Cifra provisional, pendiente de medir con
+    // `node scripts/inventario-de-rutas.mjs` sobre el árbol rebasado y corregir aquí.
+    expect(salida).toContain("99 entradas");
     expect(codigo, salida).toBe(0);
   });
 
