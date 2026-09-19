@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { saveTrapRuleFormAction, type TraceabilityActionState } from "../../actions/traceability";
 import { BotonQueNecesitaConexion } from "./BotonQueNecesitaConexion";
+import { opcionesConActual } from "../../../lib/traceability/precargaDeIntervencion";
 
 const NIVELES = ["ninguno", "pocos", "algunos", "muchos"] as const;
 
@@ -41,6 +42,11 @@ export function ReglaDeTrampasForm({
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(saveTrapRuleFormAction, initialState);
   const id = (campo: string) => `${campo}-${farmLocationId}`;
+  // Ronda final de arreglos, hallazgo 4: sin acceso para listar productos,
+  // `productos` llega vacío. Sin esto el `<select>` no podría representar el
+  // producto ya guardado, y guardar sin tocarlo lo borraría — ver
+  // `opcionesConActual`.
+  const opcionesDeMaterial = opcionesConActual(productos, regla?.suggestedMaterial ?? null);
 
   return (
     <form action={formAction} className="nn-form">
@@ -105,7 +111,7 @@ export function ReglaDeTrampasForm({
           defaultValue={regla?.suggestedMaterial?.id ?? ""}
         >
           <option value="">{t("trapRuleSuggestedMaterialNone")}</option>
-          {productos.map((p) => (
+          {opcionesDeMaterial.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
