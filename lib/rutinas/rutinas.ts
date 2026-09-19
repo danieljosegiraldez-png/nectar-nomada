@@ -47,8 +47,15 @@ export async function requireRutinaAccess(
     if (!(await puedeSobreEquipo(userAccountId, cosa.equipmentId, accion))) throw new RutinaError("forbidden");
     return;
   }
-  await lugarParaRutina(cosa.locationId!);
+  // El permiso PRIMERO (arreglo de revisión final, 2026-09-19): `puedeSobreLugar`
+  // devuelve `false` para un id que no existe, así que un llamador sin permiso
+  // recibe `forbidden` idéntico para un uuid inexistente, un lugar que no admite
+  // rutinas y un lugar que sí las admite pero no puede ver — antes, `lugarParaRutina`
+  // corría primero y esos tres casos se distinguían del `forbidden` por el código
+  // de error, filtrando existencia y tipo a cualquiera. Sólo un llamador YA
+  // AUTORIZADO llega a la distinción de tipo (`lugar_sin_rutinas`/`rutina_en_el_estante`).
   if (!(await puedeSobreLugar(userAccountId, cosa.locationId!, accion))) throw new RutinaError("forbidden");
+  await lugarParaRutina(cosa.locationId!);
 }
 
 const t = (v: string | null | undefined) => (v?.trim() ? v.trim() : null);

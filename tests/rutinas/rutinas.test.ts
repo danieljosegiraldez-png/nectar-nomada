@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { prisma } from "../../lib/db";
 import { registrarEquipo } from "../../lib/equipos/equipos";
 import {
@@ -16,6 +17,8 @@ import { diaDeHoy } from "../../lib/time/diaDeHoy";
 import { montarFixtures, type Fixtures } from "../helpers/fixturesDeCatalogo";
 
 let f: Fixtures;
+let sitio: string;
+let bodega: string;
 const dia = (s: string) => new Date(`${s}T00:00:00Z`);
 
 /** Un equipo del sitio A, adquirido el 2026-01-01: fija la referencia cuando no hay registros. */
@@ -32,6 +35,21 @@ async function equipo() {
 
 beforeAll(async () => {
   f = await montarFixtures("rut");
+  // Un lugar que SÍ admite rutinas (a diferencia de `sitioA`, un `plot`), para
+  // probar que `forbidden` manda incluso cuando el tipo permitiría seguir
+  // (Hallazgo 2, ola de arreglos de revisión final). Una bodega exige un padre
+  // `site` o `beneficio` (ADR-177, disparador `location_bodega_padre`): `sitioA`
+  // es un `plot`, así que hace falta un `site` propio debajo.
+  sitio = (
+    await prisma.location.create({
+      data: { locationType: "site", name: `TEST sitio ${f.run}`, parentLocationId: f.sitioA, organizationId: f.orgA, status: "approved", classification: "internal" },
+    })
+  ).id;
+  bodega = (
+    await prisma.location.create({
+      data: { locationType: "storage_facility", name: `TEST bodega ${f.run}`, parentLocationId: sitio, organizationId: f.orgA, status: "approved", classification: "internal" },
+    })
+  ).id;
 });
 
 afterAll(async () => {
@@ -41,6 +59,8 @@ afterAll(async () => {
   await prisma.careRoutine.deleteMany({ where: { id: { in: rs } } });
   await prisma.equipmentTransfer.deleteMany({ where: { equipmentId: { in: eqs } } });
   await prisma.equipment.deleteMany({ where: { id: { in: eqs } } });
+  await prisma.location.deleteMany({ where: { id: bodega } });
+  await prisma.location.deleteMany({ where: { id: sitio } });
   await f.limpiar();
 });
 
@@ -73,6 +93,24 @@ describe("definir es gestión", () => {
     expect(ev.before).toEqual({ intervalDays: 90 });
     await retirarRutina(f.jefeA, r.id, new Date());
     expect((await prisma.careRoutine.findUniqueOrThrow({ where: { id: r.id } })).retiredAt).not.toBeNull();
+  });
+});
+
+describe("requireRutinaAccess: `forbidden` manda antes que existencia o tipo (Hallazgo 2)", () => {
+  it("un uuid que no existe, para quien no tiene NINGÚN permiso: forbidden, no lugar_no_encontrado", async () => {
+    await expect(requireRutinaAccess(f.ajeno, { equipmentId: null, locationId: randomUUID() }, "manage")).rejects.toThrow(
+      new RutinaError("forbidden"),
+    );
+  });
+  it("un lugar que NO admite rutinas (un sitio), para quien no puede verlo: forbidden, no lugar_sin_rutinas", async () => {
+    await expect(requireRutinaAccess(f.ajeno, { equipmentId: null, locationId: f.sitioA }, "manage")).rejects.toThrow(
+      new RutinaError("forbidden"),
+    );
+  });
+  it("un lugar que SÍ admite rutinas (una bodega), para quien no puede verlo: forbidden igual", async () => {
+    await expect(requireRutinaAccess(f.ajeno, { equipmentId: null, locationId: bodega }, "manage")).rejects.toThrow(
+      new RutinaError("forbidden"),
+    );
   });
 });
 

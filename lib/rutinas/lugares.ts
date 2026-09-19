@@ -7,6 +7,7 @@
 import type { ClassificationLevel, LocationType } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
+import { puedeSobreEquipo } from "../equipos/equipos";
 import { RutinaError } from "./error";
 
 export type LugarConRutina = {
@@ -99,7 +100,15 @@ export async function insumosDeLugar(userAccountId: string, locationId: string) 
   return lotes.map((x) => ({ id: x.id, etiqueta: `${x.material.name} · ${x.batchLabel}`, materialName: x.material.name, batchLabel: x.batchLabel }));
 }
 
-/** Los equipos cuyo ÚLTIMO traslado va a este lugar (spec §4.4). */
+/**
+ * Los equipos cuyo ÚLTIMO traslado va a este lugar (spec §4.4).
+ *
+ * El permiso sobre el LUGAR no es el permiso sobre cada EQUIPO (arreglo de
+ * revisión final, 2026-09-19): un equipo trae su propia `organizationId` y su
+ * propia `classification`, así que cada candidato que sobrevive al filtro de
+ * traslado pasa además por `puedeSobreEquipo`, igual que hace `listarEquipos`
+ * (`lib/equipos/equipos.ts`) para cualquier otra lista de equipos.
+ */
 export async function equiposAqui(userAccountId: string, locationId: string) {
   if (!(await puedeSobreLugar(userAccountId, locationId, "view"))) return [];
   const candidatos = await prisma.equipment.findMany({
@@ -107,5 +116,12 @@ export async function equiposAqui(userAccountId: string, locationId: string) {
     select: { id: true, name: true, transfers: { orderBy: { occurredAt: "desc" }, take: 1, select: { toLocationId: true } } },
     orderBy: { name: "asc" },
   });
-  return candidatos.filter((e) => e.transfers[0]?.toLocationId === locationId).map((e) => ({ id: e.id, name: e.name }));
+  const aqui = candidatos.filter((e) => e.transfers[0]?.toLocationId === locationId);
+  const visible = new Map<string, boolean>();
+  const salida: { id: string; name: string }[] = [];
+  for (const e of aqui) {
+    if (!visible.has(e.id)) visible.set(e.id, await puedeSobreEquipo(userAccountId, e.id, "view"));
+    if (visible.get(e.id)) salida.push({ id: e.id, name: e.name });
+  }
+  return salida;
 }

@@ -2,13 +2,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../lib/db";
 import { crearRutina, registrarRealizada, RutinaError, rutinasDeLugar, vencidasPorLugar } from "../../lib/rutinas/rutinas";
-import { lugarConRutinasOVacio, rutaDeLugar } from "../../lib/rutinas/lugares";
+import { equiposAqui, lugarConRutinasOVacio, rutaDeLugar } from "../../lib/rutinas/lugares";
 import { montarFixtures, type Fixtures } from "../helpers/fixturesDeCatalogo";
 
 let f: Fixtures;
 const L: Record<string, string> = {};
 let material: string;
 let loteDeInsumo: string;
+let loteDeInsumo2: string;
 let loteAjeno: string;
 const dia = (s: string) => new Date(`${s}T00:00:00Z`);
 
@@ -39,6 +40,10 @@ beforeAll(async () => {
   material = mat.id;
   loteDeInsumo = (await prisma.consumableLot.create({ data: { materialId: material, batchLabel: `TEST L ${f.run}`, receivedAt: dia("2026-08-01") } })).id;
   await prisma.consumableStockEvent.create({ data: { consumableLotId: loteDeInsumo, eventType: "received", quantity: 10, unit: "kg", occurredAt: dia("2026-08-01"), provenanceClass: "original_record" } });
+  // Segundo lote, del mismo material: para probar dos consumos de dos LOTES
+  // DISTINTOS en una sola vez (Hallazgo 5, ola de arreglos de revisión final).
+  loteDeInsumo2 = (await prisma.consumableLot.create({ data: { materialId: material, batchLabel: `TEST L2 ${f.run}`, receivedAt: dia("2026-08-01") } })).id;
+  await prisma.consumableStockEvent.create({ data: { consumableLotId: loteDeInsumo2, eventType: "received", quantity: 10, unit: "kg", occurredAt: dia("2026-08-01"), provenanceClass: "original_record" } });
   const matB = await prisma.consumableMaterial.create({ data: { name: `TEST ajeno ${f.run}`, defaultUnit: "kg", organizationId: f.orgB } });
   loteAjeno = (await prisma.consumableLot.create({ data: { materialId: matB.id, batchLabel: `TEST LB ${f.run}`, receivedAt: dia("2026-08-01") } })).id;
 });
@@ -47,8 +52,8 @@ afterAll(async () => {
   const rs = (await prisma.careRoutine.findMany({ where: { locationId: { in: Object.values(L) } }, select: { id: true } })).map((r) => r.id);
   const evs = (await prisma.careRoutineEvent.findMany({ where: { routineId: { in: rs } }, select: { id: true } })).map((e) => e.id);
   await prisma.materialConsumptionEntry.deleteMany({ where: { careRoutineEventId: { in: evs } } });
-  await prisma.consumableStockEvent.deleteMany({ where: { consumableLotId: { in: [loteDeInsumo, loteAjeno] } } });
-  await prisma.consumableLot.deleteMany({ where: { id: { in: [loteDeInsumo, loteAjeno] } } });
+  await prisma.consumableStockEvent.deleteMany({ where: { consumableLotId: { in: [loteDeInsumo, loteDeInsumo2, loteAjeno] } } });
+  await prisma.consumableLot.deleteMany({ where: { id: { in: [loteDeInsumo, loteDeInsumo2, loteAjeno] } } });
   await prisma.consumableMaterial.deleteMany({ where: { name: { contains: f.run } } });
   await prisma.careRoutineEvent.deleteMany({ where: { id: { in: evs } } });
   await prisma.careRoutine.deleteMany({ where: { id: { in: rs } } });
@@ -96,6 +101,23 @@ describe("el producto", () => {
     });
     expect(await prisma.materialConsumptionEntry.count({ where: { careRoutineEventId: ev.id } })).toBe(2);
     expect(await prisma.consumableStockEvent.count({ where: { consumableLotId: loteDeInsumo, eventType: "consumed" } })).toBe(1);
+  });
+  it("dos insumos de DOS LOTES distintos, los dos con cantidad: dos consumos y dos ConsumableStockEvent", async () => {
+    const r = await crearRutina(f.jefeA, { locationId: L.beneficio!, kind: "otra", kindNote: "TEST dos lotes", intervalDays: 30 });
+    const ev = await registrarRealizada(f.operarioA, {
+      routineId: r.id,
+      performedOn: dia("2026-08-14"),
+      provenanceClass: "original_record",
+      insumos: [{ consumableLotId: loteDeInsumo, quantity: 1, unit: "kg" }, { consumableLotId: loteDeInsumo2, quantity: 2, unit: "kg" }],
+    });
+    expect(await prisma.materialConsumptionEntry.count({ where: { careRoutineEventId: ev.id } })).toBe(2);
+    // Uno por lote, y sólo los de ESTE evento: `occurredAt` es el `performedOn`
+    // de esta llamada, que no comparte fecha con ningún otro consumo de la suite.
+    expect(
+      await prisma.consumableStockEvent.count({
+        where: { consumableLotId: { in: [loteDeInsumo, loteDeInsumo2] }, eventType: "consumed", occurredAt: dia("2026-08-14") },
+      }),
+    ).toBe(2);
   });
   it("si el segundo falla (unidad distinta), no queda NADA: ni la vez, ni el primer consumo", async () => {
     const r = await crearRutina(f.jefeA, { locationId: L.cama!, kind: "fumigacion", intervalDays: 30 });
@@ -148,6 +170,34 @@ describe("el aviso", () => {
   });
   it("el ajeno no ve las rutinas del lugar", async () => {
     await expect(rutinasDeLugar(f.ajeno, L.beneficio!, "2026-09-10")).rejects.toThrow(new RutinaError("forbidden"));
+  });
+});
+
+describe("equiposAqui: el permiso del LUGAR no es el permiso del EQUIPO (Hallazgo 1)", () => {
+  it("un equipo ajeno (otra organización, clasificación que el jefe no tiene) no aparece; el propio del lugar sí", async () => {
+    const propio = await prisma.equipment.create({
+      data: { name: `TEST eq propio ${f.run}`, kind: "instrument", organizationId: f.orgA, classification: "internal", provenanceClass: "original_record" },
+    });
+    const ajeno = await prisma.equipment.create({
+      data: { name: `TEST eq ajeno ${f.run}`, kind: "instrument", organizationId: f.orgB, classification: "confidential", provenanceClass: "original_record" },
+    });
+    await prisma.equipmentTransfer.createMany({
+      data: [
+        { equipmentId: propio.id, toLocationId: L.cuarto!, occurredAt: dia("2026-08-01") },
+        { equipmentId: ajeno.id, toLocationId: L.cuarto!, occurredAt: dia("2026-08-01") },
+      ],
+    });
+    try {
+      const vistos = (await equiposAqui(f.jefeA, L.cuarto!)).map((e) => e.id);
+      // Positivo: A ve su propio equipo en su lugar.
+      expect(vistos).toContain(propio.id);
+      // El hallazgo: el traslado a un lugar de A no basta para ver un equipo
+      // de B que el jefe de A no tiene clasificación para ver.
+      expect(vistos).not.toContain(ajeno.id);
+    } finally {
+      await prisma.equipmentTransfer.deleteMany({ where: { equipmentId: { in: [propio.id, ajeno.id] } } });
+      await prisma.equipment.deleteMany({ where: { id: { in: [propio.id, ajeno.id] } } });
+    }
   });
 });
 
