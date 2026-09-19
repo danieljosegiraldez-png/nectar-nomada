@@ -5,6 +5,10 @@
  * SAGARPA: «crianza de reinas», «cambio de reinas», «introducción de reinas». Sin marca de reina
  * (Daniel, 2026-09-18: «no marcamos las reinas»).
  *
+ * **El año en que nació** sí se guarda, si se sabe (spec 2026-09-18 §5.4). Su color —el de la cera
+ * de ese año, `colorDelAño`— es el APODO de la reina («la blanca de 2026»), no una marca pintada:
+ * Daniel lo confirmó el 2026-09-19. No puede ser posterior al año en que llegó a la colonia.
+ *
  * - Una tenencia es un intervalo cerrado a la izquierda y abierto a la derecha. **Cambiar** cierra la
  *   vieja y abre la nueva en el MISMO instante; la nueva no empieza antes que la vigente.
  * - Una abierta por colonia y una abierta por reina: lo garantiza la base (índices parciales únicos),
@@ -56,19 +60,27 @@ export interface ReinaNueva {
   readonly origenColonyId?: string | null;
   /** Obligatoria si `origen = otro`. */
   readonly notas?: string | null;
+  /** El año en que nació, si se sabe. No posterior al año en que llega a la colonia. */
+  readonly añoDeNacimiento?: number | null;
 }
 
-/** Valida el origen y, si fue criada aquí, que quien registra pueda ver la colonia de donde salió. */
-async function validarOrigen(userAccountId: string, nueva: ReinaNueva) {
+/**
+ * Valida el origen y, si fue criada aquí, que quien registra pueda ver la colonia de donde salió.
+ * Y el año de nacimiento, contra `llegada`: una reina no nace después de llegar a la colonia.
+ */
+async function validarOrigen(userAccountId: string, nueva: ReinaNueva, llegada: Date) {
   const notas = nueva.notas?.trim() || null;
   if (nueva.origen === "criada_aqui" && !nueva.origenColonyId) throw new ReinaInvalida("criada_aqui_sin_colonia");
   if (nueva.origen !== "criada_aqui" && nueva.origenColonyId) throw new ReinaInvalida("colonia_de_origen_solo_si_criada_aqui");
   if (nueva.origen === "otro" && !notas) throw new ReinaInvalida("otro_sin_nota");
+  const año = nueva.añoDeNacimiento ?? null;
+  if (año !== null && (!Number.isInteger(año) || año < 1990)) throw new ReinaInvalida("ano_de_nacimiento_invalido");
+  if (año !== null && año > llegada.getUTCFullYear()) throw new ReinaInvalida("nacio_despues_de_llegar");
   if (nueva.origenColonyId) {
     const madre = await coloniaConCaja(nueva.origenColonyId);
     await requireApiaryAccess(userAccountId, "view", [madre.hive]);
   }
-  return { origin: nueva.origen, originColonyId: nueva.origenColonyId ?? null, notes: notas };
+  return { origin: nueva.origen, originColonyId: nueva.origenColonyId ?? null, notes: notas, birthYear: año };
 }
 
 function validarFin(fin: QueenTenureEnd, finNota?: string | null) {
@@ -87,7 +99,7 @@ export async function introducirReina(userAccountId: string, input: IntroducirRe
   const colonia = await coloniaConCaja(input.colonyId);
   await requireApiaryAccess(userAccountId, "manage", [colonia.hive]);
   fechaValida(input.desde);
-  const datos = await validarOrigen(userAccountId, input);
+  const datos = await validarOrigen(userAccountId, input, input.desde);
   if (colonia.status !== "active") throw new ReinaInvalida("colonia_no_activa");
   if (input.desde < colonia.startedAt) throw new ReinaInvalida("reina_antes_de_la_colonia");
 
@@ -128,7 +140,7 @@ export async function cambiarReina(userAccountId: string, input: CambiarReinaInp
   const colonia = await coloniaConCaja(input.colonyId);
   await requireApiaryAccess(userAccountId, "manage", [colonia.hive]);
   fechaValida(input.cuando);
-  const datos = await validarOrigen(userAccountId, input.nueva);
+  const datos = await validarOrigen(userAccountId, input.nueva, input.cuando);
   const finNota = validarFin(input.finDeLaVieja, input.finNota);
   if (colonia.status !== "active") throw new ReinaInvalida("colonia_no_activa");
 
