@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../lib/auth/session";
 import { getPlotDetail } from "../../../../lib/traceability/plantingCohorts";
+import { getObserverCandidates } from "../../../../lib/traceability/lots";
 import { LocationAccessError } from "../../../../lib/traceability/locations";
 import { listSoilProfilesForLocation } from "../../../../lib/traceability/soilProfiles";
 import { estadosPorCohorte } from "../../../../lib/traceability/estadoDeProduccion";
@@ -15,6 +16,7 @@ import { listPlotBlocks, claveDeTituloDeBloque } from "../../../../lib/traceabil
 import { AltaDeBloqueForm } from "../../../components/traceability/AltaDeBloqueForm";
 import { AsignarTipoDeBloqueForm } from "../../../components/traceability/AsignarTipoDeBloqueForm";
 import { AltaDeTrampaForm } from "../../../components/traceability/AltaDeTrampaForm";
+import { RevisionDeTrampaForm } from "../../../components/traceability/RevisionDeTrampaForm";
 import { ReglaDeTrampasForm } from "../../../components/traceability/ReglaDeTrampasForm";
 
 export const dynamic = "force-dynamic";
@@ -45,9 +47,10 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   const { location, cohorts, cultivarOptions, eventosDeProduccion, trampas, reglaDeTrampas } = detail;
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
-  const [calicatas, bloques] = await Promise.all([
+  const [calicatas, bloques, { people, selfPersonId }] = await Promise.all([
     listSoilProfilesForLocation(user.userAccountId, id),
     listPlotBlocks(user.userAccountId, id),
+    getObserverCandidates(user.userAccountId),
   ]);
 
   return (
@@ -216,8 +219,15 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
       <section className="nn-section" id="trampas">
         <h2>{t("trapsTitle")}</h2>
         {trampas.length === 0 ? <p className="nn-muted">{t("trapsNone")}</p> : null}
-        {/* Aquí sólo la configuración: qué trampas hay y en qué bloque. La
-            revisión y su foto son trabajo de campo y viven en el tablero. */}
+        {/* La configuración (qué trampas hay y en qué bloque) y, para cada
+            trampa ACTIVA, un camino de transcripción con procedencia y
+            observador elegibles (spec §4.2) — para quien pasa notas de papel
+            de otra persona a la aplicación, no para quien mira la tela en el
+            campo. Ese camino corto, con provenance/observador fijos al
+            propio operario, vive en la ronda (`/finca/trampas/ronda`), no
+            aquí. Ruling del controlador, Tarea 10 fix round 1: restaura
+            `RevisionDeTrampaForm`, que el commit anterior había dejado sin
+            ningún sitio de montaje. */}
         {trampas.length > 0 ? (
           <ul className="nn-detail-meta">
             {trampas.map((trampa) => (
@@ -231,6 +241,17 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
                 ) : (
                   t("trapsNoBlock")
                 )}
+                {trampa.status === "active" ? (
+                  <details>
+                    <summary>{t("trapCheckTranscribedSummary")}</summary>
+                    <RevisionDeTrampaForm
+                      locationId={location.id}
+                      specimenId={trampa.id}
+                      people={people}
+                      selfPersonId={selfPersonId}
+                    />
+                  </details>
+                ) : null}
               </li>
             ))}
           </ul>

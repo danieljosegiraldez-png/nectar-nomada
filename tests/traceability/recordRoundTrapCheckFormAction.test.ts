@@ -109,7 +109,7 @@ describe("recordRoundTrapCheckFormAction", () => {
     expect(revision.observerPersonId).not.toBe(otraPersona.id);
   });
 
-  it("rechaza una cuenta sin persona vinculada, y no guarda ninguna revisión", async () => {
+  it("rechaza una cuenta borrada (`selfPersonId` null), y no guarda ninguna revisión", async () => {
     const parcela = await crearParcela();
     locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);

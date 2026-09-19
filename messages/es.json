@@ -1150,6 +1150,7 @@
     "trapsMaintenance": "Mantenimiento — limpieza: {limpieza} · líquido: {liquido} · atrayente: {atrayente}",
     "trapsObserver": "Observó: {nombre}",
     "trapNewTitle": "Registrar una trampa",
+    "trapCheckTranscribedSummary": "Registrar una revisión transcrita",
     "trapInstalledAt": "Fecha de instalación",
     "trapNumberAssigned": "Quedó como la trampa {n}: rotúlala en la botella.",
     "blockNewTitle": "Crear un bloque",

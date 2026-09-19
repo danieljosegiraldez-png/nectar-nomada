@@ -17,8 +17,11 @@ const initialState: TraceabilityActionState = {};
  * `recordRoundTrapCheckFormAction` fija los dos en el SERVIDOR —observación
  * directa, la persona vinculada a la cuenta de la sesión— y ni siquiera lee
  * esos nombres del `FormData`. `RevisionDeTrampaForm` —con procedencia,
- * calidad del dato y observador elegibles— queda para ajustes y para
- * corregir, no para este formulario.
+ * calidad del dato y observador elegibles— vive en
+ * `/plots/[id]/ajustes` (sección «trampas», Tarea 10 fix round 1), para
+ * transcribir una revisión de notas de papel de un tercero; no en este
+ * formulario, donde quien registra es siempre quien tiene la sesión
+ * iniciada.
  *
  * `hoy` (`YYYY-MM-DD`) lo calcula el servidor con la zona de LA FINCA
  * (`diaDeHoy`, en `app/finca/trampas/ronda/page.tsx`): un `hoyLocalISO()` en
@@ -71,7 +74,8 @@ export function RondaDeTrampaForm({
           placeholder={t("notRecorded")}
           // La rueda del ratón sobre un campo numérico con foco lo cambia: desde
           // vacío, un paso abajo deja 0, y «no se contó» pasa a «cero brocas»
-          // sin que nadie lo vea (mismo guardia que `RevisionDeTrampaForm`).
+          // sin que nadie lo vea (mismo guardia que `RevisionDeTrampaForm`,
+          // en `/plots/[id]/ajustes`).
           onWheel={(e) => e.currentTarget.blur()}
         />
       </div>

@@ -1150,6 +1150,7 @@
     "trapsMaintenance": "Maintenance — cleaned: {limpieza} · liquid: {liquido} · lure: {atrayente}",
     "trapsObserver": "Checked by: {nombre}",
     "trapNewTitle": "Register a trap",
+    "trapCheckTranscribedSummary": "Record a transcribed check",
     "trapInstalledAt": "Installation date",
     "trapNumberAssigned": "Registered as trap {n}: label the bottle with it.",
     "blockNewTitle": "Create a block",
