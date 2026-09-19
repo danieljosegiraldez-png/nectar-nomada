@@ -99,6 +99,8 @@ import { requestLotAssetUpload, finalizeLotAssetUpload, type LotAssetParent } fr
 import {
   requestLandAssetUpload,
   finalizeLandAssetUpload,
+  requestTrampaPhotoUpload,
+  finalizeTrampaPhotoPorBorrador,
   LandMediaValidationError,
   type LandAssetParent,
 } from "../../lib/traceability/landMedia";
@@ -2071,6 +2073,74 @@ export async function finalizeLandAssetUploadAction(
   // que un catch de arriba se tragaría.
   const destino = volverAValido(volverA, locationId);
   if (destino) redirect(destino);
+  return { ok: true };
+}
+
+// --- Foto de la ronda de trampas, sin señal (Tarea 12) -------------------
+//
+// Gemelas de `requestLandAssetUploadAction`/`finalizeLandAssetUploadAction`
+// de arriba, y NO un `if` dentro de ellas: ruling P2 del controlador gatea
+// esta pareja con `requireTrapAccess` (specimen:manage), nunca con
+// `location:manage_attributes`, y las dos de arriba siguen exactamente como
+// estaban para los demás padres (bloque, perfil de suelo, lote de biochar).
+
+export async function requestTrampaPhotoUploadAction(
+  locationId: string,
+  originalFilename: string,
+  contentType: string,
+): Promise<{ uploadUrl: string; storageKey: string } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const t = await getTranslations("Traceability");
+  try {
+    return await requestTrampaPhotoUpload(user.userAccountId, { locationId, originalFilename, contentType });
+  } catch (error) {
+    if (error instanceof TrapAccessError) return { error: t("error_access", { detail: error.message }) };
+    if (error instanceof Error) return { error: error.message };
+    throw error;
+  }
+}
+
+/**
+ * `{ pendiente: true }` no es un error: la revisión todavía no llegó por su
+ * propia cola (Tarea 11) y la foto se reintenta, sin engancharse nunca a otra
+ * revisión (spec §4.3). `syncTrapPhotos` (`lib/sync/trapPhotoQueue.ts`) es
+ * quien distingue las tres formas de esta respuesta.
+ */
+export async function finalizeTrampaPhotoPorBorradorAction(
+  locationId: string,
+  storageKey: string,
+  mimeType: string,
+  sizeBytes: number,
+  originalFilename: string,
+  revisionClientDraftId: string,
+  creatorPersonId: string | null,
+): Promise<{ ok: true } | { pendiente: true } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  try {
+    await finalizeTrampaPhotoPorBorrador(user.userAccountId, {
+      locationId,
+      storageKey,
+      mimeType,
+      sizeBytes,
+      originalFilename,
+      revisionClientDraftId,
+      // Una fotografía de la ronda es evidencia original: la tomó quien
+      // registró la revisión. Misma regla que la revisión (T10, ruling del
+      // controlador): procedencia siempre observación directa.
+      provenanceClass: "direct_observation",
+      creatorPersonId,
+    });
+  } catch (error) {
+    if (error instanceof LandMediaValidationError && error.message === "revision_not_found_yet") {
+      return { pendiente: true };
+    }
+    return { error: friendlyError(t, error) };
+  }
+  revalidatePath("/finca/trampas/ronda");
   return { ok: true };
 }
 

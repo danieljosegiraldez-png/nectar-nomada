@@ -8,6 +8,7 @@ import { claveDeTituloDeBloque } from "../../../../lib/traceability/plotBlocks";
 import { diaDeHoy } from "../../../../lib/time/diaDeHoy";
 import { RondaDeTrampaForm } from "../../../components/traceability/RondaDeTrampaForm";
 import { FieldSyncControls } from "../../../components/traceability/FieldSyncControls";
+import { SincronizarFotosDeRonda } from "../../../components/traceability/SincronizarFotosDeRonda";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +91,10 @@ export default async function RondaDeTrampasPage({
           registrada sin señal se ve y se sincroniza desde aquí, igual que en
           `/plots/[id]`. */}
       <FieldSyncControls />
+      {/* Tarea 12 — su propio indicador: la foto viaja por una cola distinta
+          (`lib/sync/trapPhotoQueue.ts`), así que `FieldSyncControls` no la
+          cuenta. */}
+      <SincronizarFotosDeRonda />
       <p className="nn-detail-meta"><Link href="/finca/trampas">{t("plotDashboardBackLink")}</Link></p>
       <h1>{t("trapsRoundTitleNamed", { name: detalle.farmName })}</h1>
 

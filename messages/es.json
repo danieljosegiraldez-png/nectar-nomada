@@ -1142,6 +1142,8 @@
     "trapCheckCleaned": "Se limpió la trampa",
     "trapCheckLiquid": "Se cambió el líquido",
     "trapCheckLure": "Se recargó el atrayente",
+    "trapCheckPhotoLabel": "Foto de la tela",
+    "trapPhotoSyncPending": "{count, plural, =0 {Ninguna foto pendiente} one {# foto pendiente} other {# fotos pendientes}}",
     "trapCheckObserverLabel": "Quién revisó (opcional)",
     "trapCheckPhotosRevisionLabel": "A qué revisión pertenece esta foto",
     "trapsCaptureCount": "Conteo: {n}",

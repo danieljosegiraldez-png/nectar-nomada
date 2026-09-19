@@ -18,6 +18,8 @@ import { prisma } from "../../lib/db";
 import { LocationAccessError } from "../../lib/traceability/locations";
 import {
   finalizeLandAssetUpload,
+  finalizeTrampaPhotoPorBorrador,
+  requestTrampaPhotoUpload,
   LandMediaValidationError,
   listLandAssets,
   requestLandAssetUpload,
@@ -25,8 +27,50 @@ import {
 import { createSoilProfile } from "../../lib/traceability/soilProfiles";
 import { createBiocharBatch } from "../../lib/traceability/biocharBatches";
 import { createTrap, recordTrapCheck, TrapAccessError } from "../../lib/traceability/traps";
-import { crearUsuarioConAcceso, crearParcela } from "../helpers/traceability";
+import { crearUsuarioConAcceso, crearUsuarioSinAcceso, crearParcela } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+
+/** Un Farm Operator de ESA parcela, con una concesión suya denegada a propósito
+ * (o ninguna) — mismo mecanismo que la prueba "rechaza colgar la foto de una
+ * revisión sin `specimen:manage`" de más abajo, factorizado para las pruebas
+ * de la Tarea 12 (ruling P2 del controlador), que necesitan tres combinaciones
+ * distintas de las dos concesiones del perfil. */
+async function crearOperadorDeParcela(
+  locationId: string,
+  denegar?: { resourceType: string; action: string },
+) {
+  const persona = await prisma.person.create({
+    data: {
+      givenName: "TEST",
+      familyName: "P2",
+      displayName: `TEST P2 (land-media-${Date.now()}-${crypto.randomUUID()})`,
+      locale: "es",
+    },
+  });
+  const cuenta = await prisma.userAccount.create({
+    data: { personId: persona.id, authProvider: "credentials", status: "active" },
+  });
+  const perfil = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+  // `Scope` es único por (scopeType, scopeRefId): dos operadores de LA MISMA
+  // parcela (los tres casos de este describe la comparten, con distintas
+  // concesiones denegadas) tienen que compartir una sola fila de `Scope`, no
+  // crear una cada uno — de ahí el `upsert` en vez de `create`.
+  const scope = await prisma.scope.upsert({
+    where: { scopeType_scopeRefId: { scopeType: "location", scopeRefId: locationId } },
+    update: {},
+    create: { scopeType: "location", scopeRefId: locationId },
+  });
+  const assignment = await prisma.assignment.create({
+    data: { userAccountId: cuenta.id, roleProfileId: perfil.id, scopeId: scope.id },
+  });
+  if (denegar) {
+    const permiso = await prisma.permission.findFirstOrThrow({ where: denegar });
+    await prisma.assignmentPermissionOverride.create({
+      data: { assignmentId: assignment.id, permissionId: permiso.id, effect: "deny" },
+    });
+  }
+  return { userAccountId: cuenta.id, personId: persona.id, scopeId: scope.id };
+}
 
 const RUN_ID = `land-media-${Date.now()}`;
 
@@ -388,6 +432,334 @@ describe("la foto de una revisión de trampa", () => {
         sizeBytes: 1234,
         originalFilename: "sin-permiso.jpg",
         parent: { kind: "trapCheck", specimenObservationId: revision.id },
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(TrapAccessError);
+  });
+});
+
+// Tarea 12 — la foto de la ronda viaja sin señal y se engancha por el
+// `clientDraftId` de SU revisión (spec §4.3), nunca por el
+// `specimenObservationId` real: la revisión puede no haber llegado todavía
+// (Tarea 11, su propia cola). `finalizeTrampaPhotoPorBorrador` es la mitad
+// server de ese enganche; `requestTrampaPhotoUpload` es el paso 1, la URL
+// firmada.
+describe("finalizeTrampaPhotoPorBorrador: engancha por clientDraftId, nunca a otra revisión", () => {
+  const userAccountIds: string[] = [];
+  const personIds: string[] = [];
+  const scopeIds: string[] = [];
+  const locationIds: string[] = [];
+  const organizationIds: string[] = [];
+  const assetIdsLocal: string[] = [];
+
+  afterAll(async () => {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: userAccountIds } }) });
+    await prisma.asset.deleteMany({ where: assertDefinedWhere({ id: { in: assetIdsLocal } }) });
+    await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
+    await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
+    await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizationIds } }) });
+  });
+
+  it("resuelve la revisión por clientDraftId y cuelga el Asset de ella", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const clientDraftId = crypto.randomUUID();
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId,
+    });
+
+    const asset = await finalizeTrampaPhotoPorBorrador(userAccountId, {
+      locationId: parcela.id,
+      storageKey: `nectar-originals/land/${parcela.id}/${Date.now()}-t12-tela.jpg`,
+      mimeType: "image/jpeg",
+      sizeBytes: 1024,
+      originalFilename: "tela.jpg",
+      revisionClientDraftId: clientDraftId,
+      provenanceClass: "direct_observation",
+    });
+    assetIdsLocal.push(asset.id);
+    expect(asset.specimenObservationId).toBe(revision.id);
+  });
+
+  it("si la revisión no ha llegado, lanza revision_not_found_yet (no un rechazo definitivo)", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    await expect(
+      finalizeTrampaPhotoPorBorrador(userAccountId, {
+        locationId: parcela.id,
+        storageKey: `nectar-originals/land/${parcela.id}/${Date.now()}-t12-huerfana.jpg`,
+        mimeType: "image/jpeg",
+        sizeBytes: 1024,
+        originalFilename: "tela.jpg",
+        revisionClientDraftId: "no-existe-todavia",
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(/revision_not_found_yet/);
+  });
+
+  it("deniega sin acceso de specimen a la parcela (la revisión que no puede alcanzar)", async () => {
+    const dueno = await crearUsuarioConAcceso();
+    userAccountIds.push(dueno.userAccountId);
+    personIds.push(dueno.personId);
+    scopeIds.push(dueno.scopeId);
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(dueno.userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const clientDraftId = crypto.randomUUID();
+    await recordTrapCheck(dueno.userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId,
+    });
+
+    const ajeno = await crearUsuarioSinAcceso();
+    userAccountIds.push(ajeno.userAccountId);
+    personIds.push(ajeno.personId);
+    scopeIds.push(ajeno.scopeId);
+    locationIds.push(ajeno.locationId);
+    organizationIds.push(ajeno.organizationId);
+
+    await expect(
+      finalizeTrampaPhotoPorBorrador(ajeno.userAccountId, {
+        locationId: parcela.id,
+        storageKey: `nectar-originals/land/${parcela.id}/${Date.now()}-t12-ajeno.jpg`,
+        mimeType: "image/jpeg",
+        sizeBytes: 1024,
+        originalFilename: "tela.jpg",
+        revisionClientDraftId: clientDraftId,
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(TrapAccessError);
+  });
+
+  // El mismo agujero que "el padre tiene que ser de ESE bloque", más arriba,
+  // pero por `clientDraftId`: quien tiene acceso a la parcela A no puede
+  // enganchar su foto a una revisión de la parcela B mandando A como ámbito.
+  // La comprobación es la MISMA foto en dos filas de `LandMediaValidationError`
+  // — `exigirPadreDeEsaLocation` no se reutiliza aquí porque exige un
+  // `specimenObservationId` real, así que la resuelve directamente
+  // `finalizeTrampaPhotoPorBorrador`.
+  it("no engancha la foto a una revisión de otra parcela, aunque tenga acceso a la suya", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcelaA = await crearParcela();
+    locationIds.push(parcelaA.id, parcelaA.parentLocationId!);
+    organizationIds.push(parcelaA.organizationId!);
+    const parcelaB = await crearParcela();
+    locationIds.push(parcelaB.id, parcelaB.parentLocationId!);
+    organizationIds.push(parcelaB.organizationId!);
+
+    const trampaB = await createTrap(userAccountId, {
+      locationId: parcelaB.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const clientDraftId = crypto.randomUUID();
+    await recordTrapCheck(userAccountId, {
+      specimenId: trampaB.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId,
+    });
+
+    await expect(
+      finalizeTrampaPhotoPorBorrador(userAccountId, {
+        locationId: parcelaA.id,
+        storageKey: `nectar-originals/land/${parcelaA.id}/${Date.now()}-t12-cruzada.jpg`,
+        mimeType: "image/jpeg",
+        sizeBytes: 1024,
+        originalFilename: "cruzada.jpg",
+        revisionClientDraftId: clientDraftId,
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(LandMediaValidationError);
+  });
+});
+
+// Ruling P2 del controlador (Tarea 12) — la foto de una revisión de trampa se
+// autoriza con `requireTrapAccess` (specimen:manage), nunca con
+// `location:manage_attributes`. `crearOperadorDeParcela` (arriba) da un Farm
+// Operator con una de las dos concesiones quitada a propósito, para poner las
+// tres combinaciones que pide el ruling: sólo trampa, ninguna, y sólo
+// atributos.
+describe("permiso de la foto de trampa: TRAP, no location:manage_attributes (ruling P2)", () => {
+  const userAccountIds: string[] = [];
+  const personIds: string[] = [];
+  const scopeIds: string[] = [];
+  const locationIds: string[] = [];
+  const organizationIds: string[] = [];
+  const assetIdsLocal: string[] = [];
+
+  afterAll(async () => {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: userAccountIds } }) });
+    await prisma.asset.deleteMany({ where: assertDefinedWhere({ id: { in: assetIdsLocal } }) });
+    await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
+    await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
+    await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizationIds } }) });
+  });
+
+  it("sólo permiso de trampa, sin manage_attributes: la URL no la rechaza el acceso, y finaliza", async () => {
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const operador = await crearOperadorDeParcela(parcela.id, { resourceType: "location", action: "manage_attributes" });
+    userAccountIds.push(operador.userAccountId);
+    personIds.push(operador.personId);
+    scopeIds.push(operador.scopeId);
+
+    const trampa = await createTrap(operador.userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const clientDraftId = crypto.randomUUID();
+    const revision = await recordTrapCheck(operador.userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId,
+    });
+
+    // El camino feliz de `requestTrampaPhotoUpload` llama al adaptador real de
+    // R2 (`putObject`) y no hay credenciales en este entorno (ver la cabecera
+    // de este archivo). Lo que SÍ se puede comprobar sin ellas es que la
+    // compuerta de acceso no lo detiene: si rechazara, sería con
+    // `TrapAccessError`, y eso es lo que se afirma que NO pasa.
+    let rechazoDeAcceso = false;
+    try {
+      await requestTrampaPhotoUpload(operador.userAccountId, {
+        locationId: parcela.id, originalFilename: "tela.jpg", contentType: "image/jpeg",
+      });
+    } catch (error) {
+      rechazoDeAcceso = error instanceof TrapAccessError;
+    }
+    expect(rechazoDeAcceso).toBe(false);
+
+    const asset = await finalizeTrampaPhotoPorBorrador(operador.userAccountId, {
+      locationId: parcela.id,
+      storageKey: `nectar-originals/land/${parcela.id}/${Date.now()}-p2-solo-trampa.jpg`,
+      mimeType: "image/jpeg",
+      sizeBytes: 1024,
+      originalFilename: "tela.jpg",
+      revisionClientDraftId: clientDraftId,
+      provenanceClass: "direct_observation",
+    });
+    assetIdsLocal.push(asset.id);
+    expect(asset.specimenObservationId).toBe(revision.id);
+  });
+
+  it("sin ningún permiso de trampa, se rechaza al pedir la URL y al finalizar", async () => {
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const dueno = await crearOperadorDeParcela(parcela.id);
+    userAccountIds.push(dueno.userAccountId);
+    personIds.push(dueno.personId);
+    scopeIds.push(dueno.scopeId);
+    const trampa = await createTrap(dueno.userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const clientDraftId = crypto.randomUUID();
+    await recordTrapCheck(dueno.userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId,
+    });
+
+    const ajeno = await crearUsuarioSinAcceso();
+    userAccountIds.push(ajeno.userAccountId);
+    personIds.push(ajeno.personId);
+    scopeIds.push(ajeno.scopeId);
+    locationIds.push(ajeno.locationId);
+    organizationIds.push(ajeno.organizationId);
+
+    await expect(
+      requestTrampaPhotoUpload(ajeno.userAccountId, {
+        locationId: parcela.id, originalFilename: "tela.jpg", contentType: "image/jpeg",
+      }),
+    ).rejects.toThrow(TrapAccessError);
+
+    await expect(
+      finalizeTrampaPhotoPorBorrador(ajeno.userAccountId, {
+        locationId: parcela.id,
+        storageKey: `nectar-originals/land/${parcela.id}/${Date.now()}-p2-sin-permiso.jpg`,
+        mimeType: "image/jpeg",
+        sizeBytes: 1024,
+        originalFilename: "y.jpg",
+        revisionClientDraftId: clientDraftId,
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(TrapAccessError);
+  });
+
+  it("con manage_attributes pero sin permiso de trampa, también se rechaza para un padre de trampa", async () => {
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const dueno = await crearOperadorDeParcela(parcela.id);
+    userAccountIds.push(dueno.userAccountId);
+    personIds.push(dueno.personId);
+    scopeIds.push(dueno.scopeId);
+    const trampa = await createTrap(dueno.userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const clientDraftId = crypto.randomUUID();
+    await recordTrapCheck(dueno.userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId,
+    });
+
+    const soloAtributos = await crearOperadorDeParcela(parcela.id, { resourceType: "specimen", action: "manage" });
+    userAccountIds.push(soloAtributos.userAccountId);
+    personIds.push(soloAtributos.personId);
+    scopeIds.push(soloAtributos.scopeId);
+
+    await expect(
+      requestTrampaPhotoUpload(soloAtributos.userAccountId, {
+        locationId: parcela.id, originalFilename: "tela.jpg", contentType: "image/jpeg",
+      }),
+    ).rejects.toThrow(TrapAccessError);
+
+    await expect(
+      finalizeTrampaPhotoPorBorrador(soloAtributos.userAccountId, {
+        locationId: parcela.id,
+        storageKey: `nectar-originals/land/${parcela.id}/${Date.now()}-p2-solo-atributos.jpg`,
+        mimeType: "image/jpeg",
+        sizeBytes: 1024,
+        originalFilename: "z.jpg",
+        revisionClientDraftId: clientDraftId,
         provenanceClass: "direct_observation",
       }),
     ).rejects.toThrow(TrapAccessError);

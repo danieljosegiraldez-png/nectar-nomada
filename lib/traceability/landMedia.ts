@@ -46,14 +46,33 @@ export interface RequestLandAssetUploadInput {
   contentType: string;
 }
 
-export async function requestLandAssetUpload(userAccountId: string, input: RequestLandAssetUploadInput) {
-  await requireLocationAttributeAccess(userAccountId, input.locationId);
-
+/** La clave y el PUT firmado, compartidos por las dos compuertas de abajo. */
+async function crearUrlDeSubida(input: RequestLandAssetUploadInput) {
   const ext = input.originalFilename.includes(".") ? input.originalFilename.split(".").pop() : undefined;
   const storageKey = `${prefijoDe(input.locationId)}${randomUUID()}${ext ? `.${ext}` : ""}`;
 
   const { uploadUrl } = await objectStorageProvider.putObject({ key: storageKey, contentType: input.contentType });
   return { uploadUrl, storageKey };
+}
+
+export async function requestLandAssetUpload(userAccountId: string, input: RequestLandAssetUploadInput) {
+  await requireLocationAttributeAccess(userAccountId, input.locationId);
+  return crearUrlDeSubida(input);
+}
+
+/**
+ * Tarea 12, ruling P2 del controlador. Para la foto de la ronda de trampas, el
+ * paso de la URL firmada se gatea con `requireTrapAccess` (`specimen:manage`
+ * sobre esa trampa), NO con `location:manage_attributes` — es la misma persona
+ * que puede registrar la revisión la que puede subir su foto, sin depender de
+ * que además tenga permiso de atributos de la parcela. Los demás padres de
+ * `LandAssetParent` (bloque, perfil de suelo, lote de biochar) siguen exigiendo
+ * `requestLandAssetUpload`, sin cambios: esta función es sólo para la foto de
+ * trampa, y por eso vive aparte en vez de añadirle un parámetro a aquélla.
+ */
+export async function requestTrampaPhotoUpload(userAccountId: string, input: RequestLandAssetUploadInput) {
+  await requireTrapAccess(userAccountId, input.locationId);
+  return crearUrlDeSubida(input);
 }
 
 export interface FinalizeLandAssetUploadInput {
@@ -169,6 +188,103 @@ export async function finalizeLandAssetUpload(userAccountId: string, input: Fina
       },
     });
 
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "asset.create",
+        entityType: "asset",
+        entityId: asset.id,
+        after: asset,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+    return asset;
+  });
+}
+
+export interface FinalizeTrampaPhotoInput {
+  locationId: string;
+  storageKey: string;
+  mimeType: string;
+  sizeBytes: number;
+  originalFilename: string;
+  revisionClientDraftId: string;
+  provenanceClass: ProvenanceClass;
+  creatorPersonId?: string | null;
+}
+
+/**
+ * F6 fix-final extendido para la ronda sin señal (spec §4.3, Tarea 12). La
+ * revisión puede no haber llegado todavía —viaja por su propia cola, Tarea
+ * 11— así que se resuelve por `clientDraftId` en vez de exigir un
+ * `specimenObservationId` real. Si no aparece, `revision_not_found_yet` es una
+ * señal de REINTENTAR, no un rechazo: la foto nunca se engancha a otra
+ * revisión (spec §4.3, «si la foto llega antes, se reintenta»).
+ *
+ * **Decisión de modelo (spec §4.3, brief Tarea 12):** sigue siendo `Asset` con
+ * `specimenObservationId`, no `FieldEvent` — la ronda no tiene `FieldSession`
+ * (es de toda la finca, no de un lote), y `FieldEvent.fieldSessionId` no es
+ * anulable; forzar una jornada de mentira inventaría un hecho de campo que no
+ * ocurrió (ver la cabecera de `fieldMedia.ts`, que explica por qué una foto de
+ * campo SÍ es un `FieldEvent`: éste no tiene ese ancla).
+ *
+ * **Permiso, ruling P2 del controlador.** Sólo `requireTrapAccess`
+ * (`specimen:manage`), nunca `requireLocationAttributeAccess`: es la misma
+ * persona que puede registrar la revisión la que puede colgarle la foto, sin
+ * depender de un segundo permiso de atributos de la parcela. `input.locationId`
+ * es contra lo que se autoriza, y `exigirPadreDeEsaLocation` de más arriba
+ * (para `finalizeLandAssetUpload`) no se reutiliza aquí porque esa función
+ * exige un `specimenObservationId` real — la comprobación equivalente para
+ * «pertenece a esa Location» va debajo, una vez resuelta la revisión.
+ *
+ * Sin deduplicar por `clientDraftId` de la foto misma —a diferencia de
+ * `finalizeFieldMedia`—: hereda la misma laguna que ya tiene
+ * `finalizeLandAssetUpload`, y cerrarla aquí sería una tarea distinta sobre un
+ * archivo que esta rama no reescribe.
+ */
+export async function finalizeTrampaPhotoPorBorrador(userAccountId: string, input: FinalizeTrampaPhotoInput) {
+  await requireTrapAccess(userAccountId, input.locationId);
+  if (!input.storageKey.startsWith(prefijoDe(input.locationId))) {
+    throw new LandMediaValidationError("invalid_storage_key");
+  }
+
+  const revision = await prisma.specimenObservation.findUnique({
+    where: { clientDraftId: input.revisionClientDraftId },
+    select: { id: true, specimen: { select: { locationId: true } } },
+  });
+  if (!revision) throw new LandMediaValidationError("revision_not_found_yet");
+  if (revision.specimen.locationId !== input.locationId) {
+    throw new LandMediaValidationError("trap_check_not_in_location");
+  }
+
+  const userAccount = await prisma.userAccount.findUniqueOrThrow({
+    where: { id: userAccountId },
+    select: { personId: true },
+  });
+
+  return prisma.$transaction(async (tx) => {
+    const asset = await tx.asset.create({
+      data: {
+        assetType: input.mimeType.startsWith("image/")
+          ? "photo"
+          : input.mimeType.startsWith("video/")
+            ? "video"
+            : "document",
+        storageKey: input.storageKey,
+        storageBucket: BUCKET,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        originalFilename: input.originalFilename,
+        creatorPersonId: input.creatorPersonId ?? userAccount.personId,
+        status: "approved",
+        classification: DEFAULT_CLASSIFICATION,
+        createdBy: userAccountId,
+        provenanceClass: input.provenanceClass,
+        locationId: input.locationId,
+        specimenObservationId: revision.id,
+      },
+    });
     await recordAuditEvent(
       {
         actorUserAccountId: userAccountId,

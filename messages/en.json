@@ -1142,6 +1142,8 @@
     "trapCheckCleaned": "The trap was cleaned",
     "trapCheckLiquid": "The liquid was changed",
     "trapCheckLure": "The lure was recharged",
+    "trapCheckPhotoLabel": "Photo of the trap sheet",
+    "trapPhotoSyncPending": "{count, plural, =0 {No photos pending} one {# photo pending} other {# photos pending}}",
     "trapCheckObserverLabel": "Who checked it (optional)",
     "trapCheckPhotosRevisionLabel": "Which check this photo belongs to",
     "trapsCaptureCount": "Count: {n}",

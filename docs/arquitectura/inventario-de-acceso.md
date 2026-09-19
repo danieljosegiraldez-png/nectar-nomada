@@ -11,9 +11,9 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-18
+## Lo medido el 2026-09-05, actualizado el 2026-09-19
 
-**419 operaciones** que tocan la base, en **129 archivos**:
+**420 operaciones** que tocan la base, en **129 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,26 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **301** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **302** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **37** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **63** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
+
+> **El de 419→420, sin archivo nuevo, es `finalizeTrampaPhotoPorBorrador`
+> (`lib/traceability/landMedia.ts`, Tarea 12 de vistas de finca y parcela).**
+> Sube la fila de **guardia directo**: llama a `requireTrapAccess`
+> (`specimen:manage`), nunca a `requireLocationAttributeAccess` — ruling P2 del
+> controlador, para que la foto de la ronda se autorice igual que la revisión
+> que documenta. `requestTrampaPhotoUpload`, su pareja del paso 1, **no** suma
+> fila: como `requestLandAssetUpload` (ya inventariado, cero filas propias),
+> no hace ningún `prisma.*` directo — sólo llama al guardia y al proveedor de
+> almacenamiento. Las dos nuevas Server Actions
+> (`requestTrampaPhotoUploadAction`, `finalizeTrampaPhotoPorBorradorAction`,
+> en `app/actions/traceability.ts`) tampoco suman: delegan toda su
+> autorización en `lib/traceability/landMedia.ts`, el mismo criterio de la
+> nota de la Tarea 3 más abajo.
 
 > **Y el de 417→419, con un archivo nuevo, es `lib/traceability/fincaTrampas.ts` (Tarea 7 de
 > vistas de finca y parcela).** `getFincasConTrampas` y `getFincaTrampas` suben dos veces la
