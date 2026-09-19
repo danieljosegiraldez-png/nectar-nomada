@@ -38,6 +38,13 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · Abrir una jornada sin propósito da un mensaje, no un 500 (PR #433)
+
+`friendlyError` (`app/actions/traceability.ts`) **relanza toda clase que no conoce**, y no conocía
+`PropositoInvalido`: el formulario manda `[]` y el servicio lo rechaza. Ahora dice «Elige al menos un
+propósito de la visita». **Una clase de validación nueva que llegue a una acción necesita su rama
+ahí**, o es un 500. Prueba hermética con flip-test. **Sin ver en navegador.**
+
 ### 2026-09-18 · Anular una asignación a tienda que no va a llegar
 
 ADR-170. Una asignación pendiente se anula con motivo y día —desde `/tienda` o desde la ficha del
