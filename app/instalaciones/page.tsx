@@ -29,9 +29,12 @@ export default async function InstalacionesPage() {
     <ul>{instalaciones.map((i) => <li key={i.id}>
       {i.sitio?.name ?? t("sitioNoVisible")} → <Link href={`/instalaciones/${i.id}`}>{i.name}</Link>
       <p className="nn-muted">{i.dryingEnvironment ? t(`ambiente_${i.dryingEnvironment}`) : t("noDeclarado")}{sombra(t, i.shadePercentage, i.shadeDescription) ? ` · ${sombra(t, i.shadePercentage, i.shadeDescription)}` : ""}</p>
-      <ul>{i.camas.map((c) => <li key={c.id}>{c.name} · {c.rackLevel == null ? t("rackNoDeclarado") : t("rackValor", { nivel: c.rackLevel })}
-        {" · "}{sombra(t, c.shadePercentage, c.shadeDescription) ?? (i.shadePercentage || i.shadeDescription ? `${sombra(t, i.shadePercentage, i.shadeDescription)} (${t("sombraDeLaInstalacion")})` : null)}
-      </li>)}</ul>
+      <ul>{i.camas.map((c) => {
+        const camaSombra = sombra(t, c.shadePercentage, c.shadeDescription) ?? (i.shadePercentage || i.shadeDescription ? `${sombra(t, i.shadePercentage, i.shadeDescription)} (${t("sombraDeLaInstalacion")})` : null);
+        return <li key={c.id}>{c.name} · {c.rackLevel == null ? t("rackNoDeclarado") : t("rackValor", { nivel: c.rackLevel })}
+          {camaSombra ? ` · ${camaSombra}` : ""}
+        </li>;
+      })}</ul>
     </li>)}</ul>
   </div>;
 }
