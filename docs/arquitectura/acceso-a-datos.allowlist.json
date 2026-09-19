@@ -564,6 +564,10 @@
     {
       "archivo": "lib/traceability/estantes.ts",
       "razon": "Paso 2a del plan de secado por bandeja - estantes y sus posiciones generadas. Modulo de dominio: es el sitio donde el acceso a datos vive por diseno. Exige location:edit_beneficio sobre la instalacion (crearEstante) o sobre el propio estante (ampliarEstante) ANTES de escribir. Escritura, generacion de posiciones y AuditEvent en la MISMA transaccion."
+    },
+    {
+      "archivo": "lib/equipos/bandejas.ts",
+      "razon": "Tarea 3 del plan de secado por bandeja - tipos de bandeja y bandejas numeradas por finca. Modulo de dominio. crearTipoDeBandeja exige exigeEditarBeneficioEnOrganizacion; registrarBandejas exige puedeConfigurarEn sobre el sitio; tiposDeBandeja y bandejasDeLaFinca son lectura y filtran con equipment:view (directo o heredado via lugaresDeOrganizacion). Escritura, traslado inicial y AuditEvent en la MISMA transaccion."
     }
   ],
   "reciben_transaccion": [
@@ -1066,6 +1070,12 @@
       "archivo": "lib/traceability/instalaciones.ts",
       "operacion": "instalacionDe",
       "razon": "No recibe principal porque no autoriza nada: sube por el arbol desde una posicion o cama hasta su instalacion, solo para saber a donde redirigir. Sus dos llamadores de produccion (guardarInstalacionFormAction y guardarEstanteFormAction en app/actions/instalaciones.ts) la invocan SOLO despues de que actualizarUbicacionDeSecado/ampliarEstante ya autorizaron la escritura sobre esa misma ubicacion.",
+      "verificado": "2026-09-18"
+    },
+    {
+      "archivo": "lib/traceability/locations.ts",
+      "operacion": "lugaresDeOrganizacion",
+      "razon": "No recibe principal ni autoriza nada: es la bajada por el arbol, extraida de exigeEditarBeneficioEnOrganizacion (Tarea 3 del plan de secado, 2026-09-18), que devuelve las Location propias de una organizacion mas sus descendientes con organizationId nulo que la heredan. Sus dos llamadores comprueban can() sobre CADA lugar devuelto antes de decidir: exigeEditarBeneficioEnOrganizacion aqui mismo, y puedeVerEquiposEnOrganizacion en lib/equipos/bandejas.ts.",
       "verificado": "2026-09-18"
     }
   ]

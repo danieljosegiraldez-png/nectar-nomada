@@ -15,6 +15,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 **515 operaciones** que tocan la base, en **145 archivos**:
 **433 operaciones** que tocan la base, en **131 archivos**:
+**439 operaciones** que tocan la base, en **132 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -29,6 +30,9 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | **312** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **38** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **64** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **316** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **39** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **65** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
@@ -93,6 +97,34 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > fila de **guardia directo**, 314→341: cada una pasa por `can(` o por un `require…Access`
 > (`requireCatalogoAccess`, `requireEntradaDeCatalogoAccess`, `requireRutinaAccess`) antes de
 > leer o escribir. 434→461, en 135 archivos.
+> **Tarea 3 del plan 2a de secado (tipos de bandeja y bandejas numeradas por
+> finca, 2026-09-18), con un archivo nuevo.** Partiendo de 433 operaciones en
+> 131 archivos:
+>
+> - `lib/equipos/bandejas.ts` aporta **cuatro**: `crearTipoDeBandeja`,
+>   `tiposDeBandeja` y `bandejasDeLaFinca` son **guardia directo** (+3);
+>   `registrarBandejas` sale **acotado por construcción** (+1) —el detector la
+>   lee así porque decide el número dentro de una transacción con el
+>   `FOR UPDATE` de la organización, no con un `can()` suelto en el cuerpo—.
+> - `lib/equipos/equipos.ts` suma **dos**, las dos **guardia directo** (+2):
+>   `puedeConfigurarEn` (el mismo `puedeConfigurar` de `registrarEquipo`, sobre
+>   un lugar) y `puedeVerEquipo` (Ruling 1 del controlador de esta tarea; el
+>   plan 2b la reutiliza sin duplicarla).
+> - La extracción pura de `lugaresDeOrganizacion` desde
+>   `exigeEditarBeneficioEnOrganizacion` (`lib/traceability/locations.ts`)
+>   **no suma fila**, pero mueve una: el detector ya no ve a
+>   `exigeEditarBeneficioEnOrganizacion` tocando la base directamente —ahora
+>   llama a la función extraída—, así que esa fila deja de contarse como
+>   **guardia directo** (−1) y `lugaresDeOrganizacion` aparece como **depende
+>   del llamador** (+1): sus dos llamadores —aquí mismo, y
+>   `puedeVerEquiposEnOrganizacion` en `lib/equipos/bandejas.ts`— comprueban
+>   `can()` sobre cada lugar que devuelve, antes de decidir.
+>   `lib/traceability/locations.ts` se queda en sus mismas 7 operaciones.
+>
+> Total: guardia directo 312 + 3 + 2 − 1 = **316**; acotado por construcción
+> 38 + 1 = **39**; depende del llamador 64 + 1 = **65**; 433 + 6 = **439**
+> operaciones en 131 + 1 = **132** archivos.
+
 > **Tarea 2 del plan 2a de secado (estantes y sus posiciones, 2026-09-18), con un
 > archivo nuevo.** `lib/traceability/estantes.ts` aporta **dos** operaciones,
 > `crearEstante` y `ampliarEstante`, y las dos llevan **guardia directo**, 310→312:

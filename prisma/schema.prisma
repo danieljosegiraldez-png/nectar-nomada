@@ -181,6 +181,7 @@ model UserAccount {
   createdAccounts                   UserAccount[]                @relation("UserAccountCreatedBy")
   personsCreated                    Person[]                     @relation("PersonCreatedBy")
   roleProfilesCreated               RoleProfile[]                @relation("RoleProfileCreatedBy")
+  dryingTrayTypesCreated             DryingTrayType[]             @relation("DryingTrayTypeCreatedBy")
   scopesCreated                     Scope[]                      @relation("ScopeCreatedBy")
   lotRoastProfilesChosen            LotRoastProfile[]            @relation("LotRoastProfileChosenBy")
   submissionKeys                    SubmissionKey[]
@@ -1036,6 +1037,7 @@ model Organization {
   locations                        Location[]
   // P2 (ADR-098) — recipes belong to the farm that runs them.
   processRecipes                   ProcessRecipe[]
+  dryingTrayTypes                  DryingTrayType[]          @relation("DryingTrayTypeOwner")
   projectsOwned                    Project[]                @relation("ProjectOrganization")
   projectsAsClient                 Project[]                @relation("ProjectClientOrganization")
   samples                          Sample[]
@@ -5301,6 +5303,28 @@ model CareRoutineEvent {
   @@schema("core")
 }
 
+/// Un tipo de bandeja de secado de la organización: «4×2 pies» (spec §4.2). Se
+/// guarda en cm (00_conventions §1) y se conserva la unidad tecleada. El área NO
+/// se guarda: se deriva de ancho × largo, que es lo medido.
+model DryingTrayType {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation("DryingTrayTypeOwner", fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  widthCm        Decimal      @map("width_cm") @db.Decimal(6, 1)
+  lengthCm       Decimal      @map("length_cm") @db.Decimal(6, 1)
+  entryUnit      String       @map("entry_unit")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  createdBy      String?      @map("created_by") @db.Uuid
+  creator        UserAccount? @relation("DryingTrayTypeCreatedBy", fields: [createdBy], references: [id])
+
+  trays Equipment[] @relation("EquipmentTrayType")
+
+  @@unique([organizationId, name], map: "drying_tray_type_nombre_unico")
+  @@map("drying_tray_type")
+  @@schema("core")
+}
+
 model Equipment {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
@@ -5308,6 +5332,12 @@ model Equipment {
   /// «Refractómetro A», «Barrica 12».
   name String
   kind EquipmentKind
+
+  /// Sólo en una bandeja de secado (kind vessel): su tipo y su número consecutivo
+  /// en la finca, que se enseña como B-001. Los dos juntos o ninguno (CHECK).
+  trayTypeId String?         @map("tray_type_id") @db.Uuid
+  trayType   DryingTrayType? @relation("EquipmentTrayType", fields: [trayTypeId], references: [id], onDelete: Restrict)
+  trayNumber Int?            @map("tray_number")
 
   /// Sólo para `kind = vessel`. La migración lo obliga con un CHECK, porque una
   /// restricción que vive en TypeScript no existe para un importador ni para SQL

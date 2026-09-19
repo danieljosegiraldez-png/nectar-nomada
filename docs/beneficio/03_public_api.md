@@ -269,3 +269,5 @@ Son de persistencia, no de motor: los motores de §6 no cambian.
 | `LocationType.drying_rack` | `core` | un estante de una instalación de secado |
 | `Location.shadeDescription` | `core.location.shade_description` | qué da la sombra de arriba, en texto libre |
 | `Location.rackSlot` | `core.location.rack_slot` | el puesto dentro del nivel de un estante |
+| `DryingTrayType` | `core.drying_tray_type` | tipo de bandeja de la organización, en cm, con su unidad tecleada |
+| `Equipment.trayTypeId`, `Equipment.trayNumber` | `core.equipment` | tipo y número consecutivo de una bandeja en su finca; se enseña «B-001» |

@@ -178,21 +178,43 @@ export async function puedeEditarBeneficioEn(userAccountId: string, locationId: 
 }
 
 /**
+ * Las Location de una organización: las propias y sus descendientes que la
+ * HEREDAN (organizationId nulo). Un descendiente con otra organización corta el
+ * camino. Extraída de `exigeEditarBeneficioEnOrganizacion`, que la sigue usando.
+ *
+ * `resolveOrganizationForLocation` trata la organización como heredable
+ * subiendo por `parentLocationId`, así que esta bajada tiene que recorrer el
+ * mismo camino al revés para no dejar fuera a quien esté asignado justo en uno
+ * de esos hijos. Medido el 2026-09-18 en la base de pruebas compartida: 8 de
+ * 135 `Location` (sitios y parcelas) tienen `organizationId` nulo bajo un
+ * padre que sí lo declara.
+ */
+export async function lugaresDeOrganizacion(organizationId: string) {
+  const propias = await prisma.location.findMany({ where: { organizationId }, select: { id: true, classification: true } });
+  const lugares = [...propias];
+  let frontera = propias.map((l) => l.id);
+  while (frontera.length > 0) {
+    const hijos = await prisma.location.findMany({
+      where: { parentLocationId: { in: frontera }, organizationId: null },
+      select: { id: true, classification: true },
+    });
+    if (hijos.length === 0) break;
+    lugares.push(...hijos);
+    frontera = hijos.map((h) => h.id);
+  }
+  return lugares;
+}
+
+/**
  * `location:edit_beneficio` en ALGÚN lugar de una organización — para lo que es
  * de la organización y no de un lugar, como las recetas. Una receta compartida
  * (`organizationId` nulo) sólo se configura con alcance de plataforma.
  *
- * Los candidatos son las Location propias de la organización **más sus
- * descendientes con `organizationId` nulo** — `resolveOrganizationForLocation`
- * trata la organización como heredable subiendo por `parentLocationId`, así
- * que esta guardia tiene que bajar por el mismo camino para no dejar fuera a
- * quien esté asignado justo en uno de esos hijos. Medido el 2026-09-18 en la
- * base de pruebas compartida: 8 de 135 `Location` (sitios y parcelas) tienen
- * `organizationId` nulo bajo un padre que sí lo declara. Sin esto, un capataz
- * asignado en una de ellas —los permisos sólo descienden, nunca suben— no
- * podía pasar esta guardia aunque se le concediera el permiso ahí mismo.
- * Un descendiente que declara SU PROPIA organización (distinta) corta el
- * camino: ni él ni lo que cuelgue de él entra en la lista.
+ * Los candidatos son `lugaresDeOrganizacion`: las Location propias de la
+ * organización más sus descendientes con `organizationId` nulo. Sin esto, un
+ * capataz asignado en uno de esos hijos —los permisos sólo descienden, nunca
+ * suben— no podía pasar esta guardia aunque se le concediera el permiso ahí
+ * mismo.
  */
 export async function exigeEditarBeneficioEnOrganizacion(userAccountId: string, organizationId: string | null) {
   if (organizationId === null) {
@@ -208,18 +230,7 @@ export async function exigeEditarBeneficioEnOrganizacion(userAccountId: string, 
       return;
     throw new LocationAccessError("no_beneficio_edit_access");
   }
-  const propias = await prisma.location.findMany({ where: { organizationId }, select: { id: true, classification: true } });
-  const lugares = [...propias];
-  let frontera = propias.map((l) => l.id);
-  while (frontera.length > 0) {
-    const hijos = await prisma.location.findMany({
-      where: { parentLocationId: { in: frontera }, organizationId: null },
-      select: { id: true, classification: true },
-    });
-    if (hijos.length === 0) break;
-    lugares.push(...hijos);
-    frontera = hijos.map((h) => h.id);
-  }
+  const lugares = await lugaresDeOrganizacion(organizationId);
   for (const l of lugares) {
     if (await can(userAccountId, "edit_beneficio", "location", { scopeType: "location", scopeRefId: l.id }, l.classification)) return;
   }

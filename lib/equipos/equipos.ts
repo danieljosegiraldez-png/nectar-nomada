@@ -946,6 +946,21 @@ export async function puedeGestionarEquipo(userAccountId: string, equipmentId: s
   return puedeConfigurar(userAccountId, objetivo, equipo.classification);
 }
 
+/** El mismo `puedeConfigurar` de `registrarEquipo`, sobre un lugar: registrar bandejas en un sitio lo pide. */
+export async function puedeConfigurarEn(userAccountId: string, locationId: string): Promise<boolean> {
+  const lugar = await prisma.location.findUnique({ where: { id: locationId }, select: { classification: true } });
+  if (!lugar) return false;
+  return puedeConfigurar(userAccountId, { scopeType: "location", scopeRefId: locationId }, lugar.classification);
+}
+
+/** ¿Puede esta persona VER este equipo? Misma resolución de objetivo que el resto del archivo. */
+export async function puedeVerEquipo(
+  userAccountId: string,
+  equipo: { id: string; projectId: string | null; classification: ClassificationLevel },
+): Promise<boolean> {
+  return can(userAccountId, "view", "equipment", await objetivoDeEquipo(equipo), equipo.classification);
+}
+
 /** Instrumentos visibles y modos vigentes; las escalas conservan el label del aparato. */
 export async function instrumentosParaMedicion(userAccountId: string) {
   const equipos = await prisma.equipment.findMany({
