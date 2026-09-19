@@ -38,6 +38,23 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · Jornada de cosecha y entrega al beneficio (PR #431, pieza 1 de 3)
+
+Daniel: «en finca no se registra cosecha… se asigna personas a cosecha, y esta persona… lleva al
+beneficio». Spec y plan `docs/superpowers/{specs,plans}/2026-09-18-jornada-y-entrega-de-cosecha*`.
+- **`/finca/jornadas`:** abrir una jornada (parcelas × recolectores), recolectores de la finca;
+  la jornada anota entregas (origen parcela/bloque/planta, kg de finca, hora, foto), anula con
+  motivo y se cierra. **Ninguna entrega crea lote**: queda `enviada` (piezas 2 y 3: recepción con
+  doble peso, y lotes).
+- **`/mis-entregas`:** el perfil nuevo **Recolector** anota SU entrega y reporta situaciones o la
+  condición del día (sin mm: eso es de instrumentos) con foto. Las ve el Farm Manager y el capataz;
+  a un compañero, sólo con `field_report:view` concedido en `/admin/users/…/permisos`.
+- **Sin ver en navegador.** Specs aprobados sin construir: condiciones fijas del terreno,
+  instrumentos de campo.
+
+**De Daniel:** dar el perfil Recolector (ámbito: la finca) a cada recolector con cuenta. «Mis
+entregas» no va al menú (decisión suya del 2026-09-19): se entra al iniciar sesión y desde Mi Néctar.
+
 ### 2026-09-18 · La cera con el color de su año
 
 ADR-173. Daniel: la cera nueva de un año lleva el color de ese año, el de las reinas. El color se
@@ -108,21 +125,6 @@ de otras ya aplicadas; y las cifras del inventario de acceso se desfasaron dos v
 (CI prueba el PR fusionado con `main`, no la rama). Y `tools/pack-for-review.sh` (#390, #391, #393,
 #396, #401): lee todo de la punta del rango, rutas con espacios y con tildes; en bash 3.2, `set -e`
 mata el script cuando falla una función aunque esté a la izquierda de un `||`.
-
-### 2026-09-18 · Las faenas con nombres de manual, la división y la reina (PR #397)
-
-Spec #407 aprobado por Daniel y fusionado; plan `docs/superpowers/plans/2026-09-18-faenas-division-y-reinas.md`,
-seis tareas. **Ocho faenas** en la colmena —revisar · alimentar · tratar · contar varroa · dividir ·
-reinas · unir · cosechar— con nombres de DICTA y SAGARPA; la enjambrazón es un aviso DENTRO de Revisar.
-**Genealogía:** una división nace con su madre y una unión cierra la débil apuntando a la receptora
-(las viejas sin pareja se quedan así: CHECK NOT VALID). **Reina por intervalos** (`Queen`,
-`QueenTenure`), sin marca: una colonia sin reina registrada es «sin registro», nunca huérfana. Al
-dividir se elige con quién se queda la reina. Las puertas viejas («división» en Nueva colonia, «se
-combinó» en el fin) se cerraron. **Sin ver en navegador.**
-
-**La base compartida:** los dos CHECK NOT VALID de la genealogía tumbaban 3 pruebas de `main` en otras
-sesiones; con permiso de Daniel se quitaron de `nectar_test` y esta rama compuerta en `nectar_ci_faena`.
-Vuelven con la migración al fusionar.
 
 ### 2026-09-18 · Artefactos de colmena y el nodo de sensores (PR #405)
 
