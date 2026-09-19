@@ -4,7 +4,7 @@
 
 **Objetivo:** que un lote en secado pueda repartirse en bandejas —cada una con su posición de nivel y fila, cargada y bajada por separado—, con las reglas en la base y no sólo en TypeScript.
 
-**Arquitectura:** dos migraciones. La primera añade los dos ambientes y la fila (`rackRow`). La segunda crea `DryingRunTray` con sus reglas: índice único parcial, un disparador por regla que mira otra tabla y un `CHECK` para lo de una sola fila. Encima, un servicio nuevo `lib/traceability/bandejas.ts`: cargar, bajar, listar con posición y conflicto. `endDryingRun` gana una guarda. La pantalla del lote enseña las bandejas y los dos formularios. **La posición no es una columna nueva:** es el último `EquipmentTransfer` de la bandeja hacia una `drying_bed` (spec §4.2).
+**Arquitectura:** dos migraciones. La primera añade los dos ambientes y la fila (`rackRow`). La segunda crea `DryingRunTray` con sus reglas: índice único parcial, un disparador por regla que mira otra tabla y un `CHECK` para lo de una sola fila. Encima, un servicio nuevo `lib/traceability/bandejas.ts`: cargar, bajar (la última cierra el secado), listar con posición y conflicto. `endDryingRun` gana una guarda y cede su cuerpo a `cerrarCorridaEnTransaccion`, que reutiliza bajar la última. La pantalla del lote enseña las bandejas y los dos formularios. **La posición no es una columna nueva:** es el último `EquipmentTransfer` de la bandeja hacia una `drying_bed` (spec §4.2).
 
 **Stack:** Next.js 16 App Router con Server Actions · Prisma 7.9 sobre Postgres · next-intl · vitest 4.
 
@@ -19,7 +19,7 @@
   - **Ningún otro nombre nuevo de dominio** sin preguntar.
 - **Decisiones de Daniel que este plan aplica** (spec §2):
   - un lote se reparte en varias bandejas y **cada bandeja lleva un solo lote a la vez**;
-  - el secado **termina bandeja a bandeja**: el lote termina cuando baja la última, y el paso a almacenamiento sigue siendo manual;
+  - el secado **termina bandeja a bandeja**: el lote termina cuando baja la última, y el paso a almacenamiento sigue siendo manual. **Aplicado así:** bajar la última bandeja **cierra el secado en la misma transacción**, con `endedAt = hasta`, pidiendo los datos de cierre que ya pide `endDryingRun`. Con dos pasos habría un secado con todas las bandejas abajo que sigue «secando» (hallazgo 10 de la revisión de Codex del plan);
   - **una bandeja por posición**: dos a la vez en la misma posición se **enseñan como conflicto**, no se bloquean ni se reparte nada;
   - la bandeja se identifica por **número y QR**. **El QR no entra en este plan** (ver «Fuera»).
 - **Nivel y fila, en la base:** `> 0`. La spec dice «no negativos», pero `location_rack_level_positivo` ya exige `> 0` para el nivel, y una fila 0 no existe igual que un nivel 0. Se usa la misma regla para las dos.
@@ -53,8 +53,10 @@
 | `prisma/schema.prisma` | T1 y T2 |
 | `lib/traceability/secadoForm.ts`, `lib/traceability/instalaciones.ts` | T1: `rackRow` en lectura, validación, alta, edición y detalle |
 | `app/instalaciones/FormularioUbicacion.tsx`, `app/instalaciones/page.tsx` | T1: el campo y su lectura |
+| `lib/traceability/bandejaError.ts` | T3: el error y sus códigos, aparte para no importar en círculo |
 | `lib/traceability/bandejas.ts` | T3: servicio nuevo |
-| `lib/traceability/drying.ts` | T3: la guarda de `endDryingRun` |
+| `lib/traceability/drying.ts` | T3: la guarda de `endDryingRun` y `cerrarCorridaEnTransaccion` |
+| `lib/equipos/equipos.ts` | T3: `puedeVerEquipo` exportada |
 | `app/actions/bandejas.ts` | T4: dos acciones de servidor |
 | `app/components/traceability/BandejasDelSecado.tsx` | T4: componente cliente |
 | `app/lots/[id]/page.tsx` | T4: lo monta y oculta el cierre con bandejas abiertas |
@@ -299,8 +301,9 @@ Mensaje: `feat(secado): cama africana, piso con lona y la fila del estante`.
 | la bandeja ya lleva otro lote | `Esta bandeja ya lleva otro lote en ese intervalo` |
 | la corrida ya tiene cama | `Una corrida con cama no lleva bandejas` |
 | la corrida ya tiene bandejas | `Una corrida con bandejas no lleva cama` |
-| la corrida está cerrada | `El secado ya esta cerrado` |
+| una fila abierta en una corrida cerrada (carga tardía, reapertura o mudanza) | `El secado ya esta cerrado` |
 | se cierra con bandejas abiertas | `No se cierra un secado con bandejas sin bajar` |
+| el equipo con bandejas deja de ser recipiente | el mismo texto de «no es un recipiente» |
 
 - [ ] **Paso 1: las sondas que fallan**
 
@@ -412,11 +415,84 @@ describe("el secado termina bandeja a bandeja", () => {
     await expect(cargar(r.id, (await equipo("vessel", "tarde")).id, "2026-09-03T10:00:00Z")).rejects.toThrow(/ya esta cerrado/);
   });
 
-  it("rechaza bajar antes de cargar; acepta bajar después (control positivo)", async () => {
+  it("rechaza bajar antes de cargar —también con historial previo de la bandeja—; acepta bajar después", async () => {
     const r = await corrida();
     await expect(cargar(r.id, (await equipo("vessel", "reves")).id, "2026-09-03T10:00:00Z", "2026-09-02T10:00:00Z"))
       .rejects.toThrow(/drying_run_tray_hasta_despues_de_desde/);
+    // Con historial: el disparador NO debe construir un tsrange al revés antes del CHECK.
+    const conHistoria = await equipo("vessel", "con-historia");
+    await cargar(r.id, conHistoria.id, "2026-09-01T10:00:00Z", "2026-09-01T12:00:00Z");
+    await expect(cargar((await corrida()).id, conHistoria.id, "2026-09-05T10:00:00Z", "2026-09-04T10:00:00Z"))
+      .rejects.toThrow(/drying_run_tray_hasta_despues_de_desde/);
     expect((await cargar(r.id, (await equipo("vessel", "derecho")).id, "2026-09-02T10:00:00Z", "2026-09-03T10:00:00Z")).id).toBeTruthy();
+  });
+
+  it("no se reabre una bandeja de un secado cerrado, ni se mueve una abierta a uno cerrado", async () => {
+    const r = await corrida();
+    const t = await cargar(r.id, (await equipo("vessel", "reabrir")).id, "2026-09-01T10:00:00Z", "2026-09-02T10:00:00Z");
+    await prisma.dryingRun.update({ where: { id: r.id }, data: { endedAt: new Date("2026-09-03T10:00:00Z") } });
+    await expect(prisma.dryingRunTray.update({ where: { id: t.id }, data: { hasta: null } })).rejects.toThrow(/ya esta cerrado/);
+    // Control positivo: corregir el `hasta` de una fila cerrada sigue permitido.
+    expect((await prisma.dryingRunTray.update({ where: { id: t.id }, data: { hasta: new Date("2026-09-02T11:00:00Z") } })).hasta).toBeTruthy();
+
+    const abierta = await cargar((await corrida()).id, (await equipo("vessel", "mudanza")).id, "2026-09-01T10:00:00Z");
+    await expect(prisma.dryingRunTray.update({ where: { id: abierta.id }, data: { dryingRunId: r.id } })).rejects.toThrow(/ya esta cerrado/);
+  });
+});
+
+describe("el equipo que fue bandeja sigue siendo recipiente", () => {
+  it("rechaza cambiar a instrumento un recipiente con bandejas; acepta uno que nunca lo fue", async () => {
+    const b = await equipo("vessel", "cambia-tipo");
+    await cargar((await corrida()).id, b.id, "2026-09-01T10:00:00Z", "2026-09-02T10:00:00Z");
+    await expect(prisma.equipment.update({ where: { id: b.id }, data: { kind: "instrument", format: null } })).rejects.toThrow(/tipo recipiente/);
+    const nunca = await equipo("vessel", "nunca-bandeja");
+    expect((await prisma.equipment.update({ where: { id: nunca.id }, data: { kind: "instrument", format: null } })).kind).toBe("instrument");
+  });
+});
+
+describe("cargar y cerrar a la vez no dejan una corrida incoherente", () => {
+  // Dos transacciones de verdad, en los dos órdenes. La primera retiene su
+  // bloqueo 1,5 s; la segunda arranca a los 300 ms y tiene que esperar y perder.
+  //
+  // OJO: una consulta de Prisma es PEREZOSA —no sale hasta que alguien hace
+  // `await` o `.then`—. Por eso cada operación se arranca con `resultado()`, que
+  // llama a `.then` en el acto. Sin eso, la «segunda» corre después de que la
+  // primera confirme, no hay carrera, y la prueba pasa sin medir nada.
+  const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const resultado = (p: PromiseLike<unknown>) => Promise.resolve(p).then(() => null, (e: unknown) => e as Error);
+  const inicio = () => Date.now();
+
+  it("carga primero: el cierre espera y lo rechaza", async () => {
+    const r = await corrida();
+    const b = await equipo("vessel", "carrera-1");
+    const t0 = inicio();
+    const cargarLento = resultado(prisma.$transaction(async (tx) => {
+      await tx.dryingRunTray.create({ data: { dryingRunId: r.id, equipmentId: b.id, desde: new Date("2026-09-01T10:00:00Z"), provenanceClass: "original_record" } });
+      await espera(1500);
+    }, { timeout: 10_000 }));
+    await espera(300);
+    const cerrar = resultado(prisma.dryingRun.update({ where: { id: r.id }, data: { endedAt: new Date("2026-09-02T10:00:00Z") } }));
+    expect(await cargarLento).toBeNull();
+    const error = await cerrar;
+    // Control de que HUBO carrera: el cierre tardó lo que el bloqueo, no volvió al instante.
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(1400);
+    expect(String(error)).toMatch(/bandejas sin bajar/);
+  });
+
+  it("cierra primero: la carga espera y la rechaza", async () => {
+    const r = await corrida();
+    const b = await equipo("vessel", "carrera-2");
+    const t0 = inicio();
+    const cerrarLento = resultado(prisma.$transaction(async (tx) => {
+      await tx.dryingRun.update({ where: { id: r.id }, data: { endedAt: new Date("2026-09-02T10:00:00Z") } });
+      await espera(1500);
+    }, { timeout: 10_000 }));
+    await espera(300);
+    const cargarTarde = resultado(cargar(r.id, b.id, "2026-09-01T10:00:00Z"));
+    expect(await cerrarLento).toBeNull();
+    const error = await cargarTarde;
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(1400);
+    expect(String(error)).toMatch(/ya esta cerrado/);
   });
 });
 ```
@@ -469,23 +545,40 @@ CREATE UNIQUE INDEX "drying_run_tray_una_abierta_por_bandeja"
   ON "traceability"."drying_run_tray"("equipment_id") WHERE "hasta" IS NULL;
 
 -- Al cargar o corregir una bandeja: es un recipiente, su corrida no tiene
--- cama ni está cerrada, y no se solapa con otro intervalo de la misma bandeja.
--- El FOR UPDATE sobre el equipo serializa dos cargas de la misma bandeja.
+-- cama, una fila ABIERTA no vive en una corrida cerrada, y no se solapa con otro
+-- intervalo de la misma bandeja.
+--
+-- Bloqueos, siempre en este orden: primero la CORRIDA, después el EQUIPO. El de
+-- la corrida serializa esta fila contra `exigir_corrida_coherente_con_bandejas`
+-- (un UPDATE de drying_run ya tiene la fila bloqueada cuando corre su BEFORE):
+-- sin él, cargar y cerrar a la vez podían confirmar las dos (revisión de Codex
+-- del plan, 2026-09-18). El del equipo serializa dos cargas de la misma bandeja
+-- y un cambio de su `kind`. Las funciones son VOLATILE: en READ COMMITTED cada
+-- consulta de dentro toma instantánea nueva, así que tras esperar el bloqueo se
+-- ve lo que el otro confirmó.
 CREATE OR REPLACE FUNCTION "traceability"."exigir_bandeja_valida"()
 RETURNS TRIGGER AS $$
 DECLARE tipo TEXT; cama UUID; cerrada TIMESTAMP(3);
 BEGIN
+  SELECT "drying_bed_location_id", "ended_at" INTO cama, cerrada
+    FROM "traceability"."drying_run" WHERE "id" = NEW."drying_run_id" FOR UPDATE;
   SELECT "kind"::TEXT INTO tipo FROM "core"."equipment" WHERE "id" = NEW."equipment_id" FOR UPDATE;
   IF tipo IS DISTINCT FROM 'vessel' THEN
     RAISE EXCEPTION 'Una bandeja de secado debe ser un equipo de tipo recipiente (es %)', tipo;
   END IF;
-  SELECT "drying_bed_location_id", "ended_at" INTO cama, cerrada
-    FROM "traceability"."drying_run" WHERE "id" = NEW."drying_run_id";
   IF cama IS NOT NULL THEN
     RAISE EXCEPTION 'Una corrida con cama no lleva bandejas';
   END IF;
-  IF TG_OP = 'INSERT' AND cerrada IS NOT NULL THEN
+  -- INSERT o UPDATE: una fila abierta no existe en un secado cerrado. Cubre
+  -- cargar tarde, reabrir con `hasta = NULL` y mover una fila abierta a otra corrida.
+  IF cerrada IS NOT NULL AND NEW."hasta" IS NULL THEN
     RAISE EXCEPTION 'El secado ya esta cerrado';
+  END IF;
+  -- Un intervalo al revés lo rechaza el CHECK, que corre DESPUÉS de este
+  -- disparador. Si se construyera aquí su tsrange, el error sería el de límites
+  -- del rango y no el del CHECK: se sale y se deja que el CHECK hable.
+  IF NEW."hasta" IS NOT NULL AND NEW."hasta" < NEW."desde" THEN
+    RETURN NEW;
   END IF;
   IF EXISTS (
     SELECT 1 FROM "traceability"."drying_run_tray" o
@@ -525,6 +618,25 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER "drying_run_coherente_con_bandejas"
   BEFORE UPDATE OF "drying_bed_location_id", "ended_at" ON "traceability"."drying_run"
   FOR EACH ROW EXECUTE FUNCTION "traceability"."exigir_corrida_coherente_con_bandejas"();
+
+-- Del lado del equipo: un recipiente que lleva o llevó una bandeja no cambia de
+-- `kind`. Sin esto, `UPDATE equipment SET kind = 'instrument', format = NULL`
+-- dejaba una bandeja atada a un instrumento sin disparar nada (revisión de Codex).
+CREATE OR REPLACE FUNCTION "core"."exigir_bandeja_sigue_siendo_recipiente"()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW."kind" IS DISTINCT FROM 'vessel' AND EXISTS (
+    SELECT 1 FROM "traceability"."drying_run_tray" WHERE "equipment_id" = NEW."id"
+  ) THEN
+    RAISE EXCEPTION 'Una bandeja de secado debe ser un equipo de tipo recipiente (es %)', NEW."kind";
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "equipment_bandeja_sigue_siendo_recipiente"
+  BEFORE UPDATE OF "kind" ON "core"."equipment"
+  FOR EACH ROW EXECUTE FUNCTION "core"."exigir_bandeja_sigue_siendo_recipiente"();
 ```
 
 - [ ] **Paso 4: el esquema**
@@ -570,7 +682,9 @@ Relaciones inversas:
 
 - [ ] **Paso 5: comprobar que pasan**
 
-`npx vitest run tests/traceability/bandejasEnLaBase.test.ts` → 7/7. Después `npm run build` → 0.
+`npx vitest run tests/traceability/bandejasEnLaBase.test.ts` → 11/11. Después `npm run build` → 0.
+
+**Las dos pruebas de carrera tienen que fallar por la razón correcta si se quita el bloqueo.** Es el flip 1b de la Tarea 5. Si en la base compartida salen intermitentes por carga, se sube la espera a 3 s. **No** se marcan como `skip`.
 
 - [ ] **Paso 6: commit**
 
@@ -587,11 +701,13 @@ Mensaje: `feat(secado): DryingRunTray — el lote en sus bandejas, con sus regla
 
 ---
 
-### Tarea 3: el servicio de bandejas y la guarda del cierre
+### Tarea 3: el servicio de bandejas, el cierre con la última y la guarda del cierre
 
 **Archivos:**
+- Crear: `lib/traceability/bandejaError.ts` (el error, aparte, para que `drying.ts` y `bandejas.ts` no se importen en círculo)
 - Crear: `lib/traceability/bandejas.ts`
-- Modificar: `lib/traceability/drying.ts` (`endDryingRun`)
+- Modificar: `lib/traceability/drying.ts` (`endDryingRun` y una función nueva `cerrarCorridaEnTransaccion`)
+- Modificar: `lib/equipos/equipos.ts` (una función exportada nueva, `puedeVerEquipo`)
 - Crear: `tests/traceability/bandejas.test.ts`
 - Modificar: `scripts/pruebas-por-compuerta.txt` (grupo `base-sembrada`)
 
@@ -600,30 +716,45 @@ Mensaje: `feat(secado): DryingRunTray — el lote en sus bandejas, con sus regla
 - Produce:
 
 ```ts
-export class BandejaError extends Error {} // mensajes: los códigos de abajo
+// lib/traceability/bandejaError.ts
 export type CodigoBandeja =
-  | "corrida_no_encontrada" | "secado_cerrado" | "no_es_bandeja"
-  | "bandeja_de_otra_organizacion" | "bandeja_retirada" | "bandeja_ocupada"
-  | "fecha_antes_del_secado" | "fecha_antes_de_cargar" | "ya_bajada"
-  | "bandejas_sin_bajar";
-export interface Posicion { camaId: string; cama: string; instalacion: string | null; nivel: number | null; fila: number | null }
+  | "corrida_no_encontrada" | "bandeja_no_encontrada" | "secado_cerrado" | "corrida_con_cama"
+  | "no_es_bandeja" | "bandeja_de_otra_organizacion" | "bandeja_sin_acceso" | "bandeja_retirada"
+  | "bandeja_ocupada" | "fecha_antes_del_secado" | "fecha_antes_de_cargar" | "ya_bajada"
+  | "la_ultima_cierra_el_secado" | "quedan_otras_bandejas" | "bandejas_sin_bajar";
+export class BandejaError extends Error { readonly codigo: CodigoBandeja }
+
+// lib/traceability/drying.ts
+export type CierreDelSecado = Omit<EndDryingRunInput, "dryingRunId" | "endedAt">;
+export async function cerrarCorridaEnTransaccion(tx, userAccountId: string, dryingRunId: string, sourceLot: Lot, input: EndDryingRunInput)
+  : Promise<{ run; transformation; outputLot; reconciliation }>;
+
+// lib/equipos/equipos.ts
+export async function puedeVerEquipo(userAccountId: string, equipo: { id: string; projectId: string | null; classification: ClassificationLevel }): Promise<boolean>;
+
+// lib/traceability/bandejas.ts
+export interface Posicion { camaId: string; ajena: boolean; cama: string | null; instalacion: string | null; nivel: number | null; fila: number | null }
 export interface BandejaEnCorrida {
   id: string; equipmentId: string; nombre: string; desde: Date; hasta: Date | null;
   posicion: Posicion | null;   // null = nunca se trasladó a una cama
-  conflicto: string[];         // nombres de OTRAS bandejas cargadas en la misma posición ahora
+  conflicto: string[];         // OTRAS bandejas de la organización cuyo último traslado es esta misma cama
 }
 export async function cargarBandeja(userAccountId: string, input: { dryingRunId: string; equipmentId: string; desde: Date }): Promise<{ id: string }>;
-export async function bajarBandeja(userAccountId: string, input: { dryingRunTrayId: string; hasta: Date }): Promise<{ id: string }>;
+export async function bajarBandeja(userAccountId: string, input: { dryingRunTrayId: string; hasta: Date; cierre?: CierreDelSecado | null }): Promise<{ id: string; cerro: boolean }>;
 export async function bandejasDeCorrida(userAccountId: string, dryingRunId: string): Promise<BandejaEnCorrida[]>;
 export async function bandejasDisponibles(userAccountId: string, dryingRunId: string): Promise<{ id: string; nombre: string }[]>;
-export async function posicionDeBandeja(equipmentId: string, en: Date): Promise<Posicion | null>;
+export async function posicionDeBandeja(equipmentId: string, en: Date, organizationId: string): Promise<Posicion | null>;
 ```
 
-- Y en `drying.ts`: `endDryingRun` lanza `BandejaError("bandejas_sin_bajar")` **antes** de la transacción si alguna bandeja sigue abierta. El disparador de T2 cierra la carrera.
+**Tres decisiones de esta tarea**, con su porqué, para que el revisor pueda rechazarlas:
+
+1. **Bajar la última bandeja cierra el secado, en la misma transacción.** Daniel decidió que «el lote termina cuando baja la última» (spec §2). Si fueran dos pasos, entre uno y otro habría un secado con todas las bandejas abajo que sigue «secando», admite cargas nuevas y dice algo falso en el tablero. Por eso, bajar la última **pide los datos de cierre** que ya pide `endDryingRun` (código y tipo del lote de salida, cantidad y desenlace) y ejecuta el mismo cierre con `endedAt = hasta`. Sin esos datos se rechaza con `la_ultima_cierra_el_secado`. El paso a almacenamiento sigue siendo aparte y manual.
+2. **Ver la bandeja es un permiso de equipos, no del lote.** Gestionar el lote no da derecho sobre cualquier equipo de la organización. Cargar exige, además, `can(view, equipment)` sobre esa bandeja: el mismo que usan `disponibilidadDeRecipientes` e `instrumentosParaMedicion`. Una cama de **otra organización** no devuelve su nombre, sólo `ajena: true`.
+3. **El conflicto es de ocupación física, no de carga.** Se compara el último traslado de cada recipiente de la organización, esté cargado o no (spec §4.2). Una bandeja ya bajada que sigue registrada en la posición **es** un conflicto: el registro dice que está ahí.
 
 - [ ] **Paso 1: las pruebas que fallan**
 
-`tests/traceability/bandejas.test.ts`. El fixture es el de `tests/traceability/drying.test.ts`: organización de prueba, proyecto, Farm Operator del proyecto y otro de un proyecto ajeno.
+`tests/traceability/bandejas.test.ts`. **El operador tiene su permiso por UBICACIÓN, en un sitio de prueba propio, y no por proyecto.** Una bandeja trasladada a una cama se autoriza por esa ubicación (`objetivoDeEquipo`), así que un operador asignado a un proyecto dejaría de verla en cuanto se moviera.
 
 ```ts
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -635,45 +766,55 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN_ID = `bdj-${Date.now()}`;
-let organizationId: string; let otraOrgId: string;
-let projectId: string; let ajenoProjectId: string;
+let org: string; let otraOrg: string;
+let sitio: string; let otroSitio: string; let sitioDeOtraOrg: string;
 let operador: string; let ajeno: string;
-const equipos: string[] = []; const ubicaciones: string[] = [];
+const equipos: string[] = []; const ubicaciones: string[] = []; // hijos antes que padres
+const cierre = (codigo: string) => ({ outputLotCode: `${RUN_ID}-${codigo}-verde`, outputLotType: "green" as const, provenanceClass: "original_record" as const });
 
-async function cuenta(label: string, project: string) {
+async function ubicacion(data: { name: string; locationType: "site" | "drying_facility" | "drying_bed"; organizationId: string; parentLocationId?: string; rackLevel?: number; rackRow?: number }) {
+  const l = await prisma.location.create({ data: { ...data, name: `${data.name} (${RUN_ID})` } });
+  ubicaciones.unshift(l.id); return l;
+}
+async function cuenta(label: string, siteId: string) {
   const person = await prisma.person.create({ data: { givenName: "TEST", familyName: label, displayName: `TEST ${label} (${RUN_ID})`, locale: "es" } });
   const ua = await prisma.userAccount.create({ data: { personId: person.id, authProvider: "credentials", status: "active" } });
   const perfil = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
-  const scope = await prisma.scope.create({ data: { scopeType: "project", scopeRefId: project } });
+  const scope = await prisma.scope.create({ data: { scopeType: "location", scopeRefId: siteId } });
   await prisma.assignment.create({ data: { userAccountId: ua.id, roleProfileId: perfil.id, scopeId: scope.id } });
   return ua.id;
-}
-async function bandeja(n: string, org = organizationId, kind: "vessel" | "instrument" = "vessel") {
-  const e = await prisma.equipment.create({ data: { name: `TEST Bandeja ${n} (${RUN_ID})`, kind, format: kind === "vessel" ? "other" : null, organizationId: org, provenanceClass: "original_record" } });
-  equipos.push(e.id); return e;
-}
-async function secado(codigo: string) {
-  const lot = await createLot(operador, { lotCode: `${RUN_ID}-${codigo}`, lotType: "drying", organizationId, projectId });
-  const { run } = await startDryingRun(operador, { lotId: lot.id, startedAt: new Date("2026-09-01T10:00:00Z"), provenanceClass: "original_record" });
-  return run;
-}
-async function posicion(nivel: number, fila: number) {
-  const sitio = await prisma.location.findFirstOrThrow({ where: { locationType: "site" } });
-  const inv = await prisma.location.create({ data: { name: `TEST Cuarto (${RUN_ID})`, locationType: "drying_facility", parentLocationId: sitio.id } });
-  const cama = await prisma.location.create({ data: { name: `TEST N${nivel}F${fila} (${RUN_ID})`, locationType: "drying_bed", parentLocationId: inv.id, rackLevel: nivel, rackRow: fila } });
-  ubicaciones.push(cama.id, inv.id); return cama;
 }
 async function trasladar(equipmentId: string, toLocationId: string, occurredAt: string) {
   await prisma.equipmentTransfer.create({ data: { equipmentId, toLocationId, occurredAt: new Date(occurredAt) } });
 }
+/** Un recipiente registrado en un sitio: su primer traslado es su alta, como hace `registrarEquipo`. */
+async function bandeja(n: string, o: { organizationId?: string; kind?: "vessel" | "instrument"; alta?: string } = {}) {
+  const e = await prisma.equipment.create({ data: {
+    name: `TEST Bandeja ${n} (${RUN_ID})`, kind: o.kind ?? "vessel", format: (o.kind ?? "vessel") === "vessel" ? "other" : null,
+    organizationId: o.organizationId ?? org, provenanceClass: "original_record",
+  } });
+  equipos.push(e.id);
+  await trasladar(e.id, o.alta ?? sitio, "2026-08-01T00:00:00Z");
+  return e;
+}
+async function posicion(nivel: number, fila: number, organizationId = org, padre = sitio) {
+  const inv = await ubicacion({ name: `TEST Cuarto N${nivel}F${fila}`, locationType: "drying_facility", organizationId, parentLocationId: padre });
+  return ubicacion({ name: `TEST N${nivel}F${fila}`, locationType: "drying_bed", organizationId, parentLocationId: inv.id, rackLevel: nivel, rackRow: fila });
+}
+async function secado(codigo: string) {
+  const lot = await createLot(operador, { lotCode: `${RUN_ID}-${codigo}`, lotType: "drying", organizationId: org, locationId: sitio });
+  const { run } = await startDryingRun(operador, { lotId: lot.id, startedAt: new Date("2026-09-01T10:00:00Z"), provenanceClass: "original_record" });
+  return run;
+}
 
 beforeAll(async () => {
-  organizationId = await createTestOrganization(RUN_ID);
-  otraOrgId = await createTestOrganization(`${RUN_ID}-otra`);
-  projectId = (await prisma.project.create({ data: { name: `TEST P (${RUN_ID})`, status: "approved", classification: "internal" } })).id;
-  ajenoProjectId = (await prisma.project.create({ data: { name: `TEST Q (${RUN_ID})`, status: "approved", classification: "internal" } })).id;
-  operador = await cuenta("Operador", projectId);
-  ajeno = await cuenta("Ajeno", ajenoProjectId);
+  org = await createTestOrganization(RUN_ID);
+  otraOrg = await createTestOrganization(`${RUN_ID}-otra`);
+  sitio = (await ubicacion({ name: "TEST Sitio", locationType: "site", organizationId: org })).id;
+  otroSitio = (await ubicacion({ name: "TEST Otro sitio", locationType: "site", organizationId: org })).id;
+  sitioDeOtraOrg = (await ubicacion({ name: "TEST Sitio ajeno", locationType: "site", organizationId: otraOrg })).id;
+  operador = await cuenta("Operador", sitio);
+  ajeno = await cuenta("Ajeno", otroSitio);
 });
 
 afterAll(async () => {
@@ -681,70 +822,118 @@ afterAll(async () => {
   const lotIds = lots.map((l) => l.id);
   const runs = await prisma.dryingRun.findMany({ where: { transformations: { some: { inputs: { some: { lotId: { in: lotIds } } } } } } });
   const runIds = runs.map((r) => r.id);
-  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: { in: ["drying_run", "drying_run_tray"] }, entityId: { in: [...runIds, ...(await prisma.dryingRunTray.findMany({ where: { dryingRunId: { in: runIds } } })).map((t) => t.id)] } }) });
-  await prisma.dryingRunTray.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: runIds } }) });
+  const trayIds = (await prisma.dryingRunTray.findMany({ where: { dryingRunId: { in: runIds } } })).map((t) => t.id);
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: [...runIds, ...trayIds] } }) });
+  await prisma.dryingRunTray.deleteMany({ where: assertDefinedWhere({ id: { in: trayIds } }) });
   await prisma.equipmentTransfer.deleteMany({ where: assertDefinedWhere({ equipmentId: { in: equipos } }) });
-  // El lote de salida de `endDryingRun` se llama `${RUN_ID}-ciclo-verde`: ya
-  // está en `lotIds`. Mismo orden de borrado que tests/traceability/drying.test.ts.
+  // El lote de salida del cierre se llama `${RUN_ID}-…-verde`: ya está en `lotIds`.
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: runIds } }) });
   await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
   await prisma.equipment.deleteMany({ where: assertDefinedWhere({ id: { in: equipos } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: ubicaciones } }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: [operador, ajeno] } }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: [projectId, ajenoProjectId] } }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: [sitio, otroSitio] } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [operador, ajeno] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
-  await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectId, ajenoProjectId] } }) });
+  for (const id of ubicaciones) await prisma.location.delete({ where: { id } }); // hijos antes que padres
   await deleteTestOrganizations(RUN_ID);
 });
 
-describe("cargar y bajar", () => {
-  it("carga dos bandejas, baja una, y el cierre espera a la última", async () => {
+const T = (s: string) => new Date(s);
+
+describe("el secado termina bandeja a bandeja", () => {
+  it("bajar la última cierra el secado con su hora; sin datos de cierre no se baja; con otras cargadas no se cierra", async () => {
     const run = await secado("ciclo");
     const [a, b] = [await bandeja("A"), await bandeja("B")];
-    const ta = await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: a.id, desde: new Date("2026-09-01T11:00:00Z") });
-    const tb = await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: b.id, desde: new Date("2026-09-01T11:00:00Z") });
-    await bajarBandeja(operador, { dryingRunTrayId: ta.id, hasta: new Date("2026-09-04T11:00:00Z") });
-    const cerrar = () => endDryingRun(operador, { dryingRunId: run.id, endedAt: new Date("2026-09-06T11:00:00Z"), outputLotCode: `${RUN_ID}-ciclo-verde`, outputLotType: "green", provenanceClass: "original_record" });
-    await expect(cerrar()).rejects.toThrow("bandejas_sin_bajar");
-    await bajarBandeja(operador, { dryingRunTrayId: tb.id, hasta: new Date("2026-09-05T11:00:00Z") });
-    expect((await cerrar()).run.endedAt).toEqual(new Date("2026-09-06T11:00:00Z")); // control positivo
+    const ta = await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: a.id, desde: T("2026-09-01T11:00:00Z") });
+    const tb = await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: b.id, desde: T("2026-09-01T11:00:00Z") });
+
+    await expect(bajarBandeja(operador, { dryingRunTrayId: ta.id, hasta: T("2026-09-04T11:00:00Z"), cierre: cierre("ciclo") })).rejects.toThrow("quedan_otras_bandejas");
+    expect((await prisma.dryingRunTray.findUniqueOrThrow({ where: { id: ta.id } })).hasta).toBeNull(); // la transacción se deshizo
+    expect(await bajarBandeja(operador, { dryingRunTrayId: ta.id, hasta: T("2026-09-04T11:00:00Z") })).toEqual({ id: ta.id, cerro: false });
+
+    await expect(bajarBandeja(operador, { dryingRunTrayId: tb.id, hasta: T("2026-09-05T11:00:00Z") })).rejects.toThrow("la_ultima_cierra_el_secado");
+    expect((await prisma.dryingRunTray.findUniqueOrThrow({ where: { id: tb.id } })).hasta).toBeNull();
+
+    expect(await bajarBandeja(operador, { dryingRunTrayId: tb.id, hasta: T("2026-09-05T11:00:00Z"), cierre: cierre("ciclo") })).toEqual({ id: tb.id, cerro: true });
+    const cerrada = await prisma.dryingRun.findUniqueOrThrow({ where: { id: run.id } });
+    expect(cerrada.endedAt).toEqual(T("2026-09-05T11:00:00Z"));
+    expect(await prisma.lot.findFirst({ where: { lotCode: `${RUN_ID}-ciclo-verde`, lotType: "green" } })).not.toBeNull();
   });
 
-  it("rechaza lo que no es una bandeja válida, cada caso al lado de uno que sí entra", async () => {
+  it("endDryingRun directo: con bandejas abiertas lo rechaza, pero sólo DESPUÉS del permiso", async () => {
+    const run = await secado("directo");
+    await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: (await bandeja("directo")).id, desde: T("2026-09-01T11:00:00Z") });
+    const cerrar = (quien: string) => endDryingRun(quien, { dryingRunId: run.id, endedAt: T("2026-09-06T11:00:00Z"), ...cierre("directo") });
+    await expect(cerrar(ajeno)).rejects.toBeInstanceOf(TraceabilityAccessError); // no revela que hay bandejas
+    await expect(cerrar(operador)).rejects.toThrow("bandejas_sin_bajar");
+    // Control: un secado sin bandejas cierra por endDryingRun como siempre.
+    const sin = await secado("sin-bandejas");
+    expect((await endDryingRun(operador, { dryingRunId: sin.id, endedAt: T("2026-09-06T11:00:00Z"), ...cierre("sin-bandejas") })).run.endedAt).toBeTruthy();
+  });
+});
+
+describe("qué se puede cargar", () => {
+  it("rechaza cada caso inválido, al lado de uno que sí entra", async () => {
     const run = await secado("rechazos");
-    const desde = new Date("2026-09-01T11:00:00Z");
-    await expect(cargarBandeja(operador, { dryingRunId: run.id, equipmentId: (await bandeja("instr", organizationId, "instrument")).id, desde })).rejects.toThrow("no_es_bandeja");
-    await expect(cargarBandeja(operador, { dryingRunId: run.id, equipmentId: (await bandeja("otra-org", otraOrgId)).id, desde })).rejects.toThrow("bandeja_de_otra_organizacion");
+    const desde = T("2026-09-01T11:00:00Z");
+    const intentar = (equipmentId: string, d = desde, dryingRunId = run.id) => cargarBandeja(operador, { dryingRunId, equipmentId, desde: d });
+    await expect(intentar((await bandeja("instr", { kind: "instrument" })).id)).rejects.toThrow("no_es_bandeja");
+    await expect(intentar((await bandeja("otra-org", { organizationId: otraOrg, alta: sitioDeOtraOrg })).id)).rejects.toThrow("bandeja_de_otra_organizacion");
+    await expect(intentar((await bandeja("sin-ver", { alta: otroSitio })).id)).rejects.toThrow("bandeja_sin_acceso");
     const retirada = await bandeja("retirada");
     await prisma.equipment.update({ where: { id: retirada.id }, data: { lifecycleStatus: "retired" } });
-    await expect(cargarBandeja(operador, { dryingRunId: run.id, equipmentId: retirada.id, desde })).rejects.toThrow("bandeja_retirada");
-    await expect(cargarBandeja(operador, { dryingRunId: run.id, equipmentId: (await bandeja("antes")).id, desde: new Date("2026-08-31T00:00:00Z") })).rejects.toThrow("fecha_antes_del_secado");
+    await expect(intentar(retirada.id)).rejects.toThrow("bandeja_retirada");
+    await expect(intentar((await bandeja("antes")).id, T("2026-08-31T00:00:00Z"))).rejects.toThrow("fecha_antes_del_secado");
+
     const ok = await bandeja("ok");
-    const t = await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: ok.id, desde });
-    await expect(cargarBandeja(operador, { dryingRunId: (await secado("otro")).id, equipmentId: ok.id, desde })).rejects.toThrow("bandeja_ocupada");
-    await expect(bajarBandeja(operador, { dryingRunTrayId: t.id, hasta: new Date("2026-09-01T10:00:00Z") })).rejects.toThrow("fecha_antes_de_cargar");
-    await bajarBandeja(operador, { dryingRunTrayId: t.id, hasta: new Date("2026-09-02T10:00:00Z") });
-    await expect(bajarBandeja(operador, { dryingRunTrayId: t.id, hasta: new Date("2026-09-03T10:00:00Z") })).rejects.toThrow("ya_bajada");
+    const t = await intentar(ok.id); // control positivo
+    await expect(intentar(ok.id, desde, (await secado("otro")).id)).rejects.toThrow("bandeja_ocupada");
+    await expect(bajarBandeja(operador, { dryingRunTrayId: t.id, hasta: T("2026-09-01T10:00:00Z") })).rejects.toThrow("fecha_antes_de_cargar");
+    await bajarBandeja(operador, { dryingRunTrayId: t.id, hasta: T("2026-09-02T10:00:00Z"), cierre: cierre("rechazos") });
+    await expect(bajarBandeja(operador, { dryingRunTrayId: t.id, hasta: T("2026-09-03T10:00:00Z") })).rejects.toThrow(/ya_bajada|secado_cerrado/);
   });
 
-  it("quien no gestiona el lote no carga ni lista; quien sí, sí", async () => {
+  it("una corrida con cama no lleva bandejas: el servicio lo dice con su código", async () => {
+    const run = await secado("con-cama");
+    await prisma.dryingRun.update({ where: { id: run.id }, data: { dryingBedLocationId: (await posicion(9, 9)).id } });
+    await expect(cargarBandeja(operador, { dryingRunId: run.id, equipmentId: (await bandeja("en-cama")).id, desde: T("2026-09-01T11:00:00Z") }))
+      .rejects.toThrow("corrida_con_cama");
+  });
+
+  it("un rechazo de la BASE llega como código, no como error de SQL", async () => {
+    // La lectura previa del servicio sólo mira filas ABIERTAS; un intervalo cerrado
+    // que se solapa lo caza el disparador. Tiene que llegar como `bandeja_ocupada`.
+    const b = await bandeja("solape");
+    const r1 = await secado("solape-1");
+    const t1 = await cargarBandeja(operador, { dryingRunId: r1.id, equipmentId: b.id, desde: T("2026-09-01T11:00:00Z") });
+    await bajarBandeja(operador, { dryingRunTrayId: t1.id, hasta: T("2026-09-05T11:00:00Z"), cierre: cierre("solape-1") });
+    await expect(cargarBandeja(operador, { dryingRunId: (await secado("solape-2")).id, equipmentId: b.id, desde: T("2026-09-03T11:00:00Z") }))
+      .rejects.toThrow("bandeja_ocupada");
+  });
+});
+
+describe("permisos y auditoría", () => {
+  it("quien no ve el lote no carga ni lista; quien sí, sí", async () => {
     const run = await secado("permiso");
     const b = await bandeja("permiso");
-    await expect(cargarBandeja(ajeno, { dryingRunId: run.id, equipmentId: b.id, desde: new Date("2026-09-01T11:00:00Z") })).rejects.toBeInstanceOf(TraceabilityAccessError);
+    await expect(cargarBandeja(ajeno, { dryingRunId: run.id, equipmentId: b.id, desde: T("2026-09-01T11:00:00Z") })).rejects.toBeInstanceOf(TraceabilityAccessError);
     await expect(bandejasDeCorrida(ajeno, run.id)).rejects.toBeInstanceOf(TraceabilityAccessError);
-    await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: b.id, desde: new Date("2026-09-01T11:00:00Z") });
+    await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: b.id, desde: T("2026-09-01T11:00:00Z") });
     expect(await bandejasDeCorrida(operador, run.id)).toHaveLength(1);
   });
 
   it("escribe su AuditEvent al cargar y al bajar", async () => {
     const run = await secado("audit");
-    const t = await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: (await bandeja("audit")).id, desde: new Date("2026-09-01T11:00:00Z") });
-    await bajarBandeja(operador, { dryingRunTrayId: t.id, hasta: new Date("2026-09-02T11:00:00Z") });
+    const [t, otra] = [
+      await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: (await bandeja("audit")).id, desde: T("2026-09-01T11:00:00Z") }),
+      await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: (await bandeja("audit-2")).id, desde: T("2026-09-01T11:00:00Z") }),
+    ];
+    await bajarBandeja(operador, { dryingRunTrayId: t.id, hasta: T("2026-09-02T11:00:00Z") });
     const ops = (await prisma.auditEvent.findMany({ where: { entityType: "drying_run_tray", entityId: t.id } })).map((e) => e.operation).sort();
     expect(ops).toEqual(["drying_run_tray.bajar", "drying_run_tray.cargar"]);
+    expect(otra.id).toBeTruthy();
   });
 });
 
@@ -754,33 +943,55 @@ describe("dónde está cada bandeja", () => {
     const b = await bandeja("movida");
     await trasladar(b.id, p1.id, "2026-09-01T12:00:00Z");
     await trasladar(b.id, p2.id, "2026-09-03T12:00:00Z");
-    expect(await posicionDeBandeja(b.id, new Date("2026-09-01T11:00:00Z"))).toBeNull(); // antes del primer traslado
-    expect(await posicionDeBandeja(b.id, new Date("2026-09-02T00:00:00Z"))).toMatchObject({ camaId: p1.id, nivel: 1, fila: 1 });
-    expect(await posicionDeBandeja(b.id, new Date("2026-09-04T00:00:00Z"))).toMatchObject({ camaId: p2.id, nivel: 3, fila: 2 });
+    expect(await posicionDeBandeja(b.id, T("2026-08-15T00:00:00Z"), org)).toBeNull(); // en el sitio, no en una cama
+    expect(await posicionDeBandeja(b.id, T("2026-09-02T00:00:00Z"), org)).toMatchObject({ camaId: p1.id, ajena: false, nivel: 1, fila: 1 });
+    expect(await posicionDeBandeja(b.id, T("2026-09-04T00:00:00Z"), org)).toMatchObject({ camaId: p2.id, ajena: false, nivel: 3, fila: 2 });
   });
 
-  it("dos bandejas cargadas en la misma posición se enseñan como conflicto; una sola, no", async () => {
+  it("una cama de otra organización no dice su nombre", async () => {
+    const ajenaCama = await posicion(4, 4, otraOrg, sitioDeOtraOrg);
+    const b = await bandeja("en-cama-ajena");
+    await trasladar(b.id, ajenaCama.id, "2026-09-01T12:00:00Z");
+    expect(await posicionDeBandeja(b.id, T("2026-09-02T00:00:00Z"), org))
+      .toEqual({ camaId: ajenaCama.id, ajena: true, cama: null, instalacion: null, nivel: null, fila: null });
+  });
+
+  it("conflicto = otro recipiente de la organización registrado en la misma cama, cargado o no", async () => {
     const run = await secado("conflicto");
-    const p = await posicion(2, 2);
+    const [p, sola] = [await posicion(2, 2), await posicion(2, 3)];
     const [a, b, c] = [await bandeja("C1"), await bandeja("C2"), await bandeja("C3")];
-    for (const e of [a, b, c]) await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: e.id, desde: new Date("2026-09-01T11:00:00Z") });
+    for (const e of [a, b, c]) await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: e.id, desde: T("2026-09-01T11:00:00Z") });
     await trasladar(a.id, p.id, "2026-09-01T12:00:00Z");
     await trasladar(b.id, p.id, "2026-09-01T12:30:00Z");
+    await trasladar(c.id, sola.id, "2026-09-01T12:00:00Z");
+    const vacia = await bandeja("vacia-en-p");              // de la organización, SIN cargar, registrada en p
+    await trasladar(vacia.id, p.id, "2026-09-01T13:00:00Z");
+    const deOtra = await bandeja("de-otra-en-p", { organizationId: otraOrg, alta: sitioDeOtraOrg });
+    await trasladar(deOtra.id, p.id, "2026-09-01T13:00:00Z"); // otra organización: no cuenta ni se nombra
+
     const filas = await bandejasDeCorrida(operador, run.id);
     const por = (id: string) => filas.find((f) => f.equipmentId === id)!;
-    expect(por(a.id).conflicto).toEqual([b.name]);
-    expect(por(b.id).conflicto).toEqual([a.name]);
-    expect(por(c.id)).toMatchObject({ posicion: null, conflicto: [] }); // control: sin posición, sin conflicto
+    expect(por(a.id).conflicto.sort()).toEqual([b.name, vacia.name].sort());
+    expect(por(b.id).conflicto.sort()).toEqual([a.name, vacia.name].sort());
+    expect(por(c.id)).toMatchObject({ conflicto: [] });      // sola en su posición real: sin conflicto
+    expect(por(c.id).posicion).toMatchObject({ camaId: sola.id, nivel: 2, fila: 3 });
+    expect(filas.flatMap((f) => f.conflicto)).not.toContain(deOtra.name);
   });
 
-  it("disponibles: recipientes activos de la organización del lote que no llevan otro lote", async () => {
+  it("disponibles: recipientes activos, de la organización, visibles y libres", async () => {
     const run = await secado("disponibles");
     const libre = await bandeja("libre");
     const ocupada = await bandeja("ocupada");
-    await cargarBandeja(operador, { dryingRunId: (await secado("ocupa")).id, equipmentId: ocupada.id, desde: new Date("2026-09-01T11:00:00Z") });
+    await cargarBandeja(operador, { dryingRunId: (await secado("ocupa")).id, equipmentId: ocupada.id, desde: T("2026-09-01T11:00:00Z") });
+    const instr = await bandeja("instr-disp", { kind: "instrument" });
+    const retirada = await bandeja("retirada-disp");
+    await prisma.equipment.update({ where: { id: retirada.id }, data: { lifecycleStatus: "retired" } });
+    const deOtra = await bandeja("otra-disp", { organizationId: otraOrg, alta: sitioDeOtraOrg });
+    const sinVer = await bandeja("sin-ver-disp", { alta: otroSitio });
+
     const ids = (await bandejasDisponibles(operador, run.id)).map((d) => d.id);
-    expect(ids).toContain(libre.id);
-    expect(ids).not.toContain(ocupada.id);
+    expect(ids).toContain(libre.id); // control positivo
+    for (const fuera of [ocupada, instr, retirada, deOtra, sinVer]) expect(ids).not.toContain(fuera.id);
   });
 });
 ```
@@ -791,7 +1002,88 @@ Añadir `tests/traceability/bandejas.test.ts` al grupo `base-sembrada`, debajo d
 
 `npx vitest run tests/traceability/bandejas.test.ts` → FALLA: el módulo `lib/traceability/bandejas` no existe.
 
-- [ ] **Paso 3: el servicio**
+- [ ] **Paso 3: el error, el permiso de equipos y el cierre reutilizable**
+
+`lib/traceability/bandejaError.ts`:
+
+```ts
+/** Los rechazos de las bandejas de secado, con un código que la pantalla traduce. */
+export type CodigoBandeja =
+  | "corrida_no_encontrada" | "bandeja_no_encontrada" | "secado_cerrado" | "corrida_con_cama"
+  | "no_es_bandeja" | "bandeja_de_otra_organizacion" | "bandeja_sin_acceso" | "bandeja_retirada"
+  | "bandeja_ocupada" | "fecha_antes_del_secado" | "fecha_antes_de_cargar" | "ya_bajada"
+  | "la_ultima_cierra_el_secado" | "quedan_otras_bandejas" | "bandejas_sin_bajar";
+
+export class BandejaError extends Error {
+  constructor(readonly codigo: CodigoBandeja) { super(codigo); this.name = "BandejaError"; }
+}
+```
+
+En `lib/equipos/equipos.ts`, debajo de `puedeGestionarEquipo`:
+
+```ts
+/**
+ * ¿Puede esta persona ver este equipo? El mismo `can(view)` que ya usan
+ * `disponibilidadDeRecipientes` e `instrumentosParaMedicion`. Lo pide cargar una
+ * bandeja de secado: gestionar el lote no da derecho sobre cualquier equipo.
+ */
+export async function puedeVerEquipo(
+  userAccountId: string,
+  equipo: { id: string; projectId: string | null; classification: ClassificationLevel },
+): Promise<boolean> {
+  return can(userAccountId, "view", "equipment", await objetivoDeEquipo(equipo), equipo.classification);
+}
+```
+
+En `lib/traceability/drying.ts`:
+- los imports: `import { BandejaError } from "./bandejaError";` y añadir `Lot` al `import type` del cliente generado;
+- el cuerpo de la transacción de `endDryingRun`, **tal como está hoy**, desde `const endedRun = await tx.dryingRun.update(` hasta el `return { run: endedRun, transformation, outputLot, reconciliation };`, se mueve **sin cambios** a una función exportada:
+
+```ts
+export type CierreDelSecado = Omit<EndDryingRunInput, "dryingRunId" | "endedAt">;
+
+/**
+ * El cierre de un secado dentro de una transacción ajena: lo usan `endDryingRun`
+ * y bajar la última bandeja (`lib/traceability/bandejas.ts`), que cierra en la
+ * MISMA transacción en que la baja. El permiso lo exige quien llama.
+ */
+export async function cerrarCorridaEnTransaccion(
+  tx: Parameters<typeof settleMassBalance>[0],
+  userAccountId: string,
+  dryingRunId: string,
+  sourceLot: Lot,
+  input: EndDryingRunInput,
+) {
+  const provenanceClass = input.provenanceClass;
+  // … el cuerpo movido, con `input.dryingRunId` sustituido por `dryingRunId` …
+}
+```
+
+Y `endDryingRun` queda así:
+
+```ts
+export async function endDryingRun(userAccountId: string, input: EndDryingRunInput) {
+  const run = await prisma.dryingRun.findUnique({ where: { id: input.dryingRunId } });
+  if (!run) throw new TraceabilityAccessError("drying_run_not_found");
+  if (run.endedAt) throw new TraceabilityAccessError("drying_run_already_ended");
+
+  const sourceLot = await resolveRunSourceLot(input.dryingRunId);
+  await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
+
+  // DESPUÉS del permiso: a quien no gestiona el lote no se le dice si hay bandejas
+  // (revisión de Codex del plan). El secado termina bandeja a bandeja (Daniel,
+  // 2026-09-18); el disparador de `bandejas_de_la_corrida` cierra la carrera.
+  if (await prisma.dryingRunTray.count({ where: { dryingRunId: run.id, hasta: null } }) > 0) {
+    throw new BandejaError("bandejas_sin_bajar");
+  }
+
+  return prisma.$transaction((tx) => cerrarCorridaEnTransaccion(tx, userAccountId, run.id, sourceLot, input));
+}
+```
+
+Comprobar con `npx vitest run tests/traceability/drying.test.ts` que el cierre de siempre sigue igual **antes** de seguir. Es el control de que el movimiento no cambió nada.
+
+- [ ] **Paso 4: el servicio**
 
 `lib/traceability/bandejas.ts`:
 
@@ -800,28 +1092,24 @@ Añadir `tests/traceability/bandejas.test.ts` al grupo `base-sembrada`, debajo d
  * Las bandejas de un secado (spec de secado por bandeja §4.2–§4.3; paso 2).
  *
  * Un lote se reparte en varias bandejas; cada bandeja lleva un solo lote a la
- * vez; el secado termina bandeja a bandeja (decisiones de Daniel, 2026-09-18).
- * Las reglas duras viven en la base —migración `bandejas_de_la_corrida`—; aquí
- * se comprueban antes para dar un error legible, no en lugar de la base.
+ * vez; el secado termina bandeja a bandeja, y bajar la última lo CIERRA en la
+ * misma transacción (decisiones de Daniel, 2026-09-18). Las reglas duras viven
+ * en la base —migración `bandejas_de_la_corrida`—; aquí se comprueban antes para
+ * dar un error legible, y lo que la base rechace se traduce al mismo código.
  *
  * La POSICIÓN no se escribe aquí: es el último EquipmentTransfer de la bandeja
  * hacia una drying_bed, y se mueve con `trasladarEquipo`.
  */
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
+import { puedeVerEquipo } from "../equipos/equipos";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { cerrarCorridaEnTransaccion, type CierreDelSecado } from "./drying";
+import { BandejaError } from "./bandejaError";
 
-export type CodigoBandeja =
-  | "corrida_no_encontrada" | "secado_cerrado" | "no_es_bandeja"
-  | "bandeja_de_otra_organizacion" | "bandeja_retirada" | "bandeja_ocupada"
-  | "fecha_antes_del_secado" | "fecha_antes_de_cargar" | "ya_bajada"
-  | "bandejas_sin_bajar";
+export { BandejaError } from "./bandejaError";
 
-export class BandejaError extends Error {
-  constructor(readonly codigo: CodigoBandeja) { super(codigo); this.name = "BandejaError"; }
-}
-
-export interface Posicion { camaId: string; cama: string; instalacion: string | null; nivel: number | null; fila: number | null }
+export interface Posicion { camaId: string; ajena: boolean; cama: string | null; instalacion: string | null; nivel: number | null; fila: number | null }
 export interface BandejaEnCorrida {
   id: string; equipmentId: string; nombre: string; desde: Date; hasta: Date | null;
   posicion: Posicion | null;
@@ -844,52 +1132,93 @@ async function corridaConPermiso(userAccountId: string, dryingRunId: string, acc
   return { run, lot };
 }
 
+/**
+ * Lo que la base rechaza —dos cargas que ganaron la lectura previa a la vez, un
+ * intervalo cerrado que se solapa— llega como el mismo código que da el servicio.
+ * Los textos son los de la migración, sin tildes a propósito.
+ */
+function traducirRechazo(error: unknown): unknown {
+  if (error instanceof BandejaError) return error;
+  const texto = error instanceof Error ? error.message : String(error);
+  if ((error as { code?: string })?.code === "P2002" || /ya lleva otro lote/.test(texto)) return new BandejaError("bandeja_ocupada");
+  if (/con cama no lleva bandejas/.test(texto)) return new BandejaError("corrida_con_cama");
+  if (/ya esta cerrado/.test(texto)) return new BandejaError("secado_cerrado");
+  if (/tipo recipiente/.test(texto)) return new BandejaError("no_es_bandeja");
+  if (/bandejas sin bajar/.test(texto)) return new BandejaError("bandejas_sin_bajar");
+  return error;
+}
+
 export async function cargarBandeja(userAccountId: string, input: { dryingRunId: string; equipmentId: string; desde: Date }) {
   const { run, lot } = await corridaConPermiso(userAccountId, input.dryingRunId);
   if (run.endedAt) throw new BandejaError("secado_cerrado");
+  if (run.dryingBedLocationId) throw new BandejaError("corrida_con_cama");
   if (input.desde < run.startedAt) throw new BandejaError("fecha_antes_del_secado");
   const equipo = await prisma.equipment.findUnique({ where: { id: input.equipmentId } });
   if (!equipo || equipo.kind !== "vessel") throw new BandejaError("no_es_bandeja");
   if (equipo.organizationId !== lot.organizationId) throw new BandejaError("bandeja_de_otra_organizacion");
+  if (!(await puedeVerEquipo(userAccountId, equipo))) throw new BandejaError("bandeja_sin_acceso");
   if (equipo.lifecycleStatus !== "active") throw new BandejaError("bandeja_retirada");
-  const abierta = await prisma.dryingRunTray.findFirst({ where: { equipmentId: equipo.id, hasta: null } });
-  if (abierta) throw new BandejaError("bandeja_ocupada");
+  if (await prisma.dryingRunTray.findFirst({ where: { equipmentId: equipo.id, hasta: null } })) throw new BandejaError("bandeja_ocupada");
 
-  return prisma.$transaction(async (tx) => {
-    const fila = await tx.dryingRunTray.create({ data: {
-      dryingRunId: run.id, equipmentId: equipo.id, desde: input.desde,
-      provenanceClass: "original_record", createdBy: userAccountId,
-    } });
-    await recordAuditEvent({
-      actorUserAccountId: userAccountId, operation: "drying_run_tray.cargar", entityType: "drying_run_tray",
-      entityId: fila.id, after: fila, sourceInterface: "traceability.service",
-    }, tx);
-    return { id: fila.id };
-  });
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const fila = await tx.dryingRunTray.create({ data: {
+        dryingRunId: run.id, equipmentId: equipo.id, desde: input.desde,
+        provenanceClass: "original_record", createdBy: userAccountId,
+      } });
+      await recordAuditEvent({
+        actorUserAccountId: userAccountId, operation: "drying_run_tray.cargar", entityType: "drying_run_tray",
+        entityId: fila.id, after: fila, sourceInterface: "traceability.service",
+      }, tx);
+      return { id: fila.id };
+    });
+  } catch (error) {
+    throw traducirRechazo(error);
+  }
 }
 
-export async function bajarBandeja(userAccountId: string, input: { dryingRunTrayId: string; hasta: Date }) {
+export async function bajarBandeja(
+  userAccountId: string,
+  input: { dryingRunTrayId: string; hasta: Date; cierre?: CierreDelSecado | null },
+) {
   const fila = await prisma.dryingRunTray.findUnique({ where: { id: input.dryingRunTrayId } });
-  if (!fila) throw new BandejaError("corrida_no_encontrada");
-  const { run } = await corridaConPermiso(userAccountId, fila.dryingRunId);
+  if (!fila) throw new BandejaError("bandeja_no_encontrada");
+  const { run, lot } = await corridaConPermiso(userAccountId, fila.dryingRunId);
   if (run.endedAt) throw new BandejaError("secado_cerrado");
   if (fila.hasta) throw new BandejaError("ya_bajada");
   if (input.hasta < fila.desde) throw new BandejaError("fecha_antes_de_cargar");
 
-  return prisma.$transaction(async (tx) => {
-    // Condicional: si otra pestaña la bajó entre la lectura y aquí, no se pisa.
-    const { count } = await tx.dryingRunTray.updateMany({ where: { id: fila.id, hasta: null }, data: { hasta: input.hasta } });
-    if (count !== 1) throw new BandejaError("ya_bajada");
-    await recordAuditEvent({
-      actorUserAccountId: userAccountId, operation: "drying_run_tray.bajar", entityType: "drying_run_tray",
-      entityId: fila.id, before: fila, after: { ...fila, hasta: input.hasta }, sourceInterface: "traceability.service",
-    }, tx);
-    return { id: fila.id };
-  });
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // La corrida quieta: «¿es la última?» se decide sin que otra pestaña cargue
+      // o baje en medio. Mismo orden de bloqueo que el disparador (corrida primero).
+      await tx.$queryRaw`SELECT 1 FROM "traceability"."drying_run" WHERE "id" = ${run.id}::uuid FOR UPDATE`;
+      const { count } = await tx.dryingRunTray.updateMany({ where: { id: fila.id, hasta: null }, data: { hasta: input.hasta } });
+      if (count !== 1) throw new BandejaError("ya_bajada");
+      const quedan = await tx.dryingRunTray.count({ where: { dryingRunId: run.id, hasta: null } });
+      if (quedan === 0 && !input.cierre) throw new BandejaError("la_ultima_cierra_el_secado");
+      if (quedan > 0 && input.cierre) throw new BandejaError("quedan_otras_bandejas");
+      await recordAuditEvent({
+        actorUserAccountId: userAccountId, operation: "drying_run_tray.bajar", entityType: "drying_run_tray",
+        entityId: fila.id, before: fila, after: { ...fila, hasta: input.hasta }, sourceInterface: "traceability.service",
+      }, tx);
+      if (quedan === 0 && input.cierre) {
+        await cerrarCorridaEnTransaccion(tx, userAccountId, run.id, lot, { ...input.cierre, dryingRunId: run.id, endedAt: input.hasta });
+      }
+      return { id: fila.id, cerro: quedan === 0 };
+    });
+  } catch (error) {
+    throw traducirRechazo(error);
+  }
 }
 
-/** Dónde estaba una bandeja en un instante: su último traslado hasta entonces, si fue a una cama. */
-export async function posicionDeBandeja(equipmentId: string, en: Date): Promise<Posicion | null> {
+/**
+ * Dónde estaba una bandeja en un instante: su último traslado hasta entonces, si
+ * fue a una cama. **No recibe principal**: la llaman `bandejasDeCorrida`, que ya
+ * exigió el permiso, y las pruebas. Una cama de OTRA organización no dice su
+ * nombre (`ajena: true`), porque `trasladarEquipo` no restringe el destino.
+ */
+export async function posicionDeBandeja(equipmentId: string, en: Date, organizationId: string): Promise<Posicion | null> {
   const t = await prisma.equipmentTransfer.findFirst({
     where: { equipmentId, occurredAt: { lte: en } },
     orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
@@ -897,7 +1226,10 @@ export async function posicionDeBandeja(equipmentId: string, en: Date): Promise<
   });
   const cama = t?.toLocation;
   if (!cama || cama.locationType !== "drying_bed") return null;
-  return { camaId: cama.id, cama: cama.name, instalacion: cama.parentLocation?.name ?? null, nivel: cama.rackLevel, fila: cama.rackRow };
+  if (cama.organizationId !== organizationId) {
+    return { camaId: cama.id, ajena: true, cama: null, instalacion: null, nivel: null, fila: null };
+  }
+  return { camaId: cama.id, ajena: false, cama: cama.name, instalacion: cama.parentLocation?.name ?? null, nivel: cama.rackLevel, fila: cama.rackRow };
 }
 
 export async function bandejasDeCorrida(userAccountId: string, dryingRunId: string): Promise<BandejaEnCorrida[]> {
@@ -906,28 +1238,33 @@ export async function bandejasDeCorrida(userAccountId: string, dryingRunId: stri
     where: { dryingRunId }, orderBy: [{ desde: "asc" }], include: { equipment: true },
   });
   const ahora = new Date();
-  const conPosicion = await Promise.all(filas.map(async (f) => ({ f, posicion: await posicionDeBandeja(f.equipmentId, f.hasta ?? ahora) })));
+  const conPosicion = await Promise.all(filas.map(async (f) => ({
+    f, posicion: await posicionDeBandeja(f.equipmentId, f.hasta ?? ahora, lot.organizationId),
+  })));
 
-  // Conflicto (§4.2): OTRAS bandejas cargadas ahora —de este lote o de otro de la
-  // MISMA organización— cuyo último traslado también es esta cama. Se enseña; no
-  // se bloquea ni se reparte. Filtrar por organización no es optimización: sin él,
-  // el nombre de una bandeja ajena se filtraría a quien sólo ve este lote.
-  const camas = [...new Set(conPosicion.filter((x) => x.f.hasta === null && x.posicion).map((x) => x.posicion!.camaId))];
+  // Conflicto (§4.2) = ocupación FÍSICA: otro recipiente de la organización cuyo
+  // último traslado también es esta cama, esté cargado o no. El registro dice que
+  // está ahí, y una posición lleva una bandeja. Se enseña; no se bloquea.
+  const camas = [...new Set(conPosicion
+    .filter((x) => x.f.hasta === null && x.posicion && !x.posicion.ajena)
+    .map((x) => x.posicion!.camaId))];
   const ocupantes = new Map<string, { equipmentId: string; nombre: string }[]>();
   if (camas.length > 0) {
-    const abiertas = await prisma.dryingRunTray.findMany({
-      where: { hasta: null, equipment: { organizationId: lot.organizationId } }, include: { equipment: true },
+    const candidatos = await prisma.equipmentTransfer.findMany({
+      where: { toLocationId: { in: camas }, equipment: { organizationId: lot.organizationId, kind: "vessel" } },
+      select: { equipmentId: true, equipment: { select: { name: true } } },
+      distinct: ["equipmentId"],
     });
-    for (const a of abiertas) {
-      const p = await posicionDeBandeja(a.equipmentId, ahora);
-      if (p && camas.includes(p.camaId)) {
-        ocupantes.set(p.camaId, [...(ocupantes.get(p.camaId) ?? []), { equipmentId: a.equipmentId, nombre: a.equipment.name }]);
+    for (const c of candidatos) {
+      const p = await posicionDeBandeja(c.equipmentId, ahora, lot.organizationId);
+      if (p && !p.ajena && camas.includes(p.camaId)) {
+        ocupantes.set(p.camaId, [...(ocupantes.get(p.camaId) ?? []), { equipmentId: c.equipmentId, nombre: c.equipment.name }]);
       }
     }
   }
   return conPosicion.map(({ f, posicion }) => ({
     id: f.id, equipmentId: f.equipmentId, nombre: f.equipment.name, desde: f.desde, hasta: f.hasta, posicion,
-    conflicto: f.hasta === null && posicion
+    conflicto: f.hasta === null && posicion && !posicion.ajena
       ? (ocupantes.get(posicion.camaId) ?? []).filter((o) => o.equipmentId !== f.equipmentId).map((o) => o.nombre)
       : [],
   }));
@@ -943,44 +1280,33 @@ export async function bandejasDisponibles(userAccountId: string, dryingRunId: st
     orderBy: { name: "asc" },
     take: 200,
   });
-  return filas.map((e) => ({ id: e.id, nombre: e.name }));
+  const visibles = [];
+  for (const e of filas) if (await puedeVerEquipo(userAccountId, e)) visibles.push({ id: e.id, nombre: e.name });
+  return visibles;
 }
 ```
 
-**Sobre el `take: 200`:** es la forma lenta del defecto «un admin ve la base entera» (CLAUDE.md). Aquí el filtro es la organización del lote, no la visibilidad del usuario, así que el tope sólo corta en una organización con más de 200 bandejas libres. Queda escrito en el comentario de la función al implementarla, con el número que se midió ese día.
-
-- [ ] **Paso 4: la guarda del cierre**
-
-En `lib/traceability/drying.ts`:
-- el import: `import { BandejaError } from "./bandejas";`
-- en `endDryingRun`, justo después de `if (run.endedAt) throw …`:
-
-```ts
-  // El secado termina bandeja a bandeja (decisión de Daniel, 2026-09-18): no se
-  // cierra con una bandeja sin bajar. El disparador de `bandejas_de_la_corrida`
-  // cierra la carrera; esto da el error legible antes.
-  if (await prisma.dryingRunTray.count({ where: { dryingRunId: run.id, hasta: null } }) > 0) {
-    throw new BandejaError("bandejas_sin_bajar");
-  }
-```
+**Sobre el `take: 200`:** es la forma lenta de «un admin ve la base entera» (CLAUDE.md). El filtro es la organización del lote, así que sólo corta en una organización con más de 200 recipientes libres. Al implementarlo, se cuenta cuántos hay hoy y el número se escribe en el comentario de la función.
 
 - [ ] **Paso 5: comprobar que pasan**
 
-- `npx vitest run tests/traceability/bandejas.test.ts tests/traceability/drying.test.ts` → las dos en verde. `drying.test.ts` es el control de que un secado **sin** bandejas sigue cerrando igual.
+- `npx vitest run tests/traceability/bandejas.test.ts tests/traceability/drying.test.ts tests/equipos/equipos.test.ts` → las tres en verde. `drying.test.ts` es el control del cierre sin bandejas; `equipos.test.ts`, el de que `equipos.ts` no cambió de comportamiento.
 - `npm run build` → 0.
 
 - [ ] **Paso 6: commit**
 
 ```bash
+git add lib/traceability/bandejaError.ts
 git add lib/traceability/bandejas.ts
 git add lib/traceability/drying.ts
+git add lib/equipos/equipos.ts
 git add tests/traceability/bandejas.test.ts
 git add scripts/pruebas-por-compuerta.txt
-git diff --cached --stat   # 4 archivos
+git diff --cached --stat   # 6 archivos
 git commit -F <archivo>
 ```
 
-Mensaje: `feat(secado): cargar y bajar bandejas, su posición y sus conflictos`.
+Mensaje: `feat(secado): cargar y bajar bandejas; bajar la última cierra el secado`.
 
 ---
 
@@ -994,7 +1320,7 @@ Mensaje: `feat(secado): cargar y bajar bandejas, su posición y sus conflictos`.
 - Probar: `tests/arquitectura/use-server-solo-async.test.ts` (ya existe; debe seguir en verde), y `npm run build`
 
 **Interfaces:**
-- Consume `cargarBandeja`, `bajarBandeja`, `bandejasDeCorrida`, `bandejasDisponibles`, `BandejaError` y `BandejaEnCorrida` (T3).
+- Consume `cargarBandeja`, `bajarBandeja` (con su `cierre` para la última), `bandejasDeCorrida`, `bandejasDisponibles`, `BandejaError` y `BandejaEnCorrida` (T3).
 - Produce:
   - `cargarBandejaAction(prev, formData): Promise<{ error?: string }>`;
   - `bajarBandejaAction(prev, formData): Promise<{ error?: string }>`;
@@ -1014,6 +1340,16 @@ import { bajarBandeja, BandejaError, cargarBandeja } from "../../lib/traceabilit
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 
 type Estado = { error?: string };
+
+// Sin `export`: de un archivo "use server" sólo salen funciones async.
+function textoOVacio(v: FormDataEntryValue | null): string | null {
+  const s = typeof v === "string" ? v.trim() : "";
+  return s === "" ? null : s;
+}
+function numeroOVacio(v: FormDataEntryValue | null): number | null {
+  const s = textoOVacio(v);
+  return s === null ? null : Number(s);
+}
 
 function codigo(error: unknown): string {
   if (error instanceof BandejaError) return error.codigo;
@@ -1042,8 +1378,22 @@ export async function bajarBandejaAction(_prev: Estado, formData: FormData): Pro
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const lotId = String(formData.get("lotId") ?? "");
+  // Bajar la última cierra el secado: su formulario trae los mismos datos que el
+  // cierre de siempre (`endDryingFormAction`). En las demás no vienen.
+  const esUltima = formData.get("esUltima") === "1";
   try {
-    await bajarBandeja(user.userAccountId, { dryingRunTrayId: String(formData.get("dryingRunTrayId") ?? ""), hasta: new Date() });
+    await bajarBandeja(user.userAccountId, {
+      dryingRunTrayId: String(formData.get("dryingRunTrayId") ?? ""),
+      hasta: new Date(),
+      cierre: esUltima ? {
+        outputLotCode: String(formData.get("outputLotCode") ?? ""),
+        // Mismo tratamiento que `endDryingFormAction`: el valor sale de la lista LOT_TYPES del formulario.
+        outputLotType: String(formData.get("outputLotType") ?? "green") as never,
+        quantity: numeroOVacio(formData.get("quantity")),
+        unit: textoOVacio(formData.get("unit")),
+        provenanceClass: "original_record",
+      } : null,
+    });
   } catch (error) {
     return { error: codigo(error) };
   }
@@ -1068,30 +1418,51 @@ import { BotonDeEnvio } from "../BotonDeEnvio";
 
 type Fila = {
   id: string; nombre: string; desde: string; hasta: string | null;
-  posicion: { cama: string; instalacion: string | null; nivel: number | null; fila: number | null } | null;
+  posicion: { ajena: boolean; cama: string | null; instalacion: string | null; nivel: number | null; fila: number | null } | null;
   conflicto: string[];
 };
-type Props = { lotId: string; dryingRunId: string; filas: Fila[]; disponibles: { id: string; nombre: string }[]; puedeRegistrar: boolean };
+type Props = {
+  lotId: string; dryingRunId: string; filas: Fila[]; disponibles: { id: string; nombre: string }[]; puedeRegistrar: boolean;
+  /** Los mismos tipos de lote que ofrece el cierre de siempre, ya traducidos por la página: una sola lista. */
+  tiposDeSalida: { valor: string; etiqueta: string }[];
+};
 
-export function BandejasDelSecado({ lotId, dryingRunId, filas, disponibles, puedeRegistrar }: Props) {
+export function BandejasDelSecado({ lotId, dryingRunId, filas, disponibles, puedeRegistrar, tiposDeSalida }: Props) {
   const t = useTranslations("Bandejas");
   const [cargar, accionCargar] = useActionState(cargarBandejaAction, {});
   const [bajar, accionBajar] = useActionState(bajarBandejaAction, {});
   const abiertas = filas.filter((f) => f.hasta === null).length;
-  const donde = (f: Fila) => f.posicion
-    ? t("posicion", { instalacion: f.posicion.instalacion ?? "—", cama: f.posicion.cama, nivel: f.posicion.nivel ?? "—", fila: f.posicion.fila ?? "—" })
-    : t("sinPosicion");
+  const donde = (f: Fila) => !f.posicion
+    ? t("sinPosicion")
+    : f.posicion.ajena
+      ? t("posicionAjena")
+      : t("posicion", { instalacion: f.posicion.instalacion ?? "—", cama: f.posicion.cama ?? "—", nivel: f.posicion.nivel ?? "—", fila: f.posicion.fila ?? "—" });
   return <section>
     <h4>{t("titulo", { abiertas, total: filas.length })}</h4>
     {filas.length === 0 ? <p className="nn-muted">{t("ninguna")}</p> : <ul>
       {filas.map((f) => <li key={f.id}>
         <strong>{f.nombre}</strong> · {donde(f)} · {f.hasta ? t("bajada") : t("cargada")}
         {f.conflicto.length > 0 && <p role="alert">{t("conflicto", { otras: f.conflicto.join(", ") })}</p>}
-        {puedeRegistrar && f.hasta === null && <form action={accionBajar} style={{ display: "inline" }}>
-          <input type="hidden" name="lotId" value={lotId} />
-          <input type="hidden" name="dryingRunTrayId" value={f.id} />
-          <BotonDeEnvio className="nn-button">{t("bajar")}</BotonDeEnvio>
-        </form>}
+        {puedeRegistrar && f.hasta === null && (abiertas > 1
+          ? <form action={accionBajar} style={{ display: "inline" }}>
+            <input type="hidden" name="lotId" value={lotId} />
+            <input type="hidden" name="dryingRunTrayId" value={f.id} />
+            <BotonDeEnvio className="nn-button">{t("bajar")}</BotonDeEnvio>
+          </form>
+          // La última: bajarla cierra el secado, así que pide lo mismo que el cierre de siempre.
+          : <form action={accionBajar} className="nn-form" style={{ maxWidth: 420 }}>
+            <p>{t("ultimaCierra")}</p>
+            <input type="hidden" name="lotId" value={lotId} />
+            <input type="hidden" name="dryingRunTrayId" value={f.id} />
+            <input type="hidden" name="esUltima" value="1" />
+            <label>{t("codigoSalida")}<input name="outputLotCode" type="text" required /></label>
+            <label>{t("tipoSalida")}<select name="outputLotType" defaultValue="green">
+              {tiposDeSalida.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+            </select></label>
+            <label>{t("cantidad")}<input name="quantity" type="number" step="any" min={0} /></label>
+            <label>{t("unidad")}<input name="unit" type="text" /></label>
+            <BotonDeEnvio className="nn-button">{t("bajarYCerrar")}</BotonDeEnvio>
+          </form>)}
       </li>)}
     </ul>}
     {bajar.error && <p role="alert">{t(`error_${bajar.error}`)}</p>}
@@ -1137,6 +1508,7 @@ En `app/lots/[id]/page.tsx`:
               filas={bandejas.map((b) => ({ ...b, desde: b.desde.toISOString(), hasta: b.hasta?.toISOString() ?? null }))}
               disponibles={bandejasLibres}
               puedeRegistrar={puedeRegistrar}
+              tiposDeSalida={LOT_TYPES.map((type) => ({ valor: type, etiqueta: t(`lotType_${type}` as "lotType_cherry") }))}
             />
 ```
 
@@ -1162,9 +1534,21 @@ En `app/lots/[id]/page.tsx`:
     "elegir": "Elige una bandeja libre",
     "sinDisponibles": "No hay bandejas libres en esta organización. Se registran en Equipos, como recipiente.",
     "comoSeMueve": "Mover una bandeja de nivel o fila es un traslado del equipo: queda quién y cuándo.",
-    "cierreEspera": "Quedan {n} bandejas sin bajar. El secado termina cuando baja la última.",
+    "cierreEspera": "Este secado va en {n} bandejas cargadas. Termina al bajar la última: su formulario pide los datos del cierre.",
+    "posicionAjena": "en una cama de otra organización",
+    "ultimaCierra": "Es la última bandeja cargada: al bajarla se cierra el secado del lote. El paso a almacenamiento sigue siendo aparte.",
+    "codigoSalida": "Código del lote que sale",
+    "tipoSalida": "Tipo del lote que sale",
+    "cantidad": "Cantidad (opcional)",
+    "unidad": "Unidad (opcional)",
+    "bajarYCerrar": "Bajar la última y cerrar el secado",
     "error_sin_acceso": "La cuenta no tiene permiso para gestionar este lote.",
     "error_corrida_no_encontrada": "No se encontró este secado.",
+    "error_bandeja_no_encontrada": "No se encontró esa bandeja en este secado.",
+    "error_corrida_con_cama": "Este secado está en una cama sin bandejas; no lleva bandejas.",
+    "error_bandeja_sin_acceso": "La cuenta no puede ver esa bandeja.",
+    "error_la_ultima_cierra_el_secado": "Es la última bandeja: bajarla cierra el secado y hacen falta los datos del cierre.",
+    "error_quedan_otras_bandejas": "Quedan otras bandejas cargadas; el secado no se cierra todavía.",
     "error_secado_cerrado": "Este secado ya está cerrado.",
     "error_no_es_bandeja": "Ese equipo no es un recipiente; una bandeja se registra como recipiente.",
     "error_bandeja_de_otra_organizacion": "Esa bandeja es de otra organización.",
@@ -1193,9 +1577,21 @@ En `app/lots/[id]/page.tsx`:
     "elegir": "Choose a free tray",
     "sinDisponibles": "No free trays in this organization. They are registered under Equipment, as a vessel.",
     "comoSeMueve": "Moving a tray to another level or row is an equipment move: who and when are recorded.",
-    "cierreEspera": "{n} trays are still loaded. Drying ends when the last one is unloaded.",
+    "cierreEspera": "This drying run has {n} trays loaded. It ends when the last one is unloaded: that form asks for the closing data.",
+    "posicionAjena": "on a bed of another organization",
+    "ultimaCierra": "This is the last loaded tray: unloading it closes the lot's drying. Moving to storage is still a separate step.",
+    "codigoSalida": "Code of the outgoing lot",
+    "tipoSalida": "Type of the outgoing lot",
+    "cantidad": "Quantity (optional)",
+    "unidad": "Unit (optional)",
+    "bajarYCerrar": "Unload the last tray and close drying",
     "error_sin_acceso": "This account is not allowed to manage this lot.",
     "error_corrida_no_encontrada": "This drying run was not found.",
+    "error_bandeja_no_encontrada": "That tray was not found in this drying run.",
+    "error_corrida_con_cama": "This drying run is on a bed without trays; it does not take trays.",
+    "error_bandeja_sin_acceso": "This account cannot see that tray.",
+    "error_la_ultima_cierra_el_secado": "This is the last tray: unloading it closes drying, so the closing data is needed.",
+    "error_quedan_otras_bandejas": "Other trays are still loaded; drying does not close yet.",
     "error_secado_cerrado": "This drying run is already closed.",
     "error_no_es_bandeja": "That equipment is not a vessel; a tray is registered as a vessel.",
     "error_bandeja_de_otra_organizacion": "That tray belongs to another organization.",
@@ -1208,7 +1604,7 @@ En `app/lots/[id]/page.tsx`:
   },
 ```
 
-**Cada código de `CodigoBandeja` tiene su `error_…`**, más `error_sin_acceso`. Al terminar, contar las claves `error_` de `Bandejas` en los dos idiomas: 11 y 11.
+**Cada código de `CodigoBandeja` tiene su `error_…`**, más `error_sin_acceso`: 15 + 1 = **16**. Al terminar, contar las claves `error_` de `Bandejas` en los dos idiomas: 16 y 16. Si sale otro número, falta un código o sobra una clave, y la pantalla enseñaría la clave cruda.
 
 - [ ] **Paso 5: compuertas de la tarea**
 
@@ -1219,7 +1615,9 @@ En `app/lots/[id]/page.tsx`:
 Verificación en el navegador: servidor local contra la base de prueba, un lote en secado con dos bandejas, una movida a una cama con nivel y fila. Hay que ver:
 - la lista con las dos bandejas;
 - el conflicto cuando se trasladan dos a la misma cama;
-- que el cierre desaparece mientras queda una bandeja cargada.
+- que el cierre de siempre desaparece mientras hay bandejas cargadas;
+- que la primera se baja con un botón y la segunda, la última, pide los datos del cierre;
+- que al bajarla la tarjeta «Secando» desaparece y el lote de salida existe.
 
 Se verifica con `read_page`, no leyendo el código.
 
@@ -1287,17 +1685,25 @@ Commit de la documentación, contando el stat.
 
 Cada uno imprime el sha del archivo antes y después (distintos, o se aborta), si compila o migra, y **qué prueba cae por su nombre**. Después se restaura con `git checkout --` y se comprueba el árbol limpio.
 
-1. **La regla de la base: una bandeja, un lote.** Una migración ya aplicada no cambia la base al editar su archivo, y la base compartida no se toca. Por eso este flip corre en una **base desechable del mismo clúster**:
-   - con `prisma.$executeRawUnsafe` contra la base compartida, **sólo** `CREATE DATABASE nn_flip_bandejas`, que no toca sus datos;
-   - `DATABASE_URL=…/nn_flip_bandejas npx prisma migrate deploy`;
-   - en esa base, `DROP INDEX traceability.drying_run_tray_una_abierta_por_bandeja` y `CREATE OR REPLACE` de `exigir_bandeja_valida` **sin** el bloque `IF EXISTS … tsrange`;
-   - `DATABASE_URL=…/nn_flip_bandejas npx vitest run tests/traceability/bandejasEnLaBase.test.ts -t "dos filas abiertas"`;
-   - debe caer «rechaza dos filas abiertas de la misma bandeja…»;
-   - control, en la misma base: restaurar el índice y la función, y la misma prueba vuelve a verde;
-   - al final, `DROP DATABASE nn_flip_bandejas`, y comprobar con `SELECT datname FROM pg_database` que ya no está.
-2. En `lib/traceability/drying.ts`, quitar la guarda `bandejas_sin_bajar`: debe caer «carga dos bandejas, baja una, y el cierre espera a la última». Sin la guarda, la base la rechaza igual, pero con otro mensaje: `toThrow("bandejas_sin_bajar")` es lo que distingue.
-3. En `bandejasDeCorrida`, quitar el `.filter((o) => o.equipmentId !== f.equipmentId)`: debe caer «dos bandejas … se enseñan como conflicto».
-4. En `posicionDeBandeja`, quitar `occurredAt: { lte: en }`: debe caer «una bandeja movida dos veces responde dónde estaba en cada momento».
+**Los flips de reglas de la base (1a–1d) corren en una base desechable del mismo clúster.** Editar el archivo de una migración ya aplicada no cambia la base, y la base compartida no se toca.
+- Crearla: con `prisma.$executeRawUnsafe` contra la base compartida, **sólo** `CREATE DATABASE nn_flip_bandejas`, que no toca sus datos.
+- Migrarla: `DATABASE_URL=…/nn_flip_bandejas npx prisma migrate deploy`.
+- Si alguna prueba necesita la semilla, `DATABASE_URL=…/nn_flip_bandejas npm run db:seed`.
+- Cada mutación se aplica **en esa base**, con el SQL indicado, y se revierte en ella misma volviendo a ejecutar el bloque original de la migración. **El control de cada flip**: revertida la mutación, la misma prueba vuelve a verde.
+- Al final, `DROP DATABASE nn_flip_bandejas`, y comprobar con `SELECT datname FROM pg_database` que ya no está.
+
+1. **Cada defensa de «una bandeja, un lote», por separado** (hallazgo 5 de Codex: quitar las dos juntas sólo prueba la suma):
+   - **1a.** Quitar **sólo el bloque de solapamiento** del disparador (`CREATE OR REPLACE` de `exigir_bandeja_valida` sin el `IF EXISTS … tsrange`). «Rechaza dos filas abiertas…» **sigue en verde**, porque lo sostiene el índice. En cambio, **cae** «rechaza un intervalo cerrado que se solapa…», y el nombre que sale tiene que ser exactamente ése.
+   - **1b.** Con el bloque de 1a todavía quitado, `DROP INDEX traceability.drying_run_tray_una_abierta_por_bandeja`: ahora **cae** «rechaza dos filas abiertas…». Así se ve que el índice, él solo, sostenía esa prueba.
+   - **1c.** Restaurado todo, quitar **sólo los dos `FOR UPDATE`** de `exigir_bandeja_valida`: debe caer «carga primero: el cierre espera y lo rechaza» o «cierra primero…». La línea de control de tiempo (`>= 1400 ms`) dice si hubo carrera. Si cae la de tiempo y no la del mensaje, el flip **no** probó el bloqueo: se anota así y no se cuenta.
+   - **1d.** Quitar el disparador `equipment_bandeja_sigue_siendo_recipiente`: debe caer «rechaza cambiar a instrumento un recipiente con bandejas».
+2. En `lib/traceability/drying.ts`, quitar la guarda `bandejas_sin_bajar`: debe caer «endDryingRun directo…». Sin la guarda, la base lo rechaza igual, pero con el texto de SQL `bandejas sin bajar`, con espacios. El `toThrow("bandejas_sin_bajar")`, con guiones bajos, es lo que distingue.
+3. En `lib/traceability/drying.ts`, **subir** la guarda por encima de `requireLotAccess`: debe caer la misma prueba, en su línea del ajeno (`toBeInstanceOf(TraceabilityAccessError)`).
+4. En `bajarBandeja`, quitar la llamada a `cerrarCorridaEnTransaccion`: debe caer «bajar la última cierra el secado…», en `endedAt`.
+5. En `bandejasDeCorrida`, quitar el filtro `equipment: { organizationId: … }` de los candidatos: debe caer «conflicto = otro recipiente de la organización…», en su última línea.
+6. En `posicionDeBandeja`, quitar `occurredAt: { lte: en }`: debe caer «una bandeja movida dos veces…».
+7. En `cargarBandeja`, quitar la comprobación `puedeVerEquipo`: debe caer «rechaza cada caso inválido…», en `bandeja_sin_acceso`.
+8. En `traducirRechazo`, devolver siempre `error`: debe caer «un rechazo de la BASE llega como código…».
 
 - [ ] **Paso 6: PR**
 
