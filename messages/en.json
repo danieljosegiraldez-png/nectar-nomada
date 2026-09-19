@@ -2836,8 +2836,6 @@
     "intro": "Everything on the farm up to the harvest: the plots, the work before harvesting, and the harvest itself.",
     "parcelas": "Plots",
     "parcelasAyuda": "What is planted, how each plot is doing, and what it is missing.",
-    "cosecha": "Record a harvest",
-    "cosechaAyuda": "How much was harvested, from which plot, and what the cherry was like.",
     "jornadas": "Harvest days",
     "jornadasAyuda": "Which plots are ready, who goes to each, and what each picker delivers to the mill.",
     "proximamente": "Coming next: yield and efficiency, and harvest quality with what the mill's selection sends back."

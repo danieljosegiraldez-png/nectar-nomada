@@ -2836,8 +2836,6 @@
     "intro": "Todo lo de la finca hasta la cosecha: las parcelas, lo que se hace antes de cosechar, y la cosecha.",
     "parcelas": "Parcelas",
     "parcelasAyuda": "Qué hay sembrado, cómo está cada lote de terreno y qué le falta.",
-    "cosecha": "Registrar una cosecha",
-    "cosechaAyuda": "Cuánto se cosechó, de qué parcela y cómo venía la cereza.",
     "jornadas": "Jornadas de cosecha",
     "jornadasAyuda": "Qué parcelas están listas, quién va a cada una, y lo que cada recolector entrega al beneficio.",
     "proximamente": "Llegan después: rendimiento y eficiencia, y la calidad de la cosecha con lo que devuelve la selección del beneficio."
