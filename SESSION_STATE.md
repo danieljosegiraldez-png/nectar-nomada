@@ -38,6 +38,23 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · El manejo fitosanitario de la parcela
+
+ADR-170. Registro de intervenciones fitosanitarias: cuatro clases (comprados, preparados, liberaciones,
+manejo cultural); doce objetivos + otro (todo de Daniel, con procedencia en el spec). Dos columnas nuevas
+en `ConsumableMaterial` (`isPlantProtection`, `defaultReentryHours`); tres tablas nuevas. **El descuento
+del frasco es directo, sin fila de consumo, igual que el botiquín** — Daniel lo aprobó sabiendo que
+cambiaba lo que vio en el chat. Carencia y reentrada en aritmética pura; marca en la cosecha como foto
+(`HarvestWithdrawalFlag`, nulo = desconocida). Aviso cuando hoy difiere de lo que se sabía. Reentrada
+en tablero y al abrir jornada; corregir no descuenta de nuevo. PR A; PR B (áreas por bloque, trampa)
+cuando `PlotBlock` y `TrapRule` estén en `main`.
+
+**Incidente durante T8:** un subagente corrió `npm run test:db -- reset` sobre la base compartida
+55433 (2026-09-18 ~23:39Z, restauró el backup del 2026-09-14). La instrucción «no la resetees» estaba en
+los dispatch de T3–T7 y faltó en el de T8. Esquema coherente al medir después (10 de 12 migraciones
+ajenas volvieron). Datos de prueba perdidos entre el 14 y el reset no se reparan. **Ruling:** todo
+dispatch llevar prohibición explícita de reset/restore/migrate dev.
+
 ### 2026-09-18 · Buscar y combinar muestras al montar una cata
 
 Decisión de Daniel: «un cupping se debe poder … hacer búsquedas y seleccionar varias muestras y a veces
@@ -122,26 +139,6 @@ lectura por cosecha. La ficha del equipo gana dónde declarar modos: no había n
 
 **Pendiente:** filtrar y envasar miel no tienen nombre en la cadena del lote, ni hay pantalla del
 lote de miel. Es lo siguiente.
-
-### 2026-09-17 · La limpieza se registra sobre la caja
-
-ADR-159. Decisión de Daniel: «1, sobre la caja». **Ningún evento del apiario colgaba de la caja**
-—todos de la colonia—, y la limpieza no puede: una caja vacía se desinfecta antes de recibir otra.
-`HiveCleaning`, con los actos como arreglo y dos vocabularios fijos sacados del manual de Varroa
-—**sólo los nombres, no sus cifras**—.
-
-**Las reglas viven también en la base:** tres `CHECK` probados contra Postgres, 7 de 7, el primero
-del repositorio sobre un arreglo de enum.
-
-**La caja vacía es por día entero, no por instante.** La colonia muere el 10 y la caja se limpia el
-10; la caja se limpia el 10 y entra colonia nueva ese día: las dos pasan. Su flip-test lo demuestra —
-volver al instante tumba las dos. Renovar cera es la excepción: se hace con la colonia dentro.
-
-**La primera acción del apiario que devuelve el error en vez de lanzarlo**, porque ésta rechaza en un
-caso normal y el apicultor tiene que leer por qué.
-
-**Pendiente:** los productos de tratamiento, que esperan a Daniel — y a leer «el botiquín del apiario»
-(#386), recién fusionado.
 
 ## 3. Bloqueado, y en qué
 
@@ -228,6 +225,10 @@ puede afirmar cada pantalla— y sigue sin tomarse.
   `enforce_admins` en **false**, también a propósito: si CI se cae por cuota hay
   que poder fusionar un arreglo sin desactivar la protección primero. Cerrado el
   2026-09-05; el detalle, en `docs/SESSION_STATE_ARCHIVE.md`.
+
+- **PR B del manejo fitosanitario** — bloqueado en que `PlotBlock` y `TrapRule` existan en `main`. Áreas
+  por bloque, `TrapRule.suggestedMaterialId`, botón «Registrar aplicación» desde el aviso de trampa,
+  aviso atendido. Pieza 2 (#369, diseño+plan fusionado).
 
 - **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
   y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así
