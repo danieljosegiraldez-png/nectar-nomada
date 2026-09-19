@@ -11508,3 +11508,27 @@ una instalación. Siguen fuera órdenes de trabajo, técnicos, piezas y contador
 **Consecuencias.** Cada clase nueva cuesta una tabla y un spec, no un campo en una
 tabla genérica. Las rutinas de instalación existen en la base y esperan su spec para
 tener pantalla y permisos.
+
+## ADR-173 -- La cera nueva lleva el color de su año, y el color no se guarda
+
+**Contexto.** Daniel, el 2026-09-18: *«todas las abejas reinas nacidas ese ano reciben ese apodo y
+color y toda la cera nueva de ese year que entra como marco en alza o camara de cria recibe esa
+marca color»*. Antes habia dicho que la cera no se sigue por alza, porque los marcos cambian de alza,
+y que seguir cada marco no es sostenible en el campo. Spec
+`docs/superpowers/specs/2026-09-18-alzas-y-tandas-de-marcos-design.md` §5, plan
+`docs/superpowers/plans/2026-09-18-cera-por-ano.md`.
+
+**Decision.** El color es el codigo internacional de las reinas (1/6 blanco, 2/7 amarillo, 3/8
+rojo, 4/9 verde, 5/0 azul) y **se calcula del ano** (`colorDelAño`), no se guarda. Se guardan dos
+hechos: la cera nueva que entra (`new_wax_entry`, su dia decide el ano) y los marcos que salen de
+un ano de color (`frame_removal`). La ficha del apiario junta los dos por ano: color, entraron,
+salieron, edad y el aviso — **revisar a los 2 anos, renovar a los 4**, lo que Daniel dijo
+(«2-4 years»; leerlo como dos avisos es interpretacion anotada en el spec §7.1).
+
+**No se impide sacar mas marcos de los que se anotaron entrando**: los de antes del registro no
+tienen entrada. La leyenda lo dice. **Si se impide**, en la base, sacar marcos de un ano que no ha
+llegado.
+
+**Lo que NO entra.** «Marcos negros: N» en la inspeccion (spec §5.3): la inspeccion se guarda
+tambien sin conexion y el campo toca la cola y su sincronizacion — va en su rebanada. Y el ano de
+las reinas (§5.4).

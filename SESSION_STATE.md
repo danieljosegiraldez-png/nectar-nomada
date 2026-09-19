@@ -38,6 +38,13 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · La cera con el color de su año
+
+ADR-173. Daniel: la cera nueva de un año lleva el color de ese año, el de las reinas. El color se
+calcula (`colorDelAño`); se anotan la cera que entra y los marcos que salen, y la ficha del apiario
+enseña la leyenda con avisos a los 2 y 4 años. **Sin ver en navegador.** Siguen: «marcos negros»
+en la inspección (toca la cola sin conexión) y el año de las reinas.
+
 ### 2026-09-18 · Alzas con marca
 
 ADR-171. Daniel: las alzas «se marcarán». Se registran en la ficha del apiario, se ponen en una
