@@ -724,6 +724,11 @@ enum LocationType {
   drying_rack
   drying_bed
 
+  /// La bodega (spec 2026-09-19 §4.1): cuelga de un `beneficio` o de un `site`
+  /// —lo comprueba el disparador `location_bodega_padre`—. Donde se almacena;
+  /// lleva rutinas de limpieza y fumigación.
+  storage_facility
+
   @@schema("core")
 }
 
@@ -4664,6 +4669,11 @@ model MaterialConsumptionEntry {
   fieldSessionId String?       @map("field_session_id") @db.Uuid
   fieldSession   FieldSession? @relation(fields: [fieldSessionId], references: [id])
 
+  /// La vez que se hizo una rutina de cuidado (spec 2026-09-19 §4.3): el
+  /// producto con que se fumigó o se limpió. Un padre más; el CHECK
+  /// `material_consumption_entry_un_padre` impide dos.
+  careRoutineEventId String?           @map("care_routine_event_id") @db.Uuid
+  careRoutineEvent   CareRoutineEvent? @relation(fields: [careRoutineEventId], references: [id], onDelete: Restrict)
 
   materialName String   @map("material_name")
   batchLabel   String   @map("batch_label")
@@ -4702,6 +4712,7 @@ model MaterialConsumptionEntry {
   @@index([fermentationRunId])
   @@index([dryingRunId])
   @@index([locationId])
+  @@index([careRoutineEventId])
   @@map("material_consumption_entry")
   @@schema("traceability")
 }
@@ -5308,6 +5319,8 @@ model CareRoutineEvent {
 
   createdAt DateTime @default(now()) @map("created_at")
   createdBy String?  @map("created_by") @db.Uuid
+
+  consumptions MaterialConsumptionEntry[]
 
   @@index([routineId])
   @@map("care_routine_event")

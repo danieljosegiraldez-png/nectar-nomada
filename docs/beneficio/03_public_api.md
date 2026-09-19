@@ -280,3 +280,8 @@ Revisión final del plan 2a (2026-09-19), RULING A2 y hallazgos de la misma revi
 | `fuente: "sin_acceso"` | `capacidadDeTipo` (`lib/traceability/capacidadDeBandeja.ts`) | hay pesajes de ese estado pero ninguno visible para quien mira: sin número, ni medido ni estimado — un estimado escondería que SÍ hay una medida |
 | `ocultos` | `capacidadDeTipo`, cada línea de estado | cuántos pesajes de ese estado existen y esta cuenta no ve; antes sólo lo traía `pesajesDeTipo` |
 | `dondeOculto` | `bandejasDeLaFinca` (`lib/equipos/bandejas.ts`) | la bandeja está en un lugar cuyo nombre esta cuenta no puede ver (`location:manage_attributes`); distinto de "sin traslado" |
+
+## 12. Lugares y rutinas (2026-09-19)
+
+- `LocationType.storage_facility` — la bodega; su padre es `beneficio` o `site`.
+- `MaterialConsumptionEntry.careRoutineEventId` — el insumo usado en una vez que se hizo una rutina de cuidado; un consumo tiene a lo sumo un padre.
