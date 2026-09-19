@@ -212,3 +212,40 @@ describe("el libro cuadra con lo que la cosecha aportó, no con lo que dice su p
   });
 });
 
+// Revisión de Codex: el cierre a mano leía los recipientes FUERA de la transacción, y sin un orden
+// entre quienes cambian el peso de la misma cosecha, dos escrituras a la vez suman sobre un total
+// viejo. La invariante que se exige: peso de la cosecha = saldo del libro = suma de los netos.
+describe("a la vez sobre la misma cosecha (Codex)", () => {
+  async function invariante(id: string, lotId: string) {
+    const fila = await prisma.apiaryHarvestEvent.findUniqueOrThrow({ where: { id }, include: { containers: true } });
+    const netos = fila.containers.reduce((t, c) => t + Number(c.grossKg) - Number(c.tareKg), 0);
+    return { peso: Number(fila.extractedWeightKg), libro: await saldo(lotId), netos, recipientes: fila.containers.length };
+  }
+
+  it("SEIS RECIPIENTES A LA VEZ: el peso y el libro son la suma de los seis", async () => {
+    const h = await cosecha();
+    const todos = await Promise.allSettled(
+      [1, 2, 3, 4, 5, 6].map((i) => anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: `b${i}`, grossKg: 10 + i, tareKg: 1 })),
+    );
+    expect(todos.filter((r) => r.status === "rejected")).toEqual([]);
+    const v = await invariante(h.id, h.resultingLotId);
+    expect(v.recipientes).toBe(6); // el control: entraron los seis
+    expect(v.peso).toBeCloseTo(75, 3);
+    expect(v.libro).toBeCloseTo(75, 3);
+  });
+
+  it("UN CIERRE A MANO CRUZADO CON UN RECIPIENTE: gane quien gane, peso, libro y netos coinciden", async () => {
+    for (let vuelta = 0; vuelta < 4; vuelta++) {
+      const h = await cosecha();
+      await Promise.allSettled([
+        completarCierreDeCosecha(operario, { apiaryHarvestEventId: h.id, extractedWeightKg: 40 }),
+        anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b1", grossKg: 26, tareKg: 1 }),
+      ]);
+      const v = await invariante(h.id, h.resultingLotId);
+      expect(v.recipientes).toBe(1); // el recipiente entra siempre; el cierre puede perder
+      expect(v.peso).toBeCloseTo(25, 3);
+      expect(v.libro).toBeCloseTo(25, 3);
+    }
+  });
+});
+
