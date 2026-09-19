@@ -126,7 +126,9 @@ describe("el inventario del router", () => {
     // `secreto-de-ruta` — lo que mandan los nodos de sensores. QUINTA vez que dos
     // sesiones suben la cifra al mismo número; medido sobre el árbol resuelto:
     // 75 páginas y 11 handlers.
-    expect(salida).toContain("86 entradas");
+    // 86 → 88 el 2026-09-18: /fincas y /fincas/nueva (spec fincas y parcelas). Medido: 77 páginas
+    // y 11 handlers.
+    expect(salida).toContain("88 entradas");
     expect(codigo, salida).toBe(0);
   });
 

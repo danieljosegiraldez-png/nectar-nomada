@@ -4,7 +4,8 @@ import { getTranslations } from "next-intl/server";
 import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getPlotDetail } from "../../../lib/traceability/plantingCohorts";
-import { LocationAccessError } from "../../../lib/traceability/locations";
+import { LocationAccessError, puedeGestionarAtributosDeUbicacion } from "../../../lib/traceability/locations";
+import { NuevaMicroparcelaForm } from "../../components/traceability/NuevaMicroparcelaForm";
 import { SoilProfileForm } from "../../components/traceability/SoilProfileForm";
 import { LandPhotoUploadForm } from "../../components/traceability/LandPhotoUploadForm";
 import { listLandAssets } from "../../../lib/traceability/landMedia";
@@ -41,6 +42,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
   if (!user) redirect("/login");
 
   const t = await getTranslations("Traceability");
+  const tf = await getTranslations("Fincas");
 
   let detail;
   try {
@@ -54,6 +56,8 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
 
   const { location, cohorts, density, organizationName, eventosDeProduccion, trampas, reglaDeTrampas } = detail;
   const rendimiento = detail.yield;
+  // Spec fincas y parcelas §3.3: una microparcela la crea quien gestiona los atributos de esta parcela.
+  const puedeSubdividir = location.locationType === "plot" && (await puedeGestionarAtributosDeUbicacion(user.userAccountId, id));
   const [jornadas, { people, selfPersonId }, calicatas] = await Promise.all([
     listFieldSessions(user.userAccountId, id),
     getObserverCandidates(user.userAccountId),
@@ -721,6 +725,17 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
           </article>
         ))}
       </details>
+
+      {puedeSubdividir ? (
+        <section className="nn-section">
+          <details>
+            <summary>
+              <h2 style={{ display: "inline" }}>{tf("nuevaMicroparcelaTitulo")}</h2>
+            </summary>
+            <NuevaMicroparcelaForm parentLocationId={id} />
+          </details>
+        </section>
+      ) : null}
     </div>
   );
 }

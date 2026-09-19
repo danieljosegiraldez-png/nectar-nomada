@@ -38,6 +38,22 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · Fincas y parcelas: elegir la finca, y crearlas desde la app (PR #425)
+
+Daniel: «debería preguntarme qué finca —trabajo con varias— o mostrarme todas» y «no me deja crear
+parcelas». Spec y plan `docs/superpowers/{specs,plans}/2026-09-18-fincas-y-parcelas*`.
+- **Elegir:** `/fincas`. La elección vive en una cookie de sesión que **sólo acota**: una finca
+  ajena se ignora. `/finca`, `/plots` y `/lots/new` preguntan si hay varias y ninguna elegida.
+- **Crear:** finca nueva o terreno de una organización sin él (sólo admin, permiso nuevo
+  `organization:create_farm`); parcela (Farm Manager de esa finca, `create_site`); microparcela
+  (`createMicrolot`, que ya existía sin pantalla). Nombres únicos bajo el mismo padre.
+- **La cosecha sólo sobre `plot`**, lo comprueba el servicio.
+- **Sin ver en navegador.**
+
+**De Daniel:** crear el terreno de **Kiva Estate** desde `/fincas` → «sin terreno». El seed dice que
+es un nombre ficticio (`prisma/seed.ts:168`) y Daniel dice que es real: el comentario queda para que
+él decida.
+
 ### 2026-09-18 · El despacho dice de qué lote sale cada frasco
 
 ADR-169. Daniel: «lo elige quien despacha». **El despacho no existía** —nada ponía un pedido en

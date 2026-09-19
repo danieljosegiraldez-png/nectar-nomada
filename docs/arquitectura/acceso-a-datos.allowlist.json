@@ -74,6 +74,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/fincas.ts",
+      "razon": "Módulo de dominio: las fincas (spec 2026-09-18 fincas y parcelas). `listarFincas` parte de `getManageableContext`, que ya resuelve la visibilidad de quien mira; la lectura del árbol de ubicaciones sólo sirve para subir de una parcela visible a su sitio, y no devuelve nada que no sea el sitio de algo ya visible. Crear finca exige `organization:create_farm` en ámbito de plataforma; crear parcela, `manage_attributes` y `create_site` sobre el sitio, ANTES de escribir, con el AuditEvent en la misma transacción."
+    },
+    {
       "archivo": "lib/apiary/genealogia.ts",
       "razon": "Módulo de dominio: la genealogía de la colonia (spec 2026-09-18 §3). Dividir exige `requireApiaryAccess` manage sobre la caja de la madre Y sobre la de destino ANTES de escribir, comprueba dentro de la transacción que el destino no tenga colonia activa, y escribe la hija con su AuditEvent en la MISMA transacción. Si la reina registrada va a la hija, cierra la tenencia de la madre y abre la de la hija en esa misma transacción, con su AuditEvent. Unir delega en `registrarFinDeColonia`, el único escritor del fin. Leer la línea exige view."
     },
@@ -520,6 +524,10 @@
   ],
   "reciben_transaccion": [
     {
+      "archivo": "lib/traceability/locations.ts",
+      "razon": "Spec fincas y parcelas §3.3: `nombreLibreBajo(tx, padre, nombre)` recibe el `tx` de quien crea —`createMicrolot` aquí mismo y `crearParcela` en fincas.ts— para mirar los hermanos DENTRO de la transacción que va a crear la fila. Sólo lee nombres de los hijos de un padre sobre el que quien llama ya pasó `requireLocationAttributeAccess`; no escribe nada."
+    },
+    {
       "archivo": "lib/apiary/artefactos.ts",
       "razon": "Artefactos de colmena: el UNICO escritor de los intervalos y de la foto en Hive. `abrirIntervaloEn`, `cerrarIntervaloEn` y `cerrarAbiertosEn` devuelven un cierre que recibe el `tx` de quien llama —la inspeccion, el formulario de la caja, la propia pantalla— para que el intervalo, la foto y sus AuditEvent se confirmen en LA MISMA transaccion que la escritura que los declara. Quien llama ya autorizo con requireApiaryAccess; los ayudantes solo tocan hive_fitting y hive de la colmena que reciben."
     },
@@ -578,6 +586,11 @@
       "archivo": "lib/sync/deviceTokens.ts",
       "operacion": "refrescarAcceso",
       "razon": "P4 §2. Se autentica con el refresh token, no con sesión, y es donde muerde la revocación. También flujo de autenticación. Verificado el 2026-09-05."
+    },
+    {
+      "archivo": "lib/traceability/fincas.ts",
+      "operacion": "listarFincas",
+      "razon": "Recibe al principal y no llama a `can` porque parte de `getManageableContext(userAccountId)`, que resuelve la visibilidad de lotes de esa cuenta y es quien autoriza. La lectura del árbol de ubicaciones sólo sirve para subir de una ubicación ya visible a su sitio; no devuelve nada que no sea el sitio de algo visible. Probado en tests/traceability/fincas.test.ts: el Farm Manager de A no ve B. Verificado el 2026-09-18."
     },
     {
       "archivo": "lib/rbac/admin.ts",

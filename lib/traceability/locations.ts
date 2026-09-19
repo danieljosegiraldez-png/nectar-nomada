@@ -15,7 +15,7 @@ import { can } from "../rbac/service";
 import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
-import type { Aspect, LocationType, ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
+import type { Aspect, LocationType, Prisma, ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
 
 export class LocationAccessError extends Error {}
 
@@ -336,6 +336,17 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
   return after;
 }
 
+/**
+ * ¿Está libre este nombre entre los hijos de `parentLocationId`? Sin distinguir mayúsculas ni
+ * espacios de los extremos: «Lote 7» y « lote 7 » son el mismo nombre en el patio. Se llama DENTRO
+ * de la transacción que va a crear la fila.
+ */
+export async function nombreLibreBajo(db: Prisma.TransactionClient, parentLocationId: string, nombre: string) {
+  const hermanos = await db.location.findMany({ where: { parentLocationId }, select: { name: true } });
+  const clave = nombre.trim().toLowerCase();
+  return !hermanos.some((h) => h.name.trim().toLowerCase() === clave);
+}
+
 export interface CreateMicrolotInput {
   parentLocationId: string;
   name: string;
@@ -377,6 +388,8 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
   }
 
   const microlot = await prisma.$transaction(async (tx) => {
+    // Spec fincas y parcelas §3.3: un nombre no se repite dentro del mismo padre.
+    if (!(await nombreLibreBajo(tx, parent.id, input.name))) throw new LocationValidationError("nombre_repetido");
     const microlot = await tx.location.create({
       data: {
         name: input.name.trim(),
