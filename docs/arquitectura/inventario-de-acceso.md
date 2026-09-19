@@ -23,7 +23,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
 | **356** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **38** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **39** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **65** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
