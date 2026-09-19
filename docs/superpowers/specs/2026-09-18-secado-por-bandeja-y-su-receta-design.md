@@ -139,7 +139,7 @@ sitio (finca / beneficio)
 - **el estado del café**: `CHERRY`, `MUCILAGE_HONEY` o `PARCHMENT`, del enum `MaterialState` que ya existe (cereza entera, mucílago, lavado);
 - **el peso neto** en kg, con tres decimales;
 - **la profundidad en 3 o 4 puntos**, en cm;
-- cuándo, quién, y el lote si se pesó con uno.
+- cuándo, quién, y **el lote con el que se pesó**. **Obligatorio**, corregido al planear: el protocolo de §7 pesa café de un lote («repetir en lotes distintos»), y el lote es lo que da el permiso —quien lo gestiona pesa— y el camino de vuelta de la cifra. La primera redacción decía «si se pesó con uno»; sin lote no habría a quién preguntarle el permiso.
 
 Es `measured_fact`, y no se edita: una corrección es un registro nuevo que supersede (`00_conventions` §4).
 

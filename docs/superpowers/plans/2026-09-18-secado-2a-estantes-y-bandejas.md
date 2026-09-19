@@ -412,6 +412,18 @@ describe("reglas del estante en la base", () => {
     await expect(prisma.location.create({ data: { name: nombre(), locationType: "drying_bed", parentLocationId: rack.id, rackLevel: 1, rackSlot: 0 } })).rejects.toThrow(/location_rack_slot_positivo/);
     await expect(prisma.location.create({ data: { name: nombre(), locationType: "drying_bed", parentLocationId: inv.id, rackSlot: 2 } })).rejects.toThrow(/puesto solo en una posicion de estante/);
   });
+
+  it("del lado del padre: una instalación con estantes y un estante con posiciones no cambian de tipo; sin hijos, sí", async () => {
+    const s = await sitio();
+    const inv = await prisma.location.create({ data: { name: nombre(), locationType: "drying_facility", parentLocationId: s.id } });
+    const rack = await prisma.location.create({ data: { name: nombre(), locationType: "drying_rack", parentLocationId: inv.id } });
+    await prisma.location.create({ data: { name: nombre(), locationType: "drying_bed", parentLocationId: rack.id, rackLevel: 1, rackSlot: 1 } });
+    await expect(prisma.location.update({ where: { id: inv.id }, data: { locationType: "site" } })).rejects.toThrow(/instalacion con estantes no cambia de tipo/);
+    await expect(prisma.location.update({ where: { id: rack.id }, data: { locationType: "drying_facility" } })).rejects.toThrow(/estante con posiciones no cambia de tipo/);
+    // Control: una instalación SIN estantes sí puede cambiar (lo que el árbol ya permitía).
+    const sola = await prisma.location.create({ data: { name: nombre(), locationType: "drying_facility", parentLocationId: s.id } });
+    expect((await prisma.location.update({ where: { id: sola.id }, data: { locationType: "site" } })).locationType).toBe("site");
+  });
 });
 
 describe("la inspección de hoy no ofrece posiciones de estante", () => {
@@ -453,6 +465,21 @@ CREATE OR REPLACE FUNCTION "core"."exigir_arbol_de_estante"()
 RETURNS TRIGGER AS $$
 DECLARE tipo_padre TEXT;
 BEGIN
+  -- Del lado del PADRE (revisión de Codex del plan 2a): una instalación con
+  -- estantes, o un estante con posiciones, no cambia de tipo. Sin esto, pasar
+  -- una instalación a `site` dejaba sus estantes colgando de un padre inválido.
+  IF TG_OP = 'UPDATE' AND NEW."location_type" IS DISTINCT FROM OLD."location_type" THEN
+    IF NEW."location_type" <> 'drying_facility' AND EXISTS (
+      SELECT 1 FROM "core"."location" WHERE "parent_location_id" = NEW."id" AND "location_type" = 'drying_rack'
+    ) THEN
+      RAISE EXCEPTION 'Una instalacion con estantes no cambia de tipo';
+    END IF;
+    IF NEW."location_type" <> 'drying_rack' AND EXISTS (
+      SELECT 1 FROM "core"."location" WHERE "parent_location_id" = NEW."id" AND "rack_slot" IS NOT NULL
+    ) THEN
+      RAISE EXCEPTION 'Un estante con posiciones no cambia de tipo';
+    END IF;
+  END IF;
   SELECT "location_type"::TEXT INTO tipo_padre FROM "core"."location" WHERE "id" = NEW."parent_location_id";
   IF NEW."location_type" = 'drying_rack' AND tipo_padre IS DISTINCT FROM 'drying_facility' THEN
     RAISE EXCEPTION 'Un estante debe colgar de una instalacion de secado (cuelga de %)', tipo_padre;
@@ -499,7 +526,7 @@ En el esquema, debajo de `rackLevel`:
 import type { ClassificationLevel, Prisma } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { exigeEditarBeneficioEn } from "./locations";
+import { exigeEditarBeneficioEn, resolveOrganizationForLocation } from "./locations";
 
 export class EstanteError extends Error {}
 /** Límites físicos del formulario —evitan crear un millón de filas por un error de tecleo—, no umbrales de dominio. */
@@ -541,10 +568,15 @@ export async function crearEstante(userAccountId: string, input: { facilityId: s
   validar(input.niveles, input.puestos);
   const cuarto = await prisma.location.findUniqueOrThrow({ where: { id: input.facilityId } });
   if (cuarto.locationType !== "drying_facility") throw new EstanteError("tipo_invalido");
+  // La organización se RESUELVE subiendo por el árbol, no se copia de la columna:
+  // una instalación puede heredarla (organizationId nulo). Si se copiara el nulo,
+  // cada posición saldría «de otra organización» al compararla con la bandeja
+  // (revisión de Codex del plan 2a).
+  const organizationId = await resolveOrganizationForLocation(cuarto.id);
   return prisma.$transaction(async (tx) => {
     const rack = await tx.location.create({ data: {
       name: nombre, locationType: "drying_rack", parentLocationId: cuarto.id,
-      organizationId: cuarto.organizationId, classification: cuarto.classification, timezone: cuarto.timezone, createdBy: userAccountId,
+      organizationId, classification: cuarto.classification, timezone: cuarto.timezone, createdBy: userAccountId,
     } });
     const creadas = await crearPosiciones(tx, rack, input.niveles, input.puestos, userAccountId);
     await recordAuditEvent({ actorUserAccountId: userAccountId, operation: "location.create_drying_rack", entityType: "location",
@@ -581,20 +613,39 @@ En `lib/traceability/instalaciones.ts`, `detalleInstalacion` añade:
   const racks = await prisma.location.findMany({ where: { parentLocationId: id, locationType: "drying_rack" }, orderBy: { name: "asc" } });
   const estantes = [];
   for (const r of racks) {
-    const posiciones = await prisma.location.findMany({
+    // Cada estante y cada posición pasan SU PROPIO permiso, como ya hacen las
+    // camas unas líneas arriba: una clasificación más estrecha en un hijo no se
+    // salta porque el padre sea visible (revisión de Codex del plan 2a).
+    if (!(await can(userAccountId, "manage_attributes", "location", { scopeType: "location", scopeRefId: r.id }, r.classification))) continue;
+    const todas = await prisma.location.findMany({
       where: { parentLocationId: r.id }, orderBy: [{ rackLevel: "asc" }, { rackSlot: "asc" }],
-      select: { id: true, rackLevel: true, rackSlot: true },
+      select: { id: true, rackLevel: true, rackSlot: true, classification: true, shadePercentage: true, shadeDescription: true },
     });
+    const posiciones = [];
+    for (const p of todas) {
+      if (await can(userAccountId, "manage_attributes", "location", { scopeType: "location", scopeRefId: p.id }, p.classification)) posiciones.push(p);
+    }
     estantes.push({
       id: r.id, name: r.name,
-      niveles: Math.max(0, ...posiciones.map((p) => p.rackLevel ?? 0)),
-      puestos: Math.max(0, ...posiciones.map((p) => p.rackSlot ?? 0)),
-      posiciones: posiciones.map((p) => ({ id: p.id, nivel: p.rackLevel!, puesto: p.rackSlot! })),
+      // Del estante entero, no sólo de lo visible: ampliar tiene que saber su tamaño real.
+      niveles: Math.max(0, ...todas.map((p) => p.rackLevel ?? 0)),
+      puestos: Math.max(0, ...todas.map((p) => p.rackSlot ?? 0)),
+      shadePercentage: r.shadePercentage, shadeDescription: r.shadeDescription,
+      posiciones: posiciones.map((p) => ({
+        id: p.id, nivel: p.rackLevel!, puesto: p.rackSlot!,
+        shadePercentage: p.shadePercentage, shadeDescription: p.shadeDescription,
+      })),
     });
   }
 ```
 
-y `estantes` en el `return`. El permiso es el de la instalación, que ya se exigió arriba. Un estante con una concesión propia y más estrecha no existe hoy, porque `edit_beneficio` se concede sobre el beneficio.
+y `estantes` en el `return`. La página calcula `puedeEditarBeneficioEn(user, estante.id)` **por estante** para ofrecer «Ampliar», igual que ya lo hace por cama.
+
+**La sombra de una posición** (spec §4.1: la cama o posición lleva la suya si difiere):
+- en la rejilla, cada celda es un enlace a `?posicion=<id>`, y con ese parámetro la página pinta, debajo de la rejilla, `FormularioUbicacion` con `tipo="drying_bed"` y `existente` de esa posición;
+- **`actualizarUbicacionDeSecado` conserva el nivel y el puesto de una posición:** si `before.rackSlot != null`, escribe `rackLevel: before.rackLevel` y deja `rackSlot` sin tocar, ignore lo que traiga el formulario;
+- la celda enseña su sombra si la tiene, y si no, **nada**: la de la instalación ya está arriba, marcada;
+- una prueba en `estantes.test.ts`: actualizar la sombra de una posición deja `rackLevel` y `rackSlot` intactos.
 
 En `lib/traceability/samplingEvents.ts`, `opcionesParaInspeccion`: la consulta de camas pasa a `where: { locationType: "drying_bed", parentLocation: { locationType: { not: "drying_rack" } } }`. **Por qué:** la inspección por bandeja es el paso 3. Hasta entonces, ofrecer 72 o 300 posiciones en un desplegable no sirve para nada.
 
@@ -646,7 +697,7 @@ Mensajes, `Secado`, en es y en:
 **Archivos:**
 - Crear: `prisma/migrations/20260918191000_tipos_y_numero_de_bandeja/migration.sql`
 - Crear: `lib/equipos/bandejas.ts`
-- Modificar: `prisma/schema.prisma`, `lib/equipos/equipos.ts`, `docs/beneficio/03_public_api.md`, `scripts/pruebas-por-compuerta.txt`
+- Modificar: `prisma/schema.prisma`, `lib/equipos/equipos.ts`, `lib/traceability/locations.ts` (`lugaresDeOrganizacion` extraída), `docs/beneficio/03_public_api.md`, `scripts/pruebas-por-compuerta.txt`
 - Crear: `tests/equipos/bandejas.test.ts`
 
 **Interfaces:**
@@ -684,10 +735,16 @@ describe("tipos de bandeja", () => {
     expect(Number(fila.widthCm)).toBe(121.9);   // 4 × 30,48 = 121,92 → un decimal
     expect(Number(fila.lengthCm)).toBe(61);     // 2 × 30,48 = 60,96 → 61,0
     expect(fila.entryUnit).toBe("ft");
-    // Control contra la fuente independiente (plan de secado §6): 0,743 y 0,372 m².
-    expect(areaM2(fila)).toBeCloseTo(0.743, 3);
+    // Dos comprobaciones distintas, que Codex separó:
+    // (1) el área de lo GUARDADO, exacta: 121,9 × 61,0 / 10.000 = 0,74359 m²;
+    expect(areaM2(fila)).toBeCloseTo(0.74359, 5);
+    // (2) el control contra la fuente independiente (plan de secado §6, «0.743 m²»),
+    //     con la tolerancia de su redondeo: el plan da tres decimales.
+    expect(Math.abs(areaM2(fila) - 0.743)).toBeLessThan(0.001);
     const dos = await crearTipoDeBandeja(gerente, { organizationId: org, nombre: "2×2 pies", ancho: 2, largo: 2, unidad: "ft" });
-    expect(areaM2(await prisma.dryingTrayType.findUniqueOrThrow({ where: { id: dos.id } }))).toBeCloseTo(0.372, 3);
+    const fila2 = await prisma.dryingTrayType.findUniqueOrThrow({ where: { id: dos.id } });
+    expect(areaM2(fila2)).toBeCloseTo(0.3721, 4);                 // 61,0 × 61,0
+    expect(Math.abs(areaM2(fila2) - 0.372)).toBeLessThan(0.001);  // plan de secado §6
   });
 
   it("rechaza medidas inválidas, nombre repetido y a quien no configura el beneficio", async () => {
@@ -743,6 +800,10 @@ describe("reglas de la bandeja en la base", () => {
     await expect(prisma.equipment.create({ data: { ...base, name: "dup", kind: "vessel", trayTypeId: tipo.id, trayNumber: 902 } })).rejects.toThrow(/equipment_numero_de_bandeja_unico/);
     const deOtra = await crearTipoDeBandeja(gerenteDeOtra, { organizationId: otraOrg, nombre: "Otra", ancho: 1, largo: 1, unidad: "ft" });
     await expect(prisma.equipment.create({ data: { ...base, name: "x", kind: "vessel", trayTypeId: deOtra.id, trayNumber: 903 } })).rejects.toThrow(/tipo de bandeja es de otra organizacion/);
+    // Del lado del tipo: con bandejas no se muda de organización; sin ellas, sí.
+    await expect(prisma.dryingTrayType.update({ where: { id: tipo.id }, data: { organizationId: otraOrg } })).rejects.toThrow(/con bandejas no cambia de organizacion/);
+    const vacio = await crearTipoDeBandeja(gerente, { organizationId: org, nombre: "Vacío", ancho: 1, largo: 1, unidad: "ft" });
+    expect((await prisma.dryingTrayType.update({ where: { id: vacio.id }, data: { organizationId: otraOrg } })).organizationId).toBe(otraOrg);
   });
 });
 ```
@@ -817,6 +878,24 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER "equipment_tipo_de_bandeja_propio"
   BEFORE INSERT OR UPDATE OF "tray_type_id", "organization_id" ON "core"."equipment"
   FOR EACH ROW EXECUTE FUNCTION "core"."exigir_tipo_de_bandeja_propio"();
+
+-- Del lado del TIPO (revisión de Codex del plan 2a): un tipo con bandejas no
+-- cambia de organización. Sin esto, mover el tipo dejaba sus bandejas «de otra
+-- organización» sin disparar la comprobación de arriba. (Los pesajes, que llegan
+-- en la Tarea 4, amplían esta función con su propia condición.)
+CREATE OR REPLACE FUNCTION "core"."exigir_tipo_de_bandeja_quieto"()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW."organization_id" IS DISTINCT FROM OLD."organization_id"
+     AND EXISTS (SELECT 1 FROM "core"."equipment" WHERE "tray_type_id" = NEW."id") THEN
+    RAISE EXCEPTION 'Un tipo de bandeja con bandejas no cambia de organizacion';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER "drying_tray_type_quieto"
+  BEFORE UPDATE OF "organization_id" ON "core"."drying_tray_type"
+  FOR EACH ROW EXECUTE FUNCTION "core"."exigir_tipo_de_bandeja_quieto"();
 ```
 
 En el esquema:
@@ -863,6 +942,33 @@ model DryingTrayType {
 
 - [ ] **Paso 4: el servicio**
 
+En `lib/traceability/locations.ts`, **se extrae sin cambiar su comportamiento** la bajada de `exigeEditarBeneficioEnOrganizacion`: el bloque que junta `propias` y recorre la `frontera` de hijos con `organizationId` nulo.
+
+```ts
+/**
+ * Las Location de una organización: las propias y sus descendientes que la
+ * HEREDAN (organizationId nulo). Un descendiente con otra organización corta el
+ * camino. Extraída de `exigeEditarBeneficioEnOrganizacion`, que la sigue usando.
+ */
+export async function lugaresDeOrganizacion(organizationId: string) {
+  const propias = await prisma.location.findMany({ where: { organizationId }, select: { id: true, classification: true } });
+  const lugares = [...propias];
+  let frontera = propias.map((l) => l.id);
+  while (frontera.length > 0) {
+    const hijos = await prisma.location.findMany({
+      where: { parentLocationId: { in: frontera }, organizationId: null },
+      select: { id: true, classification: true },
+    });
+    if (hijos.length === 0) break;
+    lugares.push(...hijos);
+    frontera = hijos.map((h) => h.id);
+  }
+  return lugares;
+}
+```
+
+`exigeEditarBeneficioEnOrganizacion` pasa a `const lugares = await lugaresDeOrganizacion(organizationId);`. **Control:** `npx vitest run tests/traceability/editarBeneficio.test.ts` sigue verde antes y después de la extracción. Es un movimiento, no un cambio.
+
 En `lib/equipos/equipos.ts`, debajo de `puedeGestionarEquipo`:
 
 ```ts
@@ -886,7 +992,7 @@ import type { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { can } from "../rbac/service";
-import { exigeEditarBeneficioEnOrganizacion, puedeEditarBeneficioEnOrganizacion } from "../traceability/locations";
+import { exigeEditarBeneficioEnOrganizacion, lugaresDeOrganizacion, puedeEditarBeneficioEnOrganizacion, resolveOrganizationForLocation } from "../traceability/locations";
 import { puedeConfigurarEn, puedeVerEquipo } from "./equipos";
 
 export class BandejaConfigError extends Error {}
@@ -930,7 +1036,11 @@ export async function crearTipoDeBandeja(userAccountId: string, input: { organiz
  */
 async function puedeVerEquiposEnOrganizacion(userAccountId: string, organizationId: string) {
   if (await puedeEditarBeneficioEnOrganizacion(userAccountId, organizationId)) return true;
-  const lugares = await prisma.location.findMany({ where: { organizationId }, select: { id: true, classification: true } });
+  // Las propias y las descendientes que HEREDAN la organización: la misma bajada
+  // que ya hace `exigeEditarBeneficioEnOrganizacion`, extraída a una función
+  // (revisión de Codex del plan 2a: sin ella, un operario asignado en un hijo con
+  // organizationId nulo no veía nada).
+  const lugares = await lugaresDeOrganizacion(organizationId);
   for (const l of lugares) {
     if (await can(userAccountId, "view", "equipment", { scopeType: "location", scopeRefId: l.id }, l.classification)) return true;
   }
@@ -948,8 +1058,9 @@ export async function registrarBandejas(userAccountId: string, input: { siteId: 
   if (!(await puedeConfigurarEn(userAccountId, input.siteId))) throw new BandejaConfigError("sin_acceso");
   const sitio = await prisma.location.findUniqueOrThrow({ where: { id: input.siteId } });
   const tipo = await prisma.dryingTrayType.findUniqueOrThrow({ where: { id: input.trayTypeId } });
-  if (!sitio.organizationId || tipo.organizationId !== sitio.organizationId) throw new BandejaConfigError("tipo_de_otra_organizacion");
-  const org = sitio.organizationId;
+  // Resuelta subiendo por el árbol: un sitio puede heredar su organización.
+  const org = await resolveOrganizationForLocation(sitio.id);
+  if (!org || tipo.organizationId !== org) throw new BandejaConfigError("tipo_de_otra_organizacion");
 
   return prisma.$transaction(async (tx) => {
     // El número se decide con la organización bloqueada: dos tandas a la vez esperan
@@ -1045,17 +1156,30 @@ export interface CapacidadPorEstado {
   estado: EstadoDeCarga;
   fuente: "medido" | "estimado" | "sin_medir";
   pesajes: number;                 // los que entran en el cálculo (no superseded)
+  pesajeIds: string[];             // el camino de vuelta a esas lecturas (21_rubrica_veracidad §2.6)
   densidadKgM3: number | null;
   profundidadCm: number | null;
   capacidadKg: number | null;
   fuenteDelEstimado: string | null;
 }
 export async function capacidadDeTipo(userAccountId: string, trayTypeId: string): Promise<{ areaM2: number; estados: CapacidadPorEstado[] }>;
+export async function pesajesDeTipo(userAccountId: string, trayTypeId: string, estado: EstadoDeCarga): Promise<{
+  id: string; occurredAt: Date; lote: string | null; netKg: number; profundidadesCm: number[]; densidadKgM3: number;
+}[]>;
 ```
 
 - [ ] **Paso 1: las pruebas que fallan**
 
-`tests/traceability/capacidadDeBandeja.test.ts`, con el montaje de `bandejas.test.ts`: una organización, un sitio, un gerente y un tipo 4×2 pies. Añade un **lote** de la organización en el sitio, creado con `createLot`, y el **operario** con permiso de gestionar lotes en el sitio.
+`tests/traceability/capacidadDeBandeja.test.ts`, con el montaje de `bandejas.test.ts`. **Con aislamiento por prueba**, porque la capacidad cuenta TODOS los pesajes vigentes del tipo, y una prueba que dejara un pesaje cambiaría la siguiente (revisión de Codex del plan 2a):
+
+- `beforeAll`:
+  - la organización `org`, con **dos sitios**, A y B;
+  - un gerente;
+  - **`operario`**, Farm Operator en A, y su lote `lotId`, creado con `createLot` en A;
+  - **`vecino`**, Farm Operator en B, y su lote `loteB` en B: misma organización, **otro ámbito**;
+  - una segunda organización `otraOrg`, con su lote `loteDeOtraOrg`.
+- `beforeEach`: `tipo4x2 = (await crearTipoDeBandeja(gerente, { organizationId: org, nombre: \`4×2 ${crypto.randomUUID()}\`, ancho: 4, largo: 2, unidad: "ft" })).id`. **Un tipo nuevo por prueba:** ningún pesaje de una prueba se ve en otra.
+- `afterAll`: primero los pesajes, con la limpieza de `SET LOCAL nn.limpieza_de_pruebas`; después los tipos, los lotes, y el resto en el orden de las claves foráneas.
 
 ```ts
 describe("capacidad", () => {
@@ -1073,12 +1197,13 @@ describe("capacidad", () => {
   });
 
   it("con pesajes: la densidad sale de ellos y reemplaza al estimado; sólo en su estado", async () => {
-    // 0,7432 m² × 0,030 m = 0,022296 m³; 9,0 kg / 0,022296 = 403,66 kg/m³
-    await registrarPesaje(operario, { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 9, profundidadesCm: [3, 3, 3], occurredAt: new Date() });
+    // Área GUARDADA: 121,9 × 61,0 cm = 0,74359 m² (no la 0,7432 exacta: se guarda a un decimal).
+    // 0,74359 × 0,030 m = 0,0223077 m³; 9,0 kg / 0,0223077 = 403,45 kg/m³
+    const p = await registrarPesaje(operario, { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 9, profundidadesCm: [3, 3, 3], occurredAt: new Date() });
     const cap = await capacidadDeTipo(operario, tipo4x2);
     const cereza = cap.estados.find((x) => x.estado === "CHERRY")!;
-    expect(cereza).toMatchObject({ fuente: "medido", pesajes: 1, fuenteDelEstimado: null });
-    expect(cereza.densidadKgM3!).toBeCloseTo(403.7, 0);
+    expect(cereza).toMatchObject({ fuente: "medido", pesajes: 1, pesajeIds: [p.id], fuenteDelEstimado: null });
+    expect(cereza.densidadKgM3!).toBeCloseTo(403.45, 1);
     expect(cereza.capacidadKg!).toBeCloseTo(9, 1);        // a su propia profundidad medida
     expect(cap.estados.find((x) => x.estado === "PARCHMENT")!.fuente).toBe("sin_medir"); // no contagia a otro estado
   });
@@ -1097,13 +1222,31 @@ describe("capacidad", () => {
     for (const mal of [{ netKg: 0 }, { netKg: -1 }, { profundidadesCm: [3, 3] }, { profundidadesCm: [3, 3, 3, 3, 3] }, { profundidadesCm: [3, 0, 3] }, { materialState: "GREEN" as never }]) {
       await expect(registrarPesaje(operario, { ...base, ...mal })).rejects.toThrow(/datos_invalidos|estado_invalido/);
     }
-    await expect(registrarPesaje(operario, { ...base, supersedesId: "00000000-0000-0000-0000-000000000000" })).rejects.toThrow("datos_invalidos"); // corrección sin razón
-    expect((await registrarPesaje(operario, base)).id).toBeTruthy(); // control
+    // Corrección sin razón, sobre un pesaje QUE EXISTE: con un id inventado, `updateMany`
+    // daría 0 y lanzaría lo mismo aunque faltara la validación de la razón (Codex).
+    const original = await registrarPesaje(operario, base); // también es el control de que `base` es válido
+    await expect(registrarPesaje(operario, { ...base, supersedesId: original.id })).rejects.toThrow("datos_invalidos");
+    expect((await prisma.dryingTrayWeighing.findUniqueOrThrow({ where: { id: original.id } })).supersededAt).toBeNull(); // sigue vigente
+    expect((await registrarPesaje(operario, { ...base, supersedesId: original.id, correctionReason: "Profundidad mal leída" })).id).toBeTruthy();
   });
 
-  it("quien no gestiona el lote no pesa", async () => {
-    await expect(registrarPesaje(ajeno, { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 8, profundidadesCm: [3, 3, 3], occurredAt: new Date() }))
+  it("quien no gestiona el lote no pesa, ni corrige el pesaje de un lote que no gestiona", async () => {
+    await expect(registrarPesaje(vecino, { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 8, profundidadesCm: [3, 3, 3], occurredAt: new Date() }))
       .rejects.toThrow();
+    // El vecino pesa SU lote; el operario intenta supersederlo presentando el suyo.
+    const delVecino = await registrarPesaje(vecino, { trayTypeId: tipo4x2, lotId: loteB, materialState: "CHERRY", netKg: 8, profundidadesCm: [3, 3, 3], occurredAt: new Date() });
+    await expect(registrarPesaje(operario, { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 7, profundidadesCm: [3, 3, 3], occurredAt: new Date(), supersedesId: delVecino.id, correctionReason: "x" }))
+      .rejects.toThrow();
+    expect((await prisma.dryingTrayWeighing.findUniqueOrThrow({ where: { id: delVecino.id } })).supersededAt).toBeNull();
+  });
+
+  it("cada capacidad medida lleva a sus pesajes, y cada pesaje dice su lote sólo a quien lo ve", async () => {
+    const mio = await registrarPesaje(operario, { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 8, profundidadesCm: [3, 3, 3], occurredAt: new Date() });
+    const suyo = await registrarPesaje(vecino, { trayTypeId: tipo4x2, lotId: loteB, materialState: "CHERRY", netKg: 8.4, profundidadesCm: [3, 3, 3], occurredAt: new Date() });
+    const lista = await pesajesDeTipo(operario, tipo4x2, "CHERRY");
+    expect(lista.map((x) => x.id).sort()).toEqual([mio.id, suyo.id].sort());
+    expect(lista.find((x) => x.id === mio.id)!.lote).not.toBeNull();
+    expect(lista.find((x) => x.id === suyo.id)!.lote).toBeNull(); // el número cuenta; el lote ajeno no se nombra
   });
 });
 
@@ -1116,6 +1259,29 @@ describe("reglas del pesaje en la base", () => {
     const ok = await prisma.dryingTrayWeighing.create({ data: { ...d, materialState: "CHERRY", depthPointsCm: [3, 3, 3] } }); // control
     await expect(prisma.dryingTrayWeighing.update({ where: { id: ok.id }, data: { netKg: 9 } })).rejects.toThrow(/pesaje no se edita/);
     expect((await prisma.dryingTrayWeighing.update({ where: { id: ok.id }, data: { supersededAt: new Date() } })).supersededAt).toBeTruthy();
+  });
+
+  it("los CHECK no dejan pasar un NULL: profundidad nula y corrección sin razón", async () => {
+    // Por SQL directo: el cliente tipado no deja escribir un NULL dentro del array.
+    const insertar = (profundidades: string, supersedes: string | null, razon: string | null) => prisma.$executeRawUnsafe(
+      `INSERT INTO "traceability"."drying_tray_weighing" ("tray_type_id","lot_id","material_state","net_kg","depth_points_cm","occurred_at","provenance_class","supersedes_id","correction_reason")
+       VALUES ($1::uuid,$2::uuid,'CHERRY',8,${profundidades},now(),'measured_fact',$3::uuid,$4)`,
+      tipo4x2, lotId, supersedes, razon);
+    await expect(insertar("ARRAY[3,NULL,3]::numeric[]", null, null)).rejects.toThrow(/tres_o_cuatro_puntos/);
+    await expect(insertar("ARRAY[[3,3],[3,3]]::numeric[]", null, null)).rejects.toThrow(/tres_o_cuatro_puntos/);
+    const base = await prisma.dryingTrayWeighing.create({ data: { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 8, depthPointsCm: [3, 3, 3], occurredAt: new Date(), provenanceClass: "measured_fact" } });
+    await expect(insertar("ARRAY[3,3,3]::numeric[]", base.id, null)).rejects.toThrow(/correccion_con_razon/);
+    expect(await insertar("ARRAY[3,3,3]::numeric[]", base.id, "control con razón")).toBe(1); // control positivo
+  });
+
+  it("sólo measured_fact, una organización, y no se borra; los padres no se mudan", async () => {
+    const d = { trayTypeId: tipo4x2, lotId, materialState: "CHERRY" as const, netKg: 8, depthPointsCm: [3, 3, 3], occurredAt: new Date() };
+    await expect(prisma.dryingTrayWeighing.create({ data: { ...d, provenanceClass: "original_record" } })).rejects.toThrow(/drying_tray_weighing_medido/);
+    await expect(prisma.dryingTrayWeighing.create({ data: { ...d, lotId: loteDeOtraOrg, provenanceClass: "measured_fact" } })).rejects.toThrow(/mezcla organizaciones/);
+    const p = await prisma.dryingTrayWeighing.create({ data: { ...d, provenanceClass: "measured_fact" } }); // control
+    await expect(prisma.dryingTrayWeighing.delete({ where: { id: p.id } })).rejects.toThrow(/pesaje no se borra/);
+    await expect(prisma.dryingTrayType.update({ where: { id: tipo4x2 }, data: { organizationId: otraOrg } })).rejects.toThrow(/no cambia de organizacion/);
+    await expect(prisma.lot.update({ where: { id: lotId }, data: { organizationId: otraOrg } })).rejects.toThrow(/lote con pesajes de bandeja no cambia/);
   });
 });
 ```
@@ -1148,16 +1314,27 @@ CREATE TABLE "traceability"."drying_tray_weighing" (
   CONSTRAINT "drying_tray_weighing_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "drying_tray_weighing_estado_de_secado" CHECK ("material_state" IN ('CHERRY', 'MUCILAGE_HONEY', 'PARCHMENT')),
   CONSTRAINT "drying_tray_weighing_peso_positivo" CHECK ("net_kg" > 0),
-  CONSTRAINT "drying_tray_weighing_tres_o_cuatro_puntos" CHECK (cardinality("depth_points_cm") BETWEEN 3 AND 4),
+  -- Un CHECK que da NULL PASA. Por eso cada uno descarta el nulo explícitamente
+  -- (revisión de Codex del plan 2a): [3, NULL, 3] pasaba cardinalidad y el ALL,
+  -- y una corrección con razón NULL pasaba la razón.
+  CONSTRAINT "drying_tray_weighing_tres_o_cuatro_puntos" CHECK (
+    array_ndims("depth_points_cm") = 1 AND cardinality("depth_points_cm") BETWEEN 3 AND 4
+    AND array_position("depth_points_cm", NULL) IS NULL
+  ),
   CONSTRAINT "drying_tray_weighing_profundidad_positiva" CHECK (0 < ALL("depth_points_cm")),
-  CONSTRAINT "drying_tray_weighing_correccion_con_razon" CHECK ("supersedes_id" IS NULL OR char_length(trim("correction_reason")) > 0)
+  CONSTRAINT "drying_tray_weighing_correccion_con_razon" CHECK (
+    "supersedes_id" IS NULL OR ("correction_reason" IS NOT NULL AND char_length(trim("correction_reason")) > 0)
+  ),
+  CONSTRAINT "drying_tray_weighing_medido" CHECK ("provenance_class" = 'measured_fact')
 );
 ALTER TABLE "traceability"."drying_tray_weighing"
   ADD CONSTRAINT "drying_tray_weighing_tray_type_id_fkey" FOREIGN KEY ("tray_type_id") REFERENCES "core"."drying_tray_type"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
   ADD CONSTRAINT "drying_tray_weighing_lot_id_fkey" FOREIGN KEY ("lot_id") REFERENCES "traceability"."lot"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-  ADD CONSTRAINT "drying_tray_weighing_operator_person_id_fkey" FOREIGN KEY ("operator_person_id") REFERENCES "core"."person"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+  -- RESTRICT y no SET NULL: un SET NULL sería un UPDATE, que el disparador de
+  -- inmutabilidad rechaza, y la autoría de una medida no se pierde en silencio.
+  ADD CONSTRAINT "drying_tray_weighing_operator_person_id_fkey" FOREIGN KEY ("operator_person_id") REFERENCES "core"."person"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
   ADD CONSTRAINT "drying_tray_weighing_supersedes_id_fkey" FOREIGN KEY ("supersedes_id") REFERENCES "traceability"."drying_tray_weighing"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-  ADD CONSTRAINT "drying_tray_weighing_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "core"."user_account"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  ADD CONSTRAINT "drying_tray_weighing_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "core"."user_account"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 CREATE INDEX "drying_tray_weighing_tray_type_id_idx" ON "traceability"."drying_tray_weighing"("tray_type_id");
 
 -- Inmutable salvo marcarlo superseded UNA vez (00_conventions §4).
@@ -1174,7 +1351,86 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER "drying_tray_weighing_inmutable"
   BEFORE UPDATE ON "traceability"."drying_tray_weighing"
   FOR EACH ROW EXECUTE FUNCTION "traceability"."pesaje_inmutable"();
+
+-- Tampoco se borra (00_conventions §4; revisión de Codex del plan 2a). La única
+-- puerta es un ajuste de SESIÓN que sólo pone la limpieza de las pruebas, dentro
+-- de su transacción con SET LOCAL: la aplicación no lo pone en ningún sitio, y un
+-- guardia de fuente lo comprueba (paso 4). Es la misma debilidad que tiene hoy
+-- todo el proyecto —los roles de la base no revocan DELETE— dicha en voz alta.
+CREATE OR REPLACE FUNCTION "traceability"."pesaje_no_se_borra"()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF current_setting('nn.limpieza_de_pruebas', true) = 'on' THEN RETURN OLD; END IF;
+  RAISE EXCEPTION 'Un pesaje no se borra: se corrige con un registro nuevo que lo supersede';
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER "drying_tray_weighing_no_se_borra"
+  BEFORE DELETE ON "traceability"."drying_tray_weighing"
+  FOR EACH ROW EXECUTE FUNCTION "traceability"."pesaje_no_se_borra"();
+
+-- El tipo y el lote son de la MISMA organización. Las claves foráneas no lo
+-- dicen, y un importador podría contaminar la capacidad de una finca con los
+-- pesajes de otra (revisión de Codex del plan 2a).
+CREATE OR REPLACE FUNCTION "traceability"."exigir_pesaje_de_una_organizacion"()
+RETURNS TRIGGER AS $$
+DECLARE org_tipo UUID; org_lote UUID;
+BEGIN
+  SELECT "organization_id" INTO org_tipo FROM "core"."drying_tray_type" WHERE "id" = NEW."tray_type_id";
+  SELECT "organization_id" INTO org_lote FROM "traceability"."lot" WHERE "id" = NEW."lot_id";
+  IF org_tipo IS DISTINCT FROM org_lote THEN
+    RAISE EXCEPTION 'El pesaje mezcla organizaciones: el tipo de bandeja y el lote no son de la misma';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER "drying_tray_weighing_una_organizacion"
+  BEFORE INSERT ON "traceability"."drying_tray_weighing"
+  FOR EACH ROW EXECUTE FUNCTION "traceability"."exigir_pesaje_de_una_organizacion"();
+
+-- Y del lado de los padres: un tipo con pesajes no se muda (se amplía la función
+-- de la Tarea 3), ni un lote con pesajes cambia de organización.
+CREATE OR REPLACE FUNCTION "core"."exigir_tipo_de_bandeja_quieto"()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW."organization_id" IS DISTINCT FROM OLD."organization_id" AND (
+       EXISTS (SELECT 1 FROM "core"."equipment" WHERE "tray_type_id" = NEW."id")
+    OR EXISTS (SELECT 1 FROM "traceability"."drying_tray_weighing" WHERE "tray_type_id" = NEW."id")
+  ) THEN
+    RAISE EXCEPTION 'Un tipo de bandeja con bandejas no cambia de organizacion';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION "traceability"."exigir_lote_con_pesajes_quieto"()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW."organization_id" IS DISTINCT FROM OLD."organization_id"
+     AND EXISTS (SELECT 1 FROM "traceability"."drying_tray_weighing" WHERE "lot_id" = NEW."id") THEN
+    RAISE EXCEPTION 'Un lote con pesajes de bandeja no cambia de organizacion';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER "lot_con_pesajes_quieto"
+  BEFORE UPDATE OF "organization_id" ON "traceability"."lot"
+  FOR EACH ROW EXECUTE FUNCTION "traceability"."exigir_lote_con_pesajes_quieto"();
 ```
+
+**Borrar en la limpieza de las pruebas** se hace así, y en ningún otro sitio:
+
+```ts
+await prisma.$transaction(async (tx) => {
+  await tx.$executeRaw`SET LOCAL nn.limpieza_de_pruebas = 'on'`;
+  await tx.dryingTrayWeighing.deleteMany({ where: assertDefinedWhere({ trayTypeId: { in: tipos } }) });
+});
+```
+
+Y un **guardia de fuente**, en `tests/arquitectura/limpieza-de-pruebas-solo-en-pruebas.test.ts` (hermético, sin base):
+- recorre `lib/` y `app/` y exige **cero** apariciones de `nn.limpieza_de_pruebas`;
+- **control positivo:** la misma búsqueda sobre `tests/` encuentra al menos una.
+
+Sin el control, un guardia que no lee nada pasaría igual.
 
 Las tablas `traceability.lot` y `core.person` están comprobadas en `prisma/schema.prisma` al escribir este plan: `@@map("lot")` va con `@@schema("traceability")`, y `@@map("person")` con `@@schema("core")`.
 
@@ -1252,7 +1508,7 @@ export const CAPACIDAD_SUPUESTA = {
  */
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { requireLotAccess } from "./lots";
+import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { areaM2, tiposDeBandeja } from "../equipos/bandejas";
 import { CAPACIDAD_SUPUESTA } from "../beneficio/capacidadSupuesta";
 
@@ -1276,6 +1532,14 @@ export async function registrarPesaje(userAccountId: string, input: {
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
   const tipo = await prisma.dryingTrayType.findUnique({ where: { id: input.trayTypeId } });
   if (!tipo || tipo.organizationId !== lot.organizationId) throw new PesajeError("tipo_no_encontrado");
+
+  // Corregir un pesaje exige gestionar SU lote, no sólo el que se presenta: sin
+  // esto, quien gestiona L1 retiraba el pesaje de L2 (revisión de Codex del plan 2a).
+  if (input.supersedesId) {
+    const original = await prisma.dryingTrayWeighing.findUnique({ where: { id: input.supersedesId }, include: { lot: true } });
+    if (!original || original.trayTypeId !== tipo.id || original.supersededAt) throw new PesajeError("datos_invalidos");
+    await requireLotAccess(userAccountId, "manage", [{ projectId: original.lot.projectId, locationId: original.lot.locationId, classification: original.lot.classification }]);
+  }
 
   const densidadKgM3 = input.netKg / (areaM2(tipo) * (media(input.profundidadesCm) / 100));
   return prisma.$transaction(async (tx) => {
@@ -1308,19 +1572,52 @@ export async function capacidadDeTipo(userAccountId: string, trayTypeId: string)
       const densidades = suyos.map((p, i) => Number(p.netKg) / (area * (profundidades[i]! / 100)));
       const profundidadCm = media(profundidades);
       const densidadKgM3 = media(densidades);
-      return { estado, fuente: "medido" as const, pesajes: suyos.length, densidadKgM3, profundidadCm,
+      return { estado, fuente: "medido" as const, pesajes: suyos.length, pesajeIds: suyos.map((p) => p.id), densidadKgM3, profundidadCm,
         capacidadKg: area * (profundidadCm / 100) * densidadKgM3, fuenteDelEstimado: null };
     }
     const sup = (CAPACIDAD_SUPUESTA as Partial<Record<EstadoDeCarga, { densidadKgM3: number; profundidadCm: number; fuente: string }>>)[estado];
     if (sup) {
-      return { estado, fuente: "estimado" as const, pesajes: 0, densidadKgM3: sup.densidadKgM3, profundidadCm: sup.profundidadCm,
+      return { estado, fuente: "estimado" as const, pesajes: 0, pesajeIds: [], densidadKgM3: sup.densidadKgM3, profundidadCm: sup.profundidadCm,
         capacidadKg: area * (sup.profundidadCm / 100) * sup.densidadKgM3, fuenteDelEstimado: sup.fuente };
     }
-    return { estado, fuente: "sin_medir" as const, pesajes: 0, densidadKgM3: null, profundidadCm: null, capacidadKg: null, fuenteDelEstimado: null };
+    return { estado, fuente: "sin_medir" as const, pesajes: 0, pesajeIds: [], densidadKgM3: null, profundidadCm: null, capacidadKg: null, fuenteDelEstimado: null };
   });
   return { areaM2: area, estados };
 }
+
+/**
+ * El camino de vuelta de una capacidad medida (21_rubrica_veracidad §2.6: ninguna
+ * cifra sin poder llegar a las lecturas que la formaron). Cada pesaje con su kg,
+ * sus profundidades, su densidad y su fecha. El LOTE sólo se nombra a quien puede
+ * ver ese lote; el número sí cuenta, porque forma la media que la persona ve.
+ */
+export async function pesajesDeTipo(userAccountId: string, trayTypeId: string, estado: EstadoDeCarga) {
+  const tipo = await prisma.dryingTrayType.findUniqueOrThrow({ where: { id: trayTypeId } });
+  if (!(await tiposDeBandeja(userAccountId, tipo.organizationId)).some((t) => t.id === tipo.id)) throw new PesajeError("tipo_no_encontrado");
+  const area = areaM2(tipo);
+  const filas = await prisma.dryingTrayWeighing.findMany({
+    where: { trayTypeId, materialState: estado, supersededAt: null }, orderBy: { occurredAt: "desc" }, include: { lot: true },
+  });
+  const salida = [];
+  for (const p of filas) {
+    let lote: string | null = null;
+    try {
+      await requireLotAccess(userAccountId, "view", [{ projectId: p.lot.projectId, locationId: p.lot.locationId, classification: p.lot.classification }]);
+      lote = p.lot.lotCode;
+    } catch (error) {
+      if (!(error instanceof TraceabilityAccessError)) throw error;
+    }
+    const profundidadCm = media(p.depthPointsCm.map(Number));
+    salida.push({
+      id: p.id, occurredAt: p.occurredAt, lote, netKg: Number(p.netKg),
+      profundidadesCm: p.depthPointsCm.map(Number), densidadKgM3: Number(p.netKg) / (area * (profundidadCm / 100)),
+    });
+  }
+  return salida;
+}
 ```
+
+Import: `TraceabilityAccessError`, junto a `requireLotAccess`, de `./lots`.
 
 **La media de densidades no se pondera** por el peso de cada pesaje. Es la regla del protocolo de §7: «repetir 2–3 veces en lotes distintos; un promedio gana a una lectura». Si Daniel quiere ponderar, es una decisión suya y va en otro cambio.
 
@@ -1344,7 +1641,7 @@ export async function capacidadDeTipo(userAccountId: string, trayTypeId: string)
 
 **Qué enseña `/beneficio/bandejas`, de arriba abajo, para cada organización donde quien mira ve algún tipo o alguna bandeja:**
 1. **Tipos de bandeja**, cada uno con su medida en la unidad tecleada, su área en m² y su **capacidad por estado**:
-   - `medido`: «8,9 kg · medido con 2 pesajes»;
+   - `medido`: «8,9 kg · medido con 2 pesajes», y **«ver pesajes»** despliega, con un `<details>`, la lista de `pesajesDeTipo`: fecha, lote (o «lote sin acceso»), kg, profundidades y densidad de cada uno. Es el camino de vuelta de la cifra;
    - `estimado`: «≈ 8,3 kg · estimado, sin medir», con la fuente al lado;
    - `sin_medir`: «sin medir».
 
@@ -1430,6 +1727,16 @@ Si falla una prueba fuera de estos archivos, se compara con `main` antes de atri
   6. En `capacidadDeTipo`, dejar de filtrar `supersededAt: null` → cae «una corrección supersede».
   7. Quitar el disparador `drying_tray_weighing_inmutable` → cae «rechaza… editar el peso».
   8. En `opcionesParaInspeccion`, quitar el filtro de estante → cae «opcionesParaInspeccion lista las camas sueltas…».
+  9. Quitar la rama del padre de `exigir_arbol_de_estante` (el `IF TG_OP = 'UPDATE'`) → cae «del lado del padre: una instalación con estantes…».
+  10. Quitar el disparador `drying_tray_weighing_una_organizacion` → cae «sólo measured_fact, una organización…» en su segunda línea.
+  11. Quitar el disparador `drying_tray_weighing_no_se_borra` → cae la misma prueba en su `delete`.
+  12. Volver a escribir los dos `CHECK` sin el tratamiento del nulo → cae «los CHECK no dejan pasar un NULL».
+  13. En `registrarPesaje`, quitar la comprobación de acceso al lote del ORIGINAL → cae «…ni corrige el pesaje de un lote que no gestiona».
+  14. En `detalleInstalacion`, quitar el `can(...)` por estante → cae una prueba nueva de `estantes.test.ts`: un estante `confidential` bajo una instalación `internal` no sale a un Farm Operator.
+  15. En `tiposDeBandeja`, cambiar `lugaresDeOrganizacion` por las ubicaciones propias sin descendientes → cae una prueba nueva de `bandejas.test.ts`: un operario asignado en un hijo con `organizationId` nulo ve los tipos.
+  16. En `pesajesDeTipo`, nombrar el lote sin comprobar acceso → cae «cada capacidad medida lleva a sus pesajes…» en su última línea.
+
+Las dos pruebas nuevas de los flips 14 y 15 se escriben **en su tarea** (T2 y T3), con su control positivo al lado: la instalación `internal` sí sale, y el operario de la ubicación propia también ve los tipos.
 
 - [ ] **Paso 6: PR.**
   - Contar los archivos con `git diff --name-only origin/main...HEAD`, con **tres** puntos. Deben salir los de este plan.
