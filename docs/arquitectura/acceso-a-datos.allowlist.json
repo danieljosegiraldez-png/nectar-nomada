@@ -274,6 +274,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/ubicacionesEmparentadas.ts",
+      "razon": "Tarea 3 del plan fitosanitario (§3.3) — genealogía de una Location (ascendientes y descendientes) para que la carencia de una intervención alcance a la parcela madre y a sus microparcelas, y no a una hermana. No autoriza nada: quien la llama ya pasó la compuerta. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
       "archivo": "lib/traceability/lots.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
@@ -292,6 +296,10 @@
     {
       "archivo": "lib/traceability/operations.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
+      "archivo": "lib/traceability/intervenciones.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Registrar y corregir una intervención fitosanitaria (Tarea 5, spec 2026-09-18)."
     },
     {
       "archivo": "lib/traceability/plantingCohorts.ts",
@@ -486,6 +494,10 @@
       "razon": "Modulo de dominio de equipos e instrumentos (EQUIPMENT_AND_READINESS.md §2-§4, §7 y §9). Es el sitio donde el acceso a datos vive por diseno. Cada funcion resuelve `can(..., \"equipment\", ...)` contra el ambito hoja del equipo ANTES de leer o escribir, y toda escritura confirma su AuditEvent en la misma transaccion. El veredicto de una verificacion NO se calcula aqui: lo deriva un trigger de la base."
     },
     {
+      "archivo": "lib/rutinas/rutinas.ts",
+      "razon": "Rutinas periódicas de equipo (spec de catálogos §3.4, D1 y D8): definir y anular es gestión (equipment:manage), apuntar lo hecho es faena (equipment:report_condition), siempre vía requireRutinaAccess → puedeSobreEquipo. Toda escritura confirma su AuditEvent en la misma transacción; nada se borra, los registros se anulan con motivo."
+    },
+    {
       "archivo": "lib/apiary/vitalesDeColmena.ts",
       "razon": "Los vitales de cada colmena del inventario (Anexo E §3): la última inspección, su población y el origen de la colonia viva. Dos lecturas, ninguna escritura. Es el gemelo por colmena de vitalesDelSitio.ts y comparte su disciplina: no recibe principal a propósito, porque quien lo llama ya autorizó el sitio con getApiaryDetail."
     },
@@ -562,23 +574,39 @@
       "razon": "Módulo de dominio (ADR-166). `asentarPesoDeCosecha` exige `requireApiaryAccess(\"manage\")` sobre la caja de la cosecha antes de escribir, y dentro de una transacción `Serializable` vuelve a comprobar que el lote no tenga asientos, para no asentar dos veces. Escritura y AuditEvent en la MISMA transacción."
     },
     {
+      "archivo": "lib/catalogos/propiedad.ts",
+      "razon": "Contrato común de los catálogos de referencia (spec de catálogos §2.5). Decide quién crea, edita y ve una entrada: compartida sólo con el permiso en ámbito de plataforma; propia, con el permiso juzgado en un sitio de esa organización, que se deriva del sitio y no del formulario. Sólo LEE sitios para resolver el ámbito; no escribe nada."
+    },
+    {
+      "archivo": "lib/equipos/modelos.ts",
+      "razon": "Catálogo de modelos de equipo (spec de catálogos §3.1-3.2), primer consumidor del contrato común de lib/catalogos. Crear, editar y retirar exige equipment:manage vía requireCatalogoAccess/requireEntradaDeCatalogoAccess; toda escritura confirma su AuditEvent en la misma transacción; lecturas filtradas por organizacionesVisibles."
+    },
+    {
+      "archivo": "lib/equipos/documentos.ts",
+      "razon": "Manuales, fichas técnicas, certificados y fotos de modelos y equipos (spec de catálogos §3.5). Misma forma que lib/traceability/media.ts: URL firmada y Asset creado sólo al confirmar, con la clave obligada a su prefijo por destino. Subir exige equipment:manage (vía puedeSobreEquipo o requireEntradaDeCatalogoAccess); leer, equipment:view. El AuditEvent va en la misma transacción."
+    },
+    {
       "archivo": "lib/traceability/estantes.ts",
-      "razon": "Paso 2a del plan de secado por bandeja - estantes y sus posiciones generadas. Modulo de dominio: es el sitio donde el acceso a datos vive por diseno. Exige location:edit_beneficio sobre la instalacion (crearEstante) o sobre el propio estante (ampliarEstante) ANTES de escribir. Escritura, generacion de posiciones y AuditEvent en la MISMA transaccion."
+      "razon": "Módulo de dominio: estantes de una instalación de secado y sus posiciones (spec §4.1, plan 2a de secado). `crearEstante`/`ampliarEstante` exigen `exigeEditarBeneficioEn` sobre la instalación ANTES de escribir; las posiciones se crean dentro de la misma transacción (ver `reciben_transaccion`)."
     },
     {
       "archivo": "lib/equipos/bandejas.ts",
-      "razon": "Tarea 3 del plan de secado por bandeja - tipos de bandeja y bandejas numeradas por finca. Modulo de dominio. crearTipoDeBandeja exige exigeEditarBeneficioEnOrganizacion; registrarBandejas exige puedeConfigurarEn sobre el sitio; tiposDeBandeja y bandejasDeLaFinca son lectura y filtran con equipment:view (directo o heredado via lugaresDeOrganizacion). Escritura, traslado inicial y AuditEvent en la MISMA transaccion."
+      "razon": "Módulo de dominio: tipos de bandeja y bandejas numeradas por finca (spec §4.2, plan 2a de secado). `crearTipoDeBandeja` exige `exigeEditarBeneficioEnOrganizacion`; `registrarBandejas` exige `puedeConfigurarEn` sobre el sitio y rechaza un destino que no sea `site`/`beneficio` (revisión final del plan 2a, A4); leer tipos y bandejas exige ver equipo en algún lugar de la organización (`puedeVerEquiposEnOrganizacion`/`can(view, equipment, …)`)."
     },
     {
       "archivo": "lib/traceability/capacidadDeBandeja.ts",
-      "razon": "Tarea 4 del plan de secado por bandeja - el pesaje de bandeja cargada y la capacidad por estado. Modulo de dominio. registrarPesaje exige requireLotAccess(\"manage\") sobre el lote presentado y, al supersederse, tambien sobre el lote del pesaje ORIGINAL; capacidadDeTipo y pesajesDeTipo son lectura y filtran con el mismo permiso que tiposDeBandeja (equipment:view, directo o heredado). pesajesDeTipo ademas exige requireLotAccess(\"view\") por cada fila para decidir si se enseña el lote: una lectura sin acceso se cuenta en ocultos y no se muestra. Escritura y AuditEvent en la MISMA transaccion."
+      "razon": "Módulo de dominio: el pesaje de bandeja cargada y la capacidad por estado (spec §4.2b, plan 2a de secado). `registrarPesaje` exige `requireLotAccess(manage)` sobre el lote (y sobre el original, si corrige); `capacidadDeTipo`/`pesajesDeTipo` agregan y muestran SÓLO lo que `requireLotAccess(view)` deja ver por pesaje (RULING de la revisión final del plan 2a, A2: antes agregaba también lo oculto)."
     },
     {
       "archivo": "lib/beneficio/vistaDeBandejas.ts",
-      "razon": "Tarea 5 del plan de secado por bandeja - el modelo de vista de /beneficio/bandejas. No autoriza nada por su cuenta: compone tiposDeBandeja, bandejasDeLaFinca, capacidadDeTipo, pesajesDeTipo, puedeEditarBeneficioEnOrganizacion, puedeConfigurarEn, sitiosParaRegistrar y resolveLotVisibility/lotWhereFromVisibility, que ya filtran por su propio permiso. Sus dos consultas directas son de lectura: prisma.organization.findMany (sin filtro; la organizacion sólo se enseña si alguna de las funciones de arriba dice que hay algo que ver en ella) y prisma.lot.findMany, acotada por el where de lotWhereFromVisibility(resolveLotVisibility(userAccountId, \"manage\")). Vive en lib/ y no en app/beneficio/bandejas/page.tsx porque app/** no puede importar lib/db directamente."
+      "razon": "Módulo de dominio: el modelo de vista de /beneficio/bandejas (Tarea 5, plan 2a de secado). No autoriza nada por sí mismo: delega en `sitiosParaRegistrar`, `tiposDeBandeja`, `bandejasDeLaFinca`, `capacidadDeTipo` y `puedeGestionarLote`, cada uno ya guardado; sólo organizaciones con al menos un `site` entran (revisión final del plan 2a, A5)."
     }
   ],
   "reciben_transaccion": [
+    {
+      "archivo": "lib/traceability/entregasDeCosecha.ts",
+      "razon": "Spec jornada y entrega §3.3: `exigeOrigenAsignado(tx, …)` recibe el `tx` de `anotarEntrega` para comprobar DENTRO de la transacción que crea la entrega que el origen (parcela, bloque o planta) cae en lo asignado a esa persona en esa jornada. Sólo lee asignaciones, bloques y plantas; quien llama ya autorizó con `harvest_delivery:create_own` o `requireLotAccess(manage)`; no escribe nada."
+    },
     {
       "archivo": "lib/traceability/locations.ts",
       "razon": "Spec fincas y parcelas §3.3: `nombreLibreBajo(tx, padre, nombre)` recibe el `tx` de quien crea —`createMicrolot` aquí mismo y `crearParcela` en fincas.ts— para mirar los hermanos DENTRO de la transacción que va a crear la fila. Sólo lee nombres de los hijos de un padre sobre el que quien llama ya pasó `requireLocationAttributeAccess`; no escribe nada."
@@ -604,6 +632,10 @@
       "razon": "Cálculo puro de balance de masa. No abre conexión: opera dentro de una transacción que ya abrió un llamador autorizado (lots.ts, fermentation.ts, quantity.ts, todos con requireLotAccess). Recibir el cliente por parámetro es inyección de dependencia, no un atajo — pero lo vuelve invisible a la comprobación de imports, y por eso se inventaría aquí."
     },
     {
+      "archivo": "lib/traceability/ubicacionesEmparentadas.ts",
+      "razon": "`ubicacionesEmparentadas` acepta un `Prisma.TransactionClient` OPCIONAL (por defecto el cliente total, ya inventariado arriba) para poder llamarse DENTRO de la transacción de un llamador que registra una cosecha o una intervención y necesita la genealogía de la Location antes de confirmar. No autoriza nada: sólo recorre `parentLocationId` hacia arriba y hacia abajo con el mismo tope de profundidad y guarda de vistos que `conAncestros` (lib/rbac/service.ts)."
+    },
+    {
       "archivo": "lib/audit.ts",
       "razon": "`recordAuditEvent` acepta un `tx` OPCIONAL para que el AuditEvent se confirme con la escritura que lo produjo — sin él, una fila confirmada podía quedarse sin auditoría si el insert fallaba después del commit (revisión independiente, 2026-08-31). No recibe el cliente entero: el parámetro es `Pick<Prisma.TransactionClient, \"auditEvent\">`, así que dentro de esta función no se puede consultar ninguna otra tabla. Es exactamente lo que pide el mensaje de este guardia: pasarle sólo lo que necesita. Sigue siendo el único escritor de AuditEvent."
     },
@@ -624,6 +656,10 @@
       "razon": "`crearColocacionInicial` recibe el `tx` del llamador en vez de abrir el suyo porque la colmena y su colocación son UN hecho: una colmena guardada sin la fila que dice dónde está es exactamente el estado que ADR-135 viene a impedir, y medido el 2026-09-15 eran 10 de 29 colmenas reales. Escribe una sola fila en `apiary.hive_placement` y no consulta nada: no puede leer de más aunque reciba el cliente entero. Sus tres llamadores son `createHive` —que autoriza con requireApiaryAccess(\"manage\") antes de abrir la transaccion— y los guiones de datos, que corren con la base delante."
     },
     {
+      "archivo": "lib/traceability/intervenciones.ts",
+      "razon": "`crearAreas`/`crearLineasDeIntervencion` son ayudantes PRIVADOS del mismo módulo, nunca exportados: sólo los llama `registrarIntervencion`/`corregirIntervencion`, que ya resolvieron `requireLotAccess(\"manage\")` sobre la parcela ANTES de abrir la transacción. Reciben el `tx` para que la intervención, sus áreas, sus líneas y el descuento del frasco se confirmen juntos — la misma razón que `recordColonyEvent` (lib/apiary/colonyEvents.ts, sin cliente de transacción explícito por no factorizar su cuerpo en un ayudante aparte)."
+    },
+    {
       "archivo": "lib/commerce/tienda.ts",
       "razon": "ADR-163 — `envasesDelLote` recibe el `tx` de `asignarATienda` para leer el techo de envases DENTRO de la transacción serializable que decide si cabe la asignación; leerlo fuera dejaría la carrera que el aislamiento existe para cerrar. `asignacionesDeLote` le pasa el cliente, que es la misma interfaz."
     },
@@ -641,7 +677,7 @@
     },
     {
       "archivo": "lib/traceability/estantes.ts",
-      "razon": "crearPosiciones(tx, rack, niveles, puestos, userAccountId) recibe el tx de quien la llama -crearEstante y ampliarEstante, aqui mismo- para crear las posiciones que faltan EN LA MISMA transaccion que crea o valida el estante. Solo toca los hijos directos del rack que su llamador ya autorizo con exigeEditarBeneficioEn; no recibe ni resuelve ningun otro permiso."
+      "razon": "`crearPosiciones(tx, …)` recibe el `tx` de `crearEstante`/`ampliarEstante` para crear las posiciones DENTRO de la transacción que ya autorizó con `exigeEditarBeneficioEn` sobre la instalación; no autoriza nada por sí misma."
     }
   ],
   "operaciones_sin_patron": [
@@ -669,12 +705,6 @@
       "archivo": "lib/traceability/biocharBatches.ts",
       "operacion": "listBiocharBatches",
       "razon": "Recibe el principal y filtra por el conjunto de Locations visibles que devuelve getManageableContext, que es la misma visibilidad con la que /plots lista sus parcelas — pero no llama a ningún require*, así que el detector no la reconoce y hace bien en señalarla. Es el filtro de una LISTA, no la frontera: cada lectura de detalle y cada escritura pasan por requireLocationAttributeAccess. Verificado el 2026-09-01."
-    },
-    {
-      "archivo": "lib/traceability/capacidadDeBandeja.ts",
-      "operacion": "capacidadDeTipo",
-      "razon": "No llama a can()/requireXAccess en su propio cuerpo: autoriza delegando ENTERO en tiposDeBandeja(userAccountId, tipo.organizationId) -mismo patron que su propia lectura equipment:view, directo o heredado- y lanza PesajeError si el tipo pedido no aparece en esa lista. pesajesDeTipo hace la misma comprobacion pero SI aparece como guardia directo porque ademas llama a requireLotAccess por cada fila.",
-      "verificado": "2026-09-19"
     }
   ],
   "dependen_del_llamador": [
@@ -809,6 +839,12 @@
       "operacion": "getFieldEventKinds",
       "razon": "Lee variableCatalogValue, catálogo de referencia y no dato gobernado. Su página exige sesión.",
       "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/traceability/fieldSessionCatalog.ts",
+      "operacion": "getCondicionesDelDia",
+      "razon": "Hermano de getFieldEventKinds: lee los valores del catálogo condicion_del_dia (lluvia, neblina, otro), referencia y no dato gobernado. Su único llamador, app/mis-entregas, exige sesión y harvest_delivery:create_own.",
+      "verificado": "2026-09-18"
     },
     {
       "archivo": "lib/traceability/lots.ts",
@@ -1083,14 +1119,14 @@
     {
       "archivo": "lib/traceability/instalaciones.ts",
       "operacion": "instalacionDe",
-      "razon": "No recibe principal porque no autoriza nada: sube por el arbol desde una posicion o cama hasta su instalacion, solo para saber a donde redirigir. Sus dos llamadores de produccion (guardarInstalacionFormAction y guardarEstanteFormAction en app/actions/instalaciones.ts) la invocan SOLO despues de que actualizarUbicacionDeSecado/ampliarEstante ya autorizaron la escritura sobre esa misma ubicacion.",
-      "verificado": "2026-09-18"
+      "razon": "Sube el árbol desde una Location hasta la primera `drying_facility` (spec §4.1). No recibe principal: sólo resuelve un hecho de la jerarquía. Sus llamadores (crear/ampliar un estante, entre otros) ya autorizaron sobre la Location de partida antes de invocarla.",
+      "verificado": "2026-09-19"
     },
     {
       "archivo": "lib/traceability/locations.ts",
       "operacion": "lugaresDeOrganizacion",
-      "razon": "No recibe principal ni autoriza nada: es la bajada por el arbol, extraida de exigeEditarBeneficioEnOrganizacion (Tarea 3 del plan de secado, 2026-09-18), que devuelve las Location propias de una organizacion mas sus descendientes con organizationId nulo que la heredan. Sus dos llamadores comprueban can() sobre CADA lugar devuelto antes de decidir: exigeEditarBeneficioEnOrganizacion aqui mismo, y puedeVerEquiposEnOrganizacion en lib/equipos/bandejas.ts.",
-      "verificado": "2026-09-18"
+      "razon": "Las Location propias de una organización más sus descendientes que heredan su organizationId (comentario del propio archivo). No recibe principal: es un hecho de la jerarquía. La usan guardias que SÍ autorizan (`exigeEditarBeneficioEnOrganizacion`) y lecturas ya acotadas por su llamador (`puedeVerEquiposEnOrganizacion` en `lib/equipos/bandejas.ts`, que primero prueba `edit_beneficio` y sólo baja el árbol para el resto).",
+      "verificado": "2026-09-19"
     }
   ]
 }
