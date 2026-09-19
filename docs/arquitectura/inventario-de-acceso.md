@@ -11,9 +11,9 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-18
+## Lo medido el 2026-09-05, actualizado el 2026-09-19
 
-**489 operaciones** que tocan la base, en **140 archivos**:
+**491 operaciones** que tocan la base, en **140 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,23 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **366** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **367** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **39** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **65** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **66** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+
+> **Manejo fitosanitario, ronda de arreglos 1 (2026-09-19).** Dos operaciones nuevas en
+> `lib/traceability/intervenciones.ts`, ya inventariado. `bloquesDeLaParcela` sube **guardia
+> directo**, 366→367: lee los bloques de una parcela con el MISMO permiso (`lot:view`/`manage`,
+> vía `requireLotAccess`) que ya exige leer o corregir sus intervenciones — reemplaza a
+> `listPlotBlocks` (`location:manage_attributes`) para este consumidor, porque ese permiso
+> distinto era lo que dejaba borrar un bloque en silencio al corregir sin tenerlo. `motivoValidoParaParcela`
+> no autoriza nada a propósito —sólo decide si `?motivo=` de la URL sirve para precargar el
+> formulario— y va en **depende del llamador**, 65→66: su único llamador,
+> `NuevoManejoPage` (`app/plots/[id]/manejo/nuevo/page.tsx`), ya pasó `getPlotDetail`
+> (`location:manage_attributes`) sobre la misma parcela antes de invocarla.
 
 > **La cera con el color de su año (ADR-173, 2026-09-18).** Un archivo nuevo, `lib/apiary/cera.ts`,
 > con tres operaciones —`registrarCeraNueva`, `registrarSalidaDeMarcos` y `leyendaDeCera`— que

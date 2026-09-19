@@ -1049,6 +1049,12 @@
       "operacion": "cosechasSinSaldo",
       "razon": "No recibe principal. Su único llamador es la ficha del apiario (`app/apiaries/[id]/page.tsx`), que la invoca DESPUÉS del `Promise.all` donde `getApiaryDetail` autoriza —y LANZA sin permiso—, con el id del apiario ya concedido. Filtra por ese apiario: no ve cosechas de otros sitios.",
       "verificado": "2026-09-18"
+    },
+    {
+      "archivo": "lib/traceability/intervenciones.ts",
+      "operacion": "motivoValidoParaParcela",
+      "razon": "No recibe principal a propósito: no autoriza nada, sólo decide si `?motivo=` de la URL es válido para PRECARGAR el formulario de manejo (ronda de arreglos 1, importante #2) — nunca si el registro se permite, eso lo sigue haciendo `validarReferencias` al guardar, con su propio permiso. Su único llamador de producción es `NuevoManejoPage` (`app/plots/[id]/manejo/nuevo/page.tsx`), que ya pasó `getPlotDetail` (`location:manage_attributes`) sobre esta misma parcela antes de llamarla.",
+      "verificado": "2026-09-19"
     }
   ]
 }
