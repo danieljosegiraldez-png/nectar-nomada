@@ -17,16 +17,19 @@ import {
   productosFitosanitariosSiPuede,
   intervencionesVigentes,
   listarIntervenciones,
+  bloquesDeLaParcela,
+  motivoValidoParaParcela,
   IntervencionValidationError,
   type RegistrarIntervencionInput,
 } from "../../lib/traceability/intervenciones";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { LocationAccessError } from "../../lib/traceability/locations";
 import { crearMaterial } from "../../lib/inventario/materiales";
 import { recibirLote } from "../../lib/inventario/lotes";
 import { existencias } from "../../lib/inventario/existencias";
 import { startFieldSession, endFieldSession } from "../../lib/traceability/fieldSessions";
 import { recordSpecimenObservation } from "../../lib/traceability/specimens";
-import { createPlotBlock } from "../../lib/traceability/plotBlocks";
+import { createPlotBlock, listPlotBlocks } from "../../lib/traceability/plotBlocks";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
@@ -75,6 +78,15 @@ let observacionNoTrampa: string;
 // tiene que tener locationId IGUAL a la parcela de la intervención».
 let bloque: string;
 let bloqueAjeno: string;
+// Ronda de arreglos 1 (hallazgo crítico): `bloquesDeLaParcela` se lee con
+// `lot:view`/`manage`, nunca `location:manage_attributes`. `soloVista` tiene
+// el primero y no el segundo (perfil `Project Viewer`); `operadorSinAtributos`
+// es un `Farm Operator` (lot:manage) con ese permiso QUITADO por un `deny` de
+// asignación — el mismo patrón de «grant más estrecho» que describe el
+// catálogo de roles y que dispara el defecto real.
+let soloVista: string;
+let operadorSinAtributos: string;
+let assignmentOperadorSinAtributos: string;
 
 async function crearPersona(label: string) {
   const persona = await prisma.person.create({
@@ -91,14 +103,15 @@ async function crearCuenta(label: string) {
   return cuenta.id;
 }
 
-async function asignarRol(userAccountId: string, roleProfileName: string, locationId: string) {
+async function asignarRol(userAccountId: string, roleProfileName: string, locationId: string): Promise<string> {
   const perfil = await prisma.roleProfile.findUniqueOrThrow({ where: { name: roleProfileName } });
   // Dos roles pueden compartir el mismo ámbito de ubicación: `Scope` es único
   // por (scopeType, scopeRefId), como en `consumo-descuenta.test.ts`.
   const scope =
     (await prisma.scope.findFirst({ where: { scopeType: "location", scopeRefId: locationId } })) ??
     (await prisma.scope.create({ data: { scopeType: "location", scopeRefId: locationId } }));
-  await prisma.assignment.create({ data: { userAccountId, roleProfileId: perfil.id, scopeId: scope.id } });
+  const a = await prisma.assignment.create({ data: { userAccountId, roleProfileId: perfil.id, scopeId: scope.id } });
+  return a.id;
 }
 
 beforeAll(async () => {
@@ -319,6 +332,25 @@ beforeAll(async () => {
   // Tarea 2: un bloque de `parcela` y uno de `otraParcela`.
   bloque = (await createPlotBlock(gestor, { locationId: parcela, name: `Bloque ${RUN_ID}` })).id;
   bloqueAjeno = (await createPlotBlock(gestor, { locationId: otraParcela, name: `Bloque ajeno ${RUN_ID}` })).id;
+
+  // Ronda de arreglos 1 (hallazgo crítico): `soloVista` tiene `lot:view` (perfil
+  // `Project Viewer`) y NINGÚN `location:manage_attributes`.
+  soloVista = await crearCuenta("SoloVista");
+  await asignarRol(soloVista, "Project Viewer", parcela);
+
+  // `operadorSinAtributos`: `Farm Operator` (que trae `lot:manage` Y
+  // `location:manage_attributes` de perfil) con ese segundo permiso QUITADO
+  // por un `deny` de asignación — el «grant más estrecho que el perfil» que
+  // el propio catálogo describe como patrón válido (comentario de «Farm
+  // Manager» en `lib/rbac/catalog.ts`) y que dispara el defecto real.
+  operadorSinAtributos = await crearCuenta("OperadorSinAtributos");
+  assignmentOperadorSinAtributos = await asignarRol(operadorSinAtributos, "Farm Operator", parcela);
+  const permisoManageAttributes = await prisma.permission.findFirstOrThrow({
+    where: { resourceType: "location", action: "manage_attributes" },
+  });
+  await prisma.assignmentPermissionOverride.create({
+    data: { assignmentId: assignmentOperadorSinAtributos, permissionId: permisoManageAttributes.id, effect: "deny" },
+  });
 }, 30000);
 
 afterAll(async () => {
@@ -873,5 +905,79 @@ describe("intervenciones sobre bloques — Tarea 2", () => {
     expect(encontrada.areas).toEqual([
       expect.objectContaining({ plotBlockId: bloque, specimenId: null, plotBlock: { name: bloqueDeLaBase.name } }),
     ]);
+  });
+});
+
+/**
+ * Ronda de arreglos 1, hallazgo CRÍTICO: corregir una intervención de bloque
+ * sin `location:manage_attributes` la borraba en silencio, porque los
+ * bloques de manejo se pedían con `listPlotBlocks` (ese permiso) en vez del
+ * mismo permiso que ya exige leer/escribir la intervención (`lot:view`/
+ * `manage`). `bloquesDeLaParcela` es el arreglo de raíz.
+ */
+describe("bloquesDeLaParcela — ronda de arreglos 1 (hallazgo crítico)", () => {
+  it("sin lot:view: acceso denegado", async () => {
+    await expect(bloquesDeLaParcela(sinPermiso, parcela)).rejects.toBeInstanceOf(TraceabilityAccessError);
+  });
+
+  it("con lot:view (Project Viewer) pero SIN location:manage_attributes: ve los bloques (control positivo)", async () => {
+    const bloques = await bloquesDeLaParcela(soloVista, parcela);
+    expect(bloques.map((b) => b.id)).toContain(bloque);
+    // Ordenados por nombre, como pide la firma.
+    expect(bloques).toEqual([...bloques].sort((a, b) => a.name.localeCompare(b.name)));
+  });
+
+  it("control: listPlotBlocks SÍ exige location:manage_attributes, y por eso Project Viewer no puede usarlo", async () => {
+    // Demuestra que el arreglo no fue «aflojar `listPlotBlocks`»: esa función
+    // y su permiso quedan intactos para su propia pantalla (`ajustes`).
+    await expect(listPlotBlocks(soloVista, parcela)).rejects.toBeInstanceOf(LocationAccessError);
+  });
+
+  it("corregir con bloque, desde una cuenta con lot:manage pero SIN location:manage_attributes: el bloque que bloquesDeLaParcela le mostró se conserva al guardar", async () => {
+    const o = await registrarIntervencion(operador, base({ plotBlockIds: [bloque] }));
+
+    // Lo que la pantalla de corregir hace ahora: pedir los bloques con el
+    // MISMO permiso que ya tiene para corregir, no con `listPlotBlocks`.
+    const bloquesQueVe = await bloquesDeLaParcela(operadorSinAtributos, parcela);
+    expect(bloquesQueVe.map((b) => b.id)).toContain(bloque);
+
+    const c = await corregirIntervencion(operadorSinAtributos, {
+      interventionId: o.id,
+      motivo: "conserva el bloque sin location:manage_attributes",
+      nueva: base({ plotBlockIds: [bloque] }),
+    });
+    const areas = await prisma.plotInterventionArea.findMany({ where: { interventionId: c.id } });
+    expect(areas).toEqual([expect.objectContaining({ plotBlockId: bloque, specimenId: null })]);
+  });
+});
+
+/**
+ * Ronda de arreglos 1, importante #2: `?motivo=` de `/manejo/nuevo` no se
+ * ignoraba en silencio cuando era inválido — el servicio lo rechazaba con un
+ * error al guardar. `motivoValidoParaParcela` repite las mismas tres
+ * condiciones que `validarReferencias` exige (existe, es `trap_check`, su
+ * trampa está emparentada con la parcela) pero devuelve `null` en vez de
+ * lanzar.
+ */
+describe("motivoValidoParaParcela — ronda de arreglos 1 (importante #2)", () => {
+  it("una lectura de trampa de esta parcela: se devuelve tal cual (control positivo)", async () => {
+    await expect(motivoValidoParaParcela(lecturaPropia, parcela)).resolves.toBe(lecturaPropia);
+  });
+
+  it("de otra parcela sin relación: null", async () => {
+    await expect(motivoValidoParaParcela(lecturaAjena, parcela)).resolves.toBeNull();
+  });
+
+  it("una observación que no es lectura de trampa: null", async () => {
+    await expect(motivoValidoParaParcela(observacionNoTrampa, parcela)).resolves.toBeNull();
+  });
+
+  it("inexistente: null", async () => {
+    await expect(motivoValidoParaParcela("00000000-0000-0000-0000-000000000000", parcela)).resolves.toBeNull();
+  });
+
+  it("sin parámetro (null o undefined): null, sin tocar la base", async () => {
+    await expect(motivoValidoParaParcela(null, parcela)).resolves.toBeNull();
+    await expect(motivoValidoParaParcela(undefined, parcela)).resolves.toBeNull();
   });
 });

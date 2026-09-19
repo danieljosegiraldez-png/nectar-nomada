@@ -645,6 +645,67 @@ export async function listarIntervenciones(userAccountId: string, locationId: st
   });
 }
 
+/**
+ * Los bloques de una parcela, para el formulario de manejo — Tarea 5 PR B,
+ * ronda de arreglos 1 (hallazgo crítico). Antes esas pantallas pedían
+ * `listPlotBlocks` (`plotBlocks.ts`), que exige `location:manage_attributes`
+ * — un permiso DISTINTO del que ya exige leer o corregir una intervención
+ * (`lot:view`/`manage`, arriba). Con un `Assignment` que sólo concede
+ * `lot:manage` por un `grant` más estrecho que el perfil —un patrón que el
+ * propio catálogo de roles describe y usa (`lib/rbac/catalog.ts`, «Farm
+ * Manager»)—, el formulario de corregir no podía ni listar el bloque
+ * original ni conservarlo con un input oculto, y guardar sin tocar nada
+ * borraba el bloque de la intervención en silencio.
+ *
+ * Arreglo de raíz: los bloques de una parcela son un dato DE LA PARCELA para
+ * efectos de manejo, así que se leen con el MISMO permiso que ya exige leer o
+ * escribir sus intervenciones. `listPlotBlocks` y `location:manage_attributes`
+ * siguen siendo el permiso correcto para SU PROPIA pantalla
+ * (`app/plots/[id]/ajustes/page.tsx`, dar de alta un bloque) — esto no la
+ * reemplaza, es una lectura aparte para un consumidor distinto.
+ */
+export async function bloquesDeLaParcela(
+  userAccountId: string,
+  locationId: string,
+): Promise<{ id: string; name: string }[]> {
+  await requireLotAccess(userAccountId, "view", [{ locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+  return prisma.plotBlock.findMany({
+    where: { locationId },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+/**
+ * Si `?motivo=` es una lectura de trampa válida para ESTA parcela — Tarea 5
+ * PR B, ronda de arreglos 1 (importante #2). Mismas tres condiciones que
+ * `validarReferencias` exige al GUARDAR (existe, es `trap_check`, su trampa
+ * está en `ubicacionesEmparentadas`), pero aquí deciden si la PRECARGA de
+ * `/manejo/nuevo?motivo=` se usa o se ignora — nunca si el registro se
+ * rechaza: eso lo sigue haciendo el servicio al guardar. Un enlace viejo o
+ * copiado a mano con un motivo que ya no aplica pierde la precarga en
+ * silencio, en vez de bloquear el formulario con un error (brief, decisión
+ * del controlador #3, que agrupa `motivo`/`bloque`/`material` bajo la misma
+ * regla).
+ *
+ * No autoriza nada — `ubicacionesEmparentadas` tampoco lo hace, y la propia
+ * lectura de la observación no expone nada que la pantalla no vaya a mostrar
+ * ya (el aviso que generó el enlace ya la nombra).
+ */
+export async function motivoValidoParaParcela(
+  motivoObservationId: string | null | undefined,
+  locationId: string,
+): Promise<string | null> {
+  if (!motivoObservationId) return null;
+  const motivo = await prisma.specimenObservation.findUnique({
+    where: { id: motivoObservationId },
+    select: { observationType: true, specimen: { select: { locationId: true } } },
+  });
+  if (!motivo || motivo.observationType !== "trap_check") return null;
+  const emparentadas = await ubicacionesEmparentadas(locationId);
+  return emparentadas.includes(motivo.specimen.locationId) ? motivoObservationId : null;
+}
+
 export interface MaterialFitosanitario {
   readonly id: string;
   readonly name: string;
