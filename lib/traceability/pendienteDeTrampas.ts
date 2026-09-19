@@ -167,7 +167,7 @@ export function avisosDeTrampas(e: {
   return avisos;
 }
 
-export type EstadoDeTrampa = "retirada" | "sin_regla" | "al_dia" | "toca_revisar" | "lectura_alta";
+export type EstadoDeTrampa = "retirada" | "sin_regla" | "sin_base" | "al_dia" | "toca_revisar" | "lectura_alta";
 
 /**
  * El estado de UNA trampa, para una tabla o una tarjeta — no la lista de avisos que
@@ -176,6 +176,14 @@ export type EstadoDeTrampa = "retirada" | "sin_regla" | "al_dia" | "toca_revisar
  * Una trampa que no está activa es `retirada`, y una activa sin regla es `sin_regla`:
  * son razones distintas y la pantalla dice la verdadera (ADR-080), aunque ninguna de las
  * dos tenga plazo. Ruling del controlador, 2026-09-18.
+ *
+ * **A12 fix-final (M5) — `sin_base`**, ruling del controlador: una trampa
+ * activa CON regla pero sin `instaladaEl` ni ninguna revisión no tiene desde
+ * dónde contar el plazo (`disparoYPlazo` devuelve `diasDeRetraso: null`), y
+ * antes eso caía en `al_dia` — el mismo estado que una trampa genuinamente
+ * revisada a tiempo. ADR-080: la ausencia de dato no se lee como «todo
+ * bien». El caso es de datos incompletos (importados, o una trampa dada de
+ * alta sin fecha), poco probable con `createTrap` pero no imposible.
  */
 export function estadoDeTrampa(e: {
   hoy: string;
@@ -187,7 +195,8 @@ export function estadoDeTrampa(e: {
 
   const { disparo, diasDeRetraso } = disparoYPlazo(e.trampa, e.regla, e.hoy);
   if (disparo) return { estado: "lectura_alta", diasDeRetraso };
-  if (diasDeRetraso != null && diasDeRetraso > 0) return { estado: "toca_revisar", diasDeRetraso };
+  if (diasDeRetraso == null) return { estado: "sin_base", diasDeRetraso: null };
+  if (diasDeRetraso > 0) return { estado: "toca_revisar", diasDeRetraso };
   return { estado: "al_dia", diasDeRetraso };
 }
 

@@ -163,6 +163,26 @@ describe("estadoDeTrampa", () => {
         .estado,
     ).toBe("retirada");
   });
+
+  /**
+   * A12 fix-final (M5) — activa, con regla, sin `instaladaEl` NI ninguna
+   * revisión: no hay desde dónde contar el plazo. Antes de este arreglo caía
+   * en `al_dia`, el mismo estado que una trampa genuinamente revisada a
+   * tiempo (ADR-080: la ausencia de dato no se lee como «todo bien»).
+   */
+  it("activa, con regla, pero sin instalación ni revisiones: sin_base, no al_dia", () => {
+    const trampa: TrampaParaAviso = { ...trampaBase, instaladaEl: null, ultimaRevision: null };
+    expect(estadoDeTrampa({ hoy: "2026-09-18", trampa, regla }).estado).toBe("sin_base");
+    expect(estadoDeTrampa({ hoy: "2026-09-18", trampa, regla }).diasDeRetraso).toBeNull();
+  });
+
+  // Control positivo del caso de arriba: con instalación registrada (todo lo
+  // demás igual), la misma trampa SÍ tiene base y cae en `al_dia`, no en
+  // `sin_base` — si `sin_base` apareciera siempre, esta prueba lo vería.
+  it("con instalación registrada, la misma trampa sin revisiones es al_dia, no sin_base", () => {
+    const trampa: TrampaParaAviso = { ...trampaBase, instaladaEl: "2026-09-01", ultimaRevision: null };
+    expect(estadoDeTrampa({ hoy: "2026-09-10", trampa, regla }).estado).toBe("al_dia");
+  });
 });
 
 /**

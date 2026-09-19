@@ -61,16 +61,17 @@ export default async function RondaDeTrampasPage({
     throw error;
   }
 
-  const hoy = diaDeHoy(new Date(), null);
-  // El valor por defecto del campo de fecha del formulario corto (Tarea 10,
-  // ruling del controlador) es un «hoy» distinto del de arriba: éste es el
-  // día en la zona DE LA FINCA, calculado en el servidor y pasado como prop
-  // — nunca un `hoyLocalISO()` en el cliente, que daría el día del
-  // dispositivo y además desajustaría la hidratación. El `hoy` de arriba
-  // sigue usando el respaldo UTC−12 a propósito: es para vencimientos, que
-  // no deben afirmar antes de tiempo (ver `diaDeHoy`), no para un valor que
-  // el operario puede editar.
-  const hoyDeLaFinca = diaDeHoy(new Date(), detalle.farmTimezone);
+  // A7 fix-final (I1), ruling del controlador — UNA sola fuente de «hoy»
+  // para esta pantalla, la zona REAL de la finca: la misma que ya usa
+  // `/plots/[id]` (`location.timezone`) para el vencimiento de trampas y que
+  // `/finca/trampas` usa ahora también. Antes había DOS «hoy» aquí: éste
+  // calculado con el respaldo UTC−12 (para el vencimiento) y otro con la
+  // zona de la finca (sólo para el valor por defecto del formulario corto).
+  // Esa división era la causa del defecto: la MISMA trampa podía reportar
+  // «al día» en la ronda y «toca revisar» en `/plots/[id]` durante la
+  // ventana en que las dos zonas discrepan (spec de la revisión final, I1).
+  // Ahora es un único valor, usado para las dos cosas.
+  const hoy = diaDeHoy(new Date(), detalle.farmTimezone);
   const paraAviso = new Map(trampasParaAviso(detalle.trampas).map((t) => [t.id, t]));
 
   const activas = detalle.trampas
@@ -124,7 +125,12 @@ export default async function RondaDeTrampasPage({
                   ? t("trapEstadoTextoHoy")
                   : estado === "al_dia"
                     ? t("trapEstado_al_dia")
-                    : t("trapEstado_sin_regla");
+                    // A12 fix-final (M5) — antes de este `estado`, un
+                    // `sin_base` habría caído aquí y mostrado «sin regla»,
+                    // que es falso: sí hay regla, falta la fecha base.
+                    : estado === "sin_base"
+                      ? t("trapEstado_sin_base")
+                      : t("trapEstado_sin_regla");
 
           return (
             <article key={trampa.id} className="nn-card">
@@ -158,7 +164,7 @@ export default async function RondaDeTrampasPage({
                     cada envío (`generarClaveDeRevision`), porque la tarjeta
                     sigue montada entre envíos y una clave fija por render
                     colisionaría en un segundo envío sin señal. */}
-                <RondaDeTrampaForm locationId={trampa.plotId} specimenId={trampa.id} hoy={hoyDeLaFinca} />
+                <RondaDeTrampaForm locationId={trampa.plotId} specimenId={trampa.id} hoy={hoy} />
               </details>
             </article>
           );

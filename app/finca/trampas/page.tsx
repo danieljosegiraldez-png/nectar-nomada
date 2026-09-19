@@ -66,7 +66,14 @@ export default async function TrampasDeLaFincaPage({
     throw error;
   }
 
-  const hoy = diaDeHoy(new Date(), null);
+  // A7 fix-final (I1) — la zona REAL de la finca, no el respaldo UTC−12: es
+  // la misma fuente que ya usa `/plots/[id]` para el vencimiento
+  // (`location.timezone`) y que la ronda usa para su campo de fecha. Antes
+  // esta pantalla y la ronda usaban el respaldo aunque `detalle.farmTimezone`
+  // ya estaba disponible, así que una misma trampa podía reportar «al día»
+  // aquí y «toca revisar» en `/plots/[id]` durante la ventana de la mañana en
+  // que las dos zonas discrepan. Las tres pantallas tienen que coincidir.
+  const hoy = diaDeHoy(new Date(), detalle.farmTimezone);
 
   // El estado de cada trampa se calcula una sola vez: la tabla lo muestra y el
   // filtro lo usa para decidir qué fila queda.
