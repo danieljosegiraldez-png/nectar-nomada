@@ -2336,6 +2336,7 @@
   "Inventario": {
     "recibidoOk": "Container received. It appears below with its expiry.",
     "recibirEnlace": "Receive a medicine into the kit",
+    "recibirEnlaceFitosanitario": "Receive a plant protection product",
     "colVence": "Expires",
     "colCustodia": "Where it is",
     "venceSinFecha": "no date",
