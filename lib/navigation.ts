@@ -281,6 +281,8 @@ export const DENTRO_DE_SECCION: Readonly<Record<string, string>> = {
   "/lots": "/beneficio",
   // 2026-09-18: las parcelas cuelgan de Finca.
   "/plots": "/finca",
+  // 2026-09-18 (Tarea 8): las trampas de la finca, también.
+  "/finca/trampas": "/finca",
 };
 
 /**

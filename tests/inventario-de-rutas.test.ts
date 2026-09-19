@@ -134,7 +134,10 @@ describe("el inventario del router", () => {
     // la revisión encontró que la spec pide las CUATRO rutas de captura y el
     // brief original sólo había pedido tres; ésta faltaba. 79 páginas y 11
     // handlers.
-    expect(salida).toContain("90 entradas");
+    // 90 → 91 el mismo día (Tarea 8): /finca/trampas — la tabla de todas las
+    // trampas de la finca, filtrada a los lotes que cada persona puede ver.
+    // 80 páginas y 11 handlers.
+    expect(salida).toContain("91 entradas");
     expect(codigo, salida).toBe(0);
   });
 

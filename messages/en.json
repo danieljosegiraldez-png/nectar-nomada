@@ -1107,10 +1107,14 @@
     "trapsNone": "No traps registered on this plot.",
     "trapsNumber": "Trap {n}",
     "trapsNoBlock": "No block",
+    "trapsColumnPlot": "Plot",
     "trapsColumnBlock": "Block",
     "trapsColumnLastCheck": "Last check",
     "trapsColumnLastReading": "Last reading",
     "trapsColumnStatus": "Status",
+    "fincaTrapsTitle": "Farm traps",
+    "fincaTrapsTitleNamed": "{name}'s traps",
+    "fincaTrapsNoAccess": "You don't have access to this farm's traps.",
     "trapEstado_sin_regla": "No rule",
     "trapEstado_retirada": "Removed",
     "trapEstado_al_dia": "Up to date",
@@ -2513,6 +2517,8 @@
     "parcelasAyuda": "What is planted, how each plot is doing, and what it is missing.",
     "cosecha": "Record a harvest",
     "cosechaAyuda": "How much was harvested, from which plot, and what the cherry was like.",
+    "fincaTrapsLink": "Traps",
+    "fincaTrapsLinkAyuda": "How many there are, their status, and when they're due.",
     "proximamente": "Coming next: pickers, yield and efficiency, and harvest quality with what the mill's selection sends back."
   },
   "Tienda": {

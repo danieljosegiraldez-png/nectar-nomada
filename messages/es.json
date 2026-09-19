@@ -1107,10 +1107,14 @@
     "trapsNone": "No hay trampas registradas en esta parcela.",
     "trapsNumber": "Trampa {n}",
     "trapsNoBlock": "Sin bloque",
+    "trapsColumnPlot": "Parcela",
     "trapsColumnBlock": "Bloque",
     "trapsColumnLastCheck": "Última revisión",
     "trapsColumnLastReading": "Última lectura",
     "trapsColumnStatus": "Estado",
+    "fincaTrapsTitle": "Trampas de la finca",
+    "fincaTrapsTitleNamed": "Trampas de {name}",
+    "fincaTrapsNoAccess": "No tienes acceso a las trampas de esta finca.",
     "trapEstado_sin_regla": "Sin regla",
     "trapEstado_retirada": "Retirada",
     "trapEstado_al_dia": "Al día",
@@ -2513,6 +2517,8 @@
     "parcelasAyuda": "Qué hay sembrado, cómo está cada lote de terreno y qué le falta.",
     "cosecha": "Registrar una cosecha",
     "cosechaAyuda": "Cuánto se cosechó, de qué parcela y cómo venía la cereza.",
+    "fincaTrapsLink": "Trampas",
+    "fincaTrapsLinkAyuda": "Cuántas hay, cómo están y cuándo tocan revisar.",
     "proximamente": "Llegan después: recolectores, rendimiento y eficiencia, y la calidad de la cosecha con lo que devuelve la selección del beneficio."
   },
   "Tienda": {

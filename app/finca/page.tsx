@@ -36,6 +36,12 @@ export default async function FincaPage() {
     { href: "/plots", titulo: t("parcelas"), ayuda: t("parcelasAyuda"), visible: true },
     // `recordHarvestEvent` exige `lot:manage` (lib/traceability/harvest.ts).
     { href: "/lots/new", titulo: t("cosecha"), ayuda: t("cosechaAyuda"), visible: granted.has("lot:manage") },
+    {
+      href: "/finca/trampas",
+      titulo: t("fincaTrapsLink"),
+      ayuda: t("fincaTrapsLinkAyuda"),
+      visible: granted.has("specimen:view") || granted.has("specimen:manage"),
+    },
   ].filter((d) => d.visible);
 
   return (
