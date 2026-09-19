@@ -292,7 +292,7 @@ cuesta lo mismo que hoy. Los números van con `CampoNumerico` (#418), los envío
   - los CHECK de capacidad, material `otro` sin nota y rango invertido;
   - una rutina con equipo **y** sitio, o con ninguno, se rechaza; dos rutinas activas del
     mismo tipo sobre la misma cosa chocan, y una retirada no cuenta; **corregido en la Tarea
-    10 (ADR-171):** la base admite una rutina de sitio, y lo prueban las pruebas de esquema
+    10 (ADR-172):** la base admite una rutina de sitio, y lo prueban las pruebas de esquema
     (XOR, unicidad parcial); el servicio la rechaza con `RutinaError("instalaciones_pendiente")`
     hasta el spec de instalaciones;
   - un registro anulado sin motivo se rechaza, y anulado deja de contar como «último»;
