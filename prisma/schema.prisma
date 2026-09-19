@@ -140,6 +140,9 @@ model Person {
   measurementsReviewed    MeasurementReviewFlag[]      @relation("MeasurementReviewedBy")
   careRoutineEvents CareRoutineEvent[] @relation("CareRoutineEventPerformedBy")
 
+  recolectorEnFincas     FincaRecolector[]
+  asignacionesDeCosecha  AsignacionDeJornada[] @relation("AsignacionRecolector")
+  entregasDeCosecha      EntregaDeCosecha[]    @relation("EntregaRecolector")
   @@map("person")
   @@schema("core")
   consumableCustodiesResponsible ConsumableCustody[] @relation("ConsumableCustodyResponsible")
@@ -922,6 +925,10 @@ model Location {
   plotInterventions           PlotIntervention[] @relation("PlotInterventionLocation")
 
   nodeCalibrations NodeCalibration[]
+  recolectoresDeFinca    FincaRecolector[]     @relation("FincaRecolectorSitio")
+  jornadasDeCosecha      JornadaDeCosecha[]    @relation("JornadaDeCosechaSitio")
+  asignacionesDeCosecha  AsignacionDeJornada[] @relation("AsignacionParcela")
+  entregasDeCosecha      EntregaDeCosecha[]    @relation("EntregaParcela")
   @@index([parentLocationId])
   @@index([organizationId])
   equipmentTransfersFrom EquipmentTransfer[] @relation("EquipmentTransferFrom")
@@ -2039,6 +2046,9 @@ model Asset {
   evidence         Evidence[]
   fieldEvents      FieldEvent[]
 
+  /// Spec jornada y entrega de cosecha §3.3 — la foto de una entrega, que no tiene lote.
+  entregaDeCosechaId String?           @map("entrega_de_cosecha_id") @db.Uuid
+  entregaDeCosecha   EntregaDeCosecha? @relation(fields: [entregaDeCosechaId], references: [id], onDelete: Restrict)
   @@index([projectId])
   @@index([locationId])
   @@index([lotId])
@@ -4831,6 +4841,9 @@ model FieldSession {
   events FieldEvent[]
   plotInterventions PlotIntervention[] @relation("PlotInterventionSession")
 
+  /// Spec jornada y entrega §3.5 — la jornada de campo de un recolector dentro de una jornada de cosecha.
+  jornadaDeCosechaId String?           @map("jornada_de_cosecha_id") @db.Uuid
+  jornadaDeCosecha   JornadaDeCosecha? @relation(fields: [jornadaDeCosechaId], references: [id], onDelete: Restrict)
   @@index([locationId])
   @@index([operatorPersonId])
   @@index([taskId])
@@ -5019,6 +5032,14 @@ model FieldEvent {
   createdBy String?      @map("created_by") @db.Uuid
   creator   UserAccount? @relation("FieldEventCreatedBy", fields: [createdBy], references: [id])
 
+  /// Spec jornada y entrega §3.5 — la situación puede ser de un bloque o de una planta, no sólo de la parcela de la jornada.
+  plotBlockId            String?               @map("plot_block_id") @db.Uuid
+  plotBlock              PlotBlock?            @relation("FieldEventBloque", fields: [plotBlockId], references: [id], onDelete: Restrict)
+  specimenId             String?               @map("specimen_id") @db.Uuid
+  specimen               Specimen?             @relation("FieldEventPlanta", fields: [specimenId], references: [id], onDelete: Restrict)
+  /// La condición del día (lluvia, neblina, otro), del catálogo `condicion_del_dia`. Sin valor medido: ver el spec §3.5.
+  condicionDelDiaValueId String?               @map("condicion_del_dia_value_id") @db.Uuid
+  condicionDelDiaValue   VariableCatalogValue? @relation("FieldEventCondicionDelDia", fields: [condicionDelDiaValueId], references: [id], onDelete: Restrict)
   @@index([fieldSessionId])
   @@index([occurredAt])
   // P4 §5 — el cursor de esta tabla va por `createdAt` y no por `updatedAt`,
@@ -6396,6 +6417,8 @@ model Specimen {
   assets       Asset[]
   intervencionesSobreElla PlotInterventionArea[] @relation("PlotInterventionAreaSpecimen")
 
+  entregasDeCosecha EntregaDeCosecha[]
+  fieldEvents       FieldEvent[]       @relation("FieldEventPlanta")
   @@unique([farmLocationId, trapNumber])
   @@index([locationId])
   @@index([plantingCohortId])
@@ -6431,9 +6454,112 @@ model PlotBlock {
 
   specimens Specimen[]
 
+  entregasDeCosecha EntregaDeCosecha[]
+  fieldEvents       FieldEvent[]       @relation("FieldEventBloque")
   @@unique([locationId, name])
   @@index([locationId])
   @@map("plot_block")
+  @@schema("traceability")
+}
+
+/// Spec 2026-09-18 jornada y entrega de cosecha — quién recolecta en una finca, desde cuándo.
+/// Recolector = `Person`, con cuenta o sin ella (el repositorio prohíbe una segunda identidad).
+model FincaRecolector {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personId    String    @map("person_id") @db.Uuid
+  person      Person    @relation(fields: [personId], references: [id], onDelete: Restrict)
+  fincaSiteId String    @map("finca_site_id") @db.Uuid
+  fincaSite   Location  @relation("FincaRecolectorSitio", fields: [fincaSiteId], references: [id], onDelete: Restrict)
+  desde       DateTime
+  hasta       DateTime?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+
+  @@index([fincaSiteId])
+  @@index([personId])
+  @@map("finca_recolector")
+  @@schema("traceability")
+}
+
+enum EstadoDeJornada {
+  abierta
+  cerrada
+
+  @@schema("traceability")
+}
+
+enum EstadoDeEntrega {
+  enviada
+  anulada
+
+  @@schema("traceability")
+}
+
+/// Una jornada de cosecha: la fecha, la finca, y qué recolector va a qué parcela. La abre el
+/// Farm Manager o el capataz. **La finca no crea lotes**: las entregas salen de aquí hacia el
+/// beneficio, que las recibe (pieza 2) y arma los lotes (pieza 3).
+model JornadaDeCosecha {
+  id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fincaSiteId  String                @map("finca_site_id") @db.Uuid
+  fincaSite    Location              @relation("JornadaDeCosechaSitio", fields: [fincaSiteId], references: [id], onDelete: Restrict)
+  fecha        DateTime              @db.Date
+  estado       EstadoDeJornada       @default(abierta)
+  nota         String?
+  cerradaAt    DateTime?             @map("cerrada_at")
+  asignaciones AsignacionDeJornada[]
+  entregas     EntregaDeCosecha[]
+  fieldSessions FieldSession[]
+  createdAt    DateTime              @default(now()) @map("created_at")
+  createdBy    String?               @map("created_by") @db.Uuid
+
+  @@index([fincaSiteId, fecha])
+  @@map("jornada_de_cosecha")
+  @@schema("traceability")
+}
+
+/// Qué recolector va a qué parcela (o microparcela) lista en una jornada.
+model AsignacionDeJornada {
+  id         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jornadaId  String           @map("jornada_id") @db.Uuid
+  jornada    JornadaDeCosecha @relation(fields: [jornadaId], references: [id], onDelete: Cascade)
+  locationId String           @map("location_id") @db.Uuid
+  location   Location         @relation("AsignacionParcela", fields: [locationId], references: [id], onDelete: Restrict)
+  personId   String           @map("person_id") @db.Uuid
+  person     Person           @relation("AsignacionRecolector", fields: [personId], references: [id], onDelete: Restrict)
+
+  @@unique([jornadaId, locationId, personId])
+  @@index([personId])
+  @@map("asignacion_de_jornada")
+  @@schema("traceability")
+}
+
+/// Un viaje de un recolector al beneficio: quién, de dónde (exactamente uno: parcela o
+/// microparcela, bloque o planta — CHECK), cuánto pesó en finca y quién lo anotó. **No es un
+/// lote y no crea ninguno.** Enviada no se edita: se anula con motivo (CHECK).
+model EntregaDeCosecha {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jornadaId       String           @map("jornada_id") @db.Uuid
+  jornada         JornadaDeCosecha @relation(fields: [jornadaId], references: [id], onDelete: Restrict)
+  recolectorId    String           @map("recolector_person_id") @db.Uuid
+  recolector      Person           @relation("EntregaRecolector", fields: [recolectorId], references: [id], onDelete: Restrict)
+  locationId      String?          @map("location_id") @db.Uuid
+  location        Location?        @relation("EntregaParcela", fields: [locationId], references: [id], onDelete: Restrict)
+  plotBlockId     String?          @map("plot_block_id") @db.Uuid
+  plotBlock       PlotBlock?       @relation(fields: [plotBlockId], references: [id], onDelete: Restrict)
+  specimenId      String?          @map("specimen_id") @db.Uuid
+  specimen        Specimen?        @relation(fields: [specimenId], references: [id], onDelete: Restrict)
+  pesoFincaKg     Decimal          @map("peso_finca_kg") @db.Decimal(10, 3)
+  enviadaAt       DateTime         @map("enviada_at")
+  anotadaPor      String           @map("anotada_por") @db.Uuid
+  estado          EstadoDeEntrega  @default(enviada)
+  anuladaAt       DateTime?        @map("anulada_at")
+  motivoAnulacion String?          @map("motivo_anulacion")
+  assets          Asset[]
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  @@index([jornadaId])
+  @@index([recolectorId])
+  @@map("entrega_de_cosecha")
   @@schema("traceability")
 }
 
@@ -8135,6 +8261,7 @@ model VariableCatalogValue {
   cherryDefectsOfHarvests     HarvestEvent[]           @relation("HarvestCherryDefects")
   cherryCleanlinessOfHarvests HarvestEvent[]           @relation("HarvestCherryCleanliness")
 
+  fieldEventsCondicionDelDia FieldEvent[] @relation("FieldEventCondicionDelDia")
   @@unique([catalogId, value])
   @@index([aliasOfId])
   @@map("variable_catalog_value")

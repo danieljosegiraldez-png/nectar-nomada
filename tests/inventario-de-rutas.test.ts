@@ -139,10 +139,14 @@ describe("el inventario del router", () => {
     // /equipos/modelos/[id] — el catálogo de modelos de equipo (fichas de
     // fabricante, compartidas o de organización), separado del inventario de
     // equipos concretos. 80 páginas y 11 handlers.
-    // SÉPTIMA vez el mismo día — tercera integración de `fitosanitarios` sobre
-    // `origin/main`. Medido con `node scripts/inventario-de-rutas.mjs` sobre el
-    // árbol resuelto tras el merge: 93 entradas (82 páginas y 11 handlers).
-    expect(salida).toContain("93 entradas");
+    // 91 → 93 el mismo día: /finca/jornadas y /finca/jornadas/[id] (spec jornada y entrega de
+    // cosecha), rebasado sobre el catálogo. Medido: 82 páginas y 11 handlers.
+    // 93 → 94 el mismo día: /mis-entregas, la pantalla del recolector. Medido: 83 páginas y 11
+    // handlers.
+    // 94 → 96 al fusionar `fitosanitarios` (2026-09-19): /plots/[id]/manejo/nuevo y
+    // /plots/[id]/manejo/[interventionId]. Medido con `node scripts/inventario-de-rutas.mjs`
+    // sobre el árbol fusionado: 85 páginas y 11 handlers.
+    expect(salida).toContain("96 entradas");
     expect(codigo, salida).toBe(0);
   });
 

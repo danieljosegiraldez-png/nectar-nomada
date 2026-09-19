@@ -4041,6 +4041,21 @@ La ficha del apiario las lista y un botón asienta el peso ya escrito (sin tecle
 auditoría; sólo si el lote no tiene NINGÚN asiento. **Medido en la copia local: ninguna afectada**
 —la única cosecha real se pesó al cosechar—. Es una red, no el arreglo de un daño visto.
 
+### 2026-09-18 · Las faenas con nombres de manual, la división y la reina (PR #397)
+
+Spec #407 aprobado por Daniel y fusionado; plan `docs/superpowers/plans/2026-09-18-faenas-division-y-reinas.md`,
+seis tareas. **Ocho faenas** en la colmena —revisar · alimentar · tratar · contar varroa · dividir ·
+reinas · unir · cosechar— con nombres de DICTA y SAGARPA; la enjambrazón es un aviso DENTRO de Revisar.
+**Genealogía:** una división nace con su madre y una unión cierra la débil apuntando a la receptora
+(las viejas sin pareja se quedan así: CHECK NOT VALID). **Reina por intervalos** (`Queen`,
+`QueenTenure`), sin marca: una colonia sin reina registrada es «sin registro», nunca huérfana. Al
+dividir se elige con quién se queda la reina. Las puertas viejas («división» en Nueva colonia, «se
+combinó» en el fin) se cerraron. **Sin ver en navegador.**
+
+**La base compartida:** los dos CHECK NOT VALID de la genealogía tumbaban 3 pruebas de `main` en otras
+sesiones; con permiso de Daniel se quitaron de `nectar_test` y esta rama compuerta en `nectar_ci_faena`.
+Vuelven con la migración al fusionar.
+
 ### 2026-09-18 · Artefactos de colmena y el nodo de sensores (PR #405)
 
 Plan `docs/superpowers/plans/2026-09-17-artefactos-de-colmena.md`, ocho tareas. **La colmena guarda

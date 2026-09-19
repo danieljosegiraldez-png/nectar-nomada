@@ -18,6 +18,18 @@
   ],
   "importan_cliente_total": [
     {
+      "archivo": "lib/traceability/situacionesDeCampo.ts",
+      "razon": "Módulo de dominio: las situaciones de campo del recolector en su jornada de cosecha (spec 2026-09-18 jornada y entrega §3.5). Reportar exige, ANTES de escribir, `field_report:create_own` sobre el sitio de la finca y estar asignado en esa jornada abierta, y sólo sobre lo asignado; la FieldSession, el FieldEvent y sus AuditEvent van en la misma transacción. Compuerta propia a propósito: no pasa por `requireLocationAttributeAccess` porque esa es la autoridad sobre sol, sombra y suelo. La foto de una situación (`pedirSubidaDeFotoDeSituacion`, `confirmarFotoDeSituacion`) pasa por la misma compuerta, re-comprueba al confirmar que la clave esté bajo el prefijo de ESA jornada, y crea Asset, FieldEvent y sus AuditEvent en una transacción. Leer: todo con `field_report:view` sobre la finca; si no, sólo los eventos de la Person de la cuenta."
+    },
+    {
+      "archivo": "lib/traceability/entregasDeCosecha.ts",
+      "razon": "Módulo de dominio: la entrega de cosecha de la finca al beneficio (spec 2026-09-18 jornada y entrega §3.3–3.4). Anotar exige, ANTES de escribir, `harvest_delivery:create_own` sobre el sitio si la entrega es del propio recolector de la cuenta, y si no `requireLotAccess(manage)`; anular exige `requireLotAccess(manage)`. Cada escritura lleva su AuditEvent en la misma transacción. `misEntregas` sólo lee filas de la Person de la propia cuenta."
+    },
+    {
+      "archivo": "lib/traceability/jornadasDeCosecha.ts",
+      "razon": "Módulo de dominio: recolectores y jornadas de cosecha (spec 2026-09-18 jornada y entrega §3.1–3.2). Escribir exige `requireLotAccess(manage)` sobre el sitio de la finca ANTES de escribir, con el AuditEvent en la misma transacción; leer exige `requireLotAccess(view)` sobre ese sitio. La lectura del árbol de ubicaciones sólo comprueba que las parcelas asignadas cuelguen de esa finca."
+    },
+    {
       "archivo": "lib/traceability/reporteDeVisita.ts",
       "razon": "A9.6 — emite el reporte de una visita congelando su contenido. Modulo de dominio: es el sitio donde el acceso a datos vive por diseno. Comprueba `requireFieldSessionAccess` antes de leer nada, y su escritura confirma su AuditEvent en la misma transaccion."
     },
@@ -556,6 +568,10 @@
   ],
   "reciben_transaccion": [
     {
+      "archivo": "lib/traceability/entregasDeCosecha.ts",
+      "razon": "Spec jornada y entrega §3.3: `exigeOrigenAsignado(tx, …)` recibe el `tx` de `anotarEntrega` para comprobar DENTRO de la transacción que crea la entrega que el origen (parcela, bloque o planta) cae en lo asignado a esa persona en esa jornada. Sólo lee asignaciones, bloques y plantas; quien llama ya autorizó con `harvest_delivery:create_own` o `requireLotAccess(manage)`; no escribe nada."
+    },
+    {
       "archivo": "lib/traceability/locations.ts",
       "razon": "Spec fincas y parcelas §3.3: `nombreLibreBajo(tx, padre, nombre)` recibe el `tx` de quien crea —`createMicrolot` aquí mismo y `crearParcela` en fincas.ts— para mirar los hermanos DENTRO de la transacción que va a crear la fila. Sólo lee nombres de los hijos de un padre sobre el que quien llama ya pasó `requireLocationAttributeAccess`; no escribe nada."
     },
@@ -644,6 +660,12 @@
     }
   ],
   "dependen_del_llamador": [
+    {
+      "archivo": "lib/traceability/jornadasDeCosecha.ts",
+      "operacion": "origenesDeParcelas",
+      "razon": "Lee los bloques y las plantas activas de unas parcelas para ofrecerlos como origen de una entrega o de un reporte. No recibe principal: su llamador ya autorizó esas parcelas. Llamadores de produccion: `detalleDeJornada` (mismo archivo), que exige `requireLotAccess(view)` sobre el sitio de la finca ANTES de llamarla, con las parcelas asignadas de ESA jornada; y `misEntregas` (entregasDeCosecha.ts), con sólo las parcelas asignadas a la Person de la propia cuenta en sus jornadas abiertas.",
+      "verificado": "2026-09-18"
+    },
     {
       "archivo": "lib/sensores/ingesta.ts",
       "operacion": "ingerirObservacion",
@@ -757,6 +779,12 @@
       "operacion": "getFieldEventKinds",
       "razon": "Lee variableCatalogValue, catálogo de referencia y no dato gobernado. Su página exige sesión.",
       "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/traceability/fieldSessionCatalog.ts",
+      "operacion": "getCondicionesDelDia",
+      "razon": "Hermano de getFieldEventKinds: lee los valores del catálogo condicion_del_dia (lluvia, neblina, otro), referencia y no dato gobernado. Su único llamador, app/mis-entregas, exige sesión y harvest_delivery:create_own.",
+      "verificado": "2026-09-18"
     },
     {
       "archivo": "lib/traceability/lots.ts",
