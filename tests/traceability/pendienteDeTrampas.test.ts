@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   avisosDeTrampas,
   estadoDeTrampa,
+  trampasFiltradas,
   trampasParaAviso,
   type ReglaParaAviso,
   type TrampaParaAviso,
@@ -158,5 +159,44 @@ describe("estadoDeTrampa", () => {
       estadoDeTrampa({ hoy: "2026-09-18", trampa: { ...trampaBase, status: "removed" }, regla: null })
         .estado,
     ).toBe("retirada");
+  });
+});
+
+/**
+ * El filtro de `/finca/trampas` — Fix round 1, Tarea 8. Pura: recibe la lista
+ * ya con su `estado`, así que no necesita `hoy` ni la regla.
+ */
+describe("trampasFiltradas", () => {
+  const filas = [
+    { id: "a", estado: "al_dia" as const },
+    { id: "b", estado: "toca_revisar" as const },
+    { id: "c", estado: "lectura_alta" as const },
+    { id: "d", estado: "retirada" as const },
+    { id: "e", estado: "sin_regla" as const },
+  ];
+  const ids = (r: typeof filas) => r.map((f) => f.id);
+
+  it("«toca_revisar» deja sólo las que están en ese estado", () => {
+    expect(ids(trampasFiltradas(filas, "toca_revisar"))).toEqual(["b"]);
+  });
+
+  it("«lectura_alta» deja sólo las que están en ese estado", () => {
+    expect(ids(trampasFiltradas(filas, "lectura_alta"))).toEqual(["c"]);
+  });
+
+  it("sin filtro (undefined) devuelve todas, en el mismo orden", () => {
+    expect(ids(trampasFiltradas(filas, undefined))).toEqual(["a", "b", "c", "d", "e"]);
+  });
+
+  it("un filtro vacío devuelve todas", () => {
+    expect(ids(trampasFiltradas(filas, ""))).toEqual(["a", "b", "c", "d", "e"]);
+  });
+
+  it("un filtro desconocido devuelve todas — nunca una tabla vacía por una URL escrita a mano", () => {
+    expect(ids(trampasFiltradas(filas, "algo-que-no-existe"))).toEqual(["a", "b", "c", "d", "e"]);
+  });
+
+  it("null también cuenta como ausente", () => {
+    expect(ids(trampasFiltradas(filas, null))).toEqual(["a", "b", "c", "d", "e"]);
   });
 });

@@ -6,6 +6,17 @@ import type { NivelDeBroca, ReglaParaAviso } from "./pendienteDeTrampas";
 
 export class FincaTrapAccessError extends Error {}
 
+/**
+ * ¿Puede esta persona usar `/finca/trampas`? La misma pregunta que decide si el
+ * índice de `/finca` ofrece el destino «Trampas» (Fix round 1, Tarea 8) —
+ * extraída para que exista un solo sitio que la responda y una prueba con base
+ * pueda afirmarla directamente, en vez de repetir `granted.has(...)` en cada
+ * llamador.
+ */
+export function puedeVerTrampasDeFinca(granted: ReadonlySet<string>): boolean {
+  return granted.has("specimen:view") || granted.has("specimen:manage");
+}
+
 async function puedeVerTrampasDelLote(
   userAccountId: string,
   plot: { id: string; classification: import("../../generated/prisma/client").ClassificationLevel },

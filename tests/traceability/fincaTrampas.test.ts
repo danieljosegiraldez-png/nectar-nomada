@@ -11,10 +11,17 @@
  * lote concreto — el mismo perfil que ya usa `crearUsuarioSinAcceso`, pero
  * apuntando al lote que la prueba sí quiere que vea.
  */
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
-import { FincaTrapAccessError, getFincasConTrampas, getFincaTrampas } from "../../lib/traceability/fincaTrampas";
+import {
+  FincaTrapAccessError,
+  getFincasConTrampas,
+  getFincaTrampas,
+  puedeVerTrampasDeFinca,
+} from "../../lib/traceability/fincaTrampas";
 import { createTrap } from "../../lib/traceability/traps";
 import { prisma } from "../../lib/db";
+import { permissionKeysAnywhere } from "../../lib/rbac/service";
 import { crearFinca, crearParcela, crearUsuarioSinAcceso } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
@@ -136,5 +143,52 @@ describe("getFincasConTrampas", () => {
 
     const ninguna = await getFincasConTrampas(ajeno.userAccountId);
     expect(ninguna).toEqual([]);
+  });
+});
+
+/**
+ * La visibilidad del destino «Trampas» en `/finca` — Fix round 1, Tarea 8.
+ *
+ * A propósito **no** usa Platform Admin para el caso negativo: esa cuenta
+ * tiene `specimen:view` de fábrica (CLAUDE.md, «Un admin de plataforma ve la
+ * base compartida entera»), así que probaría lo contrario de lo que el nombre
+ * del test dice. `Sensory Judge` es el perfil real sin ningún permiso de
+ * `specimen` (`lib/rbac/catalog.ts`), scopeado a una sesión — el scope no
+ * necesita existir de verdad porque `permissionKeysAnywhere` sólo resuelve
+ * permisos, nunca visibilidad de una fila concreta.
+ */
+describe("puedeVerTrampasDeFinca — visibilidad del destino en /finca", () => {
+  it("un Farm Operator con acceso a un lote SÍ ve el destino", async () => {
+    const finca = await crearFinca();
+    locationIds.push(finca.id);
+    organizationIds.push(finca.organizationId!);
+    const parcela = await crearParcela(finca);
+    locationIds.push(parcela.id);
+
+    const usuario = await crearUsuarioConAccesoAlLote(parcela.id);
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+
+    const granted = await permissionKeysAnywhere(usuario.userAccountId);
+    expect(puedeVerTrampasDeFinca(granted)).toBe(true);
+  });
+
+  it("un Sensory Judge, sin ningún permiso de specimen, NO ve el destino", async () => {
+    const persona = await prisma.person.create({
+      data: { givenName: "TEST", familyName: "Juez", displayName: `TEST Juez (${Date.now()}-${Math.random()})`, locale: "es" },
+    });
+    personIds.push(persona.id);
+    const cuenta = await prisma.userAccount.create({
+      data: { personId: persona.id, authProvider: "credentials", status: "active" },
+    });
+    userAccountIds.push(cuenta.id);
+    const perfil = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Sensory Judge" } });
+    const scope = await prisma.scope.create({ data: { scopeType: "session", scopeRefId: randomUUID() } });
+    scopeIds.push(scope.id);
+    await prisma.assignment.create({ data: { userAccountId: cuenta.id, roleProfileId: perfil.id, scopeId: scope.id } });
+
+    const granted = await permissionKeysAnywhere(cuenta.id);
+    expect(puedeVerTrampasDeFinca(granted)).toBe(false);
   });
 });

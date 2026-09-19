@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
+import { puedeVerTrampasDeFinca } from "../../lib/traceability/fincaTrampas";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ export default async function FincaPage() {
       href: "/finca/trampas",
       titulo: t("fincaTrapsLink"),
       ayuda: t("fincaTrapsLinkAyuda"),
-      visible: granted.has("specimen:view") || granted.has("specimen:manage"),
+      visible: puedeVerTrampasDeFinca(granted),
     },
   ].filter((d) => d.visible);
 

@@ -161,6 +161,29 @@ export function estadoDeTrampa(e: {
  * `toISOString().slice(0, 10)`, sin zona. Una revisión sin lectura NO se
  * descarta: pasa con `brocaLevel: null` (ver `TrampaParaAviso`).
  */
+/**
+ * Los dos filtros que ofrece `/finca/trampas` — spec §4.1. Fix round 1, Tarea 8
+ * (vistas-de-finca-y-parcela).
+ */
+export const FILTROS_DE_TRAMPAS = ["toca_revisar", "lectura_alta"] as const;
+export type FiltroDeTrampas = (typeof FILTROS_DE_TRAMPAS)[number];
+
+/**
+ * El filtro de `/finca/trampas`, pura. Recibe la lista ya con su `estado`
+ * calculado (por `estadoDeTrampa`) y el valor crudo de `?filtro=`: un valor
+ * vacío, ausente o desconocido no filtra nada y devuelve la lista entera — una
+ * URL escrita a mano no debe poder vaciar la tabla en silencio.
+ */
+export function trampasFiltradas<T extends { estado: EstadoDeTrampa }>(
+  trampas: readonly T[],
+  filtro: string | null | undefined,
+): T[] {
+  if (filtro != null && (FILTROS_DE_TRAMPAS as readonly string[]).includes(filtro)) {
+    return trampas.filter((t) => t.estado === filtro);
+  }
+  return [...trampas];
+}
+
 export function trampasParaAviso(
   trampas: readonly {
     id: string;
