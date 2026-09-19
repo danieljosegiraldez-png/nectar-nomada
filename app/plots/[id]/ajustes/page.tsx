@@ -35,6 +35,7 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
+  const tf = await getTranslations("Fincas");
 
   let detail;
   try {
@@ -45,6 +46,11 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   }
 
   const { location, cohorts, cultivarOptions, eventosDeProduccion, trampas, reglaDeTrampas } = detail;
+  // Spec fincas y parcelas §3.3: sólo una parcela se subdivide en
+  // microparcelas — una microparcela ya es una Location `micro_plot`, y no
+  // se subdivide otra vez. El acceso ya lo exigió `getPlotDetail` arriba
+  // (`manage_attributes`, la misma comprobación de `crearMicroparcelaAction`).
+  const puedeSubdividir = location.locationType === "plot";
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
   const [calicatas, bloques, { people, selfPersonId }] = await Promise.all([
@@ -59,6 +65,14 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
         <Link href={`/plots/${location.id}`}>{t("plotDashboardBackLink")}</Link>
       </p>
       <h1>{t("plotDashboardSettingsTitle", { name: location.name })}</h1>
+
+      {puedeSubdividir ? (
+        <p>
+          <Link href={`/plots/${location.id}/microparcela/nueva`} className="nn-button">
+            {tf("nuevaMicroparcelaTitulo")}
+          </Link>
+        </p>
+      ) : null}
 
       <section className="nn-section" id="siembras">
         <h2>{t("plotDashboardCohortsHeading")}</h2>

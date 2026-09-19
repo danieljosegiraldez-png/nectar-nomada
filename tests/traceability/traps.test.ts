@@ -206,7 +206,7 @@ describe("alta de trampa", () => {
     const ajeno = await createPlotBlock(userAccountId, {
       locationId: otra.id,
       name: "Norte",
-      blockType: "microparcela",
+      blockType: "trampa",
     });
 
     await expect(createTrap(userAccountId, {

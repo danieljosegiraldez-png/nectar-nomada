@@ -32,7 +32,7 @@ export function AsignarTipoDeBloqueForm({
             <option value="">{t("blockTypeChoose")}</option>
             {TIPOS_DE_BLOQUE.map((tipo) => (
               <option key={tipo} value={tipo}>
-                {t(`blockType_${tipo}` as "blockType_microparcela")}
+                {t(`blockType_${tipo}` as "blockType_trampa")}
               </option>
             ))}
           </select>

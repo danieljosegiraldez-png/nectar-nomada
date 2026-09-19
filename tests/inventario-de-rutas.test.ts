@@ -165,8 +165,11 @@ describe("el inventario del router", () => {
     // 92 (rama) + 96 (origin/main) fusionados el 2026-09-19 (merge de `origin/main` en
     // `vistas-finca-parcela`): la unión de rutas de ambos lados. Cifra REAL medida con
     // `node scripts/inventario-de-rutas.mjs` sobre el árbol fusionado, no derivada por
-    // aritmética — ver el informe de este merge.
-    expect(salida).toContain("102 entradas");
+    // aritmética — ver el informe de este merge: 102 entradas.
+    // 102 → 103 el mismo día: /plots/[id]/microparcela/nueva — decisión de Daniel de que
+    // una microparcela es la Location `micro_plot`, no un tipo de bloque, y su formulario
+    // de creación sale del tablero (no vive captura en el dashboard).
+    expect(salida).toContain("103 entradas");
     expect(codigo, salida).toBe(0);
   });
 

@@ -4,8 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getPlotDetail } from "../../../lib/traceability/plantingCohorts";
-import { LocationAccessError, puedeGestionarAtributosDeUbicacion } from "../../../lib/traceability/locations";
-import { NuevaMicroparcelaForm } from "../../components/traceability/NuevaMicroparcelaForm";
+import { LocationAccessError } from "../../../lib/traceability/locations";
 import { LandPhotoUploadForm } from "../../components/traceability/LandPhotoUploadForm";
 import { listLandAssets } from "../../../lib/traceability/landMedia";
 import { LabMeasurementForm } from "../../components/traceability/LabMeasurementForm";
@@ -56,7 +55,6 @@ export default async function PlotDetailPage({
   if (!user) redirect("/login");
 
   const t = await getTranslations("Traceability");
-  const tf = await getTranslations("Fincas");
 
   let detail;
   try {
@@ -70,8 +68,6 @@ export default async function PlotDetailPage({
 
   const { location, cohorts, density, organizationName, eventosDeProduccion, trampas, reglaDeTrampas } = detail;
   const rendimiento = detail.yield;
-  // Spec fincas y parcelas §3.3: una microparcela la crea quien gestiona los atributos de esta parcela.
-  const puedeSubdividir = location.locationType === "plot" && (await puedeGestionarAtributosDeUbicacion(user.userAccountId, id));
   const [jornadas, { people, selfPersonId }, calicatas, bloquesDeLaParcela] = await Promise.all([
     listFieldSessions(user.userAccountId, id),
     getObserverCandidates(user.userAccountId),
@@ -471,17 +467,6 @@ export default async function PlotDetailPage({
           </Link>
         </p>
       </section>
-
-      {puedeSubdividir ? (
-        <section className="nn-section">
-          <details>
-            <summary>
-              <h2 style={{ display: "inline" }}>{tf("nuevaMicroparcelaTitulo")}</h2>
-            </summary>
-            <NuevaMicroparcelaForm parentLocationId={id} />
-          </details>
-        </section>
-      ) : null}
         </>
       ) : null}
 
@@ -811,7 +796,7 @@ export default async function PlotDetailPage({
             if (deEsteTipo.length === 0) return null;
             return (
               <div key={tipo}>
-                <h4>{t(`blockType_${tipo}` as "blockType_microparcela")}</h4>
+                <h4>{t(`blockType_${tipo}` as "blockType_trampa")}</h4>
                 <ul className="nn-detail-meta">
                   {deEsteTipo.map((b) => (
                     <li key={b.id}>{b.name}{b.description ? ` — ${b.description}` : ""}</li>

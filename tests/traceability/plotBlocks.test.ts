@@ -58,7 +58,7 @@ describe("bloques de una parcela", () => {
     const bloque = await createPlotBlock(userAccountId, {
       locationId: parcela.id,
       name: "Norte",
-      blockType: "microparcela",
+      blockType: "trampa",
     });
     expect(bloque.name).toBe("Norte");
     const lista = await listPlotBlocks(userAccountId, parcela.id);
@@ -79,7 +79,7 @@ describe("bloques de una parcela", () => {
     const bloque = await createPlotBlock(userAccountId, {
       locationId: parcela.id,
       name: "Alto",
-      blockType: "microparcela",
+      blockType: "trampa",
     });
     const evento = await prisma.auditEvent.findFirst({
       where: { entityType: "plot_block", entityId: bloque.id, operation: "plot_block.create" },
@@ -99,7 +99,7 @@ describe("bloques de una parcela", () => {
     organizationIds.push(parcela.organizationId!);
 
     await expect(
-      createPlotBlock(userAccountId, { locationId: parcela.id, name: "   ", blockType: "microparcela" }),
+      createPlotBlock(userAccountId, { locationId: parcela.id, name: "   ", blockType: "trampa" }),
     ).rejects.toThrow(PlotBlockValidationError);
   });
 
@@ -114,9 +114,9 @@ describe("bloques de una parcela", () => {
     locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
 
-    await createPlotBlock(userAccountId, { locationId: parcela.id, name: "Bajo", blockType: "microparcela" });
+    await createPlotBlock(userAccountId, { locationId: parcela.id, name: "Bajo", blockType: "trampa" });
     await expect(
-      createPlotBlock(userAccountId, { locationId: parcela.id, name: "Bajo", blockType: "microparcela" }),
+      createPlotBlock(userAccountId, { locationId: parcela.id, name: "Bajo", blockType: "trampa" }),
     ).rejects.toThrow(PlotBlockValidationError);
   });
 
@@ -133,7 +133,7 @@ describe("bloques de una parcela", () => {
     organizationIds.push(ajeno.organizationId);
 
     await expect(
-      createPlotBlock(ajeno.userAccountId, { locationId: parcela.id, name: "Sur", blockType: "microparcela" }),
+      createPlotBlock(ajeno.userAccountId, { locationId: parcela.id, name: "Sur", blockType: "trampa" }),
     ).rejects.toThrow(LocationAccessError);
   });
 
@@ -205,7 +205,7 @@ describe("bloques de una parcela", () => {
       createPlotBlock(otro.userAccountId, {
         locationId: parcela.id,
         name: "Norte",
-        blockType: "microparcela",
+        blockType: "trampa",
       }),
     ).rejects.toThrow(LocationAccessError);
   });
@@ -254,8 +254,47 @@ describe("bloques de una parcela", () => {
     organizationIds.push(ajeno.organizationId);
 
     await expect(
-      setPlotBlockType(ajeno.userAccountId, { plotBlockId: bloque.id, blockType: "microparcela" }),
+      setPlotBlockType(ajeno.userAccountId, { plotBlockId: bloque.id, blockType: "trampa" }),
     ).rejects.toThrow(LocationAccessError);
+  });
+
+  /**
+   * Decisión de Daniel, 2026-09-19: una microparcela es la Location
+   * `micro_plot` del spec fincas y parcelas, no un tipo de bloque. Un bloque
+   * (zona con nombre para trampas o experimentos) puede colgar de ella igual
+   * que de una parcela — el guardia es el mismo `requireLocationAttributeAccess`
+   * sobre la Location, que no distingue "plot" de "micro_plot".
+   */
+  it("crea un bloque bajo una microparcela (Location micro_plot), no sólo bajo una parcela", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const microparcela = await prisma.location.create({
+      data: {
+        name: `TEST Microparcela (${Date.now()})`,
+        locationType: "micro_plot",
+        parentLocationId: parcela.id,
+        organizationId: parcela.organizationId,
+        status: "approved",
+      },
+    });
+    locationIds.push(microparcela.id);
+
+    const bloque = await createPlotBlock(userAccountId, {
+      locationId: microparcela.id,
+      name: "Ladera",
+      blockType: "experimental",
+    });
+    expect(bloque.locationId).toBe(microparcela.id);
+    const lista = await listPlotBlocks(userAccountId, microparcela.id);
+    expect(lista.map((b) => b.name)).toEqual(["Ladera"]);
   });
 });
 
@@ -266,10 +305,6 @@ describe("bloques de una parcela", () => {
  * existía; éste es ese caso.
  */
 describe("claveDeTituloDeBloque", () => {
-  it("microparcela", () => {
-    expect(claveDeTituloDeBloque("microparcela")).toBe("blockTitleMicroparcela");
-  });
-
   it("trampa", () => {
     expect(claveDeTituloDeBloque("trampa")).toBe("blockTitleTrampa");
   });

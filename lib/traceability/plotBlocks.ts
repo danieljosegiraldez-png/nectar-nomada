@@ -114,8 +114,7 @@ export async function listPlotBlocks(userAccountId: string, locationId: string) 
  */
 export function claveDeTituloDeBloque(
   blockType: PlotBlockType | null,
-): "blockTitleMicroparcela" | "blockTitleTrampa" | "blockTitleExperimental" | null {
-  if (blockType === "microparcela") return "blockTitleMicroparcela";
+): "blockTitleTrampa" | "blockTitleExperimental" | null {
   if (blockType === "trampa") return "blockTitleTrampa";
   if (blockType === "experimental") return "blockTitleExperimental";
   return null;

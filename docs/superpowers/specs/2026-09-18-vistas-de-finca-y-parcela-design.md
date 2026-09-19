@@ -22,11 +22,18 @@ La causa medida de (a) no son los datos, sino los formularios metidos dentro del
 3. **Las revisiones de trampas se hacen en una «Ronda de trampas» de toda la finca**, no lote por lote. Las trampas se numeran por finca.
 4. **Jerarquía de vistas:** finca → parcela → bloque → planta. **Esta fase cubre finca y parcela.** Bloque y planta quedan para después.
 5. **El tablero de parcela es sólo para mirar y se organiza en pestañas.** Cada «registrar» es un botón que lleva a su pantalla.
-6. **Los bloques tienen tipo.** «Bloque» es el concepto general, un grupo de plantas dentro de una parcela, con tres tipos:
-   - **microparcela:** la subdivisión normal de la parcela;
+6. **Los bloques tienen tipo.** «Bloque» es el concepto general, un grupo de plantas dentro de una parcela, con dos tipos:
    - **trampa:** la zona que cubre una trampa de broca;
    - **experimental:** por ejemplo, biochar aplicado frente a no aplicado, o lotes de biochar con distintos inoculantes.
-7. **Solapamiento:** las microparcelas no se solapan entre sí; los bloques de trampa y los experimentales sí pueden cruzarlas.
+
+   **CORREGIDO — decisión de Daniel, 2026-09-19: la microparcela NO es un tipo de bloque.**
+   Esta sección decía que sí, como tercer tipo; era falso desde el spec fincas y parcelas,
+   donde una microparcela es la Location `micro_plot` que cuelga de una parcela (spec
+   `2026-09-18-fincas-y-parcelas-design.md` §3.3) — otra fila de `core.location`, no una
+   zona con nombre dentro de `PlotBlock`. `PlotBlockType` pasó de tres valores a dos; los
+   bloques que tenían `microparcela` quedaron sin tipo (`NULL`, ADR-080), no con uno
+   inventado.
+7. **Solapamiento:** las microparcelas (la Location `micro_plot`, no un tipo de bloque) no se solapan entre sí; los bloques de trampa y los experimentales sí pueden cruzarlas y también pueden colgar de una microparcela, no sólo de una parcela.
 8. **Una foto tomada sin señal se guarda en el móvil y se sube al volver la conexión**, en esta misma fase.
 9. Todo el diseño se trabajó sólo con texto, sin bocetos, para gastar menos.
 
@@ -100,12 +107,23 @@ Se llega desde el índice `/finca`, con su patrón de enlaces: el enlace sólo a
 
 ## 5. Bloques con tipo
 
-- `PlotBlock` gana `blockType`: un enum `microparcela | trampa | experimental`, obligatorio en los bloques nuevos.
+- `PlotBlock` gana `blockType`: un enum `trampa | experimental`, obligatorio en los bloques nuevos.
 - Los bloques que ya existan en producción al migrar quedan con el tipo **sin registrar**, nunca con uno supuesto (ADR-080). Ajustes pide elegirlo.
 - `PlotBlock` gana también una `description` opcional, de texto libre: para un experimental, qué se compara.
-- **La pantalla muestra el tipo como prefijo:** «Microparcela Norte», «Bloque de trampa 3», «Bloque experimental Biochar A». Sin tipo muestra sólo el nombre. Así desaparece «Bloque Bloque Norte».
+- **La pantalla muestra el tipo como prefijo:** «Bloque de trampa 3», «Bloque experimental Biochar A». Sin tipo muestra sólo el nombre. Así desaparece «Bloque Bloque Norte».
 - **El solapamiento (§2.7) no se comprueba en esta fase**: hoy no hay plantas asignadas a bloques. Queda como requisito para la fase de plantas.
 - **Enlazar un bloque experimental** con su `BiocharBatch` o `TreatmentBatch` del Research OS queda para después.
+- **CORREGIDO — decisión de Daniel, 2026-09-19: `blockType` nació con tres valores
+  (`microparcela | trampa | experimental`, migración `20260918160000_bloques_con_tipo`) y
+  se quedó en dos.** Una microparcela es la Location `micro_plot` del spec fincas y
+  parcelas §3.3, no un tipo de `PlotBlock`. La migración `20260919150000_bloque_sin_microparcela`
+  no edita la del 2026-09-18 —ya estaba aplicada en la base compartida—: pone en `NULL`
+  los bloques que tenían `microparcela` y recrea el enum sin ese valor. Un bloque puede
+  colgar de una parcela o de una microparcela por igual, bajo el mismo guardia
+  (`requireLocationAttributeAccess` sobre la Location, sin distinguir el tipo).
+- `NuevaMicroparcelaForm` (crear una microparcela) no vive en el tablero de parcela —es
+  configuración, no captura de campo (§3 de este documento)—: vive en
+  `/plots/[id]/microparcela/nueva`, enlazada desde `/plots/[id]/ajustes`.
 
 ## 6. Permisos
 

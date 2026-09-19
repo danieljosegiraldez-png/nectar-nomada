@@ -109,6 +109,7 @@ export const RUTAS = {
   "/plots/[id]/fotos/nueva": { clase: "requiere-sesion", razon: "Subir una fotografía general de la parcela, mudado fuera del tablero (Tarea 6, fix round 1)." },
   "/plots/[id]/manejo/nuevo": { clase: "requiere-sesion", razon: "Registrar un manejo fitosanitario de la parcela." },
   "/plots/[id]/manejo/[interventionId]": { clase: "requiere-sesion", razon: "Detalle y corrección de una intervención fitosanitaria." },
+  "/plots/[id]/microparcela/nueva": { clase: "requiere-sesion", razon: "Crear una microparcela dentro de esta parcela (spec fincas y parcelas §3.3): es configuración, no captura de campo, y se mudó fuera del tablero — decisión de Daniel del 2026-09-19, la microparcela nunca fue un tipo de bloque." },
   "/biochar": { clase: "requiere-sesion", razon: "Lotes de biochar producidos en la finca." },
   "/biochar/[id]": { clase: "requiere-sesion", razon: "Un lote de biochar y su registro de quema." },
   "/field-sessions/[id]": { clase: "requiere-sesion", razon: "Una jornada de campo y su hilo de eventos." },
