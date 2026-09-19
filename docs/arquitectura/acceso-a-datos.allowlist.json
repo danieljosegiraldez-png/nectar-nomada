@@ -119,7 +119,7 @@
     },
     {
       "archivo": "lib/apiary/cera.ts",
-      "razon": "Módulo de dominio: la cera con el color de su año (spec 2026-09-18 §5). Anotar exige `requireApiaryAccess` manage sobre el apiario ANTES de escribir; la leyenda, view. La colmena de una entrada tiene que ser de la misma finca. Escritura y AuditEvent en la MISMA transacción. El color no se guarda: lo calcula `colorDelAño`."
+      "razon": "Módulo de dominio: la cera con el color de su año (spec 2026-09-18 §5). Anotar exige `requireApiaryAccess` manage sobre el apiario ANTES de escribir; la leyenda, view. La colmena de una entrada tiene que ser de la misma finca. Escritura y AuditEvent en la MISMA transacción. El color no se guarda: lo calcula `colorDelAño`. `marcosNegrosDelApiario` (ADR-176) exige view sobre el apiario y sólo lee inspecciones de sus cajas."
     },
     {
       "archivo": "lib/apiary/alzas.ts",
