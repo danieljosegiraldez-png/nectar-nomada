@@ -12,8 +12,17 @@ import { alcanceDelAlimento } from "../../../lib/apiary/alcanceDelAlimento";
 import { tratamientosPorObjetivo } from "../../../lib/apiary/objetivoDelTratamiento";
 import { retirosPendientes } from "../../../lib/apiary/cierreDeEvento";
 import { vitalesDeColmenas } from "../../../lib/apiary/vitalesDeColmena";
-import { completarCierreDeTratamientoFormAction, darDeBajaAlzaFormAction, registrarAlzaFormAction } from "../../actions/apiary";
+import {
+  completarCierreDeTratamientoFormAction,
+  darDeBajaAlzaFormAction,
+  registrarAlzaFormAction,
+  registrarCeraNuevaFormAction,
+  registrarSalidaDeMarcosFormAction,
+} from "../../actions/apiary";
 import { alzasDelApiario } from "../../../lib/apiary/alzas";
+import { DESTINOS_DE_CERA, leyendaDeCera, MOTIVOS_DE_SALIDA, TIPOS_DE_CERA } from "../../../lib/apiary/cera";
+import { colorDelAño } from "../../../lib/apiary/colorDelAno";
+import { CampoNumerico } from "../../components/CampoNumerico";
 import { permissionKeysAnywhere } from "../../../lib/rbac/service";
 import { confirmarCoordenadasAction } from "../../actions/traceability";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
@@ -63,6 +72,9 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   // Qué se PINTA lo decide el mismo criterio que la ficha de la colmena: «en algún ámbito» basta
   // para pintar, porque la acción autoriza de verdad.
   const alzas = await alzasDelApiario(user.userAccountId, id);
+  // Cera con el color de su año (spec §5.3). El primer renglón es siempre el año en curso.
+  const cera = await leyendaDeCera(user.userAccountId, id);
+  const añoEnCurso = cera[0]?.año ?? new Date().getUTCFullYear();
   const puedeGestionarAlzas = (await permissionKeysAnywhere(user.userAccountId)).has("apiary:manage");
 
   // Ventana MÓVIL de doce meses, no año natural: el dueño la eligió así el
@@ -706,6 +718,135 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
               <BotonDeEnvio>{t("alzaRegistrarBoton")}</BotonDeEnvio>
             </form>
           </details>
+        ) : null}
+      </section>
+
+      {/* Cera con el color de su año — spec 2026-09-18 §5.3. El color dice la edad del marco,
+          esté donde esté; aquí sólo se lee la leyenda y se anotan entradas y salidas. */}
+      <section className="nn-section" id="cera">
+        <h2>{t("ceraHeading")}</h2>
+        <p className="nn-muted">{t("ceraIntro")}</p>
+        <p>
+          <strong>{t("ceraEsteAno", { color: t(`color_${colorDelAño(añoEnCurso)}`) })}</strong>
+        </p>
+        <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
+          <thead>
+            <tr>
+              <th>{t("ceraColumnaAno")}</th>
+              <th>{t("ceraColumnaColor")}</th>
+              <th>{t("ceraColumnaEntraron")}</th>
+              <th>{t("ceraColumnaSalieron")}</th>
+              <th>{t("ceraColumnaEdad")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cera.map((f) => (
+              <tr key={f.año}>
+                <td>{f.año}</td>
+                <td>{t(`color_${f.color}`)}</td>
+                <td>{f.entraron}</td>
+                <td>
+                  {f.salieron}
+                  {f.salieronDeMas ? <span className="nn-muted"> · {t("ceraSalieronDeMas")}</span> : null}
+                </td>
+                <td>
+                  {t("ceraEdad", { edad: f.edad })}
+                  {f.aviso === "renovar" ? (
+                    <strong> · {t("ceraAvisoRenovar")}</strong>
+                  ) : f.aviso === "revisar" ? (
+                    <span> · {t("ceraAvisoRevisar")}</span>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {puedeGestionarAlzas ? (
+          <>
+            <details>
+              <summary>{t("ceraAnotarEntrada")}</summary>
+              <form action={registrarCeraNuevaFormAction} className="nn-form" style={{ maxWidth: 420 }}>
+                <input type="hidden" name="apiaryId" value={id} />
+                <div className="nn-field">
+                  <label htmlFor="cera-dia">{t("ceraDia")}</label>
+                  <input id="cera-dia" name="enteredAt" type="date" />
+                </div>
+                <div className="nn-field">
+                  <label htmlFor="cera-cuantos">{t("ceraCuantosMarcos")}</label>
+                  <CampoNumerico id="cera-cuantos" name="frameCount" min={1} step={1} inputMode="numeric" required />
+                </div>
+                <div className="nn-field">
+                  <label htmlFor="cera-tipo">{t("ceraTipo")}</label>
+                  <select id="cera-tipo" name="waxKind" required defaultValue="">
+                    <option value="" disabled />
+                    {TIPOS_DE_CERA.map((k) => (
+                      <option key={k} value={k}>
+                        {t(`cera_${k}`)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="nn-field">
+                  <label htmlFor="cera-destino">{t("ceraDestino")}</label>
+                  <select id="cera-destino" name="destination" defaultValue="">
+                    {/* El vacío no se ofrece como opción (Anexo E §6): sin elegir, no se dice. */}
+                    <option value="" />
+                    {DESTINOS_DE_CERA.map((d) => (
+                      <option key={d} value={d}>
+                        {t(`ceraDestino_${d}`)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="nn-field">
+                  <label htmlFor="cera-nota">{t("ceraNota")}</label>
+                  <input id="cera-nota" name="notes" type="text" />
+                </div>
+                <BotonDeEnvio>{t("ceraGuardar")}</BotonDeEnvio>
+              </form>
+            </details>
+            <details>
+              <summary>{t("ceraAnotarSalida")}</summary>
+              <form action={registrarSalidaDeMarcosFormAction} className="nn-form" style={{ maxWidth: 420 }}>
+                <input type="hidden" name="apiaryId" value={id} />
+                <div className="nn-field">
+                  <label htmlFor="salida-ano">{t("ceraAnoDelColor")}</label>
+                  <select id="salida-ano" name="waxYear" required defaultValue="">
+                    <option value="" disabled />
+                    {Array.from({ length: 8 }, (_, i) => añoEnCurso - i).map((a) => (
+                      <option key={a} value={a}>
+                        {a} · {t(`color_${colorDelAño(a)}`)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="nn-field">
+                  <label htmlFor="salida-cuantos">{t("ceraCuantosMarcos")}</label>
+                  <CampoNumerico id="salida-cuantos" name="frameCount" min={1} step={1} inputMode="numeric" required />
+                </div>
+                <div className="nn-field">
+                  <label htmlFor="salida-motivo">{t("ceraMotivo")}</label>
+                  <select id="salida-motivo" name="reason" required defaultValue="">
+                    <option value="" disabled />
+                    {MOTIVOS_DE_SALIDA.map((m) => (
+                      <option key={m} value={m}>
+                        {t(`ceraMotivo_${m}`)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="nn-field">
+                  <label htmlFor="salida-dia">{t("ceraDia")}</label>
+                  <input id="salida-dia" name="removedAt" type="date" />
+                </div>
+                <div className="nn-field">
+                  <label htmlFor="salida-nota">{t("ceraNota")}</label>
+                  <input id="salida-nota" name="notes" type="text" />
+                </div>
+                <BotonDeEnvio>{t("ceraGuardar")}</BotonDeEnvio>
+              </form>
+            </details>
+          </>
         ) : null}
       </section>
 

@@ -4040,3 +4040,16 @@ ADR-166. Las cosechas cerradas antes de ADR-161 pueden tener el peso en la fila 
 La ficha del apiario las lista y un botón asienta el peso ya escrito (sin teclear nada), con su
 auditoría; sólo si el lote no tiene NINGÚN asiento. **Medido en la copia local: ninguna afectada**
 —la única cosecha real se pesó al cosechar—. Es una red, no el arreglo de un daño visto.
+
+### 2026-09-18 · Artefactos de colmena y el nodo de sensores (PR #405)
+
+Plan `docs/superpowers/plans/2026-09-17-artefactos-de-colmena.md`, ocho tareas. **La colmena guarda
+qué lleva puesto y desde cuándo** (`HiveFitting`, intervalos); la inspección declara sólo el cambio,
+en un bloque plegado; la foto `queenExcluder`/`entranceReducer`/`screenedBottomBoard` la escribe sólo
+`artefactos.ts` (guardia de fuente: el flip-test de ejecución NO lo veía). **El nodo** (`HiveNode`)
+exige `hive_node:manage` —Farm Manager sí, operario no—; su crudo (`NodeObservation`) es inmutable por
+disparador, idempotente, con cuarentena y la colmena DEL MOMENTO; los kilos se derivan con la fórmula
+del firmware y una calibración inmutable. `POST /api/v1/ingest/notehub` **cerrada por defecto**.
+
+**De Daniel, cuando haya nodos:** `NOTEHUB_ROUTE_SECRET` en Vercel y en la ruta de Notehub, y
+registrar cada nodo con su UID de Notecard — registrar y calibrar **no tienen pantalla**.

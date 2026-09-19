@@ -37,6 +37,8 @@ import type { ApiaryAssetParent } from "../../lib/apiary/media";
 import { fechaDeDia, parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
 import { exigeTipoDeArtefacto, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
 import { darDeBajaAlza, ponerAlza, registrarAlza } from "../../lib/apiary/alzas";
+import { registrarCeraNueva, registrarSalidaDeMarcos } from "../../lib/apiary/cera";
+import type { FrameRemovalReason, WaxDestination, WaxKind } from "../../generated/prisma/client";
 import { dividirColonia, unirColonias } from "../../lib/apiary/genealogia";
 import { cambiarReina, cerrarTenencia, exigeFinDeTenencia, exigeOrigenDeReina, introducirReina } from "../../lib/apiary/reinas";
 
@@ -421,6 +423,44 @@ export async function darDeBajaAlzaFormAction(formData: FormData): Promise<void>
     hiveSuperId: String(formData.get("hiveSuperId") ?? ""),
     retiredAt: new Date(),
     reason: String(formData.get("reason") ?? ""),
+  });
+  revalidatePath(`/apiaries/${apiaryId}`);
+}
+
+/** El día de hoy como campo de día (medianoche UTC), para cuando el formulario lo deja vacío. */
+const hoyComoDia = () => new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+
+/**
+ * Cera con el color de su año (spec 2026-09-18 §5.2) — anotar cera nueva que entra. El servicio
+ * valida el tipo y el destino contra sus listas: el `as` sólo tipa, no confía.
+ */
+export async function registrarCeraNuevaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  await registrarCeraNueva(user.userAccountId, {
+    locationId: apiaryId,
+    enteredAt: fechaDeDia(String(formData.get("enteredAt") ?? ""), "enteredAt") ?? hoyComoDia(),
+    frameCount: Number(formData.get("frameCount") ?? ""),
+    waxKind: String(formData.get("waxKind") ?? "") as WaxKind,
+    destination: emptyToNull(formData.get("destination")) as WaxDestination | null,
+    notes: emptyToNull(formData.get("notes")),
+  });
+  revalidatePath(`/apiaries/${apiaryId}`);
+}
+
+/** Anotar marcos sacados, de un año de color. */
+export async function registrarSalidaDeMarcosFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  await registrarSalidaDeMarcos(user.userAccountId, {
+    locationId: apiaryId,
+    waxYear: Number(formData.get("waxYear") ?? ""),
+    removedAt: fechaDeDia(String(formData.get("removedAt") ?? ""), "removedAt") ?? hoyComoDia(),
+    frameCount: Number(formData.get("frameCount") ?? ""),
+    reason: String(formData.get("reason") ?? "") as FrameRemovalReason,
+    notes: emptyToNull(formData.get("notes")),
   });
   revalidatePath(`/apiaries/${apiaryId}`);
 }

@@ -38,12 +38,17 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · La cera con el color de su año
+
+ADR-173. Daniel: la cera nueva de un año lleva el color de ese año, el de las reinas. El color se
+calcula (`colorDelAño`); se anotan la cera que entra y los marcos que salen, y la ficha del apiario
+enseña la leyenda con avisos a los 2 y 4 años. **Sin ver en navegador.** Siguen: «marcos negros»
+en la inspección (toca la cola sin conexión) y el año de las reinas.
+
 ### 2026-09-18 · El manejo fitosanitario de la parcela
 
-ADR-172 (renumerado dos veces al integrar `origin/main`: la rama nació como ADR-170, ocupado
-allí en la primera integración por «Anular una asignación a tienda»; pasó a ADR-171, y en esta
-segunda integración `main` ya tenía su propio ADR-171 — «Un alza con marca…» —, así que sube a
-**ADR-172**, el siguiente libre).
+ADR-174 (nació como 170; otras sesiones ocuparon 170-173 mientras se integraba: el número de un
+ADR se asigna al fusionar, no al escribirlo).
 Registro de intervenciones fitosanitarias: cuatro clases (comprados, preparados, liberaciones,
 manejo cultural); doce objetivos + otro (todo de Daniel, con procedencia en el spec). Dos columnas nuevas
 en `ConsumableMaterial` (`isPlantProtection`, `defaultReentryHours`); tres tablas nuevas. **El descuento
@@ -137,19 +142,6 @@ combinó» en el fin) se cerraron. **Sin ver en navegador.**
 **La base compartida:** los dos CHECK NOT VALID de la genealogía tumbaban 3 pruebas de `main` en otras
 sesiones; con permiso de Daniel se quitaron de `nectar_test` y esta rama compuerta en `nectar_ci_faena`.
 Vuelven con la migración al fusionar.
-
-### 2026-09-18 · Artefactos de colmena y el nodo de sensores (PR #405)
-
-Plan `docs/superpowers/plans/2026-09-17-artefactos-de-colmena.md`, ocho tareas. **La colmena guarda
-qué lleva puesto y desde cuándo** (`HiveFitting`, intervalos); la inspección declara sólo el cambio,
-en un bloque plegado; la foto `queenExcluder`/`entranceReducer`/`screenedBottomBoard` la escribe sólo
-`artefactos.ts` (guardia de fuente: el flip-test de ejecución NO lo veía). **El nodo** (`HiveNode`)
-exige `hive_node:manage` —Farm Manager sí, operario no—; su crudo (`NodeObservation`) es inmutable por
-disparador, idempotente, con cuarentena y la colmena DEL MOMENTO; los kilos se derivan con la fórmula
-del firmware y una calibración inmutable. `POST /api/v1/ingest/notehub` **cerrada por defecto**.
-
-**De Daniel, cuando haya nodos:** `NOTEHUB_ROUTE_SECRET` en Vercel y en la ruta de Notehub, y
-registrar cada nodo con su UID de Notecard — registrar y calibrar **no tienen pantalla**.
 
 ## 3. Bloqueado, y en qué
 
