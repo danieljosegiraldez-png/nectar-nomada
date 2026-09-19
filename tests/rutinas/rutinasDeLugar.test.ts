@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../lib/db";
 import { crearRutina, registrarRealizada, RutinaError, rutinasDeLugar, vencidasPorLugar } from "../../lib/rutinas/rutinas";
-import { equiposAqui, lugarConRutinasOVacio, lugarParaVolver, rutaDeLugar } from "../../lib/rutinas/lugares";
+import { equiposAqui, insumosDeLugar, lugarConRutinasOVacio, lugarParaVolver, rutaDeLugar } from "../../lib/rutinas/lugares";
 import { montarFixtures, type Fixtures } from "../helpers/fixturesDeCatalogo";
 
 let f: Fixtures;
@@ -198,6 +198,21 @@ describe("equiposAqui: el permiso del LUGAR no es el permiso del EQUIPO (Hallazg
       await prisma.equipmentTransfer.deleteMany({ where: { equipmentId: { in: [propio.id, ajeno.id] } } });
       await prisma.equipment.deleteMany({ where: { id: { in: [propio.id, ajeno.id] } } });
     }
+  });
+});
+
+describe("insumosDeLugar: depende del ID que recibe, no de un lugar hermano (re-revisión final)", () => {
+  it("quien no puede reportar en ESE lugar recibe []; el mismo lugar, para quien sí puede, da sus lotes", async () => {
+    // El hallazgo: `app/instalaciones/[id]/page.tsx` resolvía `insumos` UNA
+    // vez con el id de la instalación y se lo pasaba a cada cama. Si una cama
+    // tiene `report_condition` sin que lo tenga la instalación (o al revés),
+    // el `[]` de un lugar se leía como el `[]` del otro — y `RutinasDeLugar`
+    // trata `[]` como "ya resuelto", no como "vacío de verdad". La función de
+    // base es correcta (cada llamada mira SU PROPIO id); lo que se corrigió
+    // fue que la página dejara de compartir el resultado entre lugares.
+    await expect(insumosDeLugar(f.ajeno, L.cuarto!)).resolves.toEqual([]);
+    const propios = await insumosDeLugar(f.jefeA, L.cuarto!);
+    expect(propios.map((x) => x.batchLabel)).toContain(`TEST L ${f.run}`);
   });
 });
 
