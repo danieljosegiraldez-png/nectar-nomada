@@ -1,4 +1,4 @@
-# Alzas con marca y tandas de marcos por color
+# Alzas con marca y cera con el color de su año
 
 **Fecha:** 2026-09-18 · **Camino:** arquitectónico · **Cambia una decisión** del spec
 `2026-09-17-artefactos-de-colmena-design.md` §4, donde las alzas se modelaron sólo como cuenta.
@@ -20,8 +20,8 @@
 
 ## 2. La idea central
 
-**La edad de la cera va escrita en el propio marco, con su color. La aplicación sólo guarda la
-leyenda.** Nadie anota por dónde se mueve un marco, porque en el campo no se va a anotar.
+**La edad de la cera va escrita en el propio marco, con el color de su año. La aplicación sólo
+sabe calcular la leyenda.** Nadie anota por dónde se mueve un marco, porque en el campo no se va a anotar.
 
 Las **alzas** sí se siguen de colmena en colmena: la marca va por fuera, donde se ve, y un alza
 se pone y se quita pocas veces.
@@ -29,8 +29,8 @@ se pone y se quita pocas veces.
 ## 3. Lo que esto NO resuelve, dicho de entrada
 
 - **En qué colmena estuvo un marco concreto.** Sin anotar cada movimiento no se puede saber, y
-  Daniel dice que en la práctica no se anotará. La sanidad llega **por alza**, y por **tanda**
-  cuando se retira una tanda entera.
+  Daniel dice que en la práctica no se anotará. La sanidad llega **por alza**, y por **año de cera**
+  cuando se retiran todos los marcos de un color.
 - **Qué marcos iban en un alza cosechada.** La cosecha dice qué alzas marcadas se extrajeron,
   no qué marcos.
 - **La doble cuenta que ya existe**: `Hive.supers` (configuración de la caja) y los intervalos
@@ -94,40 +94,70 @@ valiendo.
 
 ---
 
-## 5. Rebanada 2 — Tandas de marcos por color
+## 5. Rebanada 2 — La cera nueva lleva el color de su año
 
-### 5.1 La tanda
+### 5.1 El código de color es del año, y es uno solo
 
-Una tabla nueva `apiary.frame_batch`:
+Daniel, el 2026-09-18: *«todas las abejas reinas nacidas ese año reciben ese apodo y color y toda
+la cera nueva de ese año que entra como marco en alza o cámara de cría recibe esa marca color»*.
+
+Es el código internacional de las reinas, que se repite cada cinco años:
+
+| el año termina en | color |
+|---|---|
+| 1 o 6 | blanco |
+| 2 o 7 | amarillo |
+| 3 o 8 | rojo |
+| 4 o 9 | verde |
+| 5 o 0 | azul |
+
+**Nadie elige el color: se calcula del año.** Una sola función, `colorDelAño(año)`, que sirve
+igual para los marcos y, cuando se registre el año de las reinas (§5.4), para ellas. Un marco
+blanco de 2026 coincide con el blanco de 2031; para entonces ya debería haberse renovado, y si
+no, se ve a ojo que es viejo (§5.3).
+
+**Así se pierde una regla de la versión anterior de este spec:** «un color no se repite entre
+tandas abiertas». Ya no hay tandas con color elegido; la tanda **es** el año.
+
+### 5.2 Anotar la cera nueva que entra
+
+`apiary.new_wax_entry` — una fila cada vez que entra cera nueva:
 
 | campo | qué es |
 |---|---|
 | `organizationId` | de quién es |
-| `color` | el color de la marca, en texto: «azul», «rojo con punto blanco» |
-| `waxAppliedAt` | la fecha en que se le puso cera o lámina a la tanda |
+| `enteredAt` | el día; **su año decide el color** |
+| `frameCount` | cuántos marcos |
+| `destination` | `camara_de_cria`, `alza` o sin decir |
 | `waxKind` | vocabulario cerrado con escape: lámina estampada propia, lámina comprada, sin lámina (cera natural), otro + nota |
-| `frameCount` | cuántos marcos se hicieron en la tanda |
-| `notes` | procedencia, año de cosecha si viene de una, lo que no cabe |
-| `closedAt` | cuándo se dio por retirada la tanda entera |
+| `hiveId` | opcional: la colmena donde entró, si entró directo a una |
+| `notes` | procedencia, lo que no cabe |
 
-**Un color no se repite entre tandas abiertas** de la misma organización (índice único
-parcial). Si dos tandas vivas tuvieran el mismo color, el marco dejaría de decir su edad.
+Y cuando se sacan marcos, `apiary.frame_removal`: año del color, cuántos, día, motivo (cera
+vieja o negra, dañado, enfermedad, otro + nota) y, si vino de una, la inspección. **Las dos cosas
+son opcionales**: si nadie anota, el marco sigue diciendo su año con su color, que es lo
+principal.
 
-### 5.2 Sacar marcos de una tanda (opcional)
-
-`apiary.frame_batch_removal`: tanda, cuántos, día, motivo (renovación de cera, dañado,
-enfermedad, otro + nota) y, si vino de una, la inspección. Con eso la tanda dice **cuántos
-marcos quedan en uso**. No se exige: si nadie lo anota, la tanda sigue diciendo su edad, que es
-lo principal.
+**No se impide sacar más de lo que se anotó entrando**: los marcos anteriores a este registro no
+tienen entrada. Con las dos, cada año dice **cuántos marcos entraron y cuántos se sacaron**. No dice dónde están,
+y no lo intenta.
 
 ### 5.3 Qué se ve
 
-- **Leyenda de colores** en la ficha del apiario: color → fecha, tipo de cera y edad. Es lo que
-  se consulta en el campo con un marco en la mano.
-- **Aviso de cera vieja** cuando una tanda pasa de una edad. **El umbral lo decide Daniel**
-  (ver §7); hasta entonces se muestra la edad sin aviso.
+- **La leyenda del año** en la ficha del apiario: cada color con su año, cuántos marcos entraron
+  y cuántos siguen en uso (si se anotaron salidas), y su edad.
+- **Los marcos negros se cuentan en la inspección.** Las fuentes latinoamericanas leídas
+  (Mishkihue, INTA 2024, Chapingo) juzgan la cera vieja **por el aspecto**, no por la fecha, así
+  que el aviso sale de lo que se ve: «marcos negros: N». La edad del color es el dato de apoyo.
+- **El aviso por edad** lo pone un umbral que **decide Daniel** (§7). Las cifras encontradas son
+  2 a 3 años para la cámara de cría (FAO/IZSLT, Italia; «Apicultura y Miel», España). Ninguna
+  fuente habla de las alzas, y es probable que el umbral sea distinto para cámara y alza.
 
----
+### 5.4 Las reinas, con la misma regla — rebanada aparte
+
+La reina ya existe (`Queen`, con su historia en `QueenTenure`), pero **no guarda el año en que
+nació ni si va marcada**. Añadirlo es poco —un año opcional y «marcada: sí/no»—, y el color
+saldría de la misma `colorDelAño`. Va en su propia rebanada para no mezclarla con la cera.
 
 ## 6. Pruebas, a lo que obliga esta casa
 
@@ -137,15 +167,18 @@ Cada regla lleva su prueba y su flip-test, y cada CHECK su sonda en la base:
 - poner un alza de baja o de otra organización;
 - `hive_super_id` con `count` distinto de 1, o con otro `kind`;
 - la cosecha con un alza que no estaba en esa colmena ese día;
-- dos tandas abiertas con el mismo color;
-- sacar más marcos de los que quedan en la tanda.
+- `colorDelAño` en los diez finales de año, y en un año de cuatro cifras cualquiera;
+- **no** se rechaza sacar más marcos de un año de los que se anotaron entrando: los marcos de
+  antes de este registro nunca tendrán su entrada, y la regla impediría anotar su salida. La
+  leyenda lo dice («salieron más de los anotados») en vez de negarlo.
 
 ## 7. Preguntas que quedan para Daniel
 
-1. **A partir de qué edad es vieja la cera**, para el aviso de la §5.3. Mientras no lo diga,
-   la aplicación enseña la edad sin avisar.
+1. **A partir de qué edad es vieja la cera**, y si es la misma para cámara de cría y para alza
+   (§5.3). Mientras no lo diga, la aplicación enseña la edad sin avisar.
+2. **Cuándo va la rebanada de las reinas** (§5.4).
 
 ## 8. Orden
 
-Rebanada 1 y rebanada 2 son independientes. Van **en ese orden**, cada una con su rama, su
+Rebanada 1 (alzas) y rebanada 2 (cera por año) son independientes, y la de reinas (§5.4) también. Van **en ese orden**, cada una con su rama, su
 PR y su ADR.
