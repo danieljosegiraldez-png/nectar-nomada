@@ -1,6 +1,6 @@
 # Jornada y entrega de cosecha — la finca manda, el beneficio recibe (pieza 1 de 3)
 
-**Estado:** borrador para revisión de Daniel, 2026-09-18.
+**Estado:** aprobado por Daniel el 2026-09-18 («continua»).
 
 **Enmienda** a `docs/superpowers/specs/2026-09-18-seccion-finca-design.md` (§3, §4, §5.3 y §5.7).
 Donde los dos digan cosas distintas, manda éste: sale de lo que Daniel dijo después.

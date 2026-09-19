@@ -1,6 +1,6 @@
 # Condiciones fijas del terreno: se configuran una vez y sólo se corrigen
 
-**Estado:** borrador para revisión de Daniel, 2026-09-18.
+**Estado:** aprobado por Daniel el 2026-09-18 («continua», tras dar la lista de sombra).
 
 Pieza independiente de la jornada y la entrega de cosecha
 (`2026-09-18-jornada-y-entrega-de-cosecha-design.md`). Se puede construir antes o después.
@@ -16,7 +16,8 @@ Pieza independiente de la jornada y la entrega de cosecha
 |---|---|
 | si hay que cambiar una condición fija | **fijas, sólo corregibles**: quedan bloqueadas; sólo el Farm Manager las corrige, con motivo obligatorio, y la versión anterior queda en la historia |
 | bloque y planta | **heredan, y pueden declarar las suyas**: por defecto muestran las de su parcela, marcadas «de la parcela»; si se configuran las propias, mandan ésas, con el mismo bloqueo |
-| «tipo de sombreado» | **porcentaje y tipo, las dos**: se queda el porcentaje y se añade qué da la sombra, con una lista que da Daniel y «otro» con nota |
+| «tipo de sombreado» | **porcentaje y tipo, las dos**: se queda el porcentaje y se añade qué da la sombra, con «otro» y nota |
+| la lista de tipos de sombra | «maría, amarillo, níspero, cedro, mango, corotú, y más» |
 
 ## 2. Lo que hay hoy (medido sobre `origin/main`)
 
@@ -45,8 +46,10 @@ Pieza independiente de la jornada y la entrega de cosecha
   convierte a ángulo, porque eso sería inventarlo.
 - **Orientación** (`aspect`) y **exposición al sol** (`sunExposure`).
 - **Sombra:** el porcentaje (`shadePercentage`) y el **tipo de sombra**, nuevo. Es un catálogo
-  cuyo vocabulario da Daniel, con «otro» y nota. **No se siembra ningún valor inventado:**
-  hasta que Daniel dé la lista, sólo existe «otro».
+  sembrado con los valores de Daniel —**María, Amarillo, Níspero, Cedro, Mango, Corotú**— y «otro»
+  con nota. «Y más»: el catálogo crece por semilla, como los demás, sin migración. Una parcela
+  puede tener **varios** tipos a la vez, porque la sombra de una parcela rara vez es de un solo
+  árbol.
 
 Suelo y distancia de siembra **no** entran en esta lista: Daniel no los nombró. Siguen como hoy.
 
@@ -85,7 +88,6 @@ Suelo y distancia de siembra **no** entran en esta lista: Daniel no los nombró.
 
 ## 4. Fuera de esto
 
-- La lista de tipos de sombra: la da Daniel.
 - Convertir `slopeDescription` en ángulo: no se hace.
 - Condiciones con vigencia («desde tal fecha la sombra es…»): se eligió corrección, no
   vigencia.
