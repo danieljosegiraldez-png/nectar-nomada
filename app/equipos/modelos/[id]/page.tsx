@@ -255,6 +255,12 @@ export default async function ModeloPage({
               <select name="provenanceClass" defaultValue={modelo.provenanceClass}>
                 <option value="manufacturer_specification">{t("procedencia_manufacturer_specification")}</option>
                 <option value="original_record">{t("procedencia_original_record")}</option>
+                {/* Una clase que este formulario no ofrece (p. ej. puesta por un
+                    importador) se conserva: sin esta opción el desplegable caería en la
+                    primera y guardar la sobrescribiría en silencio. */}
+                {modelo.provenanceClass !== "manufacturer_specification" && modelo.provenanceClass !== "original_record" ? (
+                  <option value={modelo.provenanceClass}>{modelo.provenanceClass}</option>
+                ) : null}
               </select>
             </label>
             <label>

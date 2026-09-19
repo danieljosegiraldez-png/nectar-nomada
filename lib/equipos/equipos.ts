@@ -158,6 +158,17 @@ async function comprobarModelo(modelId: string | null | undefined, organizationI
   if (m.retiredAt) throw new EquipoError("modelo_retirado");
 }
 
+/**
+ * El proveedor es una organización de tipo `supplier` APROBADA (CLAUDE.md §9), la
+ * misma lista que ofrece `proveedoresPosibles`. Un id cualquiera —una granja, uno
+ * pendiente de revisión— no se acepta sólo porque la FK lo permita.
+ */
+async function comprobarProveedor(supplierOrganizationId: string | null | undefined) {
+  if (!supplierOrganizationId) return;
+  const o = await prisma.organization.findUnique({ where: { id: supplierOrganizationId }, select: { organizationType: true, status: true } });
+  if (!o || o.organizationType !== "supplier" || o.status !== "approved") throw new EquipoError("proveedor_no_valido");
+}
+
 function datosDeEquipoLimpios(d: DatosDeEquipo) {
   const t = (v: string | null | undefined) => (v?.trim() ? v.trim() : null);
   return {
@@ -219,6 +230,7 @@ export async function registrarEquipo(userAccountId: string, input: RegistrarEqu
     throw new EquipoError("advisory_hours_positivo");
   }
   await comprobarModelo(input.modelId, input.organizationId, input.kind);
+  await comprobarProveedor(input.supplierOrganizationId);
   const datosNuevos = datosDeEquipoLimpios(input);
 
   try {
@@ -289,6 +301,10 @@ export async function editarDatosDeEquipo(userAccountId: string, equipmentId: st
   // poder corregir un número de serie. Juzgar es para CAMBIAR de modelo.
   if (datos.modelId !== undefined && (datos.modelId || null) !== antes.modelId) {
     await comprobarModelo(datos.modelId, antes.organizationId, antes.kind);
+  }
+  // Igual con el proveedor: el actual se conserva aunque ya no esté aprobado.
+  if (datos.supplierOrganizationId !== undefined && (datos.supplierOrganizationId || null) !== antes.supplierOrganizationId) {
+    await comprobarProveedor(datos.supplierOrganizationId);
   }
   const cambios = datosDeEquipoParaEditar(datos);
   try {

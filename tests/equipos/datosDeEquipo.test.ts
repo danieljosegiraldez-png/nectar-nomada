@@ -6,7 +6,7 @@ import { montarFixtures, type Fixtures } from "../helpers/fixturesDeCatalogo";
 
 let f: Fixtures;
 let modeloComp: string, modeloDeB: string, modeloVaso: string, modeloRetirado: string;
-let proveedor: string;
+let proveedor: string, proveedorQueSeArchiva: string, proveedorPendiente: string;
 
 const alta = (extra: Record<string, unknown> = {}) =>
   registrarEquipo(f.jefeA, {
@@ -32,6 +32,10 @@ beforeAll(async () => {
       data: { organizationType: "supplier", name: `TEST proveedor ${f.run}`, status: "approved", classification: "internal" },
     })
   ).id;
+  const otroProveedor = (nombre: string, status: "approved" | "pending_review") =>
+    prisma.organization.create({ data: { organizationType: "supplier", name: `TEST ${nombre} ${f.run}`, status, classification: "internal" } });
+  proveedorQueSeArchiva = (await otroProveedor("proveedor que se archiva", "approved")).id;
+  proveedorPendiente = (await otroProveedor("proveedor pendiente", "pending_review")).id;
 });
 
 afterAll(async () => {
@@ -39,7 +43,7 @@ afterAll(async () => {
   await prisma.equipmentTransfer.deleteMany({ where: { equipmentId: { in: eqs.map((e) => e.id) } } });
   await prisma.equipment.deleteMany({ where: { organizationId: f.orgA } });
   await prisma.equipmentModel.deleteMany({ where: { manufacturer: `D ${f.run}` } });
-  await prisma.organization.delete({ where: { id: proveedor } });
+  await prisma.organization.deleteMany({ where: { id: { in: [proveedor, proveedorQueSeArchiva, proveedorPendiente] } } });
   await f.limpiar();
 });
 
@@ -110,6 +114,29 @@ describe("editarDatosDeEquipo", () => {
     expect(fila2.warrantyUntil).toBeNull();
     expect(fila2.serialNumber).toBe("S2");
     expect(fila2.supplierOrganizationId).toBe(proveedor);
+  });
+});
+
+describe("el proveedor es una organización proveedora aprobada", () => {
+  it("al registrar: una granja, un proveedor sin aprobar o un id inexistente se rechazan", async () => {
+    await expect(alta({ supplierOrganizationId: f.orgB })).rejects.toThrow(new EquipoError("proveedor_no_valido"));
+    await expect(alta({ supplierOrganizationId: proveedorPendiente })).rejects.toThrow(new EquipoError("proveedor_no_valido"));
+    await expect(alta({ supplierOrganizationId: "00000000-0000-4000-8000-000000000000" })).rejects.toThrow(new EquipoError("proveedor_no_valido"));
+    // Control positivo: un proveedor aprobado SÍ entra.
+    const e = await alta({ supplierOrganizationId: proveedor });
+    expect((await prisma.equipment.findUniqueOrThrow({ where: { id: e.id } })).supplierOrganizationId).toBe(proveedor);
+  });
+  it("al editar: cambiar a algo que no es proveedor se rechaza; el proveedor actual no se vuelve a juzgar", async () => {
+    const e = await alta({ supplierOrganizationId: proveedorQueSeArchiva, serialNumber: "P1" });
+    await expect(editarDatosDeEquipo(f.jefeA, e.id, { supplierOrganizationId: f.orgA })).rejects.toThrow(new EquipoError("proveedor_no_valido"));
+    await prisma.organization.update({ where: { id: proveedorQueSeArchiva }, data: { status: "archived" } });
+    // El formulario reenvía el proveedor actual: editar la serie no lo pierde ni falla.
+    await editarDatosDeEquipo(f.jefeA, e.id, { supplierOrganizationId: proveedorQueSeArchiva, serialNumber: "P2" });
+    const fila = await prisma.equipment.findUniqueOrThrow({ where: { id: e.id } });
+    expect([fila.supplierOrganizationId, fila.serialNumber]).toEqual([proveedorQueSeArchiva, "P2"]);
+    // Y cambiar a otro aprobado sí entra.
+    await editarDatosDeEquipo(f.jefeA, e.id, { supplierOrganizationId: proveedor });
+    expect((await prisma.equipment.findUniqueOrThrow({ where: { id: e.id } })).supplierOrganizationId).toBe(proveedor);
   });
 });
 
