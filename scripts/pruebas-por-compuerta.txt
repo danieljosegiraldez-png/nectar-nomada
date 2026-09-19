@@ -56,6 +56,7 @@ tests/apiary/alzas.test.ts
 tests/apiary/cera.test.ts
 tests/apiary/marcosNegros.test.ts
 tests/apiary/recipientes.test.ts
+tests/apiary/ceraDeExtraccion.test.ts
 tests/sensores/ingesta.test.ts
 tests/sensores/derivar.test.ts
 tests/sensores/ruta-de-ingesta.test.ts
