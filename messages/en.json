@@ -2690,6 +2690,15 @@
     "ambiente_open_patio": "Open patio",
     "ambiente_covered_patio": "Covered patio",
     "ambiente_mechanical_dryer": "Mechanical dryer",
+    "sombra": "Overhead shade (optional)",
+    "sombraNota": "What gives the shade (optional)",
+    "sombraAyuda": "Tree, vine, tarp, a roof with some opacity… Applies to the whole facility.",
+    "sombraAyudaCama": "Only if this bed has a different shade from its facility.",
+    "sombraValor": "Shade {grado} {nota}",
+    "sombraDeLaInstalacion": "the facility's",
+    "sombra_pct_20": "20 %", "sombra_pct_30": "30 %", "sombra_pct_50": "50 %", "sombra_pct_70": "70 %", "sombra_pct_90": "90 %",
+    "ambiente_african_bed_outdoor": "African raised bed, outdoors",
+    "ambiente_floor_tarp": "Floor on tarp",
     "sinSeleccion": "No selection",
     "noDeclarado": "Undeclared",
     "sitioNoVisible": "Site without management access",
@@ -2703,7 +2712,8 @@
     "error_zona_sin_identificar": "A zone sample needs a zone or its description.",
     "error_fecha_invalida": "The date, time or device timezone is invalid.",
     "error_rack_invalido": "The rack level must be a positive whole number.",
-    "error_tipo_invalido": "The location or its attributes do not match the site → facility → bed hierarchy."
+    "error_tipo_invalido": "The location or its attributes do not match the site → facility → bed hierarchy.",
+    "error_sombra_invalida": "The shade level is not on the list, or the note is longer than 300 characters."
   },
   "AjustesDelBeneficio": {
     "ajustesTitulo": "Mill settings",

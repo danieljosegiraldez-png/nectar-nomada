@@ -2,8 +2,8 @@ import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { LocationAccessError, exigeEditarBeneficioEn, puedeEditarBeneficioEn, puedeGestionarAtributosDeUbicacion, requireLocationAttributeAccess } from "./locations";
-import { AMBIENTES_DE_SECADO, SecadoFormError } from "./secadoForm";
-import type { DryingEnvironment } from "../../generated/prisma/enums";
+import { AMBIENTES_DE_SECADO, GRADOS_DE_SOMBRA, SecadoFormError } from "./secadoForm";
+import type { DryingEnvironment, ShadePercentageBracket } from "../../generated/prisma/enums";
 
 /** La negativa es un fallo explícito, nunca una lista vacía que aparente ausencia de instalaciones. */
 export async function sitiosParaInstalaciones(userAccountId: string) {
@@ -58,15 +58,17 @@ export async function detalleInstalacion(userAccountId: string, id: string) {
   const camas = [];
   for (const bed of beds) {
     if (await can(userAccountId, "manage_attributes", "location", { scopeType: "location", scopeRefId: bed.id }, bed.classification)) {
-      camas.push({ id: bed.id, name: bed.name, rackLevel: bed.rackLevel });
+      camas.push({ id: bed.id, name: bed.name, rackLevel: bed.rackLevel, shadePercentage: bed.shadePercentage, shadeDescription: bed.shadeDescription });
     }
   }
-  return { id: row.id, name: row.name, dryingEnvironment: row.dryingEnvironment, sitio: parent ? { id: parent.id, name: parent.name } : null, camas };
+  return { id: row.id, name: row.name, dryingEnvironment: row.dryingEnvironment, shadePercentage: row.shadePercentage, shadeDescription: row.shadeDescription, sitio: parent ? { id: parent.id, name: parent.name } : null, camas };
 }
 
-type Datos = { name: string; dryingEnvironment?: DryingEnvironment | null; rackLevel?: number | null };
+type Datos = { name: string; dryingEnvironment?: DryingEnvironment | null; rackLevel?: number | null; shadePercentage?: ShadePercentageBracket | null; shadeDescription?: string | null };
 function validar(input: Datos, tipo: "drying_facility" | "drying_bed") {
   if (!input.name.trim() || input.name.trim().length > 120) throw new SecadoFormError("datos_invalidos");
+  if (input.shadePercentage != null && !GRADOS_DE_SOMBRA.includes(input.shadePercentage)) throw new SecadoFormError("sombra_invalida");
+  if (input.shadeDescription != null && input.shadeDescription.trim().length > 300) throw new SecadoFormError("sombra_invalida");
   if (tipo === "drying_facility") {
     if (input.dryingEnvironment != null && !AMBIENTES_DE_SECADO.includes(input.dryingEnvironment)) throw new SecadoFormError("datos_invalidos");
     if (input.rackLevel != null) throw new SecadoFormError("tipo_invalido");
@@ -91,6 +93,7 @@ export async function crearUbicacionDeSecado(userAccountId: string, input: Datos
       name: input.name.trim(), locationType: input.locationType, parentLocationId: parent.id,
       organizationId: parent.organizationId, classification: parent.classification, timezone: parent.timezone,
       dryingEnvironment: input.dryingEnvironment ?? null, rackLevel: input.rackLevel ?? null, createdBy: userAccountId,
+      shadePercentage: input.shadePercentage ?? null, shadeDescription: input.shadeDescription?.trim() || null,
     } });
     await recordAuditEvent({ actorUserAccountId: userAccountId, operation: "location.create_drying", entityType: "location", entityId: after.id, after, sourceInterface: "traceability.service" }, tx);
     return after;
@@ -106,6 +109,7 @@ export async function actualizarUbicacionDeSecado(userAccountId: string, input: 
   return prisma.$transaction(async (tx) => {
     const after = await tx.location.update({ where: { id: before.id }, data: {
       name: input.name.trim(), dryingEnvironment: input.dryingEnvironment ?? null, rackLevel: input.rackLevel ?? null,
+      shadePercentage: input.shadePercentage ?? null, shadeDescription: input.shadeDescription?.trim() || null,
     } });
     await recordAuditEvent({ actorUserAccountId: userAccountId, operation: "location.update_drying", entityType: "location", entityId: after.id, before, after, sourceInterface: "traceability.service" }, tx);
     return after;

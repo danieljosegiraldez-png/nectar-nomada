@@ -1,4 +1,4 @@
-import { DryingEnvironment, SamplingZone } from "../../generated/prisma/enums";
+import { DryingEnvironment, SamplingZone, ShadePercentageBracket } from "../../generated/prisma/enums";
 import { parseLocalDateTime, TZ_OFFSET_FIELD } from "../time/localDateTime";
 import type { RegistrarInspeccionInput } from "./samplingEvents";
 
@@ -7,6 +7,7 @@ export const MATERIALES_DE_SECADO = ["CHERRY", "MUCILAGE_HONEY", "PARCHMENT"] as
 export const PAPELES_DE_MUESTRA = ["ZONE", "REPLICATE"] as const;
 export const AMBIENTES_DE_SECADO = Object.values(DryingEnvironment);
 export const ZONAS_DE_MUESTRA = Object.values(SamplingZone);
+export const GRADOS_DE_SOMBRA = Object.values(ShadePercentageBracket);
 export type SecadoFormState = { error?: string };
 
 function texto(form: FormData, key: string) {
@@ -58,9 +59,17 @@ export function leerUbicacionDeSecado(form: FormData) {
   if (rackLevel !== null && (!Number.isInteger(rackLevel) || rackLevel < 1 || rackLevel > 2147483647)) {
     throw new SecadoFormError("rack_invalido");
   }
+  // La sombra de arriba (Daniel, 2026-09-18): el grado es la escala de las
+  // parcelas; la nota dice QUÉ la da. Vacías quedan nulas: no declarado.
+  const grado = texto(form, "shadePercentage");
+  if (grado && !(GRADOS_DE_SOMBRA as string[]).includes(grado)) throw new SecadoFormError("sombra_invalida");
+  const shadeDescription = texto(form, "shadeDescription").trim() || null;
+  if (shadeDescription && shadeDescription.length > 300) throw new SecadoFormError("sombra_invalida");
   return {
     name,
     dryingEnvironment: environment ? opcion(environment, AMBIENTES_DE_SECADO) : null,
     rackLevel,
+    shadePercentage: (grado || null) as ShadePercentageBracket | null,
+    shadeDescription,
   };
 }

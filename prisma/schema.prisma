@@ -716,6 +716,9 @@ enum LocationType {
   /// `apiary_site`: una Location con su tipo y su padre, NO una familia de
   /// entidades nueva.
   drying_facility
+  /// Un estante dentro de una instalación de secado: «Estante 1» del cuarto
+  /// oscuro. Sus posiciones (`drying_bed` con nivel y puesto) se generan al crearlo.
+  drying_rack
   drying_bed
 
   @@schema("core")
@@ -739,6 +742,10 @@ enum DryingEnvironment {
   open_patio
   covered_patio
   mechanical_dryer
+  /// Cama elevada afuera, a la intemperie. Sin estante.
+  african_bed_outdoor
+  /// En el piso, sobre lona. Sin estante.
+  floor_tarp
 
   @@schema("core")
 }
@@ -855,6 +862,11 @@ model Location {
   /// Sólo para `drying_bed`: el nivel del rack en un cuarto de varios niveles.
   /// Anulable, porque una cama de patio no está en ningún rack.
   rackLevel         Int?               @map("rack_level")
+  /// Instalación o cama de secado: QUÉ da la sombra de arriba —árbol, enredadera,
+  /// lona, techo con cierta opacidad—, en texto libre al lado de `shadePercentage`,
+  /// nunca en su lugar. Una cama sin la suya se ENSEÑA con la de su instalación,
+  /// marcada como tal; no se copia aquí.
+  shadeDescription  String?            @map("shade_description")
   // P1 §3 — F1 added sun, shade, altitude range, slope, soil and spacing but
   // no area, so planted area, yield per hectare and cultivar distribution by
   // area could not be computed at all. Deliberately NOT derived from a
