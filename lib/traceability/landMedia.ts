@@ -24,6 +24,8 @@ import { objectStorageProvider } from "../integrations/storage";
 import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
 import { requireTrapAccess } from "./traps";
 import { recordAuditEvent } from "../audit";
+import { can } from "../rbac/service";
+import type { ScopeTarget } from "../rbac/types";
 import { Prisma, type ClassificationLevel, type ProvenanceClass } from "../../generated/prisma/client";
 
 export class LandMediaValidationError extends Error {}
@@ -72,6 +74,13 @@ export interface RequestTrampaPhotoUploadInput extends RequestLandAssetUploadInp
    * IndexedDB), que es justo lo que hace falta para derivar de él una clave
    * estable. */
   photoClientDraftId: string;
+  /**
+   * A6 fix-final (I2) — el clientDraftId de la REVISIÓN a la que esta foto
+   * dice pertenecer. Sólo sirve para el guardia de reutilización, más abajo:
+   * decidir si una `storageKey` que ya tiene un `Asset` es un reintento
+   * legítimo (misma revisión) o una clave ajena reutilizada.
+   */
+  revisionClientDraftId: string;
 }
 
 /**
@@ -109,9 +118,36 @@ export function claveDeFotoDeTrampa(locationId: string, photoClientDraftId: stri
  * `requestLandAssetUpload`, sin cambios: esta función es sólo para la foto de
  * trampa, y por eso vive aparte en vez de añadirle un parámetro a aquélla.
  */
+/**
+ * A6 fix-final (I2), ruling del controlador. Antes se firmaba el PUT sin
+ * comprobar si la `storageKey` derivada ya tenía un `Asset`: el PUT firmado
+ * sobrescribe bytes en el bucket sin pasar por ninguna compuerta propia — la
+ * comprobación de pertenencia sólo llegaba después, en
+ * `finalizeTrampaPhotoPorBorrador`, cuando el objeto original ya se había
+ * perdido. Ahora, si la clave ya tiene un `Asset`, sólo se firma de nuevo
+ * cuando ese `Asset` es de la MISMA revisión — el reintento legítimo que la
+ * Tarea 12 quiso resolver derivando la clave del `clientDraftId` de la
+ * foto—; si es de otra revisión (la clave se reutilizó, ajena), se rechaza
+ * ANTES de firmar nada.
+ */
 export async function requestTrampaPhotoUpload(userAccountId: string, input: RequestTrampaPhotoUploadInput) {
   await requireTrapAccess(userAccountId, input.locationId);
   const storageKey = claveDeFotoDeTrampa(input.locationId, input.photoClientDraftId, input.originalFilename);
+
+  const existente = await prisma.asset.findUnique({
+    where: { storageKey },
+    select: { specimenObservationId: true },
+  });
+  if (existente) {
+    const revision = await prisma.specimenObservation.findUnique({
+      where: { clientDraftId: input.revisionClientDraftId },
+      select: { id: true },
+    });
+    if (!revision || existente.specimenObservationId !== revision.id) {
+      throw new LandMediaValidationError("storage_key_belongs_to_another_revision");
+    }
+  }
+
   return firmarSubida(storageKey, input.contentType);
 }
 
@@ -264,7 +300,6 @@ export interface FinalizeTrampaPhotoInput {
   originalFilename: string;
   revisionClientDraftId: string;
   provenanceClass: ProvenanceClass;
-  creatorPersonId?: string | null;
 }
 
 /**
@@ -354,7 +389,11 @@ export async function finalizeTrampaPhotoPorBorrador(userAccountId: string, inpu
           mimeType: input.mimeType,
           sizeBytes: input.sizeBytes,
           originalFilename: input.originalFilename,
-          creatorPersonId: input.creatorPersonId ?? userAccount.personId,
+          // A5 fix-final (I6) — SIEMPRE la persona de la sesión, nunca un
+          // valor que el llamador pudiera pasar: una foto de la ronda es
+          // evidencia de observación directa, y su autoría no es más
+          // falsificable que `observerPersonId` en la revisión misma.
+          creatorPersonId: userAccount.personId,
           status: "approved",
           classification: DEFAULT_CLASSIFICATION,
           createdBy: userAccountId,
@@ -399,9 +438,26 @@ export async function finalizeTrampaPhotoPorBorrador(userAccountId: string, inpu
  * Las URL firmadas se piden aquí y no en la página: son de vida corta, y
  * pedirlas al construir la página es lo que hace que caduquen antes de que
  * nadie las mire si se cachean. La página no toca el proveedor.
+ *
+ * A8 fix-final (M1), ruling del controlador. `location:manage_attributes`
+ * autoriza fotos de bloque, de calicata y de biochar — evidencia de la
+ * PARCELA— pero una foto de revisión de trampa (`specimenObservationId` no
+ * nulo) es evidencia de un `Specimen`, gateada en todos los demás sitios por
+ * `specimen:view`/`specimen:manage` (`requireTrapAccess`). Sin esta
+ * comprobación, alguien con acceso de atributos y SIN acceso de trampas veía
+ * igual las fotos de revisión en la pestaña Fotos — la misma separación que
+ * spec §6 pide para el resto de la vista de trampas, que aquí no se
+ * aplicaba.
  */
 export async function listLandAssets(userAccountId: string, locationId: string) {
   await requireLocationAttributeAccess(userAccountId, locationId);
+  const location = await prisma.location.findUnique({ where: { id: locationId }, select: { classification: true } });
+  const target: ScopeTarget = { scopeType: "location", scopeRefId: locationId };
+  const puedeVerTrampas =
+    !!location &&
+    ((await can(userAccountId, "view", "specimen", target, location.classification)) ||
+      (await can(userAccountId, "manage", "specimen", target, location.classification)));
+
   const assets = await prisma.asset.findMany({
     where: { locationId },
     orderBy: { createdAt: "desc" },
@@ -428,7 +484,11 @@ export async function listLandAssets(userAccountId: string, locationId: string) 
       },
     },
   });
+  // A8 — sin permiso de trampas, las filas de revisión no se listan; las
+  // fotos generales (bloque, calicata, biochar) siguen igual. Filtrar antes
+  // de firmar evita pedir una URL para una foto que no se va a mostrar.
+  const visibles = puedeVerTrampas ? assets : assets.filter((a) => a.specimenObservationId == null);
   return Promise.all(
-    assets.map(async (a) => ({ ...a, url: await objectStorageProvider.getSignedUrl(a.storageKey) })),
+    visibles.map(async (a) => ({ ...a, url: await objectStorageProvider.getSignedUrl(a.storageKey) })),
   );
 }

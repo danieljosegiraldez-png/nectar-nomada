@@ -123,7 +123,6 @@ tests/traceability/export.test.ts
 tests/traceability/plotBlocks.test.ts
 tests/traceability/traps.test.ts
 tests/traceability/trapRules.test.ts
-tests/traceability/recordRoundTrapCheckFormAction.test.ts
 tests/traceability/recordTrapCheckFormAction.test.ts
 tests/traceability/fincaTrampas.test.ts
 tests/traceability/f1.test.ts

@@ -1,30 +1,28 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { recordRoundTrapCheckFormAction, type TraceabilityActionState } from "../../actions/traceability";
 import { TriStateField } from "./TriStateField";
-import { queueFieldEvent } from "../../../lib/sync/offlineQueue";
+import { queueFieldEvent, syncFieldEvents, listFieldEventDrafts } from "../../../lib/sync/offlineQueue";
 import { construirPayloadDeRevisionDeTrampa, generarClaveDeRevision } from "../../../lib/sync/parcelaPayload";
 import { queueTrapPhoto, syncTrapPhotos } from "../../../lib/sync/trapPhotoQueue";
 
 const NIVELES = ["ninguno", "pocos", "algunos", "muchos"] as const;
-const initialState: TraceabilityActionState = {};
 
 /**
  * El formulario corto de la ronda — spec §4.2: seis campos, no diez.
  *
  * **Sin campo de procedencia ni de observador, ni siquiera oculto.** Ruling
  * del controlador, Tarea 10: un `<input type="hidden">` es falsificable
- * (SECURITY.md §2 — el formulario no es la frontera), así que
- * `recordRoundTrapCheckFormAction` fija los dos en el SERVIDOR —observación
- * directa, la persona vinculada a la cuenta de la sesión— y ni siquiera lee
- * esos nombres del `FormData`. `RevisionDeTrampaForm` —con procedencia,
- * calidad del dato y observador elegibles— vive en
- * `/plots/[id]/ajustes` (sección «trampas», Tarea 10 fix round 1), para
- * transcribir una revisión de notas de papel de un tercero; no en este
- * formulario, donde quien registra es siempre quien tiene la sesión
- * iniciada.
+ * (SECURITY.md §2 — el formulario no es la frontera), así que el servidor
+ * fija los dos SIEMPRE al aplicar la mutación (`aplicarRevisionDeTrampa`,
+ * `lib/sync/pushFieldEvents.ts`) —observación directa, la persona vinculada
+ * a la cuenta del dispositivo que empujó el lote—, y ni siquiera se ofrece
+ * un campo para forjar. `RevisionDeTrampaForm` —con procedencia, calidad del
+ * dato y observador elegibles— vive en `/plots/[id]/ajustes` (sección
+ * «trampas»), para transcribir una revisión de notas de papel de un
+ * tercero; no en este formulario, donde quien registra es siempre quien
+ * tiene la sesión iniciada.
  *
  * `hoy` (`YYYY-MM-DD`) lo calcula el servidor con la zona de LA FINCA
  * (`diaDeHoy`, en `app/finca/trampas/ronda/page.tsx`): un `hoyLocalISO()` en
@@ -32,40 +30,42 @@ const initialState: TraceabilityActionState = {};
  * y desajustaría la hidratación. El campo sigue siendo un `type="date"`
  * editable — sólo cambia de dónde sale el valor por defecto.
  *
- * **Tarea 11 — la ronda viaja sin señal.** Sin conexión, `alEnviar` encola la
- * revisión con `queueFieldEvent` en vez de dejar que la Server Action se
- * dispare (que fallaría igual, sin red). `revisionClientDraftId` es la clave
- * de idempotencia que viaja por los DOS caminos: sin señal, dentro del
- * payload de la cola; con señal, como el resto del `FormData` que
- * `recordRoundTrapCheckFormAction` ya lee. Así la clave es la misma sin
- * importar si había cobertura al pulsar «Registrar», que es lo que la Tarea
- * 12 necesita para engancharle la foto a una revisión que el servidor
- * todavía no ha visto.
+ * **Fix final A1+A2 — un solo camino, primero la cola, y SIEMPRE.** Antes
+ * había dos caminos: con señal, el navegador hacía el envío nativo del
+ * `<form action={formAction}>` hacia `recordRoundTrapCheckFormAction`; sin
+ * señal, `alEnviar` interceptaba y encolaba. Eso rompía en dos sitios
+ * (revisión final, C1/I3): el `<input type="file">` viajaba DENTRO de ese
+ * `<form>`, así que una foto de cámara (varios MB) superaba el límite de
+ * 1 MB del cuerpo de una Server Action y la revisión no se guardaba aunque
+ * hubiera señal de sobra; y un reintento tras perder el acuse del servidor
+ * generaba una clave FRESCA (necesaria para el camino sin señal) que el
+ * camino con señal no persistía en ningún sitio, así que un segundo intento
+ * creaba una segunda fila.
  *
- * **Tarea 11, fix round 2 — la clave se genera EN EL ENVÍO, no en el
- * render.** Antes era un prop que el servidor generaba una vez al pintar la
- * página (una tarjeta = una llamada a `crypto.randomUUID()` en
- * `app/finca/trampas/ronda/page.tsx`), y ahí estaba el defecto: la tarjeta
- * sigue montada entre envíos (`<details>` no se desmonta), así que corregir
- * una lectura y volver a pulsar «Registrar» sin señal las dos veces mandaba
- * la MISMA clave dos veces — la segunda revisión se pierde en silencio,
- * leída como `duplicate` de la primera. `alEnviar` llama a
- * `generarClaveDeRevision()` al principio de cada envío y escribe el
- * resultado en el `<input>` oculto ANTES de decidir si el camino es con o
- * sin señal: por eso el campo es `defaultValue=""` (sin controlar) y no
- * `value={...}` — un campo controlado por React pelearía esa escritura
- * imperativa en el siguiente render.
+ * Ahora hay un solo camino: `alEnviar` SIEMPRE hace `preventDefault()` y
+ * encola la revisión con `queueFieldEvent` — nunca hay envío nativo del
+ * formulario, así que la foto nunca puede viajar en su cuerpo. Si hay
+ * señal, se dispara `syncFieldEvents()` enseguida después de encolar (no se
+ * espera a que el operario pulse el botón de `FieldSyncControls`). La clave
+ * de idempotencia (`generarClaveDeRevision`) es la misma que ve el servidor
+ * sin importar si había cobertura al pulsar «Registrar»: un reintento la
+ * reutiliza —se fija una vez por intento de guardado real, ver más abajo—,
+ * así que el servidor lo deduplica por `clientDraftId` en vez de crear una
+ * fila nueva, y un envío que de verdad se pierde queda recuperable en la
+ * cola en vez de desaparecer sin dejar rastro.
  *
- * **Tarea 12 — la foto viaja por su PROPIA cola, siempre.** `alEnviar` encola
- * la foto con `queueTrapPhoto` en cuanto hay una elegida, sin importar si la
- * revisión de este mismo envío toma el camino con o sin señal: las dos colas
- * son independientes (`lib/sync/offlineQueue.ts` para la revisión,
- * `lib/sync/trapPhotoQueue.ts` para el Blob) y se enganchan en el servidor por
- * `clientDraftId` (`finalizeTrampaPhotoPorBorrador`, ruling P2 del
- * controlador: gateado por el permiso de trampa, no por el de atributos de la
- * parcela). Usa la misma `clave` que ya se generó arriba para el campo
- * oculto: es la clave de ESTE envío, la que la revisión llevará cuando llegue,
- * la haya visto ya el servidor o no.
+ * `recordRoundTrapCheckFormAction` quedó sin ningún llamador con este
+ * cambio (comprobado con `grep`) y se quitó, junto con su prueba dedicada:
+ * la única regla que fijaba —procedencia y observador en el servidor— la
+ * sigue fijando `aplicarRevisionDeTrampa`, que es ahora el único sitio por
+ * el que pasa CUALQUIER revisión de la ronda, con o sin señal.
+ *
+ * **A3 — la foto se intenta encolar ANTES que la revisión.** Si
+ * `queueTrapPhoto` falla (cuota de IndexedDB, navegación privada), el
+ * formulario NO se limpia y la revisión NO se encola: el operario ve el
+ * error y no cree que guardó algo que no guardó. Si la foto se encola bien
+ * (o no había foto), la revisión se encola y, si hay señal, las dos colas
+ * —revisión y foto— se sincronizan enseguida.
  */
 export function RondaDeTrampaForm({
   locationId,
@@ -77,55 +77,81 @@ export function RondaDeTrampaForm({
   hoy: string;
 }) {
   const t = useTranslations("Traceability");
-  const [state, formAction, pending] = useActionState(recordRoundTrapCheckFormAction, initialState);
   const id = (campo: string) => `ronda-${campo}-${specimenId}`;
 
+  // `encolado`: la revisión quedó guardada en este dispositivo (spec §4.2 —
+  // «revisada hoy»). `pendienteDeEnvio`: sigue sin confirmarse que el
+  // servidor la recibió — arranca en `true` al encolar y pasa a `false` en
+  // cuanto, tras el intento de sincronización con señal, el borrador ya no
+  // está en la cola local.
   const [encolado, setEncolado] = useState(false);
+  const [pendienteDeEnvio, setPendienteDeEnvio] = useState(false);
   const [errorLocal, setErrorLocal] = useState(false);
+  const [errorFoto, setErrorFoto] = useState(false);
   const [encolando, setEncolando] = useState(false);
   // Tarea 12 — la foto elegida, si hay una. Sólo estado local: no viaja por
   // `FormData` hacia `construirPayloadDeRevisionDeTrampa` (que no la lee), va
   // por su propia cola (`queueTrapPhoto`) en `alEnviar`.
   const [foto, setFoto] = useState<File | null>(null);
-  // El pestillo, mismo motivo que `SoilProfileForm`: tras `preventDefault()`
-  // la Server Action no se dispara, así que `pending` nunca se pone a `true`
-  // en este camino, y sin el ref dos toques encolarían dos revisiones.
+  // El pestillo evita que dos toques de «Registrar» antes de que termine el
+  // primer `alEnviar` encolen dos revisiones.
   const yaEncolando = useRef(false);
 
   const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {
-    const form = e.currentTarget;
-    // Fresca en CADA envío — ver el docstring. Queda en el `<input>` oculto
-    // para el camino con señal, y en `clave` para el sin señal, más abajo.
-    // Es el punto donde la Tarea 12 puede engancharse: `clave` es la clave
-    // de ESTE envío en particular, viva mientras dure este `alEnviar`.
-    const clave = generarClaveDeRevision();
-    const campoClave = form.elements.namedItem("revisionClientDraftId");
-    if (campoClave instanceof HTMLInputElement) campoClave.value = clave;
-
-    // Tarea 12 — la foto se encola aparte SIEMPRE, tenga o no señal la
-    // revisión: viaja por su propia cola y se engancha en el servidor por
-    // `clientDraftId`, no por lo que haga el envío de la revisión más abajo.
-    // Encolarla no depende de qué camino tome ese envío.
-    if (foto) {
-      const archivo = foto;
-      void queueTrapPhoto({ locationId, revisionClientDraftId: clave, file: archivo }).then(() => syncTrapPhotos());
-      setFoto(null);
-    }
-
-    if (typeof navigator !== "undefined" && navigator.onLine) return; // camino normal: el <input> ya lleva `clave`
+    // SIEMPRE: nunca hay envío nativo del formulario — ver el docstring.
     e.preventDefault();
     if (yaEncolando.current) return;
     yaEncolando.current = true;
     setEncolando(true);
+
+    const form = e.currentTarget;
+    // Fresca en CADA intento de guardado real. Es el punto donde la Tarea 12
+    // se engancha: `clave` es la clave de ESTE envío, viva mientras dure este
+    // `alEnviar`, y la misma que verá la foto y la revisión.
+    const clave = generarClaveDeRevision();
+
     try {
+      // A3 — la foto primero: si falla, no se toca la cola de la revisión ni
+      // se limpia el formulario.
+      if (foto) {
+        try {
+          await queueTrapPhoto({ locationId, revisionClientDraftId: clave, file: foto });
+        } catch {
+          setErrorFoto(true);
+          return;
+        }
+      }
+
       await queueFieldEvent({
         ...construirPayloadDeRevisionDeTrampa(new FormData(form), specimenId, locationId, clave),
       });
       form.reset();
-      setEncolado(true);
+      setFoto(null);
+      setErrorFoto(false);
       setErrorLocal(false);
+      setEncolado(true);
+      setPendienteDeEnvio(true);
+
+      // A2 — con señal, sincronizar enseguida, no esperar al botón de
+      // `FieldSyncControls`. `syncFieldEvents` avisa por evento a
+      // `SincronizarFotosDeRonda`, que también sincroniza su propia cola de
+      // fotos (A4) — no hace falta duplicar esa llamada aquí.
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        void syncFieldEvents()
+          .then(async () => {
+            const siguePendiente = (await listFieldEventDrafts()).some(
+              (d) => (d.payload as { clientDraftId?: unknown }).clientDraftId === clave,
+            );
+            setPendienteDeEnvio(siguePendiente);
+          })
+          .catch(() => {
+            // El fetch no llegó: sigue pendiente, tal cual estaba.
+          });
+        if (foto) void syncTrapPhotos().catch(() => {});
+      }
     } catch {
       setEncolado(false);
+      setPendienteDeEnvio(false);
       setErrorLocal(true);
     } finally {
       yaEncolando.current = false;
@@ -134,13 +160,7 @@ export function RondaDeTrampaForm({
   };
 
   return (
-    <form action={formAction} onSubmit={alEnviar} className="nn-form">
-      <input type="hidden" name="locationId" value={locationId} />
-      <input type="hidden" name="specimenId" value={specimenId} />
-      {/* Sin controlar a propósito: `alEnviar` escribe el valor real en cada
-          envío, y un `value` controlado por React lo pelearía de vuelta. */}
-      <input type="hidden" name="revisionClientDraftId" defaultValue="" />
-
+    <form onSubmit={alEnviar} className="nn-form">
       <div className="nn-field">
         <label htmlFor={id("observedAt")}>{t("trapCheckDate")}</label>
         <input id={id("observedAt")} type="date" name="observedAt" required defaultValue={hoy} />
@@ -189,17 +209,15 @@ export function RondaDeTrampaForm({
         <input
           id={id("foto")}
           type="file"
-          name="foto"
           accept="image/*"
           capture="environment"
           onChange={(e) => setFoto(e.target.files?.[0] ?? null)}
         />
       </div>
 
-      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       {encolado ? (
         <p className="nn-note" role="status">
-          {t("fieldEventQueuedOffline")}
+          {t(pendienteDeEnvio ? "trapCheckQueuedPending" : "trapCheckQueuedSynced")}
         </p>
       ) : null}
       {errorLocal ? (
@@ -207,7 +225,12 @@ export function RondaDeTrampaForm({
           {t("fieldEventQueueFailed")}
         </p>
       ) : null}
-      <button type="submit" className="nn-button" disabled={pending || encolando}>{t("trapCheckSave")}</button>
+      {errorFoto ? (
+        <p className="nn-error" role="alert">
+          {t("trapCheckPhotoQueueFailed")}
+        </p>
+      ) : null}
+      <button type="submit" className="nn-button" disabled={encolando}>{t("trapCheckSave")}</button>
     </form>
   );
 }

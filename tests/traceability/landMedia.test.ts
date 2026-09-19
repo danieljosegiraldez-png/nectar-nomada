@@ -799,7 +799,7 @@ describe("permiso de la foto de trampa: TRAP, no location:manage_attributes (rul
     try {
       await requestTrampaPhotoUpload(operador.userAccountId, {
         locationId: parcela.id, originalFilename: "tela.jpg", contentType: "image/jpeg",
-        photoClientDraftId: crypto.randomUUID(),
+        photoClientDraftId: crypto.randomUUID(), revisionClientDraftId: clientDraftId,
       });
     } catch (error) {
       rechazoDeAcceso = error instanceof TrapAccessError;
@@ -847,7 +847,7 @@ describe("permiso de la foto de trampa: TRAP, no location:manage_attributes (rul
     await expect(
       requestTrampaPhotoUpload(ajeno.userAccountId, {
         locationId: parcela.id, originalFilename: "tela.jpg", contentType: "image/jpeg",
-        photoClientDraftId: crypto.randomUUID(),
+        photoClientDraftId: crypto.randomUUID(), revisionClientDraftId: clientDraftId,
       }),
     ).rejects.toThrow(TrapAccessError);
 
@@ -890,7 +890,7 @@ describe("permiso de la foto de trampa: TRAP, no location:manage_attributes (rul
     await expect(
       requestTrampaPhotoUpload(soloAtributos.userAccountId, {
         locationId: parcela.id, originalFilename: "tela.jpg", contentType: "image/jpeg",
-        photoClientDraftId: crypto.randomUUID(),
+        photoClientDraftId: crypto.randomUUID(), revisionClientDraftId: clientDraftId,
       }),
     ).rejects.toThrow(TrapAccessError);
 

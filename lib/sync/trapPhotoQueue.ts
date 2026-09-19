@@ -54,6 +54,21 @@ async function write(fn: (store: IDBObjectStore) => void): Promise<void> {
 }
 
 /**
+ * A4 fix-final — mismo patrón que `FIELD_DRAFTS_CHANGED_EVENT` en
+ * `offlineQueue.ts`: el contador de `SincronizarFotosDeRonda` y quien
+ * encola son componentes hermanos sin estado compartido. Antes de este
+ * arreglo, encolar una foto nueva o que un reintento fallara no le decía
+ * nada al contador, que sólo se recontaba al montar o tras pulsar su
+ * PROPIO botón — una foto nueva quedaba invisible hasta un remonte
+ * (revisión final, I5).
+ */
+export const TRAP_PHOTO_DRAFTS_CHANGED_EVENT = "nn-trap-photo-drafts-changed";
+
+function avisarDeCambioDeFoto(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(TRAP_PHOTO_DRAFTS_CHANGED_EVENT));
+}
+
+/**
  * El guardado. Igual que `queueFieldEvent` en `offlineQueue.ts`: escribe a
  * disco local antes de que la red entre en juego, tenga o no señal el
  * dispositivo en este instante.
@@ -74,6 +89,7 @@ export async function queueTrapPhoto(input: {
     status: "pending",
   };
   await write((s) => s.add(draft));
+  avisarDeCambioDeFoto();
   return draft;
 }
 
@@ -90,6 +106,7 @@ export async function listTrapPhotoDrafts(): Promise<FotoDeRondaPendiente[]> {
 
 export async function discardTrapPhotoDraft(id: string): Promise<void> {
   await write((s) => s.delete(id));
+  avisarDeCambioDeFoto();
 }
 
 /**
@@ -138,9 +155,14 @@ export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
         foto.originalFilename,
         foto.contentType,
         foto.id,
+        // A6 fix-final — con qué revisión hay que comparar si la clave
+        // derivada ya tiene un Asset: ver el docstring de
+        // `requestTrampaPhotoUpload` en `landMedia.ts`.
+        foto.revisionClientDraftId,
       );
       if ("error" in paso1) {
         await write((s) => s.put({ ...foto, status: "error", errorMessage: paso1.error }));
+        avisarDeCambioDeFoto();
         rejected++;
         continue;
       }
@@ -159,7 +181,6 @@ export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
         foto.blob.size,
         foto.originalFilename,
         foto.revisionClientDraftId,
-        null,
       );
       const decision = clasificarResultadoDeFoto(paso2);
       if (decision === "aplicar") {
@@ -167,6 +188,7 @@ export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
         applied++;
       } else if (decision === "rechazar" && "error" in paso2) {
         await write((s) => s.put({ ...foto, status: "error", errorMessage: paso2.error }));
+        avisarDeCambioDeFoto();
         rejected++;
       }
       // "reintentar": se deja en cola tal cual, sin marcar error.

@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-19
 
-**420 operaciones** que tocan la base, en **129 archivos**:
+**421 operaciones** que tocan la base, en **129 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,13 +22,32 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **302** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **303** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **37** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **63** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
 
+> **El de 420→421, sin archivo nuevo, es `requestTrampaPhotoUpload`
+> (`lib/traceability/landMedia.ts`, ronda de arreglos finales de vistas de
+> finca y parcela, A6 / I2).** Antes no sumaba fila: no hacía ningún
+> `prisma.*` directo, sólo llamaba al guardia y firmaba la URL. El arreglo de
+> I2 —una `storageKey` derivada del `photoClientDraftId` podía sobrescribir
+> los bytes de un `Asset` ajeno antes de que `finalizeTrampaPhotoPorBorrador`
+> llegara a comprobar de quién era— le añadió dos lecturas propias
+> (`asset.findUnique` por la clave, `specimenObservation.findUnique` por la
+> revisión) para rechazar ANTES de firmar el PUT cuando la clave ya
+> pertenece a otra revisión. Sigue gateada por `requireTrapAccess`, sin
+> cambio de clase. `listLandAssets` (A8/M1, gana `location` y la llamada a
+> `can()` para no listar fotos de trampa sin `specimen:view`/`manage`),
+> `recordTrapCheck` (A9/M2, reordena su lookup por `clientDraftId` para que
+> corra después del control de acceso) y `pushFieldEvents`
+> (`aplicarRevisionDeTrampa`, mismo A9, ahora resuelve la trampa y llama a
+> `requireTrapAccess` directamente en vez de sólo delegar en
+> `recordTrapCheck`) también cambiaron su lista de modelos/guardias, pero
+> ninguna cambió de clase — las tres ya eran **guardia directo**.
+>
 > **El de 419→420, sin archivo nuevo, es `finalizeTrampaPhotoPorBorrador`
 > (`lib/traceability/landMedia.ts`, Tarea 12 de vistas de finca y parcela).**
 > Sube la fila de **guardia directo**: llama a `requireTrapAccess`

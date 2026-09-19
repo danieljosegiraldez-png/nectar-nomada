@@ -101,6 +101,29 @@ function avisarDeCambio(): void {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(FIELD_DRAFTS_CHANGED_EVENT));
 }
 
+/**
+ * A4 fix-final — se dispara cuando `syncFieldEvents` INTENTA sincronizar,
+ * sin importar el resultado (aplicado, rechazado, o servidor caído).
+ *
+ * **Por qué existe.** La ronda de trampas tiene una SEGUNDA cola, la de
+ * fotos (`lib/sync/trapPhotoQueue.ts`), que vive aparte porque guarda
+ * `Blob`s. Antes de este arreglo, sincronizar las revisiones desde
+ * `FieldSyncControls` —el botón genérico, compartido por todos los
+ * formularios de campo— no le decía nada a esa segunda cola: una foto que
+ * había fallado al subir se quedaba pendiente sin que nada la reintentara
+ * hasta que alguien capturara OTRA foto en otra tarjeta (revisión final,
+ * I5). Este evento es el enganche: `SincronizarFotosDeRonda` lo escucha y
+ * reintenta su propia cola cada vez que CUALQUIER sincronización de
+ * revisiones ocurre en la página, sin que este módulo tenga que importar
+ * nada de fotos ni de trampas — la mayoría de formularios que usan
+ * `syncFieldEvents` no tienen fotos, y no deben pagar por esa dependencia.
+ */
+export const FIELD_EVENTS_SYNCED_EVENT = "nn-field-events-synced";
+
+function avisarDeSincronizacion(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(FIELD_EVENTS_SYNCED_EVENT));
+}
+
 export async function listFieldEventDrafts(): Promise<FieldEventDraft[]> {
   const db = await openDb();
   const rows = await new Promise<FieldEventDraft[]>((resolve, reject) => {
@@ -290,6 +313,10 @@ export function construirMutacionDesdeBorrador(
  * tanda anterior sí llegó y sólo se perdió la respuesta.
  */
 export async function syncFieldEvents(): Promise<SyncSummary> {
+  // A4 fix-final — se avisa al ENTRAR, no al salir: un formulario con foto
+  // (la ronda de trampas) necesita reintentar su propia cola cada vez que se
+  // intenta ésta, sea cual sea el resultado.
+  avisarDeSincronizacion();
   const drafts = (await listFieldEventDrafts()).filter((d) => d.status === "pending" || d.status === "error");
   if (drafts.length === 0) {
     return { applied: 0, duplicate: 0, rejected: 0, stillPending: 0, serverUnavailable: false };

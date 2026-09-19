@@ -193,15 +193,6 @@ export async function recordTrapCheck(
   input: RecordTrapCheckInput,
   ahora: Date = new Date(),
 ) {
-  // Tarea 11 — antes de cualquier otra validación: un reintento de la cola
-  // offline con la misma clave es la MISMA revisión, no una nueva que además
-  // podría fallar una validación distinta (p. ej. "en el futuro" si el reloj
-  // avanzó entre el primer intento y el reintento).
-  if (input.clientDraftId) {
-    const yaExiste = await prisma.specimenObservation.findUnique({ where: { clientDraftId: input.clientDraftId } });
-    if (yaExiste) return yaExiste;
-  }
-
   if (!input.brocaLevel || !NIVELES.includes(input.brocaLevel)) {
     throw new TrapValidationError("broca_level_required");
   }
@@ -224,6 +215,23 @@ export async function recordTrapCheck(
   if (trampa.status !== "active") throw new TrapValidationError("trap_retired");
 
   const location = await requireTrapAccess(userAccountId, trampa.locationId);
+
+  // A9 fix-final (M2), ruling del controlador — el lookup por `clientDraftId`
+  // va DESPUÉS del control de acceso, y sólo cuenta como duplicado si la fila
+  // encontrada es de la MISMA trampa. Antes corría primero, sin comprobar ni
+  // acceso ni `specimenId`: un `clientDraftId` colisionado con OTRA trampa se
+  // leía como «ya se aplicó, con éxito», y un envío que en realidad nunca se
+  // guardó bajo ese id se perdía en silencio.
+  if (input.clientDraftId) {
+    const yaExiste = await prisma.specimenObservation.findUnique({ where: { clientDraftId: input.clientDraftId } });
+    if (yaExiste) {
+      if (yaExiste.specimenId !== trampa.id) {
+        throw new TrapValidationError("client_draft_id_used_by_other_specimen");
+      }
+      return yaExiste;
+    }
+  }
+
   // F9 — necesita la zona de la Location, así que va después de leerla.
   if (diaEnElFuturo(input.observedAt, location.timezone, ahora)) {
     throw new TrapValidationError("observed_at_in_future");

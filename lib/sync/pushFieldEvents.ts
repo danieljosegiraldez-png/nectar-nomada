@@ -18,7 +18,7 @@ import { ArtefactoInvalido } from "../apiary/artefactos";
 import { createSoilSample, createFoliarSample, SampleValidationError } from "../traceability/soilSamples";
 import { createSoilProfile, SoilProfileValidationError } from "../traceability/soilProfiles";
 import { createPlantingCohort, PlantingCohortValidationError } from "../traceability/plantingCohorts";
-import { recordTrapCheck, TrapValidationError, TrapAccessError } from "../traceability/traps";
+import { recordTrapCheck, requireTrapAccess, TrapValidationError, TrapAccessError } from "../traceability/traps";
 import type { HorizonteDelFormulario } from "../traceability/horizontesDelFormulario";
 import {
   exigeProcedencia,
@@ -745,34 +745,86 @@ async function aplicarCapturaDeParcela(
 /**
  * Aplica una revisión de la ronda de trampas — Tarea 11.
  *
- * **Procedencia y observador NUNCA salen de `m`.** Ruling del controlador: la
- * misma regla que `recordRoundTrapCheckFormAction` — `provenanceClass` es
- * siempre `direct_observation`, y el observador es la Person de la cuenta del
- * DISPOSITIVO que empujó el lote (`userAccountId`, resuelto por
- * `resolverPrincipal` a partir de la cookie o el token), no un id que la
- * mutación pudiera forjar. Sin persona vinculada a esa cuenta, se rechaza
- * explícito — nunca se guarda un observador `null` en su lugar (ADR-080,
- * mismo criterio que el docstring de `recordRoundTrapCheckFormAction`).
+ * **Procedencia y observador NUNCA salen de `m`.** Ruling del controlador:
+ * `provenanceClass` es siempre `direct_observation`, y el observador es la
+ * Person de la cuenta del DISPOSITIVO que empujó el lote (`userAccountId`,
+ * resuelto por `resolverPrincipal` a partir de la cookie o el token), no un
+ * id que la mutación pudiera forjar. Sin persona vinculada a esa cuenta, se
+ * rechaza explícito — nunca se guarda un observador `null` en su lugar
+ * (ADR-080). Con el fix final A1+A2, éste es el ÚNICO sitio que fija esta
+ * regla para la ronda: ya no existe un camino «con señal» paralelo que la
+ * repitiera por su cuenta.
  *
  * La comprobación previa por `clientDraftId` es lo que separa `applied` de
  * `duplicate`, igual que en `aplicarCapturaDeParcela`.
+ *
+ * **A9 fix-final (M2), ruling del controlador — el lookup por
+ * `clientDraftId` corre DESPUÉS del control de acceso, y sólo cuenta como
+ * duplicado si la fila es de la MISMA trampa.** Antes corría el PRIMERO de
+ * todos, sin comprobar acceso ni `specimenId`: cualquiera con un
+ * `clientDraftId` ajeno (colisionado, o filtrado por otro medio) podía leer
+ * «ya se aplicó, con éxito» para una revisión de una trampa que no puede
+ * ver. `recordTrapCheck` repite la misma comprobación por su cuenta
+ * (defensa en profundidad, igual que `listPlotBlocks`/`getPlotDetail`): la
+ * de aquí evita llegar a llamarlo cuando el resultado ya se puede decidir
+ * sin acceso.
+ *
+ * El orden final es: cuenta del dispositivo (no depende de nada de `m`,
+ * posición sin cambios respecto de antes de este arreglo) → trampa +
+ * control de acceso → `clientDraftId`. Mover la cuenta DESPUÉS del acceso
+ * habría hecho que un `userAccountId` que no resuelve a ninguna fila —el
+ * único caso real de «sin persona vinculada», porque el esquema exige
+ * `personId` `NOT NULL`— se rechazara siempre por «sin acceso» en vez de
+ * «sin observador»: el mismo `userAccountId` sin fila no tiene tampoco
+ * ninguna asignación, así que `requireTrapAccess` habría llegado primero
+ * SIEMPRE, y el motivo de rechazo original habría quedado inalcanzable.
  */
 async function aplicarRevisionDeTrampa(
   userAccountId: string,
   m: MutacionDeRevisionDeTrampa,
 ): Promise<PushResult> {
-  const yaEstaba = await prisma.specimenObservation.findUnique({
-    where: { clientDraftId: m.clientDraftId },
-    select: { id: true },
-  });
-  if (yaEstaba) return { clientDraftId: m.clientDraftId, status: "duplicate", id: yaEstaba.id };
-
+  // Sin cambio de posición respecto de antes de A9: no depende de acceso a
+  // NADA de `m` — es la cuenta del dispositivo que empujó el lote, ya
+  // autenticada antes de llegar aquí. Comprobarla primero es lo que permite
+  // seguir distinguiendo, con un `userAccountId` que no resuelve a ninguna
+  // cuenta, «no hay observador» de «no tiene acceso a esta trampa» (la
+  // prueba de ese caso fija ese motivo explícitamente).
   const cuenta = await prisma.userAccount.findUnique({
     where: { id: userAccountId },
     select: { personId: true },
   });
   if (!cuenta?.personId) {
     return { clientDraftId: m.clientDraftId, status: "rejected", reason: "observer_self_missing" };
+  }
+
+  const trampa = await prisma.specimen.findUnique({
+    where: { id: m.specimenId },
+    select: { id: true, locationId: true, specimenType: true },
+  });
+  if (!trampa || trampa.specimenType !== "trap") {
+    return { clientDraftId: m.clientDraftId, status: "rejected", reason: "trap_not_found" };
+  }
+  try {
+    await requireTrapAccess(userAccountId, trampa.locationId);
+  } catch (error) {
+    if (error instanceof TrapAccessError) {
+      return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
+    }
+    throw error;
+  }
+
+  // A9 fix-final (M2) — el lookup por `clientDraftId` va DESPUÉS del control
+  // de acceso de arriba, y sólo cuenta como duplicado si la fila encontrada
+  // es de la MISMA trampa. Ver el docstring de la función.
+  const yaEstaba = await prisma.specimenObservation.findUnique({
+    where: { clientDraftId: m.clientDraftId },
+    select: { id: true, specimenId: true },
+  });
+  if (yaEstaba) {
+    if (yaEstaba.specimenId !== m.specimenId) {
+      return { clientDraftId: m.clientDraftId, status: "rejected", reason: "client_draft_id_used_by_other_specimen" };
+    }
+    return { clientDraftId: m.clientDraftId, status: "duplicate", id: yaEstaba.id };
   }
 
   try {
