@@ -11482,3 +11482,29 @@ ruta nueva. Y el listado no nombra cajas de otro apiario: dice «en otro apiario
 
 **Lo que NO entra.** La cera por color de año (spec §5) y el año de las reinas (§5.4): cada uno
 en su rebanada.
+## ADR-172 — Catálogos de referencia con atributos: compartidos y propios, un contrato común
+
+**Fecha:** 2026-09-19 · **Estado:** aceptado · **Spec:** `docs/superpowers/specs/2026-09-18-catalogos-y-modelos-de-equipo-design.md`
+
+**Contexto.** ADR-095 §1 declinó por tercera vez tablas de especies y cultivares: bastaban
+valores controlados con alias y definiciones (`VariableCatalog`). Daniel pidió el
+2026-09-18 otra cosa: **atributos con tipo por clase** —mantenimiento y rango de medida
+de un equipo; tasa de inoculación, atenuación y tolerancia al alcohol de una levadura—,
+que `VariableCatalog` sólo podría llevar como JSON libre (CLAUDE.md §49).
+
+**Decisión.** Cada clase de catálogo es su propia tabla con sus columnas, y todas cumplen
+un contrato: dueño anulable (nulo = compartido, lo edita la autoridad de plataforma;
+con valor = propio de esa organización), procedencia (ADR-038), retiro en vez de
+borrado, unicidad sin mayúsculas en la base, auditoría en la misma transacción. Lo
+vigila `tests/arquitectura/catalogos-con-contrato.test.ts` sobre el registro
+`lib/catalogos/registro.ts`. Reemplaza ADR-095 §1 **como regla general**; los
+cultivares y levaduras que hoy viven en `VariableCatalog` se mueven, cada uno en su
+spec, con su migración de datos.
+
+**Y las rutinas.** Amplía `EQUIPMENT_AND_READINESS.md` §10: una rutina por calendario
+(mantenimiento, limpieza, fumigación) **avisa y no bloquea** (D1), sobre un equipo o
+una instalación. Siguen fuera órdenes de trabajo, técnicos, piezas y contadores de uso.
+
+**Consecuencias.** Cada clase nueva cuesta una tabla y un spec, no un campo en una
+tabla genérica. Las rutinas de instalación existen en la base y esperan su spec para
+tener pantalla y permisos.

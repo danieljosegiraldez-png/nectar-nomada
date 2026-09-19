@@ -5,10 +5,18 @@ import { getTranslations } from "next-intl/server";
 
 import { registrarEquipoFormAction } from "../../actions/equipos";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
+import { SelectorDeModelo, type ModeloOpcion, type ModelosPorSitioYTipo } from "../../components/equipos/SelectorDeModelo";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { sitiosParaRegistrar } from "../../../lib/equipos/equipos";
+import { proveedoresPosibles, sitiosParaRegistrar } from "../../../lib/equipos/equipos";
+import { listarModelos } from "../../../lib/equipos/modelos";
 
 export const dynamic = "force-dynamic";
+
+const TIPOS = ["instrument", "vessel", "tool", "machine"] as const;
+
+function paraOpcion(m: { id: string; manufacturer: string; modelName: string; recommendedMaintenanceDays: number | null }): ModeloOpcion {
+  return { id: m.id, manufacturer: m.manufacturer, modelName: m.modelName, recommendedMaintenanceDays: m.recommendedMaintenanceDays };
+}
 
 /**
  * Registrar un equipo.
@@ -23,11 +31,21 @@ export const dynamic = "force-dynamic";
  * ninguna hoja. Pedirlo aquí evita registrar algo que el jefe del beneficio no
  * podría volver a abrir.
  */
-export default async function EquipoNuevoPage() {
+export default async function EquipoNuevoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ modelo?: string; error?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [t, sitios] = await Promise.all([getTranslations("Equipos"), sitiosParaRegistrar(user.userAccountId)]);
+  const [t, sitios, proveedores, { compartidos, propios }, sp] = await Promise.all([
+    getTranslations("Equipos"),
+    sitiosParaRegistrar(user.userAccountId),
+    proveedoresPosibles(user.userAccountId),
+    listarModelos(user.userAccountId),
+    searchParams,
+  ]);
   // Sin un solo sitio donde pueda registrar, la página no ofrece un formulario
   // que iba a fallar al guardar: dice por qué y devuelve a la lista.
   if (sitios.length === 0) {
@@ -42,6 +60,30 @@ export default async function EquipoNuevoPage() {
     );
   }
 
+  // Una sola llamada a `listarModelos` y un filtro en memoria por sitio y tipo
+  // (spec de catálogos §3.3), en vez de N×4 consultas con `modelosParaElegir` —
+  // una por cada combinación de sitio y tipo que el desplegable pudiera pedir.
+  const modelosPorSitio: ModelosPorSitioYTipo = {};
+  for (const sitio of sitios) {
+    const porTipo: ModelosPorSitioYTipo[string] = {};
+    for (const kind of TIPOS) {
+      porTipo[kind] = {
+        compartidos: compartidos.filter((m) => m.kind === kind && !m.retiredAt).map(paraOpcion),
+        propios: propios
+          .filter((m) => m.kind === kind && !m.retiredAt && m.organizationId === sitio.organizationId)
+          .map(paraOpcion),
+      };
+    }
+    modelosPorSitio[sitio.id] = porTipo;
+  }
+
+  // Vuelta desde «crea el modelo» (`/equipos/modelos/nuevo?volverA=...`): sólo se
+  // acepta la forma de un id de la base, nunca texto libre en la pantalla.
+  const modeloPreseleccionado = sp.modelo && /^[0-9a-f-]+$/i.test(sp.modelo) ? sp.modelo : undefined;
+  // El código viene de la URL: sólo se acepta la forma que las acciones de
+  // app/actions/equipos.ts producen, nunca texto libre en la pantalla.
+  const codigoError = sp.error && /^[a-z_]+$/.test(sp.error) ? sp.error : null;
+
   return (
     <div>
       <p>
@@ -49,6 +91,21 @@ export default async function EquipoNuevoPage() {
       </p>
       <h1>{t("nuevoTitulo")}</h1>
       <p className="nn-muted">{t("nuevoIntro")}</p>
+
+      {codigoError ? (
+        <p className="nn-error" role="alert">
+          {codigoError === "codigo_interno_duplicado"
+            ? t("errorCodigoInternoDuplicado")
+            : codigoError === "modelo_no_elegible" ||
+                codigoError === "modelo_de_otro_tipo" ||
+                codigoError === "modelo_retirado" ||
+                codigoError === "modelo_no_encontrado"
+              ? t("errorModeloNoElegible")
+              : codigoError === "forbidden" || codigoError === "sitio_no_gestionable"
+                ? t("errorSinPermiso")
+                : t("errorModeloGenerico", { codigo: codigoError })}
+        </p>
+      ) : null}
 
       <form action={registrarEquipoFormAction}>
         <label>
@@ -59,7 +116,7 @@ export default async function EquipoNuevoPage() {
         <label>
           {t("campoTipo")}
           <select name="kind" defaultValue="instrument">
-            {["instrument", "vessel", "tool", "machine"].map((k) => (
+            {TIPOS.map((k) => (
               <option key={k} value={k}>
                 {t(`tipo_${k}`)}
               </option>
@@ -69,7 +126,7 @@ export default async function EquipoNuevoPage() {
 
         <label>
           {t("campoSitio")}
-          <select name="locationId" required>
+          <select name="locationId" required defaultValue={sitios[0]!.id}>
             {sitios.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -96,6 +153,46 @@ export default async function EquipoNuevoPage() {
           {t("campoNota")}
           <textarea name="acquisitionNote" rows={2} />
         </label>
+
+        <details>
+          <summary>{t("masDatos")}</summary>
+          <SelectorDeModelo
+            modelos={modelosPorSitio}
+            etiquetas={{
+              campo: t("campoModeloDeEquipo"),
+              ninguno: t("modeloNinguno"),
+              compartidos: t("modelosCompartidos"),
+              propios: t("modelosPropios"),
+              crear: t("modeloCrear"),
+            }}
+            kindInicial="instrument"
+            locationIdInicial={sitios[0]!.id}
+            modeloInicial={modeloPreseleccionado}
+          />
+          <label>
+            {t("campoSerie")}
+            <input type="text" name="serialNumber" maxLength={120} />
+          </label>
+          <label>
+            {t("campoCodigoInterno")}
+            <input type="text" name="internalCode" maxLength={60} />
+          </label>
+          <label>
+            {t("campoProveedor")}
+            <select name="supplierOrganizationId" defaultValue="">
+              <option value="">{t("sinProveedor")}</option>
+              {proveedores.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t("campoGarantia")}
+            <input type="date" name="warrantyUntil" />
+          </label>
+        </details>
 
         <BotonDeEnvio>{t("botonRegistrar")}</BotonDeEnvio>
       </form>

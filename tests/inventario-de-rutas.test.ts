@@ -128,7 +128,11 @@ describe("el inventario del router", () => {
     // 75 páginas y 11 handlers.
     // 86 → 88 el 2026-09-18: /fincas y /fincas/nueva (spec fincas y parcelas). Medido: 77 páginas
     // y 11 handlers.
-    expect(salida).toContain("88 entradas");
+    // 88 → 91 el 2026-09-19: /equipos/modelos, /equipos/modelos/nuevo y
+    // /equipos/modelos/[id] — el catálogo de modelos de equipo (fichas de
+    // fabricante, compartidas o de organización), separado del inventario de
+    // equipos concretos. 80 páginas y 11 handlers.
+    expect(salida).toContain("91 entradas");
     expect(codigo, salida).toBe(0);
   });
 

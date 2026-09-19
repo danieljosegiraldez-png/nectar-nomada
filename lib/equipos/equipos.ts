@@ -29,11 +29,12 @@
  */
 
 import { recordAuditEvent } from "../audit";
+import { organizacionesVisibles } from "../catalogos/propiedad";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { clasificar, resumir } from "./disponibilidad";
 import { dentroDeTolerancia, estadoDeVerificacion, type EstadoDeVerificacion } from "./verificacion";
-import type { ClassificationLevel, EquipmentCondition, EquipmentKind, ProvenanceClass } from "../../generated/prisma/client";
+import { Prisma, type ClassificationLevel, type EquipmentCondition, type EquipmentKind, type ProvenanceClass } from "../../generated/prisma/client";
 
 export class EquipoError extends Error {}
 
@@ -108,7 +109,16 @@ async function equipoOFalla(id: string) {
   return equipo;
 }
 
-export interface RegistrarEquipoInput {
+export interface DatosDeEquipo {
+  modelId?: string | null;
+  serialNumber?: string | null;
+  internalCode?: string | null;
+  supplierOrganizationId?: string | null;
+  /** Campo de día: ya convertido con `fechaDeDia` por quien llama. */
+  warrantyUntil?: Date | null;
+}
+
+export interface RegistrarEquipoInput extends DatosDeEquipo {
   name: string;
   kind: EquipmentKind;
   organizationId: string;
@@ -134,6 +144,71 @@ export interface RegistrarEquipoInput {
   initialLocationId?: string | null;
 }
 
+/**
+ * El modelo elegido tiene que ser compartido o de la MISMA organización, del
+ * mismo tipo, y vigente. La base lo impide también (FK compuesta + disparador);
+ * esto sólo lo dice con una frase legible.
+ */
+async function comprobarModelo(modelId: string | null | undefined, organizationId: string, kind: EquipmentKind) {
+  if (!modelId) return;
+  const m = await prisma.equipmentModel.findUnique({ where: { id: modelId }, select: { organizationId: true, kind: true, retiredAt: true } });
+  if (!m) throw new EquipoError("modelo_no_encontrado");
+  if (m.organizationId !== null && m.organizationId !== organizationId) throw new EquipoError("modelo_no_elegible");
+  if (m.kind !== kind) throw new EquipoError("modelo_de_otro_tipo");
+  if (m.retiredAt) throw new EquipoError("modelo_retirado");
+}
+
+/**
+ * El proveedor es una organización de tipo `supplier` APROBADA (CLAUDE.md §9), la
+ * misma lista que ofrece `proveedoresPosibles`. Un id cualquiera —una granja, uno
+ * pendiente de revisión— no se acepta sólo porque la FK lo permita.
+ */
+async function comprobarProveedor(supplierOrganizationId: string | null | undefined) {
+  if (!supplierOrganizationId) return;
+  const o = await prisma.organization.findUnique({ where: { id: supplierOrganizationId }, select: { organizationType: true, status: true } });
+  if (!o || o.organizationType !== "supplier" || o.status !== "approved") throw new EquipoError("proveedor_no_valido");
+}
+
+function datosDeEquipoLimpios(d: DatosDeEquipo) {
+  const t = (v: string | null | undefined) => (v?.trim() ? v.trim() : null);
+  return {
+    modelId: d.modelId || null,
+    serialNumber: t(d.serialNumber),
+    internalCode: t(d.internalCode),
+    supplierOrganizationId: d.supplierOrganizationId || null,
+    warrantyUntil: d.warrantyUntil ?? null,
+  };
+}
+
+function esCodigoDuplicado(e: unknown) {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
+}
+
+/**
+ * Sólo las claves PRESENTES en `datos`, limpias de la misma manera que
+ * `datosDeEquipoLimpios`. Editar sólo lleva al `update` lo que quien llama
+ * quiso tocar: `undefined` es "no toques esto", `null` es "borra esto". Un
+ * `create` legítimamente escribe las cinco claves siempre —por eso
+ * `datosDeEquipoLimpios` no cambia—, pero un `update` con las cinco completas
+ * borraría en silencio lo que nadie pidió tocar.
+ */
+function datosDeEquipoParaEditar(d: DatosDeEquipo) {
+  const t = (v: string | null | undefined) => (v?.trim() ? v.trim() : null);
+  const data: {
+    modelId?: string | null;
+    serialNumber?: string | null;
+    internalCode?: string | null;
+    supplierOrganizationId?: string | null;
+    warrantyUntil?: Date | null;
+  } = {};
+  if (d.modelId !== undefined) data.modelId = d.modelId || null;
+  if (d.serialNumber !== undefined) data.serialNumber = t(d.serialNumber);
+  if (d.internalCode !== undefined) data.internalCode = t(d.internalCode);
+  if (d.supplierOrganizationId !== undefined) data.supplierOrganizationId = d.supplierOrganizationId || null;
+  if (d.warrantyUntil !== undefined) data.warrantyUntil = d.warrantyUntil ?? null;
+  return data;
+}
+
 export async function registrarEquipo(userAccountId: string, input: RegistrarEquipoInput) {
   // Mismo orden que `objetivoDeEquipo`, y por la misma razón: si se dice dónde
   // queda el equipo, el permiso se juzga AHÍ. Sin esto, registrar un
@@ -154,48 +229,139 @@ export async function registrarEquipo(userAccountId: string, input: RegistrarEqu
   if (input.checkAdvisoryHours != null && input.checkAdvisoryHours <= 0) {
     throw new EquipoError("advisory_hours_positivo");
   }
+  await comprobarModelo(input.modelId, input.organizationId, input.kind);
+  await comprobarProveedor(input.supplierOrganizationId);
+  const datosNuevos = datosDeEquipoLimpios(input);
 
-  return prisma.$transaction(async (tx) => {
-    const equipo = await tx.equipment.create({
-      data: {
-        name: input.name.trim(),
-        kind: input.kind,
-        organizationId: input.organizationId,
-        projectId: input.projectId ?? null,
-        format: input.format ?? null,
-        isFixedInPlace: input.isFixedInPlace ?? false,
-        classification: clasificacion,
-        provenanceClass: input.provenanceClass,
-        sourceReference: input.sourceReference?.trim() || null,
-        acquiredAt: input.acquiredAt ?? null,
-        acquisitionNote: input.acquisitionNote?.trim() || null,
-        checkAdvisoryHours: input.checkAdvisoryHours ?? null,
-        createdBy: userAccountId,
-      },
-    });
-    if (input.initialLocationId) {
-      await tx.equipmentTransfer.create({
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const equipo = await tx.equipment.create({
         data: {
-          equipmentId: equipo.id,
-          fromLocationId: null,
-          toLocationId: input.initialLocationId,
-          occurredAt: input.acquiredAt ?? new Date(),
+          name: input.name.trim(),
+          kind: input.kind,
+          organizationId: input.organizationId,
+          projectId: input.projectId ?? null,
+          format: input.format ?? null,
+          isFixedInPlace: input.isFixedInPlace ?? false,
+          classification: clasificacion,
+          provenanceClass: input.provenanceClass,
+          sourceReference: input.sourceReference?.trim() || null,
+          acquiredAt: input.acquiredAt ?? null,
+          acquisitionNote: input.acquisitionNote?.trim() || null,
+          checkAdvisoryHours: input.checkAdvisoryHours ?? null,
           createdBy: userAccountId,
+          ...datosNuevos,
         },
       });
-    }
-    await recordAuditEvent(
-      {
-        actorUserAccountId: userAccountId,
-        entityType: "equipment",
-        entityId: equipo.id,
-        operation: "create",
-        sourceInterface: "lib/equipos/equipos.ts",
-        after: { name: equipo.name, kind: equipo.kind, locationId: input.initialLocationId ?? null },
-      },
-      tx,
-    );
-    return equipo;
+      if (input.initialLocationId) {
+        await tx.equipmentTransfer.create({
+          data: {
+            equipmentId: equipo.id,
+            fromLocationId: null,
+            toLocationId: input.initialLocationId,
+            occurredAt: input.acquiredAt ?? new Date(),
+            createdBy: userAccountId,
+          },
+        });
+      }
+      await recordAuditEvent(
+        {
+          actorUserAccountId: userAccountId,
+          entityType: "equipment",
+          entityId: equipo.id,
+          operation: "create",
+          sourceInterface: "lib/equipos/equipos.ts",
+          after: {
+            name: equipo.name,
+            kind: equipo.kind,
+            locationId: input.initialLocationId ?? null,
+            modelId: equipo.modelId,
+            serialNumber: equipo.serialNumber,
+            internalCode: equipo.internalCode,
+            supplierOrganizationId: equipo.supplierOrganizationId,
+            warrantyUntil: equipo.warrantyUntil?.toISOString() ?? null,
+          },
+        },
+        tx,
+      );
+      return equipo;
+    });
+  } catch (e) {
+    if (esCodigoDuplicado(e)) throw new EquipoError("codigo_interno_duplicado");
+    throw e;
+  }
+}
+
+export async function editarDatosDeEquipo(userAccountId: string, equipmentId: string, datos: DatosDeEquipo): Promise<void> {
+  const antes = await prisma.equipment.findUnique({ where: { id: equipmentId } });
+  if (!antes) throw new EquipoError("equipment_not_found");
+  await exigePermiso(userAccountId, "manage", antes);
+  // El modelo que el equipo YA tiene no se vuelve a juzgar: si se retiró después,
+  // el formulario lo reenvía tal cual y rechazarlo obligaría a perderlo para
+  // poder corregir un número de serie. Juzgar es para CAMBIAR de modelo.
+  if (datos.modelId !== undefined && (datos.modelId || null) !== antes.modelId) {
+    await comprobarModelo(datos.modelId, antes.organizationId, antes.kind);
+  }
+  // Igual con el proveedor: el actual se conserva aunque ya no esté aprobado.
+  if (datos.supplierOrganizationId !== undefined && (datos.supplierOrganizationId || null) !== antes.supplierOrganizationId) {
+    await comprobarProveedor(datos.supplierOrganizationId);
+  }
+  const cambios = datosDeEquipoParaEditar(datos);
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.equipment.update({ where: { id: equipmentId }, data: cambios });
+      const after: Record<string, unknown> = { ...cambios };
+      if ("warrantyUntil" in cambios) after.warrantyUntil = cambios.warrantyUntil?.toISOString() ?? null;
+      await recordAuditEvent(
+        {
+          actorUserAccountId: userAccountId,
+          entityType: "equipment",
+          entityId: equipmentId,
+          operation: "update_datos",
+          sourceInterface: "lib/equipos/equipos.ts",
+          before: {
+            modelId: antes.modelId,
+            serialNumber: antes.serialNumber,
+            internalCode: antes.internalCode,
+            supplierOrganizationId: antes.supplierOrganizationId,
+            warrantyUntil: antes.warrantyUntil?.toISOString() ?? null,
+          },
+          after,
+        },
+        tx,
+      );
+    });
+  } catch (e) {
+    if (esCodigoDuplicado(e)) throw new EquipoError("codigo_interno_duplicado");
+    throw e;
+  }
+}
+
+/** Un permiso sobre un equipo, para otros módulos (rutinas, documentos). */
+export async function puedeSobreEquipo(
+  userAccountId: string,
+  equipmentId: string,
+  accion: "view" | "manage" | "report_condition",
+): Promise<boolean> {
+  const equipo = await prisma.equipment.findUnique({ where: { id: equipmentId }, select: { id: true, projectId: true, classification: true } });
+  if (!equipo) return false;
+  const objetivo = await objetivoDeEquipo(equipo);
+  if (accion === "manage") return puedeConfigurar(userAccountId, objetivo, equipo.classification);
+  return can(userAccountId, accion, "equipment", objetivo, equipo.classification);
+}
+
+/**
+ * Proveedores para el desplegable: organizaciones de tipo `supplier` aprobadas.
+ * Un proveedor es una entidad canónica (CLAUDE.md §9), no texto. Si no existe,
+ * se da de alta por la vía de organizaciones de siempre: aquí no se crea.
+ */
+export async function proveedoresPosibles(userAccountId: string) {
+  const orgs = await organizacionesVisibles(userAccountId, { resourceType: "equipment", action: "view" });
+  if (orgs.length === 0) return [];
+  return prisma.organization.findMany({
+    where: { organizationType: "supplier", status: "approved" },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
   });
 }
 
@@ -585,6 +751,8 @@ export interface EquipoEnLista {
   verificacion: EstadoDeVerificacion;
   ultimaVerificacion: Date | null;
   checkAdvisoryHours: number | null;
+  /** Del catálogo (Tarea 9). `null` = sin modelo declarado. */
+  model: { manufacturer: string; modelName: string } | null;
 }
 
 /**
@@ -606,6 +774,7 @@ export async function listarEquipos(userAccountId: string): Promise<EquipoEnList
       transfers: { orderBy: { occurredAt: "desc" }, take: 1, include: { toLocation: { select: { id: true, name: true } } } },
       conditionReports: { where: { resolvedAt: null }, orderBy: { occurredAt: "desc" }, take: 1 },
       checks: { orderBy: { occurredAt: "asc" }, select: { occurredAt: true, outcome: true } },
+      model: { select: { manufacturer: true, modelName: true } },
     },
     orderBy: [{ kind: "asc" }, { name: "asc" }],
   });
@@ -636,6 +805,7 @@ export async function listarEquipos(userAccountId: string): Promise<EquipoEnList
           : "SIN_INSTRUMENTO",
       ultimaVerificacion: aprobadas.length > 0 ? aprobadas[aprobadas.length - 1]!.occurredAt : null,
       checkAdvisoryHours: e.checkAdvisoryHours,
+      model: e.model ? { manufacturer: e.model.manufacturer, modelName: e.model.modelName } : null,
     });
   }
   return salida;
@@ -652,6 +822,16 @@ export async function instrumentoParaVerificar(userAccountId: string, equipmentI
         orderBy: { occurredAt: "desc" },
         take: 10,
         include: { results: { include: { requirement: { select: { label: true, unit: true } } } } },
+      },
+      // Identificación (Tarea 9, spec §3.3): el modelo y el proveedor sólo se
+      // pintan, y el último traslado dice dónde está hoy y en qué zona — de ahí
+      // sale el «hoy» que gobierna el aviso de garantía y el de las rutinas.
+      model: { select: { id: true, manufacturer: true, modelName: true, retiredAt: true } },
+      supplier: { select: { id: true, name: true } },
+      transfers: {
+        orderBy: { occurredAt: "desc" },
+        take: 1,
+        include: { toLocation: { select: { id: true, name: true, timezone: true } } },
       },
     },
   });
@@ -736,14 +916,21 @@ export async function disponibilidadDeRecipientes(userAccountId: string) {
 export async function sitiosParaRegistrar(userAccountId: string) {
   const sitios = await prisma.location.findMany({
     where: { organizationId: { not: null } },
-    select: { id: true, name: true, organizationId: true },
+    select: { id: true, name: true, organizationId: true, organization: { select: { name: true } } },
     orderBy: { name: "asc" },
   });
   const permitidos = [];
   for (const s of sitios) {
     if (!s.organizationId) continue;
     const ok = await puedeConfigurar(userAccountId, { scopeType: "location", scopeRefId: s.id }, "internal");
-    if (ok) permitidos.push({ id: s.id, name: s.name, organizationId: s.organizationId });
+    if (ok) {
+      permitidos.push({
+        id: s.id,
+        name: s.name,
+        organizationId: s.organizationId,
+        organizationName: s.organization?.name ?? null,
+      });
+    }
   }
   return permitidos;
 }
