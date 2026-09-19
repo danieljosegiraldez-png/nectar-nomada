@@ -6,7 +6,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
-import { crearApiario, createHive } from "../../lib/apiary/hives";
+import { crearApiario, createColony, createHive } from "../../lib/apiary/hives";
+import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { alzasDelApiario, darDeBajaAlza, ponerAlza, registrarAlza } from "../../lib/apiary/alzas";
 import { cerrarAbiertosEn, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
 
@@ -66,7 +67,16 @@ async function caja(locationId = apiarioId) {
 afterEach(async () => {
   const fits = (await prisma.hiveFitting.findMany({ where: assertDefinedWhere({ hiveId: { in: cajas } }), select: { id: true } })).map((f) => f.id);
   const alzas = (await prisma.hiveSuper.findMany({ where: assertDefinedWhere({ organizationId: { in: [organizationId, otraOrganizationId] } }), select: { id: true } })).map((a) => a.id);
+  const eventos = await prisma.apiaryHarvestEvent.findMany({ where: { colony: { hiveId: { in: cajas } } }, select: { id: true, resultingLotId: true } });
+  await prisma.apiaryHarvestSuper.deleteMany({ where: assertDefinedWhere({ apiaryHarvestEventId: { in: eventos.map((e) => e.id) } }) });
   await prisma.apiaryHarvestSuper.deleteMany({ where: assertDefinedWhere({ hiveSuperId: { in: alzas } }) });
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: eventos.map((e) => e.id) } }) });
+  await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: eventos.map((e) => e.resultingLotId) } }) });
+  await prisma.apiaryHarvestEvent.deleteMany({ where: assertDefinedWhere({ id: { in: eventos.map((e) => e.id) } }) });
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: eventos.map((e) => e.resultingLotId) } }) });
+  const colonias = (await prisma.colony.findMany({ where: assertDefinedWhere({ hiveId: { in: cajas } }), select: { id: true } })).map((c) => c.id);
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: colonias } }) });
+  await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: { in: colonias } }) });
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: [...fits, ...alzas] } }) });
   await prisma.hiveFitting.deleteMany({ where: assertDefinedWhere({ hiveId: { in: cajas } }) });
   await prisma.hiveSuper.deleteMany({ where: assertDefinedWhere({ id: { in: alzas } }) });
@@ -227,5 +237,44 @@ describe("alzas con marca", () => {
       cajas.splice(0, cajas.length, ...cajas.filter((c) => !cajasFuera.includes(c)));
       await prisma.location.deleteMany({ where: assertDefinedWhere({ id: otroApiario }) });
     }
+  });
+});
+
+describe("la cosecha y sus alzas", () => {
+  it("DICE QUÉ ALZAS MARCADAS SE EXTRAJERON, sólo si estaban puestas en esa colmena ese día", async () => {
+    const hiveId = await caja();
+    const otraCaja = await caja();
+    const colonia = await createColony(adminId, { hiveId, originType: "captured", startedAt: hace(60), provenanceClass: "direct_observation" });
+    const puesta = await registrarAlza(operario, { locationId: apiarioId, code: `H1-${RUN}` });
+    const fuera = await registrarAlza(operario, { locationId: apiarioId, code: `H2-${RUN}` });
+    await ponerAlza(operario, { hiveId, hiveSuperId: puesta.id, installedAt: hace(20) });
+    await ponerAlza(operario, { hiveId: otraCaja, hiveSuperId: fuera.id, installedAt: hace(20) });
+
+    await expect(
+      recordApiaryHarvest(operario, {
+        colonyId: colonia.id, lotCode: `MIEL-${RUN}-no`, occurredAt: new Date(), provenanceClass: "measured_fact",
+        hiveSuperIds: [puesta.id, fuera.id],
+      }),
+    ).rejects.toThrow(/alza_no_puesta_en_la_colmena/);
+    // Todo o nada: el rechazo no dejó lote.
+    expect(await prisma.lot.count({ where: { lotCode: `MIEL-${RUN}-no` } })).toBe(0);
+
+    const { harvestEvent } = await recordApiaryHarvest(operario, {
+      colonyId: colonia.id, lotCode: `MIEL-${RUN}-si`, occurredAt: new Date(), provenanceClass: "measured_fact",
+      hiveSuperIds: [puesta.id],
+    });
+    const filas = await prisma.apiaryHarvestSuper.findMany({ where: { apiaryHarvestEventId: harvestEvent.id } });
+    expect(filas.map((f) => f.hiveSuperId)).toEqual([puesta.id]);
+    const fila = await filaDe(puesta.id);
+    expect(fila.cosechas.map((c) => c.lotCode)).toEqual([`MIEL-${RUN}-si`]);
+  });
+
+  it("SIN ALZAS MARCADAS la cosecha vale igual", async () => {
+    const hiveId = await caja();
+    const colonia = await createColony(adminId, { hiveId, originType: "captured", startedAt: hace(60), provenanceClass: "direct_observation" });
+    const { harvestEvent } = await recordApiaryHarvest(operario, {
+      colonyId: colonia.id, lotCode: `MIEL-${RUN}-sin`, occurredAt: new Date(), provenanceClass: "measured_fact",
+    });
+    expect(await prisma.apiaryHarvestSuper.count({ where: { apiaryHarvestEventId: harvestEvent.id } })).toBe(0);
   });
 });
