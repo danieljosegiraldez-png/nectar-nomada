@@ -21,7 +21,9 @@ export function MaterialConsumptionForm({
   claveDeEnvio,
 }: {
   lotId: string;
-  parent: MaterialConsumptionParent;
+  // La rutina de cuidado cuelga su propio consumo desde `lib/rutinas/rutinas.ts`,
+  // nunca desde este formulario del lote.
+  parent: Exclude<MaterialConsumptionParent, { kind: "careRoutineEvent" }>;
   // La genera el servidor al pintar la página, no el cliente: un `useState` con
   // `crypto.randomUUID()` daría un valor al renderizar en servidor y otro al
   // hidratar, que es un desajuste de hidratación.

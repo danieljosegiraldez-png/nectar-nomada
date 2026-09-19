@@ -163,6 +163,21 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > `marcosNegrosDelApiario`, que sube la fila de **guardia directo** tras rebasar sobre reinas y fitosanitarios: llama a
 > `requireApiaryAccess` view sobre el apiario antes de leer. El archivo ya estaba contado.
 
+> **Y el de 468→469, sin archivo nuevo, es `crearConsumoEnTx` (Tarea 3, spec
+> 2026-09-19).** Vive en `lib/traceability/operations.ts`, que ya estaba
+> inventariado, y sube la fila de **acotado por construcción**, 38→39. No es
+> el patrón de siempre —filtrar un `where` por el principal—: es el heurístico
+> `userAccountId,$` de fin de línea, porque el `create` termina en
+> `createdBy: userAccountId,`. La lectura correcta no es «autoriza por sí
+> misma»: es lo que dice su propio comentario, **«No autoriza: autoriza quien
+> la llama»** — `recordMaterialConsumptionEntry` aquí mismo, y en el plan
+> siguiente el registro de una rutina. Recibe el `tx` de quien la invoca en vez
+> de abrir el suyo, así que también entra en `reciben_transaccion` de
+> `acceso-a-datos.allowlist.json`, con su razón — es la misma forma que
+> `crearColocacionInicial` (`lib/apiary/hives.ts`, ADR-135): escribe unas pocas
+> filas y no consulta nada por su cuenta, así que no puede leer de más aunque
+> reciba el cliente entero.
+
 > **La cera con el color de su año (ADR-173, 2026-09-18).** Un archivo nuevo, `lib/apiary/cera.ts`,
 > con tres operaciones —`registrarCeraNueva`, `registrarSalidaDeMarcos` y `leyendaDeCera`— que
 > suben la fila de **guardia directo**, 341→344 tras rebasar sobre catálogos (#435): las tres pasan por `fincaDe`, que llama a

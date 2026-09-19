@@ -187,6 +187,7 @@ tests/traceability/intervenciones.test.ts
 tests/traceability/carenciaEnLaCosecha.test.ts
 tests/traceability/estantes.test.ts
 tests/traceability/cerezaComoDato.test.ts
+tests/traceability/consumoConRutina.test.ts
 tests/traceability/selection.test.ts
 tests/traceability/soilProfiles.test.ts
 tests/traceability/soilSamples.test.ts

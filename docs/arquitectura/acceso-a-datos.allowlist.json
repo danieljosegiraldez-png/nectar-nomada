@@ -712,6 +712,10 @@
       "operacion": "enLaMismaTransaccion (gancho de RecordTransformationInput)",
       "razon": "No es una función que reciba una transacción: es un PARÁMETRO que la entrega. `recordTransformation` acepta un gancho que corre dentro de su transacción justo antes de confirmarla, para que un cálculo derivado —hoy `recalcularVeredicto`— no pueda guardarse por separado de la transformación que lo cambia: si lanza, todo revierte, y hay una prueba que lo afirma. Quien lo aprovecha está inventariado aparte. Lo que pase el gancho NO es una superficie nueva: `recordTransformation` ya autorizó los lotes de entrada con `requireLotAccess(\"manage\")` antes de abrir la transacción.",
       "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/operations.ts",
+      "razon": "T3 de rutinas de instalaciones y bodega (2026-09-19) — `crearConsumoEnTx` recibe el `tx` de quien la llama porque el consumo, su descuento de existencias en `consumableStockEvent` y su AuditEvent tienen que confirmarse juntos con la escritura que los origina: `recordMaterialConsumptionEntry` aquí mismo (por el lote o el lugar), y en un plan siguiente el registro de una rutina de cuidado, colgando varios consumos de la MISMA transacción que la vez que se hizo la rutina. No autoriza nada — «No autoriza: autoriza quien la llama» en su propio comentario — y sólo toca `materialConsumptionEntry` y `consumableStockEvent`, las dos tablas que `recordMaterialConsumptionEntry` ya tocaba antes de que este cambio moviera su cuerpo aquí."
     }
   ],
   "operaciones_sin_patron": [

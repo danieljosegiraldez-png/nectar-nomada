@@ -107,6 +107,17 @@ interface Llamada {
  * Del `=>` en adelante: si el cuerpo es un bloque se casan llaves, y si es una
  * expresión se corta en la primera coma o paréntesis de cierre a profundidad
  * cero. Ninguna de las dos depende del formato.
+ *
+ * **`function nombre(tx: Tipo, …)` entró el 2026-09-19**, con
+ * `crearConsumoEnTx` (T3 de rutinas de instalaciones): antes todo cierre con
+ * `tx` era una función flecha de un único parámetro —`(tx) => …`—, y una
+ * función NOMBRADA que recibe `tx` como primer parámetro y otros detrás
+ * —para que otra transacción pueda reutilizarla, en vez de un ayudante que
+ * abre la suya— no casaba con ese molde. La llamada SÍ vive dentro de la
+ * transacción de quien la invoca; lo que no reconocía el detector era la
+ * forma. `envasesDelLote`/`disponiblesPorLote` (`commerce/tienda.ts`) y
+ * `versionIdDe` (`traceability/reporteDeVisita.ts`) tienen la misma forma y no
+ * auditan nada, así que ampliar el patrón no cambia su clasificación.
  */
 /**
  * El mismo texto con comentarios y cadenas **en blanco**, conservando cada
@@ -164,7 +175,8 @@ function sinRuido(src: string): string {
   return salida.join("");
 }
 
-const CIERRE_CON_TX = /(?:async\s*)?\(\s*tx\s*(?::\s*[A-Za-z_$][\w.$<>\[\], ]*)?\)\s*=>/g;
+const CIERRE_CON_TX =
+  /(?:async\s*)?\(\s*tx\s*(?::\s*[A-Za-z_$][\w.$<>\[\], ]*)?\)\s*=>|function\s+[A-Za-z_$][\w$]*\s*\(\s*tx\s*(?::\s*[A-Za-z_$][\w.$<>\[\],: ]*)?\)/g;
 
 function rangosDeTransaccion(fuente: string): Array<[number, number]> {
   const src = sinRuido(fuente);
