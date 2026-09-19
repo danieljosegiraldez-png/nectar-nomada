@@ -21,7 +21,12 @@ import { RevisionDeTrampaForm } from "../../components/traceability/RevisionDeTr
 import { estadosPorCohorte } from "../../../lib/traceability/estadoDeProduccion";
 import { cifrasDelLote } from "../../../lib/traceability/cifrasDelLote";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
-import { pendienteDeLaParcela, enlaceDelAviso, type Aviso } from "../../../lib/traceability/pendienteDeLaParcela";
+import {
+  pendienteDeLaParcela,
+  enlaceDelAviso,
+  enlaceDeRegistrarAplicacion,
+  type Aviso,
+} from "../../../lib/traceability/pendienteDeLaParcela";
 import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEmparentadas";
 import { intervencionesVigentes, listarIntervenciones } from "../../../lib/traceability/intervenciones";
 import {
@@ -150,11 +155,20 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
       case "trampa_por_revisar":
         return t("trapsDueAlert", { n: aviso.trapNumber ?? t("notRecorded"), d: aviso.diasDeRetraso });
       case "trampa_con_lectura_alta":
-        return t("trapsHighAlert", {
-          n: aviso.trapNumber ?? t("notRecorded"),
-          lectura: t(`trapsLevel_${aviso.lectura}` as "trapsLevel_muchos"),
-          accion: aviso.accion,
-        });
+        // Decisión del controlador #4: con producto, el texto principal lo
+        // nombra y la nota (`accion`) sale aparte, debajo (ver el `<li>` de
+        // abajo); sin producto, la nota sigue yendo aquí, como antes.
+        return aviso.materialName
+          ? t("trapsHighAlertMaterial", {
+              n: aviso.trapNumber ?? t("notRecorded"),
+              lectura: t(`trapsLevel_${aviso.lectura}` as "trapsLevel_muchos"),
+              material: aviso.materialName,
+            })
+          : t("trapsHighAlert", {
+              n: aviso.trapNumber ?? t("notRecorded"),
+              lectura: t(`trapsLevel_${aviso.lectura}` as "trapsLevel_muchos"),
+              accion: aviso.accion,
+            });
     }
   };
 
@@ -369,6 +383,24 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
                   {pendiente.tocaHacer.map((aviso, i) => (
                     <li key={`toca-${i}`}>
                       <Link href={enlaceDelAviso(aviso, location.id)}>{textoDelAviso(aviso)}</Link>
+                      {/* Decisión del controlador #4: con producto, la nota
+                          (`accion`) sale debajo del texto que ya lo nombra; el
+                          botón «Registrar aplicación» abre el formulario con
+                          lo que ya se sabe precargado. */}
+                      {aviso.tipo === "trampa_con_lectura_alta" ? (
+                        <>
+                          {aviso.materialName ? (
+                            <>
+                              <br />
+                              <span className="nn-detail-meta">{aviso.accion}</span>
+                            </>
+                          ) : null}
+                          <br />
+                          <Link href={enlaceDeRegistrarAplicacion(aviso, location.id)}>
+                            {t("trapsRegisterApplicationLink")}
+                          </Link>
+                        </>
+                      ) : null}
                     </li>
                   ))}
                 </ul>

@@ -43,6 +43,10 @@ export interface SpecimenOption {
   id: string;
   commonName: string;
 }
+export interface PlotBlockOption {
+  id: string;
+  name: string;
+}
 
 export interface IntervencionFormValues {
   kind: PlotInterventionKind;
@@ -62,6 +66,8 @@ export interface IntervencionFormValues {
   operatorPersonId: string | null;
   motivoObservationId: string | null;
   specimenIds: readonly string[];
+  /** Los bloques marcados — Tarea 5 PR B. Igual que `specimenIds`: guardar sin tocarlos los conserva. */
+  plotBlockIds: readonly string[];
   notes: string | null;
   lineas: readonly ValoresDeLinea[];
 }
@@ -89,6 +95,7 @@ export function IntervencionForm({
   observers,
   selfPersonId,
   specimens,
+  bloques,
   claveDeEnvio,
   valores,
 }: {
@@ -100,6 +107,7 @@ export function IntervencionForm({
   observers: readonly PersonOption[];
   selfPersonId: string | null;
   specimens: readonly SpecimenOption[];
+  bloques: readonly PlotBlockOption[];
   claveDeEnvio: string;
   valores: IntervencionFormValues;
 }) {
@@ -110,7 +118,9 @@ export function IntervencionForm({
   const [kind, setKind] = useState<PlotInterventionKind>(valores.kind);
   const [target, setTarget] = useState<PlotInterventionTarget>(valores.target);
   const [lineas, setLineas] = useState<readonly ValoresDeLinea[]>(valores.lineas.length > 0 ? valores.lineas : [lineaVacia()]);
-  const [areaModo, setAreaModo] = useState<"parcela" | "plantas">(valores.specimenIds.length > 0 ? "plantas" : "parcela");
+  const [areaModo, setAreaModo] = useState<"parcela" | "plantas" | "bloques">(
+    valores.specimenIds.length > 0 ? "plantas" : valores.plotBlockIds.length > 0 ? "bloques" : "parcela",
+  );
 
   /**
    * Ronda final, hallazgo 1: el reloj de pared se escribe en el DOM al
@@ -194,6 +204,31 @@ export function IntervencionForm({
                       defaultChecked={valores.specimenIds.includes(s.id)}
                     />{" "}
                     {s.commonName}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : null}
+        <label style={{ display: "block" }}>
+          <input type="radio" checked={areaModo === "bloques"} onChange={() => setAreaModo("bloques")} /> {t("manejoAreaMarkBlocks")}
+        </label>
+        {areaModo === "bloques" ? (
+          bloques.length === 0 ? (
+            <p className="nn-muted">{t("manejoAreaNoBlocks")}</p>
+          ) : (
+            <ul className="nn-seleccion">
+              {bloques.map((b) => (
+                <li key={b.id}>
+                  <label htmlFor={`bloque-${b.id}`}>
+                    <input
+                      id={`bloque-${b.id}`}
+                      type="checkbox"
+                      name="plotBlockIds"
+                      value={b.id}
+                      defaultChecked={valores.plotBlockIds.includes(b.id)}
+                    />{" "}
+                    {b.name}
                   </label>
                 </li>
               ))}

@@ -3,10 +3,12 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getPlotDetail } from "../../../../../lib/traceability/plantingCohorts";
-import { LocationAccessError } from "../../../../../lib/traceability/locations";
+import { LocationAccessError, puedeGestionarAtributosDeUbicacion } from "../../../../../lib/traceability/locations";
 import { productosFitosanitarios } from "../../../../../lib/traceability/intervenciones";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
 import { listPlantSpecimens } from "../../../../../lib/traceability/specimens";
+import { listPlotBlocks } from "../../../../../lib/traceability/plotBlocks";
+import { idValidoEnLista } from "../../../../../lib/traceability/precargaDeIntervencion";
 import { IntervencionForm, type IntervencionFormValues } from "../../../../components/traceability/IntervencionForm";
 
 export const dynamic = "force-dynamic";
@@ -14,19 +16,24 @@ export const dynamic = "force-dynamic";
 /**
  * Registrar un manejo fitosanitario — Tarea 8, spec §5.
  *
- * `?motivo=<observationId>` es la lectura de trampa que lo motivó (la abre el
- * aviso del PR B); aquí sólo se lee y se manda oculta al formulario — este PR
- * no dibuja todavía ese botón.
+ * `?motivo=<observationId>` es la lectura de trampa que lo motivó, y
+ * `?bloque=`/`?material=` (Tarea 5 PR B) precargan bloque y producto desde el
+ * botón «Registrar aplicación» del aviso de lectura alta
+ * (`enlaceDeRegistrarAplicacion`, `pendienteDeLaParcela.ts`). Los tres se
+ * validan contra lo que esta misma parcela/organización ya ofrece
+ * (`idValidoEnLista`) — uno que no cuadra se ignora en silencio, sin pintar
+ * error; `motivo` es la excepción: no se valida aquí porque el servicio ya lo
+ * hace al guardar (`validarReferencias`, `intervenciones.ts`).
  */
 export default async function NuevoManejoPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ motivo?: string }>;
+  searchParams: Promise<{ motivo?: string; bloque?: string; material?: string }>;
 }) {
   const { id } = await params;
-  const { motivo } = await searchParams;
+  const { motivo, bloque, material } = await searchParams;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
@@ -40,11 +47,20 @@ export default async function NuevoManejoPage({
   }
   const { location } = detail;
 
-  const [productos, { people, selfPersonId }, plantas] = await Promise.all([
+  const [productos, { people, selfPersonId }, plantas, puedeVerBloques] = await Promise.all([
     productosFitosanitarios(user.userAccountId, id),
     getObserverCandidates(user.userAccountId),
     listPlantSpecimens(user.userAccountId, id),
+    puedeGestionarAtributosDeUbicacion(user.userAccountId, id),
   ]);
+  // `listPlotBlocks` exige `location:manage_attributes`, un permiso distinto
+  // del que ya pasó esta página — mismo hueco que documenta
+  // `productosFitosanitariosSiPuede`. Sin el permiso, ni bloques ni `?bloque=`.
+  const bloques = puedeVerBloques ? await listPlotBlocks(user.userAccountId, id) : [];
+
+  const bloqueValido = idValidoEnLista(bloque, bloques);
+  const materialIdValido = idValidoEnLista(material, productos);
+  const materialValido = productos.find((p) => p.id === materialIdValido) ?? null;
 
   const valores: IntervencionFormValues = {
     kind: "aplicacion",
@@ -60,8 +76,24 @@ export default async function NuevoManejoPage({
     operatorPersonId: null,
     motivoObservationId: motivo ?? null,
     specimenIds: [],
+    plotBlockIds: bloqueValido ? [bloqueValido] : [],
     notes: null,
-    lineas: [],
+    // Decisión del controlador #3: la línea precargada con `?material=` trae
+    // la carencia/reentrada DEL PRODUCTO, a la vista y editable — exactamente
+    // lo que `LineaDeIntervencion` muestra al elegirlo a mano (nunca un valor
+    // ya declarado, porque no hay ninguno todavía).
+    lineas: materialValido
+      ? [
+          {
+            materialId: materialValido.id,
+            consumableLotId: null,
+            quantity: null,
+            unit: null,
+            withdrawalDays: materialValido.defaultWithdrawalDays,
+            reentryHours: materialValido.defaultReentryHours,
+          },
+        ]
+      : [],
   };
 
   return (
@@ -79,6 +111,7 @@ export default async function NuevoManejoPage({
         observers={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
         selfPersonId={selfPersonId}
         specimens={plantas}
+        bloques={bloques.map((b) => ({ id: b.id, name: b.name }))}
         claveDeEnvio={crypto.randomUUID()}
         valores={valores}
       />

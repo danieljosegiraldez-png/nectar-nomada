@@ -3,8 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getPlotDetail } from "../../../../../lib/traceability/plantingCohorts";
-import { LocationAccessError } from "../../../../../lib/traceability/locations";
+import { LocationAccessError, puedeGestionarAtributosDeUbicacion } from "../../../../../lib/traceability/locations";
 import { listarIntervenciones, productosFitosanitarios } from "../../../../../lib/traceability/intervenciones";
+import { listPlotBlocks } from "../../../../../lib/traceability/plotBlocks";
 import { carenciaDeIntervencion, reentradaDeIntervencion } from "../../../../../lib/traceability/carenciaDeIntervencion";
 import { lecturaDeTrampaQueMotivo, listPlantSpecimens, type LecturaDeTrampa } from "../../../../../lib/traceability/specimens";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
@@ -52,14 +53,21 @@ export default async function ManejoDetailPage({
   if (!intervencion) notFound();
   const correccion = lista.find((i) => i.correctsId === interventionId) ?? null;
 
-  const [productos, { people, selfPersonId }, plantas, trampa] = await Promise.all([
+  const [productos, { people, selfPersonId }, plantas, trampa, puedeVerBloques] = await Promise.all([
     productosFitosanitarios(user.userAccountId, id),
     getObserverCandidates(user.userAccountId),
     listPlantSpecimens(user.userAccountId, id),
     intervencion.motivoObservationId
       ? lecturaDeTrampaQueMotivo(user.userAccountId, intervencion.motivoObservationId)
       : Promise.resolve(null),
+    puedeGestionarAtributosDeUbicacion(user.userAccountId, id),
   ]);
+  // `listPlotBlocks` exige `location:manage_attributes`, un permiso distinto
+  // del que ya pasó esta página (`lot:view`/`manage` vía `listarIntervenciones`
+  // y `productosFitosanitarios`) — mismo hueco que documenta
+  // `productosFitosanitariosSiPuede`. Sin el permiso, el formulario ofrece
+  // planta y parcela entera igual que antes, sin bloques.
+  const bloques = puedeVerBloques ? await listPlotBlocks(user.userAccountId, id) : [];
 
   const ahora = new Date();
   const carencia = carenciaDeIntervencion(intervencion, ahora);
@@ -154,10 +162,9 @@ export default async function ManejoDetailPage({
           {t("manejoAreaLabel")}:{" "}
           {intervencion.areas.length === 0
             ? t("manejoAreaWholePlot")
-            : // PR B, Tarea 1 (sólo esquema): un área puede ser un bloque y no
-              // traer `specimen`. La UI de bloques es tarea aparte; por ahora
-              // esas áreas se muestran sin nombre, no se ocultan.
-              intervencion.areas.map((a) => a.specimen?.commonName ?? "—").join(", ")}
+            : // Tarea 5 PR B: cada área es una planta o un bloque (nunca las
+              // dos — CHECK en la base), y las dos traen su nombre.
+              intervencion.areas.map((a) => a.specimen?.commonName ?? a.plotBlock?.name ?? "—").join(", ")}
         </p>
         {intervencion.notes ? (
           <p>
@@ -220,6 +227,7 @@ export default async function ManejoDetailPage({
             observers={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
             selfPersonId={selfPersonId}
             specimens={plantas}
+            bloques={bloques.map((b) => ({ id: b.id, name: b.name }))}
             claveDeEnvio={crypto.randomUUID()}
             valores={
               {
@@ -235,12 +243,14 @@ export default async function ManejoDetailPage({
                 occurredAt: intervencion.occurredAt.toISOString(),
                 operatorPersonId: intervencion.operatorPersonId,
                 motivoObservationId: intervencion.motivoObservationId,
-                // PR B, Tarea 1 (sólo esquema): un área de bloque no tiene
-                // `specimenId`. El formulario de corrección sólo maneja
-                // plantas por ahora, así que esas áreas se omiten aquí.
                 specimenIds: intervencion.areas
                   .map((a) => a.specimenId)
                   .filter((sid): sid is string => sid != null),
+                // Tarea 5 PR B, decisión del controlador #1: corregir sin
+                // tocarlos los conserva, igual que las plantas.
+                plotBlockIds: intervencion.areas
+                  .map((a) => a.plotBlockId)
+                  .filter((bid): bid is string => bid != null),
                 notes: intervencion.notes,
                 lineas: intervencion.lineas.map((l) => ({
                   materialId: l.materialId,
