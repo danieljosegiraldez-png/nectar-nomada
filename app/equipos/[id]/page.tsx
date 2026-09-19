@@ -1,3 +1,4 @@
+import { CampoNumerico } from "../../components/CampoNumerico";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -134,8 +135,7 @@ export default async function EquipoPage({
                       <td>
                         {/* Vacío = NO se envía. Un campo en blanco leído como cero
                             aprobaría el patrón del agua sin que nadie mirara. */}
-                        <input
-                          type="number"
+                        <CampoNumerico
                           step="any"
                           name={`observado_${p.id}`}
                           aria-label={`${p.label} (${p.unit})`}
@@ -151,7 +151,7 @@ export default async function EquipoPage({
               </label>
               <label>
                 {t("campoTemperatura")}
-                <input type="number" step="any" name="ambientTempC" />
+                <CampoNumerico step="any" name="ambientTempC" />
               </label>
               <label>
                 {t("campoNota")}
@@ -178,7 +178,7 @@ export default async function EquipoPage({
             </label>
             <label>
               {t("colReferencia")}
-              <input type="number" step="any" name="referenceValue" required />
+              <CampoNumerico step="any" name="referenceValue" required />
             </label>
             <label>
               {t("campoUnidad")}
@@ -186,7 +186,7 @@ export default async function EquipoPage({
             </label>
             <label>
               {t("colTolerancia")}
-              <input type="number" step="any" name="toleranceAbs" required min={0} />
+              <CampoNumerico step="any" name="toleranceAbs" required min={0} />
             </label>
             <p className="nn-muted">{t("campoToleranciaAyuda")}</p>
             <BotonDeEnvio>{t("botonDeclararPatron")}</BotonDeEnvio>
@@ -250,11 +250,11 @@ export default async function EquipoPage({
               </label>
               <label>
                 {t("campoRangoMin")}
-                <input type="number" step="any" name="rangeMin" />
+                <CampoNumerico step="any" name="rangeMin" />
               </label>
               <label>
                 {t("campoRangoMax")}
-                <input type="number" step="any" name="rangeMax" />
+                <CampoNumerico step="any" name="rangeMax" />
               </label>
               <p className="nn-muted">{t("campoRangoAyuda")}</p>
               <BotonDeEnvio>{t("botonDeclararModo")}</BotonDeEnvio>

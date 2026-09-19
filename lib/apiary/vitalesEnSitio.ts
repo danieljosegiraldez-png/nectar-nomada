@@ -38,6 +38,7 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { exigeClimaObservado } from "./climaObservado";
+import { normalizarCondicionDelSitio } from "./condicionDelSitio";
 import { compararCajasPresentes } from "./cajasPresentes";
 import { requireApiaryAccess } from "./hives";
 
@@ -49,10 +50,13 @@ export interface VitalesEnSitioInput {
   weatherObserved?: string | null;
   coloniesAliveCount?: number | null;
   hivesPresentCount?: number | null;
+  /** ADR-165 — la condición del sitio, cruda; `undefined` o vacía no toca nada. */
+  siteConditions?: readonly unknown[];
+  siteConditionOtherNote?: string | null;
 }
 
 /** Las tres claves del protocolo que esto cubre, para que el guardia pueda nombrarlas. */
-export const VITALES_DE_CAMPO = ["weather_observed", "colonies_alive_count", "hives_present_count"] as const;
+export const VITALES_DE_CAMPO = ["weather_observed", "site_condition", "colonies_alive_count", "hives_present_count"] as const;
 
 export async function registrarVitalesEnSitio(
   userAccountId: string,
@@ -69,6 +73,8 @@ export async function registrarVitalesEnSitio(
       weatherObserved: true,
       coloniesAliveCount: true,
       hivesPresentCount: true,
+      siteConditions: true,
+      siteConditionOtherNote: true,
       fieldVitalsOnSiteAt: true,
     },
   });
@@ -94,12 +100,15 @@ export async function registrarVitalesEnSitio(
     if (!Number.isInteger(v) || v < 0) throw new VitalesEnSitioInvalido(`${clave}_invalido: ${v}`);
     return v;
   };
+  // En el sitio, una lista vacía es «no marqué nada ahora», no «bórralo»: no toca la columna.
+  const condicion =
+    input.siteConditions === undefined ? undefined : normalizarCondicionDelSitio(input.siteConditions, input.siteConditionOtherNote) ?? undefined;
   const colonias = entero(input.coloniesAliveCount, "colonias_vivas");
   const cajas = entero(input.hivesPresentCount, "cajas_presentes");
 
   // **Si no viene ninguno de los tres, no se toca nada ni se estampa la marca.** Un envío vacío
   // afirmaría haber anotado en sitio sin haber anotado nada.
-  if (clima === undefined && colonias === undefined && cajas === undefined) {
+  if (clima === undefined && condicion === undefined && colonias === undefined && cajas === undefined) {
     throw new VitalesEnSitioInvalido("nada_que_registrar");
   }
 
@@ -108,6 +117,9 @@ export async function registrarVitalesEnSitio(
       where: { id: sesion.id },
       data: {
         ...(clima === undefined ? {} : { weatherObserved: clima }),
+        ...(condicion === undefined
+          ? {}
+          : { siteConditions: condicion.conditions, siteConditionOtherNote: condicion.otherNote }),
         ...(colonias === undefined ? {} : { coloniesAliveCount: colonias }),
         ...(cajas === undefined ? {} : { hivesPresentCount: cajas }),
         fieldVitalsOnSiteAt: ahora,
@@ -124,12 +136,16 @@ export async function registrarVitalesEnSitio(
           weatherObserved: sesion.weatherObserved,
           coloniesAliveCount: sesion.coloniesAliveCount,
           hivesPresentCount: sesion.hivesPresentCount,
+          siteConditions: sesion.siteConditions,
+          siteConditionOtherNote: sesion.siteConditionOtherNote,
           fieldVitalsOnSiteAt: sesion.fieldVitalsOnSiteAt,
         },
         after: {
           weatherObserved: fila.weatherObserved,
           coloniesAliveCount: fila.coloniesAliveCount,
           hivesPresentCount: fila.hivesPresentCount,
+          siteConditions: fila.siteConditions,
+          siteConditionOtherNote: fila.siteConditionOtherNote,
           fieldVitalsOnSiteAt: fila.fieldVitalsOnSiteAt,
         },
         sourceInterface: "web",

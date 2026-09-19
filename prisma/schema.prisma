@@ -233,7 +233,13 @@ model UserAccount {
   inspectionsCreated                Inspection[]                 @relation("InspectionCreatedBy")
   apiaryHarvestEventsCreated        ApiaryHarvestEvent[]         @relation("ApiaryHarvestEventCreatedBy")
   colonyEventsCreated               ColonyEvent[]                @relation("ColonyEventCreatedBy")
+  queensCreated                     Queen[]                      @relation("QueenCreatedBy")
+  queenTenuresCreated               QueenTenure[]                @relation("QueenTenureCreatedBy")
   hiveCleaningsCreated HiveCleaning[] @relation("HiveCleaningCreatedBy")
+  hiveFittingsCreated  HiveFitting[]  @relation("HiveFittingCreatedBy")
+  hiveNodesCreated     HiveNode[]     @relation("HiveNodeCreatedBy")
+  nodeCalibrationsCreated NodeCalibration[] @relation("NodeCalibrationCreatedBy")
+  nodeDerivedReadingsCreated NodeDerivedReading[] @relation("NodeDerivedReadingCreatedBy")
   varroaCountsCreated               VarroaCount[]                @relation("VarroaCountCreatedBy")
   organizationMembershipsCreated    OrganizationMembership[]     @relation("OrganizationMembershipCreatedBy")
   plantingEventsCreated             PlantingEvent[]              @relation("PlantingEventCreatedBy")
@@ -247,6 +253,8 @@ model UserAccount {
   harvestEventSourcesCreated        HarvestEventSource[]         @relation("HarvestEventSourceCreatedBy")
   specimensCreated                  Specimen[]                   @relation("SpecimenCreatedBy")
   specimenObservationsCreated       SpecimenObservation[]        @relation("SpecimenObservationCreatedBy")
+  plotBlocksCreados                 PlotBlock[]                  @relation("PlotBlockCreatedBy")
+  trapRulesCreadas                  TrapRule[]                   @relation("TrapRuleCreatedBy")
   externalCoffeeOriginsCreated      ExternalCoffeeOrigin[]       @relation("ExternalCoffeeOriginCreatedBy")
 
   // RO1 (docs/implementation/34_RO1_RESEARCH_OS.md) — one CreatedBy back-
@@ -299,6 +307,13 @@ model UserAccount {
   consumableStockEventsCreated ConsumableStockEvent[] @relation("ConsumableStockEventCreatedBy")
   consumableCustodiesCreated ConsumableCustody[] @relation("ConsumableCustodyCreatedBy")
   plotInterventionsCreadas PlotIntervention[] @relation("PlotInterventionCreatedBy")
+  /// ADR-163
+  storeAllocationsAssigned StoreAllocation[] @relation("StoreAllocationAssignedBy")
+  storeAllocationsReceived StoreAllocation[] @relation("StoreAllocationReceivedBy")
+  /// ADR-169
+  orderItemLotsDispatched OrderItemLot[] @relation("OrderItemLotDispatchedBy")
+  /// ADR-170
+  storeAllocationsCancelled StoreAllocation[] @relation("StoreAllocationCancelledBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -884,6 +899,9 @@ model Location {
   hivePlacements              HivePlacement[]
   neighbourConsultations      NeighbourConsultation[]
   specimens                   Specimen[]
+  specimensDeLaFinca          Specimen[]                 @relation("SpecimenFarm")
+  plotBlocks                  PlotBlock[]
+  trapRule                    TrapRule?                  @relation("TrapRuleFarm")
   plantingEvents              PlantingEvent[]
   plantingCohorts             PlantingCohort[]
   fieldSessions               FieldSession[]
@@ -899,6 +917,7 @@ model Location {
   processingStages            ProcessingStage[]
   plotInterventions           PlotIntervention[] @relation("PlotInterventionLocation")
 
+  nodeCalibrations NodeCalibration[]
   @@index([parentLocationId])
   @@index([organizationId])
   equipmentTransfersFrom EquipmentTransfer[] @relation("EquipmentTransferFrom")
@@ -1007,6 +1026,7 @@ model Organization {
 
   equipment Equipment[] @relation("EquipmentOwner")
 
+  hiveNodes HiveNode[]
   @@map("organization")
   @@schema("core")
   lotTransformationsPerformed LotTransformation[] @relation("LotTransformationPerformedBy")
@@ -1289,6 +1309,12 @@ model Sample {
   location       Location?           @relation(fields: [locationId], references: [id])
   status         RecordStatus        @default(draft)
   classification ClassificationLevel @default(internal)
+  /// Con rastro, nunca editada en su sitio — mismo principio que
+  /// `InstrumentCheckRequirement.retiredAt` (`lib/equipos/equipos.ts::retirarPatron`).
+  /// El motivo va al `AuditEvent` de la operación `sample.retire`, no a una
+  /// columna nueva aquí: es la misma decisión que ya toma `recordAuditEvent`
+  /// para cualquier corrección con causa.
+  retiredAt      DateTime?           @map("retired_at")
   createdAt      DateTime            @default(now()) @map("created_at")
   updatedAt      DateTime            @updatedAt @map("updated_at")
   createdBy      String?             @map("created_by") @db.Uuid
@@ -1582,6 +1608,8 @@ model ProductVariant {
 
   cartItems  CartItem[]
   orderItems OrderItem[]
+  /// ADR-163 — lo que llega de un lote envasado. Sólo lo RECIBIDO suma al inventario.
+  storeAllocations StoreAllocation[]
 
   @@index([productId])
   @@map("product_variant")
@@ -1676,6 +1704,8 @@ model OrderItem {
   quantity         Int
   unitPriceAmount  Decimal        @map("unit_price_amount") @db.Decimal(10, 2)
   currency         String
+  /// ADR-169 — de qué lotes salieron sus frascos, dicho por quien despachó.
+  lotes OrderItemLot[]
 
   @@index([orderId])
   @@map("order_item")
@@ -1938,6 +1968,10 @@ model Asset {
   soilProfileId     String?          @map("soil_profile_id") @db.Uuid
   soilProfile       SoilProfile?     @relation(fields: [soilProfileId], references: [id], onDelete: Restrict)
 
+  // F2 §4 — la foto de la tela pertenece a ESA revisión, no a la trampa entera.
+  specimenObservationId String?              @map("specimen_observation_id") @db.Uuid
+  specimenObservation   SpecimenObservation? @relation(fields: [specimenObservationId], references: [id])
+
   // A6 (22_APIARY_V1_SCOPING_REPORT.md — Photo attachment): same "specific
   // nullable FK per parent, not polymorphic" convention as the six
   // Traceability FKs above (ADR-020 decision 8). A honeyBatchId is
@@ -2005,6 +2039,7 @@ model Asset {
   @@index([processingStageId])
   @@index([biocharBatchId])
   @@index([soilProfileId])
+  @@index([specimenObservationId])
   equipmentConditionEvidence EquipmentConditionReport[] @relation("EquipmentConditionEvidence")
 
   @@map("asset")
@@ -3099,6 +3134,10 @@ model Lot {
   @@index([rejectionCategoryValueId])
   @@map("lot")
   @@schema("traceability")
+  /// ADR-163
+  storeAllocations StoreAllocation[] @relation("StoreAllocationLot")
+  /// ADR-169
+  orderItemLots OrderItemLot[] @relation("OrderItemLotLot")
 }
 
 /// ADR-161 -- los actos de procesar miel. Vocabulario fijo con «otro, ¿cual?» (Daniel).
@@ -3361,6 +3400,8 @@ model QuantityEvent {
   @@index([transformationId])
   @@map("quantity_event")
   @@schema("traceability")
+  /// ADR-169
+  orderItemLot OrderItemLot? @relation("OrderItemLotQuantity")
 }
 
 enum MeasurementSourceType {
@@ -4690,6 +4731,9 @@ model FieldSession {
   /// Clima OBSERVADO al visitar — Anexo E, etapa de campo (ADR-152). Lo que alguien vio,
   /// no un pronostico: el «Clima 7 dias» del Anexo C sigue siendo capa externa sin proveedor.
   weatherObserved   WeatherObserved? @map("weather_observed")
+  /// ADR-165 -- varias a la vez (hormigas Y pasto alto). Vacio = sin registrar (ADR-080).
+  siteConditions         SiteCondition[] @map("site_conditions")
+  siteConditionOtherNote String?         @map("site_condition_other_note")
   /// CUANDO se anotaron los vitales de campo --clima, colonias, cajas-- ESTANDO EN EL SITIO.
   ///
   /// **Existe porque el dueno pidio poder hacerlo de las dos formas** (2026-09-17): «se deberia
@@ -6147,6 +6191,19 @@ model Specimen {
   // product owner's own wording, not a number with a given unit.
   densityNote  String?         @map("density_note")
 
+  // F2 §3 — el bloque donde está la trampa. Nullable: `sectorSimple` sigue valiendo
+  // y una trampa puede no pertenecer a ningún bloque.
+  plotBlockId String?    @map("plot_block_id") @db.Uuid
+  plotBlock   PlotBlock? @relation(fields: [plotBlockId], references: [id])
+
+  // F2 §4 — el número que va rotulado en la botella. Lo genera el sistema,
+  // correlativo por finca. `farmLocationId` se rellena al crear con
+  // `location.parentLocationId ?? location.id`: los lotes de Finca Rosina tienen
+  // `organization_id` NULL, así que la finca es el padre en la jerarquía.
+  farmLocationId String?   @map("farm_location_id") @db.Uuid
+  farmLocation   Location? @relation("SpecimenFarm", fields: [farmLocationId], references: [id])
+  trapNumber     Int?      @map("trap_number")
+
   notes String?
 
   // Colony (A2) already established this exact precedent: an origin/
@@ -6162,9 +6219,44 @@ model Specimen {
   assets       Asset[]
   intervencionesSobreElla PlotInterventionArea[] @relation("PlotInterventionAreaSpecimen")
 
+  @@unique([farmLocationId, trapNumber])
   @@index([locationId])
   @@index([plantingCohortId])
   @@map("specimen")
+  @@schema("traceability")
+}
+
+/// Lo que el operador ve en la tela, F2 §4: la escala manda y el número es opcional.
+/// No se convierte a número por debajo — una escala no es un conteo.
+enum TrapCaptureLevel {
+  ninguno
+  pocos
+  algunos
+  muchos
+
+  @@schema("traceability")
+}
+
+/// Subdivisión con nombre de una parcela — «bloque», término aprobado por el dueño
+/// (F2 §3). Es una ZONA, no una lista de plantas: sirve para saber en qué parte del
+/// lote está cada trampa y comparar bloques a lo largo del tiempo. Opcional en los
+/// dos sentidos: una parcela puede no tener bloques y una trampa puede no tener bloque.
+model PlotBlock {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id])
+  name       String
+  notes      String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("PlotBlockCreatedBy", fields: [createdBy], references: [id])
+
+  specimens Specimen[]
+
+  @@unique([locationId, name])
+  @@index([locationId])
+  @@map("plot_block")
   @@schema("traceability")
 }
 
@@ -6205,6 +6297,28 @@ model SpecimenObservation {
   // ahead of a second numeric observation type actually needing one.
   captureCount Int? @map("capture_count")
 
+  // F2 §4 — la lectura tal como se hace en campo. Obligatoria en un `trap_check`
+  // (lo valida el servicio, no el esquema: la misma tabla guarda floraciones y
+  // material cosechado, que no tienen lectura).
+  brocaLevel TrapCaptureLevel? @map("broca_level")
+
+  // «si es broca u otro». Sin catálogo de especies: nadie lo mantendría hoy, y la
+  // nota con la foto conservan el hecho (F2 §8).
+  otherInsects     Boolean? @map("other_insects")
+  otherInsectsNote String?  @map("other_insects_note")
+
+  // El mantenimiento va DENTRO de la revisión: en campo es una sola visita.
+  //
+  // F1 fix-final (ADR-080) — `Boolean?`, sin `default`. La migración
+  // 20260917210000 los creó `NOT NULL DEFAULT false`, así que una revisión
+  // vieja sin esta pregunta afirmaba «no se hizo» en vez de «no se preguntó».
+  // La migración 20260918100000 quita el NOT NULL/DEFAULT y limpia el dato
+  // inventado; el tri-estado vive ahora en el formulario con `TriStateField`,
+  // igual que `otherInsects`.
+  cleaned        Boolean?
+  liquidChanged  Boolean? @map("liquid_changed")
+  lureRecharged  Boolean? @map("lure_recharged")
+
   notes String?
 
   provenanceClass ProvenanceClass @map("provenance_class")
@@ -6216,6 +6330,7 @@ model SpecimenObservation {
 
   fieldEvents FieldEvent[]
   intervencionesMotivadas PlotIntervention[] @relation("PlotInterventionMotivo")
+  assets      Asset[]
 
   @@index([specimenId])
   @@map("specimen_observation")
@@ -6369,6 +6484,8 @@ model Hive {
   assets     Asset[]
   placements HivePlacement[]
   cleanings  HiveCleaning[]
+  fittings   HiveFitting[]
+  nodeObservations NodeObservation[]
 
   @@unique([locationId, identifier])
   @@index([locationId])
@@ -6615,9 +6732,93 @@ model Colony {
   apiaryHarvestEvents ApiaryHarvestEvent[]
   assets              Asset[]
 
+  /// Spec 2026-09-18 §3 — la genealogía. La MADRE, sólo cuando la colonia nace de una división
+  /// (`originType = split`) y obligatoria en las nuevas (CHECK NOT VALID: las viejas sin madre se
+  /// quedan sin madre, no se les adivina una). NO ACTION y no RESTRICT: una madre con hijas no se borra, pero la comprobación es al FINAL
+  /// de la sentencia, así que borrar madre e hija juntas en un mismo `deleteMany` no depende del orden.
+  parentColonyId String? @map("parent_colony_id") @db.Uuid
+  parentColony   Colony? @relation("ColonyParent", fields: [parentColonyId], references: [id], onDelete: NoAction)
+  daughters      Colony[] @relation("ColonyParent")
+  /// La RECEPTORA, sólo cuando esta colonia terminó uniéndose a otra (`status = combined`).
+  combinedIntoColonyId String?  @map("combined_into_colony_id") @db.Uuid
+  combinedInto         Colony?  @relation("ColonyCombinedInto", fields: [combinedIntoColonyId], references: [id], onDelete: NoAction)
+  absorbed             Colony[] @relation("ColonyCombinedInto")
+  /// Spec 2026-09-18 §4 — las reinas que ha tenido (por intervalos) y las que se criaron aquí.
+  queenTenures QueenTenure[]
+  queensRaised Queen[]       @relation("QueenOriginColony")
+
+  @@index([parentColonyId])
   @@index([hiveId])
   @@index([originSourceValueId])
   @@map("colony")
+  @@schema("apiary")
+}
+
+/// Spec 2026-09-18 §4 — de dónde salió una reina. Nombres de SAGARPA («crianza», «cambio»,
+/// «introducción de reinas»). Sin marca: Daniel, «no marcamos las reinas».
+enum QueenOrigin {
+  criada_aqui
+  comprada
+  natural
+  de_enjambre
+  otro
+
+  @@schema("apiary")
+}
+
+/// Cómo terminó la estancia de una reina en una colonia.
+enum QueenTenureEnd {
+  cambiada
+  muerta
+  perdida
+  enjambro
+  otro
+
+  @@schema("apiary")
+}
+
+/// Una reina. Sólo existe si alguien la registró: una colonia sin ninguna no es «huérfana», es
+/// «sin registro» (ADR-080). Dónde estuvo y cuándo vive en `QueenTenure`.
+model Queen {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  origin          QueenOrigin
+  /// La colonia donde se crió, cuando `origin = criada_aqui` — y sólo entonces (CHECK).
+  originColonyId  String?         @map("origin_colony_id") @db.Uuid
+  originColony    Colony?         @relation("QueenOriginColony", fields: [originColonyId], references: [id], onDelete: Restrict)
+  /// Obligatoria si `origin = otro` (CHECK).
+  notes           String?
+  tenures         QueenTenure[]
+  provenanceClass ProvenanceClass @map("provenance_class")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  createdBy       String?         @map("created_by") @db.Uuid
+  creator         UserAccount?    @relation("QueenCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([originColonyId])
+  @@map("queen")
+  @@schema("apiary")
+}
+
+/// La reina de una colonia, por intervalos: cerrado a la izquierda, abierto a la derecha. Una
+/// abierta por colonia y una abierta por reina (índices parciales únicos en la migración).
+model QueenTenure {
+  id        String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  queenId   String          @map("queen_id") @db.Uuid
+  queen     Queen           @relation(fields: [queenId], references: [id], onDelete: Restrict)
+  colonyId  String          @map("colony_id") @db.Uuid
+  colony    Colony          @relation(fields: [colonyId], references: [id], onDelete: Restrict)
+  desde     DateTime
+  hasta     DateTime?
+  /// Presente si y sólo si `hasta` lo está (CHECK).
+  fin       QueenTenureEnd?
+  /// Obligatoria si `fin = otro` (CHECK).
+  finNota   String?         @map("fin_nota")
+  createdAt DateTime        @default(now()) @map("created_at")
+  createdBy String?         @map("created_by") @db.Uuid
+  creator   UserAccount?    @relation("QueenTenureCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([colonyId, desde])
+  @@index([queenId])
+  @@map("queen_tenure")
   @@schema("apiary")
 }
 
@@ -6864,6 +7065,9 @@ model Inspection {
   /// el trabajo de apiario dentro de una jornada.
   fieldEvents FieldEvent[]
 
+  fittingsInstalled HiveFitting[] @relation("HiveFittingInstalledIn")
+  fittingsRemoved   HiveFitting[] @relation("HiveFittingRemovedIn")
+
   @@index([colonyId])
   @@map("inspection")
   @@schema("apiary")
@@ -6940,6 +7144,23 @@ enum ColonyEventType {
 /// ninguno. No hay `otro`: el protocolo no lo declara, y el sitio donde se anade un quinto
 /// --«neblina», por ejemplo, que en Cerro Azul no es raro-- es `protocolos/apiario-campo-v1.json`
 /// mas su migracion, no este archivo por su cuenta.
+/// ADR-165 -- la condicion del SITIO, no de una caja. Vocabulario del protocolo v2, elegido por
+/// Daniel el 2026-09-18 sobre los ejemplos del Anexo B y la guia de Varroa. «agua» son DOS:
+/// falta y exceso. `sin_novedad` es la respuesta «mire y esta bien», que no es «nadie miro».
+enum SiteCondition {
+  hormigas
+  moho_humedad
+  pasto_alto
+  cerca_caida
+  dosel_cerrado
+  fuente_de_agua_seca
+  encharcamiento
+  sin_novedad
+  otro
+
+  @@schema("traceability")
+}
+
 enum WeatherObserved {
   despejado
   nublado
@@ -8631,6 +8852,30 @@ enum ByproductDestination {
   @@schema("traceability")
 }
 
+/// F2 §5 — lo que el encargado de finca fija para sus trampas. **Sin regla no hay
+/// avisos ni plazos**: el sistema no trae ningún valor por defecto, ni siquiera el
+/// quincenal de la guía de Anacafé.
+model TrapRule {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  farmLocationId String           @unique @map("farm_location_id") @db.Uuid
+  farmLocation   Location         @relation("TrapRuleFarm", fields: [farmLocationId], references: [id])
+  /// La lectura a partir de la cual se dispara el aviso (ese nivel o peor).
+  triggerLevel   TrapCaptureLevel @map("trigger_level")
+  /// Días entre revisiones en situación normal y cuando la lectura disparó.
+  normalDays     Int              @map("normal_days")
+  alertDays      Int              @map("alert_days")
+  /// Texto libre: «aplicar repelente Bralic». Los productos son de la finca y el
+  /// catálogo fitosanitario es la pieza 3.
+  suggestedAction String          @map("suggested_action")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("TrapRuleCreatedBy", fields: [createdBy], references: [id])
+
+  @@map("trap_rule")
+  @@schema("traceability")
+}
+
 /// Qué es la cosa que se gasta: aserrín, gallinaza, melaza, hojarasca.
 ///
 /// **Sin esto no hay existencias, y ésa es toda la razón de esta tabla.** Hasta
@@ -8867,4 +9112,302 @@ model ConsumableCustody {
   @@index([consumableLotId, desde])
   @@map("consumable_custody")
   @@schema("traceability")
+}
+
+/// ADR-163 -- envases de un lote envasado asignados a la tienda, y su recepcion.
+///
+/// **Dos actos y no uno** (Daniel, 2026-09-18): no todo lo envasado va a la tienda de Nectar
+/// Nomada. Despues de envasar se ASIGNA una cantidad a una variante; en la tienda alguien
+/// CONFIRMA lo que llego, y solo entonces sube el inventario. Asignar no toca la tienda.
+model StoreAllocation {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// El lote ENVASADO del que salen los envases (sale de una transformacion `packaging`).
+  lotId            String         @map("lot_id") @db.Uuid
+  lot              Lot            @relation("StoreAllocationLot", fields: [lotId], references: [id], onDelete: Restrict)
+  productVariantId String         @map("product_variant_id") @db.Uuid
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  unitsAssigned    Int            @map("units_assigned")
+  /// El DIA en que se asigno (medianoche UTC).
+  assignedAt       DateTime       @map("assigned_at")
+  assignedBy       String         @map("assigned_by") @db.Uuid
+  assigner         UserAccount    @relation("StoreAllocationAssignedBy", fields: [assignedBy], references: [id], onDelete: Restrict)
+  /// La recepcion: las tres van juntas o ninguna (CHECK). Menos de lo asignado exige nota.
+  receivedAt       DateTime?      @map("received_at")
+  receivedBy       String?        @map("received_by") @db.Uuid
+  receiver         UserAccount?   @relation("StoreAllocationReceivedBy", fields: [receivedBy], references: [id], onDelete: Restrict)
+  unitsReceived    Int?           @map("units_received")
+  receiptNote      String?        @map("receipt_note")
+  /// ADR-170 -- una asignacion que nunca se recibio se ANULA, no se borra: quien, cuando y por
+  /// que (CHECK: las tres o ninguna, y nunca junto a una recepcion). Sus envases vuelven a libres.
+  cancelledAt      DateTime?      @map("cancelled_at")
+  cancelledBy      String?        @map("cancelled_by") @db.Uuid
+  canceller        UserAccount?   @relation("StoreAllocationCancelledBy", fields: [cancelledBy], references: [id], onDelete: Restrict)
+  cancelReason     String?        @map("cancel_reason")
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  @@index([lotId])
+  @@index([productVariantId])
+  @@index([receivedAt])
+  @@map("store_allocation")
+  @@schema("commerce")
+}
+
+/// Qué lleva puesta una colmena, y DESDE CUÁNDO — spec 2026-09-17 «artefactos de colmena» §A.
+///
+/// Un booleano en `Hive` contesta «¿lleva excluidor hoy?»; esto contesta «¿lo llevaba el 3 de
+/// mayo?», que es la pregunta que la ingestión de telemetría tiene que poder hacer — un nodo que
+/// se movió de colmena tiene datos viejos que pertenecen a la colmena anterior.
+///
+/// Intervalo cerrado a la izquierda y abierto a la derecha: retirado el día 10, el día 10 ya no
+/// estaba. Las reglas viven también en la base (CHECK), no sólo en el servicio.
+model HiveFitting {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  hiveId String @map("hive_id") @db.Uuid
+  hive   Hive   @relation(fields: [hiveId], references: [id])
+
+  kind HiveFittingKind
+
+  /// Sólo para `alza`, y obligatoria ahí: dos o tres, no una fila por alza. Nadie las numera en
+  /// el patio, y una identidad que el campo no puede sostener es una columna que se rellena mal.
+  count Int?
+
+  installedAt DateTime  @map("installed_at")
+  /// Nulo = sigue puesta. **No** se rellena con «hoy» al leer.
+  removedAt   DateTime? @map("removed_at")
+
+  /// El aparato, cuando `kind` es `nodo_de_sensores` — y sólo entonces (CHECK). Lo que distingue
+  /// a un artefacto con identidad de uno sin ella. RESTRICT: un nodo con historia no se borra.
+  hiveNodeId String?   @map("hive_node_id") @db.Uuid
+  hiveNode   HiveNode? @relation(fields: [hiveNodeId], references: [id], onDelete: Restrict)
+
+  /// La inspección donde se declaró el cambio, si vino de una — la mitad de la instrucción
+  /// de Daniel: «en la inspección sólo se registra la diferencia». RESTRICT: es evidencia.
+  installedInspectionId String?     @map("installed_inspection_id") @db.Uuid
+  installedInspection   Inspection? @relation("HiveFittingInstalledIn", fields: [installedInspectionId], references: [id], onDelete: Restrict)
+  removedInspectionId   String?     @map("removed_inspection_id") @db.Uuid
+  removedInspection     Inspection? @relation("HiveFittingRemovedIn", fields: [removedInspectionId], references: [id], onDelete: Restrict)
+
+  /// El «cuál» de `otro`, y lo que no cabe en el vocabulario.
+  notes String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("HiveFittingCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([hiveId, installedAt])
+  @@map("hive_fitting")
+  @@schema("apiary")
+}
+
+/// Vocabulario cerrado con escape, la regla que Daniel dio para la alimentación: «que no sea
+/// campo libre, que sean variables». Con `otro` y su nota — un vocabulario sin escape enseña a
+/// mentir en la casilla más cercana.
+enum HiveFittingKind {
+  excluidor
+  reductor_de_piquera
+  piso_ventilado
+  alimentador
+  alza
+  nodo_de_sensores
+  otro
+
+  @@schema("apiary")
+}
+
+/// El nodo de sensores, el aparato — spec «artefactos de colmena» §B. Tiene número de serie,
+/// firmware y configuración, y SE MUEVE de colmena: su asignación es un `HiveFitting` de
+/// `kind = nodo_de_sensores` que apunta aquí. No hay dos tablas de intervalos.
+model HiveNode {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// El `device_id` que manda el propio aparato: «rp2040-0011223344556677». Único: es la
+  /// identidad del REGISTRO, contra la que se contrasta lo que llegue (nunca al revés).
+  deviceId        String  @unique @map("device_id")
+  /// El UID del Notecard que la ruta de Notehub trae VERIFICADO. Es la identidad con la que
+  /// se autentica una observación; el `device_id` del cuerpo sólo se contrasta con ella.
+  /// Nulo mientras el nodo no tenga módem: sus datos llegan por USB, no por la ruta.
+  notecardUid     String? @unique @map("notecard_uid")
+  hardware        String?
+  firmware        String?
+  configurationId String? @map("configuration_id")
+
+  /// De quién es. Sale del sitio donde se registra; un nodo no se instala en otra finca.
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  lifecycleStatus EquipmentLifecycle @default(active) @map("lifecycle_status")
+
+  fittings     HiveFitting[]
+  observations NodeObservation[]
+  calibrations NodeCalibration[]
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("HiveNodeCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([organizationId])
+  @@map("hive_node")
+  @@schema("apiary")
+}
+
+/// Lo que mandó un nodo, TAL COMO LLEGÓ — spec «artefactos de colmena» §B.3. **Inmutable**: un
+/// disparador de la base rechaza cualquier UPDATE. Recalibrar produce una lectura derivada nueva
+/// (`NodeDerivedReading`), nunca toca esto.
+///
+/// No es `Measurement`: ésa es la medición humana, una variable y un valor. Esto son
+/// observaciones anidadas con crudos, fallos y muestras perdidas, muchas veces al día.
+model NodeObservation {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// La identidad del evento según el aparato. `(deviceId, epoch, seq)` es único: eso da la
+  /// idempotencia que el paquete exige — un acuse perdido produce un duplicado.
+  deviceId String @map("device_id")
+  epoch    String
+  seq      Int
+  eventId  String @map("event_id")
+
+  /// El aparato del REGISTRO que la ruta autenticó — no el que dice el cuerpo.
+  hiveNodeId String   @map("hive_node_id") @db.Uuid
+  hiveNode   HiveNode @relation(fields: [hiveNodeId], references: [id], onDelete: Restrict)
+
+  /// Los TRES tiempos, separados a propósito. `observedAt` nulo es DESCONOCIDO y no se rellena
+  /// con `receivedAt`: el paquete lo prohíbe con esas palabras.
+  observedAt  DateTime? @map("observed_at")
+  receivedAt  DateTime  @default(now()) @map("received_at")
+  timeQuality String    @map("time_quality")
+
+  /// A qué colmena pertenecía EN EL MOMENTO de medirse. Nulo cuando no se pudo resolver —sin
+  /// hora, o sin nodo instalado entonces— y entonces se dice, no se adivina.
+  hiveId String? @map("hive_id") @db.Uuid
+  hive   Hive?   @relation(fields: [hiveId], references: [id], onDelete: Restrict)
+
+  /// El cuerpo entero, sin tocar, y su huella canónica: con ella se distingue el duplicado
+  /// exacto del «mismo id, otro contenido».
+  payload     Json
+  payloadHash String @map("payload_hash")
+
+  faults        Json
+  missedSamples Int @map("missed_samples")
+
+  conflicts       NodeObservationConflict[]
+  derivedReadings NodeDerivedReading[]
+
+  @@unique([deviceId, epoch, seq])
+  @@index([hiveId, observedAt])
+  @@index([hiveNodeId, receivedAt])
+  @@map("node_observation")
+  @@schema("apiary")
+}
+
+/// La cuarentena: un evento con el MISMO id que uno ya guardado y OTRO contenido. No pisa al
+/// primero ni se descarta — se guarda para que una persona decida (paquete: «409 en
+/// cuarentena»).
+model NodeObservationConflict {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  deviceId String @map("device_id")
+  epoch    String
+  seq      Int
+
+  existingObservationId String          @map("existing_observation_id") @db.Uuid
+  existingObservation   NodeObservation @relation(fields: [existingObservationId], references: [id], onDelete: Restrict)
+
+  payload     Json
+  payloadHash String   @map("payload_hash")
+  receivedAt  DateTime @default(now()) @map("received_at")
+
+  @@index([deviceId, epoch, seq])
+  @@map("node_observation_conflict")
+  @@schema("apiary")
+}
+
+/// Una calibración de la báscula de un nodo — artefactos de colmena, Tarea 6. La fórmula es la del
+/// firmware del paquete (`calibration.py`): counts = offset + counts_per_kg × kg. **Inmutable**
+/// (disparador): recalibrar es un registro NUEVO con otro `calibrationId`, y las lecturas viejas
+/// siguen apuntando a la suya — «recalibrar después no muta la evidencia original».
+model NodeCalibration {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  hiveNodeId String   @map("hive_node_id") @db.Uuid
+  hiveNode   HiveNode @relation(fields: [hiveNodeId], references: [id], onDelete: Restrict)
+
+  /// El `calibrationID` que el procedimiento del paquete exige único, y que el nodo reporta.
+  calibrationId String @map("calibration_id")
+
+  offset      Float
+  countsPerKg Float  @map("counts_per_kg")
+  /// El residuo del ajuste, si se conoce. El paquete rechaza > 0.2 kg al calibrar.
+  residualKg  Float? @map("residual_kg")
+
+  /// Dónde se calibró: de ahí sale el permiso (`hive_node:manage`).
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id])
+
+  performedAt DateTime @map("performed_at")
+
+  readings NodeDerivedReading[]
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("NodeCalibrationCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([hiveNodeId, calibrationId])
+  @@map("node_calibration")
+  @@schema("apiary")
+}
+
+/// Lo INTERPRETADO a partir de una observación cruda: los kilos que salen de las cuentas, con el
+/// algoritmo, su versión y la calibración usada. Se puede recalcular sin tocar lo crudo; varias
+/// versiones conviven. Un sensor sin lectura da `value` nulo con su limitación, nunca un cero.
+model NodeDerivedReading {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  observationId String          @map("observation_id") @db.Uuid
+  observation   NodeObservation @relation(fields: [observationId], references: [id], onDelete: Restrict)
+
+  variable         String
+  value            Float?
+  unit             String
+  algorithm        String
+  algorithmVersion Int    @map("algorithm_version")
+
+  calibrationId String          @map("calibration_id") @db.Uuid
+  calibration   NodeCalibration @relation(fields: [calibrationId], references: [id], onDelete: Restrict)
+
+  /// Lo que limita la lectura, dicho: `SENSOR_EN_FALLO`, `VENTANA_INESTABLE`, `FUERA_DE_RANGO`.
+  limitations String[]
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("NodeDerivedReadingCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([observationId, variable, algorithm, algorithmVersion, calibrationId])
+  @@map("node_derived_reading")
+  @@schema("apiary")
+}
+
+/// ADR-169 -- de que lote salio cada frasco vendido. Lo dice quien despacha (Daniel eligio eso
+/// frente a descontar automaticamente del mas antiguo): un articulo puede salir de varios lotes.
+model OrderItemLot {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderItemId  String      @map("order_item_id") @db.Uuid
+  orderItem    OrderItem   @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  lotId        String      @map("lot_id") @db.Uuid
+  lot          Lot         @relation("OrderItemLotLot", fields: [lotId], references: [id], onDelete: Restrict)
+  units        Int
+  /// El asiento del libro del lote: los kilos de esos frascos salen de su saldo.
+  quantityEventId String   @unique @map("quantity_event_id") @db.Uuid
+  quantityEvent   QuantityEvent @relation("OrderItemLotQuantity", fields: [quantityEventId], references: [id], onDelete: Restrict)
+  dispatchedAt DateTime    @map("dispatched_at")
+  dispatchedBy String      @map("dispatched_by") @db.Uuid
+  dispatcher   UserAccount @relation("OrderItemLotDispatchedBy", fields: [dispatchedBy], references: [id], onDelete: Restrict)
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  @@unique([orderItemId, lotId])
+  @@index([lotId])
+  @@map("order_item_lot")
+  @@schema("commerce")
 }

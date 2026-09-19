@@ -11,6 +11,7 @@
  * de un tanque de 30), y no se deducen. La merma es opcional; si falta y no cuadra, el balance
  * del lote lo dice.
  */
+import { CampoNumerico } from "../CampoNumerico";
 import Link from "next/link";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
@@ -53,7 +54,7 @@ function Comunes({ prefijo }: { prefijo: string }) {
       </div>
       <div className="nn-field">
         <label htmlFor={`${prefijo}-entra`}>{t("mielKilosEntran")}</label>
-        <input id={`${prefijo}-entra`} name="inputKg" type="number" min={0} step="0.001" inputMode="decimal" required />
+        <CampoNumerico id={`${prefijo}-entra`} name="inputKg" min={0} step="0.001" inputMode="decimal" required />
       </div>
     </>
   );
@@ -80,11 +81,11 @@ export function ProcesarMielForm({ lotId }: { lotId: string }) {
       </div>
       <div className="nn-field">
         <label htmlFor="proceso-sale">{t("mielKilosSalen")}</label>
-        <input id="proceso-sale" name="outputKg" type="number" min={0} step="0.001" inputMode="decimal" required />
+        <CampoNumerico id="proceso-sale" name="outputKg" min={0} step="0.001" inputMode="decimal" required />
       </div>
       <div className="nn-field">
         <label htmlFor="proceso-merma">{t("mielMerma")}</label>
-        <input id="proceso-merma" name="lossKg" type="number" min={0} step="0.001" inputMode="decimal" />
+        <CampoNumerico id="proceso-merma" name="lossKg" min={0} step="0.001" inputMode="decimal" />
       </div>
       <Resultado estado={estado} />
       <button type="submit" disabled={pending}>
@@ -103,16 +104,16 @@ export function EnvasarMielForm({ lotId }: { lotId: string }) {
       <Comunes prefijo="envasado" />
       <div className="nn-field">
         <label htmlFor="envasado-cuantos">{t("mielEnvases")}</label>
-        <input id="envasado-cuantos" name="packageCount" type="number" min={1} step={1} inputMode="numeric" required />
+        <CampoNumerico id="envasado-cuantos" name="packageCount" min={1} step={1} inputMode="numeric" required />
       </div>
       <div className="nn-field">
         <label htmlFor="envasado-neto">{t("mielMasaNeta")}</label>
-        <input id="envasado-neto" name="packageNetMassG" type="number" min={0} step="0.01" inputMode="decimal" required />
+        <CampoNumerico id="envasado-neto" name="packageNetMassG" min={0} step="0.01" inputMode="decimal" required />
       </div>
       <p className="nn-muted">{t("mielEnvasadoAyuda")}</p>
       <div className="nn-field">
         <label htmlFor="envasado-merma">{t("mielMermaEnvasado")}</label>
-        <input id="envasado-merma" name="lossKg" type="number" min={0} step="0.001" inputMode="decimal" />
+        <CampoNumerico id="envasado-merma" name="lossKg" min={0} step="0.001" inputMode="decimal" />
       </div>
       <Resultado estado={estado} />
       <button type="submit" disabled={pending}>
@@ -139,12 +140,12 @@ export function DividirMielForm({ lotId }: { lotId: string }) {
       {Array.from({ length: PARTES_OFRECIDAS }, (_, i) => (
         <div className="nn-field" key={i}>
           <label htmlFor={`dividir-parte-${i}`}>{t("mielParte", { n: i + 1 })}</label>
-          <input id={`dividir-parte-${i}`} name="parteKg" type="number" min={0} step="0.001" inputMode="decimal" required={i < 2} />
+          <CampoNumerico id={`dividir-parte-${i}`} name="parteKg" min={0} step="0.001" inputMode="decimal" required={i < 2} />
         </div>
       ))}
       <div className="nn-field">
         <label htmlFor="dividir-merma">{t("mielMermaDividir")}</label>
-        <input id="dividir-merma" name="lossKg" type="number" min={0} step="0.001" inputMode="decimal" />
+        <CampoNumerico id="dividir-merma" name="lossKg" min={0} step="0.001" inputMode="decimal" />
       </div>
       <Resultado estado={estado} />
       <button type="submit" disabled={pending}>

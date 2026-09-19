@@ -2,7 +2,7 @@
  * Los seis propositos de visita dicen lo mismo en los TRES sitios donde estan escritos.
  *
  * **El problema que vigila.** El vocabulario del dueno vive en
- * `protocolos/apiario-campo-v1.json`, y para que sirva tiene que estar tambien en el enum de
+ * `protocolos/apiario-campo-v2.json`, y para que sirva tiene que estar tambien en el enum de
  * Postgres --que es quien lo hace cumplir-- y en un modulo puro --que es lo unico que el
  * formulario puede importar sin arrastrar `prisma` al navegador--. Tres listas separadas en
  * tres archivos que se editan por separado: la misma forma que `valoresEnumerados` vigila para
@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { PROPOSITOS_DE_VISITA, exigePropositos, PropositoInvalido } from "../../lib/apiary/propositoDeVisita";
 
-const protocolo = JSON.parse(readFileSync("protocolos/apiario-campo-v1.json", "utf8")) as {
+const protocolo = JSON.parse(readFileSync("protocolos/apiario-campo-v2.json", "utf8")) as {
   activities: { items: { key: string; options?: string[] }[] }[];
 };
 const DEL_PROTOCOLO = protocolo.activities

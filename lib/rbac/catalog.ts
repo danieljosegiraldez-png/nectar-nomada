@@ -68,6 +68,8 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // different act by someone else. Same separation A7 applied when it withheld
   // `apiary:manage` from the Apiary Colony Event Recorder — a competence and
   // authority boundary, not a tier of the same permission.
+  { resourceType: "commerce", action: "manage_store", description: "ADR-163. Llevar la tienda: crear variantes de un producto y confirmar la recepción de envases asignados desde un lote envasado — lo único que sube el inventario. Separado de lot:manage a propósito: envasar y asignar es trabajo de campo; recibir en la tienda, no." },
+  { resourceType: "hive_node", action: "manage", description: "Register a sensor node and install, move or remove it on a hive. Deliberately separate from apiary:manage, which every Farm Operator holds: moving a node REASSIGNS its data — May's observations start belonging to another hive (artefactos de colmena spec, §7.1)." },
   { resourceType: "lot", action: "release", description: "Authorize a rested lot for sale. Deliberately separate from lot:manage, which every Farm Operator holds: releasing is a commercial decision, not field work. Does not check the resting age — that is a judgement about the buyer, not the calendar." },
   { resourceType: "lot", action: "override_balance", description: "Accept a lot transformation whose mass balance is outside the organization's tolerance." },
   // §9 de `docs/architecture/EQUIPMENT_AND_READINESS.md`: «No new *machinery*,
@@ -122,7 +124,20 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // (RBAC.md §3), y un Farm Manager de una finca no puede crear un beneficio
   // en otra. El precedente contrario es `crearSitioDeAbejas`, que exige alcance
   // de plataforma porque parte de ninguna ubicación.
-  { resourceType: "location", action: "create_site", description: "Crear una ubicación nueva bajo un sitio que ya se gestiona — hoy, un beneficio." },
+  // Decisión de Daniel, 2026-09-18 (spec fincas y parcelas): una finca nueva la da de alta sólo
+  // el administrador de plataforma. Crear una organización no es trabajo de una finca, así que
+  // ningún perfil acotado lo lista; Platform Admin lo recibe por tener el catálogo entero.
+  { resourceType: "organization", action: "create_farm", description: "Dar de alta una finca: la organización y su terreno. Sólo en ámbito de plataforma." },
+
+  { resourceType: "location", action: "create_site", description: "Crear una ubicación nueva bajo un sitio que ya se gestiona: un beneficio, una instalación o una parcela." },
+
+  // Decisión de Daniel, 2026-09-18 (spec #370 §4.3): el capataz edita un
+  // beneficio SÓLO si se le concede; por defecto no. Va aparte de
+  // `create_site` porque son dos autoridades: conceder a un capataz que edite
+  // no le da crear beneficios nuevos. Y aparte de `manage_attributes`, que el
+  // operario sí tiene y que es justo lo que hasta hoy le dejaba editar el
+  // beneficio por la acción de atributos y la de coordenadas.
+  { resourceType: "location", action: "edit_beneficio", description: "Editar un beneficio: su ficha, atributos y coordenadas. De serie para Farm Manager; a un Farm Operator sólo por concesión." },
 
   // F1 §3/§5 — a Specimen is a standing land asset (a tracked tree, or a
   // broca trap modeled as a Specimen per direct product-owner decision),
@@ -339,6 +354,8 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       "parcels, drying facilities and beds — so one Assignment covers the whole farm.",
     permissions: [
       ["lot", "release"],
+      // Artefactos de colmena §7.1: el gestor registra y MUEVE nodos; el operario no.
+      ["hive_node", "manage"],
       ["lot", "manage"],
       ["lot", "view"],
       ["lot", "export"],
@@ -352,6 +369,8 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       ["location", "manage_attributes"],
       // El jefe de beneficio da de alta su beneficio; el operario no.
       ["location", "create_site"],
+      // …y lo edita. El operario no, salvo concesión por persona.
+      ["location", "edit_beneficio"],
       ["specimen", "manage"],
       ["specimen", "view"],
       ["project", "manage_operations"],

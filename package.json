@@ -53,7 +53,8 @@
     "check:rutas": "node scripts/inventario-de-rutas.mjs",
     "data:apiario-las-nubes": "tsx scripts/apiario-las-nubes.ts",
     "data:procedencias-y-sitios": "tsx scripts/procedencias-y-sitios.ts",
-    "data:apiario-toabre": "tsx scripts/apiario-toabre.ts"
+    "data:apiario-toabre": "tsx scripts/apiario-toabre.ts",
+    "data:retirar-muestra-111": "tsx scripts/retirar-muestra-111.ts"
   },
   "keywords": [],
   "author": "",

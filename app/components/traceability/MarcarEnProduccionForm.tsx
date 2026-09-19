@@ -1,5 +1,6 @@
 "use client";
 
+import { soltarFocoConLaRueda } from "../CampoNumerico";
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordEnteredProductionFormAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -58,6 +59,7 @@ export function MarcarEnProduccionForm({ cohortId }: { cohortId: string }) {
           id={`occurredAt-${cohortId}`}
           name="occurredAt"
           type={inputType}
+          onWheel={soltarFocoConLaRueda}
           // Los mismos límites que el año de `PlantingCohortForm`: sin ellos un
           // «99» llegaba al servidor como una fecha inválida.
           {...(inputType === "number" ? { min: 1900, max: 2200, step: 1, inputMode: "numeric" as const } : {})}

@@ -75,7 +75,9 @@ beforeAll(async () => {
   projectId = project.id;
 
   const location = await prisma.location.create({
-    data: { locationType: "site", name: `TEST Plot (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
+    // Una parcela, no un sitio: desde el 2026-09-18 `recordHarvestEvent` rechaza cosechar sobre
+    // cualquier cosa que no sea `plot` (spec fincas y parcelas §3.4). El nombre ya decía «Plot».
+    data: { locationType: "plot", name: `TEST Plot (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
   });
   locationId = location.id;
 

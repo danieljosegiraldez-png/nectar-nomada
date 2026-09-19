@@ -1,9 +1,11 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 // Del módulo PURO: importar `fieldSessions.ts` arrastraría `prisma` al navegador.
 import { CLIMAS_OBSERVADOS } from "../../../lib/apiary/climaObservado";
+import { CONDICIONES_DEL_SITIO } from "../../../lib/apiary/condicionDelSitio";
 import {
   emitirReporteDeVisitaAction,
   completarVisitaAction,
@@ -16,6 +18,31 @@ import {
 
 const inicial: TraceabilityActionState = {};
 const inicialEnlace: EnlaceDeReporteState = {};
+
+/**
+ * La condición del sitio (ADR-165): casillas, porque puede haber hormigas Y pasto alto. Sin
+ * ninguna marcada no se escribe nada — ni en el sitio ni al cerrar—, así que no borra lo anotado.
+ */
+function CondicionDelSitioCampo({ prefijo }: { prefijo: string }) {
+  const t = useTranslations("Traceability");
+  return (
+    <>
+      <fieldset className="nn-field">
+        <legend>{t("visitSiteConditionLabel")}</legend>
+        <p className="nn-muted">{t("visitSiteConditionHelp")}</p>
+        {CONDICIONES_DEL_SITIO.map((c) => (
+          <label key={c} style={{ display: "block", padding: "0.35rem 0" }}>
+            <input type="checkbox" name="siteConditions" value={c} /> {t(`siteCondition_${c}`)}
+          </label>
+        ))}
+      </fieldset>
+      <div className="nn-field">
+        <label htmlFor={`${prefijo}-sitio-otro`}>{t("visitSiteConditionOtherLabel")}</label>
+        <input id={`${prefijo}-sitio-otro`} name="siteConditionOtherNote" type="text" />
+      </div>
+    </>
+  );
+}
 
 /**
  * Emitir el informe de una visita cerrada.
@@ -65,7 +92,7 @@ export function PublicarEnlaceForm({ fieldSessionId }: { fieldSessionId: string 
       <input type="hidden" name="fieldSessionId" value={fieldSessionId} />
       <div className="nn-field">
         <label htmlFor="dias">{t("reportLinkDaysLabel")}</label>
-        <input id="dias" name="diasDeVigencia" type="number" inputMode="numeric" min="1" max="365" step="1" />
+        <CampoNumerico id="dias" name="diasDeVigencia" inputMode="numeric" min="1" max="365" step="1" />
         <p className="nn-muted">{t("reportLinkDaysHelp")}</p>
       </div>
 
@@ -194,7 +221,7 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
 
       <div className="nn-field">
         <label htmlFor="cv-colonies">{t("visitColoniesAliveLabel")}</label>
-        <input id="cv-colonies" name="coloniesAliveCount" type="number" inputMode="numeric" min="0" step="1" />
+        <CampoNumerico id="cv-colonies" name="coloniesAliveCount" inputMode="numeric" min="0" step="1" />
         <p className="nn-muted">{t("visitColoniesAliveHelp")}</p>
       </div>
 
@@ -203,7 +230,7 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
           y esa diferencia es el dato: una caja que se fue sin registrarse, o un recuento malo. */}
       <div className="nn-field">
         <label htmlFor="cv-hives">{t("visitHivesPresentLabel")}</label>
-        <input id="cv-hives" name="hivesPresentCount" type="number" inputMode="numeric" min="0" step="1" />
+        <CampoNumerico id="cv-hives" name="hivesPresentCount" inputMode="numeric" min="0" step="1" />
         <p className="nn-muted">{t("visitHivesPresentHelp")}</p>
       </div>
 
@@ -221,6 +248,8 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
         </select>
       </div>
 
+      <CondicionDelSitioCampo prefijo="cv" />
+
       <div className="nn-field">
         <label htmlFor="cv-notes">{t("visitCompleteNotesLabel")}</label>
         <textarea id="cv-notes" name="notes" rows={3} />
@@ -236,7 +265,7 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
           existiera. */}
       <div className="nn-field">
         <label htmlFor="cv-costo">{t("visitTravelCostLabel")}</label>
-        <input id="cv-costo" name="travelCostUsd" type="number" inputMode="decimal" min="0" step="0.01" />
+        <CampoNumerico id="cv-costo" name="travelCostUsd" inputMode="decimal" min="0" step="0.01" />
       </div>
 
       <div className="nn-field">
@@ -300,14 +329,16 @@ export function VitalesEnSitioForm({ fieldSessionId }: { fieldSessionId: string 
         </select>
       </div>
 
+      <CondicionDelSitioCampo prefijo="vs" />
+
       <div className="nn-field">
         <label htmlFor="vs-colonias">{t("visitColoniesAliveLabel")}</label>
-        <input id="vs-colonias" name="coloniesAliveCount" type="number" inputMode="numeric" min="0" step="1" />
+        <CampoNumerico id="vs-colonias" name="coloniesAliveCount" inputMode="numeric" min="0" step="1" />
       </div>
 
       <div className="nn-field">
         <label htmlFor="vs-cajas">{t("visitHivesPresentLabel")}</label>
-        <input id="vs-cajas" name="hivesPresentCount" type="number" inputMode="numeric" min="0" step="1" />
+        <CampoNumerico id="vs-cajas" name="hivesPresentCount" inputMode="numeric" min="0" step="1" />
         <p className="nn-muted">{t("visitHivesPresentHelp")}</p>
       </div>
 

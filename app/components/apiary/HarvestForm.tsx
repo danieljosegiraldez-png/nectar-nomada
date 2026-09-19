@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useTranslations } from "next-intl";
 import { recordApiaryHarvestFormAction } from "../../actions/apiary";
 import { BotonDeEnvio } from "../BotonDeEnvio";
@@ -24,11 +25,11 @@ export function HarvestForm({ colonyId }: { colonyId: string }) {
       <div style={{ display: "flex", gap: "0.5rem" }}>
         <div className="nn-field" style={{ flex: 1 }}>
           <label htmlFor="harvest-weight">{t("extractedWeightKgLabel")}</label>
-          <input id="harvest-weight" name="extractedWeightKg" type="number" inputMode="decimal" step="0.01" min="0" />
+          <CampoNumerico id="harvest-weight" name="extractedWeightKg" inputMode="decimal" step="0.01" min="0" />
         </div>
         <div className="nn-field" style={{ flex: 1 }}>
           <label htmlFor="harvest-frames">{t("framesHarvestedLabel")}</label>
-          <input id="harvest-frames" name="framesHarvested" type="number" inputMode="numeric" step="1" min="0" />
+          <CampoNumerico id="harvest-frames" name="framesHarvested" inputMode="numeric" step="1" min="0" />
         </div>
       </div>
       <div className="nn-field">

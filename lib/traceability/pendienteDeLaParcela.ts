@@ -1,5 +1,6 @@
 import type { EstadoDeProduccion } from "./estadoDeProduccion";
 import { carenciaDeIntervencion, reentradaDeIntervencion, type IntervencionParaCarencia } from "./carenciaDeIntervencion";
+import { avisosDeTrampas, type ReglaParaAviso, type TrampaParaAviso } from "./pendienteDeTrampas";
 
 /**
  * Lo pendiente de una parcela — tablero de parcela, spec §4.
@@ -45,6 +46,10 @@ export interface EntradaDePendiente {
   ahora: Date;
   /** Ya reducidas por `ubicacionesEmparentadas` + `intervencionesVigentes`, spec §3.3/§4.1. */
   intervenciones: readonly IntervencionParaAviso[];
+  /** Trampas de broca de la parcela; ver `avisosDeTrampas`. */
+  trampas: readonly TrampaParaAviso[];
+  /** La regla de la finca. `null` = sin regla, y sin regla no hay avisos de trampas. */
+  regla: ReglaParaAviso | null;
 }
 
 export type Aviso =
@@ -58,7 +63,9 @@ export type Aviso =
   | { tipo: "reentrada_vigente"; interventionId: string; locationId: string; hasta: Date }
   | { tipo: "carencia_vigente"; interventionId: string; locationId: string; hasta: Date; dias: number }
   | { tipo: "carencia_no_declarada"; interventionId: string; locationId: string; alMenosHasta: Date | null }
-  | { tipo: "reentrada_no_declarada"; interventionId: string; locationId: string; alMenosHasta: Date | null };
+  | { tipo: "reentrada_no_declarada"; interventionId: string; locationId: string; alMenosHasta: Date | null }
+  | { tipo: "trampa_por_revisar"; specimenId: string; trapNumber: number | null; diasDeRetraso: number }
+  | { tipo: "trampa_con_lectura_alta"; specimenId: string; trapNumber: number | null; lectura: string; accion: string };
 
 /** Mismo día y mes del año siguiente; un 29 de febrero vence el 28. */
 export function venceElMuestreo(ultimoDia: string): string {
@@ -97,6 +104,8 @@ export function pendienteDeLaParcela(e: EntradaDePendiente): { tocaHacer: Aviso[
   if (sueloSinResultado + foliarSinResultado > 0) {
     tocaHacer.push({ tipo: "muestras_sin_resultado", suelo: sueloSinResultado, foliar: foliarSinResultado });
   }
+
+  tocaHacer.push(...avisosDeTrampas({ hoy: e.hoy, trampas: e.trampas, regla: e.regla }));
 
   if (e.areaHectares == null) faltaUnDato.push({ tipo: "sin_area" });
   // `!(x > 0)` y no `x <= 0`: con `NaN` la segunda es falsa y lo dejaría pasar.
@@ -142,5 +151,8 @@ export function enlaceDelAviso(aviso: Aviso, locationId: string): string {
       // vive en `/plots/<madre>/manejo/<id>`, y `listarIntervenciones` de una
       // microparcela nunca la encuentra.
       return `/plots/${aviso.locationId}/manejo/${aviso.interventionId}`;
+    case "trampa_por_revisar":
+    case "trampa_con_lectura_alta":
+      return `/plots/${locationId}#trampas`;
   }
 }

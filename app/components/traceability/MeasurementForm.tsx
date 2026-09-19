@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordMeasurementAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -190,7 +191,7 @@ export function MeasurementForm({
         <label htmlFor="value">
           {unicaUnidad ? t("valueLabelWithUnit", { unit: unicaUnidad }) : t("valueLabel")}
         </label>
-        <input id="value" name="value" type="number" inputMode="decimal" step="0.01" required />
+        <CampoNumerico id="value" name="value" inputMode="decimal" step="0.01" required />
       </div>
 
       {unicaUnidad ? (

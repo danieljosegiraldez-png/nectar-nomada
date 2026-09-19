@@ -35,8 +35,12 @@ Daniel, 2026-09-18 (sus palabras, con erratas de teclado corregidas): *«en el s
 | dónde se toma | **por instalación, con nivel o fila opcional** |
 | qué se anota | **temperatura, humedad relativa, cielo/clima y ventilación** |
 | cómo se identifica una bandeja | **número y QR propio**, como ya se decidió para los envases de insumos |
+| cómo termina el secado de un lote en bandejas | **bandeja a bandeja**: cada bandeja que llega a meta se baja sola, y el lote termina cuando baja la última. **El paso a almacenamiento sigue siendo manual** (`20_modelo_ciclo_completo.md` §2) |
+| cuántas bandejas por posición | **una**: dos bandejas en la misma posición al mismo tiempo son un conflicto de datos (§4.2) |
+| catálogo de cielo | **soleado, parcialmente nublado, nublado, lluvia** |
+| catálogo de ventilación | **abierto, semiabierto, cerrado, ventilador / deshumidificador** |
 
-**Abierta, sin decidir:** cómo **termina** el secado de un lote repartido en bandejas —bandeja a bandeja, todo junto, o a criterio del encargado—. La pregunta se hizo el 2026-09-18 y **Daniel no la contestó**; no se supone. Ver §7.
+Las cuatro últimas filas se decidieron el 2026-09-18, en una segunda ronda. Hasta entonces figuraban en §7 como abiertas; **ya no hay ninguna decisión de Daniel pendiente en este spec**.
 
 ## 3. Lo que ya existe — medido sobre `1192af6`
 
@@ -110,8 +114,8 @@ Daniel, 2026-09-18 (sus palabras, con erratas de teclado corregidas): *«en el s
 | `occurredAt`, operador | como el resto |
 | temperatura | °C del aire, con unidad |
 | humedad relativa | %, con unidad |
-| cielo | catálogo corto: soleado, nublado, lluvia… más nota libre, **nunca en su lugar** |
-| ventilación | catálogo corto: abierto, cerrado, ventilador… más nota libre |
+| cielo | catálogo de Daniel: **soleado, parcialmente nublado, nublado, lluvia**, más nota libre, **nunca en su lugar** |
+| ventilación | catálogo de Daniel: **abierto, semiabierto, cerrado, ventilador / deshumidificador**, más nota libre |
 | **fuente** | **`manual`** hoy. Va como columna aunque sólo tenga un valor, porque `CLAUDE.md` §7 exige **no mezclar fuentes como si fueran equivalentes**: el día que llegue un registrador, sus filas se distinguen de las de una persona sin migrar las viejas |
 | `provenanceClass`, `createdBy` | como el resto |
 
@@ -187,10 +191,10 @@ Lo debido de §4.7 entra en la cola del tablero (#363 §4.2) **como una lectura 
 
 ## 7. Abierto
 
-- **Cómo termina el secado de un lote en bandejas.** Bandeja a bandeja —cada una que llega a meta baja sola y el lote cierra con la última—, todo junto, o a criterio del encargado. Se preguntó y no se contestó; **se vuelve a preguntar antes del plan del paso 2**, porque decide si `DryingRunTray.hasta` basta o si cada bandeja lleva su propio resultado.
 - **Los nombres** de todo lo nuevo, contra `03_public_api.md`.
-- **Los catálogos de cielo y ventilación**: los valores los da Daniel; el diseño no los inventa.
-- **«Una bandeja por posición» es un supuesto mío, no una decisión.** Es lo físico en un estante, y por eso §4.2 enseña dos bandejas en una posición como conflicto. Si en algún cuarto una posición lleva dos bandejas, esa regla se cambia antes del plan.
+- **Cómo se marca que una bandeja llegó a meta.** Daniel decidió que el secado termina bandeja a bandeja (§2). Lo que **no** decidió, y el plan del paso 2 no lo supone: si bajar una bandeja pide sólo cerrar su `DryingRunTray.hasta` o también dejar escrito con qué humedad bajó. Es una pregunta de modelo, no de dominio: el plan la resuelve con `13_drying_moisture.md` (`TARGET_REACHED` exige humedad **y** actividad de agua) y la enseña antes de construir.
+
+Cerradas el 2026-09-18 y movidas a §2: cómo termina el secado de un lote en bandejas, «una bandeja por posición» (era un supuesto y ahora es decisión) y los catálogos de cielo y ventilación.
 
 ## 8. Fuera de alcance
 

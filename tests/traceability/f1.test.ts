@@ -306,7 +306,7 @@ describe("createSpecimen", () => {
 });
 
 describe("recordSpecimenObservation — trap capture-count series and the active/removed/reinstalled cycle", () => {
-  it("rejects a trap_check with no captureCount", async () => {
+  it("rejects a trap_check with no brocaLevel", async () => {
     await expect(
       recordSpecimenObservation(authorizedUserAccountId, {
         specimenId: specimenTrapId,
@@ -323,6 +323,7 @@ describe("recordSpecimenObservation — trap capture-count series and the active
         specimenId: specimenTrapId,
         observationType: "trap_check",
         observedAt: new Date("2027-02-01T08:00:00Z"),
+        brocaLevel: "pocos",
         captureCount: 3,
         provenanceClass: "direct_observation",
       }),
@@ -334,6 +335,7 @@ describe("recordSpecimenObservation — trap capture-count series and the active
       specimenId: specimenTrapId,
       observationType: "trap_check",
       observedAt: new Date("2027-02-01T08:00:00Z"),
+      brocaLevel: "pocos",
       captureCount: 4,
       provenanceClass: "direct_observation",
     });
@@ -341,6 +343,7 @@ describe("recordSpecimenObservation — trap capture-count series and the active
       specimenId: specimenTrapId,
       observationType: "trap_check",
       observedAt: new Date("2027-02-08T08:00:00Z"),
+      brocaLevel: "algunos",
       captureCount: 11,
       provenanceClass: "direct_observation",
     });
@@ -380,6 +383,7 @@ describe("recordSpecimenObservation — trap capture-count series and the active
       specimenId: specimenTrapId,
       observationType: "trap_check",
       observedAt: new Date("2027-02-15T08:00:00Z"),
+      brocaLevel: "pocos",
       captureCount: 2,
       provenanceClass: "direct_observation",
     });

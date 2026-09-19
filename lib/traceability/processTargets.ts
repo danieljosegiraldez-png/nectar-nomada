@@ -29,6 +29,7 @@
 import { prisma } from "../db";
 import { Prisma } from "../../generated/prisma/client";
 import { requireLotAccess } from "./lots";
+import { exigeEditarBeneficioEnOrganizacion } from "./locations";
 import { recordAuditEvent } from "../audit";
 import { boundsFor } from "./units";
 import { compareNames } from "../naturalOrder";
@@ -331,6 +332,9 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
   });
   if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
   await requireLotAccess(userAccountId, "manage", [anyLot]);
+  // Configurar recetas es configurar el beneficio (spec #370 §4.3): además del
+  // lote, `edit_beneficio` en la organización de la receta; compartida, plataforma.
+  await exigeEditarBeneficioEnOrganizacion(userAccountId, input.organizationId);
 
   const recipe = await prisma.$transaction(async (tx) => {
     const recipe = await tx.processRecipe.create({
@@ -482,6 +486,9 @@ export async function updateRecipeMetadata(
   const anyLot = await prisma.lot.findFirst({ where: { organizationId: before.organizationId ?? undefined } });
   if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
   await requireLotAccess(userAccountId, "manage", [anyLot]);
+  // Configurar recetas es configurar el beneficio (spec #370 §4.3): además del
+  // lote, `edit_beneficio` en la organización de la receta; compartida, plataforma.
+  await exigeEditarBeneficioEnOrganizacion(userAccountId, before.organizationId);
 
   const name = input.name.trim();
   if (!name) throw new ProcessTargetError("name_required");
@@ -540,6 +547,9 @@ export async function createRecipeVersion(
   const anyLot = await prisma.lot.findFirst({ where: { organizationId: recipe.organizationId ?? undefined } });
   if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
   await requireLotAccess(userAccountId, "manage", [anyLot]);
+  // Configurar recetas es configurar el beneficio (spec #370 §4.3): además del
+  // lote, `edit_beneficio` en la organización de la receta; compartida, plataforma.
+  await exigeEditarBeneficioEnOrganizacion(userAccountId, recipe.organizationId);
 
   validateTargets(targets);
   validateExpectedHours(expectedHours);

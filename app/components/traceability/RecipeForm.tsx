@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { createRecipeAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -41,9 +42,13 @@ interface TargetRow {
 export function RecipeForm({
   organizations,
   variables,
+  permiteCompartida,
 }: {
   organizations: { id: string; name: string }[];
   variables: VariableChoice[];
+  /** Ofrece la opción de receta compartida (`organizationId` nulo) sólo si el
+   *  servidor la va a aceptar (Task 3, plan 3): `puedeEditarBeneficioEnOrganizacion(user, null)`. */
+  permiteCompartida?: boolean;
 }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(createRecipeAction, initialState);
@@ -75,6 +80,7 @@ export function RecipeForm({
       <div className="nn-field">
         <label htmlFor="recipe-org">{t("recipeOrganizationLabel")}</label>
         <select id="recipe-org" name="organizationId" defaultValue={organizations[0]?.id ?? ""}>
+          {permiteCompartida && <option value="">{t("recipeSharedOption")}</option>}
           {organizations.map((o) => (
             <option key={o.id} value={o.id}>{o.name}</option>
           ))}
@@ -83,8 +89,8 @@ export function RecipeForm({
 
       <div className="nn-field">
         <label htmlFor="recipe-expected">{t("recipeExpectedHoursLabel")}</label>
-        <input
-          id="recipe-expected" name="expectedHours" type="number" min={1} step={1}
+        <CampoNumerico
+          id="recipe-expected" name="expectedHours" min={1} step={1}
           inputMode="numeric" placeholder="36"
         />
         <p className="nn-muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85em" }}>
@@ -150,24 +156,24 @@ export function RecipeForm({
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               <div className="nn-field" style={{ flex: "1 1 120px" }}>
                 <label htmlFor={`t-${row.key}`}>{t("recipeTargetValueLabel")}</label>
-                <input
-                  id={`t-${row.key}`} name={`targets[${i}][targetValue]`} type="number" step="any"
+                <CampoNumerico
+                  id={`t-${row.key}`} name={`targets[${i}][targetValue]`} step="any"
                   min={b?.min} max={b?.max} value={row.targetValue}
                   onChange={(e) => update(row.key, { targetValue: e.target.value })}
                 />
               </div>
               <div className="nn-field" style={{ flex: "1 1 120px" }}>
                 <label htmlFor={`min-${row.key}`}>{t("recipeMinLabel")}</label>
-                <input
-                  id={`min-${row.key}`} name={`targets[${i}][minValue]`} type="number" step="any"
+                <CampoNumerico
+                  id={`min-${row.key}`} name={`targets[${i}][minValue]`} step="any"
                   min={b?.min} max={b?.max} value={row.minValue}
                   onChange={(e) => update(row.key, { minValue: e.target.value })}
                 />
               </div>
               <div className="nn-field" style={{ flex: "1 1 120px" }}>
                 <label htmlFor={`max-${row.key}`}>{t("recipeMaxLabel")}</label>
-                <input
-                  id={`max-${row.key}`} name={`targets[${i}][maxValue]`} type="number" step="any"
+                <CampoNumerico
+                  id={`max-${row.key}`} name={`targets[${i}][maxValue]`} step="any"
                   min={b?.min} max={b?.max} value={row.maxValue}
                   onChange={(e) => update(row.key, { maxValue: e.target.value })}
                 />
@@ -181,8 +187,8 @@ export function RecipeForm({
             {row.moment === "during" ? (
               <div className="nn-field">
                 <label htmlFor={`cada-${row.key}`}>{t("recipeEveryHoursLabel")}</label>
-                <input
-                  id={`cada-${row.key}`} name={`targets[${i}][everyHours]`} type="number"
+                <CampoNumerico
+                  id={`cada-${row.key}`} name={`targets[${i}][everyHours]`}
                   min={1} step={1} inputMode="numeric" placeholder={t("recipeEveryHoursPlaceholder")}
                   value={row.everyHours}
                   onChange={(e) => update(row.key, { everyHours: e.target.value })}

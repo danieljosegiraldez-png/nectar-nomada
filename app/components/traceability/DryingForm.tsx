@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { startDryingAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -19,11 +20,11 @@ export function DryingForm({ lotId }: { lotId: string }) {
       </div>
       <div className="nn-field">
         <label htmlFor="d-layerDepthCm">{t("layerDepthLabel")}</label>
-        <input id="d-layerDepthCm" name="layerDepthCm" type="number" inputMode="decimal" step="0.1" />
+        <CampoNumerico id="d-layerDepthCm" name="layerDepthCm" inputMode="decimal" step="0.1" />
       </div>
       <div className="nn-field">
         <label htmlFor="d-quantity">{t("quantityLabel")}</label>
-        <input id="d-quantity" name="quantity" type="number" inputMode="decimal" step="0.001" />
+        <CampoNumerico id="d-quantity" name="quantity" inputMode="decimal" step="0.001" />
       </div>
       <div className="nn-field">
         <label htmlFor="d-unit">{t("unitLabel")}</label>

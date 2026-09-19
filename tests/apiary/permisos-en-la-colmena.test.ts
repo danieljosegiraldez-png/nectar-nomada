@@ -56,6 +56,19 @@ describe("los formularios de la colmena respetan el permiso", () => {
     expect(PANTALLA).toContain('t("sinPermisoGestion")');
   });
 
+  it("dividir, reinas y unir (spec 2026-09-18) exigen gestión, y dicen por qué cuando falta", () => {
+    // Los servicios (`genealogia.ts`, `reinas.ts`) exigen apiary:manage. Kenis las VE con su razón.
+    for (const faena of ["dividir", "reinas", "unir"]) {
+      const inicio = PANTALLA.indexOf(`id="faena-${faena}"`);
+      expect(inicio, `no está la sección faena-${faena}`).toBeGreaterThan(-1);
+      const seccion = PANTALLA.slice(inicio, PANTALLA.indexOf("</section>", inicio));
+      const primerForm = seccion.indexOf("<form");
+      expect(primerForm, `faena-${faena} no tiene formulario`).toBeGreaterThan(-1);
+      expect(seccion.slice(0, primerForm), `faena-${faena} pinta su formulario sin comprobar gestión`).toContain("puedeGestionar &&");
+      expect(seccion, `faena-${faena} esconde el formulario sin decir por qué`).toContain('t("sinPermisoGestion")');
+    }
+  });
+
   it("control del propio guardia: un nombre parecido NO cuela", () => {
     expect(new RegExp(`<HarvestForm[\\s/>]`).test("<HarvestFormOtro />")).toBe(false);
     expect(new RegExp(`<HarvestForm[\\s/>]`).test("<HarvestForm a />")).toBe(true);

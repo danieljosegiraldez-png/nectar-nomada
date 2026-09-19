@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useTranslations } from "next-intl";
 import { recordMaterialConsumptionEntryFormAction } from "../../actions/traceability";
 import type { MaterialConsumptionParent } from "../../../lib/traceability/operations";
@@ -68,7 +69,7 @@ export function MaterialConsumptionForm({
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
         <div className="nn-field" style={{ flex: "1 1 100px" }}>
           <label htmlFor={`consumption-quantity-${parent.kind}`}>{t("quantityLabel")}</label>
-          <input id={`consumption-quantity-${parent.kind}`} name="quantity" type="number" inputMode="decimal" step="0.001" />
+          <CampoNumerico id={`consumption-quantity-${parent.kind}`} name="quantity" inputMode="decimal" step="0.001" />
         </div>
         <div className="nn-field" style={{ flex: "1 1 80px" }}>
           <label htmlFor={`consumption-unit-${parent.kind}`}>{t("unitLabel")}</label>

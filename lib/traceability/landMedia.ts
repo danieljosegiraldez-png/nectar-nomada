@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
 import { objectStorageProvider } from "../integrations/storage";
 import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
+import { requireTrapAccess } from "./traps";
 import { recordAuditEvent } from "../audit";
 import type { ClassificationLevel, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -36,7 +37,8 @@ const prefijoDe = (locationId: string) => `nectar-originals/land/${locationId}/`
 export type LandAssetParent =
   | { kind: "location" }
   | { kind: "biocharBatch"; biocharBatchId: string }
-  | { kind: "soilProfile"; soilProfileId: string };
+  | { kind: "soilProfile"; soilProfileId: string }
+  | { kind: "trapCheck"; specimenObservationId: string };
 
 export interface RequestLandAssetUploadInput {
   locationId: string;
@@ -101,11 +103,30 @@ async function exigirPadreDeEsaLocation(parent: LandAssetParent, locationId: str
     }
     return { soilProfileId: parent.soilProfileId };
   }
+  if (parent.kind === "trapCheck") {
+    const revision = await prisma.specimenObservation.findUnique({
+      where: { id: parent.specimenObservationId },
+      select: { specimen: { select: { locationId: true } } },
+    });
+    if (!revision) throw new LocationAccessError("trap_check_not_found");
+    if (revision.specimen.locationId !== locationId) {
+      throw new LandMediaValidationError("trap_check_not_in_location");
+    }
+    return { specimenObservationId: parent.specimenObservationId };
+  }
   return {};
 }
 
 export async function finalizeLandAssetUpload(userAccountId: string, input: FinalizeLandAssetUploadInput) {
   await requireLocationAttributeAccess(userAccountId, input.locationId);
+  // F5 fix-final — colgar una foto de una revisión de trampa es tocar un
+  // Specimen, gateado igual que `createTrap`/`recordTrapCheck`
+  // (`requireTrapAccess`, `specimen:manage`). Sin esto, `location:manage_
+  // attributes` bastaba para adjuntar evidencia a una revisión que ese mismo
+  // usuario no podía leer si le quitaban el permiso de specimen.
+  if (input.parent.kind === "trapCheck") {
+    await requireTrapAccess(userAccountId, input.locationId);
+  }
 
   // La clave tiene que estar bajo el prefijo de ESTE bloque. Sin esto, un
   // llamador podría registrar como suyo un objeto subido bajo otro bloque.
@@ -183,6 +204,9 @@ export async function listLandAssets(userAccountId: string, locationId: string) 
       createdAt: true,
       biocharBatchId: true,
       soilProfileId: true,
+      // Sin él, la foto de la tela de una revisión aparecía también entre las
+      // fotos generales de la parcela, que filtran por los otros dos padres.
+      specimenObservationId: true,
     },
   });
   return Promise.all(

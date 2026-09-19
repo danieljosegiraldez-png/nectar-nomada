@@ -1,5 +1,6 @@
 "use server";
 
+import { CondicionDelSitioInvalida } from "../../lib/apiary/condicionDelSitio";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
@@ -54,6 +55,9 @@ import {
   PlantingCohortValidationError,
 } from "../../lib/traceability/plantingCohorts";
 import { recordEnteredProduction, PlantingEventValidationError } from "../../lib/traceability/plantingEvents";
+import { createPlotBlock, PlotBlockValidationError } from "../../lib/traceability/plotBlocks";
+import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
+import { saveTrapRule, TrapRuleValidationError } from "../../lib/traceability/trapRules";
 import {
   updateLocationAttributes,
   LocationAccessError,
@@ -90,7 +94,7 @@ import {
   createFoliarSample,
   SampleValidationError,
 } from "../../lib/traceability/soilSamples";
-import { createSampleFromLot } from "../../lib/traceability/samples";
+import { createSampleFromLot, SampleValidationError as SampleFromLotValidationError } from "../../lib/traceability/samples";
 import { requestLotAssetUpload, finalizeLotAssetUpload, type LotAssetParent } from "../../lib/traceability/media";
 import {
   requestLandAssetUpload,
@@ -116,6 +120,10 @@ export interface TraceabilityActionState {
 // copy — functional and honest beats a polished translation catalog for
 // every possible internal error code.
 function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: unknown): string {
+  if (error instanceof CondicionDelSitioInvalida) {
+    const [clave, ...resto] = error.message.split(":");
+    return t(`error_condicion_${clave}` as "error_condicion_otro_sin_decir_cual", { value: resto.join(":") });
+  }
   if (error instanceof ProcedenciaInvalida) {
     // `provenance_not_offered:ai_suggestion` trae el valor pegado con dos
     // puntos, como los errores de atributo del informe externo.
@@ -135,8 +143,27 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof FieldSessionValidationError) return t("error_field_session", { detail: error.message });
   if (error instanceof BiocharBatchValidationError) return t("error_biochar", { detail: error.message });
   if (error instanceof SoilProfileValidationError) return t("error_soil_profile", { detail: error.message });
+  if (error instanceof SampleFromLotValidationError && error.message === "green_sample_before_reposo") {
+    return t("error_sample_green_before_reposo");
+  }
+  if (error instanceof SampleFromLotValidationError) return t("error_sample", { detail: error.message });
   if (error instanceof SampleValidationError) return t("error_sample", { detail: error.message });
   if (error instanceof LandMediaValidationError) return t("error_land_media", { detail: error.message });
+  // F4 fix-final — «revisa la lectura y la fecha» no es verdad de una trampa
+  // retirada: el caso real es que no se puede revisar en absoluto, y ése se
+  // dice, con su propia clave.
+  if (error instanceof TrapValidationError && error.message === "trap_retired") return t("error_trap_retired");
+  // La escala o la fecha: el mensaje dice qué revisar, y el código crudo no
+  // aporta al operario de campo nada que ese mensaje no diga.
+  if (error instanceof TrapValidationError) return t("error_trap");
+  if (error instanceof TrapAccessError) return t("error_access", { detail: error.message });
+  // «Revisa la lectura y la fecha» no es verdad de un bloque: el caso real es
+  // un nombre repetido, y ése se dice.
+  if (error instanceof PlotBlockValidationError) return t("error_block", { detail: error.message });
+  // Cada código de la regla tiene su frase: dice qué campo corregir.
+  if (error instanceof TrapRuleValidationError) {
+    return t(`error_trapRule_${error.message}` as "error_trapRule_suggested_action_required");
+  }
   if (error instanceof FechaInvalidaError) return t("error_datetime", { detail: error.message });
   if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });
   throw error;
@@ -594,6 +621,7 @@ export async function createSampleAction(
     await createSampleFromLot(user.userAccountId, {
       sampleCode: String(formData.get("sampleCode") ?? ""),
       sampleType: String(formData.get("sampleType") ?? ""),
+      materialState: emptyToNull(formData.get("materialState")) as import("../../generated/prisma/client").MaterialState | null,
       sourceLotId: lotId,
       quantity: emptyToNullNumber(formData.get("quantity")),
       unit: emptyToNull(formData.get("unit")),
@@ -1208,6 +1236,156 @@ export async function recordEnteredProductionFormAction(
 
   revalidatePath(`/plots/${locationId}`);
   revalidatePath(`/plots/${locationId}/ajustes`);
+  return {};
+}
+
+// --- Trampas de broca (F2 §3–§4) ----------------------------------------
+
+/** El estado del alta de trampa: además del error, el número que asignó el
+ *  sistema, para que el operario lo rotule en la botella. */
+export interface TrapActionState extends TraceabilityActionState {
+  trapNumber?: number;
+}
+
+/**
+ * Las tres acciones revalidan tablero y ajustes **también cuando fallan**: el
+ * fallo puede deberse a que otro operario cambió la parcela entretanto (un
+ * bloque con ese nombre, una trampa más), y la pantalla debe enseñarlo.
+ * `locationId` del POST sólo decide qué ruta se refresca; la autorización la
+ * hace el servicio sobre el id que de verdad escribe.
+ */
+function revalidarParcela(locationId: string) {
+  if (!locationId) return;
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+}
+
+export async function createPlotBlockFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const locationId = String(formData.get("locationId") ?? "");
+
+  try {
+    await createPlotBlock(user.userAccountId, {
+      locationId,
+      name: String(formData.get("name") ?? ""),
+      notes: emptyToNull(formData.get("notes")),
+    });
+  } catch (error) {
+    revalidarParcela(locationId);
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidarParcela(locationId);
+  return {};
+}
+
+export async function createTrapFormAction(
+  _prevState: TrapActionState,
+  formData: FormData,
+): Promise<TrapActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const locationId = String(formData.get("locationId") ?? "");
+
+  let trapNumber: number | null;
+  try {
+    const trampa = await createTrap(user.userAccountId, {
+      locationId,
+      plotBlockId: emptyToNull(formData.get("plotBlockId")),
+      installedAt: fechaDeDiaRequerida(formData, "installedAt"),
+      notes: emptyToNull(formData.get("notes")),
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_REGISTRO_DE_CAMPO),
+      dataQuality: emptyToNull(formData.get("dataQuality")) as never,
+    });
+    trapNumber = trampa.trapNumber;
+  } catch (error) {
+    revalidarParcela(locationId);
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidarParcela(locationId);
+  return trapNumber == null ? {} : { trapNumber };
+}
+
+export async function recordTrapCheckFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const locationId = String(formData.get("locationId") ?? "");
+
+  try {
+    // Sin número tecleado es `null`: nadie contó. Nunca un 0 (ADR-080).
+    const conteo = emptyToNullNumber(formData.get("captureCount"));
+    const otros = booleanoDeTresEstados(formData.get("otherInsects"));
+    await recordTrapCheck(user.userAccountId, {
+      specimenId: String(formData.get("specimenId") ?? ""),
+      observedAt: fechaDeDiaRequerida(formData, "observedAt"),
+      brocaLevel: String(formData.get("brocaLevel") ?? "") as never,
+      captureCount: conteo,
+      otherInsects: otros,
+      // F8 fix-final — la nota se guarda salvo cuando "otros" es
+      // explícitamente NO: antes se descartaba también con "sin registrar",
+      // así que escribir una nota y dejar el selector sin tocar la borraba en
+      // silencio.
+      otherInsectsNote: otros === false ? null : emptyToNull(formData.get("otherInsectsNote")),
+      // F1 fix-final (ADR-080) — tri-estado, como `otherInsects`: una casilla
+      // sin marcar no distingue "no se hizo" de "no se preguntó".
+      cleaned: booleanoDeTresEstados(formData.get("cleaned")),
+      liquidChanged: booleanoDeTresEstados(formData.get("liquidChanged")),
+      lureRecharged: booleanoDeTresEstados(formData.get("lureRecharged")),
+      // F3 fix-final (spec §4.6) — quién estuvo en el campo.
+      observerPersonId: emptyToNull(formData.get("observerPersonId")),
+      notes: emptyToNull(formData.get("notes")),
+      provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_REGISTRO_DE_CAMPO),
+      dataQuality: emptyToNull(formData.get("dataQuality")) as never,
+    });
+  } catch (error) {
+    revalidarParcela(locationId);
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidarParcela(locationId);
+  return {};
+}
+
+/**
+ * La regla de trampas de la finca — F2 §5. La finca viaja en el formulario
+ * (`farmLocationId`) y `saveTrapRule` comprueba el acceso sobre ella; la
+ * parcela (`locationId`) sólo sirve para revalidar las dos pantallas.
+ */
+export async function saveTrapRuleFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const locationId = String(formData.get("locationId") ?? "");
+
+  try {
+    await saveTrapRule(user.userAccountId, {
+      farmLocationId: String(formData.get("farmLocationId") ?? ""),
+      triggerLevel: String(formData.get("triggerLevel") ?? "") as never,
+      // Vacío o con letras da NaN o 0, y el servicio lo rechaza con su código.
+      normalDays: Number(String(formData.get("normalDays") ?? "").trim() || Number.NaN),
+      alertDays: Number(String(formData.get("alertDays") ?? "").trim() || Number.NaN),
+      suggestedAction: String(formData.get("suggestedAction") ?? ""),
+    });
+  } catch (error) {
+    revalidarParcela(locationId);
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidarParcela(locationId);
   return {};
 }
 
@@ -2098,6 +2276,11 @@ export async function completarVisitaAction(
       // ese cero es un dato distinto de no haber contado (ADR-080).
       hivesPresentCount: cajasCrudas === "" ? null : Number(cajasCrudas),
       weatherObserved: climaCrudo === "" ? null : climaCrudo,
+      // Sin ninguna casilla marcada NO se toca: las casillas no pueden decir «lo de antes», y
+      // borrar lo que se anotó en el sitio por no volver a marcarlo al cerrar sería perderlo.
+      ...(formData.getAll("siteConditions").length === 0
+        ? {}
+        : { siteConditions: formData.getAll("siteConditions").map(String), siteConditionOtherNote: emptyToNull(formData.get("siteConditionOtherNote")) }),
       notes: emptyToNull(formData.get("notes")),
       // Las tres de casa (`stage: close`). El vacío es `null` —«no se anotó»— y NO cero: una
       // visita sin viáticos anotados no es una visita que costó cero.
@@ -2142,6 +2325,8 @@ export async function vitalesEnSitioAction(
       weatherObserved: clima === "" ? undefined : clima,
       coloniesAliveCount: colonias === "" ? undefined : Number(colonias),
       hivesPresentCount: cajas === "" ? undefined : Number(cajas),
+      siteConditions: formData.getAll("siteConditions").map(String),
+      siteConditionOtherNote: emptyToNull(formData.get("siteConditionOtherNote")),
     });
   } catch (error) {
     return { error: friendlyError(t, error) };

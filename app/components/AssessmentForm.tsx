@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "./CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { submitAssessmentAction, type SensoryActionState } from "../actions/sensory";
@@ -53,10 +54,9 @@ export function AssessmentForm({
       ) : (
         <div className="nn-field">
           <label htmlFor={`overallScore-${blindSampleId}`}>{t("overallScoreLabel", { min: scoreMin, max: scoreMax })}</label>
-          <input
+          <CampoNumerico
             id={`overallScore-${blindSampleId}`}
-            name="overallScore"
-            type="number" inputMode="decimal"
+            name="overallScore" inputMode="decimal"
             step="0.25"
             min={scoreMin}
             max={scoreMax}
@@ -83,10 +83,9 @@ export function AssessmentForm({
               ))}
             </select>
           ) : (
-            <input
+            <CampoNumerico
               id={`attr-${blindSampleId}-${attribute.id}`}
-              name={`attr_${attribute.id}`}
-              type="number" inputMode="decimal"
+              name={`attr_${attribute.id}`} inputMode="decimal"
               step="0.25"
               min={attribute.scaleMin}
               max={attribute.scaleMax}

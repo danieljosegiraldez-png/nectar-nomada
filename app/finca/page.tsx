@@ -3,6 +3,10 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
+import { cookies } from "next/headers";
+import { COOKIE_FINCA, fincaDeLaPagina, puedeCrearParcelaEn } from "../../lib/traceability/fincas";
+import { NuevaParcelaForm } from "../components/traceability/NuevaParcelaForm";
+import { FincaElegida } from "../components/traceability/FincaElegida";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +35,13 @@ export default async function FincaPage() {
   const veFinca = ["location:manage_attributes", "lot:view", "lot:manage"].some((k) => granted.has(k));
   if (!veFinca) notFound();
 
+  // Spec fincas y parcelas §3.1: con varias fincas y ninguna elegida, primero se elige.
+  const finca = await fincaDeLaPagina(user.userAccountId, (await cookies()).get(COOKIE_FINCA)?.value);
+  if (finca.debeElegir) redirect("/fincas?volver=/finca");
+  const puedeCrearParcela = finca.elegida ? await puedeCrearParcelaEn(user.userAccountId, finca.elegida.siteId) : false;
+
   const t = await getTranslations("SeccionFinca");
+  const tf = await getTranslations("Fincas");
   const destinos = [
     { href: "/plots", titulo: t("parcelas"), ayuda: t("parcelasAyuda"), visible: true },
     // `recordHarvestEvent` exige `lot:manage` (lib/traceability/harvest.ts).
@@ -41,6 +51,7 @@ export default async function FincaPage() {
   return (
     <div>
       <h1>{t("titulo")}</h1>
+      <FincaElegida elegida={finca.elegida} hayVarias={finca.fincas.length > 1} volver="/finca" />
       <p className="nn-muted">{t("intro")}</p>
       <ul>
         {destinos.map((d) => (
@@ -51,6 +62,12 @@ export default async function FincaPage() {
           </li>
         ))}
       </ul>
+      {finca.elegida ? (
+        <section className="nn-section">
+          <h2>{tf("nuevaParcelaTitulo")}</h2>
+          {puedeCrearParcela ? <NuevaParcelaForm siteId={finca.elegida.siteId} /> : <p className="nn-muted">{tf("parcelaSinPermiso")}</p>}
+        </section>
+      ) : null}
       <p className="nn-muted">{t("proximamente")}</p>
     </div>
   );

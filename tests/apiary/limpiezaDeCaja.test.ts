@@ -160,7 +160,7 @@ describe("la limpieza de la caja", () => {
     await createColony(userAccountId, {
       hiveId,
       startedAt: D("2026-09-15"),
-      originType: "split",
+      originType: "purchased", // era "split": las divisiones ahora nacen con dividirColonia (spec 2026-09-18 §3); el origen no importa aquí
       provenanceClass: "direct_observation",
     });
     const f = await registrarLimpiezaDeCaja(userAccountId, {
@@ -199,7 +199,7 @@ describe("la limpieza de la caja", () => {
     await createColony(userAccountId, {
       hiveId,
       startedAt: new Date("2026-09-10T16:00:00Z"),
-      originType: "split",
+      originType: "purchased", // era "split": las divisiones ahora nacen con dividirColonia (spec 2026-09-18 §3); el origen no importa aquí
       provenanceClass: "direct_observation",
     });
     await expect(

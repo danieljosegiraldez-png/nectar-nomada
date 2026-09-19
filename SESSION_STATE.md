@@ -40,14 +40,15 @@ de «hecho y sin rastro».
 
 ### 2026-09-18 · El manejo fitosanitario de la parcela
 
-ADR-170. Registro de intervenciones fitosanitarias: cuatro clases (comprados, preparados, liberaciones,
+ADR-171 (renumerado al integrar `origin/main`: la rama nació como ADR-170, ya ocupado allí).
+Registro de intervenciones fitosanitarias: cuatro clases (comprados, preparados, liberaciones,
 manejo cultural); doce objetivos + otro (todo de Daniel, con procedencia en el spec). Dos columnas nuevas
 en `ConsumableMaterial` (`isPlantProtection`, `defaultReentryHours`); tres tablas nuevas. **El descuento
 del frasco es directo, sin fila de consumo, igual que el botiquín** — Daniel lo aprobó sabiendo que
 cambiaba lo que vio en el chat. Carencia y reentrada en aritmética pura; marca en la cosecha como foto
 (`HarvestWithdrawalFlag`, nulo = desconocida). Aviso cuando hoy difiere de lo que se sabía. Reentrada
-en tablero y al abrir jornada; corregir no descuenta de nuevo. PR A; PR B (áreas por bloque, trampa)
-cuando `PlotBlock` y `TrapRule` estén en `main`.
+en tablero y al abrir jornada; corregir no descuenta de nuevo. PR A; el PR B ya puede empezar:
+`PlotBlock` y `TrapRule` están en `main` desde el PR #413.
 
 **Incidente durante T8:** un subagente corrió `npm run test:db -- reset` sobre la base compartida
 55433 (2026-09-18 ~23:39Z, restauró el backup del 2026-09-14). La instrucción «no la resetees» estaba en
@@ -66,79 +67,83 @@ corta en 200, así que pasadas las 200 rechazaba una muestra propia. Ahora compr
 Flips de las dos cosas. **Sin verificar en navegador** —hace falta sesión—. Cierra
 `PENDING_IMPLEMENTATIONS/012`.
 
-### 2026-09-18 · Dividir un lote de miel
+### 2026-09-18 · Anular una asignación a tienda que no va a llegar
 
-ADR-162. `split` ya existía y conserva masa; faltaba la pantalla. De dos a seis partes, cada una un
-lote nuevo que sabe de qué caja viene; lo no repartido se queda. Lo que entra se deduce (partes +
-merma) **sumado en gramos enteros**, para no asentar el resto de coma flotante de 0,1 + 0,2.
+ADR-170. Una asignación pendiente se anula con motivo y día —desde `/tienda` o desde la ficha del
+lote— y sus envases vuelven a libres. No se borra (quién, cuándo, por qué y AuditEvent); una
+recibida no se anula y una anulada no se recibe. Salió como hueco del flujo de dos actos, no como
+petición de Daniel.
 
-### 2026-09-18 · Procesar y envasar miel: dos pasos del lote
+### 2026-09-18 · Fincas y parcelas: elegir la finca, y crearlas desde la app (PR #425)
 
-ADR-161. Daniel eligió «proceso + envasado». `honey_processing` (actos fijos: colado, filtrado,
-decantación/maduración, homogenizado, otro ¿cuál?) y `packaging` (envases × masa neta, dicho como
-cálculo). Cada paso crea un lote nuevo; los dos **conservan masa** y lo que no cuadra queda como
-desviación, no como rechazo. Cuatro `CHECK`; **una sonda encontró un fallo en la primera versión**.
+Daniel: «debería preguntarme qué finca —trabajo con varias— o mostrarme todas» y «no me deja crear
+parcelas». Spec y plan `docs/superpowers/{specs,plans}/2026-09-18-fincas-y-parcelas*`.
+- **Elegir:** `/fincas`. La elección vive en una cookie de sesión que **sólo acota**: una finca
+  ajena se ignora. `/finca`, `/plots` y `/lots/new` preguntan si hay varias y ninguna elegida.
+- **Crear:** finca nueva o terreno de una organización sin él (sólo admin, permiso nuevo
+  `organization:create_farm`); parcela (Farm Manager de esa finca, `create_site`); microparcela
+  (`createMicrolot`, que ya existía sin pantalla). Nombres únicos bajo el mismo padre.
+- **La cosecha sólo sobre `plot`**, lo comprueba el servicio.
+- **Sin ver en navegador.**
 
-**Hueco de debajo, arreglado:** el peso completado en el cierre de extracción no entraba en el
-libro del lote, así que la miel pesada al extraer no tenía saldo. La ficha del lote de miel ya no
-ofrece botones del café y dice de qué caja viene, también para un frasco.
+**De Daniel:** crear el terreno de **Kiva Estate** desde `/fincas` → «sin terreno». El seed dice que
+es un nombre ficticio (`prisma/seed.ts:168`) y Daniel dice que es real: el comentario queda para que
+él decida.
 
-**Pendiente:** dividir miel desde la pantalla, enlazar el envasado a un producto, y la traducción
-que le falta a `transformationType_hulling` (vista, sin tocar).
+### 2026-09-18 · El despacho dice de qué lote sale cada frasco
 
-### 2026-09-18 · `reporteDeProceso.test.ts` dejó de fallar a veces (PR #395)
+ADR-169. Daniel: «lo elige quien despacha». **El despacho no existía** —nada ponía un pedido en
+`fulfilled`— y hay cero pedidos en la copia local. `/tienda` lista los pagados; por artículo se dice
+cuántos frascos salen de cada lote recibido, la suma tiene que dar lo pedido, y los kilos salen del
+libro del lote (`transfer_out`). Falta que el cliente lo vea en «Mis pedidos».
 
-Fallaba intermitente en el carril con base (`expected 3 to be 1`) y pasaba sola. **El gestor del
-fixture era Platform Admin**, así que el reporte contaba toda la base, incluidos los procesos que
-`lotProcess.test.ts` cierra en paralelo. Ahora es Farm Operator de su plot, y los recuentos de lotes
-son exactos para que la prueba afirme su propio aislamiento. Reproducido con un contaminante
-temporal (antes cae, después 6/6) y flip de la mutación (volver a poner el admin → `56 ≠ 2`).
-**Sin reproducir:** el fallo de «agrupa por grado»; se atribuye a la misma causa, sin medirlo.
+### 2026-09-18 · La muestra verde sólo en almacenamiento, y la 111 retirada (PR #419)
 
-Auditadas las otras 21 pruebas que buscan Platform Admin: **ninguna con el defecto hoy**, dos con su
-forma lenta — ver `PENDING_IMPLEMENTATIONS/012`. Lección en `CLAUDE.md`, «Un admin de plataforma ve la
-base compartida entera».
+Spec #408 (con las 5 respuestas de Daniel) y plan #414, aprobados y fusionados. **Bloquea** en
+`createSampleFromLot` una muestra `materialState` verde si el lote no está en almacenamiento; **sin
+permiso de anulación**. «Crear Muestra» pide el estado del material. `retirarMuestra` (columna
+`retiredAt`, migración `20260918180000_muestra_retirada`, `AuditEvent` en la misma transacción);
+«Nueva cata» ni ofrece ni acepta retiradas. **La 111 (lote PE-80) está retirada en producción**, por
+el guion `data:retirar-muestra-111`: ensayo primero, 1 `sample.retire` con motivo, 0 muestras activas.
+Nota a `01_lot_lifecycle` §2 regla 4: volver del secado a una fase anterior es receta, no error.
+**Consecuencia esperada:** hoy ningún lote tiene proceso cerrado ni almacenamiento registrado, así que
+no se puede tomar muestra verde hasta que la captura de campo alimente esas fases. **Sin ver en
+navegador.**
 
-### 2026-09-18 · El botiquín: vencimiento, custodia, descuento y aviso
+**Tres cosas que se cazaron antes de producción:** el guion buscaba `id: "111"` —es el código; el id es
+un uuid— y habría fallado sin retirar nada; la migración se llamaba `…130000` y habría llegado detrás
+de otras ya aplicadas; y las cifras del inventario de acceso se desfasaron dos veces al avanzar `main`
+(CI prueba el PR fusionado con `main`, no la rama). Y `tools/pack-for-review.sh` (#390, #391, #393,
+#396, #401): lee todo de la punta del rango, rutas con espacios y con tildes; en bash 3.2, `set -e`
+mata el script cuando falla una función aunque esté a la izquierda de un `||`.
 
-Nueve tareas del plan `docs/superpowers/plans/2026-09-17-botiquin.md`, en un PR. El producto lleva
-una vez fabricante, principio activo, registro, carencia, con cuánto aviso, almacenamiento y
-advertencias; el frasco, en cada compra, vencimiento, presentación y factura. **Botado y perdido**
-restan y exigen motivo (`CHECK` en la base). **Custodia** = sitio + persona, en intervalos sin hueco
-ni solape. Foto de la etiqueta sobre el frasco. **Aplicar un tratamiento descuenta del frasco** en la
-misma transacción; vencido se aplica y queda marcado. `/inventario/recibir`, y la lista con «Vence»
-y «Dónde está».
+### 2026-09-18 · Las faenas con nombres de manual, la división y la reina (PR #397)
 
-**Decisiones de la ejecución que el plan no traía, para que Daniel las vea:**
-- **El aviso NO va en `/start`**: esa ruta sólo redirige (ADR-082). Va en `/lots`, `/apiaries` y la
-  ficha del apiario, a quien tiene `lot:manage` donde ESTÁ el frasco.
-- **Descontar exige `lot:manage` sobre el frasco.** Kenis (sólo eventos de colonia) registra el
-  tratamiento sin frasco. El manejo en lote no acepta frasco todavía.
-- **FK de evidencia en RESTRICT** (foto y tratamiento), como fijó la revisión del 2026-09-01; la
-  primera versión copió SET NULL de padres anteriores y la deriva de migraciones lo cazó.
-- **Completar un producto sólo rellena huecos**; corregir lo ya declarado no tiene pantalla.
+Spec #407 aprobado por Daniel y fusionado; plan `docs/superpowers/plans/2026-09-18-faenas-division-y-reinas.md`,
+seis tareas. **Ocho faenas** en la colmena —revisar · alimentar · tratar · contar varroa · dividir ·
+reinas · unir · cosechar— con nombres de DICTA y SAGARPA; la enjambrazón es un aviso DENTRO de Revisar.
+**Genealogía:** una división nace con su madre y una unión cierra la débil apuntando a la receptora
+(las viejas sin pareja se quedan así: CHECK NOT VALID). **Reina por intervalos** (`Queen`,
+`QueenTenure`), sin marca: una colonia sin reina registrada es «sin registro», nunca huérfana. Al
+dividir se elige con quién se queda la reina. Las puertas viejas («división» en Nueva colonia, «se
+combinó» en el fin) se cerraron. **Sin ver en navegador.**
 
-**Migraciones fuera de orden:** tres del botiquín (`20260918000000`–`020000`) tienen fecha anterior a
-`20260918023857_limpieza_de_caja`, ya en producción. Son de tablas independientes; `migrate deploy`
-aplica las pendientes, pero **leer el log del despliegue** y confirmar que nombra las seis.
+**La base compartida:** los dos CHECK NOT VALID de la genealogía tumbaban 3 pruebas de `main` en otras
+sesiones; con permiso de Daniel se quitaron de `nectar_test` y esta rama compuerta en `nectar_ci_faena`.
+Vuelven con la migración al fusionar.
 
-**Sin verificar en navegador** —hace falta sesión—. **La cifra del router chocó por cuarta vez:** la
-rama decía 83 y, rebasada sobre `/finca`, se midió 84.
+### 2026-09-18 · Artefactos de colmena y el nodo de sensores (PR #405)
 
-### 2026-09-17 · El refractómetro de miel: la lectura va sobre el lote
+Plan `docs/superpowers/plans/2026-09-17-artefactos-de-colmena.md`, ocho tareas. **La colmena guarda
+qué lleva puesto y desde cuándo** (`HiveFitting`, intervalos); la inspección declara sólo el cambio,
+en un bloque plegado; la foto `queenExcluder`/`entranceReducer`/`screenedBottomBoard` la escribe sólo
+`artefactos.ts` (guardia de fuente: el flip-test de ejecución NO lo veía). **El nodo** (`HiveNode`)
+exige `hive_node:manage` —Farm Manager sí, operario no—; su crudo (`NodeObservation`) es inmutable por
+disparador, idempotente, con cuarentena y la colmena DEL MOMENTO; los kilos se derivan con la fórmula
+del firmware y una calibración inmutable. `POST /api/v1/ingest/notehub` **cerrada por defecto**.
 
-ADR-160. Daniel corrigió: un refractómetro no mide humedad en general; **el de miel lee Brix y H%**, y
-**el del beneficio es otro aparato** (Brix 0–32 de mosto, sin H%). La primera versión metía tres
-columnas en la cosecha; **se quitaron antes de commitear** porque el esquema ya lo prohibía y Daniel
-lo dijo a mitad: **la miel es un lote**, que se sigue al dividir, filtrar, envasar y muestrear.
-
-`MaterialState.BEE_HONEY`, `InstrumentMeasurementMode.variable`, y `recordMeasurement` que rechaza
-un modo que no lee esa variable y una lectura fuera de su rango. **El Brix 0–40 del café no se
-ensancha**: se abre a 0–100 sólo sobre lotes `honey`. **El H% nunca se calcula desde el Brix.** Una
-lectura por cosecha. La ficha del equipo gana dónde declarar modos: no había ninguna pantalla.
-
-**Pendiente:** filtrar y envasar miel no tienen nombre en la cadena del lote, ni hay pantalla del
-lote de miel. Es lo siguiente.
+**De Daniel, cuando haya nodos:** `NOTEHUB_ROUTE_SECRET` en Vercel y en la ruta de Notehub, y
+registrar cada nodo con su UID de Notecard — registrar y calibrar **no tienen pantalla**.
 
 ## 3. Bloqueado, y en qué
 
@@ -281,7 +286,10 @@ puede afirmar cada pantalla— y sigue sin tomarse.
   no se ha ejecutado. La herramienta quedó lista el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **`npm run apiary:load-protocol` YA SE CORRIÓ — 2026-09-16, lo confirmó Daniel.**
+- **La v2 del protocolo YA ESTÁ CARGADA en producción — 2026-09-18, lo confirmó Daniel.** La
+  vista previa dice «versión(es) 1, 2» y que la 2 ya está (con el guion arreglado en #422: el
+  viejo buscaba el identificador por versión y habría dicho «NO está»).
+- **`npm run apiary:load-protocol` (v1) YA SE CORRIÓ — 2026-09-16, lo confirmó Daniel.**
   `apiario-campo-v1` está en producción, así que las pantallas de captura de campo
   tienen qué preguntar. **Se anota justamente porque no estaba anotado:** ese día
   se le pidió correrlo como «lo único que falta» sacándolo de la memoria de una

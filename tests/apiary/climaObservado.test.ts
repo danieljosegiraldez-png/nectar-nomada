@@ -22,8 +22,8 @@ import {
 describe("el vocabulario es el del protocolo, no uno nuestro", () => {
   it("LOS CUATRO VALORES SALEN DEL PROTOCOLO, leído del archivo", () => {
     // No se comparan contra una lista escrita aquí —eso sería compararme conmigo mismo—: se leen
-    // de `protocolos/apiario-campo-v1.json`, que es el artefacto del dueño.
-    const protocolo = JSON.parse(readFileSync(join(process.cwd(), "protocolos/apiario-campo-v1.json"), "utf8"));
+    // de `protocolos/apiario-campo-v2.json`, que es el artefacto del dueño.
+    const protocolo = JSON.parse(readFileSync(join(process.cwd(), "protocolos/apiario-campo-v2.json"), "utf8"));
     const items = (protocolo.activities ?? []).flatMap((a: { items?: unknown[] }) => a.items ?? []);
     const clima = items.find((i: { key: string }) => i.key === "weather_observed") as
       | { options?: string[] }

@@ -1,3 +1,4 @@
+import { CampoNumerico } from "../../components/CampoNumerico";
 import { instrumentosParaMedicion } from "../../../lib/equipos/equipos";
 import { inspeccionesParaMedicion } from "../../../lib/traceability/measurements";
 import Link from "next/link";
@@ -50,6 +51,8 @@ import { HarvestSourcesForm } from "../../components/traceability/HarvestSources
 import type { LabourEntry } from "../../../generated/prisma/client";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { DividirMielForm, EnvasarMielForm, ProcesarMielForm } from "../../components/apiary/PasosDeMielForm";
+import { AnularAsignacionForm, AsignarATiendaForm } from "../../components/commerce/TiendaForms";
+import { asignacionesDeLote, variantesParaAsignar } from "../../../lib/commerce/tienda";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +67,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
 
   const t = await getTranslations("Traceability");
   const tMiel = await getTranslations("Apiary");
+  const tTienda = await getTranslations("Tienda");
 
   let detail;
   try {
@@ -295,6 +299,10 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   // ADR-161 — un lote de MIEL no fermenta, no se seca ni tiene proceso de café: se procesa y se
   // envasa. Ofrecerle los botones del café era invitar a registrar algo que no existe.
   const esMiel = lot.lotType === "honey";
+  // ADR-163 — sólo un lote que SALIÓ de un envasado tiene envases que asignar a la tienda.
+  // `getLotDetail` ya autorizó este lote; las dos lecturas trabajan sobre su id.
+  const tienda = esMiel ? await asignacionesDeLote(lot.id) : null;
+  const variantesTienda = tienda && puedeRegistrar && tienda.libres > 0 ? await variantesParaAsignar() : [];
   const selectionCatalogs = canSelect ? await getSelectionCatalogs() : null;
   // Los códigos que ya cuelgan de este batch, para que la pantalla sugiera el
   // siguiente libre y no uno que abortaría la transacción.
@@ -516,6 +524,41 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               <EnvasarMielForm lotId={lot.id} />
               <h3 id="dividir-miel">{tMiel("mielDividirTitulo")}</h3>
               <DividirMielForm lotId={lot.id} />
+            </>
+          ) : null}
+
+          {/* ADR-163 — a la tienda. Asignar no toca el inventario: lo sube la recepción. */}
+          {tienda ? (
+            <>
+              <h3 id="a-la-tienda">{tTienda("loteTitulo")}</h3>
+              <p className="nn-muted">{tTienda("loteResumen", { envases: tienda.envases, asignados: tienda.asignados, libres: tienda.libres })}</p>
+              {tienda.filas.length > 0 ? (
+                <ul>
+                  {tienda.filas.map((f) => (
+                    <li key={f.id}>
+                      {f.assignedAt.toISOString().slice(0, 10)} ·{" "}
+                      {tTienda("pendienteFila", {
+                        envases: f.unitsAssigned,
+                        producto: f.productVariant.product.name,
+                        variante: f.productVariant.variantName ?? f.productVariant.sku,
+                      })}{" "}
+                      ·{" "}
+                      {f.cancelledAt
+                        ? tTienda("anuladaFila", { fecha: f.cancelledAt.toISOString().slice(0, 10), motivo: f.cancelReason ?? "" })
+                        : f.receivedAt
+                          ? tTienda("recibidaFila", { n: f.unitsReceived ?? 0, fecha: f.receivedAt.toISOString().slice(0, 10) }) +
+                            (f.receiptNote ? ` — ${f.receiptNote}` : "")
+                          : tTienda("esperandoRecepcion")}
+                      {puedeRegistrar && !f.cancelledAt && !f.receivedAt ? (
+                        <AnularAsignacionForm allocationId={f.id} lotId={lot.id} />
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {puedeRegistrar && tienda.libres > 0 ? (
+                <AsignarATiendaForm lotId={lot.id} variantes={variantesTienda} libres={tienda.libres} />
+              ) : null}
             </>
           ) : null}
         </section>
@@ -893,7 +936,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               </div>
               <div className="nn-field">
                 <label htmlFor="ferm-output-quantity">{t("quantityLabel")}</label>
-                <input id="ferm-output-quantity" name="quantity" type="number" inputMode="decimal" step="0.001" />
+                <CampoNumerico id="ferm-output-quantity" name="quantity" inputMode="decimal" step="0.001" />
               </div>
               <div className="nn-field">
                 <label htmlFor="ferm-output-unit">{t("unitLabel")}</label>
@@ -992,7 +1035,7 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
               </div>
               <div className="nn-field">
                 <label htmlFor="dry-output-quantity">{t("quantityLabel")}</label>
-                <input id="dry-output-quantity" name="quantity" type="number" inputMode="decimal" step="0.001" />
+                <CampoNumerico id="dry-output-quantity" name="quantity" inputMode="decimal" step="0.001" />
               </div>
               <div className="nn-field">
                 <label htmlFor="dry-output-unit">{t("unitLabel")}</label>

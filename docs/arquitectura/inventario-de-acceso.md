@@ -13,17 +13,44 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**387 operaciones** que tocan la base, en **118 archivos**:<!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
+**437 operaciones** que tocan la base, en **131 archivos**:
+
+<!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
      la compuerta falla y dice cuál. Todo el trabajo del 2026-08-31 empezó por
      una discrepancia de uno entre este documento y la medición. -->
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **276** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo || **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **59** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama || **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
+| **317** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **38** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **63** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
+| **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+
+> **Anular una asignación a tienda (ADR-170, 2026-09-18).** Una operación nueva,
+> `anularAsignacion` en `lib/commerce/tienda.ts`, y sube la fila de **guardia directo**,
+> 309→310 tras rebasar sobre las fincas (#425): exige `commerce:manage_store` o, si no, `requireLotAccess("manage")` sobre el lote
+> de la asignación, antes de escribir nada. 429→430.
+
+> **Fusión de `origin/main` en `trampas-broca` (2026-09-18).** Los dos lados
+> traían cifras propias —356/106 la rama, 376/116 `main`— y **ninguna de las dos
+> vale para el árbol combinado**. Las de arriba son las que imprime
+> `node scripts/inventario-de-acceso.mjs` sobre la fusión: **382 en 119**.
+
+> **Y el de 419→422, con un archivo nuevo, es el plan 3 de «editar beneficio»
+> (Tarea 4, ADR-168, 2026-09-18): conceder y quitar desde `/beneficio/ajustes`.**
+> `lib/traceability/concesiones.ts` aporta **tres** operaciones y las tres
+> llevan **guardia directo**, 300→303: `concederEditarBeneficio`,
+> `quitarEditarBeneficio` y `personasDelBeneficio` empiezan las tres por
+> `exigeEditarBeneficioEn` (ADR-167) sobre el propio beneficio, antes de leer o
+> escribir nada. 3 = 3: si la cuenta no cerrara con la fila de «guardia
+> directo», alguna se habría colado sin esa guardia. Las pantallas y acciones
+> de servidor (`app/actions/beneficios.ts`, `app/beneficio/ajustes/Concesiones.tsx`,
+> `sitiosParaCrearInstalacion` en `instalaciones.ts`) no suman fila propia: sólo
+> llaman a operaciones ya inventariadas o a los booleanos `puedeEditarBeneficioEn`/
+> `puedeEditarBeneficioEnOrganizacion`, que no tocan la base por su cuenta.
 
 > **Y el de 350→354, con un archivo nuevo, es el servicio de beneficio (Tarea 2 del
 > plan de alta de beneficio).** `lib/traceability/beneficios.ts` aporta **cuatro**
@@ -59,6 +86,29 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > misma compuerta que ya usaba `recordFieldEvent()` — de ahí que sume una fila y no
 > dos: la llamada existente no cambió de forma, sólo de sitio. Ningún archivo nuevo:
 > vive en `fieldSessions.ts`, ya inventariado.
+
+> **Y el de 387→389, sin archivo nuevo, es el plan 2 de «editar beneficio» (Tarea 4,
+> 2026-09-18).** Dos operaciones más en `lib/traceability/locations.ts`:
+> `exigeEditarBeneficioEn` (sobre una ubicación, sea del tipo que sea) y
+> `exigeEditarBeneficioEnOrganizacion` (en algún lugar de una organización, o en
+> plataforma si no hay ninguna) — las dos **guardia directo**, 274→275. La otra
+> unidad, «acotado por construcción» 34→35, es la propia
+> `exigeEditarBeneficioEnOrganizacion`: recorre las `Location` de la organización y
+> se detiene en la primera donde `can()` acepta, así que no puede devolver una
+> concesión ajena a esa organización. `instalaciones.ts` y `processTargets.ts` pasan
+> a llamar a estas dos guardias, y `equipos.ts` gana `puedeConfigurar` — sin fila
+> propia porque no es una función exportada, sólo una que las seis escrituras de
+> equipos y `sitiosParaRegistrar` ya citaban por su cadena `guardias`/`transitivo`.
+> **Fuera del cambio de cifras:** `lib/inventario/materiales.ts` y `recepcion.ts`
+> siguen comprobando `equipment:manage` directamente y no pasan por
+> `puedeConfigurar` — el módulo de insumos reutiliza el permiso de equipos y este
+> plan no lo toca (§3 de la spec, nota del 2026-09-18).
+
+> **Fusión de `origin/main` en `fitosanitarios` (2026-09-18).** Los dos lados
+> traían cifras propias sobre árboles distintos —387/118 aquí, tras la ronda final
+> de revisión, y 430/130 en `main`— y **ninguna de las dos vale para el árbol
+> combinado**. Las cifras del encabezado y de la tabla de arriba son las que
+> imprime `node scripts/inventario-de-acceso.mjs` sobre la fusión: **437 en 131**.
 
 > **Tareas 8 y 9 (2026-09-16):** el inventario incluye las opciones de inspección y
 > el servicio de instalaciones. Las cifras anteriores se regeneraron con
@@ -110,6 +160,44 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > `crearSubproducto` autoriza contra los lotes de ENTRADA de la transformación,
 > porque quien no puede tocar ese lote no puede declarar lo que salió de él.
 
+> **Y el de 350→352, con un archivo nuevo, es `lib/traceability/plotBlocks.ts`.**
+> `createPlotBlock` y `listPlotBlocks` (Tarea 2 de trampas de broca) suben la fila de
+> **guardia directo**: las dos llaman a `requireLocationAttributeAccess` antes de tocar
+> `PlotBlock`, la misma compuerta de «configurar la parcela» que usa `locations.ts`.
+
+> **Y el de 352→353, con un archivo nuevo, es `lib/traceability/traps.ts`.**
+> `createTrap` (Tarea 3 de trampas de broca) sube la fila de **guardia directo**: llama a
+> `can(..., "manage", "specimen", ...)` en su propio `requireTrapAccess`, la compuerta de
+> `specimens.ts` — no la de la parcela, porque dar de alta una trampa es gestionar un
+> `Specimen`, no configurar la parcela.
+
+> **Y el de 353→354, sin archivo nuevo, es `recordTrapCheck` en el mismo
+> `lib/traceability/traps.ts` (Tarea 4 de trampas de broca).** Sube otra vez la fila de
+> **guardia directo**: pasa por el mismo `requireTrapAccess` que `createTrap`, después de su
+> propio `prisma.specimen.findUnique` para confirmar que el `id` recibido es una trampa
+> (`specimenType: "trap"`) y no cualquier otro `Specimen`. No necesita entrada nueva en el
+> allowlist — el archivo ya estaba en la lista desde la fila anterior.
+
+> **Y el de 354→356, con un archivo nuevo, es `lib/traceability/trapRules.ts` (Tarea 7 de
+> trampas de broca).** `saveTrapRule` y `getTrapRule` suben dos veces la fila de **guardia
+> directo**: las dos pasan por `requireLocationAttributeAccess` sobre la finca
+> (`farmLocationId`) antes de tocar `trap_rule` — la compuerta de «configurar la parcela»,
+> la misma de `plotBlocks.ts`. Entrada nueva en el allowlist como módulo de dominio.
+
+> **Y el de 382→383, sin archivo nuevo, es exportar `requireTrapAccess` (ronda de arreglos
+> finales de trampas de broca, F5).** No cambia ningún permiso: sigue siendo exactamente
+> `can(..., "manage", "specimen", ...)`, sin tocar. Lo que cambia es que
+> `lib/traceability/landMedia.ts` ahora la LLAMA — antes, colgar la foto de una revisión de
+> trampa sólo exigía `location:manage_attributes` (la compuerta genérica de la parcela), así
+> que a alguien con la parcela pero sin `specimen:manage` le bastaba para adjuntar evidencia
+> a una revisión que ni siquiera podía crear. Como `requireTrapAccess` no era `export`, el
+> inventario no la veía como operación propia; al exportarla para reutilizarla, la cuenta la
+> recoge por primera vez — aunque llevaba autorizando `createTrap`/`recordTrapCheck` desde la
+> Tarea 3. `getPlotDetail` (`lib/traceability/plantingCohorts.ts`) recibió el mismo tipo de
+> arreglo —ahora exige además `specimen:view` antes de incluir la sección de trampas— pero no
+> sube la cuenta: ya era **guardia directo** por `requireLocationAttributeAccess`, y añadir un
+> segundo `can(...)` dentro de una función ya contada no crea una fila nueva.
+
 > **Y el de 342→345 son los tres ajustes de permiso por asignación (ADR-146).** Viven en
 > `lib/rbac/admin.ts`, que ya estaba inventariado, y suben la fila de **guardia directo**:
 > `listAssignmentPermissions`, `setPermissionOverride` y `clearPermissionOverride` exigen
@@ -159,6 +247,21 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > propia compuerta. Es la misma razón que ya excluye a
 > `crearAreas`/`crearLineasDeIntervencion` de la nota de arriba: el detector
 > cuenta operaciones con principal, no cada función que toca `prisma`.
+
+> **Y seis más, con un archivo nuevo, son la tienda (ADR-163).** `lib/commerce/tienda.ts`
+> aporta cuatro de **guardia directo** —`asignarATienda` con `requireLotAccess("manage")`;
+> `confirmarRecepcion`, `crearVariante` y `tiendaParaGestionar` con `commerce:manage_store`— y
+> dos que **dependen del llamador**: `asignacionesDeLote` y `variantesParaAsignar`, que sólo llama
+> la ficha del lote después de que `getLotDetail` autorice. 4 + 2 = 6.
+
+> **Y dos más, con un archivo nuevo, son las cosechas sin saldo (ADR-166).**
+> `lib/apiary/cosechasSinSaldo.ts`: `asentarPesoDeCosecha` sube **guardia directo**
+> (`requireApiaryAccess("manage")`) y `cosechasSinSaldo` **depende del llamador**: sólo la llama
+> la ficha del apiario después de que `getApiaryDetail` autorice.
+
+> **Y dos más, en `lib/commerce/tienda.ts`, son el despacho (ADR-169).** `pedidosPorDespachar` y
+> `despacharPedido` suben **guardia directo**: los dos exigen `commerce:manage_store` antes de
+> leer nada.
 
 > **Y el de 355→356 es `registrarVitalesEnSitio` (ADR-157).** Vive en
 > `lib/apiary/vitalesEnSitio.ts` y sube la fila de **guardia directo**: exige

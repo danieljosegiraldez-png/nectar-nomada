@@ -24,6 +24,8 @@ import {
 } from "../../lib/traceability/landMedia";
 import { createSoilProfile } from "../../lib/traceability/soilProfiles";
 import { createBiocharBatch } from "../../lib/traceability/biocharBatches";
+import { createTrap, recordTrapCheck, TrapAccessError } from "../../lib/traceability/traps";
+import { crearUsuarioConAcceso, crearParcela } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `land-media-${Date.now()}`;
@@ -243,5 +245,151 @@ describe("listLandAssets", () => {
     // El camino feliz pide URL firmadas a R2 y no se puede ejercitar sin
     // credenciales; el rechazo corre antes de tocar el almacenamiento.
     await expect(listLandAssets(userAId, locationBId)).rejects.toThrow(LocationAccessError);
+  });
+});
+
+// F2 §4 (Tarea 5) — una foto de la tela de una trampa cuelga de la REVISIÓN
+// (SpecimenObservation, `observationType: "trap_check"`), no de la trampa
+// entera (Specimen). Setup propio, ajeno al `beforeAll`/`afterAll` de arriba
+// (que son del bloque A/B de biochar y suelo): usa `crearUsuarioConAcceso` +
+// `crearParcela`, el mismo patrón que `tests/traceability/traps.test.ts`.
+describe("la foto de una revisión de trampa", () => {
+  const userAccountIds: string[] = [];
+  const personIds: string[] = [];
+  const scopeIds: string[] = [];
+  const locationIds: string[] = [];
+  const organizationIds: string[] = [];
+  const assetIdsLocal: string[] = [];
+
+  afterAll(async () => {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: userAccountIds } }) });
+    await prisma.asset.deleteMany({ where: assertDefinedWhere({ id: { in: assetIdsLocal } }) });
+    await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
+    await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
+    await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizationIds } }) });
+  });
+
+  it("cuelga la foto de la revisión, no de la trampa", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation",
+    });
+    // `requestLandAssetUpload` no se ejercita aquí: su camino feliz llama al
+    // adaptador real de R2 y no hay credenciales en ningún entorno de prueba
+    // (ver el comentario de cabecera de este archivo) — mismo motivo por el
+    // que el resto de pruebas de este archivo construyen la clave a mano.
+    const asset = await finalizeLandAssetUpload(userAccountId, {
+      locationId: parcela.id,
+      storageKey: `nectar-originals/land/${parcela.id}/${RUN_ID}-tela.jpg`,
+      mimeType: "image/jpeg",
+      sizeBytes: 1234,
+      originalFilename: "tela.jpg",
+      parent: { kind: "trapCheck", specimenObservationId: revision.id },
+      provenanceClass: "direct_observation",
+    });
+    assetIdsLocal.push(asset.id);
+    expect(asset.specimenObservationId).toBe(revision.id);
+  });
+
+  // El agujero, igual que con el perfil de suelo y el lote de biochar: la
+  // Location que se autoriza (parcela A) y el padre (una revisión de la
+  // parcela B) pueden no coincidir. Sin la comprobación, alguien con acceso
+  // a A podría colgar ahí la foto de una revisión de B.
+  it("rechaza colgar la foto de una revisión de otra parcela", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcelaA = await crearParcela();
+    locationIds.push(parcelaA.id, parcelaA.parentLocationId!);
+    organizationIds.push(parcelaA.organizationId!);
+    const parcelaB = await crearParcela();
+    locationIds.push(parcelaB.id, parcelaB.parentLocationId!);
+    organizationIds.push(parcelaB.organizationId!);
+
+    const trampaB = await createTrap(userAccountId, {
+      locationId: parcelaB.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revisionB = await recordTrapCheck(userAccountId, {
+      specimenId: trampaB.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation",
+    });
+    await expect(
+      finalizeLandAssetUpload(userAccountId, {
+        locationId: parcelaA.id,
+        storageKey: `nectar-originals/land/${parcelaA.id}/${RUN_ID}-cruzada-trampa.jpg`,
+        mimeType: "image/jpeg",
+        sizeBytes: 1234,
+        originalFilename: "cruzada.jpg",
+        parent: { kind: "trapCheck", specimenObservationId: revisionB.id },
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(LandMediaValidationError);
+  });
+
+  // F5 fix-final — antes esta vía sólo exigía `location:manage_attributes`
+  // (la primera línea de `finalizeLandAssetUpload`). Alguien con la parcela
+  // pero sin `specimen:manage` podía colgar evidencia en una revisión que ni
+  // siquiera podía crear. Mismo mecanismo de `deny` que
+  // `tests/rbac/ajustesDePermiso.test.ts`, para probar el guardia nuevo con
+  // acceso real a la parcela y no con la ausencia total de asignación.
+  it("rechaza colgar la foto de una revisión sin `specimen:manage`", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const revision = await recordTrapCheck(userAccountId, {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation",
+    });
+
+    const assignment = await prisma.assignment.findFirstOrThrow({ where: { userAccountId } });
+    const permisoSpecimenManage = await prisma.permission.findFirstOrThrow({
+      where: { resourceType: "specimen", action: "manage" },
+    });
+    await prisma.assignmentPermissionOverride.create({
+      data: { assignmentId: assignment.id, permissionId: permisoSpecimenManage.id, effect: "deny" },
+    });
+
+    await expect(
+      finalizeLandAssetUpload(userAccountId, {
+        locationId: parcela.id,
+        storageKey: `nectar-originals/land/${parcela.id}/${RUN_ID}-sin-permiso.jpg`,
+        mimeType: "image/jpeg",
+        sizeBytes: 1234,
+        originalFilename: "sin-permiso.jpg",
+        parent: { kind: "trapCheck", specimenObservationId: revision.id },
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(TrapAccessError);
   });
 });

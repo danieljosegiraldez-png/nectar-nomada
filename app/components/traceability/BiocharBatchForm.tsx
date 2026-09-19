@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -167,9 +168,8 @@ export function BiocharBatchForm({
 
       <div className="nn-field">
         <label htmlFor="peakTemperatureC">{t("biocharPeakTempLabel")}</label>
-        <input
+        <CampoNumerico
           id="peakTemperatureC"
-          type="number"
           name="peakTemperatureC"
           step="1"
           min="0"
@@ -192,12 +192,12 @@ export function BiocharBatchForm({
 
       <div className="nn-field">
         <label htmlFor="burnDurationMinutes">{t("biocharBurnDurationLabel")}</label>
-        <input id="burnDurationMinutes" type="number" name="burnDurationMinutes" step="1" min="0" inputMode="numeric" defaultValue={values.burnDurationMinutes ?? ""} placeholder={t("notRecorded")} />
+        <CampoNumerico id="burnDurationMinutes" name="burnDurationMinutes" step="1" min="0" inputMode="numeric" defaultValue={values.burnDurationMinutes ?? ""} placeholder={t("notRecorded")} />
       </div>
 
       <div className="nn-field">
         <label htmlFor="timeAtPeakMinutes">{t("biocharTimeAtPeakLabel")}</label>
-        <input id="timeAtPeakMinutes" type="number" name="timeAtPeakMinutes" step="1" min="0" inputMode="numeric" defaultValue={values.timeAtPeakMinutes ?? ""} placeholder={t("notRecorded")} />
+        <CampoNumerico id="timeAtPeakMinutes" name="timeAtPeakMinutes" step="1" min="0" inputMode="numeric" defaultValue={values.timeAtPeakMinutes ?? ""} placeholder={t("notRecorded")} />
       </div>
 
       <div className="nn-field">
@@ -256,7 +256,7 @@ export function BiocharBatchForm({
 
       <div className="nn-field">
         <label htmlFor="chargingDurationDays">{t("biocharChargingDaysLabel")}</label>
-        <input id="chargingDurationDays" type="number" name="chargingDurationDays" step="1" min="0" inputMode="numeric" defaultValue={values.chargingDurationDays ?? ""} placeholder={t("notRecorded")} />
+        <CampoNumerico id="chargingDurationDays" name="chargingDurationDays" step="1" min="0" inputMode="numeric" defaultValue={values.chargingDurationDays ?? ""} placeholder={t("notRecorded")} />
       </div>
 
       <h3>{t("biocharRecordHeading")}</h3>

@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
+import { destinosDelBeneficio } from "./destinos";
 
 export const dynamic = "force-dynamic";
 
@@ -34,29 +35,8 @@ export default async function BeneficioPage() {
   if (!granted.has("lot:view") && !granted.has("lot:manage")) notFound();
 
   const t = await getTranslations("SeccionBeneficio");
-  // Lotes, recetas e informe se rigen por el acceso a lotes, ya comprobado arriba.
-  const destinos = [
-    { href: "/lots", titulo: t("lotes"), ayuda: t("lotesAyuda"), visible: true },
-    { href: "/recipes", titulo: t("recetas"), ayuda: t("recetasAyuda"), visible: true },
-    { href: "/reports/proceso", titulo: t("informe"), ayuda: t("informeAyuda"), visible: true },
-    {
-      href: "/instalaciones",
-      titulo: t("instalaciones"),
-      ayuda: t("instalacionesAyuda"),
-      visible: granted.has("location:manage_attributes"),
-    },
-    { href: "/equipos", titulo: t("equipos"), ayuda: t("equiposAyuda"), visible: granted.has("equipment:view") },
-    {
-      href: "/beneficio/ajustes",
-      titulo: t("ajustes"),
-      ayuda: t("ajustesAyuda"),
-      // Los mismos dos permisos que exige el servicio de ajustes, pero preguntados
-      // en CUALQUIER asignación, no juntos sobre el mismo sitio como hace el
-      // servicio. Pueden divergir con overrides por asignación; si divergen, la
-      // pantalla de ajustes responde 404 y ése es el respaldo.
-      visible: granted.has("location:manage_attributes") && granted.has("location:create_site"),
-    },
-  ].filter((d) => d.visible);
+  // Qué enlace ve cada perfil lo decide `destinosDelBeneficio`, que tiene su prueba.
+  const destinos = destinosDelBeneficio(granted);
 
   return (
     <div>
@@ -65,9 +45,9 @@ export default async function BeneficioPage() {
       <ul>
         {destinos.map((d) => (
           <li key={d.href}>
-            <Link href={d.href}>{d.titulo}</Link>
+            <Link href={d.href}>{t(d.clave)}</Link>
             <br />
-            <span className="nn-muted">{d.ayuda}</span>
+            <span className="nn-muted">{t(`${d.clave}Ayuda`)}</span>
           </li>
         ))}
       </ul>

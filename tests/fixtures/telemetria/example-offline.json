@@ -1,0 +1,31 @@
+{
+  "schema": "nn.hive.observation/1",
+  "device_id": "rp2040-0011223344556677",
+  "epoch": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "seq": 7,
+  "event_id": "rp2040-0011223344556677:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:7",
+  "ts": null,
+  "time_quality": "unknown",
+  "boot": 8,
+  "uptime_ms": 500,
+  "hardware": "V1-P1",
+  "firmware": "1.0.0-rc1",
+  "configuration_id": "local-1",
+  "reset_cause": 1,
+  "observations": {
+    "battery": null,
+    "inspection": null,
+    "weight": null,
+    "brood": null,
+    "ambient": null,
+    "pressure": null,
+    "accel": null,
+    "light": null,
+    "audio": null
+  },
+  "faults": [
+    "SYNTHETIC_TEST_FIXTURE"
+  ],
+  "events": [],
+  "missed_samples": 0
+}

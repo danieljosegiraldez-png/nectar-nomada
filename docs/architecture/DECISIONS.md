@@ -11251,7 +11251,213 @@ y ese resto se habria asentado en el libro.
 **Seis casillas y no una lista dinamica**: una lista que crece necesita JavaScript en un telefono
 de campo; seis vacias no. Para mas partes se divide dos veces, que ademas deja la genealogia honesta.
 
-## ADR-170 — Manejo fitosanitario de la parcela: registro de intervenciones
+## ADR-163 -- De un lote de miel envasado a la tienda: asignar y recibir
+
+**Contexto.** El informe del apiario dejo la miel donde se deja el cafe: un lote con resultado de
+cata, no un articulo de la tienda (ADR-039). No habia ningun enlace lote→producto, ni para el
+cafe. Se le preguntaron tres formas a Daniel y eligio **trazabilidad + inventario**, con una
+precision que cambio el diseno: *«no siempre todo va a tienda Nectar Nomada, solo si se define o
+asigna post envasado»*, y *«ya en tienda uno puede confirmar recepcion»*.
+
+**Decision -- dos actos, y solo el segundo toca la tienda.**
+
+1. **Asignar** (`asignarATienda`): quien trabaja el lote, con `lot:manage`, asigna N envases de un
+   lote ENVASADO a una variante del producto. **No mueve el inventario.** El techo es el numero de
+   envases que salio del envasado, restando lo ya asignado; la transaccion es `Serializable` para
+   que dos asignaciones a la vez no pasen juntas del techo.
+2. **Recibir** (`confirmarRecepcion`): en la tienda, con `commerce:manage_store`, se dice cuantos
+   llegaron. **Solo esto sube el inventario.** Menos de lo asignado exige motivo; cero es valido
+   (se rompio todo). Una asignacion se recibe una vez: la actualizacion lleva `receivedAt: null` en
+   su condicion, asi que dos confirmaciones simultaneas no suman dos veces. Una variante sin
+   inventario llevado empieza a contarse con lo recibido.
+
+**Un permiso nuevo, `commerce:manage_store`**, que hoy solo tiene el administrador de plataforma. No
+existia NINGUN permiso de tienda. Separado de `lot:manage` a proposito, como `lot:release`
+(liberacion del lote): envasar y asignar es trabajo de campo; decidir lo que se ofrece a la venta, no.
+
+**Tampoco habia donde crear una variante**: los productos se sembraban y no tenian ninguna. Sin
+«Miel multifloral 500 g» no hay a que asignar, asi que `/tienda` las crea -- nombre, SKU y precio,
+que da quien lleva la tienda --. Nace sin inventario llevado: un 0 escrito diria que se conto.
+
+**Cuatro `CHECK`**: asignados positivos; la recepcion va entera (quien, cuando, cuantos) o no va;
+recibidos entre 0 y lo asignado; faltante con motivo. Probados con sondas y su control positivo.
+**Las claves hacia las personas son `RESTRICT`**: Prisma habria puesto `SET NULL` en quien recibio,
+y borrar una cuenta habria borrado quien firmo una recepcion.
+
+**Lo que NO entra.** Vender descuenta de la variante (ya existia) pero no del lote: el libro del lote
+no sabe que envases se vendieron. Devolver a la finca lo asignado y no recibido. Y la pagina
+`/tienda` no se ha visto en un navegador: hace falta sesion.
+
+## ADR-164 — «Editar beneficio»: un permiso que se concede, no uno que se hereda
+
+**Fecha:** 2026-09-18 · **Estado:** aceptado · **Spec:** #370 §4.3
+
+**Contexto.** La auditoría de Codex del 2026-09-18 sobre #377 encontró que el capataz (Farm Operator) editaba un beneficio por caminos que no pasaban por `beneficios.ts`: la acción de atributos de parcela (`updateLocationAttributes`, que no miraba el tipo), la de coordenadas (`confirmarCoordenadasDelSitio`) y, latente, `createMicrolot`, que sobre un beneficio crearía otro. Todos exigían sólo `manage_attributes`, que el capataz tiene y hereda del sitio.
+
+**Decisión de Daniel.** *«El capataz puede editar un beneficio si en configuración el Farm Manager/owner le da ese permiso; por defecto NO.»*
+
+**Decisión.** `location:edit_beneficio`, de serie para Farm Manager y Platform Admin, excluido de Farm Operator. Una sola guardia, `exigeEditarBeneficioSiLoEs` en `lib/traceability/locations.ts`, llamada desde cada escritura; no hace nada si la ubicación no es un beneficio. `actualizarBeneficio` pasa de `create_site` a este permiso, porque `create_site` no se puede conceder a un capataz sin darle también crear. `createMicrolot` rechaza un padre beneficio para todos.
+
+**La concesión** es un `AssignmentPermissionOverride` de efecto `grant`, que `can()` ya resuelve. La pantalla para que el Farm Manager la dé es el plan 3 de la spec.
+
+**Consecuencias.** Instalaciones, camas, equipos y recetas siguen abiertos al capataz hasta el plan 2 de la misma spec; está dicho en su §4.2.
+
+## ADR-165 -- La condicion del sitio: lista fija, en la version 2 del protocolo de campo
+
+**Contexto.** Era la ultima pregunta del protocolo sin sitio. La v1 la pedia como «una linea» con
+la pista «Hormigas, moho, dosel, agua, cerca», y Daniel pidio vocabularios fijos con «otro, ¿cual?».
+Antes de preguntarle se leyo lo escrito: el Anexo B da los ejemplos (hormigas en cajas vacias, moho,
+dosel, agua, cerca caida) y la guia de Varroa el pasto alto alrededor de los soportes. Lo unico
+ambiguo era «agua», y Daniel lo resolvio: **son dos**, falta (fuente seca o lejos) y exceso
+(encharcamiento).
+
+**Decision.** `SiteCondition[]` en `FieldSession`, con nota para «otro». Se anade **`sin_novedad`**,
+que va sola: sin ella «mire y el sitio esta bien» y «nadie miro» se guardarian igual (ADR-080). Se
+escribe por las dos puertas del clima -- en el sitio (ADR-157) y al cerrar --; al cerrar, **sin
+ninguna casilla marcada no se toca** lo anotado en el sitio, porque las casillas no pueden decir «lo
+de antes». Dos `CHECK` (otro ⇔ nota; sin novedad sola), probados con sondas y control positivo.
+
+**Cambiar la pregunta es una VERSION 2, no una edicion.** Lo dice el propio JSON: *«Cambiar esto
+despues NO es editar aqui: es crear una version 2, para que las respuestas ya dadas sigan
+significando lo mismo.»* `apiario-campo-v2.json` es la v1 con esa pregunta cambiada; la v1 se queda.
+
+**Y el cargador no sabia versionar.** Ponia el numero de version en el identificador del protocolo,
+asi que una v2 habria nacido como un protocolo aparte, sin parentesco. Ahora la identidad es fija
+(`apiario-campo-v1`, como nacio en produccion el 2026-09-16) y la version crece debajo, idempotente por
+protocolo y version. **Su prueba borraba el protocolo entero** si habia creado la version: con la v1
+real en la base compartida, habria borrado la v1 al limpiar la v2. Ahora borra solo lo que creo.
+
+**El guardia de vocabulario solo miraba `enum`**, no `multi_enum`. Extendido, vigila 15 preguntas en
+vez de 12 -- entran `brood_stages`, `purpose` y esta -- y las tres coinciden.
+
+**Pendiente del dueno:** correr `npm run apiary:load-protocol` en produccion despues de fusionar,
+para que exista la v2. Hasta entonces la condicion del sitio se guarda igual: va a columna.
+
+## ADR-166 -- Las cosechas pesadas sin saldo: se asientan desde la ficha del apiario
+
+**Contexto.** ADR-161 arreglo que el peso escrito en el cierre de una cosecha entre en el libro del
+lote; antes solo entraba si se escribia AL COSECHAR. Las cosechas cerradas antes de ese arreglo
+pueden tener el peso en la fila y el lote de miel sin ningun asiento, y entonces procesar, envasar
+o dividir ese lote no tiene contra que cuadrar. Daniel eligio arreglarlo asi entre cuatro opciones.
+
+**Decision.** La ficha del apiario lista las cosechas con peso escrito y lote SIN NINGUN asiento, y
+un boton asienta ese peso: `received`, con la fecha de la cosecha y su procedencia, igual que el
+asiento que ADR-161 escribe al cerrar. **No se teclea ningun numero**: se asienta el que ya esta.
+
+- **Lo hace Daniel desde la aplicacion, no un script.** Esta sesion no escribe en produccion, y
+  cada asiento queda con quien y cuando, que un script por lotes no diria.
+- **«Sin saldo» es NINGUN asiento**, de ningun tipo. Un lote con cualquier asiento ya tiene
+  historia y sumarle el peso podria contarlo dos veces: no se ofrece, y el servicio lo rechaza.
+- La comprobacion se repite dentro de una transaccion `Serializable`: dos pulsaciones a la vez no
+  asientan dos veces.
+- La seccion solo aparece cuando hay algo que asentar.
+
+**Medido antes de fusionar, y dicho sin adornos:** en la copia local —un respaldo de produccion—
+hay UNA cosecha real, y tiene saldo: se peso al cosechar. **Segun ese respaldo, ninguna cosecha
+esta afectada.** Esto es una red para las que pudiera haber en produccion desde entonces, no el
+arreglo de un dano medido.
+
+## ADR-167 — «Editar beneficio», plan 2: instalaciones, recetas y equipos
+
+**Fecha:** 2026-09-18 · **Estado:** aceptado · **Spec:** #370 §2, §4.2, §4.3 · **Plan:** `docs/superpowers/plans/2026-09-18-editar-beneficio-2.md`
+
+**Contexto.** ADR-164 cerró la ficha, los atributos y las coordenadas de un beneficio detrás de `location:edit_beneficio`, pero dejó dicho en su propio §4.2 que instalaciones de secado, camas, recetas y equipos seguían abiertos al capataz. Este plan cierra esos tres caminos.
+
+**Tres decisiones de Daniel, 2026-09-18:**
+
+1. **Instalaciones y camas: todas**, cuelguen de donde cuelguen. Hoy `crearUbicacionDeSecado` sólo acepta una `drying_facility` bajo un `site` (el código de #377 nunca llegó a aceptar `beneficio` como padre, aunque la spec original lo previera) — así que la guardia nueva no distingue por tipo de padre: exige `edit_beneficio` sobre el padre exacto que se pase, sea cual sea.
+2. **Recetas: `edit_beneficio` en algún lugar de la organización de la receta.** Una receta compartida (`organizationId` nulo) sólo se configura con alcance de plataforma — no basta con gestionar el lote de una finca cualquiera. La comprobación de `lot:manage` que ya tenían crear/editar/publicar se queda intacta; ésta se suma.
+3. **Equipos: la misma concesión abre configurarlos.** Registrar, trasladar, declarar/retirar patrón y declarar modo aceptan `equipment:manage` **o** `edit_beneficio` en el lugar del equipo. Sin lugar (proyecto o plataforma), sólo `equipment:manage` — no hay beneficio sobre el que resolver la concesión.
+
+**Decisión técnica.** Dos guardias nuevas en `lib/traceability/locations.ts`: `exigeEditarBeneficioEn(userAccountId, locationId)` (el permiso sobre una ubicación, sea del tipo que sea; distinta de `exigeEditarBeneficioSiLoEs` de ADR-164, que sólo actúa si la ubicación **es** un beneficio) y `exigeEditarBeneficioEnOrganizacion(userAccountId, organizationId)` (en algún lugar de la organización, o en plataforma si `organizationId` es nulo o la organización no tiene ninguna `Location` propia — el caso de las organizaciones-sólo-con-lotes que ya usan `recipeAuthoring.test.ts` y `recipeVersions.test.ts`). `instalaciones.ts` llama a la primera desde crear (sobre el padre) y editar (sobre la propia ubicación); `processTargets.ts` llama a la segunda desde `createRecipeWithVersion`, `updateRecipeMetadata` y `createRecipeVersion`, después de la comprobación de `lot:manage` que ya tenían. En `lib/equipos/equipos.ts`, `puedeConfigurar` sustituye al `can(..., "manage", "equipment", ...)` suelto en `registrarEquipo`, `exigePermiso("manage")`, `puedeGestionarEquipo` y `sitiosParaRegistrar` (esta última alimenta el selector de sitios del formulario de alta; sin el cambio, la concesión abría `registrarEquipo` pero el capataz nunca veía su propia finca en la lista).
+
+**Qué sigue abierto.** La pantalla para que el Farm Manager conceda o quite `edit_beneficio` por persona es el plan 3 de la spec — hasta entonces, la concesión sólo se escribe a mano en la base (`AssignmentPermissionOverride`) o por quien tiene `platform:manage_permissions`. Y lo que este plan deja fuera a propósito: `lib/inventario/materiales.ts` y `lib/inventario/recepcion.ts` comprueban `equipment:manage` directamente y no pasan por `puedeConfigurar` — el módulo de insumos reutiliza el permiso de equipos sin que la concesión de `edit_beneficio` lo abra.
+
+**Consecuencias.** Con ADR-164, la lista de §4.2 de la spec queda cerrada por completo: ficha, atributos, coordenadas, instalaciones, camas, recetas y equipos exigen todos `edit_beneficio` (equipos, además, `equipment:manage` como alternativa que ya tenía). Sólo falta la pantalla de concesión.
+
+**Corregido el 2026-09-18, auditoría final de Codex (dos hallazgos verificados):** (1) `exigeEditarBeneficioSiLoEs` (ADR-164) sólo miraba `locationType === "beneficio"`, así que `updateLocationAttributes`/`confirmarCoordenadasDelSitio` —los caminos genéricos de parcela, que no pasan por `exigeEditarBeneficioEn`— dejaban a un capataz con `manage_attributes` editar atributos y coordenadas de una `drying_facility`/`drying_bed`, y `createMicrolot` podía crear una nueva instalación de secado bajo ese mismo permiso. Ahora `TIPOS_DEL_BENEFICIO` (`beneficio`, `drying_facility`, `drying_bed`) cubre los tres caminos, y `createMicrolot` rechaza un padre de secado con `LocationValidationError("secado_no_se_subdivide")`. (2) `exigeEditarBeneficioEnOrganizacion` sólo miraba `Location.organizationId = org` directamente; como la organización es heredable (`resolveOrganizationForLocation`, subiendo por `parentLocationId`), un capataz asignado en un descendiente con `organizationId` nulo —8 de 135 `Location` en la base de pruebas compartida están así— nunca podía pasar la guardia aunque se le concediera el permiso ahí mismo. Ahora los candidatos incluyen esos descendientes, caminando hacia abajo hasta el primero que declare su propia organización.
+
+## ADR-168 — «Editar beneficio», plan 3: conceder y quitar desde `/beneficio/ajustes`
+
+**Fecha:** 2026-09-18 · **Estado:** aceptado · **Spec:** #370/#417 §4.3 «Cómo se concede» · **Plan:** `docs/superpowers/plans/2026-09-18-conceder-editar-beneficio.md`
+
+**Contexto.** ADR-164 y ADR-167 cerraron todos los caminos de escritura de un beneficio detrás de `location:edit_beneficio`, pero la concesión de ese permiso a un capataz sólo se podía escribir a mano en la base o por quien tiene `platform:manage_permissions` (`requirePermissionAdmin`, Platform Admin). Este plan añade la pantalla para que el Farm Manager o el dueño la den y la quiten ellos mismos, y hace que las pantallas de ajustes, recetas e instalaciones sólo ofrezcan un formulario a quien puede guardarlo.
+
+**Decisión técnica: una delegación estrecha**, en `lib/traceability/concesiones.ts` (`concederEditarBeneficio`, `quitarEditarBeneficio`, `personasDelBeneficio`), sobre `AssignmentPermissionOverride`: sólo el permiso `location:edit_beneficio`, sólo quien ya lo tiene sobre ese beneficio (misma guardia `exigeEditarBeneficioEn` de ADR-167), sólo a una asignación **activa** cuyo ámbito (`scope.scopeType === "location"`) alcanza ese beneficio subiendo por `parentLocationId`. No es una puerta a `platform:manage_permissions`: quien concede no puede tocar ningún otro permiso, y el servicio lo impone escribiendo siempre el mismo `permissionId` de `location:edit_beneficio`, nunca uno que reciba de fuera.
+
+**Tres rulings del controlador (decisiones del plan, cambiables por Daniel):**
+
+1. **Un `deny` de administración manda.** Si `platform:manage_permissions` ya puso un `deny` de `location:edit_beneficio` sobre esa asignación, el Farm Manager no lo sobrescribe: conceder se rechaza con `ConcesionError("quitado_por_administracion")` y el `deny` sigue ahí.
+2. **Quitar puede borrar CUALQUIER `grant` de este permiso** en esa asignación —también uno puesto por la administración, no sólo uno de esta misma delegación—, siempre que el actor tenga autoridad sobre el ámbito de esa asignación; nunca toca el permiso de serie del perfil (Farm Manager, Platform Admin) ni un `deny`. No hay columnas de procedencia que distingan quién concedió cada `grant` — corregido el 2026-09-18, ver «Correcciones» abajo.
+3. **La concesión vale para todo el ámbito de la asignación** de quien la recibe (spec §4.3, «Un límite, dicho ya»): si su asignación cubre la finca entera y la finca tiene dos beneficios, la concesión abre los dos. No hay un alcance más fino que la propia `Scope`; la pantalla lo dice con una línea fija.
+
+Razón obligatoria (recortada, no vacía) al conceder; `AuditEvent` (`beneficio.conceder_edicion` / `beneficio.quitar_edicion`) en la **misma transacción** que la escritura del override, en los dos sentidos.
+
+**Las pantallas usan booleanos sobre las mismas guardias del servidor**, así que la pantalla y el servidor no pueden discrepar: `puedeEditarBeneficioEn`/`puedeEditarBeneficioEnOrganizacion` (`lib/traceability/locations.ts`) devuelven `false` sólo ante `LocationAccessError("no_beneficio_edit_access")` y relanzan cualquier otro error. `listarBeneficios` los usa para `puedeEditar` por fila; `app/beneficio/ajustes/page.tsx` los usa para decidir si hay algo que ofrecer (renombrar, concesiones) sin que la ausencia de sitios administrables la haga desaparecer entera; `sitiosParaCrearInstalacion` (`lib/traceability/instalaciones.ts`) filtra `sitiosParaInstalaciones` con el mismo booleano para `/instalaciones/nueva`; `/instalaciones/[id]` y `/recipes/[id]`/`/recipes/new` ocultan sus formularios de escritura con la misma guardia, sin dejar de mostrar la lectura.
+
+**Consecuencias.** (1) Sigue el límite ya conocido de §4.3: la concesión cuelga de la asignación entera, no de un beneficio suelto dentro de ella — decisión diferida a cuando haya más de un beneficio por finca. (2) `/instalaciones/[id]` evalúa el permiso **por cada cama, sobre su propio id** (corregido el 2026-09-18, ver «Correcciones» — antes reutilizaba el de la instalación), y el de la instalación para su propio formulario y para «crear cama»; en los dos casos coincide con lo que `actualizarUbicacionDeSecado`/`crearUbicacionDeSecado` autorizan.
+
+**Correcciones del 2026-09-18, revisión independiente de Codex sobre `b1bf728`.** Seis hallazgos, los seis en el mismo commit que esta nota:
+
+1. **Escalada de ámbito.** `concederEditarBeneficio`/`quitarEditarBeneficio` sólo comprobaban autoridad del actor SOBRE EL BENEFICIO, pero la fila que tocan es el override de la asignación RECEPTORA, cuyo ámbito puede ser un ancestro más ancho (todo el sitio). Un Farm Manager con autoridad sólo sobre el beneficio podía conceder o quitar sobre una asignación de sitio entero — más de lo que él mismo tiene. Las dos funciones exigen ahora, además, `exigeEditarBeneficioEn(actorId, asignacion.scope.scopeRefId)`.
+2. **Concurrencia: el `deny` de administración debe ganar también bajo carrera.** El estado se leía antes de la transacción y el `upsert` escribía `grant` sin condición. `escribirGrant` ahora escribe condicionalmente dentro de la transacción (`UPDATE ... WHERE effect = 'grant'`; si no hay fila, `INSERT` con `catch` de `P2002` que relee y rechaza si la fila ganadora es un `deny`), y `quitarEditarBeneficio` borra con `deleteMany({ where: { ..., effect: "grant" } })`. Las dos transacciones usan `isolationLevel: "Serializable"`. **Probado:** el `UPDATE` condicional no toca una fila `deny` (test directo de la condición SQL) y que re-conceder no cambia `createdBy`. **Argumentado, no probado con concurrencia real:** el camino `P2002` (dos `INSERT` verdaderamente simultáneos) — sigue el mismo patrón ya usado en `lib/commerce/tienda.ts`/`lib/sensory/service.ts`, pero no hay en este repositorio un arnés de dos transacciones solapadas para ejercitarlo de forma determinista sin volverse un test intermitente.
+3. **Ruling 2 corregido.** Quitar puede borrar cualquier `grant` dentro del ámbito de autoridad del actor, no sólo uno puesto por esta misma delegación — no hay columnas de procedencia. Y re-conceder sobre un `grant` existente ya NO sobrescribe `createdBy` (sólo `reason` cambia).
+4. **Contexto de auditoría.** `after`/`before` del `AuditEvent` llevan ahora `contexto: { beneficioId, ambitoLocationId }` — desde qué beneficio se autorizó y el ámbito de la asignación receptora.
+5. **Camas con su propio permiso.** `/instalaciones/[id]` gateaba el formulario de CADA cama con el permiso de la INSTALACIÓN. Ahora evalúa `puedeEditarBeneficioEn(user, cama.id)` por cama; el permiso de la instalación sigue gobernando su propio formulario y «crear cama».
+6. **Criterio de asignación activa.** `concesiones.ts` trataba `status === "active"` como el criterio completo; el resolutor (`lib/rbac/service.ts`) también exige `validFrom <= ahora` y (`validTo` nulo o `> ahora`). `asignacionQueAlcanza` y `personasDelBeneficio` usan ahora `esAsignacionActiva`/`activeAssignmentWhere`, exportados de `lib/rbac/service.ts` para que el criterio no se repita a medias.
+
+## ADR-169 -- El despacho dice de que lote sale cada frasco, y la venta baja el libro del lote
+
+**Contexto.** ADR-163 llevo la miel envasada hasta el inventario de la tienda, pero una venta solo
+bajaba ese inventario: el lote no se enteraba, y la trazabilidad se cortaba en el estante. Se le
+pregunto a Daniel de que lote sale un frasco vendido; eligio **«lo elige quien despacha»**, frente a
+descontar automaticamente del mas antiguo.
+
+**Lo que habia debajo:** el despacho no existia. Nada en el codigo ponia un pedido en `fulfilled`;
+el pago lo dejaba en `paid` y ahi se quedaba. Y en la copia local hay CERO pedidos.
+
+**Decision.** `/tienda` lista los pedidos pagados. Por cada articulo, quien despacha dice cuantos
+frascos salen de cada lote, entre los lotes con frascos de esa variante **recibidos** en la tienda
+y no despachados ya. Al despachar, en una transaccion `Serializable`:
+
+- lo que sale de los lotes tiene que sumar **exactamente** lo pedido, articulo por articulo;
+- de un lote no sale mas de lo que queda en el estante (recibido menos despachado); **lo asignado y
+  no recibido no cuenta**: no esta en el estante;
+- cada fila queda en `OrderItemLot` (articulo, lote, frascos, quien, cuando);
+- **los kilos de esos frascos salen del libro del lote** como `transfer_out` con referencia al
+  pedido: frascos x masa neta del envasado. Si el libro no tiene tanta miel, se rechaza;
+- el pedido pasa a `fulfilled`, con su AuditEvent.
+
+**Lo que NO entra.** Que el cliente vea en «Mis pedidos» de que lote salio su frasco: el dato ya
+esta, falta la pantalla. Y devoluciones: un pedido despachado no se deshace aqui.
+
+## ADR-170 -- Una asignacion a tienda que no va a llegar se anula, no se borra
+
+**Contexto.** ADR-163 separo asignar (en el lote) de recibir (en la tienda). Pero una asignacion
+que nunca iba a llegar —el envio no sale, la tienda no tiene sitio, se asigno a la variante
+equivocada— se quedaba pendiente para siempre y **sus envases seguian contando como asignados**:
+el lote no podia volver a asignarlos. No habia salida. Esto no lo pidio Daniel con esas palabras:
+salio al cerrar ADR-169, como el hueco que dejaba el flujo de dos actos.
+
+**Decision.** Una asignacion **pendiente** se puede anular, con **motivo obligatorio** y el dia.
+Puede anular quien gestiona el lote (`requireLotAccess("manage")`) o quien lleva la tienda
+(`commerce:manage_store`): los dos lados saben que el envio no va a salir.
+
+- La fila **no se borra**: guarda `cancelled_at`, `cancelled_by` y `cancel_reason`, y deja un
+  AuditEvent `store_allocation.cancel`.
+- Sus envases vuelven a **libres**: la suma de asignados sale de las no anuladas.
+- La tienda deja de esperarla, y una anulada **no se puede recibir**.
+- **Una recibida no se anula**: esos frascos ya estan en el estante. La escritura lleva
+  `received_at IS NULL AND cancelled_at IS NULL` en su condicion, asi que no pisa una recepcion
+  que llegue a la vez.
+
+**En la base, dos CHECK:** `store_allocation_anulacion_completa` (los tres campos juntos o
+ninguno, y el motivo no en blanco) y `store_allocation_recibida_o_anulada` (nunca las dos).
+
+**Lo que NO entra.** Deshacer una anulacion (se asigna de nuevo), y corregir una recepcion ya
+confirmada: eso seria un ajuste de inventario, no una anulacion.
+
+## ADR-171 — Manejo fitosanitario de la parcela: registro de intervenciones
 
 **Contexto.** Daniel pidio «una seccion de prevencion y control de plagas, donde entra fumigacion o
 tratamientos de esta indole, trampas de broca o manejos relacionados». Las trampas son la pieza 2
@@ -11377,7 +11583,9 @@ apiario.
   el producto prerellenado.
 - El aviso se da por **atendido** cuando existe una intervención vigente posterior a la lectura que
   cubre la trampa. Cuenta cualquier tipo, también una repela. El sistema sugiere, no opina.
-- Las áreas por bloque entran cuando `PlotBlock` exista en `main`.
+- **Actualizado al integrar `origin/main` (2026-09-18):** el PR B (áreas por bloque,
+  `TrapRule.suggestedMaterialId`, aviso de trampa atendido) ya puede empezar: `PlotBlock` y
+  `TrapRule` están en `main` desde el PR #413.
 
 **Alternatives considered:** Escribir también `MaterialConsumptionEntry` (lo que se vio en el chat).
 El botiquín optó por el descuento directo sin fila de consumo, que es más limpio. Ambos son válidos;

@@ -1,3 +1,4 @@
+import { CampoNumerico } from "../components/CampoNumerico";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -75,7 +76,7 @@ export default async function CalibrationPage() {
               <option value="self_created">{t("standardOrigin_self_created")}</option>
               <option value="adapted_from_commercial">{t("standardOrigin_adapted_from_commercial")}</option>
             </select>
-            <input type="number" inputMode="decimal" step="any" name="typicalThresholdValue" placeholder={t("thresholdValuePlaceholder")} />
+            <CampoNumerico inputMode="decimal" step="any" name="typicalThresholdValue" placeholder={t("thresholdValuePlaceholder")} />
             <input type="text" name="thresholdUnit" placeholder={t("thresholdUnitPlaceholder")} />
             <input type="text" name="supplierProductReference" placeholder={t("supplierProductReferencePlaceholder")} />
             <input type="text" name="dataSheetReference" placeholder={t("dataSheetReferencePlaceholder")} />

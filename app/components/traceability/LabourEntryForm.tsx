@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordLabourEntryFormAction } from "../../actions/traceability";
@@ -67,11 +68,11 @@ export function LabourEntryForm({
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
         <div className="nn-field" style={{ flex: "1 1 100px" }}>
           <label htmlFor={`labour-workers-${parent.kind}`}>{t("workerCountLabel")}</label>
-          <input id={`labour-workers-${parent.kind}`} name="workerCount" type="number" inputMode="numeric" min={1} step={1} required />
+          <CampoNumerico id={`labour-workers-${parent.kind}`} name="workerCount" inputMode="numeric" min={1} step={1} required />
         </div>
         <div className="nn-field" style={{ flex: "1 1 100px" }}>
           <label htmlFor={`labour-hours-${parent.kind}`}>{t("hoursLabel")}</label>
-          <input id={`labour-hours-${parent.kind}`} name="hours" type="number" inputMode="decimal" min={0.25} step={0.25} required />
+          <CampoNumerico id={`labour-hours-${parent.kind}`} name="hours" inputMode="decimal" min={0.25} step={0.25} required />
         </div>
       </div>
       <div className="nn-field">

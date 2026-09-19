@@ -1,3 +1,4 @@
+import { CampoNumerico } from "../../components/CampoNumerico";
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -102,8 +103,8 @@ export default async function CalibrationSessionPage({
             {t("correctlyIdentifiedLabel")}
           </label>
           <input type="text" name="perceivedDescriptorGiven" placeholder={t("perceivedDescriptorPlaceholder")} />
-          <input type="number" inputMode="decimal" step="any" name="perceivedIntensityRating" placeholder={t("perceivedIntensityPlaceholder")} />
-          <input type="number" inputMode="decimal" step="any" name="actualConcentrationPresented" placeholder={t("actualConcentrationPlaceholder")} />
+          <CampoNumerico inputMode="decimal" step="any" name="perceivedIntensityRating" placeholder={t("perceivedIntensityPlaceholder")} />
+          <CampoNumerico inputMode="decimal" step="any" name="actualConcentrationPresented" placeholder={t("actualConcentrationPlaceholder")} />
           <textarea name="notes" placeholder={t("notesPlaceholder")} />
           <BotonDeEnvio className="nn-button">
             {t("recordResultButton")}
