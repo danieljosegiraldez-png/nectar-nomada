@@ -126,40 +126,42 @@ export default async function ModeloPage({
         {modelo.specs.length === 0 ? (
           <p className="nn-muted">{t("especificacionesVacio")}</p>
         ) : (
-          <table className="nn-table">
-            <thead>
-              <tr>
-                <th>{t("specMagnitud")}</th>
-                <th>{t("specUnidad")}</th>
-                <th>{t("specMin")}</th>
-                <th>{t("specMax")}</th>
-                <th>{t("specResolucion")}</th>
-                <th>{t("specPrecision")}</th>
-                {puedeEditar ? <th /> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {modelo.specs.map((s) => (
-                <tr key={s.id}>
-                  <td>{s.quantity}</td>
-                  <td>{s.unit}</td>
-                  <td>{s.rangeMin !== null ? String(s.rangeMin) : ""}</td>
-                  <td>{s.rangeMax !== null ? String(s.rangeMax) : ""}</td>
-                  <td>{s.resolution !== null ? String(s.resolution) : ""}</td>
-                  <td>{s.accuracyAbs !== null ? String(s.accuracyAbs) : ""}</td>
-                  {puedeEditar ? (
-                    <td>
-                      <form action={retirarEspecificacionFormAction}>
-                        <input type="hidden" name="modelId" value={modelo.id} />
-                        <input type="hidden" name="specId" value={s.id} />
-                        <BotonDeEnvio className="nn-button-quiet">{t("specRetirar")}</BotonDeEnvio>
-                      </form>
-                    </td>
-                  ) : null}
+          <div style={{ overflowX: "auto" }}>
+            <table className="nn-table">
+              <thead>
+                <tr>
+                  <th>{t("specMagnitud")}</th>
+                  <th>{t("specUnidad")}</th>
+                  <th>{t("specMin")}</th>
+                  <th>{t("specMax")}</th>
+                  <th>{t("specResolucion")}</th>
+                  <th>{t("specPrecision")}</th>
+                  {puedeEditar ? <th /> : null}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {modelo.specs.map((s) => (
+                  <tr key={s.id}>
+                    <td>{s.quantity}</td>
+                    <td>{s.unit}</td>
+                    <td>{s.rangeMin !== null ? String(s.rangeMin) : ""}</td>
+                    <td>{s.rangeMax !== null ? String(s.rangeMax) : ""}</td>
+                    <td>{s.resolution !== null ? String(s.resolution) : ""}</td>
+                    <td>{s.accuracyAbs !== null ? String(s.accuracyAbs) : ""}</td>
+                    {puedeEditar ? (
+                      <td>
+                        <form action={retirarEspecificacionFormAction}>
+                          <input type="hidden" name="modelId" value={modelo.id} />
+                          <input type="hidden" name="specId" value={s.id} />
+                          <BotonDeEnvio className="nn-button-quiet">{t("specRetirar")}</BotonDeEnvio>
+                        </form>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {puedeEditar && modelo.kind === "instrument" ? (
