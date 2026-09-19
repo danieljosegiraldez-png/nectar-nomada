@@ -1,6 +1,6 @@
 # Instrumentos de campo: se instalan en parcela, microparcela o bloque, y sus lecturas son del sitio donde estaban
 
-**Estado:** borrador para revisión de Daniel, 2026-09-18.
+**Estado:** aprobado por Daniel el 2026-09-18 («sisi continua»).
 
 Pieza propia. La usan la condición del día de la jornada
 (`2026-09-18-jornada-y-entrega-de-cosecha-design.md` §3.5) y las condiciones del terreno
