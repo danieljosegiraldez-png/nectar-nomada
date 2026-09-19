@@ -92,6 +92,9 @@ describe("marcos negros en la inspección", () => {
     const cero = await recordInspection(operario, { colonyId, outcome: "nothing_unusual", occurredAt: dia("2026-05-04"), darkFrames: 0 });
     expect([con.darkFrames, sin.darkFrames, vacio.darkFrames, cero.darkFrames]).toEqual([3, null, null, 0]);
     await expect(recordInspection(operario, { colonyId, outcome: "nothing_unusual", darkFrames: -1 })).rejects.toThrow(/marcos_negros_invalido/);
+    // Codex, #443: un blanco de espacios era `Number("  ") = 0`, un cero que nadie contó.
+    const espacios = await recordInspection(operario, { colonyId, outcome: "nothing_unusual", occurredAt: dia("2026-05-05"), darkFrames: "   " });
+    expect(espacios.darkFrames).toBeNull();
   });
 
   it("VIAJAN POR LA COLA SIN CONEXIÓN, y una inspección vieja sin el campo llega como «no se contó»", async () => {
@@ -125,6 +128,27 @@ describe("el aviso de marcos negros en el apiario", () => {
       [a.identifier, 5, "2026-07-01"],
       [c.identifier, 3, "2026-07-01"],
     ]);
+  });
+
+  it("EMPATE EN EL MISMO INSTANTE: manda el conteo mayor, para no esconder una renovación (Codex, #443)", async () => {
+    const e = await colmena();
+    const mismo = dia("2026-07-15");
+    await recordInspection(operario, { colonyId: e.colonyId, outcome: "nothing_unusual", occurredAt: mismo, darkFrames: 0 });
+    await recordInspection(operario, { colonyId: e.colonyId, outcome: "nothing_unusual", occurredAt: mismo, darkFrames: 5 });
+    await recordInspection(operario, { colonyId: e.colonyId, outcome: "nothing_unusual", occurredAt: mismo, darkFrames: 0 });
+    const fila = (await marcosNegrosDelApiario(operario, apiarioId)).find((f) => f.hiveId === e.hiveId);
+    expect(fila?.marcos).toBe(5);
+  });
+
+  it("DE UNA COLONIA ANTERIOR: el aviso sigue, pero dice que el conteo no es de la colonia de hoy (Codex, #443)", async () => {
+    const vieja = await colmena();
+    await recordInspection(operario, { colonyId: vieja.colonyId, outcome: "nothing_unusual", occurredAt: dia("2026-06-01"), darkFrames: 4 });
+    await prisma.colony.update({ where: { id: vieja.colonyId }, data: { status: "dead", endedAt: dia("2026-07-01") } });
+    await createColony(adminId, { hiveId: vieja.hiveId, originType: "purchased", startedAt: dia("2026-07-10"), provenanceClass: "direct_observation" });
+    const fila = (await marcosNegrosDelApiario(operario, apiarioId)).find((f) => f.hiveId === vieja.hiveId);
+    expect([fila?.marcos, fila?.coloniaAnterior]).toEqual([4, true]);
+    const viva = (await marcosNegrosDelApiario(operario, apiarioId)).find((f) => f.coloniaAnterior === false);
+    expect(viva, "control: las de la colonia de hoy dicen false").toBeTruthy();
   });
 
   it("SÓLO LAS CAJAS DE ESTE APIARIO, y sin permiso no se ve", async () => {

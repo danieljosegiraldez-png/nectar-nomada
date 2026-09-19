@@ -2152,7 +2152,8 @@
     "darkFramesEnInspeccion": "{n, plural, one {# marco negro} other {# marcos negros}}",
     "marcosNegrosHeading": "Marcos negros en las colmenas",
     "marcosNegrosIntro": "De la última inspección que los contó en cada colmena. La cera vieja se juzga por el aspecto: estos son los marcos que toca renovar.",
-    "marcosNegrosFila": "{n, plural, one {# marco negro} other {# marcos negros}} el {fecha}"
+    "marcosNegrosFila": "{n, plural, one {# marco negro} other {# marcos negros}} el {fecha}",
+    "marcosNegrosColoniaAnterior": "contados en una colonia anterior de esta caja"
   },
   "Research": {
     "badge": "Research OS",

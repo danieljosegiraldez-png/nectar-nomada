@@ -145,6 +145,12 @@ export interface MarcosNegrosDeColmena {
   marcos: number;
   /** La inspección que los contó. Si la última no contó, manda la anterior que sí — y su fecha lo dice. */
   fecha: Date;
+  /**
+   * El conteo es de una colonia que ya no está en la caja (Codex, #443). El aviso sigue —la muerte
+   * de la colonia no renueva la cera—, pero la ficha de la caja enseña la colonia de HOY, y esa
+   * inspección no aparece allí: hay que decirlo.
+   */
+  coloniaAnterior: boolean;
 }
 
 /**
@@ -157,12 +163,21 @@ export async function marcosNegrosDelApiario(userAccountId: string, locationId: 
   const contadas = await prisma.inspection.findMany({
     where: { darkFrames: { not: null }, colony: { hive: { locationId } } },
     orderBy: { occurredAt: "desc" },
-    select: { darkFrames: true, occurredAt: true, colony: { select: { hive: { select: { id: true, identifier: true } } } } },
+    select: { darkFrames: true, occurredAt: true, colony: { select: { status: true, hive: { select: { id: true, identifier: true } } } } },
   });
+  // Del más nuevo al más viejo: la primera de cada caja es la última que contó. **Empate en el mismo
+  // instante** (Codex, #443): manda el conteo MAYOR — para un aviso, esconder una renovación cuesta
+  // más que sobrar una. Sin esta regla, el orden de la consulta decidía.
   const ultima = new Map<string, MarcosNegrosDeColmena>();
   for (const i of contadas) {
     const h = i.colony.hive;
-    if (!ultima.has(h.id)) ultima.set(h.id, { hiveId: h.id, identifier: h.identifier, marcos: i.darkFrames ?? 0, fecha: i.occurredAt });
+    const marcos = i.darkFrames ?? 0;
+    const previa = ultima.get(h.id);
+    if (!previa) {
+      ultima.set(h.id, { hiveId: h.id, identifier: h.identifier, marcos, fecha: i.occurredAt, coloniaAnterior: i.colony.status !== "active" });
+    } else if (previa.fecha.getTime() === i.occurredAt.getTime() && marcos > previa.marcos) {
+      ultima.set(h.id, { ...previa, marcos, coloniaAnterior: i.colony.status !== "active" });
+    }
   }
   return [...ultima.values()].filter((f) => f.marcos > 0).sort((a, b) => b.marcos - a.marcos);
 }

@@ -773,6 +773,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
                   <Link href={`/apiaries/${id}/hives/${m.hiveId}`}>{m.identifier}</Link>
                   {": "}
                   {t("marcosNegrosFila", { n: m.marcos, fecha: m.fecha.toISOString().slice(0, 10) })}
+                  {m.coloniaAnterior ? <span className="nn-muted"> · {t("marcosNegrosColoniaAnterior")}</span> : null}
                 </li>
               ))}
             </ul>
