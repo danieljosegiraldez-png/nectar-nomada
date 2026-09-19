@@ -44,6 +44,7 @@ Del 2026-09-19:
 | ¿muestra al recibir? | **sí, opcional: Brix** |
 | cómo se construye | **una sola recepción**, venga de donde venga (enfoque A) |
 | ¿en qué estado se pesa? | **siempre igual, no se anota**: fresca, tal cual, en los dos lados |
+| la recepción vieja (`ReceivingEvent`), ¿qué pasa con ella? | **la nueva la sustituye**: la vieja sigue hasta la pieza 3 y se retira junto con «registrar cosecha»; no se migra nada |
 | ¿de una recepción salen varios lotes? | **sí**: «de una recepción se pueden correr muchos diferentes procesos, y cada uno se ve como un lote»; y un lote puede juntar varias recepciones |
 
 ## 2. Lo que hay hoy (medido sobre `origin/main`, 2026-09-19)
@@ -53,6 +54,12 @@ Del 2026-09-19:
 - **La entrega** (`EntregaDeCosecha`) nace en la jornada, `enviada`, con su peso de finca
   (`pesoFincaKg`), quién la anotó (`anotadaPor`) y su recolector. **Nada la recibe.**
 - **La jornada** (`JornadaDeCosecha`) no dice a qué beneficio va.
+- **Ya existe una recepción de proveedor, y este spec la pasó por alto en su primer borrador:**
+  `ReceivingEvent` (`recordReceivingEvent` en `lib/traceability/harvest.ts`, formulario
+  `ReceivingForm` en `/lots/new`). Recibe cereza de una `Organization` proveedora con peso,
+  Brix, temperatura y nota de entrega, y **crea su lote en el mismo acto**: `resultingLotId`
+  obligatorio y único, una recepción = un lote. En la copia local restaurada tiene **0 filas**
+  (control: 34 `HarvestEvent`).
 - **La tolerancia de pesos ya existe**, en `lib/beneficio/balanceDeMasas.ts`
   (`POLITICA_POR_DEFECTO`): 0,5 % relativo `[PROVISIONAL]` con piso de 0,5 kg, y estados
   `BALANCED`, `DISCREPANCY_FLAGGED` y `GROSS_IMBALANCE` (más de 5 %). Sale de
@@ -69,6 +76,15 @@ Del 2026-09-19:
   firmado». Esta pieza lo da; la transición de etapa es de la pieza 3.
 
 ## 3. Diseño
+
+### 3.0 La recepción vieja
+
+- `RecepcionDeCereza` **sustituye** a `ReceivingEvent` para toda cereza nueva, propia o de fuera
+  (decisión de Daniel, 2026-09-19). No se amplía la tabla vieja: su semántica es una recepción =
+  un lote, y aquí de una recepción salen muchos.
+- `ReceivingEvent` y su formulario siguen funcionando **hasta el final de la pieza 3**, y se
+  retiran entonces junto con la cosecha propia de `/lots/new`, como ya estaba previsto para ésta.
+- No se migra nada: no hay filas reales.
 
 ### 3.1 El destino de la jornada
 
@@ -220,7 +236,9 @@ Del 2026-09-19:
 - **El otro lado ve el resultado.** En la jornada de la finca y en «Mis entregas», cada entrega
   dice «recibida: 17,9 kg en el beneficio (−0,6 kg)» o «rechazada: motivo». Leer eso no da
   ningún permiso sobre el beneficio.
-- **Abrir jornada** pide el beneficio de destino (de los beneficios que quien abre puede ver).
+- **Abrir jornada** pide el beneficio de destino: los beneficios sobre los que quien abre tiene
+  `lot:view`. No se usa `listarBeneficios`, que filtra por `location:manage_attributes` y un
+  capataz no lo tiene.
 - Botones de envío contra el doble toque, como en el resto.
 
 ## 5. Permisos
