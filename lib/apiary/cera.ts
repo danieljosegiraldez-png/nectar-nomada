@@ -138,3 +138,32 @@ export async function leyendaDeCera(userAccountId: string, locationId: string, h
       return { año, color: colorDelAño(año), entraron: c.entraron, salieron: c.salieron, edad, aviso: avisoDeCera(edad), salieronDeMas: c.salieron > c.entraron };
     });
 }
+
+export interface MarcosNegrosDeColmena {
+  hiveId: string;
+  identifier: string;
+  marcos: number;
+  /** La inspección que los contó. Si la última no contó, manda la anterior que sí — y su fecha lo dice. */
+  fecha: Date;
+}
+
+/**
+ * El aviso por aspecto — spec §5.3: las colmenas de ESTE apiario cuya última inspección que contó
+ * marcos negros vio alguno. Si después se contaron cero, no avisa: se renovaron. Una inspección que
+ * no contó (nulo) no borra el conteo anterior, porque «no se contó» no es «no hay».
+ */
+export async function marcosNegrosDelApiario(userAccountId: string, locationId: string): Promise<MarcosNegrosDeColmena[]> {
+  await requireApiaryAccess(userAccountId, "view", [{ locationId }]);
+  const contadas = await prisma.inspection.findMany({
+    where: { darkFrames: { not: null }, colony: { hive: { locationId } } },
+    orderBy: { occurredAt: "desc" },
+    select: { darkFrames: true, occurredAt: true, colony: { select: { hive: { select: { id: true, identifier: true } } } } },
+  });
+  const ultima = new Map<string, MarcosNegrosDeColmena>();
+  for (const i of contadas) {
+    const h = i.colony.hive;
+    if (!ultima.has(h.id)) ultima.set(h.id, { hiveId: h.id, identifier: h.identifier, marcos: i.darkFrames ?? 0, fecha: i.occurredAt });
+  }
+  return [...ultima.values()].filter((f) => f.marcos > 0).sort((a, b) => b.marcos - a.marcos);
+}
+

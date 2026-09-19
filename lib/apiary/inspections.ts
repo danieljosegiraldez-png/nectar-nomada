@@ -68,6 +68,8 @@ export interface RecordInspectionInput {
   // frontera: el formulario y la cola offline mandan CADENAS.
   population?: ColonyPopulation | string | null;
   beeCoveredFrames?: number | string | null;
+  /** Marcos con la cera vieja o negra (spec 2026-09-18 §5.3). Vacío = no se contó, no cero. */
+  darkFrames?: number | string | null;
   broodStages?: readonly (BroodStage | string)[] | null;
   queenCellKind?: QueenCellKind | string | null;
   queenCellCount?: number | string | null;
@@ -140,6 +142,7 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
   // TypeScript no sobrevive a un cuerpo JSON.
   const population = input.population == null || input.population === "" ? null : exigePoblacion(input.population);
   const beeCoveredFrames = exigeEnteroContado(input.beeCoveredFrames, "cuadros_cubiertos");
+  const darkFrames = exigeEnteroContado(input.darkFrames, "marcos_negros");
   const broodStages = exigeEtapasDeCria(input.broodStages);
   const celdas = exigeCeldasReales(input.queenCellKind, input.queenCellCount);
   const honeyStoresLevel =
@@ -175,6 +178,7 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
         temperamentNote: input.temperamentNote ?? null,
         population,
         beeCoveredFrames,
+        darkFrames,
         broodStages,
         queenCellKind: celdas.kind,
         queenCellCount: celdas.count,

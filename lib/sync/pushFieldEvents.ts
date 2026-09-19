@@ -135,6 +135,8 @@ export type MutacionDeInspeccion = {
   // servicio — no se cuelan en el enum con `as never`.
   population?: string | null;
   beeCoveredFrames?: number | string | null;
+  /** Spec 2026-09-18 §5.3. Una mutación encolada ANTES de este campo no lo trae: llega nulo, «no se contó». */
+  darkFrames?: number | string | null;
   broodStages?: readonly string[] | null;
   queenCellKind?: string | null;
   queenCellCount?: number | string | null;
@@ -363,6 +365,7 @@ async function aplicarMutacionDeApiario(
             // Anexo B §2.2 — se pasan tal cual llegan; el servicio los valida.
             population: m.population ?? null,
             beeCoveredFrames: m.beeCoveredFrames ?? null,
+            darkFrames: m.darkFrames ?? null,
             broodStages: m.broodStages ?? null,
             queenCellKind: m.queenCellKind ?? null,
             queenCellCount: m.queenCellCount ?? null,
