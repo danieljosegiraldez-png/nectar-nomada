@@ -7,7 +7,6 @@ import { montarFixtures, type Fixtures } from "../helpers/fixturesDeCatalogo";
 let f: Fixtures;
 let finca: string;
 let beneficio: string;
-const creadas: string[] = [];
 
 beforeAll(async () => {
   f = await montarFixtures("bod");
@@ -17,7 +16,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   const ids = (await prisma.location.findMany({ where: { name: { contains: f.run }, locationType: "storage_facility" }, select: { id: true } })).map((l) => l.id);
-  await prisma.location.deleteMany({ where: { id: { in: [...ids, ...creadas] } } });
+  await prisma.location.deleteMany({ where: { id: { in: ids } } });
   await prisma.location.deleteMany({ where: { id: beneficio } });
   await prisma.location.deleteMany({ where: { id: finca } });
   await f.limpiar();

@@ -64,7 +64,7 @@ export async function crearRutinaFormAction(formData: FormData): Promise<void> {
       intervalDays: diasOFalla(formData, "intervalDays"),
       instructions: instructions || null,
     });
-    revalidatePath(`/equipos/${equipmentId}`);
+    if (equipmentId) revalidatePath(`/equipos/${equipmentId}`);
     revalidatePath("/equipos");
     revalidatePath(base);
     destino = `${base}?ok=rutina_creada`;
@@ -93,13 +93,13 @@ export async function registrarRealizadaFormAction(formData: FormData): Promise<
       provenanceClass: (String(formData.get("provenanceClass") ?? "") || "original_record") as ProvenanceClass,
       insumos: insumosDelFormulario(formData),
     });
-    revalidatePath(`/equipos/${equipmentId}`);
+    if (equipmentId) revalidatePath(`/equipos/${equipmentId}`);
     revalidatePath("/equipos");
     revalidatePath(base);
     destino = `${base}?ok=rutina_registrada`;
   } catch (error) {
     if (error instanceof MaterialConsumptionValidationError) {
-      destino = `${base}?error=unidad_distinta`;
+      destino = `${base}?error=${error.message.startsWith("unidad distinta") ? "unidad_distinta" : "consumo_invalido"}`;
     } else if (error instanceof RutinaError) {
       destino = `${base}?error=${encodeURIComponent(error.message)}`;
     } else {
@@ -122,7 +122,7 @@ export async function anularRegistroFormAction(formData: FormData): Promise<void
       String(formData.get("eventId") ?? ""),
       String(formData.get("motivo") ?? ""),
     );
-    revalidatePath(`/equipos/${equipmentId}`);
+    if (equipmentId) revalidatePath(`/equipos/${equipmentId}`);
     revalidatePath("/equipos");
     revalidatePath(base);
     destino = `${base}?ok=rutina_anulada`;
@@ -142,7 +142,7 @@ export async function cambiarIntervaloFormAction(formData: FormData): Promise<vo
   let destino: string;
   try {
     await cambiarIntervalo(user.userAccountId, String(formData.get("routineId") ?? ""), diasOFalla(formData, "intervalDays"));
-    revalidatePath(`/equipos/${equipmentId}`);
+    if (equipmentId) revalidatePath(`/equipos/${equipmentId}`);
     revalidatePath("/equipos");
     revalidatePath(base);
     destino = `${base}?ok=datos`;
@@ -162,7 +162,7 @@ export async function retirarRutinaFormAction(formData: FormData): Promise<void>
   let destino: string;
   try {
     await retirarRutina(user.userAccountId, String(formData.get("routineId") ?? ""), new Date());
-    revalidatePath(`/equipos/${equipmentId}`);
+    if (equipmentId) revalidatePath(`/equipos/${equipmentId}`);
     revalidatePath("/equipos");
     revalidatePath(base);
     destino = `${base}?ok=datos`;

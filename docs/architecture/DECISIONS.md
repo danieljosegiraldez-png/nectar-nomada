@@ -11994,14 +11994,19 @@ misma razón que `beneficio_no_se_subdivide` — copiaría el tipo saltándose s
 `lib/rutinas/lugares.ts` (`lugarParaRutina`) sólo admite `beneficio`, `drying_facility`,
 `storage_facility` y `drying_bed`. Una cama **sin** estante (su padre es una `drying_facility`)
 lleva su propia rutina; el resto —incluida cualquier `site`, `plot` o lo que sea— es
-`RutinaError("lugar_sin_rutinas")`. La distinción que sí importa está dentro de las camas: hoy toda
-cama cuelga de una instalación, así que la comprobación de estante nunca dispara — pero el `if`
-sobre el tipo del padre ya está escrito, no por adivinar el futuro sino porque la Parte 2
-(`drying_rack`, en la rama `secado-2a`) va a colgar posiciones de un estante, y **una posición dentro
-de un estante no lleva rutina propia**: la rutina es del estante entero, no de cada hueco —
-`RutinaError("rutina_en_el_estante")`, que manda al estante. Escribirlo ahora, aunque hoy nunca se
-dispare, es lo que evita que `secado-2a` tenga que volver a tocar este archivo para el caso que ya
-sabíamos que iba a llegar.
+`RutinaError("lugar_sin_rutinas")`. La distinción que sí importa está dentro de las camas: una cama
+normal cuelga de una `drying_facility`, pero el `if` sobre el tipo del padre es más ancho que ese
+caso — dispara para CUALQUIER padre que no sea `drying_facility`, hoy mismo, para una cama huérfana
+o mal anidada; el fixture `camaSuelta` de `tests/rutinas/rutinasDeLugar.test.ts` la ejercita.
+**Corregido en la ola de arreglos de revisión final (2026-09-19, Hallazgo 10): esta sección decía
+que «hoy nunca se dispara», y era falso** — se escribió pensando sólo en la Parte 2
+(`drying_rack`, en la rama `secado-2a`), que va a colgar posiciones de un estante, y **una posición
+dentro de un estante no lleva rutina propia**: la rutina es del estante entero, no de cada hueco —
+`RutinaError("rutina_en_el_estante")`, que manda al estante. El nombre del error sigue siendo
+PROVISIONAL hasta que exista `drying_rack`: hoy nombra también el caso más amplio (padre distinto de
+`drying_facility`), no sólo la futura posición de un estante. Escribir la condición así de ancha
+desde ahora es lo que evita que `secado-2a` tenga que volver a tocar este archivo para el caso del
+estante que ya sabíamos que iba a llegar.
 
 **Y `RutinasDeLugar` (el componente de `/instalaciones/[id]`, `/bodegas/[id]` y `/beneficio`) no
 puede asumir que todo lugar admite rutina.** La revisión de la Tarea 6 lo encontró como riesgo antes
