@@ -41,6 +41,30 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **6** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, desde el 2026-09-18 `listarFincas()` —que lee sobre `getManageableContext`, quien autoriza—, y desde la Tarea 4 del plan de secado `capacidadDeTipo()`, que delega entera en `tiposDeBandeja()` — las seis miradas a mano y explicadas en el allowlist |
 
+> **Tarea 6 del plan 2a de secado (ADR-176, 2026-09-19): cierre, sin archivos
+> nuevos.** El script, corrido sobre el árbol final de la rama, da **443**
+> operaciones en **134** archivos: 319 guardia directo, 65 depende del llamador,
+> 39 acotado por construcción, 10 público, 6 recibe principal sin guardia
+> visible, 4 previo a la sesión. De las **nueve** operaciones exportadas de
+> `estantes.ts` (2), `bandejas.ts` (4) y `capacidadDeBandeja.ts` (3), **siete**
+> salen guardia directo y **dos** en otra fila, miradas a mano:
+>
+> - `registrarBandejas` sale **acotado por construcción**, y **no lo es**: el
+>   detector la clasifica así sólo porque una línea termina en
+>   `createdBy: userAccountId,` (su regla `userAccountId,\s*$`), no porque
+>   filtre por el principal. La corrige lo que dice la nota de la Tarea 3 de
+>   abajo (el `FOR UPDATE` no autoriza nada: decide el número). Lo que autoriza
+>   es la **primera** línea tras validar la cantidad,
+>   `if (!(await puedeConfigurarEn(userAccountId, input.siteId))) throw …`, que
+>   llama a `can(manage, equipment)` o, en un lugar, `can(edit_beneficio,
+>   location)`. El detector no la ve porque sólo sigue un salto:
+>   `puedeConfigurarEn` no llama a `can()` en su propio cuerpo sino a través de
+>   `puedeConfigurar`, y por eso no entra en «los que guardan» de
+>   `lib/equipos/equipos.ts`. La razón del archivo en el allowlist ya lo dice.
+> - `capacidadDeTipo` sale **recibe principal, sin guardia visible**: delega
+>   entera en `tiposDeBandeja()` y lanza si el tipo no aparece. Explicada en
+>   `operaciones_sin_patron` del allowlist desde la Tarea 4.
+
 > **Tarea 4 del plan 2a de secado (el pesaje de bandeja cargada y la capacidad
 > por estado, 2026-09-19), con un archivo nuevo.** Partiendo de 439 operaciones
 > en 132 archivos: `lib/traceability/capacidadDeBandeja.ts` aporta **tres**:
