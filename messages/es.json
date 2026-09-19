@@ -2804,7 +2804,7 @@
     "estado_CHERRY": "cereza entera (cereza)",
     "estado_MUCILAGE_HONEY": "en mucílago (honey)",
     "estado_PARCHMENT": "lavado (pergamino)",
-    "capacidadMedida": "{kg} kg · medido con {n, plural, one {# pesaje} other {# pesajes}} a {profundidad} cm",
+    "capacidadMedida": "{kg} kg · calculado a partir de {n, plural, one {# pesaje} other {# pesajes}}: media {densidad} kg/m³ a {profundidad} cm",
     "verPesajes": "ver pesajes",
     "pesajeLinea": "{fecha} · lote {lote} · {kg} kg · profundidades {profundidades} cm · densidad {densidad} kg/m³",
     "pesajesOcultos": "{n, plural, one {y # pesaje de lotes que tu cuenta no ve} other {y # pesajes de lotes que tu cuenta no ve}}",
@@ -2851,7 +2851,8 @@
     "error_tipo_no_encontrado": "No se encontró ese tipo de bandeja.",
     "capacidadSinAcceso": "{n, plural, one {hay # pesaje de lotes que tu cuenta no ve} other {hay # pesajes de lotes que tu cuenta no ve}}",
     "lotesRecortados": "Mostrando los 100 lotes más recientes; puede haber más.",
-    "dondeOculto": "ubicación restringida"
+    "dondeOculto": "ubicación restringida",
+    "noSePudoCalcular": "no se pudo calcular"
   },
   "Inventario": {
     "recibidoOk": "Frasco recibido. Aparece abajo con su vencimiento.",

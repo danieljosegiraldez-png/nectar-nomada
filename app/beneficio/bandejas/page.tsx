@@ -54,6 +54,12 @@ export default async function BandejasPage() {
                       guardada de la 4×2 esto es lo que la distingue de la 2×2. */}
                   {t("area", { area: num(tipo.areaM2, 3) })}
                 </p>
+                {/* F5 (RULING, revisión final 2): un fallo no relacionado con
+                    acceso en ESTE tipo degrada esta fila en vez de tirar toda
+                    la página — no hay `error.tsx` bajo `app/`. */}
+                {tipo.fallo ? (
+                  <p role="alert">{t("noSePudoCalcular")}</p>
+                ) : (
                 <ul>
                   {tipo.estados.map((linea) => (
                     <li key={linea.estado}>
@@ -61,7 +67,7 @@ export default async function BandejasPage() {
                       {": "}
                       {linea.fuente === "medido" && linea.capacidadKg != null && (
                         <>
-                          {t("capacidadMedida", { kg: num(linea.capacidadKg, 1), n: linea.pesajes, profundidad: num(linea.profundidadCm!, 1) })}
+                          {t("capacidadMedida", { kg: num(linea.capacidadKg, 1), n: linea.pesajes, densidad: num(linea.densidadKgM3!, 0), profundidad: num(linea.profundidadCm!, 1) })}
                           {linea.detalle && linea.detalle.visibles.length > 0 && (
                             <details>
                               <summary>{t("verPesajes")}</summary>
@@ -101,6 +107,7 @@ export default async function BandejasPage() {
                     </li>
                   ))}
                 </ul>
+                )}
               </div>
             );
           })}
@@ -118,11 +125,13 @@ export default async function BandejasPage() {
             </>
           )}
 
+          {/* A1/F4: el corte silencioso de la paginación se dice, no se calla —
+              incluso cuando ningún lote queda seleccionable, fuera de la
+              condición de abajo para que no dependa de si hay formulario. */}
+          {tipos.length > 0 && lotesRecortados && <p className="nn-muted">{t("lotesRecortados")}</p>}
           {lotesGestionables.length > 0 && tipos.length > 0 && (
             <>
               <h3>{t("registrarPesajeTitulo")}</h3>
-              {/* A1: el corte silencioso de `take: 100` se dice, no se calla. */}
-              {lotesRecortados && <p className="nn-muted">{t("lotesRecortados")}</p>}
               <FormularioPesaje tipos={tipos.map((tp) => ({ id: tp.id, nombre: tp.nombre }))} lotes={lotesGestionables} />
             </>
           )}

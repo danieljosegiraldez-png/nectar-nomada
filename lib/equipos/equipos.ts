@@ -923,7 +923,7 @@ export async function sitiosParaRegistrar(userAccountId: string) {
       // estantes y posiciones junto a fincas y beneficios de verdad.
       NOT: [{ locationType: "drying_rack" }, { AND: [{ locationType: "drying_bed" }, { rackSlot: { not: null } }] }],
     },
-    select: { id: true, name: true, organizationId: true, organization: { select: { name: true } } },
+    select: { id: true, name: true, organizationId: true, locationType: true, organization: { select: { name: true } } },
     orderBy: { name: "asc" },
   });
   const permitidos = [];
@@ -936,6 +936,7 @@ export async function sitiosParaRegistrar(userAccountId: string) {
         name: s.name,
         organizationId: s.organizationId,
         organizationName: s.organization?.name ?? null,
+        locationType: s.locationType,
       });
     }
   }

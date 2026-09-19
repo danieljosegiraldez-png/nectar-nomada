@@ -1,9 +1,51 @@
+import type { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { bandejasDeLaFinca, tiposDeBandeja } from "../equipos/bandejas";
 import { puedeConfigurarEn, sitiosParaRegistrar } from "../equipos/equipos";
-import { capacidadDeTipo, pesajesDeTipo } from "../traceability/capacidadDeBandeja";
+import { capacidadDeTipo } from "../traceability/capacidadDeBandeja";
 import { puedeEditarBeneficioEnOrganizacion } from "../traceability/locations";
 import { lotWhereFromVisibility, puedeGestionarLote, resolveLotVisibility } from "../traceability/lots";
+
+/**
+ * F4 (revisión final 2, plan 2a de secado): antes se tomaban 101 candidatos y
+ * SÓLO DESPUÉS se autorizaba cada uno — con 100 lotes restringidos por delante
+ * de uno gestionable, el formulario de pesaje desaparecía sin explicación,
+ * porque el gestionable ni siquiera entraba en la página. Ahora se pagina
+ * hasta llenar la cuota de gestionables O agotar los candidatos, con un tope
+ * de páginas para acotar el trabajo. `cuota`/`tamanoPagina`/`maxPaginas` son
+ * parámetros (no constantes) para que la prueba pueda forzar la paginación
+ * sin crear cientos de filas.
+ */
+export async function lotesGestionablesDeOrganizacion(
+  userAccountId: string,
+  loteWhere: Prisma.LotWhereInput,
+  organizationId: string,
+  opciones: { cuota?: number; tamanoPagina?: number; maxPaginas?: number } = {},
+): Promise<{ lotes: { id: string; lotCode: string }[]; recortados: boolean }> {
+  const cuota = opciones.cuota ?? 100;
+  const tamanoPagina = opciones.tamanoPagina ?? 100;
+  const maxPaginas = opciones.maxPaginas ?? 5;
+  const lotes: { id: string; lotCode: string }[] = [];
+  let recortados = false;
+  for (let pagina = 0; pagina < maxPaginas; pagina++) {
+    const candidatos = await prisma.lot.findMany({
+      where: { ...loteWhere, organizationId },
+      select: { id: true, lotCode: true, projectId: true, locationId: true, classification: true },
+      orderBy: { createdAt: "desc" },
+      skip: pagina * tamanoPagina,
+      take: tamanoPagina,
+    });
+    if (candidatos.length === 0) break;
+    for (const lote of candidatos) {
+      if (lotes.length >= cuota) { recortados = true; break; }
+      if (await puedeGestionarLote(userAccountId, lote)) lotes.push({ id: lote.id, lotCode: lote.lotCode });
+    }
+    if (lotes.length >= cuota) break;
+    if (candidatos.length < tamanoPagina) break; // se agotaron de verdad los candidatos
+    if (pagina === maxPaginas - 1) recortados = true; // tope de páginas, sin agotar
+  }
+  return { lotes, recortados };
+}
 
 /**
  * El modelo de vista de `/beneficio/bandejas` (Tarea 5 del plan 2a): una
@@ -49,18 +91,33 @@ export async function vistaDeBandejas(userAccountId: string) {
 
     const tiposConCapacidad = [];
     for (const tipo of tipos) {
-      const capacidad = await capacidadDeTipo(userAccountId, tipo.id);
-      const estados = [];
-      for (const linea of capacidad.estados) {
-        // `detalle` es el camino de vuelta (visibles/ocultos); `linea.pesajes`
-        // sigue siendo el CONTEO que ya trae `capacidadDeTipo` — no se pisan.
-        const detalle = linea.fuente === "medido" ? await pesajesDeTipo(userAccountId, tipo.id, linea.estado) : null;
-        estados.push({ ...linea, detalle });
+      // F5 (RULING, revisión final 2): un fallo en UN tipo no puede tirar
+      // abajo toda la página — no hay `error.tsx` bajo `app/`. Arreglo
+      // ACOTADO: esta fila se degrada a `fallo: true`; no se toca la
+      // autorización ni se añade un error boundary global (fuera de alcance
+      // de esta rama, ya grande de por sí).
+      try {
+        // F5 (cheap win, misma revisión): `capacidad.estados[].detalle` ya
+        // trae el detalle del MISMO conjunto que `capacidadDeTipo` autorizó —
+        // antes se volvía a consultar y a autorizar cada pesaje visible con
+        // una segunda llamada a `pesajesDeTipo`, por cada estado medido.
+        const capacidad = await capacidadDeTipo(userAccountId, tipo.id);
+        tiposConCapacidad.push({ ...tipo, estados: capacidad.estados, fallo: false as const });
+      } catch {
+        tiposConCapacidad.push({ ...tipo, estados: [], fallo: true as const });
       }
-      tiposConCapacidad.push({ ...tipo, estados });
     }
 
-    const candidatos = sitiosPropios.filter((s) => s.organizationId === org.id);
+    // F2 (revisión final 2, medido antes de elegir dónde filtrar):
+    // `sitiosParaRegistrar` (lib/equipos/equipos.ts:916) tiene otros dos
+    // llamadores además de esta vista — `app/equipos/nuevo/page.tsx` y
+    // `app/actions/equipos.ts`, el alta y la validación de equipo EN GENERAL,
+    // no sólo de bandejas — así que no se puede acotar ahí a `site`/`beneficio`
+    // sin romper el registro de otros equipos en una parcela, un apiario o una
+    // instalación. Se filtra AQUÍ, sólo para el selector de bandejas.
+    const candidatos = sitiosPropios.filter(
+      (s) => s.organizationId === org.id && (s.locationType === "site" || s.locationType === "beneficio"),
+    );
     const sitiosDisponibles = [];
     for (const s of candidatos) if (await puedeConfigurarEn(userAccountId, s.id)) sitiosDisponibles.push(s);
 
@@ -70,20 +127,10 @@ export async function vistaDeBandejas(userAccountId: string) {
     // candidato con el mismo guardia que usa `registrarPesaje`
     // (`puedeGestionarLote`, que llama a `requireLotAccess`). `resolveLotVisibility`
     // NO se toca: es compartido y está fuera de este alcance.
-    const candidatosDeLote =
+    const { lotes: lotesGestionables, recortados: lotesRecortados } =
       tipos.length && loteWhere
-        ? await prisma.lot.findMany({
-            where: { ...loteWhere, organizationId: org.id },
-            select: { id: true, lotCode: true, projectId: true, locationId: true, classification: true },
-            orderBy: { createdAt: "desc" },
-            take: 101,
-          })
-        : [];
-    const lotesRecortados = candidatosDeLote.length > 100;
-    const lotesGestionables: { id: string; lotCode: string }[] = [];
-    for (const lote of candidatosDeLote.slice(0, 100)) {
-      if (await puedeGestionarLote(userAccountId, lote)) lotesGestionables.push({ id: lote.id, lotCode: lote.lotCode });
-    }
+        ? await lotesGestionablesDeOrganizacion(userAccountId, loteWhere, org.id)
+        : { lotes: [], recortados: false };
 
     secciones.push({ org, tipos: tiposConCapacidad, bandejas, puedeEditar, sitiosDisponibles, lotesGestionables, lotesRecortados });
   }

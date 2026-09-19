@@ -2804,7 +2804,7 @@
     "estado_CHERRY": "whole cherry (cherry)",
     "estado_MUCILAGE_HONEY": "in mucilage (honey)",
     "estado_PARCHMENT": "washed (parchment)",
-    "capacidadMedida": "{kg} kg · measured from {n, plural, one {# weighing} other {# weighings}} at {profundidad} cm",
+    "capacidadMedida": "{kg} kg · calculated from {n, plural, one {# weighing} other {# weighings}}: average {densidad} kg/m³ at {profundidad} cm",
     "verPesajes": "see weighings",
     "pesajeLinea": "{fecha} · lot {lote} · {kg} kg · depths {profundidades} cm · density {densidad} kg/m³",
     "pesajesOcultos": "{n, plural, one {and # weighing from lots your account can't see} other {and # weighings from lots your account can't see}}",
@@ -2851,7 +2851,8 @@
     "error_tipo_no_encontrado": "That tray type wasn't found.",
     "capacidadSinAcceso": "{n, plural, one {there is # weighing from lots your account can't see} other {there are # weighings from lots your account can't see}}",
     "lotesRecortados": "Showing the 100 most recent lots; there may be more.",
-    "dondeOculto": "restricted location"
+    "dondeOculto": "restricted location",
+    "noSePudoCalcular": "could not be calculated"
   },
   "Inventario": {
     "recibidoOk": "Container received. It appears below with its expiry.",
