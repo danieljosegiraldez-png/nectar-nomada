@@ -19,6 +19,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 **442 operaciones** que tocan la base, en **133 archivos**:
 **443 operaciones** que tocan la base, en **134 archivos**:
 **503 operaciones** que tocan la base, en **144 archivos**:
+**504 operaciones** que tocan la base, en **144 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -39,11 +40,18 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | **39** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **65** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **377** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **378** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **40** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **67** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+
+> **Segunda revisión final del plan 2a de secado (2026-09-19), F4.**
+> `lotesGestionablesDeOrganizacion` (`lib/beneficio/vistaDeBandejas.ts`), nueva
+> función que pagina los lotes candidatos hasta llenar la cuota de gestionables
+> en vez de autorizar sólo los primeros 100 tomados de golpe. 503→504,
+> guardia directo 377→378; mismos 144 archivos (el archivo ya estaba contado).
 
 > **Marcos negros (ADR-176, 2026-09-19).** Una operación nueva en `lib/apiary/cera.ts`,
 > `marcosNegrosDelApiario`, que sube la fila de **guardia directo**, 366→367 tras rebasar sobre reinas y fitosanitarios: llama a
