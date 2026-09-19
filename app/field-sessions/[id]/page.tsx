@@ -17,7 +17,7 @@ import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante
 import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEmparentadas";
 import { intervencionesVigentes } from "../../../lib/traceability/intervenciones";
 import { reentradaDeIntervencion } from "../../../lib/traceability/carenciaDeIntervencion";
-import type { PlotInterventionKind } from "../../../generated/prisma/client";
+import { textoDeTipoDeManejo as textoDeTipoDeManejoDe } from "../../components/traceability/etiquetasDeManejo";
 
 export const dynamic = "force-dynamic";
 
@@ -89,14 +89,9 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
   // las intervenciones emparentadas con el sitio de la jornada (misma regla que
   // la cosecha, spec §3.3). Cierra sola cuando `re.estado` deja de ser
   // "vigente"/"desconocida", sin botón ni confirmación.
-  // `Record` total: un valor nuevo en `PlotInterventionKind` rompe el
-  // typecheck aquí en vez de colarse crudo en una interfaz bilingüe (hallazgo
-  // de la revisión, ronda 1).
-  const textoDeTipoDeManejo: Record<PlotInterventionKind, string> = {
-    aplicacion: t("manejoKind_aplicacion"),
-    liberacion: t("manejoKind_liberacion"),
-    manejo_cultural: t("manejoKind_manejo_cultural"),
-  };
+  // Tarea 8, ronda de arreglos 1 (menor #1): la tabla vivía aquí duplicada;
+  // ahora sale de `etiquetasDeManejo.ts`, compartida con las otras 3 pantallas.
+  const textoDeTipoDeManejo = textoDeTipoDeManejoDe(t);
   const avisosDeReentrada: { key: string; texto: string }[] = [];
   if (enCurso) {
     const intervenciones = await intervencionesVigentes(await ubicacionesEmparentadas(session.locationId));

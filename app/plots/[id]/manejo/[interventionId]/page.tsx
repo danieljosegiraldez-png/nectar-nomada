@@ -11,11 +11,12 @@ import { getObserverCandidates } from "../../../../../lib/traceability/lots";
 import { mostrarFecha, mostrarInstante } from "../../../../../lib/time/mostrarInstante";
 import { paraCampoLocal } from "../../../../../lib/time/localDateTime";
 import { IntervencionForm, type IntervencionFormValues } from "../../../../components/traceability/IntervencionForm";
-import type {
-  PlotInterventionKind,
-  PlotInterventionMethod,
-  PlotInterventionTarget,
-} from "../../../../../generated/prisma/client";
+import {
+  textoDeTipoDeManejo,
+  textoDeObjetivoDeManejo,
+  textoDeMetodoDeManejo,
+} from "../../../../components/traceability/etiquetasDeManejo";
+import { origenDeLaCarencia } from "../../../../../lib/traceability/origenDeLaCarencia";
 
 export const dynamic = "force-dynamic";
 
@@ -65,42 +66,18 @@ export default async function ManejoDetailPage({
   const carencia = carenciaDeIntervencion(intervencion, ahora);
   const reentrada = reentradaDeIntervencion(intervencion, ahora);
 
-  const textoDeTipo: Record<PlotInterventionKind, string> = {
-    aplicacion: t("manejoKind_aplicacion"),
-    liberacion: t("manejoKind_liberacion"),
-    manejo_cultural: t("manejoKind_manejo_cultural"),
-  };
-  const textoDeObjetivo: Record<PlotInterventionTarget, string> = {
-    arana_roja: t("manejoTarget_arana_roja"),
-    broca: t("manejoTarget_broca"),
-    minador_hoja: t("manejoTarget_minador_hoja"),
-    cochinillas: t("manejoTarget_cochinillas"),
-    nematodos: t("manejoTarget_nematodos"),
-    jobotos: t("manejoTarget_jobotos"),
-    roya: t("manejoTarget_roya"),
-    ojo_de_gallo: t("manejoTarget_ojo_de_gallo"),
-    mancha_de_hierro: t("manejoTarget_mancha_de_hierro"),
-    antracnosis: t("manejoTarget_antracnosis"),
-    llaga_macana: t("manejoTarget_llaga_macana"),
-    chasparria: t("manejoTarget_chasparria"),
-    otro: t("manejoTarget_otro"),
-  };
-  const textoDeMetodo: Record<PlotInterventionMethod, string> = {
-    follaje: t("manejoMethod_follaje"),
-    tronco: t("manejoMethod_tronco"),
-    suelo: t("manejoMethod_suelo"),
-    riego: t("manejoMethod_riego"),
-    cebo: t("manejoMethod_cebo"),
-    liberacion: t("manejoMethod_liberacion"),
-    manual: t("manejoMethod_manual"),
-    otro: t("manejoMethod_otro"),
-  };
+  // Tarea 8, ronda de arreglos 1 (menor #1): las tres tablas salen de
+  // `etiquetasDeManejo.ts`, compartida con las otras 3 pantallas.
+  const textoDeTipo = textoDeTipoDeManejo(t);
+  const textoDeObjetivo = textoDeObjetivoDeManejo(t);
+  const textoDeMetodo = textoDeMetodoDeManejo(t);
 
-  // Rúbrica de veracidad (spec §4.3): cada carencia dice de dónde salió.
-  const origenDeCarencia = (l: (typeof intervencion.lineas)[number]): "del_producto" | "indicada_al_registrar" | "no_declarada" => {
-    if (l.withdrawalDays == null) return "no_declarada";
-    return l.withdrawalDays === l.material.defaultWithdrawalDays ? "del_producto" : "indicada_al_registrar";
-  };
+  // Rúbrica de veracidad (spec §4.3): cada carencia dice de dónde salió. La
+  // MISMA función que usa el formulario para su rótulo (ronda de arreglos 1,
+  // importante #1) — `esLaOriginal: true` porque aquí se enseña el valor YA
+  // GUARDADO, no una precarga en vivo.
+  const origenDeCarencia = (l: (typeof intervencion.lineas)[number]) =>
+    origenDeLaCarencia(l.withdrawalDays, l.material.defaultWithdrawalDays, true);
   const textoDeOrigen = {
     del_producto: t("manejoOriginFromProduct"),
     indicada_al_registrar: t("manejoOriginDeclaredAtEntry"),

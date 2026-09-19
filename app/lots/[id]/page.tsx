@@ -7,7 +7,8 @@ import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante
 import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEmparentadas";
 import { intervencionesVigentes } from "../../../lib/traceability/intervenciones";
 import { carenciaDeIntervencion } from "../../../lib/traceability/carenciaDeIntervencion";
-import type { PlotInterventionTarget } from "../../../generated/prisma/client";
+import { difierenMarcasDeCarencia } from "../../../lib/traceability/difierenMarcasDeCarencia";
+import { textoDeObjetivoDeManejo as textoDeObjetivoDeManejoDe } from "../../components/traceability/etiquetasDeManejo";
 import { getCurrentUser } from "../../../lib/auth/session";
 import {
   getLotDetail,
@@ -165,12 +166,18 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         return marcas;
       }, [])
     : [];
-  const ordenarMarcas = (xs: readonly { interventionId: string; diasQueFaltaban: number | null }[]) =>
-    [...xs].sort((a, b) => a.interventionId.localeCompare(b.interventionId));
-  const carenciaDeHoyCoincideConLaFoto = harvestEvent
-    ? JSON.stringify(ordenarMarcas(harvestEvent.marcasDeCarencia.map((m) => ({ interventionId: m.interventionId, diasQueFaltaban: m.diasQueFaltaban })))) ===
-      JSON.stringify(ordenarMarcas(calculoDeCarenciaHoy))
-    : true;
+  // Ronda de arreglos 1 (importante #2, hueco de spec §3.4 confirmado por el
+  // controlador): la comparación corre SIEMPRE, aunque la foto esté vacía —
+  // antes vivía gateada dentro del `if (marcasDeCarencia.length > 0)` de la
+  // JSX, así que una cosecha SIN carencia en su foto nunca podía enseñar que
+  // hoy sí la hay. `difiereCarenciaDeHoy` decide, más abajo, si la caja se
+  // pinta —con o sin lista— y no al revés.
+  const difiereCarenciaDeHoy = harvestEvent
+    ? difierenMarcasDeCarencia(
+        harvestEvent.marcasDeCarencia.map((m) => ({ interventionId: m.interventionId, diasQueFaltaban: m.diasQueFaltaban })),
+        calculoDeCarenciaHoy,
+      )
+    : false;
 
   // Qué mediciones han sido superadas por una corrección. Se calcula de la
   // lista que ya se cargó, sin otra consulta.
@@ -192,23 +199,9 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   const cuando = (date: Date) => mostrarInstante(date, lot.location?.timezone);
   const cuandoDia = (date: Date) => mostrarFecha(date, lot.location?.timezone ?? null);
 
-  // Como `manejoKind_` en las otras pantallas: un `Record` explícito para que
-  // un valor del enum sin traducción no compile.
-  const textoDeObjetivoDeManejo: Record<PlotInterventionTarget, string> = {
-    arana_roja: t("manejoTarget_arana_roja"),
-    broca: t("manejoTarget_broca"),
-    minador_hoja: t("manejoTarget_minador_hoja"),
-    cochinillas: t("manejoTarget_cochinillas"),
-    nematodos: t("manejoTarget_nematodos"),
-    jobotos: t("manejoTarget_jobotos"),
-    roya: t("manejoTarget_roya"),
-    ojo_de_gallo: t("manejoTarget_ojo_de_gallo"),
-    mancha_de_hierro: t("manejoTarget_mancha_de_hierro"),
-    antracnosis: t("manejoTarget_antracnosis"),
-    llaga_macana: t("manejoTarget_llaga_macana"),
-    chasparria: t("manejoTarget_chasparria"),
-    otro: t("manejoTarget_otro"),
-  };
+  // Tarea 8, ronda de arreglos 1 (menor #1): sale de `etiquetasDeManejo.ts`,
+  // compartida con las otras 3 pantallas.
+  const textoDeObjetivoDeManejo = textoDeObjetivoDeManejoDe(t);
   const labourEntryLine = (entry: LabourEntry) =>
     t("labourEntryLine", { workers: entry.workerCount, hours: entry.hours.toString(), date: cuando(entry.occurredAt) }) +
     (entry.taskNote ? ` — ${entry.taskNote}` : "");
@@ -577,21 +570,27 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           <h2>{t("harvestInfoHeading")}</h2>
           <p className="nn-muted">{t("harvestOccurredAtLabel", { date: cuando(harvestEvent.harvestedAt) })}</p>
 
-          {harvestEvent.marcasDeCarencia.length > 0 ? (
+          {/* Ronda de arreglos 1 (importante #2): la caja se pinta si hay
+              marcas en la foto O si el cálculo de hoy difiere de ella —
+              antes sólo la primera condición decidía, y una foto vacía
+              apagaba también el aviso de discrepancia (spec §3.4). */}
+          {harvestEvent.marcasDeCarencia.length > 0 || difiereCarenciaDeHoy ? (
             <div className="nn-card">
               <h3>{t("harvestWithdrawalHeading")}</h3>
-              <ul className="nn-detail-meta">
-                {harvestEvent.marcasDeCarencia.map((m) => (
-                  <li key={m.id}>
-                    {m.diasQueFaltaban != null ? t("harvestWithdrawalKnown", { n: m.diasQueFaltaban }) : t("harvestWithdrawalUnknown")}
-                    {" — "}
-                    <Link href={`/plots/${m.intervention.locationId}/manejo/${m.intervention.id}`}>
-                      {cuandoDia(m.intervention.occurredAt)} · {textoDeObjetivoDeManejo[m.intervention.target]}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-              {!carenciaDeHoyCoincideConLaFoto ? (
+              {harvestEvent.marcasDeCarencia.length > 0 ? (
+                <ul className="nn-detail-meta">
+                  {harvestEvent.marcasDeCarencia.map((m) => (
+                    <li key={m.id}>
+                      {m.diasQueFaltaban != null ? t("harvestWithdrawalKnown", { n: m.diasQueFaltaban }) : t("harvestWithdrawalUnknown")}
+                      {" — "}
+                      <Link href={`/plots/${m.intervention.locationId}/manejo/${m.intervention.id}`}>
+                        {cuandoDia(m.intervention.occurredAt)} · {textoDeObjetivoDeManejo[m.intervention.target]}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {difiereCarenciaDeHoy ? (
                 <p className="nn-muted">
                   {t("harvestWithdrawalRecalculated", {
                     detalle:

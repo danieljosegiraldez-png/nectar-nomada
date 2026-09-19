@@ -7,6 +7,7 @@ import type { TraceabilityActionState } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
 import { BotonDeEnvio } from "../BotonDeEnvio";
 import { LineaDeIntervencion, type ProductoOption, type ValoresDeLinea } from "./LineaDeIntervencion";
+import { textoDeTipoDeManejo, textoDeObjetivoDeManejo, textoDeMetodoDeManejo } from "./etiquetasDeManejo";
 import type { PlotInterventionKind, PlotInterventionMethod, PlotInterventionTarget } from "../../../generated/prisma/client";
 
 const initialState: TraceabilityActionState = {};
@@ -103,36 +104,11 @@ export function IntervencionForm({
   const [lineas, setLineas] = useState<readonly ValoresDeLinea[]>(valores.lineas.length > 0 ? valores.lineas : [lineaVacia()]);
   const [areaModo, setAreaModo] = useState<"parcela" | "plantas">(valores.specimenIds.length > 0 ? "plantas" : "parcela");
 
-  const textoDeTipo: Record<PlotInterventionKind, string> = {
-    aplicacion: t("manejoKind_aplicacion"),
-    liberacion: t("manejoKind_liberacion"),
-    manejo_cultural: t("manejoKind_manejo_cultural"),
-  };
-  const textoDeObjetivo: Record<PlotInterventionTarget, string> = {
-    arana_roja: t("manejoTarget_arana_roja"),
-    broca: t("manejoTarget_broca"),
-    minador_hoja: t("manejoTarget_minador_hoja"),
-    cochinillas: t("manejoTarget_cochinillas"),
-    nematodos: t("manejoTarget_nematodos"),
-    jobotos: t("manejoTarget_jobotos"),
-    roya: t("manejoTarget_roya"),
-    ojo_de_gallo: t("manejoTarget_ojo_de_gallo"),
-    mancha_de_hierro: t("manejoTarget_mancha_de_hierro"),
-    antracnosis: t("manejoTarget_antracnosis"),
-    llaga_macana: t("manejoTarget_llaga_macana"),
-    chasparria: t("manejoTarget_chasparria"),
-    otro: t("manejoTarget_otro"),
-  };
-  const textoDeMetodo: Record<PlotInterventionMethod, string> = {
-    follaje: t("manejoMethod_follaje"),
-    tronco: t("manejoMethod_tronco"),
-    suelo: t("manejoMethod_suelo"),
-    riego: t("manejoMethod_riego"),
-    cebo: t("manejoMethod_cebo"),
-    liberacion: t("manejoMethod_liberacion"),
-    manual: t("manejoMethod_manual"),
-    otro: t("manejoMethod_otro"),
-  };
+  // Tarea 8, ronda de arreglos 1 (menor #1): las tres tablas salen de
+  // `etiquetasDeManejo.ts`, compartida con las otras pantallas que las usan.
+  const textoDeTipo = textoDeTipoDeManejo(t);
+  const textoDeObjetivo = textoDeObjetivoDeManejo(t);
+  const textoDeMetodo = textoDeMetodoDeManejo(t);
 
   return (
     <form action={formAction} className="nn-form">

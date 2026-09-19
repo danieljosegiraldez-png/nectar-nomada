@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { origenDeLaCarencia } from "../../../lib/traceability/origenDeLaCarencia";
 
 export interface ProductoOption {
   id: string;
@@ -48,6 +49,24 @@ export function LineaDeIntervencion({
   const producto = productos.find((p) => p.id === materialId) ?? null;
   const esElProductoOriginal = materialId === valores.materialId;
   const hoy = new Date();
+
+  // Ronda de arreglos 1 (importante #1): el valor que el campo enseña de
+  // verdad —el mismo que se le pasa como `defaultValue` más abajo—, no «el
+  // producto tiene un default». Con el material sin cambiar, ese valor es el
+  // YA DECLARADO en la línea, que puede diferir del default del producto.
+  const valorMostradoDeCarencia = esElProductoOriginal ? (valores.withdrawalDays ?? null) : (producto?.defaultWithdrawalDays ?? null);
+  const valorMostradoDeReentrada = esElProductoOriginal ? (valores.reentryHours ?? null) : (producto?.defaultReentryHours ?? null);
+  const origenDeCarencia = producto
+    ? origenDeLaCarencia(valorMostradoDeCarencia, producto.defaultWithdrawalDays, esElProductoOriginal)
+    : null;
+  const origenDeReentrada = producto
+    ? origenDeLaCarencia(valorMostradoDeReentrada, producto.defaultReentryHours, esElProductoOriginal)
+    : null;
+  const rotuloDeOrigen = (origen: ReturnType<typeof origenDeLaCarencia> | null) => {
+    if (origen === "del_producto") return t("manejoOriginFromProduct");
+    if (origen === "indicada_al_registrar") return t("manejoOriginDeclaredAtEntry");
+    return null;
+  };
 
   return (
     <fieldset className="nn-card" style={{ marginBottom: "0.75rem" }}>
@@ -121,7 +140,7 @@ export function LineaDeIntervencion({
         <div className="nn-field" style={{ flex: "1 1 160px" }}>
           <label htmlFor={`linea-${indice}-withdrawal`}>
             {t("manejoWithdrawalLabel")}
-            {producto?.defaultWithdrawalDays != null ? <span className="nn-muted"> — {t("manejoOriginFromProduct")}</span> : null}
+            {rotuloDeOrigen(origenDeCarencia) ? <span className="nn-muted"> — {rotuloDeOrigen(origenDeCarencia)}</span> : null}
           </label>
           <input
             key={`withdrawal-${materialId}`}
@@ -130,14 +149,14 @@ export function LineaDeIntervencion({
             type="number"
             step={1}
             min={0}
-            defaultValue={esElProductoOriginal ? (valores.withdrawalDays ?? "") : (producto?.defaultWithdrawalDays ?? "")}
+            defaultValue={valorMostradoDeCarencia ?? ""}
             placeholder={producto && producto.defaultWithdrawalDays == null ? t("manejoProductDoesNotDeclare") : undefined}
           />
         </div>
         <div className="nn-field" style={{ flex: "1 1 160px" }}>
           <label htmlFor={`linea-${indice}-reentry`}>
             {t("manejoReentryLabel")}
-            {producto?.defaultReentryHours != null ? <span className="nn-muted"> — {t("manejoOriginFromProduct")}</span> : null}
+            {rotuloDeOrigen(origenDeReentrada) ? <span className="nn-muted"> — {rotuloDeOrigen(origenDeReentrada)}</span> : null}
           </label>
           <input
             key={`reentry-${materialId}`}
@@ -146,7 +165,7 @@ export function LineaDeIntervencion({
             type="number"
             step={1}
             min={0}
-            defaultValue={esElProductoOriginal ? (valores.reentryHours ?? "") : (producto?.defaultReentryHours ?? "")}
+            defaultValue={valorMostradoDeReentrada ?? ""}
             placeholder={producto && producto.defaultReentryHours == null ? t("manejoProductDoesNotDeclare") : undefined}
           />
         </div>

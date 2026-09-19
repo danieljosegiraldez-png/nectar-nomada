@@ -22,7 +22,10 @@ import { diaDeHoy } from "../../../lib/time/diaDeHoy";
 import { pendienteDeLaParcela, enlaceDelAviso, type Aviso } from "../../../lib/traceability/pendienteDeLaParcela";
 import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEmparentadas";
 import { intervencionesVigentes, listarIntervenciones } from "../../../lib/traceability/intervenciones";
-import type { PlotInterventionKind, PlotInterventionTarget } from "../../../generated/prisma/client";
+import {
+  textoDeTipoDeManejo as textoDeTipoDeManejoDe,
+  textoDeObjetivoDeManejo as textoDeObjetivoDeManejoDe,
+} from "../../components/traceability/etiquetasDeManejo";
 
 export const dynamic = "force-dynamic";
 
@@ -133,29 +136,11 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
-  // Tarea 8, spec §5 — como `manejoKind_`: un `Record` explícito, no una
-  // clave calculada, para que un valor nuevo del enum sin traducción no
-  // compile en vez de fallar en silencio al renderizar.
-  const textoDeTipoDeManejo: Record<PlotInterventionKind, string> = {
-    aplicacion: t("manejoKind_aplicacion"),
-    liberacion: t("manejoKind_liberacion"),
-    manejo_cultural: t("manejoKind_manejo_cultural"),
-  };
-  const textoDeObjetivoDeManejo: Record<PlotInterventionTarget, string> = {
-    arana_roja: t("manejoTarget_arana_roja"),
-    broca: t("manejoTarget_broca"),
-    minador_hoja: t("manejoTarget_minador_hoja"),
-    cochinillas: t("manejoTarget_cochinillas"),
-    nematodos: t("manejoTarget_nematodos"),
-    jobotos: t("manejoTarget_jobotos"),
-    roya: t("manejoTarget_roya"),
-    ojo_de_gallo: t("manejoTarget_ojo_de_gallo"),
-    mancha_de_hierro: t("manejoTarget_mancha_de_hierro"),
-    antracnosis: t("manejoTarget_antracnosis"),
-    llaga_macana: t("manejoTarget_llaga_macana"),
-    chasparria: t("manejoTarget_chasparria"),
-    otro: t("manejoTarget_otro"),
-  };
+  // Tarea 8, ronda de arreglos 1 (menor #1): las dos tablas salen de
+  // `etiquetasDeManejo.ts`, compartida con las otras 3 pantallas que las
+  // necesitan — antes estaban duplicadas ahí y aquí.
+  const textoDeTipoDeManejo = textoDeTipoDeManejoDe(t);
+  const textoDeObjetivoDeManejo = textoDeObjetivoDeManejoDe(t);
 
   return (
     <div>
