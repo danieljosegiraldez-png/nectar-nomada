@@ -688,3 +688,29 @@ export async function productosFitosanitarios(userAccountId: string, locationId:
     lotes: m.lots,
   }));
 }
+
+/**
+ * `productosFitosanitarios` para una pantalla que ofrece el selector como algo
+ * OPCIONAL (regla de trampas, Tarea 3 ronda 1) — un ámbito de ubicación sólo
+ * alcanza hacia sus descendientes (`lib/rbac/service.ts`), así que alguien con
+ * `location:manage_attributes` asignado exactamente en la parcela (no en la
+ * finca ni en un ancestro) puede entrar al tablero de esa parcela y aun así no
+ * tener `lot:view` sobre la finca. Sin este envoltorio, `productosFitosanitarios`
+ * lanzaba `TraceabilityAccessError` sin capturar y la página entera reventaba
+ * (500) en vez de sólo faltar el selector — el guardado ya fallaba con gracia
+ * antes de esta tarea (`saveTrapRuleFormAction` + `friendlyError`), y esta
+ * función preserva ese mismo trato para la lectura.
+ *
+ * Sólo traga `TraceabilityAccessError`: cualquier otro error se relanza.
+ */
+export async function productosFitosanitariosSiPuede(
+  userAccountId: string,
+  locationId: string,
+): Promise<MaterialFitosanitario[]> {
+  try {
+    return await productosFitosanitarios(userAccountId, locationId);
+  } catch (error) {
+    if (error instanceof TraceabilityAccessError) return [];
+    throw error;
+  }
+}

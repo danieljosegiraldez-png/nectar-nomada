@@ -14,6 +14,7 @@ import {
   registrarIntervencion,
   corregirIntervencion,
   productosFitosanitarios,
+  productosFitosanitariosSiPuede,
   intervencionesVigentes,
   IntervencionValidationError,
   type RegistrarIntervencionInput,
@@ -597,6 +598,28 @@ describe("la organización se resuelve subiendo por parentLocationId (ronda de a
         lineas: [{ materialId: fitoOtraOrg, withdrawalDays: 7 }],
       }),
     ).rejects.toThrow(IntervencionValidationError);
+  });
+});
+
+/**
+ * Tarea 3, ronda de arreglos 1 — la regla de trampas ofrece este selector
+ * como algo OPCIONAL (`app/plots/[id]/ajustes/page.tsx`), y `operador` es el
+ * fixture que ya reproduce el hueco: `Farm Operator` en `parcelaHija`, hija
+ * de `finca`, y NINGÚN `Assignment` en `finca` misma. Un ámbito de ubicación
+ * alcanza sus descendientes, nunca sus ancestros, así que pedir
+ * `lot:view` sobre `finca` con la asignación de `operador` falla — y antes de
+ * esta ronda esa falla llegaba sin capturar hasta la página.
+ */
+describe("productosFitosanitariosSiPuede — ronda de arreglos 1", () => {
+  it("sin lot:view en la finca (ámbito sólo en la parcela hija): lista vacía, no lanza", async () => {
+    await expect(productosFitosanitariosSiPuede(operador, finca)).resolves.toEqual([]);
+  });
+
+  it("control: con lot:view en la finca, trae los mismos productos que productosFitosanitarios", async () => {
+    const esperado = await productosFitosanitarios(gestor, finca);
+    const obtenido = await productosFitosanitariosSiPuede(gestor, finca);
+    expect(obtenido).toEqual(esperado);
+    expect(obtenido.map((p) => p.id)).toContain(fito);
   });
 });
 

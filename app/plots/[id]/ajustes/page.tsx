@@ -12,7 +12,7 @@ import { PlotAttributesForm } from "../../../components/traceability/PlotAttribu
 import { SoilProfileForm } from "../../../components/traceability/SoilProfileForm";
 import { MarcarEnProduccionForm } from "../../../components/traceability/MarcarEnProduccionForm";
 import { listPlotBlocks } from "../../../../lib/traceability/plotBlocks";
-import { productosFitosanitarios } from "../../../../lib/traceability/intervenciones";
+import { productosFitosanitariosSiPuede } from "../../../../lib/traceability/intervenciones";
 import { AltaDeBloqueForm } from "../../../components/traceability/AltaDeBloqueForm";
 import { AltaDeTrampaForm } from "../../../components/traceability/AltaDeTrampaForm";
 import { ReglaDeTrampasForm } from "../../../components/traceability/ReglaDeTrampasForm";
@@ -47,11 +47,19 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
   // La regla es de la FINCA —el padre de la parcela—, así que sus productos
   // sugeridos también se ofrecen por la organización de la finca.
+  //
+  // Ronda 1: `location:manage_attributes` (lo que exige esta página) y
+  // `lot:view` (lo que exige el selector) son permisos distintos sobre
+  // ámbitos que NO se implican entre sí — un ámbito alcanza sus
+  // descendientes, nunca sus ancestros —, así que alguien con permiso sólo
+  // sobre la parcela puede entrar aquí y no tener `lot:view` en la finca.
+  // `productosFitosanitariosSiPuede` no lanza en ese caso: sin permiso, el
+  // selector sale vacío en vez de reventar la página entera.
   const farmLocationId = location.parentLocation?.id ?? location.id;
   const [calicatas, bloques, productosDeLaFinca] = await Promise.all([
     listSoilProfilesForLocation(user.userAccountId, id),
     listPlotBlocks(user.userAccountId, id),
-    productosFitosanitarios(user.userAccountId, farmLocationId),
+    productosFitosanitariosSiPuede(user.userAccountId, farmLocationId),
   ]);
 
   return (
