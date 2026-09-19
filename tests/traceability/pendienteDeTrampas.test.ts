@@ -230,6 +230,24 @@ describe("ordenDeRonda", () => {
     const orden = ordenDeRonda([trampa(5, "al_dia", null), trampa(2, "al_dia", null)]);
     expect(orden.map((t) => t.trapNumber)).toEqual([2, 5]);
   });
+
+  // Contraejemplo de la revisión: «toca hoy» (al_dia con diasDeRetraso === 0)
+  // es su propia franja, distinta de «al_dia» con días negativos (no vence
+  // todavía). Antes del fix, las dos caían en el mismo grupo «no urgente» y
+  // #2 ganaba por número de trampa — el spec exige lo contrario.
+  it("toca hoy va antes que una que no vence en varios días (contraejemplo de revisión)", () => {
+    const orden = ordenDeRonda([trampa(2, "al_dia", -5), trampa(9, "al_dia", 0)]);
+    expect(orden.map((t) => t.trapNumber)).toEqual([9, 2]);
+  });
+
+  it("las tres franjas juntas: vencida, toca hoy, y el resto (incluye sin_regla)", () => {
+    const orden = ordenDeRonda([
+      trampa(8, "sin_regla", null),
+      trampa(5, "al_dia", 0),
+      trampa(1, "toca_revisar", 3),
+    ]);
+    expect(orden.map((t) => t.trapNumber)).toEqual([1, 5, 8]);
+  });
 });
 
 /**
@@ -274,5 +292,19 @@ describe("proximaRevisionDe", () => {
 
   it("sin revisión y sin instalación registrada no inventa una fecha", () => {
     expect(proximaRevisionDe({ ...trampaBase, instaladaEl: null }, regla)).toBeNull();
+  });
+
+  it("cruza un mes sin cruzar año: instalada el 20 de enero, el plazo normal (15 días) da el 4 de febrero", () => {
+    const trampa: TrampaParaAviso = { ...trampaBase, instaladaEl: "2026-01-20" };
+    expect(proximaRevisionDe(trampa, regla)).toBe("2026-02-04");
+  });
+
+  it("cruza un año: última revisión el 25 de diciembre con un plazo normal de 14 días da el 8 de enero", () => {
+    const trampa: TrampaParaAviso = {
+      ...trampaBase,
+      ultimaRevision: { dia: "2026-12-25", brocaLevel: "pocos" },
+    };
+    const reglaDeCatorce: ReglaParaAviso = { ...regla, normalDays: 14 };
+    expect(proximaRevisionDe(trampa, reglaDeCatorce)).toBe("2027-01-08");
   });
 });

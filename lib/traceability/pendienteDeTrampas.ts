@@ -59,12 +59,10 @@ function diasEntre(desde: string, hasta: string): number {
 }
 
 /**
- * Si la última lectura disparó y desde cuándo corre el plazo — la única
- * lógica no trivial de este archivo, compartida por `avisosDeTrampas` y
- * `estadoDeTrampa`. Ruling del controlador sobre la Tarea 3
- * (2026-09-18-vistas-de-finca-y-parcela): el borrador de la tarea pedía
- * repetir esta rama en las dos funciones; en vez de eso vive aquí una sola
- * vez, y las dos la llaman.
+ * Si la última lectura disparó y desde cuándo corre el plazo — la parte de
+ * `disparoYPlazo` que no depende de «hoy» (ver su docstring para por qué
+ * las dos funciones existen). Extraída en la Tarea 9 (spec §4.2) para que
+ * `proximaRevisionDe` pueda calcular la fecha límite sin repetir esta rama.
  *
  * F7 fix-final — una revisión de ANTES de la última instalación/
  * reinstalación es de un ciclo cerrado: ni cuenta como visita ni puede
@@ -72,11 +70,6 @@ function diasEntre(desde: string, hasta: string): number {
  * reinstalarla meses después seguía proponiendo la acción de esa lectura
  * vieja, y el plazo corría desde ella en vez de desde la reinstalación.
  * Comparación de cadenas `YYYY-MM-DD`, válida porque son ISO.
- */
-/**
- * La parte de `disparoYPlazo` que no depende de «hoy»: desde cuándo cuenta el
- * plazo y cuántos días dura. Extraída para que `proximaRevisionDe` —Tarea 9,
- * spec §4.2— pueda calcular la fecha límite sin repetir esta rama.
  */
 function plazoDeLaTrampa(
   trampa: TrampaParaAviso,
@@ -100,6 +93,14 @@ function plazoDeLaTrampa(
   return { desde, plazo, disparo, lectura };
 }
 
+/**
+ * Añade «hoy» a `plazoDeLaTrampa` para dar `diasDeRetraso` — la única lógica
+ * no trivial de este archivo, compartida por `avisosDeTrampas` y
+ * `estadoDeTrampa`. Ruling del controlador sobre la Tarea 3
+ * (2026-09-18-vistas-de-finca-y-parcela): el borrador de la tarea pedía
+ * repetir esta rama en las dos funciones; en vez de eso vive aquí una sola
+ * vez, y las dos la llaman.
+ */
 function disparoYPlazo(
   trampa: TrampaParaAviso,
   regla: ReglaParaAviso,
@@ -248,15 +249,31 @@ export function trampasParaAviso(
  * de trampa. `lectura_alta` cuenta como «toca revisar» para este orden: las dos son
  * la misma urgencia, sólo cambia el texto.
  */
+/**
+ * Las tres franjas de la ronda, spec §4.2: 0 vencidas, 1 «toca hoy», 2 el resto.
+ * «Toca hoy» —el día exacto del vencimiento— NO es un `estado` propio:
+ * `estadoDeTrampa` lo codifica como `al_dia` con `diasDeRetraso === 0`
+ * (ver su docstring, «el día exacto del vencimiento todavía no avisa»), así
+ * que hay que mirar las dos cosas juntas para no confundirlo con una trampa
+ * que aún le quedan días. Fix round 1 de revisión, Tarea 9: la versión
+ * anterior sólo separaba «vencida» del resto y dejaba «toca hoy» mezclada
+ * con «no vence en varios días» dentro del mismo grupo, ordenadas sólo por
+ * número — ver el contraejemplo #9/#2 en la prueba.
+ */
+function franjaDeRonda(e: { estado: EstadoDeTrampa; diasDeRetraso: number | null }): 0 | 1 | 2 {
+  if (e.estado === "toca_revisar" || e.estado === "lectura_alta") return 0;
+  if (e.estado === "al_dia" && e.diasDeRetraso === 0) return 1;
+  return 2;
+}
+
 export function ordenDeRonda<
   T extends { trapNumber: number | null; estadoActual: { estado: EstadoDeTrampa; diasDeRetraso: number | null } },
 >(trampas: readonly T[]): T[] {
-  const urgente = (e: EstadoDeTrampa) => e === "toca_revisar" || e === "lectura_alta";
   return [...trampas].sort((a, b) => {
-    const aUrgente = urgente(a.estadoActual.estado);
-    const bUrgente = urgente(b.estadoActual.estado);
-    if (aUrgente !== bUrgente) return aUrgente ? -1 : 1;
-    if (aUrgente) {
+    const franjaA = franjaDeRonda(a.estadoActual);
+    const franjaB = franjaDeRonda(b.estadoActual);
+    if (franjaA !== franjaB) return franjaA - franjaB;
+    if (franjaA === 0) {
       const diff = (b.estadoActual.diasDeRetraso ?? 0) - (a.estadoActual.diasDeRetraso ?? 0);
       if (diff !== 0) return diff;
     }
