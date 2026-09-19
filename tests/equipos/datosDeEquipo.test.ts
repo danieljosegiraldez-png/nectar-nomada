@@ -70,6 +70,21 @@ describe("editarDatosDeEquipo", () => {
     expect((ev.before as { serialNumber: string }).serialNumber).toBe("A");
     expect((ev.after as { serialNumber: string }).serialNumber).toBe("B");
   });
+  it("un equipo cuyo modelo se retiró después conserva el modelo al editar otro dato", async () => {
+    const propio = (
+      await crearModelo(f.jefeA, { dueno: { tipo: "propio", locationId: f.sitioA }, kind: "instrument", manufacturer: `D ${f.run}`, modelName: "se-retira", provenanceClass: "manufacturer_specification" })
+    ).id;
+    const e = await alta({ modelId: propio, serialNumber: "S1" });
+    await retirarModelo(f.jefeA, propio, new Date());
+    // El formulario reenvía el modelo actual tal cual: no es elegirlo de nuevo.
+    await editarDatosDeEquipo(f.jefeA, e.id, { modelId: propio, serialNumber: "S2" });
+    const fila = await prisma.equipment.findUniqueOrThrow({ where: { id: e.id } });
+    expect(fila.modelId).toBe(propio);
+    expect(fila.serialNumber).toBe("S2");
+    // Control: CAMBIAR a un modelo retirado sigue rechazado.
+    const otro = await alta({ serialNumber: "S3" });
+    await expect(editarDatosDeEquipo(f.jefeA, otro.id, { modelId: propio })).rejects.toThrow(new EquipoError("modelo_retirado"));
+  });
   it("el operario no edita los datos (gestión)", async () => {
     const e = await alta();
     await expect(editarDatosDeEquipo(f.operarioA, e.id, { serialNumber: "X" })).rejects.toThrow();

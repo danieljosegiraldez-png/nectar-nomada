@@ -86,6 +86,7 @@ export default async function EquipoPage({
       getObserverCandidates(user.userAccountId),
     ]);
   const personas = observadores.people.map((p) => ({ id: p.id, name: p.displayName }));
+  const modeloActualElegible = [...modelosElegibles.compartidos, ...modelosElegibles.propios].some((m) => m.id === equipo.modelId);
   const patrones = equipo.checkRequirements;
   const esInstrumento = equipo.kind === "instrument";
   // El código viene de la URL: sólo se acepta la forma que las acciones de
@@ -209,6 +210,15 @@ export default async function EquipoPage({
                 {t("campoModeloDeEquipo")}
                 <select name="modelId" defaultValue={equipo.modelId ?? ""}>
                   <option value="">{t("modeloNinguno")}</option>
+                  {/* El modelo ACTUAL siempre se ofrece, aunque esté retirado o no sea
+                      elegible hoy: si faltara, el formulario enviaría "" y editar la
+                      serie borraría el modelo en silencio. */}
+                  {equipo.model && !modeloActualElegible ? (
+                    <option value={equipo.model.id}>
+                      {equipo.model.manufacturer} {equipo.model.modelName}
+                      {equipo.model.retiredAt ? ` (${t("modeloRetirado")})` : null}
+                    </option>
+                  ) : null}
                   {modelosElegibles.compartidos.length > 0 ? (
                     <optgroup label={t("modelosCompartidos")}>
                       {modelosElegibles.compartidos.map((m) => (
@@ -241,6 +251,10 @@ export default async function EquipoPage({
                 {t("campoProveedor")}
                 <select name="supplierOrganizationId" defaultValue={equipo.supplierOrganizationId ?? ""}>
                   <option value="">{t("sinProveedor")}</option>
+                  {/* Igual que el modelo: el proveedor actual se ofrece siempre. */}
+                  {equipo.supplier && !proveedores.some((p) => p.id === equipo.supplier!.id) ? (
+                    <option value={equipo.supplier.id}>{equipo.supplier.name}</option>
+                  ) : null}
                   {proveedores.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}

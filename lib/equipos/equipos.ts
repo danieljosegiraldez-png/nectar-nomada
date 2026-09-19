@@ -284,7 +284,12 @@ export async function editarDatosDeEquipo(userAccountId: string, equipmentId: st
   const antes = await prisma.equipment.findUnique({ where: { id: equipmentId } });
   if (!antes) throw new EquipoError("equipment_not_found");
   await exigePermiso(userAccountId, "manage", antes);
-  if (datos.modelId !== undefined) await comprobarModelo(datos.modelId, antes.organizationId, antes.kind);
+  // El modelo que el equipo YA tiene no se vuelve a juzgar: si se retiró después,
+  // el formulario lo reenvía tal cual y rechazarlo obligaría a perderlo para
+  // poder corregir un número de serie. Juzgar es para CAMBIAR de modelo.
+  if (datos.modelId !== undefined && (datos.modelId || null) !== antes.modelId) {
+    await comprobarModelo(datos.modelId, antes.organizationId, antes.kind);
+  }
   const cambios = datosDeEquipoParaEditar(datos);
   try {
     await prisma.$transaction(async (tx) => {
@@ -805,7 +810,7 @@ export async function instrumentoParaVerificar(userAccountId: string, equipmentI
       // Identificación (Tarea 9, spec §3.3): el modelo y el proveedor sólo se
       // pintan, y el último traslado dice dónde está hoy y en qué zona — de ahí
       // sale el «hoy» que gobierna el aviso de garantía y el de las rutinas.
-      model: { select: { id: true, manufacturer: true, modelName: true } },
+      model: { select: { id: true, manufacturer: true, modelName: true, retiredAt: true } },
       supplier: { select: { id: true, name: true } },
       transfers: {
         orderBy: { occurredAt: "desc" },
