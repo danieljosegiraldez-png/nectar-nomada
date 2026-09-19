@@ -11,6 +11,8 @@ import { recordAuditEvent } from "../audit";
 import { prisma } from "../db";
 import { exigeEditarBeneficioEn, requireLocationAttributeAccess } from "./locations";
 
+export { ordenarParaAlmacenar } from "./ordenarParaAlmacenar";
+
 export class BodegaError extends Error {}
 
 const PADRES = ["site", "beneficio"] as const;

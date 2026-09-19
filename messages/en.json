@@ -517,6 +517,8 @@
     "dryingMethodLabel": "Method",
     "layerDepthLabel": "Layer depth (cm)",
     "storageLocationLabel": "Storage location",
+    "storageGroupBodegas": "Storage rooms",
+    "storageGroupOtros": "Other places",
     "containerNoteLabel": "Container note",
     "sampleCodeLabel": "Sample code",
     "sampleTypeLabel": "Sample type",

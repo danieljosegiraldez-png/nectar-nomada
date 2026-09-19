@@ -517,6 +517,8 @@
     "dryingMethodLabel": "Método",
     "layerDepthLabel": "Profundidad de capa (cm)",
     "storageLocationLabel": "Ubicación de almacenamiento",
+    "storageGroupBodegas": "Bodegas",
+    "storageGroupOtros": "Otros lugares",
     "containerNoteLabel": "Nota de contenedor",
     "sampleCodeLabel": "Código de muestra",
     "sampleTypeLabel": "Tipo de muestra",
