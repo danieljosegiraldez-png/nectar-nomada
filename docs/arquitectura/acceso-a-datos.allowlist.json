@@ -647,7 +647,7 @@
     {
       "archivo": "lib/traceability/jornadasDeCosecha.ts",
       "operacion": "origenesDeParcelas",
-      "razon": "Lee los bloques y las plantas activas de unas parcelas para ofrecerlos como origen de una entrega o de un reporte. No recibe principal: su llamador ya autorizó esas parcelas. Llamador de produccion: `detalleDeJornada` (mismo archivo), que exige `requireLotAccess(view)` sobre el sitio de la finca ANTES de llamarla, con las parcelas asignadas de ESA jornada.",
+      "razon": "Lee los bloques y las plantas activas de unas parcelas para ofrecerlos como origen de una entrega o de un reporte. No recibe principal: su llamador ya autorizó esas parcelas. Llamadores de produccion: `detalleDeJornada` (mismo archivo), que exige `requireLotAccess(view)` sobre el sitio de la finca ANTES de llamarla, con las parcelas asignadas de ESA jornada; y `misEntregas` (entregasDeCosecha.ts), con sólo las parcelas asignadas a la Person de la propia cuenta en sus jornadas abiertas.",
       "verificado": "2026-09-18"
     },
     {
@@ -763,6 +763,12 @@
       "operacion": "getFieldEventKinds",
       "razon": "Lee variableCatalogValue, catálogo de referencia y no dato gobernado. Su página exige sesión.",
       "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/traceability/fieldSessionCatalog.ts",
+      "operacion": "getCondicionesDelDia",
+      "razon": "Hermano de getFieldEventKinds: lee los valores del catálogo condicion_del_dia (lluvia, neblina, otro), referencia y no dato gobernado. Su único llamador, app/mis-entregas, exige sesión y harvest_delivery:create_own.",
+      "verificado": "2026-09-18"
     },
     {
       "archivo": "lib/traceability/lots.ts",

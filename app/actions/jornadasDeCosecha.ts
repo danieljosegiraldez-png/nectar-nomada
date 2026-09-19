@@ -13,7 +13,13 @@ import {
   pedirSubidaDeFotoDeEntrega,
   type OrigenDeEntrega,
 } from "../../lib/traceability/entregasDeCosecha";
-import { SituacionError, reportarCondicionDelDia, reportarSituacion } from "../../lib/traceability/situacionesDeCampo";
+import {
+  SituacionError,
+  confirmarFotoDeSituacion,
+  pedirSubidaDeFotoDeSituacion,
+  reportarCondicionDelDia,
+  reportarSituacion,
+} from "../../lib/traceability/situacionesDeCampo";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { FechaDeDiaInvalida, LocalDateTimeError, TZ_OFFSET_FIELD, fechaDeDia, parseLocalDateTime } from "../../lib/time/localDateTime";
 
@@ -29,6 +35,7 @@ const CODIGOS = [
   "ya_es_recolector", "persona_no_encontrada", "ya_cerrada", "jornada_cerrada", "no_es_su_entrega", "sin_permiso",
   "peso_invalido", "no_asignado_en_la_jornada", "origen_no_asignado", "motivo_obligatorio", "ya_anulada",
   "sobre_no_asignado", "nota_obligatoria", "event_kind_invalido", "condicion_del_dia_invalido",
+  "tipo_de_archivo_invalido", "clave_invalida", "tamano_invalido",
 ] as const;
 
 async function traducir(error: unknown): Promise<JornadaActionState> {
@@ -198,6 +205,54 @@ export async function reportarSituacionAction(_prev: JornadaActionState, formDat
     }
   } catch (error) {
     return traducir(error);
+  }
+  revalidatePath("/mis-entregas");
+  return { ok: true };
+}
+
+/** Foto de una situación, paso 1: la URL de subida directa. */
+export async function pedirSubidaDeFotoDeSituacionAction(
+  jornadaId: string,
+  originalFilename: string,
+  contentType: string,
+): Promise<{ uploadUrl: string; storageKey: string } | { error: string }> {
+  const yo = await usuario();
+  try {
+    return await pedirSubidaDeFotoDeSituacion(yo, { jornadaId, originalFilename, contentType });
+  } catch (error) {
+    const r = await traducir(error);
+    return { error: r.error ?? "" };
+  }
+}
+
+/** Foto de una situación, paso 2: el evento de campo con su Asset, sobre lo asignado. */
+export async function confirmarFotoDeSituacionAction(input: {
+  jornadaId: string;
+  sobre: string;
+  storageKey: string;
+  mimeType: string;
+  sizeBytes: number;
+  originalFilename: string;
+  nota: string;
+  ocurridaAtIso: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const yo = await usuario();
+  try {
+    const sobre = await leerOrigen(input.sobre);
+    if (!sobre) throw new SituacionError("sobre_no_asignado");
+    await confirmarFotoDeSituacion(yo, {
+      jornadaId: input.jornadaId,
+      sobre,
+      storageKey: input.storageKey,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      originalFilename: input.originalFilename,
+      nota: input.nota || null,
+      ocurridaAt: new Date(input.ocurridaAtIso),
+    });
+  } catch (error) {
+    const r = await traducir(error);
+    return { error: r.error ?? "" };
   }
   revalidatePath("/mis-entregas");
   return { ok: true };

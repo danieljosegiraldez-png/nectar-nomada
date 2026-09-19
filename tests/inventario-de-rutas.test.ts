@@ -134,7 +134,9 @@ describe("el inventario del router", () => {
     // equipos concretos. 80 páginas y 11 handlers.
     // 91 → 93 el mismo día: /finca/jornadas y /finca/jornadas/[id] (spec jornada y entrega de
     // cosecha), rebasado sobre el catálogo. Medido: 82 páginas y 11 handlers.
-    expect(salida).toContain("93 entradas");
+    // 93 → 94 el mismo día: /mis-entregas, la pantalla del recolector. Medido: 83 páginas y 11
+    // handlers.
+    expect(salida).toContain("94 entradas");
     expect(codigo, salida).toBe(0);
   });
 

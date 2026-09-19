@@ -16,6 +16,7 @@ import { recordAuditEvent } from "../audit";
 import { can } from "../rbac/service";
 import { objectStorageProvider } from "../integrations/storage";
 import { requireLotAccess } from "./lots";
+import { origenesDeParcelas } from "./jornadasDeCosecha";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
 export class EntregaError extends Error {}
@@ -145,9 +146,22 @@ export async function misEntregas(userAccountId: string) {
       where: { personId: persona, jornada: { estado: "abierta" } },
       include: { jornada: { select: { id: true, fecha: true, fincaSite: { select: { id: true, name: true } } } }, location: { select: { id: true, name: true } } },
     }),
-    prisma.entregaDeCosecha.findMany({ where: { recolectorId: persona }, orderBy: { enviadaAt: "desc" }, take: 50 }),
+    prisma.entregaDeCosecha.findMany({
+      where: { recolectorId: persona },
+      orderBy: { enviadaAt: "desc" },
+      take: 50,
+      include: {
+        jornada: { select: { estado: true, fincaSite: { select: { timezone: true } } } },
+        location: { select: { name: true } },
+        plotBlock: { select: { name: true } },
+        specimen: { select: { commonName: true } },
+        _count: { select: { assets: true } },
+      },
+    }),
   ]);
-  return { personaId: persona, asignaciones, entregas };
+  // Los orígenes sólo de las parcelas asignadas a ESTA persona en sus jornadas abiertas.
+  const origenes = await origenesDeParcelas([...new Set(asignaciones.map((a) => a.locationId))]);
+  return { personaId: persona, asignaciones, entregas, origenes };
 }
 
 /** Paso 1 de la foto de una entrega: la URL de subida. Misma autorización que anotarla. */
