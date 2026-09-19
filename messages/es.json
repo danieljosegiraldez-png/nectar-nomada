@@ -2140,7 +2140,14 @@
     "ceraMotivo_enfermedad": "enfermedad",
     "ceraMotivo_otro": "otro (dilo en la nota)",
     "ceraNota": "Nota",
-    "ceraGuardar": "Anotar"
+    "ceraGuardar": "Anotar",
+    "reinaAnoDeNacimiento": "¿En qué año nació? (si se sabe)",
+    "reinaApodo": "la {color} de {ano}",
+    "reinaColor_blanco": "blanca",
+    "reinaColor_amarillo": "amarilla",
+    "reinaColor_rojo": "roja",
+    "reinaColor_verde": "verde",
+    "reinaColor_azul": "azul"
   },
   "Research": {
     "badge": "Research OS",

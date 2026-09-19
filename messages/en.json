@@ -2140,7 +2140,14 @@
     "ceraMotivo_enfermedad": "disease",
     "ceraMotivo_otro": "other (say in the note)",
     "ceraNota": "Note",
-    "ceraGuardar": "Record"
+    "ceraGuardar": "Record",
+    "reinaAnoDeNacimiento": "What year was she born? (if known)",
+    "reinaApodo": "the {color} one of {ano}",
+    "reinaColor_blanco": "white",
+    "reinaColor_amarillo": "yellow",
+    "reinaColor_rojo": "red",
+    "reinaColor_verde": "green",
+    "reinaColor_azul": "blue"
   },
   "Research": {
     "badge": "Research OS",

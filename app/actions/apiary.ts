@@ -928,6 +928,8 @@ function reinaNuevaDe(formData: FormData) {
     origen: exigeOrigenDeReina(String(formData.get("origen") ?? "")),
     origenColonyId: emptyToNull(formData.get("origenColonyId")),
     notas: emptyToNull(formData.get("notas")),
+    // Vacío = no se sabe, y queda nulo. El servicio valida el número.
+    añoDeNacimiento: emptyToNull(formData.get("anoDeNacimiento")) === null ? null : Number(formData.get("anoDeNacimiento")),
   };
 }
 

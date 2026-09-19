@@ -8,6 +8,7 @@ import { lineaDeColonia } from "../../../../../lib/apiary/genealogia";
 import { dividirColoniaFormAction, unirColoniasFormAction } from "../../../../actions/apiary";
 import { cambiarReinaFormAction, cerrarTenenciaFormAction, introducirReinaFormAction } from "../../../../actions/apiary";
 import { estadoDeReina, FINES_DE_TENENCIA, historiaDeReinas, ORIGENES_DE_REINA } from "../../../../../lib/apiary/reinas";
+import { colorDelAño } from "../../../../../lib/apiary/colorDelAno";
 import { permissionKeysAnywhere } from "../../../../../lib/rbac/service";
 import { origenesDeColonia } from "../../../../../lib/apiary/origenDeColonia";
 import { sinRegistrar } from "../../../../../lib/apiary/vacio";
@@ -165,6 +166,9 @@ export default async function HiveDetailPage({
   const [estadoReina, historiaReinas] = colony
     ? await Promise.all([estadoDeReina(user.userAccountId, colony.id), historiaDeReinas(user.userAccountId, colony.id)])
     : [null, []];
+  // Los años que se ofrecen para el nacimiento de una reina: éste y los cinco anteriores, con su
+  // color. Una reina de más de cinco años es rara, y si hace falta, se deja en «no se sabe».
+  const añosDeNacimiento = Array.from({ length: 6 }, (_, i) => new Date().getUTCFullYear() - i);
   // «Criada aquí»: cualquier colonia activa del apiario, esta incluida.
   const coloniasDeOrigen = cajasDelApiario.flatMap((h) =>
     h.colonies.filter((c) => c.status === "active").map((c) => ({ colonyId: c.id, identifier: h.identifier })),
@@ -699,6 +703,9 @@ export default async function HiveDetailPage({
                               hasta: r.hasta.toISOString().slice(0, 10),
                             })
                           : t("reinaTenenciaAbierta", { origen: t(`reinaOrigen_${r.queen.origin}`), desde: r.desde.toISOString().slice(0, 10) })}
+                        {r.queen.birthYear !== null
+                          ? ` · ${t("reinaApodo", { color: t(`reinaColor_${colorDelAño(r.queen.birthYear)}`), ano: r.queen.birthYear })}`
+                          : ""}
                         {r.fin ? ` · ${t(`reinaFin_${r.fin}`)}` : ""}
                         {r.finNota ? ` — ${r.finNota}` : ""}
                       </li>
@@ -748,6 +755,18 @@ export default async function HiveDetailPage({
                         {coloniasDeOrigen.map((c) => (
                           <option key={c.colonyId} value={c.colonyId}>
                             {c.identifier}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-nacimiento">{t("reinaAnoDeNacimiento")}</label>
+                      {/* El vacío no se ofrece como opción (Anexo E §6): sin elegir, no se sabe. */}
+                      <select id="cambiar-nacimiento" name="anoDeNacimiento" defaultValue="">
+                        <option value="" />
+                        {añosDeNacimiento.map((a) => (
+                          <option key={a} value={a}>
+                            {a} · {t(`reinaColor_${colorDelAño(a)}`)}
                           </option>
                         ))}
                       </select>
@@ -816,6 +835,18 @@ export default async function HiveDetailPage({
                         {coloniasDeOrigen.map((c) => (
                           <option key={c.colonyId} value={c.colonyId}>
                             {c.identifier}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="introducir-nacimiento">{t("reinaAnoDeNacimiento")}</label>
+                      {/* El vacío no se ofrece como opción (Anexo E §6): sin elegir, no se sabe. */}
+                      <select id="introducir-nacimiento" name="anoDeNacimiento" defaultValue="">
+                        <option value="" />
+                        {añosDeNacimiento.map((a) => (
+                          <option key={a} value={a}>
+                            {a} · {t(`reinaColor_${colorDelAño(a)}`)}
                           </option>
                         ))}
                       </select>
