@@ -2399,7 +2399,13 @@
     "notas": "Notes",
     "mostrarRetirados": "show retired",
     "ocultarRetirados": "hide retired",
-    "filtroTodos": "all"
+    "filtroTodos": "all",
+    "errorModeloDuplicado": "A model with that manufacturer and name already exists for this owner.",
+    "errorSinPermiso": "You do not have permission to do this here.",
+    "errorModeloGenerico": "It could not be saved: {codigo}",
+    "especificacionesVacio": "No specifications recorded.",
+    "documentosVacio": "No documents attached.",
+    "modeloSinEquipos": "No equipment uses this model yet."
   },
   "Secado": {
     "instalaciones": "Drying facilities",

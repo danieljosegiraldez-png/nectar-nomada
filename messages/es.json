@@ -2399,7 +2399,13 @@
     "notas": "Notas",
     "mostrarRetirados": "mostrar retirados",
     "ocultarRetirados": "ocultar retirados",
-    "filtroTodos": "todos"
+    "filtroTodos": "todos",
+    "errorModeloDuplicado": "Ya existe un modelo con ese fabricante y ese nombre para este dueño.",
+    "errorSinPermiso": "No tienes permiso para hacer esto aquí.",
+    "errorModeloGenerico": "No se pudo guardar: {codigo}",
+    "especificacionesVacio": "Sin especificaciones registradas.",
+    "documentosVacio": "Sin documentos adjuntos.",
+    "modeloSinEquipos": "Ningún equipo usa este modelo todavía."
   },
   "Secado": {
     "instalaciones": "Instalaciones de secado",

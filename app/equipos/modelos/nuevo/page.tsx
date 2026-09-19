@@ -26,7 +26,7 @@ const MATERIALES = ["acero_inoxidable", "plastico_alimentario", "madera", "vidri
 export default async function ModeloNuevoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ volverA?: string }>;
+  searchParams: Promise<{ volverA?: string; error?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -51,6 +51,9 @@ export default async function ModeloNuevoPage({
   }
 
   const volverA = sp.volverA?.startsWith("/equipos/nuevo") ? sp.volverA : null;
+  // El código viene de la URL: sólo se acepta la forma que las acciones
+  // de app/actions/modelos.ts producen, nunca texto libre en la pantalla.
+  const codigoError = sp.error && /^[a-z_]+$/.test(sp.error) ? sp.error : null;
 
   return (
     <div>
@@ -58,6 +61,16 @@ export default async function ModeloNuevoPage({
         <Link href="/equipos/modelos">← {t("verCatalogo")}</Link>
       </p>
       <h1>{t("modeloNuevo")}</h1>
+
+      {codigoError ? (
+        <p className="nn-error" role="alert">
+          {codigoError === "modelo_duplicado"
+            ? t("errorModeloDuplicado")
+            : codigoError === "forbidden"
+              ? t("errorSinPermiso")
+              : t("errorModeloGenerico", { codigo: codigoError })}
+        </p>
+      ) : null}
 
       <form action={crearModeloFormAction}>
         {volverA ? <input type="hidden" name="volverA" value={volverA} /> : null}

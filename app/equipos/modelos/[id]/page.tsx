@@ -31,7 +31,7 @@ export default async function ModeloPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ ok?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -53,6 +53,9 @@ export default async function ModeloPage({
   ]);
 
   const tieneCapacidad = modelo.capacityValue !== null || modelo.contactMaterial !== null;
+  // El código viene de la URL: sólo se acepta la forma que las acciones
+  // de app/actions/modelos.ts producen, nunca texto libre en la pantalla.
+  const codigoError = sp.error && /^[a-z_]+$/.test(sp.error) ? sp.error : null;
 
   return (
     <div>
@@ -78,6 +81,16 @@ export default async function ModeloPage({
       {sp.ok === "retirado" ? (
         <p className="nn-ok" role="status">
           {t("okRetirado")}
+        </p>
+      ) : null}
+
+      {codigoError ? (
+        <p className="nn-error" role="alert">
+          {codigoError === "modelo_duplicado"
+            ? t("errorModeloDuplicado")
+            : codigoError === "forbidden"
+              ? t("errorSinPermiso")
+              : t("errorModeloGenerico", { codigo: codigoError })}
         </p>
       ) : null}
 
@@ -111,7 +124,7 @@ export default async function ModeloPage({
       <section style={{ marginTop: "1.5rem" }}>
         <h2>{t("especificaciones")}</h2>
         {modelo.specs.length === 0 ? (
-          <p className="nn-muted">{t("modelosVacio")}</p>
+          <p className="nn-muted">{t("especificacionesVacio")}</p>
         ) : (
           <table className="nn-table">
             <thead>
@@ -184,7 +197,7 @@ export default async function ModeloPage({
       <section style={{ marginTop: "1.5rem" }}>
         <h2>{t("documentos")}</h2>
         {documentos.length === 0 ? (
-          <p className="nn-muted">{t("modelosVacio")}</p>
+          <p className="nn-muted">{t("documentosVacio")}</p>
         ) : (
           <ul>
             {documentos.map((d) => (
@@ -202,7 +215,7 @@ export default async function ModeloPage({
       <section style={{ marginTop: "1.5rem" }}>
         <h2>{t("modeloEquipos")}</h2>
         {modelo.equipment.length === 0 ? (
-          <p className="nn-muted">{t("modelosVacio")}</p>
+          <p className="nn-muted">{t("modeloSinEquipos")}</p>
         ) : (
           <ul>
             {modelo.equipment.map((e) => (
