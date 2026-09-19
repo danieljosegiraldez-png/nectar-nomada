@@ -285,6 +285,7 @@ beforeAll(async () => {
       observationType: "trap_check",
       observedAt: new Date("2026-09-09T12:00:00Z"),
       captureCount: 5,
+      brocaLevel: "algunos",
       provenanceClass: "direct_observation",
     })
   ).id;
@@ -294,6 +295,7 @@ beforeAll(async () => {
       observationType: "trap_check",
       observedAt: new Date("2026-09-09T12:00:00Z"),
       captureCount: 3,
+      brocaLevel: "pocos",
       provenanceClass: "direct_observation",
     })
   ).id;

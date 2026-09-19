@@ -56,17 +56,6 @@ los dispatch de T3–T7 y faltó en el de T8. Esquema coherente al medir despué
 ajenas volvieron). Datos de prueba perdidos entre el 14 y el reset no se reparan. **Ruling:** todo
 dispatch llevar prohibición explícita de reset/restore/migrate dev.
 
-### 2026-09-18 · Buscar y combinar muestras al montar una cata
-
-Decisión de Daniel: «un cupping se debe poder … hacer búsquedas y seleccionar varias muestras y a veces
-no vienen mismo lugar, lote, finca, parcela». «Nueva cata» busca por código de muestra, batch o finca,
-y **la selección sobrevive a cada búsqueda**. El orden de selección decide el código ciego, y la
-pantalla enseña la letra — el texto de ayuda ya lo prometía y **no era verdad**: el orden era el de la
-pantalla. **Y un defecto de camino:** `crearSesionDeCata` comprobaba las muestras contra la lista que
-corta en 200, así que pasadas las 200 rechazaba una muestra propia. Ahora comprueba cada una por id.
-Flips de las dos cosas. **Sin verificar en navegador** —hace falta sesión—. Cierra
-`PENDING_IMPLEMENTATIONS/012`.
-
 ### 2026-09-18 · Anular una asignación a tienda que no va a llegar
 
 ADR-170. Una asignación pendiente se anula con motivo y día —desde `/tienda` o desde la ficha del

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { origenDeLaCarencia } from "../../../lib/traceability/origenDeLaCarencia";
+import { soltarFocoConLaRueda } from "../CampoNumerico";
 
 export interface ProductoOption {
   id: string;
@@ -113,6 +114,7 @@ export function LineaDeIntervencion({
             step="0.001"
             min={0}
             defaultValue={valores.quantity ?? ""}
+            onWheel={soltarFocoConLaRueda}
           />
         </div>
         <div className="nn-field" style={{ flex: "1 1 100px" }}>
@@ -151,6 +153,7 @@ export function LineaDeIntervencion({
             min={0}
             defaultValue={valorMostradoDeCarencia ?? ""}
             placeholder={producto && producto.defaultWithdrawalDays == null ? t("manejoProductDoesNotDeclare") : undefined}
+            onWheel={soltarFocoConLaRueda}
           />
         </div>
         <div className="nn-field" style={{ flex: "1 1 160px" }}>
@@ -167,6 +170,7 @@ export function LineaDeIntervencion({
             min={0}
             defaultValue={valorMostradoDeReentrada ?? ""}
             placeholder={producto && producto.defaultReentryHours == null ? t("manejoProductDoesNotDeclare") : undefined}
+            onWheel={soltarFocoConLaRueda}
           />
         </div>
       </div>

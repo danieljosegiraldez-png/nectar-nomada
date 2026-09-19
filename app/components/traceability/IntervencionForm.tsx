@@ -7,6 +7,7 @@ import type { TraceabilityActionState } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
 import { paraCampoLocal, instanteAPrecargar } from "../../../lib/time/localDateTime";
 import { BotonDeEnvio } from "../BotonDeEnvio";
+import { soltarFocoConLaRueda } from "../CampoNumerico";
 import { LineaDeIntervencion, type ProductoOption, type ValoresDeLinea } from "./LineaDeIntervencion";
 import { textoDeTipoDeManejo, textoDeObjetivoDeManejo, textoDeMetodoDeManejo } from "./etiquetasDeManejo";
 import type { PlotInterventionKind, PlotInterventionMethod, PlotInterventionTarget } from "../../../generated/prisma/client";
@@ -233,7 +234,7 @@ export function IntervencionForm({
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
         <div className="nn-field" style={{ flex: "1 1 140px" }}>
           <label htmlFor="manejo-mix-volume">{t("manejoMixVolumeLabel")}</label>
-          <input id="manejo-mix-volume" name="mixVolume" type="number" step="0.001" min={0} defaultValue={valores.mixVolume ?? ""} />
+          <input id="manejo-mix-volume" name="mixVolume" type="number" step="0.001" min={0} defaultValue={valores.mixVolume ?? ""} onWheel={soltarFocoConLaRueda} />
         </div>
         <div className="nn-field" style={{ flex: "1 1 100px" }}>
           <label htmlFor="manejo-mix-unit">{t("manejoMixUnitLabel")}</label>

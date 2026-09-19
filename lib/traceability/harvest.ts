@@ -88,11 +88,18 @@ export interface RecordHarvestEventInput {
 
 export async function recordHarvestEvent(userAccountId: string, input: RecordHarvestEventInput) {
   await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
-  // Spec fincas y parcelas §3.4: la cereza se cosecha en una parcela o en una microparcela (las
-  // dos son `plot`). Hasta el 2026-09-18 lo único que lo limitaba era la lista del formulario, así
-  // que un guion o una petición directa podía cosechar sobre la finca entera o sobre un beneficio.
+  // Spec fincas y parcelas §3.4: la cereza se cosecha en una parcela o en una microparcela.
+  // Hasta el 2026-09-18 lo único que lo limitaba era la lista del formulario, así que un guion
+  // o una petición directa podía cosechar sobre la finca entera o sobre un beneficio.
+  // Corregido al integrar `fitosanitarios` (2026-09-18): el comentario ya decía «las dos son
+  // `plot`», pero `LocationType` las declara como dos valores distintos (`plot`, `micro_plot`)
+  // y la comparación sólo aceptaba el primero — una cosecha real sobre una microparcela habría
+  // sido rechazada. Lo destapó `tests/traceability/carenciaEnLaCosecha.test.ts`, que cosecha
+  // sobre una microparcela para probar la carencia heredada.
   const donde = await prisma.location.findUnique({ where: { id: input.locationId }, select: { locationType: true } });
-  if (donde?.locationType !== "plot") throw new CerezaError("la_cosecha_va_sobre_una_parcela");
+  if (donde?.locationType !== "plot" && donde?.locationType !== "micro_plot") {
+    throw new CerezaError("la_cosecha_va_sobre_una_parcela");
+  }
   await exigeCatalogosDeCereza(input);
 
   const provenanceClass = input.provenanceClass;
