@@ -38,5 +38,5 @@ Y un comentario que dice lo contrario de lo que hace: `lib/traceability/fieldSes
 Una rama por clase con su clave en `messages/es.json` y `en.json`, una prueba hermética por acción
 (el patrón de `tests/traceability/startFieldSessionAction.test.ts`), y **un guardia**: una prueba
 que falle si una clase de error de `lib/` alcanzable desde una acción no tiene rama en
-`friendlyError`. **Sin decisión de Daniel todavía:** se le ofreció el 2026-09-19 (arreglar,
-arreglar + guardia, o sólo anotar) y su «2» contestaba a dos preguntas a la vez; no quedó claro.
+`friendlyError`. **Decisión de Daniel, 2026-09-19: arreglar las nueve Y añadir el guardia**, para que
+no vuelva a pasar. Sin fecha; es trabajo aparte del beneficio.
