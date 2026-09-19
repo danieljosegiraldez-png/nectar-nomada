@@ -2153,7 +2153,17 @@
     "marcosNegrosHeading": "Dark frames in the hives",
     "marcosNegrosIntro": "From the last inspection that counted them in each hive. Old wax is judged by how it looks: these are the frames due for renewal.",
     "marcosNegrosFila": "{n, plural, one {# dark frame} other {# dark frames}} on {fecha}",
-    "marcosNegrosColoniaAnterior": "counted in an earlier colony of this hive"
+    "marcosNegrosColoniaAnterior": "counted in an earlier colony of this hive",
+    "recipientesHeading": "Containers",
+    "recipienteFila": "{label}: {bruto} − {tara} = {neto} kg",
+    "recipientesTotal": "Total: {kg} kg — this is the harvest weight",
+    "recipienteEtiqueta": "Which one? (bucket 3, drum A…)",
+    "recipienteBruto": "Full (kg)",
+    "recipienteTara": "Empty (kg)",
+    "recipienteGuardar": "Add container",
+    "recipienteQuitar": "Remove",
+    "recipienteMotivo": "Why remove it?",
+    "pesoLoDanLosRecipientes": "This harvest's weight comes from its containers."
   },
   "Research": {
     "badge": "Research OS",
