@@ -60,6 +60,7 @@ export interface RegistrarIntervencionInput {
   readonly fieldSessionId?: string | null;
   readonly motivoObservationId?: string | null;
   readonly specimenIds?: readonly string[];
+  readonly plotBlockIds?: readonly string[];
   readonly lineas: readonly LineaInput[];
   readonly dataQuality?: DataQuality | null;
   readonly notes?: string | null;
@@ -113,7 +114,10 @@ interface ParcelaResuelta {
  */
 async function validarReferencias(
   parcela: ParcelaResuelta,
-  datos: Pick<RegistrarIntervencionInput, "specimenIds" | "lineas" | "fieldSessionId" | "motivoObservationId">,
+  datos: Pick<
+    RegistrarIntervencionInput,
+    "specimenIds" | "plotBlockIds" | "lineas" | "fieldSessionId" | "motivoObservationId"
+  >,
 ) {
   const specimenIds = datos.specimenIds ?? [];
   if (specimenIds.length > 0) {
@@ -127,6 +131,24 @@ async function validarReferencias(
       if (!especimen) throw new IntervencionValidationError(`no existe la planta ${id}`);
       if (especimen.locationId !== parcela.id) {
         throw new IntervencionValidationError(`la planta ${id} es de otra parcela`);
+      }
+    }
+  }
+
+  // Tarea 2: cada bloque tiene que ser de esta parcela — `locationId` IGUAL,
+  // no basta con estar emparentado (brief, Notas del controlador).
+  const plotBlockIds = datos.plotBlockIds ?? [];
+  if (plotBlockIds.length > 0) {
+    const bloques = await prisma.plotBlock.findMany({
+      where: { id: { in: [...plotBlockIds] } },
+      select: { id: true, locationId: true },
+    });
+    const porId = new Map(bloques.map((b) => [b.id, b]));
+    for (const id of plotBlockIds) {
+      const bloque = porId.get(id);
+      if (!bloque) throw new IntervencionValidationError(`no existe el bloque ${id}`);
+      if (bloque.locationId !== parcela.id) {
+        throw new IntervencionValidationError(`el bloque ${id} es de otra parcela`);
       }
     }
   }
@@ -220,12 +242,22 @@ async function resolverParcela(locationId: string): Promise<ParcelaResuelta | nu
 }
 
 /**
- * Crea las áreas (plantas) de la intervención. Sin filas = la parcela entera.
+ * Crea las áreas (plantas y bloques) de la intervención. Sin filas = la
+ * parcela entera. Cada fila lleva exactamente una de las dos referencias —
+ * `CHECK` en la base — así que nunca se pasan las dos en la misma llamada.
  */
-async function crearAreas(tx: Prisma.TransactionClient, interventionId: string, specimenIds: readonly string[]) {
+async function crearAreas(
+  tx: Prisma.TransactionClient,
+  interventionId: string,
+  specimenIds: readonly string[],
+  plotBlockIds: readonly string[] = [],
+) {
   const areas = [];
   for (const specimenId of specimenIds) {
     areas.push(await tx.plotInterventionArea.create({ data: { interventionId, specimenId } }));
+  }
+  for (const plotBlockId of plotBlockIds) {
+    areas.push(await tx.plotInterventionArea.create({ data: { interventionId, plotBlockId } }));
   }
   return areas;
 }
@@ -369,7 +401,7 @@ export async function registrarIntervencion(
         },
       });
 
-      const areas = await crearAreas(tx, creada.id, input.specimenIds ?? []);
+      const areas = await crearAreas(tx, creada.id, input.specimenIds ?? [], input.plotBlockIds ?? []);
       const lineas = await crearLineasDeIntervencion(tx, {
         interventionId: creada.id,
         lineas: input.lineas,
@@ -495,7 +527,7 @@ export async function corregirIntervencion(
         throw error;
       });
 
-    const areas = await crearAreas(tx, creada.id, input.nueva.specimenIds ?? []);
+    const areas = await crearAreas(tx, creada.id, input.nueva.specimenIds ?? [], input.nueva.plotBlockIds ?? []);
     // Sin descuento: una corrección no vuelve a gastar producto (Restricciones
     // globales del brief). Un saldo mal descontado se cuadra con
     // `reconciliar` del inventario, que exige su propia razón.
@@ -537,9 +569,16 @@ export async function corregirIntervencion(
 export async function intervencionesVigentes(
   locationIds: readonly string[],
   opciones?: { hasta?: Date; db?: Prisma.TransactionClient },
-): Promise<(IntervencionParaCarencia & { locationId: string; target: PlotInterventionTarget })[]> {
+): Promise<
+  (IntervencionParaCarencia & {
+    locationId: string;
+    target: PlotInterventionTarget;
+    parcelaEntera: boolean;
+    plotBlockIds: string[];
+  })[]
+> {
   const db = opciones?.db ?? prisma;
-  return db.plotIntervention.findMany({
+  const filas = await db.plotIntervention.findMany({
     where: {
       locationId: { in: [...locationIds] },
       correcciones: { none: {} },
@@ -552,8 +591,17 @@ export async function intervencionesVigentes(
       locationId: true,
       target: true,
       lineas: { select: { withdrawalDays: true, reentryHours: true } },
+      areas: { select: { plotBlockId: true } },
     },
   });
+
+  // Tarea 2: sin áreas = parcela entera; los bloques son las áreas cuyo
+  // `plotBlockId` no es nulo (las de planta no cuentan para esta lista).
+  return filas.map(({ areas, ...resto }) => ({
+    ...resto,
+    parcelaEntera: areas.length === 0,
+    plotBlockIds: areas.map((a) => a.plotBlockId).filter((id): id is string => id != null),
+  }));
 }
 
 export type IntervencionListada = Prisma.PlotInterventionGetPayload<{

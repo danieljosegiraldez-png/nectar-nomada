@@ -14,6 +14,7 @@ import {
   registrarIntervencion,
   corregirIntervencion,
   productosFitosanitarios,
+  intervencionesVigentes,
   IntervencionValidationError,
   type RegistrarIntervencionInput,
 } from "../../lib/traceability/intervenciones";
@@ -23,6 +24,7 @@ import { recibirLote } from "../../lib/inventario/lotes";
 import { existencias } from "../../lib/inventario/existencias";
 import { startFieldSession, endFieldSession } from "../../lib/traceability/fieldSessions";
 import { recordSpecimenObservation } from "../../lib/traceability/specimens";
+import { createPlotBlock } from "../../lib/traceability/plotBlocks";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
@@ -67,6 +69,10 @@ let trampaAjena: string;
 let lecturaPropia: string;
 let lecturaAjena: string;
 let observacionNoTrampa: string;
+// Tarea 2: un bloque de `parcela` y uno de `otraParcela`, para «el bloque
+// tiene que tener locationId IGUAL a la parcela de la intervención».
+let bloque: string;
+let bloqueAjeno: string;
 
 async function crearPersona(label: string) {
   const persona = await prisma.person.create({
@@ -307,6 +313,10 @@ beforeAll(async () => {
       provenanceClass: "direct_observation",
     })
   ).id;
+
+  // Tarea 2: un bloque de `parcela` y uno de `otraParcela`.
+  bloque = (await createPlotBlock(gestor, { locationId: parcela, name: `Bloque ${RUN_ID}` })).id;
+  bloqueAjeno = (await createPlotBlock(gestor, { locationId: otraParcela, name: `Bloque ajeno ${RUN_ID}` })).id;
 }, 30000);
 
 afterAll(async () => {
@@ -319,9 +329,12 @@ afterAll(async () => {
   const originales = await prisma.plotIntervention.findMany({ where: { locationId: { in: ubicaciones } }, select: { id: true } });
   const idsIntervenciones = originales.map((o) => o.id);
   await prisma.plotInterventionLine.deleteMany({ where: assertDefinedWhere({ interventionId: { in: idsIntervenciones } }) });
+  // Las áreas ANTES que los bloques: `plotBlock` tiene `onDelete: Restrict`
+  // desde `plotInterventionArea` (brief, Limpieza completa).
   await prisma.plotInterventionArea.deleteMany({ where: assertDefinedWhere({ interventionId: { in: idsIntervenciones } }) });
   await prisma.plotIntervention.deleteMany({ where: assertDefinedWhere({ id: { in: idsIntervenciones }, correctsId: { not: null } }) });
   await prisma.plotIntervention.deleteMany({ where: assertDefinedWhere({ id: { in: idsIntervenciones } }) });
+  await prisma.plotBlock.deleteMany({ where: assertDefinedWhere({ id: { in: [bloque, bloqueAjeno] } }) });
 
   const materiales = [fito, fito2, fitoOtraOrg];
   const lotes = await prisma.consumableLot.findMany({ where: { materialId: { in: materiales } }, select: { id: true } });
@@ -777,5 +790,52 @@ describe("revisión final — hallazgo 5: cantidad negativa se rechaza en servic
     // Control positivo del propio CHECK: 0 sí entra por este mismo camino directo.
     const linea0 = await prisma.plotInterventionLine.create({ data: { interventionId: o.id, materialId: fito, quantity: 0 } });
     expect(linea0.quantity?.toNumber()).toBe(0);
+  });
+});
+
+/**
+ * PR B, Tarea 2 — intervenciones sobre bloques (`task-2-brief.md`). El bloque
+ * tiene que tener `locationId` IGUAL a la parcela de la intervención: no
+ * basta con estar emparentado (a diferencia de la jornada o la observación
+ * que motiva, arriba, que sí aceptan parentesco).
+ */
+describe("intervenciones sobre bloques — Tarea 2", () => {
+  it("un bloque de OTRA parcela se rechaza; uno de ésta entra con su propia área", async () => {
+    await expect(registrarIntervencion(operador, base({ plotBlockIds: [bloqueAjeno] }))).rejects.toThrow(
+      IntervencionValidationError,
+    );
+    const ok = await registrarIntervencion(operador, base({ plotBlockIds: [bloque] }));
+    const areas = await prisma.plotInterventionArea.findMany({ where: { interventionId: ok.id } });
+    expect(areas).toEqual([expect.objectContaining({ plotBlockId: bloque, specimenId: null })]);
+  });
+
+  it("corregir con bloques: la fila nueva lleva sus propias áreas de bloque, la original ninguna", async () => {
+    const o = await registrarIntervencion(operador, base());
+    const c = await corregirIntervencion(operador, {
+      interventionId: o.id,
+      motivo: "era sobre un bloque",
+      nueva: base({ plotBlockIds: [bloque] }),
+    });
+    expect(await prisma.plotInterventionArea.count({ where: { interventionId: o.id } })).toBe(0);
+    const areasCorreccion = await prisma.plotInterventionArea.findMany({ where: { interventionId: c.id } });
+    expect(areasCorreccion).toEqual([expect.objectContaining({ plotBlockId: bloque, specimenId: null })]);
+  });
+
+  it("intervencionesVigentes: sin áreas → parcelaEntera true y plotBlockIds vacío", async () => {
+    const o = await registrarIntervencion(operador, base());
+    const vigentes = await intervencionesVigentes([parcela]);
+    expect(vigentes.find((v) => v.id === o.id)).toMatchObject({ parcelaEntera: true, plotBlockIds: [] });
+  });
+
+  it("intervencionesVigentes: con un bloque → parcelaEntera false y plotBlockIds con su id", async () => {
+    const o = await registrarIntervencion(operador, base({ plotBlockIds: [bloque] }));
+    const vigentes = await intervencionesVigentes([parcela]);
+    expect(vigentes.find((v) => v.id === o.id)).toMatchObject({ parcelaEntera: false, plotBlockIds: [bloque] });
+  });
+
+  it("intervencionesVigentes: sólo plantas → parcelaEntera false y plotBlockIds vacío (no se confunde con bloque)", async () => {
+    const o = await registrarIntervencion(operador, base({ specimenIds: [plantaPropia] }));
+    const vigentes = await intervencionesVigentes([parcela]);
+    expect(vigentes.find((v) => v.id === o.id)).toMatchObject({ parcelaEntera: false, plotBlockIds: [] });
   });
 });
