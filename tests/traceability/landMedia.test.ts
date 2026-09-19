@@ -20,6 +20,7 @@ import {
   finalizeLandAssetUpload,
   finalizeTrampaPhotoPorBorrador,
   requestTrampaPhotoUpload,
+  claveDeFotoDeTrampa,
   LandMediaValidationError,
   listLandAssets,
   requestLandAssetUpload,
@@ -602,6 +603,29 @@ describe("finalizeTrampaPhotoPorBorrador: engancha por clientDraftId, nunca a ot
         provenanceClass: "direct_observation",
       }),
     ).rejects.toThrow(LandMediaValidationError);
+  });
+});
+
+// Fix round 1 — la mitad pura de la idempotencia: la clave tiene que ser
+// SIEMPRE la misma para la misma foto, nunca al azar. Sin base, sin permisos:
+// es sólo formato de cadena. El flip-test que pide el ruling («volver a una
+// clave al azar por intento») cae exactamente aquí, en el primer `it`.
+describe("claveDeFotoDeTrampa: determinista por foto, no al azar (fix round 1)", () => {
+  it("mismos locationId + photoClientDraftId + originalFilename dan SIEMPRE la misma clave", () => {
+    const a = claveDeFotoDeTrampa("loc-1", "foto-abc", "tela.jpg");
+    const b = claveDeFotoDeTrampa("loc-1", "foto-abc", "tela.jpg");
+    expect(a).toBe(b);
+  });
+
+  it("una foto DISTINTA (otro clientDraftId) da una clave distinta", () => {
+    const a = claveDeFotoDeTrampa("loc-1", "foto-abc", "tela.jpg");
+    const b = claveDeFotoDeTrampa("loc-1", "foto-xyz", "tela.jpg");
+    expect(a).not.toBe(b);
+  });
+
+  it("queda bajo el prefijo de ESA parcela", () => {
+    const clave = claveDeFotoDeTrampa("loc-1", "foto-abc", "tela.jpg");
+    expect(clave.startsWith("nectar-originals/land/loc-1/")).toBe(true);
   });
 });
 

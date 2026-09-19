@@ -94,7 +94,7 @@ export interface RequestTrampaPhotoUploadInput extends RequestLandAssetUploadInp
  * de siempre (`prefijoDe`), sólo que ahora el UUID lo aporta el cliente en vez
  * de generarlo el servidor en cada intento.
  */
-function claveDeFotoDeTrampa(locationId: string, photoClientDraftId: string, originalFilename: string): string {
+export function claveDeFotoDeTrampa(locationId: string, photoClientDraftId: string, originalFilename: string): string {
   const ext = originalFilename.includes(".") ? originalFilename.split(".").pop() : undefined;
   return `${prefijoDe(locationId)}foto-${photoClientDraftId}${ext ? `.${ext}` : ""}`;
 }
