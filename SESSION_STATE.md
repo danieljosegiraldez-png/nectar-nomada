@@ -38,6 +38,12 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-19 · La reina guarda el año en que nació; su color es el apodo
+
+ADR-175. Daniel: el color del año es sólo apodo, las reinas no se pintan. `queen.birth_year` (nulo
+si no se sabe), no posterior a su llegada; la historia de reinas dice «la blanca de 2026». **Sin
+ver en navegador.** Sigue: «marcos negros» en la inspección.
+
 ### 2026-09-18 · Jornada de cosecha y entrega al beneficio (PR #431, pieza 1 de 3)
 
 Daniel: «en finca no se registra cosecha… se asigna personas a cosecha, y esta persona… lleva al
@@ -125,28 +131,14 @@ ADR-169. Daniel: «lo elige quien despacha». **El despacho no existía** —nad
 cuántos frascos salen de cada lote recibido, la suma tiene que dar lo pedido, y los kilos salen del
 libro del lote (`transfer_out`). Falta que el cliente lo vea en «Mis pedidos».
 
-### 2026-09-18 · La muestra verde sólo en almacenamiento, y la 111 retirada (PR #419)
-
-Spec #408 (con las 5 respuestas de Daniel) y plan #414, aprobados y fusionados. **Bloquea** en
-`createSampleFromLot` una muestra `materialState` verde si el lote no está en almacenamiento; **sin
-permiso de anulación**. «Crear Muestra» pide el estado del material. `retirarMuestra` (columna
-`retiredAt`, migración `20260918180000_muestra_retirada`, `AuditEvent` en la misma transacción);
-«Nueva cata» ni ofrece ni acepta retiradas. **La 111 (lote PE-80) está retirada en producción**, por
-el guion `data:retirar-muestra-111`: ensayo primero, 1 `sample.retire` con motivo, 0 muestras activas.
-Nota a `01_lot_lifecycle` §2 regla 4: volver del secado a una fase anterior es receta, no error.
-**Consecuencia esperada:** hoy ningún lote tiene proceso cerrado ni almacenamiento registrado, así que
-no se puede tomar muestra verde hasta que la captura de campo alimente esas fases. **Sin ver en
-navegador.**
-
-**Tres cosas que se cazaron antes de producción:** el guion buscaba `id: "111"` —es el código; el id es
-un uuid— y habría fallado sin retirar nada; la migración se llamaba `…130000` y habría llegado detrás
-de otras ya aplicadas; y las cifras del inventario de acceso se desfasaron dos veces al avanzar `main`
-(CI prueba el PR fusionado con `main`, no la rama). Y `tools/pack-for-review.sh` (#390, #391, #393,
-#396, #401): lee todo de la punta del rango, rutas con espacios y con tildes; en bash 3.2, `set -e`
-mata el script cuando falla una función aunque esté a la izquierda de un `||`.
-
-
 ## 3. Bloqueado, y en qué
+
+#### Nodos de sensores: lo que falta cuando haya nodos (de Daniel)
+
+Movido aquí al archivar la entrada de artefactos (PR #405), porque sigue dirigiendo trabajo:
+`NOTEHUB_ROUTE_SECRET` en Vercel y en la ruta de Notehub, y registrar cada nodo con su UID de
+Notecard — registrar y calibrar **no tienen pantalla**. `POST /api/v1/ingest/notehub` sigue
+**cerrada por defecto** hasta entonces.
 
 #### El presupuesto de Actions se agotó y volvió — y `main` ya no tiene compuerta propia
 

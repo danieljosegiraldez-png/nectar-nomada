@@ -7091,6 +7091,10 @@ model Queen {
   originColony    Colony?         @relation("QueenOriginColony", fields: [originColonyId], references: [id], onDelete: Restrict)
   /// Obligatoria si `origin = otro` (CHECK).
   notes           String?
+  /// El año en que nació, si se sabe — spec 2026-09-18 §5.4. Nulo = no se sabe, no «este año».
+  /// Su color (`colorDelAño`) es el APODO de la reina, el mismo que la cera de ese año; no se
+  /// guarda, y la reina no se pinta (Daniel: «no marcamos las reinas»). CHECK `queen_nacimiento_razonable`.
+  birthYear       Int?            @map("birth_year")
   tenures         QueenTenure[]
   provenanceClass ProvenanceClass @map("provenance_class")
   createdAt       DateTime        @default(now()) @map("created_at")

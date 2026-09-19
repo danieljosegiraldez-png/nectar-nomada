@@ -8,6 +8,7 @@ import { lineaDeColonia } from "../../../../../lib/apiary/genealogia";
 import { dividirColoniaFormAction, unirColoniasFormAction } from "../../../../actions/apiary";
 import { cambiarReinaFormAction, cerrarTenenciaFormAction, introducirReinaFormAction } from "../../../../actions/apiary";
 import { estadoDeReina, FINES_DE_TENENCIA, historiaDeReinas, ORIGENES_DE_REINA } from "../../../../../lib/apiary/reinas";
+import { colorDelAño } from "../../../../../lib/apiary/colorDelAno";
 import { permissionKeysAnywhere } from "../../../../../lib/rbac/service";
 import { origenesDeColonia } from "../../../../../lib/apiary/origenDeColonia";
 import { sinRegistrar } from "../../../../../lib/apiary/vacio";
@@ -699,6 +700,9 @@ export default async function HiveDetailPage({
                               hasta: r.hasta.toISOString().slice(0, 10),
                             })
                           : t("reinaTenenciaAbierta", { origen: t(`reinaOrigen_${r.queen.origin}`), desde: r.desde.toISOString().slice(0, 10) })}
+                        {r.queen.birthYear !== null
+                          ? ` · ${t("reinaApodo", { color: t(`reinaColor_${colorDelAño(r.queen.birthYear)}`), ano: r.queen.birthYear })}`
+                          : ""}
                         {r.fin ? ` · ${t(`reinaFin_${r.fin}`)}` : ""}
                         {r.finNota ? ` — ${r.finNota}` : ""}
                       </li>
@@ -751,6 +755,13 @@ export default async function HiveDetailPage({
                           </option>
                         ))}
                       </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-nacimiento">{t("reinaAnoDeNacimiento")}</label>
+                      {/* Un campo de año y no una lista corta (Codex, PR #441): pasar al sistema una
+                          reina de 2020 nacida en 2019 no debe obligar a dejarla en «no se sabe». Vacío =
+                          no se sabe; el servicio valida el número. */}
+                      <CampoNumerico id="cambiar-nacimiento" name="anoDeNacimiento" inputMode="numeric" min={1990} step={1} />
                     </div>
                     <div className="nn-field">
                       <label htmlFor="cambiar-nueva-notas">{t("reinaNotas")}</label>
@@ -819,6 +830,13 @@ export default async function HiveDetailPage({
                           </option>
                         ))}
                       </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="introducir-nacimiento">{t("reinaAnoDeNacimiento")}</label>
+                      {/* Un campo de año y no una lista corta (Codex, PR #441): pasar al sistema una
+                          reina de 2020 nacida en 2019 no debe obligar a dejarla en «no se sabe». Vacío =
+                          no se sabe; el servicio valida el número. */}
+                      <CampoNumerico id="introducir-nacimiento" name="anoDeNacimiento" inputMode="numeric" min={1990} step={1} />
                     </div>
                     <div className="nn-field">
                       <label htmlFor="introducir-notas">{t("reinaNotas")}</label>

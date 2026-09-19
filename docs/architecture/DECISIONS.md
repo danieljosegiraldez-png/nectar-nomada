@@ -11672,3 +11672,17 @@ se sigue el precedente para coherencia.
 peligra residuo y cuando. Las intervenciones vigentes se distinguen de las corregidas. Una carencia
 desconocida no desaparece con el tiempo. Crecer la lista de objetivos es una migración de una línea.
 Lo que no esté entra como `otro` con nota.
+## ADR-175 -- La reina guarda el ano en que nacio; su color es un apodo, no una marca
+
+**Contexto.** Spec `docs/superpowers/specs/2026-09-18-alzas-y-tandas-de-marcos-design.md` §5.4:
+las reinas nacidas un ano llevan el color de ese ano, el mismo que la cera. Pero el modulo de reinas
+(ADR de faenas, 2026-09-18) dice *«no marcamos las reinas»*. Se le pregunto a Daniel el 2026-09-19
+y contesto: **el color es solo un apodo; las reinas no se pintan.**
+
+**Decision.** `queen.birth_year`, nulo si no se sabe (CHECK: nulo o desde 1990). El servicio no
+deja que una reina nazca despues del ano en que llega a la colonia. El color no se guarda: lo
+calcula `colorDelAño` (ADR-173), y la historia de reinas dice «la blanca de 2026». **No hay campo
+«marcada»**, porque no se marcan.
+
+**Lo que NO entra.** Corregir el ano de una reina ya registrada: se registra al introducirla o al
+cambiarla.
