@@ -28,6 +28,7 @@ const base = (over: Partial<EntradaDePendiente> = {}): EntradaDePendiente => ({
   intervenciones: [],
   trampas: [],
   regla: null,
+  intervencionesDeTrampas: [],
   ...over,
 });
 
@@ -210,15 +211,58 @@ describe("enlaceDelAviso", () => {
       base({
         hoy: "2026-09-17",
         trampas: [
-          { id: "t1", trapNumber: 7, bloque: null, status: "active", instaladaEl: "2026-08-01", ultimaRevision: { dia: "2026-09-01", brocaLevel: "muchos" } },
+          {
+            id: "t1",
+            trapNumber: 7,
+            bloque: null,
+            plotBlockId: null,
+            status: "active",
+            instaladaEl: "2026-08-01",
+            ultimaRevision: { id: "o1", dia: "2026-09-01", observedAt: new Date("2026-09-01T00:00:00Z"), brocaLevel: "muchos" },
+          },
         ],
-        regla: { triggerLevel: "algunos", normalDays: 14, alertDays: 7, suggestedAction: "aplicar Bralic" },
+        regla: { triggerLevel: "algunos", normalDays: 14, alertDays: 7, suggestedAction: "aplicar Bralic", suggestedMaterial: null },
       }),
     );
     expect(r.tocaHacer).toEqual([
       { tipo: "trampa_por_revisar", specimenId: "t1", trapNumber: 7, diasDeRetraso: 9 },
-      { tipo: "trampa_con_lectura_alta", specimenId: "t1", trapNumber: 7, lectura: "muchos", accion: "aplicar Bralic" },
+      {
+        tipo: "trampa_con_lectura_alta",
+        specimenId: "t1",
+        trapNumber: 7,
+        lectura: "muchos",
+        accion: "aplicar Bralic",
+        observationId: "o1",
+        plotBlockId: null,
+        materialId: null,
+        materialName: null,
+      },
     ]);
     for (const aviso of r.tocaHacer) expect(enlaceDelAviso(aviso, "L")).toBe("/plots/L#trampas");
+  });
+
+  // Tarea 4: `intervencionesDeTrampas` llega hasta `avisosDeTrampas` — una
+  // intervención posterior sobre la parcela entera apaga la lectura alta pero
+  // no el aviso de revisión vencida (spec §4.2: atendido no es resuelto).
+  it("una intervención posterior sobre la parcela entera atiende la lectura alta, no la revisión vencida", () => {
+    const r = pendienteDeLaParcela(
+      base({
+        hoy: "2026-09-17",
+        trampas: [
+          {
+            id: "t1",
+            trapNumber: 7,
+            bloque: null,
+            plotBlockId: null,
+            status: "active",
+            instaladaEl: "2026-08-01",
+            ultimaRevision: { id: "o1", dia: "2026-09-01", observedAt: new Date("2026-09-01T00:00:00Z"), brocaLevel: "muchos" },
+          },
+        ],
+        regla: { triggerLevel: "algunos", normalDays: 14, alertDays: 7, suggestedAction: "aplicar Bralic", suggestedMaterial: null },
+        intervencionesDeTrampas: [{ occurredAt: new Date("2026-09-02T00:00:00Z"), parcelaEntera: true, plotBlockIds: [] }],
+      }),
+    );
+    expect(r.tocaHacer).toEqual([{ tipo: "trampa_por_revisar", specimenId: "t1", trapNumber: 7, diasDeRetraso: 9 }]);
   });
 });

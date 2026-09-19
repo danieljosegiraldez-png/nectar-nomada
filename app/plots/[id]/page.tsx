@@ -74,6 +74,10 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
   // La parcela ve también las intervenciones de su microparcela y de su parcela
   // madre — igual que la cosecha, spec §3.3.
   const intervenciones = await intervencionesVigentes(await ubicacionesEmparentadas(id));
+  // «Atendido» de trampas (spec §4.2) sólo mira intervenciones de ESTA misma
+  // parcela: una sobre «la parcela entera» de la madre es de la madre, no de
+  // aquí (Decisiones del plan, tabla).
+  const intervencionesDeTrampas = intervenciones.filter((i) => i.locationId === id);
   // Las de ESTA parcela, con nombre de producto — Tarea 8, spec §5. A
   // diferencia de la lista de arriba (para avisos), aquí sólo importan las
   // propias: es el historial de manejo de la parcela, no de sus emparentadas.
@@ -96,6 +100,7 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
     // Sin regla de la finca (`null`) no sale ningún aviso de trampas.
     trampas: trampasParaAviso(trampas),
     regla: reglaDeTrampas,
+    intervencionesDeTrampas,
   });
   const ultimoAnio = rendimiento.status === "ok" ? rendimiento.years[0] : undefined;
 

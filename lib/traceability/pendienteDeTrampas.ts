@@ -21,6 +21,13 @@ export interface TrampaParaAviso {
   id: string;
   trapNumber: number | null;
   bloque: string | null;
+  /**
+   * El bloque de VERDAD (FK), a diferencia de `bloque` que es su nombre para
+   * mostrar. Es lo que compara «atendido» contra `plotBlockIds` de una
+   * intervención — spec §4.2. `null` = trampa sin bloque, y a esa sólo la
+   * cubre una intervención sobre la parcela entera.
+   */
+  plotBlockId: string | null;
   status: "active" | "removed" | "dead";
   /**
    * `dia` es campo de día `YYYY-MM-DD` (la revisión se guarda a medianoche UTC).
@@ -31,8 +38,13 @@ export interface TrampaParaAviso {
    * **F7 fix-final**: si `dia` es ANTERIOR a `instaladaEl`, `avisosDeTrampas`
    * la trata como si no existiera — es de un ciclo cerrado por un retiro y
    * reinstalación posteriores, y ni cuenta como visita ni puede disparar.
+   *
+   * `id` y `observedAt` (el INSTANTE, no el día) son la Tarea 4: hacen falta
+   * para nombrar la observación que motivó el aviso y para comparar contra
+   * `occurredAt` de una intervención con la precisión que pide «atendido»
+   * (spec §4.2) — un `>` de instantes, no de días.
    */
-  ultimaRevision: { dia: string; brocaLevel: NivelDeBroca | null } | null;
+  ultimaRevision: { id: string; dia: string; observedAt: Date; brocaLevel: NivelDeBroca | null } | null;
   /**
    * Día `YYYY-MM-DD` de la última observación `installed` O `reinstalled`
    * (lo que sea más reciente); `null` si no hay ninguna. Es la fecha de la
@@ -46,6 +58,20 @@ export interface ReglaParaAviso {
   normalDays: number;
   alertDays: number;
   suggestedAction: string;
+  /** Tarea 4, spec §4.2: la regla puede apuntar a un producto del catálogo. */
+  suggestedMaterial: { id: string; name: string } | null;
+}
+
+/**
+ * Una intervención vigente de la MISMA parcela que la trampa — Tarea 4, spec
+ * §4.2. Sólo lo que hace falta para juzgar si «cubre»: nunca el `kind`, porque
+ * cualquier tipo cuenta igual, también un manejo cultural (la regla sugiere,
+ * no manda).
+ */
+export interface IntervencionQueCubre {
+  occurredAt: Date;
+  parcelaEntera: boolean;
+  plotBlockIds: readonly string[];
 }
 
 /**
@@ -61,6 +87,8 @@ export function avisosDeTrampas(e: {
   hoy: string;
   trampas: readonly TrampaParaAviso[];
   regla: ReglaParaAviso | null;
+  /** Vigentes de la MISMA parcela — spec §4.2. Sin este parámetro nada atiende. */
+  intervenciones: readonly IntervencionQueCubre[];
 }): Aviso[] {
   const { regla } = e;
   if (regla == null) return [];
@@ -96,13 +124,34 @@ export function avisosDeTrampas(e: {
       avisos.push({ tipo: "trampa_por_revisar", specimenId: t.id, trapNumber: t.trapNumber, diasDeRetraso });
     }
 
-    if (disparo) {
+    // Spec §4.2: «atendido» apaga SÓLO este aviso, nunca `trampa_por_revisar`
+    // (la trampa sigue con su plazo). Cubre cualquier intervención vigente de
+    // ESTA parcela, posterior a la lectura que disparó — estrictamente
+    // posterior: una simultánea no cuenta. Una trampa sin bloque sólo la
+    // cubre una intervención sobre la parcela entera; con bloque, también una
+    // que incluya ese bloque. Nunca una intervención sobre plantas sueltas
+    // (esas no llegan aquí como `parcelaEntera` ni aportan a `plotBlockIds`,
+    // ver `intervencionesVigentes`).
+    const atendida =
+      disparo &&
+      revisionVigente != null &&
+      e.intervenciones.some(
+        (i) =>
+          i.occurredAt.getTime() > revisionVigente.observedAt.getTime() &&
+          (i.parcelaEntera || (t.plotBlockId != null && i.plotBlockIds.includes(t.plotBlockId))),
+      );
+
+    if (disparo && !atendida) {
       avisos.push({
         tipo: "trampa_con_lectura_alta",
         specimenId: t.id,
         trapNumber: t.trapNumber,
         lectura: lectura,
         accion: regla.suggestedAction,
+        observationId: revisionVigente!.id,
+        plotBlockId: t.plotBlockId,
+        materialId: regla.suggestedMaterial?.id ?? null,
+        materialName: regla.suggestedMaterial?.name ?? null,
       });
     }
   }
@@ -121,9 +170,10 @@ export function trampasParaAviso(
     id: string;
     trapNumber: number | null;
     bloque: string | null;
+    plotBlockId: string | null;
     status: TrampaParaAviso["status"];
     instaladaEl: Date | null;
-    ultimaRevision: { observedAt: Date; brocaLevel: NivelDeBroca | null } | null;
+    ultimaRevision: { id: string; observedAt: Date; brocaLevel: NivelDeBroca | null } | null;
   }[],
 ): TrampaParaAviso[] {
   const dia = (d: Date) => d.toISOString().slice(0, 10);
@@ -131,9 +181,12 @@ export function trampasParaAviso(
     id: t.id,
     trapNumber: t.trapNumber,
     bloque: t.bloque,
+    plotBlockId: t.plotBlockId,
     status: t.status,
     instaladaEl: t.instaladaEl == null ? null : dia(t.instaladaEl),
     ultimaRevision:
-      t.ultimaRevision == null ? null : { dia: dia(t.ultimaRevision.observedAt), brocaLevel: t.ultimaRevision.brocaLevel },
+      t.ultimaRevision == null
+        ? null
+        : { id: t.ultimaRevision.id, dia: dia(t.ultimaRevision.observedAt), observedAt: t.ultimaRevision.observedAt, brocaLevel: t.ultimaRevision.brocaLevel },
   }));
 }

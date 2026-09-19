@@ -1,6 +1,6 @@
 import type { EstadoDeProduccion } from "./estadoDeProduccion";
 import { carenciaDeIntervencion, reentradaDeIntervencion, type IntervencionParaCarencia } from "./carenciaDeIntervencion";
-import { avisosDeTrampas, type ReglaParaAviso, type TrampaParaAviso } from "./pendienteDeTrampas";
+import { avisosDeTrampas, type IntervencionQueCubre, type ReglaParaAviso, type TrampaParaAviso } from "./pendienteDeTrampas";
 
 /**
  * Lo pendiente de una parcela — tablero de parcela, spec §4.
@@ -50,6 +50,13 @@ export interface EntradaDePendiente {
   trampas: readonly TrampaParaAviso[];
   /** La regla de la finca. `null` = sin regla, y sin regla no hay avisos de trampas. */
   regla: ReglaParaAviso | null;
+  /**
+   * Las intervenciones que pueden «atender» una trampa (spec §4.2) — vigentes
+   * de esta MISMA parcela, no las de `intervenciones` (que incluye las
+   * emparentadas, para carencia/reentrada). La página las filtra por
+   * `locationId` antes de pasarlas.
+   */
+  intervencionesDeTrampas: readonly IntervencionQueCubre[];
 }
 
 export type Aviso =
@@ -65,7 +72,17 @@ export type Aviso =
   | { tipo: "carencia_no_declarada"; interventionId: string; locationId: string; alMenosHasta: Date | null }
   | { tipo: "reentrada_no_declarada"; interventionId: string; locationId: string; alMenosHasta: Date | null }
   | { tipo: "trampa_por_revisar"; specimenId: string; trapNumber: number | null; diasDeRetraso: number }
-  | { tipo: "trampa_con_lectura_alta"; specimenId: string; trapNumber: number | null; lectura: string; accion: string };
+  | {
+      tipo: "trampa_con_lectura_alta";
+      specimenId: string;
+      trapNumber: number | null;
+      lectura: string;
+      accion: string;
+      observationId: string;
+      plotBlockId: string | null;
+      materialId: string | null;
+      materialName: string | null;
+    };
 
 /** Mismo día y mes del año siguiente; un 29 de febrero vence el 28. */
 export function venceElMuestreo(ultimoDia: string): string {
@@ -105,7 +122,7 @@ export function pendienteDeLaParcela(e: EntradaDePendiente): { tocaHacer: Aviso[
     tocaHacer.push({ tipo: "muestras_sin_resultado", suelo: sueloSinResultado, foliar: foliarSinResultado });
   }
 
-  tocaHacer.push(...avisosDeTrampas({ hoy: e.hoy, trampas: e.trampas, regla: e.regla }));
+  tocaHacer.push(...avisosDeTrampas({ hoy: e.hoy, trampas: e.trampas, regla: e.regla, intervenciones: e.intervencionesDeTrampas }));
 
   if (e.areaHectares == null) faltaUnDato.push({ tipo: "sin_area" });
   // `!(x > 0)` y no `x <= 0`: con `NaN` la segunda es falsa y lo dejaría pasar.

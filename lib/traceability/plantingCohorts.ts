@@ -572,7 +572,7 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
           id: true,
           trapNumber: true,
           status: true,
-          plotBlock: { select: { name: true } },
+          plotBlock: { select: { id: true, name: true } },
           observations: {
             where: { observationType: "trap_check" },
             orderBy: [{ observedAt: "desc" }, { createdAt: "desc" }],
@@ -638,6 +638,9 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
       id: t.id,
       trapNumber: t.trapNumber,
       bloque: t.plotBlock?.name ?? null,
+      // Tarea 4: el bloque de VERDAD (FK), para comparar contra `plotBlockIds`
+      // de una intervención — `bloque` de arriba es sólo el nombre a mostrar.
+      plotBlockId: t.plotBlock?.id ?? null,
       status: t.status,
       instaladaEl: instaladaEl.get(t.id) ?? null,
       // Sin revisión es `null`, no una lectura de cero (ADR-080).
