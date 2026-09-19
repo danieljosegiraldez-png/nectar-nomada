@@ -214,3 +214,64 @@ export async function getTrapCheckSeries(userAccountId: string, specimenId: stri
     orderBy: { observedAt: "asc" },
   });
 }
+
+/**
+ * Las plantas (no las trampas) de una parcela — Tarea 8, spec §5. El
+ * formulario de intervención las ofrece para «marcar plantas»: sin ninguna
+ * marcada, el área es la parcela entera.
+ */
+export async function listPlantSpecimens(userAccountId: string, locationId: string) {
+  await requireSpecimenAccess(userAccountId, "view", locationId);
+
+  return prisma.specimen.findMany({
+    where: { locationId, specimenType: "plant", status: "active" },
+    select: { id: true, commonName: true },
+    orderBy: { commonName: "asc" },
+  });
+}
+
+export interface LecturaDeTrampa {
+  readonly id: string;
+  readonly observedAt: Date;
+  readonly captureCount: number | null;
+  // F2 §4: la escala es la lectura principal ahora; el número queda como
+  // dato adicional, cuando alguien contó.
+  readonly brocaLevel: TrapCaptureLevel | null;
+}
+
+/**
+ * La lectura de trampa que motivó una intervención, y la siguiente si la hay
+ * — spec fitosanitario §4.3. La ficha de la intervención la usa para enseñar
+ * si sirvió, sin que quien la registró tenga que ir a buscarla.
+ */
+export async function lecturaDeTrampaQueMotivo(
+  userAccountId: string,
+  observationId: string,
+): Promise<{ motivo: LecturaDeTrampa; siguiente: LecturaDeTrampa | null } | null> {
+  const motivo = await prisma.specimenObservation.findUnique({
+    where: { id: observationId },
+    select: {
+      id: true,
+      observedAt: true,
+      captureCount: true,
+      brocaLevel: true,
+      specimenId: true,
+      observationType: true,
+      specimen: { select: { locationId: true } },
+    },
+  });
+  if (!motivo) return null;
+
+  await requireSpecimenAccess(userAccountId, "view", motivo.specimen.locationId);
+
+  const siguiente = await prisma.specimenObservation.findFirst({
+    where: { specimenId: motivo.specimenId, observationType: motivo.observationType, observedAt: { gt: motivo.observedAt } },
+    orderBy: { observedAt: "asc" },
+    select: { id: true, observedAt: true, captureCount: true, brocaLevel: true },
+  });
+
+  return {
+    motivo: { id: motivo.id, observedAt: motivo.observedAt, captureCount: motivo.captureCount, brocaLevel: motivo.brocaLevel },
+    siguiente,
+  };
+}

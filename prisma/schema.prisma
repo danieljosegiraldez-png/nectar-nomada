@@ -146,6 +146,7 @@ model Person {
   @@map("person")
   @@schema("core")
   consumableCustodiesResponsible ConsumableCustody[] @relation("ConsumableCustodyResponsible")
+  plotInterventionsOperadas PlotIntervention[] @relation("PlotInterventionOperator")
 }
 
 enum UserAccountStatus {
@@ -312,6 +313,7 @@ model UserAccount {
   consumableLotsCreated ConsumableLot[] @relation("ConsumableLotCreatedBy")
   consumableStockEventsCreated ConsumableStockEvent[] @relation("ConsumableStockEventCreatedBy")
   consumableCustodiesCreated ConsumableCustody[] @relation("ConsumableCustodyCreatedBy")
+  plotInterventionsCreadas PlotIntervention[] @relation("PlotInterventionCreatedBy")
   /// ADR-163
   storeAllocationsAssigned StoreAllocation[] @relation("StoreAllocationAssignedBy")
   storeAllocationsReceived StoreAllocation[] @relation("StoreAllocationReceivedBy")
@@ -920,6 +922,7 @@ model Location {
   labourEntries               LabourEntry[]
   materialConsumptionEntries  MaterialConsumptionEntry[]
   processingStages            ProcessingStage[]
+  plotInterventions           PlotIntervention[] @relation("PlotInterventionLocation")
 
   nodeCalibrations NodeCalibration[]
   recolectoresDeFinca    FincaRecolector[]     @relation("FincaRecolectorSitio")
@@ -3679,6 +3682,7 @@ model HarvestEvent {
   labourEntries LabourEntry[]
   sources       HarvestEventSource[]
   fieldEvents   FieldEvent[]
+  marcasDeCarencia HarvestWithdrawalFlag[]
 
   @@index([locationId])
   @@index([organizationId])
@@ -4413,6 +4417,170 @@ model LabourEntry {
   @@schema("traceability")
 }
 
+/// Qué clase de intervención. Decisión de Daniel, 2026-09-18: entran las cuatro
+/// —productos comprados, preparados de finca, liberaciones y manejo cultural—, y
+/// las dos primeras son la misma clase aquí (`aplicacion`): lo que las distingue
+/// es el producto, no el acto.
+enum PlotInterventionKind {
+  aplicacion
+  liberacion
+  manejo_cultural
+
+  @@schema("traceability")
+}
+
+/// Contra qué. **La lista es de Daniel**, 2026-09-18, spec §2.5, con la
+/// procedencia de cada nombre. No se añade nada sin él; crecer es una línea.
+enum PlotInterventionTarget {
+  arana_roja
+  broca
+  minador_hoja
+  cochinillas
+  nematodos
+  jobotos
+  roya
+  ojo_de_gallo
+  mancha_de_hierro
+  antracnosis
+  llaga_macana
+  chasparria
+  otro
+
+  @@schema("traceability")
+}
+
+/// Cómo se aplicó. Opcional. Las formas que nombran las guías de Anacafé, sin
+/// ninguna de sus cifras.
+enum PlotInterventionMethod {
+  follaje
+  tronco
+  suelo
+  riego
+  cebo
+  liberacion
+  manual
+  otro
+
+  @@schema("traceability")
+}
+
+/// Una intervención contra una plaga en una parcela — spec §2.1.
+///
+/// **Nunca se edita en sitio.** Una corrección es otra fila con `correctsId` y
+/// motivo, igual que `Measurement`. Vigente = ninguna fila la corrige.
+model PlotIntervention {
+  id         String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId String               @map("location_id") @db.Uuid
+  location   Location             @relation("PlotInterventionLocation", fields: [locationId], references: [id])
+  kind       PlotInterventionKind
+  target     PlotInterventionTarget
+  targetNote String?              @map("target_note")
+  method     PlotInterventionMethod?
+  mixVolume  Decimal?             @map("mix_volume") @db.Decimal(10, 3)
+  mixUnit    String?              @map("mix_unit")
+  occurredAt DateTime             @map("occurred_at")
+
+  operatorPersonId String?       @map("operator_person_id") @db.Uuid
+  operator         Person?       @relation("PlotInterventionOperator", fields: [operatorPersonId], references: [id])
+  fieldSessionId   String?       @map("field_session_id") @db.Uuid
+  fieldSession     FieldSession? @relation("PlotInterventionSession", fields: [fieldSessionId], references: [id])
+  /// La lectura de trampa que la motivó. Procedencia, no mecanismo (spec §2.1).
+  motivoObservationId String?              @map("motivo_observation_id") @db.Uuid
+  motivoObservation   SpecimenObservation? @relation("PlotInterventionMotivo", fields: [motivoObservationId], references: [id])
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+  dataQuality     DataQuality?    @map("data_quality")
+  notes           String?
+
+  /// **Como mucho UNA corrección vigente por fila, y NO se declara aquí.** El
+  /// índice real es único PARCIAL —`(corrects_id) WHERE corrects_id IS NOT
+  /// NULL`, migración `20260918170000_correccion_unica_y_cantidad_no_negativa`—
+  /// porque un único exacto sobre una columna nula prohibiría más de una fila
+  /// SIN corrección, que es el caso normal. Prisma no sabe expresar índices
+  /// parciales (mismo motivo que el funcional de `ConsumableMaterial`, más
+  /// arriba); declarar aquí el `@@unique([correctsId])` exacto pediría un
+  /// índice que las migraciones no crean, y `derivaDeMigraciones` lo cazaría.
+  /// La restricción vive en la base; el servicio (`corregirIntervencion`)
+  /// traduce su violación (P2002) a un error que se entiende.
+  correctsId       String?            @map("corrects_id") @db.Uuid
+  corrects         PlotIntervention?  @relation("PlotInterventionCorrection", fields: [correctsId], references: [id])
+  correcciones     PlotIntervention[] @relation("PlotInterventionCorrection")
+  correctionReason String?            @map("correction_reason")
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("PlotInterventionCreatedBy", fields: [createdBy], references: [id])
+
+  areas         PlotInterventionArea[]
+  lineas        PlotInterventionLine[]
+  marcasDeCosecha HarvestWithdrawalFlag[]
+  fieldEvents   FieldEvent[]
+
+  @@index([locationId, occurredAt])
+  @@index([correctsId])
+  @@map("plot_intervention")
+  @@schema("traceability")
+}
+
+/// Dónde, dentro de la parcela. Sin filas = la parcela entera (spec §2.2).
+///
+/// **En el PR A sólo plantas.** El bloque llega en el PR B, cuando `PlotBlock`
+/// exista: entonces `specimenId` pasa a anulable, entra `plotBlockId` y el CHECK
+/// de «exactamente uno».
+model PlotInterventionArea {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  interventionId String           @map("intervention_id") @db.Uuid
+  intervention   PlotIntervention @relation(fields: [interventionId], references: [id])
+  specimenId     String           @map("specimen_id") @db.Uuid
+  specimen       Specimen         @relation("PlotInterventionAreaSpecimen", fields: [specimenId], references: [id])
+
+  @@unique([interventionId, specimenId])
+  @@map("plot_intervention_area")
+  @@schema("traceability")
+}
+
+/// Una línea por producto de la mezcla (spec §2.3).
+model PlotInterventionLine {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  interventionId  String             @map("intervention_id") @db.Uuid
+  intervention    PlotIntervention   @relation(fields: [interventionId], references: [id])
+  materialId      String             @map("material_id") @db.Uuid
+  material        ConsumableMaterial @relation("PlotInterventionLineMaterial", fields: [materialId], references: [id])
+  consumableLotId String?            @map("consumable_lot_id") @db.Uuid
+  consumableLot   ConsumableLot?     @relation("PlotInterventionLineLot", fields: [consumableLotId], references: [id], onDelete: Restrict)
+  /// Nulo = no declarada; 0 es una cantidad legítima. CHECK ≥ 0 (migración
+  /// `20260918170000_correccion_unica_y_cantidad_no_negativa`): antes sólo el
+  /// libro mayor —vía el `CHECK` de `ConsumableStockEvent`— rechazaba una
+  /// cantidad negativa, y sólo cuando la línea llevaba frasco.
+  quantity        Decimal?           @db.Decimal(10, 3)
+  unit            String?
+  /// Nulo = no declarada; 0 = declarada cero. Sin DEFAULT, a propósito.
+  withdrawalDays  Int?               @map("withdrawal_days")
+  reentryHours    Int?               @map("reentry_hours")
+  /// Copia de `ColonyEvent.treatmentLotExpiredAtApplication`. CHECK: exige frasco.
+  lotExpiredAtApplication Boolean?   @map("lot_expired_at_application")
+
+  @@index([interventionId])
+  @@map("plot_intervention_line")
+  @@schema("traceability")
+}
+
+/// La marca de carencia de una cosecha: una fila por intervención todavía en
+/// carencia al cosechar (spec §3.4). **`diasQueFaltaban` nulo = desconocida**; sin
+/// filas = no había ninguna. Es una foto: no se recalcula.
+model HarvestWithdrawalFlag {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  harvestEventId  String           @map("harvest_event_id") @db.Uuid
+  harvestEvent    HarvestEvent     @relation(fields: [harvestEventId], references: [id])
+  interventionId  String           @map("intervention_id") @db.Uuid
+  intervention    PlotIntervention @relation(fields: [interventionId], references: [id])
+  diasQueFaltaban Int?             @map("dias_que_faltaban")
+
+  @@unique([harvestEventId, interventionId])
+  @@map("harvest_withdrawal_flag")
+  @@schema("traceability")
+}
+
 // T12.6 (§2). Batch-identified material consumption (yeast, cultures,
 // nutrients, treatments) — the batch is the irrecoverable identity fact;
 // a fermentation result isn't fully interpretable later without knowing
@@ -4671,6 +4839,7 @@ model FieldSession {
   creator   UserAccount? @relation("FieldSessionCreatedBy", fields: [createdBy], references: [id])
 
   events FieldEvent[]
+  plotInterventions PlotIntervention[] @relation("PlotInterventionSession")
 
   /// Spec jornada y entrega §3.5 — la jornada de campo de un recolector dentro de una jornada de cosecha.
   jornadaDeCosechaId String?           @map("jornada_de_cosecha_id") @db.Uuid
@@ -4832,6 +5001,10 @@ model FieldEvent {
   /// «la visita es el hecho» dejaría de ser cierto para él.
   varroaCountId         String?              @map("varroa_count_id") @db.Uuid
   varroaCount           VarroaCount?         @relation(fields: [varroaCountId], references: [id])
+  /// Una intervención fitosanitaria hecha durante la jornada entra en ella —
+  /// mismo molde que A9.1.
+  plotInterventionId String?           @map("plot_intervention_id") @db.Uuid
+  plotIntervention   PlotIntervention? @relation(fields: [plotInterventionId], references: [id])
 
   provenanceClass ProvenanceClass @map("provenance_class")
 
@@ -4879,6 +5052,7 @@ model FieldEvent {
   @@index([colonyEventId])
   @@index([apiaryHarvestEventId])
   @@index([varroaCountId])
+  @@index([plotInterventionId])
   @@map("field_event")
   @@schema("traceability")
 }
@@ -6241,6 +6415,7 @@ model Specimen {
 
   observations SpecimenObservation[]
   assets       Asset[]
+  intervencionesSobreElla PlotInterventionArea[] @relation("PlotInterventionAreaSpecimen")
 
   entregasDeCosecha EntregaDeCosecha[]
   fieldEvents       FieldEvent[]       @relation("FieldEventPlanta")
@@ -6457,6 +6632,7 @@ model SpecimenObservation {
   creator   UserAccount? @relation("SpecimenObservationCreatedBy", fields: [createdBy], references: [id])
 
   fieldEvents FieldEvent[]
+  intervencionesMotivadas PlotIntervention[] @relation("PlotInterventionMotivo")
   assets      Asset[]
 
   @@index([specimenId])
@@ -9062,6 +9238,12 @@ model ConsumableMaterial {
   /// vencer; lo VENCIDO avisa siempre (plan del botiquín, decisión 1). CHECK ≥ 0.
   avisarDiasAntes       Int?    @map("avisar_dias_antes")
 
+  /// Producto de manejo fitosanitario. Gemela de `isVeterinaryMedicine`: separa
+  /// lo que se ofrece al registrar una intervención del aserrín y la gallinaza.
+  isPlantProtection   Boolean @default(false) @map("is_plant_protection")
+  /// Horas de reentrada por defecto. Nulo = no declarada; 0 = declarada cero.
+  defaultReentryHours Int?    @map("default_reentry_hours")
+
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
   creator   UserAccount? @relation("ConsumableMaterialCreatedBy", fields: [createdBy], references: [id])
@@ -9080,6 +9262,7 @@ model ConsumableMaterial {
   @@map("consumable_material")
   @@schema("traceability")
   lots ConsumableLot[]
+  lineasDeIntervencion PlotInterventionLine[] @relation("PlotInterventionLineMaterial")
 }
 
 /// Lo que entró una vez: 28 quintales de gallinaza del 1 de julio, con su
@@ -9132,6 +9315,7 @@ model ConsumableLot {
   notes      String?
 
   events ConsumableStockEvent[]
+  lineasDeIntervencion PlotInterventionLine[] @relation("PlotInterventionLineLot")
 
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid

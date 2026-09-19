@@ -11482,6 +11482,7 @@ ruta nueva. Y el listado no nombra cajas de otro apiario: dice «en otro apiario
 
 **Lo que NO entra.** La cera por color de año (spec §5) y el año de las reinas (§5.4): cada uno
 en su rebanada.
+
 ## ADR-172 — Catálogos de referencia con atributos: compartidos y propios, un contrato común
 
 **Fecha:** 2026-09-19 · **Estado:** aceptado · **Spec:** `docs/superpowers/specs/2026-09-18-catalogos-y-modelos-de-equipo-design.md`
@@ -11532,3 +11533,142 @@ llegado.
 **Lo que NO entra.** «Marcos negros: N» en la inspeccion (spec §5.3): la inspeccion se guarda
 tambien sin conexion y el campo toca la cola y su sincronizacion — va en su rebanada. Y el ano de
 las reinas (§5.4).
+
+## ADR-174 — Manejo fitosanitario de la parcela: registro de intervenciones
+
+**Contexto.** Daniel pidio «una seccion de prevencion y control de plagas, donde entra fumigacion o
+tratamientos de esta indole, trampas de broca o manejos relacionados». Las trampas son la pieza 2
+(#369, diseño y plan fusionados; `PlotBlock` y `TrapRule` no existen todavia en `main`). Este ADR
+cubre la pieza 3: registrar intervenciones, avisar carencia y reentrada, marcar la cosecha cuando
+hay riesgo de residuo.
+
+**La decision de las cuatro clases fue de Daniel el 2026-09-18:**
+
+1. **Productos comprados** — Bralic, Regin, fungicidas, insecticidas, abonos foliares.
+2. **Preparados de la finca** — un lote hecho en la biofábrica cuelga de `ConsumableLot`, igual que
+   un frasco comprado. No hace falta tabla nueva.
+3. **Liberaciones biologicas** — parasitoides, ácaros depredadores, bacterias; se miden en unidades
+   (individuos, colonias) segun el prep.
+4. **Manejo cultural** — repela, pepena, poda sanitaria. No aplican nada; son acciones.
+
+**Los doce objetivos mas `otro`, con su procedencia, son de Daniel y estan en el spec §2.5.**
+Araña roja la pidio él desde la entrada; los otros once salieron de consulta: guía técnica del ICAFE
+(Costa Rica), boletín Cedicafé, manuales de la región. **Ninguno entro sin que lo marcara él.** De
+esas fuentes no se toma ninguna cifra de dosis, carencia ni registro — eso lo pone quien da de alta
+el producto.
+
+**Los objetivos se eligen al registrar.** Sin elegir objetivo no se puede preguntar después «¿qué
+funcionó contra la broca?». Es la misma razon que el Anexo B §4 pidio `TreatmentTarget` para el
+apiario.
+
+**Decision — `PlotIntervention` con su catálogo.**
+
+1. **`ConsumableMaterial` gana dos columnas:**
+   - `isPlantProtection`: booleano, `false` por defecto. Es gemela de `isVeterinaryMedicine`.
+     Evita que el selector de productos muestre aserrín ni gallinaza cuando se registra una
+     intervención.
+   - `defaultReentryHours`: entero anulable, `CHECK >= 0`. Nulo = no declarada. Es lo que el
+     botiquín no tenía (ADR-168).
+
+2. **Tres tablas nuevas:**
+   - `PlotIntervention`: ubicacion, tipo (aplicación/liberación/manejo_cultural), objetivo, la
+     mezcla de tanque (volumen total del caldo), fecha y hora con desfase, operario, jornada, la
+     observacion de trampa que la motivó (procedencia, no mecanismo). **Nunca se edita en sitio:**
+     corregir escribe una fila nueva con `correctsId` y motivo obligatorio, como
+     `correctMeasurement`. Auditada en transacción.
+   - `PlotInterventionArea`: por intervención, **exactamente uno** de `plotBlockId` o
+     `specimenId` — `CHECK` en base. Sin filas = toda la parcela. El servicio verifica que el
+     bloque o planta pertenecen a esa parcela.
+   - `PlotInterventionLine`: una por producto de la mezcla. Lleva `materialId` (obligatorio; un
+     producto sin identidad no se puede comparar), frasco (opcional para siempre), cantidad y
+     unidad (opcionales; «no medí» se guarda). **Carencia y reentrada, anulables:** nulo = no
+     declarada, `CHECK >= 0` si presente (ADR-080).
+
+3. **El descuento del frasco:** cuando la línea lleva frasco y cantidad, escribe su
+   `ConsumableStockEvent` de tipo `consumed` en la **misma transacción**, igual que el tratamiento
+   de colmena (ADR-168). Exige la misma unidad que el lote. Sin cantidad no descuenta y se guarda
+   igual: dice de qué frasco salió aunque no cuánto.
+
+   **Este cambio respecto de lo que Daniel vio en el chat es de propósito:** en el chat dije que
+   escribiría también un `MaterialConsumptionEntry`; medí después que el botiquín (fusionado ese
+   mismo día) resolvió lo mismo **al revés** — el tratamiento de colmena descuenta sin fila de
+   consumo. Aquí se sigue ese precedente. Si Daniel prefiere lo que vio primero, el cambio es de
+   una tarea del plan y no toca el resto.
+
+4. **Frasco vencido se aplica y queda marcado:** `lotExpiredAtApplication = true`. Alguien puede
+   estar registrando hoy lo que aplicó la semana pasada.
+
+5. **El servicio NO rellena carencia ni reentrada** con las del producto. El formulario las
+   precarga **visibles y editables** — quien registra las confirma o las cambia. Si el servicio
+   copiara el valor, una carencia editada en el producto después cambiaría el significado de lo que
+   ya se registró, y un nulo del producto se volvería una afirmación que nadie hizo (ADR-080).
+
+6. **Nulo ≠ cero:** ninguna columna de carencia ni reentrada lleva `DEFAULT 0`. Un cero por defecto
+   convertiría «nadie lo dijo» en «dijo cero». `CHECK` en base, no solo en TypeScript.
+
+7. **Reglas por tipo, en el servicio y base:**
+   - `manejo_cultural` → cero líneas. Una repela no aplica nada.
+   - `aplicacion` y `liberacion` → al menos una.
+   - Intervención sin líneas: la base rechaza con `CHECK`. Cambio en producto después no cambia
+     lo que se registró.
+
+**La carencia y reentrada salen de aritmética pura (§3 del spec).**
+
+- `libreDesdeDe` y `diasQueFaltanDe` se mueven de `lib/apiary/carencia.ts` a `lib/time/carencia.ts`
+  (modulo sin importar base). Café y miel cuentan igual: días enteros, redondeando hacia arriba.
+  Medio día de carencia sigue siendo carencia. Adiós `Math.floor`.
+- `carenciaDeIntervencion(intervencion, enLaFecha)`: función pura.
+  - `manejo_cultural` → `no_aplica`.
+  - Todas las líneas declaran → `conocida`, manda la más larga de la mezcla.
+  - Alguna no declara → `desconocida`. Si otra sí, añade `alMenosHasta`.
+  - La más larga ya se cumplió y ninguna es desconocida → `cumplida`.
+- **`desconocida` nunca se vuelve `cumplida` por el tiempo.** Una carencia que nadie declaró no
+  vence sola: sigue en *falta un dato* hasta que alguien corrige la intervención.
+- Qué intervenciones cuentan: **solo las vigentes** (no corregidas por otra).
+- `reentradaDeIntervencion`: igual, en horas.
+
+**La marca en la cosecha es una foto de lo que el sistema sabía.**
+
+- `recordHarvestEvent` sigue guardando siempre. En la misma transacción escribe una fila
+  `HarvestWithdrawalFlag` **por cada intervención que siga en carencia** en `harvestedAt`:
+  - `interventionId`, `harvestEventId` — únicos por par.
+  - `diasQueFaltaban` — entero anulable. **Nulo = desconocida.** Distinto de cero.
+  - Sin filas: no había ninguna carencia vigente.
+- La página de la cosecha enseña **también** el cálculo de hoy, y **si no coinciden lo dice:**
+  lo que se sabía entonces y lo que se sabe ahora son dos hechos distintos. Importa el día que
+  aparezca un análisis de residuo.
+- **Intervenciones que tocan una cosecha:** las de la misma parcela sin importar bloque ni planta
+  (la cosecha no lo dice), **y también ascendientes y descendientes** por `parentLocationId`. Es
+  conservador: mejor aviso de más que una carencia que no se ve. Nueva función
+  `ubicacionesEmparentadas(locationId)`, que copia de `conAncestros` el tope
+  `PROFUNDIDAD_MAXIMA_DE_UBICACION = 12` y la guarda de ciclos.
+
+**Los avisos en el tablero y al abrir jornada (§4.1 del spec).**
+
+- Nuevos grupos en `pendienteDeLaParcela`: `reentrada_vigente` (hasta qué hora, de qué
+  intervención), `carencia_vigente` (no cosechar hasta fecha, por intervención),
+  `carencia_no_declarada` / `reentrada_no_declarada` (para corregir con valor).
+- La reentrada también avisa al abrir jornada en esa parcela o emparentada: «sin protección no
+  entrar hasta las 14:00» — notificacion, no bloqueo.
+- Una reentrada no declarada dice **«desconocida»** y no se calla. Si se calla, se lee como que se
+  puede entrar.
+
+**La pieza 2 (trampas, #369) queda fuera de este ADR pero enlazada:**
+
+- `TrapRule` gana `suggestedMaterialId` opcional, FK `ConsumableMaterial` filtrado a
+  `isPlantProtection`. Cuando existe, el aviso de lectura disparada trae «Registrar aplicación» con
+  el producto prerellenado.
+- El aviso se da por **atendido** cuando existe una intervención vigente posterior a la lectura que
+  cubre la trampa. Cuenta cualquier tipo, también una repela. El sistema sugiere, no opina.
+- **Actualizado al integrar `origin/main` (2026-09-18):** el PR B (áreas por bloque,
+  `TrapRule.suggestedMaterialId`, aviso de trampa atendido) ya puede empezar: `PlotBlock` y
+  `TrapRule` están en `main` desde el PR #413.
+
+**Alternatives considered:** Escribir también `MaterialConsumptionEntry` (lo que se vio en el chat).
+El botiquín optó por el descuento directo sin fila de consumo, que es más limpio. Ambos son válidos;
+se sigue el precedente para coherencia.
+
+**Consequences:** El registro de fumigación deja de ser consumo sin carencia. La cosecha sabe si
+peligra residuo y cuando. Las intervenciones vigentes se distinguen de las corregidas. Una carencia
+desconocida no desaparece con el tiempo. Crecer la lista de objetivos es una migración de una línea.
+Lo que no esté entra como `otro` con nota.

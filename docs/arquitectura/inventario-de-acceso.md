@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**482 operaciones** que tocan la base, en **139 archivos**:
+**489 operaciones** que tocan la base, en **140 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,7 +22,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **359** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **366** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **39** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **65** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -88,6 +88,23 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > reparto de la nota anterior—, y eso es lo esperado: una pantalla que delega toda su
 > autorización en el servicio no suma una fila nueva al inventario.
 
+> **Tarea 8 del plan fitosanitario (2026-09-18): 383→386, con tres operaciones
+> nuevas, las tres guardia directo.** `productosFitosanitarios()`
+> (`lib/traceability/intervenciones.ts`) resuelve `requireLotAccess(view)` sobre la
+> parcela; `listPlantSpecimens()` y `lecturaDeTrampaQueMotivo()`
+> (`lib/traceability/specimens.ts`) resuelven `requireSpecimenAccess(view)`. Ningún
+> archivo nuevo: las tres viven en archivos ya inventariados.
+
+> **Ronda final de revisión (2026-09-18, hallazgo 3): 386→387, una operación
+> nueva, guardia directo.** `requireOpenFieldSessionForEvent()`
+> (`lib/traceability/fieldSessions.ts`) se extrajo de `recordFieldEvent()` para que
+> `registrarIntervencion()` la reutilizara antes de escribir su `FieldEvent`: antes
+> sólo comprobaba parentesco de ubicación con la jornada, nunca autorización sobre
+> ELLA. Resuelve `requireFieldSessionAccess()` sobre `session.locationId`, que es la
+> misma compuerta que ya usaba `recordFieldEvent()` — de ahí que sume una fila y no
+> dos: la llamada existente no cambió de forma, sólo de sitio. Ningún archivo nuevo:
+> vive en `fieldSessions.ts`, ya inventariado.
+
 > **Y el de 387→389, sin archivo nuevo, es el plan 2 de «editar beneficio» (Tarea 4,
 > 2026-09-18).** Dos operaciones más en `lib/traceability/locations.ts`:
 > `exigeEditarBeneficioEn` (sobre una ubicación, sea del tipo que sea) y
@@ -104,6 +121,24 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > siguen comprobando `equipment:manage` directamente y no pasan por
 > `puedeConfigurar` — el módulo de insumos reutiliza el permiso de equipos y este
 > plan no lo toca (§3 de la spec, nota del 2026-09-18).
+
+> **Fusión de `origin/main` en `fitosanitarios` (2026-09-18).** Los dos lados
+> traían cifras propias sobre árboles distintos —387/118 aquí, tras la ronda final
+> de revisión, y 430/130 en `main`— y **ninguna de las dos vale para el árbol
+> combinado**. Las cifras del encabezado y de la tabla de arriba son las que
+> imprime `node scripts/inventario-de-acceso.mjs` sobre la fusión: **437 en 131**.
+
+> **Segunda integración de `origin/main` en `fitosanitarios` (2026-09-19).** Volvió a
+> pasar lo mismo: 437/131 aquí (con los arreglos post-merge de la primera integración) y
+> 434/131 en `main` (alzas con marca, ADR-171 de `main`), y **ninguna de las dos vale
+> para el árbol combinado**. Las cifras de arriba son las que imprime
+> `node scripts/inventario-de-acceso.mjs` sobre esta segunda fusión: **441 en 132**.
+
+> **Tercera integración de `origin/main` en `fitosanitarios` (2026-09-19).** Otra vez la
+> misma forma: 441/132 aquí y 461/135 en `main` (catálogos, rutinas y modelos de equipo,
+> ADR-172 de `main`), y **ninguna de las dos vale para el árbol combinado**. Las cifras de
+> arriba son las que imprime `node scripts/inventario-de-acceso.mjs` sobre esta tercera
+> fusión: **468 en 136**.
 
 > **Tareas 8 y 9 (2026-09-16):** el inventario incluye las opciones de inspección y
 > el servicio de instalaciones. Las cifras anteriores se regeneraron con
@@ -220,6 +255,28 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 > **Y el de 378→379 es `dividirMiel` (ADR-162)**, en el mismo archivo: pasa por `loteDeMiel`, que
 > autoriza con `requireLotAccess("manage")` antes de leer nada, y escribe por `recordTransformation`.
+
+> **Y el de 380→382, con un archivo nuevo, es `registrarIntervencion`/`corregirIntervencion`
+> (Tarea 5, manejo fitosanitario, spec 2026-09-18).** Viven en
+> `lib/traceability/intervenciones.ts`. Las dos suben **guardia directo**: resuelven
+> `requireLotAccess("manage")` sobre la parcela —la de la intervención al registrar, la de la
+> original al corregir— antes de tocar materiales, frascos, plantas o jornada. Sus ayudantes
+> privados `crearAreas`/`crearLineasDeIntervencion` reciben el `tx` del llamador ya autorizado
+> —la misma razón que `crearColocacionInicial`— y por eso llevan su propia entrada en
+> `reciben_transaccion`, no en `dependen_del_llamador`: no son funciones exportadas que el
+> detector cuente como operación propia.
+
+> **Y el de 382→383, sin archivo nuevo, es `listarIntervenciones` (Tarea 6,
+> manejo fitosanitario, spec 2026-09-18 §3.3/§3.4).** Vive en
+> `lib/traceability/intervenciones.ts`, ya inventariado desde la Tarea 5, y sube
+> **guardia directo**: resuelve `requireLotAccess("view")` sobre la parcela antes
+> de listar sus intervenciones. **`intervencionesVigentes`, la otra función nueva
+> de esta tarea, no aparece como operación propia**: no recibe principal —toma
+> una lista de `locationIds` ya resuelta por `ubicacionesEmparentadas`, que
+> tampoco autoriza— porque quien la llama (`recordHarvestEvent`) ya pasó su
+> propia compuerta. Es la misma razón que ya excluye a
+> `crearAreas`/`crearLineasDeIntervencion` de la nota de arriba: el detector
+> cuenta operaciones con principal, no cada función que toca `prisma`.
 
 > **Y seis más, con un archivo nuevo, son la tienda (ADR-163).** `lib/commerce/tienda.ts`
 > aporta cuatro de **guardia directo** —`asignarATienda` con `requireLotAccess("manage")`;

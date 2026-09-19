@@ -22,6 +22,12 @@ import { estadosPorCohorte } from "../../../lib/traceability/estadoDeProduccion"
 import { cifrasDelLote } from "../../../lib/traceability/cifrasDelLote";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
 import { pendienteDeLaParcela, enlaceDelAviso, type Aviso } from "../../../lib/traceability/pendienteDeLaParcela";
+import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEmparentadas";
+import { intervencionesVigentes, listarIntervenciones } from "../../../lib/traceability/intervenciones";
+import {
+  textoDeTipoDeManejo as textoDeTipoDeManejoDe,
+  textoDeObjetivoDeManejo as textoDeObjetivoDeManejoDe,
+} from "../../components/traceability/etiquetasDeManejo";
 import { trampasParaAviso } from "../../../lib/traceability/pendienteDeTrampas";
 
 export const dynamic = "force-dynamic";
@@ -65,18 +71,28 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
   ]);
   const muestras = await listSamplesForLocation(user.userAccountId, id);
   const fotos = await listLandAssets(user.userAccountId, id);
+  // La parcela ve también las intervenciones de su microparcela y de su parcela
+  // madre — igual que la cosecha, spec §3.3.
+  const intervenciones = await intervencionesVigentes(await ubicacionesEmparentadas(id));
+  // Las de ESTA parcela, con nombre de producto — Tarea 8, spec §5. A
+  // diferencia de la lista de arriba (para avisos), aquí sólo importan las
+  // propias: es el historial de manejo de la parcela, no de sus emparentadas.
+  const manejosVigentes = (await listarIntervenciones(user.userAccountId, id)).filter((i) => i.correcciones.length === 0);
 
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
   const cifras = cifrasDelLote(activas, estados);
+  const ahora = new Date();
   const pendiente = pendienteDeLaParcela({
-    hoy: diaDeHoy(new Date(), location.timezone),
+    hoy: diaDeHoy(ahora, location.timezone),
     areaHectares: location.areaHectares == null ? null : Number(location.areaHectares),
     cohortesActivas: activas,
     estados,
     jornadas,
     muestrasDeSuelo: muestras.soil.map((m) => ({ sampledAt: m.sampledAt, resultados: m.measurements.length })),
     muestrasFoliares: muestras.foliar.map((m) => ({ sampledAt: m.sampledAt, resultados: m.measurements.length })),
+    ahora,
+    intervenciones,
     // Sin regla de la finca (`null`) no sale ningún aviso de trampas.
     trampas: trampasParaAviso(trampas),
     regla: reglaDeTrampas,
@@ -114,6 +130,18 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         return t("plotDashboardAlertNoCount", { n: aviso.n });
       case "siembras_sin_marcar":
         return t("plotDashboardAlertUnmarked", { n: aviso.n });
+      case "reentrada_vigente":
+        return t("plotDashboardAlertReentry", { hasta: mostrarInstante(aviso.hasta, location.timezone) });
+      case "carencia_vigente":
+        return t("plotDashboardAlertWithdrawal", { fecha: mostrarFecha(aviso.hasta, location.timezone), dias: aviso.dias });
+      case "carencia_no_declarada":
+        return t("plotDashboardAlertWithdrawalUnknown", {
+          fecha: aviso.alMenosHasta == null ? t("notRecorded") : mostrarFecha(aviso.alMenosHasta, location.timezone),
+        });
+      case "reentrada_no_declarada":
+        return t("plotDashboardAlertReentryUnknown", {
+          fecha: aviso.alMenosHasta == null ? t("notRecorded") : mostrarFecha(aviso.alMenosHasta, location.timezone),
+        });
       case "trampa_por_revisar":
         return t("trapsDueAlert", { n: aviso.trapNumber ?? t("notRecorded"), d: aviso.diasDeRetraso });
       case "trampa_con_lectura_alta":
@@ -124,6 +152,12 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         });
     }
   };
+
+  // Tarea 8, ronda de arreglos 1 (menor #1): las dos tablas salen de
+  // `etiquetasDeManejo.ts`, compartida con las otras 3 pantallas que las
+  // necesitan — antes estaban duplicadas ahí y aquí.
+  const textoDeTipoDeManejo = textoDeTipoDeManejoDe(t);
+  const textoDeObjetivoDeManejo = textoDeObjetivoDeManejoDe(t);
 
   return (
     <div>
@@ -351,6 +385,29 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             ) : null}
           </>
         )}
+      </section>
+
+      <section className="nn-section">
+        <h2>{t("plotDashboardManejoHeading")}</h2>
+        {manejosVigentes.length === 0 ? (
+          <p className="nn-muted">{t("plotDashboardManejoNone")}</p>
+        ) : (
+          <ul className="nn-detail-meta">
+            {manejosVigentes.slice(0, 5).map((i) => (
+              <li key={i.id}>
+                <Link href={`/plots/${location.id}/manejo/${i.id}`}>
+                  {mostrarFecha(i.occurredAt, location.timezone)} · {textoDeTipoDeManejo[i.kind]} · {textoDeObjetivoDeManejo[i.target]}
+                  {i.lineas.length > 0 ? ` · ${i.lineas.map((l) => l.material.name).join(", ")}` : ""}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p>
+          <Link href={`/plots/${location.id}/manejo/nuevo`} className="nn-button">
+            {t("plotDashboardManejoRegisterButton")}
+          </Link>
+        </p>
       </section>
 
       <section className="nn-section">

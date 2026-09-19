@@ -4,7 +4,12 @@ import { inspeccionesParaMedicion } from "../../../lib/traceability/measurements
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { mostrarInstante } from "../../../lib/time/mostrarInstante";
+import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
+import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEmparentadas";
+import { intervencionesVigentes } from "../../../lib/traceability/intervenciones";
+import { carenciaDeIntervencion } from "../../../lib/traceability/carenciaDeIntervencion";
+import { difierenMarcasDeCarencia } from "../../../lib/traceability/difierenMarcasDeCarencia";
+import { textoDeObjetivoDeManejo as textoDeObjetivoDeManejoDe } from "../../components/traceability/etiquetasDeManejo";
 import { getCurrentUser } from "../../../lib/auth/session";
 import {
   getLotDetail,
@@ -150,6 +155,34 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
     ? await puedeGestionarAtributosDeUbicacion(user.userAccountId, harvestEvent.locationId)
     : false;
 
+  // La marca de carencia al cosechar — Tarea 8 fitosanitaria, spec §3.4.
+  // `harvestEvent.marcasDeCarencia` (ya en `detail`) es la FOTO de lo que el
+  // sistema sabía al cosechar; aquí se recalcula HOY con el mismo cálculo que
+  // `recordHarvestEvent` hizo entonces, para poder decir si una corrección
+  // posterior lo cambió. Nunca se sobreescribe la foto: sólo se compara.
+  const calculoDeCarenciaHoy: { interventionId: string; diasQueFaltaban: number | null }[] = harvestEvent
+    ? (
+        await intervencionesVigentes(await ubicacionesEmparentadas(harvestEvent.locationId), { hasta: harvestEvent.harvestedAt })
+      ).reduce<{ interventionId: string; diasQueFaltaban: number | null }[]>((marcas, i) => {
+        const c = carenciaDeIntervencion(i, harvestEvent.harvestedAt);
+        if (c.estado === "conocida") marcas.push({ interventionId: i.id, diasQueFaltaban: c.diasQueFaltan });
+        else if (c.estado === "desconocida") marcas.push({ interventionId: i.id, diasQueFaltaban: null });
+        return marcas;
+      }, [])
+    : [];
+  // Ronda de arreglos 1 (importante #2, hueco de spec §3.4 confirmado por el
+  // controlador): la comparación corre SIEMPRE, aunque la foto esté vacía —
+  // antes vivía gateada dentro del `if (marcasDeCarencia.length > 0)` de la
+  // JSX, así que una cosecha SIN carencia en su foto nunca podía enseñar que
+  // hoy sí la hay. `difiereCarenciaDeHoy` decide, más abajo, si la caja se
+  // pinta —con o sin lista— y no al revés.
+  const difiereCarenciaDeHoy = harvestEvent
+    ? difierenMarcasDeCarencia(
+        harvestEvent.marcasDeCarencia.map((m) => ({ interventionId: m.interventionId, diasQueFaltaban: m.diasQueFaltaban })),
+        calculoDeCarenciaHoy,
+      )
+    : false;
+
   // Qué mediciones han sido superadas por una corrección. Se calcula de la
   // lista que ya se cargó, sin otra consulta.
   const supersededMeasurementIds = new Set(
@@ -168,6 +201,11 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
    * de la finca es mejor que mostrar UTC, y no hay una tercera opción honesta.
    */
   const cuando = (date: Date) => mostrarInstante(date, lot.location?.timezone);
+  const cuandoDia = (date: Date) => mostrarFecha(date, lot.location?.timezone ?? null);
+
+  // Tarea 8, ronda de arreglos 1 (menor #1): sale de `etiquetasDeManejo.ts`,
+  // compartida con las otras 3 pantallas.
+  const textoDeObjetivoDeManejo = textoDeObjetivoDeManejoDe(t);
   const labourEntryLine = (entry: LabourEntry) =>
     t("labourEntryLine", { workers: entry.workerCount, hours: entry.hours.toString(), date: cuando(entry.occurredAt) }) +
     (entry.taskNote ? ` — ${entry.taskNote}` : "");
@@ -574,6 +612,46 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         <section className="nn-section">
           <h2>{t("harvestInfoHeading")}</h2>
           <p className="nn-muted">{t("harvestOccurredAtLabel", { date: cuando(harvestEvent.harvestedAt) })}</p>
+
+          {/* Ronda de arreglos 1 (importante #2): la caja se pinta si hay
+              marcas en la foto O si el cálculo de hoy difiere de ella —
+              antes sólo la primera condición decidía, y una foto vacía
+              apagaba también el aviso de discrepancia (spec §3.4). */}
+          {harvestEvent.marcasDeCarencia.length > 0 || difiereCarenciaDeHoy ? (
+            <div className="nn-card">
+              <h3>{t("harvestWithdrawalHeading")}</h3>
+              {harvestEvent.marcasDeCarencia.length > 0 ? (
+                <ul className="nn-detail-meta">
+                  {harvestEvent.marcasDeCarencia.map((m) => (
+                    <li key={m.id}>
+                      {m.diasQueFaltaban != null ? t("harvestWithdrawalKnown", { n: m.diasQueFaltaban }) : t("harvestWithdrawalUnknown")}
+                      {" — "}
+                      <Link href={`/plots/${m.intervention.locationId}/manejo/${m.intervention.id}`}>
+                        {cuandoDia(m.intervention.occurredAt)} · {textoDeObjetivoDeManejo[m.intervention.target]}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {difiereCarenciaDeHoy ? (
+                <p className="nn-muted">
+                  {t("harvestWithdrawalRecalculated", {
+                    detalle:
+                      calculoDeCarenciaHoy.length === 0
+                        ? t("harvestWithdrawalRecalculatedNone")
+                        : calculoDeCarenciaHoy
+                            .map((m) =>
+                              m.diasQueFaltaban != null
+                                ? t("harvestWithdrawalKnown", { n: m.diasQueFaltaban })
+                                : t("harvestWithdrawalUnknown"),
+                            )
+                            .join("; "),
+                  })}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           {labourEntries.filter((le) => le.harvestEventId === harvestEvent.id).length > 0 ? (
             <ul>
               {labourEntries

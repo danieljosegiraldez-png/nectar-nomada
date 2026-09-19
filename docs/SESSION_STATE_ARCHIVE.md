@@ -3902,6 +3902,15 @@ pruebas compartida creyéndola derivada; iba POR DELANTE de git —otra sesión 
 formularios—, §A de `docs/superpowers/specs/2026-09-17-faena-de-colmena-y-botiquin-design.md`. El
 botiquín, §B del mismo spec, ya se ejecutó: ver 2026-09-18.
 
+---
+
+## Sexto archivado, 2026-09-18
+
+Entra la entrada de «La limpieza se registra sobre la caja», movida para que quepa el manejo
+fitosanitario (ADR-171, renumerado al integrar `origin/main` — la rama nació como ADR-170, ya
+ocupado allí). Su contenido (ADR-159, decisión de Daniel, reglas en base, flip-test del
+día entero) vive en esos sitios y en `DECISIONS.md`; no dirige trabajo nuevo.
+
 ### 2026-09-17 · La limpieza se registra sobre la caja
 
 ADR-159. Decisión de Daniel: «1, sobre la caja». **Ningún evento del apiario colgaba de la caja**
@@ -4046,3 +4055,16 @@ combinó» en el fin) se cerraron. **Sin ver en navegador.**
 **La base compartida:** los dos CHECK NOT VALID de la genealogía tumbaban 3 pruebas de `main` en otras
 sesiones; con permiso de Daniel se quitaron de `nectar_test` y esta rama compuerta en `nectar_ci_faena`.
 Vuelven con la migración al fusionar.
+
+### 2026-09-18 · Artefactos de colmena y el nodo de sensores (PR #405)
+
+Plan `docs/superpowers/plans/2026-09-17-artefactos-de-colmena.md`, ocho tareas. **La colmena guarda
+qué lleva puesto y desde cuándo** (`HiveFitting`, intervalos); la inspección declara sólo el cambio,
+en un bloque plegado; la foto `queenExcluder`/`entranceReducer`/`screenedBottomBoard` la escribe sólo
+`artefactos.ts` (guardia de fuente: el flip-test de ejecución NO lo veía). **El nodo** (`HiveNode`)
+exige `hive_node:manage` —Farm Manager sí, operario no—; su crudo (`NodeObservation`) es inmutable por
+disparador, idempotente, con cuarentena y la colmena DEL MOMENTO; los kilos se derivan con la fórmula
+del firmware y una calibración inmutable. `POST /api/v1/ingest/notehub` **cerrada por defecto**.
+
+**De Daniel, cuando haya nodos:** `NOTEHUB_ROUTE_SECRET` en Vercel y en la ruta de Notehub, y
+registrar cada nodo con su UID de Notecard — registrar y calibrar **no tienen pantalla**.

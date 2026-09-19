@@ -62,6 +62,25 @@ calcula (`colorDelAño`); se anotan la cera que entra y los marcos que salen, y 
 enseña la leyenda con avisos a los 2 y 4 años. **Sin ver en navegador.** Siguen: «marcos negros»
 en la inspección (toca la cola sin conexión) y el año de las reinas.
 
+### 2026-09-18 · El manejo fitosanitario de la parcela
+
+ADR-174 (nació como 170; otras sesiones ocuparon 170-173 mientras se integraba: el número de un
+ADR se asigna al fusionar, no al escribirlo).
+Registro de intervenciones fitosanitarias: cuatro clases (comprados, preparados, liberaciones,
+manejo cultural); doce objetivos + otro (todo de Daniel, con procedencia en el spec). Dos columnas nuevas
+en `ConsumableMaterial` (`isPlantProtection`, `defaultReentryHours`); tres tablas nuevas. **El descuento
+del frasco es directo, sin fila de consumo, igual que el botiquín** — Daniel lo aprobó sabiendo que
+cambiaba lo que vio en el chat. Carencia y reentrada en aritmética pura; marca en la cosecha como foto
+(`HarvestWithdrawalFlag`, nulo = desconocida). Aviso cuando hoy difiere de lo que se sabía. Reentrada
+en tablero y al abrir jornada; corregir no descuenta de nuevo. PR A; el PR B ya puede empezar:
+`PlotBlock` y `TrapRule` están en `main` desde el PR #413.
+
+**Incidente durante T8:** un subagente corrió `npm run test:db -- reset` sobre la base compartida
+55433 (2026-09-18 ~23:39Z, restauró el backup del 2026-09-14). La instrucción «no la resetees» estaba en
+los dispatch de T3–T7 y faltó en el de T8. Esquema coherente al medir después (10 de 12 migraciones
+ajenas volvieron). Datos de prueba perdidos entre el 14 y el reset no se reparan. **Ruling:** todo
+dispatch llevar prohibición explícita de reset/restore/migrate dev.
+
 ### 2026-09-18 · Alzas con marca
 
 ADR-171. Daniel: las alzas «se marcarán». Se registran en la ficha del apiario, se ponen en una
@@ -126,18 +145,6 @@ de otras ya aplicadas; y las cifras del inventario de acceso se desfasaron dos v
 #396, #401): lee todo de la punta del rango, rutas con espacios y con tildes; en bash 3.2, `set -e`
 mata el script cuando falla una función aunque esté a la izquierda de un `||`.
 
-### 2026-09-18 · Artefactos de colmena y el nodo de sensores (PR #405)
-
-Plan `docs/superpowers/plans/2026-09-17-artefactos-de-colmena.md`, ocho tareas. **La colmena guarda
-qué lleva puesto y desde cuándo** (`HiveFitting`, intervalos); la inspección declara sólo el cambio,
-en un bloque plegado; la foto `queenExcluder`/`entranceReducer`/`screenedBottomBoard` la escribe sólo
-`artefactos.ts` (guardia de fuente: el flip-test de ejecución NO lo veía). **El nodo** (`HiveNode`)
-exige `hive_node:manage` —Farm Manager sí, operario no—; su crudo (`NodeObservation`) es inmutable por
-disparador, idempotente, con cuarentena y la colmena DEL MOMENTO; los kilos se derivan con la fórmula
-del firmware y una calibración inmutable. `POST /api/v1/ingest/notehub` **cerrada por defecto**.
-
-**De Daniel, cuando haya nodos:** `NOTEHUB_ROUTE_SECRET` en Vercel y en la ruta de Notehub, y
-registrar cada nodo con su UID de Notecard — registrar y calibrar **no tienen pantalla**.
 
 ## 3. Bloqueado, y en qué
 
@@ -224,6 +231,10 @@ puede afirmar cada pantalla— y sigue sin tomarse.
   `enforce_admins` en **false**, también a propósito: si CI se cae por cuota hay
   que poder fusionar un arreglo sin desactivar la protección primero. Cerrado el
   2026-09-05; el detalle, en `docs/SESSION_STATE_ARCHIVE.md`.
+
+- **PR B del manejo fitosanitario** — bloqueado en que `PlotBlock` y `TrapRule` existan en `main`. Áreas
+  por bloque, `TrapRule.suggestedMaterialId`, botón «Registrar aplicación» desde el aviso de trampa,
+  aviso atendido. Pieza 2 (#369, diseño+plan fusionado).
 
 - **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
   y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así
