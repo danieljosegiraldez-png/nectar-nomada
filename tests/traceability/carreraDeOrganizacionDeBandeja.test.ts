@@ -30,6 +30,7 @@ const orgIds: string[] = [];
 const locationIds: string[] = [];
 const lotIds: string[] = [];
 const tipoIds: string[] = [];
+const equipmentIds: string[] = [];
 
 let org: string;
 let orgB: string;
@@ -72,6 +73,7 @@ afterAll(async () => {
     await tx.$executeRaw`SET LOCAL nn.limpieza_de_pruebas = 'on'`;
     await tx.dryingTrayWeighing.deleteMany({ where: { trayTypeId: { in: tipoIds } } });
   });
+  await prisma.equipment.deleteMany({ where: { id: { in: equipmentIds } } });
   await prisma.dryingTrayType.deleteMany({ where: { id: { in: tipoIds } } });
   await prisma.lot.deleteMany({ where: { id: { in: lotIds } } });
   await prisma.assignment.deleteMany({ where: { userAccountId: { in: accountIds } } });
@@ -130,4 +132,109 @@ it("un INSERT de pesaje espera a un UPDATE concurrente de la organización del t
     await clientA.end();
     await clientB.end();
   }
+}, 15_000);
+
+it("F6a: lo mismo moviendo la organización del LOTE en vez del tipo (mismo bloqueo, el otro padre)", async () => {
+  const tipo = await crearTipoDeBandeja(gerente, { organizationId: org, nombre: nombre("Carrera-lote"), ancho: 1, largo: 1, unidad: "ft" });
+  tipoIds.push(tipo.id);
+  const lot = await createLot(operario, { lotCode: nombre("lote-carrera-mov"), lotType: "drying", organizationId: org, locationId: sitio });
+  lotIds.push(lot.id);
+
+  // Control positivo: el mismo tipo, un lote de la MISMA organización, sin
+  // ninguna carrera de por medio — si esto rechazara también, la prueba de
+  // abajo no probaría nada sobre la carrera en sí.
+  const lotControl = await createLot(operario, { lotCode: nombre("lote-carrera-control"), lotType: "drying", organizationId: org, locationId: sitio });
+  lotIds.push(lotControl.id);
+  await prisma.$executeRaw`INSERT INTO "traceability"."drying_tray_weighing"
+      ("tray_type_id","lot_id","material_state","net_kg","depth_points_cm","occurred_at","provenance_class")
+    VALUES (${tipo.id}::uuid, ${lotControl.id}::uuid, 'CHERRY', 8, ARRAY[3,3,3]::numeric[], now(), 'measured_fact')`;
+
+  const clientA = new Client({ connectionString: process.env.DATABASE_URL });
+  const clientB = new Client({ connectionString: process.env.DATABASE_URL });
+  await clientA.connect();
+  await clientB.connect();
+  try {
+    await clientA.query("BEGIN");
+    // Ahora es el LOTE el que se muda de organización, sin confirmar todavía.
+    await clientA.query('UPDATE "traceability"."lot" SET "organization_id" = $1 WHERE "id" = $2', [orgB, lot.id]);
+    const cierre = clientA.query("SELECT pg_sleep(1.5)").then(() => clientA.query("COMMIT"));
+
+    await new Promise((r) => setTimeout(r, 150));
+
+    const inicio = Date.now();
+    let error: unknown = null;
+    try {
+      await clientB.query(
+        `INSERT INTO "traceability"."drying_tray_weighing"
+           ("tray_type_id","lot_id","material_state","net_kg","depth_points_cm","occurred_at","provenance_class")
+         VALUES ($1::uuid,$2::uuid,'CHERRY',8,ARRAY[3,3,3]::numeric[],now(),'measured_fact')`,
+        [tipo.id, lot.id],
+      );
+    } catch (e) {
+      error = e;
+    }
+    const esperoMs = Date.now() - inicio;
+    await cierre;
+
+    expect(esperoMs).toBeGreaterThanOrEqual(1000);
+    expect(error).toBeTruthy();
+    expect(String((error as Error).message)).toMatch(/mezcla organizaciones/);
+  } finally {
+    await clientA.query("ROLLBACK").catch(() => {});
+    await clientA.end();
+    await clientB.end();
+  }
+}, 15_000);
+
+it("F6a: la misma carrera sobre el disparador del EQUIPO (`exigir_tipo_de_bandeja_propio`)", async () => {
+  // El tipo de la carrera va SOLO — sin equipo todavía —: `drying_tray_type_quieto`
+  // rechaza mudar de organización a un tipo que YA tiene bandejas, así que un
+  // control puesto ANTES sobre el mismo tipo le impediría a A mudarlo.
+  const tipo = await crearTipoDeBandeja(gerente, { organizationId: org, nombre: nombre("Carrera-equipo"), ancho: 1, largo: 1, unidad: "ft" });
+  tipoIds.push(tipo.id);
+
+  const clientA = new Client({ connectionString: process.env.DATABASE_URL });
+  const clientB = new Client({ connectionString: process.env.DATABASE_URL });
+  await clientA.connect();
+  await clientB.connect();
+  try {
+    await clientA.query("BEGIN");
+    await clientA.query('UPDATE "core"."drying_tray_type" SET "organization_id" = $1 WHERE "id" = $2', [orgB, tipo.id]);
+    const cierre = clientA.query("SELECT pg_sleep(1.5)").then(() => clientA.query("COMMIT"));
+
+    await new Promise((r) => setTimeout(r, 150));
+
+    const inicio = Date.now();
+    let error: unknown = null;
+    try {
+      await clientB.query(
+        `INSERT INTO "core"."equipment"
+           ("organization_id","name","kind","tray_type_id","tray_number","classification","provenance_class")
+         VALUES ($1::uuid,$2,'vessel',$3::uuid,9002,'internal','original_record')`,
+        [org, nombre("bandeja-carrera"), tipo.id],
+      );
+    } catch (e) {
+      error = e;
+    }
+    const esperoMs = Date.now() - inicio;
+    await cierre;
+
+    expect(esperoMs).toBeGreaterThanOrEqual(1000);
+    expect(error).toBeTruthy();
+    expect(String((error as Error).message)).toMatch(/tipo de bandeja es de otra organizacion/);
+  } finally {
+    await clientA.query("ROLLBACK").catch(() => {});
+    await clientA.end();
+    await clientB.end();
+  }
+
+  // Control positivo, DESPUÉS de la carrera: el tipo ya está en `orgB` (A confirmó);
+  // una bandeja de esa MISMA organización, sin ninguna carrera, entra sin problema —
+  // si esto fallara, el montaje estaría mal, no el disparador.
+  const control = await prisma.equipment.create({ data: {
+    organizationId: orgB, name: nombre("bandeja-control"), kind: "vessel", trayTypeId: tipo.id, trayNumber: 9003,
+    classification: "internal", provenanceClass: "original_record",
+  } });
+  equipmentIds.push(control.id);
+  expect(control.id).toBeTruthy();
 }, 15_000);
