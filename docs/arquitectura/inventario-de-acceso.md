@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-19
 
-**491 operaciones** que tocan la base, en **140 archivos**:
+**492 operaciones** que tocan la base, en **140 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,25 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **367** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **368** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **39** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **66** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+
+> **Manejo fitosanitario, ronda final de arreglos (2026-09-19, hallazgo 5).** Una
+> operación nueva en `lib/traceability/intervenciones.ts`, ya inventariado:
+> `contextoDeManejo` sube **guardia directo**, 367→368. El arreglo de
+> `bloquesDeLaParcela` (entrada de abajo) dejó incompleto el permiso de las
+> pantallas de manejo: `/plots/[id]/manejo/nuevo` y `/manejo/[interventionId]`
+> seguían pidiendo `getPlotDetail` (`location:manage_attributes`) ANTES de
+> llegar a `bloquesDeLaParcela`, así que un operario con `lot:view`/`lot:manage`
+> y sin ese permiso distinto recibía `notFound()` igual. `contextoDeManejo` lee
+> sólo nombre y zona de la parcela, autorizada con el MISMO `requireLotAccess("view")`
+> que ya exige leer o corregir sus intervenciones — `getPlotDetail` y el
+> tablero (`/plots/[id]`) siguen exigiendo `location:manage_attributes`, sin
+> cambios.
 
 > **Manejo fitosanitario, ronda de arreglos 1 (2026-09-19).** Dos operaciones nuevas en
 > `lib/traceability/intervenciones.ts`, ya inventariado. `bloquesDeLaParcela` sube **guardia

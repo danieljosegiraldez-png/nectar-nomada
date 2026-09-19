@@ -913,6 +913,7 @@
     "manejoAreaLegend": "Área",
     "manejoAreaLabel": "Área",
     "manejoAreaWholePlot": "Toda la parcela",
+    "manejoAreaWholePlotHint": "Si no marcas ninguna planta ni bloque, aplica a toda la parcela.",
     "manejoAreaMarkPlants": "Marcar plantas",
     "manejoAreaNoPlants": "Esta parcela no tiene plantas registradas.",
     "manejoAreaMarkBlocks": "Marcar bloques",

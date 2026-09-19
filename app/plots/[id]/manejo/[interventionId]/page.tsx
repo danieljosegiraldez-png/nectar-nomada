@@ -2,9 +2,13 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
-import { getPlotDetail } from "../../../../../lib/traceability/plantingCohorts";
-import { LocationAccessError } from "../../../../../lib/traceability/locations";
-import { listarIntervenciones, productosFitosanitarios, bloquesDeLaParcela } from "../../../../../lib/traceability/intervenciones";
+import { TraceabilityAccessError } from "../../../../../lib/traceability/lots";
+import {
+  listarIntervenciones,
+  productosFitosanitarios,
+  bloquesDeLaParcela,
+  contextoDeManejo,
+} from "../../../../../lib/traceability/intervenciones";
 import { carenciaDeIntervencion, reentradaDeIntervencion } from "../../../../../lib/traceability/carenciaDeIntervencion";
 import { lecturaDeTrampaQueMotivo, listPlantSpecimens, type LecturaDeTrampa } from "../../../../../lib/traceability/specimens";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
@@ -38,14 +42,17 @@ export default async function ManejoDetailPage({
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
 
-  let detail;
+  let location;
   try {
-    detail = await getPlotDetail(user.userAccountId, id);
+    // Ronda final de arreglos, hallazgo 5: lectura propia y acotada,
+    // autorizada con `lot:view` — no `getPlotDetail`, que exige
+    // `location:manage_attributes` y dejaba fuera a un operario con sólo
+    // `lot:view`/`lot:manage`. Ver el docstring de `contextoDeManejo`.
+    location = await contextoDeManejo(user.userAccountId, id);
   } catch (error) {
-    if (error instanceof LocationAccessError) notFound();
+    if (error instanceof TraceabilityAccessError) notFound();
     throw error;
   }
-  const { location } = detail;
 
   const lista = await listarIntervenciones(user.userAccountId, id);
   const intervencion = lista.find((i) => i.id === interventionId);

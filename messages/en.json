@@ -913,6 +913,7 @@
     "manejoAreaLegend": "Area",
     "manejoAreaLabel": "Area",
     "manejoAreaWholePlot": "The whole plot",
+    "manejoAreaWholePlotHint": "If you mark no plant and no block, it applies to the whole plot.",
     "manejoAreaMarkPlants": "Mark plants",
     "manejoAreaNoPlants": "This plot has no plants registered.",
     "manejoAreaMarkBlocks": "Mark blocks",

@@ -2,9 +2,13 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
-import { getPlotDetail } from "../../../../../lib/traceability/plantingCohorts";
-import { LocationAccessError } from "../../../../../lib/traceability/locations";
-import { productosFitosanitarios, bloquesDeLaParcela, motivoValidoParaParcela } from "../../../../../lib/traceability/intervenciones";
+import { TraceabilityAccessError } from "../../../../../lib/traceability/lots";
+import {
+  productosFitosanitarios,
+  bloquesDeLaParcela,
+  motivoValidoParaParcela,
+  contextoDeManejo,
+} from "../../../../../lib/traceability/intervenciones";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
 import { listPlantSpecimens } from "../../../../../lib/traceability/specimens";
 import { idValidoEnLista } from "../../../../../lib/traceability/precargaDeIntervencion";
@@ -41,14 +45,17 @@ export default async function NuevoManejoPage({
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
 
-  let detail;
+  let location;
   try {
-    detail = await getPlotDetail(user.userAccountId, id);
+    // Ronda final de arreglos, hallazgo 5: lectura propia y acotada,
+    // autorizada con `lot:view` — no `getPlotDetail`, que exige
+    // `location:manage_attributes` y dejaba fuera a un operario con sólo
+    // `lot:view`/`lot:manage`. Ver el docstring de `contextoDeManejo`.
+    location = await contextoDeManejo(user.userAccountId, id);
   } catch (error) {
-    if (error instanceof LocationAccessError) notFound();
+    if (error instanceof TraceabilityAccessError) notFound();
     throw error;
   }
-  const { location } = detail;
 
   const [productos, { people, selfPersonId }, plantas, bloques, motivoValido] = await Promise.all([
     productosFitosanitarios(user.userAccountId, id),

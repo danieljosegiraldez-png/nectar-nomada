@@ -19,6 +19,7 @@ import {
   listarIntervenciones,
   bloquesDeLaParcela,
   motivoValidoParaParcela,
+  contextoDeManejo,
   IntervencionValidationError,
   type RegistrarIntervencionInput,
 } from "../../lib/traceability/intervenciones";
@@ -74,6 +75,13 @@ let trampaAjena: string;
 let lecturaPropia: string;
 let lecturaAjena: string;
 let observacionNoTrampa: string;
+// Ronda final de arreglos, hallazgo 6: una trampa en `finca` (la MADRE de
+// `parcelaHija`) y otra en `parcelaHija` misma, para exigir la MISMA parcela
+// en `motivoObservationId` — no basta con estar emparentada.
+let trampaEnFinca: string;
+let lecturaEnFinca: string;
+let trampaEnParcelaHija: string;
+let lecturaEnParcelaHija: string;
 // Tarea 2: un bloque de `parcela` y uno de `otraParcela`, para «el bloque
 // tiene que tener locationId IGUAL a la parcela de la intervención».
 let bloque: string;
@@ -329,6 +337,42 @@ beforeAll(async () => {
     })
   ).id;
 
+  // Ronda final de arreglos, hallazgo 6: `finca` es la MADRE de `parcelaHija`
+  // (`ubicacionesEmparentadas(parcelaHija)` la incluye), así que antes del
+  // arreglo una lectura de `finca` se aceptaba como motivo de una
+  // intervención sobre `parcelaHija`. `gestor` tiene `Farm Manager` en
+  // `finca`; `operador` tiene `Farm Operator` en `parcelaHija`.
+  trampaEnFinca = (
+    await prisma.specimen.create({
+      data: { locationId: finca, specimenType: "trap", commonName: `Trampa en finca ${RUN_ID}`, provenanceClass: "original_record" },
+    })
+  ).id;
+  lecturaEnFinca = (
+    await recordSpecimenObservation(gestor, {
+      specimenId: trampaEnFinca,
+      observationType: "trap_check",
+      observedAt: new Date("2026-09-09T12:00:00Z"),
+      captureCount: 4,
+      brocaLevel: "algunos",
+      provenanceClass: "direct_observation",
+    })
+  ).id;
+  trampaEnParcelaHija = (
+    await prisma.specimen.create({
+      data: { locationId: parcelaHija, specimenType: "trap", commonName: `Trampa en hija ${RUN_ID}`, provenanceClass: "original_record" },
+    })
+  ).id;
+  lecturaEnParcelaHija = (
+    await recordSpecimenObservation(operador, {
+      specimenId: trampaEnParcelaHija,
+      observationType: "trap_check",
+      observedAt: new Date("2026-09-09T12:00:00Z"),
+      captureCount: 2,
+      brocaLevel: "algunos",
+      provenanceClass: "direct_observation",
+    })
+  ).id;
+
   // Tarea 2: un bloque de `parcela` y uno de `otraParcela`.
   bloque = (await createPlotBlock(gestor, { locationId: parcela, name: `Bloque ${RUN_ID}` })).id;
   bloqueAjeno = (await createPlotBlock(gestor, { locationId: otraParcela, name: `Bloque ajeno ${RUN_ID}` })).id;
@@ -357,7 +401,9 @@ afterAll(async () => {
   await prisma.fieldEvent.deleteMany({
     where: assertDefinedWhere({ fieldSessionId: { in: [jornada, jornadaOtraParcela, jornadaCerrada, jornadaEnFinca] } }),
   });
-  await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimenId: { in: [trampaPropia, trampaAjena] } }) });
+  await prisma.specimenObservation.deleteMany({
+    where: assertDefinedWhere({ specimenId: { in: [trampaPropia, trampaAjena, trampaEnFinca, trampaEnParcelaHija] } }),
+  });
 
   const ubicaciones = [parcela, otraParcela, parcelaOtraOrg, finca, parcelaHija];
   const originales = await prisma.plotIntervention.findMany({ where: { locationId: { in: ubicaciones } }, select: { id: true } });
@@ -377,7 +423,9 @@ afterAll(async () => {
   await prisma.consumableLot.deleteMany({ where: assertDefinedWhere({ id: { in: idsLotes } }) });
   await prisma.consumableMaterial.deleteMany({ where: assertDefinedWhere({ id: { in: [fito, aserrin, fito2, fitoOtraOrg] } }) });
 
-  await prisma.specimen.deleteMany({ where: assertDefinedWhere({ id: { in: [plantaPropia, plantaAjena, trampaPropia, trampaAjena] } }) });
+  await prisma.specimen.deleteMany({
+    where: assertDefinedWhere({ id: { in: [plantaPropia, plantaAjena, trampaPropia, trampaAjena, trampaEnFinca, trampaEnParcelaHija] } }),
+  });
 
   await prisma.fieldSession.deleteMany({
     where: assertDefinedWhere({ id: { in: [jornada, jornadaOtraParcela, jornadaCerrada, jornadaEnFinca] } }),
@@ -909,6 +957,39 @@ describe("intervenciones sobre bloques — Tarea 2", () => {
 });
 
 /**
+ * Ronda final de arreglos, hallazgo 2: el modelo permite áreas MIXTAS (una
+ * planta Y un bloque en la misma intervención — `crearAreas` nunca lo
+ * prohibió), pero el formulario obligaba a elegir un modo excluyente, así que
+ * corregir una intervención mixta mostrando sólo "plantas" enviaba
+ * `plotBlockIds: []` y el bloque desaparecía en silencio. El arreglo es del
+ * formulario (`IntervencionForm.tsx`: las dos secciones se envían siempre
+ * juntas); esta prueba demuestra que el SERVICIO, que es lo que el formulario
+ * arreglado ahora envía, conserva las dos áreas sin necesidad de otro cambio.
+ */
+describe("áreas mixtas (planta Y bloque) — ronda final, hallazgo 2", () => {
+  it("registrar con planta y bloque a la vez guarda las dos áreas", async () => {
+    const o = await registrarIntervencion(operador, base({ specimenIds: [plantaPropia], plotBlockIds: [bloque] }));
+    const areas = await prisma.plotInterventionArea.findMany({ where: { interventionId: o.id } });
+    expect(areas).toHaveLength(2);
+    expect(areas).toContainEqual(expect.objectContaining({ plotBlockId: null, specimenId: plantaPropia }));
+    expect(areas).toContainEqual(expect.objectContaining({ plotBlockId: bloque, specimenId: null }));
+  });
+
+  it("corregir reenviando la planta y el bloque precargados conserva las dos áreas en la fila nueva", async () => {
+    const o = await registrarIntervencion(operador, base({ specimenIds: [plantaPropia], plotBlockIds: [bloque] }));
+    const c = await corregirIntervencion(operador, {
+      interventionId: o.id,
+      motivo: "sólo se corrigen las notas; planta y bloque van tal cual estaban",
+      nueva: base({ specimenIds: [plantaPropia], plotBlockIds: [bloque], notes: "corregida" }),
+    });
+    const areasCorreccion = await prisma.plotInterventionArea.findMany({ where: { interventionId: c.id } });
+    expect(areasCorreccion).toHaveLength(2);
+    expect(areasCorreccion).toContainEqual(expect.objectContaining({ plotBlockId: null, specimenId: plantaPropia }));
+    expect(areasCorreccion).toContainEqual(expect.objectContaining({ plotBlockId: bloque, specimenId: null }));
+  });
+});
+
+/**
  * Ronda de arreglos 1, hallazgo CRÍTICO: corregir una intervención de bloque
  * sin `location:manage_attributes` la borraba en silencio, porque los
  * bloques de manejo se pedían con `listPlotBlocks` (ese permiso) en vez del
@@ -952,6 +1033,39 @@ describe("bloquesDeLaParcela — ronda de arreglos 1 (hallazgo crítico)", () =>
 });
 
 /**
+ * Ronda final de arreglos, hallazgo 5: las pantallas de manejo
+ * (`/plots/[id]/manejo/nuevo` y `/manejo/[interventionId]`) pedían
+ * `getPlotDetail`, que exige `location:manage_attributes` — el mismo defecto
+ * que `bloquesDeLaParcela` arregló para los bloques, pero incompleto: un
+ * operario con `lot:view`/`lot:manage` y sin ese permiso llegaba a
+ * `notFound()` ANTES de que `bloquesDeLaParcela` importara. `contextoDeManejo`
+ * es la lectura propia que reemplaza a `getPlotDetail` en esas dos pantallas.
+ */
+describe("contextoDeManejo — ronda final de arreglos, hallazgo 5", () => {
+  it("con lot:manage pero SIN location:manage_attributes: trae nombre y zona (control positivo del arreglo)", async () => {
+    const contexto = await contextoDeManejo(operadorSinAtributos, parcela);
+    expect(contexto.id).toBe(parcela);
+    expect(contexto.name).toEqual(expect.any(String));
+  });
+
+  it("con lot:view (Project Viewer) también entra: view basta, no hace falta manage", async () => {
+    const contexto = await contextoDeManejo(soloVista, parcela);
+    expect(contexto.id).toBe(parcela);
+  });
+
+  it("sin lot:view: TraceabilityAccessError — no LocationAccessError, que es lo que lanzaba getPlotDetail", async () => {
+    await expect(contextoDeManejo(sinPermiso, parcela)).rejects.toBeInstanceOf(TraceabilityAccessError);
+  });
+
+  it("control: getPlotDetail SÍ exige location:manage_attributes, y por eso operadorSinAtributos no puede usarlo", async () => {
+    // Demuestra que el arreglo no fue «aflojar getPlotDetail»: el tablero de
+    // la parcela (`/plots/[id]`) sigue exigiendo ese permiso, sin cambios.
+    const { getPlotDetail } = await import("../../lib/traceability/plantingCohorts");
+    await expect(getPlotDetail(operadorSinAtributos, parcela)).rejects.toBeInstanceOf(LocationAccessError);
+  });
+});
+
+/**
  * Ronda de arreglos 1, importante #2: `?motivo=` de `/manejo/nuevo` no se
  * ignoraba en silencio cuando era inválido — el servicio lo rechazaba con un
  * error al guardar. `motivoValidoParaParcela` repite las mismas tres
@@ -979,5 +1093,34 @@ describe("motivoValidoParaParcela — ronda de arreglos 1 (importante #2)", () =
   it("sin parámetro (null o undefined): null, sin tocar la base", async () => {
     await expect(motivoValidoParaParcela(null, parcela)).resolves.toBeNull();
     await expect(motivoValidoParaParcela(undefined, parcela)).resolves.toBeNull();
+  });
+});
+
+/**
+ * Ronda final de arreglos, hallazgo 6: `?motivo=` aceptaba una lectura de la
+ * parcela MADRE como precarga en una microparcela, vía `ubicacionesEmparentadas`
+ * — tener acceso a la hija no da acceso a la madre. `esMotivoDeTrampaValido`
+ * exige ahora la MISMA parcela, y `motivoValidoParaParcela` y
+ * `validarReferencias` (a través de `registrarIntervencion`/
+ * `corregirIntervencion`) comparten ese único predicado.
+ */
+describe("motivoObservationId exige la MISMA parcela, no una emparentada — ronda final, hallazgo 6", () => {
+  it("precarga: una lectura de la parcela MADRE (`finca`) para la hija (`parcelaHija`) se ignora", async () => {
+    await expect(motivoValidoParaParcela(lecturaEnFinca, parcelaHija)).resolves.toBeNull();
+  });
+
+  it("precarga: una lectura de la propia `parcelaHija` se devuelve tal cual (control positivo)", async () => {
+    await expect(motivoValidoParaParcela(lecturaEnParcelaHija, parcelaHija)).resolves.toBe(lecturaEnParcelaHija);
+  });
+
+  it("guardar: una lectura de la parcela MADRE se rechaza aunque esté emparentada", async () => {
+    await expect(
+      registrarIntervencion(operador, base({ locationId: parcelaHija, motivoObservationId: lecturaEnFinca })),
+    ).rejects.toThrow(IntervencionValidationError);
+  });
+
+  it("guardar: una lectura de la MISMA parcela entra (control positivo)", async () => {
+    const r = await registrarIntervencion(operador, base({ locationId: parcelaHija, motivoObservationId: lecturaEnParcelaHija }));
+    expect(r.motivoObservationId).toBe(lecturaEnParcelaHija);
   });
 });
