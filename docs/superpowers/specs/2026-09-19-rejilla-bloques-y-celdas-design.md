@@ -94,14 +94,37 @@ Con eso, una siembra de 600 plantones que usó tres cargas queda registrada tal 
 
 **Fuera de esta fase, a propósito:** mapas y GPS por planta, dibujar la rejilla en un plano, resiembras que renumeran, y rendimiento por celda.
 
-## 6. Permisos
+## 6. Permisos, y qué puede hacer cada quien
 
-Todo cuelga de la parcela y usa sus compuertas actuales: configurar la rejilla y los rangos exige el permiso de configurar la parcela; ver celdas y bloques exige poder ver esa parcela; las trampas siguen con el permiso de trampas. **Nada nuevo se decide en el cliente.**
+Todo cuelga de la parcela. **Nada nuevo se decide en el cliente**: cada regla se comprueba en el servidor.
+
+**Decisión de Daniel (2026-09-19), tras ver la pantalla de gestión de una microparcela:** hoy un solo permiso, «configurar la parcela», abre la rejilla, crear microparcelas, los bloques, el alta de trampas, la regla de la finca **y** registrar siembras. Quien puede una cosa puede todas, y eso no es lo que la finca necesita. Se parte en dos niveles:
+
+| nivel | qué incluye | quién |
+|---|---|---|
+| **Configurar** | la rejilla, crear microparcelas, los bloques y sus rangos, el alta de trampas y la regla de la finca | capataz y dueño |
+| **Registrar** | siembras, revisiones de trampa, manejos, muestras y fotos | también el operario |
+
+Lo de configurar es la estructura de la finca y cambia poco; lo de registrar es el día a día. Ver celdas y bloques sigue exigiendo poder ver esa parcela, y las trampas conservan su permiso de trampas.
+
+**La separación llega con la entrega 2**, porque exige tocar el catálogo de permisos y los perfiles; la entrega 1 usa las compuertas de hoy y no amplía el acceso de nadie.
+
+## 6.bis Cuántos niveles de microparcela
+
+**Decisión de Daniel (2026-09-19): uno solo.** Parcela → microparcela, y ahí se acaba. Dentro de una microparcela lo que se crea son **bloques**, que es para lo que existen: selecciones de celdas con su propósito.
+
+Hoy `createMicrolot` permite anidar sin límite, porque sólo comprueba que el padre sea una `plot` y una microparcela también lo es. La entrega 1 lo cierra: crear una microparcela bajo otra microparcela se rechaza, con su prueba. Así cada celda tiene un único camino hacia arriba —celda → bloque → microparcela → parcela → finca— y las coordenadas no se vuelven ambiguas.
+
+## 6.ter La vista de finca
+
+**Decisión de Daniel (2026-09-19): la finca muestra lo operativo, sumado desde las celdas hacia arriba.** Por parcela y microparcela: cuántas plantas, cuántas trampas y su estado, qué toca revisar, qué manejos se aplicaron y cuándo, y qué bloques experimentales están en marcha. Cada fila enlaza hacia abajo, al detalle.
+
+Lo productivo —cosecha y rendimiento por microparcela— **queda fuera de este diseño**: depende de la cosecha por microparcela que construye otra sesión, y se añadirá cuando exista. Mientras tanto, esas columnas no se muestran vacías ni a cero: no se muestran (ADR-080).
 
 ## 7. Las tres entregas
 
-1. **La rejilla y la microparcela como rango.**
-2. **Bloques por rango, con trampas y su cobertura** en el tablero y en la ronda.
+1. **La rejilla y la microparcela como rango**, y el cierre del anidamiento a un solo nivel (§6.bis).
+2. **Bloques por rango, con trampas y su cobertura** en el tablero y en la ronda; **la separación de permisos en dos niveles** (§6); y **la vista de finca con lo operativo sumado** (§6.ter).
 3. **Celdas materializadas, alcance de las aplicaciones y el biochar con noria, carga y receta.**
 
 Cada una funciona sola y termina con un recorrido en el navegador con Daniel.
