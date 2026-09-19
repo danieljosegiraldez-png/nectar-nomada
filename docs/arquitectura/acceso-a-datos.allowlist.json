@@ -18,6 +18,10 @@
   ],
   "importan_cliente_total": [
     {
+      "archivo": "lib/traceability/recepcionesDeCereza.ts",
+      "razon": "Módulo de dominio: la recepción de cereza en el beneficio (spec recepción §3.4). Recibir, rechazar, anular y la foto exigen `requireLotAccess(manage)` sobre ESE beneficio (por `exigeGestionarBeneficio`) ANTES de escribir; listar, `requireLotAccess(view)`. Recibir bloquea con `SELECT … FOR UPDATE` la fila de la entrega y la del pedido dentro de la transacción, y comprueba ahí destino, vigencia y la regla de dos personas; cada escritura lleva su AuditEvent en la misma transacción. Los disparadores de la migración 20260919150000 son la red en la base."
+    },
+    {
       "archivo": "lib/traceability/proveedoresDeCereza.ts",
       "razon": "Módulo de dominio: los productores de fuera que traen cereza (spec recepción de cereza §3.2). Dar de alta exige `cherry_supplier:create` en algún ámbito ANTES de escribir, con el AuditEvent en la transacción; listar exige `lot:view` o `lot:manage` en algún ámbito. Un proveedor no tiene ubicación, por eso el permiso se mira con `permissionKeysAnywhere`."
     },
@@ -684,6 +688,9 @@
       "archivo": "lib/apiary/cierreDeCosecha.ts",
       "operacion": "bloquearCosechaEn",
       "razon": "Revisión de Codex de la pesada por recipiente (ADR-177): toma la fila de la cosecha con FOR UPDATE al principio de la transacción que cambia su peso, para que el cierre a mano y anotar/quitar un recipiente sobre la MISMA cosecha no se crucen. No lee ni devuelve datos. Sus cuatro llamadores autorizan ANTES: `completarCierreDeCosecha` (mismo archivo), `anotarRecipiente`/`quitarRecipiente` (recipientes.ts, vía `cosechaGestionable`) y `asentarPesoDeCosecha` (cosechasSinSaldo.ts), los cuatro con `requireApiaryAccess` manage sobre la caja de la cosecha.",
+      "archivo": "lib/traceability/recepcionesDeCereza.ts",
+      "operacion": "recepcionDeEntregas",
+      "razon": "Devuelve la recepción vigente (estado, neto, diferencia, motivo de rechazo) de unas entregas ya elegidas, para que la finca vea lo que recibió el beneficio. No recibe principal: la llaman `detalleDeJornada` (exige `requireLotAccess(view)` sobre la finca) y `misEntregas` (sólo las entregas de la Person de la propia cuenta), que ya autorizaron esas entregas; los dos llamadores se conectan en la Tarea 6 del plan.",
       "verificado": "2026-09-19"
     },
     {
