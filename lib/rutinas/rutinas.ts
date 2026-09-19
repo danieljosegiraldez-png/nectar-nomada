@@ -160,13 +160,27 @@ export async function rutinasDeEquipo(userAccountId: string, equipmentId: string
       },
     },
   });
+  // El estado sale del último registro VÁLIDO de toda la historia, no de la
+  // ventana de 20 que se pinta: si los 20 más recientes están anulados, uno
+  // válido más viejo sigue siendo la referencia.
+  const ultimosValidos = await prisma.careRoutineEvent.groupBy({
+    by: ["routineId"],
+    where: { routineId: { in: rutinas.map((r) => r.id) }, voidedAt: null },
+    _max: { performedOn: true },
+  });
+  const ultimoValido = new Map(ultimosValidos.map((u) => [u.routineId, u._max.performedOn]));
   return rutinas.map((r) => ({
     id: r.id,
     kind: r.kind,
     kindNote: r.kindNote,
     intervalDays: r.intervalDays,
     instructions: r.instructions,
-    estado: estadoDeRutina({ intervalDays: r.intervalDays, registros: r.events, alta: equipo.acquiredAt, hoy }) as EstadoDeRutina,
+    estado: estadoDeRutina({
+      intervalDays: r.intervalDays,
+      registros: ultimoValido.get(r.id) ? [{ performedOn: ultimoValido.get(r.id)!, voidedAt: null }] : [],
+      alta: equipo.acquiredAt,
+      hoy,
+    }) as EstadoDeRutina,
     registros: r.events.map((e) => ({ id: e.id, performedOn: e.performedOn, note: e.note, voidedAt: e.voidedAt, voidReason: e.voidReason, performedBy: e.performedBy })),
   }));
 }

@@ -126,6 +126,29 @@ describe("el estado que ve la ficha y la lista", () => {
     // Referencia = adquisición (2026-01-01) + 30 = 2026-01-31: vencida.
     expect(despues!.estado).toEqual({ estado: "vencida", ultimo: null, proximo: "2026-01-31", pasaron: 230 });
   });
+  it("el estado sale del último registro VÁLIDO aunque los 20 más recientes estén anulados", async () => {
+    const e = await equipo();
+    const r = await crearRutina(f.jefeA, { equipmentId: e.id, kind: "mantenimiento", intervalDays: 30 });
+    await registrarRealizada(f.operarioA, { routineId: r.id, performedOn: dia("2026-08-01"), provenanceClass: "original_record" });
+    // 21 registros más nuevos, todos anulados: llenan de sobra la ventana del historial.
+    for (let i = 2; i <= 22; i++) {
+      await prisma.careRoutineEvent.create({
+        data: {
+          routineId: r.id,
+          performedOn: dia(`2026-08-${String(i).padStart(2, "0")}`),
+          provenanceClass: "original_record",
+          voidedAt: new Date(),
+          voidReason: "apuntado por error",
+        },
+      });
+    }
+    const [rutina] = await rutinasDeEquipo(f.operarioA, e.id, "2026-09-18");
+    // 2026-08-01 + 30 = 2026-08-31: vencida por 18 días. Sin el registro válido
+    // la referencia caería a la adquisición (2026-01-01) y diría 230.
+    expect(rutina!.estado).toEqual({ estado: "vencida", ultimo: "2026-08-01", proximo: "2026-08-31", pasaron: 18 });
+    // El historial que se pinta sigue acotado a 20 filas.
+    expect(rutina!.registros).toHaveLength(20);
+  });
   it("vencidasPorEquipo cuenta las vencidas y omite lo que no se ve", async () => {
     const e = await equipo();
     await crearRutina(f.jefeA, { equipmentId: e.id, kind: "limpieza", intervalDays: 7 });
