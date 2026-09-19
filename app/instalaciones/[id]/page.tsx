@@ -48,12 +48,16 @@ export default async function InstalacionPage({ params, searchParams }: {
     ? instalacion.estantes.flatMap((e) => e.posiciones.map((p) => ({ ...p, estanteId: e.id }))).find((p) => p.id === posicion)
     : undefined;
   const puedeEditarPosicion = posicionSeleccionada ? await puedeEditarBeneficioEn(user.userAccountId, posicionSeleccionada.id) : false;
-  // Hallazgo 4 (revisión final, 2026-09-19): la instalación y todas sus camas
-  // comparten la misma organización (`crearUbicacionDeSecado` copia
-  // `organizationId` del padre), así que resolver esto UNA vez y pasarlo a
-  // cada `RutinasDeLugar` evita el N+1 de `insumosDeLugar`/`getObserverCandidates`
-  // que antes corría una vez por cama.
-  const [insumos, personas] = await Promise.all([
+  // Hallazgo 4 (revisión final, 2026-09-19): `getObserverCandidates` es la
+  // misma lista de Personas activas sea cual sea el lugar, así que se
+  // resuelve UNA vez para toda la página. `insumosDeLugar` NO se hoistea del
+  // mismo modo: gatea sobre `report_condition` del id que recibe, y una cama
+  // puede tener ese permiso sin que lo tenga la instalación (o al revés) —
+  // reutilizar el de la instalación en cada cama devolvía `[]` para quien sí
+  // podía apuntar en su cama, y `RutinasDeLugar` trata `[]` como «ya
+  // resuelto», no como «vacío de verdad» (arreglo de la re-revisión final,
+  // 2026-09-19). Cada `RutinasDeLugar` de cama sigue resolviendo el suyo.
+  const [insumosDeLaInstalacion, personas] = await Promise.all([
     insumosDeLugar(user.userAccountId, id),
     getObserverCandidates(user.userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName }))),
   ]);
@@ -70,7 +74,7 @@ export default async function InstalacionPage({ params, searchParams }: {
     {instalacion.camas.map((c, i) => <section key={JSON.stringify(c)}>
       <h3>{c.name}</h3>
       {permisosDeCamas[i] && <FormularioUbicacion tipo="drying_bed" existente={c} />}
-      <RutinasDeLugar userAccountId={user.userAccountId} locationId={c.id} insumos={insumos} personas={personas} />
+      <RutinasDeLugar userAccountId={user.userAccountId} locationId={c.id} personas={personas} />
     </section>)}
     {puedeEditar && <><h2>{t("crearCama")}</h2><FormularioUbicacion tipo="drying_bed" parentLocationId={id} /></>}
     <h2>{t("estantes")}</h2>
@@ -106,6 +110,6 @@ export default async function InstalacionPage({ params, searchParams }: {
     })}
     {puedeEditar && <><h2>{t("crearEstante")}</h2><FormularioEstante facilityId={id} /></>}
     <p><Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link></p>
-    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} insumos={insumos} personas={personas} />
+    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} insumos={insumosDeLaInstalacion} personas={personas} />
   </div>;
 }
