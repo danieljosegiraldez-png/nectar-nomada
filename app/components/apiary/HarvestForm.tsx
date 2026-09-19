@@ -12,7 +12,7 @@ import { BotonDeEnvio } from "../BotonDeEnvio";
  * server action redirects straight to /lots/[id] — the existing Lot
  * Detail page, reused verbatim (§2).
  */
-export function HarvestForm({ colonyId }: { colonyId: string }) {
+export function HarvestForm({ colonyId, alzas = [] }: { colonyId: string; alzas?: { id: string; code: string }[] }) {
   const t = useTranslations("Apiary");
 
   return (
@@ -32,6 +32,18 @@ export function HarvestForm({ colonyId }: { colonyId: string }) {
           <CampoNumerico id="harvest-frames" name="framesHarvested" inputMode="numeric" step="1" min="0" />
         </div>
       </div>
+      {/* Spec 2026-09-18 §4.3 — sólo las alzas con marca que esta caja lleva hoy. */}
+      {alzas.length > 0 ? (
+        <fieldset className="nn-field">
+          <legend>{t("alzasCosechadas")}</legend>
+          <p className="nn-muted">{t("alzasCosechadasAyuda")}</p>
+          {alzas.map((a) => (
+            <label key={a.id} style={{ display: "block" }}>
+              <input type="checkbox" name="hiveSuperIds" value={a.id} /> {a.code}
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
       <div className="nn-field">
         <label htmlFor="harvest-notes">{t("notesLabel")}</label>
         <textarea id="harvest-notes" name="notes" rows={2} />

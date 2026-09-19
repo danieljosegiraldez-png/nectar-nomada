@@ -35,6 +35,11 @@ export interface RecordApiaryHarvestInput {
   // ADR-038 pattern — no default, the caller must state a real class.
   provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
+  /**
+   * Spec 2026-09-18 §4.3 — las alzas CON MARCA que se extrajeron. Cada una tiene que estar puesta
+   * en la colmena de esta colonia en `occurredAt`; si no, se rechaza todo. Opcional.
+   */
+  hiveSuperIds?: readonly string[];
 }
 
 export async function recordApiaryHarvest(userAccountId: string, input: RecordApiaryHarvestInput) {
@@ -100,6 +105,24 @@ export async function recordApiaryHarvest(userAccountId: string, input: RecordAp
       },
     });
 
+    // Las alzas marcadas, comprobadas DENTRO de la transacción que crea la cosecha: si una no
+    // estaba en esta caja ese día, no se guarda nada — ni lote ni cosecha a medias.
+    const alzas = [...new Set(input.hiveSuperIds ?? [])];
+    for (const hiveSuperId of alzas) {
+      const puesta = await tx.hiveFitting.count({
+        where: {
+          hiveSuperId,
+          hiveId: hive.id,
+          installedAt: { lte: input.occurredAt },
+          OR: [{ removedAt: null }, { removedAt: { gt: input.occurredAt } }],
+        },
+      });
+      if (!puesta) throw new ApiaryAccessError("alza_no_puesta_en_la_colmena");
+    }
+    if (alzas.length) {
+      await tx.apiaryHarvestSuper.createMany({ data: alzas.map((hiveSuperId) => ({ apiaryHarvestEventId: harvestEvent.id, hiveSuperId })) });
+    }
+
     // Mirrors recordHarvestEvent exactly: skipped when weight isn't
     // recorded, matching CLAUDE.md §3's "missing must remain missing"
     // discipline rather than fabricating a zero-quantity event.
@@ -131,7 +154,7 @@ export async function recordApiaryHarvest(userAccountId: string, input: RecordAp
         operation: "apiary_harvest_event.create",
         entityType: "apiary_harvest_event",
         entityId: harvestEvent.id,
-        after: harvestEvent,
+        after: { ...harvestEvent, hiveSuperIds: alzas },
         sourceInterface: "apiary.service",
       },
       tx,

@@ -40,7 +40,10 @@ de «hecho y sin rastro».
 
 ### 2026-09-18 · El manejo fitosanitario de la parcela
 
-ADR-171 (renumerado al integrar `origin/main`: la rama nació como ADR-170, ya ocupado allí).
+ADR-172 (renumerado dos veces al integrar `origin/main`: la rama nació como ADR-170, ocupado
+allí en la primera integración por «Anular una asignación a tienda»; pasó a ADR-171, y en esta
+segunda integración `main` ya tenía su propio ADR-171 — «Un alza con marca…» —, así que sube a
+**ADR-172**, el siguiente libre).
 Registro de intervenciones fitosanitarias: cuatro clases (comprados, preparados, liberaciones,
 manejo cultural); doce objetivos + otro (todo de Daniel, con procedencia en el spec). Dos columnas nuevas
 en `ConsumableMaterial` (`isPlantProtection`, `defaultReentryHours`); tres tablas nuevas. **El descuento
@@ -55,6 +58,20 @@ en tablero y al abrir jornada; corregir no descuenta de nuevo. PR A; el PR B ya 
 los dispatch de T3–T7 y faltó en el de T8. Esquema coherente al medir después (10 de 12 migraciones
 ajenas volvieron). Datos de prueba perdidos entre el 14 y el reset no se reparan. **Ruling:** todo
 dispatch llevar prohibición explícita de reset/restore/migrate dev.
+
+### 2026-09-18 · Alzas con marca
+
+ADR-171. Daniel: las alzas «se marcarán». Se registran en la ficha del apiario, se ponen en una
+colmena como artefacto con marca y la cosecha dice cuáles salieron. Las sin marca se siguen
+contando. La inspección que quita alzas ya no cierra las marcadas. **Sin ver en navegador**: hace
+falta entrar con una cuenta. Siguen: la cera por color de año y el año de las reinas.
+
+### 2026-09-18 · Abrir una jornada sin propósito da un mensaje, no un 500 (PR #433)
+
+`friendlyError` (`app/actions/traceability.ts`) **relanza toda clase que no conoce**, y no conocía
+`PropositoInvalido`: el formulario manda `[]` y el servicio lo rechaza. Ahora dice «Elige al menos un
+propósito de la visita». **Una clase de validación nueva que llegue a una acción necesita su rama
+ahí**, o es un 500. Prueba hermética con flip-test. **Sin ver en navegador.**
 
 ### 2026-09-18 · Anular una asignación a tienda que no va a llegar
 

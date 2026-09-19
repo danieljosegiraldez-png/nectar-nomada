@@ -36,6 +36,7 @@ import type { RecordColonyEventInput } from "../../lib/apiary/colonyEvents";
 import type { ApiaryAssetParent } from "../../lib/apiary/media";
 import { fechaDeDia, parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
 import { exigeTipoDeArtefacto, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
+import { darDeBajaAlza, ponerAlza, registrarAlza } from "../../lib/apiary/alzas";
 import { dividirColonia, unirColonias } from "../../lib/apiary/genealogia";
 import { cambiarReina, cerrarTenencia, exigeFinDeTenencia, exigeOrigenDeReina, introducirReina } from "../../lib/apiary/reinas";
 
@@ -193,6 +194,9 @@ export async function recordApiaryHarvestFormAction(formData: FormData): Promise
     // count value read at the time — measured_fact, matching
     // recordHarvestEvent's own choice for the coffee-side equivalent.
     provenanceClass: "measured_fact",
+    // Spec 2026-09-18 §4.3 — las alzas marcadas que se extrajeron; el servicio comprueba que
+    // estaban puestas en esta colmena.
+    hiveSuperIds: formData.getAll("hiveSuperIds").map(String).filter(Boolean),
   });
 
   // Reuses the existing /lots/[id] page verbatim — §2's whole point: a
@@ -376,6 +380,49 @@ export async function retirarArtefactoFormAction(formData: FormData): Promise<vo
       parseOptionalLocalDateTime(String(formData.get("cuando") ?? ""), String(formData.get(TZ_OFFSET_FIELD) ?? "")) ?? new Date(),
   });
   revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+}
+
+/** Alzas con marca (spec 2026-09-18 §4) — registrar una desde la ficha del apiario. */
+export async function registrarAlzaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  await registrarAlza(user.userAccountId, {
+    locationId: apiaryId,
+    code: String(formData.get("code") ?? ""),
+    inServiceAt: fechaDeDia(String(formData.get("inServiceAt") ?? ""), "inServiceAt"),
+    notes: emptyToNull(formData.get("notes")),
+  });
+  revalidatePath(`/apiaries/${apiaryId}`);
+}
+
+/** Poner un alza marcada en una colmena, desde la ficha de la colmena. */
+export async function ponerAlzaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const hiveId = String(formData.get("hiveId") ?? "");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  await ponerAlza(user.userAccountId, {
+    hiveId,
+    hiveSuperId: String(formData.get("hiveSuperId") ?? ""),
+    installedAt:
+      parseOptionalLocalDateTime(String(formData.get("cuando") ?? ""), String(formData.get(TZ_OFFSET_FIELD) ?? "")) ?? new Date(),
+  });
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+  revalidatePath(`/apiaries/${apiaryId}`);
+}
+
+/** Dar de baja un alza marcada (rota, perdida…). Pide motivo; puesta en una colmena, no se deja. */
+export async function darDeBajaAlzaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  await darDeBajaAlza(user.userAccountId, {
+    hiveSuperId: String(formData.get("hiveSuperId") ?? ""),
+    retiredAt: new Date(),
+    reason: String(formData.get("reason") ?? ""),
+  });
+  revalidatePath(`/apiaries/${apiaryId}`);
 }
 
 /**

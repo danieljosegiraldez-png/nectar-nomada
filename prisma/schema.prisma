@@ -238,6 +238,7 @@ model UserAccount {
   hiveCleaningsCreated HiveCleaning[] @relation("HiveCleaningCreatedBy")
   hiveFittingsCreated  HiveFitting[]  @relation("HiveFittingCreatedBy")
   hiveNodesCreated     HiveNode[]     @relation("HiveNodeCreatedBy")
+  hiveSupersCreated    HiveSuper[]    @relation("HiveSuperCreatedBy")
   nodeCalibrationsCreated NodeCalibration[] @relation("NodeCalibrationCreatedBy")
   nodeDerivedReadingsCreated NodeDerivedReading[] @relation("NodeDerivedReadingCreatedBy")
   varroaCountsCreated               VarroaCount[]                @relation("VarroaCountCreatedBy")
@@ -1027,6 +1028,7 @@ model Organization {
   equipment Equipment[] @relation("EquipmentOwner")
 
   hiveNodes HiveNode[]
+  hiveSupers HiveSuper[]
   @@map("organization")
   @@schema("core")
   lotTransformationsPerformed LotTransformation[] @relation("LotTransformationPerformedBy")
@@ -7704,6 +7706,8 @@ model ApiaryHarvestEvent {
   /// A9.1 — el otro lado de la FK que `FieldEvent` gana para agrupar
   /// el trabajo de apiario dentro de una jornada.
   fieldEvents FieldEvent[]
+  /// Spec 2026-09-18 §4.3 — las alzas con marca que se extrajeron.
+  supers      ApiaryHarvestSuper[]
 
   @@index([colonyId])
   @@map("apiary_harvest_event")
@@ -9181,6 +9185,11 @@ model HiveFitting {
   hiveNodeId String?   @map("hive_node_id") @db.Uuid
   hiveNode   HiveNode? @relation(fields: [hiveNodeId], references: [id], onDelete: Restrict)
 
+  /// El alza, cuando `kind` es `alza` y lleva marca — spec 2026-09-18 §4.2. Con ella la cuenta es
+  /// 1 (CHECK `hive_fitting_alza_marcada_es_una`). RESTRICT: un alza con historia no se borra.
+  hiveSuperId String?    @map("hive_super_id") @db.Uuid
+  hiveSuper   HiveSuper? @relation(fields: [hiveSuperId], references: [id], onDelete: Restrict)
+
   /// La inspección donde se declaró el cambio, si vino de una — la mitad de la instrucción
   /// de Daniel: «en la inspección sólo se registra la diferencia». RESTRICT: es evidencia.
   installedInspectionId String?     @map("installed_inspection_id") @db.Uuid
@@ -9198,6 +9207,7 @@ model HiveFitting {
   creator   UserAccount? @relation("HiveFittingCreatedBy", fields: [createdBy], references: [id])
 
   @@index([hiveId, installedAt])
+  @@index([hiveSuperId])
   @@map("hive_fitting")
   @@schema("apiary")
 }
@@ -9250,6 +9260,58 @@ model HiveNode {
 
   @@index([organizationId])
   @@map("hive_node")
+  @@schema("apiary")
+}
+
+/// Un alza con marca propia — spec 2026-09-18 «alzas y cera» §4.1. Daniel: «todavía no [llevan
+/// marca], pero se marcarán». La que no tiene marca sigue siendo una CUENTA en `HiveFitting`.
+/// Dónde estuvo lo dicen sus `HiveFitting` (kind `alza`, cuenta 1): el mismo intervalo que el
+/// nodo de sensores, sin una segunda tabla de colocaciones.
+model HiveSuper {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// De quién es. Sale del sitio donde se registra; un alza no se pone en otra finca.
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  /// La marca, normalizada (sin espacios a los lados, en mayúsculas): «A-07». Única por
+  /// organización. Nadie impone formato. CHECK `hive_super_marca_normalizada`.
+  code String
+
+  /// Desde cuándo se usa, si se sabe. Nulo = no se sabe, no «hoy».
+  inServiceAt DateTime? @map("in_service_at")
+
+  lifecycleStatus EquipmentLifecycle @default(active) @map("lifecycle_status")
+  /// La baja: las dos juntas y sólo fuera de servicio (CHECK `hive_super_baja_completa`).
+  retiredAt     DateTime? @map("retired_at")
+  retiredReason String?   @map("retired_reason")
+
+  notes String?
+
+  fittings HiveFitting[]
+  harvests ApiaryHarvestSuper[]
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("HiveSuperCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("hive_super")
+  @@schema("apiary")
+}
+
+/// Qué alzas marcadas se extrajeron en una cosecha — spec §4.3. Opcional: una cosecha sin alzas
+/// marcadas sigue valiendo. RESTRICT a los dos lados: es evidencia de origen de la miel.
+model ApiaryHarvestSuper {
+  apiaryHarvestEventId String             @map("apiary_harvest_event_id") @db.Uuid
+  apiaryHarvestEvent   ApiaryHarvestEvent @relation(fields: [apiaryHarvestEventId], references: [id], onDelete: Restrict)
+  hiveSuperId          String             @map("hive_super_id") @db.Uuid
+  hiveSuper            HiveSuper          @relation(fields: [hiveSuperId], references: [id], onDelete: Restrict)
+
+  @@id([apiaryHarvestEventId, hiveSuperId])
+  @@index([hiveSuperId])
+  @@map("apiary_harvest_super")
   @@schema("apiary")
 }
 
