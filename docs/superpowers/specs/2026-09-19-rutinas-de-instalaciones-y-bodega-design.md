@@ -43,7 +43,8 @@
 - **Tipo nuevo `storage_facility`** en `LocationType`.
 - **Padre**: `beneficio` o `site`. Lo comprueba el servicio (`crearUbicacionDeSecado` se generaliza o se hermana con `crearBodega`, mismo archivo) **y la base**, con un disparador sobre `location` que rechaza un `storage_facility` con otro tipo de padre.
 - **Permiso para crearla**: el mismo que una instalación de secado, `exigeEditarBeneficioEn` sobre el padre.
-- **Se crea** con `FormularioUbicacion` (`tipo="storage_facility"`), ofreciendo como padres los beneficios y las fincas visibles. Hereda organización, clasificación y zona del padre, como las instalaciones.
+- **Se crea en `/bodegas/nueva`**, con su propio formulario y su propio servicio (`lib/traceability/bodegas.ts`), ofreciendo como padres los beneficios y las fincas donde se puede editar el beneficio. Hereda organización, clasificación y zona del padre, como las instalaciones. **No reutiliza `FormularioUbicacion` ni `lib/traceability/instalaciones.ts`**, que `secado-2a` está reescribiendo: medido el 2026-09-19, esa rama cambia los dos. Archivos propios dejan el choque en una línea.
+- **Es configuración del beneficio**: entra en `TIPOS_DEL_BENEFICIO` (`lib/traceability/locations.ts`), así que editar sus atributos por los caminos genéricos exige `location:edit_beneficio`, como una instalación.
 - **Almacenar**: el formulario de `StorageAssignment` agrupa: primero **Bodegas**, después **Otros lugares**. Ningún lugar deja de ser elegible, así que los almacenamientos viejos siguen igual.
 - **Microlotes**: `createMicrolot` rechaza también un padre `storage_facility` (misma razón que `beneficio_no_se_subdivide`: copiaría el tipo saltándose su permiso).
 
@@ -82,8 +83,8 @@ Nada nuevo en la base. La ficha del lugar lista los **equipos que están ahí ah
 
 ## 5. Pantallas
 
-- **`/instalaciones`** lista también las bodegas, con el aviso «rutina vencida» y el filtro de vencidas, como `/equipos`. Gana el botón **Nueva bodega**.
-- **`/instalaciones/[id]`** suma tres bloques **al final**, sin tocar los de `secado-2a`: **Rutinas** (`TarjetaDeRutina`), **Productos** de cada vez que se hizo, y **Equipos aquí**.
+- **`/bodegas`** lista las bodegas con el aviso «N rutinas vencidas» y un filtro de vencidas, como `/equipos`; **`/bodegas/nueva`** la crea; **`/bodegas/[id]`** es su ficha, con los tres bloques de abajo. `/instalaciones` sólo gana un enlace a `/bodegas`.
+- **`/instalaciones/[id]`** suma los bloques **al final**, sin tocar los de `secado-2a`: **Rutinas** (`TarjetaDeRutina`, con los **productos** de cada vez que se hizo) y **Equipos aquí**. Los dos salen de un solo componente, `RutinasDeLugar`, que es también el de `/bodegas/[id]` y `/beneficio`.
 - **Camas sueltas**: su fila en la ficha de la instalación enseña sus rutinas.
 - **`/beneficio`**: sólo se añade la tarjeta de rutinas del beneficio.
 - **Formulario de rutina hecha**: filas repetibles de insumo (lote de insumo de la organización + cantidad + unidad), opcionales.
