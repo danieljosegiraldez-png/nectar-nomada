@@ -29,9 +29,10 @@
 # Revisión del dueño — 2026-09-18/19
 
 Daniel la hizo respondiendo, una a una, preguntas sobre cada parte. Entre comillas, sus
-palabras; lo demás es la regla que salió de ellas, confirmada con él antes de escribirla.
+palabras; lo demás es **una síntesis de sus respuestas**, escrita por el agente. Él confirmó
+puntos sueltos, no este texto entero: donde hay una inferencia, se dice.
 
-**§1, la tabla: respaldada tal cual**, con lo que la corrigen los puntos de abajo: los dos
+**§1, la tabla: respaldada inicialmente; aplican las correcciones siguientes**: los dos
 huecos (3,5 – 3,8 y 4,5 – 5,5) quedan nombrados, y el criterio de la fila «> 4,5 estancado»
 lo sustituye la regla de estancamiento.
 
@@ -52,7 +53,7 @@ lo sustituye la regla de estancamiento.
    estancado; si alguna señal medida cambió, no. **El tiempo lo fija cada tratamiento, entre
    24 y 48 horas.**
 3. **Los huecos de la tabla:**
-   - **3,5 – 3,8:** «ya debajo de 3,8 en la mayoría de las recetas es muy bajo y es de
+   - **Desde 3,5 y por debajo de 3,8** (3,8 exacto sigue en la ventana óptima): «ya debajo de 3,8 en la mayoría de las recetas es muy bajo y es de
      alerta y de cortar el proceso» — pasar a cama, interrumpir la fermentación. **3,8 es el
      valor por defecto; la receta puede fijar otro**, porque es «la mayoría», no todas.
    - **4,5 – 5,5:** transición normal mientras el pH baja; se registra sin alerta. Si se
