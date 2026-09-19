@@ -131,13 +131,18 @@ describe("el aviso de marcos negros en el apiario", () => {
   });
 
   it("EMPATE EN EL MISMO INSTANTE: manda el conteo mayor, para no esconder una renovación (Codex, #443)", async () => {
-    const e = await colmena();
+    // Dos cajas con los mismos conteos grabados en orden CONTRARIO. Sin la regla, gana la fila que
+    // la base devuelva primero; sea cual sea ese orden fijo, una de las dos cajas pierde su 5. Con
+    // una sola caja, la primera versión de esta prueba pasaba por suerte (flip-test 9, #443).
     const mismo = dia("2026-07-15");
-    await recordInspection(operario, { colonyId: e.colonyId, outcome: "nothing_unusual", occurredAt: mismo, darkFrames: 0 });
+    const e = await colmena();
     await recordInspection(operario, { colonyId: e.colonyId, outcome: "nothing_unusual", occurredAt: mismo, darkFrames: 5 });
     await recordInspection(operario, { colonyId: e.colonyId, outcome: "nothing_unusual", occurredAt: mismo, darkFrames: 0 });
-    const fila = (await marcosNegrosDelApiario(operario, apiarioId)).find((f) => f.hiveId === e.hiveId);
-    expect(fila?.marcos).toBe(5);
+    const f = await colmena();
+    await recordInspection(operario, { colonyId: f.colonyId, outcome: "nothing_unusual", occurredAt: mismo, darkFrames: 0 });
+    await recordInspection(operario, { colonyId: f.colonyId, outcome: "nothing_unusual", occurredAt: mismo, darkFrames: 5 });
+    const aviso = await marcosNegrosDelApiario(operario, apiarioId);
+    expect([e.hiveId, f.hiveId].map((h) => aviso.find((x) => x.hiveId === h)?.marcos)).toEqual([5, 5]);
   });
 
   it("DE UNA COLONIA ANTERIOR: el aviso sigue, pero dice que el conteo no es de la colonia de hoy (Codex, #443)", async () => {
