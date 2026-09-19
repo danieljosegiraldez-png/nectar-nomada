@@ -12,7 +12,9 @@ import { alcanceDelAlimento } from "../../../lib/apiary/alcanceDelAlimento";
 import { tratamientosPorObjetivo } from "../../../lib/apiary/objetivoDelTratamiento";
 import { retirosPendientes } from "../../../lib/apiary/cierreDeEvento";
 import { vitalesDeColmenas } from "../../../lib/apiary/vitalesDeColmena";
-import { completarCierreDeTratamientoFormAction } from "../../actions/apiary";
+import { completarCierreDeTratamientoFormAction, darDeBajaAlzaFormAction, registrarAlzaFormAction } from "../../actions/apiary";
+import { alzasDelApiario } from "../../../lib/apiary/alzas";
+import { permissionKeysAnywhere } from "../../../lib/rbac/service";
 import { confirmarCoordenadasAction } from "../../actions/traceability";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
@@ -57,6 +59,11 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   const coordenadas = await coordenadasPropuestas(id);
   // ADR-166 — cosechas pesadas antes de ADR-161 cuyo lote quedó sin saldo. Mismo id concedido.
   const sinSaldo = await cosechasSinSaldo(id);
+  // Alzas con marca (spec 2026-09-18 §4.4). Con su propio `requireApiaryAccess("view")` dentro.
+  // Qué se PINTA lo decide el mismo criterio que la ficha de la colmena: «en algún ámbito» basta
+  // para pintar, porque la acción autoriza de verdad.
+  const alzas = await alzasDelApiario(user.userAccountId, id);
+  const puedeGestionarAlzas = (await permissionKeysAnywhere(user.userAccountId)).has("apiary:manage");
 
   // Ventana MÓVIL de doce meses, no año natural: el dueño la eligió así el
   // 2026-09-11 porque el repositorio no define ninguna temporada, y un año
@@ -607,6 +614,99 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
             selfPersonId={selfPersonId}
           />
         </details>
+      </section>
+
+      {/* Alzas con marca — spec 2026-09-18 §4.4. La «ficha del alza» es el desplegable de cada
+          una: por dónde pasó y en qué cosechas salió. Lo de otro apiario, sin nombre de caja. */}
+      <section className="nn-section" id="alzas">
+        <h2>{t("alzasHeading")}</h2>
+        <p className="nn-muted">{t("alzasIntro")}</p>
+        {alzas.length === 0 ? (
+          <p className="nn-muted">{t("alzasNinguna")}</p>
+        ) : (
+          <ul>
+            {alzas.map((a) => (
+              <li key={a.id} style={{ marginBottom: "0.5rem" }}>
+                <details>
+                  <summary>
+                    <strong className="nn-code">{a.code}</strong>
+                    {" — "}
+                    {a.lifecycleStatus !== "active"
+                      ? t("alzaDeBaja", { fecha: a.retiredAt?.toISOString().slice(0, 10) ?? "", motivo: a.retiredReason ?? "" })
+                      : a.puestaEn
+                        ? a.puestaEn.aqui
+                          ? t("alzaEnColmena", { colmena: a.puestaEn.identifier, fecha: a.puestaEn.desde.toISOString().slice(0, 10) })
+                          : t("alzaEnOtroApiario", { fecha: a.puestaEn.desde.toISOString().slice(0, 10) })
+                        : t("alzaEnBodega")}
+                  </summary>
+                  {a.historia.length > 0 ? (
+                    <>
+                      <h3>{t("alzaHistoria")}</h3>
+                      <ul>
+                        {a.historia.map((h, i) => (
+                          <li key={i}>
+                            {t("alzaHistoriaFila", {
+                              colmena: h.aqui ? h.hiveIdentifier : t("alzaHistoriaOtroApiario"),
+                              desde: h.desde.toISOString().slice(0, 10),
+                              hasta: h.hasta ? h.hasta.toISOString().slice(0, 10) : t("alzaHistoriaAbierta"),
+                            })}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                  {a.cosechas.length > 0 ? (
+                    <>
+                      <h3>{t("alzaCosechas")}</h3>
+                      <ul>
+                        {a.cosechas.map((c) => (
+                          <li key={c.lotId}>
+                            {c.occurredAt.toISOString().slice(0, 10)} ·{" "}
+                            <Link href={`/lots/${c.lotId}`} className="nn-code">
+                              {c.lotCode}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                  {puedeGestionarAlzas && a.lifecycleStatus === "active" && !a.puestaEn ? (
+                    <form action={darDeBajaAlzaFormAction} className="nn-form" style={{ maxWidth: 420 }}>
+                      <input type="hidden" name="apiaryId" value={id} />
+                      <input type="hidden" name="hiveSuperId" value={a.id} />
+                      <div className="nn-field">
+                        <label htmlFor={`baja-${a.id}`}>{t("alzaMotivoBaja")}</label>
+                        <input id={`baja-${a.id}`} name="reason" type="text" required />
+                      </div>
+                      <BotonDeEnvio>{t("alzaDarDeBajaBoton")}</BotonDeEnvio>
+                    </form>
+                  ) : null}
+                </details>
+              </li>
+            ))}
+          </ul>
+        )}
+        {puedeGestionarAlzas ? (
+          <details>
+            <summary>{t("alzaRegistrar")}</summary>
+            <form action={registrarAlzaFormAction} className="nn-form" style={{ maxWidth: 420 }}>
+              <input type="hidden" name="apiaryId" value={id} />
+              <div className="nn-field">
+                <label htmlFor="alza-code">{t("alzaMarca")}</label>
+                <input id="alza-code" name="code" type="text" required />
+              </div>
+              <div className="nn-field">
+                <label htmlFor="alza-desde">{t("alzaDesde")}</label>
+                <input id="alza-desde" name="inServiceAt" type="date" />
+              </div>
+              <div className="nn-field">
+                <label htmlFor="alza-nota">{t("alzaNota")}</label>
+                <input id="alza-nota" name="notes" type="text" />
+              </div>
+              <BotonDeEnvio>{t("alzaRegistrarBoton")}</BotonDeEnvio>
+            </form>
+          </details>
+        ) : null}
       </section>
 
       <section className="nn-section">
