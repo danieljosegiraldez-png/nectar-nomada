@@ -21,7 +21,7 @@
  * el sitio donde se declara la lista de tipos, y que haya un guardia que la
  * compara con los que el cliente sabe encolar.
  */
-import type { PushMutation, MutacionDeEvento, MutacionDePerfilDeSuelo } from "./pushFieldEvents";
+import type { PushMutation, MutacionDeEvento, MutacionDePerfilDeSuelo, MutacionDeRevisionDeTrampa } from "./pushFieldEvents";
 import type { HorizonteDelFormulario } from "../traceability/horizontesDelFormulario";
 import { fechaDeDia } from "../time/localDateTime";
 
@@ -45,11 +45,11 @@ export const KINDS_DE_APIARIO = ["inspection", "colony_event", "varroa_count"] a
 export const KIND_DE_FIN_DE_COLONIA = "colony_end";
 
 /**
- * Los cuatro tipos de captura de parcela.
+ * Los tipos de captura de parcela — cuatro más `trap_check` (Tarea 11).
  *
  * **Este comentario prometía un guardia que no existía**, y el guardia existe
- * ahora: `tests/sync/parcelaPayload.test.ts`, «los cuatro constructores producen
- * exactamente KINDS_DE_PARCELA». Llama a los cuatro constructores de
+ * ahora: `tests/sync/parcelaPayload.test.ts`, «los constructores producen
+ * exactamente KINDS_DE_PARCELA». Llama a los constructores de
  * `lib/sync/parcelaPayload.ts` y compara el `kind` que producen **de verdad**
  * con esta lista, en vez de leer el texto de un `if` o repetir los literales.
  *
@@ -58,8 +58,13 @@ export const KIND_DE_FIN_DE_COLONIA = "colony_end";
  * borra los tipos, así que TypeScript no ve la relación. Renombrar uno de los
  * dos lados dejaba cada anotación de ese tipo en `unknown_kind` permanente, sin
  * que nada se pusiera rojo.
+ *
+ * **`trap_check` es el quinto, y sin él en esta lista cae en el `unknown_kind`
+ * de más abajo** — la rama de `pushFieldEvents.ts` que lo aplica quedaría
+ * inalcanzable aunque estuviera escrita, porque el parseo nunca llegaría a
+ * construir esa mutación. Ruling del controlador, Tarea 11.
  */
-export const KINDS_DE_PARCELA = ["soil_sample", "foliar_sample", "soil_profile", "planting_cohort"] as const;
+export const KINDS_DE_PARCELA = ["soil_sample", "foliar_sample", "soil_profile", "planting_cohort", "trap_check"] as const;
 
 /** Un número que llega del JSON, o `null`. `"abc"` es `null`, no `NaN`. */
 function numeroOpcional(v: unknown): number | null {
@@ -210,6 +215,31 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
       }
       if (m.kind === "planting_cohort") {
         parsed.push({ ...(m as object), plantedAt: toDate(m.plantedAt) } as PushMutation);
+        continue;
+      }
+      // Tarea 11 — su fecha es `observedAt`, no `sampledAt`, y su campo
+      // obligatorio es `brocaLevel`, no `sampleCode`: por eso tiene su propia
+      // rama en vez de caer en la de abajo, pensada para las dos muestras.
+      // `observerPersonId`/`provenanceClass` NO se leen aquí ni en ningún lado
+      // de este parseo — ruling del controlador, Tarea 11: los fija el
+      // servidor al aplicar la mutación (`aplicarRevisionDeTrampa`), nunca el
+      // payload de la cola.
+      if (m.kind === "trap_check") {
+        const observedAt = toDate(m.observedAt);
+        if (!observedAt) {
+          rechazar("observed_at_required");
+          continue;
+        }
+        if (typeof m.brocaLevel !== "string" || m.brocaLevel.trim() === "") {
+          rechazar("broca_level_required");
+          continue;
+        }
+        if (typeof m.specimenId !== "string" || m.specimenId.trim() === "") {
+          rechazar("specimen_id_required");
+          continue;
+        }
+        const revision: MutacionDeRevisionDeTrampa = { ...(m as unknown as MutacionDeRevisionDeTrampa), observedAt };
+        parsed.push(revision);
         continue;
       }
       const sampledAt = toDate(m.sampledAt);

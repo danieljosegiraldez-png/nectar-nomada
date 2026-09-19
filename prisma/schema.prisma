@@ -6149,6 +6149,10 @@ model SpecimenObservation {
   provenanceClass ProvenanceClass @map("provenance_class")
   dataQuality     DataQuality?    @map("data_quality")
 
+  // P4 §11 extendido — la clave de idempotencia de la ronda sin señal. NULL en toda
+  // observación que no viene de ese camino (floraciones, instalaciones, etc.).
+  clientDraftId String? @unique @map("client_draft_id")
+
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
   creator   UserAccount? @relation("SpecimenObservationCreatedBy", fields: [createdBy], references: [id])

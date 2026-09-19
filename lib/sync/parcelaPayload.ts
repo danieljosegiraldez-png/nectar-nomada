@@ -249,3 +249,58 @@ export function construirPayloadDeSiembra(fd: FormData, locationId: string): Pay
     notes: texto(fd, "notes"),
   };
 }
+
+export interface PayloadDeRevisionDeTrampa {
+  kind: "trap_check";
+  locationId: string;
+  specimenId: string;
+  clientDraftId: string;
+  observedAt: string;
+  brocaLevel: string;
+  captureCount: number | null;
+  otherInsects: boolean | null;
+  otherInsectsNote: string | null;
+  cleaned: boolean | null;
+  liquidChanged: boolean | null;
+  lureRecharged: boolean | null;
+}
+
+/**
+ * La revisión de la ronda de trampas, sin señal — Tarea 11 (Tarea 10, ruling del
+ * controlador, extendido a la cola).
+ *
+ * **Sin `observerPersonId` ni `provenanceClass`, a diferencia de los cuatro
+ * constructores de arriba.** `RondaDeTrampaForm` no los ofrece ni siquiera como
+ * campo oculto (SECURITY.md §2 — un `<input type="hidden">` es falsificable, y
+ * un payload de cola es tan falsificable como un campo oculto: viaja igual, por
+ * fuera de cualquier sesión). Los dos se fijan en el SERVIDOR al aplicar la
+ * mutación (`aplicarRevisionDeTrampa` en `pushFieldEvents.ts`), con la misma
+ * regla que `recordRoundTrapCheckFormAction`: procedencia siempre
+ * `direct_observation`, observador la Person de la cuenta del dispositivo. Este
+ * constructor no puede leer del `FormData` un campo que el formulario nunca
+ * pinta.
+ */
+export function construirPayloadDeRevisionDeTrampa(
+  fd: FormData,
+  specimenId: string,
+  locationId: string,
+  clientDraftId: string,
+): PayloadDeRevisionDeTrampa {
+  const otros = booleano(fd, "otherInsects");
+  return {
+    kind: "trap_check",
+    locationId,
+    specimenId,
+    clientDraftId,
+    observedAt: diaRequerido(fd, "observedAt"),
+    brocaLevel: String(fd.get("brocaLevel") ?? ""),
+    captureCount: numero(fd, "captureCount"),
+    otherInsects: otros,
+    // Mismo criterio que `recordRoundTrapCheckFormAction` (F8 fix-final): la
+    // nota se guarda salvo cuando "otros" es explícitamente NO.
+    otherInsectsNote: otros === false ? null : texto(fd, "otherInsectsNote"),
+    cleaned: booleano(fd, "cleaned"),
+    liquidChanged: booleano(fd, "liquidChanged"),
+    lureRecharged: booleano(fd, "lureRecharged"),
+  };
+}

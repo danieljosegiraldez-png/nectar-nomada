@@ -13,15 +13,20 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { parsearMutaciones } from "../../lib/sync/parsearMutaciones";
-import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
+import { pushFieldEvents, type MutacionDeRevisionDeTrampa } from "../../lib/sync/pushFieldEvents";
+import { createTrap } from "../../lib/traceability/traps";
 
 const RUN_ID = `parcela-sin-senal-${Date.now()}`;
 
 let organizationId: string;
 let locationId: string;
 let userAccountId: string;
+let personId: string;
 let deviceId: string;
 let scopeId: string;
+// Tarea 11 — trampas creadas por los tests de `trap_check` de más abajo; se
+// limpian aquí porque comparten el `afterAll` de arriba, no uno propio.
+let trampaIds: string[] = [];
 
 beforeAll(async () => {
   const organization = await prisma.organization.create({
@@ -37,6 +42,7 @@ beforeAll(async () => {
   const person = await prisma.person.create({
     data: { givenName: "TEST", familyName: "Operador", displayName: `TEST Operador (${RUN_ID})`, locale: "es" },
   });
+  personId = person.id;
   const account = await prisma.userAccount.create({
     data: { personId: person.id, authProvider: "credentials", status: "active" },
   });
@@ -61,6 +67,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Tarea 11 — antes que nada: `Specimen`→`SpecimenObservation` no tiene
+  // `RESTRICT` (`onDelete: Cascade`, ver schema), pero se borra la
+  // observación primero de todos modos, por si alguna vez cambia.
+  await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimenId: { in: trampaIds } }) });
+  await prisma.specimen.deleteMany({ where: assertDefinedWhere({ id: { in: trampaIds } }) });
   await prisma.soilSample.deleteMany({ where: assertDefinedWhere({ locationId }) });
   // Ronda de arreglo de la revisión final: las pruebas de enum crean también
   // muestras foliares y perfiles en este mismo `locationId`.
@@ -313,6 +324,101 @@ describe("el lote reconoce los cuatro tipos de captura de parcela", () => {
     if (!r.ok) return;
     expect(r.mutations).toHaveLength(1);
     expect(r.rechazos).toEqual([{ clientDraftId: "d-raro", reason: "unknown_kind" }]);
+  });
+});
+
+/**
+ * Tarea 11 — la revisión de la ronda de trampas se suma a la cola de
+ * captura de parcela.
+ *
+ * **El guardia que el ruling del controlador pide explícito.** Sin
+ * `"trap_check"` en `KINDS_DE_PARCELA`, esta mutación cae en la rama del
+ * `kind` desconocido de más abajo (`unknown_kind`) en vez de en la suya:
+ * `aplicarRevisionDeTrampa` quedaría escrita y sin poder alcanzarse nunca,
+ * porque el parseo nunca llegaría a construir la mutación tipada que esa
+ * rama espera. Flip-test: quitar `"trap_check"` de `KINDS_DE_PARCELA` y esta
+ * prueba cae con `{ reason: "unknown_kind" }` en vez de `ok: true` con la
+ * mutación parseada.
+ */
+describe("el lote reconoce la revisión de la ronda de trampas", () => {
+  it("parsea una revisión de trampa encolada", () => {
+    const r = parsearMutaciones([
+      {
+        kind: "trap_check",
+        clientDraftId: "d-trampa",
+        locationId: "loc1",
+        specimenId: "specimen1",
+        observedAt: "2026-09-18T12:00:00.000Z",
+        brocaLevel: "pocos",
+      },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.mutations).toHaveLength(1); // control: cuántas parseó, no sólo que no falló
+    expect(r.rechazos).toEqual([]);
+    expect(r.mutations[0]).toMatchObject({
+      kind: "trap_check",
+      observedAt: new Date("2026-09-18T12:00:00.000Z"),
+      brocaLevel: "pocos",
+    });
+  });
+
+  it("una revisión sin observedAt se rechaza sola, con su propia razón", () => {
+    const r = parsearMutaciones([
+      { kind: "trap_check", clientDraftId: "d1", locationId: "loc1", specimenId: "specimen1", brocaLevel: "pocos" },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.rechazos).toEqual([{ clientDraftId: "d1", reason: "observed_at_required" }]);
+    expect(r.mutations).toHaveLength(0);
+  });
+
+  it("una revisión sin brocaLevel se rechaza sola, no tumba el lote", () => {
+    const r = parsearMutaciones([
+      { kind: "trap_check", clientDraftId: "d1", locationId: "loc1", specimenId: "specimen1", observedAt: "2026-09-18T12:00:00.000Z" },
+      { kind: "trap_check", clientDraftId: "d-ok", locationId: "loc1", specimenId: "specimen1", observedAt: "2026-09-18T12:00:00.000Z", brocaLevel: "muchos" },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.rechazos).toEqual([{ clientDraftId: "d1", reason: "broca_level_required" }]);
+    // Control: la buena del mismo lote SÍ pasó.
+    expect(r.mutations).toHaveLength(1);
+    expect(r.mutations[0]).toMatchObject({ clientDraftId: "d-ok" });
+  });
+
+  it("una revisión sin specimenId se rechaza sola, con su propia razón", () => {
+    const r = parsearMutaciones([
+      { kind: "trap_check", clientDraftId: "d1", locationId: "loc1", observedAt: "2026-09-18T12:00:00.000Z", brocaLevel: "pocos" },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.rechazos).toEqual([{ clientDraftId: "d1", reason: "specimen_id_required" }]);
+  });
+
+  // Mismo criterio que las otras cuatro: sin `locationId` se rechaza sola,
+  // porque hay `clientDraftId` a quien atribuirlo.
+  it("una revisión sin locationId se rechaza sola: tiene a quién atribuirse", () => {
+    const r = parsearMutaciones([
+      { kind: "trap_check", clientDraftId: "d1", specimenId: "specimen1", observedAt: "2026-09-18T12:00:00.000Z", brocaLevel: "pocos" },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.rechazos).toEqual([{ clientDraftId: "d1", reason: "location_id_required" }]);
+  });
+
+  // Ruling del controlador: `observerPersonId`/`provenanceClass` forjados en
+  // el payload NO llegan a `MutacionDeRevisionDeTrampa` con ningún privilegio
+  // especial — el parseo los deja pasar tal cual (los ignora quien aplica la
+  // mutación, no el parseo), así que esta prueba sólo confirma que el parseo
+  // no los necesita para aceptar la mutación. El rechazo/ignorado real se
+  // prueba contra la base, más abajo.
+  it("acepta la mutación aunque no traiga observerPersonId ni provenanceClass", () => {
+    const r = parsearMutaciones([
+      { kind: "trap_check", clientDraftId: "d1", locationId: "loc1", specimenId: "specimen1", observedAt: "2026-09-18T12:00:00.000Z", brocaLevel: "pocos" },
+    ]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.mutations).toHaveLength(1);
   });
 });
 
@@ -750,5 +856,180 @@ describe("una carrera de push con el mismo clientDraftId no lanza excepción", (
     ]);
     expect([a!.status, b!.status].sort()).toEqual(["applied", "duplicate"]);
     expect(await prisma.soilSample.count({ where: { clientDraftId: draft } })).toBe(1);
+  });
+});
+
+/**
+ * Tarea 11 — la revisión de la ronda de trampas, aplicada contra la base.
+ * Postgres real, mismos `locationId`/`deviceId`/`userAccountId` del `beforeAll`.
+ */
+describe("el replay aplica la revisión de trampa y no la duplica", () => {
+  it("aplica una vez y la segunda dice duplicate, con UNA sola fila", async () => {
+    const trampa = await createTrap(userAccountId, {
+      locationId, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    trampaIds.push(trampa.id);
+
+    const m: MutacionDeRevisionDeTrampa = {
+      kind: "trap_check",
+      clientDraftId: `d-trampa-${Date.now()}`,
+      locationId,
+      specimenId: trampa.id,
+      observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos",
+    };
+    const [primera] = await pushFieldEvents(userAccountId, deviceId, [m]);
+    const [segunda] = await pushFieldEvents(userAccountId, deviceId, [m]);
+    expect(primera).toMatchObject({ status: "applied" });
+    expect(segunda).toMatchObject({ status: "duplicate" });
+    expect(await prisma.specimenObservation.count({ where: { clientDraftId: m.clientDraftId } })).toBe(1);
+  });
+
+  it("guarda el conteo y los tres tri-estados de mantenimiento que trajo", async () => {
+    const trampa = await createTrap(userAccountId, {
+      locationId, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    trampaIds.push(trampa.id);
+
+    const clientDraftId = `d-trampa-fila-${Date.now()}`;
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "trap_check",
+        clientDraftId,
+        locationId,
+        specimenId: trampa.id,
+        observedAt: new Date("2026-09-15"),
+        brocaLevel: "muchos",
+        captureCount: 12,
+        otherInsects: true,
+        otherInsectsNote: "avispas",
+        cleaned: true,
+        liquidChanged: false,
+        // `lureRecharged` deliberadamente ausente: "no se preguntó", nunca `false`.
+      } satisfies MutacionDeRevisionDeTrampa,
+    ]);
+    expect(r).toMatchObject({ status: "applied" });
+
+    const fila = await prisma.specimenObservation.findUniqueOrThrow({ where: { clientDraftId } });
+    expect(fila.brocaLevel).toBe("muchos");
+    expect(fila.captureCount).toBe(12);
+    expect(fila.otherInsectsNote).toBe("avispas");
+    expect(fila.cleaned).toBe(true);
+    expect(fila.liquidChanged).toBe(false); // se preguntó: no se hizo
+    expect(fila.lureRecharged).toBeNull();  // ni se mencionó (ADR-080)
+  });
+
+  it("un brocaLevel que no existe en el enum es rejected, no 500", async () => {
+    const trampa = await createTrap(userAccountId, {
+      locationId, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    trampaIds.push(trampa.id);
+
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "trap_check",
+        clientDraftId: `d-broca-${Date.now()}`,
+        locationId,
+        specimenId: trampa.id,
+        observedAt: new Date("2026-09-15"),
+        brocaLevel: "un montón",
+      } satisfies MutacionDeRevisionDeTrampa,
+    ]);
+    expect(r).toMatchObject({ status: "rejected" });
+    expect((r as { reason: string }).reason).toContain("brocaLevel");
+  });
+});
+
+/**
+ * Tarea 11, ruling del controlador — el camino sin señal aplica la MISMA
+ * regla que `recordRoundTrapCheckFormAction` (Tarea 10): procedencia y
+ * observador se fijan en el SERVIDOR, nunca desde lo que trae la mutación.
+ * Un payload de cola es tan falsificable como un `<input type="hidden">`
+ * (SECURITY.md §2), así que aunque la mutación forjada trajera un observador
+ * o una procedencia distintos, `aplicarRevisionDeTrampa` los ignora.
+ *
+ * **Flip-test, corrido durante la implementación (ver task-11-report.md).**
+ * Cambiar `observerPersonId: cuenta.personId, provenanceClass:
+ * "direct_observation"` por `observerPersonId: (m as unknown as {
+ * observerPersonId?: string }).observerPersonId ?? cuenta.personId,
+ * provenanceClass: (m as unknown as { provenanceClass?: string
+ * }).provenanceClass ?? "direct_observation"` en `aplicarRevisionDeTrampa`
+ * (`lib/sync/pushFieldEvents.ts`) hizo caer exactamente la primera prueba de
+ * este describe — «un observerPersonId y una provenanceClass forjados en la
+ * mutación se ignoran» — con la fila guardando el observador forjado en vez
+ * del de la cuenta del dispositivo, y las otras 40 de `parcelaSinSenal.test.ts`
+ * siguieron en verde. Restaurado y confirmado de nuevo en verde antes de
+ * commitear.
+ */
+describe("ruling del controlador: procedencia y observador NUNCA salen del payload", () => {
+  it("un observerPersonId y una provenanceClass forjados en la mutación se ignoran", async () => {
+    const trampa = await createTrap(userAccountId, {
+      locationId, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    trampaIds.push(trampa.id);
+
+    // Una Person real, DISTINTA de la de la cuenta del dispositivo — no un
+    // uuid al azar, para que "se ignoró" no se confunda con "no existía y
+    // por eso no se pudo guardar".
+    const otraPersona = await prisma.person.create({
+      data: { givenName: "TEST", familyName: "Forjado", displayName: `TEST Forjado (${RUN_ID})`, locale: "es" },
+    });
+
+    const clientDraftId = `d-forjado-${Date.now()}`;
+    const [r] = await pushFieldEvents(userAccountId, deviceId, [
+      {
+        kind: "trap_check",
+        clientDraftId,
+        locationId,
+        specimenId: trampa.id,
+        observedAt: new Date("2026-09-15"),
+        brocaLevel: "pocos",
+        // Ninguno de los dos existe en `MutacionDeRevisionDeTrampa`: viajan
+        // igual, como los llevaría un payload JSON hostil que el tipo no
+        // puede impedir en tiempo de ejecución.
+        ...({ observerPersonId: otraPersona.id, provenanceClass: "interpretation" } as Record<string, unknown>),
+      } as MutacionDeRevisionDeTrampa,
+    ]);
+    expect(r).toMatchObject({ status: "applied" });
+
+    const fila = await prisma.specimenObservation.findUniqueOrThrow({ where: { clientDraftId } });
+    // Lo que el servidor fijó, no lo que la mutación traía.
+    expect(fila.observerPersonId).toBe(personId);
+    expect(fila.observerPersonId).not.toBe(otraPersona.id);
+    expect(fila.provenanceClass).toBe("direct_observation");
+
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ id: otraPersona.id }) });
+  });
+
+  // `UserAccount.personId` es `String` sin `?` en el esquema (línea 159):
+  // NOT NULL y `@unique`, así que Prisma no deja crear una cuenta sin
+  // persona — «cuenta sin persona vinculada» no es alcanzable con una fila
+  // real. La única forma de ejercer la misma guardia
+  // (`if (!cuenta?.personId)`) es que `cuenta` sea `null`, es decir, un
+  // `userAccountId` que no resuelva a ninguna cuenta — el mismo `if`, la
+  // otra mitad de la condición.
+  it("con un userAccountId que no resuelve a ninguna cuenta, se rechaza explícito", async () => {
+    const trampa = await createTrap(userAccountId, {
+      locationId, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    trampaIds.push(trampa.id);
+
+    const [r] = await pushFieldEvents(crypto.randomUUID(), deviceId, [
+      {
+        kind: "trap_check",
+        clientDraftId: `d-sin-cuenta-${Date.now()}`,
+        locationId,
+        specimenId: trampa.id,
+        observedAt: new Date("2026-09-15"),
+        brocaLevel: "pocos",
+      } satisfies MutacionDeRevisionDeTrampa,
+    ]);
+    expect(r).toMatchObject({ status: "rejected", reason: "observer_self_missing" });
+    // Control: no quedó ninguna revisión — un rechazo no escribe nada a
+    // medias. Filtrado por `observationType`: `createTrap` ya deja su propia
+    // observación `installed` en este mismo `specimenId`.
+    expect(
+      await prisma.specimenObservation.count({ where: { specimenId: trampa.id, observationType: "trap_check" } }),
+    ).toBe(0);
   });
 });

@@ -175,6 +175,10 @@ export interface RecordTrapCheckInput {
   notes?: string | null;
   provenanceClass: ProvenanceClass;
   dataQuality?: DataQuality | null;
+  // Tarea 11 — la ronda viaja sin señal, y esta es su clave de idempotencia: un
+  // reintento con el mismo valor devuelve la fila ya creada en vez de duplicarla.
+  // `undefined`/`null`/ausente (el camino con señal de siempre) no la comprueba.
+  clientDraftId?: string | null;
 }
 
 const NIVELES: readonly TrapCaptureLevel[] = ["ninguno", "pocos", "algunos", "muchos"];
@@ -189,6 +193,15 @@ export async function recordTrapCheck(
   input: RecordTrapCheckInput,
   ahora: Date = new Date(),
 ) {
+  // Tarea 11 — antes de cualquier otra validación: un reintento de la cola
+  // offline con la misma clave es la MISMA revisión, no una nueva que además
+  // podría fallar una validación distinta (p. ej. "en el futuro" si el reloj
+  // avanzó entre el primer intento y el reintento).
+  if (input.clientDraftId) {
+    const yaExiste = await prisma.specimenObservation.findUnique({ where: { clientDraftId: input.clientDraftId } });
+    if (yaExiste) return yaExiste;
+  }
+
   if (!input.brocaLevel || !NIVELES.includes(input.brocaLevel)) {
     throw new TrapValidationError("broca_level_required");
   }
@@ -238,6 +251,7 @@ export async function recordTrapCheck(
         liquidChanged: input.liquidChanged ?? null,
         lureRecharged: input.lureRecharged ?? null,
         notes: input.notes ?? null,
+        clientDraftId: input.clientDraftId ?? null,
         provenanceClass: input.provenanceClass,
         dataQuality: input.dataQuality ?? null,
         createdBy: userAccountId,

@@ -1442,6 +1442,11 @@ export async function recordRoundTrapCheckFormAction(
       provenanceClass: "direct_observation",
       notes: null,
       dataQuality: null,
+      // Tarea 11 — la misma clave que la cola offline generó en el cliente
+      // (`revisionClientDraftId`, campo oculto): viaja también por el camino
+      // CON señal, para que sea la misma sin importar si había cobertura al
+      // enviar. Ausente es `null`, que `recordTrapCheck` no comprueba.
+      clientDraftId: emptyToNull(formData.get("revisionClientDraftId")),
     });
   } catch (error) {
     revalidarParcela(locationId);

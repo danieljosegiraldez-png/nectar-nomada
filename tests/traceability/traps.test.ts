@@ -489,6 +489,36 @@ describe("revisión de trampa", () => {
       observerPersonId: "00000000-0000-0000-0000-000000000000", provenanceClass: "direct_observation",
     })).rejects.toThrow(TrapValidationError);
   });
+
+  // Tarea 11 — la ronda viaja sin señal por la cola offline, y un reintento del
+  // cliente (misma clave) no puede duplicar la revisión.
+  it("con clientDraftId, una segunda llamada devuelve la misma fila", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const clientDraftId = crypto.randomUUID();
+    const inputBase = {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos" as const, provenanceClass: "direct_observation" as const,
+    };
+    const primera = await recordTrapCheck(userAccountId, { ...inputBase, clientDraftId });
+    const segunda = await recordTrapCheck(userAccountId, { ...inputBase, clientDraftId });
+    expect(segunda.id).toBe(primera.id);
+    const total = await prisma.specimenObservation.count({
+      where: { specimenId: trampa.id, observationType: "trap_check" },
+    });
+    expect(total).toBe(1);
+  });
 });
 
 describe("getPlotDetail — lo que necesitan los avisos de trampas", () => {

@@ -4,6 +4,7 @@ import {
   construirPayloadDeMuestraFoliar,
   construirPayloadDePerfilDeSuelo,
   construirPayloadDeSiembra,
+  construirPayloadDeRevisionDeTrampa,
 } from "../../lib/sync/parcelaPayload";
 import { KINDS_DE_PARCELA } from "../../lib/sync/parsearMutaciones";
 
@@ -48,7 +49,7 @@ const UN_DIA_QUE_NO_ES_HOY = "2020-03-01";
  * rompe.
  */
 describe("los kind del cliente y los que el lote reconoce son la misma lista", () => {
-  it("los cuatro constructores producen exactamente KINDS_DE_PARCELA", () => {
+  it("los cinco constructores producen exactamente KINDS_DE_PARCELA", () => {
     const delCliente = [
       construirPayloadDeMuestraDeSuelo(
         form({ sampleCode: "S-01", sampledAt: UN_DIA_QUE_NO_ES_HOY, provenanceClass: "direct_observation" }),
@@ -63,10 +64,16 @@ describe("los kind del cliente y los que el lote reconoce son la misma lista", (
         "loc1",
       ).kind,
       construirPayloadDeSiembra(form({ provenanceClass: "direct_observation" }), "loc1").kind,
+      construirPayloadDeRevisionDeTrampa(
+        form({ observedAt: UN_DIA_QUE_NO_ES_HOY, brocaLevel: "pocos" }),
+        "specimen1",
+        "loc1",
+        "draft1",
+      ).kind,
     ];
-    // Control: que sean cuatro distintos. Si dos constructores devolvieran el
+    // Control: que sean cinco distintos. Si dos constructores devolvieran el
     // mismo `kind`, `sort()` contra la lista lo escondería a medias.
-    expect(new Set(delCliente).size).toBe(4);
+    expect(new Set(delCliente).size).toBe(5);
     expect([...delCliente].sort()).toEqual([...KINDS_DE_PARCELA].sort());
   });
 });
@@ -302,5 +309,90 @@ describe("construirPayloadDeSiembra", () => {
     const p = construirPayloadDeSiembra(form({ ...BASE, cultivarValueId: "", notes: "" }), "loc1");
     expect(p.cultivarValueId).toBeNull();
     expect(p.notes).toBeNull();
+  });
+});
+
+/**
+ * Tarea 11 — la revisión de la ronda de trampas, sin señal.
+ *
+ * **Sin `observerPersonId` ni `provenanceClass` en las pruebas de este
+ * `describe`.** Ruling del controlador: `RondaDeTrampaForm` no los ofrece ni
+ * como campo oculto, así que este constructor no los lee del `FormData` — los
+ * fija el servidor al aplicar la mutación. Sólo `specimenId`/`locationId`
+ * (ids del componente, no del formulario) y `clientDraftId` viajan como
+ * argumentos, igual que en la firma del brief.
+ */
+describe("construirPayloadDeRevisionDeTrampa", () => {
+  const BASE = { observedAt: UN_DIA_QUE_NO_ES_HOY, brocaLevel: "pocos" };
+
+  it("los ids y la lectura viajan tal cual", () => {
+    const p = construirPayloadDeRevisionDeTrampa(form(BASE), "specimen-1", "loc-1", "draft-1");
+    expect(p.kind).toBe("trap_check");
+    expect(p.specimenId).toBe("specimen-1");
+    expect(p.locationId).toBe("loc-1");
+    expect(p.clientDraftId).toBe("draft-1");
+    expect(p.brocaLevel).toBe("pocos");
+  });
+
+  // La fecha del brief (paso 11 del task brief): un campo de DÍA, parseado con
+  // `fechaDeDia` (medianoche UTC) — no `parseLocalDateTime`, que aplicaría el
+  // desfase del dispositivo y movería la fecha (ver la cabecera del módulo).
+  it("la fecha del payload es la del formulario, no la de hoy", () => {
+    const p = construirPayloadDeRevisionDeTrampa(form(BASE), "specimen-1", "loc-1", "draft-1");
+    expect(p.observedAt).toBe("2020-03-01T00:00:00.000Z");
+    expect(p.observedAt).not.toBe(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z");
+  });
+
+  // Paso 11 del task brief, verbatim: blanco = null, nunca 0/false (ADR-080).
+  it("conserva vacío = null en conteo y en los tres de mantenimiento", () => {
+    const fd = new FormData();
+    fd.set("observedAt", "2026-09-18");
+    fd.set("brocaLevel", "pocos");
+    fd.set("provenanceClass", "direct_observation");
+    const payload = construirPayloadDeRevisionDeTrampa(fd, "specimen-1", "loc-1", "draft-1");
+    expect(payload.captureCount).toBeNull();
+    expect(payload.cleaned).toBeNull();
+    expect(payload.liquidChanged).toBeNull();
+    expect(payload.lureRecharged).toBeNull();
+  });
+
+  // Control positivo del caso de arriba, mismo criterio que
+  // `tests/traceability/traps.test.ts`, "guarda un `false` explícito...": sin
+  // esto, la prueba de arriba pasaría igual si el constructor devolviera
+  // `false` siempre en vez de distinguir "no se preguntó" de "se preguntó y
+  // no se hizo".
+  it("guarda un `false` explícito de mantenimiento, y lo distingue de sin registrar", () => {
+    const p = construirPayloadDeRevisionDeTrampa(
+      form({ ...BASE, cleaned: "no", liquidChanged: "yes" }),
+      "specimen-1", "loc-1", "draft-1",
+    );
+    expect(p.cleaned).toBe(false);      // se preguntó: no se hizo
+    expect(p.liquidChanged).toBe(true); // se preguntó: sí se hizo
+    expect(p.lureRecharged).toBeNull(); // ni se mencionó en el envío
+  });
+
+  it("acepta el número exacto cuando alguien contó", () => {
+    const p = construirPayloadDeRevisionDeTrampa(form({ ...BASE, captureCount: "47" }), "specimen-1", "loc-1", "draft-1");
+    expect(p.captureCount).toBe(47);
+  });
+
+  // F8 fix-final (recordRoundTrapCheckFormAction): la nota se guarda salvo
+  // cuando "otros" es explícitamente NO.
+  it("otherInsectsNote se descarta cuando otherInsects es explícitamente NO", () => {
+    const p = construirPayloadDeRevisionDeTrampa(
+      form({ ...BASE, otherInsects: "no", otherInsectsNote: "avispas" }),
+      "specimen-1", "loc-1", "draft-1",
+    );
+    expect(p.otherInsects).toBe(false);
+    expect(p.otherInsectsNote).toBeNull();
+  });
+
+  it("otherInsectsNote se conserva cuando otherInsects es sí", () => {
+    const p = construirPayloadDeRevisionDeTrampa(
+      form({ ...BASE, otherInsects: "yes", otherInsectsNote: "avispas" }),
+      "specimen-1", "loc-1", "draft-1",
+    );
+    expect(p.otherInsects).toBe(true);
+    expect(p.otherInsectsNote).toBe("avispas");
   });
 });

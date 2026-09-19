@@ -7,6 +7,7 @@ import { estadoDeTrampa, ordenDeRonda, proximaRevisionDe, trampasParaAviso } fro
 import { claveDeTituloDeBloque } from "../../../../lib/traceability/plotBlocks";
 import { diaDeHoy } from "../../../../lib/time/diaDeHoy";
 import { RondaDeTrampaForm } from "../../../components/traceability/RondaDeTrampaForm";
+import { FieldSyncControls } from "../../../components/traceability/FieldSyncControls";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,10 @@ export default async function RondaDeTrampasPage({
 
   return (
     <div>
+      {/* Tarea 11 — spec §4.3: «el indicador existente lo cuenta». La ronda
+          registrada sin señal se ve y se sincroniza desde aquí, igual que en
+          `/plots/[id]`. */}
+      <FieldSyncControls />
       <p className="nn-detail-meta"><Link href="/finca/trampas">{t("plotDashboardBackLink")}</Link></p>
       <h1>{t("trapsRoundTitleNamed", { name: detalle.farmName })}</h1>
 
@@ -143,7 +148,12 @@ export default async function RondaDeTrampasPage({
               ) : null}
               <details>
                 <summary>{t("trapCheckTitle")}</summary>
-                <RondaDeTrampaForm locationId={trampa.plotId} specimenId={trampa.id} hoy={hoyDeLaFinca} />
+                <RondaDeTrampaForm
+                  locationId={trampa.plotId}
+                  specimenId={trampa.id}
+                  hoy={hoyDeLaFinca}
+                  revisionClientDraftId={crypto.randomUUID()}
+                />
               </details>
             </article>
           );
