@@ -23,6 +23,8 @@ let adminId: string;
 let operario: string;
 let extrano: string;
 const scopes: string[] = [];
+let projectId: string;
+let porProyecto: string;
 const cajas: string[] = [];
 const personas: string[] = [];
 let n = 0;
@@ -56,6 +58,16 @@ beforeAll(async () => {
   await prisma.assignment.create({ data: { userAccountId: adminId, roleProfileId: admin.id, scopeId: plataforma.id } });
   apiarioId = (await crearApiario(adminId, { name: `TEST Apiario (${RUN})`, organizationId })).id;
   apiarioAjeno = (await crearApiario(adminId, { name: `TEST Apiario ajeno (${RUN})`, organizationId })).id;
+  // Una cuenta que llega al apiario SÓLO por el proyecto de una de sus colmenas: así llega
+  // `getApiaryDetail`, y la cera tiene que aceptar el mismo camino (revisión de Codex).
+  projectId = (await prisma.project.create({ data: { name: `TEST Proyecto (${RUN})`, organizationId, status: "approved", classification: "internal" } })).id;
+  porProyecto = await cuenta("PorProyecto");
+  const farmOperator = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+  const scopeProyecto = await prisma.scope.create({ data: { scopeType: "project", scopeRefId: projectId } });
+  scopes.push(scopeProyecto.id);
+  await prisma.assignment.create({ data: { userAccountId: porProyecto, roleProfileId: farmOperator.id, scopeId: scopeProyecto.id } });
+  const cajaDelProyecto = await createHive(adminId, { identifier: `${RUN}-proy`, locationId: apiarioId, projectId });
+  cajas.push(cajaDelProyecto.id);
   await asignar(operario, "Farm Operator", apiarioId);
   await asignar(extrano, "Farm Operator", apiarioAjeno);
 }, 30000);
@@ -116,6 +128,7 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [apiarioId, apiarioAjeno] } }) });
+  await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
@@ -273,5 +286,13 @@ describe("la ventana dice la verdad sobre lugar y tiempo (Codex)", () => {
     // El control: la cascarilla sí entra por ahí, que es para lo que existe ese servicio.
     const cascarilla = await crearSubproducto(adminId, { ...comun, byproductType: "CASCARILLA" });
     expect(cascarilla.byproductType).toBe("CASCARILLA");
+  });
+
+  it("QUIEN LLEGA POR EL PROYECTO de una colmena del sitio también anota y lee su cera", async () => {
+    const fila = await anotarCeraDeExtraccion(porProyecto, { apiaryLocationId: apiarioId, massKg: 5, destination: "GUARDADA", ...ventana });
+    expect(Number(fila.massKg)).toBe(5);
+    expect(await ceraDeExtraccionDelApiario(porProyecto, apiarioId)).toHaveLength(1);
+    // El control: quien no tiene ninguno de los dos caminos sigue fuera.
+    await expect(ceraDeExtraccionDelApiario(extrano, apiarioId)).rejects.toThrow(/no_apiary_access/);
   });
 });
