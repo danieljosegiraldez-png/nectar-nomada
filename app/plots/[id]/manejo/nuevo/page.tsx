@@ -3,11 +3,10 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getPlotDetail } from "../../../../../lib/traceability/plantingCohorts";
-import { LocationAccessError, puedeGestionarAtributosDeUbicacion } from "../../../../../lib/traceability/locations";
-import { productosFitosanitarios } from "../../../../../lib/traceability/intervenciones";
+import { LocationAccessError } from "../../../../../lib/traceability/locations";
+import { productosFitosanitarios, bloquesDeLaParcela, motivoValidoParaParcela } from "../../../../../lib/traceability/intervenciones";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
 import { listPlantSpecimens } from "../../../../../lib/traceability/specimens";
-import { listPlotBlocks } from "../../../../../lib/traceability/plotBlocks";
 import { idValidoEnLista } from "../../../../../lib/traceability/precargaDeIntervencion";
 import { IntervencionForm, type IntervencionFormValues } from "../../../../components/traceability/IntervencionForm";
 
@@ -20,10 +19,14 @@ export const dynamic = "force-dynamic";
  * `?bloque=`/`?material=` (Tarea 5 PR B) precargan bloque y producto desde el
  * botón «Registrar aplicación» del aviso de lectura alta
  * (`enlaceDeRegistrarAplicacion`, `pendienteDeLaParcela.ts`). Los tres se
- * validan contra lo que esta misma parcela/organización ya ofrece
- * (`idValidoEnLista`) — uno que no cuadra se ignora en silencio, sin pintar
- * error; `motivo` es la excepción: no se valida aquí porque el servicio ya lo
- * hace al guardar (`validarReferencias`, `intervenciones.ts`).
+ * validan contra lo que es válido para ESTA parcela/organización — uno que no
+ * cuadra se ignora en silencio, sin pintar error (brief, decisión del
+ * controlador #3): `bloque`/`material` con `idValidoEnLista` contra lo que
+ * la página ya cargó; `motivo` con `motivoValidoParaParcela`, que repite las
+ * mismas tres condiciones que el servicio exige al guardar
+ * (`validarReferencias`) pero sin lanzar — ronda de arreglos 1, importante
+ * #2: antes se pasaba sin validar y un motivo inválido hacía FALLAR el
+ * guardado con un error, en vez de perder sólo la precarga.
  */
 export default async function NuevoManejoPage({
   params,
@@ -47,16 +50,17 @@ export default async function NuevoManejoPage({
   }
   const { location } = detail;
 
-  const [productos, { people, selfPersonId }, plantas, puedeVerBloques] = await Promise.all([
+  const [productos, { people, selfPersonId }, plantas, bloques, motivoValido] = await Promise.all([
     productosFitosanitarios(user.userAccountId, id),
     getObserverCandidates(user.userAccountId),
     listPlantSpecimens(user.userAccountId, id),
-    puedeGestionarAtributosDeUbicacion(user.userAccountId, id),
+    // Ronda de arreglos 1 (hallazgo crítico): los bloques de manejo se leen
+    // con el MISMO permiso (`lot:view`/`manage`) que ya exige esta página,
+    // nunca `location:manage_attributes` — ver el docstring de
+    // `bloquesDeLaParcela`.
+    bloquesDeLaParcela(user.userAccountId, id),
+    motivoValidoParaParcela(motivo, id),
   ]);
-  // `listPlotBlocks` exige `location:manage_attributes`, un permiso distinto
-  // del que ya pasó esta página — mismo hueco que documenta
-  // `productosFitosanitariosSiPuede`. Sin el permiso, ni bloques ni `?bloque=`.
-  const bloques = puedeVerBloques ? await listPlotBlocks(user.userAccountId, id) : [];
 
   const bloqueValido = idValidoEnLista(bloque, bloques);
   const materialIdValido = idValidoEnLista(material, productos);
@@ -74,7 +78,7 @@ export default async function NuevoManejoPage({
     // del servidor en el valor precargado.
     occurredAt: null,
     operatorPersonId: null,
-    motivoObservationId: motivo ?? null,
+    motivoObservationId: motivoValido,
     specimenIds: [],
     plotBlockIds: bloqueValido ? [bloqueValido] : [],
     notes: null,

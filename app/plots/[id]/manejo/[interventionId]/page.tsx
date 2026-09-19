@@ -3,9 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getPlotDetail } from "../../../../../lib/traceability/plantingCohorts";
-import { LocationAccessError, puedeGestionarAtributosDeUbicacion } from "../../../../../lib/traceability/locations";
-import { listarIntervenciones, productosFitosanitarios } from "../../../../../lib/traceability/intervenciones";
-import { listPlotBlocks } from "../../../../../lib/traceability/plotBlocks";
+import { LocationAccessError } from "../../../../../lib/traceability/locations";
+import { listarIntervenciones, productosFitosanitarios, bloquesDeLaParcela } from "../../../../../lib/traceability/intervenciones";
 import { carenciaDeIntervencion, reentradaDeIntervencion } from "../../../../../lib/traceability/carenciaDeIntervencion";
 import { lecturaDeTrampaQueMotivo, listPlantSpecimens, type LecturaDeTrampa } from "../../../../../lib/traceability/specimens";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
@@ -53,21 +52,21 @@ export default async function ManejoDetailPage({
   if (!intervencion) notFound();
   const correccion = lista.find((i) => i.correctsId === interventionId) ?? null;
 
-  const [productos, { people, selfPersonId }, plantas, trampa, puedeVerBloques] = await Promise.all([
+  const [productos, { people, selfPersonId }, plantas, trampa, bloques] = await Promise.all([
     productosFitosanitarios(user.userAccountId, id),
     getObserverCandidates(user.userAccountId),
     listPlantSpecimens(user.userAccountId, id),
     intervencion.motivoObservationId
       ? lecturaDeTrampaQueMotivo(user.userAccountId, intervencion.motivoObservationId)
       : Promise.resolve(null),
-    puedeGestionarAtributosDeUbicacion(user.userAccountId, id),
+    // Ronda de arreglos 1 (hallazgo crítico): los bloques de manejo se leen
+    // con el MISMO permiso (`lot:view`/`manage`) que ya exige
+    // `listarIntervenciones` — nunca `location:manage_attributes`. Antes,
+    // sin ese permiso distinto, corregir una intervención de bloque perdía
+    // el bloque en silencio: no había forma de listarlo NI de conservarlo.
+    // Ver el docstring de `bloquesDeLaParcela`.
+    bloquesDeLaParcela(user.userAccountId, id),
   ]);
-  // `listPlotBlocks` exige `location:manage_attributes`, un permiso distinto
-  // del que ya pasó esta página (`lot:view`/`manage` vía `listarIntervenciones`
-  // y `productosFitosanitarios`) — mismo hueco que documenta
-  // `productosFitosanitariosSiPuede`. Sin el permiso, el formulario ofrece
-  // planta y parcela entera igual que antes, sin bloques.
-  const bloques = puedeVerBloques ? await listPlotBlocks(user.userAccountId, id) : [];
 
   const ahora = new Date();
   const carencia = carenciaDeIntervencion(intervencion, ahora);
