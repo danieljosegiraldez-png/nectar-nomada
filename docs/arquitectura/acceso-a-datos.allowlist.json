@@ -685,12 +685,15 @@
   ],
   "dependen_del_llamador": [
     {
+      "archivo": "lib/traceability/recepcionesDeCereza.ts",
+      "operacion": "recepcionDeEntregas",
+      "razon": "Devuelve la recepción vigente (estado, neto, diferencia, motivo de rechazo) de unas entregas ya elegidas, para que la finca vea lo que recibió el beneficio. No recibe principal: la llaman `detalleDeJornada` (exige `requireLotAccess(view)` sobre la finca) y `misEntregas` (sólo las entregas de la Person de la propia cuenta), que ya autorizaron esas entregas.",
+      "verificado": "2026-09-19"
+    },
+    {
       "archivo": "lib/apiary/cierreDeCosecha.ts",
       "operacion": "bloquearCosechaEn",
       "razon": "Revisión de Codex de la pesada por recipiente (ADR-177): toma la fila de la cosecha con FOR UPDATE al principio de la transacción que cambia su peso, para que el cierre a mano y anotar/quitar un recipiente sobre la MISMA cosecha no se crucen. No lee ni devuelve datos. Sus cuatro llamadores autorizan ANTES: `completarCierreDeCosecha` (mismo archivo), `anotarRecipiente`/`quitarRecipiente` (recipientes.ts, vía `cosechaGestionable`) y `asentarPesoDeCosecha` (cosechasSinSaldo.ts), los cuatro con `requireApiaryAccess` manage sobre la caja de la cosecha.",
-      "archivo": "lib/traceability/recepcionesDeCereza.ts",
-      "operacion": "recepcionDeEntregas",
-      "razon": "Devuelve la recepción vigente (estado, neto, diferencia, motivo de rechazo) de unas entregas ya elegidas, para que la finca vea lo que recibió el beneficio. No recibe principal: la llaman `detalleDeJornada` (exige `requireLotAccess(view)` sobre la finca) y `misEntregas` (sólo las entregas de la Person de la propia cuenta), que ya autorizaron esas entregas; los dos llamadores se conectan en la Tarea 6 del plan.",
       "verificado": "2026-09-19"
     },
     {
