@@ -536,6 +536,10 @@
     {
       "archivo": "lib/equipos/modelos.ts",
       "razon": "Catálogo de modelos de equipo (spec de catálogos §3.1-3.2), primer consumidor del contrato común de lib/catalogos. Crear, editar y retirar exige equipment:manage vía requireCatalogoAccess/requireEntradaDeCatalogoAccess; toda escritura confirma su AuditEvent en la misma transacción; lecturas filtradas por organizacionesVisibles."
+    },
+    {
+      "archivo": "lib/equipos/documentos.ts",
+      "razon": "Manuales, fichas técnicas, certificados y fotos de modelos y equipos (spec de catálogos §3.5). Misma forma que lib/traceability/media.ts: URL firmada y Asset creado sólo al confirmar, con la clave obligada a su prefijo por destino. Subir exige equipment:manage (vía puedeSobreEquipo o requireEntradaDeCatalogoAccess); leer, equipment:view. El AuditEvent va en la misma transacción."
     }
   ],
   "reciben_transaccion": [

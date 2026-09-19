@@ -31,6 +31,7 @@ tests/equipos/datosDeEquipo.test.ts
 tests/equipos/marcasDeRevision.test.ts
 tests/equipos/esquemaDeCatalogo.test.ts
 tests/equipos/modelos.test.ts
+tests/equipos/documentos.test.ts
 tests/rutinas/rutinas.test.ts
 tests/catalogos/propiedad.test.ts
 tests/apiary/alcanceDelAlimento.test.ts

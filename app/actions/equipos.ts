@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 
 import { getCurrentUser } from "../../lib/auth/session";
+import { CatalogoError } from "../../lib/catalogos/propiedad";
 import {
   EquipoError,
   declararPatron,
@@ -13,9 +15,15 @@ import {
   verificarInstrumento,
   type ContrasteObservado,
 } from "../../lib/equipos/equipos";
+import {
+  DocumentoError,
+  confirmarSubidaDeDocumento,
+  pedirSubidaDeDocumento,
+  type DestinoDeDocumento,
+} from "../../lib/equipos/documentos";
 import { TZ_OFFSET_FIELD, parseLocalDateTime } from "../../lib/time/localDateTime";
 import { declararModoDeInstrumento } from "../../lib/equipos/modosDeInstrumento";
-import type { MaterialState } from "../../generated/prisma/client";
+import type { MaterialState, ProvenanceClass } from "../../generated/prisma/client";
 
 /**
  * Verificar un instrumento contra sus patrones.
@@ -172,4 +180,62 @@ export async function declararModoFormAction(formData: FormData): Promise<void> 
 
   revalidatePath(`/equipos/${equipmentId}`);
   redirect(`/equipos/${equipmentId}?ok=modo`);
+}
+
+/**
+ * Documentos de modelo y de equipo (spec de catálogos §3.5). Dos pasos, misma
+ * forma que `requestLotAssetUploadAction`/`finalizeLotAssetUploadAction`
+ * (app/actions/traceability.ts): pedir la URL firmada, subir directo a R2 desde
+ * el navegador, confirmar. `DocumentoError` y `CatalogoError` —el modelo puede
+ * rechazar con cualquiera de las dos— se traducen a un mensaje legible; el resto
+ * se relanza.
+ */
+export async function pedirSubidaDeDocumentoAction(
+  destino: DestinoDeDocumento,
+  nombre: string,
+  tipo: string,
+): Promise<{ uploadUrl: string; storageKey: string } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const t = await getTranslations("Equipos");
+  try {
+    return await pedirSubidaDeDocumento(user.userAccountId, destino, nombre, tipo);
+  } catch (error) {
+    if (error instanceof DocumentoError || error instanceof CatalogoError) {
+      return { error: t("documentoError", { detalle: error.message }) };
+    }
+    throw error;
+  }
+}
+
+export async function confirmarSubidaDeDocumentoAction(
+  destino: DestinoDeDocumento,
+  storageKey: string,
+  mimeType: string,
+  sizeBytes: number,
+  nombre: string,
+  procedencia: ProvenanceClass,
+): Promise<{ ok: true } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const t = await getTranslations("Equipos");
+  try {
+    await confirmarSubidaDeDocumento(user.userAccountId, {
+      destino,
+      storageKey,
+      mimeType,
+      sizeBytes,
+      originalFilename: nombre,
+      provenanceClass: procedencia,
+    });
+  } catch (error) {
+    if (error instanceof DocumentoError || error instanceof CatalogoError) {
+      return { error: t("documentoError", { detalle: error.message }) };
+    }
+    throw error;
+  }
+
+  return { ok: true };
 }
