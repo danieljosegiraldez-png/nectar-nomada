@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
+import { CatalogoError } from "../../lib/catalogos/propiedad";
 import {
   ModeloError,
   crearModelo,
@@ -56,13 +57,13 @@ describe("crearModelo", () => {
   it("el operario no crea modelos (definir el catálogo es gestión)", async () => {
     await expect(
       crearModelo(operarioA, { dueno: { tipo: "propio", locationId: sitioA }, kind: "instrument", manufacturer: `X ${RUN}`, modelName: "op", provenanceClass: "original_record" }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(new CatalogoError("forbidden"));
   });
 
   it("un compartido exige plataforma", async () => {
     await expect(
       crearModelo(jefeA, { dueno: { tipo: "compartido" }, kind: "instrument", manufacturer: `X ${RUN}`, modelName: "comp", provenanceClass: "original_record" }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(new CatalogoError("forbidden"));
     const m = await crearModelo(admin, { dueno: { tipo: "compartido" }, kind: "instrument", manufacturer: `X ${RUN}`, modelName: "comp", provenanceClass: "original_record" });
     expect((await prisma.equipmentModel.findUniqueOrThrow({ where: { id: m.id } })).organizationId).toBeNull();
   });
@@ -91,7 +92,16 @@ describe("editar y retirar", () => {
 
   it("el jefe de A no edita un modelo de B ni uno compartido", async () => {
     const deB = await crearModelo(admin, { dueno: { tipo: "propio", locationId: sitioB }, kind: "instrument", manufacturer: `B ${RUN}`, modelName: "b1", provenanceClass: "original_record" });
-    await expect(editarModelo(jefeA, deB.id, { manufacturer: `B ${RUN}`, modelName: "b1", provenanceClass: "original_record" })).rejects.toThrow();
+    await expect(editarModelo(jefeA, deB.id, { manufacturer: `B ${RUN}`, modelName: "b1", provenanceClass: "original_record" })).rejects.toThrow(
+      new CatalogoError("forbidden"),
+    );
+    const comp = await crearModelo(admin, { dueno: { tipo: "compartido" }, kind: "instrument", manufacturer: `B ${RUN}`, modelName: "compartido", provenanceClass: "original_record" });
+    await expect(
+      editarModelo(jefeA, comp.id, { manufacturer: `B ${RUN}`, modelName: "compartido", notes: "del jefe", provenanceClass: "original_record" }),
+    ).rejects.toThrow(new CatalogoError("forbidden"));
+    // Control positivo: el mismo cambio, hecho por quien manda en la plataforma, SÍ entra.
+    await editarModelo(admin, comp.id, { manufacturer: `B ${RUN}`, modelName: "compartido", notes: "del admin", provenanceClass: "original_record" });
+    expect((await prisma.equipmentModel.findUniqueOrThrow({ where: { id: comp.id } })).notes).toBe("del admin");
   });
 
   it("retirar no borra: la fila sigue y deja de ofrecerse", async () => {

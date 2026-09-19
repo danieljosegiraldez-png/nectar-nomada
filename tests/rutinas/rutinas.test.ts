@@ -81,7 +81,9 @@ describe("apuntar es faena; anular es gestión", () => {
     const e = await equipo();
     const r = await crearRutina(f.jefeA, { equipmentId: e.id, kind: "mantenimiento", intervalDays: 30 });
     await registrarRealizada(f.operarioA, { routineId: r.id, performedOn: dia("2026-09-10"), provenanceClass: "original_record" });
-    await expect(registrarRealizada(f.ajeno, { routineId: r.id, performedOn: dia("2026-09-11"), provenanceClass: "original_record" })).rejects.toThrow();
+    await expect(registrarRealizada(f.ajeno, { routineId: r.id, performedOn: dia("2026-09-11"), provenanceClass: "original_record" })).rejects.toThrow(
+      new RutinaError("forbidden"),
+    );
   });
   it("una fecha que no ha llegado en ninguna zona del planeta se rechaza", async () => {
     const e = await equipo();

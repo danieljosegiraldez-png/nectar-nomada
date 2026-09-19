@@ -87,7 +87,7 @@ describe("editarDatosDeEquipo", () => {
   });
   it("el operario no edita los datos (gestión)", async () => {
     const e = await alta();
-    await expect(editarDatosDeEquipo(f.operarioA, e.id, { serialNumber: "X" })).rejects.toThrow();
+    await expect(editarDatosDeEquipo(f.operarioA, e.id, { serialNumber: "X" })).rejects.toThrow(new EquipoError("forbidden"));
   });
   it("editar un solo dato no borra los demás; un null explícito sí borra", async () => {
     const e = await alta({
