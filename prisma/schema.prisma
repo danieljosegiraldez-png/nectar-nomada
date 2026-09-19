@@ -243,6 +243,7 @@ model UserAccount {
   hiveFittingsCreated  HiveFitting[]  @relation("HiveFittingCreatedBy")
   hiveNodesCreated     HiveNode[]     @relation("HiveNodeCreatedBy")
   hiveSupersCreated    HiveSuper[]    @relation("HiveSuperCreatedBy")
+  harvestContainersCreated HarvestContainer[] @relation("HarvestContainerCreatedBy")
   newWaxEntriesCreated NewWaxEntry[]  @relation("NewWaxEntryCreatedBy")
   frameRemovalsCreated FrameRemoval[] @relation("FrameRemovalCreatedBy")
   nodeCalibrationsCreated NodeCalibration[] @relation("NodeCalibrationCreatedBy")
@@ -8017,6 +8018,8 @@ model ApiaryHarvestEvent {
   fieldEvents FieldEvent[]
   /// Spec 2026-09-18 §4.3 — las alzas con marca que se extrajeron.
   supers      ApiaryHarvestSuper[]
+  /// Spec 2026-09-19 §3 — los recipientes de la extracción. Si hay, el peso es la suma de sus netos.
+  containers  HarvestContainer[]
 
   @@index([colonyId])
   @@map("apiary_harvest_event")
@@ -9622,6 +9625,30 @@ model ApiaryHarvestSuper {
   @@id([apiaryHarvestEventId, hiveSuperId])
   @@index([hiveSuperId])
   @@map("apiary_harvest_super")
+  @@schema("apiary")
+}
+
+/// Un recipiente de la extracción — spec 2026-09-19 §3. Daniel: «por recipiente». El neto NO se
+/// guarda: es bruto − tara. Si la cosecha tiene recipientes, su peso ES la suma de los netos.
+model HarvestContainer {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  apiaryHarvestEventId String             @map("apiary_harvest_event_id") @db.Uuid
+  apiaryHarvestEvent   ApiaryHarvestEvent @relation(fields: [apiaryHarvestEventId], references: [id], onDelete: Restrict)
+
+  /// «balde 3», «tambor A». Única dentro de la cosecha (CHECK: no en blanco).
+  label   String
+  /// Lleno. CHECK `harvest_container_pesos_posibles`: mayor que la tara.
+  grossKg Decimal @map("gross_kg") @db.Decimal(10, 3)
+  /// Vacío. No negativa.
+  tareKg  Decimal @map("tare_kg") @db.Decimal(10, 3)
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("HarvestContainerCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@unique([apiaryHarvestEventId, label])
+  @@map("harvest_container")
   @@schema("apiary")
 }
 
