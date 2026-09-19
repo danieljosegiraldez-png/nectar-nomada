@@ -11456,3 +11456,29 @@ ninguno, y el motivo no en blanco) y `store_allocation_recibida_o_anulada` (nunc
 
 **Lo que NO entra.** Deshacer una anulacion (se asigna de nuevo), y corregir una recepcion ya
 confirmada: eso seria un ajuste de inventario, no una anulacion.
+
+## ADR-171 -- Un alza con marca se sigue de colmena en colmena; las sin marca se siguen contando
+
+**Contexto.** El spec de artefactos del 2026-09-17 (§4) modelo las alzas solo como cuenta:
+«nadie numera las alzas en el patio». Daniel, el 2026-09-18: *«todavia no, pero se marcaran»*,
+para saber de que alza salio la miel, por donde paso y el inventario del equipo. Spec
+`docs/superpowers/specs/2026-09-18-alzas-y-tandas-de-marcos-design.md` §4, plan
+`docs/superpowers/plans/2026-09-18-alzas-con-marca.md`. Lo leido en manuales latinoamericanos
+(SENASICA, SENASA) no pide identificar alzas: esto es gestion propia, no trazabilidad obligatoria.
+
+**Decision.** Tabla `hive_super`: marca normalizada (sin espacios, en mayusculas) y unica por
+finca, baja con fecha y motivo. Ponerla en una colmena es un `hive_fitting` `alza` de cuenta 1 que
+apunta a ella, el patron del nodo de sensores; un indice parcial la deja abierta en una sola
+colmena y el servicio rechaza solapes con intervalos ya cerrados. La cosecha nombra las alzas
+marcadas que estaban puestas en esa caja ese dia (`apiary_harvest_super`), comprobado dentro de
+la transaccion que la crea. **La inspeccion que declara «quite el alza» ya no cierra las
+marcadas**: no dice cual, y cerrarlas escribiria una historia falsa.
+
+**En la base:** `hive_super_marca_normalizada`, `hive_super_baja_completa`,
+`hive_fitting_alza_marcada_es_una` y el indice `hive_fitting_alza_abierta_en_una_colmena`.
+
+**Desviaciones del spec.** La «ficha del alza» es un desplegable en la ficha del apiario, no una
+ruta nueva. Y el listado no nombra cajas de otro apiario: dice «en otro apiario».
+
+**Lo que NO entra.** La cera por color de año (spec §5) y el año de las reinas (§5.4): cada uno
+en su rebanada.

@@ -38,6 +38,13 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-18 · Alzas con marca
+
+ADR-171. Daniel: las alzas «se marcarán». Se registran en la ficha del apiario, se ponen en una
+colmena como artefacto con marca y la cosecha dice cuáles salieron. Las sin marca se siguen
+contando. La inspección que quita alzas ya no cierra las marcadas. **Sin ver en navegador**: hace
+falta entrar con una cuenta. Siguen: la cera por color de año y el año de las reinas.
+
 ### 2026-09-18 · Abrir una jornada sin propósito da un mensaje, no un 500 (PR #433)
 
 `friendlyError` (`app/actions/traceability.ts`) **relanza toda clase que no conoce**, y no conocía
