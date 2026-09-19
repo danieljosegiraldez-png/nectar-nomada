@@ -4,10 +4,12 @@ import { prisma } from "../../lib/db";
 import {
   MAX_TANDA,
   areaM2,
+  bandejasDeLaFinca,
   crearTipoDeBandeja,
   registrarBandejas,
   tiposDeBandeja,
 } from "../../lib/equipos/bandejas";
+import { puedeVerEquipo } from "../../lib/equipos/equipos";
 
 /**
  * Tipos de bandeja y bandejas numeradas por finca (spec §4.2; Daniel,
@@ -197,6 +199,87 @@ describe("reglas de la bandeja en la base", () => {
     await expect(prisma.dryingTrayType.update({ where: { id: tipo.id }, data: { organizationId: otraOrg } })).rejects.toThrow(/con bandejas no cambia de organizacion/);
     const vacio = await crearTipoDeBandeja(gerente, { organizationId: org, nombre: nombre("Vacío"), ancho: 1, largo: 1, unidad: "ft" });
     expect((await prisma.dryingTrayType.update({ where: { id: vacio.id }, data: { organizationId: otraOrg } })).organizationId).toBe(otraOrg);
+  });
+});
+
+/**
+ * Hallazgo de la revisión del controlador: `bandejasDeLaFinca` no tenía
+ * prueba propia. Cubre lo que hace por construcción —el `where` de
+ * `bandejasVisibles` filtra `trayNumber: { not: null }`, así que una vasija
+ * sin número queda fuera antes de llegar a `puedeVerEquipo`— y lo que decide
+ * `puedeVerEquipo` en cada fila: el número, el tipo, y el lugar del ÚLTIMO
+ * traslado (el sitio al registrarla; el nuevo lugar tras moverla).
+ */
+describe("bandejasDeLaFinca", () => {
+  it("número, tipo y dónde está (el sitio; tras un traslado, el nuevo lugar); descarta lo que no es bandeja", async () => {
+    const { org, sitio, gerente } = await finca("lista");
+    const nombreTipo = nombre("Lista");
+    const tipo = await crearTipoDeBandeja(gerente, { organizationId: org, nombre: nombreTipo, ancho: 1, largo: 1, unidad: "ft" });
+    const { numeros } = await registrarBandejas(gerente, { siteId: sitio, trayTypeId: tipo.id, cantidad: 2 });
+
+    // Un segundo sitio, con el mismo gerente asignado ahí también: sin esto,
+    // `can()` no lo dejaría ver una bandeja movida fuera de su lugar de
+    // siempre (el ámbito de un ROLE de location es de identidad exacta, no
+    // hereda del árbol).
+    const otroSitio = await prisma.location.create({
+      data: { locationType: "site", name: nombre("otro-sitio-lista"), organizationId: org, status: "approved", classification: "internal" },
+    });
+    locationIds.push(otroSitio.id);
+    await asignar(gerente, "Farm Manager", otroSitio.id);
+
+    const segunda = await prisma.equipment.findFirstOrThrow({ where: { organizationId: org, name: numeros[1] } });
+    await prisma.equipmentTransfer.create({
+      data: { equipmentId: segunda.id, fromLocationId: sitio, toLocationId: otroSitio.id, occurredAt: new Date(), createdBy: gerente },
+    });
+
+    // Una vasija de la misma organización, sin tipo ni número: no es una
+    // bandeja. `bandejasVisibles` la descarta por construcción (su `where`
+    // exige `trayNumber: { not: null }`), no por visibilidad.
+    const vasija = await prisma.equipment.create({
+      data: { organizationId: org, name: nombre("Vasija"), kind: "vessel", classification: "internal", provenanceClass: "original_record" },
+    });
+
+    const [sitioRow, otroSitioRow] = await Promise.all([
+      prisma.location.findUniqueOrThrow({ where: { id: sitio }, select: { name: true } }),
+      prisma.location.findUniqueOrThrow({ where: { id: otroSitio.id }, select: { name: true } }),
+    ]);
+
+    const lista = await bandejasDeLaFinca(gerente, org);
+    expect(lista.map((b) => b.id)).not.toContain(vasija.id);
+
+    const primera = lista.find((b) => b.numero === numeros[0]);
+    const segundaFila = lista.find((b) => b.numero === numeros[1]);
+    expect(primera).toBeDefined();
+    expect(segundaFila).toBeDefined();
+    expect(primera!.tipo).toBe(nombreTipo);
+    expect(segundaFila!.tipo).toBe(nombreTipo);
+    // El primero se quedó en el sitio donde se registró; el segundo está donde
+    // lo movió el traslado, no donde nació.
+    expect(primera).toMatchObject({ dondeId: sitio, donde: sitioRow.name });
+    expect(segundaFila).toMatchObject({ dondeId: otroSitio.id, donde: otroSitioRow.name });
+    // En orden: B-001 antes que B-002, que es el orden por trayNumber que usa el servicio.
+    expect(lista.map((b) => b.numero)).toEqual(numeros);
+  });
+
+  it("una bandeja `trade_secret` no aparece para un Farm Operator; el control es la que sí ve", async () => {
+    const { org, sitio, gerente, operario } = await finca("visibilidad");
+    const tipo = await crearTipoDeBandeja(gerente, { organizationId: org, nombre: nombre("Visible"), ancho: 1, largo: 1, unidad: "ft" });
+    const { numeros } = await registrarBandejas(gerente, { siteId: sitio, trayTypeId: tipo.id, cantidad: 2 });
+
+    const secreta = await prisma.equipment.findFirstOrThrow({ where: { organizationId: org, name: numeros[0] } });
+    await prisma.equipment.update({ where: { id: secreta.id }, data: { classification: "trade_secret" } });
+    const secretaActualizada = await prisma.equipment.findUniqueOrThrow({ where: { id: secreta.id } });
+
+    // Primero, que el caso sea real: Farm Operator no tiene `classification:clear_trade_secret`.
+    expect(await puedeVerEquipo(operario, secretaActualizada)).toBe(false);
+    // Control positivo del mismo hecho: el mismo operario SÍ puede ver la otra
+    // bandeja (internal, en su propio sitio).
+    const visible = await prisma.equipment.findFirstOrThrow({ where: { organizationId: org, name: numeros[1] } });
+    expect(await puedeVerEquipo(operario, visible)).toBe(true);
+
+    const listaDelOperario = await bandejasDeLaFinca(operario, org);
+    expect(listaDelOperario.map((b) => b.numero)).not.toContain(numeros[0]);
+    expect(listaDelOperario.map((b) => b.numero)).toContain(numeros[1]);
   });
 });
 
