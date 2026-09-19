@@ -116,9 +116,8 @@ Una fila por viaje de un recolector al beneficio.
     si su jornada lo toca;
   - cada situación lleva un tipo del catálogo o **«otro» con nota obligatoria**, más la foto.
   - también las **condiciones del día** (lluvia, neblina u otro), con su tipo y una nota. **El
-    valor medido (mm de lluvia) no entra en esta pieza:** una `Measurement` hoy sólo cuelga de
-    un lote, una muestra y otros sujetos con reglas en la base, no de una ubicación. Llega con la
-    pieza de condiciones del terreno. Lo fijo del terreno —GPS, altitud, pendiente, orientación, sombra— no se anota
+    valor medido** (mm de lluvia) es la lectura de un instrumento instalado en ese sitio:
+    `2026-09-18-instrumentos-de-campo-design.md`. Daniel corrigió el aplazamiento: sí se puede. Lo fijo del terreno —GPS, altitud, pendiente, orientación, sombra— no se anota
     aquí: es otra pieza, `2026-09-18-condiciones-fijas-del-terreno-design.md`.
 - **Quién lo ve:**
   - **sus superiores** en esa finca (Farm Manager y capataz), siempre;

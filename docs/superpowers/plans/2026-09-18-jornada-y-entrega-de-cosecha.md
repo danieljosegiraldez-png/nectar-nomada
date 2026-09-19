@@ -35,8 +35,8 @@ vitest.
   - reportar situaciones: `field_report:create_own` (Recolector);
   - ver situaciones: `field_report:view`, de serie para Farm Manager y Farm Operator, y
     concedible a otros.
-- **Condiciones del día:** tipo (lluvia, neblina, otro) y nota. **Sin valor medido** en esta
-  pieza (spec §3.5).
+- **Condiciones del día:** tipo (lluvia, neblina, otro) y nota. El valor medido es la lectura
+  de un instrumento de campo, **otra pieza** (`2026-09-18-instrumentos-de-campo-design.md`).
 - Toda escritura, con su `AuditEvent` en la misma transacción.
 - Pruebas con base en `scripts/pruebas-por-compuerta.txt` (`base-sembrada`). Permisos nuevos →
   `npm run db:seed` en la base propia `nectar_ci_entrega`.

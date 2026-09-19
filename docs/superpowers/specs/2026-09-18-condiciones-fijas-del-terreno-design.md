@@ -84,9 +84,8 @@ Suelo y distancia de siembra **no** entran en esta lista: Daniel no los nombró.
 - Lluvia, neblina y demás **no son atributos**: son observaciones con fecha.
 - Se anotan como **condiciones del día** en las situaciones de campo de la jornada (spec de la
   jornada y la entrega, §3.5): tipo del catálogo o «otro» con nota.
-- **El valor medido** (mm de lluvia) va en esta pieza. Una `Measurement` tiene que poder colgar
-  de una ubicación (parcela, microparcela, bloque o planta), con su propio CHECK de sujeto
-  exclusivo, como los otros sujetos independientes (`measurement_sujeto_no_cafe_exclusivo`).
+- **El valor medido** (mm de lluvia) es la lectura de un instrumento instalado en ese sitio:
+  `2026-09-18-instrumentos-de-campo-design.md`.
 
 ## 4. Fuera de esto
 
