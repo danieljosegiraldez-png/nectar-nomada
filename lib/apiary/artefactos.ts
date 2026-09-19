@@ -117,6 +117,8 @@ export interface AbrirIntervalo {
   readonly installedInspectionId?: string | null;
   /** Sólo `nodo_de_sensores`: el aparato. Lo pone `instalarNodo`, que exige su permiso. */
   readonly hiveNodeId?: string | null;
+  /** Sólo `alza` con marca: CUÁL alza. Lo pone `ponerAlza`, que comprueba que no esté en otra colmena. */
+  readonly hiveSuperId?: string | null;
 }
 
 /**
@@ -138,6 +140,7 @@ export const abrirIntervaloEn = (userAccountId: string, d: AbrirIntervalo) => as
       provenanceClass: d.provenanceClass,
       installedInspectionId: d.installedInspectionId ?? null,
       hiveNodeId: d.hiveNodeId ?? null,
+      hiveSuperId: d.hiveSuperId ?? null,
       createdBy: userAccountId,
     },
   });
@@ -185,11 +188,15 @@ export const cerrarIntervaloEn =
  * «Se quitó el excluidor», dicho sin señalar CUÁL intervalo: cierra los abiertos de ese tipo. Si
  * no hay ninguno —una colmena declarada con el booleano antes de que existieran los intervalos—
  * no se inventa una instalación con fecha desconocida: sólo se apaga la foto, auditada.
+ *
+ * **Las alzas CON MARCA no entran** (spec 2026-09-18 §4.2): «quité el alza» en la inspección no
+ * dice CUÁL, y cerrar A-07 sin que nadie lo diga le escribiría una historia falsa. Una marcada
+ * se quita con su propio botón (`retirarArtefacto`).
  */
 export const cerrarAbiertosEn =
   (userAccountId: string, hiveId: string, kind: HiveFittingKind, removedAt: Date, removedInspectionId: string | null = null) =>
   async (tx: Tx) => {
-    const abiertos = await tx.hiveFitting.findMany({ where: { hiveId, kind, removedAt: null } });
+    const abiertos = await tx.hiveFitting.findMany({ where: { hiveId, kind, removedAt: null, hiveSuperId: null } });
     for (const a of abiertos) await cerrarIntervaloEn(userAccountId, a, removedAt, removedInspectionId)(tx);
     if (abiertos.length === 0) await refrescarFotoEn(userAccountId, hiveId, kind)(tx);
     return abiertos.length;
@@ -259,7 +266,7 @@ export async function historiaDeArtefactos(userAccountId: string, hiveId: string
   await requireApiaryAccess(userAccountId, "view", [await colmena(hiveId)]);
   return prisma.hiveFitting.findMany({
     where: { hiveId },
-    include: { hiveNode: { select: { deviceId: true } } },
+    include: { hiveNode: { select: { deviceId: true } }, hiveSuper: { select: { code: true } } },
     orderBy: [{ installedAt: "desc" }, { createdAt: "desc" }],
   });
 }

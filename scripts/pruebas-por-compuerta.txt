@@ -46,6 +46,7 @@ tests/apiary/vitalesEnSitio.test.ts
 tests/apiary/limpiezaDeCaja.test.ts
 tests/apiary/artefactos.test.ts
 tests/apiary/nodo.test.ts
+tests/apiary/alzas.test.ts
 tests/sensores/ingesta.test.ts
 tests/sensores/derivar.test.ts
 tests/sensores/ruta-de-ingesta.test.ts
