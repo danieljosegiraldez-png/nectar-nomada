@@ -115,6 +115,9 @@ Una fila por viaje de un recolector al beneficio.
     sobre lo que tiene asignado: parcela, microparcela, bloque o planta. También sobre un lote,
     si su jornada lo toca;
   - cada situación lleva un tipo del catálogo o **«otro» con nota obligatoria**, más la foto.
+  - también las **condiciones del día** (lluvia, neblina…), con su valor si se mide (mm de lluvia,
+    por ejemplo). Lo fijo del terreno —GPS, altitud, pendiente, orientación, sombra— no se anota
+    aquí: es otra pieza, `2026-09-18-condiciones-fijas-del-terreno-design.md`.
 - **Quién lo ve:**
   - **sus superiores** en esa finca (Farm Manager y capataz), siempre;
   - **los demás** que trabajan esa parcela o ese lote, **sólo si se les concede** un permiso
