@@ -77,6 +77,13 @@ export default async function MisEntregasPage() {
                   {t("fotos", { n: e._count.assets })}
                   {" · "}
                   {e.estado === "anulada" ? t("anuladaMotivo", { motivo: e.motivoAnulacion ?? "" }) : t("enviada")}
+                  {e.recepcion
+                    ? ` · ${
+                        e.recepcion.estado === "rechazada"
+                          ? t("rechazadaEnBeneficio", { motivo: e.recepcion.motivoRechazo ?? "" })
+                          : t("recibidaEnBeneficio", { kg: e.recepcion.netoKg.toFixed(1), dif: (e.recepcion.diferenciaKg ?? 0).toFixed(1) })
+                      }`
+                    : ""}
                 </span>
                 {e.estado === "enviada" && e.jornada.estado === "abierta" ? <FotoDeEntregaForm entregaId={e.id} /> : null}
               </li>

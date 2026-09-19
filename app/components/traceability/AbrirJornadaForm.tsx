@@ -20,16 +20,20 @@ export function AbrirJornadaForm({
   fincaSiteId,
   parcelas,
   recolectores,
+  beneficios,
 }: {
   fincaSiteId: string;
   parcelas: { id: string; name: string }[];
   recolectores: { personId: string; nombre: string }[];
+  /** Spec recepción §3.1: a qué beneficio va la cereza del día (`beneficiosDeDestino`). */
+  beneficios: { id: string; name: string }[];
 }) {
   const t = useTranslations("Jornadas");
   const [state, formAction, pending] = useActionState(abrirJornadaAction, inicial);
 
   if (!parcelas.length) return <p className="nn-muted">{t("sinParcelas")}</p>;
   if (!recolectores.length) return <p className="nn-muted">{t("sinRecolectores")}</p>;
+  if (!beneficios.length) return <p className="nn-muted">{t("sinBeneficioDestino")}</p>;
 
   return (
     <form action={formAction} className="nn-form">
@@ -37,6 +41,15 @@ export function AbrirJornadaForm({
       <div className="nn-field">
         <label htmlFor="jornada-fecha">{t("fecha")}</label>
         <input id="jornada-fecha" name="fecha" type="date" required ref={(el) => { if (el && !el.value) el.value = hoyLocal(); }} />
+      </div>
+      <div className="nn-field">
+        <label htmlFor="jornada-destino">{t("destino")}</label>
+        <select id="jornada-destino" name="beneficioId" required defaultValue={beneficios.length === 1 ? beneficios[0]!.id : ""}>
+          <option value="" disabled>{t("elegir")}</option>
+          {beneficios.map((b) => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
       </div>
       {parcelas.map((p) => (
         <fieldset key={p.id} className="nn-field">

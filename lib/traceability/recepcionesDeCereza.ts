@@ -233,9 +233,10 @@ export async function pendientesDeBeneficio(userAccountId: string, beneficioId: 
   });
 }
 
-/** Lo recibido en un beneficio desde una fecha, con quién lo recibió. */
-export async function recepcionesDeBeneficio(userAccountId: string, beneficioId: string, desde: Date) {
+/** Lo recibido en un beneficio en las últimas `horas`, con quién lo recibió. */
+export async function recepcionesDeBeneficio(userAccountId: string, beneficioId: string, horas: number) {
   await exigeVerBeneficio(userAccountId, beneficioId);
+  const desde = new Date(Date.now() - horas * 3_600_000);
   const filas = await prisma.recepcionDeCereza.findMany({
     where: { beneficioId, recibidaAt: { gte: desde } },
     orderBy: { recibidaAt: "desc" },

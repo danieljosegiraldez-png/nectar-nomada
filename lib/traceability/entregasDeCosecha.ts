@@ -17,6 +17,7 @@ import { can } from "../rbac/service";
 import { objectStorageProvider } from "../integrations/storage";
 import { requireLotAccess } from "./lots";
 import { origenesDeParcelas } from "./jornadasDeCosecha";
+import { recepcionDeEntregas } from "./recepcionesDeCereza";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
 export class EntregaError extends Error {}
@@ -164,8 +165,12 @@ export async function misEntregas(userAccountId: string) {
     }),
   ]);
   // Los orígenes sólo de las parcelas asignadas a ESTA persona en sus jornadas abiertas.
-  const origenes = await origenesDeParcelas([...new Set(asignaciones.map((a) => a.locationId))]);
-  return { personaId: persona, asignaciones, entregas, origenes };
+  const [origenes, recibidas] = await Promise.all([
+    origenesDeParcelas([...new Set(asignaciones.map((a) => a.locationId))]),
+    // Spec recepción §4: el recolector ve lo que recibió el beneficio de SUS entregas.
+    recepcionDeEntregas(entregas.map((e) => e.id)),
+  ]);
+  return { personaId: persona, asignaciones, entregas: entregas.map((e) => ({ ...e, recepcion: recibidas.get(e.id) ?? null })), origenes };
 }
 
 /** Paso 1 de la foto de una entrega: la URL de subida. Misma autorización que anotarla. */

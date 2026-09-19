@@ -146,7 +146,9 @@ describe("el inventario del router", () => {
     // 94 → 96 al fusionar `fitosanitarios` (2026-09-19): /plots/[id]/manejo/nuevo y
     // /plots/[id]/manejo/[interventionId]. Medido con `node scripts/inventario-de-rutas.mjs`
     // sobre el árbol fusionado: 85 páginas y 11 handlers.
-    expect(salida).toContain("96 entradas");
+    // 96 → 98 el mismo día: /beneficio/recepcion y /beneficio/pedidos (spec recepción de cereza).
+    // Medido: 87 páginas y 11 handlers.
+    expect(salida).toContain("98 entradas");
     expect(codigo, salida).toBe(0);
   });
 

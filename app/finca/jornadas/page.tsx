@@ -6,7 +6,7 @@ import { getCurrentUser } from "../../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../../lib/rbac/service";
 import { COOKIE_FINCA, fincaDeLaPagina, idsBajoLaFinca, ordenarParcelas } from "../../../lib/traceability/fincas";
 import { getManageableContext, getObserverCandidates, TraceabilityAccessError } from "../../../lib/traceability/lots";
-import { jornadasDeFinca, recolectoresDeFinca } from "../../../lib/traceability/jornadasDeCosecha";
+import { beneficiosDeDestino, jornadasDeFinca, recolectoresDeFinca } from "../../../lib/traceability/jornadasDeCosecha";
 import { FincaElegida } from "../../components/traceability/FincaElegida";
 import { AbrirJornadaForm, AgregarRecolectorForm } from "../../components/traceability/AbrirJornadaForm";
 
@@ -51,9 +51,9 @@ export default async function JornadasPage() {
   }
 
   const gestiona = granted.has("lot:manage");
-  const [contexto, candidatos] = gestiona
-    ? await Promise.all([getManageableContext(user.userAccountId), getObserverCandidates(user.userAccountId)])
-    : [null, null];
+  const [contexto, candidatos, destinos] = gestiona
+    ? await Promise.all([getManageableContext(user.userAccountId), getObserverCandidates(user.userAccountId), beneficiosDeDestino(user.userAccountId)])
+    : [null, null, []];
   const bajo = contexto ? idsBajoLaFinca(contexto.locations, siteId) : new Set<string>();
   const parcelas = contexto ? ordenarParcelas(contexto.plotLocations.filter((p) => bajo.has(p.id))) : [];
   const yaSon = new Set(recolectores.map((r) => r.personId));
@@ -87,7 +87,7 @@ export default async function JornadasPage() {
         <>
           <section className="nn-section">
             <h2>{t("abrirTitulo")}</h2>
-            <AbrirJornadaForm fincaSiteId={siteId} parcelas={parcelas.map((p) => ({ id: p.id, name: p.name }))} recolectores={recolectores} />
+            <AbrirJornadaForm fincaSiteId={siteId} parcelas={parcelas.map((p) => ({ id: p.id, name: p.name }))} recolectores={recolectores} beneficios={destinos} />
           </section>
           <section className="nn-section">
             <h2>{t("recolectoresTitulo")}</h2>

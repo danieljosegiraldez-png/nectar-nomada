@@ -18,6 +18,7 @@ import { recordAuditEvent } from "../audit";
 import { requireLotAccess } from "./lots";
 import { idsBajoLaFinca } from "./fincas";
 import { can } from "../rbac/service";
+import { recepcionDeEntregas } from "./recepcionesDeCereza";
 
 export class JornadaError extends Error {}
 
@@ -240,14 +241,16 @@ export async function detalleDeJornada(userAccountId: string, jornadaId: string)
       },
     }),
   ]);
-  const [origenes, cuentas] = await Promise.all([
+  const [origenes, cuentas, recibidas] = await Promise.all([
     origenesDeParcelas([...new Set(asignaciones.map((a) => a.location.id))]),
     prisma.userAccount.findMany({
       where: { id: { in: [...new Set(entregas.map((e) => e.anotadaPor))] } },
       select: { id: true, person: { select: { displayName: true } } },
     }),
+    // Spec recepción §4: la finca ve lo que recibió el beneficio. Ya se autorizó ver esta jornada.
+    recepcionDeEntregas(entregas.map((e) => e.id)),
   ]);
   // `anotadaPor` es una cuenta sin relación en el esquema: el nombre se resuelve aquí.
   const anotadores = new Map(cuentas.map((c) => [c.id, c.person.displayName]));
-  return { jornada, asignaciones, entregas: entregas.map((e) => ({ ...e, anotadaPorNombre: anotadores.get(e.anotadaPor) ?? null })), origenes };
+  return { jornada, asignaciones, entregas: entregas.map((e) => ({ ...e, anotadaPorNombre: anotadores.get(e.anotadaPor) ?? null, recepcion: recibidas.get(e.id) ?? null })), origenes };
 }
