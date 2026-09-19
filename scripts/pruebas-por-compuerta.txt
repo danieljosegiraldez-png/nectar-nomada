@@ -143,7 +143,6 @@ tests/traceability/measurements.test.ts
 tests/traceability/media.test.ts
 tests/traceability/operations.test.ts
 tests/traceability/organizacionAcotada.test.ts
-tests/traceability/pendienteDeTrampas.test.ts
 tests/traceability/perfilDeTueste.test.ts
 tests/traceability/processTargets.test.ts
 tests/traceability/quantity.test.ts
