@@ -7,7 +7,7 @@
 import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
-import { asignarATiendaAction, confirmarRecepcionAction, crearVarianteAction, despacharPedidoAction } from "../../actions/tienda";
+import { anularAsignacionAction, asignarATiendaAction, confirmarRecepcionAction, crearVarianteAction, despacharPedidoAction } from "../../actions/tienda";
 
 type Estado = { error?: string; ok?: boolean };
 const inicial: Estado = {};
@@ -169,5 +169,37 @@ export function DespacharPedidoForm({ orderId, articulos }: { orderId: string; a
         {t("despacharGuardar")}
       </button>
     </form>
+  );
+}
+
+/**
+ * Anular una asignación que no se va a recibir (ADR-170). Plegado detrás de un «Anular» para que
+ * no se confunda con recibir: es la salida rara, no la normal.
+ */
+export function AnularAsignacionForm({ allocationId, lotId }: { allocationId: string; lotId?: string }) {
+  const [estado, accion, pending] = useActionState(anularAsignacionAction, inicial);
+  const t = useTranslations("Tienda");
+  const id = (s: string) => `${s}-${allocationId}`;
+  return (
+    <details style={{ marginTop: "0.25rem" }}>
+      <summary>{t("anular")}</summary>
+      <form action={accion} className="nn-form" style={{ margin: "0.25rem 0 0", maxWidth: 460 }}>
+        <input type="hidden" name="allocationId" value={allocationId} />
+        {lotId ? <input type="hidden" name="lotId" value={lotId} /> : null}
+        <div className="nn-field">
+          <label htmlFor={id("anu-dia")}>{t("dia")}</label>
+          <input id={id("anu-dia")} name="cancelledAt" type="date" required />
+        </div>
+        <div className="nn-field">
+          <label htmlFor={id("anu-motivo")}>{t("anularMotivo")}</label>
+          <input id={id("anu-motivo")} name="reason" type="text" required />
+        </div>
+        <p className="nn-muted">{t("anularAyuda")}</p>
+        <Resultado estado={estado} ok={t("anulada")} />
+        <button type="submit" disabled={pending}>
+          {t("anularGuardar")}
+        </button>
+      </form>
+    </details>
   );
 }

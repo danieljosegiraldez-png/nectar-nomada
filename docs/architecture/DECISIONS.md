@@ -11430,3 +11430,29 @@ y no despachados ya. Al despachar, en una transaccion `Serializable`:
 
 **Lo que NO entra.** Que el cliente vea en «Mis pedidos» de que lote salio su frasco: el dato ya
 esta, falta la pantalla. Y devoluciones: un pedido despachado no se deshace aqui.
+
+## ADR-170 -- Una asignacion a tienda que no va a llegar se anula, no se borra
+
+**Contexto.** ADR-163 separo asignar (en el lote) de recibir (en la tienda). Pero una asignacion
+que nunca iba a llegar —el envio no sale, la tienda no tiene sitio, se asigno a la variante
+equivocada— se quedaba pendiente para siempre y **sus envases seguian contando como asignados**:
+el lote no podia volver a asignarlos. No habia salida. Esto no lo pidio Daniel con esas palabras:
+salio al cerrar ADR-169, como el hueco que dejaba el flujo de dos actos.
+
+**Decision.** Una asignacion **pendiente** se puede anular, con **motivo obligatorio** y el dia.
+Puede anular quien gestiona el lote (`requireLotAccess("manage")`) o quien lleva la tienda
+(`commerce:manage_store`): los dos lados saben que el envio no va a salir.
+
+- La fila **no se borra**: guarda `cancelled_at`, `cancelled_by` y `cancel_reason`, y deja un
+  AuditEvent `store_allocation.cancel`.
+- Sus envases vuelven a **libres**: la suma de asignados sale de las no anuladas.
+- La tienda deja de esperarla, y una anulada **no se puede recibir**.
+- **Una recibida no se anula**: esos frascos ya estan en el estante. La escritura lleva
+  `received_at IS NULL AND cancelled_at IS NULL` en su condicion, asi que no pisa una recepcion
+  que llegue a la vez.
+
+**En la base, dos CHECK:** `store_allocation_anulacion_completa` (los tres campos juntos o
+ninguno, y el motivo no en blanco) y `store_allocation_recibida_o_anulada` (nunca las dos).
+
+**Lo que NO entra.** Deshacer una anulacion (se asigna de nuevo), y corregir una recepcion ya
+confirmada: eso seria un ajuste de inventario, no una anulacion.

@@ -515,7 +515,7 @@
     },
     {
       "archivo": "lib/commerce/tienda.ts",
-      "razon": "Módulo de dominio (ADR-163): de un lote envasado a la tienda. `asignarATienda` exige `requireLotAccess(\"manage\")` antes de leer nada del lote; `confirmarRecepcion`, `crearVariante` y `tiendaParaGestionar` exigen `commerce:manage_store`. Escritura y AuditEvent en la MISMA transacción; la asignación en `Serializable` para que dos a la vez no pasen juntas del techo de envases."
+      "razon": "Módulo de dominio (ADR-163): de un lote envasado a la tienda. `asignarATienda` exige `requireLotAccess(\"manage\")` antes de leer nada del lote; `confirmarRecepcion`, `crearVariante` y `tiendaParaGestionar` exigen `commerce:manage_store`; `anularAsignacion` (ADR-170) exige `commerce:manage_store` o `requireLotAccess(\"manage\")` sobre el lote. Escritura y AuditEvent en la MISMA transacción; la asignación en `Serializable` para que dos a la vez no pasen juntas del techo de envases."
     },
     {
       "archivo": "lib/apiary/cosechasSinSaldo.ts",

@@ -75,7 +75,7 @@ export async function asignarATienda(userAccountId: string, input: AsignarATiend
       if (envases === null) throw new TiendaInvalida("el_lote_no_esta_envasado");
       const variante = await tx.productVariant.findUnique({ where: { id: input.productVariantId } });
       if (!variante || variante.status !== "active") throw new TiendaInvalida("variante_no_disponible");
-      const ya = await tx.storeAllocation.aggregate({ where: { lotId: lote.id }, _sum: { unitsAssigned: true } });
+      const ya = await tx.storeAllocation.aggregate({ where: { lotId: lote.id, cancelledAt: null }, _sum: { unitsAssigned: true } });
       const asignados = ya._sum.unitsAssigned ?? 0;
       if (asignados + unidades > envases) throw new TiendaInvalida(`mas_envases_de_los_que_hay:${envases - asignados}`);
 
@@ -134,11 +134,12 @@ export async function confirmarRecepcion(userAccountId: string, input: Confirmar
     const antes = await tx.storeAllocation.findUnique({ where: { id: input.allocationId } });
     if (!antes) throw new TiendaInvalida("asignacion_no_encontrada");
     if (antes.receivedAt) throw new TiendaInvalida("ya_recibida");
+    if (antes.cancelledAt) throw new TiendaInvalida("asignacion_anulada");
     if (recibidos > antes.unitsAssigned) throw new TiendaInvalida(`mas_de_lo_asignado:${antes.unitsAssigned}`);
     if (recibidos < antes.unitsAssigned && !nota) throw new TiendaInvalida("faltante_sin_motivo");
 
     const hecho = await tx.storeAllocation.updateMany({
-      where: { id: antes.id, receivedAt: null },
+      where: { id: antes.id, receivedAt: null, cancelledAt: null },
       data: { receivedAt: input.receivedAt, receivedBy: userAccountId, unitsReceived: recibidos, receiptNote: nota },
     });
     if (hecho.count !== 1) throw new TiendaInvalida("ya_recibida");
@@ -216,7 +217,7 @@ export async function tiendaParaGestionar(userAccountId: string) {
       },
     }),
     prisma.storeAllocation.findMany({
-      where: { receivedAt: null },
+      where: { receivedAt: null, cancelledAt: null },
       orderBy: { assignedAt: "asc" },
       select: {
         id: true, unitsAssigned: true, assignedAt: true,
@@ -243,10 +244,12 @@ export async function asignacionesDeLote(lotId: string) {
     orderBy: { assignedAt: "asc" },
     select: {
       id: true, unitsAssigned: true, assignedAt: true, unitsReceived: true, receivedAt: true, receiptNote: true,
+      cancelledAt: true, cancelReason: true,
       productVariant: { select: { sku: true, variantName: true, product: { select: { name: true } } } },
     },
   });
-  const asignados = filas.reduce((a, f) => a + f.unitsAssigned, 0);
+  // Lo anulado se enseña —es historia— pero no cuenta: sus envases volvieron a libres.
+  const asignados = filas.filter((f) => !f.cancelledAt).reduce((a, f) => a + f.unitsAssigned, 0);
   return { envases, asignados, libres: envases - asignados, filas };
 }
 
@@ -395,4 +398,55 @@ export async function despacharPedido(userAccountId: string, input: DespacharPed
     },
     { isolationLevel: "Serializable" },
   );
+}
+
+export interface AnularAsignacionInput {
+  allocationId: string;
+  /** Obligatorio: una anulación sin motivo no se puede discutir después. */
+  reason: string;
+  /** El DÍA de la anulación. */
+  cancelledAt: Date;
+}
+
+/**
+ * Anular una asignación que NUNCA se recibió — ADR-170. Sus envases vuelven a libres para
+ * asignarse de nuevo. **No se borra**: queda con quién, cuándo y por qué.
+ *
+ * Puede anular quien gestiona el LOTE (quien asignó) o quien lleva la TIENDA (quien iba a
+ * recibir): los dos lados saben que el envío no va a salir. **Una asignación recibida no se
+ * anula**: esos frascos ya están en el estante. La actualización lleva `receivedAt: null` y
+ * `cancelledAt: null` en su condición, así que no pisa una recepción que llegue a la vez.
+ */
+export async function anularAsignacion(userAccountId: string, input: AnularAsignacionInput) {
+  const motivo = input.reason.trim();
+  if (!motivo) throw new TiendaInvalida("anular_sin_motivo");
+  const antes = await prisma.storeAllocation.findUnique({ where: { id: input.allocationId }, include: { lot: true } });
+  if (!antes) throw new TiendaInvalida("asignacion_no_encontrada");
+  if (!(await puedeGestionarTienda(userAccountId))) await requireLotAccess(userAccountId, "manage", [antes.lot]);
+  if (antes.receivedAt) throw new TiendaInvalida("ya_recibida");
+  if (antes.cancelledAt) throw new TiendaInvalida("asignacion_anulada");
+
+  return prisma.$transaction(async (tx) => {
+    const hecho = await tx.storeAllocation.updateMany({
+      where: { id: antes.id, receivedAt: null, cancelledAt: null },
+      data: { cancelledAt: input.cancelledAt, cancelledBy: userAccountId, cancelReason: motivo },
+    });
+    if (hecho.count !== 1) throw new TiendaInvalida("ya_recibida");
+    const despues = await tx.storeAllocation.findUniqueOrThrow({ where: { id: antes.id } });
+    const { lot: _lote, ...fila } = antes;
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "store_allocation.cancel",
+        entityType: "store_allocation",
+        entityId: antes.id,
+        before: fila,
+        after: despues,
+        reason: motivo,
+        sourceInterface: "commerce.tienda",
+      },
+      tx,
+    );
+    return despues;
+  });
 }

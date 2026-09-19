@@ -4,7 +4,7 @@ import { getTranslations } from "next-intl/server";
 
 import { getCurrentUser } from "../../lib/auth/session";
 import { pedidosPorDespachar, puedeGestionarTienda, tiendaParaGestionar } from "../../lib/commerce/tienda";
-import { ConfirmarRecepcionForm, DespacharPedidoForm, NuevaVarianteForm } from "../components/commerce/TiendaForms";
+import { AnularAsignacionForm, ConfirmarRecepcionForm, DespacharPedidoForm, NuevaVarianteForm } from "../components/commerce/TiendaForms";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +67,7 @@ export default async function TiendaPage() {
                   {p.lot.lotCode}
                 </Link>
                 <ConfirmarRecepcionForm allocationId={p.id} asignados={p.unitsAssigned} />
+                <AnularAsignacionForm allocationId={p.id} lotId={p.lot.id} />
               </li>
             ))}
           </ul>

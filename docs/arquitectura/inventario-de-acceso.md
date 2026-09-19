@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**429 operaciones** que tocan la base, en **130 archivos**:
+**430 operaciones** que tocan la base, en **130 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,17 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **309** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **310** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **38** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **63** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+
+> **Anular una asignación a tienda (ADR-170, 2026-09-18).** Una operación nueva,
+> `anularAsignacion` en `lib/commerce/tienda.ts`, y sube la fila de **guardia directo**,
+> 309→310 tras rebasar sobre las fincas (#425): exige `commerce:manage_store` o, si no, `requireLotAccess("manage")` sobre el lote
+> de la asignación, antes de escribir nada. 429→430.
 
 > **Fusión de `origin/main` en `trampas-broca` (2026-09-18).** Los dos lados
 > traían cifras propias —356/106 la rama, 376/116 `main`— y **ninguna de las dos
