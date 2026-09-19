@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { getFincasConTrampas, getFincaTrampas, FincaTrapAccessError } from "../../../lib/traceability/fincaTrampas";
+import { getFincasConTrampas, getFincaTrampas, FincaTrapAccessError, elegirFincaDeTrampas } from "../../../lib/traceability/fincaTrampas";
 import { estadoDeTrampa, trampasParaAviso, trampasFiltradas, FILTROS_DE_TRAMPAS } from "../../../lib/traceability/pendienteDeTrampas";
 import { claveDeTituloDeBloque } from "../../../lib/traceability/plotBlocks";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
@@ -21,6 +21,10 @@ export const dynamic = "force-dynamic";
  *   Así la rama `FincaTrapAccessError` deja de ser código muerto — es lo que
  *   responde a una finca concreta que el visor no puede ver, spec §6.
  * - Sin NINGÚN acceso, ya no hay `notFound()`: el mensaje explícito de spec §6.
+ *
+ * Fix round 1 (Tarea 9, ruling del controlador): la elección de finca se movió a
+ * `elegirFincaDeTrampas` (`lib/traceability/fincaTrampas.ts`), que también usa la
+ * ronda — una sola implementación en vez de dos copias con el mismo criterio.
  */
 export default async function TrampasDeLaFincaPage({
   searchParams,
@@ -37,7 +41,7 @@ export default async function TrampasDeLaFincaPage({
   }
 
   const { finca: fincaElegida, filtro: filtroCrudo } = await searchParams;
-  const farmLocationId = fincaElegida ?? (fincas.length === 1 ? fincas[0]!.id : null);
+  const farmLocationId = elegirFincaDeTrampas(fincas, fincaElegida);
 
   if (farmLocationId == null) {
     return (
