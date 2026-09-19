@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import { actualizarUbicacionDeSecado, crearUbicacionDeSecado, detalleInstalacion } from "../../lib/traceability/instalaciones";
+import { actualizarUbicacionDeSecado, crearUbicacionDeSecado, detalleInstalacion, instalacionDe } from "../../lib/traceability/instalaciones";
 import { ampliarEstante, crearEstante, EstanteError, MAX_NIVELES, MAX_PUESTOS } from "../../lib/traceability/estantes";
 import { opcionesParaInspeccion } from "../../lib/traceability/samplingEvents";
 
@@ -18,10 +18,23 @@ const scopeIds: string[] = [];
 // Ninguno de los dos queda atrapado por el filtro `name: { in: names }` de
 // abajo, así que los estantes creados por el servicio se rastrean por id.
 const rackIds: string[] = [];
+const orgIds: string[] = [];
 function nombre() { const n = `TEST-EST-${randomUUID()}`; names.push(n); return n; }
 function id(ids: string[]) { const value = randomUUID(); ids.push(value); return value; }
 async function sitio() {
   return prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal" } });
+}
+/** Un sitio con SU PROPIA organización — para el hallazgo 2 de la revisión: un
+ *  sitio sin organización (como `sitio()`) hace que la instalación herede
+ *  `null`, y comparar `null === null` no puede distinguir «heredó bien» de
+ *  «copió el null del padre inmediato». Aquí la instalación NO declara
+ *  organización propia (la hereda de este sitio), así que el estante sólo
+ *  puede llevar la del sitio si `resolveOrganizationForLocation` de verdad sube. */
+async function sitioConOrganizacion() {
+  const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
+  orgIds.push(org.id);
+  const s = await prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal", organizationId: org.id } });
+  return { org, sitio: s };
 }
 async function cuenta(locationId?: string, perfil: "Farm Manager" | "Farm Operator" = "Farm Manager") {
   const personId = id(personIds);
@@ -66,13 +79,19 @@ afterEach(async () => {
   for (const locationType of ["drying_bed", "drying_rack", "drying_facility", "site"] as const) {
     await prisma.location.deleteMany({ where: { ...where, locationType } });
   }
+  // La organización se suelta ANTES de borrarla: una Location con
+  // `organizationId` puesto la referencia, y la fila ya se borró arriba, así
+  // que sólo queda quitar la propia Organization (mismo orden que
+  // `editarBeneficio.test.ts`).
+  if (orgIds.length) await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
   expect(await prisma.location.count({ where })).toBe(0);
   expect(await prisma.location.count({ where: { id: { in: rackIds } } })).toBe(0);
   expect(await prisma.auditEvent.count({ where: auditWhere })).toBe(0);
   expect(await prisma.userAccount.count({ where: { id: { in: accountIds } } })).toBe(0);
   expect(await prisma.person.count({ where: { id: { in: personIds } } })).toBe(0);
   expect(await prisma.scope.count({ where: { id: { in: scopeIds } } })).toBe(0);
-  for (const ids of [names, accountIds, personIds, scopeIds, rackIds]) ids.length = 0;
+  expect(await prisma.organization.count({ where: { id: { in: orgIds } } })).toBe(0);
+  for (const ids of [names, accountIds, personIds, scopeIds, rackIds, orgIds]) ids.length = 0;
 });
 
 describe("estantes", () => {
@@ -127,6 +146,34 @@ describe("estantes", () => {
   });
 });
 
+describe("crearEstante resuelve la organización subiendo por el árbol, no la copia del padre inmediato", () => {
+  it("una instalación sin organización propia hereda la del sitio, y el estante y sus posiciones la reciben también", async () => {
+    const { org, sitio: finca } = await sitioConOrganizacion();
+    const actor = await cuenta(finca.id);
+    // A propósito NO por `crearUbicacionDeSecado`: ese servicio COPIA
+    // `parent.organizationId` al crear, así que con un sitio CON organización
+    // la instalación saldría con `org.id` de una — sin ejercer nunca la
+    // resolución que sube por el árbol, que es justo lo que este caso prueba.
+    // La fila de abajo es el estado real que exige `resolveOrganizationForLocation`
+    // (su propio comentario: "una instalación puede heredarla, organizationId
+    // nulo"): la instalación no declara organización propia y el sitio sí.
+    const cuarto = await prisma.location.create({ data: {
+      name: nombre(), locationType: "drying_facility", parentLocationId: finca.id,
+      classification: "internal", organizationId: null,
+    } });
+    // Si `crearEstante` copiara `cuarto.organizationId` tal cual (el bug que
+    // este caso caza), el estante saldría con null también.
+    expect(cuarto.organizationId).toBeNull();
+    const { id } = await crearEstante(actor, { facilityId: cuarto.id, nombre: "E", niveles: 1, puestos: 2 });
+    rackIds.push(id);
+    const rack = await prisma.location.findUniqueOrThrow({ where: { id } });
+    expect(rack.organizationId).toBe(org.id);
+    const posiciones = await prisma.location.findMany({ where: { parentLocationId: id } });
+    expect(posiciones).toHaveLength(2);
+    expect(posiciones.every((p) => p.organizationId === org.id)).toBe(true);
+  });
+});
+
 describe("ruling 2: la visibilidad de un estante es POR ESTANTE, no por instalación (flip 14)", () => {
   it("en una instalación interna, un Farm Operator ve el estante interno con sus posiciones y no ve el confidencial", async () => {
     const parent = await sitio();
@@ -170,6 +217,61 @@ describe("la sombra de una posición conserva su nivel y su puesto", () => {
   });
 });
 
+describe("instalacionDe sube hasta la primera drying_facility", () => {
+  it("desde una posición de estante, desde una cama suelta, y desde la propia instalación", async () => {
+    const parent = await sitio(); const actor = await cuenta(parent.id);
+    const cuarto = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: parent.id, locationType: "drying_facility" });
+    const cama = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: cuarto.id, locationType: "drying_bed" });
+    const { id: rackId } = await crearEstante(actor, { facilityId: cuarto.id, nombre: "E", niveles: 1, puestos: 1 });
+    rackIds.push(rackId);
+    const posicion = await prisma.location.findFirstOrThrow({ where: { parentLocationId: rackId } });
+    expect(await instalacionDe(posicion.id)).toBe(cuarto.id); // posición → estante → instalación
+    expect(await instalacionDe(cama.id)).toBe(cuarto.id); // cama suelta → instalación
+    expect(await instalacionDe(cuarto.id)).toBe(cuarto.id); // ya es la instalación
+  });
+
+  it("desde un sitio, que no cuelga de ninguna instalación, rechaza con tipo_invalido", async () => {
+    const parent = await sitio();
+    await expect(instalacionDe(parent.id)).rejects.toThrow("tipo_invalido");
+  });
+});
+
+describe("crear varias posiciones de un golpe: el disparador mira cada fila del INSERT", () => {
+  it("un createMany con una fila inválida rechaza el lote entero; el mismo lote sin ella entra entero (control positivo)", async () => {
+    const parent = await sitio(); const actor = await cuenta(parent.id);
+    const cuarto = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: parent.id, locationType: "drying_facility" });
+    const rack = await prisma.location.create({ data: {
+      name: nombre(), locationType: "drying_rack", parentLocationId: cuarto.id,
+      organizationId: cuarto.organizationId, classification: cuarto.classification,
+    } });
+    rackIds.push(rack.id);
+
+    // Control positivo: tres posiciones válidas, EN UN SOLO createMany —el
+    // mismo camino que usa `crearEstante`—, entran todas.
+    const validas = [1, 2, 3].map((puesto) => ({
+      name: `PROBE N1 · P${puesto}`, locationType: "drying_bed" as const, parentLocationId: rack.id,
+      rackLevel: 1, rackSlot: puesto, organizationId: rack.organizationId, classification: rack.classification,
+    }));
+    await prisma.location.createMany({ data: validas });
+    expect(await prisma.location.count({ where: { parentLocationId: rack.id, rackLevel: 1 } })).toBe(3);
+
+    // El lote bajo prueba: dos posiciones válidas de nivel 2 y una fila
+    // inválida en medio —sin `rackSlot`, que el disparador rechaza— para
+    // comprobar que Postgres corre el disparador FILA A FILA también dentro
+    // de un INSERT múltiple, y que rechazar una fila aborta el lote entero.
+    const lote = [
+      { name: "PROBE N2 · P1", locationType: "drying_bed" as const, parentLocationId: rack.id, rackLevel: 2, rackSlot: 1, organizationId: rack.organizationId, classification: rack.classification },
+      { name: "PROBE N2 · invalida", locationType: "drying_bed" as const, parentLocationId: rack.id, rackLevel: 2, rackSlot: null, organizationId: rack.organizationId, classification: rack.classification },
+      { name: "PROBE N2 · P2", locationType: "drying_bed" as const, parentLocationId: rack.id, rackLevel: 2, rackSlot: 2, organizationId: rack.organizationId, classification: rack.classification },
+    ];
+    await expect(prisma.location.createMany({ data: lote })).rejects.toThrow(/nivel y puesto/);
+    // Nada del lote de nivel 2 entró: ni las dos filas válidas que lo acompañaban.
+    expect(await prisma.location.count({ where: { parentLocationId: rack.id, rackLevel: 2 } })).toBe(0);
+    // Y las tres del control positivo siguen intactas: lo que se rechazó fue el lote, no el estante entero.
+    expect(await prisma.location.count({ where: { parentLocationId: rack.id, rackLevel: 1 } })).toBe(3);
+  });
+});
+
 describe("reglas del estante en la base", () => {
   it("un estante sólo cuelga de una instalación; una posición de estante lleva nivel y puesto y no se repite", async () => {
     const s = await sitio();
@@ -199,6 +301,9 @@ describe("reglas del estante en la base", () => {
     // Control: una instalación SIN estantes sí puede cambiar (lo que el árbol ya permitía).
     const sola = await prisma.location.create({ data: { name: nombre(), locationType: "drying_facility", parentLocationId: s.id } });
     expect((await prisma.location.update({ where: { id: sola.id }, data: { locationType: "site" } })).locationType).toBe("site");
+    // Control simétrico: un estante SIN posiciones también puede cambiar de tipo.
+    const rackSolo = await prisma.location.create({ data: { name: nombre(), locationType: "drying_rack", parentLocationId: inv.id } });
+    expect((await prisma.location.update({ where: { id: rackSolo.id }, data: { locationType: "site" } })).locationType).toBe("site");
   });
 });
 
