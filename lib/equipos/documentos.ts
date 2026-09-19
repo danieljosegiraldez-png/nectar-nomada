@@ -98,10 +98,20 @@ async function visibles(where: object): Promise<DocumentoVisible[]> {
 
 export async function documentosDeEquipo(userAccountId: string, equipmentId: string) {
   if (!(await puedeSobreEquipo(userAccountId, equipmentId, "view"))) throw new DocumentoError("forbidden");
-  const e = await prisma.equipment.findUniqueOrThrow({ where: { id: equipmentId }, select: { modelId: true } });
+  const e = await prisma.equipment.findUniqueOrThrow({
+    where: { id: equipmentId },
+    select: { modelId: true, model: { select: { organizationId: true } } },
+  });
+  // Ver el equipo no es ver el catálogo de su dueño: un equipo de A trasladado a
+  // un sitio de B lo ve quien trabaja en B, pero los documentos de un modelo
+  // PROPIO de A siguen siendo de A. Sólo se heredan si el modelo es compartido o
+  // de una organización que esta persona ve.
+  const modeloVisible =
+    e.model !== null &&
+    (e.model.organizationId === null || (await organizacionesVisibles(userAccountId, VER)).includes(e.model.organizationId));
   const [propios, delModelo] = await Promise.all([
     visibles({ equipmentId }),
-    e.modelId ? visibles({ equipmentModelId: e.modelId }) : Promise.resolve([]),
+    modeloVisible && e.modelId ? visibles({ equipmentModelId: e.modelId }) : Promise.resolve([]),
   ]);
   return { propios, delModelo };
 }

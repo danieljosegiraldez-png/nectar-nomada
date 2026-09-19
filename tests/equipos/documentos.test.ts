@@ -5,12 +5,13 @@ vi.mock("../../lib/traceability/media", () => ({ getSignedUrlForAsset: async (k:
 
 import { prisma } from "../../lib/db";
 import { DocumentoError, confirmarSubidaDeDocumento, documentosDeEquipo } from "../../lib/equipos/documentos";
-import { registrarEquipo } from "../../lib/equipos/equipos";
+import { registrarEquipo, trasladarEquipo } from "../../lib/equipos/equipos";
+import { CatalogoError } from "../../lib/catalogos/propiedad";
 import { crearModelo } from "../../lib/equipos/modelos";
 import { montarFixtures, type Fixtures } from "../helpers/fixturesDeCatalogo";
 
 let f: Fixtures;
-let equipoA: string, otroEquipo: string, modeloComp: string, modeloPropio: string;
+let equipoA: string, otroEquipo: string, viajeroPropio: string, viajeroComp: string, modeloComp: string, modeloPropio: string;
 
 const subir = (usuario: string, destino: object, clave: string) =>
   confirmarSubidaDeDocumento(usuario, {
@@ -30,12 +31,14 @@ beforeAll(async () => {
     registrarEquipo(f.jefeA, { name: `TEST eq ${f.run} ${Math.random()}`, kind: "instrument", organizationId: f.orgA, initialLocationId: f.sitioA, provenanceClass: "original_record", modelId });
   equipoA = (await alta(modeloComp)).id;
   otroEquipo = (await alta(null)).id;
+  viajeroPropio = (await alta(modeloPropio)).id;
+  viajeroComp = (await alta(modeloComp)).id;
 });
 
 afterAll(async () => {
-  await prisma.asset.deleteMany({ where: { OR: [{ equipmentId: { in: [equipoA, otroEquipo] } }, { equipmentModelId: { in: [modeloComp, modeloPropio] } }] } });
-  await prisma.equipmentTransfer.deleteMany({ where: { equipmentId: { in: [equipoA, otroEquipo] } } });
-  await prisma.equipment.deleteMany({ where: { id: { in: [equipoA, otroEquipo] } } });
+  await prisma.asset.deleteMany({ where: { OR: [{ equipmentId: { in: [equipoA, otroEquipo, viajeroPropio, viajeroComp] } }, { equipmentModelId: { in: [modeloComp, modeloPropio] } }] } });
+  await prisma.equipmentTransfer.deleteMany({ where: { equipmentId: { in: [equipoA, otroEquipo, viajeroPropio, viajeroComp] } } });
+  await prisma.equipment.deleteMany({ where: { id: { in: [equipoA, otroEquipo, viajeroPropio, viajeroComp] } } });
   await prisma.equipmentModel.deleteMany({ where: { id: { in: [modeloComp, modeloPropio] } } });
   await f.limpiar();
 });
@@ -54,10 +57,14 @@ describe("confirmarSubidaDeDocumento", () => {
     );
   });
   it("el operario no adjunta (gestión)", async () => {
-    await expect(subir(f.operarioA, { tipo: "equipo", equipmentId: equipoA }, `nectar-originals/equipos/${equipoA}/y.pdf`)).rejects.toThrow();
+    await expect(subir(f.operarioA, { tipo: "equipo", equipmentId: equipoA }, `nectar-originals/equipos/${equipoA}/y.pdf`)).rejects.toThrow(
+      new DocumentoError("forbidden"),
+    );
   });
   it("al modelo compartido sólo con plataforma; al propio, el jefe de su organización", async () => {
-    await expect(subir(f.jefeA, { tipo: "modelo", modelId: modeloComp }, `nectar-originals/equipos/modelos/${modeloComp}/m.pdf`)).rejects.toThrow();
+    await expect(subir(f.jefeA, { tipo: "modelo", modelId: modeloComp }, `nectar-originals/equipos/modelos/${modeloComp}/m.pdf`)).rejects.toThrow(
+      new CatalogoError("forbidden"),
+    );
     await subir(f.admin, { tipo: "modelo", modelId: modeloComp }, `nectar-originals/equipos/modelos/${modeloComp}/m.pdf`);
     await subir(f.jefeA, { tipo: "modelo", modelId: modeloPropio }, `nectar-originals/equipos/modelos/${modeloPropio}/p.pdf`);
   });
@@ -69,5 +76,22 @@ describe("documentosDeEquipo", () => {
     expect(docs.propios.map((d) => d.url)).toContain(`url:nectar-originals/equipos/${equipoA}/cert.pdf`);
     expect(docs.delModelo.map((d) => d.url)).toContain(`url:nectar-originals/equipos/modelos/${modeloComp}/m.pdf`);
     expect(docs.propios.some((d) => d.url.includes("/modelos/"))).toBe(false);
+  });
+
+  it("un equipo trasladado a un sitio de OTRA organización no enseña ahí los documentos del modelo propio", async () => {
+    const docPropio = `url:nectar-originals/equipos/modelos/${modeloPropio}/p.pdf`;
+    const docComp = `url:nectar-originals/equipos/modelos/${modeloComp}/m.pdf`;
+    // Control positivo: en su sitio de origen, el operario de A SÍ los ve.
+    expect((await documentosDeEquipo(f.operarioA, viajeroPropio)).delModelo.map((d) => d.url)).toContain(docPropio);
+
+    for (const id of [viajeroPropio, viajeroComp]) {
+      await trasladarEquipo(f.jefeA, { equipmentId: id, fromLocationId: f.sitioA, toLocationId: f.sitioB, occurredAt: new Date() });
+    }
+    // El operario de B ve el equipo (está en su sitio), pero no el catálogo de A.
+    const enB = await documentosDeEquipo(f.operarioB, viajeroPropio);
+    expect(enB.delModelo.map((d) => d.url)).not.toContain(docPropio);
+    expect(enB.delModelo).toEqual([]);
+    // Lo compartido sí viaja: el mismo operario ve el manual del modelo compartido.
+    expect((await documentosDeEquipo(f.operarioB, viajeroComp)).delModelo.map((d) => d.url)).toContain(docComp);
   });
 });
