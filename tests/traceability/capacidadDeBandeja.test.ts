@@ -3,7 +3,30 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { crearTipoDeBandeja } from "../../lib/equipos/bandejas";
 import { createLot } from "../../lib/traceability/lots";
-import { capacidadDeTipo, pesajesDeTipo, registrarPesaje } from "../../lib/traceability/capacidadDeBandeja";
+import { PesajeError, capacidadDeTipo, pesajesDeTipo, registrarPesaje } from "../../lib/traceability/capacidadDeBandeja";
+
+/**
+ * `.rejects.toThrow("datos_invalidos")` es un `.includes()` sobre el mensaje.
+ * Descubierto en esta ronda (F3): un `PesajeError` que SÍ se lanza a mano
+ * tiene ese mensaje exacto y lo casa de verdad, pero un error de PRISMA trae
+ * un fragmento del código fuente alrededor de la línea que falló — y esta
+ * misma función tiene, dos líneas más arriba de la que revienta contra un
+ * `CHECK`, un `throw new PesajeError("datos_invalidos")` de otra rama. El
+ * fragmento cita esa línea, así que el `toThrow` de cadena la encuentra
+ * IGUAL, aunque el error de verdad sea un `CHECK` de la base — el flip-test de
+ * F3 pasaba en verde con la regla mutada por esto exacto. Se afirma el TIPO y
+ * el mensaje EXACTO, que ningún fragmento de código ajeno puede imitar.
+ */
+async function rechazaConDatosInvalidos(promesa: Promise<unknown>) {
+  await expect(promesa).rejects.toBeInstanceOf(PesajeError);
+  try {
+    await promesa;
+    throw new Error("se esperaba que rechazara");
+  } catch (error) {
+    expect(error).toBeInstanceOf(PesajeError);
+    expect((error as PesajeError).message).toBe("datos_invalidos");
+  }
+}
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 /**
@@ -193,16 +216,36 @@ describe("capacidad", () => {
     const base = { trayTypeId: tipo4x2, lotId, materialState: "CHERRY" as const, occurredAt: new Date() };
     // Profundidad: DECIMAL(5,1) — un decimal cabe, dos no. 2,85 truncaría en
     // silencio a 2,8 o 2,9 sin que nadie lo supiera; 0,04 (dos decimales) igual.
-    await expect(registrarPesaje(operario, { ...base, netKg: 8, profundidadesCm: [2.85, 2.8, 2.8] })).rejects.toThrow("datos_invalidos");
-    await expect(registrarPesaje(operario, { ...base, netKg: 8, profundidadesCm: [0.04, 2.8, 2.8] })).rejects.toThrow("datos_invalidos");
+    await rechazaConDatosInvalidos(registrarPesaje(operario, { ...base, netKg: 8, profundidadesCm: [2.85, 2.8, 2.8] }));
+    await rechazaConDatosInvalidos(registrarPesaje(operario, { ...base, netKg: 8, profundidadesCm: [0.04, 2.8, 2.8] }));
     // Control: 2,8 (un decimal) sí entra.
     expect((await registrarPesaje(operario, { ...base, netKg: 8, profundidadesCm: [2.8, 2.8, 2.8] })).id).toBeTruthy();
     // netKg: DECIMAL(10,3) — tres decimales caben, cuatro no.
-    await expect(registrarPesaje(operario, { ...base, netKg: 8.1234, profundidadesCm: [2.8, 2.8, 2.8] })).rejects.toThrow("datos_invalidos");
+    await rechazaConDatosInvalidos(registrarPesaje(operario, { ...base, netKg: 8.1234, profundidadesCm: [2.8, 2.8, 2.8] }));
     expect((await registrarPesaje(operario, { ...base, netKg: 8.123, profundidadesCm: [2.8, 2.8, 2.8] })).id).toBeTruthy(); // control
     // Rangos: DECIMAL(5,1) tope < 1000; DECIMAL(10,3) tope < 10^7.
-    await expect(registrarPesaje(operario, { ...base, netKg: 8, profundidadesCm: [1000, 2.8, 2.8] })).rejects.toThrow("datos_invalidos");
-    await expect(registrarPesaje(operario, { ...base, netKg: 10_000_000, profundidadesCm: [2.8, 2.8, 2.8] })).rejects.toThrow("datos_invalidos");
+    await rechazaConDatosInvalidos(registrarPesaje(operario, { ...base, netKg: 8, profundidadesCm: [1000, 2.8, 2.8] }));
+    await rechazaConDatosInvalidos(registrarPesaje(operario, { ...base, netKg: 10_000_000, profundidadesCm: [2.8, 2.8, 2.8] }));
+  });
+
+  it("F3: la notación exponencial no engaña al contador de decimales", async () => {
+    const base = { trayTypeId: tipo4x2, lotId, materialState: "CHERRY" as const, occurredAt: new Date() };
+    // (5e-7).toString() es "5e-7" — sin punto, así que un contador de
+    // caracteres tras el punto leía CERO decimales y dejaba pasar un número
+    // muchísimo más fino que lo que DECIMAL(10,3)/(5,1) guardan.
+    //
+    // **`rechazaConDatosInvalidos`, no `.rejects.toThrow("datos_invalidos")`.**
+    // Con la regla rota, esta llamada no la rechaza el guardia sino un CHECK de
+    // la base (`drying_tray_weighing_peso_positivo`) — y el error de Prisma
+    // imprime un fragmento del código fuente que, dos líneas antes de la que
+    // revienta, tiene un `throw new PesajeError("datos_invalidos")` de OTRA
+    // rama. `.toThrow("datos_invalidos")` es un `.includes()`: encontraba esa
+    // cita y pasaba en verde con la regla mutada. Comprobado en esta misma
+    // ronda: el flip de F3 no hacía caer esta prueba hasta este cambio.
+    await rechazaConDatosInvalidos(registrarPesaje(operario, { ...base, netKg: 5e-7, profundidadesCm: [2.8, 2.8, 2.8] }));
+    await rechazaConDatosInvalidos(registrarPesaje(operario, { ...base, netKg: 8, profundidadesCm: [1e-7, 2.8, 2.8] }));
+    // Control: los valores que ya se aceptaban siguen aceptándose.
+    expect((await registrarPesaje(operario, { ...base, netKg: 8.123, profundidadesCm: [2.8, 2.8, 2.8] })).id).toBeTruthy();
   });
 
   it("quien no gestiona el lote no pesa, ni corrige el pesaje de un lote que no gestiona", async () => {
@@ -239,6 +282,16 @@ describe("capacidad", () => {
     const suyo = await registrarPesaje(vecino, { trayTypeId: tipo4x2, lotId: loteB, materialState: "PARCHMENT", netKg: 8, profundidadesCm: [3, 3, 3], occurredAt: new Date() });
     const lavado = (await capacidadDeTipo(operario, tipo4x2)).estados.find((x) => x.estado === "PARCHMENT")!;
     expect(lavado).toMatchObject({ fuente: "sin_acceso", pesajes: 0, pesajeIds: [], capacidadKg: null, densidadKgM3: null, ocultos: 1 });
+    expect(suyo.id).toBeTruthy();
+  });
+
+  it("F6b: el mismo caso con CHERRY — sin_acceso NUNCA cede el paso al estimado, aunque cereza sea el único estado con uno", async () => {
+    // C-14/O-3: PARCHMENT no tiene estimado, así que la prueba de arriba pasaría
+    // igual si `capacidadDeTipo` comprobara el estimado ANTES que `ocultos` —
+    // el orden sólo se ve con CHERRY, que sí tiene uno.
+    const suyo = await registrarPesaje(vecino, { trayTypeId: tipo4x2, lotId: loteB, materialState: "CHERRY", netKg: 8, profundidadesCm: [3, 3, 3], occurredAt: new Date() });
+    const cereza = (await capacidadDeTipo(operario, tipo4x2)).estados.find((x) => x.estado === "CHERRY")!;
+    expect(cereza).toMatchObject({ fuente: "sin_acceso", pesajes: 0, pesajeIds: [], capacidadKg: null, densidadKgM3: null, fuenteDelEstimado: null, ocultos: 1 });
     expect(suyo.id).toBeTruthy();
   });
 

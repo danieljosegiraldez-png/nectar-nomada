@@ -17,14 +17,18 @@ export class PesajeError extends Error {}
 const media = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
 /**
- * Cuántos decimales tiene `n` tal como se escribió — no cuenta el error de
- * redondeo binario de por ejemplo `0.1 + 0.2`, porque `n` aquí siempre viene
- * de un solo literal tecleado (form o test), nunca de una suma.
+ * ¿Tiene `n` a lo sumo `k` decimales? F3 (revisión final 2): la versión
+ * anterior contaba caracteres tras el punto en `n.toString()`, y
+ * `n.toString()` de un número muy pequeño o muy grande sale en notación
+ * exponencial — `(5e-7).toString()` es `"5e-7"`, sin punto, así que contaba
+ * CERO decimales y la cifra pasaba el filtro para que la base la redondeara
+ * de todos modos. La forma de comparación no mira cómo se ESCRIBIÓ el
+ * número: redondea a `k` decimales y compara el VALOR — a prueba de
+ * notación exponencial porque `toFixed` opera sobre el número, no sobre su
+ * representación en texto.
  */
-function decimales(n: number): number {
-  const s = n.toString();
-  const i = s.indexOf(".");
-  return i === -1 ? 0 : s.length - i - 1;
+function noExcedeDecimales(n: number, k: number): boolean {
+  return n === Number(n.toFixed(k));
 }
 
 // A7 (revisión final del plan 2a): un redondeo silencioso de un HECHO medido
@@ -42,9 +46,9 @@ export async function registrarPesaje(userAccountId: string, input: {
   if (!ESTADOS.includes(input.materialState)) throw new PesajeError("estado_invalido");
   const n = input.profundidadesCm.length;
   if (
-    !(Number.isFinite(input.netKg) && input.netKg > 0 && input.netKg < NET_KG_MAX && decimales(input.netKg) <= 3) ||
+    !(Number.isFinite(input.netKg) && input.netKg > 0 && input.netKg < NET_KG_MAX && noExcedeDecimales(input.netKg, 3)) ||
     n < 3 || n > 4 ||
-    !input.profundidadesCm.every((p) => Number.isFinite(p) && p > 0 && p < PROFUNDIDAD_MAX_CM && decimales(p) <= 1)
+    !input.profundidadesCm.every((p) => Number.isFinite(p) && p > 0 && p < PROFUNDIDAD_MAX_CM && noExcedeDecimales(p, 1))
   ) {
     throw new PesajeError("datos_invalidos");
   }
@@ -124,25 +128,35 @@ export async function capacidadDeTipo(userAccountId: string, trayTypeId: string)
       const densidades = suyos.map((p, i) => Number(p.netKg) / (area * (profundidades[i]! / 100)));
       const profundidadCm = media(profundidades);
       const densidadKgM3 = media(densidades);
+      // F5 (cheap win, revisión final 2): el detalle sale del MISMO `suyos` ya
+      // autorizado por `separarVisibles` arriba — antes `vistaDeBandejas`
+      // volvía a llamar `pesajesDeTipo`, que vuelve a consultar Y a
+      // re-autorizar cada pesaje visible, por cada estado medido.
+      const visiblesDetalle = suyos
+        .map((p, i) => ({
+          id: p.id, occurredAt: p.occurredAt, lote: p.lot.lotCode, netKg: Number(p.netKg),
+          profundidadesCm: p.depthPointsCm.map(Number), densidadKgM3: densidades[i]!,
+        }))
+        .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
       estados.push({ estado, fuente: "medido" as const, pesajes: suyos.length, pesajeIds: suyos.map((p) => p.id), densidadKgM3, profundidadCm,
-        capacidadKg: area * (profundidadCm / 100) * densidadKgM3, fuenteDelEstimado: null, ocultos });
+        capacidadKg: area * (profundidadCm / 100) * densidadKgM3, fuenteDelEstimado: null, ocultos, detalle: { visibles: visiblesDetalle, ocultos } });
       continue;
     }
     if (ocultos > 0) {
       // Hay pesajes de ese estado, pero ninguno visible: ni número ni estimado
       // — un estimado aquí escondería que SÍ hay una medida, sólo que esta
       // cuenta no la ve.
-      estados.push({ estado, fuente: "sin_acceso" as const, pesajes: 0, pesajeIds: [], densidadKgM3: null, profundidadCm: null, capacidadKg: null, fuenteDelEstimado: null, ocultos });
+      estados.push({ estado, fuente: "sin_acceso" as const, pesajes: 0, pesajeIds: [], densidadKgM3: null, profundidadCm: null, capacidadKg: null, fuenteDelEstimado: null, ocultos, detalle: null });
       continue;
     }
     // Sin ningún pesaje en absoluto (visible u oculto) — el estimado aplica aquí, y sólo aquí.
     const sup = (CAPACIDAD_SUPUESTA as Partial<Record<EstadoDeCarga, { densidadKgM3: number; profundidadCm: number; fuente: string }>>)[estado];
     if (sup) {
       estados.push({ estado, fuente: "estimado" as const, pesajes: 0, pesajeIds: [], densidadKgM3: sup.densidadKgM3, profundidadCm: sup.profundidadCm,
-        capacidadKg: area * (sup.profundidadCm / 100) * sup.densidadKgM3, fuenteDelEstimado: sup.fuente, ocultos: 0 });
+        capacidadKg: area * (sup.profundidadCm / 100) * sup.densidadKgM3, fuenteDelEstimado: sup.fuente, ocultos: 0, detalle: null });
       continue;
     }
-    estados.push({ estado, fuente: "sin_medir" as const, pesajes: 0, pesajeIds: [], densidadKgM3: null, profundidadCm: null, capacidadKg: null, fuenteDelEstimado: null, ocultos: 0 });
+    estados.push({ estado, fuente: "sin_medir" as const, pesajes: 0, pesajeIds: [], densidadKgM3: null, profundidadCm: null, capacidadKg: null, fuenteDelEstimado: null, ocultos: 0, detalle: null });
   }
   return { areaM2: area, estados };
 }
