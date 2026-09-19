@@ -26,3 +26,16 @@ export async function getFieldEventKinds() {
     orderBy: { value: "asc" },
   });
 }
+
+/**
+ * Spec jornada y entrega §3.5 — los valores de `condicion_del_dia` (lluvia, neblina, otro), el
+ * mismo catálogo contra el que valida `reportarCondicionDelDia`. Lectura sin sujeto, como la de
+ * arriba.
+ */
+export async function getCondicionesDelDia() {
+  return prisma.variableCatalogValue.findMany({
+    where: { catalog: { key: "condicion_del_dia" }, aliasOfId: null },
+    select: { id: true, value: true },
+    orderBy: { value: "asc" },
+  });
+}

@@ -430,6 +430,39 @@ const SUBJECT_KEYS = [
   "lotTransformationId",
 ] as const;
 
+/**
+ * Las reglas de autorización y estado que cualquier escritor de `FieldEvent`
+ * debe cumplir sobre su jornada — extraídas de `recordFieldEvent` (ronda
+ * final, hallazgo 3) para que `registrarIntervencion`
+ * (`lib/traceability/intervenciones.ts`) las reutilice en vez de reimplementar
+ * una versión más floja que sólo comprobaba parentesco de ubicación.
+ *
+ * **Comportamiento sin cambios respecto a `recordFieldEvent`**: mismo orden
+ * —existe, cerrada, autorización, antes de empezar—, mismos mensajes. Lo que
+ * queda fuera (sujeto único, tipo de evento, operador, coordenadas, y la
+ * relectura justo antes de insertar) es propio de esa función y no de esta
+ * regla compartida.
+ */
+export async function requireOpenFieldSessionForEvent(userAccountId: string, fieldSessionId: string, occurredAt: Date) {
+  const session = await prisma.fieldSession.findUnique({ where: { id: fieldSessionId } });
+  if (!session) throw new FieldSessionValidationError("session_not_found");
+  // Una jornada cerrada rechaza el evento, pero DICE cuál de los dos casos es.
+  // Son hechos distintos: «anoté esto durante la visita y sincronizó tarde» y
+  // «esto pasó cuando la visita ya había terminado». El segundo no pertenece a
+  // esa jornada aunque llegue por la misma vía, y quien lea el error necesita
+  // saber si le falta una jornada o si se equivocó de jornada.
+  if (session.endedAt) {
+    throw new FieldSessionValidationError(occurredAt > session.endedAt ? "event_after_session_end" : "session_already_ended");
+  }
+
+  await requireFieldSessionAccess(userAccountId, session.locationId);
+
+  // An event before its session started belongs to a different session.
+  if (occurredAt < session.startedAt) throw new FieldSessionValidationError("event_before_session_start");
+
+  return session;
+}
+
 export async function recordFieldEvent(userAccountId: string, input: RecordFieldEventInput) {
   // P4 §4 — reintentar un push cuya respuesta se perdió devuelve la fila que ya
   // existe, no una segunda. Va ANTES de toda validación a propósito: este
@@ -445,20 +478,7 @@ export async function recordFieldEvent(userAccountId: string, input: RecordField
     if (existing) return existing;
   }
 
-  const session = await prisma.fieldSession.findUnique({ where: { id: input.fieldSessionId } });
-  if (!session) throw new FieldSessionValidationError("session_not_found");
-  // Una jornada cerrada rechaza el evento, pero DICE cuál de los dos casos es.
-  // Son hechos distintos: «anoté esto durante la visita y sincronizó tarde» y
-  // «esto pasó cuando la visita ya había terminado». El segundo no pertenece a
-  // esa jornada aunque llegue por la misma vía, y quien lea el error necesita
-  // saber si le falta una jornada o si se equivocó de jornada.
-  if (session.endedAt) {
-    throw new FieldSessionValidationError(
-      input.occurredAt > session.endedAt ? "event_after_session_end" : "session_already_ended",
-    );
-  }
-
-  await requireFieldSessionAccess(userAccountId, session.locationId);
+  const session = await requireOpenFieldSessionForEvent(userAccountId, input.fieldSessionId, input.occurredAt);
 
   // At most one subject. Two would make the timeline ambiguous about which row
   // this moment refers to, and the spine's whole value is that it is not.
@@ -493,9 +513,6 @@ export async function recordFieldEvent(userAccountId: string, input: RecordField
 
   validateCoordinates(input.position, "position");
   validateCaptureTimes(input.occurredAt, input.capture);
-
-  // An event before its session started belongs to a different session.
-  if (input.occurredAt < session.startedAt) throw new FieldSessionValidationError("event_before_session_start");
 
   // Se relee el estado de la jornada JUSTO antes de insertar, y se rechaza si
   // se cerró mientras tanto. No es una carrera exótica: `FieldEvent` lleva

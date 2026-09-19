@@ -3,8 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { getCurrentUser } from "../../lib/auth/session";
-import { puedeGestionarTienda, tiendaParaGestionar } from "../../lib/commerce/tienda";
-import { ConfirmarRecepcionForm, NuevaVarianteForm } from "../components/commerce/TiendaForms";
+import { pedidosPorDespachar, puedeGestionarTienda, tiendaParaGestionar } from "../../lib/commerce/tienda";
+import { AnularAsignacionForm, ConfirmarRecepcionForm, DespacharPedidoForm, NuevaVarianteForm } from "../components/commerce/TiendaForms";
 
 export const dynamic = "force-dynamic";
 
@@ -19,11 +19,33 @@ export default async function TiendaPage() {
   if (!user) redirect("/login");
   if (!(await puedeGestionarTienda(user.userAccountId))) notFound();
 
-  const [t, { productos, pendientes }] = await Promise.all([getTranslations("Tienda"), tiendaParaGestionar(user.userAccountId)]);
+  const [t, { productos, pendientes }, porDespachar] = await Promise.all([
+    getTranslations("Tienda"),
+    tiendaParaGestionar(user.userAccountId),
+    pedidosPorDespachar(user.userAccountId),
+  ]);
 
   return (
     <div>
       <h1>{t("titulo")}</h1>
+
+      {/* ADR-169 — los pedidos pagados, y de qué lote sale cada frasco. */}
+      <section className="nn-section">
+        <h2>{t("despachoTitulo")}</h2>
+        <p className="nn-muted">{t("despachoIntro")}</p>
+        {porDespachar.length === 0 ? (
+          <p className="nn-muted">{t("sinPedidos")}</p>
+        ) : (
+          <ul>
+            {porDespachar.map((p) => (
+              <li key={p.id} style={{ marginBottom: "1rem" }}>
+                <strong>{p.orderNumber}</strong> · {p.createdAt.toISOString().slice(0, 10)}
+                <DespacharPedidoForm orderId={p.id} articulos={p.items} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="nn-section">
         <h2>{t("pendientesTitulo")}</h2>
@@ -45,6 +67,7 @@ export default async function TiendaPage() {
                   {p.lot.lotCode}
                 </Link>
                 <ConfirmarRecepcionForm allocationId={p.id} asignados={p.unitsAssigned} />
+                <AnularAsignacionForm allocationId={p.id} lotId={p.lot.id} />
               </li>
             ))}
           </ul>

@@ -1,3 +1,4 @@
+import { CampoNumerico } from "../../../../components/CampoNumerico";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -7,6 +8,7 @@ import { lineaDeColonia } from "../../../../../lib/apiary/genealogia";
 import { dividirColoniaFormAction, unirColoniasFormAction } from "../../../../actions/apiary";
 import { cambiarReinaFormAction, cerrarTenenciaFormAction, introducirReinaFormAction } from "../../../../actions/apiary";
 import { estadoDeReina, FINES_DE_TENENCIA, historiaDeReinas, ORIGENES_DE_REINA } from "../../../../../lib/apiary/reinas";
+import { colorDelAño } from "../../../../../lib/apiary/colorDelAno";
 import { permissionKeysAnywhere } from "../../../../../lib/rbac/service";
 import { origenesDeColonia } from "../../../../../lib/apiary/origenDeColonia";
 import { sinRegistrar } from "../../../../../lib/apiary/vacio";
@@ -33,7 +35,8 @@ import { instrumentosParaMedicion } from "../../../../../lib/equipos/equipos";
 import { limpiezasDeCaja } from "../../../../../lib/apiary/limpiezaDeCaja";
 import { historiaDeArtefactos } from "../../../../../lib/apiary/artefactos";
 import { DECLARABLES_EN_INSPECCION } from "../../../../../lib/apiary/tiposDeArtefacto";
-import { instalarArtefactoFormAction, retirarArtefactoFormAction } from "../../../../actions/apiary";
+import { instalarArtefactoFormAction, ponerAlzaFormAction, retirarArtefactoFormAction } from "../../../../actions/apiary";
+import { alzasDelApiario } from "../../../../../lib/apiary/alzas";
 import { FinDeColoniaForm } from "../../../../components/apiary/FinDeColoniaForm";
 import { InspectionForm } from "../../../../components/apiary/InspectionForm";
 import { ColonyEventQuickEntry } from "../../../../components/apiary/ColonyEventQuickEntry";
@@ -104,6 +107,13 @@ export default async function HiveDetailPage({
    */
   const puedeGestionar = granted.has("apiary:manage");
   const puedeRegistrarEventos = puedeGestionar || granted.has("colony_event:manage");
+  // Alzas con marca (spec 2026-09-18 §4.2–4.3): las libres para poner aquí —de la finca, activas,
+  // sin colmena— y las que esta caja lleva HOY, que son las únicas que la cosecha puede nombrar
+  // (se guarda con «ahora»). `hive.locationId` y no el `apiaryId` de la URL: es el sitio real de
+  // la caja ya autorizada.
+  const alzasDeLaFinca = puedeGestionar ? await alzasDelApiario(user.userAccountId, hive.locationId) : [];
+  const alzasLibres = alzasDeLaFinca.filter((a) => a.lifecycleStatus === "active" && !a.puestaEn);
+  const alzasPuestasAqui = puestos.filter((f) => f.hiveSuper).map((f) => ({ id: f.hiveSuperId ?? "", code: f.hiveSuper?.code ?? "" }));
   // Botiquín, Tarea 7: sólo los frascos que esta persona puede descontar. Sin
   // ninguno, el formulario de tratamiento es el de siempre.
   const frascos = puedeRegistrarEventos ? await frascosParaTratar(user.userAccountId) : [];
@@ -302,15 +312,15 @@ export default async function HiveDetailPage({
               <div style={{ display: "flex", gap: "0.5rem" }}>
                 <div className="nn-field" style={{ flex: 1 }}>
                   <label htmlFor="caja-camaras">{t("broodBoxesLabel")}</label>
-                  <input id="caja-camaras" name="broodBoxes" type="number" min={0} step={1} inputMode="numeric" defaultValue={hive.broodBoxes ?? ""} />
+                  <CampoNumerico id="caja-camaras" name="broodBoxes" min={0} step={1} inputMode="numeric" defaultValue={hive.broodBoxes ?? ""} />
                 </div>
                 <div className="nn-field" style={{ flex: 1 }}>
                   <label htmlFor="caja-alzas">{t("supersLabel")}</label>
-                  <input id="caja-alzas" name="supers" type="number" min={0} step={1} inputMode="numeric" defaultValue={hive.supers ?? ""} />
+                  <CampoNumerico id="caja-alzas" name="supers" min={0} step={1} inputMode="numeric" defaultValue={hive.supers ?? ""} />
                 </div>
                 <div className="nn-field" style={{ flex: 1 }}>
                   <label htmlFor="caja-cuadros">{t("framesPerBoxLabel")}</label>
-                  <input id="caja-cuadros" name="framesPerBox" type="number" min={1} step={1} inputMode="numeric" defaultValue={hive.framesPerBox ?? ""} />
+                  <CampoNumerico id="caja-cuadros" name="framesPerBox" min={1} step={1} inputMode="numeric" defaultValue={hive.framesPerBox ?? ""} />
                 </div>
               </div>
               <div className="nn-field">
@@ -406,6 +416,7 @@ export default async function HiveDetailPage({
                     <strong>{t(`artefacto_${f.kind}`)}</strong>
                     {f.count !== null ? ` × ${f.count}` : ""}
                     {f.hiveNode ? ` · ${f.hiveNode.deviceId}` : ""}
+                    {f.hiveSuper ? ` · ${f.hiveSuper.code}` : ""}
                     {f.notes ? ` · ${f.notes}` : ""}
                     {" — "}
                     {t("artefactoDesde", { fecha: f.installedAt.toISOString().slice(0, 10) })}
@@ -424,6 +435,37 @@ export default async function HiveDetailPage({
               </ul>
             )}
             {puedeGestionar ? (
+              <>
+              {/* «¿Tiene marca?» del spec §4.2, hecho con dos formularios: éste pone un alza CON
+                  marca; el de abajo, con «alza», pone alzas SIN marca, que se siguen contando. */}
+              <details>
+                <summary>{t("alzaPonerMarcada")}</summary>
+                {alzasLibres.length === 0 ? (
+                  <p className="nn-muted">{t("alzaSinLibres")}</p>
+                ) : (
+                  <form action={ponerAlzaFormAction} className="nn-form">
+                    <input type="hidden" name="hiveId" value={hive.id} />
+                    <input type="hidden" name="apiaryId" value={apiaryId} />
+                    <TimezoneOffsetField />
+                    <div className="nn-field">
+                      <label htmlFor="alza-cual">{t("alzaCual")}</label>
+                      <select id="alza-cual" name="hiveSuperId" required defaultValue="">
+                        <option value="" disabled />
+                        {alzasLibres.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.code}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="alza-cuando">{t("artefactoCuando")}</label>
+                      <input id="alza-cuando" name="cuando" type="datetime-local" />
+                    </div>
+                    <BotonDeEnvio>{t("alzaPonerBoton")}</BotonDeEnvio>
+                  </form>
+                )}
+              </details>
               <details>
                 <summary>{t("artefactoPoner")}</summary>
                 <form action={instalarArtefactoFormAction} className="nn-form">
@@ -443,7 +485,7 @@ export default async function HiveDetailPage({
                   </div>
                   <div className="nn-field">
                     <label htmlFor="artefacto-count">{t("artefactoCuantasAlzas")}</label>
-                    <input id="artefacto-count" name="count" type="number" min={1} step={1} inputMode="numeric" />
+                    <CampoNumerico id="artefacto-count" name="count" min={1} step={1} inputMode="numeric" />
                   </div>
                   <div className="nn-field">
                     <label htmlFor="artefacto-notes">{t("artefactoNota")}</label>
@@ -456,6 +498,7 @@ export default async function HiveDetailPage({
                   <BotonDeEnvio>{t("artefactoPonerBoton")}</BotonDeEnvio>
                 </form>
               </details>
+              </>
             ) : (
               <p className="nn-muted">{t("artefactosSinPermiso")}</p>
             )}
@@ -470,6 +513,7 @@ export default async function HiveDetailPage({
                         {t(`artefacto_${f.kind}`)}
                         {f.count !== null ? ` × ${f.count}` : ""}
                         {f.hiveNode ? ` · ${f.hiveNode.deviceId}` : ""}
+                    {f.hiveSuper ? ` · ${f.hiveSuper.code}` : ""}
                         {" — "}
                         {t("artefactoDesdeHasta", {
                           desde: f.installedAt.toISOString().slice(0, 10),
@@ -656,6 +700,9 @@ export default async function HiveDetailPage({
                               hasta: r.hasta.toISOString().slice(0, 10),
                             })
                           : t("reinaTenenciaAbierta", { origen: t(`reinaOrigen_${r.queen.origin}`), desde: r.desde.toISOString().slice(0, 10) })}
+                        {r.queen.birthYear !== null
+                          ? ` · ${t("reinaApodo", { color: t(`reinaColor_${colorDelAño(r.queen.birthYear)}`), ano: r.queen.birthYear })}`
+                          : ""}
                         {r.fin ? ` · ${t(`reinaFin_${r.fin}`)}` : ""}
                         {r.finNota ? ` — ${r.finNota}` : ""}
                       </li>
@@ -708,6 +755,13 @@ export default async function HiveDetailPage({
                           </option>
                         ))}
                       </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="cambiar-nacimiento">{t("reinaAnoDeNacimiento")}</label>
+                      {/* Un campo de año y no una lista corta (Codex, PR #441): pasar al sistema una
+                          reina de 2020 nacida en 2019 no debe obligar a dejarla en «no se sabe». Vacío =
+                          no se sabe; el servicio valida el número. */}
+                      <CampoNumerico id="cambiar-nacimiento" name="anoDeNacimiento" inputMode="numeric" min={1990} step={1} />
                     </div>
                     <div className="nn-field">
                       <label htmlFor="cambiar-nueva-notas">{t("reinaNotas")}</label>
@@ -776,6 +830,13 @@ export default async function HiveDetailPage({
                           </option>
                         ))}
                       </select>
+                    </div>
+                    <div className="nn-field">
+                      <label htmlFor="introducir-nacimiento">{t("reinaAnoDeNacimiento")}</label>
+                      {/* Un campo de año y no una lista corta (Codex, PR #441): pasar al sistema una
+                          reina de 2020 nacida en 2019 no debe obligar a dejarla en «no se sabe». Vacío =
+                          no se sabe; el servicio valida el número. */}
+                      <CampoNumerico id="introducir-nacimiento" name="anoDeNacimiento" inputMode="numeric" min={1990} step={1} />
                     </div>
                     <div className="nn-field">
                       <label htmlFor="introducir-notas">{t("reinaNotas")}</label>
@@ -858,7 +919,7 @@ export default async function HiveDetailPage({
               <summary>
                 <h2 style={{ display: "inline" }}>{t("harvestHeading")}</h2>
               </summary>
-            {puedeGestionar ? <HarvestForm colonyId={colony.id} /> : <p className="nn-muted">{t("sinPermisoGestion")}</p>}
+            {puedeGestionar ? <HarvestForm colonyId={colony.id} alzas={alzasPuestasAqui} /> : <p className="nn-muted">{t("sinPermisoGestion")}</p>}
 
             {/* Las cosechas, con su cierre. Cada una lleva su formulario porque el tipo
                 de miel y el peso se saben al extraer, semanas después de cosechar. */}
@@ -941,10 +1002,9 @@ export default async function HiveDetailPage({
                         </div>
                         <div className="nn-field">
                           <label htmlFor={`peso-${c.id}`}>{t("extractedWeightLabel")}</label>
-                          <input
+                          <CampoNumerico
                             id={`peso-${c.id}`}
                             name="extractedWeightKg"
-                            type="number"
                             min={0}
                             step="0.001"
                             inputMode="decimal"

@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
-import { LocationAccessError, exigeEditarBeneficioSiLoEs, puedeGestionarAtributosDeUbicacion, requireLocationAttributeAccess } from "./locations";
+import { LocationAccessError, exigeEditarBeneficioSiLoEs, puedeEditarBeneficioEn, puedeGestionarAtributosDeUbicacion, requireLocationAttributeAccess } from "./locations";
 
 export class BeneficioError extends Error {}
 
@@ -69,7 +69,7 @@ export async function sitiosParaBeneficio(userAccountId: string) {
 
 export async function listarBeneficios(userAccountId: string) {
   const rows = await prisma.location.findMany({ where: { locationType: "beneficio" }, orderBy: { name: "asc" } });
-  const salida: { id: string; name: string; sitio: { id: string; name: string } | null }[] = [];
+  const salida: { id: string; name: string; sitio: { id: string; name: string } | null; puedeEditar: boolean }[] = [];
   for (const row of rows) {
     const target = { scopeType: "location" as const, scopeRefId: row.id };
     if (!(await can(userAccountId, "manage_attributes", "location", target, row.classification))) continue;
@@ -81,7 +81,10 @@ export async function listarBeneficios(userAccountId: string) {
       && await puedeGestionarAtributosDeUbicacion(userAccountId, row.parentLocationId)
       ? await prisma.location.findUnique({ where: { id: row.parentLocationId }, select: { id: true, name: true } })
       : null;
-    salida.push({ id: row.id, name: row.name, sitio: padre });
+    // `edit_beneficio`, no `manage_attributes` de arriba: la pantalla de
+    // ajustes sólo ofrece renombrar y conceder donde este permiso alcanza —
+    // de serie para Farm Manager, por concesión para un capataz.
+    salida.push({ id: row.id, name: row.name, sitio: padre, puedeEditar: await puedeEditarBeneficioEn(userAccountId, row.id) });
   }
   return salida;
 }

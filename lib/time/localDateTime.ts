@@ -91,6 +91,21 @@ export function paraCampoLocal(instante: Date): string {
   return comoSiFueraUtc.toISOString().slice(0, 16);
 }
 
+/**
+ * Qué instante precargar en un campo `datetime-local` — ronda final,
+ * hallazgo 1. Puro: recibe «ahora» en vez de leer el reloj, para poder
+ * probarse sin depender de cuándo corre la prueba ni del navegador.
+ *
+ * Un instante ya existente (una fila guardada, en ISO) se respeta tal cual;
+ * su ausencia — un formulario "nuevo" — precarga con el instante actual.
+ * `paraCampoLocal` sigue siendo quien convierte el resultado al reloj de
+ * pared del DISPOSITIVO, y eso sólo puede hacerse en un efecto del cliente:
+ * ver su cabecera y `TimezoneOffsetField`.
+ */
+export function instanteAPrecargar(existente: string | null, ahora: Date): Date {
+  return existente ? new Date(existente) : ahora;
+}
+
 /** Un día que el POST trae y no existe en el calendario. */
 export class FechaDeDiaInvalida extends Error {}
 

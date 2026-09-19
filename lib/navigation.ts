@@ -161,6 +161,11 @@ const LANDING_PRIORITY: readonly NavDefinition[] = [
     href: "/sensory",
     requiresAnyOf: ["sensory:submit_assessment", "sensory:manage_session", "competition:manage"],
   },
+  // Spec 2026-09-18 jornada y entrega §3.6. Último a propósito: sólo decide para quien no tiene
+  // nada de arriba —el recolector, cuyo perfil son sus dos `create_own`—. Un capataz o un
+  // administrador también lo tienen y siguen entrando en `/lots`. No es una entrada del menú:
+  // el menú no crece por esto (ver `tests/navigation.test.ts`, las 10 entradas).
+  { labelKey: "misEntregas", href: "/mis-entregas", requiresAnyOf: ["harvest_delivery:create_own"] },
 ];
 
 /** The fallback, and the destination for a viewer holding no operational grant. */
@@ -285,6 +290,9 @@ export const DENTRO_DE_SECCION: Readonly<Record<string, string>> = {
   "/finca/trampas": "/finca",
   // 2026-09-18 (Tarea 9): la ronda de trampas, también.
   "/finca/trampas/ronda": "/finca",
+  // 2026-09-18, spec jornada y entrega §3.6: el recolector aterriza en sus entregas, que «Mi
+  // Néctar» enlaza para quien tiene harvest_delivery:create_own. Así el menú no crece.
+  "/mis-entregas": "/my-nectar",
 };
 
 /**

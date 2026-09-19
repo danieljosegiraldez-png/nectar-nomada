@@ -14,6 +14,9 @@
  */
 import { prisma } from "../db";
 import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
+import { ubicacionesEmparentadas } from "./ubicacionesEmparentadas";
+import { intervencionesVigentes } from "./intervenciones";
+import { carenciaDeIntervencion } from "./carenciaDeIntervencion";
 import { recordAuditEvent } from "../audit";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
@@ -85,6 +88,11 @@ export interface RecordHarvestEventInput {
 
 export async function recordHarvestEvent(userAccountId: string, input: RecordHarvestEventInput) {
   await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+  // Spec fincas y parcelas §3.4: la cereza se cosecha en una parcela o en una microparcela (las
+  // dos son `plot`). Hasta el 2026-09-18 lo único que lo limitaba era la lista del formulario, así
+  // que un guion o una petición directa podía cosechar sobre la finca entera o sobre un beneficio.
+  const donde = await prisma.location.findUnique({ where: { id: input.locationId }, select: { locationType: true } });
+  if (donde?.locationType !== "plot") throw new CerezaError("la_cosecha_va_sobre_una_parcela");
   await exigeCatalogosDeCereza(input);
 
   const provenanceClass = input.provenanceClass;
@@ -139,6 +147,26 @@ export async function recordHarvestEvent(userAccountId: string, input: RecordHar
       });
     }
 
+    // La marca de carencia — spec fitosanitario §3.4. Avisa, NO bloquea: la cosecha
+    // ya está guardada arriba. Una fila por intervención todavía en carencia;
+    // NULO = desconocida. Sin filas = no había ninguna.
+    const emparentadas = await ubicacionesEmparentadas(input.locationId, tx);
+    const vigentes = await intervencionesVigentes(emparentadas, { hasta: input.harvestedAt, db: tx });
+    const marcasDeCarencia = [];
+    for (const i of vigentes) {
+      const c = carenciaDeIntervencion(i, input.harvestedAt);
+      if (c.estado !== "conocida" && c.estado !== "desconocida") continue;
+      marcasDeCarencia.push(
+        await tx.harvestWithdrawalFlag.create({
+          data: {
+            harvestEventId: harvestEvent.id,
+            interventionId: i.id,
+            diasQueFaltaban: c.estado === "conocida" ? c.diasQueFaltan : null,
+          },
+        }),
+      );
+    }
+
     // C1 §3: evidentiary write (carries provenanceClass).
     //
     // Dentro de la transacción y con `tx` desde el 2026-09-06. Iba fuera «same
@@ -152,7 +180,7 @@ export async function recordHarvestEvent(userAccountId: string, input: RecordHar
         operation: "harvest_event.create",
         entityType: "harvest_event",
         entityId: harvestEvent.id,
-        after: harvestEvent,
+        after: { ...harvestEvent, marcasDeCarencia },
         sourceInterface: "traceability.service",
       },
       tx,

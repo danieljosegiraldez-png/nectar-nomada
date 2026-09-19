@@ -165,3 +165,24 @@ describe("el producto como medicamento", () => {
     expect(g.manufacturer).toBeNull();
   }, 20000);
 });
+
+/**
+ * El producto de manejo fitosanitario — aplicaciones fitosanitarias, Tarea 4.
+ * Gemelo del bloque de arriba: reentrada en vez de carencia.
+ */
+describe("el producto como fitosanitario", () => {
+  const base = () => ({ projectId, organizationId: orgA, defaultUnit: "l" });
+
+  it("un producto fitosanitario guarda su reentrada; cero declarado no es nulo", async () => {
+    const m = await crearMaterial(gestorId, { ...base(), name: `Fito ${RUN_ID}`, isPlantProtection: true, defaultReentryHours: 0 });
+    expect(m.isPlantProtection).toBe(true);
+    expect(m.defaultReentryHours).toBe(0);
+    const s = await crearMaterial(gestorId, { ...base(), name: `Fito2 ${RUN_ID}`, isPlantProtection: true });
+    expect(s.defaultReentryHours).toBeNull();
+  }, 20000);
+
+  it("reentrada negativa se rechaza en el servicio, antes de la base", async () => {
+    await expect(crearMaterial(gestorId, { ...base(), name: `Neg ${RUN_ID}`, defaultReentryHours: -1 }))
+      .rejects.toThrow(MaterialValidationError);
+  }, 20000);
+});

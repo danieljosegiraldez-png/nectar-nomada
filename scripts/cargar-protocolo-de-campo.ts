@@ -13,10 +13,11 @@
  * poner. Aquí la puerta es un comando, no una pantalla, porque cargar un
  * protocolo es una decisión del dueño que se toma una vez y se lee en el diff.
  *
- * **Es idempotente.** `cargarProtocoloDeCampo` mira el identificador externo
- * `apiario-campo-v<versión>` y, si ya está, devuelve lo que hay sin tocarlo.
- * Correrlo dos veces no crea dos protocolos, y por eso se puede correr sin
- * miedo para comprobar qué hay.
+ * **Es idempotente.** Desde ADR-165 el protocolo tiene una identidad FIJA
+ * (`apiario-campo-v1`, como nació en producción) y las versiones crecen debajo:
+ * si la versión del archivo ya está, se devuelve sin tocarla; si no, se AÑADE al
+ * mismo protocolo. Correrlo dos veces no crea nada dos veces, y por eso se puede
+ * correr sin miedo para comprobar qué hay.
  *
  * **Escribe en producción.** Lee `DATABASE_URL` del `.env`, igual que
  * `sensory:create-protocol`. No es un ensayo.
@@ -30,6 +31,7 @@ import "dotenv/config";
 import { prisma } from "../lib/db";
 import {
   cargarProtocoloDeCampo,
+  IDENTIFICADOR_DEL_PROTOCOLO_DE_CAMPO,
   leerProtocoloDeCampo,
   variablesDe,
   ProtocoloDeCampoError,
@@ -65,16 +67,25 @@ async function main() {
     console.log(`    ${actividad.label} — ${actividad.items.length} pregunta(s), ${obligatorias} obligatoria(s)`);
   }
 
-  // Fila patrón: qué hay YA en la base, antes de decidir nada.
-  const identificador = `apiario-campo-v${protocolo.version}`;
+  // Fila patrón: qué hay YA en la base, antes de decidir nada. **Con la identidad fija de
+  // ADR-165**: antes buscaba `apiario-campo-v<versión del archivo>`, y con la v2 habría dicho
+  // «NO está» de un protocolo que sí estaba —como v1—. Una vista previa que miente es peor que
+  // ninguna: es la que se lee antes de escribir en producción.
   const existente = await prisma.protocol.findUnique({
-    where: { externalIdentifier: identificador },
-    include: { versions: { orderBy: { version: "desc" }, take: 1 } },
+    where: { externalIdentifier: IDENTIFICADOR_DEL_PROTOCOLO_DE_CAMPO },
+    include: { versions: { orderBy: { version: "asc" }, select: { version: true } } },
   });
+  const versiones = existente?.versions.map((v) => v.version) ?? [];
+  const numero = Number(protocolo.version);
   console.log(
     `\n  En la base: ${
-      existente ? `ya está, versión ${existente.versions[0]?.version ?? "?"}` : "NO está"
+      existente ? `el protocolo está, con la(s) versión(es) ${versiones.join(", ")}` : "el protocolo NO está"
     }`,
+  );
+  console.log(
+    versiones.includes(numero)
+      ? `  La versión ${numero} del archivo YA está cargada: --cargar no tocaría nada.`
+      : `  La versión ${numero} del archivo NO está: --cargar la ${existente ? "AÑADE al mismo protocolo" : "crea"}.`,
   );
 
   if (!cargar) {

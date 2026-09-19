@@ -1,3 +1,4 @@
+import { CampoNumerico } from "../components/CampoNumerico";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -52,7 +53,7 @@ export default async function CartPage() {
                 <input type="hidden" name="cartItemId" value={item.id} />
                 <label className="nn-field" style={{ margin: 0 }}>
                   <span className="nn-muted">{t("quantityLabel")}</span>
-                  <input name="quantity" type="number" inputMode="numeric" min={0} defaultValue={item.quantity} style={{ width: "4rem" }} />
+                  <CampoNumerico name="quantity" inputMode="numeric" min={0} defaultValue={item.quantity} style={{ width: "4rem" }} />
                 </label>
                 <BotonDeEnvio className="nn-button">
                   {t("updateButton")}

@@ -15,6 +15,7 @@ import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { requireLotAccess, TraceabilityAccessError } from "../traceability/lots";
 import { Prisma } from "../../generated/prisma/client";
+import { computeLotBalance } from "../traceability/balance";
 
 export class TiendaInvalida extends Error {}
 export class TiendaSinPermiso extends Error {}
@@ -74,7 +75,7 @@ export async function asignarATienda(userAccountId: string, input: AsignarATiend
       if (envases === null) throw new TiendaInvalida("el_lote_no_esta_envasado");
       const variante = await tx.productVariant.findUnique({ where: { id: input.productVariantId } });
       if (!variante || variante.status !== "active") throw new TiendaInvalida("variante_no_disponible");
-      const ya = await tx.storeAllocation.aggregate({ where: { lotId: lote.id }, _sum: { unitsAssigned: true } });
+      const ya = await tx.storeAllocation.aggregate({ where: { lotId: lote.id, cancelledAt: null }, _sum: { unitsAssigned: true } });
       const asignados = ya._sum.unitsAssigned ?? 0;
       if (asignados + unidades > envases) throw new TiendaInvalida(`mas_envases_de_los_que_hay:${envases - asignados}`);
 
@@ -133,11 +134,12 @@ export async function confirmarRecepcion(userAccountId: string, input: Confirmar
     const antes = await tx.storeAllocation.findUnique({ where: { id: input.allocationId } });
     if (!antes) throw new TiendaInvalida("asignacion_no_encontrada");
     if (antes.receivedAt) throw new TiendaInvalida("ya_recibida");
+    if (antes.cancelledAt) throw new TiendaInvalida("asignacion_anulada");
     if (recibidos > antes.unitsAssigned) throw new TiendaInvalida(`mas_de_lo_asignado:${antes.unitsAssigned}`);
     if (recibidos < antes.unitsAssigned && !nota) throw new TiendaInvalida("faltante_sin_motivo");
 
     const hecho = await tx.storeAllocation.updateMany({
-      where: { id: antes.id, receivedAt: null },
+      where: { id: antes.id, receivedAt: null, cancelledAt: null },
       data: { receivedAt: input.receivedAt, receivedBy: userAccountId, unitsReceived: recibidos, receiptNote: nota },
     });
     if (hecho.count !== 1) throw new TiendaInvalida("ya_recibida");
@@ -215,7 +217,7 @@ export async function tiendaParaGestionar(userAccountId: string) {
       },
     }),
     prisma.storeAllocation.findMany({
-      where: { receivedAt: null },
+      where: { receivedAt: null, cancelledAt: null },
       orderBy: { assignedAt: "asc" },
       select: {
         id: true, unitsAssigned: true, assignedAt: true,
@@ -242,10 +244,12 @@ export async function asignacionesDeLote(lotId: string) {
     orderBy: { assignedAt: "asc" },
     select: {
       id: true, unitsAssigned: true, assignedAt: true, unitsReceived: true, receivedAt: true, receiptNote: true,
+      cancelledAt: true, cancelReason: true,
       productVariant: { select: { sku: true, variantName: true, product: { select: { name: true } } } },
     },
   });
-  const asignados = filas.reduce((a, f) => a + f.unitsAssigned, 0);
+  // Lo anulado se enseña —es historia— pero no cuenta: sus envases volvieron a libres.
+  const asignados = filas.filter((f) => !f.cancelledAt).reduce((a, f) => a + f.unitsAssigned, 0);
   return { envases, asignados, libres: envases - asignados, filas };
 }
 
@@ -259,5 +263,190 @@ export async function variantesParaAsignar() {
     where: { status: "active" },
     orderBy: [{ product: { name: "asc" } }, { sku: "asc" }],
     select: { id: true, sku: true, variantName: true, product: { select: { name: true } } },
+  });
+}
+
+/**
+ * Cuántos frascos de una variante quedan en cada lote, en la TIENDA: lo recibido menos lo ya
+ * despachado. Lo asignado y no recibido no cuenta: no está en el estante.
+ */
+async function disponiblesPorLote(tx: Prisma.TransactionClient, productVariantId: string) {
+  const recibidos = await tx.storeAllocation.groupBy({
+    by: ["lotId"],
+    where: { productVariantId, receivedAt: { not: null } },
+    _sum: { unitsReceived: true },
+  });
+  const despachados = await tx.orderItemLot.groupBy({
+    by: ["lotId"],
+    where: { orderItem: { productVariantId } },
+    _sum: { units: true },
+  });
+  const salida = new Map<string, number>();
+  for (const r of recibidos) salida.set(r.lotId, r._sum.unitsReceived ?? 0);
+  for (const d of despachados) salida.set(d.lotId, (salida.get(d.lotId) ?? 0) - (d._sum.units ?? 0));
+  return salida;
+}
+
+/**
+ * Los pedidos pagados que esperan despacho, con los lotes de los que puede salir cada artículo.
+ */
+export async function pedidosPorDespachar(userAccountId: string) {
+  await exigeTienda(userAccountId);
+  const pedidos = await prisma.order.findMany({
+    where: { status: "paid" },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true, orderNumber: true, createdAt: true,
+      items: { select: { id: true, quantity: true, productVariantId: true, productVariant: { select: { sku: true, variantName: true, product: { select: { name: true } } } } } },
+    },
+  });
+  const variantes = [...new Set(pedidos.flatMap((p) => p.items.map((i) => i.productVariantId)))];
+  const lotesPorVariante = new Map<string, { lotId: string; lotCode: string; disponibles: number }[]>();
+  for (const v of variantes) {
+    const disp = await disponiblesPorLote(prisma, v);
+    const conStock = [...disp.entries()].filter(([, n]) => n > 0);
+    const codigos = await prisma.lot.findMany({ where: { id: { in: conStock.map(([id]) => id) } }, select: { id: true, lotCode: true } });
+    const codigo = new Map(codigos.map((c) => [c.id, c.lotCode]));
+    lotesPorVariante.set(v, conStock.map(([lotId, disponibles]) => ({ lotId, lotCode: codigo.get(lotId) ?? lotId, disponibles })));
+  }
+  return pedidos.map((p) => ({
+    ...p,
+    items: p.items.map((i) => ({ ...i, lotes: lotesPorVariante.get(i.productVariantId) ?? [] })),
+  }));
+}
+
+export interface DespacharPedidoInput {
+  orderId: string;
+  /** El DÍA del despacho. */
+  despachadoEn: Date;
+  /** Cuántos frascos de cada artículo salen de cada lote. Las filas en cero se ignoran. */
+  filas: readonly { orderItemId: string; lotId: string; units: number | string }[];
+}
+
+/**
+ * Despachar un pedido pagado diciendo de qué lote sale cada frasco — ADR-169.
+ *
+ * Por cada artículo, lo que sale de los lotes tiene que sumar **exactamente** lo pedido; de cada
+ * lote no puede salir más de lo que la tienda recibió de esa variante y no despachó ya. Y los
+ * kilos de esos frascos (frascos × masa neta del envasado) **salen del libro del lote**: la venta
+ * llega a la trazabilidad, no se queda en la tienda.
+ *
+ * `Serializable`: dos despachos a la vez del mismo lote leerían el mismo disponible.
+ */
+export async function despacharPedido(userAccountId: string, input: DespacharPedidoInput) {
+  await exigeTienda(userAccountId);
+  const filas = input.filas
+    .map((f) => ({ ...f, units: typeof f.units === "number" ? f.units : Number(String(f.units ?? "").trim() || "0") }))
+    .filter((f) => f.units !== 0);
+  for (const f of filas) if (!Number.isInteger(f.units) || f.units < 0) throw new TiendaInvalida("frascos_invalidos");
+
+  return prisma.$transaction(
+    async (tx) => {
+      const pedido = await tx.order.findUnique({ where: { id: input.orderId }, include: { items: true } });
+      if (!pedido) throw new TiendaInvalida("pedido_no_encontrado");
+      if (pedido.status !== "paid") throw new TiendaInvalida(`pedido_no_despachable:${pedido.status}`);
+
+      for (const item of pedido.items) {
+        const suma = filas.filter((f) => f.orderItemId === item.id).reduce((a, f) => a + f.units, 0);
+        if (suma !== item.quantity) throw new TiendaInvalida(`no_cuadra:${item.quantity}:${suma}`);
+      }
+      const itemPorId = new Map(pedido.items.map((i) => [i.id, i]));
+      if (filas.some((f) => !itemPorId.has(f.orderItemId))) throw new TiendaInvalida("articulo_ajeno");
+
+      const creadas = [];
+      for (const f of filas) {
+        const item = itemPorId.get(f.orderItemId)!;
+        const disp = (await disponiblesPorLote(tx, item.productVariantId)).get(f.lotId) ?? 0;
+        if (f.units > disp) throw new TiendaInvalida(`lote_sin_tantos:${disp}`);
+        const envasado = await tx.lotTransformationOutput.findFirst({
+          where: { lotId: f.lotId, transformation: { transformationType: "packaging" } },
+          select: { transformation: { select: { packageNetMassG: true } } },
+        });
+        const netoG = envasado?.transformation.packageNetMassG;
+        if (netoG == null) throw new TiendaInvalida("lote_no_envasado");
+        const kg = new Prisma.Decimal(netoG).mul(f.units).div(1000);
+        const saldo = await computeLotBalance(tx, f.lotId);
+        if (!saldo.recorded || saldo.quantity.lessThan(kg)) throw new TiendaInvalida("libro_sin_saldo");
+
+        const asiento = await tx.quantityEvent.create({
+          data: {
+            lotId: f.lotId, eventType: "transfer_out", quantity: kg, unit: "kg", occurredAt: input.despachadoEn,
+            createdBy: userAccountId, provenanceClass: "original_record", sourceReference: `order:${pedido.orderNumber}`,
+          },
+        });
+        creadas.push(
+          await tx.orderItemLot.create({
+            data: { orderItemId: f.orderItemId, lotId: f.lotId, units: f.units, quantityEventId: asiento.id, dispatchedAt: input.despachadoEn, dispatchedBy: userAccountId },
+          }),
+        );
+      }
+
+      const despues = await tx.order.update({ where: { id: pedido.id }, data: { status: "fulfilled" } });
+      await recordAuditEvent(
+        {
+          actorUserAccountId: userAccountId,
+          operation: "order.fulfill",
+          entityType: "order",
+          entityId: pedido.id,
+          before: { status: pedido.status },
+          after: { status: despues.status, lotes: creadas.map((c) => ({ orderItemId: c.orderItemId, lotId: c.lotId, units: c.units })) },
+          sourceInterface: "commerce.tienda",
+        },
+        tx,
+      );
+      return { pedido: despues, lotes: creadas };
+    },
+    { isolationLevel: "Serializable" },
+  );
+}
+
+export interface AnularAsignacionInput {
+  allocationId: string;
+  /** Obligatorio: una anulación sin motivo no se puede discutir después. */
+  reason: string;
+  /** El DÍA de la anulación. */
+  cancelledAt: Date;
+}
+
+/**
+ * Anular una asignación que NUNCA se recibió — ADR-170. Sus envases vuelven a libres para
+ * asignarse de nuevo. **No se borra**: queda con quién, cuándo y por qué.
+ *
+ * Puede anular quien gestiona el LOTE (quien asignó) o quien lleva la TIENDA (quien iba a
+ * recibir): los dos lados saben que el envío no va a salir. **Una asignación recibida no se
+ * anula**: esos frascos ya están en el estante. La actualización lleva `receivedAt: null` y
+ * `cancelledAt: null` en su condición, así que no pisa una recepción que llegue a la vez.
+ */
+export async function anularAsignacion(userAccountId: string, input: AnularAsignacionInput) {
+  const motivo = input.reason.trim();
+  if (!motivo) throw new TiendaInvalida("anular_sin_motivo");
+  const antes = await prisma.storeAllocation.findUnique({ where: { id: input.allocationId }, include: { lot: true } });
+  if (!antes) throw new TiendaInvalida("asignacion_no_encontrada");
+  if (!(await puedeGestionarTienda(userAccountId))) await requireLotAccess(userAccountId, "manage", [antes.lot]);
+  if (antes.receivedAt) throw new TiendaInvalida("ya_recibida");
+  if (antes.cancelledAt) throw new TiendaInvalida("asignacion_anulada");
+
+  return prisma.$transaction(async (tx) => {
+    const hecho = await tx.storeAllocation.updateMany({
+      where: { id: antes.id, receivedAt: null, cancelledAt: null },
+      data: { cancelledAt: input.cancelledAt, cancelledBy: userAccountId, cancelReason: motivo },
+    });
+    if (hecho.count !== 1) throw new TiendaInvalida("ya_recibida");
+    const despues = await tx.storeAllocation.findUniqueOrThrow({ where: { id: antes.id } });
+    const { lot: _lote, ...fila } = antes;
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "store_allocation.cancel",
+        entityType: "store_allocation",
+        entityId: antes.id,
+        before: fila,
+        after: despues,
+        reason: motivo,
+        sourceInterface: "commerce.tienda",
+      },
+      tx,
+    );
+    return despues;
   });
 }

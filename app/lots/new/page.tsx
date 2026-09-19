@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getManageableContext } from "../../../lib/traceability/lots";
+import { cookies } from "next/headers";
+import { COOKIE_FINCA, fincaDeLaPagina, idsBajoLaFinca, ordenarParcelas } from "../../../lib/traceability/fincas";
+import { FincaElegida } from "../../components/traceability/FincaElegida";
 import { catalogosDeCereza } from "../../../lib/traceability/harvest";
 import { HarvestForm } from "../../components/traceability/HarvestForm";
 import { ReceivingForm } from "../../components/traceability/ReceivingForm";
@@ -14,7 +17,13 @@ export default async function NewLotPage() {
   if (!user) redirect("/login");
 
   const t = await getTranslations("Traceability");
+  const finca = await fincaDeLaPagina(user.userAccountId, (await cookies()).get(COOKIE_FINCA)?.value);
+  if (finca.debeElegir) redirect("/fincas?volver=/lots/new");
   const context = await getManageableContext(user.userAccountId);
+  // Spec fincas y parcelas §3.4: sólo las parcelas de la finca elegida, cada microparcela
+  // debajo de su parcela. La elección acota lo autorizado; nunca añade.
+  const bajo = finca.elegida ? idsBajoLaFinca(context.locations, finca.elegida.siteId) : null;
+  const parcelas = ordenarParcelas(bajo ? context.plotLocations.filter((p) => bajo.has(p.id)) : context.plotLocations);
   // Vocabulario de la cereza: los tres catálogos cerrados que sustituyen a la
   // caja de texto «condición».
   const cerezas = await catalogosDeCereza();
@@ -25,6 +34,7 @@ export default async function NewLotPage() {
         {t("backToLots")}
       </Link>
       <h1>{t("createLotButton")}</h1>
+      <FincaElegida elegida={finca.elegida} hayVarias={finca.fincas.length > 1} volver="/lots/new" />
 
       {/* Sin ámbito de gestión, `getManageableContext` devuelve las tres listas
           vacías y los dos formularios salían igual: `organizationId` y
@@ -45,12 +55,12 @@ export default async function NewLotPage() {
 
           <section className="nn-section">
             <h2>{t("harvestHeading")}</h2>
-            <HarvestForm organizations={context.organizations} locations={context.plotLocations} projects={context.projects} cerezas={cerezas} />
+            <HarvestForm organizations={context.organizations} locations={parcelas} projects={context.projects} cerezas={cerezas} />
           </section>
 
           <section className="nn-section">
             <h2>{t("receivingHeading")}</h2>
-            <ReceivingForm organizations={context.organizations} locations={context.plotLocations} projects={context.projects} />
+            <ReceivingForm organizations={context.organizations} locations={parcelas} projects={context.projects} />
           </section>
         </>
       )}

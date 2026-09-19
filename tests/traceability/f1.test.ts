@@ -22,6 +22,7 @@ import {
 import {
   createSpecimen,
   getTrapCheckSeries,
+  lecturaDeTrampaQueMotivo,
   recordSpecimenObservation,
   SpecimenAccessError,
   SpecimenValidationError,
@@ -388,6 +389,70 @@ describe("recordSpecimenObservation — trap capture-count series and the active
     });
     specimen = await prisma.specimen.findUniqueOrThrow({ where: { id: specimenTrapId } });
     expect(specimen.status).toBe("active");
+  });
+});
+
+describe("lecturaDeTrampaQueMotivo — Tarea 8 fitosanitario, spec §4.3", () => {
+  let trampa: string;
+  let lecturaMotivo: string;
+  let lecturaSiguiente: string;
+
+  beforeAll(async () => {
+    const trap = await createSpecimen(authorizedUserAccountId, {
+      locationId,
+      specimenType: "trap",
+      commonName: "TEST Trampa Manejo",
+      provenanceClass: "direct_observation",
+    });
+    trampa = trap.id;
+    const r1 = await recordSpecimenObservation(authorizedUserAccountId, {
+      specimenId: trampa,
+      observationType: "trap_check",
+      observedAt: new Date("2027-03-01T08:00:00Z"),
+      captureCount: 9,
+      brocaLevel: "muchos",
+      provenanceClass: "direct_observation",
+    });
+    lecturaMotivo = r1.id;
+    const r2 = await recordSpecimenObservation(authorizedUserAccountId, {
+      specimenId: trampa,
+      observationType: "trap_check",
+      observedAt: new Date("2027-03-08T08:00:00Z"),
+      captureCount: 1,
+      brocaLevel: "pocos",
+      provenanceClass: "direct_observation",
+    });
+    lecturaSiguiente = r2.id;
+  });
+
+  afterAll(async () => {
+    await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimenId: trampa }) });
+    await prisma.specimen.deleteMany({ where: assertDefinedWhere({ id: trampa }) });
+  });
+
+  it("trae la lectura motivadora y la siguiente, con su escala", async () => {
+    const r = await lecturaDeTrampaQueMotivo(authorizedUserAccountId, lecturaMotivo);
+    expect(r?.motivo.id).toBe(lecturaMotivo);
+    expect(r?.motivo.captureCount).toBe(9);
+    expect(r?.motivo.brocaLevel).toBe("muchos");
+    expect(r?.siguiente?.id).toBe(lecturaSiguiente);
+    expect(r?.siguiente?.brocaLevel).toBe("pocos");
+    // Control: no es el mismo valor en las dos — si lo fuera, un error que
+    // devolviera siempre `motivo.brocaLevel` para ambas pasaría igual.
+    expect(r?.siguiente?.brocaLevel).not.toBe(r?.motivo.brocaLevel);
+  });
+
+  it("sin lectura posterior: siguiente es null", async () => {
+    const r = await lecturaDeTrampaQueMotivo(authorizedUserAccountId, lecturaSiguiente);
+    expect(r?.siguiente).toBeNull();
+  });
+
+  it("observación inexistente: null, no un error", async () => {
+    expect(await lecturaDeTrampaQueMotivo(authorizedUserAccountId, "00000000-0000-0000-0000-000000000000")).toBeNull();
+  });
+
+  it("sin acceso a la ubicación de la trampa: SpecimenAccessError", async () => {
+    await expect(lecturaDeTrampaQueMotivo(wrongLocationUserAccountId, lecturaMotivo)).rejects.toThrow(SpecimenAccessError);
   });
 });
 

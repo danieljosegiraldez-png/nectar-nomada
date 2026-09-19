@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "../../lib/auth/session";
 import { crearMaterial } from "../../lib/inventario/materiales";
 import { recibirLote } from "../../lib/inventario/lotes";
-import { CAMPOS_DEL_PRODUCTO, completarProducto, opcionesDeRecepcion, type CampoDelProducto } from "../../lib/inventario/recepcion";
+import { camposDe, completarProducto, opcionesDeRecepcion, type CampoDelProducto, type ClaseDeProducto } from "../../lib/inventario/recepcion";
 import { fechaDeDia } from "../../lib/time/localDateTime";
 
 /**
@@ -36,13 +36,17 @@ export async function recibirMedicamentoFormAction(formData: FormData): Promise<
     return Number.isFinite(n) ? n : null;
   };
 
+  const claseBruta = texto("clase");
+  if (claseBruta !== "medicamento" && claseBruta !== "fitosanitario") redirect("/inventario/recibir?error=clase");
+  const clase: ClaseDeProducto = claseBruta;
+
   const locationId = texto("locationId") ?? "";
-  const sitio = (await opcionesDeRecepcion(user.userAccountId)).sitios.find((s) => s.id === locationId);
+  const sitio = (await opcionesDeRecepcion(user.userAccountId, clase)).sitios.find((s) => s.id === locationId);
   if (!sitio) redirect("/inventario/recibir?error=sitio");
 
   const campos: Partial<Record<CampoDelProducto, string | number | null>> = {};
-  for (const c of CAMPOS_DEL_PRODUCTO) {
-    campos[c] = c === "defaultWithdrawalDays" || c === "avisarDiasAntes" ? numero(`p_${c}`) : texto(`p_${c}`);
+  for (const c of camposDe(clase)) {
+    campos[c] = c === "defaultWithdrawalDays" || c === "avisarDiasAntes" || c === "defaultReentryHours" ? numero(`p_${c}`) : texto(`p_${c}`);
   }
 
   let materialId = texto("materialId");
@@ -53,12 +57,14 @@ export async function recibirMedicamentoFormAction(formData: FormData): Promise<
       organizationId: sitio.organizationId,
       name: texto("nuevoNombre") ?? "",
       defaultUnit: unit,
-      isVeterinaryMedicine: true,
+      isVeterinaryMedicine: clase === "medicamento",
+      isPlantProtection: clase === "fitosanitario",
       manufacturer: texto("p_manufacturer"),
       activeIngredient: texto("p_activeIngredient"),
       sanitaryRegistration: texto("p_sanitaryRegistration"),
       defaultWithdrawalDays: numero("p_defaultWithdrawalDays"),
       avisarDiasAntes: numero("p_avisarDiasAntes"),
+      defaultReentryHours: numero("p_defaultReentryHours"),
       storageConditions: texto("p_storageConditions"),
       safetyNotes: texto("p_safetyNotes"),
     });

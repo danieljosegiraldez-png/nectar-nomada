@@ -443,7 +443,23 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       { value: "tarea_completada" },
       { value: "incidencia", definition: "Algo que salió mal o requiere atención — plaga, daño, equipo averiado." },
       { value: "movimiento_material", definition: "Material que cambió de lugar o de estado. El linaje vive en LotTransformation." },
+      { value: "manejo_fitosanitario", definition: "Una intervención contra una plaga en la parcela. Lo que se hizo vive en PlotIntervention." },
       { value: "otro", definition: "Siempre acompañado de nota libre. La regla de F1 §1: una lista tipada siempre necesita dónde poner lo que no encaja." },
+    ],
+  },
+
+  // Spec 2026-09-18 jornada y entrega §3.5 — lo variable del día que el recolector anota en su
+  // jornada. Sin valor medido: los milímetros son la lectura de un instrumento instalado en el
+  // sitio (spec de instrumentos de campo). Lo fijo del terreno no va aquí.
+  {
+    key: "condicion_del_dia",
+    name: "Condición del día",
+    description:
+      "Lo que el recolector ve del tiempo en la parcela durante su jornada. Es una observación, no una medición: la cantidad la da un instrumento.",
+    values: [
+      { value: "lluvia" },
+      { value: "neblina" },
+      { value: "otro", definition: "Siempre acompañado de nota libre." },
     ],
   },
 

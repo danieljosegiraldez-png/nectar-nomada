@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useTranslations } from "next-intl";
 import { crearApiarioFormAction } from "../../actions/apiary";
 import { BotonDeEnvio } from "../BotonDeEnvio";
@@ -100,12 +101,12 @@ export function NuevoApiarioForm({
 
       <div className="nn-field">
         <label htmlFor="ap-lat">{t("apiaryLatitudeLabel")}</label>
-        <input id="ap-lat" name="latitude" type="number" inputMode="decimal" step="0.000001" min="-90" max="90" />
+        <CampoNumerico id="ap-lat" name="latitude" inputMode="decimal" step="0.000001" min="-90" max="90" />
       </div>
 
       <div className="nn-field">
         <label htmlFor="ap-lon">{t("apiaryLongitudeLabel")}</label>
-        <input id="ap-lon" name="longitude" type="number" inputMode="decimal" step="0.000001" min="-180" max="180" />
+        <CampoNumerico id="ap-lon" name="longitude" inputMode="decimal" step="0.000001" min="-180" max="180" />
       </div>
 
       <BotonDeEnvio>{t("apiaryCreateButton")}</BotonDeEnvio>

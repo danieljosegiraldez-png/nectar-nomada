@@ -42,8 +42,12 @@ export default async function InventarioPage({ searchParams }: { searchParams: P
       <h1>{t("title")}</h1>
       <p className="nn-muted">{t("intro")}</p>
       {ok === "recibido" ? <p className="nn-alerta">{t("recibidoOk")}</p> : null}
-      <p>
+      <p style={{ display: "flex", gap: "0.75rem" }}>
         <Link href="/inventario/recibir">{t("recibirEnlace")}</Link>
+        {/* Ronda de arreglos 2 (Tarea 8): el formulario de recepción ya
+            distingue medicamento/fitosanitario (`?clase=`, Tarea 4); este
+            índice sólo enlazaba al primero. */}
+        <Link href="/inventario/recibir?clase=fitosanitario">{t("recibirEnlaceFitosanitario")}</Link>
       </p>
 
       {/* Lo que hay que atender, arriba y con número. Si no hay nada, se DICE —

@@ -120,6 +120,9 @@ describe("el inventario del router", () => {
     // botiquín. CUARTA vez que dos sesiones suben la cifra al mismo número con
     // pantallas distintas: la rama decía 83 y, rebasada sobre /finca, se MIDIÓ
     // sobre el árbol resuelto: 74 páginas y 10 handlers.
+    // 84 → 86 el 2026-09-18 (Tarea 8 fitosanitaria): dos páginas nuevas,
+    // `/plots/[id]/manejo/nuevo` y `/plots/[id]/manejo/[interventionId]` — 76
+    // páginas y 10 handlers.
     // 84 → 85 el 2026-09-18: /tienda — la tienda por dentro, recepciones y variantes (ADR-163).
     // 75 páginas y 10 handlers, medido sobre el árbol de la rama.
     // 85 → 86 el 2026-09-18: /api/v1/ingest/notehub, el primer handler de clase
@@ -139,7 +142,31 @@ describe("el inventario del router", () => {
     // 80 páginas y 11 handlers.
     // 91 → 92 el mismo día (Tarea 9): /finca/trampas/ronda — la lista de
     // tarjetas de la ronda, spec §4.2. 81 páginas y 11 handlers.
-    expect(salida).toContain("92 entradas");
+    //
+    // Y, en paralelo sobre `origin/main` (rama `fitosanitarios`, no la nuestra):
+    // 86 → 88 el 2026-09-18: /fincas y /fincas/nueva (spec fincas y parcelas). Medido: 77 páginas
+    // y 11 handlers.
+    // SEXTA vez el mismo día que dos sesiones suben la cifra con pantallas
+    // distintas — integración de `fitosanitarios` sobre `origin/main`. Medido
+    // con `node scripts/inventario-de-rutas.mjs` sobre el árbol resuelto tras
+    // el merge: 90 entradas (79 páginas y 11 handlers).
+    // 88 → 91 el 2026-09-19: /equipos/modelos, /equipos/modelos/nuevo y
+    // /equipos/modelos/[id] — el catálogo de modelos de equipo (fichas de
+    // fabricante, compartidas o de organización), separado del inventario de
+    // equipos concretos. 80 páginas y 11 handlers.
+    // 91 → 93 el mismo día: /finca/jornadas y /finca/jornadas/[id] (spec jornada y entrega de
+    // cosecha), rebasado sobre el catálogo. Medido: 82 páginas y 11 handlers.
+    // 93 → 94 el mismo día: /mis-entregas, la pantalla del recolector. Medido: 83 páginas y 11
+    // handlers.
+    // 94 → 96 al fusionar `fitosanitarios` (2026-09-19): /plots/[id]/manejo/nuevo y
+    // /plots/[id]/manejo/[interventionId]. Medido con `node scripts/inventario-de-rutas.mjs`
+    // sobre el árbol fusionado: 85 páginas y 11 handlers.
+    //
+    // 92 (rama) + 96 (origin/main) fusionados el 2026-09-19 (merge de `origin/main` en
+    // `vistas-finca-parcela`): la unión de rutas de ambos lados. Cifra REAL medida con
+    // `node scripts/inventario-de-rutas.mjs` sobre el árbol fusionado, no derivada por
+    // aritmética — ver el informe de este merge.
+    expect(salida).toContain("102 entradas");
     expect(codigo, salida).toBe(0);
   });
 

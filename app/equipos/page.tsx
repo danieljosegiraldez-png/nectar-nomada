@@ -4,6 +4,8 @@ import { getTranslations } from "next-intl/server";
 
 import { getCurrentUser } from "../../lib/auth/session";
 import { disponibilidadDeRecipientes, listarEquipos } from "../../lib/equipos/equipos";
+import { vencidasPorEquipo } from "../../lib/rutinas/rutinas";
+import { diaDeHoy } from "../../lib/time/diaDeHoy";
 
 export const dynamic = "force-dynamic";
 
@@ -18,27 +20,60 @@ export const dynamic = "force-dynamic";
  * que ya gobierna `VeredictoDeBeneficio`: en el patio se mira una pantalla a
  * pleno sol y con las manos sucias, y un matiz de color no sobrevive a eso.
  */
-export default async function EquiposPage() {
+export default async function EquiposPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ vencidas?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [t, equipos, disponibilidad] = await Promise.all([
+  const [t, equiposTodos, disponibilidad, sp] = await Promise.all([
     getTranslations("Equipos"),
     listarEquipos(user.userAccountId),
     disponibilidadDeRecipientes(user.userAccountId),
+    searchParams,
   ]);
+
+  // `diaDeHoy(..., null)` usa la zona más atrasada del planeta (UTC−12): un
+  // aviso de rutina vencida puede llegar como mucho un día tarde, nunca antes
+  // de tiempo — la misma regla que ya gobierna el resto de avisos derivados.
+  const vencidasPorId = await vencidasPorEquipo(
+    user.userAccountId,
+    equiposTodos.map((e) => e.id),
+    diaDeHoy(new Date(), null),
+  );
+
+  const soloVencidas = sp.vencidas === "1";
+  const equipos = soloVencidas ? equiposTodos.filter((e) => (vencidasPorId.get(e.id) ?? 0) > 0) : equiposTodos;
 
   const instrumentos = equipos.filter((e) => e.kind === "instrument");
   const resto = equipos.filter((e) => e.kind !== "instrument");
   // Lo que pide atención primero: un instrumento sin revisar o que falló su
-  // contraste, y cualquier equipo averiado.
+  // contraste, cualquier equipo averiado, y ahora también cualquiera con una
+  // rutina de cuidado vencida.
   const atencion = equipos.filter(
     (e) =>
       e.verificacion === "REVISION_VENCIDA" ||
       e.verificacion === "VERIFICACION_FALLIDA" ||
       e.verificacion === "SIN_VERIFICACION" ||
-      (e.condicion !== null && e.condicion.condition !== "operational"),
+      (e.condicion !== null && e.condicion.condition !== "operational") ||
+      (vencidasPorId.get(e.id) ?? 0) > 0,
   );
+
+  const filaModeloYVencidas = (e: (typeof equipos)[number]) => {
+    const n = vencidasPorId.get(e.id) ?? 0;
+    return (
+      <>
+        {e.model ? (
+          <div className="nn-muted">
+            {e.model.manufacturer} {e.model.modelName}
+          </div>
+        ) : null}
+        {n > 0 ? <div>{t("rutinasVencidas", { n })}</div> : null}
+      </>
+    );
+  };
 
   return (
     <div>
@@ -49,7 +84,10 @@ export default async function EquiposPage() {
       <p style={{ marginTop: "1rem" }}>
         <Link href="/equipos/nuevo" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
           {t("botonNuevo")}
-        </Link>
+        </Link>{" "}
+        <Link href="/equipos/modelos">{t("verCatalogo")}</Link>
+        {" · "}
+        {soloVencidas ? <Link href="/equipos">{t("filtroTodos")}</Link> : <Link href="/equipos?vencidas=1">{t("soloVencidas")}</Link>}
       </p>
 
       {equipos.length === 0 ? (
@@ -95,16 +133,20 @@ export default async function EquiposPage() {
           <h2>{t("atencionTitulo", { n: atencion.length })}</h2>
           <p className="nn-muted">{t("atencionIntro")}</p>
           <ul>
-            {atencion.map((e) => (
-              <li key={e.id}>
-                <Link href={`/equipos/${e.id}`}>{e.name}</Link>
-                {" — "}
-                {e.verificacion !== "SIN_INSTRUMENTO" ? t(`verificacion_${e.verificacion}`) : null}
-                {e.condicion && e.condicion.condition !== "operational"
-                  ? ` · ${t(`condicion_${e.condicion.condition}`)}`
-                  : null}
-              </li>
-            ))}
+            {atencion.map((e) => {
+              const n = vencidasPorId.get(e.id) ?? 0;
+              return (
+                <li key={e.id}>
+                  <Link href={`/equipos/${e.id}`}>{e.name}</Link>
+                  {" — "}
+                  {e.verificacion !== "SIN_INSTRUMENTO" ? t(`verificacion_${e.verificacion}`) : null}
+                  {e.condicion && e.condicion.condition !== "operational"
+                    ? ` · ${t(`condicion_${e.condicion.condition}`)}`
+                    : null}
+                  {n > 0 ? ` · ${t("rutinasVencidas", { n })}` : null}
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : null}
@@ -127,6 +169,7 @@ export default async function EquiposPage() {
                 <tr key={e.id}>
                   <td>
                     <Link href={`/equipos/${e.id}`}>{e.name}</Link>
+                    {filaModeloYVencidas(e)}
                   </td>
                   <td>{e.ubicacion?.name ?? t("sinUbicar")}</td>
                   <td>{t(`verificacion_${e.verificacion}`)}</td>
@@ -159,6 +202,7 @@ export default async function EquiposPage() {
                 <tr key={e.id}>
                   <td>
                     <Link href={`/equipos/${e.id}`}>{e.name}</Link>
+                    {filaModeloYVencidas(e)}
                   </td>
                   <td>{t(`tipo_${e.kind}`)}</td>
                   <td>{e.ubicacion?.name ?? t("sinUbicar")}</td>

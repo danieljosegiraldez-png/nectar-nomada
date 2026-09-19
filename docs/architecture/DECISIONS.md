@@ -11356,3 +11356,333 @@ asiento que ADR-161 escribe al cerrar. **No se teclea ningun numero**: se asient
 hay UNA cosecha real, y tiene saldo: se peso al cosechar. **Segun ese respaldo, ninguna cosecha
 esta afectada.** Esto es una red para las que pudiera haber en produccion desde entonces, no el
 arreglo de un dano medido.
+
+## ADR-167 — «Editar beneficio», plan 2: instalaciones, recetas y equipos
+
+**Fecha:** 2026-09-18 · **Estado:** aceptado · **Spec:** #370 §2, §4.2, §4.3 · **Plan:** `docs/superpowers/plans/2026-09-18-editar-beneficio-2.md`
+
+**Contexto.** ADR-164 cerró la ficha, los atributos y las coordenadas de un beneficio detrás de `location:edit_beneficio`, pero dejó dicho en su propio §4.2 que instalaciones de secado, camas, recetas y equipos seguían abiertos al capataz. Este plan cierra esos tres caminos.
+
+**Tres decisiones de Daniel, 2026-09-18:**
+
+1. **Instalaciones y camas: todas**, cuelguen de donde cuelguen. Hoy `crearUbicacionDeSecado` sólo acepta una `drying_facility` bajo un `site` (el código de #377 nunca llegó a aceptar `beneficio` como padre, aunque la spec original lo previera) — así que la guardia nueva no distingue por tipo de padre: exige `edit_beneficio` sobre el padre exacto que se pase, sea cual sea.
+2. **Recetas: `edit_beneficio` en algún lugar de la organización de la receta.** Una receta compartida (`organizationId` nulo) sólo se configura con alcance de plataforma — no basta con gestionar el lote de una finca cualquiera. La comprobación de `lot:manage` que ya tenían crear/editar/publicar se queda intacta; ésta se suma.
+3. **Equipos: la misma concesión abre configurarlos.** Registrar, trasladar, declarar/retirar patrón y declarar modo aceptan `equipment:manage` **o** `edit_beneficio` en el lugar del equipo. Sin lugar (proyecto o plataforma), sólo `equipment:manage` — no hay beneficio sobre el que resolver la concesión.
+
+**Decisión técnica.** Dos guardias nuevas en `lib/traceability/locations.ts`: `exigeEditarBeneficioEn(userAccountId, locationId)` (el permiso sobre una ubicación, sea del tipo que sea; distinta de `exigeEditarBeneficioSiLoEs` de ADR-164, que sólo actúa si la ubicación **es** un beneficio) y `exigeEditarBeneficioEnOrganizacion(userAccountId, organizationId)` (en algún lugar de la organización, o en plataforma si `organizationId` es nulo o la organización no tiene ninguna `Location` propia — el caso de las organizaciones-sólo-con-lotes que ya usan `recipeAuthoring.test.ts` y `recipeVersions.test.ts`). `instalaciones.ts` llama a la primera desde crear (sobre el padre) y editar (sobre la propia ubicación); `processTargets.ts` llama a la segunda desde `createRecipeWithVersion`, `updateRecipeMetadata` y `createRecipeVersion`, después de la comprobación de `lot:manage` que ya tenían. En `lib/equipos/equipos.ts`, `puedeConfigurar` sustituye al `can(..., "manage", "equipment", ...)` suelto en `registrarEquipo`, `exigePermiso("manage")`, `puedeGestionarEquipo` y `sitiosParaRegistrar` (esta última alimenta el selector de sitios del formulario de alta; sin el cambio, la concesión abría `registrarEquipo` pero el capataz nunca veía su propia finca en la lista).
+
+**Qué sigue abierto.** La pantalla para que el Farm Manager conceda o quite `edit_beneficio` por persona es el plan 3 de la spec — hasta entonces, la concesión sólo se escribe a mano en la base (`AssignmentPermissionOverride`) o por quien tiene `platform:manage_permissions`. Y lo que este plan deja fuera a propósito: `lib/inventario/materiales.ts` y `lib/inventario/recepcion.ts` comprueban `equipment:manage` directamente y no pasan por `puedeConfigurar` — el módulo de insumos reutiliza el permiso de equipos sin que la concesión de `edit_beneficio` lo abra.
+
+**Consecuencias.** Con ADR-164, la lista de §4.2 de la spec queda cerrada por completo: ficha, atributos, coordenadas, instalaciones, camas, recetas y equipos exigen todos `edit_beneficio` (equipos, además, `equipment:manage` como alternativa que ya tenía). Sólo falta la pantalla de concesión.
+
+**Corregido el 2026-09-18, auditoría final de Codex (dos hallazgos verificados):** (1) `exigeEditarBeneficioSiLoEs` (ADR-164) sólo miraba `locationType === "beneficio"`, así que `updateLocationAttributes`/`confirmarCoordenadasDelSitio` —los caminos genéricos de parcela, que no pasan por `exigeEditarBeneficioEn`— dejaban a un capataz con `manage_attributes` editar atributos y coordenadas de una `drying_facility`/`drying_bed`, y `createMicrolot` podía crear una nueva instalación de secado bajo ese mismo permiso. Ahora `TIPOS_DEL_BENEFICIO` (`beneficio`, `drying_facility`, `drying_bed`) cubre los tres caminos, y `createMicrolot` rechaza un padre de secado con `LocationValidationError("secado_no_se_subdivide")`. (2) `exigeEditarBeneficioEnOrganizacion` sólo miraba `Location.organizationId = org` directamente; como la organización es heredable (`resolveOrganizationForLocation`, subiendo por `parentLocationId`), un capataz asignado en un descendiente con `organizationId` nulo —8 de 135 `Location` en la base de pruebas compartida están así— nunca podía pasar la guardia aunque se le concediera el permiso ahí mismo. Ahora los candidatos incluyen esos descendientes, caminando hacia abajo hasta el primero que declare su propia organización.
+
+## ADR-168 — «Editar beneficio», plan 3: conceder y quitar desde `/beneficio/ajustes`
+
+**Fecha:** 2026-09-18 · **Estado:** aceptado · **Spec:** #370/#417 §4.3 «Cómo se concede» · **Plan:** `docs/superpowers/plans/2026-09-18-conceder-editar-beneficio.md`
+
+**Contexto.** ADR-164 y ADR-167 cerraron todos los caminos de escritura de un beneficio detrás de `location:edit_beneficio`, pero la concesión de ese permiso a un capataz sólo se podía escribir a mano en la base o por quien tiene `platform:manage_permissions` (`requirePermissionAdmin`, Platform Admin). Este plan añade la pantalla para que el Farm Manager o el dueño la den y la quiten ellos mismos, y hace que las pantallas de ajustes, recetas e instalaciones sólo ofrezcan un formulario a quien puede guardarlo.
+
+**Decisión técnica: una delegación estrecha**, en `lib/traceability/concesiones.ts` (`concederEditarBeneficio`, `quitarEditarBeneficio`, `personasDelBeneficio`), sobre `AssignmentPermissionOverride`: sólo el permiso `location:edit_beneficio`, sólo quien ya lo tiene sobre ese beneficio (misma guardia `exigeEditarBeneficioEn` de ADR-167), sólo a una asignación **activa** cuyo ámbito (`scope.scopeType === "location"`) alcanza ese beneficio subiendo por `parentLocationId`. No es una puerta a `platform:manage_permissions`: quien concede no puede tocar ningún otro permiso, y el servicio lo impone escribiendo siempre el mismo `permissionId` de `location:edit_beneficio`, nunca uno que reciba de fuera.
+
+**Tres rulings del controlador (decisiones del plan, cambiables por Daniel):**
+
+1. **Un `deny` de administración manda.** Si `platform:manage_permissions` ya puso un `deny` de `location:edit_beneficio` sobre esa asignación, el Farm Manager no lo sobrescribe: conceder se rechaza con `ConcesionError("quitado_por_administracion")` y el `deny` sigue ahí.
+2. **Quitar puede borrar CUALQUIER `grant` de este permiso** en esa asignación —también uno puesto por la administración, no sólo uno de esta misma delegación—, siempre que el actor tenga autoridad sobre el ámbito de esa asignación; nunca toca el permiso de serie del perfil (Farm Manager, Platform Admin) ni un `deny`. No hay columnas de procedencia que distingan quién concedió cada `grant` — corregido el 2026-09-18, ver «Correcciones» abajo.
+3. **La concesión vale para todo el ámbito de la asignación** de quien la recibe (spec §4.3, «Un límite, dicho ya»): si su asignación cubre la finca entera y la finca tiene dos beneficios, la concesión abre los dos. No hay un alcance más fino que la propia `Scope`; la pantalla lo dice con una línea fija.
+
+Razón obligatoria (recortada, no vacía) al conceder; `AuditEvent` (`beneficio.conceder_edicion` / `beneficio.quitar_edicion`) en la **misma transacción** que la escritura del override, en los dos sentidos.
+
+**Las pantallas usan booleanos sobre las mismas guardias del servidor**, así que la pantalla y el servidor no pueden discrepar: `puedeEditarBeneficioEn`/`puedeEditarBeneficioEnOrganizacion` (`lib/traceability/locations.ts`) devuelven `false` sólo ante `LocationAccessError("no_beneficio_edit_access")` y relanzan cualquier otro error. `listarBeneficios` los usa para `puedeEditar` por fila; `app/beneficio/ajustes/page.tsx` los usa para decidir si hay algo que ofrecer (renombrar, concesiones) sin que la ausencia de sitios administrables la haga desaparecer entera; `sitiosParaCrearInstalacion` (`lib/traceability/instalaciones.ts`) filtra `sitiosParaInstalaciones` con el mismo booleano para `/instalaciones/nueva`; `/instalaciones/[id]` y `/recipes/[id]`/`/recipes/new` ocultan sus formularios de escritura con la misma guardia, sin dejar de mostrar la lectura.
+
+**Consecuencias.** (1) Sigue el límite ya conocido de §4.3: la concesión cuelga de la asignación entera, no de un beneficio suelto dentro de ella — decisión diferida a cuando haya más de un beneficio por finca. (2) `/instalaciones/[id]` evalúa el permiso **por cada cama, sobre su propio id** (corregido el 2026-09-18, ver «Correcciones» — antes reutilizaba el de la instalación), y el de la instalación para su propio formulario y para «crear cama»; en los dos casos coincide con lo que `actualizarUbicacionDeSecado`/`crearUbicacionDeSecado` autorizan.
+
+**Correcciones del 2026-09-18, revisión independiente de Codex sobre `b1bf728`.** Seis hallazgos, los seis en el mismo commit que esta nota:
+
+1. **Escalada de ámbito.** `concederEditarBeneficio`/`quitarEditarBeneficio` sólo comprobaban autoridad del actor SOBRE EL BENEFICIO, pero la fila que tocan es el override de la asignación RECEPTORA, cuyo ámbito puede ser un ancestro más ancho (todo el sitio). Un Farm Manager con autoridad sólo sobre el beneficio podía conceder o quitar sobre una asignación de sitio entero — más de lo que él mismo tiene. Las dos funciones exigen ahora, además, `exigeEditarBeneficioEn(actorId, asignacion.scope.scopeRefId)`.
+2. **Concurrencia: el `deny` de administración debe ganar también bajo carrera.** El estado se leía antes de la transacción y el `upsert` escribía `grant` sin condición. `escribirGrant` ahora escribe condicionalmente dentro de la transacción (`UPDATE ... WHERE effect = 'grant'`; si no hay fila, `INSERT` con `catch` de `P2002` que relee y rechaza si la fila ganadora es un `deny`), y `quitarEditarBeneficio` borra con `deleteMany({ where: { ..., effect: "grant" } })`. Las dos transacciones usan `isolationLevel: "Serializable"`. **Probado:** el `UPDATE` condicional no toca una fila `deny` (test directo de la condición SQL) y que re-conceder no cambia `createdBy`. **Argumentado, no probado con concurrencia real:** el camino `P2002` (dos `INSERT` verdaderamente simultáneos) — sigue el mismo patrón ya usado en `lib/commerce/tienda.ts`/`lib/sensory/service.ts`, pero no hay en este repositorio un arnés de dos transacciones solapadas para ejercitarlo de forma determinista sin volverse un test intermitente.
+3. **Ruling 2 corregido.** Quitar puede borrar cualquier `grant` dentro del ámbito de autoridad del actor, no sólo uno puesto por esta misma delegación — no hay columnas de procedencia. Y re-conceder sobre un `grant` existente ya NO sobrescribe `createdBy` (sólo `reason` cambia).
+4. **Contexto de auditoría.** `after`/`before` del `AuditEvent` llevan ahora `contexto: { beneficioId, ambitoLocationId }` — desde qué beneficio se autorizó y el ámbito de la asignación receptora.
+5. **Camas con su propio permiso.** `/instalaciones/[id]` gateaba el formulario de CADA cama con el permiso de la INSTALACIÓN. Ahora evalúa `puedeEditarBeneficioEn(user, cama.id)` por cama; el permiso de la instalación sigue gobernando su propio formulario y «crear cama».
+6. **Criterio de asignación activa.** `concesiones.ts` trataba `status === "active"` como el criterio completo; el resolutor (`lib/rbac/service.ts`) también exige `validFrom <= ahora` y (`validTo` nulo o `> ahora`). `asignacionQueAlcanza` y `personasDelBeneficio` usan ahora `esAsignacionActiva`/`activeAssignmentWhere`, exportados de `lib/rbac/service.ts` para que el criterio no se repita a medias.
+
+## ADR-169 -- El despacho dice de que lote sale cada frasco, y la venta baja el libro del lote
+
+**Contexto.** ADR-163 llevo la miel envasada hasta el inventario de la tienda, pero una venta solo
+bajaba ese inventario: el lote no se enteraba, y la trazabilidad se cortaba en el estante. Se le
+pregunto a Daniel de que lote sale un frasco vendido; eligio **«lo elige quien despacha»**, frente a
+descontar automaticamente del mas antiguo.
+
+**Lo que habia debajo:** el despacho no existia. Nada en el codigo ponia un pedido en `fulfilled`;
+el pago lo dejaba en `paid` y ahi se quedaba. Y en la copia local hay CERO pedidos.
+
+**Decision.** `/tienda` lista los pedidos pagados. Por cada articulo, quien despacha dice cuantos
+frascos salen de cada lote, entre los lotes con frascos de esa variante **recibidos** en la tienda
+y no despachados ya. Al despachar, en una transaccion `Serializable`:
+
+- lo que sale de los lotes tiene que sumar **exactamente** lo pedido, articulo por articulo;
+- de un lote no sale mas de lo que queda en el estante (recibido menos despachado); **lo asignado y
+  no recibido no cuenta**: no esta en el estante;
+- cada fila queda en `OrderItemLot` (articulo, lote, frascos, quien, cuando);
+- **los kilos de esos frascos salen del libro del lote** como `transfer_out` con referencia al
+  pedido: frascos x masa neta del envasado. Si el libro no tiene tanta miel, se rechaza;
+- el pedido pasa a `fulfilled`, con su AuditEvent.
+
+**Lo que NO entra.** Que el cliente vea en «Mis pedidos» de que lote salio su frasco: el dato ya
+esta, falta la pantalla. Y devoluciones: un pedido despachado no se deshace aqui.
+
+## ADR-170 -- Una asignacion a tienda que no va a llegar se anula, no se borra
+
+**Contexto.** ADR-163 separo asignar (en el lote) de recibir (en la tienda). Pero una asignacion
+que nunca iba a llegar —el envio no sale, la tienda no tiene sitio, se asigno a la variante
+equivocada— se quedaba pendiente para siempre y **sus envases seguian contando como asignados**:
+el lote no podia volver a asignarlos. No habia salida. Esto no lo pidio Daniel con esas palabras:
+salio al cerrar ADR-169, como el hueco que dejaba el flujo de dos actos.
+
+**Decision.** Una asignacion **pendiente** se puede anular, con **motivo obligatorio** y el dia.
+Puede anular quien gestiona el lote (`requireLotAccess("manage")`) o quien lleva la tienda
+(`commerce:manage_store`): los dos lados saben que el envio no va a salir.
+
+- La fila **no se borra**: guarda `cancelled_at`, `cancelled_by` y `cancel_reason`, y deja un
+  AuditEvent `store_allocation.cancel`.
+- Sus envases vuelven a **libres**: la suma de asignados sale de las no anuladas.
+- La tienda deja de esperarla, y una anulada **no se puede recibir**.
+- **Una recibida no se anula**: esos frascos ya estan en el estante. La escritura lleva
+  `received_at IS NULL AND cancelled_at IS NULL` en su condicion, asi que no pisa una recepcion
+  que llegue a la vez.
+
+**En la base, dos CHECK:** `store_allocation_anulacion_completa` (los tres campos juntos o
+ninguno, y el motivo no en blanco) y `store_allocation_recibida_o_anulada` (nunca las dos).
+
+**Lo que NO entra.** Deshacer una anulacion (se asigna de nuevo), y corregir una recepcion ya
+confirmada: eso seria un ajuste de inventario, no una anulacion.
+
+## ADR-171 -- Un alza con marca se sigue de colmena en colmena; las sin marca se siguen contando
+
+**Contexto.** El spec de artefactos del 2026-09-17 (§4) modelo las alzas solo como cuenta:
+«nadie numera las alzas en el patio». Daniel, el 2026-09-18: *«todavia no, pero se marcaran»*,
+para saber de que alza salio la miel, por donde paso y el inventario del equipo. Spec
+`docs/superpowers/specs/2026-09-18-alzas-y-tandas-de-marcos-design.md` §4, plan
+`docs/superpowers/plans/2026-09-18-alzas-con-marca.md`. Lo leido en manuales latinoamericanos
+(SENASICA, SENASA) no pide identificar alzas: esto es gestion propia, no trazabilidad obligatoria.
+
+**Decision.** Tabla `hive_super`: marca normalizada (sin espacios, en mayusculas) y unica por
+finca, baja con fecha y motivo. Ponerla en una colmena es un `hive_fitting` `alza` de cuenta 1 que
+apunta a ella, el patron del nodo de sensores; un indice parcial la deja abierta en una sola
+colmena y el servicio rechaza solapes con intervalos ya cerrados. La cosecha nombra las alzas
+marcadas que estaban puestas en esa caja ese dia (`apiary_harvest_super`), comprobado dentro de
+la transaccion que la crea. **La inspeccion que declara «quite el alza» ya no cierra las
+marcadas**: no dice cual, y cerrarlas escribiria una historia falsa.
+
+**En la base:** `hive_super_marca_normalizada`, `hive_super_baja_completa`,
+`hive_fitting_alza_marcada_es_una` y el indice `hive_fitting_alza_abierta_en_una_colmena`.
+
+**Desviaciones del spec.** La «ficha del alza» es un desplegable en la ficha del apiario, no una
+ruta nueva. Y el listado no nombra cajas de otro apiario: dice «en otro apiario».
+
+**Lo que NO entra.** La cera por color de año (spec §5) y el año de las reinas (§5.4): cada uno
+en su rebanada.
+
+## ADR-172 — Catálogos de referencia con atributos: compartidos y propios, un contrato común
+
+**Fecha:** 2026-09-19 · **Estado:** aceptado · **Spec:** `docs/superpowers/specs/2026-09-18-catalogos-y-modelos-de-equipo-design.md`
+
+**Contexto.** ADR-095 §1 declinó por tercera vez tablas de especies y cultivares: bastaban
+valores controlados con alias y definiciones (`VariableCatalog`). Daniel pidió el
+2026-09-18 otra cosa: **atributos con tipo por clase** —mantenimiento y rango de medida
+de un equipo; tasa de inoculación, atenuación y tolerancia al alcohol de una levadura—,
+que `VariableCatalog` sólo podría llevar como JSON libre (CLAUDE.md §49).
+
+**Decisión.** Cada clase de catálogo es su propia tabla con sus columnas, y todas cumplen
+un contrato: dueño anulable (nulo = compartido, lo edita la autoridad de plataforma;
+con valor = propio de esa organización), procedencia (ADR-038), retiro en vez de
+borrado, unicidad sin mayúsculas en la base, auditoría en la misma transacción. Lo
+vigila `tests/arquitectura/catalogos-con-contrato.test.ts` sobre el registro
+`lib/catalogos/registro.ts`. Reemplaza ADR-095 §1 **como regla general**; los
+cultivares y levaduras que hoy viven en `VariableCatalog` se mueven, cada uno en su
+spec, con su migración de datos.
+
+**Y las rutinas.** Amplía `EQUIPMENT_AND_READINESS.md` §10: una rutina por calendario
+(mantenimiento, limpieza, fumigación) **avisa y no bloquea** (D1), sobre un equipo o
+una instalación. Siguen fuera órdenes de trabajo, técnicos, piezas y contadores de uso.
+
+**Consecuencias.** Cada clase nueva cuesta una tabla y un spec, no un campo en una
+tabla genérica. Las rutinas de instalación existen en la base y esperan su spec para
+tener pantalla y permisos.
+
+## ADR-173 -- La cera nueva lleva el color de su año, y el color no se guarda
+
+**Contexto.** Daniel, el 2026-09-18: *«todas las abejas reinas nacidas ese ano reciben ese apodo y
+color y toda la cera nueva de ese year que entra como marco en alza o camara de cria recibe esa
+marca color»*. Antes habia dicho que la cera no se sigue por alza, porque los marcos cambian de alza,
+y que seguir cada marco no es sostenible en el campo. Spec
+`docs/superpowers/specs/2026-09-18-alzas-y-tandas-de-marcos-design.md` §5, plan
+`docs/superpowers/plans/2026-09-18-cera-por-ano.md`.
+
+**Decision.** El color es el codigo internacional de las reinas (1/6 blanco, 2/7 amarillo, 3/8
+rojo, 4/9 verde, 5/0 azul) y **se calcula del ano** (`colorDelAño`), no se guarda. Se guardan dos
+hechos: la cera nueva que entra (`new_wax_entry`, su dia decide el ano) y los marcos que salen de
+un ano de color (`frame_removal`). La ficha del apiario junta los dos por ano: color, entraron,
+salieron, edad y el aviso — **revisar a los 2 anos, renovar a los 4**, lo que Daniel dijo
+(«2-4 years»; leerlo como dos avisos es interpretacion anotada en el spec §7.1).
+
+**No se impide sacar mas marcos de los que se anotaron entrando**: los de antes del registro no
+tienen entrada. La leyenda lo dice. **Si se impide**, en la base, sacar marcos de un ano que no ha
+llegado.
+
+**Lo que NO entra.** «Marcos negros: N» en la inspeccion (spec §5.3): la inspeccion se guarda
+tambien sin conexion y el campo toca la cola y su sincronizacion — va en su rebanada. Y el ano de
+las reinas (§5.4).
+
+## ADR-174 — Manejo fitosanitario de la parcela: registro de intervenciones
+
+**Contexto.** Daniel pidio «una seccion de prevencion y control de plagas, donde entra fumigacion o
+tratamientos de esta indole, trampas de broca o manejos relacionados». Las trampas son la pieza 2
+(#369, diseño y plan fusionados; `PlotBlock` y `TrapRule` no existen todavia en `main`). Este ADR
+cubre la pieza 3: registrar intervenciones, avisar carencia y reentrada, marcar la cosecha cuando
+hay riesgo de residuo.
+
+**La decision de las cuatro clases fue de Daniel el 2026-09-18:**
+
+1. **Productos comprados** — Bralic, Regin, fungicidas, insecticidas, abonos foliares.
+2. **Preparados de la finca** — un lote hecho en la biofábrica cuelga de `ConsumableLot`, igual que
+   un frasco comprado. No hace falta tabla nueva.
+3. **Liberaciones biologicas** — parasitoides, ácaros depredadores, bacterias; se miden en unidades
+   (individuos, colonias) segun el prep.
+4. **Manejo cultural** — repela, pepena, poda sanitaria. No aplican nada; son acciones.
+
+**Los doce objetivos mas `otro`, con su procedencia, son de Daniel y estan en el spec §2.5.**
+Araña roja la pidio él desde la entrada; los otros once salieron de consulta: guía técnica del ICAFE
+(Costa Rica), boletín Cedicafé, manuales de la región. **Ninguno entro sin que lo marcara él.** De
+esas fuentes no se toma ninguna cifra de dosis, carencia ni registro — eso lo pone quien da de alta
+el producto.
+
+**Los objetivos se eligen al registrar.** Sin elegir objetivo no se puede preguntar después «¿qué
+funcionó contra la broca?». Es la misma razon que el Anexo B §4 pidio `TreatmentTarget` para el
+apiario.
+
+**Decision — `PlotIntervention` con su catálogo.**
+
+1. **`ConsumableMaterial` gana dos columnas:**
+   - `isPlantProtection`: booleano, `false` por defecto. Es gemela de `isVeterinaryMedicine`.
+     Evita que el selector de productos muestre aserrín ni gallinaza cuando se registra una
+     intervención.
+   - `defaultReentryHours`: entero anulable, `CHECK >= 0`. Nulo = no declarada. Es lo que el
+     botiquín no tenía (ADR-168).
+
+2. **Tres tablas nuevas:**
+   - `PlotIntervention`: ubicacion, tipo (aplicación/liberación/manejo_cultural), objetivo, la
+     mezcla de tanque (volumen total del caldo), fecha y hora con desfase, operario, jornada, la
+     observacion de trampa que la motivó (procedencia, no mecanismo). **Nunca se edita en sitio:**
+     corregir escribe una fila nueva con `correctsId` y motivo obligatorio, como
+     `correctMeasurement`. Auditada en transacción.
+   - `PlotInterventionArea`: por intervención, **exactamente uno** de `plotBlockId` o
+     `specimenId` — `CHECK` en base. Sin filas = toda la parcela. El servicio verifica que el
+     bloque o planta pertenecen a esa parcela.
+   - `PlotInterventionLine`: una por producto de la mezcla. Lleva `materialId` (obligatorio; un
+     producto sin identidad no se puede comparar), frasco (opcional para siempre), cantidad y
+     unidad (opcionales; «no medí» se guarda). **Carencia y reentrada, anulables:** nulo = no
+     declarada, `CHECK >= 0` si presente (ADR-080).
+
+3. **El descuento del frasco:** cuando la línea lleva frasco y cantidad, escribe su
+   `ConsumableStockEvent` de tipo `consumed` en la **misma transacción**, igual que el tratamiento
+   de colmena (ADR-168). Exige la misma unidad que el lote. Sin cantidad no descuenta y se guarda
+   igual: dice de qué frasco salió aunque no cuánto.
+
+   **Este cambio respecto de lo que Daniel vio en el chat es de propósito:** en el chat dije que
+   escribiría también un `MaterialConsumptionEntry`; medí después que el botiquín (fusionado ese
+   mismo día) resolvió lo mismo **al revés** — el tratamiento de colmena descuenta sin fila de
+   consumo. Aquí se sigue ese precedente. Si Daniel prefiere lo que vio primero, el cambio es de
+   una tarea del plan y no toca el resto.
+
+4. **Frasco vencido se aplica y queda marcado:** `lotExpiredAtApplication = true`. Alguien puede
+   estar registrando hoy lo que aplicó la semana pasada.
+
+5. **El servicio NO rellena carencia ni reentrada** con las del producto. El formulario las
+   precarga **visibles y editables** — quien registra las confirma o las cambia. Si el servicio
+   copiara el valor, una carencia editada en el producto después cambiaría el significado de lo que
+   ya se registró, y un nulo del producto se volvería una afirmación que nadie hizo (ADR-080).
+
+6. **Nulo ≠ cero:** ninguna columna de carencia ni reentrada lleva `DEFAULT 0`. Un cero por defecto
+   convertiría «nadie lo dijo» en «dijo cero». `CHECK` en base, no solo en TypeScript.
+
+7. **Reglas por tipo, en el servicio y base:**
+   - `manejo_cultural` → cero líneas. Una repela no aplica nada.
+   - `aplicacion` y `liberacion` → al menos una.
+   - Intervención sin líneas: la base rechaza con `CHECK`. Cambio en producto después no cambia
+     lo que se registró.
+
+**La carencia y reentrada salen de aritmética pura (§3 del spec).**
+
+- `libreDesdeDe` y `diasQueFaltanDe` se mueven de `lib/apiary/carencia.ts` a `lib/time/carencia.ts`
+  (modulo sin importar base). Café y miel cuentan igual: días enteros, redondeando hacia arriba.
+  Medio día de carencia sigue siendo carencia. Adiós `Math.floor`.
+- `carenciaDeIntervencion(intervencion, enLaFecha)`: función pura.
+  - `manejo_cultural` → `no_aplica`.
+  - Todas las líneas declaran → `conocida`, manda la más larga de la mezcla.
+  - Alguna no declara → `desconocida`. Si otra sí, añade `alMenosHasta`.
+  - La más larga ya se cumplió y ninguna es desconocida → `cumplida`.
+- **`desconocida` nunca se vuelve `cumplida` por el tiempo.** Una carencia que nadie declaró no
+  vence sola: sigue en *falta un dato* hasta que alguien corrige la intervención.
+- Qué intervenciones cuentan: **solo las vigentes** (no corregidas por otra).
+- `reentradaDeIntervencion`: igual, en horas.
+
+**La marca en la cosecha es una foto de lo que el sistema sabía.**
+
+- `recordHarvestEvent` sigue guardando siempre. En la misma transacción escribe una fila
+  `HarvestWithdrawalFlag` **por cada intervención que siga en carencia** en `harvestedAt`:
+  - `interventionId`, `harvestEventId` — únicos por par.
+  - `diasQueFaltaban` — entero anulable. **Nulo = desconocida.** Distinto de cero.
+  - Sin filas: no había ninguna carencia vigente.
+- La página de la cosecha enseña **también** el cálculo de hoy, y **si no coinciden lo dice:**
+  lo que se sabía entonces y lo que se sabe ahora son dos hechos distintos. Importa el día que
+  aparezca un análisis de residuo.
+- **Intervenciones que tocan una cosecha:** las de la misma parcela sin importar bloque ni planta
+  (la cosecha no lo dice), **y también ascendientes y descendientes** por `parentLocationId`. Es
+  conservador: mejor aviso de más que una carencia que no se ve. Nueva función
+  `ubicacionesEmparentadas(locationId)`, que copia de `conAncestros` el tope
+  `PROFUNDIDAD_MAXIMA_DE_UBICACION = 12` y la guarda de ciclos.
+
+**Los avisos en el tablero y al abrir jornada (§4.1 del spec).**
+
+- Nuevos grupos en `pendienteDeLaParcela`: `reentrada_vigente` (hasta qué hora, de qué
+  intervención), `carencia_vigente` (no cosechar hasta fecha, por intervención),
+  `carencia_no_declarada` / `reentrada_no_declarada` (para corregir con valor).
+- La reentrada también avisa al abrir jornada en esa parcela o emparentada: «sin protección no
+  entrar hasta las 14:00» — notificacion, no bloqueo.
+- Una reentrada no declarada dice **«desconocida»** y no se calla. Si se calla, se lee como que se
+  puede entrar.
+
+**La pieza 2 (trampas, #369) queda fuera de este ADR pero enlazada:**
+
+- `TrapRule` gana `suggestedMaterialId` opcional, FK `ConsumableMaterial` filtrado a
+  `isPlantProtection`. Cuando existe, el aviso de lectura disparada trae «Registrar aplicación» con
+  el producto prerellenado.
+- El aviso se da por **atendido** cuando existe una intervención vigente posterior a la lectura que
+  cubre la trampa. Cuenta cualquier tipo, también una repela. El sistema sugiere, no opina.
+- **Actualizado al integrar `origin/main` (2026-09-18):** el PR B (áreas por bloque,
+  `TrapRule.suggestedMaterialId`, aviso de trampa atendido) ya puede empezar: `PlotBlock` y
+  `TrapRule` están en `main` desde el PR #413.
+
+**Alternatives considered:** Escribir también `MaterialConsumptionEntry` (lo que se vio en el chat).
+El botiquín optó por el descuento directo sin fila de consumo, que es más limpio. Ambos son válidos;
+se sigue el precedente para coherencia.
+
+**Consequences:** El registro de fumigación deja de ser consumo sin carencia. La cosecha sabe si
+peligra residuo y cuando. Las intervenciones vigentes se distinguen de las corregidas. Una carencia
+desconocida no desaparece con el tiempo. Crecer la lista de objetivos es una migración de una línea.
+Lo que no esté entra como `otro` con nota.
+## ADR-175 -- La reina guarda el ano en que nacio; su color es un apodo, no una marca
+
+**Contexto.** Spec `docs/superpowers/specs/2026-09-18-alzas-y-tandas-de-marcos-design.md` §5.4:
+las reinas nacidas un ano llevan el color de ese ano, el mismo que la cera. Pero el modulo de reinas
+(ADR de faenas, 2026-09-18) dice *«no marcamos las reinas»*. Se le pregunto a Daniel el 2026-09-19
+y contesto: **el color es solo un apodo; las reinas no se pintan.**
+
+**Decision.** `queen.birth_year`, nulo si no se sabe (CHECK: nulo o desde 1990). El servicio no
+deja que una reina nazca despues del ano en que llega a la colonia. El color no se guarda: lo
+calcula `colorDelAño` (ADR-173), y la historia de reinas dice «la blanca de 2026». **No hay campo
+«marcada»**, porque no se marcan.
+
+**Lo que NO entra.** Corregir el ano de una reina ya registrada: se registra al introducirla o al
+cambiarla.

@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
-import { LocationAccessError, puedeGestionarAtributosDeUbicacion, requireLocationAttributeAccess } from "./locations";
+import { LocationAccessError, exigeEditarBeneficioEn, puedeEditarBeneficioEn, puedeGestionarAtributosDeUbicacion, requireLocationAttributeAccess } from "./locations";
 import { AMBIENTES_DE_SECADO, SecadoFormError } from "./secadoForm";
 import type { DryingEnvironment } from "../../generated/prisma/enums";
 
@@ -15,6 +15,24 @@ export async function sitiosParaInstalaciones(userAccountId: string) {
     }
   }
   if (!permitidos.length) throw new LocationAccessError("no_location_attribute_access");
+  return permitidos;
+}
+
+/**
+ * Los sitios donde crear una instalación de secado, para `/instalaciones/nueva`
+ * (Task 3, plan 3). `manage_attributes` (`sitiosParaInstalaciones`) sólo deja
+ * ver y administrar atributos genéricos; crear una instalación es configurar
+ * el beneficio, así que además hace falta `location:edit_beneficio` sobre ese
+ * mismo sitio. Lista vacía si ninguno pasa el segundo filtro — no lanza, para
+ * que la pantalla la distinga de «no hay ningún sitio administrable», que sí
+ * sigue siendo la negativa explícita de `sitiosParaInstalaciones`.
+ */
+export async function sitiosParaCrearInstalacion(userAccountId: string) {
+  const sitios = await sitiosParaInstalaciones(userAccountId);
+  const permitidos = [];
+  for (const sitio of sitios) {
+    if (await puedeEditarBeneficioEn(userAccountId, sitio.id)) permitidos.push(sitio);
+  }
   return permitidos;
 }
 
@@ -62,6 +80,8 @@ export async function crearUbicacionDeSecado(userAccountId: string, input: Datos
   parentLocationId: string; locationType: "drying_facility" | "drying_bed";
 }) {
   await requireLocationAttributeAccess(userAccountId, input.parentLocationId);
+  // Configurar el secado es configurar el beneficio (spec #370 §4.3).
+  await exigeEditarBeneficioEn(userAccountId, input.parentLocationId);
   const parent = await prisma.location.findUniqueOrThrow({ where: { id: input.parentLocationId } });
   if (!((input.locationType === "drying_facility" && parent.locationType === "site") ||
     (input.locationType === "drying_bed" && parent.locationType === "drying_facility"))) throw new SecadoFormError("tipo_invalido");
@@ -79,6 +99,7 @@ export async function crearUbicacionDeSecado(userAccountId: string, input: Datos
 
 export async function actualizarUbicacionDeSecado(userAccountId: string, input: Datos & { locationId: string }) {
   await requireLocationAttributeAccess(userAccountId, input.locationId);
+  await exigeEditarBeneficioEn(userAccountId, input.locationId);
   const before = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
   if (before.locationType !== "drying_facility" && before.locationType !== "drying_bed") throw new SecadoFormError("tipo_invalido");
   validar(input, before.locationType);

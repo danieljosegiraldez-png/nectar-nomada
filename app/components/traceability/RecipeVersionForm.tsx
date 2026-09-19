@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { createRecipeVersionAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -62,7 +63,7 @@ export function RecipeVersionForm({
       </div>
       <div className="nn-field">
         <label htmlFor="version-expected">{t("recipeExpectedHoursLabel")}</label>
-        <input id="version-expected" name="expectedHours" type="number" min={1} step={1} inputMode="numeric" defaultValue={expectedHours ?? ""} />
+        <CampoNumerico id="version-expected" name="expectedHours" min={1} step={1} inputMode="numeric" defaultValue={expectedHours ?? ""} />
       </div>
 
       {rows.map((row, i) => {
@@ -100,19 +101,19 @@ export function RecipeVersionForm({
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               <div className="nn-field" style={{ flex: "1 1 120px" }}>
                 <label htmlFor={`vt-${row.key}`}>{t("recipeTargetValueLabel")}</label>
-                <input id={`vt-${row.key}`} name={`targets[${i}][targetValue]`} type="number" step="any"
+                <CampoNumerico id={`vt-${row.key}`} name={`targets[${i}][targetValue]`} step="any"
                   min={b?.min} max={b?.max} value={row.targetValue}
                   onChange={(e) => update(row.key, { targetValue: e.target.value })} />
               </div>
               <div className="nn-field" style={{ flex: "1 1 120px" }}>
                 <label htmlFor={`vmin-${row.key}`}>{t("recipeMinLabel")}</label>
-                <input id={`vmin-${row.key}`} name={`targets[${i}][minValue]`} type="number" step="any"
+                <CampoNumerico id={`vmin-${row.key}`} name={`targets[${i}][minValue]`} step="any"
                   min={b?.min} max={b?.max} value={row.minValue}
                   onChange={(e) => update(row.key, { minValue: e.target.value })} />
               </div>
               <div className="nn-field" style={{ flex: "1 1 120px" }}>
                 <label htmlFor={`vmax-${row.key}`}>{t("recipeMaxLabel")}</label>
-                <input id={`vmax-${row.key}`} name={`targets[${i}][maxValue]`} type="number" step="any"
+                <CampoNumerico id={`vmax-${row.key}`} name={`targets[${i}][maxValue]`} step="any"
                   min={b?.min} max={b?.max} value={row.maxValue}
                   onChange={(e) => update(row.key, { maxValue: e.target.value })} />
               </div>
@@ -123,8 +124,8 @@ export function RecipeVersionForm({
               {/* Sin esto, publicar una v2 le borraba el ritmo a la receta en
                   silencio. Lo cazó la revisión de Codex el 2026-09-13. */}
               {row.moment === "during" ? (
-                <input
-                  name={`targets[${i}][everyHours]`} type="number" min={1} step={1}
+                <CampoNumerico
+                  name={`targets[${i}][everyHours]`} min={1} step={1}
                   inputMode="numeric" aria-label={t("recipeEveryHoursLabel")}
                   placeholder={t("recipeEveryHoursLabel")}
                   value={row.everyHours ?? ""}

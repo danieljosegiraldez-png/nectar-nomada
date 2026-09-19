@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico, soltarFocoConLaRueda } from "../CampoNumerico";
 import { useActionState, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recortarPorPrecision } from "../../../lib/time/recortarPorPrecision";
@@ -163,9 +164,8 @@ export function PlantingCohortForm({
 
       <div className="nn-field">
         <label htmlFor={`plantCount-${cohort?.id ?? "new"}`}>{t("plantCountLabel")}</label>
-        <input
+        <CampoNumerico
           id={`plantCount-${cohort?.id ?? "new"}`}
-          type="number"
           name="plantCount"
           min="0"
           step="1"
@@ -196,6 +196,7 @@ export function PlantingCohortForm({
         <input
           id={`plantedAt-${cohort?.id ?? "new"}`}
           type={inputType}
+          onWheel={soltarFocoConLaRueda}
           name="plantedAt"
           {...(inputType === "number" ? { min: 1900, max: 2200, step: 1, inputMode: "numeric" as const } : {})}
           value={fecha}

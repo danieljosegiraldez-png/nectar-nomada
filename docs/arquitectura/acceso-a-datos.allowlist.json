@@ -18,6 +18,18 @@
   ],
   "importan_cliente_total": [
     {
+      "archivo": "lib/traceability/situacionesDeCampo.ts",
+      "razon": "Módulo de dominio: las situaciones de campo del recolector en su jornada de cosecha (spec 2026-09-18 jornada y entrega §3.5). Reportar exige, ANTES de escribir, `field_report:create_own` sobre el sitio de la finca y estar asignado en esa jornada abierta, y sólo sobre lo asignado; la FieldSession, el FieldEvent y sus AuditEvent van en la misma transacción. Compuerta propia a propósito: no pasa por `requireLocationAttributeAccess` porque esa es la autoridad sobre sol, sombra y suelo. La foto de una situación (`pedirSubidaDeFotoDeSituacion`, `confirmarFotoDeSituacion`) pasa por la misma compuerta, re-comprueba al confirmar que la clave esté bajo el prefijo de ESA jornada, y crea Asset, FieldEvent y sus AuditEvent en una transacción. Leer: todo con `field_report:view` sobre la finca; si no, sólo los eventos de la Person de la cuenta."
+    },
+    {
+      "archivo": "lib/traceability/entregasDeCosecha.ts",
+      "razon": "Módulo de dominio: la entrega de cosecha de la finca al beneficio (spec 2026-09-18 jornada y entrega §3.3–3.4). Anotar exige, ANTES de escribir, `harvest_delivery:create_own` sobre el sitio si la entrega es del propio recolector de la cuenta, y si no `requireLotAccess(manage)`; anular exige `requireLotAccess(manage)`. Cada escritura lleva su AuditEvent en la misma transacción. `misEntregas` sólo lee filas de la Person de la propia cuenta."
+    },
+    {
+      "archivo": "lib/traceability/jornadasDeCosecha.ts",
+      "razon": "Módulo de dominio: recolectores y jornadas de cosecha (spec 2026-09-18 jornada y entrega §3.1–3.2). Escribir exige `requireLotAccess(manage)` sobre el sitio de la finca ANTES de escribir, con el AuditEvent en la misma transacción; leer exige `requireLotAccess(view)` sobre ese sitio. La lectura del árbol de ubicaciones sólo comprueba que las parcelas asignadas cuelguen de esa finca."
+    },
+    {
       "archivo": "lib/traceability/reporteDeVisita.ts",
       "razon": "A9.6 — emite el reporte de una visita congelando su contenido. Modulo de dominio: es el sitio donde el acceso a datos vive por diseno. Comprueba `requireFieldSessionAccess` antes de leer nada, y su escritura confirma su AuditEvent en la misma transaccion."
     },
@@ -74,6 +86,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/fincas.ts",
+      "razon": "Módulo de dominio: las fincas (spec 2026-09-18 fincas y parcelas). `listarFincas` parte de `getManageableContext`, que ya resuelve la visibilidad de quien mira; la lectura del árbol de ubicaciones sólo sirve para subir de una parcela visible a su sitio, y no devuelve nada que no sea el sitio de algo ya visible. Crear finca exige `organization:create_farm` en ámbito de plataforma; crear parcela, `manage_attributes` y `create_site` sobre el sitio, ANTES de escribir, con el AuditEvent en la misma transacción."
+    },
+    {
       "archivo": "lib/apiary/genealogia.ts",
       "razon": "Módulo de dominio: la genealogía de la colonia (spec 2026-09-18 §3). Dividir exige `requireApiaryAccess` manage sobre la caja de la madre Y sobre la de destino ANTES de escribir, comprueba dentro de la transacción que el destino no tenga colonia activa, y escribe la hija con su AuditEvent en la MISMA transacción. Si la reina registrada va a la hija, cierra la tenencia de la madre y abre la de la hija en esa misma transacción, con su AuditEvent. Unir delega en `registrarFinDeColonia`, el único escritor del fin. Leer la línea exige view."
     },
@@ -100,6 +116,14 @@
     {
       "archivo": "lib/apiary/nodos.ts",
       "razon": "Módulo de dominio: el nodo de sensores. Registrar, instalar y mover exigen `requireHiveNodeAccess` (hive_node:manage, que el Farm Operator no tiene) sobre el sitio o la colmena ANTES de escribir; el nodo tiene que ser de la finca de la colmena. Los cruces de intervalos se comprueban dentro de la transaccion y los abiertos los sostiene la base con indices parciales. Escritura y AuditEvent en la MISMA transaccion."
+    },
+    {
+      "archivo": "lib/apiary/cera.ts",
+      "razon": "Módulo de dominio: la cera con el color de su año (spec 2026-09-18 §5). Anotar exige `requireApiaryAccess` manage sobre el apiario ANTES de escribir; la leyenda, view. La colmena de una entrada tiene que ser de la misma finca. Escritura y AuditEvent en la MISMA transacción. El color no se guarda: lo calcula `colorDelAño`."
+    },
+    {
+      "archivo": "lib/apiary/alzas.ts",
+      "razon": "Módulo de dominio: alzas con marca (spec 2026-09-18 §4). Registrar, poner y dar de baja exigen `requireApiaryAccess` manage sobre el sitio o la colmena ANTES de escribir; listar, view. El alza tiene que ser de la finca de la colmena y estar activa; los cruces de intervalos se comprueban dentro de la transacción y el abierto lo sostiene un índice parcial. Escritura y AuditEvent en la MISMA transacción. El listado no nombra cajas de otro apiario."
     },
     {
       "archivo": "lib/apiary/artefactos.ts",
@@ -230,6 +254,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/ubicacionesEmparentadas.ts",
+      "razon": "Tarea 3 del plan fitosanitario (§3.3) — genealogía de una Location (ascendientes y descendientes) para que la carencia de una intervención alcance a la parcela madre y a sus microparcelas, y no a una hermana. No autoriza nada: quien la llama ya pasó la compuerta. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
       "archivo": "lib/traceability/lots.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
@@ -248,6 +276,10 @@
     {
       "archivo": "lib/traceability/operations.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
+      "archivo": "lib/traceability/intervenciones.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Registrar y corregir una intervención fitosanitaria (Tarea 5, spec 2026-09-18)."
     },
     {
       "archivo": "lib/traceability/plantingCohorts.ts",
@@ -446,6 +478,10 @@
       "razon": "Modulo de dominio de equipos e instrumentos (EQUIPMENT_AND_READINESS.md §2-§4, §7 y §9). Es el sitio donde el acceso a datos vive por diseno. Cada funcion resuelve `can(..., \"equipment\", ...)` contra el ambito hoja del equipo ANTES de leer o escribir, y toda escritura confirma su AuditEvent en la misma transaccion. El veredicto de una verificacion NO se calcula aqui: lo deriva un trigger de la base."
     },
     {
+      "archivo": "lib/rutinas/rutinas.ts",
+      "razon": "Rutinas periódicas de equipo (spec de catálogos §3.4, D1 y D8): definir y anular es gestión (equipment:manage), apuntar lo hecho es faena (equipment:report_condition), siempre vía requireRutinaAccess → puedeSobreEquipo. Toda escritura confirma su AuditEvent en la misma transacción; nada se borra, los registros se anulan con motivo."
+    },
+    {
       "archivo": "lib/apiary/vitalesDeColmena.ts",
       "razon": "Los vitales de cada colmena del inventario (Anexo E §3): la última inspección, su población y el origen de la colonia viva. Dos lecturas, ninguna escritura. Es el gemelo por colmena de vitalesDelSitio.ts y comparte su disciplina: no recibe principal a propósito, porque quien lo llama ya autorizó el sitio con getApiaryDetail."
     },
@@ -472,6 +508,10 @@
     {
       "archivo": "lib/traceability/beneficios.ts",
       "razon": "Tarea 2 del plan de alta de beneficio — crea y renombra el beneficio (LocationType nuevo) bajo un sitio. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. A diferencia de instalaciones.ts, crear exige DOS permisos sobre el padre —`location:manage_attributes` y `location:create_site`—, porque dar de alta un lugar nuevo es una autoridad más estrecha que administrar el árbol de uno existente y es justo la que un Farm Operator no tiene. Escritura y AuditEvent en la MISMA transacción, tanto al crear como al renombrar."
+    },
+    {
+      "archivo": "lib/traceability/concesiones.ts",
+      "razon": "Plan 3 de «editar beneficio» (ADR-168) — conceder y quitar `location:edit_beneficio` desde /beneficio/ajustes. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Delegación estrecha sobre `AssignmentPermissionOverride`: sólo ese permiso, sólo quien lo tiene sobre ese beneficio (`exigeEditarBeneficioEn`), y sólo hacia una asignación cuyo ámbito alcanza el beneficio. Escritura y AuditEvent en la MISMA transacción, tanto al conceder como al quitar."
     },
     {
       "archivo": "lib/inventario/materiales.ts",
@@ -511,14 +551,34 @@
     },
     {
       "archivo": "lib/commerce/tienda.ts",
-      "razon": "Módulo de dominio (ADR-163): de un lote envasado a la tienda. `asignarATienda` exige `requireLotAccess(\"manage\")` antes de leer nada del lote; `confirmarRecepcion`, `crearVariante` y `tiendaParaGestionar` exigen `commerce:manage_store`. Escritura y AuditEvent en la MISMA transacción; la asignación en `Serializable` para que dos a la vez no pasen juntas del techo de envases."
+      "razon": "Módulo de dominio (ADR-163): de un lote envasado a la tienda. `asignarATienda` exige `requireLotAccess(\"manage\")` antes de leer nada del lote; `confirmarRecepcion`, `crearVariante` y `tiendaParaGestionar` exigen `commerce:manage_store`; `anularAsignacion` (ADR-170) exige `commerce:manage_store` o `requireLotAccess(\"manage\")` sobre el lote. Escritura y AuditEvent en la MISMA transacción; la asignación en `Serializable` para que dos a la vez no pasen juntas del techo de envases."
     },
     {
       "archivo": "lib/apiary/cosechasSinSaldo.ts",
       "razon": "Módulo de dominio (ADR-166). `asentarPesoDeCosecha` exige `requireApiaryAccess(\"manage\")` sobre la caja de la cosecha antes de escribir, y dentro de una transacción `Serializable` vuelve a comprobar que el lote no tenga asientos, para no asentar dos veces. Escritura y AuditEvent en la MISMA transacción."
+    },
+    {
+      "archivo": "lib/catalogos/propiedad.ts",
+      "razon": "Contrato común de los catálogos de referencia (spec de catálogos §2.5). Decide quién crea, edita y ve una entrada: compartida sólo con el permiso en ámbito de plataforma; propia, con el permiso juzgado en un sitio de esa organización, que se deriva del sitio y no del formulario. Sólo LEE sitios para resolver el ámbito; no escribe nada."
+    },
+    {
+      "archivo": "lib/equipos/modelos.ts",
+      "razon": "Catálogo de modelos de equipo (spec de catálogos §3.1-3.2), primer consumidor del contrato común de lib/catalogos. Crear, editar y retirar exige equipment:manage vía requireCatalogoAccess/requireEntradaDeCatalogoAccess; toda escritura confirma su AuditEvent en la misma transacción; lecturas filtradas por organizacionesVisibles."
+    },
+    {
+      "archivo": "lib/equipos/documentos.ts",
+      "razon": "Manuales, fichas técnicas, certificados y fotos de modelos y equipos (spec de catálogos §3.5). Misma forma que lib/traceability/media.ts: URL firmada y Asset creado sólo al confirmar, con la clave obligada a su prefijo por destino. Subir exige equipment:manage (vía puedeSobreEquipo o requireEntradaDeCatalogoAccess); leer, equipment:view. El AuditEvent va en la misma transacción."
     }
   ],
   "reciben_transaccion": [
+    {
+      "archivo": "lib/traceability/entregasDeCosecha.ts",
+      "razon": "Spec jornada y entrega §3.3: `exigeOrigenAsignado(tx, …)` recibe el `tx` de `anotarEntrega` para comprobar DENTRO de la transacción que crea la entrega que el origen (parcela, bloque o planta) cae en lo asignado a esa persona en esa jornada. Sólo lee asignaciones, bloques y plantas; quien llama ya autorizó con `harvest_delivery:create_own` o `requireLotAccess(manage)`; no escribe nada."
+    },
+    {
+      "archivo": "lib/traceability/locations.ts",
+      "razon": "Spec fincas y parcelas §3.3: `nombreLibreBajo(tx, padre, nombre)` recibe el `tx` de quien crea —`createMicrolot` aquí mismo y `crearParcela` en fincas.ts— para mirar los hermanos DENTRO de la transacción que va a crear la fila. Sólo lee nombres de los hijos de un padre sobre el que quien llama ya pasó `requireLocationAttributeAccess`; no escribe nada."
+    },
     {
       "archivo": "lib/apiary/artefactos.ts",
       "razon": "Artefactos de colmena: el UNICO escritor de los intervalos y de la foto en Hive. `abrirIntervaloEn`, `cerrarIntervaloEn` y `cerrarAbiertosEn` devuelven un cierre que recibe el `tx` de quien llama —la inspeccion, el formulario de la caja, la propia pantalla— para que el intervalo, la foto y sus AuditEvent se confirmen en LA MISMA transaccion que la escritura que los declara. Quien llama ya autorizo con requireApiaryAccess; los ayudantes solo tocan hive_fitting y hive de la colmena que reciben."
@@ -538,6 +598,10 @@
     {
       "archivo": "lib/traceability/balance.ts",
       "razon": "Cálculo puro de balance de masa. No abre conexión: opera dentro de una transacción que ya abrió un llamador autorizado (lots.ts, fermentation.ts, quantity.ts, todos con requireLotAccess). Recibir el cliente por parámetro es inyección de dependencia, no un atajo — pero lo vuelve invisible a la comprobación de imports, y por eso se inventaría aquí."
+    },
+    {
+      "archivo": "lib/traceability/ubicacionesEmparentadas.ts",
+      "razon": "`ubicacionesEmparentadas` acepta un `Prisma.TransactionClient` OPCIONAL (por defecto el cliente total, ya inventariado arriba) para poder llamarse DENTRO de la transacción de un llamador que registra una cosecha o una intervención y necesita la genealogía de la Location antes de confirmar. No autoriza nada: sólo recorre `parentLocationId` hacia arriba y hacia abajo con el mismo tope de profundidad y guarda de vistos que `conAncestros` (lib/rbac/service.ts)."
     },
     {
       "archivo": "lib/audit.ts",
@@ -560,8 +624,16 @@
       "razon": "`crearColocacionInicial` recibe el `tx` del llamador en vez de abrir el suyo porque la colmena y su colocación son UN hecho: una colmena guardada sin la fila que dice dónde está es exactamente el estado que ADR-135 viene a impedir, y medido el 2026-09-15 eran 10 de 29 colmenas reales. Escribe una sola fila en `apiary.hive_placement` y no consulta nada: no puede leer de más aunque reciba el cliente entero. Sus tres llamadores son `createHive` —que autoriza con requireApiaryAccess(\"manage\") antes de abrir la transaccion— y los guiones de datos, que corren con la base delante."
     },
     {
+      "archivo": "lib/traceability/intervenciones.ts",
+      "razon": "`crearAreas`/`crearLineasDeIntervencion` son ayudantes PRIVADOS del mismo módulo, nunca exportados: sólo los llama `registrarIntervencion`/`corregirIntervencion`, que ya resolvieron `requireLotAccess(\"manage\")` sobre la parcela ANTES de abrir la transacción. Reciben el `tx` para que la intervención, sus áreas, sus líneas y el descuento del frasco se confirmen juntos — la misma razón que `recordColonyEvent` (lib/apiary/colonyEvents.ts, sin cliente de transacción explícito por no factorizar su cuerpo en un ayudante aparte)."
+    },
+    {
       "archivo": "lib/commerce/tienda.ts",
       "razon": "ADR-163 — `envasesDelLote` recibe el `tx` de `asignarATienda` para leer el techo de envases DENTRO de la transacción serializable que decide si cabe la asignación; leerlo fuera dejaría la carrera que el aislamiento existe para cerrar. `asignacionesDeLote` le pasa el cliente, que es la misma interfaz."
+    },
+    {
+      "archivo": "lib/traceability/concesiones.ts",
+      "razon": "ADR-168, corrección del 2026-09-18 (hallazgo 2 de la revisión independiente de Codex) — `escribirGrant` recibe el `tx` de `concederEditarBeneficio` para escribir el override CONDICIONALMENTE (UPDATE con WHERE effect:\"grant\", o INSERT con catch de P2002) dentro de la misma transacción serializable que decide si un `deny` de administración manda. Leer y escribir fuera de una única transacción es exactamente la carrera que el hallazgo señaló: el `upsert` anterior escribía `grant` sin condición. No abre su propia conexión ni amplía qué puede consultar: sólo opera sobre `assignment_permission_override`."
     }
   ],
   "operaciones_sin_patron": [
@@ -576,6 +648,11 @@
       "razon": "P4 §2. Se autentica con el refresh token, no con sesión, y es donde muerde la revocación. También flujo de autenticación. Verificado el 2026-09-05."
     },
     {
+      "archivo": "lib/traceability/fincas.ts",
+      "operacion": "listarFincas",
+      "razon": "Recibe al principal y no llama a `can` porque parte de `getManageableContext(userAccountId)`, que resuelve la visibilidad de lotes de esa cuenta y es quien autoriza. La lectura del árbol de ubicaciones sólo sirve para subir de una ubicación ya visible a su sitio; no devuelve nada que no sea el sitio de algo visible. Probado en tests/traceability/fincas.test.ts: el Farm Manager de A no ve B. Verificado el 2026-09-18."
+    },
+    {
       "archivo": "lib/rbac/admin.ts",
       "operacion": "listScopeChoices",
       "razon": "No recibe principal. La llama app/admin/users/page.tsx, que antes hace requirePermissionAdmin. Verificado el 2026-08-31."
@@ -587,6 +664,12 @@
     }
   ],
   "dependen_del_llamador": [
+    {
+      "archivo": "lib/traceability/jornadasDeCosecha.ts",
+      "operacion": "origenesDeParcelas",
+      "razon": "Lee los bloques y las plantas activas de unas parcelas para ofrecerlos como origen de una entrega o de un reporte. No recibe principal: su llamador ya autorizó esas parcelas. Llamadores de produccion: `detalleDeJornada` (mismo archivo), que exige `requireLotAccess(view)` sobre el sitio de la finca ANTES de llamarla, con las parcelas asignadas de ESA jornada; y `misEntregas` (entregasDeCosecha.ts), con sólo las parcelas asignadas a la Person de la propia cuenta en sus jornadas abiertas.",
+      "verificado": "2026-09-18"
+    },
     {
       "archivo": "lib/sensores/ingesta.ts",
       "operacion": "ingerirObservacion",
@@ -700,6 +783,12 @@
       "operacion": "getFieldEventKinds",
       "razon": "Lee variableCatalogValue, catálogo de referencia y no dato gobernado. Su página exige sesión.",
       "verificado": "2026-08-31"
+    },
+    {
+      "archivo": "lib/traceability/fieldSessionCatalog.ts",
+      "operacion": "getCondicionesDelDia",
+      "razon": "Hermano de getFieldEventKinds: lee los valores del catálogo condicion_del_dia (lluvia, neblina, otro), referencia y no dato gobernado. Su único llamador, app/mis-entregas, exige sesión y harvest_delivery:create_own.",
+      "verificado": "2026-09-18"
     },
     {
       "archivo": "lib/traceability/lots.ts",

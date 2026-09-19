@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { saveTrapRuleFormAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -57,9 +58,8 @@ export function ReglaDeTrampasForm({
 
       <div className="nn-field">
         <label htmlFor={id("normalDays")}>{t("trapRuleNormalDays")}</label>
-        <input
+        <CampoNumerico
           id={id("normalDays")}
-          type="number"
           name="normalDays"
           min="1"
           step="1"
@@ -71,9 +71,8 @@ export function ReglaDeTrampasForm({
 
       <div className="nn-field">
         <label htmlFor={id("alertDays")}>{t("trapRuleAlertDays")}</label>
-        <input
+        <CampoNumerico
           id={id("alertDays")}
-          type="number"
           name="alertDays"
           min="1"
           step="1"

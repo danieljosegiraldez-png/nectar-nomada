@@ -2802,8 +2802,21 @@ medidores distintos y confundirlos lleva a pagar por un problema que no era de
 pago. Desde el 2026-09-05 hay `vercel.json` con `ignoreCommand`: un cambio que
 sólo toca documentación no construye. Ver `scripts/solo-documentacion.sh`.
 
-Cuando sí haya fila, el botón *Redeploy* del panel sobre el commit fallido usa
-la integración de git, queda atado al commit, y no necesita CLI.
+**CORREGIDO EL 2026-09-18: el *Redeploy* del panel NO arregla la comprobación del
+PR.** Esta sección decía que «usa la integración de git, queda atado al commit». Falso,
+y medido: en #421, con Vercel en caída parcial, el build de *preview* falló con
+«An unexpected error occurred… may be a transient issue». Daniel pulsó *Redeploy*
+sobre ese despliegue, el nuevo terminó **Ready**, y el commit siguió con sus dos
+únicos estados de Vercel —`pending` y `failure`, los del intento original—: el
+Redeploy **no escribe ningún estado nuevo en GitHub**. El PR seguía en rojo.
+
+Lo que sí rehízo la comprobación fue **volver a empujar el mismo contenido con otro
+sha** (`git commit --amend --no-edit --date=now`; se comprueba que el árbol es
+idéntico antes de empujar). Medido en #421: el sha nuevo recibió su propio estado de
+Vercel y pasó a `success`. Cuesta repetir el CI de Actions entero, que es el precio.
+**Y con Vercel todavía en caída, el despliegue nuevo puede quedarse minutos en
+«Initializing»**: el de #421 tardó ~8 minutos en arrancar. Esperar, no volver a empujar.
+Antes de pedirle a Daniel que pulse nada en el panel, esto es lo que hay que saber.
 
 ### Y GitHub Actions tiene su propia cuota, que se lee como un fallo del cambio
 

@@ -35,8 +35,33 @@ Daniel, 2026-09-18 (sus palabras, con erratas de teclado corregidas): *«en el s
 | dónde se toma | **por instalación, con nivel o fila opcional** |
 | qué se anota | **temperatura, humedad relativa, cielo/clima y ventilación** |
 | cómo se identifica una bandeja | **número y QR propio**, como ya se decidió para los envases de insumos |
+| cómo termina el secado de un lote en bandejas | **bandeja a bandeja**: cada bandeja que llega a meta se baja sola, y el lote termina cuando baja la última. **El paso a almacenamiento sigue siendo manual** (`20_modelo_ciclo_completo.md` §2) |
+| cuántas bandejas por posición | **una**: dos bandejas en la misma posición al mismo tiempo son un conflicto de datos (§4.2) |
+| catálogo de cielo | **soleado, parcialmente nublado, nublado, lluvia** |
+| catálogo de ventilación | **abierto, semiabierto, cerrado, ventilador / deshumidificador** |
 
-**Abierta, sin decidir:** cómo **termina** el secado de un lote repartido en bandejas —bandeja a bandeja, todo junto, o a criterio del encargado—. La pregunta se hizo el 2026-09-18 y **Daniel no la contestó**; no se supone. Ver §7.
+Las cuatro últimas filas se decidieron el 2026-09-18, en una segunda ronda. Hasta entonces figuraban en §7 como abiertas.
+
+**Tercera ronda, el mismo día, con el plan de secado de Las Nubes Cerro Azul delante** (`Las_Nubes_Cerro_Azul_Drying_Plan_2026-27.md`, que Daniel compartió; §1, §5, §6 y §7 de ese documento):
+
+| pregunta | decisión |
+|---|---|
+| sombra de arriba | **grado** (la escala de las parcelas, 20–90 %) y **qué la da** en texto libre —árbol, enredadera, lona, techo con cierta opacidad—, **en la instalación y en la cama**: la cama sólo si difiere |
+| cómo está armado el lugar | **varios estantes por instalación** |
+| qué es una posición | **estante + nivel + puesto**: «Cuarto oscuro I · Estante 2 · Nivel 4 · Puesto 3». Al crear un estante se dan sus niveles y sus puestos por nivel, y **las posiciones se crean solas** |
+| la medida de la bandeja | **tipos fijos**, en **pies**: 2×2 y 4×2. Se guarda en centímetros y se enseña en pies |
+| el número de la bandeja | **consecutivo por finca**: B-001, B-002… No se repite en la finca |
+| cuánto café cabe en una bandeja | **medido por estado** —cereza entera, en mucílago (honey), lavado— con el pesaje de campo de §7 del plan de secado; **hasta que exista la medida, un estimado marcado como tal** |
+
+**Qué dice el plan de secado, y se usa como dato de partida (declarado, no medido):**
+- el cuarto oscuro I tiene 2 filas × 6 niveles × 6 bandejas: 72;
+- el cuarto solar existente, 2 lados × 3 niveles, con 24 bandejas de 2×2;
+- el toldo exterior, 1 fila × 1 nivel, con 25 bandejas;
+- en la fase II, el cuarto oscuro II tiene 2 × 6 × 10 y el cuarto solar II 2 × 4 × 10;
+- carga a unos 2,8 cm, dos capas de cereza;
+- densidad de **400 kg/m³ para cereza, marcada allí como provisional**.
+
+**Para mucílago y lavado el plan no da densidad**, así que aquí no se inventa ninguna.
 
 ## 3. Lo que ya existe — medido sobre `1192af6`
 
@@ -57,23 +82,80 @@ Daniel, 2026-09-18 (sus palabras, con erratas de teclado corregidas): *«en el s
 
 ## 4. Diseño
 
-### 4.1 Las instalaciones
+### 4.1 Las instalaciones, sus estantes y su sombra
 
-`DryingEnvironment` gana dos valores: **cama africana a la intemperie** y **piso con lona**. Los nombres exactos se contrastan con `docs/beneficio/03_public_api.md` en el plan, que es el contrato de nombres.
+`DryingEnvironment` gana dos valores: **cama africana a la intemperie** y **piso con lona**.
 
-**La forma varía por instalación, y el modelo lo aguanta sin ramas:**
+**El árbol** —todo son `Location`, el patrón que ya siguen finca, instalación y cama—:
 
-| instalación | posiciones | bandejas |
-|---|---|---|
-| cama africana afuera, piso con lona | `drying_bed` sin nivel ni fila | **ninguna**: el lote está en la cama, como hoy |
-| invernadero, cuarto oscuro | `drying_bed` con **nivel y fila** | una bandeja por posición |
+```
+sitio (finca / beneficio)
+└── instalación (drying_facility)            «Cuarto oscuro I»
+    ├── estante (drying_rack)                «Estante 1»
+    │   └── posición (drying_bed)            nivel 4 · puesto 3
+    └── cama sin estante (drying_bed)        una cama africana, un piso con lona
+```
 
-### 4.2 La posición y la bandeja
+| instalación | estantes | posiciones | bandejas |
+|---|---|---|---|
+| cama africana, piso con lona | ninguno | la cama misma, sin nivel ni puesto | **ninguna**: el lote está en la cama, como hoy |
+| cuarto oscuro, invernadero, toldo con bandejas | uno o varios | **generadas**: niveles × puestos por nivel | una por posición |
 
-- **`drying_bed` gana `rackRow Int?`**, al lado de `rackLevel`. Anulable por la misma razón que el nivel: una cama de patio no está en ningún estante. Nivel y fila, **no negativos**, en la base.
-- **La bandeja es un `Equipment` de `kind = vessel`.** Su número va en el nombre y su **QR propio** sigue el mismo diseño que los envases de insumos (#365): una etiqueta que el celular escanea para abrir esa bandeja, no un código que identifica por sí mismo.
-- **Dónde está una bandeja** en un momento = su último `EquipmentTransfer` hasta ese momento, hacia una `drying_bed`. **Moverla de nivel o fila es un traslado**, con quién y cuándo. No hay historial nuevo que construir.
-- **Una posición aloja una bandeja a la vez.** Dos bandejas en la misma posición al mismo tiempo se enseñan como **conflicto de datos**, igual que dos corridas en un tanque (#363 §4.3), y no se reparte nada.
+- **El estante es un tipo de ubicación nuevo, `drying_rack`**, hijo de una instalación.
+- **Al crearlo se dan sus niveles y sus puestos por nivel, y las posiciones se crean solas.** El cuarto oscuro I son dos estantes de 6 × 6, así que 72 posiciones sin teclear ninguna.
+  - **Ampliar** un estante crea las posiciones que falten.
+  - **Nunca se borra** una posición con historia: una bandeja que estuvo allí tiene que seguir pudiendo decir dónde estuvo.
+- **La posición** es una `drying_bed` hija del estante, con `rackLevel` (ya existe) y **`rackSlot`**, el puesto dentro del nivel, que es nuevo.
+  - Nivel y puesto `> 0` en la base, como ya lo es el nivel.
+  - Una posición es **única** en su estante por (nivel, puesto): índice único en la base.
+- **Sustituye a la «fila» que traía la versión anterior de esta spec.** Con el plan de secado delante, la fila del cuarto **es** el estante: «2 filas» son dos estantes. Añadir `rackRow` además de `rackSlot` sería decir lo mismo dos veces.
+- **La sombra de arriba**, en la instalación **y** en la cama o posición:
+  - `shadePercentage`, la columna que ya existe y usan las parcelas;
+  - y **`shadeDescription`**, nueva: qué la da, en texto libre.
+  - Una cama sin sombra propia se **enseña** con la de su instalación y marcada como tal. **No se copia.**
+
+### 4.2 La bandeja: su tipo, su número, dónde está
+
+- **La bandeja es un `Equipment` de `kind = vessel`**, como ya decía esta spec. Gana dos columnas:
+  - **`trayTypeId`**: su tipo.
+  - **`trayNumber`**: el consecutivo **único en la organización**. Una finca es una organización; hoy la única es Finca Rosina. Se enseña como **B-001**.
+  - Las dos, **sólo en recipientes**, por `CHECK`.
+- **El tipo de bandeja, `DryingTrayType`**, es de la organización:
+  - un nombre («4×2 pies»);
+  - **ancho y largo en centímetros**, `> 0` y con un decimal;
+  - la unidad en que se tecleó (`ft` o `cm`), que se conserva como manda `00_conventions` §1.
+  - **El área no se guarda**: se deriva de ancho × largo, que es lo único medido.
+- **Registrar bandejas va en tanda:** «40 bandejas de 4×2 pies en el beneficio» crea B-0xx … consecutivas, cada una con su alta como primer traslado al sitio.
+  - El siguiente número se toma **dentro de la transacción**.
+  - El índice único cierra la carrera de dos tandas a la vez.
+- **Dónde está una bandeja** en un momento = su último `EquipmentTransfer` hacia una posición. **Moverla es un traslado**, con quién y cuándo, como ya decía esta spec.
+- **Una posición aloja una bandeja a la vez.** Dos a la vez se enseñan como **conflicto de datos**, sin bloquear.
+- **El QR** sigue el diseño de los envases de insumos (#365) y va con su propio plan. El número ya permite escribir la etiqueta a mano.
+
+### 4.2b Cuánto café cabe: medido por estado, con el estimado marcado
+
+**El pesaje de bandeja cargada, `DryingTrayWeighing`**, es el protocolo de §7 del plan de secado hecho registro:
+- el tipo de bandeja;
+- **el estado del café**: `CHERRY`, `MUCILAGE_HONEY` o `PARCHMENT`, del enum `MaterialState` que ya existe (cereza entera, mucílago, lavado);
+- **el peso neto** en kg, con tres decimales;
+- **la profundidad en 3 o 4 puntos**, en cm;
+- cuándo, quién, y **el lote con el que se pesó**. **Obligatorio**, corregido al planear: el protocolo de §7 pesa café de un lote («repetir en lotes distintos»), y el lote es lo que da el permiso —quien lo gestiona pesa— y el camino de vuelta de la cifra. La primera redacción decía «si se pesó con uno»; sin lote no habría a quién preguntarle el permiso.
+
+Es `measured_fact`, y no se edita: una corrección es un registro nuevo que supersede (`00_conventions` §4).
+
+**La densidad y la capacidad se derivan, no se guardan:**
+- densidad = kg ÷ (área × profundidad media);
+- capacidad de un tipo y un estado = área × profundidad media × densidad media de **sus** pesajes;
+- se enseña **con cuántos pesajes** se calculó (`21_rubrica_veracidad` §1: `DERIVADO`, con sus insumos navegables).
+
+**Sin pesajes de ese estado:**
+
+| estado | qué se enseña |
+|---|---|
+| cereza | el estimado del plan de secado, **400 kg/m³ a 2,8 cm**, etiquetado **«estimado, sin medir»** (`SUPUESTO`) y con su fuente |
+| mucílago, lavado | **«sin medir»**, sin número. El plan de secado no da densidad para ellos y no se inventa una (`21_rubrica_veracidad` §2.1) |
+
+El estimado de cereza es configuración marcada `[PROVISIONAL]`, no un literal (`00_reglas_del_modulo` §1).
 
 ### 4.3 El lote en sus bandejas
 
@@ -110,8 +192,8 @@ Daniel, 2026-09-18 (sus palabras, con erratas de teclado corregidas): *«en el s
 | `occurredAt`, operador | como el resto |
 | temperatura | °C del aire, con unidad |
 | humedad relativa | %, con unidad |
-| cielo | catálogo corto: soleado, nublado, lluvia… más nota libre, **nunca en su lugar** |
-| ventilación | catálogo corto: abierto, cerrado, ventilador… más nota libre |
+| cielo | catálogo de Daniel: **soleado, parcialmente nublado, nublado, lluvia**, más nota libre, **nunca en su lugar** |
+| ventilación | catálogo de Daniel: **abierto, semiabierto, cerrado, ventilador / deshumidificador**, más nota libre |
 | **fuente** | **`manual`** hoy. Va como columna aunque sólo tenga un valor, porque `CLAUDE.md` §7 exige **no mezclar fuentes como si fueran equivalentes**: el día que llegue un registrador, sus filas se distinguen de las de una persona sin migrar las viejas |
 | `provenanceClass`, `createdBy` | como el resto |
 
@@ -179,7 +261,8 @@ Lo debido de §4.7 entra en la cola del tablero (#363 §4.2) **como una lectura 
 ## 6. Orden
 
 1. **Este spec**, PR sólo de documentación.
-2. **Bandejas y posiciones** (§4.1–§4.3): `rackRow`, los dos valores de instalación, `DryingRunTray` con sus reglas. Sin esto no hay dónde colgar lo demás.
+2a. **Instalaciones, estantes, bandejas y capacidad** (§4.1, §4.2, §4.2b): los dos ambientes, la sombra, el estante con sus posiciones generadas, los tipos de bandeja, el registro numerado en tanda, y el pesaje con su capacidad. Sin esto no hay dónde poner una bandeja.
+2b. **El lote en sus bandejas** (§4.3): `DryingRunTray` con sus reglas, cargar y bajar —la última cierra el secado—, dónde está cada una y sus conflictos.
 3. **Humedad y volteos por bandeja** (§4.4).
 4. **Ambiente a mano** (§4.5). Independiente de 2 y 3: puede ir en paralelo.
 5. **Tramos, inicio y marcha** (§4.6, §4.7), y su entrada en el tablero (§4.8), que espera a que el tablero (#363) exista.
@@ -187,10 +270,18 @@ Lo debido de §4.7 entra en la cola del tablero (#363 §4.2) **como una lectura 
 
 ## 7. Abierto
 
-- **Cómo termina el secado de un lote en bandejas.** Bandeja a bandeja —cada una que llega a meta baja sola y el lote cierra con la última—, todo junto, o a criterio del encargado. Se preguntó y no se contestó; **se vuelve a preguntar antes del plan del paso 2**, porque decide si `DryingRunTray.hasta` basta o si cada bandeja lleva su propio resultado.
-- **Los nombres** de todo lo nuevo, contra `03_public_api.md`.
-- **Los catálogos de cielo y ventilación**: los valores los da Daniel; el diseño no los inventa.
-- **«Una bandeja por posición» es un supuesto mío, no una decisión.** Es lo físico en un estante, y por eso §4.2 enseña dos bandejas en una posición como conflicto. Si en algún cuarto una posición lleva dos bandejas, esa regla se cambia antes del plan.
+- **Los nombres de la tercera ronda**, pendientes del visto bueno de Daniel porque `03_public_api.md` no declara ninguno de secado:
+  - `drying_rack`;
+  - `rackSlot`;
+  - `DryingTrayType`;
+  - `trayTypeId` y `trayNumber` en `Equipment`;
+  - `DryingTrayWeighing`;
+  - `shadeDescription`.
+
+  Los de la segunda ronda (`african_bed_outdoor`, `floor_tarp`, `DryingRunTray`) ya están aprobados. **`rackRow` queda retirado** (§4.1). `00_reglas_del_modulo` §7.6 exige declararlos en `03_public_api.md` **en el mismo commit** que los introduce.
+- **Cómo se marca que una bandeja llegó a meta.** Daniel decidió que el secado termina bandeja a bandeja (§2). Lo que **no** decidió, y el plan del paso 2 no lo supone: si bajar una bandeja pide sólo cerrar su `DryingRunTray.hasta` o también dejar escrito con qué humedad bajó. Es una pregunta de modelo, no de dominio: el plan la resuelve con `13_drying_moisture.md` (`TARGET_REACHED` exige humedad **y** actividad de agua) y la enseña antes de construir.
+
+Cerradas el 2026-09-18 y movidas a §2: cómo termina el secado de un lote en bandejas, «una bandeja por posición» (era un supuesto y ahora es decisión) y los catálogos de cielo y ventilación.
 
 ## 8. Fuera de alcance
 

@@ -1,10 +1,11 @@
 "use client";
 
+import { CampoNumerico, soltarFocoConLaRueda } from "../CampoNumerico";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { BotonDeEnvio } from "../BotonDeEnvio";
-import type { CampoDelProducto, OpcionesDeRecepcion } from "../../../lib/inventario/recepcion";
+import type { CampoDelProducto, ClaseDeProducto, OpcionesDeRecepcion } from "../../../lib/inventario/recepcion";
 
 /** Los campos del producto, en el orden de la pantalla. Copia de `CAMPOS_DEL_PRODUCTO`: el módulo de servidor no se importa aquí. */
 const CAMPOS: readonly CampoDelProducto[] = [
@@ -15,9 +16,16 @@ const CAMPOS: readonly CampoDelProducto[] = [
   "avisarDiasAntes",
   "storageConditions",
   "safetyNotes",
+  "defaultReentryHours",
 ];
-const NUMERICOS = new Set<CampoDelProducto>(["defaultWithdrawalDays", "avisarDiasAntes"]);
+const NUMERICOS = new Set<CampoDelProducto>(["defaultWithdrawalDays", "avisarDiasAntes", "defaultReentryHours"]);
 const LARGOS = new Set<CampoDelProducto>(["storageConditions", "safetyNotes"]);
+
+/** Copia de `camposDe`: el módulo de servidor no se importa aquí. La reentrada
+ *  no significa nada para un medicamento de colmena. */
+function camposDeLaClase(clase: ClaseDeProducto): readonly CampoDelProducto[] {
+  return clase === "fitosanitario" ? CAMPOS : CAMPOS.filter((c) => c !== "defaultReentryHours");
+}
 
 /**
  * El formulario de recepción del botiquín — botiquín, Tarea 9.
@@ -31,10 +39,12 @@ export function RecibirMedicamentoForm({
   action,
   sitios,
   productos,
+  clase,
 }: {
   action: (formData: FormData) => Promise<void>;
   sitios: OpcionesDeRecepcion["sitios"];
   productos: OpcionesDeRecepcion["productos"];
+  clase: ClaseDeProducto;
 }) {
   const t = useTranslations("Inventario");
   const [locationId, setLocationId] = useState(sitios[0]?.id ?? "");
@@ -45,10 +55,11 @@ export function RecibirMedicamentoForm({
   const nuevo = materialId === "__nuevo__";
   const [unit, setUnit] = useState("");
 
-  const aPedir: readonly CampoDelProducto[] = nuevo ? CAMPOS : producto && sitio?.puedeDefinirProducto ? producto.faltan : [];
+  const aPedir: readonly CampoDelProducto[] = nuevo ? camposDeLaClase(clase) : producto && sitio?.puedeDefinirProducto ? producto.faltan : [];
 
   return (
     <form action={action} className="nn-form">
+      <input type="hidden" name="clase" value={clase} />
       <label>
         {t("campoSitio")}
         <select name="locationId" value={locationId} onChange={(e) => { setLocationId(e.target.value); setMaterialId(""); }} required>
@@ -104,6 +115,7 @@ export function RecibirMedicamentoForm({
               ) : (
                 <input
                   type={NUMERICOS.has(c) ? "number" : "text"}
+                  onWheel={soltarFocoConLaRueda}
                   name={`p_${c}`}
                   {...(NUMERICOS.has(c) ? { min: 0, step: 1, inputMode: "numeric" as const } : {})}
                 />
@@ -127,7 +139,7 @@ export function RecibirMedicamentoForm({
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <label style={{ flex: 1 }}>
             {t("campoCantidad")}
-            <input type="number" name="quantity" min={0} step="any" inputMode="decimal" />
+            <CampoNumerico name="quantity" min={0} step="any" inputMode="decimal" />
           </label>
           <label style={{ flex: 1 }}>
             {t("campoUnidad")}

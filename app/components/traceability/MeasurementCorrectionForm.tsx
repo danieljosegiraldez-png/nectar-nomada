@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { correctMeasurementFormAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -85,9 +86,8 @@ export function MeasurementCorrectionForm({
 
       <div className="nn-field">
         <label htmlFor={id("value")}>{t("correctionValueLabel")}</label>
-        <input
+        <CampoNumerico
           id={id("value")}
-          type="number"
           name="value"
           step="any"
           required

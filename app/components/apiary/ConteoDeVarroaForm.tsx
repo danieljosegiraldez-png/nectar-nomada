@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { queueDraft } from "../../../lib/apiary/offlineQueue";
@@ -126,9 +127,8 @@ export function ConteoDeVarroaForm({
         <label htmlFor="varroa-sample">{t("varroaSampleBeesLabel")}</label>
         {/* `inputMode="numeric"` además de `type="number"`: en el teléfono abre el
             teclado de cifras, que es donde esto se teclea. */}
-        <input
+        <CampoNumerico
           id="varroa-sample"
-          type="number"
           inputMode="numeric"
           min={1}
           step={1}
@@ -140,9 +140,8 @@ export function ConteoDeVarroaForm({
 
       <div className="nn-field">
         <label htmlFor="varroa-mites">{t("varroaMitesLabel")}</label>
-        <input
+        <CampoNumerico
           id="varroa-mites"
-          type="number"
           inputMode="numeric"
           min={0}
           step={1}

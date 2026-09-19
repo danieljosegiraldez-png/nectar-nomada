@@ -1,5 +1,6 @@
 "use client";
 
+import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -134,9 +135,8 @@ export function SoilProfileForm({
 
       <div className="nn-field">
         <label htmlFor={`pitDepthCm-${values.id ?? "nuevo"}`}>{t("soilPitDepthLabel")}</label>
-        <input
+        <CampoNumerico
           id={`pitDepthCm-${values.id ?? "nuevo"}`}
-          type="number"
           name="pitDepthCm"
           step="1"
           min="0"
@@ -149,9 +149,8 @@ export function SoilProfileForm({
 
       <div className="nn-field">
         <label htmlFor={`rootingDepthCm-${values.id ?? "nuevo"}`}>{t("soilRootingDepthLabel")}</label>
-        <input
+        <CampoNumerico
           id={`rootingDepthCm-${values.id ?? "nuevo"}`}
-          type="number"
           name="rootingDepthCm"
           step="1"
           min="0"
@@ -201,9 +200,8 @@ export function SoilProfileForm({
 
       <div className="nn-field">
         <label htmlFor={`impedingLayerDepthCm-${values.id ?? "nuevo"}`}>{t("soilImpedingDepthLabel")}</label>
-        <input
+        <CampoNumerico
           id={`impedingLayerDepthCm-${values.id ?? "nuevo"}`}
-          type="number"
           name="impedingLayerDepthCm"
           step="1"
           min="0"
@@ -237,8 +235,8 @@ export function SoilProfileForm({
                   filas NO vacías, así que dejar la segunda en blanco y llenar
                   la tercera no deja un hueco en la secuencia. */}
               <input type="hidden" name={`horizonOrdinal.${i}`} value={i + 1} />
-              <input type="number" name={`horizonTopCm.${i}`} step="1" min="0" placeholder={t("soilHorizonTopPlaceholder")} />
-              <input type="number" name={`horizonBottomCm.${i}`} step="1" min="0" placeholder={t("soilHorizonBottomPlaceholder")} />
+              <CampoNumerico name={`horizonTopCm.${i}`} step="1" min="0" placeholder={t("soilHorizonTopPlaceholder")} />
+              <CampoNumerico name={`horizonBottomCm.${i}`} step="1" min="0" placeholder={t("soilHorizonBottomPlaceholder")} />
               <input type="text" name={`horizonDesignation.${i}`} placeholder={t("soilHorizonDesignationPlaceholder")} />
               <input type="text" name={`horizonColour.${i}`} placeholder={t("soilHorizonColourPlaceholder")} />
               <input type="text" name={`horizonStructure.${i}`} placeholder={t("soilHorizonStructurePlaceholder")} />

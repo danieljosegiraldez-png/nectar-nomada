@@ -13,15 +13,39 @@ import { permissionKey } from "./types";
 export { CLASSIFICATION_GATE_DEFERRED, CLASSIFICATION_NOT_APPLICABLE } from "./resolve";
 import type { ClassificationLevel, ResolvedAssignment, ScopeTarget, ScopeType } from "./types";
 
+/**
+ * El criterio de "asignación activa ahora mismo": `status: "active"` Y dentro
+ * de su ventana `[validFrom, validTo)`. Único lugar donde vive, para que otro
+ * servicio que necesite el mismo criterio (p. ej. `concesiones.ts`, hallazgo
+ * 6 de la revisión independiente del 2026-09-18) lo importe en vez de
+ * repetir sólo la mitad — `lib/traceability/concesiones.ts` trataba
+ * `status === "active"` como si fuera el criterio completo, así que una
+ * asignación ya vencida (`validTo` en el pasado) o todavía no vigente
+ * (`validFrom` en el futuro) pasaba igual.
+ */
+export function activeAssignmentWhere(now: Date = new Date()) {
+  return {
+    status: "active" as const,
+    validFrom: { lte: now },
+    OR: [{ validTo: null }, { validTo: { gt: now } }],
+  };
+}
+
+/** La misma comprobación, sobre una fila ya leída (no una query). */
+export function esAsignacionActiva(
+  a: { status: string; validFrom: Date; validTo: Date | null },
+  now: Date = new Date(),
+): boolean {
+  return a.status === "active" && a.validFrom <= now && (a.validTo === null || a.validTo > now);
+}
+
 async function getResolvedAssignments(userAccountId: string): Promise<ResolvedAssignment[]> {
   const now = new Date();
 
   const rows = await prisma.assignment.findMany({
     where: {
       userAccountId,
-      status: "active",
-      validFrom: { lte: now },
-      OR: [{ validTo: null }, { validTo: { gt: now } }],
+      ...activeAssignmentWhere(now),
     },
     include: {
       scope: true,

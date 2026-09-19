@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "../../lib/db";
 import { crearMaterial, MaterialAccessError } from "../../lib/inventario/materiales";
-import { completarProducto, opcionesDeRecepcion } from "../../lib/inventario/recepcion";
+import { camposDe, completarProducto, opcionesDeRecepcion } from "../../lib/inventario/recepcion";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
@@ -61,7 +61,7 @@ describe("recibir un medicamento", () => {
   it("las opciones traen los sitios donde se puede recibir y los medicamentos de esa finca, con lo que les falta", async () => {
     const m = await crearMaterial(gestorId, { locationId: bodega, organizationId, name: `Oxálico ${RUN_ID}`, defaultUnit: "g", isVeterinaryMedicine: true, manufacturer: "Lab X" });
     await crearMaterial(gestorId, { locationId: bodega, organizationId, name: `Cal ${RUN_ID}`, defaultUnit: "saco" });
-    const o = await opcionesDeRecepcion(gestorId);
+    const o = await opcionesDeRecepcion(gestorId, "medicamento");
     expect(o.sitios.find((s) => s.id === bodega)).toMatchObject({ puedeDefinirProducto: true });
     expect(o.sitios.map((s) => s.id)).not.toContain(sitioAjeno);
     const nombres = o.productos.map((p) => p.name);
@@ -71,7 +71,7 @@ describe("recibir un medicamento", () => {
     expect(ox.faltan).toContain("defaultWithdrawalDays");
     expect(ox.faltan).not.toContain("manufacturer");
     // El operario recibe, pero no define productos.
-    expect((await opcionesDeRecepcion(operarioId)).sitios.find((s) => s.id === bodega)).toMatchObject({ puedeDefinirProducto: false });
+    expect((await opcionesDeRecepcion(operarioId, "medicamento")).sitios.find((s) => s.id === bodega)).toMatchObject({ puedeDefinirProducto: false });
   }, 20000);
 
   it("completar rellena los huecos y NO sobrescribe lo declarado", async () => {
@@ -93,5 +93,31 @@ describe("recibir un medicamento", () => {
     await expect(completarProducto(ajenoId, { materialId: m.id, locationId: sitioAjeno, campos: { safetyNotes: "x" } })).rejects.toThrow(MaterialAccessError);
     const ok = await completarProducto(gestorId, { materialId: m.id, locationId: bodega, campos: { safetyNotes: "x" } });
     expect(ok.safetyNotes).toBe("x");
+  }, 20000);
+});
+
+/**
+ * Recibir un producto fitosanitario — aplicaciones fitosanitarias, Tarea 4.
+ * Gemela del describe de arriba: la reentrada sólo tiene sentido aquí.
+ */
+describe("recibir un producto fitosanitario", () => {
+  it("la recepción de fitosanitarios ofrece sólo fitosanitarios, y pide la reentrada", async () => {
+    await crearMaterial(gestorId, { locationId: bodega, organizationId, name: `Fito ${RUN_ID}`, defaultUnit: "l", isPlantProtection: true });
+    const o = await opcionesDeRecepcion(gestorId, "fitosanitario");
+    expect(o.productos.every((p) => p.name.startsWith("Fito"))).toBe(true);
+    expect(o.productos.length).toBeGreaterThan(0); // control: no es una lista vacía
+    expect(camposDe("fitosanitario")).toContain("defaultReentryHours");
+    expect(camposDe("medicamento")).not.toContain("defaultReentryHours");
+  }, 20000);
+
+  it("la de medicamentos no cambia: sigue sin enseñar fitosanitarios", async () => {
+    // Control positivo: sin él, un filtro roto que devolviera la lista VACÍA
+    // pasaría igual esta prueba — «no aparece Fito» también es cierto cuando
+    // no aparece nada.
+    const m = await crearMaterial(gestorId, { locationId: bodega, organizationId, name: `Med ${RUN_ID}`, defaultUnit: "tira", isVeterinaryMedicine: true });
+    const o = await opcionesDeRecepcion(gestorId, "medicamento");
+    expect(o.productos.some((p) => p.name.startsWith("Fito"))).toBe(false);
+    expect(o.productos.length).toBeGreaterThan(0);
+    expect(o.productos.map((p) => p.id)).toContain(m.id);
   }, 20000);
 });
