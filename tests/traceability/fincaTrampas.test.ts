@@ -21,6 +21,7 @@ import {
   puedeVerTrampasDeFinca,
 } from "../../lib/traceability/fincaTrampas";
 import { createTrap } from "../../lib/traceability/traps";
+import { createMicrolot } from "../../lib/traceability/locations";
 import { prisma } from "../../lib/db";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
 import { crearFinca, crearParcela, crearUsuarioSinAcceso } from "../helpers/traceability";
@@ -120,6 +121,60 @@ describe("getFincaTrampas", () => {
     expect(resultado.trampas).toHaveLength(1);
     expect(resultado.trampas[0]!.id).toBe(trampaA.id);
     expect(resultado.plots).toEqual([{ id: parcelaA.id, name: parcelaA.name }]);
+  });
+
+  /**
+   * Revisión del merge, hallazgo 4: una microparcela (spec fincas y parcelas
+   * §3.3) es una Location `plot` cuyo padre es OTRA `plot`, creada con
+   * `createMicrolot` — así que es NIETA del sitio de la finca, no hija
+   * directa. La consulta anterior filtraba por `parentLocationId: sitio.id`,
+   * que sólo alcanza hijos; una trampa instalada en una microparcela así no
+   * aparecía ni en `/finca/trampas` ni en la ronda. Este test crea la
+   * microparcela con `createMicrolot` (el camino real) y comprueba que su
+   * trampa SÍ aparece — `idsBajoLaFinca` camina el árbol a cualquier
+   * profundidad, así que la nieta entra igual que la hija.
+   */
+  it("una trampa en una microparcela (nieta del sitio, creada con createMicrolot) aparece en getFincaTrampas", async () => {
+    const finca = await crearFinca();
+    locationIds.push(finca.id);
+    organizationIds.push(finca.organizationId!);
+
+    const parcela = await crearParcela(finca);
+    locationIds.push(parcela.id);
+
+    // Un scope en la parcela alcanza a sus descendientes (decisión de Daniel
+    // 2026-09-16, ver el docstring de `getFincasConTrampas`), así que el
+    // mismo Farm Operator crea la microparcela (exige manage_attributes
+    // sobre la parcela) y después la trampa sobre ella (exige specimen
+    // sobre la microparcela, heredado).
+    const operador = await crearUsuarioConAccesoAlLote(parcela.id);
+    userAccountIds.push(operador.userAccountId);
+    personIds.push(operador.personId);
+    scopeIds.push(operador.scopeId);
+
+    const microparcela = await createMicrolot(operador.userAccountId, {
+      parentLocationId: parcela.id,
+      name: `TEST Microparcela (${Date.now()})`,
+      subdivisionReason: "altitude",
+    });
+    locationIds.push(microparcela.id);
+    // El camino real produce `plot`, nunca `micro_plot` — afirmarlo, no sólo
+    // asumirlo (mismo hallazgo que en plotBlocks.test.ts).
+    expect(microparcela.locationType).toBe("plot");
+    expect(microparcela.parentLocationId).toBe(parcela.id);
+
+    const trampa = await createTrap(operador.userAccountId, {
+      locationId: microparcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+
+    const resultado = await getFincaTrampas(operador.userAccountId, finca.id);
+    expect(resultado.trampas.map((t) => t.id)).toEqual([trampa.id]);
+    expect(resultado.trampas[0]!.plotId).toBe(microparcela.id);
+    // `plots` lista todo lote accesible, no sólo los que tienen trampa: el
+    // scope del operador está en la parcela y alcanza a su descendiente, así
+    // que las dos son accesibles. Lo que este test afirma es que la
+    // microparcela SÍ está — antes de este arreglo, no lo estaba.
+    expect(resultado.plots.map((p) => p.id).sort()).toEqual([microparcela.id, parcela.id].sort());
   });
 
   it("deniega sin ningún acceso de specimen en la finca", async () => {

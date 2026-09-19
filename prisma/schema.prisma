@@ -6437,9 +6437,11 @@ enum TrapCaptureLevel {
   @@schema("traceability")
 }
 
-/// Decisión de Daniel, 2026-09-19: una microparcela es la Location `micro_plot`
-/// del spec fincas y parcelas, no un tipo de bloque — «microparcela» salió de
-/// este enum (antes tenía tres valores).
+/// Decisión de Daniel, 2026-09-19: una microparcela es una Location `plot`
+/// hija de otra `plot` (creada con `createMicrolot`, spec fincas y parcelas
+/// §3.3), no un tipo de bloque — «microparcela» salió de este enum (antes
+/// tenía tres valores). No es la Location `micro_plot`: ese valor del enum
+/// de arriba existe pero nada lo produce.
 enum PlotBlockType {
   trampa
   experimental

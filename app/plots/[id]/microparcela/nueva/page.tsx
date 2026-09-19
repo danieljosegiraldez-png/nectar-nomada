@@ -15,9 +15,12 @@ export const dynamic = "force-dynamic";
  * `/plots/[id]/ajustes`, de donde se llega y a donde se vuelve.
  *
  * Mismo acceso que las demás rutas mudadas fuera del tablero:
- * `getPlotDetail` exige `manage_attributes` sobre esta Location. Además,
- * sólo una parcela se subdivide (spec §3.3) — una microparcela ya es una
- * Location `micro_plot`, y esta pantalla no existe para ella.
+ * `getPlotDetail` exige `manage_attributes` sobre esta Location. El
+ * `locationType === "plot"` de abajo es la regla que ya tenía `main`, sin
+ * cambios — una microparcela creada por `createMicrolot` ES `plot` (copia
+ * el tipo de su padre, spec fincas y parcelas §3.3), así que esta pantalla
+ * SÍ existe para ella: el spec no prohíbe subdividir una microparcela otra
+ * vez, y `createMicrolot` no tiene tope de profundidad.
  */
 export default async function NuevaMicroparcelaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

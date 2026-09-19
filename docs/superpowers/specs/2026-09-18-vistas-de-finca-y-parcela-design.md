@@ -27,13 +27,17 @@ La causa medida de (a) no son los datos, sino los formularios metidos dentro del
    - **experimental:** por ejemplo, biochar aplicado frente a no aplicado, o lotes de biochar con distintos inoculantes.
 
    **CORREGIDO — decisión de Daniel, 2026-09-19: la microparcela NO es un tipo de bloque.**
-   Esta sección decía que sí, como tercer tipo; era falso desde el spec fincas y parcelas,
-   donde una microparcela es la Location `micro_plot` que cuelga de una parcela (spec
-   `2026-09-18-fincas-y-parcelas-design.md` §3.3) — otra fila de `core.location`, no una
-   zona con nombre dentro de `PlotBlock`. `PlotBlockType` pasó de tres valores a dos; los
-   bloques que tenían `microparcela` quedaron sin tipo (`NULL`, ADR-080), no con uno
-   inventado.
-7. **Solapamiento:** las microparcelas (la Location `micro_plot`, no un tipo de bloque) no se solapan entre sí; los bloques de trampa y los experimentales sí pueden cruzarlas y también pueden colgar de una microparcela, no sólo de una parcela.
+   Esta sección decía que sí, como tercer tipo; era falso desde el spec fincas y parcelas.
+   **Corregido otra vez el mismo día, tras la revisión del merge: la primera corrección
+   describía mal DÓNDE vive la microparcela.** No es la Location `micro_plot` del enum —
+   ese valor existe en el esquema pero **nada lo crea**
+   (`2026-09-18-fincas-y-parcelas-design.md` §2 y §3.3). El mecanismo real: una
+   microparcela es una Location `plot` cuyo `parentLocationId` es OTRA `plot`, creada con
+   `createMicrolot` (`lib/traceability/locations.ts`), que copia el `locationType` del
+   padre — así que una microparcela y su parcela madre tienen el mismo tipo, `plot`.
+   `PlotBlockType` pasó de tres valores a dos; los bloques que tenían `microparcela`
+   quedaron sin tipo (`NULL`, ADR-080), no con uno inventado.
+7. **Solapamiento:** las microparcelas (una Location `plot` anidada bajo otra `plot`, no un tipo de bloque ni la Location `micro_plot` — ver la corrección del punto 6) no se solapan entre sí; los bloques de trampa y los experimentales sí pueden cruzarlas y también pueden colgar de una microparcela, no sólo de una parcela de primer nivel.
 8. **Una foto tomada sin señal se guarda en el móvil y se sube al volver la conexión**, en esta misma fase.
 9. Todo el diseño se trabajó sólo con texto, sin bocetos, para gastar menos.
 
@@ -115,15 +119,25 @@ Se llega desde el índice `/finca`, con su patrón de enlaces: el enlace sólo a
 - **Enlazar un bloque experimental** con su `BiocharBatch` o `TreatmentBatch` del Research OS queda para después.
 - **CORREGIDO — decisión de Daniel, 2026-09-19: `blockType` nació con tres valores
   (`microparcela | trampa | experimental`, migración `20260918160000_bloques_con_tipo`) y
-  se quedó en dos.** Una microparcela es la Location `micro_plot` del spec fincas y
-  parcelas §3.3, no un tipo de `PlotBlock`. La migración `20260919150000_bloque_sin_microparcela`
-  no edita la del 2026-09-18 —ya estaba aplicada en la base compartida—: pone en `NULL`
-  los bloques que tenían `microparcela` y recrea el enum sin ese valor. Un bloque puede
-  colgar de una parcela o de una microparcela por igual, bajo el mismo guardia
-  (`requireLocationAttributeAccess` sobre la Location, sin distinguir el tipo).
+  se quedó en dos.** Una microparcela **no** es un tipo de `PlotBlock`.
+  **Corregido otra vez el mismo día, tras la revisión del merge — el mecanismo estaba mal
+  descrito la primera vez.** Una microparcela no es la Location `micro_plot` (ese valor
+  del enum existe pero nada lo produce, `2026-09-18-fincas-y-parcelas-design.md` §2 y
+  §3.3): es una Location `plot` cuyo padre es OTRA `plot`, creada con `createMicrolot`. La
+  migración `20260919150000_bloque_sin_microparcela` no edita la del 2026-09-18 —ya estaba
+  aplicada en la base compartida—: pone en `NULL` los bloques que tenían `microparcela` y
+  recrea el enum sin ese valor; **su SQL es correcta, y su comentario de cabecera es el
+  que describe mal la Location** (dice «micro_plot» donde debería decir «`plot` hija de
+  otra `plot`») — no se editó ese archivo porque ya está aplicado, se corrige aquí. Un
+  bloque puede colgar de una parcela o de una microparcela por igual, bajo el mismo
+  guardia (`requireLocationAttributeAccess` sobre la Location, sin distinguir el tipo).
 - `NuevaMicroparcelaForm` (crear una microparcela) no vive en el tablero de parcela —es
   configuración, no captura de campo (§3 de este documento)—: vive en
-  `/plots/[id]/microparcela/nueva`, enlazada desde `/plots/[id]/ajustes`.
+  `/plots/[id]/microparcela/nueva`, enlazada desde `/plots/[id]/ajustes`. La regla de
+  cuándo se ofrece ese enlace es la que ya tenía `main`, sin cambios: `locationType ===
+  "plot"` más el permiso de `manage_attributes`. Como una microparcela también es `plot`,
+  esa regla la deja subdividir otra vez — el spec fincas y parcelas no lo prohíbe, y
+  `createMicrolot` tampoco tiene ningún tope de profundidad.
 
 ## 6. Permisos
 

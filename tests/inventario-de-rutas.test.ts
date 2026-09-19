@@ -167,8 +167,10 @@ describe("el inventario del router", () => {
     // `node scripts/inventario-de-rutas.mjs` sobre el árbol fusionado, no derivada por
     // aritmética — ver el informe de este merge: 102 entradas.
     // 102 → 103 el mismo día: /plots/[id]/microparcela/nueva — decisión de Daniel de que
-    // una microparcela es la Location `micro_plot`, no un tipo de bloque, y su formulario
-    // de creación sale del tablero (no vive captura en el dashboard).
+    // una microparcela no es un tipo de bloque (es una Location `plot` hija de otra
+    // `plot`, creada con `createMicrolot` — no la Location `micro_plot`, corregido tras
+    // revisión), y su formulario de creación sale del tablero (no vive captura en el
+    // dashboard).
     expect(salida).toContain("103 entradas");
     expect(codigo, salida).toBe(0);
   });

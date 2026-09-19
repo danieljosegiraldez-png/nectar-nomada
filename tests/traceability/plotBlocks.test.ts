@@ -16,7 +16,7 @@ import {
   claveDeTituloDeBloque,
   PlotBlockValidationError,
 } from "../../lib/traceability/plotBlocks";
-import { LocationAccessError } from "../../lib/traceability/locations";
+import { LocationAccessError, createMicrolot } from "../../lib/traceability/locations";
 import { prisma } from "../../lib/db";
 import { crearUsuarioConAcceso, crearParcela, crearUsuarioSinAcceso } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -259,13 +259,18 @@ describe("bloques de una parcela", () => {
   });
 
   /**
-   * Decisión de Daniel, 2026-09-19: una microparcela es la Location
-   * `micro_plot` del spec fincas y parcelas, no un tipo de bloque. Un bloque
-   * (zona con nombre para trampas o experimentos) puede colgar de ella igual
-   * que de una parcela — el guardia es el mismo `requireLocationAttributeAccess`
-   * sobre la Location, que no distingue "plot" de "micro_plot".
+   * Decisión de Daniel, 2026-09-19: una microparcela no es un tipo de bloque.
+   * **Corregido tras la revisión del merge:** no es tampoco la Location
+   * `micro_plot` del enum — ese valor existe en el esquema pero nada lo
+   * produce (`2026-09-18-fincas-y-parcelas-design.md` §2 y §3.3). El camino
+   * real de la aplicación es `createMicrolot`
+   * (`crearMicroparcelaAction` → `createMicrolot`, spec fincas y parcelas
+   * §3.3), que crea una Location `plot` cuyo padre es OTRA `plot` —copia el
+   * `locationType` del padre—, no una Location `micro_plot`. Este test crea
+   * la microparcela por ese camino, no fabricando el tipo a mano, para que
+   * ejercite la entrada que la aplicación de verdad produce.
    */
-  it("crea un bloque bajo una microparcela (Location micro_plot), no sólo bajo una parcela", async () => {
+  it("crea un bloque bajo una microparcela creada con createMicrolot, no sólo bajo una parcela de primer nivel", async () => {
     const usuario = await crearUsuarioConAcceso();
     userAccountIds.push(usuario.userAccountId);
     personIds.push(usuario.personId);
@@ -276,16 +281,16 @@ describe("bloques de una parcela", () => {
     locationIds.push(parcela.id, parcela.parentLocationId!);
     organizationIds.push(parcela.organizationId!);
 
-    const microparcela = await prisma.location.create({
-      data: {
-        name: `TEST Microparcela (${Date.now()})`,
-        locationType: "micro_plot",
-        parentLocationId: parcela.id,
-        organizationId: parcela.organizationId,
-        status: "approved",
-      },
+    const microparcela = await createMicrolot(userAccountId, {
+      parentLocationId: parcela.id,
+      name: `TEST Microparcela (${Date.now()})`,
+      subdivisionReason: "altitude",
     });
     locationIds.push(microparcela.id);
+    // El camino real produce una Location `plot`, no `micro_plot` — es la
+    // afirmación que el hallazgo 1 de la revisión pedía comprobar, no sólo
+    // asumir.
+    expect(microparcela.locationType).toBe("plot");
 
     const bloque = await createPlotBlock(userAccountId, {
       locationId: microparcela.id,

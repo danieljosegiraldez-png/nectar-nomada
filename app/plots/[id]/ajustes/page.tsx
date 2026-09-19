@@ -46,10 +46,13 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   }
 
   const { location, cohorts, cultivarOptions, eventosDeProduccion, trampas, reglaDeTrampas } = detail;
-  // Spec fincas y parcelas §3.3: sólo una parcela se subdivide en
-  // microparcelas — una microparcela ya es una Location `micro_plot`, y no
-  // se subdivide otra vez. El acceso ya lo exigió `getPlotDetail` arriba
-  // (`manage_attributes`, la misma comprobación de `crearMicroparcelaAction`).
+  // Spec fincas y parcelas §3.3, regla de `main` sin cambios: el enlace se
+  // ofrece sobre cualquier Location `plot` con `manage_attributes` (ya
+  // exigido por `getPlotDetail` arriba, la misma comprobación de
+  // `crearMicroparcelaAction`). Una microparcela creada por `createMicrolot`
+  // ES `plot` —copia el tipo de su padre—, así que esta regla también deja
+  // subdividirla otra vez: el spec no lo prohíbe y `createMicrolot` no tiene
+  // tope de profundidad.
   const puedeSubdividir = location.locationType === "plot";
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
