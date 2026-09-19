@@ -9,6 +9,7 @@ import { CatalogoError } from "../../lib/catalogos/propiedad";
 import {
   EquipoError,
   declararPatron,
+  editarDatosDeEquipo,
   informarCondicion,
   registrarEquipo,
   sitiosParaRegistrar,
@@ -21,7 +22,8 @@ import {
   pedirSubidaDeDocumento,
   type DestinoDeDocumento,
 } from "../../lib/equipos/documentos";
-import { TZ_OFFSET_FIELD, parseLocalDateTime } from "../../lib/time/localDateTime";
+import { RutinaError, crearRutina } from "../../lib/rutinas/rutinas";
+import { TZ_OFFSET_FIELD, fechaDeDia, parseLocalDateTime } from "../../lib/time/localDateTime";
 import { declararModoDeInstrumento } from "../../lib/equipos/modosDeInstrumento";
 import type { MaterialState, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -97,35 +99,96 @@ export async function informarCondicionFormAction(formData: FormData): Promise<v
  * **La organización sale del sitio elegido**, no de un campo aparte: un
  * fermentador en Finca Rosina pertenece a Finca Rosina, y dejar elegir las dos
  * cosas invita a una combinación imposible que después nadie sabe leer.
+ *
+ * **`destino` se calcula dentro del `try`, y `redirect()` se llama UNA sola vez
+ * al final, fuera de cualquier `catch`** (misma forma que
+ * `app/actions/modelos.ts`): así su excepción de control no se confunde con un
+ * `EquipoError`/`RutinaError` real, y sólo esos dos se atrapan aquí.
  */
 export async function registrarEquipoFormAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const locationId = String(formData.get("locationId") ?? "");
-  const sitios = await sitiosParaRegistrar(user.userAccountId);
-  const sitio = sitios.find((s) => s.id === locationId);
-  // No se confía en el `value` del desplegable: un formulario se puede reenviar
-  // con otro id. Se vuelve a resolver contra los sitios que esta persona puede
-  // gestionar de verdad, y si no está, `registrarEquipo` lo rechazaría igual —
-  // pero aquí sale con una frase legible en vez de un `forbidden` seco.
-  if (!sitio) throw new EquipoError("sitio_no_gestionable");
+  let destino: string;
+  try {
+    const locationId = String(formData.get("locationId") ?? "");
+    const sitios = await sitiosParaRegistrar(user.userAccountId);
+    const sitio = sitios.find((s) => s.id === locationId);
+    // No se confía en el `value` del desplegable: un formulario se puede reenviar
+    // con otro id. Se vuelve a resolver contra los sitios que esta persona puede
+    // gestionar de verdad, y si no está, `registrarEquipo` lo rechazaría igual —
+    // pero aquí sale con una frase legible en vez de un `forbidden` seco.
+    if (!sitio) throw new EquipoError("sitio_no_gestionable");
 
-  const aviso = String(formData.get("checkAdvisoryHours") ?? "").trim();
-  const equipo = await registrarEquipo(user.userAccountId, {
-    name: String(formData.get("name") ?? ""),
-    kind: String(formData.get("kind") ?? "instrument") as "vessel" | "instrument" | "tool" | "machine",
-    organizationId: sitio.organizationId,
-    initialLocationId: sitio.id,
-    provenanceClass: String(formData.get("provenanceClass") ?? "original_record") as
-      | "original_record"
-      | "manufacturer_specification",
-    acquisitionNote: String(formData.get("acquisitionNote") ?? "") || null,
-    checkAdvisoryHours: aviso === "" ? null : Number(aviso),
-  });
+    const aviso = String(formData.get("checkAdvisoryHours") ?? "").trim();
+    const equipo = await registrarEquipo(user.userAccountId, {
+      name: String(formData.get("name") ?? ""),
+      kind: String(formData.get("kind") ?? "instrument") as "vessel" | "instrument" | "tool" | "machine",
+      organizationId: sitio.organizationId,
+      initialLocationId: sitio.id,
+      provenanceClass: String(formData.get("provenanceClass") ?? "original_record") as
+        | "original_record"
+        | "manufacturer_specification",
+      acquisitionNote: String(formData.get("acquisitionNote") ?? "") || null,
+      checkAdvisoryHours: aviso === "" ? null : Number(aviso),
+      modelId: String(formData.get("modelId") ?? "") || null,
+      serialNumber: String(formData.get("serialNumber") ?? "") || null,
+      internalCode: String(formData.get("internalCode") ?? "") || null,
+      supplierOrganizationId: String(formData.get("supplierOrganizationId") ?? "") || null,
+      warrantyUntil: fechaDeDia(formData.get("warrantyUntil") as string | null, "warrantyUntil"),
+    });
 
-  revalidatePath("/equipos");
-  redirect(`/equipos/${equipo.id}?ok=registrado`);
+    revalidatePath("/equipos");
+    destino = `/equipos/${equipo.id}?ok=registrado`;
+
+    // La recomendación del modelo se convierte en rutina SÓLO si quien da de alta lo
+    // deja marcado (spec §3.3): es el ajuste local, no el modelo, el que manda.
+    const dias = String(formData.get("rutinaMantenimientoDias") ?? "").trim();
+    if (formData.get("crearRutinaMantenimiento") === "on" && dias !== "") {
+      try {
+        await crearRutina(user.userAccountId, { equipmentId: equipo.id, kind: "mantenimiento", intervalDays: Number(dias) });
+      } catch (error) {
+        if (!(error instanceof RutinaError)) throw error;
+        // El equipo ya quedó registrado: el error es sólo de la rutina, y se dice en SU ficha.
+        destino = `/equipos/${equipo.id}?error=${encodeURIComponent(error.message)}`;
+      }
+    }
+  } catch (error) {
+    if (!(error instanceof EquipoError)) throw error;
+    destino = `/equipos/nuevo?error=${encodeURIComponent(error.message)}`;
+  }
+  redirect(destino);
+}
+
+/**
+ * Editar los datos de identificación de un equipo ya registrado: modelo, serie,
+ * código interno, proveedor y garantía. Es una edición TOTAL del formulario —el
+ * `<details>` siempre manda los cinco campos—, así que vacío significa «borra
+ * esto» y no «no toques esto» (la distinción que `DatosDeEquipo` sí necesita
+ * para un `PATCH` parcial no aplica a este formulario).
+ */
+export async function editarDatosDeEquipoFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const equipmentId = String(formData.get("equipmentId") ?? "");
+
+  let destino: string;
+  try {
+    await editarDatosDeEquipo(user.userAccountId, equipmentId, {
+      modelId: String(formData.get("modelId") ?? "") || null,
+      serialNumber: String(formData.get("serialNumber") ?? "") || null,
+      internalCode: String(formData.get("internalCode") ?? "") || null,
+      supplierOrganizationId: String(formData.get("supplierOrganizationId") ?? "") || null,
+      warrantyUntil: fechaDeDia(formData.get("warrantyUntil") as string | null, "warrantyUntil"),
+    });
+    revalidatePath("/equipos");
+    revalidatePath(`/equipos/${equipmentId}`);
+    destino = `/equipos/${equipmentId}?ok=datos`;
+  } catch (error) {
+    if (!(error instanceof EquipoError)) throw error;
+    destino = `/equipos/${equipmentId}?error=${encodeURIComponent(error.message)}`;
+  }
+  redirect(destino);
 }
 
 /**

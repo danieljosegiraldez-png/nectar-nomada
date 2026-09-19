@@ -730,6 +730,8 @@ export interface EquipoEnLista {
   verificacion: EstadoDeVerificacion;
   ultimaVerificacion: Date | null;
   checkAdvisoryHours: number | null;
+  /** Del catálogo (Tarea 9). `null` = sin modelo declarado. */
+  model: { manufacturer: string; modelName: string } | null;
 }
 
 /**
@@ -751,6 +753,7 @@ export async function listarEquipos(userAccountId: string): Promise<EquipoEnList
       transfers: { orderBy: { occurredAt: "desc" }, take: 1, include: { toLocation: { select: { id: true, name: true } } } },
       conditionReports: { where: { resolvedAt: null }, orderBy: { occurredAt: "desc" }, take: 1 },
       checks: { orderBy: { occurredAt: "asc" }, select: { occurredAt: true, outcome: true } },
+      model: { select: { manufacturer: true, modelName: true } },
     },
     orderBy: [{ kind: "asc" }, { name: "asc" }],
   });
@@ -781,6 +784,7 @@ export async function listarEquipos(userAccountId: string): Promise<EquipoEnList
           : "SIN_INSTRUMENTO",
       ultimaVerificacion: aprobadas.length > 0 ? aprobadas[aprobadas.length - 1]!.occurredAt : null,
       checkAdvisoryHours: e.checkAdvisoryHours,
+      model: e.model ? { manufacturer: e.model.manufacturer, modelName: e.model.modelName } : null,
     });
   }
   return salida;
@@ -797,6 +801,16 @@ export async function instrumentoParaVerificar(userAccountId: string, equipmentI
         orderBy: { occurredAt: "desc" },
         take: 10,
         include: { results: { include: { requirement: { select: { label: true, unit: true } } } } },
+      },
+      // Identificación (Tarea 9, spec §3.3): el modelo y el proveedor sólo se
+      // pintan, y el último traslado dice dónde está hoy y en qué zona — de ahí
+      // sale el «hoy» que gobierna el aviso de garantía y el de las rutinas.
+      model: { select: { id: true, manufacturer: true, modelName: true } },
+      supplier: { select: { id: true, name: true } },
+      transfers: {
+        orderBy: { occurredAt: "desc" },
+        take: 1,
+        include: { toLocation: { select: { id: true, name: true, timezone: true } } },
       },
     },
   });
