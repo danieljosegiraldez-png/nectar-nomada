@@ -14,6 +14,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  elegirFincaDeTrampas,
   FincaTrapAccessError,
   getFincasConTrampas,
   getFincaTrampas,
@@ -24,6 +25,27 @@ import { prisma } from "../../lib/db";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
 import { crearFinca, crearParcela, crearUsuarioSinAcceso } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+
+/**
+ * La elección de finca que comparten `/finca/trampas` y `/finca/trampas/ronda`
+ * (Tarea 9) — pura, sin base. Vive en este archivo por estar junto a las demás
+ * pruebas de `fincaTrampas.ts`, aunque no necesite `afterEach`.
+ */
+describe("elegirFincaDeTrampas", () => {
+  const FINCAS = [{ id: "f1", name: "Uno" }, { id: "f2", name: "Dos" }];
+
+  it("con una sola finca accesible, entra directo sin necesitar ?finca=", () => {
+    expect(elegirFincaDeTrampas([FINCAS[0]!], undefined)).toBe("f1");
+  });
+
+  it("con varias y sin ?finca=, no elige ninguna: hace falta el selector", () => {
+    expect(elegirFincaDeTrampas(FINCAS, undefined)).toBeNull();
+  });
+
+  it("?finca= manda, incluso con una sola finca accesible", () => {
+    expect(elegirFincaDeTrampas([FINCAS[0]!], "f2")).toBe("f2");
+  });
+});
 
 let userAccountIds: string[] = [];
 let personIds: string[] = [];
