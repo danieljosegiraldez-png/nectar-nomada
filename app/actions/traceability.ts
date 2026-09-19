@@ -15,7 +15,7 @@ import { calcularFechaConPrecision } from "../../lib/time/fechaConPrecision";
 // Los horizontes los lee `lib/traceability/horizontesDelFormulario.ts`, que
 // comparten este camino y el de la cola offline. Ver su cabecera.
 import { horizontesDelFormulario, maxIndiceDeFilas } from "../../lib/traceability/horizontesDelFormulario";
-import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
+import { recordTransformation, TraceabilityAccessError, getObserverCandidates } from "../../lib/traceability/lots";
 import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadasDelSitio";
 import { recordSelection, SelectionValidationError } from "../../lib/traceability/selection";
 import { recordQuantityEvent, QuantityValidationError } from "../../lib/traceability/quantity";
@@ -150,6 +150,12 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   // retirada: el caso real es que no se puede revisar en absoluto, y ése se
   // dice, con su propia clave.
   if (error instanceof TrapValidationError && error.message === "trap_retired") return t("error_trap_retired");
+  // T10 — la ronda fija el observador a la persona de la cuenta; sin una
+  // vinculada, se rechaza en vez de guardar un observador nulo (ruling del
+  // controlador). El mensaje dice a quién avisar, no cómo corregir un campo.
+  if (error instanceof TrapValidationError && error.message === "observer_self_missing") {
+    return t("error_trap_no_observer");
+  }
   // La escala o la fecha: el mensaje dice qué revisar, y el código crudo no
   // aporta al operario de campo nada que ese mensaje no diga.
   if (error instanceof TrapValidationError) return t("error_trap");
@@ -1376,6 +1382,75 @@ export async function recordTrapCheckFormAction(
   }
 
   revalidarParcela(locationId);
+  return {};
+}
+
+/**
+ * El formulario corto de la ronda de trampas — spec §4.2, Tarea 10. NO es
+ * `recordTrapCheckFormAction` con menos campos: es una acción propia porque
+ * la ronda no ofrece elegir procedencia ni observador, y un `<input
+ * type="hidden">` para esos dos valores sería falsificable (SECURITY.md §2 —
+ * el formulario no es la frontera, no una `<input>` que nadie lee del lado
+ * del servidor). Esta acción ni siquiera intenta leer
+ * `formData.get("provenanceClass")` u `formData.get("observerPersonId")`:
+ * los fija aquí, en el servidor, así que un envío que los trajera forjados
+ * se ignora sin necesidad de validarlos.
+ *
+ * Ruling del controlador: en la ronda, quien registra es quien miró la
+ * tela. `provenanceClass` es siempre `direct_observation`, y
+ * `observerPersonId` es la Person de `getObserverCandidates` —la misma
+ * fuente que ya usan `FieldSessionForms` y el resto de formularios de
+ * observador—, tomando sólo `selfPersonId`. Una cuenta sin persona vinculada
+ * se rechaza explícitamente: nunca se guarda un observador `null` en su
+ * lugar (ADR-080 — ausencia de dato distinta de dato no preguntado, aquí
+ * aplicado a quién firma la observación, no a qué observó).
+ *
+ * El resto pasa, sin cambios, por `recordTrapCheck`: su compuerta de acceso
+ * (`requireTrapAccess`), la auditoría en la misma transacción, la escala
+ * obligatoria y los tri-estados de mantenimiento.
+ */
+export async function recordRoundTrapCheckFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const locationId = String(formData.get("locationId") ?? "");
+
+  try {
+    const { selfPersonId } = await getObserverCandidates(user.userAccountId);
+    if (!selfPersonId) throw new TrapValidationError("observer_self_missing");
+
+    // Sin número tecleado es `null`: nadie contó. Nunca un 0 (ADR-080).
+    const conteo = emptyToNullNumber(formData.get("captureCount"));
+    const otros = booleanoDeTresEstados(formData.get("otherInsects"));
+    await recordTrapCheck(user.userAccountId, {
+      specimenId: String(formData.get("specimenId") ?? ""),
+      observedAt: fechaDeDiaRequerida(formData, "observedAt"),
+      brocaLevel: String(formData.get("brocaLevel") ?? "") as never,
+      captureCount: conteo,
+      otherInsects: otros,
+      // Mismo criterio que `recordTrapCheckFormAction` (F8 fix-final): la
+      // nota se guarda salvo cuando "otros" es explícitamente NO.
+      otherInsectsNote: otros === false ? null : emptyToNull(formData.get("otherInsectsNote")),
+      cleaned: booleanoDeTresEstados(formData.get("cleaned")),
+      liquidChanged: booleanoDeTresEstados(formData.get("liquidChanged")),
+      lureRecharged: booleanoDeTresEstados(formData.get("lureRecharged")),
+      // Fijos en el servidor, nunca leídos del FormData — ver el docstring.
+      observerPersonId: selfPersonId,
+      provenanceClass: "direct_observation",
+      notes: null,
+      dataQuality: null,
+    });
+  } catch (error) {
+    revalidarParcela(locationId);
+    revalidatePath("/finca/trampas/ronda");
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidarParcela(locationId);
+  revalidatePath("/finca/trampas/ronda");
   return {};
 }
 

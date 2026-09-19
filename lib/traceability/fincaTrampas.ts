@@ -97,7 +97,7 @@ export interface FincaTrampa {
 export async function getFincaTrampas(userAccountId: string, farmLocationId: string) {
   const finca = await prisma.location.findUnique({
     where: { id: farmLocationId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, timezone: true },
   });
   if (!finca) throw new FincaTrapAccessError("farm_not_found");
 
@@ -163,6 +163,12 @@ export async function getFincaTrampas(userAccountId: string, farmLocationId: str
   return {
     farmLocationId: finca.id,
     farmName: finca.name,
+    // Tarea 10, ruling del controlador — el «hoy» que precarga la fecha del
+    // formulario corto de la ronda se calcula en el servidor con la zona de
+    // LA FINCA, no la del dispositivo: la misma razón que `diaDeHoy` ya usa
+    // para los avisos, aplicada ahora a un valor por defecto en vez de a una
+    // comparación de vencimiento.
+    farmTimezone: finca.timezone,
     plots: accesibles.map((l) => ({ id: l.id, name: l.name })),
     trampas,
     reglaDeTrampas,

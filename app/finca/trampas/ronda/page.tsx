@@ -6,6 +6,7 @@ import { getFincasConTrampas, getFincaTrampas, FincaTrapAccessError, elegirFinca
 import { estadoDeTrampa, ordenDeRonda, proximaRevisionDe, trampasParaAviso } from "../../../../lib/traceability/pendienteDeTrampas";
 import { claveDeTituloDeBloque } from "../../../../lib/traceability/plotBlocks";
 import { diaDeHoy } from "../../../../lib/time/diaDeHoy";
+import { RondaDeTrampaForm } from "../../../components/traceability/RondaDeTrampaForm";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,15 @@ export default async function RondaDeTrampasPage({
   }
 
   const hoy = diaDeHoy(new Date(), null);
+  // El valor por defecto del campo de fecha del formulario corto (Tarea 10,
+  // ruling del controlador) es un «hoy» distinto del de arriba: éste es el
+  // día en la zona DE LA FINCA, calculado en el servidor y pasado como prop
+  // — nunca un `hoyLocalISO()` en el cliente, que daría el día del
+  // dispositivo y además desajustaría la hidratación. El `hoy` de arriba
+  // sigue usando el respaldo UTC−12 a propósito: es para vencimientos, que
+  // no deben afirmar antes de tiempo (ver `diaDeHoy`), no para un valor que
+  // el operario puede editar.
+  const hoyDeLaFinca = diaDeHoy(new Date(), detalle.farmTimezone);
   const paraAviso = new Map(trampasParaAviso(detalle.trampas).map((t) => [t.id, t]));
 
   const activas = detalle.trampas
@@ -131,7 +141,10 @@ export default async function RondaDeTrampasPage({
               {trampa.proximaRevision ? (
                 <p className="nn-detail-meta">{t("trapsNextReview", { fecha: trampa.proximaRevision })}</p>
               ) : null}
-              {/* La Tarea 10 añade aquí el <details> con RondaDeTrampaForm. */}
+              <details>
+                <summary>{t("trapCheckTitle")}</summary>
+                <RondaDeTrampaForm locationId={trampa.plotId} specimenId={trampa.id} hoy={hoyDeLaFinca} />
+              </details>
             </article>
           );
         })

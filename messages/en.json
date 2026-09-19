@@ -1169,6 +1169,7 @@
     "blocksNone": "This plot has no blocks. They are optional.",
     "error_trap": "Could not save. Check the reading and the date.",
     "error_trap_retired": "This trap is retired; it can't be checked.",
+    "error_trap_no_observer": "Your account has no linked person, so who checked it can't be recorded. Ask whoever manages access.",
     "blocksTitle": "Blocks",
     "trapBlockLabel": "Block (optional)",
     "trapCheckDate": "Check date",

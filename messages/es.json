@@ -1169,6 +1169,7 @@
     "blocksNone": "Esta parcela no tiene bloques. Son opcionales.",
     "error_trap": "No se pudo guardar. Revisa la lectura y la fecha.",
     "error_trap_retired": "Esta trampa está retirada; no se puede revisar.",
+    "error_trap_no_observer": "Tu cuenta no tiene una persona vinculada; no se puede registrar quién revisó. Avisa a quien administra el acceso.",
     "blocksTitle": "Bloques",
     "trapBlockLabel": "Bloque (opcional)",
     "trapCheckDate": "Fecha de la revisión",
