@@ -530,6 +530,10 @@
       "razon": "Tarea 2 del plan de alta de beneficio — crea y renombra el beneficio (LocationType nuevo) bajo un sitio. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. A diferencia de instalaciones.ts, crear exige DOS permisos sobre el padre —`location:manage_attributes` y `location:create_site`—, porque dar de alta un lugar nuevo es una autoridad más estrecha que administrar el árbol de uno existente y es justo la que un Farm Operator no tiene. Escritura y AuditEvent en la MISMA transacción, tanto al crear como al renombrar."
     },
     {
+      "archivo": "lib/traceability/bodegas.ts",
+      "razon": "Tarea 2 de la spec 2026-09-19 §4.1 — crear, listar y ver la bodega (`storage_facility`, LocationType de Tarea 1). Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Crearla es configurar el beneficio: exige `location:edit_beneficio` sobre el padre (`exigeEditarBeneficioEn`), igual que una instalación de secado; la base lo comprueba también, con el disparador `location_bodega_padre` (sólo `site` o `beneficio`). Escritura y AuditEvent en la MISMA transacción."
+    },
+    {
       "archivo": "lib/traceability/concesiones.ts",
       "razon": "Plan 3 de «editar beneficio» (ADR-168) — conceder y quitar `location:edit_beneficio` desde /beneficio/ajustes. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Delegación estrecha sobre `AssignmentPermissionOverride`: sólo ese permiso, sólo quien lo tiene sobre ese beneficio (`exigeEditarBeneficioEn`), y sólo hacia una asignación cuyo ámbito alcanza el beneficio. Escritura y AuditEvent en la MISMA transacción, tanto al conceder como al quitar."
     },

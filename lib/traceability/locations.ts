@@ -29,7 +29,7 @@ export class LocationAccessError extends Error {}
  * `drying_bed` por los caminos genéricos (`updatePlotAttributesAction`,
  * `confirmarCoordenadasDelSitio`), que no pasan por `exigeEditarBeneficioEn`.
  */
-const TIPOS_DEL_BENEFICIO = new Set<LocationType>(["beneficio", "drying_facility", "drying_bed", "drying_rack"]);
+const TIPOS_DEL_BENEFICIO = new Set<LocationType>(["beneficio", "drying_facility", "drying_bed", "drying_rack", "storage_facility"]);
 
 /**
  * La organización a la que pertenece una Location, subiendo por la jerarquía.
@@ -397,6 +397,7 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
   if (parent.locationType === "drying_facility" || parent.locationType === "drying_bed" || parent.locationType === "drying_rack") {
     throw new LocationValidationError("secado_no_se_subdivide");
   }
+  if (parent.locationType === "storage_facility") throw new LocationValidationError("bodega_no_se_subdivide");
 
   const microlot = await prisma.$transaction(async (tx) => {
     // Spec fincas y parcelas §3.3: un nombre no se repite dentro del mismo padre.

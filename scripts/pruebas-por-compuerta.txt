@@ -22,6 +22,7 @@
 tests/derivaDeMigraciones.test.ts
 tests/limpiarAuditDePruebas.test.ts
 tests/instalaciones/esquemaDeBodega.test.ts
+tests/instalaciones/bodegas.test.ts
 tests/traceability/beneficios.test.ts
 tests/traceability/editarBeneficio.test.ts
 tests/traceability/concesiones.test.ts

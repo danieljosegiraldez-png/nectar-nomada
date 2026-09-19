@@ -11,9 +11,12 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`
+## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`, y otra
+## vez el 2026-09-21 al rebasar `spec/instalaciones-rutinas`
 
-**545 operaciones** que tocan la base, en **152 archivos**:
+**PENDIENTE-REGENERAR** operaciones que tocan la base, en **PENDIENTE-REGENERAR**
+archivos — cifra que se sustituye al final del rebase con
+`node scripts/inventario-de-acceso.mjs`:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -142,9 +145,23 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > `recepcionDeEntregas` entra como **depende del llamador**: no recibe principal, y sus dos
 > llamadores (`detalleDeJornada`, `misEntregas`) ya autorizaron esas entregas antes.
 
+> **La bodega (Tarea 2, spec 2026-09-19 §4.1), con un archivo nuevo.**
+> `lib/traceability/bodegas.ts` aporta **cuatro** operaciones y las cuatro
+> llevan **guardia directo**: `crearBodega` y `padresParaBodega`
+> resuelven `location:edit_beneficio` (`exigeEditarBeneficioEn`/`can()`) sobre
+> el candidato a padre; `listarBodegas` y `detalleBodega` resuelven
+> `manage_attributes` sobre la propia bodega. `padresParaBodega` llama a
+> `can(` directo y no al booleano `puedeEditarBeneficioEn` — ese envoltorio
+> sólo invoca `exigeEditarBeneficioEn` dentro de un try/catch, sin `can(`
+> literal en su propio cuerpo, así que el detector no lo reconoce como guardia
+> transitivo y la operación habría quedado «sin guardia visible» pese a estar
+> autorizada igual que sus hermanas. 4 = 4: si la cuenta no cerrara con la fila
+> de «guardia directo», alguna se habría colado sin ese permiso. Cifras exactas
+> de esta fusión, regeneradas al final del rebase más abajo.
+
 > **Marcos negros (ADR-176, 2026-09-19).** Una operación nueva en `lib/apiary/cera.ts`,
-> `marcosNegrosDelApiario`, que sube la fila de **guardia directo**, 366→367 tras rebasar sobre reinas y fitosanitarios: llama a
-> `requireApiaryAccess` view sobre el apiario antes de leer. 489→490; el archivo ya estaba contado.
+> `marcosNegrosDelApiario`, que sube la fila de **guardia directo** tras rebasar sobre reinas y fitosanitarios: llama a
+> `requireApiaryAccess` view sobre el apiario antes de leer. El archivo ya estaba contado.
 
 > **La cera con el color de su año (ADR-173, 2026-09-18).** Un archivo nuevo, `lib/apiary/cera.ts`,
 > con tres operaciones —`registrarCeraNueva`, `registrarSalidaDeMarcos` y `leyendaDeCera`— que
